@@ -1,0 +1,52 @@
+import { WeatherIcon } from "@/lib/weather-icons";
+import { weatherCodeToInfo, type DailyWeather } from "@/lib/weather";
+
+interface Props {
+  daily: DailyWeather;
+}
+
+export function DailyForecast({ daily }: Props) {
+  return (
+    <section aria-label="7-day forecast">
+      <div className="rounded-[var(--radius-card)] bg-surface-card p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-text-primary font-sans">7-Day Forecast</h2>
+        <div className="mt-4 divide-y divide-text-tertiary/10">
+          {daily.time.map((date, i) => {
+            const d = new Date(date);
+            const info = weatherCodeToInfo(daily.weather_code[i]);
+            const isToday = i === 0;
+            const dayName = isToday
+              ? "Today"
+              : d.toLocaleDateString("en-ZW", { weekday: "short" });
+
+            return (
+              <div
+                key={date}
+                className="flex items-center gap-4 py-3"
+              >
+                <span className="w-12 text-sm font-medium text-text-secondary">
+                  {dayName}
+                </span>
+                <WeatherIcon icon={info.icon} size={24} className="text-primary" />
+                <span className="flex-1 text-sm text-text-secondary">{info.label}</span>
+                {daily.precipitation_probability_max[i] > 0 && (
+                  <span className="text-xs text-secondary">
+                    {daily.precipitation_probability_max[i]}%
+                  </span>
+                )}
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-semibold text-text-primary">
+                    {Math.round(daily.temperature_2m_max[i])}°
+                  </span>
+                  <span className="text-text-tertiary">
+                    {Math.round(daily.temperature_2m_min[i])}°
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
