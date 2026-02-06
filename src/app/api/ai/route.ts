@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getZimbabweSeason } from "@/lib/weather";
+import {
+  getCachedSummary,
+  setCachedSummary,
+  isSummaryStale,
+  type CachedAISummary,
+} from "@/lib/kv-cache";
 
 const WEATHER_AI_SYSTEM_PROMPT = `You are Shamwari Weather, the AI assistant for mukoko weather — Zimbabwe's weather intelligence platform. You provide actionable, contextual weather advice grounded in Zimbabwean geography, agriculture, industry, and culture.
 
@@ -30,19 +36,55 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing weather data or location" }, { status: 400 });
     }
 
+    const currentTemp = weatherData.current?.temperature_2m ?? 0;
+    const currentCode = weatherData.current?.weather_code ?? 0;
+    const locationSlug = (location.name as string ?? "unknown").toLowerCase().replace(/\s+/g, "-");
+
+    // Try to get KV namespace from Cloudflare runtime (if deployed on CF Pages/Workers)
+    // In non-CF environments, this will be undefined and we use the in-memory fallback
+    let kvNamespace: KVNamespace | undefined;
+    try {
+      // Cloudflare Workers passes bindings via env; in Node.js this is undefined
+      const cfEnv = (globalThis as Record<string, unknown>).__CF_KV_AI_SUMMARIES;
+      if (cfEnv) {
+        kvNamespace = cfEnv as KVNamespace;
+      }
+    } catch {
+      // Not on Cloudflare — memory fallback will be used
+    }
+
+    // Check cache first — serves all concurrent users from a single cached entry
+    const cached = await getCachedSummary(locationSlug, kvNamespace);
+    if (cached && !isSummaryStale(cached, currentTemp, currentCode)) {
+      return NextResponse.json({
+        insight: cached.insight,
+        cached: true,
+        generatedAt: cached.generatedAt,
+      });
+    }
+
+    // Cache miss or stale — generate fresh AI summary
+    const season = getZimbabweSeason();
     const apiKey = process.env.ANTHROPIC_API_KEY;
+
     if (!apiKey) {
       // Fallback to a basic summary when no API key is configured
       const temp = weatherData.current?.temperature_2m;
       const humidity = weatherData.current?.relative_humidity_2m;
-      const season = getZimbabweSeason();
-      return NextResponse.json({
-        insight: `Current conditions in ${location.name}: ${temp !== undefined ? Math.round(temp) + "°C" : "N/A"} with ${humidity !== undefined ? humidity + "%" : "N/A"} humidity. We are in the ${season.shona} season (${season.name}). ${season.description}. Stay informed and plan your day accordingly.`,
-      });
+      const insight = `Current conditions in ${location.name}: ${temp !== undefined ? Math.round(temp) + "°C" : "N/A"} with ${humidity !== undefined ? humidity + "%" : "N/A"} humidity. We are in the ${season.shona} season (${season.name}). ${season.description}. Stay informed and plan your day accordingly.`;
+
+      const summaryEntry: CachedAISummary = {
+        insight,
+        generatedAt: new Date().toISOString(),
+        locationSlug,
+        weatherSnapshot: { temperature: currentTemp, weatherCode: currentCode },
+      };
+      await setCachedSummary(locationSlug, summaryEntry, kvNamespace);
+
+      return NextResponse.json({ insight, cached: false });
     }
 
     const anthropic = new Anthropic({ apiKey });
-    const season = getZimbabweSeason();
 
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
@@ -65,7 +107,18 @@ Provide:
     });
 
     const textBlock = message.content.find((b) => b.type === "text");
-    return NextResponse.json({ insight: textBlock?.text ?? "No insight available." });
+    const insight = textBlock?.text ?? "No insight available.";
+
+    // Store in KV cache — all subsequent requests for this location get the cached version
+    const summaryEntry: CachedAISummary = {
+      insight,
+      generatedAt: new Date().toISOString(),
+      locationSlug,
+      weatherSnapshot: { temperature: currentTemp, weatherCode: currentCode },
+    };
+    await setCachedSummary(locationSlug, summaryEntry, kvNamespace);
+
+    return NextResponse.json({ insight, cached: false, generatedAt: summaryEntry.generatedAt });
   } catch {
     return NextResponse.json({ error: "AI service unavailable" }, { status: 502 });
   }
