@@ -5,8 +5,10 @@ import {
   getCachedSummary,
   setCachedSummary,
   isSummaryStale,
+  getTtlForLocation,
   type CachedAISummary,
 } from "@/lib/kv-cache";
+import { getLocationBySlug } from "@/lib/locations";
 
 const WEATHER_AI_SYSTEM_PROMPT = `You are Shamwari Weather, the AI assistant for mukoko weather — Zimbabwe's weather intelligence platform. You provide actionable, contextual weather advice grounded in Zimbabwean geography, agriculture, industry, and culture.
 
@@ -39,6 +41,11 @@ export async function POST(request: Request) {
     const currentTemp = weatherData.current?.temperature_2m ?? 0;
     const currentCode = weatherData.current?.weather_code ?? 0;
     const locationSlug = (location.name as string ?? "unknown").toLowerCase().replace(/\s+/g, "-");
+
+    // Look up the location in our database to get tags for tiered TTL
+    const knownLocation = getLocationBySlug(locationSlug);
+    const locationTags = knownLocation?.tags ?? [];
+    const ttl = getTtlForLocation(locationSlug, locationTags);
 
     // Try to get KV namespace from Cloudflare runtime (if deployed on CF Pages/Workers)
     // In non-CF environments, this will be undefined and we use the in-memory fallback
@@ -79,7 +86,7 @@ export async function POST(request: Request) {
         locationSlug,
         weatherSnapshot: { temperature: currentTemp, weatherCode: currentCode },
       };
-      await setCachedSummary(locationSlug, summaryEntry, kvNamespace);
+      await setCachedSummary(locationSlug, summaryEntry, kvNamespace, ttl);
 
       return NextResponse.json({ insight, cached: false });
     }
@@ -94,6 +101,7 @@ export async function POST(request: Request) {
         {
           role: "user",
           content: `Generate a weather briefing for ${location.name}, Zimbabwe (elevation: ${location.elevation}m).
+${locationTags.length > 0 ? `This area is relevant to: ${locationTags.join(", ")}.` : ""}
 
 Current conditions: ${JSON.stringify(weatherData.current)}
 3-day forecast summary: max temps ${JSON.stringify(weatherData.daily?.temperature_2m_max)}, min temps ${JSON.stringify(weatherData.daily?.temperature_2m_min)}, weather codes ${JSON.stringify(weatherData.daily?.weather_code)}
@@ -101,7 +109,7 @@ Season: ${season.shona} (${season.name})
 
 Provide:
 1. A 2-sentence general summary
-2. One key actionable recommendation for today`,
+2. One industry/context-specific tip relevant to this area (e.g. farming advice for farming areas, safety for mining areas, travel conditions for border/travel areas, outdoor guidance for tourism/national parks)`,
         },
       ],
     });
