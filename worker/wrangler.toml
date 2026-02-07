@@ -1,0 +1,53 @@
+#:schema node_modules/wrangler/config-schema.json
+
+name = "nyuchi-weather-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Domain: weather.nyuchi.com
+# Configure via Cloudflare Dashboard: Workers > nyuchi-weather-api > Custom Domains
+
+# ───── KV Namespace Bindings ─────
+# AI summary cache — tiered TTL per location
+[[kv_namespaces]]
+binding = "AI_SUMMARIES"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
+
+# Weather data cache — short-lived cache of Open-Meteo responses
+[[kv_namespaces]]
+binding = "WEATHER_CACHE"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
+
+# Widget configuration cache — stores embed configs
+[[kv_namespaces]]
+binding = "WIDGET_CONFIGS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
+
+# ───── Environment Variables ─────
+[vars]
+ENVIRONMENT = "production"
+CORS_ORIGINS = "https://nyuchi.com,https://mukoko.africa,https://weather.nyuchi.com"
+NEXT_APP_URL = "https://weather.nyuchi.com"
+
+# ───── Secrets (set via `wrangler secret put`) ─────
+# ANTHROPIC_API_KEY — Claude API key for AI summaries
+
+# ───── Dev environment ─────
+[env.dev]
+name = "nyuchi-weather-api-dev"
+[env.dev.vars]
+ENVIRONMENT = "development"
+CORS_ORIGINS = "*"
+NEXT_APP_URL = "http://localhost:3000"
+
+# ───── Staging environment ─────
+[env.staging]
+name = "nyuchi-weather-api-staging"
+[env.staging.vars]
+ENVIRONMENT = "staging"
+CORS_ORIGINS = "https://staging.weather.nyuchi.com,https://staging.nyuchi.com"
+NEXT_APP_URL = "https://staging.weather.nyuchi.com"
