@@ -9,7 +9,7 @@ AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, 
 - **Real-time weather** — current conditions from Open-Meteo for any Zimbabwe location
 - **7-day forecasts** — daily highs, lows, precipitation probability, and weather conditions
 - **24-hour hourly forecasts** — hour-by-hour temperature and rain predictions
-- **AI weather intelligence** — Claude-powered contextual summaries with farming, mining, and travel advice
+- **AI weather intelligence** — Claude-powered markdown-formatted summaries with farming, mining, and travel advice
 - **Frost alerts** — automated frost risk detection for overnight hours with severity levels
 - **90+ locations** — cities, farming regions, mining areas, national parks, border posts, and travel corridors
 - **Zimbabwe seasons** — Masika, Chirimo, Zhizha, and Munakamwe season awareness
@@ -28,8 +28,10 @@ AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, 
 | State | [Zustand 5](https://zustand.docs.pmnd.rs) |
 | AI | [Anthropic Claude SDK](https://docs.anthropic.com/en/docs) |
 | Weather API | [Open-Meteo](https://open-meteo.com) |
+| Database | [MongoDB Atlas](https://mongodb.com/atlas) |
+| Markdown | [react-markdown](https://github.com/remarkjs/react-markdown) |
 | Testing | [Vitest](https://vitest.dev) |
-| Deployment | Cloudflare Pages + Workers |
+| Deployment | [Vercel](https://vercel.com) |
 
 ## Getting Started
 
@@ -58,7 +60,9 @@ Open [http://localhost:3000](http://localhost:3000). The app redirects to `/hara
 
 | Variable | Required | Description |
 |----------|----------|-------------|
+| `MONGODB_URI` | Yes | MongoDB Atlas connection string for caching and data storage. |
 | `ANTHROPIC_API_KEY` | No | Anthropic API key for AI weather summaries. Without it, a basic fallback summary is generated. |
+| `DB_INIT_SECRET` | No | Protects the `/api/db-init` endpoint in production. |
 
 ### Build
 
@@ -80,34 +84,42 @@ src/
   app/
     layout.tsx              # Root layout, metadata, JSON-LD schemas
     page.tsx                # Home — redirects to /harare
-    globals.css             # Brand system v7 (WCAG 3.0 APCA compliant)
+    globals.css             # Brand System v6 (WCAG 3.0 APCA compliant)
     robots.ts               # Dynamic robots.txt
     sitemap.ts              # Dynamic sitemap for 90+ locations
     [location]/
       page.tsx              # Dynamic weather page per location
       loading.tsx           # Skeleton loading state
       not-found.tsx         # 404 with location suggestions
-      FrostAlertBanner.tsx  # Frost risk alert component
+      FrostAlertBanner.tsx  # Frost risk alert (design-system tokens)
     api/
-      weather/route.ts      # GET /api/weather?lat=&lon=
-      geo/route.ts          # GET /api/geo?lat=&lon=
-      ai/route.ts           # POST /api/ai
-    embed/
-      page.tsx              # Embeddable widget documentation
+      weather/route.ts      # GET /api/weather — Open-Meteo proxy + MongoDB cache
+      geo/route.ts          # GET /api/geo — nearest location lookup
+      ai/route.ts           # POST /api/ai — AI summaries (markdown-formatted)
+      history/route.ts      # GET /api/history — historical weather data
+      db-init/route.ts      # POST /api/db-init — one-time DB setup
+    about/page.tsx          # Company info page
+    embed/page.tsx          # Embeddable widget documentation
+    help/page.tsx           # User help/FAQ
+    privacy/page.tsx        # Privacy policy
+    terms/page.tsx          # Terms of service
   components/
-    brand/                  # MukokoLogo, ThemeToggle, ThemeProvider, FlagStrip
+    brand/                  # MukokoLogo, ThemeToggle, ThemeProvider, MineralsStripe
     layout/                 # Header, Footer
     weather/                # CurrentConditions, HourlyForecast, DailyForecast,
                             # SunTimes, SeasonBadge, AISummary, LocationSelector
+    embed/                  # MukokoWeatherEmbed (CSS module, self-contained)
   lib/
     locations.ts            # 90+ Zimbabwe locations database
     weather.ts              # Open-Meteo client, frost detection, seasons
+    db.ts                   # MongoDB CRUD operations
+    mongo.ts                # MongoDB client (connection-pooled)
+    weather-idb.ts          # IndexedDB on-device cache
+    use-weather-sync.ts     # Auto-refresh hook (60s interval)
     geolocation.ts          # Browser geolocation detection
-    kv-cache.ts             # Cloudflare KV caching layer
     store.ts                # Zustand state management
-    weather-icons.tsx        # SVG weather icon components
-  types/
-    cloudflare.d.ts         # KVNamespace type definitions
+    weather-icons.tsx       # SVG weather icon components
+    i18n.ts                 # Internationalization utilities
 public/
   manifest.json             # PWA manifest with app shortcuts
   icons/                    # PWA icons (192x192, 512x512)
@@ -117,7 +129,7 @@ public/
 
 ### `GET /api/weather?lat=-17.83&lon=31.05`
 
-Returns Open-Meteo weather data for the given coordinates. Coordinates must be within the Zimbabwe region.
+Returns Open-Meteo weather data for the given coordinates. Responses are cached in MongoDB. Coordinates must be within the Zimbabwe region.
 
 ### `GET /api/geo?lat=-17.83&lon=31.05`
 
@@ -125,7 +137,15 @@ Returns the nearest Zimbabwe location to the given coordinates.
 
 ### `POST /api/ai`
 
-Generates an AI weather summary. Body: `{ weatherData, location }`.
+Generates a markdown-formatted AI weather summary. Body: `{ weatherData, location }`. Responses are cached in MongoDB with tiered TTL (30–120 min based on location tier).
+
+### `GET /api/history?location=harare&days=30`
+
+Returns historical weather data for a location.
+
+### `POST /api/db-init`
+
+One-time database setup: creates indexes and syncs location data to MongoDB. Protected by `DB_INIT_SECRET` in production.
 
 ## Accessibility
 
