@@ -25,11 +25,11 @@ describe("robots.ts", () => {
   });
 
   it("includes sitemap URL", () => {
-    expect(result.sitemap).toBe("https://weather.mukoko.africa/sitemap.xml");
+    expect(result.sitemap).toBe("https://weather.mukoko.com/sitemap.xml");
   });
 
   it("includes host", () => {
-    expect(result.host).toBe("https://weather.mukoko.africa");
+    expect(result.host).toBe("https://weather.mukoko.com");
   });
 });
 
@@ -37,7 +37,7 @@ describe("sitemap.ts", () => {
   const result = sitemap();
 
   it("includes the homepage", () => {
-    const home = result.find((entry) => entry.url === "https://weather.mukoko.africa");
+    const home = result.find((entry) => entry.url === "https://weather.mukoko.com");
     expect(home).toBeDefined();
     expect(home!.priority).toBe(1.0);
     expect(home!.changeFrequency).toBe("hourly");
@@ -45,25 +45,25 @@ describe("sitemap.ts", () => {
 
   it("includes all locations from the database", () => {
     for (const loc of LOCATIONS) {
-      const entry = result.find((e) => e.url === `https://weather.mukoko.africa/${loc.slug}`);
+      const entry = result.find((e) => e.url === `https://weather.mukoko.com/${loc.slug}`);
       expect(entry).toBeDefined();
     }
   });
 
   it("includes static pages (about, help, privacy, terms)", () => {
-    const aboutEntry = result.find((e) => e.url === "https://weather.mukoko.africa/about");
+    const aboutEntry = result.find((e) => e.url === "https://weather.mukoko.com/about");
     expect(aboutEntry).toBeDefined();
     expect(aboutEntry!.changeFrequency).toBe("monthly");
 
-    const helpEntry = result.find((e) => e.url === "https://weather.mukoko.africa/help");
+    const helpEntry = result.find((e) => e.url === "https://weather.mukoko.com/help");
     expect(helpEntry).toBeDefined();
     expect(helpEntry!.changeFrequency).toBe("monthly");
 
-    const privacyEntry = result.find((e) => e.url === "https://weather.mukoko.africa/privacy");
+    const privacyEntry = result.find((e) => e.url === "https://weather.mukoko.com/privacy");
     expect(privacyEntry).toBeDefined();
     expect(privacyEntry!.changeFrequency).toBe("yearly");
 
-    const termsEntry = result.find((e) => e.url === "https://weather.mukoko.africa/terms");
+    const termsEntry = result.find((e) => e.url === "https://weather.mukoko.com/terms");
     expect(termsEntry).toBeDefined();
     expect(termsEntry!.changeFrequency).toBe("yearly");
   });
@@ -73,20 +73,20 @@ describe("sitemap.ts", () => {
   });
 
   it("city locations have priority 0.9", () => {
-    const harare = result.find((e) => e.url === "https://weather.mukoko.africa/harare");
+    const harare = result.find((e) => e.url === "https://weather.mukoko.com/harare");
     expect(harare).toBeDefined();
     expect(harare!.priority).toBe(0.9);
   });
 
   it("non-city locations have priority 0.7", () => {
-    const mazowe = result.find((e) => e.url === "https://weather.mukoko.africa/mazowe");
+    const mazowe = result.find((e) => e.url === "https://weather.mukoko.com/mazowe");
     expect(mazowe).toBeDefined();
     expect(mazowe!.priority).toBe(0.7);
   });
 
   it("all location entries have changeFrequency set to hourly", () => {
     const locationEntries = result.filter((e) =>
-      LOCATIONS.some((loc) => e.url === `https://weather.mukoko.africa/${loc.slug}`)
+      LOCATIONS.some((loc) => e.url === `https://weather.mukoko.com/${loc.slug}`)
     );
     for (const entry of locationEntries) {
       expect(entry.changeFrequency).toBe("hourly");

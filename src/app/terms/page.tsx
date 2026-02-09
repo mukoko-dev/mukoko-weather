@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description:
     "Terms of Service for mukoko weather — Zimbabwe's AI-powered weather intelligence platform, operated by Mukoko Africa, a division of Nyuchi Africa (PVT) Ltd.",
   alternates: {
-    canonical: "https://weather.mukoko.africa/terms",
+    canonical: "https://weather.mukoko.com/terms",
   },
 };
 
@@ -32,7 +32,7 @@ export default function TermsPage() {
             </p>
             <p className="mt-3">
               By accessing or using the Service at{" "}
-              <a href="https://weather.mukoko.africa" className="text-primary underline">weather.mukoko.africa</a>,
+              <a href="https://weather.mukoko.com" className="text-primary underline">weather.mukoko.com</a>,
               you agree to be bound by these Terms. If you do not agree, please do not use the Service.
             </p>
           </section>

@@ -3,7 +3,7 @@ import { FlagStrip } from "@/components/brand/FlagStrip";
 import { ThemeProvider } from "@/components/brand/ThemeProvider";
 import "./globals.css";
 
-const BASE_URL = "https://weather.mukoko.africa";
+const BASE_URL = "https://weather.mukoko.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),

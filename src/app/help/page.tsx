@@ -8,11 +8,11 @@ export const metadata: Metadata = {
   description:
     "Get help with mukoko weather — how to use forecasts, understand frost alerts, install the app, and more. Frequently asked questions about Zimbabwe's weather intelligence platform.",
   alternates: {
-    canonical: "https://weather.mukoko.africa/help",
+    canonical: "https://weather.mukoko.com/help",
   },
 };
 
-const BASE_URL = "https://weather.mukoko.africa";
+const BASE_URL = "https://weather.mukoko.com";
 
 export default function HelpPage() {
   const faqSchema = {
@@ -48,7 +48,7 @@ export default function HelpPage() {
         name: "Can I install mukoko weather as an app?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "Yes. On Android or Huawei phones, open weather.mukoko.africa in Chrome or your browser, tap the menu (three dots), and select 'Add to Home Screen' or 'Install App'. The app works offline for recently viewed locations and launches in standalone mode.",
+          text: "Yes. On Android or Huawei phones, open weather.mukoko.com in Chrome or your browser, tap the menu (three dots), and select 'Add to Home Screen' or 'Install App'. The app works offline for recently viewed locations and launches in standalone mode.",
         },
       },
       {
@@ -82,7 +82,7 @@ export default function HelpPage() {
             <p>
               mukoko weather gives you accurate weather data for 90+ Zimbabwe locations. No account needed —
               just visit{" "}
-              <a href={BASE_URL} className="text-primary underline">weather.mukoko.africa</a>{" "}
+              <a href={BASE_URL} className="text-primary underline">weather.mukoko.com</a>{" "}
               and you&apos;re ready to go.
             </p>
             <h3 className="font-semibold text-text-primary">Selecting a location</h3>
@@ -213,14 +213,14 @@ export default function HelpPage() {
             </p>
             <h3 className="font-semibold text-text-primary">Android / Huawei</h3>
             <ol className="list-decimal pl-6 space-y-1">
-              <li>Open <strong className="text-text-primary">weather.mukoko.africa</strong> in Chrome or your browser</li>
+              <li>Open <strong className="text-text-primary">weather.mukoko.com</strong> in Chrome or your browser</li>
               <li>Tap the <strong className="text-text-primary">menu button</strong> (three dots in the top-right)</li>
               <li>Tap <strong className="text-text-primary">&quot;Add to Home Screen&quot;</strong> or <strong className="text-text-primary">&quot;Install App&quot;</strong></li>
               <li>The app icon will appear on your home screen</li>
             </ol>
             <h3 className="font-semibold text-text-primary">iPhone / iPad</h3>
             <ol className="list-decimal pl-6 space-y-1">
-              <li>Open <strong className="text-text-primary">weather.mukoko.africa</strong> in Safari</li>
+              <li>Open <strong className="text-text-primary">weather.mukoko.com</strong> in Safari</li>
               <li>Tap the <strong className="text-text-primary">Share button</strong> (square with arrow)</li>
               <li>Scroll down and tap <strong className="text-text-primary">&quot;Add to Home Screen&quot;</strong></li>
             </ol>

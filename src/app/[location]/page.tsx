@@ -14,7 +14,7 @@ import { FrostAlertBanner } from "./FrostAlertBanner";
 
 export const dynamic = "force-dynamic";
 
-const BASE_URL = "https://weather.mukoko.africa";
+const BASE_URL = "https://weather.mukoko.com";
 
 export async function generateMetadata({
   params,

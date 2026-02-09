@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description:
     "Privacy Policy for mukoko weather. Learn how we handle your data — spoiler: we collect almost nothing.",
   alternates: {
-    canonical: "https://weather.mukoko.africa/privacy",
+    canonical: "https://weather.mukoko.com/privacy",
   },
 };
 
@@ -28,7 +28,7 @@ export default function PrivacyPage() {
               a division of <strong className="text-text-primary">Nyuchi Africa (PVT) Ltd</strong>
               (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;), handles information when you use mukoko weather
               (&quot;the Service&quot;) at{" "}
-              <a href="https://weather.mukoko.africa" className="text-primary underline">weather.mukoko.africa</a>.
+              <a href="https://weather.mukoko.com" className="text-primary underline">weather.mukoko.com</a>.
             </p>
             <p className="mt-3">
               We are committed to your privacy. mukoko weather is designed to provide weather intelligence

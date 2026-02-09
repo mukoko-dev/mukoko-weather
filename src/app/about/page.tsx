@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description:
     "Learn about mukoko weather — Zimbabwe's AI-powered weather intelligence platform. A Mukoko Africa product, developed by Nyuchi Web Services, a division of Nyuchi Africa (PVT) Ltd.",
   alternates: {
-    canonical: "https://weather.mukoko.africa/about",
+    canonical: "https://weather.mukoko.com/about",
   },
 };
 

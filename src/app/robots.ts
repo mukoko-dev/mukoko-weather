@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = "https://weather.mukoko.africa";
+  const baseUrl = "https://weather.mukoko.com";
 
   return {
     rules: [

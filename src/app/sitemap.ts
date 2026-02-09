@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { LOCATIONS } from "@/lib/locations";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = "https://weather.mukoko.africa";
+  const baseUrl = "https://weather.mukoko.com";
   const now = new Date();
 
   const locationPages: MetadataRoute.Sitemap = LOCATIONS.map((loc) => ({

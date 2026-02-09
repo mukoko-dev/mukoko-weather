@@ -2,7 +2,7 @@
 
 AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 90+ locations.
 
-**Live:** [weather.mukoko.africa](https://weather.mukoko.africa)
+**Live:** [weather.mukoko.com](https://weather.mukoko.com)
 
 ## Features
 
@@ -159,7 +159,7 @@ This app targets **WCAG 3.0 APCA/AAA** compliance:
 
 ## Links
 
-- **Website:** [weather.mukoko.africa](https://weather.mukoko.africa)
+- **Website:** [weather.mukoko.com](https://weather.mukoko.com)
 - **Twitter:** [@mukokoafrica](https://twitter.com/mukokoafrica)
 - **Instagram:** [@mukoko.africa](https://instagram.com/mukoko.africa)
 - **Support:** [support@mukoko.com](mailto:support@mukoko.com)
