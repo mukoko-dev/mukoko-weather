@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
 import { SparklesIcon } from "@/lib/weather-icons";
 import type { WeatherData } from "@/lib/weather";
 import type { ZimbabweLocation } from "@/lib/locations";
@@ -74,10 +75,8 @@ export function AISummary({ weather, location }: Props) {
           )}
 
           {insight && !loading && (
-            <div className="prose prose-sm max-w-none text-text-secondary">
-              {insight.split("\n").map((line, i) => (
-                <p key={i} className="mb-2 last:mb-0">{line}</p>
-              ))}
+            <div className="prose prose-sm max-w-none text-text-secondary prose-strong:text-text-primary prose-headings:text-text-primary prose-li:marker:text-text-tertiary">
+              <ReactMarkdown>{insight}</ReactMarkdown>
             </div>
           )}
         </div>

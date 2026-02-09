@@ -25,6 +25,12 @@
   --color-tanzanite: #4B0082;
   --color-tanzanite-foreground: #FFFFFF;
 
+  /* Frost Alert Severity */
+  --color-frost-severe: #B3261E;
+  --color-frost-severe-bg: rgba(179, 38, 30, 0.1);
+  --color-frost-high-bg: rgba(139, 69, 19, 0.1);
+  --color-frost-moderate-bg: rgba(93, 64, 55, 0.1);
+
   /* Surfaces */
   --color-surface-base: #FAF9F5;
   --color-surface-card: #FFFFFF;
@@ -88,6 +94,12 @@
   --color-tanzanite: #B388FF;
   --color-tanzanite-foreground: #0A0A0A;
 
+  /* Frost Alert Severity */
+  --color-frost-severe: #FF5252;
+  --color-frost-severe-bg: rgba(255, 82, 82, 0.12);
+  --color-frost-high-bg: rgba(212, 165, 116, 0.12);
+  --color-frost-moderate-bg: rgba(255, 215, 64, 0.12);
+
   /* Surfaces */
   --color-surface-base: #0A0A0A;
   --color-surface-card: #141414;
@@ -132,6 +144,10 @@
   --color-warmth: var(--color-warmth);
   --color-earth: var(--color-earth);
   --color-tanzanite: var(--color-tanzanite);
+  --color-frost-severe: var(--color-frost-severe);
+  --color-frost-severe-bg: var(--color-frost-severe-bg);
+  --color-frost-high-bg: var(--color-frost-high-bg);
+  --color-frost-moderate-bg: var(--color-frost-moderate-bg);
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-display: "Noto Serif", Georgia, serif;
   --font-heading: "Plus Jakarta Sans", system-ui, sans-serif;

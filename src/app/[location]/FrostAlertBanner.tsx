@@ -3,17 +3,17 @@ import type { FrostAlert } from "@/lib/weather";
 export function FrostAlertBanner({ alert }: { alert: FrostAlert }) {
   const bgColor =
     alert.risk === "severe"
-      ? "bg-[rgba(179,38,30,0.1)] border-[#B3261E]"
+      ? "bg-frost-severe-bg border-frost-severe"
       : alert.risk === "high"
-        ? "bg-[rgba(139,69,19,0.1)] border-earth"
-        : "bg-[rgba(93,64,55,0.1)] border-accent";
+        ? "bg-frost-high-bg border-earth"
+        : "bg-frost-moderate-bg border-accent";
 
   const textColor =
     alert.risk === "severe"
-      ? "text-[#B3261E] dark:text-[#FF5252]"
+      ? "text-frost-severe"
       : alert.risk === "high"
-        ? "text-earth dark:text-earth"
-        : "text-accent dark:text-accent";
+        ? "text-earth"
+        : "text-accent";
 
   return (
     <div

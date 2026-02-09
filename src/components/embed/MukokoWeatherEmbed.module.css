@@ -1,0 +1,199 @@
+/* Embed widget styles — self-contained for external embedding */
+
+.widget {
+  --mkw-bg: #FFFFFF;
+  --mkw-bg-subtle: #FAF9F5;
+  --mkw-text: #141413;
+  --mkw-text-secondary: #52524E;
+  --mkw-text-tertiary: #8C8B87;
+  --mkw-primary: #4B0082;
+  --mkw-border: rgba(140, 139, 135, 0.15);
+}
+
+.widgetDark {
+  --mkw-bg: #141414;
+  --mkw-bg-subtle: #1E1E1E;
+  --mkw-text: #F5F5F4;
+  --mkw-text-secondary: #A8A8A3;
+  --mkw-text-tertiary: #6B6B66;
+  --mkw-primary: #B388FF;
+  --mkw-border: rgba(107, 107, 102, 0.2);
+}
+
+/* Shared base */
+.card {
+  background: var(--mkw-bg);
+  border: 1px solid var(--mkw-border);
+  border-radius: 16px;
+  padding: 20px;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
+/* States */
+.stateMessage {
+  padding: 20px;
+  text-align: center;
+  color: var(--mkw-text-tertiary);
+  font-size: 13px;
+}
+
+.errorMessage {
+  composes: stateMessage;
+  color: var(--mkw-text-secondary);
+  padding: 16px;
+}
+
+.errorLink {
+  color: var(--mkw-primary);
+}
+
+/* Attribution link */
+.attribution {
+  display: block;
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--mkw-border);
+  font-size: 11px;
+  color: var(--mkw-primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+/* ---- Current Widget ---- */
+.currentCard {
+  composes: card;
+  max-width: 360px;
+}
+
+.currentHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.currentLocationName {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--mkw-text);
+}
+
+.currentProvince {
+  font-size: 12px;
+  color: var(--mkw-text-tertiary);
+}
+
+.currentBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 16px;
+}
+
+.currentTemp {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--mkw-text);
+  line-height: 1.1;
+  font-family: 'Noto Serif', Georgia, serif;
+}
+
+.currentCondition {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--mkw-text);
+}
+
+.currentFeelsLike {
+  font-size: 13px;
+  color: var(--mkw-text-secondary);
+}
+
+.currentStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--mkw-border);
+  font-size: 12px;
+  color: var(--mkw-text-secondary);
+}
+
+/* ---- Forecast Widget ---- */
+.forecastCard {
+  composes: card;
+  max-width: 440px;
+}
+
+.forecastTitle {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--mkw-text);
+  margin-bottom: 12px;
+}
+
+.forecastRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--mkw-text);
+}
+
+.forecastRowBorder {
+  composes: forecastRow;
+  border-bottom: 1px solid var(--mkw-border);
+}
+
+.forecastDay {
+  width: 48px;
+  font-weight: 500;
+  color: var(--mkw-text-secondary);
+}
+
+.forecastCondition {
+  flex: 1;
+  color: var(--mkw-text-secondary);
+}
+
+.forecastTemps {
+  font-weight: 600;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+/* ---- Badge Widget ---- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--mkw-bg);
+  border: 1px solid var(--mkw-border);
+  border-radius: 9999px;
+  font-size: 13px;
+  color: var(--mkw-text);
+  text-decoration: none;
+  white-space: nowrap;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
+.badgeTemp {
+  font-weight: 700;
+}
+
+.badgeCondition {
+  color: var(--mkw-text-secondary);
+}
+
+.badgeLocation {
+  color: var(--mkw-text-tertiary);
+  font-size: 11px;
+}
+
+.badgeBrand {
+  color: var(--mkw-primary);
+  font-size: 10px;
+  font-weight: 600;
+}
