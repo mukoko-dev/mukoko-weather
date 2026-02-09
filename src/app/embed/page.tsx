@@ -30,7 +30,7 @@ export default function EmbedPage() {
             A card showing live temperature, conditions, humidity, wind, and UV
             for any Zimbabwe location.
           </p>
-          <div className="mt-4 rounded-[var(--radius-card)] bg-surface-card p-4">
+          <div className="mt-4 overflow-hidden rounded-[var(--radius-card)] bg-surface-card p-4">
             <pre className="overflow-x-auto text-sm">
               <code className="font-mono text-text-primary">{`<!-- Current conditions for Harare -->
 <div data-mukoko-widget="current"
@@ -49,7 +49,7 @@ export default function EmbedPage() {
           <p className="mt-2 text-sm text-text-secondary">
             A multi-day forecast strip. Configure 3, 5, or 7 days.
           </p>
-          <div className="mt-4 rounded-[var(--radius-card)] bg-surface-card p-4">
+          <div className="mt-4 overflow-hidden rounded-[var(--radius-card)] bg-surface-card p-4">
             <pre className="overflow-x-auto text-sm">
               <code className="font-mono text-text-primary">{`<!-- 5-day forecast for Bulawayo -->
 <div data-mukoko-widget="forecast"
@@ -70,7 +70,7 @@ export default function EmbedPage() {
             An inline badge that fits in navbars, headers, or sidebars. Shows
             temperature and condition at a glance.
           </p>
-          <div className="mt-4 rounded-[var(--radius-card)] bg-surface-card p-4">
+          <div className="mt-4 overflow-hidden rounded-[var(--radius-card)] bg-surface-card p-4">
             <pre className="overflow-x-auto text-sm">
               <code className="font-mono text-text-primary">{`<!-- Compact badge for Mutare -->
 <div data-mukoko-widget="badge"
@@ -90,7 +90,7 @@ export default function EmbedPage() {
             For complete isolation, use an iframe. Useful for CMS platforms
             that don&apos;t allow custom scripts.
           </p>
-          <div className="mt-4 rounded-[var(--radius-card)] bg-surface-card p-4">
+          <div className="mt-4 overflow-hidden rounded-[var(--radius-card)] bg-surface-card p-4">
             <pre className="overflow-x-auto text-sm">
               <code className="font-mono text-text-primary">{`<iframe
   src="https://weather.nyuchi.com/embed/iframe/harare?type=current&theme=auto"
@@ -115,7 +115,7 @@ export default function EmbedPage() {
             </code>{" "}
             component directly.
           </p>
-          <div className="mt-4 rounded-[var(--radius-card)] bg-surface-card p-4">
+          <div className="mt-4 overflow-hidden rounded-[var(--radius-card)] bg-surface-card p-4">
             <pre className="overflow-x-auto text-sm">
               <code className="font-mono text-text-primary">{`import { MukokoWeatherEmbed } from "@mukoko/weather-embed";
 

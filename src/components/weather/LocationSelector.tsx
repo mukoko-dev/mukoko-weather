@@ -121,7 +121,7 @@ export function LocationSelector({ currentSlug }: { currentSlug: string }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-40 mt-2 w-80 rounded-[var(--radius-card)] bg-surface-card shadow-lg sm:w-96">
+        <div className="absolute right-0 top-full z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-[var(--radius-card)] bg-surface-card shadow-lg sm:w-96">
           {/* Search input */}
           <div className="border-b border-text-tertiary/10 p-3">
             <div className="relative">

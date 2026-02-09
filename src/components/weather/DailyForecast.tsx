@@ -8,7 +8,7 @@ interface Props {
 export function DailyForecast({ daily }: Props) {
   return (
     <section aria-labelledby="daily-forecast-heading">
-      <div className="rounded-[var(--radius-card)] bg-surface-card p-6 shadow-sm">
+      <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
         <h2 id="daily-forecast-heading" className="text-lg font-semibold text-text-primary font-sans">7-Day Forecast</h2>
         <div className="mt-4 divide-y divide-text-tertiary/10" role="list" aria-label="7-day weather forecast">
           {daily.time.map((date, i) => {
@@ -26,19 +26,19 @@ export function DailyForecast({ daily }: Props) {
                 key={date}
                 role="listitem"
                 aria-label={`${dayName}: ${info.label}, high ${high} degrees, low ${low} degrees`}
-                className="flex items-center gap-4 py-3"
+                className="flex min-w-0 items-center gap-3 py-3"
               >
-                <span className="w-12 text-sm font-medium text-text-secondary">
+                <span className="w-10 shrink-0 text-sm font-medium text-text-secondary sm:w-12">
                   {dayName}
                 </span>
-                <WeatherIcon icon={info.icon} size={24} className="text-primary" />
-                <span className="flex-1 text-sm text-text-secondary">{info.label}</span>
+                <WeatherIcon icon={info.icon} size={24} className="shrink-0 text-primary" />
+                <span className="min-w-0 flex-1 truncate text-sm text-text-secondary">{info.label}</span>
                 {daily.precipitation_probability_max[i] > 0 && (
-                  <span className="text-xs text-secondary">
+                  <span className="shrink-0 text-xs text-secondary">
                     {daily.precipitation_probability_max[i]}%
                   </span>
                 )}
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex shrink-0 items-center gap-2 text-sm">
                   <span className="font-semibold text-text-primary" aria-label={`High ${high} degrees`}>
                     {high}°
                   </span>
