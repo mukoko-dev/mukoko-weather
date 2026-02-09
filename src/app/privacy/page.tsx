@@ -17,12 +17,12 @@ export default function PrivacyPage() {
     <>
       <Header currentLocation="" />
       <main id="main-content" className="mx-auto max-w-3xl px-4 py-10 sm:pl-6 md:pl-8">
-        <h1 className="font-serif text-3xl font-bold text-text-primary sm:text-4xl">Privacy Policy</h1>
+        <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">Privacy Policy</h1>
         <p className="mt-2 text-sm text-text-tertiary">Last updated: February 2026</p>
 
         <div className="mt-8 space-y-8 text-text-secondary leading-relaxed">
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">Introduction</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">Introduction</h2>
             <p className="mt-3">
               This Privacy Policy explains how <strong className="text-text-primary">Mukoko Africa</strong>,
               a division of <strong className="text-text-primary">Nyuchi Africa (PVT) Ltd</strong>
@@ -37,7 +37,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">Information we collect</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">Information we collect</h2>
             <h3 className="mt-4 font-semibold text-text-primary">Information you provide</h3>
             <p className="mt-2">
               mukoko weather does not require account creation, registration, or login. We do not collect
@@ -69,7 +69,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">How we use information</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">How we use information</h2>
             <p className="mt-3">
               Since we collect minimal information, our use is limited to:
             </p>
@@ -81,7 +81,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">Third-party services</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">Third-party services</h2>
             <p className="mt-3">mukoko weather uses the following third-party services:</p>
             <dl className="mt-3 space-y-3">
               <div>
@@ -117,7 +117,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">Data retention</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">Data retention</h2>
             <p className="mt-3">
               We do not retain any personal data. AI-generated weather summaries are cached for 30-120
               minutes depending on the location, after which they are automatically regenerated. These
@@ -126,7 +126,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">Children&apos;s privacy</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">Children&apos;s privacy</h2>
             <p className="mt-3">
               mukoko weather is a general-audience weather service. We do not knowingly collect any personal
               information from anyone, including children under 13.
@@ -134,7 +134,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">Changes to this policy</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">Changes to this policy</h2>
             <p className="mt-3">
               We may update this Privacy Policy from time to time. Changes will be posted on this page with
               an updated date. Your continued use of the Service after changes constitutes acceptance of the
@@ -143,7 +143,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">Contact</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">Contact</h2>
             <p className="mt-3">
               For privacy-related questions or concerns, contact us at:
             </p>

@@ -1,7 +1,7 @@
-export function FlagStrip() {
+export function MineralsStripe() {
   return (
     <div
-      className="flag-strip"
+      className="minerals-stripe"
       role="presentation"
       aria-hidden="true"
     />

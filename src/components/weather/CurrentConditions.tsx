@@ -22,10 +22,10 @@ export function CurrentConditions({ current, locationName }: Props) {
           <div className="min-w-0">
             <p className="text-sm font-medium text-text-secondary">{locationName}</p>
             <div className="mt-1 flex items-baseline gap-2">
-              <span className="font-serif text-6xl font-bold text-text-primary" aria-label={`${Math.round(current.temperature_2m)} degrees Celsius`}>
+              <span className="font-mono text-6xl font-medium tracking-tight text-text-primary" aria-label={`${Math.round(current.temperature_2m)} degrees Celsius`}>
                 {Math.round(current.temperature_2m)}
               </span>
-              <span className="text-2xl text-text-secondary" aria-hidden="true">°C</span>
+              <span className="font-sans text-2xl font-normal text-text-secondary align-super" aria-hidden="true">°C</span>
             </div>
             <p className="mt-1 text-sm text-text-secondary">
               Feels like {Math.round(current.apparent_temperature)}°C

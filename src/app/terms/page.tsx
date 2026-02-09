@@ -17,12 +17,12 @@ export default function TermsPage() {
     <>
       <Header currentLocation="" />
       <main id="main-content" className="mx-auto max-w-3xl px-4 py-10 sm:pl-6 md:pl-8">
-        <h1 className="font-serif text-3xl font-bold text-text-primary sm:text-4xl">Terms of Service</h1>
+        <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">Terms of Service</h1>
         <p className="mt-2 text-sm text-text-tertiary">Last updated: February 2026</p>
 
         <div className="mt-8 space-y-8 text-text-secondary leading-relaxed">
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">1. Agreement</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">1. Agreement</h2>
             <p className="mt-3">
               These Terms of Service (&quot;Terms&quot;) govern your use of mukoko weather
               (&quot;the Service&quot;), operated by <strong className="text-text-primary">Mukoko Africa</strong>,
@@ -38,7 +38,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">2. Description of Service</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">2. Description of Service</h2>
             <p className="mt-3">
               mukoko weather provides weather forecasts, current conditions, AI-generated weather summaries,
               and frost alerts for locations across Zimbabwe. The Service is provided free of charge.
@@ -46,7 +46,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">3. Weather data disclaimer</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">3. Weather data disclaimer</h2>
             <p className="mt-3">
               Weather information provided by the Service is sourced from third-party data providers
               (Open-Meteo) and AI models (Anthropic Claude). While we strive for accuracy:
@@ -64,7 +64,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">4. Acceptable use</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">4. Acceptable use</h2>
             <p className="mt-3">You may use the Service for personal, educational, and commercial purposes. You may not:</p>
             <ul className="mt-2 list-disc pl-6 space-y-1">
               <li>Attempt to disrupt, overload, or interfere with the Service&apos;s infrastructure</li>
@@ -75,7 +75,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">5. API and embed usage</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">5. API and embed usage</h2>
             <p className="mt-3">
               The Service provides API endpoints and an embeddable widget. These are provided for
               reasonable use. We reserve the right to rate-limit or restrict access to API endpoints
@@ -84,7 +84,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">6. Intellectual property</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">6. Intellectual property</h2>
             <p className="mt-3">
               The mukoko weather name, logo, and brand are trademarks of Mukoko Africa / Nyuchi Africa (PVT) Ltd.
               The Service&apos;s source code is licensed under the{" "}
@@ -96,7 +96,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">7. Limitation of liability</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">7. Limitation of liability</h2>
             <p className="mt-3">
               THE SERVICE IS PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE&quot; WITHOUT WARRANTIES
               OF ANY KIND, EITHER EXPRESS OR IMPLIED. TO THE FULLEST EXTENT PERMITTED BY LAW, NYUCHI
@@ -110,7 +110,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">8. Service availability</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">8. Service availability</h2>
             <p className="mt-3">
               We aim to keep the Service available at all times but do not guarantee uninterrupted access.
               The Service may be temporarily unavailable due to maintenance, updates, or circumstances
@@ -119,7 +119,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">9. Changes to these Terms</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">9. Changes to these Terms</h2>
             <p className="mt-3">
               We may update these Terms from time to time. Changes will be posted on this page with an
               updated date. Your continued use of the Service after changes constitutes acceptance of the
@@ -128,7 +128,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">10. Governing law</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">10. Governing law</h2>
             <p className="mt-3">
               These Terms are governed by the laws of the Republic of Zimbabwe. Any disputes arising from
               these Terms or your use of the Service shall be subject to the jurisdiction of the courts
@@ -137,7 +137,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-serif text-xl font-bold text-text-primary">11. Contact</h2>
+            <h2 className="font-heading text-xl font-bold text-text-primary">11. Contact</h2>
             <p className="mt-3">
               For questions about these Terms, contact us at:
             </p>

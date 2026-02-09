@@ -8,7 +8,7 @@
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "background_color": "#FAF9F5",
-  "theme_color": "#4B0082",
+  "theme_color": "#0047AB",
   "orientation": "portrait-primary",
   "categories": ["weather", "utilities", "lifestyle"],
   "lang": "en",

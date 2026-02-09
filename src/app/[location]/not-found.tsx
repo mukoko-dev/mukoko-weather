@@ -4,7 +4,7 @@ import { LOCATIONS } from "@/lib/locations";
 export default function LocationNotFound() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
-      <h1 className="font-serif text-4xl font-bold text-text-primary">Location not found</h1>
+      <h1 className="font-display text-4xl font-bold text-text-primary">Location not found</h1>
       <p className="mt-4 text-text-secondary">
         We don&apos;t have weather data for that location yet.
       </p>
