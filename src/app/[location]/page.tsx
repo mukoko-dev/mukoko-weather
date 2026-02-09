@@ -217,7 +217,7 @@ export default async function LocationPage({
 
       <main
         id="main-content"
-        className="mx-auto max-w-5xl px-4 py-6 sm:pl-6 md:pl-8"
+        className="mx-auto max-w-5xl overflow-hidden px-4 py-6 sm:pl-6 md:pl-8"
         aria-label={`Weather dashboard for ${location.name}`}
       >
         {/* H1 for SEO — visually integrated but semantically correct */}
@@ -234,7 +234,7 @@ export default async function LocationPage({
         {/* Main grid */}
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Left column: Current + AI Summary */}
-          <div className="space-y-6 lg:col-span-2">
+          <div className="min-w-0 space-y-6 lg:col-span-2">
             <CurrentConditions
               current={weather.current}
               locationName={location.name}
@@ -244,13 +244,13 @@ export default async function LocationPage({
           </div>
 
           {/* Right column: Daily + Sun + Info */}
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
             <DailyForecast daily={weather.daily} />
             <SunTimes daily={weather.daily} />
 
             {/* Location info card */}
             <section aria-labelledby={`about-${location.slug}`}>
-              <div className="rounded-[var(--radius-card)] bg-surface-card p-6 shadow-sm">
+              <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
                 <h2 id={`about-${location.slug}`} className="text-lg font-semibold text-text-primary font-sans">
                   About {location.name}
                 </h2>

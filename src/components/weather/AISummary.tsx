@@ -51,7 +51,7 @@ export function AISummary({ weather, location }: Props) {
 
   return (
     <section aria-label="AI weather intelligence summary">
-      <div className="rounded-[var(--radius-card)] border-l-4 border-primary bg-surface-card p-6 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border-l-4 border-primary bg-surface-card p-4 shadow-sm sm:p-6">
         <div className="flex items-center gap-2">
           <SparklesIcon size={20} className="text-primary" />
           <h2 className="text-lg font-semibold text-text-primary font-sans">

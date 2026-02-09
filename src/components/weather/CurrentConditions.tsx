@@ -13,13 +13,13 @@ export function CurrentConditions({ current, locationName }: Props) {
 
   return (
     <section aria-labelledby="current-conditions-heading">
-      <div className="rounded-[var(--radius-card)] bg-surface-card p-6 shadow-sm">
+      <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
         <h2 id="current-conditions-heading" className="sr-only">
           Current weather conditions in {locationName}
         </h2>
         {/* Main temperature display */}
-        <div className="flex items-start justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
             <p className="text-sm font-medium text-text-secondary">{locationName}</p>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="font-serif text-6xl font-bold text-text-primary" aria-label={`${Math.round(current.temperature_2m)} degrees Celsius`}>
@@ -79,11 +79,11 @@ export function CurrentConditions({ current, locationName }: Props) {
 
 function QuickStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div role="listitem" className="flex items-center gap-3 rounded-[var(--radius-input)] bg-surface-base p-3">
-      <span className="text-text-tertiary" aria-hidden="true">{icon}</span>
-      <div>
+    <div role="listitem" className="flex min-w-0 items-center gap-3 rounded-[var(--radius-input)] bg-surface-base p-3">
+      <span className="shrink-0 text-text-tertiary" aria-hidden="true">{icon}</span>
+      <div className="min-w-0">
         <p className="text-xs text-text-tertiary">{label}</p>
-        <p className="text-sm font-medium text-text-primary" aria-label={`${label}: ${value}`}>{value}</p>
+        <p className="truncate text-sm font-medium text-text-primary" aria-label={`${label}: ${value}`}>{value}</p>
       </div>
     </div>
   );
