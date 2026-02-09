@@ -1,7 +1,7 @@
 /**
  * nyuchi-weather-api — Cloudflare Worker
  *
- * Edge API layer for mukoko weather at weather.nyuchi.com
+ * Edge API layer for mukoko weather at weather.mukoko.com
  *
  * Routes:
  *   GET  /api/weather?lat=&lon=         — Cached Open-Meteo weather proxy

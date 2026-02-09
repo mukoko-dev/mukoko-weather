@@ -5,15 +5,15 @@
  *
  *   <!-- Current conditions widget -->
  *   <div data-mukoko-widget="current" data-location="harare"></div>
- *   <script src="https://weather.nyuchi.com/embed/widget.js" async></script>
+ *   <script src="https://weather.mukoko.com/embed/widget.js" async></script>
  *
  *   <!-- Forecast widget -->
  *   <div data-mukoko-widget="forecast" data-location="bulawayo" data-days="5"></div>
- *   <script src="https://weather.nyuchi.com/embed/widget.js" async></script>
+ *   <script src="https://weather.mukoko.com/embed/widget.js" async></script>
  *
  *   <!-- Compact badge -->
  *   <div data-mukoko-widget="badge" data-location="mutare"></div>
- *   <script src="https://weather.nyuchi.com/embed/widget.js" async></script>
+ *   <script src="https://weather.mukoko.com/embed/widget.js" async></script>
  *
  * Widget types:
  *   - "current"  — Current conditions card (temp, conditions, wind, humidity)
@@ -36,7 +36,7 @@ export const embedRoutes = new Hono<{ Bindings: Env }>();
 
 // ───── Widget JavaScript loader ─────
 embedRoutes.get("/widget.js", (c) => {
-  const baseUrl = c.env.NEXT_APP_URL ?? "https://weather.nyuchi.com";
+  const baseUrl = c.env.NEXT_APP_URL ?? "https://weather.mukoko.com";
   const script = generateWidgetScript(baseUrl);
 
   return new Response(script, {
@@ -102,7 +102,7 @@ embedRoutes.get("/data/:location", async (c) => {
     weather,
     _meta: {
       source: "mukoko weather by Nyuchi Africa",
-      url: `https://weather.nyuchi.com/${slug}`,
+      url: `https://weather.mukoko.com/${slug}`,
     },
   }, 200, {
     "Cache-Control": "public, max-age=900",
@@ -115,7 +115,7 @@ embedRoutes.get("/iframe/:location", (c) => {
   const slug = c.req.param("location");
   const type = c.req.query("type") ?? "current";
   const theme = c.req.query("theme") ?? "auto";
-  const baseUrl = c.env.NEXT_APP_URL ?? "https://weather.nyuchi.com";
+  const baseUrl = c.env.NEXT_APP_URL ?? "https://weather.mukoko.com";
 
   const location = getLocationBySlug(slug);
   if (!location) {

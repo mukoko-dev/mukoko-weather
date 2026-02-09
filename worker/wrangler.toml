@@ -5,7 +5,7 @@ main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Domain: weather.nyuchi.com
+# Domain: weather.mukoko.com
 # Configure via Cloudflare Dashboard: Workers > nyuchi-weather-api > Custom Domains
 
 # ───── KV Namespace Bindings ─────
@@ -30,8 +30,8 @@ preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
 # ───── Environment Variables ─────
 [vars]
 ENVIRONMENT = "production"
-CORS_ORIGINS = "https://nyuchi.com,https://mukoko.com,https://weather.mukoko.com,https://weather.nyuchi.com"
-NEXT_APP_URL = "https://weather.nyuchi.com"
+CORS_ORIGINS = "https://nyuchi.com,https://mukoko.com,https://weather.mukoko.com"
+NEXT_APP_URL = "https://weather.mukoko.com"
 
 # ───── Secrets (set via `wrangler secret put`) ─────
 # ANTHROPIC_API_KEY — Claude API key for AI summaries
@@ -49,5 +49,5 @@ NEXT_APP_URL = "http://localhost:3000"
 name = "nyuchi-weather-api-staging"
 [env.staging.vars]
 ENVIRONMENT = "staging"
-CORS_ORIGINS = "https://staging.weather.nyuchi.com,https://staging.nyuchi.com"
-NEXT_APP_URL = "https://staging.weather.nyuchi.com"
+CORS_ORIGINS = "https://staging.weather.mukoko.com,https://staging.nyuchi.com"
+NEXT_APP_URL = "https://staging.weather.mukoko.com"

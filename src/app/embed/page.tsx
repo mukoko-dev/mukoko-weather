@@ -36,7 +36,7 @@ export default function EmbedPage() {
 <div data-mukoko-widget="current"
      data-location="harare">
 </div>
-<script src="https://weather.nyuchi.com/embed/widget.js" async></script>`}</code>
+<script src="https://weather.mukoko.com/embed/widget.js" async></script>`}</code>
             </pre>
           </div>
         </section>
@@ -56,7 +56,7 @@ export default function EmbedPage() {
      data-location="bulawayo"
      data-days="5">
 </div>
-<script src="https://weather.nyuchi.com/embed/widget.js" async></script>`}</code>
+<script src="https://weather.mukoko.com/embed/widget.js" async></script>`}</code>
             </pre>
           </div>
         </section>
@@ -76,7 +76,7 @@ export default function EmbedPage() {
 <div data-mukoko-widget="badge"
      data-location="mutare">
 </div>
-<script src="https://weather.nyuchi.com/embed/widget.js" async></script>`}</code>
+<script src="https://weather.mukoko.com/embed/widget.js" async></script>`}</code>
             </pre>
           </div>
         </section>
@@ -93,7 +93,7 @@ export default function EmbedPage() {
           <div className="mt-4 overflow-hidden rounded-[var(--radius-card)] bg-surface-card p-4">
             <pre className="overflow-x-auto text-sm">
               <code className="font-mono text-text-primary">{`<iframe
-  src="https://weather.nyuchi.com/embed/iframe/harare?type=current&theme=auto"
+  src="https://weather.mukoko.com/embed/iframe/harare?type=current&theme=auto"
   width="380"
   height="280"
   frameborder="0"
