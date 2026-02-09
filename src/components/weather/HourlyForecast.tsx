@@ -15,23 +15,26 @@ export function HourlyForecast({ hourly }: Props) {
   const hours = hourly.time.slice(start, start + 24);
 
   return (
-    <section aria-label="Hourly forecast">
+    <section aria-labelledby="hourly-forecast-heading">
       <div className="rounded-[var(--radius-card)] bg-surface-card p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-text-primary font-sans">24-Hour Forecast</h2>
-        <div className="mt-4 flex gap-4 overflow-x-auto pb-2 scrollbar-hide" role="list">
+        <h2 id="hourly-forecast-heading" className="text-lg font-semibold text-text-primary font-sans">24-Hour Forecast</h2>
+        <div className="mt-4 flex gap-4 overflow-x-auto pb-2 scrollbar-hide" role="list" aria-label="Hourly weather forecast">
           {hours.map((time, i) => {
             const idx = start + i;
             const date = new Date(time);
             const info = weatherCodeToInfo(hourly.weather_code[idx]);
             const isDay = hourly.is_day[idx];
+            const temp = Math.round(hourly.temperature_2m[idx]);
+            const timeLabel = i === 0 ? "Now" : date.toLocaleTimeString("en-ZW", { hour: "2-digit", minute: "2-digit", hour12: false });
             return (
               <div
                 key={time}
                 role="listitem"
+                aria-label={`${timeLabel}: ${temp} degrees, ${info.label}`}
                 className="flex min-w-[72px] flex-col items-center gap-2 rounded-[var(--radius-input)] bg-surface-base px-3 py-3"
               >
                 <span className="text-xs font-medium text-text-secondary">
-                  {i === 0 ? "Now" : date.toLocaleTimeString("en-ZW", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                  {timeLabel}
                 </span>
                 <WeatherIcon
                   icon={isDay ? info.icon : "moon"}
@@ -39,7 +42,7 @@ export function HourlyForecast({ hourly }: Props) {
                   className="text-primary"
                 />
                 <span className="text-sm font-semibold text-text-primary">
-                  {Math.round(hourly.temperature_2m[idx])}°
+                  {temp}°
                 </span>
                 {hourly.precipitation_probability[idx] > 0 && (
                   <span className="text-xs text-secondary">

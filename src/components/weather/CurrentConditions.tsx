@@ -12,17 +12,20 @@ export function CurrentConditions({ current, locationName }: Props) {
   const wind = windDirection(current.wind_direction_10m);
 
   return (
-    <section aria-label={`Current weather conditions in ${locationName}`}>
+    <section aria-labelledby="current-conditions-heading">
       <div className="rounded-[var(--radius-card)] bg-surface-card p-6 shadow-sm">
+        <h2 id="current-conditions-heading" className="sr-only">
+          Current weather conditions in {locationName}
+        </h2>
         {/* Main temperature display */}
         <div className="flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-text-secondary">{locationName}</p>
             <div className="mt-1 flex items-baseline gap-2">
-              <span className="font-serif text-6xl font-bold text-text-primary">
+              <span className="font-serif text-6xl font-bold text-text-primary" aria-label={`${Math.round(current.temperature_2m)} degrees Celsius`}>
                 {Math.round(current.temperature_2m)}
               </span>
-              <span className="text-2xl text-text-secondary">°C</span>
+              <span className="text-2xl text-text-secondary" aria-hidden="true">°C</span>
             </div>
             <p className="mt-1 text-sm text-text-secondary">
               Feels like {Math.round(current.apparent_temperature)}°C
@@ -37,7 +40,7 @@ export function CurrentConditions({ current, locationName }: Props) {
         </div>
 
         {/* Quick stats grid */}
-        <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3" role="list" aria-label="Weather statistics">
           <QuickStat
             icon={<DropletIcon size={18} />}
             label="Humidity"
@@ -76,11 +79,11 @@ export function CurrentConditions({ current, locationName }: Props) {
 
 function QuickStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-[var(--radius-input)] bg-surface-base p-3">
-      <span className="text-text-tertiary">{icon}</span>
+    <div role="listitem" className="flex items-center gap-3 rounded-[var(--radius-input)] bg-surface-base p-3">
+      <span className="text-text-tertiary" aria-hidden="true">{icon}</span>
       <div>
         <p className="text-xs text-text-tertiary">{label}</p>
-        <p className="text-sm font-medium text-text-primary">{value}</p>
+        <p className="text-sm font-medium text-text-primary" aria-label={`${label}: ${value}`}>{value}</p>
       </div>
     </div>
   );

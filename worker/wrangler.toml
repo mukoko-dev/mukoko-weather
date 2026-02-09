@@ -30,7 +30,7 @@ preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
 # ───── Environment Variables ─────
 [vars]
 ENVIRONMENT = "production"
-CORS_ORIGINS = "https://nyuchi.com,https://mukoko.africa,https://weather.nyuchi.com"
+CORS_ORIGINS = "https://nyuchi.com,https://mukoko.com,https://weather.mukoko.com,https://weather.nyuchi.com"
 NEXT_APP_URL = "https://weather.nyuchi.com"
 
 # ───── Secrets (set via `wrangler secret put`) ─────
