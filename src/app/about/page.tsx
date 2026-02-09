@@ -17,7 +17,7 @@ export default function AboutPage() {
     <>
       <Header currentLocation="" />
       <main id="main-content" className="mx-auto max-w-3xl px-4 py-10 sm:pl-6 md:pl-8">
-        <h1 className="font-serif text-3xl font-bold text-text-primary sm:text-4xl">About mukoko weather</h1>
+        <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">About mukoko weather</h1>
 
         <section className="mt-8 space-y-4 text-text-secondary leading-relaxed">
           <p>
@@ -33,7 +33,7 @@ export default function AboutPage() {
         </section>
 
         <section className="mt-10">
-          <h2 className="font-serif text-2xl font-bold text-text-primary">Who we are</h2>
+          <h2 className="font-heading text-2xl font-bold text-text-primary">Who we are</h2>
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
               <strong className="text-text-primary">mukoko weather</strong> is a product of{" "}
@@ -52,7 +52,7 @@ export default function AboutPage() {
         </section>
 
         <section className="mt-10">
-          <h2 className="font-serif text-2xl font-bold text-text-primary">What we offer</h2>
+          <h2 className="font-heading text-2xl font-bold text-text-primary">What we offer</h2>
           <ul className="mt-4 space-y-2 text-text-secondary">
             <li className="flex items-start gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" aria-hidden="true" />
@@ -82,7 +82,7 @@ export default function AboutPage() {
         </section>
 
         <section className="mt-10">
-          <h2 className="font-serif text-2xl font-bold text-text-primary">Data sources</h2>
+          <h2 className="font-heading text-2xl font-bold text-text-primary">Data sources</h2>
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
               Weather data is sourced from{" "}
@@ -99,7 +99,7 @@ export default function AboutPage() {
         </section>
 
         <section className="mt-10">
-          <h2 className="font-serif text-2xl font-bold text-text-primary">Contact us</h2>
+          <h2 className="font-heading text-2xl font-bold text-text-primary">Contact us</h2>
           <dl className="mt-4 space-y-3 text-sm">
             <div className="flex gap-4">
               <dt className="w-28 flex-shrink-0 text-text-tertiary">General</dt>

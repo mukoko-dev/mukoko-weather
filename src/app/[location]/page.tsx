@@ -76,54 +76,117 @@ export default async function LocationPage({
   const season = getZimbabweSeason();
   const conditionInfo = weatherCodeToInfo(weather.current.weather_code);
 
-  // Schema.org structured data — WeatherForecast + Place
+  const now = new Date().toISOString();
+
+  // Schema.org structured data — WebPage + Place + weather observations
   const pageSchema = {
     "@context": "https://schema.org",
     "@type": "WebPage",
+    "@id": `${BASE_URL}/${location.slug}`,
     name: `${location.name} Weather Forecast`,
     description: `Current weather and 7-day forecast for ${location.name}, ${location.province}, Zimbabwe`,
     url: `${BASE_URL}/${location.slug}`,
+    datePublished: now,
+    dateModified: now,
+    inLanguage: "en",
+    isPartOf: { "@id": `${BASE_URL}/#website` },
+    publisher: { "@id": `${BASE_URL}/#org` },
     mainEntity: {
       "@type": "Place",
+      "@id": `${BASE_URL}/${location.slug}#place`,
       name: location.name,
       geo: {
         "@type": "GeoCoordinates",
         latitude: location.lat,
         longitude: location.lon,
-        elevation: location.elevation,
+        elevation: {
+          "@type": "QuantitativeValue",
+          value: location.elevation,
+          unitCode: "MTR",
+          unitText: "metres",
+        },
       },
       address: {
         "@type": "PostalAddress",
         addressRegion: location.province,
         addressCountry: "ZW",
       },
+      containedInPlace: {
+        "@type": "Country",
+        name: "Zimbabwe",
+        identifier: "ZW",
+      },
     },
     about: {
       "@type": "Observation",
       measurementMethod: "Open-Meteo weather API",
-      observationDate: new Date().toISOString(),
+      observationDate: now,
+      observationAbout: { "@id": `${BASE_URL}/${location.slug}#place` },
       measuredProperty: [
         {
           "@type": "PropertyValue",
           name: "temperature",
           value: weather.current.temperature_2m,
           unitCode: "CEL",
+          unitText: "°C",
         },
         {
           "@type": "PropertyValue",
-          name: "humidity",
+          name: "apparentTemperature",
+          value: weather.current.apparent_temperature,
+          unitCode: "CEL",
+          unitText: "°C",
+        },
+        {
+          "@type": "PropertyValue",
+          name: "relativeHumidity",
           value: weather.current.relative_humidity_2m,
           unitCode: "P1",
+          unitText: "%",
         },
         {
           "@type": "PropertyValue",
           name: "windSpeed",
           value: weather.current.wind_speed_10m,
           unitCode: "KMH",
+          unitText: "km/h",
         },
         {
           "@type": "PropertyValue",
-          name: "condition",
+          name: "windDirection",
+          value: weather.current.wind_direction_10m,
+          unitCode: "DD",
+          unitText: "°",
+        },
+        {
+          "@type": "PropertyValue",
+          name: "surfacePressure",
+          value: weather.current.surface_pressure,
+          unitCode: "HPA",
+          unitText: "hPa",
+        },
+        {
+          "@type": "PropertyValue",
+          name: "uvIndex",
+          value: weather.current.uv_index,
+        },
+        {
+          "@type": "PropertyValue",
+          name: "cloudCover",
+          value: weather.current.cloud_cover,
+          unitCode: "P1",
+          unitText: "%",
+        },
+        {
+          "@type": "PropertyValue",
+          name: "precipitation",
+          value: weather.current.precipitation,
+          unitCode: "MMT",
+          unitText: "mm",
+        },
+        {
+          "@type": "PropertyValue",
+          name: "weatherCondition",
           value: conditionInfo.label,
         },
       ],
@@ -145,7 +208,6 @@ export default async function LocationPage({
         "@type": "ListItem",
         position: 2,
         name: location.province,
-        item: `${BASE_URL}/${location.slug}`,
       },
       {
         "@type": "ListItem",
@@ -251,7 +313,7 @@ export default async function LocationPage({
             {/* Location info card */}
             <section aria-labelledby={`about-${location.slug}`}>
               <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
-                <h2 id={`about-${location.slug}`} className="text-lg font-semibold text-text-primary font-sans">
+                <h2 id={`about-${location.slug}`} className="text-lg font-semibold text-text-primary font-heading">
                   About {location.name}
                 </h2>
                 <dl className="mt-4 space-y-3 text-sm">

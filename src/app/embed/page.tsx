@@ -13,7 +13,7 @@ export default function EmbedPage() {
     <>
       <Header currentLocation="harare" />
       <main className="mx-auto max-w-3xl px-4 py-10 sm:pl-6 md:pl-8">
-        <h1 className="font-serif text-3xl font-bold text-text-primary">
+        <h1 className="font-display text-3xl font-bold text-text-primary">
           Embed Weather Widgets
         </h1>
         <p className="mt-4 text-text-secondary">

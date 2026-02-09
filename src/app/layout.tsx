@@ -39,6 +39,10 @@ export const metadata: Metadata = {
   publisher: "Nyuchi Africa (PVT) Ltd",
   alternates: {
     canonical: BASE_URL,
+    languages: {
+      "en": BASE_URL,
+      "x-default": BASE_URL,
+    },
   },
   openGraph: {
     title: "mukoko weather — Zimbabwe Weather Intelligence",
@@ -81,6 +85,7 @@ export default function RootLayout({
   const webAppSchema = {
     "@context": "https://schema.org",
     "@type": "WebApplication",
+    "@id": `${BASE_URL}/#app`,
     name: "mukoko weather",
     alternateName: "Mukoko Weather Zimbabwe",
     description:
@@ -89,15 +94,13 @@ export default function RootLayout({
     applicationCategory: "WeatherApplication",
     operatingSystem: "Any",
     browserRequirements: "Requires JavaScript",
-    creator: {
-      "@type": "Organization",
-      name: "Nyuchi Web Services",
-      url: "https://nyuchi.com",
-      parentOrganization: {
-        "@type": "Organization",
-        name: "Nyuchi Africa (PVT) Ltd",
-      },
-    },
+    availableLanguage: [
+      { "@type": "Language", name: "English", alternateName: "en" },
+      { "@type": "Language", name: "Shona", alternateName: "sn" },
+      { "@type": "Language", name: "Ndebele", alternateName: "nd" },
+    ],
+    creator: { "@id": `${BASE_URL}/#org` },
+    publisher: { "@id": `${BASE_URL}/#org` },
     areaServed: {
       "@type": "Country",
       name: "Zimbabwe",
@@ -108,8 +111,9 @@ export default function RootLayout({
       price: "0",
       priceCurrency: "USD",
       description: "Free weather intelligence for Zimbabwe",
+      availability: "https://schema.org/InStock",
     },
-    inLanguage: ["en", "sn", "nd"],
+    inLanguage: "en",
     featureList: [
       "Real-time weather conditions",
       "7-day weather forecasts",
@@ -125,6 +129,7 @@ export default function RootLayout({
   const orgSchema = {
     "@context": "https://schema.org",
     "@type": "Organization",
+    "@id": `${BASE_URL}/#org`,
     name: "Nyuchi Africa (PVT) Ltd",
     legalName: "Nyuchi Africa (PVT) Ltd",
     url: "https://nyuchi.com",
@@ -143,6 +148,7 @@ export default function RootLayout({
         "@type": "ContactPoint",
         email: "support@mukoko.com",
         contactType: "customer support",
+        availableLanguage: ["en", "sn"],
       },
       {
         "@type": "ContactPoint",
@@ -154,15 +160,19 @@ export default function RootLayout({
       "https://twitter.com/mukokoafrica",
       "https://instagram.com/mukoko.africa",
     ],
+    knowsLanguage: ["en", "sn", "nd"],
   };
 
   // WebSite schema with search action for sitelinks search box
   const webSiteSchema = {
     "@context": "https://schema.org",
     "@type": "WebSite",
+    "@id": `${BASE_URL}/#website`,
     name: "mukoko weather",
     alternateName: "Mukoko Weather",
     url: BASE_URL,
+    publisher: { "@id": `${BASE_URL}/#org` },
+    inLanguage: "en",
     potentialAction: {
       "@type": "SearchAction",
       target: {
@@ -176,19 +186,21 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      dir="ltr"
       data-theme="light"
       data-brand="mukoko-weather"
     >
       <head>
         <meta name="color-scheme" content="light dark" />
-        <meta name="theme-color" content="#0047AB" />
+        <meta name="theme-color" content="#0047AB" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#0A0A0A" media="(prefers-color-scheme: dark)" />
         {/* Mobile-first: optimised for Android & Huawei devices */}
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="format-detection" content="telephone=no" />
         <link rel="manifest" href="/manifest.json" />
-        {/* Google Fonts loaded via link tags */}
+        {/* Specialty fonts for headings, display text, and data only — body uses system fonts */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

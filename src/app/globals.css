@@ -132,8 +132,9 @@
   --color-warmth: var(--color-warmth);
   --color-earth: var(--color-earth);
   --color-tanzanite: var(--color-tanzanite);
-  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
-  --font-serif: "Noto Serif", Georgia, serif;
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Noto Serif", Georgia, serif;
+  --font-heading: "Plus Jakarta Sans", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
@@ -144,7 +145,7 @@ html {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), system-ui, sans-serif;
+  font-family: var(--font-sans);
   overflow-x: hidden;
   max-width: 100vw;
 }

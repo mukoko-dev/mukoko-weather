@@ -70,14 +70,14 @@ export default function HelpPage() {
       />
       <Header currentLocation="" />
       <main id="main-content" className="mx-auto max-w-3xl px-4 py-10 sm:pl-6 md:pl-8">
-        <h1 className="font-serif text-3xl font-bold text-text-primary sm:text-4xl">Help & FAQ</h1>
+        <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">Help & FAQ</h1>
         <p className="mt-3 text-text-secondary">
           Everything you need to know about using mukoko weather.
         </p>
 
         {/* Getting Started */}
         <section className="mt-10">
-          <h2 className="font-serif text-2xl font-bold text-text-primary">Getting started</h2>
+          <h2 className="font-heading text-2xl font-bold text-text-primary">Getting started</h2>
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
               mukoko weather gives you accurate weather data for 90+ Zimbabwe locations. No account needed —
@@ -106,7 +106,7 @@ export default function HelpPage() {
 
         {/* Understanding the forecast */}
         <section className="mt-10">
-          <h2 className="font-serif text-2xl font-bold text-text-primary">Understanding the forecast</h2>
+          <h2 className="font-heading text-2xl font-bold text-text-primary">Understanding the forecast</h2>
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <h3 className="font-semibold text-text-primary">Current conditions</h3>
             <p>
@@ -145,7 +145,7 @@ export default function HelpPage() {
 
         {/* Frost alerts */}
         <section className="mt-10">
-          <h2 className="font-serif text-2xl font-bold text-text-primary">Frost alerts</h2>
+          <h2 className="font-heading text-2xl font-bold text-text-primary">Frost alerts</h2>
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
               mukoko weather automatically monitors overnight temperatures and displays a frost alert banner
@@ -176,7 +176,7 @@ export default function HelpPage() {
 
         {/* Zimbabwe seasons */}
         <section className="mt-10">
-          <h2 className="font-serif text-2xl font-bold text-text-primary">Zimbabwe seasons</h2>
+          <h2 className="font-heading text-2xl font-bold text-text-primary">Zimbabwe seasons</h2>
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
               Zimbabwe has distinct seasons that affect daily life, agriculture, and travel. mukoko weather
@@ -205,7 +205,7 @@ export default function HelpPage() {
 
         {/* Install as app */}
         <section className="mt-10">
-          <h2 className="font-serif text-2xl font-bold text-text-primary">Install as an app</h2>
+          <h2 className="font-heading text-2xl font-bold text-text-primary">Install as an app</h2>
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
               mukoko weather works as a Progressive Web App (PWA) — you can install it on your phone&apos;s
@@ -233,7 +233,7 @@ export default function HelpPage() {
 
         {/* Dark mode */}
         <section className="mt-10">
-          <h2 className="font-serif text-2xl font-bold text-text-primary">Dark mode</h2>
+          <h2 className="font-heading text-2xl font-bold text-text-primary">Dark mode</h2>
           <div className="mt-4 text-text-secondary leading-relaxed">
             <p>
               Tap the theme toggle button in the top-right corner of the header (next to the location selector)
@@ -244,7 +244,7 @@ export default function HelpPage() {
 
         {/* Embed widget */}
         <section className="mt-10">
-          <h2 className="font-serif text-2xl font-bold text-text-primary">Embed widget</h2>
+          <h2 className="font-heading text-2xl font-bold text-text-primary">Embed widget</h2>
           <div className="mt-4 text-text-secondary leading-relaxed">
             <p>
               mukoko weather offers an embeddable weather widget for third-party websites. Visit the{" "}
@@ -258,10 +258,10 @@ export default function HelpPage() {
 
         {/* FAQ */}
         <section className="mt-10">
-          <h2 className="font-serif text-2xl font-bold text-text-primary">Frequently asked questions</h2>
+          <h2 className="font-heading text-2xl font-bold text-text-primary">Frequently asked questions</h2>
           <div className="mt-4 divide-y divide-text-tertiary/10">
             <details className="group py-4">
-              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors">
+              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:rounded">
                 Is mukoko weather free?
               </summary>
               <p className="mt-2 text-text-secondary leading-relaxed">
@@ -271,7 +271,7 @@ export default function HelpPage() {
             </details>
 
             <details className="group py-4">
-              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors">
+              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:rounded">
                 How accurate is the weather data?
               </summary>
               <p className="mt-2 text-text-secondary leading-relaxed">
@@ -283,7 +283,7 @@ export default function HelpPage() {
             </details>
 
             <details className="group py-4">
-              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors">
+              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:rounded">
                 Do you collect my personal data?
               </summary>
               <p className="mt-2 text-text-secondary leading-relaxed">
@@ -294,7 +294,7 @@ export default function HelpPage() {
             </details>
 
             <details className="group py-4">
-              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors">
+              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:rounded">
                 Why can&apos;t I find my location?
               </summary>
               <p className="mt-2 text-text-secondary leading-relaxed">
@@ -310,7 +310,7 @@ export default function HelpPage() {
             </details>
 
             <details className="group py-4">
-              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors">
+              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:rounded">
                 What does the AI summary do?
               </summary>
               <p className="mt-2 text-text-secondary leading-relaxed">
@@ -322,7 +322,7 @@ export default function HelpPage() {
             </details>
 
             <details className="group py-4">
-              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors">
+              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:rounded">
                 Does it work offline?
               </summary>
               <p className="mt-2 text-text-secondary leading-relaxed">
@@ -333,7 +333,7 @@ export default function HelpPage() {
             </details>
 
             <details className="group py-4">
-              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors">
+              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:rounded">
                 Who built mukoko weather?
               </summary>
               <p className="mt-2 text-text-secondary leading-relaxed">
@@ -347,7 +347,7 @@ export default function HelpPage() {
 
         {/* Contact */}
         <section className="mt-10">
-          <h2 className="font-serif text-2xl font-bold text-text-primary">Still need help?</h2>
+          <h2 className="font-heading text-2xl font-bold text-text-primary">Still need help?</h2>
           <div className="mt-4 text-text-secondary leading-relaxed">
             <p>Reach out to us:</p>
             <ul className="mt-2 space-y-1">
