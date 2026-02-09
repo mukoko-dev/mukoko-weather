@@ -149,13 +149,20 @@ This app targets **WCAG 3.0 APCA/AAA** compliance:
 - Visible breadcrumb navigation
 - Semantic H1 on every location page
 
+## Company
+
+**mukoko weather** is a product of **Mukoko Africa**, a division of **Nyuchi Africa (PVT) Ltd**. Developed by **Nyuchi Web Services**.
+
 ## License
 
-[MIT](LICENSE) — Nyuchi Africa
+[MIT](LICENSE) — Nyuchi Africa (PVT) Ltd
 
 ## Links
 
 - **Website:** [weather.mukoko.africa](https://weather.mukoko.africa)
 - **Twitter:** [@mukokoafrica](https://twitter.com/mukokoafrica)
 - **Instagram:** [@mukoko.africa](https://instagram.com/mukoko.africa)
-- **Built by:** [Nyuchi Africa](https://nyuchi.com)
+- **Support:** [support@mukoko.com](mailto:support@mukoko.com)
+- **General:** [hi@mukoko.com](mailto:hi@mukoko.com)
+- **Legal:** [legal@nyuchi.com](mailto:legal@nyuchi.com)
+- **Built by:** [Nyuchi Web Services](https://nyuchi.com) / [Nyuchi Africa (PVT) Ltd](https://nyuchi.com)

@@ -34,9 +34,9 @@ export const metadata: Metadata = {
     "mukoko weather",
     "Nyuchi Africa",
   ],
-  authors: [{ name: "Nyuchi Africa", url: "https://nyuchi.com" }],
-  creator: "Nyuchi Africa",
-  publisher: "Nyuchi Africa",
+  authors: [{ name: "Nyuchi Web Services", url: "https://nyuchi.com" }],
+  creator: "Mukoko Africa",
+  publisher: "Nyuchi Africa (PVT) Ltd",
   alternates: {
     canonical: BASE_URL,
   },
@@ -91,8 +91,12 @@ export default function RootLayout({
     browserRequirements: "Requires JavaScript",
     creator: {
       "@type": "Organization",
-      name: "Nyuchi Africa",
+      name: "Nyuchi Web Services",
       url: "https://nyuchi.com",
+      parentOrganization: {
+        "@type": "Organization",
+        name: "Nyuchi Africa (PVT) Ltd",
+      },
     },
     areaServed: {
       "@type": "Country",
@@ -121,12 +125,31 @@ export default function RootLayout({
   const orgSchema = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "Nyuchi Africa",
+    name: "Nyuchi Africa (PVT) Ltd",
+    legalName: "Nyuchi Africa (PVT) Ltd",
     url: "https://nyuchi.com",
+    department: {
+      "@type": "Organization",
+      name: "Mukoko Africa",
+      url: BASE_URL,
+    },
     brand: {
       "@type": "Brand",
       name: "mukoko weather",
     },
+    email: "hi@mukoko.com",
+    contactPoint: [
+      {
+        "@type": "ContactPoint",
+        email: "support@mukoko.com",
+        contactType: "customer support",
+      },
+      {
+        "@type": "ContactPoint",
+        email: "legal@nyuchi.com",
+        contactType: "legal",
+      },
+    ],
     sameAs: [
       "https://twitter.com/mukokoafrica",
       "https://instagram.com/mukoko.africa",

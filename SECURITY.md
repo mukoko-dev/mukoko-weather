@@ -12,7 +12,7 @@ If you discover a security vulnerability in mukoko weather, please report it res
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Instead, please email: **security@nyuchi.com**
+Instead, please email: **legal@nyuchi.com**
 
 Include:
 - A description of the vulnerability
