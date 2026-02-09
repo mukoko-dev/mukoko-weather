@@ -12,22 +12,22 @@ export function SunTimes({ daily }: Props) {
     d.toLocaleTimeString("en-ZW", { hour: "2-digit", minute: "2-digit", hour12: false });
 
   return (
-    <section aria-label="Sunrise and sunset times">
+    <section aria-labelledby="sun-times-heading">
       <div className="rounded-[var(--radius-card)] bg-surface-card p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-text-primary font-sans">Sun</h2>
+        <h2 id="sun-times-heading" className="text-lg font-semibold text-text-primary font-sans">Sun</h2>
         <div className="mt-4 flex gap-6">
           <div className="flex items-center gap-3">
-            <SunriseIcon size={24} className="text-warmth" />
+            <SunriseIcon size={24} className="text-warmth" aria-hidden="true" />
             <div>
               <p className="text-xs text-text-tertiary">Sunrise</p>
-              <p className="text-sm font-semibold text-text-primary">{fmt(sunrise)}</p>
+              <p className="text-sm font-semibold text-text-primary" aria-label={`Sunrise at ${fmt(sunrise)}`}>{fmt(sunrise)}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <SunsetIcon size={24} className="text-accent" />
+            <SunsetIcon size={24} className="text-accent" aria-hidden="true" />
             <div>
               <p className="text-xs text-text-tertiary">Sunset</p>
-              <p className="text-sm font-semibold text-text-primary">{fmt(sunset)}</p>
+              <p className="text-sm font-semibold text-text-primary" aria-label={`Sunset at ${fmt(sunset)}`}>{fmt(sunset)}</p>
             </div>
           </div>
         </div>

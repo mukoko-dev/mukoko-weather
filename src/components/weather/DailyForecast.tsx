@@ -7,10 +7,10 @@ interface Props {
 
 export function DailyForecast({ daily }: Props) {
   return (
-    <section aria-label="7-day forecast">
+    <section aria-labelledby="daily-forecast-heading">
       <div className="rounded-[var(--radius-card)] bg-surface-card p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-text-primary font-sans">7-Day Forecast</h2>
-        <div className="mt-4 divide-y divide-text-tertiary/10">
+        <h2 id="daily-forecast-heading" className="text-lg font-semibold text-text-primary font-sans">7-Day Forecast</h2>
+        <div className="mt-4 divide-y divide-text-tertiary/10" role="list" aria-label="7-day weather forecast">
           {daily.time.map((date, i) => {
             const d = new Date(date);
             const info = weatherCodeToInfo(daily.weather_code[i]);
@@ -18,10 +18,14 @@ export function DailyForecast({ daily }: Props) {
             const dayName = isToday
               ? "Today"
               : d.toLocaleDateString("en-ZW", { weekday: "short" });
+            const high = Math.round(daily.temperature_2m_max[i]);
+            const low = Math.round(daily.temperature_2m_min[i]);
 
             return (
               <div
                 key={date}
+                role="listitem"
+                aria-label={`${dayName}: ${info.label}, high ${high} degrees, low ${low} degrees`}
                 className="flex items-center gap-4 py-3"
               >
                 <span className="w-12 text-sm font-medium text-text-secondary">
@@ -35,11 +39,11 @@ export function DailyForecast({ daily }: Props) {
                   </span>
                 )}
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="font-semibold text-text-primary">
-                    {Math.round(daily.temperature_2m_max[i])}°
+                  <span className="font-semibold text-text-primary" aria-label={`High ${high} degrees`}>
+                    {high}°
                   </span>
-                  <span className="text-text-tertiary">
-                    {Math.round(daily.temperature_2m_min[i])}°
+                  <span className="text-text-tertiary" aria-label={`Low ${low} degrees`}>
+                    {low}°
                   </span>
                 </div>
               </div>

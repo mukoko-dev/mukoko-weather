@@ -46,6 +46,19 @@ export function LocationSelector({ currentSlug }: { currentSlug: string }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Close on Escape key — WCAG 2.1.1 keyboard accessible
+  useEffect(() => {
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape" && open) {
+        setOpen(false);
+        setQuery("");
+        setActiveTag(null);
+      }
+    }
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [open]);
+
   // Focus search input when dropdown opens
   useEffect(() => {
     if (open) {
@@ -170,11 +183,12 @@ export function LocationSelector({ currentSlug }: { currentSlug: string }) {
 
           {/* Tag filter pills */}
           {!query && (
-            <div className="flex flex-wrap gap-1.5 border-b border-text-tertiary/10 px-3 py-2">
+            <div role="group" aria-label="Filter locations by category" className="flex flex-wrap gap-1.5 border-b border-text-tertiary/10 px-3 py-2">
               {TAG_ORDER.map((tag) => (
                 <button
                   key={tag}
                   onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                  aria-pressed={activeTag === tag}
                   className={`rounded-[var(--radius-badge)] px-2.5 py-1 text-xs font-medium transition-colors ${
                     activeTag === tag
                       ? "bg-primary text-primary-foreground"

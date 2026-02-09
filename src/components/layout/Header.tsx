@@ -15,9 +15,9 @@ export function Header({ currentLocation }: Props) {
       className="sticky top-0 z-30 border-b border-text-tertiary/10 bg-surface-base/80 backdrop-blur-md"
       role="banner"
     >
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:pl-6 md:pl-8">
+      <nav aria-label="Primary navigation" className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:pl-6 md:pl-8">
         <div className="flex items-center gap-4">
-          <Link href="/" aria-label="mukoko weather home">
+          <Link href="/" aria-label="mukoko weather — return to home page">
             <MukokoLogo className="text-xl" />
           </Link>
         </div>
@@ -25,7 +25,7 @@ export function Header({ currentLocation }: Props) {
           <LocationSelector currentSlug={currentLocation} />
           <ThemeToggle />
         </div>
-      </div>
+      </nav>
     </header>
   );
 }

@@ -1,26 +1,63 @@
 {
-  "name": "mukoko weather",
+  "name": "mukoko weather — Zimbabwe Weather Intelligence",
   "short_name": "mukoko weather",
-  "description": "AI-powered weather intelligence for Zimbabwe",
-  "start_url": "/",
+  "description": "AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 90+ locations.",
+  "start_url": "/harare",
+  "scope": "/",
+  "id": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#FAF9F5",
   "theme_color": "#4B0082",
   "orientation": "portrait-primary",
-  "categories": ["weather", "utilities"],
+  "categories": ["weather", "utilities", "lifestyle"],
   "lang": "en",
+  "dir": "ltr",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Harare Weather",
+      "short_name": "Harare",
+      "url": "/harare",
+      "description": "Weather forecast for Harare"
+    },
+    {
+      "name": "Bulawayo Weather",
+      "short_name": "Bulawayo",
+      "url": "/bulawayo",
+      "description": "Weather forecast for Bulawayo"
+    },
+    {
+      "name": "Victoria Falls Weather",
+      "short_name": "Vic Falls",
+      "url": "/victoria-falls",
+      "description": "Weather forecast for Victoria Falls"
     }
   ]
 }
