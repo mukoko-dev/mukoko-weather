@@ -12,7 +12,7 @@ interface MukokoWeatherEmbedProps {
   days?: number;
   /** Theme override */
   theme?: "light" | "dark" | "auto";
-  /** Base API URL (defaults to weather.nyuchi.com) */
+  /** Base API URL (defaults to weather.mukoko.com) */
   apiUrl?: string;
   /** Additional CSS class */
   className?: string;
@@ -68,7 +68,7 @@ export function MukokoWeatherEmbed({
   type = "current",
   days = 5,
   theme = "auto",
-  apiUrl = "https://weather.nyuchi.com",
+  apiUrl = "https://weather.mukoko.com",
   className = "",
 }: MukokoWeatherEmbedProps) {
   const [data, setData] = useState<WeatherData | null>(null);
