@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { FlagStrip } from "@/components/brand/FlagStrip";
+import { MineralsStripe } from "@/components/brand/MineralsStripe";
 import { ThemeProvider } from "@/components/brand/ThemeProvider";
 import "./globals.css";
 
@@ -177,11 +177,11 @@ export default function RootLayout({
     <html
       lang="en"
       data-theme="light"
-      data-brand="mukoko"
+      data-brand="mukoko-weather"
     >
       <head>
         <meta name="color-scheme" content="light dark" />
-        <meta name="theme-color" content="#4B0082" />
+        <meta name="theme-color" content="#0047AB" />
         {/* Mobile-first: optimised for Android & Huawei devices */}
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -209,7 +209,7 @@ export default function RootLayout({
           Skip to main content
         </a>
         <ThemeProvider>
-          <FlagStrip />
+          <MineralsStripe />
           <div className="pl-0 min-[480px]:pl-1">
             {children}
           </div>

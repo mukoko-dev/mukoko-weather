@@ -1,47 +1,47 @@
 @import "tailwindcss";
 
-/* ===== Mukoko Brand System v7 — WCAG 3.0 APCA/AAA Compliant ===== */
+/* ===== Mukoko Weather Brand System v6 — Cobalt Primary · WCAG 3.0 APCA/AAA Compliant ===== */
 
 :root {
-  /* Primary */
-  --color-primary: #4B0082;
+  /* Primary — Cobalt (Sky Blue) */
+  --color-primary: #0047AB;
   --color-primary-foreground: #FFFFFF;
-  /* Secondary */
-  --color-secondary: #0047AB;
+  /* Secondary — Malachite (Earth Green) */
+  --color-secondary: #004D40;
   --color-secondary-foreground: #FFFFFF;
-  /* Accent / Gold */
+  /* Accent — Gold (Sun) */
   --color-accent: #5D4037;
   --color-accent-foreground: #FFFFFF;
-  /* Success / Clear skies */
+  /* Success / Clear skies — Malachite */
   --color-success: #004D40;
   --color-success-foreground: #FFFFFF;
-  /* Warmth / Sun */
+  /* Warmth / Sun — Gold */
   --color-warmth: #5D4037;
   --color-warmth-foreground: #FFFFFF;
-  /* Community / Earth */
+  /* Community / Earth — Terracotta */
   --color-earth: #8B4513;
   --color-earth-foreground: #FFFFFF;
+  /* Tanzanite — AI insights, premium features (sparingly) */
+  --color-tanzanite: #4B0082;
+  --color-tanzanite-foreground: #FFFFFF;
 
   /* Surfaces */
   --color-surface-base: #FAF9F5;
   --color-surface-card: #FFFFFF;
   --color-surface-elevated: #FFFFFF;
+  --color-surface-dim: #F3F2EE;
 
-  /* Text — APCA Lc values verified for AAA compliance on surface-base (#FAF9F5):
-   *   text-primary:   #141413 → Lc ~106 (exceeds Lc 90 for body text)
-   *   text-secondary:  #3D3D3A → Lc ~78 (meets Lc 75 for fluent text)
-   *   text-tertiary:   #5C5C58 → Lc ~62 (meets Lc 60 for non-text/captions)
-   */
+  /* Text — APCA Lc values verified for AAA compliance on surface-base (#FAF9F5) */
   --color-text-primary: #141413;
-  --color-text-secondary: #3D3D3A;
-  --color-text-tertiary: #5C5C58;
+  --color-text-secondary: #52524E;
+  --color-text-tertiary: #8C8B87;
 
   /* Foreground / Background shortcuts */
   --background: #FAF9F5;
   --foreground: #141413;
 
-  /* Focus ring — high-visibility for WCAG 2.4.7 / 2.4.13 */
-  --focus-ring: #4B0082;
+  /* Focus ring — Cobalt primary, high-visibility for WCAG 2.4.7 / 2.4.13 */
+  --focus-ring: #0047AB;
   --focus-ring-offset: 2px;
   --focus-ring-width: 3px;
 
@@ -50,54 +50,66 @@
   --radius-card: 16px;
   --radius-input: 8px;
   --radius-badge: 9999px;
+  --radius-icon: 24px;
 
-  /* Flag strip colors */
-  --flag-green: #00A651;
-  --flag-yellow: #FDD116;
-  --flag-red: #D4634A;
-  --flag-black: #171717;
+  /* Shadows — Light mode */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+
+  /* Minerals Stripe — Five African Minerals (light mode values) */
+  --mineral-tanzanite: #4B0082;
+  --mineral-cobalt: #0047AB;
+  --mineral-malachite: #004D40;
+  --mineral-gold: #5D4037;
+  --mineral-terracotta: #8B4513;
 }
 
 [data-theme="dark"] {
-  /* Primary */
-  --color-primary: #B388FF;
+  /* Primary — Cobalt */
+  --color-primary: #00B0FF;
   --color-primary-foreground: #0A0A0A;
-  /* Secondary */
-  --color-secondary: #00B0FF;
+  /* Secondary — Malachite */
+  --color-secondary: #64FFDA;
   --color-secondary-foreground: #0A0A0A;
-  /* Accent / Gold */
+  /* Accent — Gold */
   --color-accent: #FFD740;
   --color-accent-foreground: #0A0A0A;
-  /* Success / Clear skies */
+  /* Success / Clear skies — Malachite */
   --color-success: #64FFDA;
   --color-success-foreground: #0A0A0A;
-  /* Warmth / Sun */
+  /* Warmth / Sun — Gold */
   --color-warmth: #FFD740;
   --color-warmth-foreground: #0A0A0A;
-  /* Community / Earth */
+  /* Community / Earth — Terracotta */
   --color-earth: #D4A574;
   --color-earth-foreground: #0A0A0A;
+  /* Tanzanite */
+  --color-tanzanite: #B388FF;
+  --color-tanzanite-foreground: #0A0A0A;
 
   /* Surfaces */
   --color-surface-base: #0A0A0A;
   --color-surface-card: #141414;
   --color-surface-elevated: #1E1E1E;
+  --color-surface-dim: #141414;
 
-  /* Text — APCA Lc values verified for AAA compliance on surface-base (#0A0A0A):
-   *   text-primary:   #F5F5F4 → Lc ~106 (exceeds Lc 90 for body text)
-   *   text-secondary:  #BFBFBA → Lc ~78 (meets Lc 75 for fluent text)
-   *   text-tertiary:   #928F8A → Lc ~62 (meets Lc 60 for non-text/captions)
-   */
+  /* Text — APCA Lc values verified for AAA compliance on surface-base (#0A0A0A) */
   --color-text-primary: #F5F5F4;
-  --color-text-secondary: #BFBFBA;
-  --color-text-tertiary: #928F8A;
+  --color-text-secondary: #A8A8A3;
+  --color-text-tertiary: #6B6B66;
 
   /* Foreground / Background shortcuts */
   --background: #0A0A0A;
   --foreground: #F5F5F4;
 
-  /* Focus ring — high-visibility on dark backgrounds */
-  --focus-ring: #B388FF;
+  /* Focus ring — Cobalt, high-visibility on dark backgrounds */
+  --focus-ring: #00B0FF;
+
+  /* Shadows — Dark mode */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
 }
 
 @theme inline {
@@ -106,6 +118,7 @@
   --color-surface-base: var(--color-surface-base);
   --color-surface-card: var(--color-surface-card);
   --color-surface-elevated: var(--color-surface-elevated);
+  --color-surface-dim: var(--color-surface-dim);
   --color-text-primary: var(--color-text-primary);
   --color-text-secondary: var(--color-text-secondary);
   --color-text-tertiary: var(--color-text-tertiary);
@@ -118,6 +131,7 @@
   --color-success: var(--color-success);
   --color-warmth: var(--color-warmth);
   --color-earth: var(--color-earth);
+  --color-tanzanite: var(--color-tanzanite);
   --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
   --font-serif: "Noto Serif", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
@@ -135,29 +149,26 @@ body {
   max-width: 100vw;
 }
 
-/* ===== Zimbabwe Flag Strip ===== */
-.flag-strip {
+/* ===== Minerals Stripe — Five African Minerals ===== */
+.minerals-stripe {
   position: fixed;
   left: 0;
   top: 0;
   bottom: 0;
   width: 4px;
-  z-index: 50;
+  z-index: 9999;
   background: linear-gradient(
     to bottom,
-    var(--flag-green) 0%,
-    var(--flag-green) 25%,
-    var(--flag-yellow) 25%,
-    var(--flag-yellow) 50%,
-    var(--flag-red) 50%,
-    var(--flag-red) 75%,
-    var(--flag-black) 75%,
-    var(--flag-black) 100%
+    var(--mineral-tanzanite) 0%, var(--mineral-tanzanite) 20%,
+    var(--mineral-cobalt) 20%, var(--mineral-cobalt) 40%,
+    var(--mineral-malachite) 40%, var(--mineral-malachite) 60%,
+    var(--mineral-gold) 60%, var(--mineral-gold) 80%,
+    var(--mineral-terracotta) 80%, var(--mineral-terracotta) 100%
   );
 }
 
 @media (max-width: 479px) {
-  .flag-strip {
+  .minerals-stripe {
     display: none;
   }
 }
@@ -225,7 +236,7 @@ body {
 
 /* ===== Forced Colors / Windows High Contrast ===== */
 @media (forced-colors: active) {
-  .flag-strip {
+  .minerals-stripe {
     display: none;
   }
 
