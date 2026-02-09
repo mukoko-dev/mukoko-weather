@@ -136,7 +136,7 @@ export default function EmbedPage() {
           <h2 className="text-xl font-semibold text-text-primary">
             Configuration
           </h2>
-          <div className="mt-4 -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-text-tertiary/10 text-left">
