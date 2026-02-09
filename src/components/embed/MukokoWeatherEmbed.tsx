@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import styles from "./MukokoWeatherEmbed.module.css";
 
 interface MukokoWeatherEmbedProps {
   /** Location slug (e.g. "harare", "bulawayo", "marondera") */
@@ -77,6 +78,8 @@ export function MukokoWeatherEmbed({
     theme === "dark" ||
     (theme === "auto" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
+  const themeClass = isDark ? `${styles.widget} ${styles.widgetDark}` : styles.widget;
+
   useEffect(() => {
     fetch(`${apiUrl}/embed/data/${encodeURIComponent(location)}`)
       .then((r) => {
@@ -87,22 +90,12 @@ export function MukokoWeatherEmbed({
       .catch(() => setError(true));
   }, [location, apiUrl]);
 
-  const vars = {
-    "--mkw-bg": isDark ? "#141414" : "#FFFFFF",
-    "--mkw-bg-subtle": isDark ? "#1E1E1E" : "#FAF9F5",
-    "--mkw-text": isDark ? "#F5F5F4" : "#141413",
-    "--mkw-text-secondary": isDark ? "#A8A8A3" : "#52524E",
-    "--mkw-text-tertiary": isDark ? "#6B6B66" : "#8C8B87",
-    "--mkw-primary": isDark ? "#B388FF" : "#4B0082",
-    "--mkw-border": isDark ? "rgba(107,107,102,0.2)" : "rgba(140,139,135,0.15)",
-  } as React.CSSProperties;
-
   if (error) {
     return (
-      <div className={className} style={vars}>
-        <div style={{ padding: "16px", textAlign: "center", color: "var(--mkw-text-secondary)", fontSize: "13px" }}>
+      <div className={`${themeClass} ${className}`}>
+        <div className={styles.errorMessage}>
           Weather unavailable —{" "}
-          <a href={`${apiUrl}/${location}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--mkw-primary)" }}>
+          <a href={`${apiUrl}/${location}`} target="_blank" rel="noopener noreferrer" className={styles.errorLink}>
             view on mukoko weather
           </a>
         </div>
@@ -112,52 +105,45 @@ export function MukokoWeatherEmbed({
 
   if (!data) {
     return (
-      <div className={className} style={vars}>
-        <div style={{ padding: "20px", textAlign: "center", color: "var(--mkw-text-tertiary)", fontSize: "13px" }}>
-          Loading weather...
-        </div>
+      <div className={`${themeClass} ${className}`}>
+        <div className={styles.stateMessage}>Loading weather...</div>
       </div>
     );
   }
 
   if (type === "badge") {
-    return <BadgeWidget data={data} isDark={isDark} className={className} vars={vars} />;
+    return <BadgeWidget data={data} themeClass={themeClass} className={className} />;
   }
 
   if (type === "forecast") {
-    return <ForecastWidget data={data} days={days} className={className} vars={vars} />;
+    return <ForecastWidget data={data} days={days} themeClass={themeClass} className={className} />;
   }
 
-  return <CurrentWidget data={data} className={className} vars={vars} />;
+  return <CurrentWidget data={data} themeClass={themeClass} className={className} />;
 }
 
-function CurrentWidget({ data, className, vars }: { data: WeatherData; className: string; vars: React.CSSProperties }) {
+function CurrentWidget({ data, themeClass, className }: { data: WeatherData; themeClass: string; className: string }) {
   const c = data.weather.current;
   return (
-    <div className={className} style={vars}>
-      <div style={{
-        background: "var(--mkw-bg)", border: "1px solid var(--mkw-border)",
-        borderRadius: "16px", padding: "20px", maxWidth: "360px",
-        fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-      }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "12px" }}>
-          <span style={{ fontWeight: 600, fontSize: "14px", color: "var(--mkw-text)" }}>{data.location.name}</span>
-          <span style={{ fontSize: "12px", color: "var(--mkw-text-tertiary)" }}>{data.location.province}</span>
+    <div className={`${themeClass} ${className}`}>
+      <div className={styles.currentCard}>
+        <div className={styles.currentHeader}>
+          <span className={styles.currentLocationName}>{data.location.name}</span>
+          <span className={styles.currentProvince}>{data.location.province}</span>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "16px" }}>
-          <span style={{ fontSize: "48px", fontWeight: 700, color: "var(--mkw-text)", lineHeight: 1.1, fontFamily: "'Noto Serif', Georgia, serif" }}>
+        <div className={styles.currentBody}>
+          <span className={styles.currentTemp}>
             {Math.round(c.temperature_2m)}°C
           </span>
-          <span style={{ fontSize: "16px", fontWeight: 500, color: "var(--mkw-text)" }}>{weatherLabel(c.weather_code)}</span>
-          <span style={{ fontSize: "13px", color: "var(--mkw-text-secondary)" }}>Feels like {Math.round(c.apparent_temperature)}°C</span>
+          <span className={styles.currentCondition}>{weatherLabel(c.weather_code)}</span>
+          <span className={styles.currentFeelsLike}>Feels like {Math.round(c.apparent_temperature)}°C</span>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", paddingTop: "12px", borderTop: "1px solid var(--mkw-border)", fontSize: "12px", color: "var(--mkw-text-secondary)" }}>
+        <div className={styles.currentStats}>
           <span>Humidity {c.relative_humidity_2m}%</span>
           <span>Wind {Math.round(c.wind_speed_10m)} km/h {windDir(c.wind_direction_10m)}</span>
           <span>UV {c.uv_index}</span>
         </div>
-        <a href={data._meta.url} target="_blank" rel="noopener noreferrer"
-          style={{ display: "block", marginTop: "12px", paddingTop: "8px", borderTop: "1px solid var(--mkw-border)", fontSize: "11px", color: "var(--mkw-primary)", textDecoration: "none", fontWeight: 600 }}>
+        <a href={data._meta.url} target="_blank" rel="noopener noreferrer" className={styles.attribution}>
           mukoko weather
         </a>
       </div>
@@ -165,34 +151,29 @@ function CurrentWidget({ data, className, vars }: { data: WeatherData; className
   );
 }
 
-function ForecastWidget({ data, days, className, vars }: { data: WeatherData; days: number; className: string; vars: React.CSSProperties }) {
+function ForecastWidget({ data, days, themeClass, className }: { data: WeatherData; days: number; themeClass: string; className: string }) {
   const d = data.weather.daily;
   const n = Math.min(days, d.time.length);
   return (
-    <div className={className} style={vars}>
-      <div style={{
-        background: "var(--mkw-bg)", border: "1px solid var(--mkw-border)",
-        borderRadius: "16px", padding: "20px", maxWidth: "440px",
-        fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-      }}>
-        <div style={{ fontWeight: 600, fontSize: "14px", color: "var(--mkw-text)", marginBottom: "12px" }}>
+    <div className={`${themeClass} ${className}`}>
+      <div className={styles.forecastCard}>
+        <div className={styles.forecastTitle}>
           {data.location.name} Forecast
         </div>
         {Array.from({ length: n }).map((_, i) => {
           const date = new Date(d.time[i]);
           const dayName = i === 0 ? "Today" : date.toLocaleDateString("en-ZW", { weekday: "short" });
           return (
-            <div key={d.time[i]} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "8px 0", borderBottom: i < n - 1 ? "1px solid var(--mkw-border)" : "none", fontSize: "13px", color: "var(--mkw-text)" }}>
-              <span style={{ width: "48px", fontWeight: 500, color: "var(--mkw-text-secondary)" }}>{dayName}</span>
-              <span style={{ flex: 1, color: "var(--mkw-text-secondary)" }}>{weatherLabel(d.weather_code[i])}</span>
-              <span style={{ fontWeight: 600, fontFamily: "monospace", fontSize: "12px" }}>
+            <div key={d.time[i]} className={i < n - 1 ? styles.forecastRowBorder : styles.forecastRow}>
+              <span className={styles.forecastDay}>{dayName}</span>
+              <span className={styles.forecastCondition}>{weatherLabel(d.weather_code[i])}</span>
+              <span className={styles.forecastTemps}>
                 {Math.round(d.temperature_2m_max[i])}° / {Math.round(d.temperature_2m_min[i])}°
               </span>
             </div>
           );
         })}
-        <a href={data._meta.url} target="_blank" rel="noopener noreferrer"
-          style={{ display: "block", marginTop: "12px", paddingTop: "8px", borderTop: "1px solid var(--mkw-border)", fontSize: "11px", color: "var(--mkw-primary)", textDecoration: "none", fontWeight: 600 }}>
+        <a href={data._meta.url} target="_blank" rel="noopener noreferrer" className={styles.attribution}>
           mukoko weather
         </a>
       </div>
@@ -200,21 +181,15 @@ function ForecastWidget({ data, days, className, vars }: { data: WeatherData; da
   );
 }
 
-function BadgeWidget({ data, isDark, className, vars }: { data: WeatherData; isDark: boolean; className: string; vars: React.CSSProperties }) {
+function BadgeWidget({ data, themeClass, className }: { data: WeatherData; themeClass: string; className: string }) {
   const c = data.weather.current;
   return (
-    <div className={className} style={vars}>
-      <a href={data._meta.url} target="_blank" rel="noopener noreferrer"
-        style={{
-          display: "inline-flex", alignItems: "center", gap: "8px", padding: "6px 12px",
-          background: isDark ? "#141414" : "#FFFFFF", border: "1px solid var(--mkw-border)",
-          borderRadius: "9999px", fontSize: "13px", color: "var(--mkw-text)", textDecoration: "none", whiteSpace: "nowrap",
-          fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-        }}>
-        <span style={{ fontWeight: 700 }}>{Math.round(c.temperature_2m)}°C</span>
-        <span style={{ color: "var(--mkw-text-secondary)" }}>{weatherLabel(c.weather_code)}</span>
-        <span style={{ color: "var(--mkw-text-tertiary)", fontSize: "11px" }}>{data.location.name}</span>
-        <span style={{ color: "var(--mkw-primary)", fontSize: "10px", fontWeight: 600 }}>mukoko</span>
+    <div className={`${themeClass} ${className}`}>
+      <a href={data._meta.url} target="_blank" rel="noopener noreferrer" className={styles.badge}>
+        <span className={styles.badgeTemp}>{Math.round(c.temperature_2m)}°C</span>
+        <span className={styles.badgeCondition}>{weatherLabel(c.weather_code)}</span>
+        <span className={styles.badgeLocation}>{data.location.name}</span>
+        <span className={styles.badgeBrand}>mukoko</span>
       </a>
     </div>
   );

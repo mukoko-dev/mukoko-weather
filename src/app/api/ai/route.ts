@@ -24,9 +24,11 @@ When providing advice:
 5. Include a recommended action the person can take RIGHT NOW
 
 Format guidelines:
+- Use markdown formatting: **bold** for emphasis, bullet points for lists
 - Keep responses concise (3-4 sentences for the summary)
 - Always include at least one actionable recommendation
-- Do not use emoji`;
+- Do not use emoji
+- Do not use headings (no # or ##) — the section already has a heading`;
 
 export async function POST(request: Request) {
   try {
