@@ -1,20 +1,32 @@
 ---
 name: Feature request
-about: Suggest an idea for this project
-title: ''
-labels: ''
+about: Suggest a feature for mukoko weather
+title: '[Feature] '
+labels: enhancement
 assignees: ''
-
 ---
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+**Category**
+What area does this feature relate to?
+- [ ] Weather data / forecasts
+- [ ] Locations (new location or improved data)
+- [ ] AI summaries
+- [ ] Farming / agriculture
+- [ ] Mining / industry
+- [ ] Travel / tourism
+- [ ] Accessibility
+- [ ] Mobile experience
+- [ ] Performance
+- [ ] Other
 
-**Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+**Problem**
+What problem does this feature solve? Who benefits from it?
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've considered.
+**Proposed solution**
+Describe the feature you'd like.
+
+**Alternatives considered**
+Any other approaches you've thought about.
 
 **Additional context**
-Add any other context or screenshots about the feature request here.
+Screenshots, mockups, or examples from other apps.
