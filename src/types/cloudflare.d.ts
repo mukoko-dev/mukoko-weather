@@ -1,26 +1,5 @@
 /**
- * Cloudflare Workers KV Namespace type declaration.
- * When deployed to Cloudflare, the actual runtime provides this interface.
- * This declaration allows TypeScript to compile without the full @cloudflare/workers-types package.
+ * @deprecated — Cloudflare KV is no longer used.
+ * Storage has been migrated to MongoDB Atlas (src/lib/db.ts).
+ * This file is kept empty to avoid breaking any lingering references.
  */
-interface KVNamespace {
-  get(key: string, options?: { type?: "text" }): Promise<string | null>;
-  get(key: string, options: { type: "json" }): Promise<unknown>;
-  get(key: string, options: { type: "arrayBuffer" }): Promise<ArrayBuffer | null>;
-  get(key: string, options: { type: "stream" }): Promise<ReadableStream | null>;
-  put(
-    key: string,
-    value: string | ArrayBuffer | ReadableStream,
-    options?: { expiration?: number; expirationTtl?: number; metadata?: unknown },
-  ): Promise<void>;
-  delete(key: string): Promise<void>;
-  list(options?: {
-    prefix?: string;
-    limit?: number;
-    cursor?: string;
-  }): Promise<{
-    keys: { name: string; expiration?: number; metadata?: unknown }[];
-    list_complete: boolean;
-    cursor?: string;
-  }>;
-}
