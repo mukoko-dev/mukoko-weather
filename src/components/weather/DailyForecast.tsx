@@ -1,5 +1,6 @@
 import { WeatherIcon } from "@/lib/weather-icons";
 import { weatherCodeToInfo, type DailyWeather } from "@/lib/weather";
+import { DailyChart } from "./DailyChart";
 
 interface Props {
   daily: DailyWeather;
@@ -10,6 +11,7 @@ export function DailyForecast({ daily }: Props) {
     <section aria-labelledby="daily-forecast-heading">
       <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
         <h2 id="daily-forecast-heading" className="text-lg font-semibold text-text-primary font-heading">7-Day Forecast</h2>
+        <DailyChart daily={daily} />
         <div className="mt-4 divide-y divide-text-tertiary/10" role="list" aria-label="7-day weather forecast">
           {daily.time.map((date, i) => {
             const d = new Date(date);
