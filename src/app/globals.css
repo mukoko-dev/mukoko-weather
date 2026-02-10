@@ -99,6 +99,17 @@
   --chart-3: #5D4037;
   --chart-4: #8B4513;
   --chart-5: #4B0082;
+
+  /* Temperature bar gradient — warm spectrum */
+  --color-temp-cold: #0047AB;
+  --color-temp-cool: #00897B;
+  --color-temp-mild: #F9A825;
+  --color-temp-warm: #EF6C00;
+  --color-temp-hot: #C62828;
+  --color-temp-bar-track: rgba(0, 0, 0, 0.06);
+
+  /* Rain probability */
+  --color-rain: #0288D1;
 }
 
 [data-theme="dark"] {
@@ -177,6 +188,17 @@
   --chart-3: #FFD740;
   --chart-4: #D4A574;
   --chart-5: #B388FF;
+
+  /* Temperature bar gradient — dark mode warm spectrum */
+  --color-temp-cold: #42A5F5;
+  --color-temp-cool: #26A69A;
+  --color-temp-mild: #FDD835;
+  --color-temp-warm: #FF9800;
+  --color-temp-hot: #EF5350;
+  --color-temp-bar-track: rgba(255, 255, 255, 0.08);
+
+  /* Rain probability */
+  --color-rain: #4FC3F7;
 }
 
 @theme inline {
@@ -203,6 +225,13 @@
   --color-frost-severe-bg: var(--color-frost-severe-bg);
   --color-frost-high-bg: var(--color-frost-high-bg);
   --color-frost-moderate-bg: var(--color-frost-moderate-bg);
+  --color-temp-cold: var(--color-temp-cold);
+  --color-temp-cool: var(--color-temp-cool);
+  --color-temp-mild: var(--color-temp-mild);
+  --color-temp-warm: var(--color-temp-warm);
+  --color-temp-hot: var(--color-temp-hot);
+  --color-temp-bar-track: var(--color-temp-bar-track);
+  --color-rain: var(--color-rain);
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-display: "Noto Serif", Georgia, serif;
   --font-heading: "Plus Jakarta Sans", system-ui, sans-serif;

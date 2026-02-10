@@ -300,6 +300,7 @@ export default async function LocationPage({
             <CurrentConditions
               current={weather.current}
               locationName={location.name}
+              daily={weather.daily}
             />
             <AISummary weather={weather} location={location} />
             <HourlyForecast hourly={weather.hourly} />

@@ -47,7 +47,7 @@ export function HourlyForecast({ hourly }: Props) {
                   {temp}°
                 </span>
                 {hourly.precipitation_probability[idx] > 0 && (
-                  <span className="text-xs text-secondary">
+                  <span className="text-xs font-semibold text-rain">
                     {hourly.precipitation_probability[idx]}%
                   </span>
                 )}
