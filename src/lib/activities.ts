@@ -28,6 +28,23 @@ export const ACTIVITY_CATEGORIES: ActivityCategoryInfo[] = [
   { id: "casual", label: "Casual" },
 ];
 
+/** Category → mineral color CSS classes (all static for Tailwind JIT) */
+export interface CategoryStyle {
+  bg: string;
+  border: string;
+  text: string;
+  badge: string;
+}
+
+export const CATEGORY_STYLES: Record<string, CategoryStyle> = {
+  farming:  { bg: "bg-mineral-malachite/10",  border: "border-mineral-malachite",  text: "text-mineral-malachite",  badge: "bg-mineral-malachite text-mineral-malachite-fg" },
+  mining:   { bg: "bg-mineral-terracotta/10",  border: "border-mineral-terracotta",  text: "text-mineral-terracotta",  badge: "bg-mineral-terracotta text-mineral-terracotta-fg" },
+  travel:   { bg: "bg-mineral-cobalt/10",      border: "border-mineral-cobalt",      text: "text-mineral-cobalt",      badge: "bg-mineral-cobalt text-mineral-cobalt-fg" },
+  tourism:  { bg: "bg-mineral-tanzanite/10",   border: "border-mineral-tanzanite",   text: "text-mineral-tanzanite",   badge: "bg-mineral-tanzanite text-mineral-tanzanite-fg" },
+  sports:   { bg: "bg-mineral-gold/10",        border: "border-mineral-gold",        text: "text-mineral-gold",        badge: "bg-mineral-gold text-mineral-gold-fg" },
+  casual:   { bg: "bg-primary/10",             border: "border-primary",             text: "text-primary",             badge: "bg-primary text-primary-foreground" },
+};
+
 export const ACTIVITIES: Activity[] = [
   // Farming — maps to "farming" location tag
   { id: "crop-farming", label: "Crop Farming", category: "farming", relevantTags: ["farming"], description: "Maize, tobacco, cotton, and other crop cultivation" },

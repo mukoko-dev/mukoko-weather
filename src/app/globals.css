@@ -73,6 +73,12 @@
   --mineral-malachite: #004D40;
   --mineral-gold: #5D4037;
   --mineral-terracotta: #8B4513;
+  /* Mineral foregrounds (light mode — white on rich mineral tones) */
+  --mineral-tanzanite-fg: #FFFFFF;
+  --mineral-cobalt-fg: #FFFFFF;
+  --mineral-malachite-fg: #FFFFFF;
+  --mineral-gold-fg: #FFFFFF;
+  --mineral-terracotta-fg: #FFFFFF;
 
   /* shadcn/ui tokens — mapped to brand system */
   --radius: 0.625rem;
@@ -199,6 +205,18 @@
 
   /* Rain probability */
   --color-rain: #4FC3F7;
+
+  /* Minerals Stripe — dark mode (brighter for contrast on dark surfaces) */
+  --mineral-tanzanite: #B388FF;
+  --mineral-cobalt: #64B5F6;
+  --mineral-malachite: #69F0AE;
+  --mineral-gold: #FFD54F;
+  --mineral-terracotta: #D4A574;
+  --mineral-tanzanite-fg: #0A0A0A;
+  --mineral-cobalt-fg: #0A0A0A;
+  --mineral-malachite-fg: #0A0A0A;
+  --mineral-gold-fg: #0A0A0A;
+  --mineral-terracotta-fg: #0A0A0A;
 }
 
 @theme inline {
@@ -221,6 +239,16 @@
   --color-warmth: var(--color-warmth);
   --color-earth: var(--color-earth);
   --color-tanzanite: var(--color-tanzanite);
+  --color-mineral-tanzanite: var(--mineral-tanzanite);
+  --color-mineral-cobalt: var(--mineral-cobalt);
+  --color-mineral-malachite: var(--mineral-malachite);
+  --color-mineral-gold: var(--mineral-gold);
+  --color-mineral-terracotta: var(--mineral-terracotta);
+  --color-mineral-tanzanite-fg: var(--mineral-tanzanite-fg);
+  --color-mineral-cobalt-fg: var(--mineral-cobalt-fg);
+  --color-mineral-malachite-fg: var(--mineral-malachite-fg);
+  --color-mineral-gold-fg: var(--mineral-gold-fg);
+  --color-mineral-terracotta-fg: var(--mineral-terracotta-fg);
   --color-frost-severe: var(--color-frost-severe);
   --color-frost-severe-bg: var(--color-frost-severe-bg);
   --color-frost-high-bg: var(--color-frost-high-bg);

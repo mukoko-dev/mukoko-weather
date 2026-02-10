@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useAppStore } from "@/lib/store";
-import { ACTIVITIES, type ActivityCategory } from "@/lib/activities";
+import { ACTIVITIES, CATEGORY_STYLES, type ActivityCategory } from "@/lib/activities";
 import type { WeatherInsights } from "@/lib/weather";
 
 // ---------------------------------------------------------------------------
@@ -222,7 +222,7 @@ function FarmingCard({ insights }: { insights: WeatherInsights }) {
   const hasGdd = insights.gdd10To30 != null || insights.gdd08To30 != null || insights.gdd03To25 != null;
 
   return (
-    <InsightCard title="Farming Intelligence" icon={<SproutIcon />}>
+    <InsightCard title="Farming Intelligence" icon={<SproutIcon />} category="farming">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {insights.gdd10To30 != null && (
           <InsightStat icon={<SproutIcon />} label="Maize/Soy GDD" value={`${insights.gdd10To30.toFixed(1)}`} detail="10–30 °C base" />
@@ -261,7 +261,7 @@ function FarmingCard({ insights }: { insights: WeatherInsights }) {
 
 function MiningCard({ insights }: { insights: WeatherInsights }) {
   return (
-    <InsightCard title="Mining & Construction Safety" icon={<HardHatIcon />}>
+    <InsightCard title="Mining & Construction Safety" icon={<HardHatIcon />} category="mining">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {insights.heatStressIndex != null && (
           <InsightStat
@@ -291,7 +291,7 @@ function MiningCard({ insights }: { insights: WeatherInsights }) {
 
 function SportsCard({ insights }: { insights: WeatherInsights }) {
   return (
-    <InsightCard title="Sports & Fitness" icon={<FlameIcon />}>
+    <InsightCard title="Sports & Fitness" icon={<FlameIcon />} category="sports">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {insights.heatStressIndex != null && (
           <InsightStat
@@ -327,7 +327,7 @@ function SportsCard({ insights }: { insights: WeatherInsights }) {
 
 function TravelCard({ insights }: { insights: WeatherInsights }) {
   return (
-    <InsightCard title="Travel & Driving" icon={<CarIcon />}>
+    <InsightCard title="Travel & Driving" icon={<CarIcon />} category="travel">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {insights.visibility != null && (
           <InsightStat
@@ -358,7 +358,7 @@ function TravelCard({ insights }: { insights: WeatherInsights }) {
 
 function TourismCard({ insights }: { insights: WeatherInsights }) {
   return (
-    <InsightCard title="Tourism & Photography" icon={<CameraIcon />}>
+    <InsightCard title="Tourism & Photography" icon={<CameraIcon />} category="tourism">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {insights.moonPhase != null && (
           <InsightStat icon={<MoonIcon />} label="Moon Phase" value={moonPhaseName(insights.moonPhase)} />
@@ -385,7 +385,7 @@ function TourismCard({ insights }: { insights: WeatherInsights }) {
 
 function CasualCard({ insights }: { insights: WeatherInsights }) {
   return (
-    <InsightCard title="Outdoor Comfort" icon={<CoffeeIcon />}>
+    <InsightCard title="Outdoor Comfort" icon={<CoffeeIcon />} category="casual">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {insights.uvHealthConcern != null && (
           <InsightStat
@@ -424,18 +424,27 @@ function CasualCard({ insights }: { insights: WeatherInsights }) {
 function InsightCard({
   title,
   icon,
+  category,
   children,
 }: {
   title: string;
   icon: React.ReactNode;
+  category?: string;
   children: React.ReactNode;
 }) {
+  const style = category ? CATEGORY_STYLES[category] : undefined;
+
   return (
     <section aria-label={title}>
-      <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
+      <div className={`rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6 ${style ? `border ${style.border}` : ""}`}>
         <div className="mb-4 flex items-center gap-2">
-          <span className="text-primary" aria-hidden="true">{icon}</span>
+          <span className={style?.text ?? "text-primary"} aria-hidden="true">{icon}</span>
           <h3 className="text-base font-semibold text-text-primary font-heading">{title}</h3>
+          {style && (
+            <span className={`ml-auto rounded-[var(--radius-badge)] px-2 py-0.5 text-xs font-medium ${style.badge}`}>
+              {category}
+            </span>
+          )}
         </div>
         {children}
       </div>
