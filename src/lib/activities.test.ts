@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   ACTIVITIES,
   ACTIVITY_CATEGORIES,
+  CATEGORY_STYLES,
   getActivitiesByCategory,
   getActivityById,
   getActivityLabels,
@@ -151,5 +152,39 @@ describe("searchActivities", () => {
 
   it("returns empty array for no matches", () => {
     expect(searchActivities("xyznonexistent")).toHaveLength(0);
+  });
+});
+
+describe("CATEGORY_STYLES", () => {
+  it("has styles for every activity category", () => {
+    for (const cat of ACTIVITY_CATEGORIES) {
+      expect(CATEGORY_STYLES[cat.id]).toBeDefined();
+      expect(CATEGORY_STYLES[cat.id].bg).toBeTruthy();
+      expect(CATEGORY_STYLES[cat.id].border).toBeTruthy();
+      expect(CATEGORY_STYLES[cat.id].text).toBeTruthy();
+      expect(CATEGORY_STYLES[cat.id].badge).toBeTruthy();
+    }
+  });
+
+  it("uses mineral color classes for non-casual categories", () => {
+    expect(CATEGORY_STYLES.farming.text).toContain("mineral-malachite");
+    expect(CATEGORY_STYLES.mining.text).toContain("mineral-terracotta");
+    expect(CATEGORY_STYLES.travel.text).toContain("mineral-cobalt");
+    expect(CATEGORY_STYLES.tourism.text).toContain("mineral-tanzanite");
+    expect(CATEGORY_STYLES.sports.text).toContain("mineral-gold");
+  });
+
+  it("uses primary color for casual category", () => {
+    expect(CATEGORY_STYLES.casual.text).toContain("text-primary");
+    expect(CATEGORY_STYLES.casual.border).toContain("border-primary");
+  });
+
+  it("includes bg, border, text, and badge for each style", () => {
+    for (const [, style] of Object.entries(CATEGORY_STYLES)) {
+      expect(style.bg).toMatch(/^bg-/);
+      expect(style.border).toMatch(/^border-/);
+      expect(style.text).toMatch(/^text-/);
+      expect(style.badge).toContain("bg-");
+    }
   });
 });

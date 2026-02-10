@@ -49,6 +49,31 @@ export interface WeatherData {
   hourly: HourlyWeather;
   daily: DailyWeather;
   current_units: Record<string, string>;
+  /** Activity-specific insights — only available when Tomorrow.io is the provider */
+  insights?: WeatherInsights;
+}
+
+/** Extended weather data from Tomorrow.io for activity-aware insight cards */
+export interface WeatherInsights {
+  // Farming — Growing Degree Days (today)
+  gdd10To30?: number;  // Maize & soybean
+  gdd10To31?: number;  // Sunflower
+  gdd08To30?: number;  // Sorghum & green gram
+  gdd03To25?: number;  // Potatoes
+  evapotranspiration?: number;  // mm (today)
+  dewPoint?: number;            // °C (current)
+  precipitationType?: number;   // 0=none, 1=rain, 2=snow, 3=freezing rain, 4=sleet
+
+  // Safety — outdoor activities
+  thunderstormProbability?: number;  // % (current)
+  heatStressIndex?: number;          // 0–30+ (current)
+  uvHealthConcern?: number;          // 0–11+ (current)
+
+  // Tourism / photography
+  moonPhase?: number;        // 0–7
+  cloudBase?: number | null; // km (current)
+  cloudCeiling?: number | null; // km (current)
+  visibility?: number;       // km (current)
 }
 
 export interface FrostAlert {

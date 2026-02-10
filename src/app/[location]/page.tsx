@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getLocationBySlug } from "@/lib/locations";
-import { fetchWeather, checkFrostRisk, getZimbabweSeason, weatherCodeToInfo } from "@/lib/weather";
+import { fetchWeather, checkFrostRisk, getZimbabweSeason, weatherCodeToInfo, type WeatherData } from "@/lib/weather";
+import { fetchWeatherFromTomorrow, TomorrowRateLimitError } from "@/lib/tomorrow";
+import { getApiKey } from "@/lib/db";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { CurrentConditions } from "@/components/weather/CurrentConditions";
@@ -11,6 +13,7 @@ import { SunTimes } from "@/components/weather/SunTimes";
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { AISummary } from "@/components/weather/AISummary";
 import { ActivitySelector } from "@/components/weather/ActivitySelector";
+import { ActivityInsights } from "@/components/weather/ActivityInsights";
 import { FrostAlertBanner } from "./FrostAlertBanner";
 
 export const dynamic = "force-dynamic";
@@ -72,7 +75,21 @@ export default async function LocationPage({
   const location = getLocationBySlug(slug);
   if (!location) notFound();
 
-  const weather = await fetchWeather(location.lat, location.lon);
+  // Try Tomorrow.io first (richer data with insights), fall back to Open-Meteo
+  let weather: WeatherData;
+  try {
+    const tomorrowKey = await getApiKey("tomorrow").catch(() => null);
+    if (tomorrowKey) {
+      weather = await fetchWeatherFromTomorrow(location.lat, location.lon, tomorrowKey);
+    } else {
+      weather = await fetchWeather(location.lat, location.lon);
+    }
+  } catch (err) {
+    if (err instanceof TomorrowRateLimitError) {
+      console.warn("Tomorrow.io rate limit, falling back to Open-Meteo");
+    }
+    weather = await fetchWeather(location.lat, location.lon);
+  }
   const frostAlert = checkFrostRisk(weather.hourly);
   const season = getZimbabweSeason();
   const conditionInfo = weatherCodeToInfo(weather.current.weather_code);
@@ -304,6 +321,7 @@ export default async function LocationPage({
               daily={weather.daily}
             />
             <AISummary weather={weather} location={location} />
+            <ActivityInsights insights={weather.insights} />
             <HourlyForecast hourly={weather.hourly} />
           </div>
 

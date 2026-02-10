@@ -170,12 +170,12 @@ export function LocationSelector({ currentSlug }: { currentSlug: string }) {
               </span>
             </button>
             {geoState?.status === "denied" && (
-              <p className="px-3 pb-1 text-xs text-text-tertiary">
+              <p className="px-3 pb-1 text-sm text-text-tertiary">
                 Location access denied. Enable it in your browser settings.
               </p>
             )}
             {geoState?.status === "outside-zw" && (
-              <p className="px-3 pb-1 text-xs text-text-tertiary">
+              <p className="px-3 pb-1 text-sm text-text-tertiary">
                 You appear to be outside Zimbabwe. Select a location below.
               </p>
             )}
@@ -189,7 +189,7 @@ export function LocationSelector({ currentSlug }: { currentSlug: string }) {
                   key={tag}
                   onClick={() => setActiveTag(activeTag === tag ? null : tag)}
                   aria-pressed={activeTag === tag}
-                  className={`min-h-[44px] rounded-[var(--radius-badge)] px-3 py-2 text-xs font-medium transition-colors ${
+                  className={`min-h-[44px] rounded-[var(--radius-badge)] px-3 py-2 text-sm font-medium transition-colors ${
                     activeTag === tag
                       ? "bg-primary text-primary-foreground"
                       : "bg-surface-base text-text-secondary hover:text-text-primary"
@@ -230,7 +230,7 @@ export function LocationSelector({ currentSlug }: { currentSlug: string }) {
                   />
                   <div className="flex flex-col items-start">
                     <span>{loc.name}</span>
-                    <span className="text-xs text-text-tertiary">
+                    <span className="text-sm text-text-tertiary">
                       {loc.province}
                     </span>
                   </div>
@@ -238,7 +238,7 @@ export function LocationSelector({ currentSlug }: { currentSlug: string }) {
                     {loc.tags.slice(0, 2).map((tag) => (
                       <span
                         key={tag}
-                        className="rounded-[var(--radius-badge)] bg-surface-base px-1.5 py-0.5 text-[10px] text-text-tertiary"
+                        className="rounded-[var(--radius-badge)] bg-surface-base px-1.5 py-0.5 text-xs text-text-tertiary"
                       >
                         {tag}
                       </span>
@@ -251,7 +251,7 @@ export function LocationSelector({ currentSlug }: { currentSlug: string }) {
 
           {/* Total count footer */}
           <div className="border-t border-text-tertiary/10 px-3 py-2">
-            <p className="text-xs text-text-tertiary">
+            <p className="text-sm text-text-tertiary">
               {LOCATIONS.length} locations across Zimbabwe
             </p>
           </div>

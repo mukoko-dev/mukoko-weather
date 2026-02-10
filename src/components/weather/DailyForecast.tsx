@@ -28,7 +28,7 @@ export function DailyForecast({ daily }: Props) {
   return (
     <section aria-labelledby="daily-forecast-heading">
       <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
-        <h2 id="daily-forecast-heading" className="text-lg font-semibold text-text-primary font-heading">7-Day Forecast</h2>
+        <h2 id="daily-forecast-heading" className="text-lg font-semibold text-text-primary font-heading">{daily.time.length}-Day Forecast</h2>
         <DailyChart daily={daily} />
         <div className="mt-4 space-y-1" role="list" aria-label="7-day weather forecast">
           {daily.time.map((date, i) => {
@@ -55,7 +55,7 @@ export function DailyForecast({ daily }: Props) {
               >
                 {/* Day + date */}
                 <div className="flex w-12 shrink-0 flex-col items-center sm:w-14">
-                  <span className="text-xs font-medium text-text-secondary leading-tight">
+                  <span className="text-sm font-medium text-text-secondary leading-tight">
                     {dayName}
                   </span>
                   <span className="text-lg font-bold text-text-primary leading-tight">
@@ -67,7 +67,7 @@ export function DailyForecast({ daily }: Props) {
                 <div className="flex w-10 shrink-0 flex-col items-center gap-0.5">
                   <WeatherIcon icon={info.icon} size={22} className="text-primary" />
                   {rainPct > 0 && (
-                    <span className="text-[10px] font-semibold text-rain">
+                    <span className="text-xs font-semibold text-rain">
                       {rainPct}%
                     </span>
                   )}

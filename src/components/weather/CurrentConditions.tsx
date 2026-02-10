@@ -90,7 +90,7 @@ function QuickStat({ icon, label, value }: { icon: React.ReactNode; label: strin
     <div role="listitem" className="flex min-w-0 items-center gap-3 rounded-[var(--radius-input)] bg-surface-base p-3">
       <span className="shrink-0 text-text-tertiary" aria-hidden="true">{icon}</span>
       <div className="min-w-0">
-        <p className="text-xs text-text-tertiary">{label}</p>
+        <p className="text-sm text-text-tertiary">{label}</p>
         <p className="truncate text-sm font-medium text-text-primary" aria-label={`${label}: ${value}`}>{value}</p>
       </div>
     </div>

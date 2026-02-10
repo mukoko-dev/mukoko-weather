@@ -2,8 +2,19 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useAppStore } from "@/lib/store";
-import { ACTIVITIES, ACTIVITY_CATEGORIES, searchActivities, type ActivityCategory } from "@/lib/activities";
+import {
+  ACTIVITIES,
+  ACTIVITY_CATEGORIES,
+  CATEGORY_STYLES,
+  searchActivities,
+  type ActivityCategory,
+} from "@/lib/activities";
 import { ActivityIcon } from "@/lib/weather-icons";
+
+/** Get the category style or fall back to casual/primary */
+function getCategoryStyle(category: string) {
+  return CATEGORY_STYLES[category] ?? CATEGORY_STYLES.casual;
+}
 
 export function ActivitySelector() {
   const selectedActivities = useAppStore((s) => s.selectedActivities);
@@ -25,7 +36,7 @@ export function ActivitySelector() {
             </h2>
             <button
               onClick={() => setOpen(true)}
-              className="rounded-[var(--radius-button)] bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+              className="rounded-[var(--radius-button)] bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
               aria-label={selectedItems.length > 0 ? "Edit your activities" : "Add activities"}
             >
               {selectedItems.length > 0 ? "Edit" : "Add"}
@@ -37,17 +48,28 @@ export function ActivitySelector() {
               Select activities to get personalised weather advice for farming, travel, sports, and more.
             </p>
           ) : (
-            <div className="mt-3 flex flex-wrap gap-2" role="list" aria-label="Selected activities">
-              {selectedItems.map((a) => (
-                <span
-                  key={a.id}
-                  role="listitem"
-                  className="inline-flex items-center gap-1.5 rounded-[var(--radius-badge)] bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
-                >
-                  <ActivityIcon activity={a.id} size={14} />
-                  {a.label}
-                </span>
-              ))}
+            <div className="mt-3 grid gap-2" role="list" aria-label="Selected activities">
+              {selectedItems.map((a) => {
+                const style = getCategoryStyle(a.category);
+                return (
+                  <div
+                    key={a.id}
+                    role="listitem"
+                    className={`flex items-center gap-3 rounded-[var(--radius-card)] border p-3 ${style.bg} ${style.border}`}
+                  >
+                    <span className={`shrink-0 ${style.text}`} aria-hidden="true">
+                      <ActivityIcon activity={a.id} size={20} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm font-semibold ${style.text}`}>{a.label}</p>
+                      <p className="text-xs text-text-tertiary">{a.description}</p>
+                    </div>
+                    <span className={`shrink-0 rounded-[var(--radius-badge)] px-2 py-0.5 text-xs font-medium ${style.badge}`}>
+                      {ACTIVITY_CATEGORIES.find((c) => c.id === a.category)?.label ?? a.category}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -129,6 +151,7 @@ function ActivityModal({ onClose }: { onClose: () => void }) {
         <div className="flex gap-2 overflow-x-auto px-4 pt-3 pb-2 scrollbar-hide" role="tablist" aria-label="Activity categories">
           <CategoryTab
             label="All"
+            categoryId="all"
             active={activeCategory === "all"}
             onClick={() => setActiveCategory("all")}
           />
@@ -136,6 +159,7 @@ function ActivityModal({ onClose }: { onClose: () => void }) {
             <CategoryTab
               key={cat.id}
               label={cat.label}
+              categoryId={cat.id}
               active={activeCategory === cat.id}
               onClick={() => setActiveCategory(cat.id)}
             />
@@ -165,6 +189,7 @@ function ActivityModal({ onClose }: { onClose: () => void }) {
           <div className="grid grid-cols-2 gap-2.5" role="group" aria-label="Available activities">
             {filteredActivities.map((activity) => {
               const isSelected = selectedActivities.includes(activity.id);
+              const style = getCategoryStyle(activity.category);
               return (
                 <button
                   key={activity.id}
@@ -173,13 +198,13 @@ function ActivityModal({ onClose }: { onClose: () => void }) {
                   aria-label={`${activity.label}: ${activity.description}`}
                   className={`relative flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border-2 p-3 transition-colors ${
                     isSelected
-                      ? "border-primary bg-primary/5"
+                      ? `${style.border} ${style.bg}`
                       : "border-transparent bg-surface-base hover:border-text-tertiary/30"
                   }`}
                 >
                   {isSelected && (
-                    <span className="absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary" aria-hidden="true">
-                      <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <span className={`absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full ${style.badge}`} aria-hidden="true">
+                      <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                     </span>
@@ -187,9 +212,9 @@ function ActivityModal({ onClose }: { onClose: () => void }) {
                   <ActivityIcon
                     activity={activity.id}
                     size={28}
-                    className={isSelected ? "text-primary" : "text-text-tertiary"}
+                    className={isSelected ? style.text : "text-text-tertiary"}
                   />
-                  <span className={`text-xs font-medium ${isSelected ? "text-primary" : "text-text-secondary"}`}>
+                  <span className={`text-sm font-medium ${isSelected ? style.text : "text-text-secondary"}`}>
                     {activity.label}
                   </span>
                 </button>
@@ -208,15 +233,27 @@ function ActivityModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function CategoryTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function CategoryTab({
+  label,
+  categoryId,
+  active,
+  onClick,
+}: {
+  label: string;
+  categoryId: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const style = categoryId === "all" ? null : getCategoryStyle(categoryId);
+
   return (
     <button
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`shrink-0 rounded-[var(--radius-badge)] px-3 py-1.5 text-xs font-medium transition-colors ${
+      className={`shrink-0 rounded-[var(--radius-badge)] px-3 py-1.5 text-sm font-medium transition-colors ${
         active
-          ? "bg-primary text-primary-foreground"
+          ? style ? `${style.badge}` : "bg-primary text-primary-foreground"
           : "bg-surface-base text-text-secondary hover:text-text-primary"
       }`}
     >

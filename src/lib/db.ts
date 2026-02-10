@@ -91,6 +91,9 @@ export async function ensureIndexes(): Promise<void> {
     // Locations: by slug (unique) and by tags
     locationsCollection().createIndex({ slug: 1 }, { unique: true }),
     locationsCollection().createIndex({ tags: 1 }),
+
+    // API keys: one key per provider
+    apiKeysCollection().createIndex({ provider: 1 }, { unique: true }),
   ]);
 }
 
@@ -254,6 +257,33 @@ export async function getWeatherHistory(
     })
     .sort({ date: -1 })
     .toArray();
+}
+
+// ---------------------------------------------------------------------------
+// API key storage (provider keys stored in MongoDB, not env vars)
+// ---------------------------------------------------------------------------
+
+export interface ApiKeyDoc {
+  provider: string;
+  key: string;
+  updatedAt: Date;
+}
+
+function apiKeysCollection() {
+  return getDb().collection<ApiKeyDoc>("api_keys");
+}
+
+export async function getApiKey(provider: string): Promise<string | null> {
+  const doc = await apiKeysCollection().findOne({ provider });
+  return doc?.key ?? null;
+}
+
+export async function setApiKey(provider: string, key: string): Promise<void> {
+  await apiKeysCollection().updateOne(
+    { provider },
+    { $set: { key, updatedAt: new Date() } },
+    { upsert: true },
+  );
 }
 
 // ---------------------------------------------------------------------------

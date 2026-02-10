@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchWeather } from "@/lib/weather";
 import { findNearestLocation } from "@/lib/locations";
-import { getCachedWeather, setCachedWeather, recordWeatherHistory } from "@/lib/db";
+import { getCachedWeather, setCachedWeather, recordWeatherHistory, getApiKey } from "@/lib/db";
+import { fetchWeatherFromTomorrow, TomorrowRateLimitError } from "@/lib/tomorrow";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -30,8 +31,27 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Cache miss — fetch from Open-Meteo
-    const data = await fetchWeather(lat, lon);
+    // Cache miss — try Tomorrow.io first, fall back to Open-Meteo
+    let data;
+    let provider = "open-meteo";
+
+    const tomorrowKey = await getApiKey("tomorrow").catch(() => null);
+    if (tomorrowKey) {
+      try {
+        data = await fetchWeatherFromTomorrow(lat, lon, tomorrowKey);
+        provider = "tomorrow";
+      } catch (err) {
+        if (err instanceof TomorrowRateLimitError) {
+          console.warn("Tomorrow.io rate limit hit, falling back to Open-Meteo");
+        } else {
+          console.warn("Tomorrow.io fetch failed, falling back to Open-Meteo:", err);
+        }
+      }
+    }
+
+    if (!data) {
+      data = await fetchWeather(lat, lon);
+    }
 
     // Store in MongoDB cache (15 min TTL via TTL index) + record history
     await Promise.all([
@@ -40,7 +60,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     return NextResponse.json(data, {
-      headers: { "X-Cache": "MISS" },
+      headers: { "X-Cache": "MISS", "X-Weather-Provider": provider },
     });
   } catch {
     return NextResponse.json({ error: "Failed to fetch weather data" }, { status: 502 });
