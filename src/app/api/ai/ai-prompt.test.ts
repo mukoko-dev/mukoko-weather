@@ -38,4 +38,9 @@ describe("AI summary system prompt", () => {
   it("requires actionable recommendations", () => {
     expect(routeContent).toContain("actionable recommendation");
   });
+
+  it("supports user activities for personalized advice", () => {
+    expect(routeContent).toContain("activities");
+    expect(routeContent).toContain("Tailor advice to these activities");
+  });
 });

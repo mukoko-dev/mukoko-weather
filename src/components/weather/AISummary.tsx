@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import { SparklesIcon } from "@/lib/weather-icons";
+import { useAppStore } from "@/lib/store";
+import { getActivityLabels } from "@/lib/activities";
 import type { WeatherData } from "@/lib/weather";
 import type { ZimbabweLocation } from "@/lib/locations";
 
@@ -15,11 +17,13 @@ export function AISummary({ weather, location }: Props) {
   const [insight, setInsight] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const selectedActivities = useAppStore((s) => s.selectedActivities);
 
   const fetchInsight = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      const activityLabels = getActivityLabels(selectedActivities);
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -34,6 +38,7 @@ export function AISummary({ weather, location }: Props) {
             },
           },
           location: { name: location.name, lat: location.lat, lon: location.lon, elevation: location.elevation },
+          activities: activityLabels,
         }),
       });
       if (!res.ok) throw new Error("Failed to get AI insight");
@@ -44,7 +49,7 @@ export function AISummary({ weather, location }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [weather, location]);
+  }, [weather, location, selectedActivities]);
 
   useEffect(() => {
     fetchInsight();
