@@ -25,7 +25,7 @@ export function ActivitySelector() {
             </h2>
             <button
               onClick={() => setOpen(true)}
-              className="rounded-[var(--radius-button)] bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+              className="rounded-[var(--radius-button)] bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
               aria-label={selectedItems.length > 0 ? "Edit your activities" : "Add activities"}
             >
               {selectedItems.length > 0 ? "Edit" : "Add"}
@@ -42,7 +42,7 @@ export function ActivitySelector() {
                 <span
                   key={a.id}
                   role="listitem"
-                  className="inline-flex items-center gap-1.5 rounded-[var(--radius-badge)] bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+                  className="inline-flex items-center gap-1.5 rounded-[var(--radius-badge)] bg-primary/10 px-2.5 py-1.5 text-sm font-medium text-primary"
                 >
                   <ActivityIcon activity={a.id} size={14} />
                   {a.label}
@@ -189,7 +189,7 @@ function ActivityModal({ onClose }: { onClose: () => void }) {
                     size={28}
                     className={isSelected ? "text-primary" : "text-text-tertiary"}
                   />
-                  <span className={`text-xs font-medium ${isSelected ? "text-primary" : "text-text-secondary"}`}>
+                  <span className={`text-sm font-medium ${isSelected ? "text-primary" : "text-text-secondary"}`}>
                     {activity.label}
                   </span>
                 </button>
@@ -214,7 +214,7 @@ function CategoryTab({ label, active, onClick }: { label: string; active: boolea
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`shrink-0 rounded-[var(--radius-badge)] px-3 py-1.5 text-xs font-medium transition-colors ${
+      className={`shrink-0 rounded-[var(--radius-badge)] px-3 py-1.5 text-sm font-medium transition-colors ${
         active
           ? "bg-primary text-primary-foreground"
           : "bg-surface-base text-text-secondary hover:text-text-primary"

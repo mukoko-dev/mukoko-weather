@@ -5,8 +5,8 @@ export function SeasonBadge() {
 
   return (
     <div className="inline-flex max-w-full items-center gap-2 rounded-[var(--radius-badge)] bg-primary/10 px-3 py-1">
-      <span className="shrink-0 text-xs font-semibold text-primary">{season.shona}</span>
-      <span className="truncate text-xs text-text-secondary">
+      <span className="shrink-0 text-sm font-semibold text-primary">{season.shona}</span>
+      <span className="truncate text-sm text-text-secondary">
         {season.name} — {season.description}
       </span>
     </div>
