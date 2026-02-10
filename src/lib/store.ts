@@ -6,6 +6,8 @@ interface AppState {
   toggleTheme: () => void;
   selectedLocation: string; // slug
   setSelectedLocation: (slug: string) => void;
+  selectedActivities: string[]; // activity IDs from src/lib/activities.ts
+  toggleActivity: (id: string) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -23,6 +25,13 @@ export const useAppStore = create<AppState>()(
         }),
       selectedLocation: "harare",
       setSelectedLocation: (slug) => set({ selectedLocation: slug }),
+      selectedActivities: [],
+      toggleActivity: (id) =>
+        set((state) => ({
+          selectedActivities: state.selectedActivities.includes(id)
+            ? state.selectedActivities.filter((a) => a !== id)
+            : [...state.selectedActivities, id],
+        })),
     }),
     {
       name: "mukoko-weather-prefs",

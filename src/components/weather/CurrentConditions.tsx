@@ -1,15 +1,18 @@
 import { WeatherIcon, WindIcon, DropletIcon, ThermometerIcon, EyeIcon, GaugeIcon } from "@/lib/weather-icons";
-import { weatherCodeToInfo, windDirection, uvLevel, type CurrentWeather } from "@/lib/weather";
+import { weatherCodeToInfo, windDirection, uvLevel, type CurrentWeather, type DailyWeather } from "@/lib/weather";
 
 interface Props {
   current: CurrentWeather;
   locationName: string;
+  daily?: DailyWeather;
 }
 
-export function CurrentConditions({ current, locationName }: Props) {
+export function CurrentConditions({ current, locationName, daily }: Props) {
   const info = weatherCodeToInfo(current.weather_code);
   const uv = uvLevel(current.uv_index);
   const wind = windDirection(current.wind_direction_10m);
+  const todayHigh = daily ? Math.round(daily.temperature_2m_max[0]) : null;
+  const todayLow = daily ? Math.round(daily.temperature_2m_min[0]) : null;
 
   return (
     <section aria-labelledby="current-conditions-heading">
@@ -21,26 +24,31 @@ export function CurrentConditions({ current, locationName }: Props) {
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-sm font-medium text-text-secondary">{locationName}</p>
-            <div className="mt-1 flex items-baseline gap-2">
-              <span className="font-mono text-6xl font-medium tracking-tight text-text-primary" aria-label={`${Math.round(current.temperature_2m)} degrees Celsius`}>
+            <div className="mt-1 flex items-baseline gap-1">
+              <span className="font-mono text-7xl font-bold tracking-tighter text-text-primary sm:text-8xl" aria-label={`${Math.round(current.temperature_2m)} degrees Celsius`}>
                 {Math.round(current.temperature_2m)}
               </span>
-              <span className="font-sans text-2xl font-normal text-text-secondary align-super" aria-hidden="true">°C</span>
+              <span className="font-sans text-3xl font-light text-text-tertiary" aria-hidden="true">°</span>
             </div>
+            <p className="mt-1 text-base font-semibold text-text-primary">{info.label}</p>
             <p className="mt-1 text-sm text-text-secondary">
               Feels like {Math.round(current.apparent_temperature)}°C
+              {todayHigh !== null && todayLow !== null && (
+                <span className="ml-1">
+                  · High {todayHigh}° Low {todayLow}°
+                </span>
+              )}
             </p>
-            <p className="mt-2 text-base font-medium text-text-primary">{info.label}</p>
           </div>
           <WeatherIcon
             icon={current.is_day ? info.icon : "moon"}
-            size={64}
+            size={80}
             className="text-primary"
           />
         </div>
 
         {/* Quick stats grid */}
-        <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3" role="list" aria-label="Weather statistics">
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3" role="list" aria-label="Weather statistics">
           <QuickStat
             icon={<DropletIcon size={18} />}
             label="Humidity"

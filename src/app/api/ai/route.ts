@@ -32,7 +32,8 @@ Format guidelines:
 
 export async function POST(request: Request) {
   try {
-    const { weatherData, location } = await request.json();
+    const { weatherData, location, activities } = await request.json();
+    const userActivities: string[] = Array.isArray(activities) ? activities : [];
 
     if (!weatherData || !location) {
       return NextResponse.json({ error: "Missing weather data or location" }, { status: 400 });
@@ -87,6 +88,7 @@ export async function POST(request: Request) {
           role: "user",
           content: `Generate a weather briefing for ${location.name}, Zimbabwe (elevation: ${location.elevation}m).
 ${locationTags.length > 0 ? `This area is relevant to: ${locationTags.join(", ")}.` : ""}
+${userActivities.length > 0 ? `The user's activities: ${userActivities.join(", ")}. Tailor advice to these activities.` : ""}
 
 Current conditions: ${JSON.stringify(weatherData.current)}
 3-day forecast summary: max temps ${JSON.stringify(weatherData.daily?.temperature_2m_max)}, min temps ${JSON.stringify(weatherData.daily?.temperature_2m_min)}, weather codes ${JSON.stringify(weatherData.daily?.weather_code)}
@@ -94,7 +96,7 @@ Season: ${season.shona} (${season.name})
 
 Provide:
 1. A 2-sentence general summary
-2. One industry/context-specific tip relevant to this area (e.g. farming advice for farming areas, safety for mining areas, travel conditions for border/travel areas, outdoor guidance for tourism/national parks)`,
+2. ${userActivities.length > 0 ? `One specific tip for the user's activities (${userActivities.slice(0, 3).join(", ")})` : "One industry/context-specific tip relevant to this area (e.g. farming advice for farming areas, safety for mining areas, travel conditions for border/travel areas, outdoor guidance for tourism/national parks)"}`,
         },
       ],
     });

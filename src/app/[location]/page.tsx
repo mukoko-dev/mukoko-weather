@@ -10,6 +10,7 @@ import { DailyForecast } from "@/components/weather/DailyForecast";
 import { SunTimes } from "@/components/weather/SunTimes";
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { AISummary } from "@/components/weather/AISummary";
+import { ActivitySelector } from "@/components/weather/ActivitySelector";
 import { FrostAlertBanner } from "./FrostAlertBanner";
 
 export const dynamic = "force-dynamic";
@@ -300,6 +301,7 @@ export default async function LocationPage({
             <CurrentConditions
               current={weather.current}
               locationName={location.name}
+              daily={weather.daily}
             />
             <AISummary weather={weather} location={location} />
             <HourlyForecast hourly={weather.hourly} />
@@ -309,6 +311,7 @@ export default async function LocationPage({
           <div className="min-w-0 space-y-6">
             <DailyForecast daily={weather.daily} />
             <SunTimes daily={weather.daily} />
+            <ActivitySelector />
 
             {/* Location info card */}
             <section aria-labelledby={`about-${location.slug}`}>
