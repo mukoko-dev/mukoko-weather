@@ -195,4 +195,98 @@ describe("normalizeTomorrowResponse", () => {
     };
     expect(() => normalizeTomorrowResponse(empty)).toThrow("empty hourly data");
   });
+
+  it("extracts insights from extended core fields", () => {
+    const withInsights = {
+      timelines: {
+        hourly: [
+          {
+            time: "2025-01-15T10:00:00Z",
+            values: {
+              temperature: 28,
+              humidity: 65,
+              temperatureApparent: 30,
+              precipitationProbability: 20,
+              rainIntensity: 0,
+              weatherCode: 1000,
+              cloudCover: 30,
+              windSpeed: 10,
+              windDirection: 90,
+              windGust: 15,
+              uvIndex: 8,
+              visibility: 20,
+              pressureSurfaceLevel: 1010,
+              dewPoint: 18,
+              // Extended core fields
+              thunderstormProbability: 25,
+              ezHeatStressIndex: 24.5,
+              uvHealthConcern: 8,
+              precipitationType: 1,
+              cloudBase: 2.5,
+              cloudCeiling: 5.0,
+              evapotranspiration: 3.2,
+            },
+          },
+        ],
+        daily: [
+          {
+            time: "2025-01-15T00:00:00Z",
+            values: {
+              temperatureMax: 32,
+              temperatureMin: 20,
+              weatherCodeMax: 1000,
+              sunriseTime: "2025-01-15T05:30:00Z",
+              sunsetTime: "2025-01-15T18:45:00Z",
+              uvIndexMax: 10,
+              precipitationProbabilityMax: 30,
+              windSpeedMax: 18,
+              // Extended core fields
+              moonPhase: 4,
+              gdd10To30: 12.5,
+              gdd10To31: 13.0,
+              gdd08To30: 14.2,
+              gdd03To25: 15.0,
+              evapotranspirationAvg: 4.1,
+            },
+          },
+        ],
+      },
+      location: { lat: -17.83, lon: 31.05 },
+    };
+
+    const result = normalizeTomorrowResponse(withInsights);
+    expect(result.insights).toBeDefined();
+
+    // Farming insights
+    expect(result.insights!.gdd10To30).toBe(12.5);
+    expect(result.insights!.gdd10To31).toBe(13.0);
+    expect(result.insights!.gdd08To30).toBe(14.2);
+    expect(result.insights!.gdd03To25).toBe(15.0);
+    expect(result.insights!.evapotranspiration).toBe(3.2);
+    expect(result.insights!.dewPoint).toBe(18);
+    expect(result.insights!.precipitationType).toBe(1);
+
+    // Safety insights
+    expect(result.insights!.thunderstormProbability).toBe(25);
+    expect(result.insights!.heatStressIndex).toBe(24.5);
+    expect(result.insights!.uvHealthConcern).toBe(8);
+
+    // Tourism insights
+    expect(result.insights!.moonPhase).toBe(4);
+    expect(result.insights!.cloudBase).toBe(2.5);
+    expect(result.insights!.cloudCeiling).toBe(5.0);
+    expect(result.insights!.visibility).toBe(20);
+  });
+
+  it("returns insights with undefined fields when extended data is missing", () => {
+    const result = normalizeTomorrowResponse(mockResponse);
+    expect(result.insights).toBeDefined();
+    expect(result.insights!.dewPoint).toBe(15); // always present in hourly
+    expect(result.insights!.visibility).toBe(16); // always present in hourly
+    // Extended fields should be undefined
+    expect(result.insights!.gdd10To30).toBeUndefined();
+    expect(result.insights!.thunderstormProbability).toBeUndefined();
+    expect(result.insights!.heatStressIndex).toBeUndefined();
+    expect(result.insights!.moonPhase).toBeUndefined();
+  });
 });

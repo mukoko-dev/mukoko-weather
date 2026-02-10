@@ -7,7 +7,7 @@
  * Tomorrow.io is the primary provider; Open-Meteo serves as fallback.
  */
 
-import type { WeatherData, CurrentWeather, HourlyWeather, DailyWeather } from "./weather";
+import type { WeatherData, CurrentWeather, HourlyWeather, DailyWeather, WeatherInsights } from "./weather";
 
 // ---------------------------------------------------------------------------
 // Tomorrow.io weather code → WMO code mapping
@@ -62,6 +62,14 @@ interface TomorrowHourlyValues {
   visibility: number;
   pressureSurfaceLevel: number;
   dewPoint: number;
+  // Extended core fields for activity insights
+  thunderstormProbability?: number;
+  ezHeatStressIndex?: number;
+  uvHealthConcern?: number;
+  precipitationType?: number;
+  cloudBase?: number | null;
+  cloudCeiling?: number | null;
+  evapotranspiration?: number;
 }
 
 interface TomorrowDailyValues {
@@ -78,6 +86,13 @@ interface TomorrowDailyValues {
   windGustMax?: number;
   rainAccumulation?: number;
   snowAccumulation?: number;
+  // Extended core fields for activity insights
+  moonPhase?: number;
+  gdd10To30?: number;
+  gdd10To31?: number;
+  gdd08To30?: number;
+  gdd03To25?: number;
+  evapotranspirationAvg?: number;
 }
 
 interface TomorrowTimelineEntry<V> {
@@ -234,5 +249,27 @@ export function normalizeTomorrowResponse(data: TomorrowForecastResponse): Weath
     cloud_cover: "%",
   };
 
-  return { current, hourly, daily, current_units };
+  // --- Insights: activity-specific data from Tomorrow.io core fields ---
+  const today = dailyEntries[0]?.values;
+  const insights: WeatherInsights = {
+    // Farming — GDD + water loss
+    gdd10To30: today?.gdd10To30,
+    gdd10To31: today?.gdd10To31,
+    gdd08To30: today?.gdd08To30,
+    gdd03To25: today?.gdd03To25,
+    evapotranspiration: first.evapotranspiration ?? today?.evapotranspirationAvg,
+    dewPoint: first.dewPoint,
+    precipitationType: first.precipitationType,
+    // Safety
+    thunderstormProbability: first.thunderstormProbability,
+    heatStressIndex: first.ezHeatStressIndex,
+    uvHealthConcern: first.uvHealthConcern,
+    // Tourism
+    moonPhase: today?.moonPhase,
+    cloudBase: first.cloudBase,
+    cloudCeiling: first.cloudCeiling,
+    visibility: first.visibility, // already in km from Tomorrow.io
+  };
+
+  return { current, hourly, daily, current_units, insights };
 }
