@@ -187,10 +187,16 @@ export default function RootLayout({
     <html
       lang="en"
       dir="ltr"
-      data-theme="light"
       data-brand="mukoko-weather"
+      suppressHydrationWarning
     >
       <head>
+        {/* Prevent flash of wrong theme — runs before first paint */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var s=JSON.parse(localStorage.getItem("mukoko-weather-prefs")||"{}");var t=(s.state&&s.state.theme)||"system";if(t==="system"){t=window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"}document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","light")}})();`,
+          }}
+        />
         <meta name="color-scheme" content="light dark" />
         <meta name="theme-color" content="#0047AB" media="(prefers-color-scheme: light)" />
         <meta name="theme-color" content="#0A0A0A" media="(prefers-color-scheme: dark)" />

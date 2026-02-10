@@ -1,8 +1,25 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+export type ThemePreference = "light" | "dark" | "system";
+
+/** Resolve the effective theme (light/dark) for a given preference */
+export function resolveTheme(pref: ThemePreference): "light" | "dark" {
+  if (pref !== "system") return pref;
+  if (typeof window === "undefined") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+/** Apply the resolved theme to the DOM */
+function applyTheme(pref: ThemePreference) {
+  if (typeof document === "undefined") return;
+  document.documentElement.setAttribute("data-theme", resolveTheme(pref));
+  document.documentElement.setAttribute("data-brand", "mukoko");
+}
+
 interface AppState {
-  theme: "light" | "dark";
+  theme: ThemePreference;
+  setTheme: (theme: ThemePreference) => void;
   toggleTheme: () => void;
   selectedLocation: string; // slug
   setSelectedLocation: (slug: string) => void;
@@ -10,17 +27,21 @@ interface AppState {
   toggleActivity: (id: string) => void;
 }
 
+const THEME_CYCLE: ThemePreference[] = ["light", "dark", "system"];
+
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      theme: "light",
+      theme: "system" as ThemePreference,
+      setTheme: (theme: ThemePreference) => {
+        applyTheme(theme);
+        set({ theme });
+      },
       toggleTheme: () =>
         set((state) => {
-          const next = state.theme === "light" ? "dark" : "light";
-          if (typeof document !== "undefined") {
-            document.documentElement.setAttribute("data-theme", next);
-            document.documentElement.setAttribute("data-brand", "mukoko");
-          }
+          const idx = THEME_CYCLE.indexOf(state.theme);
+          const next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
+          applyTheme(next);
           return { theme: next };
         }),
       selectedLocation: "harare",
@@ -36,10 +57,7 @@ export const useAppStore = create<AppState>()(
     {
       name: "mukoko-weather-prefs",
       onRehydrateStorage: () => (state) => {
-        if (state && typeof document !== "undefined") {
-          document.documentElement.setAttribute("data-theme", state.theme);
-          document.documentElement.setAttribute("data-brand", "mukoko");
-        }
+        if (state) applyTheme(state.theme);
       },
     },
   ),

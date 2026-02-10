@@ -6,16 +6,17 @@ AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, 
 
 ## Features
 
-- **Real-time weather** — current conditions from Open-Meteo for any Zimbabwe location
+- **Real-time weather** — current conditions from Tomorrow.io (primary) with Open-Meteo fallback
 - **7-day forecasts** — daily highs, lows, precipitation probability, and weather conditions
 - **24-hour hourly forecasts** — hour-by-hour temperature and rain predictions
 - **AI weather intelligence** — Claude-powered markdown-formatted summaries with farming, mining, and travel advice
+- **Personalised activity insights** — 20 activities across 6 categories (farming, mining, travel, tourism, sports, casual) with mineral-colored cards showing GDD, heat stress, thunderstorm risk, visibility, and more
 - **Frost alerts** — automated frost risk detection for overnight hours with severity levels
 - **90+ locations** — cities, farming regions, mining areas, national parks, border posts, and travel corridors
 - **Zimbabwe seasons** — Masika, Chirimo, Zhizha, and Munakamwe season awareness
 - **Geolocation** — automatic nearest-location detection via browser GPS
 - **Embeddable widget** — drop-in weather widget for third-party sites
-- **Dark mode** — full light/dark theme support
+- **Smart theming** — light, dark, and system (auto) modes with OS preference detection
 - **PWA** — installable as a standalone app on Android, iOS, and desktop
 
 ## Tech Stack
@@ -27,7 +28,7 @@ AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, 
 | Styling | [Tailwind CSS 4](https://tailwindcss.com) |
 | State | [Zustand 5](https://zustand.docs.pmnd.rs) |
 | AI | [Anthropic Claude SDK](https://docs.anthropic.com/en/docs) |
-| Weather API | [Open-Meteo](https://open-meteo.com) |
+| Weather API | [Tomorrow.io](https://tomorrow.io) (primary) + [Open-Meteo](https://open-meteo.com) (fallback) |
 | Database | [MongoDB Atlas](https://mongodb.com/atlas) |
 | Markdown | [react-markdown](https://github.com/remarkjs/react-markdown) |
 | Testing | [Vitest](https://vitest.dev) |
@@ -104,21 +105,24 @@ src/
     privacy/page.tsx        # Privacy policy
     terms/page.tsx          # Terms of service
   components/
-    brand/                  # MukokoLogo, ThemeToggle, ThemeProvider, MineralsStripe
+    brand/                  # MukokoLogo, ThemeToggle (3-state), ThemeProvider, MineralsStripe
     layout/                 # Header, Footer
     weather/                # CurrentConditions, HourlyForecast, DailyForecast,
-                            # SunTimes, SeasonBadge, AISummary, LocationSelector
+                            # SunTimes, SeasonBadge, AISummary, LocationSelector,
+                            # ActivitySelector, ActivityInsights
     embed/                  # MukokoWeatherEmbed (CSS module, self-contained)
   lib/
     locations.ts            # 90+ Zimbabwe locations database
+    activities.ts           # 20 activities, 6 categories, mineral color styles
+    tomorrow.ts             # Tomorrow.io API client + WMO normalization
     weather.ts              # Open-Meteo client, frost detection, seasons
-    db.ts                   # MongoDB CRUD operations
+    db.ts                   # MongoDB CRUD operations (+ API key storage)
     mongo.ts                # MongoDB client (connection-pooled)
     weather-idb.ts          # IndexedDB on-device cache
     use-weather-sync.ts     # Auto-refresh hook (60s interval)
     geolocation.ts          # Browser geolocation detection
-    store.ts                # Zustand state management
-    weather-icons.tsx       # SVG weather icon components
+    store.ts                # Zustand state (theme with system detection, location, activities)
+    weather-icons.tsx       # SVG weather + activity icon components
     i18n.ts                 # Internationalization utilities
 public/
   manifest.json             # PWA manifest with app shortcuts
@@ -129,7 +133,7 @@ public/
 
 ### `GET /api/weather?lat=-17.83&lon=31.05`
 
-Returns Open-Meteo weather data for the given coordinates. Responses are cached in MongoDB. Coordinates must be within the Zimbabwe region.
+Returns weather data for the given coordinates. Uses Tomorrow.io as primary provider (with extended activity insights) and falls back to Open-Meteo. The `X-Weather-Provider` header indicates which provider served the data. Responses are cached in MongoDB. Coordinates must be within the Zimbabwe region.
 
 ### `GET /api/geo?lat=-17.83&lon=31.05`
 
@@ -145,7 +149,7 @@ Returns historical weather data for a location.
 
 ### `POST /api/db-init`
 
-One-time database setup: creates indexes and syncs location data to MongoDB. Protected by `DB_INIT_SECRET` in production.
+One-time database setup: creates indexes and syncs location data to MongoDB. Optionally seeds API keys via body `{ "apiKeys": { "tomorrow": "..." } }`. Protected by `DB_INIT_SECRET` in production.
 
 ## Accessibility
 
