@@ -20,7 +20,7 @@ export default function GlobalError({
     retryCount.current += 1;
     if (retryCount.current >= 2) {
       // After 2 failed retries, do a full page reload to clear any
-      // corrupted client state (stale Zustand, broken IndexedDB, etc.)
+      // corrupted client state
       window.location.reload();
       return;
     }
