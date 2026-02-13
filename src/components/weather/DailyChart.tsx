@@ -1,6 +1,6 @@
 "use client";
 
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Line } from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
@@ -17,6 +17,8 @@ export interface DailyDataPoint {
   day: string;
   high: number;
   low: number;
+  feelsHigh: number;
+  feelsLow: number;
   range: [number, number];
   rain: number;
 }
@@ -35,6 +37,8 @@ export function prepareDailyData(daily: DailyWeather): DailyDataPoint[] {
       day: dayName,
       high,
       low,
+      feelsHigh: Math.round(daily.apparent_temperature_max[i]),
+      feelsLow: Math.round(daily.apparent_temperature_min[i]),
       range: [low, high],
       rain: daily.precipitation_probability_max[i],
     };
@@ -50,13 +54,21 @@ const chartConfig = {
     label: "Low",
     color: "var(--chart-2)",
   },
+  feelsHigh: {
+    label: "Feels High",
+    color: "var(--chart-3)",
+  },
+  feelsLow: {
+    label: "Feels Low",
+    color: "var(--chart-4)",
+  },
 } satisfies ChartConfig;
 
 export function DailyChart({ daily }: Props) {
   const data = prepareDailyData(daily);
   if (data.length < 2) return null;
 
-  const allTemps = data.flatMap((d) => [d.high, d.low]);
+  const allTemps = data.flatMap((d) => [d.high, d.low, d.feelsHigh, d.feelsLow]);
   const minTemp = Math.min(...allTemps) - 2;
   const maxTemp = Math.max(...allTemps) + 2;
 
@@ -101,8 +113,8 @@ export function DailyChart({ daily }: Props) {
             content={
               <ChartTooltipContent
                 formatter={(value, name) => {
-                  const label = name === "high" ? "High" : "Low";
-                  return `${label}: ${value}°C`;
+                  const labels: Record<string, string> = { high: "High", low: "Low", feelsHigh: "Feels High", feelsLow: "Feels Low" };
+                  return `${labels[name as string] ?? name}: ${value}°C`;
                 }}
               />
             }
@@ -125,6 +137,24 @@ export function DailyChart({ daily }: Props) {
             dot={{ r: 3, strokeWidth: 2, fill: "var(--color-surface-card)" }}
             activeDot={{ r: 5, strokeWidth: 2 }}
             strokeDasharray="4 3"
+          />
+          <Line
+            type="monotone"
+            dataKey="feelsHigh"
+            stroke="var(--color-feelsHigh)"
+            strokeWidth={1.5}
+            strokeDasharray="4 3"
+            dot={false}
+            activeDot={{ r: 3, strokeWidth: 1 }}
+          />
+          <Line
+            type="monotone"
+            dataKey="feelsLow"
+            stroke="var(--color-feelsLow)"
+            strokeWidth={1.5}
+            strokeDasharray="4 3"
+            dot={false}
+            activeDot={{ r: 3, strokeWidth: 1 }}
           />
         </AreaChart>
       </ChartContainer>

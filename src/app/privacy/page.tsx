@@ -62,9 +62,24 @@ export default function PrivacyPage() {
 
             <h3 className="mt-4 font-semibold text-text-primary">Automatically collected information</h3>
             <p className="mt-2">
-              We do not use cookies, analytics trackers, advertising pixels, or fingerprinting technologies.
-              Our hosting provider (Cloudflare) may collect standard web server logs (IP address, browser
-              type, request time) as part of their infrastructure. We do not access or analyse these logs.
+              We use <strong className="text-text-primary">Google Analytics</strong> to understand how our
+              service is used — such as which locations are most popular and how visitors navigate the site.
+              Google Analytics collects anonymised usage data including page views, approximate geographic
+              region, browser type, and device category. This data is aggregated and cannot identify you
+              personally.
+            </p>
+            <p className="mt-2">
+              Google Analytics uses cookies to distinguish unique visitors. You can opt out of Google
+              Analytics by installing the{" "}
+              <a href="https://tools.google.com/dlpage/gaoptout" className="text-primary underline" rel="noopener noreferrer">
+                Google Analytics Opt-out Browser Add-on
+              </a>.
+            </p>
+            <p className="mt-2">
+              We do not use advertising pixels, fingerprinting technologies, or any other tracking beyond
+              Google Analytics. Our hosting provider (Cloudflare) may collect standard web server logs
+              (IP address, browser type, request time) as part of their infrastructure. We do not access
+              or analyse these logs.
             </p>
           </section>
 
@@ -97,6 +112,14 @@ export default function PrivacyPage() {
                 <dd className="mt-1">
                   AI model used to generate weather summaries. Only weather data and location names are sent —
                   no personal data. Processing occurs on our server, not in your browser.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-text-primary">Google Analytics</dt>
+                <dd className="mt-1">
+                  Anonymised website usage analytics. Collects aggregated data on page views, visitor counts,
+                  and navigation patterns. No personally identifiable information is collected.
+                  See their <a href="https://policies.google.com/privacy" className="text-primary underline" rel="noopener noreferrer">privacy policy</a>.
                 </dd>
               </div>
               <div>

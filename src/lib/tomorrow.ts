@@ -204,12 +204,17 @@ export function normalizeTomorrowResponse(data: TomorrowForecastResponse): Weath
   const hourly: HourlyWeather = {
     time: hourlyEntries.map((e) => e.time),
     temperature_2m: hourlyEntries.map((e) => e.values.temperature),
+    apparent_temperature: hourlyEntries.map((e) => e.values.temperatureApparent),
     relative_humidity_2m: hourlyEntries.map((e) => e.values.humidity),
     precipitation_probability: hourlyEntries.map((e) => e.values.precipitationProbability),
     precipitation: hourlyEntries.map((e) => e.values.rainIntensity),
     weather_code: hourlyEntries.map((e) => tomorrowCodeToWmo(e.values.weatherCode)),
     visibility: hourlyEntries.map((e) => e.values.visibility * 1000), // km → m (Open-Meteo uses meters)
+    cloud_cover: hourlyEntries.map((e) => e.values.cloudCover),
+    surface_pressure: hourlyEntries.map((e) => e.values.pressureSurfaceLevel),
     wind_speed_10m: hourlyEntries.map((e) => e.values.windSpeed),
+    wind_direction_10m: hourlyEntries.map((e) => e.values.windDirection),
+    wind_gusts_10m: hourlyEntries.map((e) => e.values.windGust),
     uv_index: hourlyEntries.map((e) => e.values.uvIndex),
     is_day: hourlyEntries.map((e) => computeIsDay(e.time, dailyEntries)),
   };

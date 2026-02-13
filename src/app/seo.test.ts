@@ -50,7 +50,7 @@ describe("sitemap.ts", () => {
     }
   });
 
-  it("includes static pages (about, help, privacy, terms)", () => {
+  it("includes static pages (about, help, history, privacy, terms)", () => {
     const aboutEntry = result.find((e) => e.url === "https://weather.mukoko.com/about");
     expect(aboutEntry).toBeDefined();
     expect(aboutEntry!.changeFrequency).toBe("monthly");
@@ -58,6 +58,11 @@ describe("sitemap.ts", () => {
     const helpEntry = result.find((e) => e.url === "https://weather.mukoko.com/help");
     expect(helpEntry).toBeDefined();
     expect(helpEntry!.changeFrequency).toBe("monthly");
+
+    const historyEntry = result.find((e) => e.url === "https://weather.mukoko.com/history");
+    expect(historyEntry).toBeDefined();
+    expect(historyEntry!.changeFrequency).toBe("daily");
+    expect(historyEntry!.priority).toBe(0.7);
 
     const privacyEntry = result.find((e) => e.url === "https://weather.mukoko.com/privacy");
     expect(privacyEntry).toBeDefined();
@@ -68,8 +73,8 @@ describe("sitemap.ts", () => {
     expect(termsEntry!.changeFrequency).toBe("yearly");
   });
 
-  it("total entries = 5 static pages + all locations", () => {
-    expect(result.length).toBe(5 + LOCATIONS.length);
+  it("total entries = 6 static pages + all locations", () => {
+    expect(result.length).toBe(6 + LOCATIONS.length);
   });
 
   it("city locations have priority 0.9", () => {

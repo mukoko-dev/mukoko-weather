@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { MineralsStripe } from "@/components/brand/MineralsStripe";
 import { ThemeProvider } from "@/components/brand/ThemeProvider";
+import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import "./globals.css";
 
 const BASE_URL = "https://weather.mukoko.com";
@@ -219,6 +220,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
+        <GoogleAnalytics />
         {/* Skip navigation link for keyboard/screen reader users — WCAG 2.4.1 */}
         <a
           href="#main-content"

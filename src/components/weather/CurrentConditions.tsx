@@ -48,7 +48,7 @@ export function CurrentConditions({ current, locationName, daily }: Props) {
         </div>
 
         {/* Quick stats grid */}
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3" role="list" aria-label="Weather statistics">
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" role="list" aria-label="Weather statistics">
           <QuickStat
             icon={<DropletIcon size={18} />}
             label="Humidity"
@@ -58,6 +58,11 @@ export function CurrentConditions({ current, locationName, daily }: Props) {
             icon={<WindIcon size={18} />}
             label="Wind"
             value={`${Math.round(current.wind_speed_10m)} km/h ${wind}`}
+          />
+          <QuickStat
+            icon={<WindIcon size={18} />}
+            label="Wind Gusts"
+            value={`${Math.round(current.wind_gusts_10m)} km/h`}
           />
           <QuickStat
             icon={<GaugeIcon size={18} />}
@@ -79,6 +84,13 @@ export function CurrentConditions({ current, locationName, daily }: Props) {
             label="Precipitation"
             value={`${current.precipitation} mm`}
           />
+          {todayHigh !== null && todayLow !== null && daily && (
+            <QuickStat
+              icon={<ThermometerIcon size={18} />}
+              label="Feels Like"
+              value={`${Math.round(daily.apparent_temperature_max[0])}° / ${Math.round(daily.apparent_temperature_min[0])}°`}
+            />
+          )}
         </div>
       </div>
     </section>

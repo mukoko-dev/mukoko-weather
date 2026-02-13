@@ -18,12 +18,17 @@ export interface CurrentWeather {
 export interface HourlyWeather {
   time: string[];
   temperature_2m: number[];
+  apparent_temperature: number[];
   relative_humidity_2m: number[];
   precipitation_probability: number[];
   precipitation: number[];
   weather_code: number[];
   visibility: number[];
+  cloud_cover: number[];
+  surface_pressure: number[];
   wind_speed_10m: number[];
+  wind_direction_10m: number[];
+  wind_gusts_10m: number[];
   uv_index: number[];
   is_day: number[];
 }
@@ -101,12 +106,17 @@ const CURRENT_PARAMS = [
 
 const HOURLY_PARAMS = [
   "temperature_2m",
+  "apparent_temperature",
   "relative_humidity_2m",
   "precipitation_probability",
   "precipitation",
   "weather_code",
   "visibility",
+  "cloud_cover",
+  "surface_pressure",
   "wind_speed_10m",
+  "wind_direction_10m",
+  "wind_gusts_10m",
   "uv_index",
   "is_day",
 ].join(",");
