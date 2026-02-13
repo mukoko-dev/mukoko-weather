@@ -14,7 +14,7 @@ export function resolveTheme(pref: ThemePreference): "light" | "dark" {
 function applyTheme(pref: ThemePreference) {
   if (typeof document === "undefined") return;
   document.documentElement.setAttribute("data-theme", resolveTheme(pref));
-  document.documentElement.setAttribute("data-brand", "mukoko");
+  document.documentElement.setAttribute("data-brand", "mukoko-weather");
 }
 
 interface AppState {

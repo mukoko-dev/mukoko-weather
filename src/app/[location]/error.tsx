@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 
 export default function LocationError({
@@ -10,9 +10,22 @@ export default function LocationError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const retryCount = useRef(0);
+
   useEffect(() => {
     console.error("Weather page error:", error);
   }, [error]);
+
+  const handleRetry = () => {
+    retryCount.current += 1;
+    if (retryCount.current >= 2) {
+      // After 2 failed retries, do a full page reload to clear any
+      // corrupted client state
+      window.location.reload();
+      return;
+    }
+    reset();
+  };
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
@@ -24,7 +37,7 @@ export default function LocationError({
         temporary issue with our weather providers.
       </p>
       <button
-        onClick={reset}
+        onClick={handleRetry}
         className="mt-8 rounded-[var(--radius-badge)] bg-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-primary"
       >
         Try again

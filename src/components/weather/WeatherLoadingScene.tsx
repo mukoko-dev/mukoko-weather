@@ -26,6 +26,7 @@ export function WeatherLoadingScene() {
       // ---- Setup ----
       const width = el.clientWidth;
       const height = el.clientHeight;
+      if (width === 0 || height === 0) return;
 
       const scene = new THREE.Scene();
       scene.fog = new THREE.FogExp2(0x0a0f1a, 0.02);
@@ -33,7 +34,14 @@ export function WeatherLoadingScene() {
       const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 100);
       camera.position.set(0, 0, 20);
 
-      const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
+      let renderer: InstanceType<typeof THREE.WebGLRenderer>;
+      try {
+        renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
+      } catch {
+        // WebGL unavailable (headless browser, low memory, etc.)
+        setReady(true);
+        return;
+      }
       renderer.setSize(width, height);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       el.appendChild(renderer.domElement);
@@ -200,6 +208,10 @@ export function WeatherLoadingScene() {
           el.removeChild(renderer.domElement);
         }
       };
+    }).catch(() => {
+      // Three.js failed to load (network error, chunk failure, etc.)
+      // Show the text-only loading state instead of crashing
+      if (!disposed) setReady(true);
     });
 
     return () => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Line } from "recharts";
 import {
   ChartContainer,
@@ -64,7 +65,22 @@ const chartConfig = {
   },
 } satisfies ChartConfig;
 
+const subscribe = () => () => {};
+const getSnapshot = () => true;
+const getServerSnapshot = () => false;
+
 export function DailyChart({ daily }: Props) {
+  // Defer chart rendering to client-only to prevent hydration mismatch.
+  // prepareDailyData uses new Date() and toLocaleDateString which can differ
+  // between server and client, producing different SVG output.
+  const hydrated = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+
+  if (!hydrated) {
+    return (
+      <div className="mt-4 mb-2 aspect-[16/7] w-full animate-pulse rounded bg-text-tertiary/10" />
+    );
+  }
+
   const data = prepareDailyData(daily);
   if (data.length < 2) return null;
 
