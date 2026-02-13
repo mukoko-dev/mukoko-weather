@@ -149,6 +149,7 @@ export async function fetchWeather(lat: number, lon: number): Promise<WeatherDat
 
   const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, {
     next: { revalidate: 900 }, // cache for 15 minutes
+    signal: AbortSignal.timeout(10_000), // 10s timeout
   });
 
   if (!res.ok) {

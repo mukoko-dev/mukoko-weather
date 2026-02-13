@@ -89,7 +89,12 @@ export default async function LocationPage({
     if (err instanceof TomorrowRateLimitError) {
       console.warn("Tomorrow.io rate limit, falling back to Open-Meteo");
     }
-    weather = await fetchWeather(location.lat, location.lon);
+    try {
+      weather = await fetchWeather(location.lat, location.lon);
+    } catch (fallbackErr) {
+      console.error("All weather providers failed:", err, fallbackErr);
+      throw new Error("Unable to load weather data. Please try again shortly.");
+    }
   }
   const frostAlert = checkFrostRisk(weather.hourly);
   const season = getZimbabweSeason();
