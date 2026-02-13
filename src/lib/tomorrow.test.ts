@@ -146,9 +146,14 @@ describe("normalizeTomorrowResponse", () => {
     const result = normalizeTomorrowResponse(mockResponse);
     expect(result.hourly.time).toHaveLength(2);
     expect(result.hourly.temperature_2m).toEqual([25.5, 26.0]);
+    expect(result.hourly.apparent_temperature).toEqual([26.0, 27.0]);
     expect(result.hourly.relative_humidity_2m).toEqual([60, 58]);
     expect(result.hourly.precipitation_probability).toEqual([10, 15]);
     expect(result.hourly.wind_speed_10m).toEqual([12, 14]);
+    expect(result.hourly.wind_direction_10m).toEqual([180, 190]);
+    expect(result.hourly.wind_gusts_10m).toEqual([18, 20]);
+    expect(result.hourly.cloud_cover).toEqual([45, 60]);
+    expect(result.hourly.surface_pressure).toEqual([1013, 1012]);
     expect(result.hourly.weather_code).toEqual([2, 61]); // WMO mapped
   });
 

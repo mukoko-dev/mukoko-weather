@@ -14,6 +14,7 @@ import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { AISummary } from "@/components/weather/AISummary";
 import { ActivitySelector } from "@/components/weather/ActivitySelector";
 import { ActivityInsights } from "@/components/weather/ActivityInsights";
+import { AtmosphericDetails } from "@/components/weather/AtmosphericDetails";
 import { FrostAlertBanner } from "./FrostAlertBanner";
 
 export const dynamic = "force-dynamic";
@@ -323,6 +324,7 @@ export default async function LocationPage({
             <AISummary weather={weather} location={location} />
             <ActivityInsights insights={weather.insights} />
             <HourlyForecast hourly={weather.hourly} />
+            <AtmosphericDetails hourly={weather.hourly} />
           </div>
 
           {/* Right column: Daily + Sun + Info */}

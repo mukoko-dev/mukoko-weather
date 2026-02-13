@@ -1,6 +1,6 @@
 "use client";
 
-import { Area, CartesianGrid, XAxis, YAxis, Bar, ComposedChart } from "recharts";
+import { Area, CartesianGrid, XAxis, YAxis, Bar, Line, ComposedChart } from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
@@ -16,6 +16,7 @@ interface Props {
 export interface HourlyDataPoint {
   label: string;
   temp: number;
+  feelsLike: number;
   rain: number;
 }
 
@@ -44,6 +45,7 @@ export function prepareHourlyData(hourly: HourlyWeather): HourlyDataPoint[] {
               hour12: false,
             }),
       temp: Math.round(hourly.temperature_2m[idx]),
+      feelsLike: Math.round(hourly.apparent_temperature[idx]),
       rain: hourly.precipitation_probability[idx],
     });
   }
@@ -55,6 +57,10 @@ const chartConfig = {
     label: "Temperature",
     color: "var(--chart-1)",
   },
+  feelsLike: {
+    label: "Feels Like",
+    color: "var(--chart-3)",
+  },
   rain: {
     label: "Rain %",
     color: "var(--chart-2)",
@@ -65,9 +71,9 @@ export function HourlyChart({ hourly }: Props) {
   const data = prepareHourlyData(hourly);
   if (data.length < 2) return null;
 
-  const temps = data.map((d) => d.temp);
-  const minTemp = Math.min(...temps) - 2;
-  const maxTemp = Math.max(...temps) + 2;
+  const allTemps = data.flatMap((d) => [d.temp, d.feelsLike]);
+  const minTemp = Math.min(...allTemps) - 2;
+  const maxTemp = Math.max(...allTemps) + 2;
 
   return (
     <div className="mt-4 mb-2">
@@ -107,7 +113,7 @@ export function HourlyChart({ hourly }: Props) {
             content={
               <ChartTooltipContent
                 formatter={(value, name) =>
-                  name === "temp" ? `${value}°C` : `${value}%`
+                  name === "rain" ? `${value}%` : `${value}°C`
                 }
               />
             }
@@ -128,6 +134,15 @@ export function HourlyChart({ hourly }: Props) {
             fill="url(#hourlyTempGradient)"
             dot={false}
             activeDot={{ r: 4, strokeWidth: 2 }}
+          />
+          <Line
+            type="monotone"
+            dataKey="feelsLike"
+            stroke="var(--color-feelsLike)"
+            strokeWidth={1.5}
+            strokeDasharray="4 3"
+            dot={false}
+            activeDot={{ r: 3, strokeWidth: 1 }}
           />
         </ComposedChart>
       </ChartContainer>

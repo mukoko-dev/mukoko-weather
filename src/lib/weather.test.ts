@@ -20,12 +20,17 @@ function makeHourlyData(temps: number[], hours?: number[]): HourlyWeather {
   return {
     time: times,
     temperature_2m: temps,
+    apparent_temperature: temps.map((t) => t - 2),
     relative_humidity_2m: temps.map(() => 50),
     precipitation_probability: temps.map(() => 0),
     precipitation: temps.map(() => 0),
     weather_code: temps.map(() => 0),
     visibility: temps.map(() => 10000),
+    cloud_cover: temps.map(() => 40),
+    surface_pressure: temps.map(() => 1013),
     wind_speed_10m: temps.map(() => 5),
+    wind_direction_10m: temps.map(() => 180),
+    wind_gusts_10m: temps.map(() => 12),
     uv_index: temps.map(() => 1),
     is_day: temps.map(() => 0),
   };
