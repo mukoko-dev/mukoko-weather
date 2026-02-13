@@ -13,7 +13,8 @@ import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { AISummary } from "@/components/weather/AISummary";
 import { ActivitySelector } from "@/components/weather/ActivitySelector";
 import { ActivityInsights } from "@/components/weather/ActivityInsights";
-import { AtmosphericDetails } from "@/components/weather/AtmosphericDetails";
+import { LazyAtmosphericDetails } from "@/components/weather/LazyAtmosphericDetails";
+import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { FrostAlertBanner } from "./FrostAlertBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
 
@@ -324,13 +325,19 @@ export default async function LocationPage({
             />
             {!usingFallback && <AISummary weather={weather} location={location} />}
             <ActivityInsights insights={weather.insights} />
-            <HourlyForecast hourly={weather.hourly} />
-            <AtmosphericDetails hourly={weather.hourly} />
+            <ChartErrorBoundary name="hourly forecast">
+              <HourlyForecast hourly={weather.hourly} />
+            </ChartErrorBoundary>
+            <ChartErrorBoundary name="atmospheric details">
+              <LazyAtmosphericDetails hourly={weather.hourly} />
+            </ChartErrorBoundary>
           </div>
 
           {/* Right column: Daily + Sun + Info */}
           <div className="min-w-0 space-y-6">
-            <DailyForecast daily={weather.daily} />
+            <ChartErrorBoundary name="daily forecast">
+              <DailyForecast daily={weather.daily} />
+            </ChartErrorBoundary>
             <SunTimes daily={weather.daily} />
             <ActivitySelector />
 

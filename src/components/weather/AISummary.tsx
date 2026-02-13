@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import { SparklesIcon } from "@/lib/weather-icons";
 import { useAppStore } from "@/lib/store";
@@ -18,42 +18,65 @@ export function AISummary({ weather, location }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const fetchInsight = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const activityLabels = getActivityLabels(selectedActivities);
-      const res = await fetch("/api/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          weatherData: {
-            current: weather.current,
-            daily: {
-              temperature_2m_max: weather.daily.temperature_2m_max.slice(0, 3),
-              temperature_2m_min: weather.daily.temperature_2m_min.slice(0, 3),
-              weather_code: weather.daily.weather_code.slice(0, 3),
-              precipitation_probability_max: weather.daily.precipitation_probability_max.slice(0, 3),
-            },
-          },
-          location: { name: location.name, lat: location.lat, lon: location.lon, elevation: location.elevation },
-          activities: activityLabels,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to get AI insight");
-      const data = await res.json();
-      setInsight(data.insight);
-    } catch {
-      setError("Unable to load AI summary. Weather data is still available above.");
-    } finally {
-      setLoading(false);
-    }
-  }, [weather, location, selectedActivities]);
+  // Serialize deps to stable strings so Zustand rehydration of an
+  // equivalent value (e.g. [] → []) doesn't trigger a re-fetch.
+  const activitiesKey = useMemo(() => selectedActivities.slice().sort().join(","), [selectedActivities]);
+  const locationKey = `${location.slug}:${location.lat}:${location.lon}`;
+  const weatherKey = `${weather.current.temperature_2m}:${weather.current.weather_code}`;
 
   useEffect(() => {
+    // Abort any in-flight request before starting a new one
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    let cancelled = false;
+
+    async function fetchInsight() {
+      setLoading(true);
+      setError(null);
+      try {
+        const activityLabels = getActivityLabels(selectedActivities);
+        const res = await fetch("/api/ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            weatherData: {
+              current: weather.current,
+              daily: {
+                temperature_2m_max: weather.daily.temperature_2m_max.slice(0, 3),
+                temperature_2m_min: weather.daily.temperature_2m_min.slice(0, 3),
+                weather_code: weather.daily.weather_code.slice(0, 3),
+                precipitation_probability_max: weather.daily.precipitation_probability_max.slice(0, 3),
+              },
+            },
+            location: { name: location.name, lat: location.lat, lon: location.lon, elevation: location.elevation },
+            activities: activityLabels,
+          }),
+        });
+        if (!res.ok) throw new Error("Failed to get AI insight");
+        const data = await res.json();
+        if (!cancelled) setInsight(data.insight);
+      } catch (err) {
+        // Don't show error for intentional aborts
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (!cancelled) setError("Unable to load AI summary. Weather data is still available above.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
     fetchInsight();
-  }, [fetchInsight]);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activitiesKey, locationKey, weatherKey]);
 
   return (
     <section aria-label="AI weather intelligence summary">
