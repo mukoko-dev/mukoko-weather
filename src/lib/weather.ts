@@ -249,3 +249,171 @@ export function uvLevel(index: number): { label: string; color: string } {
   if (index <= 10) return { label: "Very High", color: "text-earth" };
   return { label: "Extreme", color: "text-primary" };
 }
+
+/**
+ * Generate fallback weather data using seasonal averages for a Zimbabwe location.
+ * Used when all weather providers are unavailable so the page still renders.
+ * Temperatures are adjusted for elevation (~6.5°C per 1000m lapse rate).
+ */
+export function createFallbackWeather(lat: number, lon: number, elevation: number): WeatherData {
+  const now = new Date();
+  const season = getZimbabweSeason(now);
+  const hour = now.getHours();
+  const isDay = hour >= 6 && hour < 18 ? 1 : 0;
+
+  // Seasonal base temperatures (°C) at ~1200m reference elevation
+  const seasonalBase: Record<string, { high: number; low: number; humidity: number; code: number }> = {
+    "Main rains":  { high: 28, low: 17, humidity: 70, code: 2 },
+    "Cool dry":    { high: 22, low: 8,  humidity: 40, code: 0 },
+    "Hot dry":     { high: 32, low: 18, humidity: 30, code: 0 },
+    "Short rains": { high: 25, low: 14, humidity: 55, code: 2 },
+  };
+  const base = seasonalBase[season.name] ?? seasonalBase["Main rains"];
+
+  // Adjust for elevation: −6.5°C per 1000m above reference (1200m)
+  const elevAdj = ((elevation - 1200) / 1000) * -6.5;
+  const high = Math.round(base.high + elevAdj);
+  const low = Math.round(base.low + elevAdj);
+  const midTemp = Math.round((high + low) / 2);
+
+  // Generate 48 hours of hourly data
+  const hourlyTimes: string[] = [];
+  const hourlyTemps: number[] = [];
+  const hourlyApparent: number[] = [];
+  const hourlyHumidity: number[] = [];
+  const hourlyPrecipProb: number[] = [];
+  const hourlyPrecip: number[] = [];
+  const hourlyCodes: number[] = [];
+  const hourlyVis: number[] = [];
+  const hourlyCloud: number[] = [];
+  const hourlyPressure: number[] = [];
+  const hourlyWindSpeed: number[] = [];
+  const hourlyWindDir: number[] = [];
+  const hourlyWindGusts: number[] = [];
+  const hourlyUV: number[] = [];
+  const hourlyIsDay: number[] = [];
+
+  for (let i = 0; i < 48; i++) {
+    const t = new Date(now.getTime() + i * 3600_000);
+    const h = t.getHours();
+    const daylight = h >= 6 && h < 18;
+    // Sinusoidal temperature curve: low at 5am, high at 2pm
+    const tempFrac = Math.sin(((h - 5) / 24) * Math.PI);
+    const temp = Math.round(low + (high - low) * Math.max(0, tempFrac));
+
+    hourlyTimes.push(t.toISOString());
+    hourlyTemps.push(temp);
+    hourlyApparent.push(temp - 1);
+    hourlyHumidity.push(base.humidity);
+    hourlyPrecipProb.push(0);
+    hourlyPrecip.push(0);
+    hourlyCodes.push(base.code);
+    hourlyVis.push(10000);
+    hourlyCloud.push(base.code === 0 ? 10 : 40);
+    hourlyPressure.push(870);
+    hourlyWindSpeed.push(8);
+    hourlyWindDir.push(90);
+    hourlyWindGusts.push(15);
+    hourlyUV.push(daylight ? 5 : 0);
+    hourlyIsDay.push(daylight ? 1 : 0);
+  }
+
+  // Generate 7 days of daily data
+  const dailyTimes: string[] = [];
+  const dailyHighs: number[] = [];
+  const dailyLows: number[] = [];
+  const dailyApparentHighs: number[] = [];
+  const dailyApparentLows: number[] = [];
+  const dailyCodes: number[] = [];
+  const dailySunrise: string[] = [];
+  const dailySunset: string[] = [];
+  const dailyUV: number[] = [];
+  const dailyPrecipSum: number[] = [];
+  const dailyPrecipProbMax: number[] = [];
+  const dailyWindMax: number[] = [];
+  const dailyGustMax: number[] = [];
+
+  for (let d = 0; d < 7; d++) {
+    const day = new Date(now);
+    day.setDate(day.getDate() + d);
+    day.setHours(0, 0, 0, 0);
+    const sunrise = new Date(day);
+    sunrise.setHours(5, 45, 0, 0);
+    const sunset = new Date(day);
+    sunset.setHours(18, 15, 0, 0);
+
+    dailyTimes.push(day.toISOString().slice(0, 10));
+    dailyHighs.push(high);
+    dailyLows.push(low);
+    dailyApparentHighs.push(high - 1);
+    dailyApparentLows.push(low - 1);
+    dailyCodes.push(base.code);
+    dailySunrise.push(sunrise.toISOString());
+    dailySunset.push(sunset.toISOString());
+    dailyUV.push(7);
+    dailyPrecipSum.push(0);
+    dailyPrecipProbMax.push(0);
+    dailyWindMax.push(12);
+    dailyGustMax.push(20);
+  }
+
+  return {
+    current: {
+      temperature_2m: midTemp,
+      relative_humidity_2m: base.humidity,
+      apparent_temperature: midTemp - 1,
+      precipitation: 0,
+      weather_code: base.code,
+      cloud_cover: base.code === 0 ? 10 : 40,
+      wind_speed_10m: 8,
+      wind_direction_10m: 90,
+      wind_gusts_10m: 15,
+      uv_index: isDay ? 5 : 0,
+      surface_pressure: 870,
+      is_day: isDay,
+    },
+    hourly: {
+      time: hourlyTimes,
+      temperature_2m: hourlyTemps,
+      apparent_temperature: hourlyApparent,
+      relative_humidity_2m: hourlyHumidity,
+      precipitation_probability: hourlyPrecipProb,
+      precipitation: hourlyPrecip,
+      weather_code: hourlyCodes,
+      visibility: hourlyVis,
+      cloud_cover: hourlyCloud,
+      surface_pressure: hourlyPressure,
+      wind_speed_10m: hourlyWindSpeed,
+      wind_direction_10m: hourlyWindDir,
+      wind_gusts_10m: hourlyWindGusts,
+      uv_index: hourlyUV,
+      is_day: hourlyIsDay,
+    },
+    daily: {
+      time: dailyTimes,
+      weather_code: dailyCodes,
+      temperature_2m_max: dailyHighs,
+      temperature_2m_min: dailyLows,
+      apparent_temperature_max: dailyApparentHighs,
+      apparent_temperature_min: dailyApparentLows,
+      sunrise: dailySunrise,
+      sunset: dailySunset,
+      uv_index_max: dailyUV,
+      precipitation_sum: dailyPrecipSum,
+      precipitation_probability_max: dailyPrecipProbMax,
+      wind_speed_10m_max: dailyWindMax,
+      wind_gusts_10m_max: dailyGustMax,
+    },
+    current_units: {
+      temperature_2m: "°C",
+      relative_humidity_2m: "%",
+      apparent_temperature: "°C",
+      precipitation: "mm",
+      wind_speed_10m: "km/h",
+      wind_gusts_10m: "km/h",
+      uv_index: "",
+      surface_pressure: "hPa",
+      cloud_cover: "%",
+    },
+  };
+}
