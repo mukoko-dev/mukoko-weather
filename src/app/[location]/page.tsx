@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getLocationBySlug } from "@/lib/locations";
-import { fetchWeather, checkFrostRisk, getZimbabweSeason, weatherCodeToInfo, type WeatherData } from "@/lib/weather";
-import { fetchWeatherFromTomorrow, TomorrowRateLimitError } from "@/lib/tomorrow";
-import { getApiKey } from "@/lib/db";
+import { checkFrostRisk, getZimbabweSeason, weatherCodeToInfo } from "@/lib/weather";
+import { getWeatherForLocation } from "@/lib/db";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { CurrentConditions } from "@/components/weather/CurrentConditions";
@@ -16,6 +15,7 @@ import { ActivitySelector } from "@/components/weather/ActivitySelector";
 import { ActivityInsights } from "@/components/weather/ActivityInsights";
 import { AtmosphericDetails } from "@/components/weather/AtmosphericDetails";
 import { FrostAlertBanner } from "./FrostAlertBanner";
+import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -76,22 +76,17 @@ export default async function LocationPage({
   const location = getLocationBySlug(slug);
   if (!location) notFound();
 
-  // Try Tomorrow.io first (richer data with insights), fall back to Open-Meteo
-  let weather: WeatherData;
-  try {
-    const tomorrowKey = await getApiKey("tomorrow").catch(() => null);
-    if (tomorrowKey) {
-      weather = await fetchWeatherFromTomorrow(location.lat, location.lon, tomorrowKey);
-    } else {
-      weather = await fetchWeather(location.lat, location.lon);
-    }
-  } catch (err) {
-    if (err instanceof TomorrowRateLimitError) {
-      console.warn("Tomorrow.io rate limit, falling back to Open-Meteo");
-    }
-    weather = await fetchWeather(location.lat, location.lon);
-  }
-  const frostAlert = checkFrostRisk(weather.hourly);
+  // Fetch weather through MongoDB cache → Tomorrow.io → Open-Meteo → seasonal fallback.
+  // MongoDB cache ensures external APIs are called at most once per 15-min TTL window
+  // regardless of traffic volume.
+  const { data: weather, source: weatherSource } = await getWeatherForLocation(
+    location.slug,
+    location.lat,
+    location.lon,
+    location.elevation,
+  );
+  const usingFallback = weatherSource === "fallback";
+  const frostAlert = usingFallback ? null : checkFrostRisk(weather.hourly);
   const season = getZimbabweSeason();
   const conditionInfo = weatherCodeToInfo(weather.current.weather_code);
 
@@ -271,9 +266,12 @@ export default async function LocationPage({
 
   return (
     <>
+      {/* Omit weather observation schema when using fallback seasonal estimates */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify([pageSchema, breadcrumbSchema, faqSchema]) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(
+          usingFallback ? [breadcrumbSchema] : [pageSchema, breadcrumbSchema, faqSchema]
+        ) }}
       />
       <Header currentLocation={slug} />
 
@@ -309,6 +307,9 @@ export default async function LocationPage({
           <SeasonBadge />
         </div>
 
+        {/* Weather unavailable banner — shown when all providers failed */}
+        {usingFallback && <WeatherUnavailableBanner />}
+
         {/* Frost alert banner */}
         {frostAlert && <FrostAlertBanner alert={frostAlert} />}
 
@@ -321,7 +322,7 @@ export default async function LocationPage({
               locationName={location.name}
               daily={weather.daily}
             />
-            <AISummary weather={weather} location={location} />
+            {!usingFallback && <AISummary weather={weather} location={location} />}
             <ActivityInsights insights={weather.insights} />
             <HourlyForecast hourly={weather.hourly} />
             <AtmosphericDetails hourly={weather.hourly} />

@@ -5,6 +5,7 @@ import {
   getZimbabweSeason,
   windDirection,
   uvLevel,
+  createFallbackWeather,
   type HourlyWeather,
 } from "./weather";
 
@@ -275,5 +276,85 @@ describe("uvLevel", () => {
     for (const idx of [0, 3, 6, 8, 11]) {
       expect(uvLevel(idx).color).toMatch(/^text-/);
     }
+  });
+});
+
+describe("createFallbackWeather", () => {
+  // Harare: -17.83, 31.05, 1483m
+  const harare = { lat: -17.83, lon: 31.05, elevation: 1483 };
+
+  it("returns valid WeatherData with all required fields", () => {
+    const data = createFallbackWeather(harare.lat, harare.lon, harare.elevation);
+
+    expect(data.current).toBeDefined();
+    expect(data.hourly).toBeDefined();
+    expect(data.daily).toBeDefined();
+    expect(data.current_units).toBeDefined();
+
+    // Current conditions have all required fields
+    expect(typeof data.current.temperature_2m).toBe("number");
+    expect(typeof data.current.relative_humidity_2m).toBe("number");
+    expect(typeof data.current.apparent_temperature).toBe("number");
+    expect(typeof data.current.wind_speed_10m).toBe("number");
+    expect(typeof data.current.surface_pressure).toBe("number");
+    expect(typeof data.current.uv_index).toBe("number");
+    expect(typeof data.current.is_day).toBe("number");
+  });
+
+  it("generates 48 hours of hourly data", () => {
+    const data = createFallbackWeather(harare.lat, harare.lon, harare.elevation);
+
+    expect(data.hourly.time).toHaveLength(48);
+    expect(data.hourly.temperature_2m).toHaveLength(48);
+    expect(data.hourly.apparent_temperature).toHaveLength(48);
+    expect(data.hourly.relative_humidity_2m).toHaveLength(48);
+    expect(data.hourly.precipitation_probability).toHaveLength(48);
+    expect(data.hourly.weather_code).toHaveLength(48);
+    expect(data.hourly.wind_speed_10m).toHaveLength(48);
+    expect(data.hourly.uv_index).toHaveLength(48);
+    expect(data.hourly.is_day).toHaveLength(48);
+  });
+
+  it("generates 7 days of daily data", () => {
+    const data = createFallbackWeather(harare.lat, harare.lon, harare.elevation);
+
+    expect(data.daily.time).toHaveLength(7);
+    expect(data.daily.temperature_2m_max).toHaveLength(7);
+    expect(data.daily.temperature_2m_min).toHaveLength(7);
+    expect(data.daily.sunrise).toHaveLength(7);
+    expect(data.daily.sunset).toHaveLength(7);
+    expect(data.daily.weather_code).toHaveLength(7);
+    expect(data.daily.wind_speed_10m_max).toHaveLength(7);
+    expect(data.daily.uv_index_max).toHaveLength(7);
+  });
+
+  it("adjusts temperature for elevation (higher = cooler)", () => {
+    const lowElevation = createFallbackWeather(-17.83, 31.05, 500);
+    const highElevation = createFallbackWeather(-17.83, 31.05, 1800);
+
+    // Higher elevation should produce lower temperatures
+    expect(highElevation.daily.temperature_2m_max[0]).toBeLessThan(lowElevation.daily.temperature_2m_max[0]);
+  });
+
+  it("daily highs are always greater than lows", () => {
+    const data = createFallbackWeather(harare.lat, harare.lon, harare.elevation);
+
+    for (let i = 0; i < 7; i++) {
+      expect(data.daily.temperature_2m_max[i]).toBeGreaterThan(data.daily.temperature_2m_min[i]);
+    }
+  });
+
+  it("produces data that checkFrostRisk can process without crashing", () => {
+    const data = createFallbackWeather(harare.lat, harare.lon, harare.elevation);
+    // Should not throw
+    const result = checkFrostRisk(data.hourly);
+    expect(result === null || typeof result === "object").toBe(true);
+  });
+
+  it("produces data that weatherCodeToInfo can process", () => {
+    const data = createFallbackWeather(harare.lat, harare.lon, harare.elevation);
+    const info = weatherCodeToInfo(data.current.weather_code);
+    expect(info.label).toBeTruthy();
+    expect(info.icon).toBeTruthy();
   });
 });

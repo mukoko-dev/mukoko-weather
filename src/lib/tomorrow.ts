@@ -153,6 +153,7 @@ export async function fetchWeatherFromTomorrow(
 
   const res = await fetch(`${TOMORROW_FORECAST_URL}?${params}`, {
     headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(10_000), // 10s timeout
   });
 
   if (!res.ok) {

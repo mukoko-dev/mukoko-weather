@@ -9,7 +9,8 @@
  */
 
 import { getDb } from "./mongo";
-import type { WeatherData } from "./weather";
+import { fetchWeather, createFallbackWeather, type WeatherData } from "./weather";
+import { fetchWeatherFromTomorrow, TomorrowRateLimitError } from "./tomorrow";
 import type { ZimbabweLocation } from "./locations";
 
 // ---------------------------------------------------------------------------
@@ -133,6 +134,83 @@ export async function setCachedWeather(
     },
     { upsert: true },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Unified weather fetch — cache-first, then APIs, then seasonal fallback
+// ---------------------------------------------------------------------------
+
+export interface WeatherResult {
+  data: WeatherData;
+  /** "cache" | "tomorrow" | "open-meteo" | "fallback" */
+  source: string;
+}
+
+/**
+ * Get weather data for a location, checking MongoDB cache first.
+ * On cache miss, fetches from Tomorrow.io → Open-Meteo → seasonal fallback.
+ * Results are stored in MongoDB so subsequent requests are served from cache.
+ * This ensures external APIs are called at most once per 15-min TTL window
+ * regardless of how many users request the same location.
+ */
+export async function getWeatherForLocation(
+  slug: string,
+  lat: number,
+  lon: number,
+  elevation: number,
+): Promise<WeatherResult> {
+  // 1. Try MongoDB cache
+  try {
+    const cached = await getCachedWeather(slug);
+    if (cached) return { data: cached, source: "cache" };
+  } catch {
+    // DB unavailable — proceed to fetch from APIs
+  }
+
+  // 2. Try Tomorrow.io (richer data with activity insights)
+  let data: WeatherData | null = null;
+  let source = "open-meteo";
+
+  try {
+    const tomorrowKey = await getApiKey("tomorrow").catch(() => null);
+    if (tomorrowKey) {
+      try {
+        data = await fetchWeatherFromTomorrow(lat, lon, tomorrowKey);
+        source = "tomorrow";
+      } catch (err) {
+        if (err instanceof TomorrowRateLimitError) {
+          console.warn("Tomorrow.io rate limit, falling back to Open-Meteo");
+        } else {
+          console.warn("Tomorrow.io fetch failed, falling back to Open-Meteo:", err);
+        }
+      }
+    }
+  } catch {
+    // getApiKey failed (DB down) — skip Tomorrow.io
+  }
+
+  // 3. Try Open-Meteo
+  if (!data) {
+    try {
+      data = await fetchWeather(lat, lon);
+      source = "open-meteo";
+    } catch (err) {
+      console.error("Open-Meteo fetch failed:", err);
+    }
+  }
+
+  // 4. Seasonal fallback — guarantees the page always renders
+  if (!data) {
+    return { data: createFallbackWeather(lat, lon, elevation), source: "fallback" };
+  }
+
+  // Store in MongoDB cache + record history (fire-and-forget, don't block response)
+  Promise.all([
+    setCachedWeather(slug, lat, lon, data),
+    recordWeatherHistory(slug, data),
+  ]).catch((err) => console.error("Failed to cache weather data:", err));
+
+  return { data, source };
 }
 
 // ---------------------------------------------------------------------------
