@@ -8,16 +8,40 @@ import { useRef, useEffect, useState } from "react";
  * Renders a particle-based weather scene with floating raindrops, clouds,
  * and a warm sun glow over a stylised Zimbabwe silhouette. The scene is
  * dynamically imported so it doesn't block initial HTML delivery.
+ *
+ * On mobile / touch devices, Three.js is skipped entirely to conserve
+ * memory — the text-only loading state is shown instead.
  */
 export function WeatherLoadingScene() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
+  // Track whether this device should attempt the 3D scene
+  const [use3D, setUse3D] = useState(false);
+
+  // Decide once on mount whether to load Three.js.
+  // Skip on mobile / touch / reduced-motion to conserve GPU memory.
+  useEffect(() => {
+    const isMobile = window.matchMedia("(hover: none), (pointer: coarse)").matches;
+    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!isMobile && !prefersReduced) {
+      setUse3D(true);
+    } else {
+      // Immediately show the text-only fallback
+      setReady(true);
+    }
+  }, []);
 
   useEffect(() => {
+    if (!use3D) return;
+
     const el = containerRef.current;
     if (!el) return;
 
     let disposed = false;
+    // Store the Three.js cleanup so useEffect teardown can call it.
+    // The .then() callback is async, so cleanup might be null if
+    // the component unmounts before Three.js finishes loading.
+    let threeCleanup: (() => void) | null = null;
 
     // Dynamic import keeps three.js out of the initial bundle
     import("three").then((THREE) => {
@@ -26,7 +50,10 @@ export function WeatherLoadingScene() {
       // ---- Setup ----
       const width = el.clientWidth;
       const height = el.clientHeight;
-      if (width === 0 || height === 0) return;
+      if (width === 0 || height === 0) {
+        setReady(true);
+        return;
+      }
 
       const scene = new THREE.Scene();
       scene.fog = new THREE.FogExp2(0x0a0f1a, 0.02);
@@ -126,10 +153,9 @@ export function WeatherLoadingScene() {
         new THREE.Vector3(-4, -3, 0),
       ];
       const zwCurve = new THREE.CatmullRomCurve3(zwPoints, true, "centripetal", 0.5);
-      const zwLine = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(zwCurve.getPoints(80)),
-        new THREE.LineBasicMaterial({ color: 0x0047ab, transparent: true, opacity: 0.35 }),
-      );
+      const zwLineGeo = new THREE.BufferGeometry().setFromPoints(zwCurve.getPoints(80));
+      const zwLineMat = new THREE.LineBasicMaterial({ color: 0x0047ab, transparent: true, opacity: 0.35 });
+      const zwLine = new THREE.Line(zwLineGeo, zwLineMat);
       zwLine.position.set(0, -1, -2);
       scene.add(zwLine);
 
@@ -190,8 +216,8 @@ export function WeatherLoadingScene() {
       }
       window.addEventListener("resize", handleResize);
 
-      // ---- Cleanup ----
-      return () => {
+      // ---- Build the cleanup function ----
+      const dispose = () => {
         disposed = true;
         cancelAnimationFrame(frameId);
         window.removeEventListener("resize", handleResize);
@@ -204,10 +230,19 @@ export function WeatherLoadingScene() {
         sunMat.dispose();
         glowGeo.dispose();
         glowMat.dispose();
+        zwLineGeo.dispose();
+        zwLineMat.dispose();
         if (el.contains(renderer.domElement)) {
           el.removeChild(renderer.domElement);
         }
       };
+
+      // If the component already unmounted while we were loading, clean up now
+      if (disposed) {
+        dispose();
+      } else {
+        threeCleanup = dispose;
+      }
     }).catch(() => {
       // Three.js failed to load (network error, chunk failure, etc.)
       // Show the text-only loading state instead of crashing
@@ -216,17 +251,20 @@ export function WeatherLoadingScene() {
 
     return () => {
       disposed = true;
+      threeCleanup?.();
     };
-  }, []);
+  }, [use3D]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
-      {/* Three.js canvas fills the background */}
-      <div
-        ref={containerRef}
-        className="absolute inset-0"
-        aria-hidden="true"
-      />
+      {/* Three.js canvas fills the background (desktop only) */}
+      {use3D && (
+        <div
+          ref={containerRef}
+          className="absolute inset-0"
+          aria-hidden="true"
+        />
+      )}
 
       {/* Bold text overlay */}
       <div className="relative z-10 flex flex-col items-center gap-6 px-4 text-center" role="status">
@@ -243,8 +281,8 @@ export function WeatherLoadingScene() {
           <span className="h-2 w-2 animate-pulse rounded-full bg-primary [animation-delay:400ms]" />
         </div>
         <span className="sr-only">Loading weather data for your location</span>
-        {/* Show a subtle hint while three.js loads */}
-        {!ready && (
+        {/* Show a subtle hint while three.js loads (desktop only) */}
+        {use3D && !ready && (
           <p className="text-xs text-text-tertiary animate-pulse">Loading scene...</p>
         )}
       </div>
