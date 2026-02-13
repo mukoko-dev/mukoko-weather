@@ -17,6 +17,7 @@ AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, 
 - **Geolocation** — automatic nearest-location detection via browser GPS
 - **Embeddable widget** — drop-in weather widget for third-party sites
 - **Smart theming** — light, dark, and system (auto) modes with OS preference detection
+- **Historical data dashboard** — explore recorded weather trends, precipitation, and climate patterns over time
 - **PWA** — installable as a standalone app on Android, iOS, and desktop
 
 ## Tech Stack
@@ -31,6 +32,7 @@ AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, 
 | Weather API | [Tomorrow.io](https://tomorrow.io) (primary) + [Open-Meteo](https://open-meteo.com) (fallback) |
 | Database | [MongoDB Atlas](https://mongodb.com/atlas) |
 | Markdown | [react-markdown](https://github.com/remarkjs/react-markdown) |
+| Analytics | [Google Analytics 4](https://analytics.google.com) |
 | Testing | [Vitest](https://vitest.dev) |
 | Deployment | [Vercel](https://vercel.com) |
 
@@ -102,11 +104,15 @@ src/
     about/page.tsx          # Company info page
     embed/page.tsx          # Embeddable widget documentation
     help/page.tsx           # User help/FAQ
+    history/                # Historical weather data dashboard
+      page.tsx              # Page metadata and layout
+      HistoryDashboard.tsx  # Client-side search, charts, and data table
     privacy/page.tsx        # Privacy policy
     terms/page.tsx          # Terms of service
   components/
+    analytics/              # Google Analytics 4 integration
     brand/                  # MukokoLogo, ThemeToggle (3-state), ThemeProvider, MineralsStripe
-    layout/                 # Header, Footer
+    layout/                 # Header, Footer (with site stats)
     weather/                # CurrentConditions, HourlyForecast, DailyForecast,
                             # SunTimes, SeasonBadge, AISummary, LocationSelector,
                             # ActivitySelector, ActivityInsights

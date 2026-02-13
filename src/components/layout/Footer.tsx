@@ -1,13 +1,45 @@
 import Link from "next/link";
+import { LOCATIONS } from "@/lib/locations";
 
 export function Footer() {
   const year = new Date().getFullYear();
+  const locationCount = LOCATIONS.length;
+  const provinceCount = new Set(LOCATIONS.map((l) => l.province)).size;
+
   return (
     <footer
       className="border-t border-text-tertiary/10 bg-surface-base"
       role="contentinfo"
     >
       <div className="mx-auto max-w-5xl px-4 py-6 sm:pl-6 md:pl-8">
+        {/* Site stats strip — subtle, informational */}
+        <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-text-tertiary/10 pb-4">
+          <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg>
+            <span><strong className="text-text-secondary">{locationCount}</strong> locations</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect width="18" height="18" x="3" y="3" rx="2" />
+              <path d="M3 9h18" />
+              <path d="M9 3v18" />
+            </svg>
+            <span><strong className="text-text-secondary">{provinceCount}</strong> provinces</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 3v18h18" />
+              <path d="m19 9-5 5-4-4-3 3" />
+            </svg>
+            <Link href="/history" className="underline hover:text-text-secondary transition-colors">
+              Historical data
+            </Link>
+          </div>
+        </div>
+
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <p className="text-xs text-text-tertiary">
@@ -28,6 +60,9 @@ export function Footer() {
           <nav aria-label="Footer navigation" className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-tertiary">
             <Link href="/about" className="underline hover:text-text-secondary transition-colors">
               About
+            </Link>
+            <Link href="/history" className="underline hover:text-text-secondary transition-colors">
+              History
             </Link>
             <Link href="/privacy" className="underline hover:text-text-secondary transition-colors">
               Privacy
