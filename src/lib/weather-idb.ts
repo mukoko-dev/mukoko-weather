@@ -6,6 +6,11 @@
  *   - Auto-refreshes every 60 seconds via interval
  *   - Refreshes on page visibility change (tab switch / app resume)
  *   - Falls back gracefully if IndexedDB is unavailable
+ *
+ * IMPORTANT: Every public function must catch all errors and return a safe
+ * fallback. On iOS Safari (Private Browsing), IndexedDB may throw at any
+ * point — open, transaction, put, get — and unhandled rejections crash the
+ * page. All inner promises use `return await` so the outer try-catch works.
  */
 
 import type { WeatherData } from "./weather";
@@ -44,7 +49,14 @@ function openDb(): Promise<IDBDatabase> {
       return;
     }
 
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    let request: IDBOpenDBRequest;
+    try {
+      request = indexedDB.open(DB_NAME, DB_VERSION);
+    } catch (e) {
+      // iOS Safari private browsing can throw synchronously
+      reject(e);
+      return;
+    }
 
     request.onupgradeneeded = () => {
       const db = request.result;
@@ -72,7 +84,9 @@ export async function getWeatherFromIDB(
 ): Promise<WeatherData | null> {
   try {
     const db = await openDb();
-    return new Promise((resolve, reject) => {
+    // `return await` is intentional — ensures the inner rejection is caught
+    // by the outer try-catch. A bare `return` would let it escape.
+    return await new Promise((resolve, reject) => {
       const tx = db.transaction(WEATHER_STORE, "readonly");
       const store = tx.objectStore(WEATHER_STORE);
       const request = store.get(locationSlug);
@@ -98,7 +112,7 @@ export async function setWeatherInIDB(
 ): Promise<void> {
   try {
     const db = await openDb();
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       const tx = db.transaction(WEATHER_STORE, "readwrite");
       const store = tx.objectStore(WEATHER_STORE);
       const entry: IDBWeatherEntry = {
@@ -124,7 +138,7 @@ export async function getAISummaryFromIDB(
 ): Promise<IDBAISummaryEntry | null> {
   try {
     const db = await openDb();
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       const tx = db.transaction(AI_STORE, "readonly");
       const store = tx.objectStore(AI_STORE);
       const request = store.get(locationSlug);
@@ -152,7 +166,7 @@ export async function setAISummaryInIDB(
 ): Promise<void> {
   try {
     const db = await openDb();
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       const tx = db.transaction(AI_STORE, "readwrite");
       const store = tx.objectStore(AI_STORE);
       const entry: IDBAISummaryEntry = {

@@ -93,40 +93,47 @@ export function useWeatherSync(
   const refresh = useCallback(async () => {
     if (!mountedRef.current) return;
 
-    // Try IndexedDB first for instant display
-    const [cachedWeather, cachedAI] = await Promise.all([
-      getWeatherFromIDB(locationSlug),
-      getAISummaryFromIDB(locationSlug),
-    ]);
+    try {
+      // Try IndexedDB first for instant display
+      const [cachedWeather, cachedAI] = await Promise.all([
+        getWeatherFromIDB(locationSlug),
+        getAISummaryFromIDB(locationSlug),
+      ]);
 
-    if (cachedWeather && mountedRef.current) {
-      setState((prev) => ({
-        ...prev,
-        weather: cachedWeather,
-        aiInsight: cachedAI?.insight ?? prev.aiInsight,
-        loading: false,
-        lastUpdated: new Date(),
-      }));
-    }
+      if (cachedWeather && mountedRef.current) {
+        setState((prev) => ({
+          ...prev,
+          weather: cachedWeather,
+          aiInsight: cachedAI?.insight ?? prev.aiInsight,
+          loading: false,
+          lastUpdated: new Date(),
+        }));
+      }
 
-    // Always fetch fresh data from server in background
-    const freshWeather = await fetchWeatherFromServer();
-    if (freshWeather && mountedRef.current) {
-      setState((prev) => ({
-        ...prev,
-        weather: freshWeather,
-        loading: false,
-        lastUpdated: new Date(),
-      }));
+      // Always fetch fresh data from server in background
+      const freshWeather = await fetchWeatherFromServer();
+      if (freshWeather && mountedRef.current) {
+        setState((prev) => ({
+          ...prev,
+          weather: freshWeather,
+          loading: false,
+          lastUpdated: new Date(),
+        }));
 
-      // Fetch AI in background (non-blocking)
-      fetchAIFromServer(freshWeather).then((insight) => {
-        if (insight && mountedRef.current) {
-          setState((prev) => ({ ...prev, aiInsight: insight }));
-        }
-      });
-    } else if (!cachedWeather && mountedRef.current) {
-      setState((prev) => ({ ...prev, loading: false }));
+        // Fetch AI in background (non-blocking)
+        fetchAIFromServer(freshWeather).then((insight) => {
+          if (insight && mountedRef.current) {
+            setState((prev) => ({ ...prev, aiInsight: insight }));
+          }
+        });
+      } else if (!cachedWeather && mountedRef.current) {
+        setState((prev) => ({ ...prev, loading: false }));
+      }
+    } catch {
+      // Storage or network failure — ensure loading state is cleared
+      if (mountedRef.current) {
+        setState((prev) => ({ ...prev, loading: false }));
+      }
     }
   }, [locationSlug, fetchWeatherFromServer, fetchAIFromServer]);
 

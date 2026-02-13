@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 export type ThemePreference = "light" | "dark" | "system";
 
@@ -29,6 +29,42 @@ interface AppState {
 
 const THEME_CYCLE: ThemePreference[] = ["light", "dark", "system"];
 
+/**
+ * Safe localStorage wrapper that never throws.
+ *
+ * iOS Safari in Private Browsing mode throws QuotaExceededError or
+ * SecurityError on ANY localStorage access — getItem, setItem, and
+ * removeItem can all throw. Zustand's default persist storage doesn't
+ * wrap these in try-catch, so the unhandled exception crashes React
+ * during hydration and creates an infinite reload loop.
+ *
+ * We wrap the raw Storage object and pass it to createJSONStorage so
+ * Zustand handles the JSON serialization layer on top.
+ */
+const safeLocalStorage: Pick<Storage, "getItem" | "setItem" | "removeItem"> = {
+  getItem(name: string): string | null {
+    try {
+      return localStorage.getItem(name);
+    } catch {
+      return null;
+    }
+  },
+  setItem(name: string, value: string): void {
+    try {
+      localStorage.setItem(name, value);
+    } catch {
+      // localStorage unavailable (iOS private browsing, quota exceeded)
+    }
+  },
+  removeItem(name: string): void {
+    try {
+      localStorage.removeItem(name);
+    } catch {
+      // localStorage unavailable
+    }
+  },
+};
+
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
@@ -56,6 +92,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "mukoko-weather-prefs",
+      storage: createJSONStorage(() => safeLocalStorage),
       onRehydrateStorage: () => (state) => {
         if (state) applyTheme(state.theme);
       },
