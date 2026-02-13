@@ -30,8 +30,9 @@ jobs:
       - uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-
-      - uses: github/codeql-action/autobuild@v3
+          # JavaScript/TypeScript doesn't need a build step — CodeQL
+          # analyses source files directly. Skipping autobuild avoids
+          # failures from missing runtime env vars (MONGODB_URI, etc.).
 
       - uses: github/codeql-action/analyze@v3
         with:
