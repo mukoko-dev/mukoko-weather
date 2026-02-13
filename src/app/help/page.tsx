@@ -48,7 +48,7 @@ export default function HelpPage() {
         name: "Can I install mukoko weather as an app?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "Yes. On Android or Huawei phones, open weather.mukoko.com in Chrome or your browser, tap the menu (three dots), and select 'Add to Home Screen' or 'Install App'. The app works offline for recently viewed locations and launches in standalone mode.",
+          text: "Yes. On Android or Huawei phones, open weather.mukoko.com in Chrome or your browser, tap the menu (three dots), and select 'Add to Home Screen' or 'Install App'. The app launches in standalone mode for a native-like experience.",
         },
       },
       {
