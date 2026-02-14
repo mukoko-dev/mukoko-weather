@@ -149,7 +149,7 @@ export function HourlyChart({ hourly }: Props) {
             strokeWidth={2.5}
             fill="url(#hourlyTempGradient)"
             dot={false}
-            activeDot={{ r: 4, strokeWidth: 2 }}
+            activeDot={false}
           />
           <Line
             type="monotone"
@@ -158,7 +158,7 @@ export function HourlyChart({ hourly }: Props) {
             strokeWidth={1.5}
             strokeDasharray="4 3"
             dot={false}
-            activeDot={{ r: 3, strokeWidth: 1 }}
+            activeDot={false}
           />
         </ComposedChart>
       </ChartContainer>

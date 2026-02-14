@@ -85,8 +85,8 @@ function HumidityCloudChart({ data }: { data: AtmosphericDataPoint[] }) {
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} fontSize={11} interval={3} tick={{ fill: "var(--color-text-tertiary)" }} />
         <YAxis domain={[0, 100]} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}%`} fontSize={11} tick={{ fill: "var(--color-text-tertiary)" }} width={40} />
         <ChartTooltip content={<ChartTooltipContent formatter={(value) => `${value}%`} />} />
-        <Area type="monotone" dataKey="humidity" stroke="var(--color-humidity)" strokeWidth={2} fill="url(#humidityGradient)" dot={false} activeDot={{ r: 3 }} />
-        <Line type="monotone" dataKey="cloudCover" stroke="var(--color-cloudCover)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} activeDot={{ r: 3 }} />
+        <Area type="monotone" dataKey="humidity" stroke="var(--color-humidity)" strokeWidth={2} fill="url(#humidityGradient)" dot={false} activeDot={false} />
+        <Line type="monotone" dataKey="cloudCover" stroke="var(--color-cloudCover)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} activeDot={false} />
       </ComposedChart>
     </ChartContainer>
   );
@@ -107,7 +107,7 @@ const windConfig = {
 
 function WindChart({ data }: { data: AtmosphericDataPoint[] }) {
   const allWind = data.flatMap((d) => [d.windSpeed, d.windGusts]);
-  const maxWind = Math.max(...allWind) + 5;
+  const maxWind = (allWind.length > 0 ? Math.max(...allWind) : 20) + 5;
 
   return (
     <ChartContainer config={windConfig} className="aspect-[16/5] w-full">
@@ -122,8 +122,8 @@ function WindChart({ data }: { data: AtmosphericDataPoint[] }) {
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} fontSize={11} interval={3} tick={{ fill: "var(--color-text-tertiary)" }} />
         <YAxis domain={[0, maxWind]} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}`} fontSize={11} tick={{ fill: "var(--color-text-tertiary)" }} width={40} />
         <ChartTooltip content={<ChartTooltipContent formatter={(value) => `${value} km/h`} />} />
-        <Area type="monotone" dataKey="windSpeed" stroke="var(--color-windSpeed)" strokeWidth={2} fill="url(#windSpeedGradient)" dot={false} activeDot={{ r: 3 }} />
-        <Line type="monotone" dataKey="windGusts" stroke="var(--color-windGusts)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} activeDot={{ r: 3 }} />
+        <Area type="monotone" dataKey="windSpeed" stroke="var(--color-windSpeed)" strokeWidth={2} fill="url(#windSpeedGradient)" dot={false} activeDot={false} />
+        <Line type="monotone" dataKey="windGusts" stroke="var(--color-windGusts)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} activeDot={false} />
       </ComposedChart>
     </ChartContainer>
   );
@@ -140,8 +140,8 @@ const pressureConfig = {
 
 function PressureChart({ data }: { data: AtmosphericDataPoint[] }) {
   const pressures = data.map((d) => d.pressure);
-  const minP = Math.min(...pressures) - 2;
-  const maxP = Math.max(...pressures) + 2;
+  const minP = (pressures.length > 0 ? Math.min(...pressures) : 1010) - 2;
+  const maxP = (pressures.length > 0 ? Math.max(...pressures) : 1020) + 2;
 
   return (
     <ChartContainer config={pressureConfig} className="aspect-[16/5] w-full">
@@ -150,7 +150,7 @@ function PressureChart({ data }: { data: AtmosphericDataPoint[] }) {
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} fontSize={11} interval={3} tick={{ fill: "var(--color-text-tertiary)" }} />
         <YAxis domain={[minP, maxP]} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}`} fontSize={11} tick={{ fill: "var(--color-text-tertiary)" }} width={48} />
         <ChartTooltip content={<ChartTooltipContent formatter={(value) => `${value} hPa`} />} />
-        <Line type="monotone" dataKey="pressure" stroke="var(--color-pressure)" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 2 }} />
+        <Line type="monotone" dataKey="pressure" stroke="var(--color-pressure)" strokeWidth={2} dot={false} activeDot={false} />
       </ComposedChart>
     </ChartContainer>
   );

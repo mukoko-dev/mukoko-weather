@@ -142,7 +142,7 @@ export function DailyChart({ daily }: Props) {
             strokeWidth={2.5}
             fill="url(#dailyHighGradient)"
             dot={{ r: 3, strokeWidth: 2, fill: "var(--color-surface-card)" }}
-            activeDot={{ r: 5, strokeWidth: 2 }}
+            activeDot={false}
           />
           <Area
             type="monotone"
@@ -151,7 +151,7 @@ export function DailyChart({ daily }: Props) {
             strokeWidth={2}
             fill="url(#dailyLowGradient)"
             dot={{ r: 3, strokeWidth: 2, fill: "var(--color-surface-card)" }}
-            activeDot={{ r: 5, strokeWidth: 2 }}
+            activeDot={false}
             strokeDasharray="4 3"
           />
           <Line
@@ -161,7 +161,7 @@ export function DailyChart({ daily }: Props) {
             strokeWidth={1.5}
             strokeDasharray="4 3"
             dot={false}
-            activeDot={{ r: 3, strokeWidth: 1 }}
+            activeDot={false}
           />
           <Line
             type="monotone"
@@ -170,7 +170,7 @@ export function DailyChart({ daily }: Props) {
             strokeWidth={1.5}
             strokeDasharray="4 3"
             dot={false}
-            activeDot={{ r: 3, strokeWidth: 1 }}
+            activeDot={false}
           />
         </AreaChart>
       </ChartContainer>

@@ -8,6 +8,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { LOCATIONS, searchLocations, type ZimbabweLocation } from "@/lib/locations";
 import { weatherCodeToInfo, windDirection, uvLevel } from "@/lib/weather";
 import type { WeatherHistoryDoc } from "@/lib/db";
@@ -223,8 +224,8 @@ export function HistoryDashboard() {
     ? {
         avgHigh: avg(records.map((r) => r.tempHigh)),
         avgLow: avg(records.map((r) => r.tempLow)),
-        maxTemp: Math.max(...records.map((r) => r.tempHigh)),
-        minTemp: Math.min(...records.map((r) => r.tempLow)),
+        maxTemp: records.reduce((m, r) => Math.max(m, r.tempHigh), -Infinity),
+        minTemp: records.reduce((m, r) => Math.min(m, r.tempLow), Infinity),
         avgFeelsHigh: avg(records.map((r) => r.feelsLikeHigh)),
         avgFeelsLow: avg(records.map((r) => r.feelsLikeLow)),
         totalRain: sum(records.map((r) => r.precipitation)),
@@ -234,9 +235,9 @@ export function HistoryDashboard() {
         avgCloudCover: avg(records.map((r) => r.cloudCover)),
         avgPressure: avg(records.map((r) => r.pressure)),
         avgUv: avg(records.map((r) => Math.round(r.uvIndex))),
-        maxUv: Math.round(Math.max(...records.map((r) => r.uvIndex)) * 10) / 10,
+        maxUv: Math.round(records.reduce((m, r) => Math.max(m, r.uvIndex), 0) * 10) / 10,
         avgWind: avg(records.map((r) => r.windSpeed)),
-        maxGusts: Math.max(...records.map((r) => r.windGusts)),
+        maxGusts: records.reduce((m, r) => Math.max(m, r.windGusts), 0),
         avgDaylight: records[0]?.daylightHours
           ? (Math.round(avg(records.map((r) => Math.round(r.daylightHours * 10))) / 10 * 10) / 10)
           : null,
@@ -416,6 +417,7 @@ export function HistoryDashboard() {
           </section>
 
           {/* ── 1. Temperature chart (actual + feels-like) ─────────────── */}
+          <ChartErrorBoundary name="temperature trend">
           <section aria-labelledby="history-temp-chart">
             <h2 id="history-temp-chart" className="text-lg font-semibold text-text-primary font-heading">
               Temperature trend
@@ -450,8 +452,8 @@ export function HistoryDashboard() {
                       />
                     }
                   />
-                  <Area type="monotone" dataKey="tempHigh" stroke="var(--color-tempHigh)" strokeWidth={2} fill="url(#histHighGrad)" dot={showDots} activeDot={{ r: 4, strokeWidth: 2 }} />
-                  <Area type="monotone" dataKey="tempLow" stroke="var(--color-tempLow)" strokeWidth={2} fill="url(#histLowGrad)" dot={showDots} activeDot={{ r: 4, strokeWidth: 2 }} strokeDasharray="4 3" />
+                  <Area type="monotone" dataKey="tempHigh" stroke="var(--color-tempHigh)" strokeWidth={2} fill="url(#histHighGrad)" dot={showDots} activeDot={false} />
+                  <Area type="monotone" dataKey="tempLow" stroke="var(--color-tempLow)" strokeWidth={2} fill="url(#histLowGrad)" dot={showDots} activeDot={false} strokeDasharray="4 3" />
                   <Line type="monotone" dataKey="feelsLikeHigh" stroke="var(--color-feelsLikeHigh)" strokeWidth={1.5} dot={false} strokeDasharray="2 2" strokeOpacity={0.6} />
                   <Line type="monotone" dataKey="feelsLikeLow" stroke="var(--color-feelsLikeLow)" strokeWidth={1.5} dot={false} strokeDasharray="2 2" strokeOpacity={0.6} />
                 </ComposedChart>
@@ -464,8 +466,10 @@ export function HistoryDashboard() {
               </div>
             </div>
           </section>
+          </ChartErrorBoundary>
 
           {/* ── 2. Precipitation + probability ─────────────────────────── */}
+          <ChartErrorBoundary name="precipitation">
           <section aria-labelledby="history-rain-chart">
             <h2 id="history-rain-chart" className="text-lg font-semibold text-text-primary font-heading">
               Precipitation & rain probability
@@ -495,8 +499,10 @@ export function HistoryDashboard() {
               </div>
             </div>
           </section>
+          </ChartErrorBoundary>
 
           {/* ── 3. UV Index & Cloud Cover ──────────────────────────────── */}
+          <ChartErrorBoundary name="UV and cloud cover">
           <section aria-labelledby="history-uv-cloud-chart">
             <h2 id="history-uv-cloud-chart" className="text-lg font-semibold text-text-primary font-heading">
               UV index & cloud cover
@@ -532,8 +538,10 @@ export function HistoryDashboard() {
               </div>
             </div>
           </section>
+          </ChartErrorBoundary>
 
           {/* ── 4. Wind speed & gusts ─────────────────────────────────── */}
+          <ChartErrorBoundary name="wind">
           <section aria-labelledby="history-wind-chart">
             <h2 id="history-wind-chart" className="text-lg font-semibold text-text-primary font-heading">
               Wind speed & gusts
@@ -556,7 +564,7 @@ export function HistoryDashboard() {
                     }
                   />
                   <Area type="monotone" dataKey="windGusts" stroke="var(--color-windGusts)" strokeWidth={1.5} fill="var(--color-windGusts)" fillOpacity={0.1} dot={false} strokeDasharray="3 2" />
-                  <Area type="monotone" dataKey="windSpeed" stroke="var(--color-windSpeed)" strokeWidth={2} fill="var(--color-windSpeed)" fillOpacity={0.15} dot={showDots} activeDot={{ r: 3, strokeWidth: 2 }} />
+                  <Area type="monotone" dataKey="windSpeed" stroke="var(--color-windSpeed)" strokeWidth={2} fill="var(--color-windSpeed)" fillOpacity={0.15} dot={showDots} activeDot={false} />
                 </ComposedChart>
               </ChartContainer>
               <div className="mt-2 flex items-center justify-center gap-4 text-xs text-text-tertiary">
@@ -565,8 +573,10 @@ export function HistoryDashboard() {
               </div>
             </div>
           </section>
+          </ChartErrorBoundary>
 
           {/* ── 5. Barometric pressure ────────────────────────────────── */}
+          <ChartErrorBoundary name="pressure">
           <section aria-labelledby="history-pressure-chart">
             <h2 id="history-pressure-chart" className="text-lg font-semibold text-text-primary font-heading">
               Barometric pressure
@@ -585,13 +595,15 @@ export function HistoryDashboard() {
                       />
                     }
                   />
-                  <Line type="monotone" dataKey="pressure" stroke="var(--color-pressure)" strokeWidth={2} dot={showDots} activeDot={{ r: 4, strokeWidth: 2 }} />
+                  <Line type="monotone" dataKey="pressure" stroke="var(--color-pressure)" strokeWidth={2} dot={showDots} activeDot={false} />
                 </ComposedChart>
               </ChartContainer>
             </div>
           </section>
+          </ChartErrorBoundary>
 
           {/* ── 6. Humidity ───────────────────────────────────────────── */}
+          <ChartErrorBoundary name="humidity">
           <section aria-labelledby="history-humidity-chart">
             <h2 id="history-humidity-chart" className="text-lg font-semibold text-text-primary font-heading">
               Humidity
@@ -616,14 +628,16 @@ export function HistoryDashboard() {
                       />
                     }
                   />
-                  <Area type="monotone" dataKey="humidity" stroke="var(--color-humidity)" strokeWidth={2} fill="url(#humidityGrad)" dot={showDots} activeDot={{ r: 4, strokeWidth: 2 }} />
+                  <Area type="monotone" dataKey="humidity" stroke="var(--color-humidity)" strokeWidth={2} fill="url(#humidityGrad)" dot={showDots} activeDot={false} />
                 </ComposedChart>
               </ChartContainer>
             </div>
           </section>
+          </ChartErrorBoundary>
 
           {/* ── 7. Daylight hours ─────────────────────────────────────── */}
           {records.some((r) => r.daylightHours > 0) && (
+            <ChartErrorBoundary name="daylight hours">
             <section aria-labelledby="history-daylight-chart">
               <h2 id="history-daylight-chart" className="text-lg font-semibold text-text-primary font-heading">
                 Daylight hours
@@ -645,11 +659,12 @@ export function HistoryDashboard() {
                         />
                       }
                     />
-                    <Area type="monotone" dataKey="daylightHours" stroke="var(--color-daylightHours)" strokeWidth={2} fill="var(--color-daylightHours)" fillOpacity={0.12} dot={showDots} activeDot={{ r: 4, strokeWidth: 2 }} />
+                    <Area type="monotone" dataKey="daylightHours" stroke="var(--color-daylightHours)" strokeWidth={2} fill="var(--color-daylightHours)" fillOpacity={0.12} dot={showDots} activeDot={false} />
                   </ComposedChart>
                 </ChartContainer>
               </div>
             </section>
+            </ChartErrorBoundary>
           )}
 
           {/* ── 8. Full data table ────────────────────────────────────── */}
