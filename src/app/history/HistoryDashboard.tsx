@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Area, Bar, Line, ComposedChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   ChartContainer,
@@ -181,6 +181,7 @@ export function HistoryDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [fetched, setFetched] = useState(false);
+  const [visibleRowCount, setVisibleRowCount] = useState(50);
 
   const results = query.length > 0 ? searchLocations(query) : LOCATIONS.slice(0, 10);
 
@@ -197,6 +198,7 @@ export function HistoryDashboard() {
         }
         const json = await res.json();
         setRecords(transformHistory(json.data));
+        setVisibleRowCount(50);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to fetch history");
         setRecords([]);
@@ -246,6 +248,17 @@ export function HistoryDashboard() {
       }
     : null;
 
+  // Downsample chart data on mobile for large datasets to reduce SVG
+  // element count and prevent OOM tab-kills on memory-constrained devices.
+  const chartData = useMemo(() => {
+    if (records.length <= 60) return records;
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      const step = Math.ceil(records.length / 60);
+      return records.filter((_, i) => i === 0 || i === records.length - 1 || i % step === 0);
+    }
+    return records;
+  }, [records]);
+
   // ─── Date formatting ────────────────────────────────────────────────────
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -265,8 +278,8 @@ export function HistoryDashboard() {
     });
   };
 
-  const tickInterval = days <= 14 ? 0 : days <= 30 ? 2 : days <= 90 ? 6 : days <= 180 ? 14 : 30;
-  const showDots = records.length <= 31;
+  const tickInterval = chartData.length <= 14 ? 0 : chartData.length <= 30 ? 2 : Math.max(1, Math.ceil(chartData.length / 10) - 1);
+  const showDots = chartData.length <= 31;
 
   return (
     <div className="mt-8 space-y-6">
@@ -430,7 +443,7 @@ export function HistoryDashboard() {
             </p>
             <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
               <ChartContainer config={tempChartConfig} className="aspect-[16/6] w-full">
-                <ComposedChart data={records} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
+                <ComposedChart data={chartData} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
                   <defs>
                     <linearGradient id="histHighGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="var(--color-tempHigh)" stopOpacity={0.25} />
@@ -481,7 +494,7 @@ export function HistoryDashboard() {
             </h2>
             <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
               <ChartContainer config={precipChartConfig} className="aspect-[16/5] w-full">
-                <ComposedChart data={records} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
+                <ComposedChart data={chartData} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-text-tertiary)" strokeOpacity={0.15} />
                   <XAxis dataKey="date" tickFormatter={formatDate} tickLine={false} axisLine={false} tickMargin={8} fontSize={11} interval={tickInterval} tick={{ fill: "var(--color-text-tertiary)" }} />
                   <YAxis yAxisId="mm" tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v} mm`} fontSize={11} tick={{ fill: "var(--color-text-tertiary)" }} width={50} />
@@ -516,7 +529,7 @@ export function HistoryDashboard() {
             </h2>
             <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
               <ChartContainer config={uvCloudChartConfig} className="aspect-[16/5] w-full">
-                <ComposedChart data={records} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
+                <ComposedChart data={chartData} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-text-tertiary)" strokeOpacity={0.15} />
                   <XAxis dataKey="date" tickFormatter={formatDate} tickLine={false} axisLine={false} tickMargin={8} fontSize={11} interval={tickInterval} tick={{ fill: "var(--color-text-tertiary)" }} />
                   <YAxis yAxisId="uv" domain={[0, 12]} tickLine={false} axisLine={false} fontSize={11} tick={{ fill: "var(--color-text-tertiary)" }} width={30} />
@@ -557,7 +570,7 @@ export function HistoryDashboard() {
             </h2>
             <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
               <ChartContainer config={windChartConfig} className="aspect-[16/5] w-full">
-                <ComposedChart data={records} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
+                <ComposedChart data={chartData} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-text-tertiary)" strokeOpacity={0.15} />
                   <XAxis dataKey="date" tickFormatter={formatDate} tickLine={false} axisLine={false} tickMargin={8} fontSize={11} interval={tickInterval} tick={{ fill: "var(--color-text-tertiary)" }} />
                   <YAxis tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}`} fontSize={11} tick={{ fill: "var(--color-text-tertiary)" }} width={30} />
@@ -594,7 +607,7 @@ export function HistoryDashboard() {
             </h2>
             <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
               <ChartContainer config={pressureChartConfig} className="aspect-[16/4] w-full">
-                <ComposedChart data={records} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
+                <ComposedChart data={chartData} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-text-tertiary)" strokeOpacity={0.15} />
                   <XAxis dataKey="date" tickFormatter={formatDate} tickLine={false} axisLine={false} tickMargin={8} fontSize={11} interval={tickInterval} tick={{ fill: "var(--color-text-tertiary)" }} />
                   <YAxis domain={["dataMin - 5", "dataMax + 5"]} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}`} fontSize={11} tick={{ fill: "var(--color-text-tertiary)" }} width={40} />
@@ -623,7 +636,7 @@ export function HistoryDashboard() {
             </h2>
             <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
               <ChartContainer config={humidityChartConfig} className="aspect-[16/4] w-full">
-                <ComposedChart data={records} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
+                <ComposedChart data={chartData} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
                   <defs>
                     <linearGradient id="humidityGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="var(--color-humidity)" stopOpacity={0.2} />
@@ -662,7 +675,7 @@ export function HistoryDashboard() {
               </p>
               <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
                 <ChartContainer config={daylightChartConfig} className="aspect-[16/4] w-full">
-                  <ComposedChart data={records} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
+                  <ComposedChart data={chartData} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-text-tertiary)" strokeOpacity={0.15} />
                     <XAxis dataKey="date" tickFormatter={formatDate} tickLine={false} axisLine={false} tickMargin={8} fontSize={11} interval={tickInterval} tick={{ fill: "var(--color-text-tertiary)" }} />
                     <YAxis domain={["dataMin - 0.5", "dataMax + 0.5"]} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}h`} fontSize={11} tick={{ fill: "var(--color-text-tertiary)" }} width={35} />
@@ -712,7 +725,7 @@ export function HistoryDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {records.slice().reverse().map((r) => (
+                  {records.slice().reverse().slice(0, visibleRowCount).map((r) => (
                     <tr key={r.date} className="border-b border-text-tertiary/5 hover:bg-surface-dim/50 transition-colors">
                       <td className="px-3 py-2 text-text-primary font-mono text-xs whitespace-nowrap">
                         {new Date(r.date).toLocaleDateString("en-ZW", { day: "numeric", month: "short", year: "numeric" })}
@@ -736,6 +749,17 @@ export function HistoryDashboard() {
                   ))}
                 </tbody>
               </table>
+              {records.length > visibleRowCount && (
+                <div className="border-t border-text-tertiary/10 py-3 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleRowCount((n) => Math.min(n + 50, records.length))}
+                    className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                  >
+                    Show more ({records.length - visibleRowCount} remaining)
+                  </button>
+                </div>
+              )}
             </div>
           </section>
           </LazySection>
