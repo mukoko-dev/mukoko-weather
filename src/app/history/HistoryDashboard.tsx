@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/chart";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { LazySection } from "@/components/weather/LazySection";
+import { StatCard } from "@/components/weather/StatCard";
 import { LOCATIONS, searchLocations, type ZimbabweLocation } from "@/lib/locations";
 import { weatherCodeToInfo, windDirection, uvLevel } from "@/lib/weather";
 import type { WeatherHistoryDoc } from "@/lib/db";
@@ -740,15 +741,6 @@ export function HistoryDashboard() {
           </LazySection>
         </>
       )}
-    </div>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[var(--radius-card)] bg-surface-card p-3 shadow-sm">
-      <p className="text-xs text-text-tertiary">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-text-primary font-mono">{value}</p>
     </div>
   );
 }

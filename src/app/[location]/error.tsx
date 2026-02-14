@@ -2,45 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-
-const RETRY_STORAGE_KEY = "mukoko-error-retries";
-const MAX_RETRIES = 3;
-
-/**
- * Read the total retry count for this URL from sessionStorage.
- * Persists across page reloads so we can break the reload loop.
- */
-function getRetryCount(): number {
-  try {
-    const stored = sessionStorage.getItem(RETRY_STORAGE_KEY);
-    if (!stored) return 0;
-    const data = JSON.parse(stored);
-    // Only count retries for the current URL
-    if (data.url === window.location.href) return data.count;
-    return 0;
-  } catch {
-    return 0;
-  }
-}
-
-function setRetryCount(count: number): void {
-  try {
-    sessionStorage.setItem(
-      RETRY_STORAGE_KEY,
-      JSON.stringify({ url: window.location.href, count }),
-    );
-  } catch {
-    // sessionStorage unavailable
-  }
-}
-
-function clearRetryCount(): void {
-  try {
-    sessionStorage.removeItem(RETRY_STORAGE_KEY);
-  } catch {
-    // sessionStorage unavailable
-  }
-}
+import { getRetryCount, setRetryCount, clearRetryCount, MAX_RETRIES } from "@/lib/error-retry";
 
 export default function LocationError({
   error,
@@ -60,7 +22,6 @@ export default function LocationError({
     setRetryCount(count);
 
     if (count >= MAX_RETRIES) {
-      // Exhausted — don't reload, just update UI
       setExhausted(true);
       return;
     }
@@ -68,7 +29,6 @@ export default function LocationError({
     reset();
   };
 
-  // When navigating away, clear the retry counter
   const handleNavigate = () => {
     clearRetryCount();
   };

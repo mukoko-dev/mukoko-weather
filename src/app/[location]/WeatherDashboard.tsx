@@ -7,6 +7,7 @@ import { CurrentConditions } from "@/components/weather/CurrentConditions";
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { LazySection } from "@/components/weather/LazySection";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
+import { SectionSkeleton } from "@/components/weather/SectionSkeleton";
 import { FrostAlertBanner } from "./FrostAlertBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
 import { getZimbabweSeason } from "@/lib/weather";
@@ -23,11 +24,6 @@ const AISummary = lazy(() => import("@/components/weather/AISummary").then((m) =
 const ActivityInsights = lazy(() => import("@/components/weather/ActivityInsights").then((m) => ({ default: m.ActivityInsights })));
 const AtmosphericSummary = lazy(() => import("@/components/weather/AtmosphericSummary").then((m) => ({ default: m.AtmosphericSummary })));
 const SunTimes = lazy(() => import("@/components/weather/SunTimes").then((m) => ({ default: m.SunTimes })));
-
-/** Lightweight placeholder while a lazy chunk loads */
-function SectionSkeleton() {
-  return <div className="h-32 animate-pulse rounded-[var(--radius-card)] bg-surface-card" />;
-}
 
 const BASE_URL = "https://weather.mukoko.com";
 
