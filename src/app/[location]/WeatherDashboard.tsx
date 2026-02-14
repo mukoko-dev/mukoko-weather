@@ -91,7 +91,7 @@ export function WeatherDashboard({
 
         {/* Main grid */}
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Left column: Current + Hourly + Atmospheric */}
+          {/* Left column: Current + AI Summary */}
           <div className="min-w-0 space-y-6 lg:col-span-2">
             <ChartErrorBoundary name="current conditions">
               <CurrentConditions
@@ -100,6 +100,13 @@ export function WeatherDashboard({
                 daily={weather.daily}
               />
             </ChartErrorBoundary>
+            <LazySection label="ai-summary">
+              <ChartErrorBoundary name="AI summary">
+                <Suspense fallback={<SectionSkeleton />}>
+                  {!usingFallback && <AISummary weather={weather} location={location} />}
+                </Suspense>
+              </ChartErrorBoundary>
+            </LazySection>
             <LazySection label="activity-insights">
               <ChartErrorBoundary name="activity insights">
                 <Suspense fallback={<SectionSkeleton />}>
@@ -174,19 +181,6 @@ export function WeatherDashboard({
             </LazySection>
           </div>
         </div>
-
-        {/* AI Summary — loaded LAST after all weather data sections */}
-        {!usingFallback && (
-          <div className="mt-6">
-            <LazySection label="ai-summary">
-              <ChartErrorBoundary name="AI summary">
-                <Suspense fallback={<SectionSkeleton />}>
-                  <AISummary weather={weather} location={location} />
-                </Suspense>
-              </ChartErrorBoundary>
-            </LazySection>
-          </div>
-        )}
       </main>
 
       <Footer />

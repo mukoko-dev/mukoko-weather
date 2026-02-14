@@ -13,6 +13,21 @@ interface Props {
   location: ZimbabweLocation;
 }
 
+/**
+ * Wait for the browser to be idle before resolving.
+ * Uses requestIdleCallback where available (Chrome, Edge, Firefox),
+ * falls back to setTimeout for Safari/iOS.
+ */
+function waitForIdle(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(() => resolve());
+    } else {
+      setTimeout(resolve, 200);
+    }
+  });
+}
+
 export function AISummary({ weather, location }: Props) {
   console.log("[AISummary] mounted for", location.name);
   const [insight, setInsight] = useState<string | null>(null);
@@ -35,7 +50,6 @@ export function AISummary({ weather, location }: Props) {
       console.log("[AISummary] skipping duplicate fetch for", location.name);
       return;
     }
-    console.log("[AISummary] effect firing — fetching for", location.name);
     lastFetchedKeyRef.current = fetchKey;
     // Abort any in-flight request before starting a new one
     abortRef.current?.abort();
@@ -45,6 +59,11 @@ export function AISummary({ weather, location }: Props) {
     let cancelled = false;
 
     async function fetchInsight() {
+      // Wait for browser idle — let all other components render first
+      console.log("[AISummary] waiting for idle before fetching...");
+      await waitForIdle();
+      if (cancelled) return;
+
       setLoading(true);
       setError(null);
       try {
