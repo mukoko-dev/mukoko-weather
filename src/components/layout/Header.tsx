@@ -1,31 +1,96 @@
 "use client";
 
+import { lazy, Suspense, useEffect, useRef } from "react";
 import Link from "next/link";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
-import { ThemeToggle } from "@/components/brand/ThemeToggle";
-import { LocationSelector } from "@/components/weather/LocationSelector";
+import { MapPinIcon, ClockIcon, SearchIcon } from "@/lib/weather-icons";
+import { Button } from "@/components/ui/button";
+import { useAppStore } from "@/lib/store";
 
-interface Props {
-  currentLocation: string;
-}
+// Code-split: MyWeatherModal imports LOCATIONS (154 items), ACTIVITIES (20 items),
+// geolocation, router, etc. Lazy-loading prevents this from bloating the initial
+// JS bundle, which is critical for iOS PWA memory limits.
+const MyWeatherModal = lazy(() =>
+  import("@/components/weather/MyWeatherModal").then((m) => ({
+    default: m.MyWeatherModal,
+  })),
+);
 
-export function Header({ currentLocation }: Props) {
+export function Header() {
+  const openMyWeather = useAppStore((s) => s.openMyWeather);
+  const myWeatherOpen = useAppStore((s) => s.myWeatherOpen);
+  const hasOnboarded = useAppStore((s) => s.hasOnboarded);
+  const onboardingChecked = useRef(false);
+
+  // Auto-open the My Weather modal for first-time visitors so they can
+  // pick their location and activities. Runs once after Zustand rehydrates.
+  useEffect(() => {
+    if (onboardingChecked.current) return;
+    onboardingChecked.current = true;
+    if (!hasOnboarded) {
+      // Small delay to let the page paint first
+      const timer = setTimeout(openMyWeather, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [hasOnboarded, openMyWeather]);
+
   return (
-    <header
-      className="sticky top-0 z-30 border-b border-text-tertiary/10 bg-surface-base/80 backdrop-blur-md"
-      role="banner"
-    >
-      <nav aria-label="Primary navigation" className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 py-3 sm:pl-6 md:pl-8">
-        <div className="flex min-w-0 shrink items-center gap-4">
-          <Link href="/" aria-label="mukoko weather — return to home page">
-            <MukokoLogo className="text-lg sm:text-xl" />
-          </Link>
-        </div>
-        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <LocationSelector currentSlug={currentLocation} />
-          <ThemeToggle />
-        </div>
-      </nav>
-    </header>
+    <>
+      <header
+        className="sticky top-0 z-30 border-b border-text-tertiary/10 bg-surface-base/80 backdrop-blur-md"
+        role="banner"
+      >
+        <nav aria-label="Primary navigation" className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 py-3 sm:pl-6 md:pl-8">
+          <div className="flex min-w-0 shrink items-center gap-4">
+            <Link href="/" aria-label="mukoko weather — return to home page">
+              <MukokoLogo className="text-lg sm:text-xl" />
+            </Link>
+          </div>
+          <div
+            className="flex shrink-0 items-center gap-0.5 rounded-[var(--radius-badge)] bg-primary/10 p-1"
+            role="toolbar"
+            aria-label="Quick actions"
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={openMyWeather}
+              aria-label="My Weather preferences"
+              className="text-primary hover:bg-primary/15"
+            >
+              <MapPinIcon size={18} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              asChild
+              className="text-primary hover:bg-primary/15"
+            >
+              <Link
+                href="/history"
+                prefetch={false}
+                aria-label="Weather history"
+              >
+                <ClockIcon size={18} />
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={openMyWeather}
+              aria-label="Search locations"
+              className="text-primary hover:bg-primary/15"
+            >
+              <SearchIcon size={18} />
+            </Button>
+          </div>
+        </nav>
+      </header>
+      {myWeatherOpen && (
+        <Suspense>
+          <MyWeatherModal />
+        </Suspense>
+      )}
+    </>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { resolveTheme, type ThemePreference } from "./store";
+import { resolveTheme, useAppStore, type ThemePreference } from "./store";
 
 describe("resolveTheme", () => {
   let originalMatchMedia: typeof window.matchMedia | undefined;
@@ -41,5 +41,17 @@ describe("ThemePreference type", () => {
       const result = resolveTheme(pref);
       expect(["light", "dark"]).toContain(result);
     }
+  });
+});
+
+describe("onboarding state", () => {
+  it("defaults hasOnboarded to false", () => {
+    const state = useAppStore.getState();
+    expect(state.hasOnboarded).toBe(false);
+  });
+
+  it("sets hasOnboarded to true after completeOnboarding()", () => {
+    useAppStore.getState().completeOnboarding();
+    expect(useAppStore.getState().hasOnboarded).toBe(true);
   });
 });

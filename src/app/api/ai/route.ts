@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getZimbabweSeason } from "@/lib/weather";
+import { logError } from "@/lib/observability";
 import {
   getCachedAISummary,
   setCachedAISummary,
@@ -34,7 +35,6 @@ export async function POST(request: Request) {
   try {
     const { weatherData, location, activities } = await request.json();
     const userActivities: string[] = Array.isArray(activities) ? activities : [];
-
     if (!weatherData || !location) {
       return NextResponse.json({ error: "Missing weather data or location" }, { status: 400 });
     }
@@ -42,7 +42,6 @@ export async function POST(request: Request) {
     const currentTemp = weatherData.current?.temperature_2m ?? 0;
     const currentCode = weatherData.current?.weather_code ?? 0;
     const locationSlug = (location.name as string ?? "unknown").toLowerCase().replace(/\s+/g, "-");
-
     // Look up the location in our database to get tags for tiered TTL
     const knownLocation = getLocationBySlug(locationSlug);
     const locationTags = knownLocation?.tags ?? [];
@@ -56,7 +55,6 @@ export async function POST(request: Request) {
         generatedAt: cached.generatedAt.toISOString(),
       });
     }
-
     // Cache miss or stale — generate fresh AI summary
     const season = getZimbabweSeason();
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -100,7 +98,6 @@ Provide:
         },
       ],
     });
-
     const textBlock = message.content.find((b) => b.type === "text");
     const insight = textBlock?.text ?? "No insight available.";
 
@@ -113,7 +110,17 @@ Provide:
     );
 
     return NextResponse.json({ insight, cached: false, generatedAt: new Date().toISOString() });
-  } catch {
+  } catch (err) {
+    const errorLocation = typeof location === "object" && location !== null
+      ? String((location as unknown as Record<string, unknown>).name ?? "unknown")
+      : undefined;
+    logError({
+      source: "ai-api",
+      severity: "medium",
+      location: errorLocation,
+      message: "AI service unavailable",
+      error: err,
+    });
     return NextResponse.json({ error: "AI service unavailable" }, { status: 502 });
   }
 }

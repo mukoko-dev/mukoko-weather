@@ -68,7 +68,7 @@ export default function HelpPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
       />
-      <Header currentLocation="" />
+      <Header />
       <main id="main-content" className="mx-auto max-w-3xl px-4 py-10 sm:pl-6 md:pl-8">
         <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">Help & FAQ</h1>
         <p className="mt-3 text-text-secondary">

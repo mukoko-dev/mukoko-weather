@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export default function AboutPage() {
   return (
     <>
-      <Header currentLocation="" />
+      <Header />
       <main id="main-content" className="mx-auto max-w-3xl px-4 py-10 sm:pl-6 md:pl-8">
         <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">About mukoko weather</h1>
 

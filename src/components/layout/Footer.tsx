@@ -34,7 +34,7 @@ export function Footer() {
               <path d="M3 3v18h18" />
               <path d="m19 9-5 5-4-4-3 3" />
             </svg>
-            <Link href="/history" className="underline hover:text-text-secondary transition-colors">
+            <Link href="/history" prefetch={false} className="underline hover:text-text-secondary transition-colors">
               Historical data
             </Link>
           </div>
@@ -58,19 +58,19 @@ export function Footer() {
             </p>
           </div>
           <nav aria-label="Footer navigation" className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-tertiary">
-            <Link href="/about" className="underline hover:text-text-secondary transition-colors">
+            <Link href="/about" prefetch={false} className="underline hover:text-text-secondary transition-colors">
               About
             </Link>
-            <Link href="/history" className="underline hover:text-text-secondary transition-colors">
+            <Link href="/history" prefetch={false} className="underline hover:text-text-secondary transition-colors">
               History
             </Link>
-            <Link href="/privacy" className="underline hover:text-text-secondary transition-colors">
+            <Link href="/privacy" prefetch={false} className="underline hover:text-text-secondary transition-colors">
               Privacy
             </Link>
-            <Link href="/terms" className="underline hover:text-text-secondary transition-colors">
+            <Link href="/terms" prefetch={false} className="underline hover:text-text-secondary transition-colors">
               Terms
             </Link>
-            <Link href="/help" className="underline hover:text-text-secondary transition-colors">
+            <Link href="/help" prefetch={false} className="underline hover:text-text-secondary transition-colors">
               Help
             </Link>
             <a href="mailto:support@mukoko.com" className="underline hover:text-text-secondary transition-colors">

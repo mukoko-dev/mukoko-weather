@@ -2,6 +2,7 @@
 
 import { useAppStore, type ThemePreference } from "@/lib/store";
 import { SunIcon, MoonIcon } from "@/lib/weather-icons";
+import { Button } from "@/components/ui/button";
 
 function MonitorIcon({ size = 20 }: { size?: number }) {
   return (
@@ -23,15 +24,15 @@ export function ThemeToggle() {
   const { theme, toggleTheme } = useAppStore();
 
   return (
-    <button
+    <Button
+      variant="outline"
+      size="icon-lg"
       onClick={toggleTheme}
-      className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-button)] border border-text-tertiary/20 bg-surface-card text-text-primary transition-colors hover:bg-surface-elevated focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       aria-label={LABELS[theme]}
-      type="button"
     >
       {theme === "light" && <MoonIcon size={20} />}
       {theme === "dark" && <MonitorIcon size={20} />}
       {theme === "system" && <SunIcon size={20} />}
-    </button>
+    </Button>
   );
 }

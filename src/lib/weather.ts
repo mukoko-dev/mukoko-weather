@@ -216,12 +216,15 @@ export function weatherCodeToInfo(code: number): { label: string; icon: string }
   return map[code] ?? { label: "Unknown", icon: "cloud" };
 }
 
-/** Zimbabwe seasons */
-export function getZimbabweSeason(date: Date = new Date()): {
+/** Zimbabwe season info */
+export interface ZimbabweSeason {
   name: string;
   shona: string;
   description: string;
-} {
+}
+
+/** Zimbabwe seasons */
+export function getZimbabweSeason(date: Date = new Date()): ZimbabweSeason {
   const month = date.getMonth() + 1; // 1-12
   if (month >= 11 || month <= 3) {
     return { name: "Main rains", shona: "Masika", description: "Flooding, road damage, planting" };

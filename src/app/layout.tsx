@@ -192,11 +192,11 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        {/* Detect system theme before first paint to prevent FOUC.
-            Also clears any stale localStorage from previous versions. */}
+        {/* Detect stored or system theme before first paint to prevent FOUC.
+            Reads persisted Zustand state from localStorage, falls back to system preference. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{localStorage.removeItem("mukoko-weather-prefs")}catch(e){}try{var t=window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light";document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","light")}})();`,
+            __html: `(function(){try{var s=JSON.parse(localStorage.getItem("mukoko-weather-prefs")||"{}");var p=s&&s.state&&s.state.theme;if(p==="light"||p==="dark"){document.documentElement.setAttribute("data-theme",p);return}}catch(e){}try{var t=window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light";document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","light")}})();`,
           }}
         />
         <meta name="color-scheme" content="light dark" />

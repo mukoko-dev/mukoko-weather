@@ -73,8 +73,9 @@ describe("sitemap.ts", () => {
     expect(termsEntry!.changeFrequency).toBe("yearly");
   });
 
-  it("total entries = 6 static pages + all locations", () => {
-    expect(result.length).toBe(6 + LOCATIONS.length);
+  it("total entries = 6 static pages + all locations + sub-routes (atmosphere, forecast)", () => {
+    // 6 static + 1 per location + 2 sub-routes per location (atmosphere, forecast)
+    expect(result.length).toBe(6 + LOCATIONS.length * 3);
   });
 
   it("city locations have priority 0.9", () => {

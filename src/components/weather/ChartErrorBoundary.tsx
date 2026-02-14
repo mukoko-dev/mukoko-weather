@@ -1,6 +1,7 @@
 "use client";
 
 import { Component, type ReactNode } from "react";
+import { reportErrorToAnalytics } from "@/lib/observability";
 
 interface Props {
   children: ReactNode;
@@ -32,10 +33,12 @@ export class ChartErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error) {
     console.error(`Chart error (${this.props.name}):`, error);
+    reportErrorToAnalytics(`render:${this.props.name}:${error.message}`, false);
   }
 
   render() {
     if (this.state.hasError) {
+      console.warn("[ChartErrorBoundary] showing fallback for:", this.props.name);
       return (
         <div
           role="alert"

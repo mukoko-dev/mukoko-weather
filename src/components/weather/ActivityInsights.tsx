@@ -476,36 +476,77 @@ const CATEGORY_CARDS: Record<ActivityCategory, React.FC<{ insights: WeatherInsig
 
 export function ActivityInsights({ insights }: { insights?: WeatherInsights }) {
   const selectedActivities = useAppStore((s) => s.selectedActivities);
+  const openMyWeather = useAppStore((s) => s.openMyWeather);
+
+  const selectedItems = useMemo(() => {
+    return selectedActivities
+      .map((id) => ACTIVITIES.find((a) => a.id === id))
+      .filter((a): a is (typeof ACTIVITIES)[number] => a != null);
+  }, [selectedActivities]);
 
   const activeCategories = useMemo(() => {
     const cats = new Set<ActivityCategory>();
-    for (const id of selectedActivities) {
-      const activity = ACTIVITIES.find((a) => a.id === id);
-      if (activity) cats.add(activity.category);
+    for (const item of selectedItems) {
+      cats.add(item.category);
     }
     return [...cats];
-  }, [selectedActivities]);
+  }, [selectedItems]);
 
-  if (!insights || activeCategories.length === 0) return null;
+  if (activeCategories.length === 0) return null;
 
-  // Deduplicate card components (e.g., city and education both map to CasualCard)
-  const seen = new Set<React.FC<{ insights: WeatherInsights }>>();
-  const cards: { category: ActivityCategory; Card: React.FC<{ insights: WeatherInsights }> }[] = [];
-  for (const cat of activeCategories) {
-    const Card = CATEGORY_CARDS[cat];
-    if (Card && !seen.has(Card)) {
-      seen.add(Card);
-      cards.push({ category: cat, Card });
+  // When insights data is available, show full category cards
+  if (insights) {
+    const seen = new Set<React.FC<{ insights: WeatherInsights }>>();
+    const cards: { category: ActivityCategory; Card: React.FC<{ insights: WeatherInsights }> }[] = [];
+    for (const cat of activeCategories) {
+      const Card = CATEGORY_CARDS[cat];
+      if (Card && !seen.has(Card)) {
+        seen.add(Card);
+        cards.push({ category: cat, Card });
+      }
     }
+
+    if (cards.length === 0) return null;
+
+    return (
+      <div className="space-y-4">
+        {cards.map(({ category, Card }) => (
+          <Card key={category} insights={insights} />
+        ))}
+      </div>
+    );
   }
 
-  if (cards.length === 0) return null;
-
+  // Fallback: show selected activities as badges when insights data isn't available
   return (
-    <div className="space-y-4">
-      {cards.map(({ category, Card }) => (
-        <Card key={category} insights={insights} />
-      ))}
-    </div>
+    <section aria-label="Selected activities">
+      <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-base font-semibold text-text-primary font-heading">Your Activities</h3>
+          <button
+            onClick={openMyWeather}
+            className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+          >
+            Edit
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {selectedItems.map((activity) => {
+            const style = CATEGORY_STYLES[activity.category] ?? CATEGORY_STYLES.casual;
+            return (
+              <span
+                key={activity.id}
+                className={`inline-flex items-center gap-1.5 rounded-[var(--radius-badge)] px-3 py-1.5 text-sm font-medium ${style.badge}`}
+              >
+                {activity.label}
+              </span>
+            );
+          })}
+        </div>
+        <p className="mt-3 text-xs text-text-tertiary">
+          Detailed activity insights appear when extended weather data is available.
+        </p>
+      </div>
+    </section>
   );
 }

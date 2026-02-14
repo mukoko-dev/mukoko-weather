@@ -3,14 +3,13 @@
 import { useRef, useState, useEffect } from "react";
 
 /**
- * Three.js weather loading animation — desktop only.
+ * Branded weather loading animation.
  *
- * Renders a particle-based weather scene with floating raindrops, clouds,
- * and a warm sun glow over a stylised Zimbabwe silhouette. The scene is
- * dynamically imported so it doesn't block initial HTML delivery.
- *
- * On mobile / touch devices, Three.js is skipped entirely to conserve
- * memory — the text-only loading state is shown instead.
+ * Shows a full-screen loading overlay with the mukoko weather logo and
+ * animated dots on ALL devices. On desktop (non-touch devices without
+ * reduced-motion preference), a Three.js particle scene is rendered
+ * behind the text for a richer experience. On mobile, the text-only
+ * version is shown to conserve GPU memory.
  */
 export function WeatherLoadingScene() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -19,14 +18,14 @@ export function WeatherLoadingScene() {
 
   // Decide once on mount whether to load Three.js.
   // Skip on mobile / touch / reduced-motion to conserve GPU memory.
+  // The branded text overlay always renders regardless.
   useEffect(() => {
     try {
       const isMobile = window.matchMedia("(hover: none), (pointer: coarse)").matches;
       const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       if (!isMobile && !prefersReduced) {
         setUse3D(true);
-      } else {
-        }
+      }
     } catch {
       // matchMedia not available — skip 3D
     }
@@ -167,7 +166,7 @@ export function WeatherLoadingScene() {
         camera.updateProjectionMatrix();
         renderer.setSize(w, h);
       }
-      window.addEventListener("resize", handleResize);
+      window.addEventListener("resize", handleResize, { passive: true });
 
       const dispose = () => {
         disposed = true;
