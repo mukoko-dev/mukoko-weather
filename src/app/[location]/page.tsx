@@ -12,7 +12,7 @@ import { SunTimes } from "@/components/weather/SunTimes";
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { AISummary } from "@/components/weather/AISummary";
 import { ActivityInsights } from "@/components/weather/ActivityInsights";
-import { LazyAtmosphericDetails } from "@/components/weather/LazyAtmosphericDetails";
+import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";
 import { LazySection } from "@/components/weather/LazySection";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { FrostAlertBanner } from "./FrostAlertBanner";
@@ -330,9 +330,7 @@ export default async function LocationPage({
                 <HourlyForecast hourly={weather.hourly} />
               </ChartErrorBoundary>
             </LazySection>
-            <ChartErrorBoundary name="atmospheric details">
-              <LazyAtmosphericDetails hourly={weather.hourly} />
-            </ChartErrorBoundary>
+            <AtmosphericSummary current={weather.current} />
           </div>
 
           {/* Right column: Daily + Sun + Info */}
