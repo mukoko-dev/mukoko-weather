@@ -20,8 +20,11 @@ import {
   searchActivities,
   type ActivityCategory,
 } from "@/lib/activities";
-
-type Tab = "weather" | "settings";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
 const POPULAR_SLUGS = [
   "harare", "bulawayo", "mutare", "gweru", "masvingo",
@@ -49,85 +52,36 @@ function getCategoryStyle(category: string) {
 
 export function MyWeatherModal() {
   const closeMyWeather = useAppStore((s) => s.closeMyWeather);
-  const [activeTab, setActiveTab] = useState<Tab>("weather");
-  const overlayRef = useRef<HTMLDivElement>(null);
-
-  // Close on Escape
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeMyWeather();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [closeMyWeather]);
-
-  // Prevent body scroll when modal is open
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, []);
-
-  const handleOverlayClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === overlayRef.current) closeMyWeather();
-    },
-    [closeMyWeather],
-  );
+  const myWeatherOpen = useAppStore((s) => s.myWeatherOpen);
 
   return (
-    <div
-      ref={overlayRef}
-      onClick={handleOverlayClick}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center"
-      role="dialog"
-      aria-modal="true"
-      aria-label="My Weather preferences"
-    >
-      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-2xl bg-surface-card sm:max-h-[80vh] sm:rounded-2xl">
+    <Dialog open={myWeatherOpen} onOpenChange={(open) => { if (!open) closeMyWeather(); }}>
+      <DialogContent className="flex max-h-[90vh] flex-col p-0 sm:max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h3 className="text-lg font-semibold text-text-primary font-heading">My Weather</h3>
-          <button
-            onClick={closeMyWeather}
-            className="rounded-[var(--radius-button)] bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-          >
+          <DialogTitle>My Weather</DialogTitle>
+          <Button size="sm" onClick={closeMyWeather}>
             Done
-          </button>
+          </Button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-border" role="tablist" aria-label="Preference sections">
-          <TabButton label="My Weather" tab="weather" active={activeTab === "weather"} onClick={() => setActiveTab("weather")} />
-          <TabButton label="Settings" tab="settings" active={activeTab === "settings"} onClick={() => setActiveTab("settings")} />
-        </div>
+        <Tabs defaultValue="weather" className="flex flex-1 flex-col overflow-hidden">
+          <TabsList>
+            <TabsTrigger value="weather">My Weather</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
+          </TabsList>
 
-        {/* Tab content */}
-        <div className="flex-1 overflow-y-auto">
-          {activeTab === "weather" && <WeatherTab />}
-          {activeTab === "settings" && <SettingsTab />}
-        </div>
-      </div>
-    </div>
-  );
-}
+          <TabsContent value="weather">
+            <WeatherTab />
+          </TabsContent>
 
-function TabButton({ label, tab, active, onClick }: { label: string; tab: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      role="tab"
-      aria-selected={active}
-      aria-controls={`panel-${tab}`}
-      onClick={onClick}
-      className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
-        active
-          ? "border-b-2 border-primary text-primary"
-          : "text-text-secondary hover:text-text-primary"
-      }`}
-    >
-      {label}
-    </button>
+          <TabsContent value="settings">
+            <SettingsTab />
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -190,7 +144,7 @@ function WeatherTab() {
   }, [activityQuery, activeCategory]);
 
   return (
-    <div id="panel-weather" role="tabpanel">
+    <div>
       {/* ── Location Section ─────────────────────────────────────── */}
       <div className="px-4 pt-3 pb-1">
         <h4 className="text-sm font-semibold text-text-primary">Location</h4>
@@ -199,7 +153,7 @@ function WeatherTab() {
       {/* Search input */}
       <div className="border-b border-text-tertiary/10 p-3 pt-2">
         <div className="relative">
-          <input
+          <Input
             ref={inputRef}
             type="text"
             value={query}
@@ -208,7 +162,7 @@ function WeatherTab() {
               setActiveTag(null);
             }}
             placeholder="Search locations..."
-            className="w-full rounded-[var(--radius-input)] bg-surface-base px-3 py-2 pl-9 text-sm text-text-primary placeholder-text-tertiary outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="pl-9"
             aria-label="Search locations"
           />
           <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
@@ -217,11 +171,11 @@ function WeatherTab() {
 
       {/* Geolocation button */}
       <div className="border-b border-text-tertiary/10 px-3 py-2">
-        <button
+        <Button
+          variant="ghost"
           onClick={handleGeolocate}
           disabled={geoLoading}
-          className="flex min-h-[44px] w-full items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-sm text-primary transition-colors hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50"
-          type="button"
+          className="flex min-h-[44px] w-full items-center justify-start gap-3 text-primary"
         >
           {geoLoading ? (
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
@@ -235,7 +189,7 @@ function WeatherTab() {
           <span className="font-medium">
             {geoLoading ? "Detecting location..." : "Use my location"}
           </span>
-        </button>
+        </Button>
         {geoState?.status === "denied" && (
           <p className="px-3 pb-1 text-sm text-text-tertiary">
             Location access denied. Enable it in your browser settings.
@@ -252,19 +206,16 @@ function WeatherTab() {
       {!query && (
         <div role="group" aria-label="Filter locations by category" className="flex flex-wrap gap-1.5 border-b border-text-tertiary/10 px-3 py-2">
           {TAG_ORDER.map((tag) => (
-            <button
+            <Button
               key={tag}
+              variant={activeTag === tag ? "default" : "secondary"}
+              size="sm"
               onClick={() => setActiveTag(activeTag === tag ? null : tag)}
               aria-pressed={activeTag === tag}
-              className={`min-h-[44px] rounded-[var(--radius-badge)] px-3 py-2 text-sm font-medium transition-colors ${
-                activeTag === tag
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-surface-base text-text-secondary hover:text-text-primary"
-              }`}
-              type="button"
+              className="min-h-[44px]"
             >
               {TAG_LABELS[tag]}
-            </button>
+            </Button>
           ))}
         </div>
       )}
@@ -297,12 +248,9 @@ function WeatherTab() {
               </div>
               <div className="ml-auto flex gap-1">
                 {loc.tags.slice(0, 2).map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-[var(--radius-badge)] bg-surface-base px-1.5 py-0.5 text-xs text-text-tertiary"
-                  >
+                  <Badge key={tag} variant="secondary" className="px-1.5 py-0.5">
                     {tag}
-                  </span>
+                  </Badge>
                 ))}
               </div>
             </button>
@@ -353,14 +301,14 @@ function WeatherTab() {
 
       {/* Activity search */}
       <div className="px-4 pb-2">
-        <div className="flex items-center gap-2 rounded-[var(--radius-input)] bg-surface-base px-3 py-2">
-          <SearchIcon size={16} className="shrink-0 text-text-tertiary" />
-          <input
+        <div className="relative">
+          <SearchIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 shrink-0 text-text-tertiary" />
+          <Input
             type="text"
             value={activityQuery}
             onChange={(e) => setActivityQuery(e.target.value)}
             placeholder="Search activities..."
-            className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none"
+            className="pl-9"
             aria-label="Search activities"
           />
         </div>
@@ -455,7 +403,7 @@ function SettingsTab() {
   const setTheme = useAppStore((s) => s.setTheme);
 
   return (
-    <div id="panel-settings" role="tabpanel" className="p-4">
+    <div className="p-4">
       <h4 className="mb-3 text-sm font-semibold text-text-primary">Appearance</h4>
       <div className="space-y-2" role="radiogroup" aria-label="Theme preference">
         {THEME_OPTIONS.map((option) => (

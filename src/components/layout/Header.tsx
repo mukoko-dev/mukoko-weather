@@ -4,6 +4,7 @@ import { lazy, Suspense } from "react";
 import Link from "next/link";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
 import { MapPinIcon, ClockIcon, SearchIcon } from "@/lib/weather-icons";
+import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store";
 
 // Code-split: MyWeatherModal imports LOCATIONS (154 items), ACTIVITIES (20 items),
@@ -36,30 +37,38 @@ export function Header() {
             role="toolbar"
             aria-label="Quick actions"
           >
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={openMyWeather}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               aria-label="My Weather preferences"
-              type="button"
+              className="text-primary hover:bg-primary/15"
             >
               <MapPinIcon size={18} />
-            </button>
-            <Link
-              href="/history"
-              prefetch={false}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-              aria-label="Weather history"
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              asChild
+              className="text-primary hover:bg-primary/15"
             >
-              <ClockIcon size={18} />
-            </Link>
-            <button
+              <Link
+                href="/history"
+                prefetch={false}
+                aria-label="Weather history"
+              >
+                <ClockIcon size={18} />
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={openMyWeather}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               aria-label="Search locations"
-              type="button"
+              className="text-primary hover:bg-primary/15"
             >
               <SearchIcon size={18} />
-            </button>
+            </Button>
           </div>
         </nav>
       </header>

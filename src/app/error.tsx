@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { getRetryCount, setRetryCount, clearRetryCount, MAX_RETRIES } from "@/lib/error-retry";
 
 export default function GlobalError({
@@ -45,20 +46,15 @@ export default function GlobalError({
       </p>
       <div className="mt-8 flex flex-col items-center gap-3">
         {!exhausted && (
-          <button
-            onClick={handleRetry}
-            className="rounded-[var(--radius-badge)] bg-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-primary"
-          >
+          <Button size="lg" onClick={handleRetry}>
             Try again
-          </button>
+          </Button>
         )}
-        <Link
-          href="/"
-          onClick={handleNavigate}
-          className="rounded-[var(--radius-badge)] border border-border-default px-6 py-3 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-card focus-visible:outline-2 focus-visible:outline-primary"
-        >
-          Go home
-        </Link>
+        <Button variant="outline" size="lg" asChild>
+          <Link href="/" onClick={handleNavigate}>
+            Go home
+          </Link>
+        </Button>
       </div>
     </div>
   );
