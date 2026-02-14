@@ -53,15 +53,35 @@ function getCategoryStyle(category: string) {
 export function MyWeatherModal() {
   const closeMyWeather = useAppStore((s) => s.closeMyWeather);
   const myWeatherOpen = useAppStore((s) => s.myWeatherOpen);
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Track pending location selection (deferred navigation)
+  const currentSlug = pathname?.replace("/", "") || "harare";
+  const [pendingSlug, setPendingSlug] = useState(currentSlug);
+
+  // Reset pending slug when modal opens with a new URL
+  useEffect(() => {
+    if (myWeatherOpen) setPendingSlug(currentSlug);
+  }, [myWeatherOpen, currentSlug]);
+
+  const handleDone = () => {
+    closeMyWeather();
+    if (pendingSlug !== currentSlug) {
+      router.push(`/${pendingSlug}`);
+    }
+  };
+
+  const locationChanged = pendingSlug !== currentSlug;
 
   return (
-    <Dialog open={myWeatherOpen} onOpenChange={(open) => { if (!open) closeMyWeather(); }}>
+    <Dialog open={myWeatherOpen} onOpenChange={(open) => { if (!open) handleDone(); }}>
       <DialogContent className="flex max-h-[90vh] flex-col p-0 sm:max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <DialogTitle>My Weather</DialogTitle>
-          <Button size="sm" onClick={closeMyWeather}>
-            Done
+          <Button size="sm" onClick={handleDone}>
+            {locationChanged ? "Apply" : "Done"}
           </Button>
         </div>
 
@@ -73,7 +93,7 @@ export function MyWeatherModal() {
           </TabsList>
 
           <TabsContent value="weather">
-            <WeatherTab />
+            <WeatherTab pendingSlug={pendingSlug} onSelectLocation={setPendingSlug} />
           </TabsContent>
 
           <TabsContent value="settings">
@@ -87,8 +107,7 @@ export function MyWeatherModal() {
 
 // ── Unified Weather Tab (Location + Activities) ─────────────────────────────
 
-function WeatherTab() {
-  const closeMyWeather = useAppStore((s) => s.closeMyWeather);
+function WeatherTab({ pendingSlug, onSelectLocation }: { pendingSlug: string; onSelectLocation: (slug: string) => void }) {
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const toggleActivity = useAppStore((s) => s.toggleActivity);
   const [query, setQuery] = useState("");
@@ -98,11 +117,7 @@ function WeatherTab() {
   const [activeCategory, setActiveCategory] = useState<ActivityCategory | "all">("all");
   const [activityQuery, setActivityQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  const router = useRouter();
-  const pathname = usePathname();
-
-  // Current slug from URL
-  const currentSlug = pathname?.replace("/", "") || "harare";
+  const activitiesRef = useRef<HTMLDivElement>(null);
 
   // Focus the search input on mount
   useEffect(() => {
@@ -117,10 +132,11 @@ function WeatherTab() {
     setGeoLoading(false);
 
     if (result.status === "success" && result.location) {
-      closeMyWeather();
-      router.push(`/${result.location.slug}`);
+      onSelectLocation(result.location.slug);
+      // Scroll to activities so user can pick those too
+      setTimeout(() => activitiesRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     }
-  }, [router, closeMyWeather]);
+  }, [onSelectLocation]);
 
   // Filtered locations
   const displayedLocations = useMemo(() => {
@@ -130,8 +146,9 @@ function WeatherTab() {
   }, [query, activeTag]);
 
   const handleSelect = (slug: string) => {
-    closeMyWeather();
-    router.push(`/${slug}`);
+    onSelectLocation(slug);
+    // Scroll to activities so user can pick those too
+    setTimeout(() => activitiesRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
   };
 
   // Filtered activities
@@ -228,11 +245,11 @@ function WeatherTab() {
           </li>
         )}
         {displayedLocations.map((loc) => (
-          <li key={loc.slug} role="option" aria-selected={loc.slug === currentSlug}>
+          <li key={loc.slug} role="option" aria-selected={loc.slug === pendingSlug}>
             <button
               onClick={() => handleSelect(loc.slug)}
               className={`flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-sm transition-colors hover:bg-surface-base focus-visible:outline-2 focus-visible:outline-primary ${
-                loc.slug === currentSlug
+                loc.slug === pendingSlug
                   ? "bg-primary/10 text-primary font-semibold"
                   : "text-text-primary"
               }`}
@@ -240,7 +257,7 @@ function WeatherTab() {
             >
               <MapPinIcon
                 size={14}
-                className={loc.slug === currentSlug ? "text-primary" : "text-text-tertiary"}
+                className={loc.slug === pendingSlug ? "text-primary" : "text-text-tertiary"}
               />
               <div className="flex flex-col items-start">
                 <span>{loc.name}</span>
@@ -266,7 +283,7 @@ function WeatherTab() {
       </div>
 
       {/* ── Activities Section ───────────────────────────────────── */}
-      <div className="border-t border-border px-4 pt-3 pb-1">
+      <div ref={activitiesRef} className="border-t border-border px-4 pt-3 pb-1">
         <h4 className="text-sm font-semibold text-text-primary">
           Activities
           {selectedActivities.length > 0 && (
