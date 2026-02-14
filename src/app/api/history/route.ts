@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWeatherHistory } from "@/lib/db";
 import { getLocationBySlug } from "@/lib/locations";
+import { logError } from "@/lib/observability";
 
 /**
  * GET /api/history?location=harare&days=30
@@ -35,7 +36,15 @@ export async function GET(request: NextRequest) {
       records: history.length,
       data: history,
     });
-  } catch {
+  } catch (err) {
+    logError({
+      source: "history-api",
+      severity: "high",
+      location: locationSlug,
+      message: "Failed to fetch weather history",
+      error: err,
+      meta: { days },
+    });
     return NextResponse.json({ error: "Failed to fetch weather history" }, { status: 502 });
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { CurrentWeather } from "@/lib/weather";
 import { windDirection, uvLevel } from "@/lib/weather";
 import {
@@ -61,7 +62,8 @@ function MetricCard({ icon, label, value, context, contextColor = "text-text-ter
 }
 
 export function AtmosphericSummary({ current }: Props) {
-  console.log("[AtmosphericSummary] render");
+  const pathname = usePathname();
+  const locationSlug = pathname?.split("/")[1] || "harare";
   const uv = uvLevel(current.uv_index);
   const wind = Math.round(current.wind_speed_10m);
   const gusts = Math.round(current.wind_gusts_10m);
@@ -76,7 +78,7 @@ export function AtmosphericSummary({ current }: Props) {
           Conditions
         </h2>
         <Link
-          href="/history"
+          href={`/${locationSlug}/atmosphere`}
           className="text-sm font-medium text-primary transition-colors hover:text-primary/80"
         >
           24h trends →

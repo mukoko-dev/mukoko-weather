@@ -60,11 +60,6 @@ export function MyWeatherModal() {
   const currentSlug = pathname?.replace("/", "") || "harare";
   const [pendingSlug, setPendingSlug] = useState(currentSlug);
 
-  // Reset pending slug when modal opens with a new URL
-  useEffect(() => {
-    if (myWeatherOpen) setPendingSlug(currentSlug);
-  }, [myWeatherOpen, currentSlug]);
-
   const handleDone = () => {
     closeMyWeather();
     if (pendingSlug !== currentSlug) {
@@ -72,10 +67,19 @@ export function MyWeatherModal() {
     }
   };
 
+  const handleOpenChange = (open: boolean) => {
+    if (open) {
+      // Reset pending slug when modal opens
+      setPendingSlug(currentSlug);
+    } else {
+      handleDone();
+    }
+  };
+
   const locationChanged = pendingSlug !== currentSlug;
 
   return (
-    <Dialog open={myWeatherOpen} onOpenChange={(open) => { if (!open) handleDone(); }}>
+    <Dialog open={myWeatherOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="flex max-h-[90vh] flex-col p-0 sm:max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { reportErrorToAnalytics } from "@/lib/observability";
 import { getRetryCount, setRetryCount, clearRetryCount, MAX_RETRIES } from "@/lib/error-retry";
 
 export default function HistoryError({
@@ -16,6 +17,7 @@ export default function HistoryError({
 
   useEffect(() => {
     console.error("History page error:", error);
+    reportErrorToAnalytics(`history:${error.message}`, true);
   }, [error]);
 
   const handleRetry = () => {

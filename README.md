@@ -16,8 +16,10 @@ AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, 
 - **Zimbabwe seasons** — Masika, Chirimo, Zhizha, and Munakamwe season awareness
 - **Geolocation** — automatic nearest-location detection via browser GPS
 - **Embeddable widget** — drop-in weather widget for third-party sites
+- **Dedicated detail pages** — `/harare/atmosphere` for 24h atmospheric charts, `/harare/forecast` for hourly + daily forecast detail
 - **Smart theming** — light, dark, and system (auto) modes with OS preference detection
 - **Historical data dashboard** — explore recorded weather trends, precipitation, and climate patterns over time
+- **Resilient architecture** — Netflix-style error isolation: per-section error boundaries, 4-stage weather fallback chain, structured observability logging
 - **PWA** — installable as a standalone app on Android, iOS, and desktop
 
 ## Tech Stack
@@ -26,6 +28,7 @@ AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, 
 |-------|-----------|
 | Framework | [Next.js 16](https://nextjs.org) (App Router) |
 | Language | TypeScript 5 |
+| UI Components | [shadcn/ui](https://ui.shadcn.com) (Radix UI + CVA) |
 | Styling | [Tailwind CSS 4](https://tailwindcss.com) |
 | State | [Zustand 5](https://zustand.docs.pmnd.rs) |
 | AI | [Anthropic Claude SDK](https://docs.anthropic.com/en/docs) |
@@ -89,12 +92,14 @@ src/
     page.tsx                # Home — redirects to /harare
     globals.css             # Brand System v6 (WCAG 3.0 APCA compliant)
     robots.ts               # Dynamic robots.txt
-    sitemap.ts              # Dynamic sitemap for 90+ locations
+    sitemap.ts              # Dynamic sitemap for 90+ locations + sub-routes
     [location]/
       page.tsx              # Dynamic weather page per location
       loading.tsx           # Skeleton loading state
       not-found.tsx         # 404 with location suggestions
       FrostAlertBanner.tsx  # Frost risk alert (design-system tokens)
+      atmosphere/           # 24h atmospheric detail charts sub-route
+      forecast/             # Hourly + daily forecast detail sub-route
     api/
       weather/route.ts      # GET /api/weather — Open-Meteo proxy + MongoDB cache
       geo/route.ts          # GET /api/geo — nearest location lookup
@@ -113,6 +118,7 @@ src/
     analytics/              # Google Analytics 4 integration
     brand/                  # MukokoLogo, ThemeToggle (3-state), ThemeProvider, MineralsStripe
     layout/                 # Header (pill icon group + My Weather modal), Footer
+    ui/                     # shadcn/ui primitives (Button, Badge, Dialog, Input, Tabs, Card, Chart)
     weather/                # CurrentConditions, HourlyForecast, DailyForecast,
                             # SunTimes, SeasonBadge, AISummary, LocationSelector,
                             # MyWeatherModal, ActivityInsights, LazySection
@@ -126,6 +132,7 @@ src/
     mongo.ts                # MongoDB client (connection-pooled)
     geolocation.ts          # Browser geolocation detection
     store.ts                # Zustand state with localStorage persistence (theme, activities)
+    observability.ts        # Structured error logging + GA4 error reporting
     weather-icons.tsx       # SVG weather + activity icon components
     i18n.ts                 # Internationalization utilities
 public/

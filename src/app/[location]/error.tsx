@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { reportErrorToAnalytics } from "@/lib/observability";
 import { getRetryCount, setRetryCount, clearRetryCount, MAX_RETRIES } from "@/lib/error-retry";
 
 export default function LocationError({
@@ -16,6 +17,7 @@ export default function LocationError({
 
   useEffect(() => {
     console.error("Weather page error:", error);
+    reportErrorToAnalytics(`location:${error.message}`, true);
   }, [error]);
 
   const handleRetry = () => {

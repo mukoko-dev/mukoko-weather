@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findNearestLocation } from "@/lib/locations";
 import { getWeatherForLocation } from "@/lib/db";
+import { createFallbackWeather } from "@/lib/weather";
+import { logError, logWarn } from "@/lib/observability";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -21,14 +23,41 @@ export async function GET(request: NextRequest) {
   const locationSlug = nearestLocation?.slug ?? `${lat.toFixed(2)}_${lon.toFixed(2)}`;
   const elevation = nearestLocation?.elevation ?? 1200;
 
-  console.log("[Weather API] fetching for", locationSlug, "lat:", lat, "lon:", lon);
-  const { data, source } = await getWeatherForLocation(locationSlug, lat, lon, elevation);
-  console.log("[Weather API]", locationSlug, "source:", source, "temp:", data.current?.temperature_2m);
+  try {
+    const { data, source } = await getWeatherForLocation(locationSlug, lat, lon, elevation);
 
-  return NextResponse.json(data, {
-    headers: {
-      "X-Cache": source === "cache" ? "HIT" : "MISS",
-      "X-Weather-Provider": source,
-    },
-  });
+    if (source === "fallback") {
+      logWarn({
+        source: "weather-api",
+        location: locationSlug,
+        message: "All weather providers failed, serving seasonal estimates",
+        meta: { lat, lon },
+      });
+    }
+
+    return NextResponse.json(data, {
+      headers: {
+        "X-Cache": source === "cache" ? "HIT" : "MISS",
+        "X-Weather-Provider": source,
+      },
+    });
+  } catch (err) {
+    logError({
+      source: "weather-api",
+      severity: "critical",
+      location: locationSlug,
+      message: "Unexpected error in weather API route",
+      error: err,
+      meta: { lat, lon },
+    });
+
+    // Even if the route itself crashes, return fallback data — never a 500
+    const fallback = createFallbackWeather(lat, lon, elevation);
+    return NextResponse.json(fallback, {
+      headers: {
+        "X-Cache": "MISS",
+        "X-Weather-Provider": "fallback",
+      },
+    });
+  }
 }

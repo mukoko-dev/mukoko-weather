@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getZimbabweSeason } from "@/lib/weather";
+import { logError } from "@/lib/observability";
 import {
   getCachedAISummary,
   setCachedAISummary,
@@ -123,7 +124,16 @@ Provide:
     console.log("[AI API] saved to cache, returning insight (", insight.length, "chars)");
     return NextResponse.json({ insight, cached: false, generatedAt: new Date().toISOString() });
   } catch (err) {
-    console.error("[AI API] 502 error:", err);
+    const errorLocation = typeof location === "object" && location !== null
+      ? String((location as unknown as Record<string, unknown>).name ?? "unknown")
+      : undefined;
+    logError({
+      source: "ai-api",
+      severity: "medium",
+      location: errorLocation,
+      message: "AI service unavailable",
+      error: err,
+    });
     return NextResponse.json({ error: "AI service unavailable" }, { status: 502 });
   }
 }

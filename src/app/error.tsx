@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { reportErrorToAnalytics } from "@/lib/observability";
 import { getRetryCount, setRetryCount, clearRetryCount, MAX_RETRIES } from "@/lib/error-retry";
 
 export default function GlobalError({
@@ -16,6 +17,7 @@ export default function GlobalError({
 
   useEffect(() => {
     console.error("Application error:", error);
+    reportErrorToAnalytics(`global:${error.message}`, true);
   }, [error]);
 
   const handleRetry = () => {
