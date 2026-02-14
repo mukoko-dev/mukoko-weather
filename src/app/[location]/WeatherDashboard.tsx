@@ -1,15 +1,10 @@
 "use client";
 
+import { lazy, Suspense } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { CurrentConditions } from "@/components/weather/CurrentConditions";
-import { HourlyForecast } from "@/components/weather/HourlyForecast";
-import { DailyForecast } from "@/components/weather/DailyForecast";
-import { SunTimes } from "@/components/weather/SunTimes";
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
-import { AISummary } from "@/components/weather/AISummary";
-import { ActivityInsights } from "@/components/weather/ActivityInsights";
-import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";
 import { LazySection } from "@/components/weather/LazySection";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { FrostAlertBanner } from "./FrostAlertBanner";
@@ -17,6 +12,22 @@ import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
 import { getZimbabweSeason } from "@/lib/weather";
 import type { WeatherData, FrostAlert } from "@/lib/weather";
 import type { ZimbabweLocation } from "@/lib/locations";
+
+// ── Code-split heavy components ─────────────────────────────────────────────
+// These use React.lazy() so their JS chunks (Recharts, ReactMarkdown, etc.)
+// are only downloaded when the LazySection IntersectionObserver fires.
+// This dramatically reduces the initial JS parse/compile on iOS PWA.
+const HourlyForecast = lazy(() => import("@/components/weather/HourlyForecast").then((m) => ({ default: m.HourlyForecast })));
+const DailyForecast = lazy(() => import("@/components/weather/DailyForecast").then((m) => ({ default: m.DailyForecast })));
+const AISummary = lazy(() => import("@/components/weather/AISummary").then((m) => ({ default: m.AISummary })));
+const ActivityInsights = lazy(() => import("@/components/weather/ActivityInsights").then((m) => ({ default: m.ActivityInsights })));
+const AtmosphericSummary = lazy(() => import("@/components/weather/AtmosphericSummary").then((m) => ({ default: m.AtmosphericSummary })));
+const SunTimes = lazy(() => import("@/components/weather/SunTimes").then((m) => ({ default: m.SunTimes })));
+
+/** Lightweight placeholder while a lazy chunk loads */
+function SectionSkeleton() {
+  return <div className="h-32 animate-pulse rounded-[var(--radius-card)] bg-surface-card" />;
+}
 
 const BASE_URL = "https://weather.mukoko.com";
 
@@ -90,22 +101,30 @@ export function WeatherDashboard({
             </ChartErrorBoundary>
             <LazySection>
               <ChartErrorBoundary name="AI summary">
-                {!usingFallback && <AISummary weather={weather} location={location} />}
+                <Suspense fallback={<SectionSkeleton />}>
+                  {!usingFallback && <AISummary weather={weather} location={location} />}
+                </Suspense>
               </ChartErrorBoundary>
             </LazySection>
             <LazySection>
               <ChartErrorBoundary name="activity insights">
-                <ActivityInsights insights={weather.insights} />
+                <Suspense fallback={<SectionSkeleton />}>
+                  <ActivityInsights insights={weather.insights} />
+                </Suspense>
               </ChartErrorBoundary>
             </LazySection>
             <LazySection>
               <ChartErrorBoundary name="hourly forecast">
-                <HourlyForecast hourly={weather.hourly} />
+                <Suspense fallback={<SectionSkeleton />}>
+                  <HourlyForecast hourly={weather.hourly} />
+                </Suspense>
               </ChartErrorBoundary>
             </LazySection>
             <LazySection>
               <ChartErrorBoundary name="atmospheric conditions">
-                <AtmosphericSummary current={weather.current} />
+                <Suspense fallback={<SectionSkeleton />}>
+                  <AtmosphericSummary current={weather.current} />
+                </Suspense>
               </ChartErrorBoundary>
             </LazySection>
           </div>
@@ -114,12 +133,16 @@ export function WeatherDashboard({
           <div className="min-w-0 space-y-6">
             <LazySection>
               <ChartErrorBoundary name="daily forecast">
-                <DailyForecast daily={weather.daily} />
+                <Suspense fallback={<SectionSkeleton />}>
+                  <DailyForecast daily={weather.daily} />
+                </Suspense>
               </ChartErrorBoundary>
             </LazySection>
             <LazySection>
               <ChartErrorBoundary name="sun times">
-                <SunTimes daily={weather.daily} />
+                <Suspense fallback={<SectionSkeleton />}>
+                  <SunTimes daily={weather.daily} />
+                </Suspense>
               </ChartErrorBoundary>
             </LazySection>
 

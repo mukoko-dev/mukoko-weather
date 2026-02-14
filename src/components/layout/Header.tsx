@@ -1,10 +1,19 @@
 "use client";
 
+import { lazy, Suspense } from "react";
 import Link from "next/link";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
-import { MyWeatherModal } from "@/components/weather/MyWeatherModal";
 import { MapPinIcon, ClockIcon, SearchIcon } from "@/lib/weather-icons";
 import { useAppStore } from "@/lib/store";
+
+// Code-split: MyWeatherModal imports LOCATIONS (154 items), ACTIVITIES (20 items),
+// geolocation, router, etc. Lazy-loading prevents this from bloating the initial
+// JS bundle, which is critical for iOS PWA memory limits.
+const MyWeatherModal = lazy(() =>
+  import("@/components/weather/MyWeatherModal").then((m) => ({
+    default: m.MyWeatherModal,
+  })),
+);
 
 export function Header() {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
@@ -53,7 +62,11 @@ export function Header() {
           </div>
         </nav>
       </header>
-      {myWeatherOpen && <MyWeatherModal />}
+      {myWeatherOpen && (
+        <Suspense>
+          <MyWeatherModal />
+        </Suspense>
+      )}
     </>
   );
 }

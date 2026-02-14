@@ -167,7 +167,7 @@ export function WeatherLoadingScene() {
         camera.updateProjectionMatrix();
         renderer.setSize(w, h);
       }
-      window.addEventListener("resize", handleResize);
+      window.addEventListener("resize", handleResize, { passive: true });
 
       const dispose = () => {
         disposed = true;
