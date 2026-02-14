@@ -20,15 +20,23 @@ export function AISummary({ weather, location }: Props) {
   const [error, setError] = useState<string | null>(null);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const abortRef = useRef<AbortController | null>(null);
+  const lastFetchedKeyRef = useRef<string>("");
 
   // Serialize deps to stable strings so Zustand rehydration of an
   // equivalent value (e.g. [] → []) doesn't trigger a re-fetch.
   const activitiesKey = useMemo(() => selectedActivities.slice().sort().join(","), [selectedActivities]);
   const locationKey = `${location.slug}:${location.lat}:${location.lon}`;
   const weatherKey = `${weather.current.temperature_2m}:${weather.current.weather_code}`;
+  const fetchKey = `${locationKey}:${weatherKey}:${activitiesKey}`;
 
   useEffect(() => {
+    // Skip duplicate fetches (e.g. from redirect double-render)
+    if (lastFetchedKeyRef.current === fetchKey && insight) {
+      console.log("[AISummary] skipping duplicate fetch for", location.name);
+      return;
+    }
     console.log("[AISummary] effect firing — fetching for", location.name);
+    lastFetchedKeyRef.current = fetchKey;
     // Abort any in-flight request before starting a new one
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -89,7 +97,7 @@ export function AISummary({ weather, location }: Props) {
       controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activitiesKey, locationKey, weatherKey]);
+  }, [fetchKey]);
 
   return (
     <section aria-label="AI weather intelligence summary">

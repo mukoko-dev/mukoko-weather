@@ -46,6 +46,7 @@ export function Header() {
             </button>
             <Link
               href="/history"
+              prefetch={false}
               className="flex h-10 w-10 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               aria-label="Weather history"
             >

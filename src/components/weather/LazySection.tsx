@@ -24,7 +24,15 @@ const DEFAULT_FALLBACK = (
  * children. This prevents all chart components from mounting simultaneously,
  * which causes OOM tab-kills on mobile devices.
  */
-export function LazySection({ children, fallback = DEFAULT_FALLBACK, rootMargin = "300px", label = "unknown" }: LazySectionProps) {
+// Use a smaller trigger distance on mobile to avoid mounting too many
+// heavy components at once (Recharts SVG, ReactMarkdown, etc.).
+function getDefaultRootMargin(): string {
+  if (typeof window === "undefined") return "300px";
+  return window.innerWidth < 768 ? "100px" : "300px";
+}
+
+export function LazySection({ children, fallback = DEFAULT_FALLBACK, rootMargin, label = "unknown" }: LazySectionProps) {
+  const resolvedMargin = rootMargin ?? getDefaultRootMargin();
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(
     () => typeof window !== "undefined" && typeof IntersectionObserver === "undefined",
@@ -38,7 +46,7 @@ export function LazySection({ children, fallback = DEFAULT_FALLBACK, rootMargin 
       return;
     }
 
-    console.log("[LazySection]", label, "— observing");
+    console.log("[LazySection]", label, "— observing (margin:", resolvedMargin, ")");
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -47,12 +55,12 @@ export function LazySection({ children, fallback = DEFAULT_FALLBACK, rootMargin 
           observer.disconnect();
         }
       },
-      { rootMargin },
+      { rootMargin: resolvedMargin },
     );
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, [visible, rootMargin, label]);
+  }, [visible, resolvedMargin, label]);
 
   if (!visible) {
     return <div ref={sentinelRef}>{fallback}</div>;
