@@ -79,15 +79,12 @@ export default async function LocationPage({
     );
     weather = result.data;
     weatherSource = result.source;
-    console.log("[page.tsx]", location.slug, "weather source:", weatherSource, "temp:", weather.current.temperature_2m);
-  } catch (err) {
-    console.error("[page.tsx]", location.slug, "weather fetch failed:", err);
+  } catch {
     weather = createFallbackWeather(location.lat, location.lon, location.elevation);
     weatherSource = "fallback";
   }
 
   const usingFallback = weatherSource === "fallback";
-  console.log("[page.tsx]", location.slug, "usingFallback:", usingFallback, "has insights:", !!weather.insights);
   const frostAlert = usingFallback ? null : checkFrostRisk(weather.hourly);
   const conditionInfo = weatherCodeToInfo(weather.current.weather_code);
   const now = new Date().toISOString();

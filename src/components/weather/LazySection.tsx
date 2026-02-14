@@ -41,16 +41,11 @@ export function LazySection({ children, fallback = DEFAULT_FALLBACK, rootMargin,
   useEffect(() => {
     if (visible) return;
     const el = sentinelRef.current;
-    if (!el) {
-      console.warn("[LazySection]", label, "— no sentinel ref");
-      return;
-    }
+    if (!el) return;
 
-    console.log("[LazySection]", label, "— observing (margin:", resolvedMargin, ")");
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          console.log("[LazySection]", label, "— VISIBLE, mounting children");
           setVisible(true);
           observer.disconnect();
         }

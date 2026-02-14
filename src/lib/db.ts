@@ -11,6 +11,7 @@
 import { getDb } from "./mongo";
 import { fetchWeather, createFallbackWeather, type WeatherData } from "./weather";
 import { fetchWeatherFromTomorrow, TomorrowRateLimitError } from "./tomorrow";
+import { logWarn, logError } from "./observability";
 import type { ZimbabweLocation } from "./locations";
 
 // ---------------------------------------------------------------------------
@@ -178,11 +179,14 @@ export async function getWeatherForLocation(
         data = await fetchWeatherFromTomorrow(lat, lon, tomorrowKey);
         source = "tomorrow";
       } catch (err) {
-        if (err instanceof TomorrowRateLimitError) {
-          console.warn("Tomorrow.io rate limit, falling back to Open-Meteo");
-        } else {
-          console.warn("Tomorrow.io fetch failed, falling back to Open-Meteo:", err);
-        }
+        logWarn({
+          source: "tomorrow-io",
+          location: slug,
+          message: err instanceof TomorrowRateLimitError
+            ? "Tomorrow.io rate limit, falling back to Open-Meteo"
+            : "Tomorrow.io fetch failed, falling back to Open-Meteo",
+          error: err,
+        });
       }
     }
   } catch {
@@ -195,7 +199,13 @@ export async function getWeatherForLocation(
       data = await fetchWeather(lat, lon);
       source = "open-meteo";
     } catch (err) {
-      console.error("Open-Meteo fetch failed:", err);
+      logError({
+        source: "open-meteo",
+        severity: "high",
+        location: slug,
+        message: "Open-Meteo fetch failed",
+        error: err,
+      });
     }
   }
 
@@ -208,7 +218,13 @@ export async function getWeatherForLocation(
   Promise.all([
     setCachedWeather(slug, lat, lon, data),
     recordWeatherHistory(slug, data),
-  ]).catch((err) => console.error("Failed to cache weather data:", err));
+  ]).catch((err) => logError({
+    source: "mongodb",
+    severity: "low",
+    location: slug,
+    message: "Failed to cache weather data",
+    error: err,
+  }));
 
   return { data, source };
 }

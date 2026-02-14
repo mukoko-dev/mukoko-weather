@@ -6,7 +6,6 @@ interface Props {
 }
 
 export function SunTimes({ daily }: Props) {
-  console.log("[SunTimes] render");
   const sunrise = new Date(daily.sunrise[0]);
   const sunset = new Date(daily.sunset[0]);
   const fmt = (d: Date) =>

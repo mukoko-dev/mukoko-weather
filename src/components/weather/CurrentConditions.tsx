@@ -8,7 +8,6 @@ interface Props {
 }
 
 export function CurrentConditions({ current, locationName, daily }: Props) {
-  console.log("[CurrentConditions] render for", locationName);
   const info = weatherCodeToInfo(current.weather_code);
   const uv = uvLevel(current.uv_index);
   const wind = windDirection(current.wind_direction_10m);

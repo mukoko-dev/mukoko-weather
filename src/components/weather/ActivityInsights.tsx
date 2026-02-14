@@ -475,7 +475,6 @@ const CATEGORY_CARDS: Record<ActivityCategory, React.FC<{ insights: WeatherInsig
 // ---------------------------------------------------------------------------
 
 export function ActivityInsights({ insights }: { insights?: WeatherInsights }) {
-  console.log("[ActivityInsights] render — has insights:", !!insights);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const openMyWeather = useAppStore((s) => s.openMyWeather);
 

@@ -40,7 +40,6 @@ export function WeatherDashboard({
   usingFallback,
   frostAlert,
 }: WeatherDashboardProps) {
-  console.log("[WeatherDashboard] render for", location.name, "usingFallback:", usingFallback, "frostAlert:", !!frostAlert);
   const season = getZimbabweSeason();
 
   return (
