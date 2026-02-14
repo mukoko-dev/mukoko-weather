@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 
 export type ThemePreference = "light" | "dark" | "system";
 
@@ -14,7 +13,7 @@ export function resolveTheme(pref: ThemePreference): "light" | "dark" {
 function applyTheme(pref: ThemePreference) {
   if (typeof document === "undefined") return;
   document.documentElement.setAttribute("data-theme", resolveTheme(pref));
-  document.documentElement.setAttribute("data-brand", "mukoko");
+  document.documentElement.setAttribute("data-brand", "mukoko-weather");
 }
 
 interface AppState {
@@ -29,36 +28,26 @@ interface AppState {
 
 const THEME_CYCLE: ThemePreference[] = ["light", "dark", "system"];
 
-export const useAppStore = create<AppState>()(
-  persist(
-    (set) => ({
-      theme: "system" as ThemePreference,
-      setTheme: (theme: ThemePreference) => {
-        applyTheme(theme);
-        set({ theme });
-      },
-      toggleTheme: () =>
-        set((state) => {
-          const idx = THEME_CYCLE.indexOf(state.theme);
-          const next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
-          applyTheme(next);
-          return { theme: next };
-        }),
-      selectedLocation: "harare",
-      setSelectedLocation: (slug) => set({ selectedLocation: slug }),
-      selectedActivities: [],
-      toggleActivity: (id) =>
-        set((state) => ({
-          selectedActivities: state.selectedActivities.includes(id)
-            ? state.selectedActivities.filter((a) => a !== id)
-            : [...state.selectedActivities, id],
-        })),
+export const useAppStore = create<AppState>()((set) => ({
+  theme: "system" as ThemePreference,
+  setTheme: (theme: ThemePreference) => {
+    applyTheme(theme);
+    set({ theme });
+  },
+  toggleTheme: () =>
+    set((state) => {
+      const idx = THEME_CYCLE.indexOf(state.theme);
+      const next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
+      applyTheme(next);
+      return { theme: next };
     }),
-    {
-      name: "mukoko-weather-prefs",
-      onRehydrateStorage: () => (state) => {
-        if (state) applyTheme(state.theme);
-      },
-    },
-  ),
-);
+  selectedLocation: "harare",
+  setSelectedLocation: (slug) => set({ selectedLocation: slug }),
+  selectedActivities: [],
+  toggleActivity: (id) =>
+    set((state) => ({
+      selectedActivities: state.selectedActivities.includes(id)
+        ? state.selectedActivities.filter((a) => a !== id)
+        : [...state.selectedActivities, id],
+    })),
+}));

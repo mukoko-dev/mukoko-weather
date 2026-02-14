@@ -124,8 +124,6 @@ src/
     weather.ts              # Open-Meteo client, frost detection, seasons
     db.ts                   # MongoDB CRUD operations (+ API key storage)
     mongo.ts                # MongoDB client (connection-pooled)
-    weather-idb.ts          # IndexedDB on-device cache
-    use-weather-sync.ts     # Auto-refresh hook (60s interval)
     geolocation.ts          # Browser geolocation detection
     store.ts                # Zustand state (theme with system detection, location, activities)
     weather-icons.tsx       # SVG weather + activity icon components

@@ -1,5 +1,6 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { Area, CartesianGrid, XAxis, YAxis, Bar, Line, ComposedChart } from "recharts";
 import {
   ChartContainer,
@@ -67,7 +68,22 @@ const chartConfig = {
   },
 } satisfies ChartConfig;
 
+const subscribe = () => () => {};
+const getSnapshot = () => true;
+const getServerSnapshot = () => false;
+
 export function HourlyChart({ hourly }: Props) {
+  // Defer chart rendering to client-only to prevent hydration mismatch.
+  // prepareHourlyData uses new Date() which differs between server and client,
+  // producing different SVG output that React 19 cannot reconcile.
+  const hydrated = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+
+  if (!hydrated) {
+    return (
+      <div className="mt-4 mb-2 aspect-[16/5] w-full animate-pulse rounded bg-text-tertiary/10" />
+    );
+  }
+
   const data = prepareHourlyData(hourly);
   if (data.length < 2) return null;
 
