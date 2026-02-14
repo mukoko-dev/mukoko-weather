@@ -21,7 +21,7 @@ import {
   type ActivityCategory,
 } from "@/lib/activities";
 
-type Tab = "location" | "activities" | "settings";
+type Tab = "weather" | "settings";
 
 const POPULAR_SLUGS = [
   "harare", "bulawayo", "mutare", "gweru", "masvingo",
@@ -49,7 +49,7 @@ function getCategoryStyle(category: string) {
 
 export function MyWeatherModal() {
   const closeMyWeather = useAppStore((s) => s.closeMyWeather);
-  const [activeTab, setActiveTab] = useState<Tab>("location");
+  const [activeTab, setActiveTab] = useState<Tab>("weather");
   const overlayRef = useRef<HTMLDivElement>(null);
 
   // Close on Escape
@@ -99,15 +99,13 @@ export function MyWeatherModal() {
 
         {/* Tabs */}
         <div className="flex border-b border-border" role="tablist" aria-label="Preference sections">
-          <TabButton label="Location" tab="location" active={activeTab === "location"} onClick={() => setActiveTab("location")} />
-          <TabButton label="Activities" tab="activities" active={activeTab === "activities"} onClick={() => setActiveTab("activities")} />
+          <TabButton label="My Weather" tab="weather" active={activeTab === "weather"} onClick={() => setActiveTab("weather")} />
           <TabButton label="Settings" tab="settings" active={activeTab === "settings"} onClick={() => setActiveTab("settings")} />
         </div>
 
         {/* Tab content */}
         <div className="flex-1 overflow-y-auto">
-          {activeTab === "location" && <LocationTab />}
-          {activeTab === "activities" && <ActivitiesTab />}
+          {activeTab === "weather" && <WeatherTab />}
           {activeTab === "settings" && <SettingsTab />}
         </div>
       </div>
@@ -133,14 +131,18 @@ function TabButton({ label, tab, active, onClick }: { label: string; tab: string
   );
 }
 
-// ── Location Tab ────────────────────────────────────────────────────────────
+// ── Unified Weather Tab (Location + Activities) ─────────────────────────────
 
-function LocationTab() {
+function WeatherTab() {
   const closeMyWeather = useAppStore((s) => s.closeMyWeather);
+  const selectedActivities = useAppStore((s) => s.selectedActivities);
+  const toggleActivity = useAppStore((s) => s.toggleActivity);
   const [query, setQuery] = useState("");
   const [activeTag, setActiveTag] = useState<LocationTag | null>(null);
   const [geoState, setGeoState] = useState<GeoResult | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<ActivityCategory | "all">("all");
+  const [activityQuery, setActivityQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -178,10 +180,24 @@ function LocationTab() {
     router.push(`/${slug}`);
   };
 
+  // Filtered activities
+  const filteredActivities = useMemo(() => {
+    let items = activityQuery ? searchActivities(activityQuery) : ACTIVITIES;
+    if (activeCategory !== "all") {
+      items = items.filter((a) => a.category === activeCategory);
+    }
+    return items;
+  }, [activityQuery, activeCategory]);
+
   return (
-    <div id="panel-location" role="tabpanel">
+    <div id="panel-weather" role="tabpanel">
+      {/* ── Location Section ─────────────────────────────────────── */}
+      <div className="px-4 pt-3 pb-1">
+        <h4 className="text-sm font-semibold text-text-primary">Location</h4>
+      </div>
+
       {/* Search input */}
-      <div className="border-b border-text-tertiary/10 p-3">
+      <div className="border-b border-text-tertiary/10 p-3 pt-2">
         <div className="relative">
           <input
             ref={inputRef}
@@ -254,7 +270,7 @@ function LocationTab() {
       )}
 
       {/* Location list */}
-      <ul role="listbox" aria-label="Available locations" className="max-h-64 overflow-y-auto p-2">
+      <ul role="listbox" aria-label="Available locations" className="max-h-48 overflow-y-auto p-2">
         {displayedLocations.length === 0 && (
           <li className="px-3 py-4 text-center text-sm text-text-tertiary">
             No locations found for &quot;{query}&quot;
@@ -294,41 +310,30 @@ function LocationTab() {
         ))}
       </ul>
 
-      {/* Total count footer */}
-      <div className="border-t border-text-tertiary/10 px-3 py-2">
-        <p className="text-sm text-text-tertiary">
+      {/* Location count */}
+      <div className="px-3 py-2">
+        <p className="text-xs text-text-tertiary">
           {LOCATIONS.length} locations across Zimbabwe
         </p>
       </div>
-    </div>
-  );
-}
 
-// ── Activities Tab ──────────────────────────────────────────────────────────
+      {/* ── Activities Section ───────────────────────────────────── */}
+      <div className="border-t border-border px-4 pt-3 pb-1">
+        <h4 className="text-sm font-semibold text-text-primary">
+          Activities
+          {selectedActivities.length > 0 && (
+            <span className="ml-2 text-xs font-normal text-text-tertiary">
+              {selectedActivities.length} selected
+            </span>
+          )}
+        </h4>
+        <p className="mt-0.5 text-xs text-text-tertiary">
+          Select activities for personalised weather insights
+        </p>
+      </div>
 
-function ActivitiesTab() {
-  const selectedActivities = useAppStore((s) => s.selectedActivities);
-  const toggleActivity = useAppStore((s) => s.toggleActivity);
-  const [activeCategory, setActiveCategory] = useState<ActivityCategory | "all">("all");
-  const [query, setQuery] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  const filteredActivities = useMemo(() => {
-    let items = query ? searchActivities(query) : ACTIVITIES;
-    if (activeCategory !== "all") {
-      items = items.filter((a) => a.category === activeCategory);
-    }
-    return items;
-  }, [query, activeCategory]);
-
-  return (
-    <div id="panel-activities" role="tabpanel">
-      {/* Category tabs */}
-      <div className="flex gap-2 overflow-x-auto px-4 pt-3 pb-2 scrollbar-hide" role="tablist" aria-label="Activity categories">
+      {/* Category filter pills */}
+      <div className="flex gap-2 overflow-x-auto px-4 pt-2 pb-2 scrollbar-hide" role="group" aria-label="Activity categories">
         <CategoryTab
           label="All"
           categoryId="all"
@@ -346,30 +351,20 @@ function ActivitiesTab() {
         ))}
       </div>
 
-      {/* Search */}
+      {/* Activity search */}
       <div className="px-4 pb-2">
         <div className="flex items-center gap-2 rounded-[var(--radius-input)] bg-surface-base px-3 py-2">
           <SearchIcon size={16} className="shrink-0 text-text-tertiary" />
           <input
-            ref={inputRef}
             type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={activityQuery}
+            onChange={(e) => setActivityQuery(e.target.value)}
             placeholder="Search activities..."
             className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none"
             aria-label="Search activities"
           />
         </div>
       </div>
-
-      {/* Selected count */}
-      {selectedActivities.length > 0 && (
-        <div className="px-4 pb-2">
-          <p className="text-sm text-text-secondary">
-            {selectedActivities.length} selected
-          </p>
-        </div>
-      )}
 
       {/* Activity grid */}
       <div className="px-4 pb-4">
@@ -411,7 +406,7 @@ function ActivitiesTab() {
 
         {filteredActivities.length === 0 && (
           <p className="py-8 text-center text-sm text-text-tertiary">
-            No activities found for &ldquo;{query}&rdquo;
+            No activities found for &ldquo;{activityQuery}&rdquo;
           </p>
         )}
       </div>
@@ -434,8 +429,7 @@ function CategoryTab({
 
   return (
     <button
-      role="tab"
-      aria-selected={active}
+      aria-pressed={active}
       onClick={onClick}
       className={`shrink-0 rounded-[var(--radius-badge)] px-3 py-1.5 text-sm font-medium transition-colors ${
         active
