@@ -9,6 +9,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
+import { LazySection } from "@/components/weather/LazySection";
 import { LOCATIONS, searchLocations, type ZimbabweLocation } from "@/lib/locations";
 import { weatherCodeToInfo, windDirection, uvLevel } from "@/lib/weather";
 import type { WeatherHistoryDoc } from "@/lib/db";
@@ -417,6 +418,7 @@ export function HistoryDashboard() {
           </section>
 
           {/* ── 1. Temperature chart (actual + feels-like) ─────────────── */}
+          <LazySection>
           <ChartErrorBoundary name="temperature trend">
           <section aria-labelledby="history-temp-chart">
             <h2 id="history-temp-chart" className="text-lg font-semibold text-text-primary font-heading">
@@ -467,8 +469,10 @@ export function HistoryDashboard() {
             </div>
           </section>
           </ChartErrorBoundary>
+          </LazySection>
 
           {/* ── 2. Precipitation + probability ─────────────────────────── */}
+          <LazySection>
           <ChartErrorBoundary name="precipitation">
           <section aria-labelledby="history-rain-chart">
             <h2 id="history-rain-chart" className="text-lg font-semibold text-text-primary font-heading">
@@ -500,8 +504,10 @@ export function HistoryDashboard() {
             </div>
           </section>
           </ChartErrorBoundary>
+          </LazySection>
 
           {/* ── 3. UV Index & Cloud Cover ──────────────────────────────── */}
+          <LazySection>
           <ChartErrorBoundary name="UV and cloud cover">
           <section aria-labelledby="history-uv-cloud-chart">
             <h2 id="history-uv-cloud-chart" className="text-lg font-semibold text-text-primary font-heading">
@@ -539,8 +545,10 @@ export function HistoryDashboard() {
             </div>
           </section>
           </ChartErrorBoundary>
+          </LazySection>
 
           {/* ── 4. Wind speed & gusts ─────────────────────────────────── */}
+          <LazySection>
           <ChartErrorBoundary name="wind">
           <section aria-labelledby="history-wind-chart">
             <h2 id="history-wind-chart" className="text-lg font-semibold text-text-primary font-heading">
@@ -574,8 +582,10 @@ export function HistoryDashboard() {
             </div>
           </section>
           </ChartErrorBoundary>
+          </LazySection>
 
           {/* ── 5. Barometric pressure ────────────────────────────────── */}
+          <LazySection>
           <ChartErrorBoundary name="pressure">
           <section aria-labelledby="history-pressure-chart">
             <h2 id="history-pressure-chart" className="text-lg font-semibold text-text-primary font-heading">
@@ -601,8 +611,10 @@ export function HistoryDashboard() {
             </div>
           </section>
           </ChartErrorBoundary>
+          </LazySection>
 
           {/* ── 6. Humidity ───────────────────────────────────────────── */}
+          <LazySection>
           <ChartErrorBoundary name="humidity">
           <section aria-labelledby="history-humidity-chart">
             <h2 id="history-humidity-chart" className="text-lg font-semibold text-text-primary font-heading">
@@ -634,9 +646,11 @@ export function HistoryDashboard() {
             </div>
           </section>
           </ChartErrorBoundary>
+          </LazySection>
 
           {/* ── 7. Daylight hours ─────────────────────────────────────── */}
           {records.some((r) => r.daylightHours > 0) && (
+            <LazySection>
             <ChartErrorBoundary name="daylight hours">
             <section aria-labelledby="history-daylight-chart">
               <h2 id="history-daylight-chart" className="text-lg font-semibold text-text-primary font-heading">
@@ -665,9 +679,11 @@ export function HistoryDashboard() {
               </div>
             </section>
             </ChartErrorBoundary>
+            </LazySection>
           )}
 
           {/* ── 8. Full data table ────────────────────────────────────── */}
+          <LazySection>
           <section aria-labelledby="history-table">
             <h2 id="history-table" className="text-lg font-semibold text-text-primary font-heading">
               Daily records
@@ -721,6 +737,7 @@ export function HistoryDashboard() {
               </table>
             </div>
           </section>
+          </LazySection>
         </>
       )}
     </div>

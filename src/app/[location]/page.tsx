@@ -323,14 +323,20 @@ export default async function LocationPage({
               locationName={location.name}
               daily={weather.daily}
             />
-            {!usingFallback && <AISummary weather={weather} location={location} />}
-            <ActivityInsights insights={weather.insights} />
+            <LazySection>
+              {!usingFallback && <AISummary weather={weather} location={location} />}
+            </LazySection>
+            <LazySection>
+              <ActivityInsights insights={weather.insights} />
+            </LazySection>
             <LazySection>
               <ChartErrorBoundary name="hourly forecast">
                 <HourlyForecast hourly={weather.hourly} />
               </ChartErrorBoundary>
             </LazySection>
-            <AtmosphericSummary current={weather.current} />
+            <LazySection>
+              <AtmosphericSummary current={weather.current} />
+            </LazySection>
           </div>
 
           {/* Right column: Daily + Sun + Info */}
@@ -340,38 +346,42 @@ export default async function LocationPage({
                 <DailyForecast daily={weather.daily} />
               </ChartErrorBoundary>
             </LazySection>
-            <SunTimes daily={weather.daily} />
+            <LazySection>
+              <SunTimes daily={weather.daily} />
+            </LazySection>
 
             {/* Location info card */}
-            <section aria-labelledby={`about-${location.slug}`}>
-              <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
-                <h2 id={`about-${location.slug}`} className="text-lg font-semibold text-text-primary font-heading">
-                  About {location.name}
-                </h2>
-                <dl className="mt-4 space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-text-secondary">Province</dt>
-                    <dd className="font-medium text-text-primary">{location.province}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-text-secondary">Elevation</dt>
-                    <dd className="font-medium text-text-primary">{location.elevation}m</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-text-secondary">Coordinates</dt>
-                    <dd className="font-mono text-xs text-text-primary">
-                      {location.lat.toFixed(2)}, {location.lon.toFixed(2)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-text-secondary">Season</dt>
-                    <dd className="font-medium text-text-primary">
-                      {season.shona} ({season.name})
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-            </section>
+            <LazySection>
+              <section aria-labelledby={`about-${location.slug}`}>
+                <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
+                  <h2 id={`about-${location.slug}`} className="text-lg font-semibold text-text-primary font-heading">
+                    About {location.name}
+                  </h2>
+                  <dl className="mt-4 space-y-3 text-sm">
+                    <div className="flex justify-between">
+                      <dt className="text-text-secondary">Province</dt>
+                      <dd className="font-medium text-text-primary">{location.province}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-text-secondary">Elevation</dt>
+                      <dd className="font-medium text-text-primary">{location.elevation}m</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-text-secondary">Coordinates</dt>
+                      <dd className="font-mono text-xs text-text-primary">
+                        {location.lat.toFixed(2)}, {location.lon.toFixed(2)}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-text-secondary">Season</dt>
+                      <dd className="font-medium text-text-primary">
+                        {season.shona} ({season.name})
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              </section>
+            </LazySection>
           </div>
         </div>
       </main>
