@@ -11,7 +11,6 @@ import { DailyForecast } from "@/components/weather/DailyForecast";
 import { SunTimes } from "@/components/weather/SunTimes";
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { AISummary } from "@/components/weather/AISummary";
-import { ActivitySelector } from "@/components/weather/ActivitySelector";
 import { ActivityInsights } from "@/components/weather/ActivityInsights";
 import { LazyAtmosphericDetails } from "@/components/weather/LazyAtmosphericDetails";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
@@ -274,7 +273,7 @@ export default async function LocationPage({
           usingFallback ? [breadcrumbSchema] : [pageSchema, breadcrumbSchema, faqSchema]
         ) }}
       />
-      <Header currentLocation={slug} />
+      <Header />
 
       {/* Breadcrumb navigation for SEO and accessibility */}
       <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:pl-6 md:pl-8">
@@ -339,7 +338,6 @@ export default async function LocationPage({
               <DailyForecast daily={weather.daily} />
             </ChartErrorBoundary>
             <SunTimes daily={weather.daily} />
-            <ActivitySelector />
 
             {/* Location info card */}
             <section aria-labelledby={`about-${location.slug}`}>
