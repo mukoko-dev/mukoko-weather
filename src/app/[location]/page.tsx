@@ -1,22 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getLocationBySlug } from "@/lib/locations";
-import { checkFrostRisk, getZimbabweSeason, weatherCodeToInfo } from "@/lib/weather";
+import { checkFrostRisk, createFallbackWeather, weatherCodeToInfo } from "@/lib/weather";
 import { getWeatherForLocation } from "@/lib/db";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
-import { CurrentConditions } from "@/components/weather/CurrentConditions";
-import { HourlyForecast } from "@/components/weather/HourlyForecast";
-import { DailyForecast } from "@/components/weather/DailyForecast";
-import { SunTimes } from "@/components/weather/SunTimes";
-import { SeasonBadge } from "@/components/weather/SeasonBadge";
-import { AISummary } from "@/components/weather/AISummary";
-import { ActivityInsights } from "@/components/weather/ActivityInsights";
-import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";
-import { LazySection } from "@/components/weather/LazySection";
-import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
-import { FrostAlertBanner } from "./FrostAlertBanner";
-import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
+import { WeatherDashboard } from "./WeatherDashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -77,23 +64,32 @@ export default async function LocationPage({
   const location = getLocationBySlug(slug);
   if (!location) notFound();
 
-  // Fetch weather through MongoDB cache → Tomorrow.io → Open-Meteo → seasonal fallback.
-  // MongoDB cache ensures external APIs are called at most once per 15-min TTL window
-  // regardless of traffic volume.
-  const { data: weather, source: weatherSource } = await getWeatherForLocation(
-    location.slug,
-    location.lat,
-    location.lon,
-    location.elevation,
-  );
+  // Fetch weather — double-caught so the page shell ALWAYS renders.
+  // getWeatherForLocation already has a 4-stage fallback (cache -> Tomorrow.io
+  // -> Open-Meteo -> seasonal estimates), but we catch any unexpected throw
+  // here as a safety net so the server component never crashes.
+  let weather;
+  let weatherSource: string;
+  try {
+    const result = await getWeatherForLocation(
+      location.slug,
+      location.lat,
+      location.lon,
+      location.elevation,
+    );
+    weather = result.data;
+    weatherSource = result.source;
+  } catch {
+    weather = createFallbackWeather(location.lat, location.lon, location.elevation);
+    weatherSource = "fallback";
+  }
+
   const usingFallback = weatherSource === "fallback";
   const frostAlert = usingFallback ? null : checkFrostRisk(weather.hourly);
-  const season = getZimbabweSeason();
   const conditionInfo = weatherCodeToInfo(weather.current.weather_code);
-
   const now = new Date().toISOString();
 
-  // Schema.org structured data — WebPage + Place + weather observations
+  // ── Schema.org structured data (SEO — server only) ──────────────────────
   const pageSchema = {
     "@context": "https://schema.org",
     "@type": "WebPage",
@@ -138,102 +134,30 @@ export default async function LocationPage({
       observationDate: now,
       observationAbout: { "@id": `${BASE_URL}/${location.slug}#place` },
       measuredProperty: [
-        {
-          "@type": "PropertyValue",
-          name: "temperature",
-          value: weather.current.temperature_2m,
-          unitCode: "CEL",
-          unitText: "°C",
-        },
-        {
-          "@type": "PropertyValue",
-          name: "apparentTemperature",
-          value: weather.current.apparent_temperature,
-          unitCode: "CEL",
-          unitText: "°C",
-        },
-        {
-          "@type": "PropertyValue",
-          name: "relativeHumidity",
-          value: weather.current.relative_humidity_2m,
-          unitCode: "P1",
-          unitText: "%",
-        },
-        {
-          "@type": "PropertyValue",
-          name: "windSpeed",
-          value: weather.current.wind_speed_10m,
-          unitCode: "KMH",
-          unitText: "km/h",
-        },
-        {
-          "@type": "PropertyValue",
-          name: "windDirection",
-          value: weather.current.wind_direction_10m,
-          unitCode: "DD",
-          unitText: "°",
-        },
-        {
-          "@type": "PropertyValue",
-          name: "surfacePressure",
-          value: weather.current.surface_pressure,
-          unitCode: "HPA",
-          unitText: "hPa",
-        },
-        {
-          "@type": "PropertyValue",
-          name: "uvIndex",
-          value: weather.current.uv_index,
-        },
-        {
-          "@type": "PropertyValue",
-          name: "cloudCover",
-          value: weather.current.cloud_cover,
-          unitCode: "P1",
-          unitText: "%",
-        },
-        {
-          "@type": "PropertyValue",
-          name: "precipitation",
-          value: weather.current.precipitation,
-          unitCode: "MMT",
-          unitText: "mm",
-        },
-        {
-          "@type": "PropertyValue",
-          name: "weatherCondition",
-          value: conditionInfo.label,
-        },
+        { "@type": "PropertyValue", name: "temperature", value: weather.current.temperature_2m, unitCode: "CEL", unitText: "\u00b0C" },
+        { "@type": "PropertyValue", name: "apparentTemperature", value: weather.current.apparent_temperature, unitCode: "CEL", unitText: "\u00b0C" },
+        { "@type": "PropertyValue", name: "relativeHumidity", value: weather.current.relative_humidity_2m, unitCode: "P1", unitText: "%" },
+        { "@type": "PropertyValue", name: "windSpeed", value: weather.current.wind_speed_10m, unitCode: "KMH", unitText: "km/h" },
+        { "@type": "PropertyValue", name: "windDirection", value: weather.current.wind_direction_10m, unitCode: "DD", unitText: "\u00b0" },
+        { "@type": "PropertyValue", name: "surfacePressure", value: weather.current.surface_pressure, unitCode: "HPA", unitText: "hPa" },
+        { "@type": "PropertyValue", name: "uvIndex", value: weather.current.uv_index },
+        { "@type": "PropertyValue", name: "cloudCover", value: weather.current.cloud_cover, unitCode: "P1", unitText: "%" },
+        { "@type": "PropertyValue", name: "precipitation", value: weather.current.precipitation, unitCode: "MMT", unitText: "mm" },
+        { "@type": "PropertyValue", name: "weatherCondition", value: conditionInfo.label },
       ],
     },
   };
 
-  // BreadcrumbList schema for Google breadcrumbs
   const breadcrumbSchema = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      {
-        "@type": "ListItem",
-        position: 1,
-        name: "mukoko weather",
-        item: BASE_URL,
-      },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: location.province,
-      },
-      {
-        "@type": "ListItem",
-        position: 3,
-        name: `${location.name} Weather`,
-        item: `${BASE_URL}/${location.slug}`,
-      },
+      { "@type": "ListItem", position: 1, name: "mukoko weather", item: BASE_URL },
+      { "@type": "ListItem", position: 2, name: location.province },
+      { "@type": "ListItem", position: 3, name: `${location.name} Weather`, item: `${BASE_URL}/${location.slug}` },
     ],
   };
 
-  // FAQPage schema for rich snippets and AIO
   const faqSchema = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
@@ -243,7 +167,7 @@ export default async function LocationPage({
         name: `What is the weather like in ${location.name} today?`,
         acceptedAnswer: {
           "@type": "Answer",
-          text: `Currently ${location.name} is ${Math.round(weather.current.temperature_2m)}°C with ${conditionInfo.label.toLowerCase()}. Humidity is ${weather.current.relative_humidity_2m}% with winds at ${Math.round(weather.current.wind_speed_10m)} km/h.`,
+          text: `Currently ${location.name} is ${Math.round(weather.current.temperature_2m)}\u00b0C with ${conditionInfo.label.toLowerCase()}. Humidity is ${weather.current.relative_humidity_2m}% with winds at ${Math.round(weather.current.wind_speed_10m)} km/h.`,
         },
       },
       {
@@ -251,7 +175,7 @@ export default async function LocationPage({
         name: `What is the 7-day forecast for ${location.name}, Zimbabwe?`,
         acceptedAnswer: {
           "@type": "Answer",
-          text: `The 7-day forecast for ${location.name} shows highs of ${Math.round(Math.max(...weather.daily.temperature_2m_max))}°C and lows of ${Math.round(Math.min(...weather.daily.temperature_2m_min))}°C. Check mukoko weather for detailed daily and hourly forecasts.`,
+          text: `The 7-day forecast for ${location.name} shows highs of ${Math.round(Math.max(...weather.daily.temperature_2m_max))}\u00b0C and lows of ${Math.round(Math.min(...weather.daily.temperature_2m_min))}\u00b0C. Check mukoko weather for detailed daily and hourly forecasts.`,
         },
       },
       {
@@ -267,126 +191,21 @@ export default async function LocationPage({
 
   return (
     <>
-      {/* Omit weather observation schema when using fallback seasonal estimates */}
+      {/* SEO schemas — server rendered only */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(
           usingFallback ? [breadcrumbSchema] : [pageSchema, breadcrumbSchema, faqSchema]
         ) }}
       />
-      <Header />
 
-      {/* Breadcrumb navigation for SEO and accessibility */}
-      <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:pl-6 md:pl-8">
-        <ol className="flex items-center gap-1 text-xs text-text-tertiary">
-          <li>
-            <a href={BASE_URL} className="hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded">
-              Home
-            </a>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li>
-            <span className="text-text-secondary">{location.province}</span>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li aria-current="page">
-            <span className="font-medium text-text-primary">{location.name}</span>
-          </li>
-        </ol>
-      </nav>
-
-      <main
-        id="main-content"
-        className="mx-auto max-w-5xl overflow-hidden px-4 py-6 sm:pl-6 md:pl-8"
-        aria-label={`Weather dashboard for ${location.name}`}
-      >
-        {/* H1 for SEO — visually integrated but semantically correct */}
-        <h1 className="sr-only">{location.name} Weather Forecast — Current Conditions and 7-Day Outlook</h1>
-
-        {/* Season indicator */}
-        <div className="mb-4">
-          <SeasonBadge />
-        </div>
-
-        {/* Weather unavailable banner — shown when all providers failed */}
-        {usingFallback && <WeatherUnavailableBanner />}
-
-        {/* Frost alert banner */}
-        {frostAlert && <FrostAlertBanner alert={frostAlert} />}
-
-        {/* Main grid */}
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Left column: Current + AI Summary */}
-          <div className="min-w-0 space-y-6 lg:col-span-2">
-            <CurrentConditions
-              current={weather.current}
-              locationName={location.name}
-              daily={weather.daily}
-            />
-            <LazySection>
-              {!usingFallback && <AISummary weather={weather} location={location} />}
-            </LazySection>
-            <LazySection>
-              <ActivityInsights insights={weather.insights} />
-            </LazySection>
-            <LazySection>
-              <ChartErrorBoundary name="hourly forecast">
-                <HourlyForecast hourly={weather.hourly} />
-              </ChartErrorBoundary>
-            </LazySection>
-            <LazySection>
-              <AtmosphericSummary current={weather.current} />
-            </LazySection>
-          </div>
-
-          {/* Right column: Daily + Sun + Info */}
-          <div className="min-w-0 space-y-6">
-            <LazySection>
-              <ChartErrorBoundary name="daily forecast">
-                <DailyForecast daily={weather.daily} />
-              </ChartErrorBoundary>
-            </LazySection>
-            <LazySection>
-              <SunTimes daily={weather.daily} />
-            </LazySection>
-
-            {/* Location info card */}
-            <LazySection>
-              <section aria-labelledby={`about-${location.slug}`}>
-                <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
-                  <h2 id={`about-${location.slug}`} className="text-lg font-semibold text-text-primary font-heading">
-                    About {location.name}
-                  </h2>
-                  <dl className="mt-4 space-y-3 text-sm">
-                    <div className="flex justify-between">
-                      <dt className="text-text-secondary">Province</dt>
-                      <dd className="font-medium text-text-primary">{location.province}</dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-text-secondary">Elevation</dt>
-                      <dd className="font-medium text-text-primary">{location.elevation}m</dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-text-secondary">Coordinates</dt>
-                      <dd className="font-mono text-xs text-text-primary">
-                        {location.lat.toFixed(2)}, {location.lon.toFixed(2)}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-text-secondary">Season</dt>
-                      <dd className="font-medium text-text-primary">
-                        {season.shona} ({season.name})
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-              </section>
-            </LazySection>
-          </div>
-        </div>
-      </main>
-
-      <Footer />
+      {/* All weather UI lives in the client component with per-section error boundaries */}
+      <WeatherDashboard
+        weather={weather}
+        location={location}
+        usingFallback={usingFallback}
+        frostAlert={frostAlert}
+      />
     </>
   );
 }
