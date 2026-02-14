@@ -53,6 +53,7 @@ function getCategoryStyle(category: string) {
 export function MyWeatherModal() {
   const closeMyWeather = useAppStore((s) => s.closeMyWeather);
   const myWeatherOpen = useAppStore((s) => s.myWeatherOpen);
+  const completeOnboarding = useAppStore((s) => s.completeOnboarding);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -61,6 +62,7 @@ export function MyWeatherModal() {
   const [pendingSlug, setPendingSlug] = useState(currentSlug);
 
   const handleDone = () => {
+    completeOnboarding();
     closeMyWeather();
     if (pendingSlug !== currentSlug) {
       router.push(`/${pendingSlug}`);

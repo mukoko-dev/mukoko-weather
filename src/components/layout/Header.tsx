@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import Link from "next/link";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
 import { MapPinIcon, ClockIcon, SearchIcon } from "@/lib/weather-icons";
@@ -19,6 +19,20 @@ const MyWeatherModal = lazy(() =>
 export function Header() {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
   const myWeatherOpen = useAppStore((s) => s.myWeatherOpen);
+  const hasOnboarded = useAppStore((s) => s.hasOnboarded);
+  const onboardingChecked = useRef(false);
+
+  // Auto-open the My Weather modal for first-time visitors so they can
+  // pick their location and activities. Runs once after Zustand rehydrates.
+  useEffect(() => {
+    if (onboardingChecked.current) return;
+    onboardingChecked.current = true;
+    if (!hasOnboarded) {
+      // Small delay to let the page paint first
+      const timer = setTimeout(openMyWeather, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [hasOnboarded, openMyWeather]);
 
   return (
     <>

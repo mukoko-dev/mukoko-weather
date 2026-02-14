@@ -28,6 +28,8 @@ interface AppState {
   myWeatherOpen: boolean;
   openMyWeather: () => void;
   closeMyWeather: () => void;
+  hasOnboarded: boolean;
+  completeOnboarding: () => void;
 }
 
 const THEME_CYCLE: ThemePreference[] = ["light", "dark", "system"];
@@ -59,12 +61,15 @@ export const useAppStore = create<AppState>()(
       myWeatherOpen: false,
       openMyWeather: () => set({ myWeatherOpen: true }),
       closeMyWeather: () => set({ myWeatherOpen: false }),
+      hasOnboarded: false,
+      completeOnboarding: () => set({ hasOnboarded: true }),
     }),
     {
       name: "mukoko-weather-prefs",
       partialize: (state) => ({
         theme: state.theme,
         selectedActivities: state.selectedActivities,
+        hasOnboarded: state.hasOnboarded,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) applyTheme(state.theme);
