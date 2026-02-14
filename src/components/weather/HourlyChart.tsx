@@ -73,12 +73,14 @@ const getSnapshot = () => true;
 const getServerSnapshot = () => false;
 
 export function HourlyChart({ hourly }: Props) {
+  console.log("[HourlyChart] render");
   // Defer chart rendering to client-only to prevent hydration mismatch.
   // prepareHourlyData uses new Date() which differs between server and client,
   // producing different SVG output that React 19 cannot reconcile.
   const hydrated = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   if (!hydrated) {
+    console.log("[HourlyChart] not hydrated yet, showing placeholder");
     return (
       <div className="mt-4 mb-2 aspect-[16/5] w-full animate-pulse rounded bg-text-tertiary/10" />
     );

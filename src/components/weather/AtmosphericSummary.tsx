@@ -61,6 +61,7 @@ function MetricCard({ icon, label, value, context, contextColor = "text-text-ter
 }
 
 export function AtmosphericSummary({ current }: Props) {
+  console.log("[AtmosphericSummary] render");
   const uv = uvLevel(current.uv_index);
   const wind = Math.round(current.wind_speed_10m);
   const gusts = Math.round(current.wind_gusts_10m);

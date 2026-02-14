@@ -21,7 +21,9 @@ export async function GET(request: NextRequest) {
   const locationSlug = nearestLocation?.slug ?? `${lat.toFixed(2)}_${lon.toFixed(2)}`;
   const elevation = nearestLocation?.elevation ?? 1200;
 
+  console.log("[Weather API] fetching for", locationSlug, "lat:", lat, "lon:", lon);
   const { data, source } = await getWeatherForLocation(locationSlug, lat, lon, elevation);
+  console.log("[Weather API]", locationSlug, "source:", source, "temp:", data.current?.temperature_2m);
 
   return NextResponse.json(data, {
     headers: {

@@ -7,6 +7,7 @@ interface Props {
 }
 
 export function HourlyForecast({ hourly }: Props) {
+  console.log("[HourlyForecast] render — hours:", hourly.time.length);
   // Show the next 24 hours
   const now = new Date();
   const currentHour = now.getHours();

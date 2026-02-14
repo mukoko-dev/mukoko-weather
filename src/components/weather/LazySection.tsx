@@ -8,6 +8,8 @@ interface LazySectionProps {
   fallback?: ReactNode;
   /** IntersectionObserver rootMargin — how far before the viewport to start loading */
   rootMargin?: string;
+  /** Debug label for console logging */
+  label?: string;
 }
 
 const DEFAULT_FALLBACK = (
@@ -22,7 +24,7 @@ const DEFAULT_FALLBACK = (
  * children. This prevents all chart components from mounting simultaneously,
  * which causes OOM tab-kills on mobile devices.
  */
-export function LazySection({ children, fallback = DEFAULT_FALLBACK, rootMargin = "300px" }: LazySectionProps) {
+export function LazySection({ children, fallback = DEFAULT_FALLBACK, rootMargin = "300px", label = "unknown" }: LazySectionProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(
     () => typeof window !== "undefined" && typeof IntersectionObserver === "undefined",
@@ -31,11 +33,16 @@ export function LazySection({ children, fallback = DEFAULT_FALLBACK, rootMargin 
   useEffect(() => {
     if (visible) return;
     const el = sentinelRef.current;
-    if (!el) return;
+    if (!el) {
+      console.warn("[LazySection]", label, "— no sentinel ref");
+      return;
+    }
 
+    console.log("[LazySection]", label, "— observing");
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
+          console.log("[LazySection]", label, "— VISIBLE, mounting children");
           setVisible(true);
           observer.disconnect();
         }
@@ -45,7 +52,7 @@ export function LazySection({ children, fallback = DEFAULT_FALLBACK, rootMargin 
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, [visible, rootMargin]);
+  }, [visible, rootMargin, label]);
 
   if (!visible) {
     return <div ref={sentinelRef}>{fallback}</div>;

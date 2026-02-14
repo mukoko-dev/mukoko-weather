@@ -44,6 +44,7 @@ export function WeatherDashboard({
   usingFallback,
   frostAlert,
 }: WeatherDashboardProps) {
+  console.log("[WeatherDashboard] render for", location.name, "usingFallback:", usingFallback, "frostAlert:", !!frostAlert);
   const season = getZimbabweSeason();
 
   return (
@@ -99,28 +100,28 @@ export function WeatherDashboard({
                 daily={weather.daily}
               />
             </ChartErrorBoundary>
-            <LazySection>
+            <LazySection label="ai-summary">
               <ChartErrorBoundary name="AI summary">
                 <Suspense fallback={<SectionSkeleton />}>
                   {!usingFallback && <AISummary weather={weather} location={location} />}
                 </Suspense>
               </ChartErrorBoundary>
             </LazySection>
-            <LazySection>
+            <LazySection label="activity-insights">
               <ChartErrorBoundary name="activity insights">
                 <Suspense fallback={<SectionSkeleton />}>
                   <ActivityInsights insights={weather.insights} />
                 </Suspense>
               </ChartErrorBoundary>
             </LazySection>
-            <LazySection>
+            <LazySection label="hourly-forecast">
               <ChartErrorBoundary name="hourly forecast">
                 <Suspense fallback={<SectionSkeleton />}>
                   <HourlyForecast hourly={weather.hourly} />
                 </Suspense>
               </ChartErrorBoundary>
             </LazySection>
-            <LazySection>
+            <LazySection label="atmospheric-summary">
               <ChartErrorBoundary name="atmospheric conditions">
                 <Suspense fallback={<SectionSkeleton />}>
                   <AtmosphericSummary current={weather.current} />
@@ -131,14 +132,14 @@ export function WeatherDashboard({
 
           {/* Right column: Daily + Sun + Info */}
           <div className="min-w-0 space-y-6">
-            <LazySection>
+            <LazySection label="daily-forecast">
               <ChartErrorBoundary name="daily forecast">
                 <Suspense fallback={<SectionSkeleton />}>
                   <DailyForecast daily={weather.daily} />
                 </Suspense>
               </ChartErrorBoundary>
             </LazySection>
-            <LazySection>
+            <LazySection label="sun-times">
               <ChartErrorBoundary name="sun times">
                 <Suspense fallback={<SectionSkeleton />}>
                   <SunTimes daily={weather.daily} />
@@ -147,7 +148,7 @@ export function WeatherDashboard({
             </LazySection>
 
             {/* Location info card */}
-            <LazySection>
+            <LazySection label="location-info">
               <section aria-labelledby={`about-${location.slug}`}>
                 <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
                   <h2 id={`about-${location.slug}`} className="text-lg font-semibold text-text-primary font-heading">

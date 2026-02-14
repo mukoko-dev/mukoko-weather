@@ -19,6 +19,7 @@ function tempBarGradient(lowPct: number, highPct: number) {
 }
 
 export function DailyForecast({ daily }: Props) {
+  console.log("[DailyForecast] render — days:", daily.time.length);
   // Calculate the absolute temp range across all 7 days for consistent bar scaling
   const allHighs = daily.temperature_2m_max.map(Math.round);
   const allLows = daily.temperature_2m_min.map(Math.round);
