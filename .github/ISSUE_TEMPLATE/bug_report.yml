@@ -1,0 +1,101 @@
+name: Bug Report
+description: Report a bug with mukoko weather
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Location affected
+      description: Which Zimbabwe location(s) does this bug affect?
+      placeholder: e.g., Harare, Bulawayo, all locations
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear description of what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce this issue?
+      value: |
+        1. Go to '...'
+        2. Click on '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What you expected to happen.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: page
+    attributes:
+      label: Page / route affected
+      description: Which page does this bug occur on?
+      options:
+        - Location page (/harare)
+        - Atmosphere page (/harare/atmosphere)
+        - Forecast page (/harare/forecast)
+        - History page (/history)
+        - About page (/about)
+        - Help page (/help)
+        - Embed widget (/embed)
+        - My Weather modal
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: theme
+    attributes:
+      label: Theme mode
+      description: Which theme were you using?
+      options:
+        - Light
+        - Dark
+        - System (auto)
+        - Not sure
+    validations:
+      required: false
+
+  - type: textarea
+    id: device
+    attributes:
+      label: Device information
+      description: Tell us about your device and browser.
+      value: |
+        - Device: [e.g., Samsung Galaxy A14, iPhone 13, Desktop PC]
+        - OS: [e.g., Android 14, iOS 17, Windows 11]
+        - Browser: [e.g., Chrome 120, Safari 17, Samsung Internet]
+        - Screen size: [e.g., mobile, tablet, desktop]
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots to help explain the problem.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Any other details (network conditions, error messages in console, etc.)
+    validations:
+      required: false

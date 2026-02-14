@@ -1,0 +1,77 @@
+name: Feature Request
+description: Suggest a feature for mukoko weather
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: checkboxes
+    id: category
+    attributes:
+      label: Category
+      description: What area does this feature relate to? Select all that apply.
+      options:
+        - label: Weather data / forecasts
+        - label: Locations (new location or improved data)
+        - label: AI summaries (Shamwari)
+        - label: Farming / agriculture
+        - label: Mining / industry
+        - label: Travel / tourism
+        - label: Activity insights
+        - label: Atmospheric details
+        - label: Historical data
+        - label: Accessibility
+        - label: Mobile experience
+        - label: Performance
+        - label: Embeddable widget
+        - label: Theming / design
+        - label: Other
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem does this feature solve? Who benefits from it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe the feature you'd like. Be as specific as possible.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: page
+    attributes:
+      label: Suggested page / route
+      description: Where should this feature live?
+      options:
+        - Location page (/[location])
+        - Atmosphere sub-page (/[location]/atmosphere)
+        - Forecast sub-page (/[location]/forecast)
+        - New sub-page (/[location]/...)
+        - History page (/history)
+        - My Weather modal
+        - Embed widget
+        - New standalone page
+        - API endpoint
+        - Not sure
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches you've thought about.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, mockups, links to similar features in other apps, or any other context.
+    validations:
+      required: false

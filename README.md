@@ -26,17 +26,18 @@ AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, 
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | [Next.js 16](https://nextjs.org) (App Router) |
-| Language | TypeScript 5 |
+| Framework | [Next.js 16](https://nextjs.org) (App Router, TypeScript 5) |
 | UI Components | [shadcn/ui](https://ui.shadcn.com) (Radix UI + CVA) |
-| Styling | [Tailwind CSS 4](https://tailwindcss.com) |
-| State | [Zustand 5](https://zustand.docs.pmnd.rs) |
-| AI | [Anthropic Claude SDK](https://docs.anthropic.com/en/docs) |
+| Charts | [Recharts 2](https://recharts.org) via shadcn chart component |
+| Styling | [Tailwind CSS 4](https://tailwindcss.com) with CSS custom properties |
+| Markdown | [react-markdown 10](https://github.com/remarkjs/react-markdown) |
+| State | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist` middleware |
+| AI | [Anthropic Claude SDK](https://docs.anthropic.com/en/docs) (server-side only) |
 | Weather API | [Tomorrow.io](https://tomorrow.io) (primary) + [Open-Meteo](https://open-meteo.com) (fallback) |
-| Database | [MongoDB Atlas](https://mongodb.com/atlas) |
-| Markdown | [react-markdown](https://github.com/remarkjs/react-markdown) |
+| Database | [MongoDB Atlas](https://mongodb.com/atlas) (cache, AI summaries, history, locations) |
 | Analytics | [Google Analytics 4](https://analytics.google.com) |
 | Testing | [Vitest](https://vitest.dev) |
+| CI/CD | [GitHub Actions](https://github.com/features/actions) (tests + lint + typecheck on push/PR) |
 | Deployment | [Vercel](https://vercel.com) |
 
 ## Getting Started
@@ -54,34 +55,80 @@ cd mukoko-weather
 npm install
 ```
 
-### Development
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000). The app redirects to `/harare` by default.
-
 ### Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `MONGODB_URI` | Yes | MongoDB Atlas connection string for caching and data storage. |
-| `ANTHROPIC_API_KEY` | No | Anthropic API key for AI weather summaries. Without it, a basic fallback summary is generated. |
-| `DB_INIT_SECRET` | No | Protects the `/api/db-init` endpoint in production. |
+| `MONGODB_URI` | Yes | MongoDB Atlas connection string for caching and data storage |
+| `ANTHROPIC_API_KEY` | No | Anthropic API key for AI weather summaries. Without it, a basic fallback summary is generated |
+| `DB_INIT_SECRET` | No | Protects the `/api/db-init` endpoint in production (via `x-init-secret` header) |
 
-### Build
-
-```bash
-npm run build
-npm start
-```
-
-### Testing
+### Development
 
 ```bash
-npm test
+npm run dev        # Start dev server (http://localhost:3000)
+npm run build      # Production build
+npm start          # Start production server
+npm test           # Run Vitest tests (single run)
+npm run test:watch # Run Vitest in watch mode
+npm run lint       # ESLint
+npx tsc --noEmit   # Type check
 ```
+
+The app redirects `/` to `/harare` by default.
+
+## Architecture
+
+### Routes
+
+| Route | Description |
+|-------|-------------|
+| `/` | Redirects to `/harare` |
+| `/[location]` | Weather overview — current conditions, AI summary, activity insights, atmospheric metric cards |
+| `/[location]/atmosphere` | 24-hour atmospheric detail charts (humidity, wind, pressure, UV) |
+| `/[location]/forecast` | Hourly (24h) + daily (7-day) forecast charts + sunrise/sunset |
+| `/about` | Company information |
+| `/help` | User help / FAQ |
+| `/history` | Historical weather data dashboard (search, multi-day charts, data table) |
+| `/privacy` | Privacy policy |
+| `/terms` | Terms of service |
+| `/embed` | Embeddable widget documentation |
+
+The main location page is a compact overview. Detail-heavy sections (charts, atmospheric trends, hourly/daily forecasts) live on dedicated sub-route pages. This reduces initial page load weight and prevents mobile OOM crashes.
+
+### API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/weather?lat=&lon=` | GET | Weather data (Tomorrow.io → Open-Meteo fallback, MongoDB cached 15-min TTL). `X-Weather-Provider` header indicates source |
+| `/api/geo?lat=&lon=` | GET | Nearest Zimbabwe location lookup |
+| `/api/ai` | POST | AI weather summary. Body: `{ weatherData, location }`. Tiered TTL cache (30/60/120 min) |
+| `/api/history?location=&days=` | GET | Historical weather data for a location |
+| `/api/db-init` | POST | One-time DB setup + optional API key seeding. Protected by `DB_INIT_SECRET` in production |
+
+### Resilience
+
+The app follows a Netflix-style resilience philosophy — the shell never crashes, failures are isolated per-section.
+
+**4-stage weather fallback chain:**
+1. MongoDB cache (15-min TTL)
+2. Tomorrow.io API (primary provider)
+3. Open-Meteo API (free fallback)
+4. `createFallbackWeather` seasonal estimates (always succeeds)
+
+**3-layer error isolation:**
+1. **Server-side safety net** — `page.tsx` wraps data fetching in try/catch; even if all providers fail, the page renders with seasonal estimates
+2. **Per-section error boundaries** — every weather section is wrapped in `ChartErrorBoundary`; a chart crash only affects that section
+3. **Page-level error boundaries** — last resort `error.tsx` pages with retry tracking (max 3 retries via sessionStorage)
+
+**Observability:**
+- Server-side: structured JSON logging (`logError`/`logWarn` in `src/lib/observability.ts`) for Vercel Log Drains
+- Client-side: GA4 exception events via `reportErrorToAnalytics` in error boundaries and error pages
+- Provider failure tracking: `reportProviderFailure` for weather API monitoring
+
+### Lazy Loading
+
+Both the location page and history page use feed-style progressive loading via `LazySection` (IntersectionObserver wrapper). Only the first section loads eagerly; everything below the fold is deferred until scrolled near.
 
 ## Project Structure
 
@@ -91,76 +138,100 @@ src/
     layout.tsx              # Root layout, metadata, JSON-LD schemas
     page.tsx                # Home — redirects to /harare
     globals.css             # Brand System v6 (WCAG 3.0 APCA compliant)
+    loading.tsx             # Root loading skeleton
+    error.tsx               # Global error boundary
     robots.ts               # Dynamic robots.txt
-    sitemap.ts              # Dynamic sitemap for 90+ locations + sub-routes
+    sitemap.ts              # Dynamic sitemap (all locations + sub-routes)
     [location]/
       page.tsx              # Dynamic weather page per location
+      WeatherDashboard.tsx  # Client: all weather UI with per-section error boundaries
       loading.tsx           # Skeleton loading state
+      error.tsx             # Location-specific error boundary
       not-found.tsx         # 404 with location suggestions
-      FrostAlertBanner.tsx  # Frost risk alert (design-system tokens)
+      FrostAlertBanner.tsx  # Frost risk alert
+      WeatherUnavailableBanner.tsx  # Fallback data alert
       atmosphere/           # 24h atmospheric detail charts sub-route
+        page.tsx            # Server wrapper (SEO, data fetch)
+        AtmosphereDashboard.tsx  # Client: atmospheric charts
+        loading.tsx         # Branded skeleton
       forecast/             # Hourly + daily forecast detail sub-route
-    api/
-      weather/route.ts      # GET /api/weather — Open-Meteo proxy + MongoDB cache
-      geo/route.ts          # GET /api/geo — nearest location lookup
-      ai/route.ts           # POST /api/ai — AI summaries (markdown-formatted)
-      history/route.ts      # GET /api/history — historical weather data
-      db-init/route.ts      # POST /api/db-init — one-time DB setup
+        page.tsx            # Server wrapper (SEO, data fetch)
+        ForecastDashboard.tsx  # Client: forecast charts + sun times
+        loading.tsx         # Branded skeleton
     about/page.tsx          # Company info page
-    embed/page.tsx          # Embeddable widget documentation
-    help/page.tsx           # User help/FAQ
-    history/                # Historical weather data dashboard
-      page.tsx              # Page metadata and layout
-      HistoryDashboard.tsx  # Client-side search, charts, and data table
+    help/page.tsx           # User help / FAQ
+    history/
+      page.tsx              # Historical data page (metadata, layout)
+      HistoryDashboard.tsx  # Client: search, 7 charts, stats, data table
+      error.tsx             # History page error boundary
     privacy/page.tsx        # Privacy policy
     terms/page.tsx          # Terms of service
+    embed/page.tsx          # Embeddable widget documentation
+    api/
+      weather/route.ts      # GET — Tomorrow.io/Open-Meteo proxy + MongoDB cache
+      geo/route.ts          # GET — nearest location lookup
+      ai/route.ts           # POST — AI summaries (Claude, markdown-formatted)
+      history/route.ts      # GET — historical weather data
+      db-init/route.ts      # POST — one-time DB setup + API key seeding
   components/
-    analytics/              # Google Analytics 4 integration
-    brand/                  # MukokoLogo, ThemeToggle (3-state), ThemeProvider, MineralsStripe
-    layout/                 # Header (pill icon group + My Weather modal), Footer
-    ui/                     # shadcn/ui primitives (Button, Badge, Dialog, Input, Tabs, Card, Chart)
-    weather/                # CurrentConditions, HourlyForecast, DailyForecast,
-                            # SunTimes, SeasonBadge, AISummary, LocationSelector,
-                            # MyWeatherModal, ActivityInsights, LazySection
-    embed/                  # MukokoWeatherEmbed (CSS module, self-contained)
+    ui/                     # shadcn/ui primitives
+      button.tsx            # Button (6 variants, 5 sizes, asChild support)
+      badge.tsx             # Badge (4 variants)
+      card.tsx              # Card, CardHeader, CardContent, etc.
+      chart.tsx             # ChartContainer, ChartTooltip (wraps Recharts)
+      dialog.tsx            # Dialog (Radix, portal, overlay, animations)
+      input.tsx             # Input (CSS custom property styled)
+      tabs.tsx              # Tabs (Radix, border-bottom active indicator)
+    analytics/
+      GoogleAnalytics.tsx   # GA4 integration via next/script
+    brand/
+      MukokoLogo.tsx        # Logo with text fallback
+      MineralsStripe.tsx    # 5-mineral decorative stripe
+      ThemeProvider.tsx     # Syncs Zustand theme to document
+      ThemeToggle.tsx       # Light/dark/system mode toggle (3-state cycle)
+    layout/
+      Header.tsx            # Sticky header, pill icon group, My Weather modal trigger
+      Footer.tsx            # Footer with site stats, copyright, Ubuntu philosophy
+    weather/
+      CurrentConditions.tsx  # Large temp display, feels-like, stats grid
+      HourlyForecast.tsx     # 24-hour hourly forecast
+      HourlyChart.tsx        # Area chart: temperature + rain over 24h
+      DailyForecast.tsx      # 7-day forecast cards
+      DailyChart.tsx         # Area chart: high/low temps over 7 days
+      AtmosphericSummary.tsx # 2x3 compact metric cards (humidity, wind, pressure, UV, cloud, feels-like)
+      AtmosphericDetails.tsx # 4x 24h atmospheric charts (used by atmosphere sub-route + history)
+      LazySection.tsx        # IntersectionObserver lazy-load wrapper
+      ChartErrorBoundary.tsx # Error boundary for chart crash isolation
+      MyWeatherModal.tsx     # Centralized preferences modal (location, activities, settings)
+      AISummary.tsx          # Shamwari AI markdown summary
+      ActivityInsights.tsx   # Category-specific weather insight cards
+      SeasonBadge.tsx        # Zimbabwe season indicator
+      SunTimes.tsx           # Sunrise/sunset display
+      LocationSelector.tsx   # Search/filter dropdown, geolocation
+    embed/
+      MukokoWeatherEmbed.tsx # Embeddable widget (CSS module, self-contained)
   lib/
     locations.ts            # 90+ Zimbabwe locations database
     activities.ts           # 20 activities, 6 categories, mineral color styles
     tomorrow.ts             # Tomorrow.io API client + WMO normalization
-    weather.ts              # Open-Meteo client, frost detection, seasons
-    db.ts                   # MongoDB CRUD operations (+ API key storage)
-    mongo.ts                # MongoDB client (connection-pooled)
-    geolocation.ts          # Browser geolocation detection
-    store.ts                # Zustand state with localStorage persistence (theme, activities)
+    weather.ts              # Open-Meteo client, frost detection, seasons, weather utils
+    db.ts                   # MongoDB CRUD (weather_cache, ai_summaries, weather_history, locations, api_keys)
+    mongo.ts                # MongoDB client (connection-pooled via @vercel/functions)
     observability.ts        # Structured error logging + GA4 error reporting
+    store.ts                # Zustand state with localStorage persistence (theme, activities)
+    geolocation.ts          # Browser Geolocation API wrapper
     weather-icons.tsx       # SVG weather + activity icon components
-    i18n.ts                 # Internationalization utilities
+    i18n.ts                 # Lightweight i18n (en complete, sn/nd structurally ready)
+    utils.ts                # Tailwind class merging helper (cn)
 public/
   manifest.json             # PWA manifest with app shortcuts
   icons/                    # PWA icons (192x192, 512x512)
+.github/
+  ISSUE_TEMPLATE/           # Bug report and feature request templates (YAML forms)
+  workflows/
+    ci.yml                  # Tests, lint, type check on push/PR
+    claude-review.yml       # Claude AI code review on PRs
 ```
-
-## API
-
-### `GET /api/weather?lat=-17.83&lon=31.05`
-
-Returns weather data for the given coordinates. Uses Tomorrow.io as primary provider (with extended activity insights) and falls back to Open-Meteo. The `X-Weather-Provider` header indicates which provider served the data. Responses are cached in MongoDB. Coordinates must be within the Zimbabwe region.
-
-### `GET /api/geo?lat=-17.83&lon=31.05`
-
-Returns the nearest Zimbabwe location to the given coordinates.
-
-### `POST /api/ai`
-
-Generates a markdown-formatted AI weather summary. Body: `{ weatherData, location }`. Responses are cached in MongoDB with tiered TTL (30–120 min based on location tier).
-
-### `GET /api/history?location=harare&days=30`
-
-Returns historical weather data for a location.
-
-### `POST /api/db-init`
-
-One-time database setup: creates indexes and syncs location data to MongoDB. Optionally seeds API keys via body `{ "apiKeys": { "tomorrow": "..." } }`. Protected by `DB_INIT_SECRET` in production.
 
 ## Accessibility
 
@@ -178,11 +249,19 @@ This app targets **WCAG 3.0 APCA/AAA** compliance:
 
 ## SEO
 
-- Dynamic `robots.txt` and `sitemap.xml` for all 90+ locations
+- Dynamic `robots.txt` and `sitemap.xml` for all 90+ locations and sub-routes
 - Per-page canonical URLs, Open Graph, and Twitter cards
 - FAQPage, BreadcrumbList, WebApplication, Organization, and WebSite JSON-LD schemas
 - Visible breadcrumb navigation
 - Semantic H1 on every location page
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on setting up your development environment, code standards, testing, and the pull request process.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for our security policy, vulnerability reporting process, and details on how we handle API keys, data privacy, and content security.
 
 ## Company
 
@@ -195,6 +274,7 @@ This app targets **WCAG 3.0 APCA/AAA** compliance:
 ## Links
 
 - **Website:** [weather.mukoko.com](https://weather.mukoko.com)
+- **Issues:** [GitHub Issues](https://github.com/nyuchitech/mukoko-weather/issues)
 - **Twitter:** [@mukokoafrica](https://twitter.com/mukokoafrica)
 - **Instagram:** [@mukoko.africa](https://instagram.com/mukoko.africa)
 - **Support:** [support@mukoko.com](mailto:support@mukoko.com)
