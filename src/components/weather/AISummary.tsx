@@ -14,6 +14,7 @@ interface Props {
 }
 
 export function AISummary({ weather, location }: Props) {
+  console.log("[AISummary] mounted for", location.name);
   const [insight, setInsight] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +28,7 @@ export function AISummary({ weather, location }: Props) {
   const weatherKey = `${weather.current.temperature_2m}:${weather.current.weather_code}`;
 
   useEffect(() => {
+    console.log("[AISummary] effect firing — fetching for", location.name);
     // Abort any in-flight request before starting a new one
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -39,6 +41,7 @@ export function AISummary({ weather, location }: Props) {
       setError(null);
       try {
         const activityLabels = getActivityLabels(selectedActivities);
+        console.log("[AISummary] POST /api/ai — location:", location.name, "activities:", activityLabels);
         const res = await fetch("/api/ai", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -57,12 +60,22 @@ export function AISummary({ weather, location }: Props) {
             activities: activityLabels,
           }),
         });
-        if (!res.ok) throw new Error("Failed to get AI insight");
+        console.log("[AISummary] response status:", res.status);
+        if (!res.ok) {
+          const errBody = await res.text();
+          console.error("[AISummary] error response body:", errBody);
+          throw new Error(`Failed to get AI insight (${res.status})`);
+        }
         const data = await res.json();
+        console.log("[AISummary] success — insight length:", data.insight?.length, "cached:", data.cached);
         if (!cancelled) setInsight(data.insight);
       } catch (err) {
         // Don't show error for intentional aborts
-        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (err instanceof DOMException && err.name === "AbortError") {
+          console.log("[AISummary] request aborted (cleanup)");
+          return;
+        }
+        console.error("[AISummary] fetch error:", err);
         if (!cancelled) setError("Unable to load AI summary. Weather data is still available above.");
       } finally {
         if (!cancelled) setLoading(false);

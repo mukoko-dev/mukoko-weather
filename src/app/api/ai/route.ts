@@ -34,14 +34,17 @@ export async function POST(request: Request) {
   try {
     const { weatherData, location, activities } = await request.json();
     const userActivities: string[] = Array.isArray(activities) ? activities : [];
+    console.log("[AI API] request for", location?.name, "activities:", userActivities.length);
 
     if (!weatherData || !location) {
+      console.warn("[AI API] 400 — missing weatherData or location");
       return NextResponse.json({ error: "Missing weather data or location" }, { status: 400 });
     }
 
     const currentTemp = weatherData.current?.temperature_2m ?? 0;
     const currentCode = weatherData.current?.weather_code ?? 0;
     const locationSlug = (location.name as string ?? "unknown").toLowerCase().replace(/\s+/g, "-");
+    console.log("[AI API] slug:", locationSlug, "temp:", currentTemp, "code:", currentCode);
 
     // Look up the location in our database to get tags for tiered TTL
     const knownLocation = getLocationBySlug(locationSlug);
@@ -50,18 +53,21 @@ export async function POST(request: Request) {
     // Check MongoDB cache first — serves all concurrent users from a single cached entry
     const cached = await getCachedAISummary(locationSlug);
     if (cached && !isSummaryStale(cached, currentTemp, currentCode)) {
+      console.log("[AI API] cache hit for", locationSlug);
       return NextResponse.json({
         insight: cached.insight,
         cached: true,
         generatedAt: cached.generatedAt.toISOString(),
       });
     }
+    console.log("[AI API] cache miss for", locationSlug, "— generating fresh");
 
     // Cache miss or stale — generate fresh AI summary
     const season = getZimbabweSeason();
     const apiKey = process.env.ANTHROPIC_API_KEY;
 
     if (!apiKey) {
+      console.log("[AI API] no ANTHROPIC_API_KEY — using fallback summary");
       // Fallback to a basic summary when no API key is configured
       const temp = weatherData.current?.temperature_2m;
       const humidity = weatherData.current?.relative_humidity_2m;
@@ -77,6 +83,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ insight, cached: false });
     }
 
+    console.log("[AI API] calling Anthropic API...");
     const anthropic = new Anthropic({ apiKey });
 
     const message = await anthropic.messages.create({
@@ -100,6 +107,7 @@ Provide:
         },
       ],
     });
+    console.log("[AI API] Anthropic response — stop_reason:", message.stop_reason, "blocks:", message.content.length);
 
     const textBlock = message.content.find((b) => b.type === "text");
     const insight = textBlock?.text ?? "No insight available.";
@@ -112,8 +120,10 @@ Provide:
       locationTags,
     );
 
+    console.log("[AI API] saved to cache, returning insight (", insight.length, "chars)");
     return NextResponse.json({ insight, cached: false, generatedAt: new Date().toISOString() });
-  } catch {
+  } catch (err) {
+    console.error("[AI API] 502 error:", err);
     return NextResponse.json({ error: "AI service unavailable" }, { status: 502 });
   }
 }
