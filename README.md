@@ -112,10 +112,10 @@ src/
   components/
     analytics/              # Google Analytics 4 integration
     brand/                  # MukokoLogo, ThemeToggle (3-state), ThemeProvider, MineralsStripe
-    layout/                 # Header, Footer (with site stats)
+    layout/                 # Header (pill icon group + My Weather modal), Footer
     weather/                # CurrentConditions, HourlyForecast, DailyForecast,
                             # SunTimes, SeasonBadge, AISummary, LocationSelector,
-                            # ActivitySelector, ActivityInsights
+                            # MyWeatherModal, ActivityInsights, LazySection
     embed/                  # MukokoWeatherEmbed (CSS module, self-contained)
   lib/
     locations.ts            # 90+ Zimbabwe locations database
@@ -125,7 +125,7 @@ src/
     db.ts                   # MongoDB CRUD operations (+ API key storage)
     mongo.ts                # MongoDB client (connection-pooled)
     geolocation.ts          # Browser geolocation detection
-    store.ts                # Zustand state (theme with system detection, location, activities)
+    store.ts                # Zustand state with localStorage persistence (theme, activities)
     weather-icons.tsx       # SVG weather + activity icon components
     i18n.ts                 # Internationalization utilities
 public/
