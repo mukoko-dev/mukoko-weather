@@ -1,13 +1,8 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
-import { Area, CartesianGrid, XAxis, YAxis, Bar, Line, ComposedChart } from "recharts";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
+import { useMemo, useSyncExternalStore } from "react";
+import { CanvasChart, resolveColor, type ChartConfig } from "@/components/ui/chart";
+import type { ChartData, ChartOptions } from "chart.js";
 import type { HourlyWeather } from "@/lib/weather";
 
 interface Props {
@@ -73,9 +68,6 @@ const getSnapshot = () => true;
 const getServerSnapshot = () => false;
 
 export function HourlyChart({ hourly }: Props) {
-  // Defer chart rendering to client-only to prevent hydration mismatch.
-  // prepareHourlyData uses new Date() which differs between server and client,
-  // producing different SVG output that React 19 cannot reconcile.
   const hydrated = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   if (!hydrated) {
@@ -84,84 +76,131 @@ export function HourlyChart({ hourly }: Props) {
     );
   }
 
-  const data = prepareHourlyData(hourly);
-  if (data.length < 2) return null;
+  return <HourlyChartInner hourly={hourly} />;
+}
 
-  const allTemps = data.flatMap((d) => [d.temp, d.feelsLike]);
+function HourlyChartInner({ hourly }: Props) {
+  const data = prepareHourlyData(hourly);
+
+  const allTemps = data.length >= 2 ? data.flatMap((d) => [d.temp, d.feelsLike]) : [0, 10];
   const minTemp = Math.min(...allTemps) - 2;
   const maxTemp = Math.max(...allTemps) + 2;
 
+  const tempColor = resolveColor("var(--chart-1)");
+  const feelsLikeColor = resolveColor("var(--chart-3)");
+  const rainColor = resolveColor("var(--chart-2)");
+  const gridColor = resolveColor("var(--color-text-tertiary)");
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const chartData: ChartData<any> = useMemo(
+    () => ({
+      labels: data.map((d) => d.label),
+      datasets: [
+        {
+          type: "line" as const,
+          label: "Temperature",
+          data: data.map((d) => d.temp),
+          borderColor: tempColor,
+          backgroundColor: tempColor + "1a",
+          borderWidth: 2.5,
+          fill: true,
+          tension: 0.4,
+          pointRadius: 0,
+          pointHitRadius: 8,
+          yAxisID: "y",
+          order: 1,
+        },
+        {
+          type: "line" as const,
+          label: "Feels Like",
+          data: data.map((d) => d.feelsLike),
+          borderColor: feelsLikeColor,
+          borderWidth: 1.5,
+          borderDash: [4, 3],
+          fill: false,
+          tension: 0.4,
+          pointRadius: 0,
+          pointHitRadius: 8,
+          yAxisID: "y",
+          order: 2,
+        },
+        {
+          type: "bar" as const,
+          label: "Rain %",
+          data: data.map((d) => d.rain),
+          backgroundColor: rainColor + "59",
+          borderRadius: 2,
+          yAxisID: "rain",
+          order: 3,
+        },
+      ],
+    }),
+    [data, tempColor, feelsLikeColor, rainColor],
+  );
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const chartOptions: ChartOptions<any> = useMemo(
+    () => ({
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            color: gridColor,
+            font: { size: 11 },
+            maxRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 8,
+          },
+          border: { display: false },
+        },
+        y: {
+          min: minTemp,
+          max: maxTemp,
+          grid: {
+            color: gridColor + "26",
+            drawTicks: false,
+          },
+          ticks: {
+            color: gridColor,
+            font: { size: 11 },
+            callback: (v: string | number) => `${v}°`,
+          },
+          border: { display: false },
+        },
+        rain: {
+          position: "right" as const,
+          min: 0,
+          max: 100,
+          display: false,
+        },
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            label: (ctx: any) => {
+              const label = ctx.dataset.label || "";
+              if (label === "Rain %") return `${label}: ${ctx.parsed.y}%`;
+              return `${label}: ${ctx.parsed.y}°C`;
+            },
+          },
+        },
+      },
+    }),
+    [gridColor, minTemp, maxTemp],
+  );
+
+  if (data.length < 2) return null;
+
   return (
     <div className="mt-4 mb-2">
-      <ChartContainer config={chartConfig} className="aspect-[16/5] w-full">
-        <ComposedChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
-          <defs>
-            <linearGradient id="hourlyTempGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-temp)" stopOpacity={0.3} />
-              <stop offset="100%" stopColor="var(--color-temp)" stopOpacity={0.02} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid
-            strokeDasharray="3 3"
-            vertical={false}
-            stroke="var(--color-text-tertiary)"
-            strokeOpacity={0.15}
-          />
-          <XAxis
-            dataKey="label"
-            tickLine={false}
-            axisLine={false}
-            tickMargin={8}
-            fontSize={11}
-            interval={2}
-            tick={{ fill: "var(--color-text-tertiary)" }}
-          />
-          <YAxis
-            domain={[minTemp, maxTemp]}
-            tickLine={false}
-            axisLine={false}
-            tickFormatter={(v: number) => `${v}°`}
-            fontSize={11}
-            tick={{ fill: "var(--color-text-tertiary)" }}
-            width={40}
-          />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                formatter={(value, name) =>
-                  name === "rain" ? `${value}%` : `${value}°C`
-                }
-              />
-            }
-          />
-          <Bar
-            dataKey="rain"
-            fill="var(--color-rain)"
-            fillOpacity={0.35}
-            radius={[2, 2, 0, 0]}
-            yAxisId="rain"
-          />
-          <YAxis yAxisId="rain" domain={[0, 100]} hide />
-          <Area
-            type="monotone"
-            dataKey="temp"
-            stroke="var(--color-temp)"
-            strokeWidth={2.5}
-            fill="url(#hourlyTempGradient)"
-            dot={false}
-            activeDot={false}
-          />
-          <Line
-            type="monotone"
-            dataKey="feelsLike"
-            stroke="var(--color-feelsLike)"
-            strokeWidth={1.5}
-            strokeDasharray="4 3"
-            dot={false}
-            activeDot={false}
-          />
-        </ComposedChart>
-      </ChartContainer>
+      <CanvasChart
+        type="bar"
+        data={chartData}
+        options={chartOptions}
+        config={chartConfig}
+        className="aspect-[16/5] w-full"
+      />
     </div>
   );
 }

@@ -16,8 +16,8 @@ interface State {
 /**
  * Lightweight error boundary for chart components.
  *
- * If a Recharts chart throws during render (e.g. due to malformed data
- * or SVG rendering failures on low-memory mobile devices), this boundary
+ * If a Canvas chart throws during render (e.g. due to malformed data
+ * or Canvas context failures on low-memory mobile devices), this boundary
  * catches the error and shows a compact fallback instead of crashing the
  * entire weather page.
  */
