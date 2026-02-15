@@ -100,8 +100,6 @@ interface CanvasChartProps<T extends ChartType = ChartType> {
 /**
  * Canvas-based chart wrapper built on Chart.js + react-chartjs-2.
  *
- * Canvas-based chart wrapper built on Chart.js + react-chartjs-2.
- *
  * Each chart is a single `<canvas>` DOM element regardless of data volume.
  * 7 charts × 365 data points = 7 DOM elements (vs thousands of SVG nodes).
  *

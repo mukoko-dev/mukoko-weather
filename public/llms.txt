@@ -1,0 +1,58 @@
+# mukoko weather
+
+> AI-powered weather intelligence platform for Zimbabwe. Real-time weather data, 7-day forecasts, frost alerts, and AI-generated contextual advice for farming, mining, travel, and daily life across 90+ Zimbabwe locations. Built by Nyuchi Africa (PVT) Ltd.
+
+mukoko weather provides hyperlocal weather data for Zimbabwe, a country underserved by global weather platforms. The AI assistant "Shamwari Weather" generates contextual advice tailored to user activities (farming, mining, travel, tourism, sports, casual) using the Ubuntu philosophy.
+
+## Live Site
+
+- [mukoko weather](https://weather.mukoko.com): Main application
+- [Harare Weather](https://weather.mukoko.com/harare): Capital city weather
+- [Bulawayo Weather](https://weather.mukoko.com/bulawayo): Second largest city
+- [Victoria Falls Weather](https://weather.mukoko.com/victoria-falls): Tourism hub
+
+## Key Pages
+
+- [Historical Weather Data](https://weather.mukoko.com/history): Explore recorded weather trends and charts across Zimbabwe
+- [Help & FAQ](https://weather.mukoko.com/help): How to use the platform, frequently asked questions
+- [About](https://weather.mukoko.com/about): About mukoko weather, Nyuchi Africa, and data sources
+- [System Status](https://weather.mukoko.com/status): Real-time health of weather services
+- [Privacy Policy](https://weather.mukoko.com/privacy): Data collection and privacy practices
+- [Terms of Service](https://weather.mukoko.com/terms): Usage terms and conditions
+- [Embed Widget](https://weather.mukoko.com/embed): Documentation for embedding weather widgets
+
+## Coverage
+
+90+ Zimbabwe locations across all 10 provinces, including major cities, farming regions, mining areas, tourism sites, national parks, border posts, and education centres.
+
+## Data Sources
+
+- **Tomorrow.io** (primary weather provider): Real-time forecasts, hourly and daily data
+- **Open-Meteo** (fallback): Free weather API, 7-day forecasts
+- **Anthropic Claude** (AI summaries): Context-aware weather advice via Shamwari Weather
+
+## Features
+
+- Current conditions with feels-like temperature
+- 24-hour hourly forecasts with temperature and rain probability charts
+- 7-day daily forecasts with high/low temperature trends
+- Frost alerts for agriculture (temps <= 3C between 10pm-8am)
+- Atmospheric details: humidity, wind, pressure, UV index, cloud cover
+- AI-generated weather summaries personalised to user activities
+- Activity insights for farming (GDD), mining (heat stress), travel (driving conditions), tourism (photography), sports (fitness), casual (comfort)
+- Historical weather data dashboard with multi-day charts and statistics
+- Zimbabwe seasonal calendar: Masika (rainy), Chirimo (cool dry), Zhizha (hot), Munakamwe (post-rainy)
+- Dark mode with system preference detection
+- Embeddable weather widget
+
+## Contact
+
+- Email: support@mukoko.com, hi@mukoko.com
+- Legal: legal@nyuchi.com
+- Twitter: @mukokoafrica
+- Instagram: @mukoko.africa
+- GitHub: [nyuchitech/mukoko-weather](https://github.com/nyuchitech/mukoko-weather)
+
+## Optional
+
+- [Full details](https://weather.mukoko.com/llms-full.txt): Complete LLM-friendly documentation

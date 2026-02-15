@@ -12,9 +12,12 @@ describe("robots.ts", () => {
     expect(rules[0].userAgent).toBe("*");
   });
 
-  it("allows root path", () => {
+  it("allows root path and llms.txt files", () => {
     const rules = Array.isArray(result.rules) ? result.rules : [result.rules];
-    expect(rules[0].allow).toBe("/");
+    const allowed = rules[0].allow;
+    expect(allowed).toContain("/");
+    expect(allowed).toContain("/llms.txt");
+    expect(allowed).toContain("/llms-full.txt");
   });
 
   it("disallows /api/ and /embed/", () => {
