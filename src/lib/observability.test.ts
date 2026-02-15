@@ -4,6 +4,8 @@ import {
   logWarn,
   reportErrorToAnalytics,
   reportProviderFailure,
+  sendAlert,
+  buildIssueUrl,
 } from "./observability";
 
 describe("logError", () => {
@@ -220,6 +222,143 @@ describe("reportErrorToAnalytics", () => {
     expect(() => reportErrorToAnalytics("test")).not.toThrow();
 
     globalThis.window = originalWindow;
+  });
+});
+
+describe("sendAlert", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("ok"));
+    vi.stubEnv("ALERT_WEBHOOK_URL", "");
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    vi.unstubAllEnvs();
+  });
+
+  it("does nothing when ALERT_WEBHOOK_URL is not set", () => {
+    sendAlert({
+      source: "weather-api",
+      severity: "critical",
+      message: "Test alert",
+    });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("does nothing for low severity events", () => {
+    vi.stubEnv("ALERT_WEBHOOK_URL", "https://hooks.slack.com/test");
+
+    sendAlert({
+      source: "weather-api",
+      severity: "low",
+      message: "Minor issue",
+    });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("does nothing for medium severity events", () => {
+    vi.stubEnv("ALERT_WEBHOOK_URL", "https://hooks.slack.com/test");
+
+    sendAlert({
+      source: "weather-api",
+      severity: "medium",
+      message: "Medium issue",
+    });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("sends webhook for high severity events", () => {
+    vi.stubEnv("ALERT_WEBHOOK_URL", "https://hooks.slack.com/test");
+
+    sendAlert({
+      source: "weather-api",
+      severity: "high",
+      message: "High severity alert",
+    });
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, options] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://hooks.slack.com/test");
+    expect(options).toHaveProperty("method", "POST");
+
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.text).toContain("HIGH");
+    expect(body.mukoko_alert.source).toBe("weather-api");
+    expect(body.mukoko_alert.severity).toBe("high");
+    expect(body.mukoko_alert.message).toBe("High severity alert");
+  });
+
+  it("sends webhook for critical severity events", () => {
+    vi.stubEnv("ALERT_WEBHOOK_URL", "https://hooks.slack.com/test");
+
+    sendAlert({
+      source: "mongodb",
+      severity: "critical",
+      message: "DB connection lost",
+      location: "harare",
+    });
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.mukoko_alert.location).toBe("harare");
+  });
+
+  it("deduplicates identical alerts within cooldown window", () => {
+    vi.stubEnv("ALERT_WEBHOOK_URL", "https://hooks.slack.com/test");
+
+    // First call — should send
+    sendAlert({
+      source: "weather-api",
+      severity: "high",
+      message: "Dedupe test unique message",
+    });
+
+    // Second identical call — should be deduped
+    sendAlert({
+      source: "weather-api",
+      severity: "high",
+      message: "Dedupe test unique message",
+    });
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+});
+
+describe("buildIssueUrl", () => {
+  it("returns a GitHub issue URL with template and title", () => {
+    const url = buildIssueUrl({ title: "Test error" });
+    expect(url).toContain("github.com/nyuchitech/mukoko-weather/issues/new");
+    expect(url).toContain("template=bug_report.yml");
+    expect(url).toContain("title=%5BBug%5D+Test+error");
+  });
+
+  it("includes error context in the body", () => {
+    const url = buildIssueUrl({
+      title: "Weather error",
+      source: "location",
+      message: "Failed to load",
+      page: "/harare",
+      digest: "abc123",
+    });
+    expect(url).toContain("body=");
+    // URLSearchParams encodes spaces as +, so replace + with space after decoding
+    const decoded = decodeURIComponent(url).replace(/\+/g, " ");
+    expect(decoded).toContain("**Error:** Failed to load");
+    expect(decoded).toContain("**Source:** location");
+    expect(decoded).toContain("**Page:** /harare");
+    expect(decoded).toContain("**Digest:** abc123");
+  });
+
+  it("omits empty fields from the body", () => {
+    const url = buildIssueUrl({ title: "Simple error" });
+    const decoded = decodeURIComponent(url).replace(/\+/g, " ");
+    expect(decoded).not.toContain("**Error:**");
+    expect(decoded).not.toContain("**Source:**");
   });
 });
 

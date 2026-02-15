@@ -64,6 +64,9 @@ export function Footer() {
             <Link href="/history" prefetch={false} className="underline hover:text-text-secondary transition-colors">
               History
             </Link>
+            <Link href="/status" prefetch={false} className="underline hover:text-text-secondary transition-colors">
+              Status
+            </Link>
             <Link href="/privacy" prefetch={false} className="underline hover:text-text-secondary transition-colors">
               Privacy
             </Link>
@@ -75,6 +78,14 @@ export function Footer() {
             </Link>
             <a href="mailto:support@mukoko.com" className="underline hover:text-text-secondary transition-colors">
               Contact
+            </a>
+            <a
+              href="https://github.com/nyuchitech/mukoko-weather/issues/new/choose"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-text-secondary transition-colors"
+            >
+              Report an Issue
             </a>
           </nav>
         </div>

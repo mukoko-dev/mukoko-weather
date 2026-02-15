@@ -8,6 +8,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = "https://weather.mukoko.com";
   const now = new Date();
 
+  // Priority tiers for sitelink signals:
+  // 1.0     — homepage
+  // 0.8-0.9 — primary navigation / sitelink candidates
+  // 0.7     — secondary content pages
+  // 0.3-0.5 — legal / utility pages
   const staticPages: MetadataRoute.Sitemap = [
     {
       url: baseUrl,
@@ -16,22 +21,46 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 1.0,
     },
     {
-      url: `${baseUrl}/about`,
+      url: `${baseUrl}/harare`,
       lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.5,
+      changeFrequency: "hourly",
+      priority: 0.9,
     },
     {
-      url: `${baseUrl}/help`,
+      url: `${baseUrl}/bulawayo`,
       lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.6,
+      changeFrequency: "hourly",
+      priority: 0.9,
     },
     {
       url: `${baseUrl}/history`,
       lastModified: now,
       changeFrequency: "daily",
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/help`,
+      lastModified: now,
+      changeFrequency: "monthly",
       priority: 0.7,
+    },
+    {
+      url: `${baseUrl}/about`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.7,
+    },
+    {
+      url: `${baseUrl}/status`,
+      lastModified: now,
+      changeFrequency: "always",
+      priority: 0.6,
+    },
+    {
+      url: `${baseUrl}/embed`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.5,
     },
     {
       url: `${baseUrl}/privacy`,
@@ -45,20 +74,18 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "yearly",
       priority: 0.3,
     },
-    {
-      url: `${baseUrl}/status`,
-      lastModified: now,
-      changeFrequency: "always",
-      priority: 0.4,
-    },
   ];
 
-  const locationPages: MetadataRoute.Sitemap = LOCATIONS.map((loc) => ({
-    url: `${baseUrl}/${loc.slug}`,
-    lastModified: now,
-    changeFrequency: "hourly" as const,
-    priority: loc.tags.includes("city") ? 0.9 : 0.7,
-  }));
+  // Harare and Bulawayo are already in staticPages with boosted priority
+  const boostedSlugs = new Set(["harare", "bulawayo"]);
+  const locationPages: MetadataRoute.Sitemap = LOCATIONS
+    .filter((loc) => !boostedSlugs.has(loc.slug))
+    .map((loc) => ({
+      url: `${baseUrl}/${loc.slug}`,
+      lastModified: now,
+      changeFrequency: "hourly" as const,
+      priority: loc.tags.includes("city") ? 0.9 : 0.7,
+    }));
 
   // Sub-route pages for each location (atmosphere, forecast)
   const subRoutePages: MetadataRoute.Sitemap = LOCATIONS.flatMap((loc) => [

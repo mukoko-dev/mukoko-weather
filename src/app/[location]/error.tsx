@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { reportErrorToAnalytics } from "@/lib/observability";
+import { reportErrorToAnalytics, buildIssueUrl } from "@/lib/observability";
 import { getRetryCount, setRetryCount, clearRetryCount, MAX_RETRIES } from "@/lib/error-retry";
 
 export default function LocationError({
@@ -65,6 +65,20 @@ export default function LocationError({
             View historical data instead
           </Link>
         </Button>
+        <a
+          href={buildIssueUrl({
+            title: "Weather page error",
+            source: "location",
+            message: error.message,
+            page: typeof window !== "undefined" ? window.location.pathname : undefined,
+            digest: error.digest,
+          })}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 text-xs text-text-tertiary underline hover:text-text-secondary transition-colors"
+        >
+          Report this issue
+        </a>
       </div>
     </div>
   );

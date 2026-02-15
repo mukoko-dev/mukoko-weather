@@ -62,7 +62,7 @@ describe("sitemap.ts", () => {
     const historyEntry = result.find((e) => e.url === "https://weather.mukoko.com/history");
     expect(historyEntry).toBeDefined();
     expect(historyEntry!.changeFrequency).toBe("daily");
-    expect(historyEntry!.priority).toBe(0.7);
+    expect(historyEntry!.priority).toBe(0.8);
 
     const privacyEntry = result.find((e) => e.url === "https://weather.mukoko.com/privacy");
     expect(privacyEntry).toBeDefined();
@@ -73,10 +73,10 @@ describe("sitemap.ts", () => {
     expect(termsEntry!.changeFrequency).toBe("yearly");
   });
 
-  it("total entries = 7 static pages + all locations + sub-routes (atmosphere, forecast)", () => {
-    // 7 static (home, about, help, history, privacy, terms, status)
-    // + 1 per location + 2 sub-routes per location (atmosphere, forecast)
-    expect(result.length).toBe(7 + LOCATIONS.length * 3);
+  it("total entries = static pages + locations + sub-routes (atmosphere, forecast)", () => {
+    // 10 static (home, harare, bulawayo, history, help, about, status, embed, privacy, terms)
+    // + (LOCATIONS.length - 2) remaining locations + 2 sub-routes per location
+    expect(result.length).toBe(10 + (LOCATIONS.length - 2) + LOCATIONS.length * 2);
   });
 
   it("city locations have priority 0.9", () => {
