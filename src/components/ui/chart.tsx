@@ -32,7 +32,7 @@ ChartJS.register(
 );
 
 // ── Chart config types ─────────────────────────────────────────────────────
-// Compatible with the previous Recharts-based config to minimise migration.
+// Chart config type for colour/label definitions per dataset key.
 
 export type ChartConfig = {
   [k in string]: {
@@ -52,7 +52,14 @@ function resolveColor(color: string): string {
   if (typeof window === "undefined") return color;
   if (!color.startsWith("var(")) return color;
   const prop = color.replace(/^var\(/, "").replace(/\)$/, "").trim();
-  return getComputedStyle(document.documentElement).getPropertyValue(prop).trim() || color;
+  try {
+    const resolved = getComputedStyle(document.documentElement).getPropertyValue(prop).trim();
+    // Return the resolved value only if non-empty, otherwise fall back to the
+    // raw CSS var string so Chart.js never receives an empty color.
+    return resolved || color;
+  } catch {
+    return color;
+  }
 }
 
 // ── Resolve all config colours ─────────────────────────────────────────────
@@ -93,13 +100,14 @@ interface CanvasChartProps<T extends ChartType = ChartType> {
 /**
  * Canvas-based chart wrapper built on Chart.js + react-chartjs-2.
  *
- * Replaces the previous SVG-based Recharts `ChartContainer`:
- * - Each chart is a single `<canvas>` DOM element regardless of data volume.
- * - 7 charts × 365 data points = 7 DOM elements (vs thousands of SVG nodes).
- * - Mobile memory usage drops dramatically, eliminating OOM tab-kills.
+ * Canvas-based chart wrapper built on Chart.js + react-chartjs-2.
+ *
+ * Each chart is a single `<canvas>` DOM element regardless of data volume.
+ * 7 charts × 365 data points = 7 DOM elements (vs thousands of SVG nodes).
  *
  * Resolves CSS custom properties to concrete values so Chart.js receives
  * real colours. Automatically updates when the theme changes.
+ * Destroys Chart.js instances on unmount to prevent canvas memory leaks.
  */
 export function CanvasChart<T extends ChartType = ChartType>({
   type,
@@ -111,12 +119,26 @@ export function CanvasChart<T extends ChartType = ChartType>({
 }: CanvasChartProps<T>) {
   const chartRef = React.useRef<ChartJS<T>>(null);
 
-  // Resolve colours on every render so theme changes are picked up.
+  // Resolve colours for the dependency hash — triggers re-render on theme change.
   const resolvedColors = resolveConfigColors(config);
+  // Simple hash to detect colour changes without deep comparison
+  const colorHash = Object.values(resolvedColors).join(",");
 
   // Mobile performance: disable animations and reduce DPR
   const isMobile =
     typeof window !== "undefined" && window.innerWidth < 768;
+
+  // Destroy the Chart.js instance on unmount to prevent canvas memory leaks.
+  // Without this, LazySection's bidirectional unmount leaves orphaned Chart
+  // instances holding canvas image data in the JS heap, causing OOM on mobile.
+  React.useEffect(() => {
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.destroy();
+        chartRef.current = null;
+      }
+    };
+  }, []);
 
   const mergedOptions: ChartOptions<T> = React.useMemo(() => {
     const base: ChartOptions<ChartType> = {
@@ -149,7 +171,7 @@ export function CanvasChart<T extends ChartType = ChartType>({
 
     // Deep merge user options over base
     return deepMerge(base, (options ?? {}) as Record<string, unknown>) as ChartOptions<T>;
-  }, [options, isMobile, resolvedColors]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [options, isMobile, colorHash]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={className} data-slot="chart">

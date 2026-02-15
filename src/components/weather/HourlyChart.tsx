@@ -82,7 +82,9 @@ export function HourlyChart({ hourly }: Props) {
 function HourlyChartInner({ hourly }: Props) {
   const data = prepareHourlyData(hourly);
 
-  const allTemps = data.length >= 2 ? data.flatMap((d) => [d.temp, d.feelsLike]) : [0, 10];
+  if (data.length < 2) return null;
+
+  const allTemps = data.flatMap((d) => [d.temp, d.feelsLike]);
   const minTemp = Math.min(...allTemps) - 2;
   const maxTemp = Math.max(...allTemps) + 2;
 
@@ -190,8 +192,6 @@ function HourlyChartInner({ hourly }: Props) {
     [gridColor, minTemp, maxTemp],
   );
 
-  if (data.length < 2) return null;
-
   return (
     <div className="mt-4 mb-2">
       <CanvasChart
@@ -199,7 +199,7 @@ function HourlyChartInner({ hourly }: Props) {
         data={chartData}
         options={chartOptions}
         config={chartConfig}
-        className="aspect-[16/5] w-full"
+        className="aspect-[2/1] sm:aspect-[16/5] w-full"
       />
     </div>
   );

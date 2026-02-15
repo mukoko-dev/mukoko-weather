@@ -74,7 +74,7 @@ We keep dependencies minimal and up to date. Key production dependencies:
 - `mongodb` — database client
 - `zustand` — client-side state
 - `radix-ui` — accessible UI primitives (via shadcn/ui)
-- `recharts` — chart rendering
+- `chart.js` + `react-chartjs-2` — Canvas 2D chart rendering
 - `react-markdown` — markdown rendering (AI summaries)
 
 GitHub Dependabot and CodeQL are enabled for automated vulnerability scanning.

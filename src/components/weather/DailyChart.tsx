@@ -79,7 +79,9 @@ export function DailyChart({ daily }: Props) {
 function DailyChartInner({ daily }: Props) {
   const data = prepareDailyData(daily);
 
-  const allTemps = data.length >= 2 ? data.flatMap((d) => [d.high, d.low, d.feelsHigh, d.feelsLow]) : [0, 10];
+  if (data.length < 2) return null;
+
+  const allTemps = data.flatMap((d) => [d.high, d.low, d.feelsHigh, d.feelsLow]);
   const minTemp = Math.min(...allTemps) - 2;
   const maxTemp = Math.max(...allTemps) + 2;
 
@@ -88,6 +90,7 @@ function DailyChartInner({ daily }: Props) {
   const feelsHighColor = resolveColor("var(--chart-3)");
   const feelsLowColor = resolveColor("var(--chart-4)");
   const gridColor = resolveColor("var(--color-text-tertiary)");
+  const surfaceColor = resolveColor("var(--color-surface-card)");
 
   const chartData: ChartData<"line"> = useMemo(
     () => ({
@@ -102,7 +105,7 @@ function DailyChartInner({ daily }: Props) {
           fill: true,
           tension: 0.4,
           pointRadius: 3,
-          pointBackgroundColor: resolveColor("var(--color-surface-card)"),
+          pointBackgroundColor: surfaceColor,
           pointBorderWidth: 2,
           pointHitRadius: 10,
         },
@@ -116,7 +119,7 @@ function DailyChartInner({ daily }: Props) {
           fill: true,
           tension: 0.4,
           pointRadius: 3,
-          pointBackgroundColor: resolveColor("var(--color-surface-card)"),
+          pointBackgroundColor: surfaceColor,
           pointBorderWidth: 2,
           pointHitRadius: 10,
         },
@@ -144,7 +147,7 @@ function DailyChartInner({ daily }: Props) {
         },
       ],
     }),
-    [data, highColor, lowColor, feelsHighColor, feelsLowColor],
+    [data, highColor, lowColor, feelsHighColor, feelsLowColor, surfaceColor],
   );
 
   const chartOptions: ChartOptions<"line"> = useMemo(
@@ -192,8 +195,6 @@ function DailyChartInner({ daily }: Props) {
     [gridColor, minTemp, maxTemp],
   );
 
-  if (data.length < 2) return null;
-
   return (
     <div className="mt-4 mb-2">
       <CanvasChart
@@ -201,7 +202,7 @@ function DailyChartInner({ daily }: Props) {
         data={chartData}
         options={chartOptions}
         config={chartConfig}
-        className="aspect-[16/7] w-full"
+        className="aspect-[4/3] sm:aspect-[16/7] w-full"
       />
     </div>
   );

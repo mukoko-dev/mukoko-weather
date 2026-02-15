@@ -67,10 +67,18 @@ export function TimeSeriesChart({
   tooltipTitle,
   xTickFormat,
   maxTicksLimit = 8,
-  aspect = "aspect-[16/5]",
+  aspect = "aspect-[2/1] sm:aspect-[16/5]",
   showDots = false,
 }: TimeSeriesChartProps) {
   const gridColor = resolveColor("var(--color-text-tertiary)");
+
+  // Resolve all series colors once — used for both config and datasets.
+  // Tracked as a dependency so charts re-render on theme change.
+  const resolvedSeriesColors = useMemo(
+    () => series.map((s) => resolveColor(s.color)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [series, gridColor], // gridColor changes when theme changes, triggering re-resolve
+  );
 
   const config = useMemo(() => {
     const cfg: ChartConfig = {};
@@ -85,8 +93,8 @@ export function TimeSeriesChart({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const chartData: ChartData<any> = useMemo(() => {
     const labels = data.map((d) => d[labelKey]);
-    const datasets = series.map((s) => {
-      const color = resolveColor(s.color);
+    const datasets = series.map((s, idx) => {
+      const color = resolvedSeriesColors[idx];
       const isBar = s.type === "bar";
       const dotRadius = (s.showDots ?? showDots) ? 2 : 0;
 
@@ -120,7 +128,7 @@ export function TimeSeriesChart({
     });
 
     return { labels, datasets };
-  }, [data, labelKey, series, showDots]);
+  }, [data, labelKey, series, showDots, resolvedSeriesColors]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const chartOptions: ChartOptions<any> = useMemo(() => {
