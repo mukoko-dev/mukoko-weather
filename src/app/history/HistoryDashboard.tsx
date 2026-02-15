@@ -11,6 +11,7 @@ import { WindSpeedChart } from "@/components/weather/charts/WindSpeedChart";
 import { PressureChart } from "@/components/weather/charts/PressureChart";
 import { HumidityChart } from "@/components/weather/charts/HumidityChart";
 import { DaylightChart } from "@/components/weather/charts/DaylightChart";
+import { ChartSkeleton } from "@/components/ui/skeleton";
 import { LOCATIONS, searchLocations, type ZimbabweLocation } from "@/lib/locations";
 import { weatherCodeToInfo, windDirection, uvLevel } from "@/lib/weather";
 import type { WeatherHistoryDoc } from "@/lib/db";
@@ -118,14 +119,6 @@ function avg(arr: number[]): number {
 
 function sum(arr: number[]): number {
   return Math.round(arr.reduce((s, v) => s + v, 0) * 10) / 10;
-}
-
-// ── Skeleton placeholder for chart sections ──────────────────────────────────
-
-function ChartSkeleton({ aspect = "aspect-[16/5]" }: { aspect?: string }) {
-  return (
-    <div className={`${aspect} w-full animate-pulse rounded-[var(--radius-card)] bg-text-tertiary/10`} />
-  );
 }
 
 // ── Main component ──────────────────────────────────────────────────────────

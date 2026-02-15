@@ -7,14 +7,14 @@ interface Props {
 }
 
 /** Calculate the percentage position of a temperature within the overall range */
-function tempPercent(temp: number, absMin: number, absMax: number) {
+export function tempPercent(temp: number, absMin: number, absMax: number) {
   const range = absMax - absMin;
   if (range === 0) return 50;
   return ((temp - absMin) / range) * 100;
 }
 
 /** Get the warm gradient color for a temperature position (0-100%) */
-function tempBarGradient(lowPct: number, highPct: number) {
+export function tempBarGradient(lowPct: number, highPct: number) {
   return `linear-gradient(to right, var(--color-temp-cool) ${lowPct}%, var(--color-temp-mild) ${(lowPct + highPct) / 2}%, var(--color-temp-warm) ${highPct}%)`;
 }
 

@@ -13,7 +13,9 @@ interface LazySectionProps {
 }
 
 const DEFAULT_FALLBACK = (
-  <div className="h-48 animate-pulse rounded-[var(--radius-card)] bg-surface-card" />
+  <div className="h-48 animate-pulse rounded-[var(--radius-card)] bg-surface-card" role="status" aria-label="Loading section">
+    <span className="sr-only">Loading section</span>
+  </div>
 );
 
 // ── TikTok-style sequential mount queue ─────────────────────────────────────

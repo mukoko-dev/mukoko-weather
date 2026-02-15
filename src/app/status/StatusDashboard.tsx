@@ -19,24 +19,24 @@ interface StatusResponse {
 function StatusIcon({ status }: { status: CheckResult["status"] }) {
   if (status === "operational") {
     return (
-      <span className="inline-flex h-3 w-3 rounded-full bg-emerald-500" aria-label="Operational" />
+      <span className="inline-flex h-3 w-3 rounded-full bg-severity-low" aria-label="Operational" />
     );
   }
   if (status === "degraded") {
     return (
-      <span className="inline-flex h-3 w-3 rounded-full bg-amber-500" aria-label="Degraded" />
+      <span className="inline-flex h-3 w-3 rounded-full bg-severity-moderate" aria-label="Degraded" />
     );
   }
   return (
-    <span className="inline-flex h-3 w-3 rounded-full bg-red-500" aria-label="Down" />
+    <span className="inline-flex h-3 w-3 rounded-full bg-severity-severe" aria-label="Down" />
   );
 }
 
 function StatusBadge({ status }: { status: CheckResult["status"] }) {
   const styles = {
-    operational: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
-    degraded: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
-    down: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20",
+    operational: "bg-severity-low/10 text-severity-low border-severity-low/20",
+    degraded: "bg-severity-moderate/10 text-severity-moderate border-severity-moderate/20",
+    down: "bg-severity-severe/10 text-severity-severe border-severity-severe/20",
   };
 
   return (
@@ -53,18 +53,18 @@ function OverallBanner({ status, timestamp }: { status: string; timestamp: strin
     <div
       className={`mt-6 flex items-center gap-3 rounded-[var(--radius-card)] border p-4 ${
         isOperational
-          ? "border-emerald-500/30 bg-emerald-500/5"
-          : "border-amber-500/30 bg-amber-500/5"
+          ? "border-severity-low/30 bg-severity-low/5"
+          : "border-severity-moderate/30 bg-severity-moderate/5"
       }`}
     >
       <span
         className={`inline-flex h-4 w-4 rounded-full ${
-          isOperational ? "bg-emerald-500" : "bg-amber-500"
+          isOperational ? "bg-severity-low" : "bg-severity-moderate"
         }`}
         aria-hidden="true"
       />
       <div>
-        <p className={`font-semibold ${isOperational ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>
+        <p className={`font-semibold ${isOperational ? "text-severity-low" : "text-severity-moderate"}`}>
           {isOperational ? "All systems operational" : "Some systems are experiencing issues"}
         </p>
         <p className="text-sm text-text-tertiary">
@@ -120,8 +120,8 @@ export function StatusDashboard() {
 
   if (error && !data) {
     return (
-      <div className="mt-8 rounded-[var(--radius-card)] border border-red-500/30 bg-red-500/5 p-6 text-center">
-        <p className="font-semibold text-red-700 dark:text-red-400">
+      <div className="mt-8 rounded-[var(--radius-card)] border border-severity-severe/30 bg-severity-severe/5 p-6 text-center">
+        <p className="font-semibold text-severity-severe">
           Unable to fetch status
         </p>
         <p className="mt-1 text-sm text-text-secondary">{error}</p>

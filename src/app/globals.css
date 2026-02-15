@@ -116,6 +116,14 @@
 
   /* Rain probability */
   --color-rain: #0288D1;
+
+  /* Severity / status levels — for weather insights, alerts */
+  --color-severity-low: #004D40;
+  --color-severity-moderate: #5D4037;
+  --color-severity-high: #BF5700;
+  --color-severity-severe: #B3261E;
+  --color-severity-extreme: #7F0000;
+  --color-severity-cold: #0047AB;
 }
 
 [data-theme="dark"] {
@@ -206,6 +214,14 @@
   /* Rain probability */
   --color-rain: #4FC3F7;
 
+  /* Severity / status levels — dark mode */
+  --color-severity-low: #64FFDA;
+  --color-severity-moderate: #FFD740;
+  --color-severity-high: #FF9800;
+  --color-severity-severe: #FF5252;
+  --color-severity-extreme: #FF1744;
+  --color-severity-cold: #42A5F5;
+
   /* Minerals Stripe — dark mode (brighter for contrast on dark surfaces) */
   --mineral-tanzanite: #B388FF;
   --mineral-cobalt: #64B5F6;
@@ -260,6 +276,12 @@
   --color-temp-hot: var(--color-temp-hot);
   --color-temp-bar-track: var(--color-temp-bar-track);
   --color-rain: var(--color-rain);
+  --color-severity-low: var(--color-severity-low);
+  --color-severity-moderate: var(--color-severity-moderate);
+  --color-severity-high: var(--color-severity-high);
+  --color-severity-severe: var(--color-severity-severe);
+  --color-severity-extreme: var(--color-severity-extreme);
+  --color-severity-cold: var(--color-severity-cold);
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-display: "Noto Serif", Georgia, serif;
   --font-heading: "Plus Jakarta Sans", system-ui, sans-serif;

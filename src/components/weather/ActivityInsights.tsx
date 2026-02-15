@@ -14,20 +14,20 @@ const MOON_PHASES = [
   "Full Moon", "Waning Gibbous", "Third Quarter", "Waning Crescent",
 ] as const;
 
-function moonPhaseName(phase: number): string {
+export function moonPhaseName(phase: number): string {
   return MOON_PHASES[phase] ?? "Unknown";
 }
 
-function heatStressLevel(index: number): { label: string; className: string } {
-  if (index < 22) return { label: "None", className: "text-green-600" };
-  if (index < 24) return { label: "Mild", className: "text-yellow-600" };
-  if (index < 26) return { label: "Moderate", className: "text-orange-500" };
-  if (index < 28) return { label: "Medium", className: "text-orange-600" };
-  if (index < 30) return { label: "Severe", className: "text-red-600" };
-  return { label: "Extreme", className: "text-red-800" };
+export function heatStressLevel(index: number): { label: string; className: string } {
+  if (index < 22) return { label: "None", className: "text-severity-low" };
+  if (index < 24) return { label: "Mild", className: "text-severity-moderate" };
+  if (index < 26) return { label: "Moderate", className: "text-severity-high" };
+  if (index < 28) return { label: "Medium", className: "text-severity-high" };
+  if (index < 30) return { label: "Severe", className: "text-severity-severe" };
+  return { label: "Extreme", className: "text-severity-extreme" };
 }
 
-function precipTypeName(type: number): string {
+export function precipTypeName(type: number): string {
   switch (type) {
     case 0: return "None";
     case 1: return "Rain";
@@ -38,12 +38,12 @@ function precipTypeName(type: number): string {
   }
 }
 
-function uvConcernLabel(concern: number): { label: string; className: string } {
-  if (concern <= 2) return { label: "Low", className: "text-green-600" };
-  if (concern <= 5) return { label: "Moderate", className: "text-yellow-600" };
-  if (concern <= 7) return { label: "High", className: "text-orange-500" };
-  if (concern <= 10) return { label: "Very High", className: "text-red-600" };
-  return { label: "Extreme", className: "text-red-800" };
+export function uvConcernLabel(concern: number): { label: string; className: string } {
+  if (concern <= 2) return { label: "Low", className: "text-severity-low" };
+  if (concern <= 5) return { label: "Moderate", className: "text-severity-moderate" };
+  if (concern <= 7) return { label: "High", className: "text-severity-high" };
+  if (concern <= 10) return { label: "Very High", className: "text-severity-severe" };
+  return { label: "Extreme", className: "text-severity-extreme" };
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +245,7 @@ function FarmingCard({ insights }: { insights: WeatherInsights }) {
             label="Dew Point"
             value={`${Math.round(insights.dewPoint)}°C`}
             detail={insights.dewPoint > 20 ? "Disease risk" : insights.dewPoint < 5 ? "Frost risk" : "Normal"}
-            detailClassName={insights.dewPoint > 20 ? "text-orange-500" : insights.dewPoint < 5 ? "text-blue-500" : "text-green-600"}
+            detailClassName={insights.dewPoint > 20 ? "text-severity-high" : insights.dewPoint < 5 ? "text-severity-cold" : "text-severity-low"}
           />
         )}
         {insights.precipitationType != null && insights.precipitationType > 0 && (
@@ -278,7 +278,7 @@ function MiningCard({ insights }: { insights: WeatherInsights }) {
             label="Lightning Risk"
             value={`${Math.round(insights.thunderstormProbability)}%`}
             detail={insights.thunderstormProbability > 50 ? "Suspend outdoor ops" : insights.thunderstormProbability > 20 ? "Monitor closely" : "Low risk"}
-            detailClassName={insights.thunderstormProbability > 50 ? "text-red-600" : insights.thunderstormProbability > 20 ? "text-orange-500" : "text-green-600"}
+            detailClassName={insights.thunderstormProbability > 50 ? "text-severity-severe" : insights.thunderstormProbability > 20 ? "text-severity-high" : "text-severity-low"}
           />
         )}
         {insights.visibility != null && (
@@ -308,7 +308,7 @@ function SportsCard({ insights }: { insights: WeatherInsights }) {
             label="Storm Risk"
             value={`${Math.round(insights.thunderstormProbability)}%`}
             detail={insights.thunderstormProbability > 40 ? "Move indoors" : insights.thunderstormProbability > 15 ? "Stay alert" : "Safe"}
-            detailClassName={insights.thunderstormProbability > 40 ? "text-red-600" : insights.thunderstormProbability > 15 ? "text-orange-500" : "text-green-600"}
+            detailClassName={insights.thunderstormProbability > 40 ? "text-severity-severe" : insights.thunderstormProbability > 15 ? "text-severity-high" : "text-severity-low"}
           />
         )}
         {insights.uvHealthConcern != null && (
@@ -335,7 +335,7 @@ function TravelCard({ insights }: { insights: WeatherInsights }) {
             label="Visibility"
             value={`${insights.visibility.toFixed(1)} km`}
             detail={insights.visibility < 1 ? "Very poor" : insights.visibility < 5 ? "Reduced" : "Good"}
-            detailClassName={insights.visibility < 1 ? "text-red-600" : insights.visibility < 5 ? "text-orange-500" : "text-green-600"}
+            detailClassName={insights.visibility < 1 ? "text-severity-severe" : insights.visibility < 5 ? "text-severity-high" : "text-severity-low"}
           />
         )}
         {insights.thunderstormProbability != null && (
