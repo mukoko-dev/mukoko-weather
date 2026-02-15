@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { LOCATIONS } from "@/lib/locations";
 import robots from "./robots";
 import sitemap from "./sitemap";
 
@@ -12,9 +11,12 @@ describe("robots.ts", () => {
     expect(rules[0].userAgent).toBe("*");
   });
 
-  it("allows root path", () => {
+  it("allows root path and llms.txt files", () => {
     const rules = Array.isArray(result.rules) ? result.rules : [result.rules];
-    expect(rules[0].allow).toBe("/");
+    const allowed = rules[0].allow;
+    expect(allowed).toContain("/");
+    expect(allowed).toContain("/llms.txt");
+    expect(allowed).toContain("/llms-full.txt");
   });
 
   it("disallows /api/ and /embed/", () => {
@@ -34,23 +36,19 @@ describe("robots.ts", () => {
 });
 
 describe("sitemap.ts", () => {
-  const result = sitemap();
-
-  it("includes the homepage", () => {
+  // Sitemap now queries MongoDB — in tests without a DB, it returns
+  // static pages + explore tag pages (locations array will be empty).
+  it("includes the homepage", async () => {
+    const result = await sitemap();
     const home = result.find((entry) => entry.url === "https://weather.mukoko.com");
     expect(home).toBeDefined();
     expect(home!.priority).toBe(1.0);
     expect(home!.changeFrequency).toBe("hourly");
   });
 
-  it("includes all locations from the database", () => {
-    for (const loc of LOCATIONS) {
-      const entry = result.find((e) => e.url === `https://weather.mukoko.com/${loc.slug}`);
-      expect(entry).toBeDefined();
-    }
-  });
+  it("includes static pages (about, help, history, privacy, terms)", async () => {
+    const result = await sitemap();
 
-  it("includes static pages (about, help, history, privacy, terms)", () => {
     const aboutEntry = result.find((e) => e.url === "https://weather.mukoko.com/about");
     expect(aboutEntry).toBeDefined();
     expect(aboutEntry!.changeFrequency).toBe("monthly");
@@ -62,7 +60,7 @@ describe("sitemap.ts", () => {
     const historyEntry = result.find((e) => e.url === "https://weather.mukoko.com/history");
     expect(historyEntry).toBeDefined();
     expect(historyEntry!.changeFrequency).toBe("daily");
-    expect(historyEntry!.priority).toBe(0.7);
+    expect(historyEntry!.priority).toBe(0.8);
 
     const privacyEntry = result.find((e) => e.url === "https://weather.mukoko.com/privacy");
     expect(privacyEntry).toBeDefined();
@@ -73,40 +71,52 @@ describe("sitemap.ts", () => {
     expect(termsEntry!.changeFrequency).toBe("yearly");
   });
 
-  it("total entries = 6 static pages + all locations + sub-routes (atmosphere, forecast)", () => {
-    // 6 static + 1 per location + 2 sub-routes per location (atmosphere, forecast)
-    expect(result.length).toBe(6 + LOCATIONS.length * 3);
-  });
+  it("includes explore page and tag pages", async () => {
+    const result = await sitemap();
+    const explore = result.find((e) => e.url === "https://weather.mukoko.com/explore");
+    expect(explore).toBeDefined();
+    expect(explore!.priority).toBe(0.8);
 
-  it("city locations have priority 0.9", () => {
-    const harare = result.find((e) => e.url === "https://weather.mukoko.com/harare");
-    expect(harare).toBeDefined();
-    expect(harare!.priority).toBe(0.9);
-  });
-
-  it("non-city locations have priority 0.7", () => {
-    const mazowe = result.find((e) => e.url === "https://weather.mukoko.com/mazowe");
-    expect(mazowe).toBeDefined();
-    expect(mazowe!.priority).toBe(0.7);
-  });
-
-  it("all location entries have changeFrequency set to hourly", () => {
-    const locationEntries = result.filter((e) =>
-      LOCATIONS.some((loc) => e.url === `https://weather.mukoko.com/${loc.slug}`)
-    );
-    for (const entry of locationEntries) {
-      expect(entry.changeFrequency).toBe("hourly");
+    const exploreTags = ["city", "farming", "mining", "tourism", "national-park", "education", "border", "travel"];
+    for (const tag of exploreTags) {
+      const entry = result.find((e) => e.url === `https://weather.mukoko.com/explore/${tag}`);
+      expect(entry).toBeDefined();
+      expect(entry!.priority).toBe(0.7);
     }
   });
 
-  it("all entries have lastModified set", () => {
+  it("includes boosted city entries (harare, bulawayo, victoria-falls)", async () => {
+    const result = await sitemap();
+    const harare = result.find((e) => e.url === "https://weather.mukoko.com/harare");
+    expect(harare).toBeDefined();
+    expect(harare!.priority).toBe(0.9);
+
+    const bulawayo = result.find((e) => e.url === "https://weather.mukoko.com/bulawayo");
+    expect(bulawayo).toBeDefined();
+    expect(bulawayo!.priority).toBe(0.9);
+
+    const vicfalls = result.find((e) => e.url === "https://weather.mukoko.com/victoria-falls");
+    expect(vicfalls).toBeDefined();
+    expect(vicfalls!.priority).toBe(0.9);
+  });
+
+  it("at minimum includes static pages + explore tag pages (12 + 8 = 20)", async () => {
+    const result = await sitemap();
+    // Without MongoDB, we get 12 static + 8 explore tags = 20 minimum
+    // With MongoDB, we also get location pages + sub-routes
+    expect(result.length).toBeGreaterThanOrEqual(20);
+  });
+
+  it("all entries have lastModified set", async () => {
+    const result = await sitemap();
     for (const entry of result) {
       expect(entry.lastModified).toBeDefined();
       expect(entry.lastModified).toBeInstanceOf(Date);
     }
   });
 
-  it("all URLs use https", () => {
+  it("all URLs use https", async () => {
+    const result = await sitemap();
     for (const entry of result) {
       expect(entry.url).toMatch(/^https:\/\//);
     }

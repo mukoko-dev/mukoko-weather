@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWeatherHistory } from "@/lib/db";
-import { getLocationBySlug } from "@/lib/locations";
+import { getWeatherHistory, getLocationFromDb } from "@/lib/db";
 import { logError } from "@/lib/observability";
 
 /**
@@ -19,7 +18,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing location parameter" }, { status: 400 });
   }
 
-  const location = getLocationBySlug(locationSlug);
+  let location;
+  try {
+    location = await getLocationFromDb(locationSlug);
+  } catch {
+    return NextResponse.json({ error: "Location service unavailable" }, { status: 503 });
+  }
   if (!location) {
     return NextResponse.json({ error: "Unknown location" }, { status: 404 });
   }

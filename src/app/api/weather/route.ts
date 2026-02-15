@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findNearestLocation } from "@/lib/locations";
-import { getWeatherForLocation } from "@/lib/db";
+import { getWeatherForLocation, findNearestLocationsFromDb } from "@/lib/db";
 import { createFallbackWeather } from "@/lib/weather";
 import { logError, logWarn } from "@/lib/observability";
 
@@ -18,10 +17,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Coordinates outside Zimbabwe region" }, { status: 400 });
   }
 
-  // Resolve to nearest known location for cache key
-  const nearestLocation = findNearestLocation(lat, lon);
-  const locationSlug = nearestLocation?.slug ?? `${lat.toFixed(2)}_${lon.toFixed(2)}`;
-  const elevation = nearestLocation?.elevation ?? 1200;
+  // Resolve to nearest known location for cache key (from MongoDB)
+  let locationSlug = `${lat.toFixed(2)}_${lon.toFixed(2)}`;
+  let elevation = 1200;
+  try {
+    const nearest = await findNearestLocationsFromDb(lat, lon, { limit: 1 });
+    if (nearest.length > 0) {
+      locationSlug = nearest[0].slug;
+      elevation = nearest[0].elevation;
+    }
+  } catch {
+    // MongoDB unavailable — use coordinate-based key
+  }
 
   try {
     const { data, source } = await getWeatherForLocation(locationSlug, lat, lon, elevation);

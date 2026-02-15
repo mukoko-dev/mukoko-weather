@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getLocationBySlug } from "@/lib/locations";
 import { checkFrostRisk, createFallbackWeather, getZimbabweSeason } from "@/lib/weather";
-import { getWeatherForLocation } from "@/lib/db";
+import { getWeatherForLocation, getLocationFromDb } from "@/lib/db";
 import { AtmosphereDashboard } from "./AtmosphereDashboard";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +14,7 @@ export async function generateMetadata({
   params: Promise<{ location: string }>;
 }): Promise<Metadata> {
   const { location: slug } = await params;
-  const loc = getLocationBySlug(slug);
+  const loc = await getLocationFromDb(slug);
   if (!loc) return { title: "Location not found" };
 
   const title = `${loc.name} Atmospheric Conditions — Humidity, Wind, UV & Pressure`;
@@ -54,7 +53,7 @@ export default async function AtmospherePage({
   params: Promise<{ location: string }>;
 }) {
   const { location: slug } = await params;
-  const location = getLocationBySlug(slug);
+  const location = await getLocationFromDb(slug);
   if (!location) notFound();
 
   let weather;

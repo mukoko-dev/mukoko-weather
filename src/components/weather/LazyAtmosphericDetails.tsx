@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect, lazy, Suspense } from "react";
+import { lazy, Suspense } from "react";
 import type { HourlyWeather } from "@/lib/weather";
 
 const AtmosphericDetails = lazy(() =>
@@ -27,43 +27,11 @@ function AtmosphericDetailsSkeleton() {
 /**
  * Lazy-loading wrapper for AtmosphericDetails.
  *
- * Uses IntersectionObserver to defer mounting the 4 heavy Recharts charts
- * until the user scrolls near them. This dramatically reduces initial memory
- * usage on mobile devices where all 6 charts would otherwise mount at once.
+ * Uses React.lazy() for code-splitting the Canvas chart components.
+ * The actual viewport-based lazy loading is handled by LazySection
+ * in the parent dashboard, so this wrapper only handles code-splitting.
  */
 export function LazyAtmosphericDetails({ hourly }: { hourly: HourlyWeather }) {
-  const sentinelRef = useRef<HTMLDivElement>(null);
-  // If IntersectionObserver is unavailable, render immediately
-  const [visible, setVisible] = useState(
-    () => typeof window !== "undefined" && typeof IntersectionObserver === "undefined",
-  );
-
-  useEffect(() => {
-    if (visible) return;
-    const el = sentinelRef.current;
-    if (!el) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      // Start loading when the section is within 200px of the viewport
-      { rootMargin: "200px" },
-    );
-
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [visible]);
-
-  if (!visible) {
-    return (
-      <div ref={sentinelRef} aria-hidden="true" className="h-24" />
-    );
-  }
-
   return (
     <Suspense fallback={<AtmosphericDetailsSkeleton />}>
       <AtmosphericDetails hourly={hourly} />

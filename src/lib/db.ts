@@ -5,7 +5,8 @@
  *   - weather_cache   : Short-lived weather API response cache (replaces KV WEATHER_CACHE)
  *   - ai_summaries    : Tiered-TTL AI summary cache (replaces KV AI_SUMMARIES)
  *   - weather_history : Historical weather recordings for analytics
- *   - locations       : Zimbabwe locations (mirrors the static array, queryable)
+ *   - locations       : Zimbabwe locations (single source of truth)
+ *   - activities      : User activities for personalized weather insights
  */
 
 import { getDb } from "./mongo";
@@ -13,6 +14,7 @@ import { fetchWeather, createFallbackWeather, type WeatherData } from "./weather
 import { fetchWeatherFromTomorrow, TomorrowRateLimitError } from "./tomorrow";
 import { logWarn, logError } from "./observability";
 import type { ZimbabweLocation } from "./locations";
+import type { Activity, ActivityCategory } from "./activities";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,6 +54,10 @@ export interface LocationDoc extends ZimbabweLocation {
   updatedAt: Date;
 }
 
+export interface ActivityDoc extends Activity {
+  updatedAt: Date;
+}
+
 // ---------------------------------------------------------------------------
 // Collection accessors
 // ---------------------------------------------------------------------------
@@ -72,6 +78,10 @@ function locationsCollection() {
   return getDb().collection<LocationDoc>("locations");
 }
 
+function activitiesCollection() {
+  return getDb().collection<ActivityDoc>("activities");
+}
+
 // ---------------------------------------------------------------------------
 // Indexes — call once on app startup (idempotent)
 // ---------------------------------------------------------------------------
@@ -90,9 +100,22 @@ export async function ensureIndexes(): Promise<void> {
     weatherHistoryCollection().createIndex({ locationSlug: 1, date: -1 }, { unique: true }),
     weatherHistoryCollection().createIndex({ recordedAt: 1 }),
 
-    // Locations: by slug (unique) and by tags
+    // Locations: by slug (unique), by tags, text search, geospatial
     locationsCollection().createIndex({ slug: 1 }, { unique: true }),
     locationsCollection().createIndex({ tags: 1 }),
+    locationsCollection().createIndex(
+      { name: "text", province: "text", slug: "text" },
+      { weights: { name: 10, province: 5, slug: 3 }, name: "location_text_search" },
+    ),
+    locationsCollection().createIndex({ location: "2dsphere" }),
+
+    // Activities: by id (unique), by category, text search
+    activitiesCollection().createIndex({ id: 1 }, { unique: true }),
+    activitiesCollection().createIndex({ category: 1 }),
+    activitiesCollection().createIndex(
+      { label: "text", description: "text", category: "text" },
+      { weights: { label: 10, description: 5, category: 3 }, name: "activity_text_search" },
+    ),
 
     // API keys: one key per provider
     apiKeysCollection().createIndex({ provider: 1 }, { unique: true }),
@@ -391,7 +414,14 @@ export async function syncLocations(
   const bulkOps = locations.map((loc) => ({
     updateOne: {
       filter: { slug: loc.slug },
-      update: { $set: { ...loc, updatedAt: now } },
+      update: {
+        $set: {
+          ...loc,
+          // GeoJSON Point for 2dsphere queries (note: GeoJSON uses [lon, lat] order)
+          location: { type: "Point", coordinates: [loc.lon, loc.lat] },
+          updatedAt: now,
+        },
+      },
       upsert: true,
     },
   }));
@@ -414,4 +444,168 @@ export async function getLocationsByTagFromDb(
 
 export async function getAllLocationsFromDb(): Promise<LocationDoc[]> {
   return locationsCollection().find({}).toArray();
+}
+
+// ---------------------------------------------------------------------------
+// Search operations (MongoDB text search + geospatial)
+// ---------------------------------------------------------------------------
+
+export interface SearchResult {
+  locations: LocationDoc[];
+  total: number;
+}
+
+/**
+ * Full-text search across locations using MongoDB text index.
+ * Supports fuzzy matching via text score ranking.
+ * Results are sorted by relevance (text score).
+ */
+export async function searchLocationsFromDb(
+  query: string,
+  options: { tag?: string; limit?: number; skip?: number } = {},
+): Promise<SearchResult> {
+  const { tag, limit = 20, skip = 0 } = options;
+  const q = query.trim();
+
+  // Build filter
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const filter: Record<string, any> = {};
+
+  if (q) {
+    filter.$text = { $search: q };
+  }
+
+  if (tag) {
+    filter.tags = tag;
+  }
+
+  const col = locationsCollection();
+
+  const [locations, total] = await Promise.all([
+    q
+      ? col
+          .find(filter)
+          .project({ score: { $meta: "textScore" as const } })
+          .sort({ score: { $meta: "textScore" as const } })
+          .skip(skip)
+          .limit(limit)
+          .toArray() as Promise<LocationDoc[]>
+      : col
+          .find(filter)
+          .sort({ name: 1 })
+          .skip(skip)
+          .limit(limit)
+          .toArray() as Promise<LocationDoc[]>,
+    col.countDocuments(filter),
+  ]);
+
+  return { locations, total };
+}
+
+/**
+ * Find nearest locations to coordinates using MongoDB 2dsphere index.
+ * Returns locations sorted by distance (nearest first).
+ */
+export async function findNearestLocationsFromDb(
+  lat: number,
+  lon: number,
+  options: { limit?: number; maxDistanceKm?: number } = {},
+): Promise<LocationDoc[]> {
+  const { limit = 10, maxDistanceKm = 200 } = options;
+
+  return locationsCollection().find({
+    location: {
+      $near: {
+        $geometry: { type: "Point", coordinates: [lon, lat] },
+        $maxDistance: maxDistanceKm * 1000, // MongoDB uses metres
+      },
+    },
+  }).limit(limit).toArray() as Promise<LocationDoc[]>;
+}
+
+/**
+ * Get all distinct tags with location counts.
+ */
+export async function getTagCounts(): Promise<{ tag: string; count: number }[]> {
+  return locationsCollection().aggregate<{ tag: string; count: number }>([
+    { $unwind: "$tags" },
+    { $group: { _id: "$tags", count: { $sum: 1 } } },
+    { $project: { _id: 0, tag: "$_id", count: 1 } },
+    { $sort: { count: -1 } },
+  ]).toArray();
+}
+
+/**
+ * Get location and province counts for stats (e.g., footer).
+ */
+export async function getLocationStats(): Promise<{ locations: number; provinces: number }> {
+  const [locations, provinces] = await Promise.all([
+    locationsCollection().countDocuments(),
+    locationsCollection().distinct("province").then((p) => p.length),
+  ]);
+  return { locations, provinces };
+}
+
+// ---------------------------------------------------------------------------
+// Activity operations (sync seed data to MongoDB, query from MongoDB)
+// ---------------------------------------------------------------------------
+
+export async function syncActivities(
+  activities: Activity[],
+): Promise<void> {
+  const now = new Date();
+  const bulkOps = activities.map((act) => ({
+    updateOne: {
+      filter: { id: act.id },
+      update: {
+        $set: {
+          ...act,
+          updatedAt: now,
+        },
+      },
+      upsert: true,
+    },
+  }));
+  if (bulkOps.length > 0) {
+    await activitiesCollection().bulkWrite(bulkOps);
+  }
+}
+
+export async function getAllActivitiesFromDb(): Promise<ActivityDoc[]> {
+  return activitiesCollection().find({}).sort({ category: 1, label: 1 }).toArray();
+}
+
+export async function getActivitiesByCategoryFromDb(
+  category: ActivityCategory,
+): Promise<ActivityDoc[]> {
+  return activitiesCollection().find({ category }).sort({ label: 1 }).toArray();
+}
+
+export async function getActivityByIdFromDb(
+  id: string,
+): Promise<ActivityDoc | null> {
+  return activitiesCollection().findOne({ id });
+}
+
+export async function getActivityLabelsFromDb(
+  ids: string[],
+): Promise<string[]> {
+  const docs = await activitiesCollection().find({ id: { $in: ids } }).toArray();
+  return docs.map((d) => d.label);
+}
+
+export async function searchActivitiesFromDb(
+  query: string,
+): Promise<ActivityDoc[]> {
+  const q = query.trim();
+  if (!q) return getAllActivitiesFromDb();
+  return activitiesCollection()
+    .find({ $text: { $search: q } })
+    .project({ score: { $meta: "textScore" as const } })
+    .sort({ score: { $meta: "textScore" as const } })
+    .toArray() as Promise<ActivityDoc[]>;
+}
+
+export async function getActivityCategoriesFromDb(): Promise<ActivityCategory[]> {
+  return activitiesCollection().distinct("category") as Promise<ActivityCategory[]>;
 }

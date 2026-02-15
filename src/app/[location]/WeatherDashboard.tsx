@@ -15,7 +15,7 @@ import type { WeatherData, FrostAlert } from "@/lib/weather";
 import type { ZimbabweLocation } from "@/lib/locations";
 
 // ── Code-split heavy components ─────────────────────────────────────────────
-// These use React.lazy() so their JS chunks (Recharts, ReactMarkdown, etc.)
+// These use React.lazy() so their JS chunks (Chart.js, ReactMarkdown, etc.)
 // are only downloaded when the LazySection IntersectionObserver fires.
 // This dramatically reduces the initial JS parse/compile on iOS PWA.
 const HourlyForecast = lazy(() => import("@/components/weather/HourlyForecast").then((m) => ({ default: m.HourlyForecast })));

@@ -184,6 +184,81 @@ export default function RootLayout({
     },
   };
 
+  // SiteNavigationElement — tells Google which pages are the primary
+  // navigation structure. These become sitelink candidates in SERP.
+  const siteNavSchema = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    "@id": `${BASE_URL}/#navigation`,
+    name: "Main Navigation",
+    itemListElement: [
+      {
+        "@type": "SiteNavigationElement",
+        position: 1,
+        name: "Harare Weather",
+        description: "Current weather conditions and forecast for Harare, Zimbabwe",
+        url: `${BASE_URL}/harare`,
+      },
+      {
+        "@type": "SiteNavigationElement",
+        position: 2,
+        name: "Bulawayo Weather",
+        description: "Current weather conditions and forecast for Bulawayo, Zimbabwe",
+        url: `${BASE_URL}/bulawayo`,
+      },
+      {
+        "@type": "SiteNavigationElement",
+        position: 3,
+        name: "Victoria Falls Weather",
+        description: "Current weather conditions and forecast for Victoria Falls, Zimbabwe",
+        url: `${BASE_URL}/victoria-falls`,
+      },
+      {
+        "@type": "SiteNavigationElement",
+        position: 4,
+        name: "Historical Weather Data",
+        description: "Explore recorded weather trends and historical data across Zimbabwe",
+        url: `${BASE_URL}/history`,
+      },
+      {
+        "@type": "SiteNavigationElement",
+        position: 5,
+        name: "Help & FAQ",
+        description: "How to use mukoko weather, frequently asked questions, and support",
+        url: `${BASE_URL}/help`,
+      },
+      {
+        "@type": "SiteNavigationElement",
+        position: 6,
+        name: "About",
+        description: "About mukoko weather, Nyuchi Africa, and our data sources",
+        url: `${BASE_URL}/about`,
+      },
+      {
+        "@type": "SiteNavigationElement",
+        position: 7,
+        name: "System Status",
+        description: "Real-time health status of mukoko weather services",
+        url: `${BASE_URL}/status`,
+      },
+    ],
+  };
+
+  // BreadcrumbList for site hierarchy — root level
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "@id": `${BASE_URL}/#breadcrumb`,
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Home",
+        item: BASE_URL,
+      },
+    ],
+  };
+
   return (
     <html
       lang="en"
@@ -217,7 +292,7 @@ export default function RootLayout({
         />
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify([webAppSchema, orgSchema, webSiteSchema]) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify([webAppSchema, orgSchema, webSiteSchema, siteNavSchema, breadcrumbSchema]) }}
         />
       </head>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">

@@ -7,18 +7,18 @@ import { MapPinIcon, SearchIcon, SunIcon, MoonIcon } from "@/lib/weather-icons";
 import { ActivityIcon } from "@/lib/weather-icons";
 import {
   LOCATIONS,
-  searchLocations,
-  getLocationsByTag,
   TAG_LABELS,
   type LocationTag,
+  type ZimbabweLocation,
 } from "@/lib/locations";
 import { detectUserLocation, type GeoResult } from "@/lib/geolocation";
 import {
   ACTIVITIES,
   ACTIVITY_CATEGORIES,
   CATEGORY_STYLES,
-  searchActivities,
+  type Activity,
   type ActivityCategory,
+  type ActivityCategoryInfo,
 } from "@/lib/activities";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -37,7 +37,7 @@ const TAG_ORDER: LocationTag[] = [
 
 function MonitorIcon({ size = 20 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect width="20" height="14" x="2" y="3" rx="2" />
       <line x1="8" x2="16" y1="21" y2="21" />
       <line x1="12" x2="12" y1="17" y2="21" />
@@ -60,6 +60,30 @@ export function MyWeatherModal() {
   // Track pending location selection (deferred navigation)
   const currentSlug = pathname?.replace("/", "") || "harare";
   const [pendingSlug, setPendingSlug] = useState(currentSlug);
+  const [activeTab, setActiveTab] = useState("location");
+
+  // Initialise with static seed data so the UI is never blank, then
+  // upgrade to the MongoDB data when the API responds.
+  const [allLocations, setAllLocations] = useState<ZimbabweLocation[]>(LOCATIONS);
+  const [allActivities, setAllActivities] = useState<Activity[]>(ACTIVITIES);
+  const [activityCategories, setActivityCategories] = useState<ActivityCategoryInfo[]>(ACTIVITY_CATEGORIES);
+
+  useEffect(() => {
+    // Fetch latest data from MongoDB — silently replace static seed data.
+    // If any fetch fails the static fallback is already rendered.
+    fetch("/api/locations")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data?.locations?.length) setAllLocations(data.locations); })
+      .catch(() => {});
+    fetch("/api/activities")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data?.activities?.length) setAllActivities(data.activities); })
+      .catch(() => {});
+    fetch("/api/activities?mode=categories")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data?.categories?.length) setActivityCategories(data.categories); })
+      .catch(() => {});
+  }, []);
 
   const handleDone = () => {
     completeOnboarding();
@@ -71,20 +95,27 @@ export function MyWeatherModal() {
 
   const handleOpenChange = (open: boolean) => {
     if (open) {
-      // Reset pending slug when modal opens
       setPendingSlug(currentSlug);
+      setActiveTab("location");
     } else {
       handleDone();
     }
   };
 
+  /** When user selects a location, auto-advance to activities tab */
+  const handleSelectLocation = useCallback((slug: string) => {
+    setPendingSlug(slug);
+    // Brief delay so user sees their selection highlighted before switching
+    setTimeout(() => setActiveTab("activities"), 250);
+  }, []);
+
   const locationChanged = pendingSlug !== currentSlug;
 
   return (
     <Dialog open={myWeatherOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex max-h-[90vh] flex-col p-0 sm:max-h-[80vh]">
+      <DialogContent className="flex h-[100dvh] flex-col p-0 sm:h-auto sm:max-h-[85vh]">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
           <DialogTitle>My Weather</DialogTitle>
           <Button size="sm" onClick={handleDone}>
             {locationChanged ? "Apply" : "Done"}
@@ -92,14 +123,28 @@ export function MyWeatherModal() {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="weather" className="flex flex-1 flex-col overflow-hidden">
-          <TabsList>
-            <TabsTrigger value="weather">My Weather</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col">
+          <TabsList className="shrink-0">
+            <TabsTrigger value="location">Location</TabsTrigger>
+            <TabsTrigger value="activities">
+              Activities
+            </TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="weather">
-            <WeatherTab pendingSlug={pendingSlug} onSelectLocation={setPendingSlug} />
+          <TabsContent value="location">
+            <LocationTab
+              pendingSlug={pendingSlug}
+              onSelectLocation={handleSelectLocation}
+              allLocations={allLocations}
+            />
+          </TabsContent>
+
+          <TabsContent value="activities">
+            <ActivitiesTab
+              allActivities={allActivities}
+              activityCategories={activityCategories}
+            />
           </TabsContent>
 
           <TabsContent value="settings">
@@ -111,19 +156,22 @@ export function MyWeatherModal() {
   );
 }
 
-// ── Unified Weather Tab (Location + Activities) ─────────────────────────────
+// ── Location Tab ───────────────────────────────────────────────────────────
 
-function WeatherTab({ pendingSlug, onSelectLocation }: { pendingSlug: string; onSelectLocation: (slug: string) => void }) {
-  const selectedActivities = useAppStore((s) => s.selectedActivities);
-  const toggleActivity = useAppStore((s) => s.toggleActivity);
+function LocationTab({
+  pendingSlug,
+  onSelectLocation,
+  allLocations,
+}: {
+  pendingSlug: string;
+  onSelectLocation: (slug: string) => void;
+  allLocations: ZimbabweLocation[];
+}) {
   const [query, setQuery] = useState("");
   const [activeTag, setActiveTag] = useState<LocationTag | null>(null);
   const [geoState, setGeoState] = useState<GeoResult | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<ActivityCategory | "all">("all");
-  const [activityQuery, setActivityQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  const activitiesRef = useRef<HTMLDivElement>(null);
 
   // Focus the search input on mount
   useEffect(() => {
@@ -139,42 +187,30 @@ function WeatherTab({ pendingSlug, onSelectLocation }: { pendingSlug: string; on
 
     if (result.status === "success" && result.location) {
       onSelectLocation(result.location.slug);
-      // Scroll to activities so user can pick those too
-      setTimeout(() => activitiesRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     }
   }, [onSelectLocation]);
 
   // Filtered locations
   const displayedLocations = useMemo(() => {
-    if (query.length > 0) return searchLocations(query);
-    if (activeTag) return getLocationsByTag(activeTag);
-    return LOCATIONS.filter((l) => POPULAR_SLUGS.includes(l.slug));
-  }, [query, activeTag]);
-
-  const handleSelect = (slug: string) => {
-    onSelectLocation(slug);
-    // Scroll to activities so user can pick those too
-    setTimeout(() => activitiesRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-  };
-
-  // Filtered activities
-  const filteredActivities = useMemo(() => {
-    let items = activityQuery ? searchActivities(activityQuery) : ACTIVITIES;
-    if (activeCategory !== "all") {
-      items = items.filter((a) => a.category === activeCategory);
+    if (query.length > 0) {
+      const q = query.toLowerCase().trim();
+      const prefix: ZimbabweLocation[] = [];
+      const rest: ZimbabweLocation[] = [];
+      for (const loc of allLocations) {
+        const name = loc.name.toLowerCase();
+        if (name.startsWith(q)) prefix.push(loc);
+        else if (name.includes(q) || loc.province.toLowerCase().includes(q)) rest.push(loc);
+      }
+      return [...prefix, ...rest];
     }
-    return items;
-  }, [activityQuery, activeCategory]);
+    if (activeTag) return allLocations.filter((l) => l.tags.includes(activeTag));
+    return allLocations.filter((l) => POPULAR_SLUGS.includes(l.slug));
+  }, [query, activeTag, allLocations]);
 
   return (
-    <div>
-      {/* ── Location Section ─────────────────────────────────────── */}
-      <div className="px-4 pt-3 pb-1">
-        <h4 className="text-sm font-semibold text-text-primary">Location</h4>
-      </div>
-
+    <div className="flex flex-col gap-1">
       {/* Search input */}
-      <div className="border-b border-text-tertiary/10 p-3 pt-2">
+      <div className="px-4 pt-3 pb-2">
         <div className="relative">
           <Input
             ref={inputRef}
@@ -193,7 +229,7 @@ function WeatherTab({ pendingSlug, onSelectLocation }: { pendingSlug: string; on
       </div>
 
       {/* Geolocation button */}
-      <div className="border-b border-text-tertiary/10 px-3 py-2">
+      <div className="px-4">
         <Button
           variant="ghost"
           onClick={handleGeolocate}
@@ -227,7 +263,7 @@ function WeatherTab({ pendingSlug, onSelectLocation }: { pendingSlug: string; on
 
       {/* Tag filter pills */}
       {!query && (
-        <div role="group" aria-label="Filter locations by category" className="flex flex-wrap gap-1.5 border-b border-text-tertiary/10 px-3 py-2">
+        <div role="group" aria-label="Filter locations by category" className="flex flex-wrap gap-1.5 px-4 py-2">
           {TAG_ORDER.map((tag) => (
             <Button
               key={tag}
@@ -243,8 +279,8 @@ function WeatherTab({ pendingSlug, onSelectLocation }: { pendingSlug: string; on
         </div>
       )}
 
-      {/* Location list */}
-      <ul role="listbox" aria-label="Available locations" className="max-h-48 overflow-y-auto p-2">
+      {/* Location list — no nested scroll, uses tab content scroll */}
+      <ul role="listbox" aria-label="Available locations" className="px-2 pb-2">
         {displayedLocations.length === 0 && (
           <li className="px-3 py-4 text-center text-sm text-text-tertiary">
             No locations found for &quot;{query}&quot;
@@ -253,7 +289,7 @@ function WeatherTab({ pendingSlug, onSelectLocation }: { pendingSlug: string; on
         {displayedLocations.map((loc) => (
           <li key={loc.slug} role="option" aria-selected={loc.slug === pendingSlug}>
             <button
-              onClick={() => handleSelect(loc.slug)}
+              onClick={() => onSelectLocation(loc.slug)}
               className={`flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-sm transition-colors hover:bg-surface-base focus-visible:outline-2 focus-visible:outline-primary ${
                 loc.slug === pendingSlug
                   ? "bg-primary/10 text-primary font-semibold"
@@ -282,36 +318,66 @@ function WeatherTab({ pendingSlug, onSelectLocation }: { pendingSlug: string; on
       </ul>
 
       {/* Location count */}
-      <div className="px-3 py-2">
+      <div className="px-4 pb-3">
         <p className="text-xs text-text-tertiary">
-          {LOCATIONS.length} locations across Zimbabwe
+          {allLocations.length} locations across Zimbabwe
         </p>
       </div>
+    </div>
+  );
+}
 
-      {/* ── Activities Section ───────────────────────────────────── */}
-      <div ref={activitiesRef} className="border-t border-border px-4 pt-3 pb-1">
+// ── Activities Tab ─────────────────────────────────────────────────────────
+
+function ActivitiesTab({
+  allActivities,
+  activityCategories,
+}: {
+  allActivities: Activity[];
+  activityCategories: ActivityCategoryInfo[];
+}) {
+  const selectedActivities = useAppStore((s) => s.selectedActivities);
+  const toggleActivity = useAppStore((s) => s.toggleActivity);
+  const [activeCategory, setActiveCategory] = useState<ActivityCategory | "all">("all");
+  const [activityQuery, setActivityQuery] = useState("");
+
+  // Filtered activities
+  const filteredActivities = useMemo(() => {
+    let items = allActivities;
+    if (activityQuery) {
+      const q = activityQuery.toLowerCase().trim();
+      items = items.filter(
+        (a) => a.label.toLowerCase().includes(q) || a.description.toLowerCase().includes(q) || a.category.includes(q),
+      );
+    }
+    if (activeCategory !== "all") {
+      items = items.filter((a) => a.category === activeCategory);
+    }
+    return items;
+  }, [activityQuery, activeCategory, allActivities]);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="px-4 pt-3 pb-1">
         <h4 className="text-sm font-semibold text-text-primary">
-          Activities
+          Select activities for personalised weather insights
           {selectedActivities.length > 0 && (
             <span className="ml-2 text-xs font-normal text-text-tertiary">
-              {selectedActivities.length} selected
+              ({selectedActivities.length} selected)
             </span>
           )}
         </h4>
-        <p className="mt-0.5 text-xs text-text-tertiary">
-          Select activities for personalised weather insights
-        </p>
       </div>
 
-      {/* Category filter pills */}
-      <div className="flex gap-2 overflow-x-auto px-4 pt-2 pb-2 scrollbar-hide" role="group" aria-label="Activity categories">
+      {/* Category filter pills — 44px touch targets */}
+      <div className="flex gap-2 overflow-x-auto px-4 pt-1 pb-2 scrollbar-hide" role="group" aria-label="Activity categories">
         <CategoryTab
           label="All"
           categoryId="all"
           active={activeCategory === "all"}
           onClick={() => setActiveCategory("all")}
         />
-        {ACTIVITY_CATEGORIES.map((cat) => (
+        {activityCategories.map((cat) => (
           <CategoryTab
             key={cat.id}
             label={cat.label}
@@ -375,7 +441,7 @@ function WeatherTab({ pendingSlug, onSelectLocation }: { pendingSlug: string; on
           })}
         </div>
 
-        {filteredActivities.length === 0 && (
+        {filteredActivities.length === 0 && activityQuery && (
           <p className="py-8 text-center text-sm text-text-tertiary">
             No activities found for &ldquo;{activityQuery}&rdquo;
           </p>
@@ -402,7 +468,7 @@ function CategoryTab({
     <button
       aria-pressed={active}
       onClick={onClick}
-      className={`shrink-0 rounded-[var(--radius-badge)] px-3 py-1.5 text-sm font-medium transition-colors ${
+      className={`shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[44px] text-sm font-medium transition-colors ${
         active
           ? style ? `${style.badge}` : "bg-primary text-primary-foreground"
           : "bg-surface-base text-text-secondary hover:text-text-primary"

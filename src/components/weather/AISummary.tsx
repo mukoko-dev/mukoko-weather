@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import { SparklesIcon } from "@/lib/weather-icons";
 import { useAppStore } from "@/lib/store";
-import { getActivityLabels } from "@/lib/activities";
 import type { WeatherData } from "@/lib/weather";
 import type { ZimbabweLocation } from "@/lib/locations";
 
@@ -63,7 +62,19 @@ export function AISummary({ weather, location }: Props) {
       setLoading(true);
       setError(null);
       try {
-        const activityLabels = getActivityLabels(selectedActivities);
+        // Fetch activity labels from MongoDB via API
+        let activityLabels: string[] = [];
+        if (selectedActivities.length > 0) {
+          try {
+            const labelsRes = await fetch(`/api/activities?labels=${selectedActivities.join(",")}`);
+            if (labelsRes.ok) {
+              const labelsData = await labelsRes.json();
+              activityLabels = labelsData.labels ?? [];
+            }
+          } catch {
+            // Activity labels unavailable — continue without them
+          }
+        }
         const res = await fetch("/api/ai", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

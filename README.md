@@ -28,7 +28,7 @@ AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, 
 |-------|-----------|
 | Framework | [Next.js 16](https://nextjs.org) (App Router, TypeScript 5) |
 | UI Components | [shadcn/ui](https://ui.shadcn.com) (Radix UI + CVA) |
-| Charts | [Recharts 2](https://recharts.org) via shadcn chart component |
+| Charts | [Chart.js 4](https://www.chartjs.org) + [react-chartjs-2](https://react-chartjs-2.js.org) (Canvas 2D) |
 | Styling | [Tailwind CSS 4](https://tailwindcss.com) with CSS custom properties |
 | Markdown | [react-markdown 10](https://github.com/remarkjs/react-markdown) |
 | State | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist` middleware |
@@ -178,7 +178,7 @@ src/
       button.tsx            # Button (6 variants, 5 sizes, asChild support)
       badge.tsx             # Badge (4 variants)
       card.tsx              # Card, CardHeader, CardContent, etc.
-      chart.tsx             # ChartContainer, ChartTooltip (wraps Recharts)
+      chart.tsx             # CanvasChart, resolveColor (wraps Chart.js Canvas 2D)
       dialog.tsx            # Dialog (Radix, portal, overlay, animations)
       input.tsx             # Input (CSS custom property styled)
       tabs.tsx              # Tabs (Radix, border-bottom active indicator)

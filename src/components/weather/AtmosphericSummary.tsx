@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { CurrentWeather } from "@/lib/weather";
 import { windDirection, uvLevel } from "@/lib/weather";
+import { humidityLabel, pressureLabel, cloudLabel, feelsLikeContext } from "@/lib/weather-labels";
 import {
   DropletIcon,
   CloudIcon,
@@ -15,27 +16,6 @@ import {
 
 interface Props {
   current: CurrentWeather;
-}
-
-function humidityLabel(h: number): string {
-  if (h <= 30) return "Dry";
-  if (h <= 60) return "Comfortable";
-  if (h <= 80) return "Humid";
-  return "Very humid";
-}
-
-function pressureLabel(p: number): string {
-  if (p < 1000) return "Low";
-  if (p <= 1020) return "Normal";
-  return "High";
-}
-
-function cloudLabel(c: number): string {
-  if (c <= 10) return "Clear";
-  if (c <= 30) return "Mostly clear";
-  if (c <= 70) return "Partly cloudy";
-  if (c <= 90) return "Mostly cloudy";
-  return "Overcast";
 }
 
 interface MetricCardProps {
@@ -120,7 +100,7 @@ export function AtmosphericSummary({ current }: Props) {
           icon={<EyeIcon size={20} />}
           label="Feels Like"
           value={`${Math.round(current.apparent_temperature)}°`}
-          context={current.apparent_temperature < current.temperature_2m ? "Cooler than actual" : current.apparent_temperature > current.temperature_2m ? "Warmer than actual" : "Same as actual"}
+          context={feelsLikeContext(current.apparent_temperature, current.temperature_2m)}
         />
       </div>
     </section>

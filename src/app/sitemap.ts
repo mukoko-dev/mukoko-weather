@@ -1,13 +1,19 @@
 import type { MetadataRoute } from "next";
-import { LOCATIONS } from "@/lib/locations";
+import { getAllLocationsFromDb } from "@/lib/db";
+import { logError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 3600;
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = "https://weather.mukoko.com";
   const now = new Date();
 
+  // Priority tiers for sitelink signals:
+  // 1.0     — homepage
+  // 0.8-0.9 — primary navigation / sitelink candidates
+  // 0.7     — secondary content pages
+  // 0.3-0.5 — legal / utility pages
   const staticPages: MetadataRoute.Sitemap = [
     {
       url: baseUrl,
@@ -16,22 +22,58 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 1.0,
     },
     {
-      url: `${baseUrl}/about`,
+      url: `${baseUrl}/harare`,
       lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.5,
+      changeFrequency: "hourly",
+      priority: 0.9,
     },
     {
-      url: `${baseUrl}/help`,
+      url: `${baseUrl}/bulawayo`,
       lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.6,
+      changeFrequency: "hourly",
+      priority: 0.9,
+    },
+    {
+      url: `${baseUrl}/victoria-falls`,
+      lastModified: now,
+      changeFrequency: "hourly",
+      priority: 0.9,
     },
     {
       url: `${baseUrl}/history`,
       lastModified: now,
       changeFrequency: "daily",
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/help`,
+      lastModified: now,
+      changeFrequency: "monthly",
       priority: 0.7,
+    },
+    {
+      url: `${baseUrl}/about`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.7,
+    },
+    {
+      url: `${baseUrl}/status`,
+      lastModified: now,
+      changeFrequency: "always",
+      priority: 0.6,
+    },
+    {
+      url: `${baseUrl}/explore`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/embed`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.5,
     },
     {
       url: `${baseUrl}/privacy`,
@@ -47,15 +89,41 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
   ];
 
-  const locationPages: MetadataRoute.Sitemap = LOCATIONS.map((loc) => ({
-    url: `${baseUrl}/${loc.slug}`,
+  // Explore tag pages
+  const exploreTags = ["city", "farming", "mining", "tourism", "national-park", "education", "border", "travel"];
+  const explorePages: MetadataRoute.Sitemap = exploreTags.map((tag) => ({
+    url: `${baseUrl}/explore/${tag}`,
     lastModified: now,
-    changeFrequency: "hourly" as const,
-    priority: loc.tags.includes("city") ? 0.9 : 0.7,
+    changeFrequency: "weekly" as const,
+    priority: 0.7,
   }));
 
+  // Fetch all locations from MongoDB
+  let locations: { slug: string; tags: string[] }[] = [];
+  try {
+    locations = await getAllLocationsFromDb();
+  } catch (err) {
+    logError({
+      source: "mongodb",
+      severity: "medium",
+      message: "Failed to load locations for sitemap",
+      error: err,
+    });
+  }
+
+  // Harare, Bulawayo, and Victoria Falls are already in staticPages with boosted priority
+  const boostedSlugs = new Set(["harare", "bulawayo", "victoria-falls"]);
+  const locationPages: MetadataRoute.Sitemap = locations
+    .filter((loc) => !boostedSlugs.has(loc.slug))
+    .map((loc) => ({
+      url: `${baseUrl}/${loc.slug}`,
+      lastModified: now,
+      changeFrequency: "hourly" as const,
+      priority: loc.tags.includes("city") ? 0.9 : 0.7,
+    }));
+
   // Sub-route pages for each location (atmosphere, forecast)
-  const subRoutePages: MetadataRoute.Sitemap = LOCATIONS.flatMap((loc) => [
+  const subRoutePages: MetadataRoute.Sitemap = locations.flatMap((loc) => [
     {
       url: `${baseUrl}/${loc.slug}/atmosphere`,
       lastModified: now,
@@ -70,5 +138,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
   ]);
 
-  return [...staticPages, ...locationPages, ...subRoutePages];
+  return [...staticPages, ...explorePages, ...locationPages, ...subRoutePages];
 }

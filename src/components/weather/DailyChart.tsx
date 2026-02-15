@@ -1,13 +1,8 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Line } from "recharts";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
+import { useMemo, useSyncExternalStore } from "react";
+import { CanvasChart, resolveColor, type ChartConfig } from "@/components/ui/chart";
+import type { ChartData, ChartOptions } from "chart.js";
 import type { DailyWeather } from "@/lib/weather";
 
 interface Props {
@@ -70,9 +65,6 @@ const getSnapshot = () => true;
 const getServerSnapshot = () => false;
 
 export function DailyChart({ daily }: Props) {
-  // Defer chart rendering to client-only to prevent hydration mismatch.
-  // prepareDailyData uses new Date() and toLocaleDateString which can differ
-  // between server and client, producing different SVG output.
   const hydrated = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   if (!hydrated) {
@@ -81,99 +73,139 @@ export function DailyChart({ daily }: Props) {
     );
   }
 
-  const data = prepareDailyData(daily);
-  if (data.length < 2) return null;
+  return <DailyChartInner daily={daily} />;
+}
 
-  const allTemps = data.flatMap((d) => [d.high, d.low, d.feelsHigh, d.feelsLow]);
+function DailyChartInner({ daily }: Props) {
+  const data = prepareDailyData(daily);
+
+  const allTemps = data.length >= 2
+    ? data.flatMap((d) => [d.high, d.low, d.feelsHigh, d.feelsLow])
+    : [0];
   const minTemp = Math.min(...allTemps) - 2;
   const maxTemp = Math.max(...allTemps) + 2;
 
+  const highColor = resolveColor("var(--chart-1)");
+  const lowColor = resolveColor("var(--chart-2)");
+  const feelsHighColor = resolveColor("var(--chart-3)");
+  const feelsLowColor = resolveColor("var(--chart-4)");
+  const gridColor = resolveColor("var(--color-text-tertiary)");
+  const surfaceColor = resolveColor("var(--color-surface-card)");
+
+  const chartData: ChartData<"line"> = useMemo(
+    () => ({
+      labels: data.map((d) => d.day),
+      datasets: [
+        {
+          label: "High",
+          data: data.map((d) => d.high),
+          borderColor: highColor,
+          backgroundColor: highColor + "40",
+          borderWidth: 2.5,
+          fill: true,
+          tension: 0.4,
+          pointRadius: 3,
+          pointBackgroundColor: surfaceColor,
+          pointBorderWidth: 2,
+          pointHitRadius: 10,
+        },
+        {
+          label: "Low",
+          data: data.map((d) => d.low),
+          borderColor: lowColor,
+          backgroundColor: lowColor + "26",
+          borderWidth: 2,
+          borderDash: [4, 3],
+          fill: true,
+          tension: 0.4,
+          pointRadius: 3,
+          pointBackgroundColor: surfaceColor,
+          pointBorderWidth: 2,
+          pointHitRadius: 10,
+        },
+        {
+          label: "Feels High",
+          data: data.map((d) => d.feelsHigh),
+          borderColor: feelsHighColor,
+          borderWidth: 1.5,
+          borderDash: [4, 3],
+          fill: false,
+          tension: 0.4,
+          pointRadius: 0,
+          pointHitRadius: 8,
+        },
+        {
+          label: "Feels Low",
+          data: data.map((d) => d.feelsLow),
+          borderColor: feelsLowColor,
+          borderWidth: 1.5,
+          borderDash: [4, 3],
+          fill: false,
+          tension: 0.4,
+          pointRadius: 0,
+          pointHitRadius: 8,
+        },
+      ],
+    }),
+    [data, highColor, lowColor, feelsHighColor, feelsLowColor, surfaceColor],
+  );
+
+  const chartOptions: ChartOptions<"line"> = useMemo(
+    () => ({
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            color: gridColor,
+            font: { size: 11 },
+          },
+          border: { display: false },
+        },
+        y: {
+          min: minTemp,
+          max: maxTemp,
+          grid: {
+            color: gridColor + "26",
+            drawTicks: false,
+          },
+          ticks: {
+            color: gridColor,
+            font: { size: 11 },
+            callback: (v: string | number) => `${v}°`,
+          },
+          border: { display: false },
+        },
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const labels: Record<string, string> = {
+                High: "High",
+                Low: "Low",
+                "Feels High": "Feels High",
+                "Feels Low": "Feels Low",
+              };
+              return `${labels[ctx.dataset.label!] ?? ctx.dataset.label}: ${ctx.parsed.y}°C`;
+            },
+          },
+        },
+      },
+    }),
+    [gridColor, minTemp, maxTemp],
+  );
+
+  if (data.length < 2) return null;
+
   return (
     <div className="mt-4 mb-2">
-      <ChartContainer config={chartConfig} className="aspect-[16/7] w-full">
-        <AreaChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
-          <defs>
-            <linearGradient id="dailyHighGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-high)" stopOpacity={0.25} />
-              <stop offset="100%" stopColor="var(--color-high)" stopOpacity={0.02} />
-            </linearGradient>
-            <linearGradient id="dailyLowGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-low)" stopOpacity={0.15} />
-              <stop offset="100%" stopColor="var(--color-low)" stopOpacity={0.02} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid
-            strokeDasharray="3 3"
-            vertical={false}
-            stroke="var(--color-text-tertiary)"
-            strokeOpacity={0.15}
-          />
-          <XAxis
-            dataKey="day"
-            tickLine={false}
-            axisLine={false}
-            tickMargin={8}
-            fontSize={11}
-            tick={{ fill: "var(--color-text-tertiary)" }}
-          />
-          <YAxis
-            domain={[minTemp, maxTemp]}
-            tickLine={false}
-            axisLine={false}
-            tickFormatter={(v: number) => `${v}°`}
-            fontSize={11}
-            tick={{ fill: "var(--color-text-tertiary)" }}
-            width={40}
-          />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                formatter={(value, name) => {
-                  const labels: Record<string, string> = { high: "High", low: "Low", feelsHigh: "Feels High", feelsLow: "Feels Low" };
-                  return `${labels[name as string] ?? name}: ${value}°C`;
-                }}
-              />
-            }
-          />
-          <Area
-            type="monotone"
-            dataKey="high"
-            stroke="var(--color-high)"
-            strokeWidth={2.5}
-            fill="url(#dailyHighGradient)"
-            dot={{ r: 3, strokeWidth: 2, fill: "var(--color-surface-card)" }}
-            activeDot={false}
-          />
-          <Area
-            type="monotone"
-            dataKey="low"
-            stroke="var(--color-low)"
-            strokeWidth={2}
-            fill="url(#dailyLowGradient)"
-            dot={{ r: 3, strokeWidth: 2, fill: "var(--color-surface-card)" }}
-            activeDot={false}
-            strokeDasharray="4 3"
-          />
-          <Line
-            type="monotone"
-            dataKey="feelsHigh"
-            stroke="var(--color-feelsHigh)"
-            strokeWidth={1.5}
-            strokeDasharray="4 3"
-            dot={false}
-            activeDot={false}
-          />
-          <Line
-            type="monotone"
-            dataKey="feelsLow"
-            stroke="var(--color-feelsLow)"
-            strokeWidth={1.5}
-            strokeDasharray="4 3"
-            dot={false}
-            activeDot={false}
-          />
-        </AreaChart>
-      </ChartContainer>
+      <CanvasChart
+        type="line"
+        data={chartData}
+        options={chartOptions}
+        config={chartConfig}
+        className="aspect-[4/3] sm:aspect-[16/7] w-full"
+      />
     </div>
   );
 }

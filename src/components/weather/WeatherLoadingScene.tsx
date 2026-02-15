@@ -199,7 +199,7 @@ export function WeatherLoadingScene() {
   }, [use3D]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-background">
       {use3D && (
         <div ref={containerRef} className="absolute inset-0" aria-hidden="true" />
       )}
