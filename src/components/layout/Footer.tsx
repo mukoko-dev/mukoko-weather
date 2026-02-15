@@ -61,6 +61,9 @@ export function Footer() {
             <Link href="/about" prefetch={false} className="underline hover:text-text-secondary transition-colors">
               About
             </Link>
+            <Link href="/explore" prefetch={false} className="underline hover:text-text-secondary transition-colors">
+              Explore
+            </Link>
             <Link href="/history" prefetch={false} className="underline hover:text-text-secondary transition-colors">
               History
             </Link>

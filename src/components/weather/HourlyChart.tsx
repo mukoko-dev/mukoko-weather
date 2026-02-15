@@ -82,9 +82,9 @@ export function HourlyChart({ hourly }: Props) {
 function HourlyChartInner({ hourly }: Props) {
   const data = prepareHourlyData(hourly);
 
-  if (data.length < 2) return null;
-
-  const allTemps = data.flatMap((d) => [d.temp, d.feelsLike]);
+  const allTemps = data.length >= 2
+    ? data.flatMap((d) => [d.temp, d.feelsLike])
+    : [0];
   const minTemp = Math.min(...allTemps) - 2;
   const maxTemp = Math.max(...allTemps) + 2;
 
@@ -191,6 +191,8 @@ function HourlyChartInner({ hourly }: Props) {
     }),
     [gridColor, minTemp, maxTemp],
   );
+
+  if (data.length < 2) return null;
 
   return (
     <div className="mt-4 mb-2">

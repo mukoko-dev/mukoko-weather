@@ -90,9 +90,14 @@ export async function ensureIndexes(): Promise<void> {
     weatherHistoryCollection().createIndex({ locationSlug: 1, date: -1 }, { unique: true }),
     weatherHistoryCollection().createIndex({ recordedAt: 1 }),
 
-    // Locations: by slug (unique) and by tags
+    // Locations: by slug (unique), by tags, text search, geospatial
     locationsCollection().createIndex({ slug: 1 }, { unique: true }),
     locationsCollection().createIndex({ tags: 1 }),
+    locationsCollection().createIndex(
+      { name: "text", province: "text", slug: "text" },
+      { weights: { name: 10, province: 5, slug: 3 }, name: "location_text_search" },
+    ),
+    locationsCollection().createIndex({ location: "2dsphere" }),
 
     // API keys: one key per provider
     apiKeysCollection().createIndex({ provider: 1 }, { unique: true }),
@@ -391,7 +396,14 @@ export async function syncLocations(
   const bulkOps = locations.map((loc) => ({
     updateOne: {
       filter: { slug: loc.slug },
-      update: { $set: { ...loc, updatedAt: now } },
+      update: {
+        $set: {
+          ...loc,
+          // GeoJSON Point for 2dsphere queries (note: GeoJSON uses [lon, lat] order)
+          location: { type: "Point", coordinates: [loc.lon, loc.lat] },
+          updatedAt: now,
+        },
+      },
       upsert: true,
     },
   }));
@@ -414,4 +426,93 @@ export async function getLocationsByTagFromDb(
 
 export async function getAllLocationsFromDb(): Promise<LocationDoc[]> {
   return locationsCollection().find({}).toArray();
+}
+
+// ---------------------------------------------------------------------------
+// Search operations (MongoDB text search + geospatial)
+// ---------------------------------------------------------------------------
+
+export interface SearchResult {
+  locations: LocationDoc[];
+  total: number;
+}
+
+/**
+ * Full-text search across locations using MongoDB text index.
+ * Supports fuzzy matching via text score ranking.
+ * Results are sorted by relevance (text score).
+ */
+export async function searchLocationsFromDb(
+  query: string,
+  options: { tag?: string; limit?: number; skip?: number } = {},
+): Promise<SearchResult> {
+  const { tag, limit = 20, skip = 0 } = options;
+  const q = query.trim();
+
+  // Build filter
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const filter: Record<string, any> = {};
+
+  if (q) {
+    filter.$text = { $search: q };
+  }
+
+  if (tag) {
+    filter.tags = tag;
+  }
+
+  const col = locationsCollection();
+
+  const [locations, total] = await Promise.all([
+    q
+      ? col
+          .find(filter)
+          .project({ score: { $meta: "textScore" as const } })
+          .sort({ score: { $meta: "textScore" as const } })
+          .skip(skip)
+          .limit(limit)
+          .toArray() as Promise<LocationDoc[]>
+      : col
+          .find(filter)
+          .sort({ name: 1 })
+          .skip(skip)
+          .limit(limit)
+          .toArray() as Promise<LocationDoc[]>,
+    col.countDocuments(filter),
+  ]);
+
+  return { locations, total };
+}
+
+/**
+ * Find nearest locations to coordinates using MongoDB 2dsphere index.
+ * Returns locations sorted by distance (nearest first).
+ */
+export async function findNearestLocationsFromDb(
+  lat: number,
+  lon: number,
+  options: { limit?: number; maxDistanceKm?: number } = {},
+): Promise<LocationDoc[]> {
+  const { limit = 10, maxDistanceKm = 200 } = options;
+
+  return locationsCollection().find({
+    location: {
+      $near: {
+        $geometry: { type: "Point", coordinates: [lon, lat] },
+        $maxDistance: maxDistanceKm * 1000, // MongoDB uses metres
+      },
+    },
+  }).limit(limit).toArray() as Promise<LocationDoc[]>;
+}
+
+/**
+ * Get all distinct tags with location counts.
+ */
+export async function getTagCounts(): Promise<{ tag: string; count: number }[]> {
+  return locationsCollection().aggregate<{ tag: string; count: number }>([
+    { $unwind: "$tags" },
+    { $group: { _id: "$tags", count: { $sum: 1 } } },
+    { $project: { _id: 0, tag: "$_id", count: 1 } },
+    { $sort: { count: -1 } },
+  ]).toArray();
 }

@@ -79,9 +79,9 @@ export function DailyChart({ daily }: Props) {
 function DailyChartInner({ daily }: Props) {
   const data = prepareDailyData(daily);
 
-  if (data.length < 2) return null;
-
-  const allTemps = data.flatMap((d) => [d.high, d.low, d.feelsHigh, d.feelsLow]);
+  const allTemps = data.length >= 2
+    ? data.flatMap((d) => [d.high, d.low, d.feelsHigh, d.feelsLow])
+    : [0];
   const minTemp = Math.min(...allTemps) - 2;
   const maxTemp = Math.max(...allTemps) + 2;
 
@@ -194,6 +194,8 @@ function DailyChartInner({ daily }: Props) {
     }),
     [gridColor, minTemp, maxTemp],
   );
+
+  if (data.length < 2) return null;
 
   return (
     <div className="mt-4 mb-2">

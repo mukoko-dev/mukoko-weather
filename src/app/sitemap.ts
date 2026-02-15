@@ -63,6 +63,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.6,
     },
     {
+      url: `${baseUrl}/explore`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.8,
+    },
+    {
       url: `${baseUrl}/embed`,
       lastModified: now,
       changeFrequency: "monthly",
@@ -81,6 +87,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.3,
     },
   ];
+
+  // Explore tag pages
+  const exploreTags = ["city", "farming", "mining", "tourism", "national-park", "education", "border", "travel"];
+  const explorePages: MetadataRoute.Sitemap = exploreTags.map((tag) => ({
+    url: `${baseUrl}/explore/${tag}`,
+    lastModified: now,
+    changeFrequency: "weekly" as const,
+    priority: 0.7,
+  }));
 
   // Harare and Bulawayo are already in staticPages with boosted priority
   const boostedSlugs = new Set(["harare", "bulawayo", "victoria-falls"]);
@@ -109,5 +124,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
   ]);
 
-  return [...staticPages, ...locationPages, ...subRoutePages];
+  return [...staticPages, ...explorePages, ...locationPages, ...subRoutePages];
 }

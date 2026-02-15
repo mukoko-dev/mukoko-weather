@@ -76,10 +76,11 @@ describe("sitemap.ts", () => {
     expect(termsEntry!.changeFrequency).toBe("yearly");
   });
 
-  it("total entries = static pages + locations + sub-routes (atmosphere, forecast)", () => {
-    // 11 static (home, harare, bulawayo, victoria-falls, history, help, about, status, embed, privacy, terms)
+  it("total entries = static pages + explore tags + locations + sub-routes", () => {
+    // 12 static (home, harare, bulawayo, victoria-falls, history, help, about, status, explore, embed, privacy, terms)
+    // + 8 explore tag pages (city, farming, mining, tourism, national-park, education, border, travel)
     // + (LOCATIONS.length - 3) remaining locations + 2 sub-routes per location
-    expect(result.length).toBe(11 + (LOCATIONS.length - 3) + LOCATIONS.length * 2);
+    expect(result.length).toBe(12 + 8 + (LOCATIONS.length - 3) + LOCATIONS.length * 2);
   });
 
   it("city locations have priority 0.9", () => {
