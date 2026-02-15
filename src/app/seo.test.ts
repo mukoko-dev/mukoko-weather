@@ -74,9 +74,9 @@ describe("sitemap.ts", () => {
   });
 
   it("total entries = static pages + locations + sub-routes (atmosphere, forecast)", () => {
-    // 10 static (home, harare, bulawayo, history, help, about, status, embed, privacy, terms)
-    // + (LOCATIONS.length - 2) remaining locations + 2 sub-routes per location
-    expect(result.length).toBe(10 + (LOCATIONS.length - 2) + LOCATIONS.length * 2);
+    // 11 static (home, harare, bulawayo, victoria-falls, history, help, about, status, embed, privacy, terms)
+    // + (LOCATIONS.length - 3) remaining locations + 2 sub-routes per location
+    expect(result.length).toBe(11 + (LOCATIONS.length - 3) + LOCATIONS.length * 2);
   });
 
   it("city locations have priority 0.9", () => {

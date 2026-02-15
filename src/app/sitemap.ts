@@ -33,6 +33,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.9,
     },
     {
+      url: `${baseUrl}/victoria-falls`,
+      lastModified: now,
+      changeFrequency: "hourly",
+      priority: 0.9,
+    },
+    {
       url: `${baseUrl}/history`,
       lastModified: now,
       changeFrequency: "daily",
@@ -77,7 +83,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   ];
 
   // Harare and Bulawayo are already in staticPages with boosted priority
-  const boostedSlugs = new Set(["harare", "bulawayo"]);
+  const boostedSlugs = new Set(["harare", "bulawayo", "victoria-falls"]);
   const locationPages: MetadataRoute.Sitemap = LOCATIONS
     .filter((loc) => !boostedSlugs.has(loc.slug))
     .map((loc) => ({
