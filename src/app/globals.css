@@ -55,6 +55,13 @@
   --focus-ring-offset: 2px;
   --focus-ring-width: 3px;
 
+  /* Touch & Interaction */
+  --touch-target-min: 44px;
+
+  /* Typography — minimum sizes for mobile readability */
+  --text-body: 0.875rem;      /* 14px — minimum for body/footer text */
+  --text-body-leading: 1.5;
+
   /* Radii */
   --radius-button: 12px;
   --radius-card: 16px;
@@ -316,6 +323,7 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+  --spacing-touch: var(--touch-target-min);
 }
 
 html {
@@ -435,5 +443,23 @@ body {
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+
+  /* Global 44px minimum touch targets for interactive elements (WCAG 2.5.8) */
+  a,
+  button,
+  [role="button"],
+  [role="option"],
+  [role="radio"],
+  [role="tab"],
+  select,
+  summary {
+    min-height: var(--touch-target-min);
+  }
+
+  /* Footer text uses the body-min token for mobile readability */
+  footer {
+    font-size: var(--text-body);
+    line-height: var(--text-body-leading);
   }
 }
