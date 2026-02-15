@@ -33,13 +33,24 @@ async function checkMongoDB(): Promise<CheckResult> {
 async function checkTomorrowIo(): Promise<CheckResult> {
   const start = Date.now();
   try {
-    const apiKey = await getApiKey("tomorrow").catch(() => null);
+    let apiKey: string | null = null;
+    try {
+      apiKey = await getApiKey("tomorrow");
+    } catch (dbErr) {
+      return {
+        name: "Tomorrow.io API",
+        status: "degraded",
+        latencyMs: Date.now() - start,
+        message: `Cannot retrieve API key — MongoDB unavailable (${dbErr instanceof Error ? dbErr.message : "connection failed"})`,
+      };
+    }
+
     if (!apiKey) {
       return {
         name: "Tomorrow.io API",
         status: "degraded",
         latencyMs: Date.now() - start,
-        message: "API key not configured — using Open-Meteo fallback",
+        message: "API key not configured in database — run POST /api/db-init with apiKeys.tomorrow to seed it. Using Open-Meteo fallback.",
       };
     }
 
