@@ -47,14 +47,17 @@ describe("/api/search route structure", () => {
     expect(source).toContain("Provide q (search query) or tag (filter)");
   });
 
-  it("falls back to in-memory search when MongoDB fails", () => {
-    expect(source).toContain('source: "fallback"');
-    expect(source).toContain("searchLocations");
+  it("returns 503 when MongoDB search fails", () => {
+    expect(source).toContain("Search unavailable");
+    expect(source).toContain("status: 503");
   });
 
   it("includes source field in response to indicate data origin", () => {
     expect(source).toContain('source: "mongodb"');
-    expect(source).toContain('source: "fallback"');
+  });
+
+  it("does not import from static locations array", () => {
+    expect(source).not.toContain('from "@/lib/locations"');
   });
 
   it("returns 503 when tag counts query fails", () => {

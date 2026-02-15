@@ -1,6 +1,6 @@
 "use client";
 
-import { findNearestLocation, type ZimbabweLocation } from "./locations";
+import type { ZimbabweLocation } from "./locations";
 
 export interface GeoResult {
   status: "success" | "denied" | "unavailable" | "outside-zw" | "error";
@@ -11,7 +11,7 @@ export interface GeoResult {
 
 /**
  * Request the user's position via the browser Geolocation API
- * and snap to the nearest Zimbabwe location.
+ * and snap to the nearest Zimbabwe location via the /api/geo endpoint.
  */
 export function detectUserLocation(): Promise<GeoResult> {
   return new Promise((resolve) => {
@@ -21,38 +21,49 @@ export function detectUserLocation(): Promise<GeoResult> {
     }
 
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      async (position) => {
         const { latitude, longitude } = position.coords;
-        const nearest = findNearestLocation(latitude, longitude);
 
-        if (!nearest) {
+        try {
+          const res = await fetch(`/api/geo?lat=${latitude}&lon=${longitude}`);
+          if (res.status === 404) {
+            resolve({
+              status: "outside-zw",
+              location: null,
+              coords: { lat: latitude, lon: longitude },
+              distanceKm: null,
+            });
+            return;
+          }
+          if (!res.ok) {
+            resolve({ status: "error", location: null, coords: { lat: latitude, lon: longitude }, distanceKm: null });
+            return;
+          }
+
+          const data = await res.json();
+          const nearest: ZimbabweLocation = data.nearest;
+
+          // Calculate distance to nearest for display
+          const R = 6371;
+          const dLat = ((nearest.lat - latitude) * Math.PI) / 180;
+          const dLon = ((nearest.lon - longitude) * Math.PI) / 180;
+          const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos((latitude * Math.PI) / 180) *
+              Math.cos((nearest.lat * Math.PI) / 180) *
+              Math.sin(dLon / 2) *
+              Math.sin(dLon / 2);
+          const distanceKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
           resolve({
-            status: "outside-zw",
-            location: null,
+            status: "success",
+            location: nearest,
             coords: { lat: latitude, lon: longitude },
-            distanceKm: null,
+            distanceKm: Math.round(distanceKm),
           });
-          return;
+        } catch {
+          resolve({ status: "error", location: null, coords: { lat: latitude, lon: longitude }, distanceKm: null });
         }
-
-        // Calculate distance to nearest for display
-        const R = 6371;
-        const dLat = ((nearest.lat - latitude) * Math.PI) / 180;
-        const dLon = ((nearest.lon - longitude) * Math.PI) / 180;
-        const a =
-          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos((latitude * Math.PI) / 180) *
-            Math.cos((nearest.lat * Math.PI) / 180) *
-            Math.sin(dLon / 2) *
-            Math.sin(dLon / 2);
-        const distanceKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-        resolve({
-          status: "success",
-          location: nearest,
-          coords: { lat: latitude, lon: longitude },
-          distanceKm: Math.round(distanceKm),
-        });
       },
       (error) => {
         if (error.code === error.PERMISSION_DENIED) {

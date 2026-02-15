@@ -6,19 +6,16 @@ import { useAppStore, type ThemePreference } from "@/lib/store";
 import { MapPinIcon, SearchIcon, SunIcon, MoonIcon } from "@/lib/weather-icons";
 import { ActivityIcon } from "@/lib/weather-icons";
 import {
-  LOCATIONS,
-  searchLocations,
-  getLocationsByTag,
   TAG_LABELS,
   type LocationTag,
+  type ZimbabweLocation,
 } from "@/lib/locations";
 import { detectUserLocation, type GeoResult } from "@/lib/geolocation";
 import {
-  ACTIVITIES,
-  ACTIVITY_CATEGORIES,
   CATEGORY_STYLES,
-  searchActivities,
+  type Activity,
   type ActivityCategory,
+  type ActivityCategoryInfo,
 } from "@/lib/activities";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -125,6 +122,26 @@ function WeatherTab({ pendingSlug, onSelectLocation }: { pendingSlug: string; on
   const inputRef = useRef<HTMLInputElement>(null);
   const activitiesRef = useRef<HTMLDivElement>(null);
 
+  // Fetch locations and activities from MongoDB on mount
+  const [allLocations, setAllLocations] = useState<ZimbabweLocation[]>([]);
+  const [allActivities, setAllActivities] = useState<Activity[]>([]);
+  const [activityCategories, setActivityCategories] = useState<ActivityCategoryInfo[]>([]);
+
+  useEffect(() => {
+    fetch("/api/locations")
+      .then((res) => (res.ok ? res.json() : { locations: [] }))
+      .then((data) => setAllLocations(data.locations ?? []))
+      .catch(() => {});
+    fetch("/api/activities")
+      .then((res) => (res.ok ? res.json() : { activities: [] }))
+      .then((data) => setAllActivities(data.activities ?? []))
+      .catch(() => {});
+    fetch("/api/activities?mode=categories")
+      .then((res) => (res.ok ? res.json() : { categories: [] }))
+      .then((data) => setActivityCategories(data.categories ?? []))
+      .catch(() => {});
+  }, []);
+
   // Focus the search input on mount
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 50);
@@ -146,10 +163,20 @@ function WeatherTab({ pendingSlug, onSelectLocation }: { pendingSlug: string; on
 
   // Filtered locations
   const displayedLocations = useMemo(() => {
-    if (query.length > 0) return searchLocations(query);
-    if (activeTag) return getLocationsByTag(activeTag);
-    return LOCATIONS.filter((l) => POPULAR_SLUGS.includes(l.slug));
-  }, [query, activeTag]);
+    if (query.length > 0) {
+      const q = query.toLowerCase().trim();
+      const prefix: ZimbabweLocation[] = [];
+      const rest: ZimbabweLocation[] = [];
+      for (const loc of allLocations) {
+        const name = loc.name.toLowerCase();
+        if (name.startsWith(q)) prefix.push(loc);
+        else if (name.includes(q) || loc.province.toLowerCase().includes(q)) rest.push(loc);
+      }
+      return [...prefix, ...rest];
+    }
+    if (activeTag) return allLocations.filter((l) => l.tags.includes(activeTag));
+    return allLocations.filter((l) => POPULAR_SLUGS.includes(l.slug));
+  }, [query, activeTag, allLocations]);
 
   const handleSelect = (slug: string) => {
     onSelectLocation(slug);
@@ -159,12 +186,18 @@ function WeatherTab({ pendingSlug, onSelectLocation }: { pendingSlug: string; on
 
   // Filtered activities
   const filteredActivities = useMemo(() => {
-    let items = activityQuery ? searchActivities(activityQuery) : ACTIVITIES;
+    let items = allActivities;
+    if (activityQuery) {
+      const q = activityQuery.toLowerCase().trim();
+      items = items.filter(
+        (a) => a.label.toLowerCase().includes(q) || a.description.toLowerCase().includes(q) || a.category.includes(q),
+      );
+    }
     if (activeCategory !== "all") {
       items = items.filter((a) => a.category === activeCategory);
     }
     return items;
-  }, [activityQuery, activeCategory]);
+  }, [activityQuery, activeCategory, allActivities]);
 
   return (
     <div>
@@ -284,7 +317,7 @@ function WeatherTab({ pendingSlug, onSelectLocation }: { pendingSlug: string; on
       {/* Location count */}
       <div className="px-3 py-2">
         <p className="text-xs text-text-tertiary">
-          {LOCATIONS.length} locations across Zimbabwe
+          {allLocations.length} locations across Zimbabwe
         </p>
       </div>
 
@@ -311,7 +344,7 @@ function WeatherTab({ pendingSlug, onSelectLocation }: { pendingSlug: string; on
           active={activeCategory === "all"}
           onClick={() => setActiveCategory("all")}
         />
-        {ACTIVITY_CATEGORIES.map((cat) => (
+        {activityCategories.map((cat) => (
           <CategoryTab
             key={cat.id}
             label={cat.label}

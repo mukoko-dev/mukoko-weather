@@ -49,8 +49,8 @@ describe("/api/weather route structure", () => {
     expect(source).toContain('"X-Weather-Provider"');
   });
 
-  it("uses findNearestLocation to resolve cache key", () => {
-    expect(source).toContain("findNearestLocation(lat, lon)");
+  it("uses MongoDB geospatial query to resolve cache key", () => {
+    expect(source).toContain("findNearestLocationsFromDb(lat, lon");
   });
 
   it("defaults elevation to 1200 when no location is found", () => {

@@ -4,7 +4,6 @@ import {
   findNearestLocationsFromDb,
   getTagCounts,
 } from "@/lib/db";
-import { searchLocations } from "@/lib/locations";
 import { logError } from "@/lib/observability";
 
 /**
@@ -66,14 +65,7 @@ export async function GET(request: NextRequest) {
         message: "Geospatial search failed",
         error: err,
       });
-      // Fall back to in-memory nearest location
-      const { findNearestLocation } = await import("@/lib/locations");
-      const nearest = findNearestLocation(latNum, lonNum);
-      return NextResponse.json({
-        locations: nearest ? [nearest] : [],
-        total: nearest ? 1 : 0,
-        source: "fallback",
-      });
+      return NextResponse.json({ error: "Search unavailable" }, { status: 503 });
     }
   }
 
@@ -90,23 +82,9 @@ export async function GET(request: NextRequest) {
     logError({
       source: "mongodb",
       severity: "medium",
-      message: "Text search failed, falling back to in-memory",
+      message: "Text search failed",
       error: err,
     });
-
-    // Fallback: in-memory search from static locations array
-    let locations = q ? searchLocations(q) : [];
-    if (tag) {
-      const { getLocationsByTag } = await import("@/lib/locations");
-      const tagResults = getLocationsByTag(tag as Parameters<typeof getLocationsByTag>[0]);
-      locations = q
-        ? locations.filter((loc) => tagResults.some((t) => t.slug === loc.slug))
-        : tagResults;
-    }
-
-    const total = locations.length;
-    const paged = locations.slice(skip, skip + limit);
-
-    return NextResponse.json({ locations: paged, total, source: "fallback" });
+    return NextResponse.json({ error: "Search unavailable" }, { status: 503 });
   }
 }

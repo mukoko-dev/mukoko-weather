@@ -6,8 +6,8 @@ import {
   getCachedAISummary,
   setCachedAISummary,
   isSummaryStale,
+  getLocationFromDb,
 } from "@/lib/db";
-import { getLocationBySlug } from "@/lib/locations";
 
 const WEATHER_AI_SYSTEM_PROMPT = `You are Shamwari Weather, the AI assistant for mukoko weather — Zimbabwe's weather intelligence platform. You provide actionable, contextual weather advice grounded in Zimbabwean geography, agriculture, industry, and culture.
 
@@ -42,8 +42,8 @@ export async function POST(request: Request) {
     const currentTemp = weatherData.current?.temperature_2m ?? 0;
     const currentCode = weatherData.current?.weather_code ?? 0;
     const locationSlug = (location.name as string ?? "unknown").toLowerCase().replace(/\s+/g, "-");
-    // Look up the location in our database to get tags for tiered TTL
-    const knownLocation = getLocationBySlug(locationSlug);
+    // Look up the location in MongoDB to get tags for tiered TTL
+    const knownLocation = await getLocationFromDb(locationSlug);
     const locationTags = knownLocation?.tags ?? [];
 
     // Check MongoDB cache first — serves all concurrent users from a single cached entry

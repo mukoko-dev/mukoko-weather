@@ -12,7 +12,7 @@ import { PressureChart } from "@/components/weather/charts/PressureChart";
 import { HumidityChart } from "@/components/weather/charts/HumidityChart";
 import { DaylightChart } from "@/components/weather/charts/DaylightChart";
 import { ChartSkeleton } from "@/components/ui/skeleton";
-import { LOCATIONS, searchLocations, type ZimbabweLocation } from "@/lib/locations";
+import type { ZimbabweLocation } from "@/lib/locations";
 import { weatherCodeToInfo, windDirection, uvLevel } from "@/lib/weather";
 import type { WeatherHistoryDoc } from "@/lib/db";
 
@@ -134,8 +134,30 @@ export function HistoryDashboard() {
   const [fetched, setFetched] = useState(false);
   const [visibleRowCount, setVisibleRowCount] = useState(50);
   const tableEndRef = useRef<HTMLDivElement>(null);
+  const [allLocations, setAllLocations] = useState<ZimbabweLocation[]>([]);
 
-  const results = query.length > 0 ? searchLocations(query) : LOCATIONS.slice(0, 10);
+  // Fetch all locations from MongoDB on mount
+  useEffect(() => {
+    fetch("/api/locations")
+      .then((res) => (res.ok ? res.json() : { locations: [] }))
+      .then((data) => setAllLocations(data.locations ?? []))
+      .catch(() => {});
+  }, []);
+
+  const results = useMemo(() => {
+    if (query.length > 0) {
+      const q = query.toLowerCase().trim();
+      const prefix: ZimbabweLocation[] = [];
+      const rest: ZimbabweLocation[] = [];
+      for (const loc of allLocations) {
+        const name = loc.name.toLowerCase();
+        if (name.startsWith(q)) prefix.push(loc);
+        else if (name.includes(q) || loc.province.toLowerCase().includes(q)) rest.push(loc);
+      }
+      return [...prefix, ...rest];
+    }
+    return allLocations.slice(0, 10);
+  }, [query, allLocations]);
 
   // ── Infinite scroll for table rows (TikTok-style) ───────────────────────
   useEffect(() => {

@@ -1,10 +1,27 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { LOCATIONS } from "@/lib/locations";
+
+interface FooterStats {
+  locations: number;
+  provinces: number;
+}
 
 export function Footer() {
   const year = new Date().getFullYear();
-  const locationCount = LOCATIONS.length;
-  const provinceCount = new Set(LOCATIONS.map((l) => l.province)).size;
+  const [stats, setStats] = useState<FooterStats>({ locations: 90, provinces: 10 });
+
+  useEffect(() => {
+    fetch("/api/locations?mode=stats")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.locations && data?.provinces) {
+          setStats({ locations: data.locations, provinces: data.provinces });
+        }
+      })
+      .catch(() => { /* use defaults */ });
+  }, []);
 
   return (
     <footer
@@ -19,7 +36,7 @@ export function Footer() {
               <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
               <circle cx="12" cy="10" r="3" />
             </svg>
-            <span><strong className="text-text-secondary">{locationCount}</strong> locations</span>
+            <span><strong className="text-text-secondary">{stats.locations}</strong> locations</span>
           </div>
           <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
             <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -27,7 +44,7 @@ export function Footer() {
               <path d="M3 9h18" />
               <path d="M9 3v18" />
             </svg>
-            <span><strong className="text-text-secondary">{provinceCount}</strong> provinces</span>
+            <span><strong className="text-text-secondary">{stats.provinces}</strong> provinces</span>
           </div>
           <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
             <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

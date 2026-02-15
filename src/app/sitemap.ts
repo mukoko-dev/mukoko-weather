@@ -1,10 +1,11 @@
 import type { MetadataRoute } from "next";
-import { LOCATIONS } from "@/lib/locations";
+import { getAllLocationsFromDb } from "@/lib/db";
+import { logError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 3600;
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = "https://weather.mukoko.com";
   const now = new Date();
 
@@ -97,9 +98,22 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }));
 
-  // Harare and Bulawayo are already in staticPages with boosted priority
+  // Fetch all locations from MongoDB
+  let locations: { slug: string; tags: string[] }[] = [];
+  try {
+    locations = await getAllLocationsFromDb();
+  } catch (err) {
+    logError({
+      source: "mongodb",
+      severity: "medium",
+      message: "Failed to load locations for sitemap",
+      error: err,
+    });
+  }
+
+  // Harare, Bulawayo, and Victoria Falls are already in staticPages with boosted priority
   const boostedSlugs = new Set(["harare", "bulawayo", "victoria-falls"]);
-  const locationPages: MetadataRoute.Sitemap = LOCATIONS
+  const locationPages: MetadataRoute.Sitemap = locations
     .filter((loc) => !boostedSlugs.has(loc.slug))
     .map((loc) => ({
       url: `${baseUrl}/${loc.slug}`,
@@ -109,7 +123,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     }));
 
   // Sub-route pages for each location (atmosphere, forecast)
-  const subRoutePages: MetadataRoute.Sitemap = LOCATIONS.flatMap((loc) => [
+  const subRoutePages: MetadataRoute.Sitemap = locations.flatMap((loc) => [
     {
       url: `${baseUrl}/${loc.slug}/atmosphere`,
       lastModified: now,

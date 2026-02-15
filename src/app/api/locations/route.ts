@@ -4,6 +4,7 @@ import {
   getLocationFromDb,
   getLocationsByTagFromDb,
   getTagCounts,
+  getLocationStats,
 } from "@/lib/db";
 import { logError } from "@/lib/observability";
 
@@ -41,6 +42,12 @@ export async function GET(request: NextRequest) {
     if (mode === "tags") {
       const tags = await getTagCounts();
       return NextResponse.json({ tags });
+    }
+
+    // Location + province counts (for footer stats etc.)
+    if (mode === "stats") {
+      const stats = await getLocationStats();
+      return NextResponse.json(stats);
     }
 
     // Filtered by tag

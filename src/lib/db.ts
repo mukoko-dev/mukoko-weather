@@ -5,7 +5,8 @@
  *   - weather_cache   : Short-lived weather API response cache (replaces KV WEATHER_CACHE)
  *   - ai_summaries    : Tiered-TTL AI summary cache (replaces KV AI_SUMMARIES)
  *   - weather_history : Historical weather recordings for analytics
- *   - locations       : Zimbabwe locations (mirrors the static array, queryable)
+ *   - locations       : Zimbabwe locations (single source of truth)
+ *   - activities      : User activities for personalized weather insights
  */
 
 import { getDb } from "./mongo";
@@ -13,6 +14,7 @@ import { fetchWeather, createFallbackWeather, type WeatherData } from "./weather
 import { fetchWeatherFromTomorrow, TomorrowRateLimitError } from "./tomorrow";
 import { logWarn, logError } from "./observability";
 import type { ZimbabweLocation } from "./locations";
+import type { Activity, ActivityCategory } from "./activities";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,6 +54,10 @@ export interface LocationDoc extends ZimbabweLocation {
   updatedAt: Date;
 }
 
+export interface ActivityDoc extends Activity {
+  updatedAt: Date;
+}
+
 // ---------------------------------------------------------------------------
 // Collection accessors
 // ---------------------------------------------------------------------------
@@ -70,6 +76,10 @@ function weatherHistoryCollection() {
 
 function locationsCollection() {
   return getDb().collection<LocationDoc>("locations");
+}
+
+function activitiesCollection() {
+  return getDb().collection<ActivityDoc>("activities");
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +108,14 @@ export async function ensureIndexes(): Promise<void> {
       { weights: { name: 10, province: 5, slug: 3 }, name: "location_text_search" },
     ),
     locationsCollection().createIndex({ location: "2dsphere" }),
+
+    // Activities: by id (unique), by category, text search
+    activitiesCollection().createIndex({ id: 1 }, { unique: true }),
+    activitiesCollection().createIndex({ category: 1 }),
+    activitiesCollection().createIndex(
+      { label: "text", description: "text", category: "text" },
+      { weights: { label: 10, description: 5, category: 3 }, name: "activity_text_search" },
+    ),
 
     // API keys: one key per provider
     apiKeysCollection().createIndex({ provider: 1 }, { unique: true }),
@@ -515,4 +533,79 @@ export async function getTagCounts(): Promise<{ tag: string; count: number }[]> 
     { $project: { _id: 0, tag: "$_id", count: 1 } },
     { $sort: { count: -1 } },
   ]).toArray();
+}
+
+/**
+ * Get location and province counts for stats (e.g., footer).
+ */
+export async function getLocationStats(): Promise<{ locations: number; provinces: number }> {
+  const [locations, provinces] = await Promise.all([
+    locationsCollection().countDocuments(),
+    locationsCollection().distinct("province").then((p) => p.length),
+  ]);
+  return { locations, provinces };
+}
+
+// ---------------------------------------------------------------------------
+// Activity operations (sync seed data to MongoDB, query from MongoDB)
+// ---------------------------------------------------------------------------
+
+export async function syncActivities(
+  activities: Activity[],
+): Promise<void> {
+  const now = new Date();
+  const bulkOps = activities.map((act) => ({
+    updateOne: {
+      filter: { id: act.id },
+      update: {
+        $set: {
+          ...act,
+          updatedAt: now,
+        },
+      },
+      upsert: true,
+    },
+  }));
+  if (bulkOps.length > 0) {
+    await activitiesCollection().bulkWrite(bulkOps);
+  }
+}
+
+export async function getAllActivitiesFromDb(): Promise<ActivityDoc[]> {
+  return activitiesCollection().find({}).sort({ category: 1, label: 1 }).toArray();
+}
+
+export async function getActivitiesByCategoryFromDb(
+  category: ActivityCategory,
+): Promise<ActivityDoc[]> {
+  return activitiesCollection().find({ category }).sort({ label: 1 }).toArray();
+}
+
+export async function getActivityByIdFromDb(
+  id: string,
+): Promise<ActivityDoc | null> {
+  return activitiesCollection().findOne({ id });
+}
+
+export async function getActivityLabelsFromDb(
+  ids: string[],
+): Promise<string[]> {
+  const docs = await activitiesCollection().find({ id: { $in: ids } }).toArray();
+  return docs.map((d) => d.label);
+}
+
+export async function searchActivitiesFromDb(
+  query: string,
+): Promise<ActivityDoc[]> {
+  const q = query.trim();
+  if (!q) return getAllActivitiesFromDb();
+  return activitiesCollection()
+    .find({ $text: { $search: q } })
+    .project({ score: { $meta: "textScore" as const } })
+    .sort({ score: { $meta: "textScore" as const } })
+    .toArray() as Promise<ActivityDoc[]>;
+}
+
+export async function getActivityCategoriesFromDb(): Promise<ActivityCategory[]> {
+  return activitiesCollection().distinct("category") as Promise<ActivityCategory[]>;
 }

@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { ACTIVITIES, CATEGORY_STYLES, type ActivityCategory } from "@/lib/activities";
+import { CATEGORY_STYLES, type Activity, type ActivityCategory } from "@/lib/activities";
 import type { WeatherInsights } from "@/lib/weather";
 
 // ---------------------------------------------------------------------------
@@ -477,12 +477,21 @@ const CATEGORY_CARDS: Record<ActivityCategory, React.FC<{ insights: WeatherInsig
 export function ActivityInsights({ insights }: { insights?: WeatherInsights }) {
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const openMyWeather = useAppStore((s) => s.openMyWeather);
+  const [allActivities, setAllActivities] = useState<Activity[]>([]);
+
+  // Fetch all activities from MongoDB on mount
+  useEffect(() => {
+    fetch("/api/activities")
+      .then((res) => (res.ok ? res.json() : { activities: [] }))
+      .then((data) => setAllActivities(data.activities ?? []))
+      .catch(() => {});
+  }, []);
 
   const selectedItems = useMemo(() => {
     return selectedActivities
-      .map((id) => ACTIVITIES.find((a) => a.id === id))
-      .filter((a): a is (typeof ACTIVITIES)[number] => a != null);
-  }, [selectedActivities]);
+      .map((id) => allActivities.find((a) => a.id === id))
+      .filter((a): a is Activity => a != null);
+  }, [selectedActivities, allActivities]);
 
   const activeCategories = useMemo(() => {
     const cats = new Set<ActivityCategory>();

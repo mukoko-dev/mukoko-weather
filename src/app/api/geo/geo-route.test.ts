@@ -37,8 +37,17 @@ describe("/api/geo route structure", () => {
     expect(source).toContain("outside Zimbabwe");
   });
 
-  it("uses findNearestLocation to resolve the position", () => {
-    expect(source).toContain("findNearestLocation(lat, lon)");
+  it("uses MongoDB geospatial query to resolve the position", () => {
+    expect(source).toContain("findNearestLocationsFromDb");
+  });
+
+  it("returns 503 when MongoDB is unavailable", () => {
+    expect(source).toContain("status: 503");
+    expect(source).toContain("Location service unavailable");
+  });
+
+  it("does not import from static locations array", () => {
+    expect(source).not.toContain('from "@/lib/locations"');
   });
 
   it("returns nearest location and redirectTo path on success", () => {

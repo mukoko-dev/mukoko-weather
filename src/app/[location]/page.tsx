@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getLocationBySlug } from "@/lib/locations";
 import { checkFrostRisk, createFallbackWeather, weatherCodeToInfo } from "@/lib/weather";
-import { getWeatherForLocation } from "@/lib/db";
+import { getWeatherForLocation, getLocationFromDb } from "@/lib/db";
 import { WeatherDashboard } from "./WeatherDashboard";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +14,7 @@ export async function generateMetadata({
   params: Promise<{ location: string }>;
 }): Promise<Metadata> {
   const { location: slug } = await params;
-  const loc = getLocationBySlug(slug);
+  const loc = await getLocationFromDb(slug);
   if (!loc) return { title: "Location not found" };
 
   const title = `${loc.name} Weather Today — Forecast & Conditions`;
@@ -61,7 +60,7 @@ export default async function LocationPage({
   params: Promise<{ location: string }>;
 }) {
   const { location: slug } = await params;
-  const location = getLocationBySlug(slug);
+  const location = await getLocationFromDb(slug);
   if (!location) notFound();
 
   // Fetch weather — double-caught so the page shell ALWAYS renders.

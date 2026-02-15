@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { ensureIndexes, syncLocations, setApiKey } from "@/lib/db";
+import { ensureIndexes, syncLocations, syncActivities, setApiKey } from "@/lib/db";
 import { LOCATIONS } from "@/lib/locations";
+import { ACTIVITIES } from "@/lib/activities";
 
 /**
  * POST /api/db-init
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
 
     await ensureIndexes();
     await syncLocations(LOCATIONS);
+    await syncActivities(ACTIVITIES);
 
     // Store any provided API keys
     const storedKeys: string[] = [];
@@ -51,6 +53,7 @@ export async function POST(request: Request) {
       success: true,
       indexes: "created",
       locations: LOCATIONS.length,
+      activities: ACTIVITIES.length,
       apiKeys: storedKeys.length > 0 ? storedKeys : "none provided",
     });
   } catch (err) {

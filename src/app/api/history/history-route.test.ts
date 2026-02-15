@@ -45,8 +45,8 @@ describe("/api/history route structure", () => {
     expect(source).toContain("isNaN(days)");
   });
 
-  it("uses getLocationBySlug to validate the location", () => {
-    expect(source).toContain("getLocationBySlug(locationSlug)");
+  it("uses MongoDB to validate the location", () => {
+    expect(source).toContain("getLocationFromDb(locationSlug)");
   });
 
   it("returns records count in successful response", () => {

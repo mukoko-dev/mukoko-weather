@@ -103,7 +103,7 @@ describe("/api/ai route structure", () => {
   });
 
   it("looks up location tags for tiered TTL", () => {
-    expect(source).toContain("getLocationBySlug(locationSlug)");
+    expect(source).toContain("getLocationFromDb(locationSlug)");
     expect(source).toContain("locationTags");
   });
 
