@@ -6,12 +6,15 @@ import { useAppStore, type ThemePreference } from "@/lib/store";
 import { MapPinIcon, SearchIcon, SunIcon, MoonIcon } from "@/lib/weather-icons";
 import { ActivityIcon } from "@/lib/weather-icons";
 import {
+  LOCATIONS,
   TAG_LABELS,
   type LocationTag,
   type ZimbabweLocation,
 } from "@/lib/locations";
 import { detectUserLocation, type GeoResult } from "@/lib/geolocation";
 import {
+  ACTIVITIES,
+  ACTIVITY_CATEGORIES,
   CATEGORY_STYLES,
   type Activity,
   type ActivityCategory,
@@ -59,26 +62,28 @@ export function MyWeatherModal() {
   const [pendingSlug, setPendingSlug] = useState(currentSlug);
   const [activeTab, setActiveTab] = useState("location");
 
-  // Fetch locations and activities from MongoDB on mount
-  const [allLocations, setAllLocations] = useState<ZimbabweLocation[]>([]);
-  const [allActivities, setAllActivities] = useState<Activity[]>([]);
-  const [activityCategories, setActivityCategories] = useState<ActivityCategoryInfo[]>([]);
+  // Initialise with static seed data so the UI is never blank, then
+  // upgrade to the MongoDB data when the API responds.
+  const [allLocations, setAllLocations] = useState<ZimbabweLocation[]>(LOCATIONS);
+  const [allActivities, setAllActivities] = useState<Activity[]>(ACTIVITIES);
+  const [activityCategories, setActivityCategories] = useState<ActivityCategoryInfo[]>(ACTIVITY_CATEGORIES);
 
   useEffect(() => {
-    if (!myWeatherOpen) return;
+    // Fetch latest data from MongoDB — silently replace static seed data.
+    // If any fetch fails the static fallback is already rendered.
     fetch("/api/locations")
-      .then((res) => (res.ok ? res.json() : { locations: [] }))
-      .then((data) => setAllLocations(data.locations ?? []))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data?.locations?.length) setAllLocations(data.locations); })
       .catch(() => {});
     fetch("/api/activities")
-      .then((res) => (res.ok ? res.json() : { activities: [] }))
-      .then((data) => setAllActivities(data.activities ?? []))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data?.activities?.length) setAllActivities(data.activities); })
       .catch(() => {});
     fetch("/api/activities?mode=categories")
-      .then((res) => (res.ok ? res.json() : { categories: [] }))
-      .then((data) => setActivityCategories(data.categories ?? []))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data?.categories?.length) setActivityCategories(data.categories); })
       .catch(() => {});
-  }, [myWeatherOpen]);
+  }, []);
 
   const handleDone = () => {
     completeOnboarding();
@@ -436,7 +441,7 @@ function ActivitiesTab({
           })}
         </div>
 
-        {filteredActivities.length === 0 && (
+        {filteredActivities.length === 0 && activityQuery && (
           <p className="py-8 text-center text-sm text-text-tertiary">
             No activities found for &ldquo;{activityQuery}&rdquo;
           </p>
