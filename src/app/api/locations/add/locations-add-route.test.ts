@@ -25,7 +25,7 @@ describe("/api/locations/add route structure", () => {
     expect(source).toContain("isInSupportedRegion");
   });
 
-  it("checks for duplicate locations within 5km", () => {
+  it("checks for duplicate locations within 20km", () => {
     expect(source).toContain("findDuplicateLocation");
   });
 

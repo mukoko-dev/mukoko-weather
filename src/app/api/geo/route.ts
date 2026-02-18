@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Double-check for duplicates (race condition protection)
-      const duplicate = await findDuplicateLocation(lat, lon, 5);
+      const duplicate = await findDuplicateLocation(lat, lon, 20);
       if (duplicate) {
         return NextResponse.json({
           nearest: duplicate,

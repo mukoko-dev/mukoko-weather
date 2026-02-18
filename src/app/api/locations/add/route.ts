@@ -71,8 +71,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check for duplicates within 5km
-    const duplicate = await findDuplicateLocation(lat, lon, 5);
+    // Check for duplicates within 20km (city-level dedup)
+    const duplicate = await findDuplicateLocation(lat, lon, 20);
     if (duplicate) {
       return NextResponse.json({
         mode: "duplicate",
