@@ -68,6 +68,7 @@ export const useAppStore = create<AppState>()(
       name: "mukoko-weather-prefs",
       partialize: (state) => ({
         theme: state.theme,
+        selectedLocation: state.selectedLocation,
         selectedActivities: state.selectedActivities,
         hasOnboarded: state.hasOnboarded,
       }),

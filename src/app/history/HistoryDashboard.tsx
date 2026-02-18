@@ -17,7 +17,8 @@ import { VisibilityChart } from "@/components/weather/charts/VisibilityChart";
 import { ThunderstormChart } from "@/components/weather/charts/ThunderstormChart";
 import { GDDChart } from "@/components/weather/charts/GDDChart";
 import { ChartSkeleton } from "@/components/ui/skeleton";
-import type { ZimbabweLocation } from "@/lib/locations";
+import { LOCATIONS, type ZimbabweLocation } from "@/lib/locations";
+import { useAppStore } from "@/lib/store";
 import { weatherCodeToInfo, windDirection, uvLevel } from "@/lib/weather";
 import type { WeatherInsights } from "@/lib/weather";
 import type { WeatherHistoryDoc } from "@/lib/db";
@@ -359,6 +360,7 @@ export function suitabilityColors(level: "excellent" | "good" | "fair" | "poor")
 // ── Main component ──────────────────────────────────────────────────────────
 
 export function HistoryDashboard() {
+  const globalSlug = useAppStore((s) => s.selectedLocation);
   const [query, setQuery] = useState("");
   const [selectedLocation, setSelectedLocation] = useState<ZimbabweLocation | null>(null);
   const [days, setDays] = useState<DayRange>(30);
@@ -373,6 +375,7 @@ export function HistoryDashboard() {
   const [categoryFilter, setCategoryFilter] = useState<ActivityCategory | "all">("all");
   const tableEndRef = useRef<HTMLDivElement>(null);
   const [allLocations, setAllLocations] = useState<ZimbabweLocation[]>([]);
+  const didAutoSelect = useRef(false);
 
   // Fetch all locations from MongoDB on mount
   useEffect(() => {
@@ -381,6 +384,40 @@ export function HistoryDashboard() {
       .then((data) => setAllLocations(data.locations ?? []))
       .catch(() => {});
   }, []);
+
+  // Auto-select the global location (from My Weather / last visited location page)
+  // on first mount so the history experience continues seamlessly.
+  useEffect(() => {
+    if (didAutoSelect.current || !globalSlug) return;
+    // Find the location object from the static seed data (available immediately,
+    // no need to wait for the API response).
+    const loc = LOCATIONS.find((l) => l.slug === globalSlug);
+    if (loc) {
+      didAutoSelect.current = true;
+      setSelectedLocation(loc);
+      setQuery(loc.name);
+      // fetchHistory is defined below — call it via the inline logic to avoid
+      // a circular dependency with useCallback.
+      setLoading(true);
+      setFetched(true);
+      fetch(`/api/history?location=${loc.slug}&days=30`)
+        .then((res) => {
+          if (!res.ok) return res.json().catch(() => ({ error: "Request failed" })).then((b) => { throw new Error(b.error || `HTTP ${res.status}`); });
+          return res.json();
+        })
+        .then((json) => {
+          setRecords(transformHistory(json.data));
+          setInsightsRecords(transformInsights(json.data));
+          setVisibleRowCount(50);
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : "Failed to fetch history");
+          setRecords([]);
+          setInsightsRecords([]);
+        })
+        .finally(() => setLoading(false));
+    }
+  }, [globalSlug]);
 
   const results = useMemo(() => {
     if (query.length > 0) {
