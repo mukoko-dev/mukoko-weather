@@ -51,8 +51,8 @@ export default function PrivacyPage() {
             </p>
             <ul className="mt-2 list-disc pl-6 space-y-1">
               <li>Processed entirely in your browser (client-side)</li>
-              <li>Used only to determine the nearest Zimbabwe weather location</li>
-              <li>Never transmitted to our servers or stored anywhere</li>
+              <li>Used only to determine the nearest supported weather location</li>
+              <li>Sent to our server only to find the nearest location — not stored or logged</li>
               <li>Never shared with third parties</li>
             </ul>
             <p className="mt-2">
@@ -102,9 +102,25 @@ export default function PrivacyPage() {
               <div>
                 <dt className="font-semibold text-text-primary">Open-Meteo</dt>
                 <dd className="mt-1">
-                  Weather data API. We send geographic coordinates (latitude/longitude of Zimbabwe locations)
+                  Weather data API. We send geographic coordinates (latitude/longitude of supported locations)
                   to retrieve weather forecasts. No personal data is transmitted.
                   See their <a href="https://open-meteo.com/en/terms" className="text-primary underline" rel="noopener noreferrer">terms</a>.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-text-primary">Tomorrow.io</dt>
+                <dd className="mt-1">
+                  Primary weather data API. We send geographic coordinates to retrieve weather forecasts
+                  and map tile imagery. No personal data is transmitted.
+                  See their <a href="https://www.tomorrow.io/privacy-policy/" className="text-primary underline" rel="noopener noreferrer">privacy policy</a>.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-text-primary">OpenStreetMap / Nominatim</dt>
+                <dd className="mt-1">
+                  Reverse geocoding API used when creating new locations. We send geographic coordinates
+                  to determine place names. No personal data is transmitted.
+                  See their <a href="https://osmfoundation.org/wiki/Privacy_Policy" className="text-primary underline" rel="noopener noreferrer">privacy policy</a>.
                 </dd>
               </div>
               <div>
@@ -145,6 +161,16 @@ export default function PrivacyPage() {
               We do not retain any personal data. AI-generated weather summaries are cached for 30-120
               minutes depending on the location, after which they are automatically regenerated. These
               caches contain only weather information, not user data.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="font-heading text-xl font-bold text-text-primary">International users</h2>
+            <p className="mt-3">
+              mukoko weather serves users in multiple countries. If you access the Service from outside
+              Zimbabwe, please be aware that data may be processed in countries other than your own.
+              By using the Service, you consent to the transfer of information as described in this
+              Privacy Policy. We apply the same privacy protections to all users regardless of location.
             </p>
           </section>
 

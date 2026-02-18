@@ -9,12 +9,12 @@ import {
   getLocationFromDb,
 } from "@/lib/db";
 
-const WEATHER_AI_SYSTEM_PROMPT = `You are Shamwari Weather, the AI assistant for mukoko weather — Zimbabwe's weather intelligence platform. You provide actionable, contextual weather advice grounded in Zimbabwean geography, agriculture, industry, and culture.
+const WEATHER_AI_SYSTEM_PROMPT = `You are Shamwari Weather, the AI assistant for mukoko weather — an AI-powered weather intelligence platform. You provide actionable, contextual weather advice grounded in local geography, agriculture, industry, and culture.
 
 Your personality:
 - Warm, practical, community-minded (Ubuntu philosophy)
-- You speak with authority about Zimbabwe's climate and geography
-- You use local knowledge: seasons (masika, chirimo, zhizha), place names, farming practices, road conditions
+- You speak with authority about the location's climate and geography
+- You use local knowledge: regional seasons, place names, farming practices, road conditions
 - You prioritize safety and actionable advice
 
 When providing advice:
@@ -94,13 +94,13 @@ export async function POST(request: Request) {
     }
 
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 300,
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 400,
       system: WEATHER_AI_SYSTEM_PROMPT,
       messages: [
         {
           role: "user",
-          content: `Generate a weather briefing for ${location.name}, Zimbabwe (elevation: ${location.elevation}m).
+          content: `Generate a weather briefing for ${location.name} (elevation: ${location.elevation}m).
 ${locationTags.length > 0 ? `This area is relevant to: ${locationTags.join(", ")}.` : ""}
 ${userActivities.length > 0 ? `The user's activities: ${userActivities.join(", ")}. Tailor advice to these activities.` : ""}
 
@@ -137,6 +137,20 @@ Provide:
       message: "AI service unavailable",
       error: err,
     });
-    return NextResponse.json({ error: "AI service unavailable" }, { status: 502 });
+
+    // Fallback: return a basic weather summary instead of 502
+    // so users always see something useful in the AI section.
+    try {
+      const { weatherData, location: loc } = await request.clone().json().catch(() => ({} as Record<string, unknown>));
+      const season = getZimbabweSeason();
+      const locName = loc && typeof loc === "object" && "name" in loc ? String(loc.name) : "your area";
+      const temp = weatherData?.current?.temperature_2m;
+      const humidity = weatherData?.current?.relative_humidity_2m;
+      const insight = `Current conditions in ${locName}: ${temp !== undefined ? Math.round(Number(temp)) + "\u00B0C" : "N/A"} with ${humidity !== undefined ? humidity + "%" : "N/A"} humidity. We are in the ${season.shona} season (${season.name}). ${season.description}. Stay informed and plan your day accordingly.`;
+      return NextResponse.json({ insight, cached: false, fallback: true });
+    } catch {
+      // If even the fallback fails, return 502
+      return NextResponse.json({ error: "AI service unavailable" }, { status: 502 });
+    }
   }
 }

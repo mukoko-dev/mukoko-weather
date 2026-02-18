@@ -6,7 +6,7 @@ import { Footer } from "@/components/layout/Footer";
 export const metadata: Metadata = {
   title: "Terms of Service",
   description:
-    "Terms of Service for mukoko weather — Zimbabwe's AI-powered weather intelligence platform, operated by Mukoko Africa, a division of Nyuchi Africa (PVT) Ltd.",
+    "Terms of Service for mukoko weather — an AI-powered weather intelligence platform, operated by Mukoko Africa, a division of Nyuchi Africa (PVT) Ltd.",
   alternates: {
     canonical: "https://weather.mukoko.com/terms",
   },
@@ -41,7 +41,8 @@ export default function TermsPage() {
             <h2 className="font-heading text-xl font-bold text-text-primary">2. Description of Service</h2>
             <p className="mt-3">
               mukoko weather provides weather forecasts, current conditions, AI-generated weather summaries,
-              and frost alerts for locations across Zimbabwe. The Service is provided free of charge.
+              and frost alerts for locations across Zimbabwe and other supported regions. The Service is
+              provided free of charge.
             </p>
           </section>
 
@@ -49,7 +50,7 @@ export default function TermsPage() {
             <h2 className="font-heading text-xl font-bold text-text-primary">3. Weather data disclaimer</h2>
             <p className="mt-3">
               Weather information provided by the Service is sourced from third-party data providers
-              (Open-Meteo) and AI models (Anthropic Claude). While we strive for accuracy:
+              (Tomorrow.io, Open-Meteo) and AI models (Anthropic Claude). While we strive for accuracy:
             </p>
             <ul className="mt-2 list-disc pl-6 space-y-1">
               <li>Weather forecasts are inherently uncertain and should be used as guidance, not guarantees</li>
@@ -58,8 +59,8 @@ export default function TermsPage() {
               <li>We do not guarantee the accuracy, completeness, or timeliness of any weather data</li>
             </ul>
             <p className="mt-3">
-              For critical decisions affecting life, property, or agriculture, always consult the
-              Zimbabwe Meteorological Services Department and relevant professional advisors.
+              For critical decisions affecting life, property, or agriculture, always consult your
+              local meteorological service and relevant professional advisors.
             </p>
           </section>
 
@@ -130,9 +131,10 @@ export default function TermsPage() {
           <section>
             <h2 className="font-heading text-xl font-bold text-text-primary">10. Governing law</h2>
             <p className="mt-3">
-              These Terms are governed by the laws of the Republic of Zimbabwe. Any disputes arising from
-              these Terms or your use of the Service shall be subject to the jurisdiction of the courts
-              of Zimbabwe.
+              These Terms are governed by the laws of the Republic of Zimbabwe, where Nyuchi Africa (PVT)
+              Ltd is incorporated. Any disputes arising from these Terms or your use of the Service shall
+              be subject to the jurisdiction of the courts of Zimbabwe. If you access the Service from
+              outside Zimbabwe, you are responsible for compliance with your local laws.
             </p>
           </section>
 

@@ -17,9 +17,10 @@ const source = readFileSync(
 describe("geolocation source structure", () => {
   it("exports GeoResult interface with all status types", () => {
     expect(source).toContain('"success"');
+    expect(source).toContain('"created"');
     expect(source).toContain('"denied"');
     expect(source).toContain('"unavailable"');
-    expect(source).toContain('"outside-zw"');
+    expect(source).toContain('"outside-supported"');
     expect(source).toContain('"error"');
   });
 
@@ -40,12 +41,20 @@ describe("geolocation source structure", () => {
     expect(source).toContain('status: "denied"');
   });
 
-  it("returns 'outside-zw' when no nearest location is found", () => {
-    expect(source).toContain('status: "outside-zw"');
+  it("returns 'outside-supported' when location is outside supported regions", () => {
+    expect(source).toContain('status: "outside-supported"');
   });
 
-  it("returns 'success' with location and distance for valid position", () => {
-    expect(source).toContain('status: "success"');
+  it("returns 'created' when a new location was auto-created", () => {
+    expect(source).toContain('status: isNew ? "created" : "success"');
+  });
+
+  it("passes autoCreate=true to the geo API", () => {
+    expect(source).toContain("autoCreate=true");
+  });
+
+  it("includes isNew flag in result", () => {
+    expect(source).toContain("isNew");
   });
 
   it("uses Earth radius of 6371 km for Haversine distance", () => {

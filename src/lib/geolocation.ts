@@ -3,15 +3,18 @@
 import type { ZimbabweLocation } from "./locations";
 
 export interface GeoResult {
-  status: "success" | "denied" | "unavailable" | "outside-zw" | "error";
+  status: "success" | "created" | "denied" | "unavailable" | "outside-supported" | "error";
   location: ZimbabweLocation | null;
   coords: { lat: number; lon: number } | null;
   distanceKm: number | null;
+  /** True when the location was just auto-created via reverse geocoding */
+  isNew?: boolean;
 }
 
 /**
  * Request the user's position via the browser Geolocation API
- * and snap to the nearest Zimbabwe location via the /api/geo endpoint.
+ * and snap to the nearest location via the /api/geo endpoint.
+ * If no nearby location exists in a supported region, auto-creates one.
  */
 export function detectUserLocation(): Promise<GeoResult> {
   return new Promise((resolve) => {
@@ -25,10 +28,10 @@ export function detectUserLocation(): Promise<GeoResult> {
         const { latitude, longitude } = position.coords;
 
         try {
-          const res = await fetch(`/api/geo?lat=${latitude}&lon=${longitude}`);
+          const res = await fetch(`/api/geo?lat=${latitude}&lon=${longitude}&autoCreate=true`);
           if (res.status === 404) {
             resolve({
-              status: "outside-zw",
+              status: "outside-supported",
               location: null,
               coords: { lat: latitude, lon: longitude },
               distanceKm: null,
@@ -42,6 +45,7 @@ export function detectUserLocation(): Promise<GeoResult> {
 
           const data = await res.json();
           const nearest: ZimbabweLocation = data.nearest;
+          const isNew: boolean = data.isNew ?? false;
 
           // Calculate distance to nearest for display
           const R = 6371;
@@ -56,10 +60,11 @@ export function detectUserLocation(): Promise<GeoResult> {
           const distanceKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
           resolve({
-            status: "success",
+            status: isNew ? "created" : "success",
             location: nearest,
             coords: { lat: latitude, lon: longitude },
             distanceKm: Math.round(distanceKm),
+            isNew,
           });
         } catch {
           resolve({ status: "error", location: null, coords: { lat: latitude, lon: longitude }, distanceKm: null });

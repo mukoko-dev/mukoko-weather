@@ -6,7 +6,7 @@ import { Footer } from "@/components/layout/Footer";
 export const metadata: Metadata = {
   title: "Help & FAQ",
   description:
-    "Get help with mukoko weather — how to use forecasts, understand frost alerts, install the app, and more. Frequently asked questions about Zimbabwe's weather intelligence platform.",
+    "Get help with mukoko weather — how to use forecasts, understand frost alerts, install the app, and more. Frequently asked questions about our weather intelligence platform.",
   alternates: {
     canonical: "https://weather.mukoko.com/help",
   },
@@ -24,7 +24,7 @@ export default function HelpPage() {
         name: "What is mukoko weather?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "mukoko weather is Zimbabwe's AI-powered weather intelligence platform. It provides real-time weather conditions, 7-day forecasts, hourly predictions, frost alerts, and AI-generated weather advice for 90+ locations across Zimbabwe.",
+          text: "mukoko weather is an AI-powered weather intelligence platform. It provides real-time weather conditions, 7-day forecasts, hourly predictions, frost alerts, and AI-generated weather advice for locations across Zimbabwe and other supported regions.",
         },
       },
       {
@@ -32,7 +32,7 @@ export default function HelpPage() {
         name: "How accurate is the weather data?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "Weather data is sourced from Open-Meteo, which aggregates data from national weather services and global models. Forecasts are generally reliable for 1-3 days ahead. Accuracy decreases for longer-range forecasts. For critical decisions, always consult the Zimbabwe Meteorological Services Department.",
+          text: "Weather data is sourced from Tomorrow.io and Open-Meteo, which aggregate data from national weather services and global models. Forecasts are generally reliable for 1-3 days ahead. Accuracy decreases for longer-range forecasts. For critical decisions, always consult your local meteorological service.",
         },
       },
       {
@@ -80,7 +80,7 @@ export default function HelpPage() {
           <h2 className="font-heading text-2xl font-bold text-text-primary">Getting started</h2>
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
-              mukoko weather gives you accurate weather data for 90+ Zimbabwe locations. No account needed —
+              mukoko weather gives you accurate weather data for locations across Zimbabwe and beyond. No account needed —
               just visit{" "}
               <a href={BASE_URL} className="text-primary underline">weather.mukoko.com</a>{" "}
               and you&apos;re ready to go.
@@ -92,13 +92,13 @@ export default function HelpPage() {
             <ul className="list-disc pl-6 space-y-1">
               <li>Search by name (e.g. &quot;Harare&quot;, &quot;Vic Falls&quot;)</li>
               <li>Filter by category — cities, farming areas, mining, tourism, national parks</li>
-              <li>Tap &quot;Use my location&quot; to auto-detect your nearest Zimbabwe location</li>
+              <li>Tap &quot;Use my location&quot; to auto-detect your nearest supported weather location</li>
             </ul>
 
             <h3 className="font-semibold text-text-primary">Using your location</h3>
             <p>
               When you tap &quot;Use my location&quot;, your browser will ask for permission. Your coordinates
-              are only used to find the nearest Zimbabwe weather station — they never leave your device. If you
+              are used to find the nearest supported weather location. If you
               deny permission, you can always select a location manually.
             </p>
           </div>
@@ -149,8 +149,8 @@ export default function HelpPage() {
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
               mukoko weather automatically monitors overnight temperatures and displays a frost alert banner
-              when conditions are risky. This is critical for Zimbabwe&apos;s farmers during the cool dry
-              season (Chirimo, May–August).
+              when conditions are risky. This is especially useful for farmers during the cool dry
+              season (May–August).
             </p>
             <h3 className="font-semibold text-text-primary">Alert levels</h3>
             <dl className="mt-2 space-y-2">
@@ -176,11 +176,11 @@ export default function HelpPage() {
 
         {/* Zimbabwe seasons */}
         <section className="mt-10">
-          <h2 className="font-heading text-2xl font-bold text-text-primary">Zimbabwe seasons</h2>
+          <h2 className="font-heading text-2xl font-bold text-text-primary">Seasonal awareness</h2>
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
-              Zimbabwe has distinct seasons that affect daily life, agriculture, and travel. mukoko weather
-              displays the current season badge on every forecast page.
+              mukoko weather displays seasonal context on forecast pages. Zimbabwe, for example, has distinct
+              seasons that affect daily life, agriculture, and travel.
             </p>
             <dl className="mt-2 space-y-3">
               <div>
@@ -275,10 +275,10 @@ export default function HelpPage() {
                 How accurate is the weather data?
               </summary>
               <p className="mt-2 text-text-secondary leading-relaxed">
-                Weather data comes from Open-Meteo, which aggregates global weather models. Short-range
-                forecasts (1-3 days) are generally very reliable. Longer-range forecasts (4-7 days) should
-                be used as general guidance. For life-critical decisions, always consult the Zimbabwe
-                Meteorological Services Department.
+                Weather data comes from Tomorrow.io and Open-Meteo, which aggregate global weather models.
+                Short-range forecasts (1-3 days) are generally very reliable. Longer-range forecasts (4-7
+                days) should be used as general guidance. For life-critical decisions, always consult your
+                local meteorological service.
               </p>
             </details>
 
@@ -287,8 +287,9 @@ export default function HelpPage() {
                 Do you collect my personal data?
               </summary>
               <p className="mt-2 text-text-secondary leading-relaxed">
-                No. We don&apos;t use cookies, analytics, or trackers. If you use the location feature, your
-                coordinates stay in your browser and are never sent to our servers. See our{" "}
+                We use Google Analytics for anonymised usage statistics (page views, visitor counts). We
+                don&apos;t use advertising pixels or fingerprinting. If you use the location feature, your
+                coordinates are only used to find the nearest weather location. See our{" "}
                 <Link href="/privacy" className="text-primary underline">Privacy Policy</Link> for full details.
               </p>
             </details>
@@ -298,14 +299,11 @@ export default function HelpPage() {
                 Why can&apos;t I find my location?
               </summary>
               <p className="mt-2 text-text-secondary leading-relaxed">
-                We currently cover 90+ Zimbabwe locations including all major cities, farming regions,
-                mining areas, national parks, and border posts. If your specific town isn&apos;t listed,
-                try the nearest major location — weather conditions are usually similar within 30-50km.
-                You can also{" "}
-                <a href="https://github.com/nyuchitech/mukoko-weather/issues/new?template=feature_request.md" className="text-primary underline" rel="noopener noreferrer">
-                  request a location
-                </a>{" "}
-                be added.
+                We cover locations across Zimbabwe, ASEAN countries, and other developing regions — with
+                more being added by the community. If your area isn&apos;t listed, try using the
+                &quot;Use my location&quot; feature — if you&apos;re in a supported region, a new
+                location will be created automatically. You can also search for a location by name in the
+                My Weather modal.
               </p>
             </details>
 

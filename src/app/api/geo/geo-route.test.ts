@@ -32,9 +32,9 @@ describe("/api/geo route structure", () => {
     expect(source).toContain('?? ""');
   });
 
-  it("returns 404 when nearest location is not found", () => {
+  it("returns 404 when location is outside supported regions", () => {
     expect(source).toContain("status: 404");
-    expect(source).toContain("outside Zimbabwe");
+    expect(source).toContain("outside supported regions");
   });
 
   it("uses MongoDB geospatial query to resolve the position", () => {
@@ -46,8 +46,16 @@ describe("/api/geo route structure", () => {
     expect(source).toContain("Location service unavailable");
   });
 
-  it("does not import from static locations array", () => {
-    expect(source).not.toContain('from "@/lib/locations"');
+  it("imports isInSupportedRegion from locations", () => {
+    expect(source).toContain("isInSupportedRegion");
+  });
+
+  it("supports autoCreate query parameter", () => {
+    expect(source).toContain("autoCreate");
+  });
+
+  it("returns isNew flag on success", () => {
+    expect(source).toContain("isNew");
   });
 
   it("returns nearest location and redirectTo path on success", () => {

@@ -1,6 +1,6 @@
 # mukoko weather
 
-AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 90+ locations.
+AI-powered weather intelligence, starting with Zimbabwe and expanding globally. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across Zimbabwe, ASEAN countries, and developing regions.
 
 **Live:** [weather.mukoko.com](https://weather.mukoko.com)
 
@@ -12,11 +12,11 @@ AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, 
 - **AI weather intelligence** — Claude-powered markdown-formatted summaries with farming, mining, and travel advice
 - **Personalised activity insights** — 20 activities across 6 categories (farming, mining, travel, tourism, sports, casual) with mineral-colored cards showing GDD, heat stress, thunderstorm risk, visibility, and more
 - **Frost alerts** — automated frost risk detection for overnight hours with severity levels
-- **90+ locations** — cities, farming regions, mining areas, national parks, border posts, and travel corridors
-- **Zimbabwe seasons** — Masika, Chirimo, Zhizha, and Munakamwe season awareness
-- **Geolocation** — automatic nearest-location detection via browser GPS
+- **Dynamic locations** — 90+ seed locations in Zimbabwe, with community-driven expansion to ASEAN and developing regions via geolocation and search
+- **Seasonal awareness** — Zimbabwe seasons (Masika, Chirimo, Zhizha, Munakamwe) and regional context
+- **Geolocation** — automatic nearest-location detection via browser GPS, with auto-creation for new areas
 - **Embeddable widget** — drop-in weather widget for third-party sites
-- **Dedicated detail pages** — `/harare/atmosphere` for 24h atmospheric charts, `/harare/forecast` for hourly + daily forecast detail
+- **Dedicated detail pages** — `/harare/atmosphere` for 24h atmospheric charts, `/harare/forecast` for hourly + daily forecast detail, `/harare/map` for full-viewport interactive weather map
 - **Smart theming** — light, dark, and system (auto) modes with OS preference detection
 - **Historical data dashboard** — explore recorded weather trends, precipitation, and climate patterns over time
 - **Resilient architecture** — Netflix-style error isolation: per-section error boundaries, 4-stage weather fallback chain, structured observability logging
@@ -88,6 +88,7 @@ The app redirects `/` to `/harare` by default.
 | `/[location]` | Weather overview — current conditions, AI summary, activity insights, atmospheric metric cards |
 | `/[location]/atmosphere` | 24-hour atmospheric detail charts (humidity, wind, pressure, UV) |
 | `/[location]/forecast` | Hourly (24h) + daily (7-day) forecast charts + sunrise/sunset |
+| `/[location]/map` | Full-viewport interactive weather map with layer switcher |
 | `/about` | Company information |
 | `/help` | User help / FAQ |
 | `/history` | Historical weather data dashboard (search, multi-day charts, data table) |
@@ -102,7 +103,8 @@ The main location page is a compact overview. Detail-heavy sections (charts, atm
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/weather?lat=&lon=` | GET | Weather data (Tomorrow.io → Open-Meteo fallback, MongoDB cached 15-min TTL). `X-Weather-Provider` header indicates source |
-| `/api/geo?lat=&lon=` | GET | Nearest Zimbabwe location lookup |
+| `/api/geo?lat=&lon=` | GET | Nearest location lookup (supports `autoCreate=true` for community locations) |
+| `/api/locations/add` | POST | Add locations via search (`{ query }`) or coordinates (`{ lat, lon }`). Rate-limited |
 | `/api/ai` | POST | AI weather summary. Body: `{ weatherData, location }`. Tiered TTL cache (30/60/120 min) |
 | `/api/history?location=&days=` | GET | Historical weather data for a location |
 | `/api/map-tiles?z=&x=&y=&layer=` | GET | Tile proxy for Tomorrow.io map layers (keeps API key server-side) |
@@ -160,6 +162,10 @@ src/
         page.tsx            # Server wrapper (SEO, data fetch)
         ForecastDashboard.tsx  # Client: forecast charts + sun times
         loading.tsx         # Branded skeleton
+      map/                  # Full-viewport weather map sub-route
+        page.tsx            # Server wrapper (SEO, no weather fetch)
+        MapDashboard.tsx    # Client: full-viewport Leaflet map + layer switcher
+        loading.tsx         # Full-viewport skeleton
     about/page.tsx          # Company info page
     help/page.tsx           # User help / FAQ
     history/
@@ -171,8 +177,9 @@ src/
     embed/page.tsx          # Embeddable widget documentation
     api/
       weather/route.ts      # GET — Tomorrow.io/Open-Meteo proxy + MongoDB cache
-      geo/route.ts          # GET — nearest location lookup
-      ai/route.ts           # POST — AI summaries (Claude, markdown-formatted)
+      geo/route.ts          # GET — nearest location lookup (supports autoCreate)
+      locations/add/route.ts # POST — add locations via search or coordinates
+      ai/route.ts           # POST — AI summaries (Claude Haiku 3.5, markdown-formatted)
       history/route.ts      # GET — historical weather data
       db-init/route.ts      # POST — one-time DB setup + API key seeding
   components/
@@ -211,17 +218,18 @@ src/
       SunTimes.tsx           # Sunrise/sunset display
       LocationSelector.tsx   # Search/filter dropdown, geolocation
     map/                     # Interactive weather map (Leaflet + Tomorrow.io tiles)
-      MapPreview.tsx         # Compact map card on location page
-      MapModal.tsx           # Full-screen map dialog with layer switcher
+      MapPreview.tsx         # Compact map card on location page (links to /[location]/map)
       MapLayerSwitcher.tsx   # Layer toggle buttons
     embed/
       MukokoWeatherEmbed.tsx # Embeddable widget (CSS module, self-contained)
   lib/
-    locations.ts            # 90+ Zimbabwe locations database
+    locations.ts            # WeatherLocation type, 90+ seed locations, SUPPORTED_REGIONS
     activities.ts           # 20 activities, 6 categories, mineral color styles
     tomorrow.ts             # Tomorrow.io API client + WMO normalization
     weather.ts              # Open-Meteo client, frost detection, seasons, weather utils
-    db.ts                   # MongoDB CRUD (weather_cache, ai_summaries, weather_history, locations, api_keys)
+    db.ts                   # MongoDB CRUD (weather_cache, ai_summaries, weather_history, locations, rate_limits, api_keys)
+    geocoding.ts            # Nominatim reverse geocoding, Open-Meteo forward geocoding, slug generation
+    rate-limit.ts           # MongoDB-backed IP rate limiter
     mongo.ts                # MongoDB client (connection-pooled via @vercel/functions)
     observability.ts        # Structured error logging + GA4 error reporting
     store.ts                # Zustand state with localStorage persistence (theme, activities)
@@ -255,7 +263,7 @@ This app targets **WCAG 3.0 APCA/AAA** compliance:
 
 ## SEO
 
-- Dynamic `robots.txt` and `sitemap.xml` for all 90+ locations and sub-routes
+- Dynamic `robots.txt` and `sitemap.xml` for all locations and sub-routes
 - Per-page canonical URLs, Open Graph, and Twitter cards
 - FAQPage, BreadcrumbList, WebApplication, Organization, and WebSite JSON-LD schemas
 - Visible breadcrumb navigation

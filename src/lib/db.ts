@@ -84,6 +84,10 @@ function activitiesCollection() {
   return getDb().collection<ActivityDoc>("activities");
 }
 
+export function rateLimitsCollection() {
+  return getDb().collection<{ key: string; count: number; expiresAt: Date }>("rate_limits");
+}
+
 // ---------------------------------------------------------------------------
 // Indexes — call once on app startup (idempotent)
 // ---------------------------------------------------------------------------
@@ -121,6 +125,10 @@ export async function ensureIndexes(): Promise<void> {
 
     // API keys: one key per provider
     apiKeysCollection().createIndex({ provider: 1 }, { unique: true }),
+
+    // Rate limits: auto-expire counters for abuse prevention
+    rateLimitsCollection().createIndex({ key: 1 }, { unique: true }),
+    rateLimitsCollection().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   ]);
 }
 
@@ -448,6 +456,30 @@ export async function getLocationsByTagFromDb(
 
 export async function getAllLocationsFromDb(): Promise<LocationDoc[]> {
   return locationsCollection().find({}).toArray();
+}
+
+/** Insert a new community-contributed location */
+export async function createLocation(
+  location: ZimbabweLocation,
+): Promise<LocationDoc> {
+  const now = new Date();
+  const doc = {
+    ...location,
+    location: { type: "Point" as const, coordinates: [location.lon, location.lat] },
+    updatedAt: now,
+  };
+  await locationsCollection().insertOne(doc as unknown as LocationDoc);
+  return { ...location, updatedAt: now };
+}
+
+/** Check if a location already exists within a given radius */
+export async function findDuplicateLocation(
+  lat: number,
+  lon: number,
+  radiusKm: number = 5,
+): Promise<LocationDoc | null> {
+  const results = await findNearestLocationsFromDb(lat, lon, { limit: 1, maxDistanceKm: radiusKm });
+  return results[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------

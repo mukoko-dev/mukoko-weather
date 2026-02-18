@@ -256,9 +256,14 @@ function LocationTab({
             Location access denied. Enable it in your browser settings.
           </p>
         )}
-        {geoState?.status === "outside-zw" && (
+        {geoState?.status === "outside-supported" && (
           <p className="px-3 pb-1 text-sm text-text-tertiary">
-            You appear to be outside Zimbabwe. Select a location below.
+            Your area isn&apos;t supported yet. Select a location below.
+          </p>
+        )}
+        {geoState?.status === "created" && (
+          <p className="px-3 pb-1 text-sm text-severity-low">
+            New location added! Weather data is loading.
           </p>
         )}
       </div>

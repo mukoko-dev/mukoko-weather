@@ -6,7 +6,7 @@ import { Footer } from "@/components/layout/Footer";
 export const metadata: Metadata = {
   title: "About",
   description:
-    "Learn about mukoko weather — Zimbabwe's AI-powered weather intelligence platform. A Mukoko Africa product, developed by Nyuchi Web Services, a division of Nyuchi Africa (PVT) Ltd.",
+    "Learn about mukoko weather — an AI-powered weather intelligence platform starting with Zimbabwe, expanding globally. A Mukoko Africa product, developed by Nyuchi Web Services, a division of Nyuchi Africa (PVT) Ltd.",
   alternates: {
     canonical: "https://weather.mukoko.com/about",
   },
@@ -21,14 +21,15 @@ export default function AboutPage() {
 
         <section className="mt-8 space-y-4 text-text-secondary leading-relaxed">
           <p>
-            <strong className="text-text-primary">mukoko weather</strong> is Zimbabwe&apos;s AI-powered weather
-            intelligence platform. We provide accurate, real-time forecasts and actionable weather insights for
-            farming, mining, travel, and daily life across 90+ locations nationwide.
+            <strong className="text-text-primary">mukoko weather</strong> is an AI-powered weather
+            intelligence platform. Starting with Zimbabwe, we&apos;re expanding to serve communities across
+            Africa, Southeast Asia, and other developing regions — providing accurate, real-time forecasts and
+            actionable weather insights for farming, mining, travel, and daily life.
           </p>
           <p>
-            Our mission is simple: <em>weather as a public good</em>. Every Zimbabwean deserves access to
+            Our mission is simple: <em>weather as a public good</em>. Everyone deserves access to
             reliable, contextual weather information — whether you&apos;re a farmer in Chinhoyi watching for
-            frost, a traveller heading to Victoria Falls, or a family in Harare planning the week ahead.
+            frost, a traveller heading to Victoria Falls, or a family in Manila planning the week ahead.
           </p>
         </section>
 
@@ -56,7 +57,7 @@ export default function AboutPage() {
           <ul className="mt-4 space-y-2 text-text-secondary">
             <li className="flex items-start gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" aria-hidden="true" />
-              <span>Real-time weather conditions for 90+ Zimbabwe locations</span>
+              <span>Real-time weather conditions for locations across Zimbabwe and beyond</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" aria-hidden="true" />
@@ -68,11 +69,11 @@ export default function AboutPage() {
             </li>
             <li className="flex items-start gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" aria-hidden="true" />
-              <span>Automated frost alerts for Zimbabwe&apos;s agricultural regions</span>
+              <span>Automated frost alerts for agricultural regions</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" aria-hidden="true" />
-              <span>Zimbabwe seasonal awareness — Masika, Chirimo, Zhizha, and Munakamwe</span>
+              <span>Seasonal awareness — including Zimbabwe&apos;s Masika, Chirimo, Zhizha, and Munakamwe</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" aria-hidden="true" />
@@ -86,10 +87,14 @@ export default function AboutPage() {
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
               Weather data is sourced from{" "}
+              <a href="https://www.tomorrow.io" className="text-primary underline hover:text-primary/80 transition-colors" rel="noopener noreferrer">
+                Tomorrow.io
+              </a>
+              {" "}(primary) and{" "}
               <a href="https://open-meteo.com" className="text-primary underline hover:text-primary/80 transition-colors" rel="noopener noreferrer">
                 Open-Meteo
               </a>
-              , a free and open-source weather API. AI-powered summaries are generated using{" "}
+              {" "}(fallback). AI-powered summaries are generated using{" "}
               <a href="https://anthropic.com" className="text-primary underline hover:text-primary/80 transition-colors" rel="noopener noreferrer">
                 Anthropic Claude
               </a>

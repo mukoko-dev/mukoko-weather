@@ -117,6 +117,7 @@ export function Footer() {
             <Link href="/privacy" prefetch={false} className={linkClass}>Privacy</Link>
             <Link href="/terms" prefetch={false} className={linkClass}>Terms</Link>
             <Link href="/help" prefetch={false} className={linkClass}>Help</Link>
+            <Link href="/embed" prefetch={false} className={linkClass}>Embed</Link>
             <a href="mailto:support@mukoko.com" className={linkClass}>Contact</a>
             <a
               href="https://github.com/nyuchitech/mukoko-weather/issues/new/choose"
