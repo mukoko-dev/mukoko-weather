@@ -35,6 +35,10 @@
   --color-frost-high-bg: rgba(139, 69, 19, 0.1);
   --color-frost-moderate-bg: rgba(93, 64, 55, 0.1);
 
+  /* Map overlay */
+  --color-map-overlay: rgba(0, 71, 171, 0.08);
+  --color-map-attribution: rgba(20, 20, 19, 0.7);
+
   /* Surfaces */
   --color-surface-base: #FAF9F5;
   --color-surface-card: #FFFFFF;
@@ -164,6 +168,10 @@
   --color-frost-high-bg: rgba(212, 165, 116, 0.12);
   --color-frost-moderate-bg: rgba(255, 215, 64, 0.12);
 
+  /* Map overlay */
+  --color-map-overlay: rgba(0, 176, 255, 0.08);
+  --color-map-attribution: rgba(245, 245, 244, 0.7);
+
   /* Surfaces */
   --color-surface-base: #0A0A0A;
   --color-surface-card: #141414;
@@ -291,6 +299,8 @@
   --color-severity-severe: var(--color-severity-severe);
   --color-severity-extreme: var(--color-severity-extreme);
   --color-severity-cold: var(--color-severity-cold);
+  --color-map-overlay: var(--color-map-overlay);
+  --color-map-attribution: var(--color-map-attribution);
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-display: "Noto Serif", Georgia, serif;
   --font-heading: "Plus Jakarta Sans", system-ui, sans-serif;
