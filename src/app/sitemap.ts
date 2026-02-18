@@ -122,7 +122,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: loc.tags.includes("city") ? 0.9 : 0.7,
     }));
 
-  // Sub-route pages for each location (atmosphere, forecast)
+  // Sub-route pages for each location (atmosphere, forecast, map)
   const subRoutePages: MetadataRoute.Sitemap = locations.flatMap((loc) => [
     {
       url: `${baseUrl}/${loc.slug}/atmosphere`,
@@ -135,6 +135,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: "hourly" as const,
       priority: loc.tags.includes("city") ? 0.7 : 0.5,
+    },
+    {
+      url: `${baseUrl}/${loc.slug}/map`,
+      lastModified: now,
+      changeFrequency: "daily" as const,
+      priority: loc.tags.includes("city") ? 0.5 : 0.3,
     },
   ]);
 

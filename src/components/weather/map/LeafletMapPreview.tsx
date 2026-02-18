@@ -7,13 +7,11 @@ import { MapContainer, TileLayer, Marker } from "react-leaflet";
 interface LeafletMapPreviewProps {
   lat: number;
   lon: number;
-  layer: string;
 }
 
 export default function LeafletMapPreview({
   lat,
   lon,
-  layer,
 }: LeafletMapPreviewProps) {
   return (
     <MapContainer
@@ -25,13 +23,8 @@ export default function LeafletMapPreview({
       attributionControl={false}
       style={{ height: "100%", width: "100%" }}
     >
-      {/* Base map — OpenStreetMap */}
+      {/* Base map only — weather overlay tiles load on the full map page */}
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      {/* Weather overlay via tile proxy */}
-      <TileLayer
-        url={`/api/map-tiles?z={z}&x={x}&y={y}&layer=${layer}`}
-        opacity={0.6}
-      />
       <Marker position={[lat, lon]} />
     </MapContainer>
   );

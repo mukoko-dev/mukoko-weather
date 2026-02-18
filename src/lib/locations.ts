@@ -1,20 +1,76 @@
-export interface ZimbabweLocation {
+export interface WeatherLocation {
   slug: string;
   name: string;
+  /** Province, state, region, or administrative division */
   province: string;
   lat: number;
   lon: number;
   elevation: number;
   tags: string[];
+  /** ISO 3166-1 alpha-2 country code (defaults to "ZW") */
+  country?: string;
+  /** How this location was added */
+  source?: "seed" | "community" | "geolocation";
 }
 
-export const ZIMBABWE_BOUNDS = {
-  north: -15.61,
-  south: -22.42,
-  east: 33.07,
-  west: 25.24,
-  center: { lat: -19.02, lon: 29.15 },
-};
+/** @deprecated Use WeatherLocation instead */
+export type ZimbabweLocation = WeatherLocation;
+
+export interface RegionBounds {
+  id: string;
+  name: string;
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+  center: { lat: number; lon: number };
+}
+
+export const SUPPORTED_REGIONS: RegionBounds[] = [
+  {
+    id: "zw",
+    name: "Zimbabwe",
+    north: -15.61,
+    south: -22.42,
+    east: 33.07,
+    west: 25.24,
+    center: { lat: -19.02, lon: 29.15 },
+  },
+  // ASEAN bounding box (covers all 10 member nations)
+  {
+    id: "asean",
+    name: "ASEAN",
+    north: 28.5,
+    south: -11.0,
+    east: 141.0,
+    west: 92.0,
+    center: { lat: 8.0, lon: 115.0 },
+  },
+  // Sub-Saharan Africa (developing nations)
+  {
+    id: "africa-dev",
+    name: "Africa (Developing)",
+    north: 15.0,
+    south: -35.0,
+    east: 52.0,
+    west: -18.0,
+    center: { lat: -5.0, lon: 25.0 },
+  },
+];
+
+/** Backward-compatible alias — equivalent to SUPPORTED_REGIONS[0] */
+export const ZIMBABWE_BOUNDS = SUPPORTED_REGIONS[0];
+
+/** Check if coordinates fall within any supported region (with 1° padding) */
+export function isInSupportedRegion(lat: number, lon: number): boolean {
+  return SUPPORTED_REGIONS.some(
+    (r) =>
+      lat >= r.south - 1 &&
+      lat <= r.north + 1 &&
+      lon >= r.west - 1 &&
+      lon <= r.east + 1,
+  );
+}
 
 // Tag categories for filtering
 export type LocationTag =
@@ -183,19 +239,13 @@ export function searchLocations(query: string): ZimbabweLocation[] {
 
 /**
  * Find the nearest location to given coordinates using the Haversine formula.
- * Returns null if the coordinates are outside Zimbabwe bounds (with generous padding).
+ * Returns null if the coordinates are outside all supported regions (with 1° padding).
  */
 export function findNearestLocation(
   lat: number,
   lon: number,
-): ZimbabweLocation | null {
-  // Generous bounds check — 1 degree padding around Zimbabwe
-  if (
-    lat < ZIMBABWE_BOUNDS.south - 1 ||
-    lat > ZIMBABWE_BOUNDS.north + 1 ||
-    lon < ZIMBABWE_BOUNDS.west - 1 ||
-    lon > ZIMBABWE_BOUNDS.east + 1
-  ) {
+): WeatherLocation | null {
+  if (!isInSupportedRegion(lat, lon)) {
     return null;
   }
 

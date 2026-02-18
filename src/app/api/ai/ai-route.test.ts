@@ -58,12 +58,12 @@ describe("/api/ai route structure", () => {
     expect(fallbackSection).toContain("setCachedAISummary");
   });
 
-  it("uses Claude claude-sonnet-4-20250514 model", () => {
-    expect(source).toContain("claude-sonnet-4-20250514");
+  it("uses Claude Haiku 3.5 model", () => {
+    expect(source).toContain("claude-haiku-4-5-20251001");
   });
 
-  it("limits max_tokens to 300", () => {
-    expect(source).toContain("max_tokens: 300");
+  it("limits max_tokens to 400", () => {
+    expect(source).toContain("max_tokens: 400");
   });
 
   it("includes the system prompt", () => {

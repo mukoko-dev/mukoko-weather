@@ -111,11 +111,19 @@ export function MyWeatherModal() {
     setTimeout(() => setActiveTab("activities"), 250);
   }, []);
 
+  /** When a location is detected/created via geolocation, navigate immediately */
+  const handleGeoLocationResolved = useCallback((slug: string) => {
+    completeOnboarding();
+    closeMyWeather();
+    setSelectedLocation(slug);
+    router.push(`/${slug}`);
+  }, [completeOnboarding, closeMyWeather, setSelectedLocation, router]);
+
   const locationChanged = pendingSlug !== currentSlug;
 
   return (
     <Dialog open={myWeatherOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex h-[100dvh] flex-col p-0 sm:h-auto sm:max-h-[85vh]">
+      <DialogContent aria-describedby={undefined} className="flex h-[100dvh] flex-col p-0 sm:h-auto sm:max-h-[85vh]">
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
           <DialogTitle>My Weather</DialogTitle>
@@ -138,6 +146,7 @@ export function MyWeatherModal() {
             <LocationTab
               pendingSlug={pendingSlug}
               onSelectLocation={handleSelectLocation}
+              onGeoLocationResolved={handleGeoLocationResolved}
               allLocations={allLocations}
             />
           </TabsContent>
@@ -163,10 +172,12 @@ export function MyWeatherModal() {
 function LocationTab({
   pendingSlug,
   onSelectLocation,
+  onGeoLocationResolved,
   allLocations,
 }: {
   pendingSlug: string;
   onSelectLocation: (slug: string) => void;
+  onGeoLocationResolved: (slug: string) => void;
   allLocations: ZimbabweLocation[];
 }) {
   const [query, setQuery] = useState("");
@@ -180,17 +191,17 @@ function LocationTab({
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
-  // Geolocation detection
+  // Geolocation detection — auto-navigate on success
   const handleGeolocate = useCallback(async () => {
     setGeoLoading(true);
     const result = await detectUserLocation();
     setGeoState(result);
     setGeoLoading(false);
 
-    if (result.status === "success" && result.location) {
-      onSelectLocation(result.location.slug);
+    if ((result.status === "success" || result.status === "created") && result.location) {
+      onGeoLocationResolved(result.location.slug);
     }
-  }, [onSelectLocation]);
+  }, [onGeoLocationResolved]);
 
   // Filtered locations
   const displayedLocations = useMemo(() => {
@@ -256,9 +267,14 @@ function LocationTab({
             Location access denied. Enable it in your browser settings.
           </p>
         )}
-        {geoState?.status === "outside-zw" && (
+        {geoState?.status === "outside-supported" && (
           <p className="px-3 pb-1 text-sm text-text-tertiary">
-            You appear to be outside Zimbabwe. Select a location below.
+            Your area isn&apos;t supported yet. Select a location below.
+          </p>
+        )}
+        {geoState?.status === "created" && (
+          <p className="px-3 pb-1 text-sm text-severity-low">
+            New location added! Weather data is loading.
           </p>
         )}
       </div>
