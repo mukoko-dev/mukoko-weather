@@ -1,11 +1,10 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
 import { MapPinIcon, ClockIcon, SearchIcon } from "@/lib/weather-icons";
-import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store";
 
 // Code-split: MyWeatherModal imports LOCATIONS (154 items), ACTIVITIES (20 items),
@@ -41,6 +40,18 @@ export function Header() {
   const hasOnboarded = useAppStore((s) => s.hasOnboarded);
   const onboardingChecked = useRef(false);
   const pathname = usePathname();
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  // Scroll detection for dynamic header background
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   // Auto-open the My Weather modal for first-time visitors so they can
   // pick their location and activities. Runs once after Zustand rehydrates.
@@ -62,52 +73,50 @@ export function Header() {
   return (
     <>
       <header
-        className="sticky top-0 z-30 border-b border-text-tertiary/10 bg-surface-base/80 backdrop-blur-md"
+        className={`sticky top-0 z-30 transition-all duration-300 ${
+          isScrolled
+            ? "bg-surface-base/70 backdrop-blur-xl border-b border-text-tertiary/10 shadow-sm"
+            : ""
+        }`}
         role="banner"
       >
-        <nav aria-label="Primary navigation" className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 py-3 sm:pl-6 md:pl-8">
+        <nav aria-label="Primary navigation" className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 py-3 sm:px-6 md:px-8">
           <div className="flex min-w-0 shrink items-center gap-4">
             <Link href="/" aria-label="mukoko weather — return to home page">
-              <MukokoLogo className="text-lg sm:text-xl" />
+              <MukokoLogo className="text-[16px] sm:text-[20px]" />
             </Link>
           </div>
+
+          {/* Action pill — solid primary background with white icons */}
           <div
-            className="flex shrink-0 items-center gap-0.5 rounded-[var(--radius-badge)] bg-primary/10 p-1"
+            className="flex shrink-0 items-center gap-0.5 sm:gap-1 rounded-full bg-primary p-0.5 sm:p-1"
             role="toolbar"
             aria-label="Quick actions"
           >
-            <Button
-              variant="ghost"
-              size="icon"
+            <button
               onClick={openMyWeather}
               aria-label="My Weather preferences"
-              className="text-primary hover:bg-primary/15"
+              className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-background/10 hover:bg-background/20 transition-colors"
+              type="button"
             >
-              <MapPinIcon size={18} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              asChild
-              className="text-primary hover:bg-primary/15"
+              <MapPinIcon size={18} className="text-white" />
+            </button>
+            <Link
+              href="/history"
+              prefetch={false}
+              aria-label="Weather history"
+              className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-background/10 hover:bg-background/20 transition-colors"
             >
-              <Link
-                href="/history"
-                prefetch={false}
-                aria-label="Weather history"
-              >
-                <ClockIcon size={18} />
-              </Link>
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
+              <ClockIcon size={18} className="text-white" />
+            </Link>
+            <button
               onClick={openMyWeather}
               aria-label="Search locations"
-              className="text-primary hover:bg-primary/15"
+              className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-background/10 hover:bg-background/20 transition-colors"
+              type="button"
             >
-              <SearchIcon size={18} />
-            </Button>
+              <SearchIcon size={18} className="text-white" />
+            </button>
           </div>
         </nav>
       </header>
@@ -115,52 +124,52 @@ export function Header() {
       {/* Mobile bottom navigation — visible only on small screens */}
       <nav
         aria-label="Mobile navigation"
-        className="fixed bottom-0 left-0 right-0 z-30 border-t border-text-tertiary/10 bg-surface-base/95 backdrop-blur-md sm:hidden"
+        className="fixed bottom-0 left-0 right-0 z-30 border-t border-text-tertiary/10 bg-surface-base/95 backdrop-blur-xl sm:hidden"
       >
-        <div className="mx-auto flex max-w-5xl items-stretch justify-around">
+        <div className="mx-auto flex items-center justify-around h-16 px-2">
           <Link
             href="/"
-            className={`flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 text-xs transition-colors ${
-              isHome ? "text-primary font-medium" : "text-text-tertiary"
+            className={`flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl transition-colors min-w-[60px] ${
+              isHome ? "text-primary" : "text-text-tertiary"
             }`}
             aria-label="Weather home"
             aria-current={isHome ? "page" : undefined}
           >
             <HomeIcon size={20} />
-            <span>Weather</span>
+            <span className="text-[10px] font-medium">Weather</span>
           </Link>
           <Link
             href="/explore"
             prefetch={false}
-            className={`flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 text-xs transition-colors ${
-              isExplore ? "text-primary font-medium" : "text-text-tertiary"
+            className={`flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl transition-colors min-w-[60px] ${
+              isExplore ? "text-primary" : "text-text-tertiary"
             }`}
             aria-label="Explore locations"
             aria-current={isExplore ? "page" : undefined}
           >
             <CompassIcon size={20} />
-            <span>Explore</span>
+            <span className="text-[10px] font-medium">Explore</span>
           </Link>
           <Link
             href="/history"
             prefetch={false}
-            className={`flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 text-xs transition-colors ${
-              isHistory ? "text-primary font-medium" : "text-text-tertiary"
+            className={`flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl transition-colors min-w-[60px] ${
+              isHistory ? "text-primary" : "text-text-tertiary"
             }`}
             aria-label="Weather history"
             aria-current={isHistory ? "page" : undefined}
           >
             <ClockIcon size={20} />
-            <span>History</span>
+            <span className="text-[10px] font-medium">History</span>
           </Link>
           <button
             onClick={openMyWeather}
-            className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 text-xs text-text-tertiary transition-colors"
+            className="flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl transition-colors min-w-[60px] text-text-tertiary"
             aria-label="My Weather settings"
             type="button"
           >
             <MapPinIcon size={20} />
-            <span>My Weather</span>
+            <span className="text-[10px] font-medium">My Weather</span>
           </button>
         </div>
       </nav>
