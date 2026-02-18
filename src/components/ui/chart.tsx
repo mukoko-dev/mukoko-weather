@@ -47,18 +47,39 @@ export type ChartConfig = {
 // ── CSS variable resolver ──────────────────────────────────────────────────
 // Chart.js needs actual colour values, not CSS custom property references.
 // We resolve `var(--foo)` at render time so charts respect theme switches.
+// If resolution fails (SSR, DOM not ready, CSS not loaded), we return a
+// sensible fallback colour so Chart.js always gets a valid value.
+
+const CSS_VAR_FALLBACKS: Record<string, string> = {
+  "--chart-1": "#2563eb",
+  "--chart-2": "#60a5fa",
+  "--chart-3": "#f59e0b",
+  "--chart-4": "#10b981",
+  "--chart-5": "#8b5cf6",
+  "--color-text-primary": "#1e293b",
+  "--color-text-secondary": "#64748b",
+  "--color-text-tertiary": "#94a3b8",
+  "--color-surface-card": "#ffffff",
+  "--color-rain": "#3b82f6",
+};
 
 function resolveColor(color: string): string {
-  if (typeof window === "undefined") return color;
+  if (typeof window === "undefined") {
+    // SSR: return fallback if available, otherwise the raw var string
+    if (color.startsWith("var(")) {
+      const prop = color.replace(/^var\(/, "").replace(/\)$/, "").trim();
+      return CSS_VAR_FALLBACKS[prop] ?? color;
+    }
+    return color;
+  }
   if (!color.startsWith("var(")) return color;
   const prop = color.replace(/^var\(/, "").replace(/\)$/, "").trim();
   try {
     const resolved = getComputedStyle(document.documentElement).getPropertyValue(prop).trim();
-    // Return the resolved value only if non-empty, otherwise fall back to the
-    // raw CSS var string so Chart.js never receives an empty color.
-    return resolved || color;
+    // Return the resolved value if non-empty, otherwise use fallback map
+    return resolved || CSS_VAR_FALLBACKS[prop] || color;
   } catch {
-    return color;
+    return CSS_VAR_FALLBACKS[prop] || color;
   }
 }
 
