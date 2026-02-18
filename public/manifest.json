@@ -1,7 +1,7 @@
 {
-  "name": "mukoko weather — Zimbabwe Weather Intelligence",
+  "name": "mukoko weather — Weather Intelligence",
   "short_name": "mukoko weather",
-  "description": "AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 90+ locations.",
+  "description": "AI-powered weather intelligence. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across Zimbabwe and beyond.",
   "start_url": "/harare",
   "scope": "/",
   "id": "/",

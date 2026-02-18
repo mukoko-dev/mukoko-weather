@@ -73,7 +73,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
       {/* Map fills remaining viewport */}
       <main
         id="main-content"
-        className="relative min-h-0 flex-1"
+        className="relative z-0 min-h-0 flex-1"
         aria-label={`Weather map for ${location.name}`}
       >
         <h1 className="sr-only">{location.name} Weather Map</h1>
