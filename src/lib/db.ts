@@ -47,6 +47,8 @@ export interface WeatherHistoryDoc {
   current: WeatherData["current"];
   hourly: WeatherData["hourly"];
   daily: WeatherData["daily"];
+  /** Activity-specific insights — only present when Tomorrow.io was the provider */
+  insights?: WeatherData["insights"];
   recordedAt: Date;
 }
 
@@ -346,16 +348,18 @@ export async function recordWeatherHistory(
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fields: Record<string, any> = {
+    current: data.current,
+    hourly: data.hourly,
+    daily: data.daily,
+    recordedAt: now,
+  };
+  if (data.insights) fields.insights = data.insights;
+
   await weatherHistoryCollection().updateOne(
     { locationSlug, date: dateStr },
-    {
-      $set: {
-        current: data.current,
-        hourly: data.hourly,
-        daily: data.daily,
-        recordedAt: now,
-      },
-    },
+    { $set: fields },
     { upsert: true },
   );
 }

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { CATEGORY_STYLES, type Activity } from "@/lib/activities";
+import { ACTIVITIES, CATEGORY_STYLES, type Activity } from "@/lib/activities";
 import type { WeatherInsights } from "@/lib/weather";
 import { ActivityIcon } from "@/lib/weather-icons";
 
@@ -205,12 +205,14 @@ function ActivityCard({ activity, insights }: { activity: Activity; insights: We
 export function ActivityInsights({ insights }: { insights?: WeatherInsights }) {
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const openMyWeather = useAppStore((s) => s.openMyWeather);
-  const [allActivities, setAllActivities] = useState<Activity[]>([]);
+  // Initialise with static seed data so activities resolve immediately,
+  // then upgrade to MongoDB data when the API responds.
+  const [allActivities, setAllActivities] = useState<Activity[]>(ACTIVITIES);
 
   useEffect(() => {
     fetch("/api/activities")
-      .then((res) => (res.ok ? res.json() : { activities: [] }))
-      .then((data) => setAllActivities(data.activities ?? []))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data?.activities?.length) setAllActivities(data.activities); })
       .catch(() => {});
   }, []);
 

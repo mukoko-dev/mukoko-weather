@@ -54,6 +54,7 @@ export function MyWeatherModal() {
   const closeMyWeather = useAppStore((s) => s.closeMyWeather);
   const myWeatherOpen = useAppStore((s) => s.myWeatherOpen);
   const completeOnboarding = useAppStore((s) => s.completeOnboarding);
+  const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -88,6 +89,7 @@ export function MyWeatherModal() {
   const handleDone = () => {
     completeOnboarding();
     closeMyWeather();
+    setSelectedLocation(pendingSlug);
     if (pendingSlug !== currentSlug) {
       router.push(`/${pendingSlug}`);
     }

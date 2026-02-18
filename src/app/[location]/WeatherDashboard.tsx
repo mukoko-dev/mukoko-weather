@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { CurrentConditions } from "@/components/weather/CurrentConditions";
@@ -11,6 +11,7 @@ import { SectionSkeleton } from "@/components/weather/SectionSkeleton";
 import { FrostAlertBanner } from "./FrostAlertBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
 import { getZimbabweSeason } from "@/lib/weather";
+import { useAppStore } from "@/lib/store";
 import type { WeatherData, FrostAlert } from "@/lib/weather";
 import type { ZimbabweLocation } from "@/lib/locations";
 
@@ -41,6 +42,13 @@ export function WeatherDashboard({
   frostAlert,
 }: WeatherDashboardProps) {
   const season = getZimbabweSeason();
+  const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
+
+  // Sync the URL-driven location to the global store so other pages
+  // (history, etc.) can use it as their default.
+  useEffect(() => {
+    setSelectedLocation(location.slug);
+  }, [location.slug, setSelectedLocation]);
 
   return (
     <>
