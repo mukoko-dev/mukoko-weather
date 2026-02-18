@@ -58,16 +58,18 @@ export type ChartConfig = {
 // sensible fallback colour so Chart.js always gets a valid value.
 
 const CSS_VAR_FALLBACKS: Record<string, string> = {
-  "--chart-1": "#2563eb",
-  "--chart-2": "#60a5fa",
-  "--chart-3": "#f59e0b",
-  "--chart-4": "#10b981",
-  "--chart-5": "#8b5cf6",
-  "--color-text-primary": "#1e293b",
-  "--color-text-secondary": "#64748b",
-  "--color-text-tertiary": "#94a3b8",
-  "--color-surface-card": "#ffffff",
-  "--color-rain": "#3b82f6",
+  // Five African Minerals palette (light mode) — matches globals.css
+  "--chart-1": "#4B0082",    // Tanzanite
+  "--chart-2": "#0047AB",    // Cobalt
+  "--chart-3": "#2D6A4F",    // Malachite
+  "--chart-4": "#B8860B",    // Gold
+  "--chart-5": "#C1440E",    // Terracotta
+  // Brand tokens (light mode fallbacks)
+  "--color-text-primary": "#141413",
+  "--color-text-secondary": "#52524E",
+  "--color-text-tertiary": "#8C8B87",
+  "--color-surface-card": "#FFFFFF",
+  "--color-rain": "#0288D1",
 };
 
 function resolveColor(color: string): string {

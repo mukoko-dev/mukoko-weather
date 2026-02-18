@@ -18,54 +18,51 @@ interface Props {
   current: CurrentWeather;
 }
 
-// ── Gauge bar configurations ─────────────────────────────────────────────────
-// Each metric gets a visual indicator bar showing where its value falls
-// on a color-coded scale (green→yellow→orange→red).
+// ── Gauge configurations ─────────────────────────────────────────────────────
+// Each metric gets a radial arc gauge showing where its value falls
+// on a severity-colored scale. The arc spans 270° (open at bottom).
 
 interface GaugeConfig {
   /** Value as percentage of the gauge (0-100) */
   percent: number;
-  /** Color class for the filled portion */
-  colorClass: string;
-  /** Track gradient classes for the background */
-  trackClass?: string;
+  /** CSS class for the stroke color of the filled arc */
+  strokeClass: string;
 }
 
-/** UV Index: 0–11+ scale, green→yellow→orange→red→purple */
+/** UV Index: 0–11+ scale */
 function uvGauge(uv: number): GaugeConfig {
   const percent = Math.min((uv / 11) * 100, 100);
-  if (uv <= 2) return { percent, colorClass: "bg-severity-low" };
-  if (uv <= 5) return { percent, colorClass: "bg-severity-moderate" };
-  if (uv <= 7) return { percent, colorClass: "bg-severity-high" };
-  if (uv <= 10) return { percent, colorClass: "bg-severity-severe" };
-  return { percent, colorClass: "bg-severity-extreme" };
+  if (uv <= 2) return { percent, strokeClass: "stroke-severity-low" };
+  if (uv <= 5) return { percent, strokeClass: "stroke-severity-moderate" };
+  if (uv <= 7) return { percent, strokeClass: "stroke-severity-high" };
+  if (uv <= 10) return { percent, strokeClass: "stroke-severity-severe" };
+  return { percent, strokeClass: "stroke-severity-extreme" };
 }
 
-/** Humidity: 0–100%, blue scale. Comfort zone is 30–60% */
+/** Humidity: 0–100%, comfort zone is 30–60% */
 function humidityGauge(h: number): GaugeConfig {
   const percent = Math.min(h, 100);
-  if (h < 30) return { percent, colorClass: "bg-severity-moderate" };
-  if (h <= 60) return { percent, colorClass: "bg-severity-low" };
-  if (h <= 80) return { percent, colorClass: "bg-severity-moderate" };
-  return { percent, colorClass: "bg-severity-high" };
+  if (h < 30) return { percent, strokeClass: "stroke-severity-moderate" };
+  if (h <= 60) return { percent, strokeClass: "stroke-severity-low" };
+  if (h <= 80) return { percent, strokeClass: "stroke-severity-moderate" };
+  return { percent, strokeClass: "stroke-severity-high" };
 }
 
 /** Cloud cover: 0–100% */
 function cloudGauge(c: number): GaugeConfig {
   const percent = Math.min(c, 100);
-  if (c <= 25) return { percent, colorClass: "bg-severity-low" };
-  if (c <= 50) return { percent, colorClass: "bg-severity-low" };
-  if (c <= 75) return { percent, colorClass: "bg-severity-moderate" };
-  return { percent, colorClass: "bg-severity-high" };
+  if (c <= 50) return { percent, strokeClass: "stroke-severity-low" };
+  if (c <= 75) return { percent, strokeClass: "stroke-severity-moderate" };
+  return { percent, strokeClass: "stroke-severity-high" };
 }
 
 /** Wind speed: 0–80+ km/h scale */
 function windGauge(speed: number): GaugeConfig {
   const percent = Math.min((speed / 80) * 100, 100);
-  if (speed <= 19) return { percent, colorClass: "bg-severity-low" };
-  if (speed <= 38) return { percent, colorClass: "bg-severity-moderate" };
-  if (speed <= 61) return { percent, colorClass: "bg-severity-high" };
-  return { percent, colorClass: "bg-severity-severe" };
+  if (speed <= 19) return { percent, strokeClass: "stroke-severity-low" };
+  if (speed <= 38) return { percent, strokeClass: "stroke-severity-moderate" };
+  if (speed <= 61) return { percent, strokeClass: "stroke-severity-high" };
+  return { percent, strokeClass: "stroke-severity-severe" };
 }
 
 /** Pressure: 980–1040 hPa range mapped to gauge */
@@ -74,42 +71,83 @@ function pressureGauge(p: number): GaugeConfig {
   const max = 1040;
   const clamped = Math.max(min, Math.min(p, max));
   const percent = ((clamped - min) / (max - min)) * 100;
-  if (p < 1000) return { percent, colorClass: "bg-severity-moderate" };
-  if (p <= 1020) return { percent, colorClass: "bg-severity-low" };
-  return { percent, colorClass: "bg-severity-moderate" };
+  if (p < 1000) return { percent, strokeClass: "stroke-severity-moderate" };
+  if (p <= 1020) return { percent, strokeClass: "stroke-severity-low" };
+  return { percent, strokeClass: "stroke-severity-moderate" };
 }
 
 /** Feels-like difference from actual */
 function feelsLikeGauge(feelsLike: number, actual: number): GaugeConfig {
   const diff = Math.abs(feelsLike - actual);
-  // Gauge shows how different feels-like is from actual (0–15° range)
   const percent = Math.min((diff / 15) * 100, 100);
-  if (diff <= 2) return { percent: Math.max(percent, 8), colorClass: "bg-severity-low" };
-  if (diff <= 5) return { percent, colorClass: "bg-severity-moderate" };
-  if (diff <= 10) return { percent, colorClass: "bg-severity-high" };
-  return { percent, colorClass: "bg-severity-severe" };
+  if (diff <= 2) return { percent: Math.max(percent, 8), strokeClass: "stroke-severity-low" };
+  if (diff <= 5) return { percent, strokeClass: "stroke-severity-moderate" };
+  if (diff <= 10) return { percent, strokeClass: "stroke-severity-high" };
+  return { percent, strokeClass: "stroke-severity-severe" };
 }
 
-// ── Gauge bar component ──────────────────────────────────────────────────────
+// ── Radial arc gauge component ───────────────────────────────────────────────
+// 270° SVG arc gauge (open at bottom). Uses stroke-dasharray technique.
+// The arc sweeps from 135° (bottom-left) to 405° (bottom-right).
 
-function GaugeBar({ percent, colorClass }: GaugeConfig) {
+const ARC_RADIUS = 20;
+const ARC_CIRCUMFERENCE = 2 * Math.PI * ARC_RADIUS; // ~125.66
+const ARC_SWEEP = 0.75; // 270° / 360°
+const ARC_LENGTH = ARC_CIRCUMFERENCE * ARC_SWEEP; // ~94.25
+
+function ArcGauge({ percent, strokeClass, value }: GaugeConfig & { value: string }) {
+  const filledLength = (percent / 100) * ARC_LENGTH;
+
   return (
     <div
-      className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-text-tertiary/15"
-      role="progressbar"
+      className="relative flex shrink-0 items-center justify-center"
+      role="meter"
       aria-valuenow={Math.round(percent)}
       aria-valuemin={0}
       aria-valuemax={100}
+      aria-label={`${value}`}
     >
-      <div
-        className={`h-full rounded-full transition-all duration-500 ${colorClass}`}
-        style={{ width: `${percent}%` }}
-      />
+      <svg
+        width="56"
+        height="56"
+        viewBox="0 0 48 48"
+        className="overflow-visible"
+        aria-hidden="true"
+      >
+        {/* Track arc (background) */}
+        <circle
+          cx="24"
+          cy="24"
+          r={ARC_RADIUS}
+          fill="none"
+          className="stroke-text-tertiary/15"
+          strokeWidth="5"
+          strokeLinecap="round"
+          strokeDasharray={`${ARC_LENGTH} ${ARC_CIRCUMFERENCE}`}
+          transform="rotate(135 24 24)"
+        />
+        {/* Value arc (foreground) */}
+        <circle
+          cx="24"
+          cy="24"
+          r={ARC_RADIUS}
+          fill="none"
+          className={`${strokeClass} transition-all duration-500`}
+          strokeWidth="5"
+          strokeLinecap="round"
+          strokeDasharray={`${filledLength} ${ARC_CIRCUMFERENCE}`}
+          transform="rotate(135 24 24)"
+        />
+      </svg>
+      {/* Value text centered in the arc */}
+      <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-text-primary">
+        {value}
+      </span>
     </div>
   );
 }
 
-// ── Metric card with visual gauge ────────────────────────────────────────────
+// ── Metric card with radial gauge ────────────────────────────────────────────
 
 interface MetricCardProps {
   icon: React.ReactNode;
@@ -122,18 +160,19 @@ interface MetricCardProps {
 
 function MetricCard({ icon, label, value, context, contextColor = "text-text-tertiary", gauge }: MetricCardProps) {
   return (
-    <div className="flex flex-col rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 text-text-tertiary" aria-hidden="true">
-          {icon}
-        </span>
-        <div className="min-w-0">
-          <p className="text-sm text-text-secondary">{label}</p>
-          <p className="text-lg font-semibold text-text-primary">{value}</p>
-          <p className={`text-sm ${contextColor}`}>{context}</p>
+    <div className="flex items-center gap-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
+      {/* Radial gauge with value inside */}
+      <ArcGauge {...gauge} value={value} />
+      {/* Text info */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-text-tertiary" aria-hidden="true">
+            {icon}
+          </span>
+          <p className="text-sm font-medium text-text-secondary">{label}</p>
         </div>
+        <p className={`mt-0.5 text-sm ${contextColor}`}>{context}</p>
       </div>
-      <GaugeBar {...gauge} />
     </div>
   );
 }
@@ -165,35 +204,35 @@ export function AtmosphericSummary({ current }: Props) {
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <MetricCard
-          icon={<DropletIcon size={20} />}
+          icon={<DropletIcon size={16} />}
           label="Humidity"
           value={`${current.relative_humidity_2m}%`}
           context={humidityLabel(current.relative_humidity_2m)}
           gauge={humidityGauge(current.relative_humidity_2m)}
         />
         <MetricCard
-          icon={<CloudIcon size={20} />}
+          icon={<CloudIcon size={16} />}
           label="Cloud Cover"
           value={`${current.cloud_cover}%`}
           context={cloudLabel(current.cloud_cover)}
           gauge={cloudGauge(current.cloud_cover)}
         />
         <MetricCard
-          icon={<WindIcon size={20} />}
+          icon={<WindIcon size={16} />}
           label="Wind"
-          value={`${wind} km/h`}
-          context={`Gusts ${gusts} km/h · ${windDirection(current.wind_direction_10m)}`}
+          value={`${wind}`}
+          context={`Gusts ${gusts} · ${windDirection(current.wind_direction_10m)}`}
           gauge={windGauge(wind)}
         />
         <MetricCard
-          icon={<GaugeIcon size={20} />}
+          icon={<GaugeIcon size={16} />}
           label="Pressure"
-          value={`${Math.round(current.surface_pressure)} hPa`}
+          value={`${Math.round(current.surface_pressure)}`}
           context={pressureLabel(current.surface_pressure)}
           gauge={pressureGauge(current.surface_pressure)}
         />
         <MetricCard
-          icon={<SunIcon size={20} />}
+          icon={<SunIcon size={16} />}
           label="UV Index"
           value={`${Math.round(current.uv_index)}`}
           context={uv.label}
@@ -201,7 +240,7 @@ export function AtmosphericSummary({ current }: Props) {
           gauge={uvGauge(current.uv_index)}
         />
         <MetricCard
-          icon={<EyeIcon size={20} />}
+          icon={<EyeIcon size={16} />}
           label="Feels Like"
           value={`${Math.round(current.apparent_temperature)}°`}
           context={feelsLikeContext(current.apparent_temperature, current.temperature_2m)}
