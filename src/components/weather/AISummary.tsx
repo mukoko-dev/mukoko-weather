@@ -88,6 +88,7 @@ export function AISummary({ weather, location }: Props) {
                 weather_code: weather.daily.weather_code.slice(0, 3),
                 precipitation_probability_max: weather.daily.precipitation_probability_max.slice(0, 3),
               },
+              insights: weather.insights,
             },
             location: { name: location.name, lat: location.lat, lon: location.lon, elevation: location.elevation },
             activities: activityLabels,

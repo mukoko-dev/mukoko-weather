@@ -4,6 +4,24 @@ import { useMemo } from "react";
 import { CanvasChart, resolveColor, type ChartConfig } from "@/components/ui/chart";
 import type { ChartData, ChartOptions } from "chart.js";
 
+/**
+ * Safely apply alpha to a resolved color string.
+ * Handles hex (#RGB, #RRGGBB, #RRGGBBAA) and rgb/rgba formats.
+ * Falls back to appending hex alpha for unknown formats.
+ */
+function hexWithAlpha(color: string, alpha: number): string {
+  const a = Math.max(0, Math.min(1, alpha));
+  // rgb(r, g, b) or rgba(r, g, b, a)
+  const rgbMatch = color.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (rgbMatch) {
+    return `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${a})`;
+  }
+  // Hex: strip existing alpha, add new one
+  const hex = color.replace(/^#/, "");
+  const base = hex.length === 8 ? hex.slice(0, 6) : hex.length === 4 ? hex.slice(0, 3) : hex;
+  return `#${base}${Math.round(a * 255).toString(16).padStart(2, "0")}`;
+}
+
 export interface SeriesConfig {
   key: string;
   label: string;
@@ -103,7 +121,7 @@ export function TimeSeriesChart({
           type: "bar" as const,
           label: s.label,
           data: data.map((d) => d[s.key]),
-          backgroundColor: color + (s.opacity ? Math.round(s.opacity * 255).toString(16).padStart(2, "0") : "99"),
+          backgroundColor: hexWithAlpha(color, s.opacity ?? 0.6),
           borderRadius: 2,
           yAxisID: s.yAxisID ?? "y",
           order: s.order ?? 2,
@@ -115,7 +133,7 @@ export function TimeSeriesChart({
         label: s.label,
         data: data.map((d) => d[s.key]),
         borderColor: color,
-        backgroundColor: s.fill ? color + (s.opacity ? Math.round(s.opacity * 255).toString(16).padStart(2, "0") : "40") : undefined,
+        backgroundColor: s.fill ? hexWithAlpha(color, s.opacity ?? 0.12) : undefined,
         borderWidth: s.dashed ? 1.5 : 2,
         borderDash: s.dashed ? [4, 3] : undefined,
         fill: s.fill ?? false,
@@ -157,7 +175,7 @@ export function TimeSeriesChart({
           max: cfg.max,
           grid: cfg.position === "right"
             ? { display: false }
-            : { color: gridColor + "26", drawTicks: false },
+            : { color: hexWithAlpha(gridColor, 0.15), drawTicks: false },
           ticks: {
             color: gridColor,
             font: { size: 11 },
@@ -168,7 +186,7 @@ export function TimeSeriesChart({
       }
     } else {
       scales.y = {
-        grid: { color: gridColor + "26", drawTicks: false },
+        grid: { color: hexWithAlpha(gridColor, 0.15), drawTicks: false },
         ticks: { color: gridColor, font: { size: 11 } },
         border: { display: false },
       };
