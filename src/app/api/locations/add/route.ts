@@ -11,7 +11,7 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server";
-import { reverseGeocode, forwardGeocode, getElevation, generateSlug } from "@/lib/geocoding";
+import { reverseGeocode, forwardGeocode, getElevation, generateSlug, inferTags } from "@/lib/geocoding";
 import { isInSupportedRegion } from "@/lib/locations";
 import { createLocation, findDuplicateLocation, getLocationFromDb } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       lat: geocoded.lat,
       lon: geocoded.lon,
       elevation: Math.round(elevation),
-      tags: ["city"],
+      tags: await inferTags(geocoded),
       country: geocoded.country,
       source: "community",
     });

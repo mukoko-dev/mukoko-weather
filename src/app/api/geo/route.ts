@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findNearestLocationsFromDb, createLocation, findDuplicateLocation } from "@/lib/db";
 import { isInSupportedRegion } from "@/lib/locations";
-import { reverseGeocode, getElevation, generateSlug } from "@/lib/geocoding";
+import { reverseGeocode, getElevation, generateSlug, inferTags } from "@/lib/geocoding";
 import { logError } from "@/lib/observability";
 
 /**
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
         lat: geocoded.lat,
         lon: geocoded.lon,
         elevation: Math.round(elevation),
-        tags: ["city"],
+        tags: await inferTags(geocoded),
         country: geocoded.country,
         source: "geolocation",
       });

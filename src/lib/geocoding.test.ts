@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { generateSlug } from "./geocoding";
+import { generateSlug, inferTagsBasic, type GeocodingResult } from "./geocoding";
 
 const source = readFileSync(resolve(__dirname, "geocoding.ts"), "utf-8");
 
@@ -68,5 +68,58 @@ describe("generateSlug", () => {
 
   it("collapses multiple hyphens", () => {
     expect(generateSlug("New   York", "US")).toBe("new-york-us");
+  });
+});
+
+function makeGeo(overrides: Partial<GeocodingResult> = {}): GeocodingResult {
+  return {
+    name: "TestCity",
+    country: "ZW",
+    countryName: "Zimbabwe",
+    admin1: "Harare",
+    lat: -17.83,
+    lon: 31.05,
+    elevation: 0,
+    ...overrides,
+  };
+}
+
+describe("inferTagsBasic", () => {
+  it("tags cities/towns with 'city'", () => {
+    expect(inferTagsBasic(makeGeo({ placeType: "city" }))).toContain("city");
+    expect(inferTagsBasic(makeGeo({ placeType: "town" }))).toContain("city");
+    expect(inferTagsBasic(makeGeo({ placeType: "village" }))).toContain("city");
+  });
+
+  it("tags national parks with 'national-park' and 'tourism'", () => {
+    const tags = inferTagsBasic(makeGeo({ placeType: "national_park", name: "Hwange" }));
+    expect(tags).toContain("national-park");
+    expect(tags).toContain("tourism");
+  });
+
+  it("tags places with tourism keywords", () => {
+    expect(inferTagsBasic(makeGeo({ name: "Victoria Falls" }))).toContain("tourism");
+    expect(inferTagsBasic(makeGeo({ name: "Great Zimbabwe Ruins" }))).toContain("tourism");
+    expect(inferTagsBasic(makeGeo({ name: "Kariba Dam" }))).toContain("tourism");
+  });
+
+  it("tags border crossings with 'border' and 'travel'", () => {
+    const tags = inferTagsBasic(makeGeo({ name: "Beitbridge Border Post", placeType: "border_crossing" }));
+    expect(tags).toContain("border");
+    expect(tags).toContain("travel");
+  });
+
+  it("defaults to 'city' when no type info is available", () => {
+    const tags = inferTagsBasic(makeGeo({ name: "SomePlace", placeType: undefined }));
+    expect(tags).toContain("city");
+  });
+
+  it("always returns at least one tag", () => {
+    const tags = inferTagsBasic(makeGeo({ name: "X", placeType: "unknown_type" }));
+    expect(tags.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("exports inferTags as async function (AI-powered)", () => {
+    expect(source).toContain("export async function inferTags");
   });
 });

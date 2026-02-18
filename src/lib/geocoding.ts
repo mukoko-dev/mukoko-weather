@@ -14,6 +14,10 @@ export interface GeocodingResult {
   lon: number;
   elevation: number;
   timezone?: string;
+  /** Nominatim place type (e.g. "city", "village", "national_park") */
+  placeType?: string;
+  /** Nominatim OSM category (e.g. "place", "boundary", "leisure") */
+  placeCategory?: string;
 }
 
 const USER_AGENT = "mukoko-weather/1.0 (https://weather.mukoko.com)";
@@ -70,6 +74,8 @@ export async function reverseGeocode(
       lat: Number(data.lat ?? lat),
       lon: Number(data.lon ?? lon),
       elevation: 0, // Nominatim doesn't return elevation — fetched separately
+      placeType: data.type ?? undefined,
+      placeCategory: data.category ?? undefined,
     };
   } catch {
     return null;
@@ -148,6 +154,102 @@ export async function getElevation(lat: number, lon: number): Promise<number> {
 // ---------------------------------------------------------------------------
 // Slug generation
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Tag inference — AI-powered with basic fallback
+// ---------------------------------------------------------------------------
+
+const VALID_TAGS = ["city", "farming", "mining", "tourism", "education", "border", "travel", "national-park"];
+
+/**
+ * Use Claude to intelligently classify a location into our tag categories.
+ *
+ * Sends place name, region, country, and coordinates to Claude and asks
+ * it to return the appropriate tags based on its knowledge of the area.
+ * Falls back to `inferTagsBasic` if the AI call fails or no API key is set.
+ */
+export async function inferTags(geocoded: GeocodingResult): Promise<string[]> {
+  // Try AI-powered inference first
+  try {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return inferTagsBasic(geocoded);
+
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    const client = new Anthropic({ apiKey });
+
+    const prompt = `Classify this location into one or more of these categories. Be generous — if a place is known for something nearby, include it.
+
+Categories:
+- city: Any city, town, village, or settlement where people live
+- farming: Areas known for agriculture, farming regions, crop production
+- mining: Areas with mining activity, mineral extraction, quarries
+- tourism: Tourist destinations, landmarks, scenic areas, or places near major attractions
+- education: University towns, places with major educational institutions
+- border: Border crossings, border towns
+- travel: Major transport corridors, highway towns, transit hubs
+- national-park: National parks, game reserves, wildlife areas, conservation zones
+
+Location: ${geocoded.name}
+Region: ${geocoded.admin1}
+Country: ${geocoded.countryName || geocoded.country}
+Coordinates: ${geocoded.lat}, ${geocoded.lon}
+OSM type: ${geocoded.placeType || "unknown"}
+
+Respond with ONLY a JSON array of matching category strings, e.g. ["city", "tourism"]. Always include at least one category. Keep it broad — most settlements should have "city".`;
+
+    const response = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 100,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const text = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
+    const match = text.match(/\[[\s\S]*\]/);
+    if (match) {
+      const parsed = JSON.parse(match[0]) as string[];
+      const valid = parsed.filter((t) => VALID_TAGS.includes(t));
+      if (valid.length > 0) return valid;
+    }
+  } catch {
+    // AI call failed — fall through to basic inference
+  }
+
+  return inferTagsBasic(geocoded);
+}
+
+/**
+ * Basic tag inference from geocoding data (fallback when AI is unavailable).
+ * Uses OSM place type and name keywords. Always returns at least one tag.
+ */
+export function inferTagsBasic(geocoded: GeocodingResult): string[] {
+  const type = (geocoded.placeType ?? "").toLowerCase();
+  const name = geocoded.name.toLowerCase();
+
+  const tags: Set<string> = new Set();
+
+  // Most places are settlements
+  if (["city", "town", "village", "hamlet", "suburb", "municipality"].includes(type) || !type) {
+    tags.add("city");
+  }
+
+  if (type === "national_park" || type === "nature_reserve" || name.includes("national park") || name.includes("game reserve")) {
+    tags.add("national-park");
+    tags.add("tourism");
+  }
+
+  if (name.includes("falls") || name.includes("ruins") || name.includes("resort") || name.includes("dam") || name.includes("lake")) {
+    tags.add("tourism");
+  }
+
+  if (name.includes("border") || type === "border_crossing") {
+    tags.add("border");
+    tags.add("travel");
+  }
+
+  if (tags.size === 0) tags.add("city");
+
+  return Array.from(tags);
+}
 
 /**
  * Generate a URL-safe slug from a location name and country.
