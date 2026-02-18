@@ -3,6 +3,8 @@
 import * as React from "react";
 import {
   Chart as ChartJS,
+  LineController,
+  BarController,
   CategoryScale,
   LinearScale,
   PointElement,
@@ -20,7 +22,12 @@ import { Chart } from "react-chartjs-2";
 
 // ── Register Chart.js modules ──────────────────────────────────────────────
 // Tree-shaken: only the modules we use are included in the bundle.
+// IMPORTANT: Chart.js 4 requires controllers (LineController, BarController)
+// in addition to elements (LineElement, BarElement). Without controllers,
+// chart types like "line" and "bar" are not recognised at runtime.
 ChartJS.register(
+  LineController,
+  BarController,
   CategoryScale,
   LinearScale,
   PointElement,
