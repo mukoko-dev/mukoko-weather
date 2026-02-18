@@ -29,6 +29,7 @@ AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, 
 | Framework | [Next.js 16](https://nextjs.org) (App Router, TypeScript 5) |
 | UI Components | [shadcn/ui](https://ui.shadcn.com) (Radix UI + CVA) |
 | Charts | [Chart.js 4](https://www.chartjs.org) + [react-chartjs-2](https://react-chartjs-2.js.org) (Canvas 2D) |
+| Maps | [Leaflet](https://leafletjs.com) + [react-leaflet](https://react-leaflet.js.org) (Tomorrow.io tile overlays) |
 | Styling | [Tailwind CSS 4](https://tailwindcss.com) with CSS custom properties |
 | Markdown | [react-markdown 10](https://github.com/remarkjs/react-markdown) |
 | State | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist` middleware |
@@ -104,6 +105,7 @@ The main location page is a compact overview. Detail-heavy sections (charts, atm
 | `/api/geo?lat=&lon=` | GET | Nearest Zimbabwe location lookup |
 | `/api/ai` | POST | AI weather summary. Body: `{ weatherData, location }`. Tiered TTL cache (30/60/120 min) |
 | `/api/history?location=&days=` | GET | Historical weather data for a location |
+| `/api/map-tiles?z=&x=&y=&layer=` | GET | Tile proxy for Tomorrow.io map layers (keeps API key server-side) |
 | `/api/db-init` | POST | One-time DB setup + optional API key seeding. Protected by `DB_INIT_SECRET` in production |
 
 ### Resilience
@@ -208,6 +210,10 @@ src/
       SeasonBadge.tsx        # Zimbabwe season indicator
       SunTimes.tsx           # Sunrise/sunset display
       LocationSelector.tsx   # Search/filter dropdown, geolocation
+    map/                     # Interactive weather map (Leaflet + Tomorrow.io tiles)
+      MapPreview.tsx         # Compact map card on location page
+      MapModal.tsx           # Full-screen map dialog with layer switcher
+      MapLayerSwitcher.tsx   # Layer toggle buttons
     embed/
       MukokoWeatherEmbed.tsx # Embeddable widget (CSS module, self-contained)
   lib/
