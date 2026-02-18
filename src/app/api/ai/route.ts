@@ -77,6 +77,22 @@ export async function POST(request: Request) {
 
     const anthropic = new Anthropic({ apiKey });
 
+    // Build insights section for the prompt if Tomorrow.io data is available
+    const insights = weatherData.daily?.insights;
+    let insightsPrompt = "";
+    if (insights && typeof insights === "object") {
+      const parts: string[] = [];
+      if (insights.heatStressIndex != null) parts.push(`Heat stress index: ${insights.heatStressIndex}`);
+      if (insights.thunderstormProbability != null) parts.push(`Thunderstorm probability: ${insights.thunderstormProbability}%`);
+      if (insights.uvHealthConcern != null) parts.push(`UV health concern: ${insights.uvHealthConcern}/10`);
+      if (insights.visibility != null) parts.push(`Visibility: ${insights.visibility} km`);
+      if (insights.dewPoint != null) parts.push(`Dew point: ${insights.dewPoint}°C`);
+      if (insights.gdd10To30 != null) parts.push(`Maize/Soy GDD: ${insights.gdd10To30}`);
+      if (insights.evapotranspiration != null) parts.push(`Evapotranspiration: ${insights.evapotranspiration} mm`);
+      if (insights.moonPhase != null) parts.push(`Moon phase: ${insights.moonPhase}`);
+      if (parts.length > 0) insightsPrompt = `\nWeather insights (from Tomorrow.io): ${parts.join(", ")}`;
+    }
+
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 300,
@@ -89,7 +105,7 @@ ${locationTags.length > 0 ? `This area is relevant to: ${locationTags.join(", ")
 ${userActivities.length > 0 ? `The user's activities: ${userActivities.join(", ")}. Tailor advice to these activities.` : ""}
 
 Current conditions: ${JSON.stringify(weatherData.current)}
-3-day forecast summary: max temps ${JSON.stringify(weatherData.daily?.temperature_2m_max)}, min temps ${JSON.stringify(weatherData.daily?.temperature_2m_min)}, weather codes ${JSON.stringify(weatherData.daily?.weather_code)}
+3-day forecast summary: max temps ${JSON.stringify(weatherData.daily?.temperature_2m_max)}, min temps ${JSON.stringify(weatherData.daily?.temperature_2m_min)}, weather codes ${JSON.stringify(weatherData.daily?.weather_code)}${insightsPrompt}
 Season: ${season.shona} (${season.name})
 
 Provide:

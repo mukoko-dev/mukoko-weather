@@ -3,6 +3,8 @@
 import * as React from "react";
 import {
   Chart as ChartJS,
+  LineController,
+  BarController,
   CategoryScale,
   LinearScale,
   PointElement,
@@ -20,7 +22,12 @@ import { Chart } from "react-chartjs-2";
 
 // ── Register Chart.js modules ──────────────────────────────────────────────
 // Tree-shaken: only the modules we use are included in the bundle.
+// IMPORTANT: Chart.js 4 requires controllers (LineController, BarController)
+// in addition to elements (LineElement, BarElement). Without controllers,
+// chart types like "line" and "bar" are not recognised at runtime.
 ChartJS.register(
+  LineController,
+  BarController,
   CategoryScale,
   LinearScale,
   PointElement,
@@ -47,18 +54,41 @@ export type ChartConfig = {
 // ── CSS variable resolver ──────────────────────────────────────────────────
 // Chart.js needs actual colour values, not CSS custom property references.
 // We resolve `var(--foo)` at render time so charts respect theme switches.
+// If resolution fails (SSR, DOM not ready, CSS not loaded), we return a
+// sensible fallback colour so Chart.js always gets a valid value.
+
+const CSS_VAR_FALLBACKS: Record<string, string> = {
+  // Five African Minerals palette (light mode) — matches globals.css
+  "--chart-1": "#4B0082",    // Tanzanite
+  "--chart-2": "#0047AB",    // Cobalt
+  "--chart-3": "#2D6A4F",    // Malachite
+  "--chart-4": "#B8860B",    // Gold
+  "--chart-5": "#C1440E",    // Terracotta
+  // Brand tokens (light mode fallbacks)
+  "--color-text-primary": "#141413",
+  "--color-text-secondary": "#52524E",
+  "--color-text-tertiary": "#8C8B87",
+  "--color-surface-card": "#FFFFFF",
+  "--color-rain": "#0288D1",
+};
 
 function resolveColor(color: string): string {
-  if (typeof window === "undefined") return color;
+  if (typeof window === "undefined") {
+    // SSR: return fallback if available, otherwise the raw var string
+    if (color.startsWith("var(")) {
+      const prop = color.replace(/^var\(/, "").replace(/\)$/, "").trim();
+      return CSS_VAR_FALLBACKS[prop] ?? color;
+    }
+    return color;
+  }
   if (!color.startsWith("var(")) return color;
   const prop = color.replace(/^var\(/, "").replace(/\)$/, "").trim();
   try {
     const resolved = getComputedStyle(document.documentElement).getPropertyValue(prop).trim();
-    // Return the resolved value only if non-empty, otherwise fall back to the
-    // raw CSS var string so Chart.js never receives an empty color.
-    return resolved || color;
+    // Return the resolved value if non-empty, otherwise use fallback map
+    return resolved || CSS_VAR_FALLBACKS[prop] || color;
   } catch {
-    return color;
+    return CSS_VAR_FALLBACKS[prop] || color;
   }
 }
 

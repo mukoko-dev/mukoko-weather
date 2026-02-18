@@ -81,21 +81,21 @@ function BadgeSkeleton({ className }: { className?: string }) {
   )
 }
 
-/** Metric card skeleton (matches AtmosphericSummary MetricCard shape) */
+/** Metric card skeleton (matches AtmosphericSummary MetricCard shape with arc gauge) */
 function MetricCardSkeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "flex items-start gap-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm",
+        "flex items-center gap-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm",
         className
       )}
       role="status"
       aria-label="Loading metric"
     >
-      <Skeleton className="mt-0.5 h-5 w-5 rounded-full" />
+      {/* Arc gauge placeholder */}
+      <Skeleton className="h-14 w-14 shrink-0 rounded-full" />
       <div className="min-w-0 flex-1">
-        <Skeleton className="h-3 w-16 mb-1.5" />
-        <Skeleton className="h-5 w-20 mb-1" />
+        <Skeleton className="h-3 w-20 mb-1.5" />
         <Skeleton className="h-3 w-24" />
       </div>
       <span className="sr-only">Loading metric</span>

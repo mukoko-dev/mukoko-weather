@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useSyncExternalStore } from "react";
-import { CanvasChart, resolveColor, type ChartConfig } from "@/components/ui/chart";
-import type { ChartData, ChartOptions } from "chart.js";
+import { useMemo } from "react";
+import { TimeSeriesChart, type SeriesConfig } from "./charts/TimeSeriesChart";
 import type { DailyWeather } from "@/lib/weather";
 
 interface Props {
@@ -41,170 +40,42 @@ export function prepareDailyData(daily: DailyWeather): DailyDataPoint[] {
   });
 }
 
-const chartConfig = {
-  high: {
-    label: "High",
-    color: "var(--chart-1)",
-  },
-  low: {
-    label: "Low",
-    color: "var(--chart-2)",
-  },
-  feelsHigh: {
-    label: "Feels High",
-    color: "var(--chart-3)",
-  },
-  feelsLow: {
-    label: "Feels Low",
-    color: "var(--chart-4)",
-  },
-} satisfies ChartConfig;
-
-const subscribe = () => () => {};
-const getSnapshot = () => true;
-const getServerSnapshot = () => false;
+const SERIES: SeriesConfig[] = [
+  { key: "high", label: "High", color: "var(--chart-1)", fill: true, order: 1, showDots: true },
+  { key: "low", label: "Low", color: "var(--chart-2)", fill: true, dashed: true, order: 2, showDots: true },
+  { key: "feelsHigh", label: "Feels High", color: "var(--chart-3)", dashed: true, order: 3 },
+  { key: "feelsLow", label: "Feels Low", color: "var(--chart-4)", dashed: true, order: 4 },
+];
 
 export function DailyChart({ daily }: Props) {
-  const hydrated = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-
-  if (!hydrated) {
-    return (
-      <div className="mt-4 mb-2 aspect-[16/7] w-full animate-pulse rounded bg-text-tertiary/10" />
-    );
-  }
-
-  return <DailyChartInner daily={daily} />;
-}
-
-function DailyChartInner({ daily }: Props) {
-  const data = prepareDailyData(daily);
-
-  const allTemps = data.length >= 2
-    ? data.flatMap((d) => [d.high, d.low, d.feelsHigh, d.feelsLow])
-    : [0];
-  const minTemp = Math.min(...allTemps) - 2;
-  const maxTemp = Math.max(...allTemps) + 2;
-
-  const highColor = resolveColor("var(--chart-1)");
-  const lowColor = resolveColor("var(--chart-2)");
-  const feelsHighColor = resolveColor("var(--chart-3)");
-  const feelsLowColor = resolveColor("var(--chart-4)");
-  const gridColor = resolveColor("var(--color-text-tertiary)");
-  const surfaceColor = resolveColor("var(--color-surface-card)");
-
-  const chartData: ChartData<"line"> = useMemo(
-    () => ({
-      labels: data.map((d) => d.day),
-      datasets: [
-        {
-          label: "High",
-          data: data.map((d) => d.high),
-          borderColor: highColor,
-          backgroundColor: highColor + "40",
-          borderWidth: 2.5,
-          fill: true,
-          tension: 0.4,
-          pointRadius: 3,
-          pointBackgroundColor: surfaceColor,
-          pointBorderWidth: 2,
-          pointHitRadius: 10,
-        },
-        {
-          label: "Low",
-          data: data.map((d) => d.low),
-          borderColor: lowColor,
-          backgroundColor: lowColor + "26",
-          borderWidth: 2,
-          borderDash: [4, 3],
-          fill: true,
-          tension: 0.4,
-          pointRadius: 3,
-          pointBackgroundColor: surfaceColor,
-          pointBorderWidth: 2,
-          pointHitRadius: 10,
-        },
-        {
-          label: "Feels High",
-          data: data.map((d) => d.feelsHigh),
-          borderColor: feelsHighColor,
-          borderWidth: 1.5,
-          borderDash: [4, 3],
-          fill: false,
-          tension: 0.4,
-          pointRadius: 0,
-          pointHitRadius: 8,
-        },
-        {
-          label: "Feels Low",
-          data: data.map((d) => d.feelsLow),
-          borderColor: feelsLowColor,
-          borderWidth: 1.5,
-          borderDash: [4, 3],
-          fill: false,
-          tension: 0.4,
-          pointRadius: 0,
-          pointHitRadius: 8,
-        },
-      ],
-    }),
-    [data, highColor, lowColor, feelsHighColor, feelsLowColor, surfaceColor],
-  );
-
-  const chartOptions: ChartOptions<"line"> = useMemo(
-    () => ({
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: {
-            color: gridColor,
-            font: { size: 11 },
-          },
-          border: { display: false },
-        },
-        y: {
-          min: minTemp,
-          max: maxTemp,
-          grid: {
-            color: gridColor + "26",
-            drawTicks: false,
-          },
-          ticks: {
-            color: gridColor,
-            font: { size: 11 },
-            callback: (v: string | number) => `${v}°`,
-          },
-          border: { display: false },
-        },
-      },
-      plugins: {
-        tooltip: {
-          callbacks: {
-            label: (ctx) => {
-              const labels: Record<string, string> = {
-                High: "High",
-                Low: "Low",
-                "Feels High": "Feels High",
-                "Feels Low": "Feels Low",
-              };
-              return `${labels[ctx.dataset.label!] ?? ctx.dataset.label}: ${ctx.parsed.y}°C`;
-            },
-          },
-        },
-      },
-    }),
-    [gridColor, minTemp, maxTemp],
-  );
+  const data = useMemo(() => prepareDailyData(daily), [daily]);
 
   if (data.length < 2) return null;
 
+  // Compute dynamic y-axis range from all temperature data
+  const allTemps = data.flatMap((d) => [d.high, d.low, d.feelsHigh, d.feelsLow]);
+  const minTemp = Math.min(...allTemps) - 2;
+  const maxTemp = Math.max(...allTemps) + 2;
+
+  const yAxes = {
+    y: {
+      position: "left" as const,
+      min: minTemp,
+      max: maxTemp,
+      format: (v: number) => `${v}°`,
+    },
+  };
+
   return (
     <div className="mt-4 mb-2">
-      <CanvasChart
-        type="line"
-        data={chartData}
-        options={chartOptions}
-        config={chartConfig}
-        className="aspect-[4/3] sm:aspect-[16/7] w-full"
+      <TimeSeriesChart
+        data={data}
+        labelKey="day"
+        series={SERIES}
+        yAxes={yAxes}
+        tooltipLabel={(label, value) => `${label}: ${value}°C`}
+        aspect="aspect-[4/3] sm:aspect-[16/7]"
+        showDots
       />
     </div>
   );

@@ -106,12 +106,14 @@
   --input: #E5E4E0;
   --ring: #0047AB;
 
-  /* Chart colors — brand-aligned */
-  --chart-1: #0047AB;
-  --chart-2: #004D40;
-  --chart-3: #5D4037;
-  --chart-4: #8B4513;
-  --chart-5: #4B0082;
+  /* Chart colors — Five African Minerals Palette
+     Order matches minerals stripe: Tanzanite → Cobalt → Malachite → Gold → Terracotta
+     Light values deepened for APCA Lc ≥ 60 contrast on surface-base (#FAF9F5) */
+  --chart-1: #4B0082;   /* Tanzanite — primary */
+  --chart-2: #0047AB;   /* Cobalt — secondary */
+  --chart-3: #2D6A4F;   /* Malachite — success/growth */
+  --chart-4: #B8860B;   /* Gold — warmth/accent */
+  --chart-5: #C1440E;   /* Terracotta — earth/alert */
 
   /* Temperature bar gradient — warm spectrum */
   --color-temp-cold: #0047AB;
@@ -203,12 +205,12 @@
   --input: rgba(255, 255, 255, 0.15);
   --ring: #00B0FF;
 
-  /* Chart colors — dark mode, brand-aligned */
-  --chart-1: #00B0FF;
-  --chart-2: #64FFDA;
-  --chart-3: #FFD740;
-  --chart-4: #D4A574;
-  --chart-5: #B388FF;
+  /* Chart colors — dark mode, Five African Minerals Palette */
+  --chart-1: #B388FF;   /* Tanzanite light */
+  --chart-2: #00B0FF;   /* Cobalt light */
+  --chart-3: #64FFDA;   /* Malachite light */
+  --chart-4: #FFD740;   /* Gold light */
+  --chart-5: #D4A574;   /* Terracotta light */
 
   /* Temperature bar gradient — dark mode warm spectrum */
   --color-temp-cold: #42A5F5;
