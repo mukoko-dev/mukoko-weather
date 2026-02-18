@@ -11,12 +11,25 @@ const VALID_LAYERS = new Set([
   "humidity",
 ]);
 
+/** Pinned origin — all outbound requests go here and nowhere else */
+const TOMORROW_TILE_ORIGIN = "https://api.tomorrow.io";
+
+/** Timestamp must be "now" or ISO 8601 date (e.g. "2024-01-15T12:00:00Z") */
+const TIMESTAMP_RE = /^(?:now|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)$/;
+
 /**
  * GET /api/map-tiles — Proxy weather map tiles from Tomorrow.io.
  *
  * Keeps the API key server-side. The client requests tiles via
  * `/api/map-tiles?z={z}&x={x}&y={y}&layer={layer}` and the server
  * fetches from Tomorrow.io and streams back the PNG.
+ *
+ * SSRF protection:
+ * - Origin is pinned to TOMORROW_TILE_ORIGIN (no user-controlled host)
+ * - layer is validated against a strict whitelist
+ * - z/x/y are parsed as integers and range-checked
+ * - timestamp is validated against a strict regex
+ * - URL is built with the URL constructor (no string interpolation)
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -56,6 +69,13 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  if (!TIMESTAMP_RE.test(timestamp)) {
+    return NextResponse.json(
+      { error: "Invalid timestamp" },
+      { status: 400 },
+    );
+  }
+
   // ── Fetch tile from Tomorrow.io ──────────────────────────────────────────
   try {
     const apiKey = await getApiKey("tomorrow");
@@ -70,7 +90,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const tileUrl = `https://api.tomorrow.io/v4/map/tile/${zInt}/${xInt}/${yInt}/${layer}/${timestamp}.png?apikey=${apiKey}`;
+    // Build URL with constructor — pinned origin prevents SSRF.
+    // All path segments are pre-validated (integers, whitelist, regex).
+    const tilePath = `/v4/map/tile/${zInt}/${xInt}/${yInt}/${layer}/${timestamp}.png`;
+    const tileUrl = new URL(tilePath, TOMORROW_TILE_ORIGIN);
+    tileUrl.searchParams.set("apikey", apiKey);
 
     const tileRes = await fetch(tileUrl, {
       signal: AbortSignal.timeout(8000),

@@ -69,6 +69,22 @@ describe("/api/map-tiles route structure", () => {
   it("has an 8-second timeout", () => {
     expect(source).toContain("AbortSignal.timeout(8000)");
   });
+
+  it("pins origin to Tomorrow.io (SSRF protection)", () => {
+    expect(source).toContain("TOMORROW_TILE_ORIGIN");
+    expect(source).toContain("https://api.tomorrow.io");
+    expect(source).toContain("new URL(tilePath, TOMORROW_TILE_ORIGIN)");
+  });
+
+  it("validates timestamp against a strict regex", () => {
+    expect(source).toContain("TIMESTAMP_RE");
+    expect(source).toContain("Invalid timestamp");
+  });
+
+  it("uses URL constructor instead of string interpolation for outbound URL", () => {
+    expect(source).toContain("new URL(");
+    expect(source).toContain("tileUrl.searchParams.set");
+  });
 });
 
 describe("layer validation logic", () => {
@@ -115,5 +131,34 @@ describe("zoom validation logic", () => {
   it("rejects non-numeric zoom", () => {
     expect(isValidZoom("abc")).toBe(false);
     expect(isValidZoom("")).toBe(false);
+  });
+});
+
+describe("timestamp validation logic", () => {
+  const TIMESTAMP_RE = /^(?:now|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)$/;
+
+  it("accepts 'now'", () => {
+    expect(TIMESTAMP_RE.test("now")).toBe(true);
+  });
+
+  it("accepts valid ISO 8601 timestamps", () => {
+    expect(TIMESTAMP_RE.test("2024-01-15T12:00:00Z")).toBe(true);
+    expect(TIMESTAMP_RE.test("2026-02-18T00:00:00Z")).toBe(true);
+  });
+
+  it("rejects path traversal attempts", () => {
+    expect(TIMESTAMP_RE.test("../../../etc/passwd")).toBe(false);
+    expect(TIMESTAMP_RE.test("now/../secret")).toBe(false);
+  });
+
+  it("rejects URLs and arbitrary strings", () => {
+    expect(TIMESTAMP_RE.test("http://evil.com")).toBe(false);
+    expect(TIMESTAMP_RE.test("")).toBe(false);
+    expect(TIMESTAMP_RE.test("anything")).toBe(false);
+  });
+
+  it("rejects timestamps without Z suffix", () => {
+    expect(TIMESTAMP_RE.test("2024-01-15T12:00:00")).toBe(false);
+    expect(TIMESTAMP_RE.test("2024-01-15T12:00:00+05:00")).toBe(false);
   });
 });
