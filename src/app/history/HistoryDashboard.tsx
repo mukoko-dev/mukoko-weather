@@ -11,12 +11,32 @@ import { WindSpeedChart } from "@/components/weather/charts/WindSpeedChart";
 import { PressureChart } from "@/components/weather/charts/PressureChart";
 import { HumidityChart } from "@/components/weather/charts/HumidityChart";
 import { DaylightChart } from "@/components/weather/charts/DaylightChart";
+import { DewPointChart } from "@/components/weather/charts/DewPointChart";
+import { HeatStressChart } from "@/components/weather/charts/HeatStressChart";
+import { VisibilityChart } from "@/components/weather/charts/VisibilityChart";
+import { ThunderstormChart } from "@/components/weather/charts/ThunderstormChart";
+import { GDDChart } from "@/components/weather/charts/GDDChart";
 import { ChartSkeleton } from "@/components/ui/skeleton";
 import type { ZimbabweLocation } from "@/lib/locations";
 import { weatherCodeToInfo, windDirection, uvLevel } from "@/lib/weather";
+import type { WeatherInsights } from "@/lib/weather";
 import type { WeatherHistoryDoc } from "@/lib/db";
+import {
+  ACTIVITY_CATEGORIES,
+  CATEGORY_STYLES,
+  type ActivityCategory,
+} from "@/lib/activities";
+import {
+  heatStressLevel,
+  uvConcernLabel,
+} from "@/components/weather/ActivityInsights";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 type DayRange = 7 | 14 | 30 | 90 | 180 | 365;
+type ViewTab = "weather" | "insights";
 
 interface HistoryRecord {
   date: string;
@@ -41,6 +61,25 @@ interface HistoryRecord {
   condition: string;
 }
 
+/** Flattened insights record for charting */
+export interface InsightsRecord {
+  date: string;
+  dewPoint: number | null;
+  heatStress: number | null;
+  thunderstorm: number | null;
+  visibility: number | null;
+  uvConcern: number | null;
+  gddMaize: number | null;
+  gddSorghum: number | null;
+  gddPotato: number | null;
+  evapotranspiration: number | null;
+  moonPhase: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers (exported for tests)
+// ---------------------------------------------------------------------------
+
 function parseSunTime(iso: string): { hours: number; minutes: number } {
   const d = new Date(iso);
   return { hours: d.getHours(), minutes: d.getMinutes() };
@@ -57,7 +96,7 @@ function formatSunTime(iso: string): string {
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
 }
 
-function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
+export function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
   return docs
     .map((doc) => {
       const daily = doc.daily;
@@ -104,6 +143,28 @@ function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+export function transformInsights(docs: WeatherHistoryDoc[]): InsightsRecord[] {
+  return docs
+    .filter((d) => d.insights != null)
+    .map((doc) => {
+      const ins = doc.insights as WeatherInsights;
+      return {
+        date: doc.date,
+        dewPoint: ins.dewPoint ?? null,
+        heatStress: ins.heatStressIndex ?? null,
+        thunderstorm: ins.thunderstormProbability ?? null,
+        visibility: ins.visibility ?? null,
+        uvConcern: ins.uvHealthConcern ?? null,
+        gddMaize: ins.gdd10To30 ?? null,
+        gddSorghum: ins.gdd08To30 ?? null,
+        gddPotato: ins.gdd03To25 ?? null,
+        evapotranspiration: ins.evapotranspiration ?? null,
+        moonPhase: ins.moonPhase ?? null,
+      };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 const DAY_OPTIONS: { value: DayRange; label: string }[] = [
   { value: 7, label: "7 days" },
   { value: 14, label: "14 days" },
@@ -113,12 +174,186 @@ const DAY_OPTIONS: { value: DayRange; label: string }[] = [
   { value: 365, label: "1 year" },
 ];
 
+const CATEGORY_FILTER_OPTIONS: { id: ActivityCategory | "all"; label: string }[] = [
+  { id: "all", label: "All Data" },
+  ...ACTIVITY_CATEGORIES.map((c) => ({ id: c.id, label: c.label })),
+];
+
 function avg(arr: number[]): number {
   return arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : 0;
 }
 
+function avgFloat(arr: number[]): number {
+  return arr.length ? Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 10) / 10 : 0;
+}
+
 function sum(arr: number[]): number {
   return Math.round(arr.reduce((s, v) => s + v, 0) * 10) / 10;
+}
+
+function defined<T>(v: T | null | undefined): v is T {
+  return v != null;
+}
+
+// ---------------------------------------------------------------------------
+// Suitability gauge card
+// ---------------------------------------------------------------------------
+
+function SuitabilityGauge({
+  label,
+  level,
+  levelLabel,
+  colorClass,
+  bgClass,
+  detail,
+  icon,
+}: {
+  label: string;
+  level: "excellent" | "good" | "fair" | "poor";
+  levelLabel: string;
+  colorClass: string;
+  bgClass: string;
+  detail: string;
+  icon: string;
+}) {
+  const pct = level === "excellent" ? 100 : level === "good" ? 75 : level === "fair" ? 50 : 25;
+  return (
+    <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm" role="group" aria-label={label}>
+      <div className="flex items-center gap-2">
+        <span className="text-lg" aria-hidden="true">{icon}</span>
+        <p className="text-sm font-semibold text-text-primary">{label}</p>
+        <span className={`ml-auto rounded-[var(--radius-badge)] px-2 py-0.5 text-xs font-bold ${bgClass} ${colorClass}`}>
+          {levelLabel}
+        </span>
+      </div>
+      {/* Gauge bar */}
+      <div className="mt-3 h-2 w-full rounded-full bg-surface-dim" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${label}: ${levelLabel}`}>
+        <div className={`h-full rounded-full transition-all ${bgClass.replace("/10", "")}`} style={{ width: `${pct}%` }} />
+      </div>
+      <p className="mt-2 text-xs text-text-secondary">{detail}</p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Compute suitability from aggregated insights
+// ---------------------------------------------------------------------------
+
+interface CategorySuitability {
+  label: string;
+  level: "excellent" | "good" | "fair" | "poor";
+  levelLabel: string;
+  colorClass: string;
+  bgClass: string;
+  detail: string;
+  icon: string;
+  category: string;
+}
+
+export function computeCategorySuitability(
+  insightsRecords: InsightsRecord[],
+): CategorySuitability[] {
+  if (insightsRecords.length === 0) return [];
+
+  const dewPoints = insightsRecords.map((r) => r.dewPoint).filter(defined);
+  const heatStresses = insightsRecords.map((r) => r.heatStress).filter(defined);
+  const thunderstorms = insightsRecords.map((r) => r.thunderstorm).filter(defined);
+  const visibilities = insightsRecords.map((r) => r.visibility).filter(defined);
+  const uvConcerns = insightsRecords.map((r) => r.uvConcern).filter(defined);
+  const gddMaize = insightsRecords.map((r) => r.gddMaize).filter(defined);
+
+  const results: CategorySuitability[] = [];
+
+  // Farming
+  if (dewPoints.length > 0 || gddMaize.length > 0) {
+    const avgDew = dewPoints.length > 0 ? avgFloat(dewPoints) : 15;
+    const avgGdd = gddMaize.length > 0 ? avgFloat(gddMaize) : 0;
+    let level: CategorySuitability["level"] = "good";
+    let detail = `Avg dew point: ${avgDew}°C`;
+    if (avgGdd > 0) detail += ` | Avg GDD: ${avgGdd}`;
+    if (avgDew > 20) { level = "fair"; detail = "High avg dew point — crop disease risk elevated"; }
+    else if (avgDew < 5) { level = "poor"; detail = "Low avg dew point — frost risk detected in period"; }
+    else if (avgGdd > 15) { level = "excellent"; detail = `Strong growth period (avg GDD: ${avgGdd})`; }
+    const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
+    results.push({ label: "Farming", level, levelLabel: lvl, colorClass, bgClass, detail, icon: "🌱", category: "farming" });
+  }
+
+  // Mining
+  if (heatStresses.length > 0 || thunderstorms.length > 0) {
+    const avgHeat = heatStresses.length > 0 ? avgFloat(heatStresses) : 20;
+    const avgStorm = thunderstorms.length > 0 ? avgFloat(thunderstorms) : 0;
+    let level: CategorySuitability["level"] = "good";
+    let detail = "Safe conditions overall";
+    if (avgHeat >= 28) { level = "poor"; detail = `Severe heat stress (avg: ${avgHeat})`; }
+    else if (avgStorm > 40) { level = "poor"; detail = `High storm risk (avg: ${Math.round(avgStorm)}%)`; }
+    else if (avgHeat >= 24 || avgStorm > 20) { level = "fair"; detail = `Moderate risk — heat: ${avgHeat}, storm: ${Math.round(avgStorm)}%`; }
+    else { level = "good"; detail = `Low risk — heat: ${avgHeat}, storm: ${Math.round(avgStorm)}%`; }
+    const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
+    results.push({ label: "Mining", level, levelLabel: lvl, colorClass, bgClass, detail, icon: "⛏️", category: "mining" });
+  }
+
+  // Sports
+  if (heatStresses.length > 0 || uvConcerns.length > 0) {
+    const avgHeat = heatStresses.length > 0 ? avgFloat(heatStresses) : 20;
+    const avgUv = uvConcerns.length > 0 ? avgFloat(uvConcerns) : 3;
+    let level: CategorySuitability["level"] = "excellent";
+    let detail = "Great conditions for outdoor exercise";
+    if (avgHeat >= 28) { level = "poor"; detail = "Too hot for outdoor sports"; }
+    else if (avgUv > 7) { level = "fair"; detail = `High UV exposure (avg: ${avgUv}) — sun protection needed`; }
+    else if (avgHeat >= 24) { level = "fair"; detail = "Warm — hydration breaks recommended"; }
+    const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
+    results.push({ label: "Sports", level, levelLabel: lvl, colorClass, bgClass, detail, icon: "🏃", category: "sports" });
+  }
+
+  // Travel
+  if (visibilities.length > 0 || thunderstorms.length > 0) {
+    const avgVis = visibilities.length > 0 ? avgFloat(visibilities) : 10;
+    const avgStorm = thunderstorms.length > 0 ? avgFloat(thunderstorms) : 0;
+    let level: CategorySuitability["level"] = "good";
+    let detail = `Clear conditions — avg visibility: ${avgVis} km`;
+    if (avgVis < 1) { level = "poor"; detail = "Very poor visibility — travel not recommended"; }
+    else if (avgStorm > 40) { level = "poor"; detail = `High storm risk for travel (avg: ${Math.round(avgStorm)}%)`; }
+    else if (avgVis < 5 || avgStorm > 20) { level = "fair"; detail = `Moderate risk — vis: ${avgVis} km, storm: ${Math.round(avgStorm)}%`; }
+    const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
+    results.push({ label: "Travel", level, levelLabel: lvl, colorClass, bgClass, detail, icon: "🚗", category: "travel" });
+  }
+
+  // Tourism
+  if (uvConcerns.length > 0 || visibilities.length > 0) {
+    const avgUv = uvConcerns.length > 0 ? avgFloat(uvConcerns) : 3;
+    const avgVis = visibilities.length > 0 ? avgFloat(visibilities) : 10;
+    let level: CategorySuitability["level"] = "good";
+    let detail = "Good conditions for outdoor activities";
+    if (avgUv > 7) { level = "fair"; detail = "Very high UV — seek shade during midday"; }
+    else if (avgVis < 5) { level = "fair"; detail = "Limited visibility may affect game viewing"; }
+    else { level = "good"; detail = `Good visibility (${avgVis} km) and moderate UV`; }
+    const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
+    results.push({ label: "Tourism", level, levelLabel: lvl, colorClass, bgClass, detail, icon: "🦁", category: "tourism" });
+  }
+
+  // Casual
+  if (thunderstorms.length > 0 || heatStresses.length > 0) {
+    const avgStorm = thunderstorms.length > 0 ? avgFloat(thunderstorms) : 0;
+    const avgHeat = heatStresses.length > 0 ? avgFloat(heatStresses) : 20;
+    let level: CategorySuitability["level"] = "excellent";
+    let detail = "Perfect for outdoor plans";
+    if (avgStorm > 40) { level = "poor"; detail = "Thunderstorm risk — indoor activities recommended"; }
+    else if (avgHeat >= 28) { level = "fair"; detail = "Very warm — limit time outdoors"; }
+    else if (avgStorm > 20 || avgHeat >= 24) { level = "fair"; detail = "Moderate conditions — check forecast"; }
+    const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
+    results.push({ label: "Casual", level, levelLabel: lvl, colorClass, bgClass, detail, icon: "☀️", category: "casual" });
+  }
+
+  return results;
+}
+
+export function suitabilityColors(level: "excellent" | "good" | "fair" | "poor") {
+  switch (level) {
+    case "excellent": return { colorClass: "text-severity-low", bgClass: "bg-severity-low/10", label: "Excellent" };
+    case "good": return { colorClass: "text-severity-low", bgClass: "bg-severity-low/10", label: "Good" };
+    case "fair": return { colorClass: "text-severity-moderate", bgClass: "bg-severity-moderate/10", label: "Fair" };
+    case "poor": return { colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10", label: "Poor" };
+  }
 }
 
 // ── Main component ──────────────────────────────────────────────────────────
@@ -128,11 +363,14 @@ export function HistoryDashboard() {
   const [selectedLocation, setSelectedLocation] = useState<ZimbabweLocation | null>(null);
   const [days, setDays] = useState<DayRange>(30);
   const [records, setRecords] = useState<HistoryRecord[]>([]);
+  const [insightsRecords, setInsightsRecords] = useState<InsightsRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [fetched, setFetched] = useState(false);
   const [visibleRowCount, setVisibleRowCount] = useState(50);
+  const [activeTab, setActiveTab] = useState<ViewTab>("weather");
+  const [categoryFilter, setCategoryFilter] = useState<ActivityCategory | "all">("all");
   const tableEndRef = useRef<HTMLDivElement>(null);
   const [allLocations, setAllLocations] = useState<ZimbabweLocation[]>([]);
 
@@ -191,10 +429,12 @@ export function HistoryDashboard() {
         }
         const json = await res.json();
         setRecords(transformHistory(json.data));
+        setInsightsRecords(transformInsights(json.data));
         setVisibleRowCount(50);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to fetch history");
         setRecords([]);
+        setInsightsRecords([]);
       } finally {
         setLoading(false);
       }
@@ -215,6 +455,8 @@ export function HistoryDashboard() {
       fetchHistory(selectedLocation, newDays);
     }
   };
+
+  const hasInsights = insightsRecords.length > 0;
 
   const stats = records.length > 0
     ? {
@@ -240,6 +482,33 @@ export function HistoryDashboard() {
       }
     : null;
 
+  const insightsStats = hasInsights
+    ? {
+        avgDewPoint: avgFloat(insightsRecords.map((r) => r.dewPoint).filter(defined)),
+        avgHeatStress: avgFloat(insightsRecords.map((r) => r.heatStress).filter(defined)),
+        maxHeatStress: insightsRecords.map((r) => r.heatStress).filter(defined).reduce((m, v) => Math.max(m, v), 0),
+        avgThunderstorm: avgFloat(insightsRecords.map((r) => r.thunderstorm).filter(defined)),
+        maxThunderstorm: insightsRecords.map((r) => r.thunderstorm).filter(defined).reduce((m, v) => Math.max(m, v), 0),
+        avgVisibility: avgFloat(insightsRecords.map((r) => r.visibility).filter(defined)),
+        avgUvConcern: avgFloat(insightsRecords.map((r) => r.uvConcern).filter(defined)),
+        avgGddMaize: avgFloat(insightsRecords.map((r) => r.gddMaize).filter(defined)),
+        totalET: sum(insightsRecords.map((r) => r.evapotranspiration).filter(defined)),
+        insightDays: insightsRecords.length,
+      }
+    : null;
+
+  const categorySuitability = useMemo(
+    () => computeCategorySuitability(insightsRecords),
+    [insightsRecords],
+  );
+
+  const filteredSuitability = useMemo(
+    () => categoryFilter === "all"
+      ? categorySuitability
+      : categorySuitability.filter((s) => s.category === categoryFilter),
+    [categorySuitability, categoryFilter],
+  );
+
   const chartData = useMemo(() => {
     if (records.length <= 60) return records;
     if (typeof window !== "undefined" && window.innerWidth < 768) {
@@ -248,6 +517,15 @@ export function HistoryDashboard() {
     }
     return records;
   }, [records]);
+
+  const insightsChartData = useMemo(() => {
+    if (insightsRecords.length <= 60) return insightsRecords;
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      const step = Math.ceil(insightsRecords.length / 60);
+      return insightsRecords.filter((_, i) => i === 0 || i === insightsRecords.length - 1 || i % step === 0);
+    }
+    return insightsRecords;
+  }, [insightsRecords]);
 
   const formatDate = useCallback((dateStr: string) => {
     const d = new Date(dateStr);
@@ -301,6 +579,56 @@ export function HistoryDashboard() {
         </div>
       </div>
 
+      {/* Category filter pills */}
+      {fetched && !loading && records.length > 0 && (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by activity category">
+          {CATEGORY_FILTER_OPTIONS.map((opt) => {
+            const active = categoryFilter === opt.id;
+            const style = opt.id !== "all" ? CATEGORY_STYLES[opt.id] : null;
+            return (
+              <button
+                key={opt.id}
+                onClick={() => setCategoryFilter(opt.id)}
+                aria-pressed={active}
+                className={`min-h-[44px] rounded-[var(--radius-badge)] px-4 py-2 text-sm font-medium transition-colors ${
+                  active
+                    ? style ? style.badge : "bg-primary text-primary-foreground"
+                    : "bg-surface-base text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* View tabs: Weather / Insights */}
+      {fetched && !loading && records.length > 0 && (
+        <div className="flex gap-1 rounded-[var(--radius-card)] bg-surface-base p-1" role="tablist" aria-label="Dashboard view">
+          <button
+            role="tab"
+            aria-selected={activeTab === "weather"}
+            onClick={() => setActiveTab("weather")}
+            className={`flex-1 min-h-[44px] rounded-[var(--radius-input)] px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === "weather" ? "bg-surface-card text-text-primary shadow-sm" : "text-text-tertiary hover:text-text-secondary"
+            }`}
+          >
+            Weather Data
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === "insights"}
+            onClick={() => setActiveTab("insights")}
+            className={`flex-1 min-h-[44px] rounded-[var(--radius-input)] px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === "insights" ? "bg-surface-card text-text-primary shadow-sm" : "text-text-tertiary hover:text-text-secondary"
+            }`}
+          >
+            Insights{hasInsights ? ` (${insightsRecords.length}d)` : ""}
+          </button>
+        </div>
+      )}
+
       {loading && (
         <div className="flex items-center justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -322,11 +650,14 @@ export function HistoryDashboard() {
       {!fetched && !loading && (
         <div className="rounded-[var(--radius-card)] bg-surface-card p-8 text-center">
           <p className="text-text-secondary">Select a location above to view its historical weather data.</p>
-          <p className="mt-2 text-xs text-text-tertiary">Browse temperature trends, precipitation totals, UV exposure, wind patterns, and climate data over time.</p>
+          <p className="mt-2 text-xs text-text-tertiary">Browse temperature trends, precipitation totals, UV exposure, wind patterns, and activity insights over time.</p>
         </div>
       )}
 
-      {!loading && records.length > 0 && stats && (
+      {/* ════════════════════════════════════════════════════════════════════
+          WEATHER TAB
+         ════════════════════════════════════════════════════════════════════ */}
+      {!loading && records.length > 0 && stats && activeTab === "weather" && (
         <>
           <section aria-labelledby="history-summary">
             <h2 id="history-summary" className="text-lg font-semibold text-text-primary font-heading">{selectedLocation?.name} — {DAY_OPTIONS.find((o) => o.value === days)?.label} summary</h2>
@@ -523,6 +854,156 @@ export function HistoryDashboard() {
               </div>
             </section>
           </LazySection>
+        </>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════
+          INSIGHTS TAB
+         ════════════════════════════════════════════════════════════════════ */}
+      {!loading && records.length > 0 && activeTab === "insights" && (
+        <>
+          {!hasInsights && (
+            <div className="rounded-[var(--radius-card)] bg-surface-card p-8 text-center">
+              <p className="text-text-secondary">No insights data available for this period.</p>
+              <p className="mt-2 text-xs text-text-tertiary">
+                Insights (dew point, heat stress, thunderstorm risk, visibility, GDD) are recorded when
+                Tomorrow.io is the weather provider. Data will appear here as it accumulates.
+              </p>
+            </div>
+          )}
+
+          {hasInsights && insightsStats && (
+            <>
+              {/* ── Activity suitability gauges ─────────────────────────── */}
+              <section aria-labelledby="history-suitability">
+                <h2 id="history-suitability" className="text-lg font-semibold text-text-primary font-heading">
+                  Activity Suitability — {DAY_OPTIONS.find((o) => o.value === days)?.label} overview
+                </h2>
+                <p className="mt-1 text-xs text-text-tertiary">
+                  Based on {insightsStats.insightDays} days of Tomorrow.io insights data
+                </p>
+                {filteredSuitability.length > 0 ? (
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {filteredSuitability.map((s) => (
+                      <SuitabilityGauge
+                        key={s.category}
+                        label={s.label}
+                        level={s.level}
+                        levelLabel={s.levelLabel}
+                        colorClass={s.colorClass}
+                        bgClass={s.bgClass}
+                        detail={s.detail}
+                        icon={s.icon}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm text-text-tertiary">No suitability data for this category.</p>
+                )}
+              </section>
+
+              {/* ── Insights summary stats ──────────────────────────────── */}
+              <section aria-labelledby="history-insights-stats">
+                <h2 id="history-insights-stats" className="text-lg font-semibold text-text-primary font-heading">Insights summary</h2>
+                <h3 className="mt-4 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Safety & Comfort</h3>
+                <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <StatCard label="Avg Heat Stress" value={`${insightsStats.avgHeatStress} (${heatStressLevel(insightsStats.avgHeatStress).label})`} />
+                  <StatCard label="Peak Heat Stress" value={`${insightsStats.maxHeatStress} (${heatStressLevel(insightsStats.maxHeatStress).label})`} />
+                  <StatCard label="Avg Storm Risk" value={`${Math.round(insightsStats.avgThunderstorm)}%`} />
+                  <StatCard label="Peak Storm Risk" value={`${Math.round(insightsStats.maxThunderstorm)}%`} />
+                  <StatCard label="Avg UV Concern" value={`${insightsStats.avgUvConcern} (${uvConcernLabel(insightsStats.avgUvConcern).label})`} />
+                  <StatCard label="Avg Visibility" value={`${insightsStats.avgVisibility} km`} />
+                </div>
+                <h3 className="mt-4 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Farming & Agriculture</h3>
+                <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <StatCard label="Avg Dew Point" value={`${insightsStats.avgDewPoint}°C`} />
+                  <StatCard label="Avg GDD (Maize)" value={`${insightsStats.avgGddMaize}`} />
+                  <StatCard label="Total ET" value={`${insightsStats.totalET} mm`} />
+                  <StatCard label="Insight Days" value={`${insightsStats.insightDays}`} />
+                </div>
+              </section>
+
+              {/* ── Heat Stress chart ───────────────────────────────────── */}
+              {insightsRecords.some((r) => r.heatStress != null) && (
+                <LazySection label="history-heat-stress" fallback={<ChartSkeleton />}>
+                  <ChartErrorBoundary name="heat stress">
+                    <section aria-labelledby="history-heat-stress-chart">
+                      <h2 id="history-heat-stress-chart" className="text-lg font-semibold text-text-primary font-heading">Heat stress index</h2>
+                      <p className="mt-1 text-xs text-text-tertiary">EZ Heat Stress Index — above 24 is moderate, above 28 is severe</p>
+                      <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
+                        <HeatStressChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
+                      </div>
+                    </section>
+                  </ChartErrorBoundary>
+                </LazySection>
+              )}
+
+              {/* ── Thunderstorm probability chart ─────────────────────── */}
+              {insightsRecords.some((r) => r.thunderstorm != null) && (
+                <LazySection label="history-thunderstorm" fallback={<ChartSkeleton />}>
+                  <ChartErrorBoundary name="thunderstorm probability">
+                    <section aria-labelledby="history-thunderstorm-chart">
+                      <h2 id="history-thunderstorm-chart" className="text-lg font-semibold text-text-primary font-heading">Thunderstorm probability</h2>
+                      <p className="mt-1 text-xs text-text-tertiary">Lightning and storm risk — above 40% unsafe for sports, above 50% unsafe for mining</p>
+                      <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
+                        <ThunderstormChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
+                      </div>
+                    </section>
+                  </ChartErrorBoundary>
+                </LazySection>
+              )}
+
+              {/* ── Dew Point chart ────────────────────────────────────── */}
+              {insightsRecords.some((r) => r.dewPoint != null) && (
+                <LazySection label="history-dew-point" fallback={<ChartSkeleton />}>
+                  <ChartErrorBoundary name="dew point">
+                    <section aria-labelledby="history-dewpoint-chart">
+                      <h2 id="history-dewpoint-chart" className="text-lg font-semibold text-text-primary font-heading">Dew point</h2>
+                      <p className="mt-1 text-xs text-text-tertiary">Below 5°C indicates frost risk, above 20°C indicates crop disease risk</p>
+                      <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
+                        <DewPointChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
+                      </div>
+                    </section>
+                  </ChartErrorBoundary>
+                </LazySection>
+              )}
+
+              {/* ── Visibility chart ───────────────────────────────────── */}
+              {insightsRecords.some((r) => r.visibility != null) && (
+                <LazySection label="history-visibility" fallback={<ChartSkeleton />}>
+                  <ChartErrorBoundary name="visibility">
+                    <section aria-labelledby="history-visibility-chart">
+                      <h2 id="history-visibility-chart" className="text-lg font-semibold text-text-primary font-heading">Visibility</h2>
+                      <p className="mt-1 text-xs text-text-tertiary">Below 5 km is reduced, below 1 km is very poor — affects travel and photography</p>
+                      <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
+                        <VisibilityChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
+                      </div>
+                    </section>
+                  </ChartErrorBoundary>
+                </LazySection>
+              )}
+
+              {/* ── GDD chart (farming) ────────────────────────────────── */}
+              {insightsRecords.some((r) => r.gddMaize != null) && (
+                <LazySection label="history-gdd" fallback={<ChartSkeleton />}>
+                  <ChartErrorBoundary name="growing degree days">
+                    <section aria-labelledby="history-gdd-chart">
+                      <h2 id="history-gdd-chart" className="text-lg font-semibold text-text-primary font-heading">Growing degree days (GDD)</h2>
+                      <p className="mt-1 text-xs text-text-tertiary">Crop growth potential — higher values mean more growth for that day</p>
+                      <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
+                        <GDDChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
+                        <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-xs text-text-tertiary">
+                          <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded-sm bg-mineral-malachite" /> Maize/Soybean</span>
+                          <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-3" /> Sorghum</span>
+                          <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-4" /> Potatoes</span>
+                        </div>
+                      </div>
+                    </section>
+                  </ChartErrorBoundary>
+                </LazySection>
+              )}
+            </>
+          )}
         </>
       )}
     </div>
