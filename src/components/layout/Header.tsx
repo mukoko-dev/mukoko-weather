@@ -124,52 +124,52 @@ export function Header() {
       {/* Mobile bottom navigation — visible only on small screens */}
       <nav
         aria-label="Mobile navigation"
-        className="fixed bottom-0 left-0 right-0 z-30 border-t border-text-tertiary/10 bg-surface-base/95 backdrop-blur-xl sm:hidden"
+        className="fixed bottom-0 left-0 right-0 z-30 border-t border-text-tertiary/10 bg-surface-base/95 backdrop-blur-xl sm:hidden pb-safe-bottom"
       >
-        <div className="mx-auto flex items-center justify-around h-16 px-2">
+        <div className="mx-auto flex items-center justify-around px-1 min-h-[4.5rem]">
           <Link
             href="/"
-            className={`flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl transition-colors min-w-[60px] ${
+            className={`flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-xl transition-colors min-w-[72px] min-h-[56px] ${
               isHome ? "text-primary" : "text-text-tertiary"
             }`}
             aria-label="Weather home"
             aria-current={isHome ? "page" : undefined}
           >
-            <HomeIcon size={20} />
-            <span className="text-[10px] font-medium">Weather</span>
+            <HomeIcon size={22} />
+            <span className="text-xs font-medium">Weather</span>
           </Link>
           <Link
             href="/explore"
             prefetch={false}
-            className={`flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl transition-colors min-w-[60px] ${
+            className={`flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-xl transition-colors min-w-[72px] min-h-[56px] ${
               isExplore ? "text-primary" : "text-text-tertiary"
             }`}
             aria-label="Explore locations"
             aria-current={isExplore ? "page" : undefined}
           >
-            <CompassIcon size={20} />
-            <span className="text-[10px] font-medium">Explore</span>
+            <CompassIcon size={22} />
+            <span className="text-xs font-medium">Explore</span>
           </Link>
           <Link
             href="/history"
             prefetch={false}
-            className={`flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl transition-colors min-w-[60px] ${
+            className={`flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-xl transition-colors min-w-[72px] min-h-[56px] ${
               isHistory ? "text-primary" : "text-text-tertiary"
             }`}
             aria-label="Weather history"
             aria-current={isHistory ? "page" : undefined}
           >
-            <ClockIcon size={20} />
-            <span className="text-[10px] font-medium">History</span>
+            <ClockIcon size={22} />
+            <span className="text-xs font-medium">History</span>
           </Link>
           <button
             onClick={openMyWeather}
-            className="flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl transition-colors min-w-[60px] text-text-tertiary"
+            className="flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-xl transition-colors min-w-[72px] min-h-[56px] text-text-tertiary"
             aria-label="My Weather settings"
             type="button"
           >
-            <MapPinIcon size={20} />
-            <span className="text-[10px] font-medium">My Weather</span>
+            <MapPinIcon size={22} />
+            <span className="text-xs font-medium">My Weather</span>
           </button>
         </div>
       </nav>

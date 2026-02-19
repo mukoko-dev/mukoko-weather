@@ -1,3 +1,5 @@
+import { AFRICA_LOCATIONS } from "./locations-africa";
+
 export interface WeatherLocation {
   slug: string;
   name: string;
@@ -11,66 +13,12 @@ export interface WeatherLocation {
   country?: string;
   /** How this location was added */
   source?: "seed" | "community" | "geolocation";
+  /** Links location to the provinces collection — auto-computed if absent */
+  provinceSlug?: string;
 }
 
 /** @deprecated Use WeatherLocation instead */
 export type ZimbabweLocation = WeatherLocation;
-
-export interface RegionBounds {
-  id: string;
-  name: string;
-  north: number;
-  south: number;
-  east: number;
-  west: number;
-  center: { lat: number; lon: number };
-}
-
-export const SUPPORTED_REGIONS: RegionBounds[] = [
-  {
-    id: "zw",
-    name: "Zimbabwe",
-    north: -15.61,
-    south: -22.42,
-    east: 33.07,
-    west: 25.24,
-    center: { lat: -19.02, lon: 29.15 },
-  },
-  // ASEAN bounding box (covers all 10 member nations)
-  {
-    id: "asean",
-    name: "ASEAN",
-    north: 28.5,
-    south: -11.0,
-    east: 141.0,
-    west: 92.0,
-    center: { lat: 8.0, lon: 115.0 },
-  },
-  // Sub-Saharan Africa (developing nations)
-  {
-    id: "africa-dev",
-    name: "Africa (Developing)",
-    north: 15.0,
-    south: -35.0,
-    east: 52.0,
-    west: -18.0,
-    center: { lat: -5.0, lon: 25.0 },
-  },
-];
-
-/** Backward-compatible alias — equivalent to SUPPORTED_REGIONS[0] */
-export const ZIMBABWE_BOUNDS = SUPPORTED_REGIONS[0];
-
-/** Check if coordinates fall within any supported region (with 1° padding) */
-export function isInSupportedRegion(lat: number, lon: number): boolean {
-  return SUPPORTED_REGIONS.some(
-    (r) =>
-      lat >= r.south - 1 &&
-      lat <= r.north + 1 &&
-      lon >= r.west - 1 &&
-      lon <= r.east + 1,
-  );
-}
 
 // Tag categories for filtering
 export type LocationTag =
@@ -83,18 +31,8 @@ export type LocationTag =
   | "travel"
   | "national-park";
 
-export const TAG_LABELS: Record<LocationTag, string> = {
-  city: "Cities & Towns",
-  farming: "Farming Regions",
-  mining: "Mining Areas",
-  tourism: "Tourist Destinations",
-  education: "Education Centres",
-  border: "Border Posts",
-  travel: "Travel Corridors",
-  "national-park": "National Parks",
-};
 
-export const LOCATIONS: ZimbabweLocation[] = [
+export const ZW_LOCATIONS: ZimbabweLocation[] = [
   // ===== CITIES & TOWNS =====
   { slug: "harare", name: "Harare", province: "Harare", lat: -17.83, lon: 31.05, elevation: 1490, tags: ["city", "education"] },
   { slug: "bulawayo", name: "Bulawayo", province: "Bulawayo", lat: -20.15, lon: 28.58, elevation: 1348, tags: ["city", "education"] },
@@ -207,79 +145,6 @@ export const LOCATIONS: ZimbabweLocation[] = [
   { slug: "lion-den", name: "Lion's Den", province: "Mashonaland West", lat: -16.93, lon: 29.65, elevation: 1100, tags: ["travel"] },
 ];
 
-export function getLocationBySlug(slug: string): ZimbabweLocation | undefined {
-  return LOCATIONS.find((l) => l.slug === slug);
-}
+/** Combined location array: Zimbabwe seed locations + African/ASEAN locations */
+export const LOCATIONS: ZimbabweLocation[] = [...ZW_LOCATIONS, ...AFRICA_LOCATIONS];
 
-/** Get locations filtered by one or more tags */
-export function getLocationsByTag(tag: LocationTag): ZimbabweLocation[] {
-  return LOCATIONS.filter((l) => l.tags.includes(tag));
-}
-
-/** Search locations by name (case-insensitive, prefix + fuzzy match) */
-export function searchLocations(query: string): ZimbabweLocation[] {
-  const q = query.toLowerCase().trim();
-  if (!q) return [];
-
-  // Exact prefix matches first, then substring matches
-  const prefix: ZimbabweLocation[] = [];
-  const substring: ZimbabweLocation[] = [];
-
-  for (const loc of LOCATIONS) {
-    const name = loc.name.toLowerCase();
-    if (name.startsWith(q)) {
-      prefix.push(loc);
-    } else if (name.includes(q) || loc.province.toLowerCase().includes(q)) {
-      substring.push(loc);
-    }
-  }
-
-  return [...prefix, ...substring];
-}
-
-/**
- * Find the nearest location to given coordinates using the Haversine formula.
- * Returns null if the coordinates are outside all supported regions (with 1° padding).
- */
-export function findNearestLocation(
-  lat: number,
-  lon: number,
-): WeatherLocation | null {
-  if (!isInSupportedRegion(lat, lon)) {
-    return null;
-  }
-
-  let nearest: ZimbabweLocation | null = null;
-  let minDist = Infinity;
-
-  for (const loc of LOCATIONS) {
-    const dist = haversineDistance(lat, lon, loc.lat, loc.lon);
-    if (dist < minDist) {
-      minDist = dist;
-      nearest = loc;
-    }
-  }
-
-  return nearest;
-}
-
-/** Haversine distance in kilometres */
-function haversineDistance(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-): number {
-  const R = 6371; // Earth radius in km
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-function toRad(deg: number): number {
-  return (deg * Math.PI) / 180;
-}

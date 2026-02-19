@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo } from "react";
 import { useAppStore } from "@/lib/store";
-import { ACTIVITIES, CATEGORY_STYLES, type Activity } from "@/lib/activities";
+import { CATEGORY_STYLES, type Activity } from "@/lib/activities";
 import type { WeatherInsights } from "@/lib/weather";
 import { ActivityIcon } from "@/lib/weather-icons";
 
@@ -202,25 +202,22 @@ function ActivityCard({ activity, insights }: { activity: Activity; insights: We
 // Main component
 // ---------------------------------------------------------------------------
 
-export function ActivityInsights({ insights }: { insights?: WeatherInsights }) {
+export function ActivityInsights({
+  insights,
+  activities,
+}: {
+  insights?: WeatherInsights;
+  /** All activities from MongoDB — passed from parent. Empty array = loading, show nothing. */
+  activities: Activity[];
+}) {
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const openMyWeather = useAppStore((s) => s.openMyWeather);
-  // Initialise with static seed data so activities resolve immediately,
-  // then upgrade to MongoDB data when the API responds.
-  const [allActivities, setAllActivities] = useState<Activity[]>(ACTIVITIES);
-
-  useEffect(() => {
-    fetch("/api/activities")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (data?.activities?.length) setAllActivities(data.activities); })
-      .catch(() => {});
-  }, []);
 
   const selectedItems = useMemo(() => {
     return selectedActivities
-      .map((id) => allActivities.find((a) => a.id === id))
+      .map((id) => activities.find((a) => a.id === id))
       .filter((a): a is Activity => a != null);
-  }, [selectedActivities, allActivities]);
+  }, [selectedActivities, activities]);
 
   if (selectedItems.length === 0) return null;
 

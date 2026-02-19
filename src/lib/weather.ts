@@ -223,7 +223,7 @@ export interface ZimbabweSeason {
   description: string;
 }
 
-/** Zimbabwe seasons */
+/** Zimbabwe seasons — synchronous fallback (used when DB is unavailable or country has no seasons) */
 export function getZimbabweSeason(date: Date = new Date()): ZimbabweSeason {
   const month = date.getMonth() + 1; // 1-12
   if (month >= 11 || month <= 3) {
@@ -238,6 +238,7 @@ export function getZimbabweSeason(date: Date = new Date()): ZimbabweSeason {
   // month 4 (April)
   return { name: "Short rains", shona: "Munakamwe", description: "Harvest, late rains" };
 }
+
 
 export function windDirection(degrees: number): string {
   const dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];

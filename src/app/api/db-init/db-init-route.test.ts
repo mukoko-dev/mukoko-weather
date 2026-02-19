@@ -39,6 +39,12 @@ describe("/api/db-init route structure", () => {
     expect(source).toContain("syncLocations(LOCATIONS)");
   });
 
+  it("syncs regions, tags, and seasons from seed files", () => {
+    expect(source).toContain("syncRegions(REGIONS)");
+    expect(source).toContain("syncTags(TAGS)");
+    expect(source).toContain("syncSeasons(SEASONS)");
+  });
+
   it("stores API keys from request body", () => {
     expect(source).toContain("setApiKey(provider, key)");
   });
@@ -54,10 +60,13 @@ describe("/api/db-init route structure", () => {
     expect(source).toContain("catch");
   });
 
-  it("returns success response with location count", () => {
+  it("returns success response with counts for all synced collections", () => {
     expect(source).toContain("success: true");
     expect(source).toContain('indexes: "created"');
     expect(source).toContain("locations: LOCATIONS.length");
+    expect(source).toContain("regions: REGIONS.length");
+    expect(source).toContain("tags: TAGS.length");
+    expect(source).toContain("seasons: SEASONS.length");
   });
 
   it("reports stored key names in response", () => {

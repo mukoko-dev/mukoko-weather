@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
-import { getAllLocationsFromDb } from "@/lib/db";
+import { getAllLocationSlugsForSitemap, getAllCountryCodes, getAllProvinces, getFeaturedTagsFromDb } from "@/lib/db";
+import { TAGS } from "@/lib/seed-tags";
 import { logError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
@@ -89,27 +90,57 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
-  // Explore tag pages
-  const exploreTags = ["city", "farming", "mining", "tourism", "national-park", "education", "border", "travel"];
-  const explorePages: MetadataRoute.Sitemap = exploreTags.map((tag) => ({
-    url: `${baseUrl}/explore/${tag}`,
-    lastModified: now,
-    changeFrequency: "weekly" as const,
-    priority: 0.7,
-  }));
-
-  // Fetch all locations from MongoDB
+  // Fetch all data from MongoDB in parallel
   let locations: { slug: string; tags: string[] }[] = [];
+  let countryCodes: string[] = [];
+  let provinces: { slug: string; countryCode: string }[] = [];
+  let featuredTagSlugs: string[] = [];
   try {
-    locations = await getAllLocationsFromDb();
+    const [locs, codes, provs, tags] = await Promise.all([
+      getAllLocationSlugsForSitemap(),
+      getAllCountryCodes(),
+      getAllProvinces(),
+      getFeaturedTagsFromDb(),
+    ]);
+    locations = locs;
+    countryCodes = codes;
+    provinces = provs;
+    // Fall back to seed tags if DB returns nothing (e.g. cold start / test environment)
+    featuredTagSlugs = tags.length > 0 ? tags.map((t) => t.slug) : TAGS.filter((t) => t.featured).map((t) => t.slug);
   } catch (err) {
     logError({
       source: "mongodb",
       severity: "medium",
-      message: "Failed to load locations for sitemap",
+      message: "Failed to load locations/countries for sitemap",
       error: err,
     });
+    // Use seed tags as fallback so explore pages still appear in sitemap
+    featuredTagSlugs = TAGS.filter((t) => t.featured).map((t) => t.slug);
   }
+
+  // Explore tag pages — sourced from DB so new tags appear without deploys
+  const explorePages: MetadataRoute.Sitemap = [
+    {
+      url: `${baseUrl}/explore/country`,
+      lastModified: now,
+      changeFrequency: "weekly" as const,
+      priority: 0.8,
+    },
+    ...featuredTagSlugs.map((tag) => ({
+      url: `${baseUrl}/explore/${tag}`,
+      lastModified: now,
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
+    })),
+  ];
+
+  // Country pages
+  const countryPages: MetadataRoute.Sitemap = countryCodes.map((code) => ({
+    url: `${baseUrl}/explore/country/${code.toLowerCase()}`,
+    lastModified: now,
+    changeFrequency: "weekly" as const,
+    priority: 0.6,
+  }));
 
   // Harare, Bulawayo, and Victoria Falls are already in staticPages with boosted priority
   const boostedSlugs = new Set(["harare", "bulawayo", "victoria-falls"]);
@@ -144,5 +175,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ]);
 
-  return [...staticPages, ...explorePages, ...locationPages, ...subRoutePages];
+  // Province pages — /explore/country/{code}/{province-slug}
+  const provincePages: MetadataRoute.Sitemap = provinces.map((p) => ({
+    url: `${baseUrl}/explore/country/${p.countryCode.toLowerCase()}/${p.slug}`,
+    lastModified: now,
+    changeFrequency: "weekly" as const,
+    priority: 0.5,
+  }));
+
+  return [...staticPages, ...explorePages, ...countryPages, ...provincePages, ...locationPages, ...subRoutePages];
 }

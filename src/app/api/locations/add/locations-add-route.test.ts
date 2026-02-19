@@ -1,3 +1,8 @@
+/**
+ * Structural compliance tests for /api/locations/add — inspects source code
+ * patterns using readFileSync because Next.js API routes cannot be imported
+ * directly in Vitest's Node environment.
+ */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
@@ -21,8 +26,8 @@ describe("/api/locations/add route structure", () => {
     expect(source).toContain("reverseGeocode");
   });
 
-  it("validates coordinates are within supported regions", () => {
-    expect(source).toContain("isInSupportedRegion");
+  it("validates coordinates are within supported regions using async DB check", () => {
+    expect(source).toContain("isInSupportedRegionFromDb");
   });
 
   it("checks for duplicate locations within 20km", () => {
@@ -68,8 +73,8 @@ describe("/api/locations/add route structure", () => {
     expect(source).toContain("getElevation");
   });
 
-  it("filters search results to supported regions", () => {
-    expect(source).toContain("isInSupportedRegion");
+  it("filters search results to supported regions using async DB check", () => {
+    expect(source).toContain("isInSupportedRegionFromDb");
     expect(source).toContain("supported");
   });
 

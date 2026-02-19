@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
-import { ensureIndexes, syncLocations, syncActivities, setApiKey } from "@/lib/db";
+import { ensureIndexes, syncLocations, syncActivities, syncCountries, syncProvinces, syncRegions, syncTags, syncSeasons, setApiKey } from "@/lib/db";
 import { LOCATIONS } from "@/lib/locations";
 import { ACTIVITIES } from "@/lib/activities";
+import { COUNTRIES, PROVINCES } from "@/lib/countries";
+import { REGIONS } from "@/lib/seed-regions";
+import { TAGS } from "@/lib/seed-tags";
+import { SEASONS } from "@/lib/seed-seasons";
 
 /**
  * POST /api/db-init
@@ -37,8 +41,19 @@ export async function POST(request: Request) {
     }
 
     await ensureIndexes();
-    await syncLocations(LOCATIONS);
-    await syncActivities(ACTIVITIES);
+    // Countries must exist before provinces (provinces reference country codes).
+    await syncCountries(COUNTRIES);
+    // Remaining syncs are independent — run in parallel for speed.
+    await Promise.all([
+      syncProvinces(PROVINCES),
+      syncRegions(REGIONS),
+      syncTags(TAGS),
+      syncSeasons(SEASONS),
+    ]);
+    await Promise.all([
+      syncLocations(LOCATIONS),
+      syncActivities(ACTIVITIES),
+    ]);
 
     // Store any provided API keys
     const storedKeys: string[] = [];
@@ -52,8 +67,13 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       indexes: "created",
+      countries: COUNTRIES.length,
+      provinces: PROVINCES.length,
       locations: LOCATIONS.length,
       activities: ACTIVITIES.length,
+      regions: REGIONS.length,
+      tags: TAGS.length,
+      seasons: SEASONS.length,
       apiKeys: storedKeys.length > 0 ? storedKeys : "none provided",
     });
   } catch (err) {

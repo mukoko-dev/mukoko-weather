@@ -16,7 +16,7 @@ export default function TermsPage() {
   return (
     <>
       <Header />
-      <main id="main-content" className="mx-auto max-w-3xl px-4 py-10 sm:pl-6 md:pl-8">
+      <main id="main-content" className="mx-auto max-w-3xl px-4 py-10 pb-24 sm:pb-10 sm:px-6 md:px-8">
         <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">Terms of Service</h1>
         <p className="mt-2 text-sm text-text-tertiary">Last updated: February 2026</p>
 

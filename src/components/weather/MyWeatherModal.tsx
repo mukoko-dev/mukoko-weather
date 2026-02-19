@@ -2,12 +2,12 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
 import { useAppStore, type ThemePreference } from "@/lib/store";
 import { MapPinIcon, SearchIcon, SunIcon, MoonIcon } from "@/lib/weather-icons";
 import { ActivityIcon } from "@/lib/weather-icons";
 import {
   LOCATIONS,
-  TAG_LABELS,
   type LocationTag,
   type ZimbabweLocation,
 } from "@/lib/locations";
@@ -20,6 +20,7 @@ import {
   type ActivityCategory,
   type ActivityCategoryInfo,
 } from "@/lib/activities";
+import { TAGS } from "@/lib/seed-tags";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,11 @@ const POPULAR_SLUGS = [
 const TAG_ORDER: LocationTag[] = [
   "city", "farming", "mining", "tourism", "national-park", "education", "border", "travel",
 ];
+
+// Derive tag display labels from the seed-tags source of truth so they stay in sync
+const TAG_LABELS = Object.fromEntries(
+  TAGS.map((t) => [t.slug, t.label]),
+) as Record<LocationTag, string>;
 
 function MonitorIcon({ size = 20 }: { size?: number }) {
   return (
@@ -63,27 +69,30 @@ export function MyWeatherModal() {
   const [pendingSlug, setPendingSlug] = useState(currentSlug);
   const [activeTab, setActiveTab] = useState("location");
 
-  // Initialise with static seed data so the UI is never blank, then
-  // upgrade to the MongoDB data when the API responds.
+  // Seed with static arrays so the modal is immediately usable even if API calls fail.
+  // Fetch from MongoDB on mount to upgrade to live data (includes community locations).
+  // ACTIVITY_CATEGORIES is kept as compile-time constant (Tailwind JIT safe).
   const [allLocations, setAllLocations] = useState<ZimbabweLocation[]>(LOCATIONS);
   const [allActivities, setAllActivities] = useState<Activity[]>(ACTIVITIES);
   const [activityCategories, setActivityCategories] = useState<ActivityCategoryInfo[]>(ACTIVITY_CATEGORIES);
+  const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch latest data from MongoDB — silently replace static seed data.
-    // If any fetch fails the static fallback is already rendered.
-    fetch("/api/locations")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (data?.locations?.length) setAllLocations(data.locations); })
-      .catch(() => {});
-    fetch("/api/activities")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (data?.activities?.length) setAllActivities(data.activities); })
-      .catch(() => {});
-    fetch("/api/activities?mode=categories")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (data?.categories?.length) setActivityCategories(data.categories); })
-      .catch(() => {});
+    // Upgrade seed data with live MongoDB data (includes community-added locations/activities).
+    Promise.all([
+      fetch("/api/locations")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => { if (data?.locations?.length) setAllLocations(data.locations); })
+        .catch(() => {}),
+      fetch("/api/activities")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => { if (data?.activities?.length) setAllActivities(data.activities); })
+        .catch(() => {}),
+      fetch("/api/activities?mode=categories")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => { if (data?.categories?.length) setActivityCategories(data.categories); })
+        .catch(() => {}),
+    ]).finally(() => setDataLoading(false));
   }, []);
 
   const handleDone = () => {
@@ -148,6 +157,7 @@ export function MyWeatherModal() {
               onSelectLocation={handleSelectLocation}
               onGeoLocationResolved={handleGeoLocationResolved}
               allLocations={allLocations}
+              loading={dataLoading}
             />
           </TabsContent>
 
@@ -174,11 +184,13 @@ function LocationTab({
   onSelectLocation,
   onGeoLocationResolved,
   allLocations,
+  loading,
 }: {
   pendingSlug: string;
   onSelectLocation: (slug: string) => void;
   onGeoLocationResolved: (slug: string) => void;
   allLocations: ZimbabweLocation[];
+  loading: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [activeTag, setActiveTag] = useState<LocationTag | null>(null);
@@ -299,9 +311,16 @@ function LocationTab({
 
       {/* Location list — no nested scroll, uses tab content scroll */}
       <ul role="listbox" aria-label="Available locations" className="px-2 pb-2">
-        {displayedLocations.length === 0 && (
+        {loading && allLocations.length === 0 && (
+          Array.from({ length: 5 }).map((_, i) => (
+            <li key={i} className="px-3 py-2" aria-hidden="true">
+              <div className="h-10 animate-pulse rounded-[var(--radius-input)] bg-surface-base" />
+            </li>
+          ))
+        )}
+        {!loading && displayedLocations.length === 0 && (
           <li className="px-3 py-4 text-center text-sm text-text-tertiary">
-            No locations found for &quot;{query}&quot;
+            {query ? `No locations found for "${query}"` : "No locations available"}
           </li>
         )}
         {displayedLocations.map((loc) => (
@@ -335,11 +354,50 @@ function LocationTab({
         ))}
       </ul>
 
-      {/* Location count */}
-      <div className="px-4 pb-3">
-        <p className="text-xs text-text-tertiary">
-          {allLocations.length} locations across Zimbabwe
-        </p>
+      {/* Community location stat — prominent to inspire contributions */}
+      <LocationCountCard allLocations={allLocations} />
+    </div>
+  );
+}
+
+// ── Location Count Card ─────────────────────────────────────────────────────
+
+function LocationCountCard({ allLocations }: { allLocations: ZimbabweLocation[] }) {
+  const closeMyWeather = useAppStore((s) => s.closeMyWeather);
+  const countryGroups = useMemo(() => {
+    const groups: Record<string, number> = {};
+    for (const loc of allLocations) {
+      const code = (loc.country ?? "ZW").toUpperCase();
+      groups[code] = (groups[code] ?? 0) + 1;
+    }
+    return groups;
+  }, [allLocations]);
+
+  const summary = useMemo(() => {
+    const entries = Object.entries(countryGroups).sort((a, b) => b[1] - a[1]);
+    if (entries.length === 0) return `${allLocations.length} locations`;
+    if (entries.length === 1) {
+      const [code, count] = entries[0];
+      return `${count} locations in ${code}`;
+    }
+    return entries.map(([code, count]) => `${code} (${count})`).join(" · ");
+  }, [countryGroups, allLocations.length]);
+
+  return (
+    <div className="mx-4 mb-3">
+      <div className="flex items-center justify-between gap-2 rounded-[var(--radius-input)] border border-primary/10 bg-primary/5 px-3 py-2">
+        <div className="flex items-center gap-2">
+          <MapPinIcon size={14} className="shrink-0 text-primary" aria-hidden="true" />
+          <span className="text-sm font-medium text-text-primary">{summary}</span>
+        </div>
+        <Link
+          href="/explore"
+          prefetch={false}
+          onClick={closeMyWeather}
+          className="shrink-0 text-xs text-primary underline-offset-2 hover:underline"
+        >
+          Explore all
+        </Link>
       </div>
     </div>
   );
@@ -388,7 +446,7 @@ function ActivitiesTab({
       </div>
 
       {/* Category filter pills — 44px touch targets */}
-      <div className="flex gap-2 overflow-x-auto px-4 pt-1 pb-2 scrollbar-hide" role="group" aria-label="Activity categories">
+      <div className="flex gap-2 overflow-x-auto px-4 pt-1 pb-2 scrollbar-hide [overscroll-behavior-x:contain]" role="group" aria-label="Activity categories">
         <CategoryTab
           label="All"
           categoryId="all"

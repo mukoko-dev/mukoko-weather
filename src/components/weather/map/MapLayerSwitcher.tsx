@@ -13,7 +13,7 @@ export function MapLayerSwitcher({
 }: MapLayerSwitcherProps) {
   return (
     <div
-      className="flex gap-2 overflow-x-auto px-4 py-2 scrollbar-hide"
+      className="flex gap-2 overflow-x-auto px-4 py-2 scrollbar-hide [overscroll-behavior-x:contain]"
       role="radiogroup"
       aria-label="Map layer selection"
     >

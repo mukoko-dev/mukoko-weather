@@ -1,18 +1,56 @@
-import { WeatherIcon, WindIcon, DropletIcon, ThermometerIcon, EyeIcon, GaugeIcon } from "@/lib/weather-icons";
+"use client";
+
+import { useState, useEffect } from "react";
+import { WeatherIcon, WindIcon, DropletIcon, ThermometerIcon, EyeIcon, GaugeIcon, ShareIcon } from "@/lib/weather-icons";
 import { weatherCodeToInfo, windDirection, uvLevel, type CurrentWeather, type DailyWeather } from "@/lib/weather";
+
+const BASE_URL = "https://weather.mukoko.com";
 
 interface Props {
   current: CurrentWeather;
   locationName: string;
   daily?: DailyWeather;
+  slug?: string;
 }
 
-export function CurrentConditions({ current, locationName, daily }: Props) {
+export function CurrentConditions({ current, locationName, daily, slug }: Props) {
   const info = weatherCodeToInfo(current.weather_code);
   const uv = uvLevel(current.uv_index);
   const wind = windDirection(current.wind_direction_10m);
   const todayHigh = daily ? Math.round(daily.temperature_2m_max[0]) : null;
   const todayLow = daily ? Math.round(daily.temperature_2m_min[0]) : null;
+  const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  useEffect(() => {
+    if (!copyFailed) return;
+    const t = setTimeout(() => setCopyFailed(false), 2000);
+    return () => clearTimeout(t);
+  }, [copyFailed]);
+
+  function handleShare() {
+    const url = slug ? `${BASE_URL}/${slug}` : window.location.href;
+    const shareData = {
+      title: `${locationName} Weather`,
+      text: `Check the weather in ${locationName} on mukoko weather`,
+      url,
+    };
+    if (typeof navigator !== "undefined" && navigator.share) {
+      navigator.share(shareData).catch(() => undefined);
+    } else {
+      navigator.clipboard.writeText(url).then(() => {
+        setCopied(true);
+      }).catch(() => {
+        setCopyFailed(true);
+      });
+    }
+  }
 
   return (
     <section aria-labelledby="current-conditions-heading">
@@ -40,11 +78,24 @@ export function CurrentConditions({ current, locationName, daily }: Props) {
               )}
             </p>
           </div>
-          <WeatherIcon
-            icon={current.is_day ? info.icon : "moon"}
-            size={80}
-            className="text-primary"
-          />
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <WeatherIcon
+              icon={current.is_day ? info.icon : "moon"}
+              size={80}
+              className="text-primary"
+            />
+            <button
+              type="button"
+              onClick={handleShare}
+              aria-label={`Share weather for ${locationName}`}
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-[var(--radius-input)] bg-surface-base px-3 text-sm text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
+            >
+              <ShareIcon size={16} aria-hidden="true" />
+              <span className="sr-only sm:not-sr-only">
+                {copied ? "Copied!" : copyFailed ? "Copy failed" : "Share"}
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* Quick stats grid */}

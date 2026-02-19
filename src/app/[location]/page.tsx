@@ -1,8 +1,14 @@
+import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { checkFrostRisk, createFallbackWeather, weatherCodeToInfo } from "@/lib/weather";
-import { getWeatherForLocation, getLocationFromDb } from "@/lib/db";
+import { getWeatherForLocation, getLocationFromDb, getCountryByCode, getSeasonForDate } from "@/lib/db";
 import { WeatherDashboard } from "./WeatherDashboard";
+
+// Deduplicate DB calls between generateMetadata and the page component.
+// Both are called for the same request; cache() ensures a single DB round-trip.
+const loadLocation = cache((slug: string) => getLocationFromDb(slug).catch(() => null));
+const loadCountry = cache((code: string) => getCountryByCode(code).catch(() => null));
 
 export const dynamic = "force-dynamic";
 
@@ -14,11 +20,15 @@ export async function generateMetadata({
   params: Promise<{ location: string }>;
 }): Promise<Metadata> {
   const { location: slug } = await params;
-  const loc = await getLocationFromDb(slug);
+  const loc = await loadLocation(slug);
   if (!loc) return { title: "Location not found" };
 
+  const countryCode = loc.country ?? "ZW";
+  const country = await loadCountry(countryCode);
+  const countryName = country?.name ?? countryCode;
+
   const title = `${loc.name} Weather Today — Forecast & Conditions`;
-  const description = `Current weather conditions, 7-day forecast, and hourly predictions for ${loc.name}, ${loc.province}, Zimbabwe. AI-powered weather intelligence with frost alerts, farming insights, and accurate temperature data from mukoko weather.`;
+  const description = `Current weather conditions, 7-day forecast, and hourly predictions for ${loc.name}, ${loc.province}, ${countryName}. AI-powered weather intelligence with frost alerts, farming insights, and accurate temperature data from mukoko weather.`;
 
   return {
     title,
@@ -28,11 +38,11 @@ export async function generateMetadata({
       `${loc.name} weather today`,
       `${loc.name} forecast`,
       `${loc.name} temperature`,
-      `weather in ${loc.name} Zimbabwe`,
+      `weather in ${loc.name} ${countryName}`,
       `${loc.province} weather`,
       `${loc.name} 7 day forecast`,
       `${loc.name} rain forecast`,
-      "Zimbabwe weather",
+      `${countryName} weather`,
       "mukoko weather",
     ],
     alternates: {
@@ -40,7 +50,7 @@ export async function generateMetadata({
     },
     openGraph: {
       title: `${loc.name} Weather | mukoko weather`,
-      description: `Live weather forecast for ${loc.name}, ${loc.province}, Zimbabwe. Current conditions, 7-day outlook, and AI-powered insights.`,
+      description: `Live weather forecast for ${loc.name}, ${loc.province}, ${countryName}. Current conditions, 7-day outlook, and AI-powered insights.`,
       url: `${BASE_URL}/${loc.slug}`,
       type: "website",
       locale: "en_ZW",
@@ -49,7 +59,7 @@ export async function generateMetadata({
     twitter: {
       card: "summary_large_image",
       title: `${loc.name} Weather | mukoko weather`,
-      description: `Live weather for ${loc.name}, Zimbabwe — current conditions, 7-day forecast, and AI insights.`,
+      description: `Live weather for ${loc.name}, ${countryName} — current conditions, 7-day forecast, and AI insights.`,
     },
   };
 }
@@ -60,7 +70,7 @@ export default async function LocationPage({
   params: Promise<{ location: string }>;
 }) {
   const { location: slug } = await params;
-  const location = await getLocationFromDb(slug);
+  const location = await loadLocation(slug);
   if (!location) notFound();
 
   // Fetch weather — double-caught so the page shell ALWAYS renders.
@@ -86,6 +96,12 @@ export default async function LocationPage({
   const usingFallback = weatherSource === "fallback";
   const frostAlert = usingFallback ? null : checkFrostRisk(weather.hourly);
   const conditionInfo = weatherCodeToInfo(weather.current.weather_code);
+  const countryCode = (location.country ?? "ZW").toUpperCase();
+  const [countryDoc, season] = await Promise.all([
+    loadCountry(countryCode),
+    getSeasonForDate(new Date(), location.country ?? "ZW"),
+  ]);
+  const countryName = countryDoc?.name ?? countryCode;
   const now = new Date().toISOString();
 
   // ── Schema.org structured data (SEO — server only) ──────────────────────
@@ -94,7 +110,7 @@ export default async function LocationPage({
     "@type": "WebPage",
     "@id": `${BASE_URL}/${location.slug}`,
     name: `${location.name} Weather Forecast`,
-    description: `Current weather and 7-day forecast for ${location.name}, ${location.province}, Zimbabwe`,
+    description: `Current weather and 7-day forecast for ${location.name}, ${location.province}, ${countryName}`,
     url: `${BASE_URL}/${location.slug}`,
     datePublished: now,
     dateModified: now,
@@ -119,12 +135,12 @@ export default async function LocationPage({
       address: {
         "@type": "PostalAddress",
         addressRegion: location.province,
-        addressCountry: "ZW",
+        addressCountry: countryCode,
       },
       containedInPlace: {
         "@type": "Country",
-        name: "Zimbabwe",
-        identifier: "ZW",
+        name: countryName,
+        identifier: countryCode,
       },
     },
     about: {
@@ -171,7 +187,7 @@ export default async function LocationPage({
       },
       {
         "@type": "Question",
-        name: `What is the 7-day forecast for ${location.name}, Zimbabwe?`,
+        name: `What is the 7-day forecast for ${location.name}, ${countryName}?`,
         acceptedAnswer: {
           "@type": "Answer",
           text: `The 7-day forecast for ${location.name} shows highs of ${Math.round(Math.max(...weather.daily.temperature_2m_max))}\u00b0C and lows of ${Math.round(Math.min(...weather.daily.temperature_2m_min))}\u00b0C. Check mukoko weather for detailed daily and hourly forecasts.`,
@@ -182,7 +198,7 @@ export default async function LocationPage({
         name: `What province is ${location.name} in?`,
         acceptedAnswer: {
           "@type": "Answer",
-          text: `${location.name} is located in ${location.province} province, Zimbabwe, at an elevation of ${location.elevation} metres above sea level.`,
+          text: `${location.name} is located in ${location.province} province, ${countryName}, at an elevation of ${location.elevation} metres above sea level.`,
         },
       },
     ],
@@ -204,6 +220,8 @@ export default async function LocationPage({
         location={location}
         usingFallback={usingFallback}
         frostAlert={frostAlert}
+        season={season}
+        countryName={countryName}
       />
     </>
   );

@@ -1,19 +1,22 @@
 import { describe, it, expect } from "vitest";
 import {
   LOCATIONS,
-  ZIMBABWE_BOUNDS,
-  SUPPORTED_REGIONS,
-  isInSupportedRegion,
-  getLocationBySlug,
-  getLocationsByTag,
-  searchLocations,
-  findNearestLocation,
+  ZW_LOCATIONS,
 } from "./locations";
+import { AFRICA_LOCATIONS } from "./locations-africa";
+import { ZIMBABWE_BOUNDS } from "./seed-regions";
 import type { WeatherLocation, ZimbabweLocation } from "./locations";
 
 describe("LOCATIONS database", () => {
   it("contains at least 90 locations", () => {
     expect(LOCATIONS.length).toBeGreaterThanOrEqual(90);
+  });
+
+  it("contains both Zimbabwe and non-Zimbabwe locations", () => {
+    const zwCount = LOCATIONS.filter((l) => !l.country || l.country === "ZW").length;
+    const nonZwCount = LOCATIONS.filter((l) => l.country && l.country !== "ZW").length;
+    expect(zwCount).toBeGreaterThanOrEqual(90);
+    expect(nonZwCount).toBeGreaterThan(0);
   });
 
   it("every location has required fields", () => {
@@ -41,8 +44,8 @@ describe("LOCATIONS database", () => {
     }
   });
 
-  it("all coordinates are within Zimbabwe bounds (with padding)", () => {
-    for (const loc of LOCATIONS) {
+  it("all Zimbabwe coordinates are within Zimbabwe bounds (with padding)", () => {
+    for (const loc of ZW_LOCATIONS) {
       expect(loc.lat).toBeGreaterThanOrEqual(ZIMBABWE_BOUNDS.south - 1);
       expect(loc.lat).toBeLessThanOrEqual(ZIMBABWE_BOUNDS.north + 1);
       expect(loc.lon).toBeGreaterThanOrEqual(ZIMBABWE_BOUNDS.west - 1);
@@ -50,9 +53,9 @@ describe("LOCATIONS database", () => {
     }
   });
 
-  it("all elevations are positive", () => {
+  it("all elevations are non-negative", () => {
     for (const loc of LOCATIONS) {
-      expect(loc.elevation).toBeGreaterThan(0);
+      expect(loc.elevation).toBeGreaterThanOrEqual(0);
     }
   });
 
@@ -64,205 +67,50 @@ describe("LOCATIONS database", () => {
   });
 });
 
-describe("getLocationBySlug", () => {
-  it("returns Harare for 'harare'", () => {
-    const loc = getLocationBySlug("harare");
-    expect(loc).toBeDefined();
-    expect(loc!.name).toBe("Harare");
-    expect(loc!.province).toBe("Harare");
-  });
-
-  it("returns Victoria Falls for 'victoria-falls'", () => {
-    const loc = getLocationBySlug("victoria-falls");
-    expect(loc).toBeDefined();
-    expect(loc!.name).toBe("Victoria Falls");
-  });
-
-  it("returns undefined for unknown slugs", () => {
-    expect(getLocationBySlug("nonexistent")).toBeUndefined();
-    expect(getLocationBySlug("")).toBeUndefined();
-    expect(getLocationBySlug("HARARE")).toBeUndefined(); // case-sensitive
-  });
-});
-
-describe("getLocationsByTag", () => {
-  it("returns cities for 'city' tag", () => {
-    const cities = getLocationsByTag("city");
-    expect(cities.length).toBeGreaterThan(10);
-    for (const city of cities) {
-      expect(city.tags).toContain("city");
+describe("AFRICA_LOCATIONS data integrity", () => {
+  it("every entry has a non-ZW country code", () => {
+    for (const loc of AFRICA_LOCATIONS) {
+      expect(loc.country).toBeDefined();
+      expect(loc.country).not.toBe("ZW");
     }
   });
 
-  it("returns national parks for 'national-park' tag", () => {
-    const parks = getLocationsByTag("national-park");
-    expect(parks.length).toBeGreaterThan(0);
-    for (const park of parks) {
-      expect(park.tags).toContain("national-park");
+  it("every slug is URL-safe and ends with the country code suffix", () => {
+    for (const loc of AFRICA_LOCATIONS) {
+      expect(loc.slug).toMatch(/^[a-z0-9-]+$/);
+      // Slug should end with -XX where XX is the lowercase country code
+      expect(loc.slug).toMatch(new RegExp(`-${loc.country!.toLowerCase()}$`));
     }
   });
 
-  it("returns farming regions for 'farming' tag", () => {
-    const farms = getLocationsByTag("farming");
-    expect(farms.length).toBeGreaterThan(10);
-  });
-
-  it("returns mining areas for 'mining' tag", () => {
-    const mines = getLocationsByTag("mining");
-    expect(mines.length).toBeGreaterThan(5);
-  });
-});
-
-describe("searchLocations", () => {
-  it("finds Harare by name", () => {
-    const results = searchLocations("Harare");
-    expect(results.length).toBeGreaterThan(0);
-    expect(results[0].slug).toBe("harare");
-  });
-
-  it("finds locations by prefix (case-insensitive)", () => {
-    const results = searchLocations("bul");
-    expect(results.length).toBeGreaterThan(0);
-    expect(results[0].slug).toBe("bulawayo");
-  });
-
-  it("finds locations by province substring", () => {
-    const results = searchLocations("Manicaland");
-    expect(results.length).toBeGreaterThan(0);
-    for (const loc of results) {
-      expect(
-        loc.name.toLowerCase().includes("manicaland") ||
-        loc.province.toLowerCase().includes("manicaland")
-      ).toBe(true);
+  it("every entry has a provinceSlug that ends with the lowercase country code", () => {
+    for (const loc of AFRICA_LOCATIONS) {
+      if (loc.provinceSlug) {
+        expect(loc.provinceSlug).toMatch(
+          new RegExp(`-${loc.country!.toLowerCase()}$`),
+        );
+      }
     }
   });
 
-  it("returns empty array for empty query", () => {
-    expect(searchLocations("")).toEqual([]);
-    expect(searchLocations("   ")).toEqual([]);
-  });
-
-  it("returns empty array for gibberish", () => {
-    expect(searchLocations("xyzqwerty")).toEqual([]);
-  });
-
-  it("prefix matches come before substring matches", () => {
-    const results = searchLocations("chi");
-    // "Chinhoyi", "Chipinge", "Chiredzi" etc. should come before "Mashingo Junction"
-    const firstNames = results.slice(0, 3).map((r) => r.name.toLowerCase());
-    for (const name of firstNames) {
-      expect(name.startsWith("chi")).toBe(true);
-    }
-  });
-});
-
-describe("findNearestLocation", () => {
-  it("finds Harare for Harare coordinates", () => {
-    const nearest = findNearestLocation(-17.83, 31.05);
-    expect(nearest).toBeDefined();
-    expect(nearest!.slug).toBe("harare");
-  });
-
-  it("finds Bulawayo for Bulawayo coordinates", () => {
-    const nearest = findNearestLocation(-20.15, 28.58);
-    expect(nearest).toBeDefined();
-    expect(nearest!.slug).toBe("bulawayo");
-  });
-
-  it("returns null for coordinates far outside all supported regions", () => {
-    // London (outside Africa and ASEAN)
-    expect(findNearestLocation(51.5, -0.12)).toBeNull();
-    // São Paulo (outside all regions)
-    expect(findNearestLocation(-23.55, -46.63)).toBeNull();
-  });
-
-  it("returns a location for coordinates just inside the border", () => {
-    // Near Beitbridge (southern border)
-    const nearest = findNearestLocation(-22.2, 30.0);
-    expect(nearest).toBeDefined();
-    expect(nearest!.slug).toBe("beitbridge");
-  });
-
-  it("returns nearest for coordinates in supported regions (even if far from Zimbabwe)", () => {
-    // Coordinates within Africa-dev region but far south — nearest is still a ZW location
-    // because only ZW locations are in the static LOCATIONS array
-    const nearest = findNearestLocation(-25.0, 30.0);
-    // This is within Africa-dev region but far from any seed location
-    expect(nearest).toBeDefined();
-  });
-});
-
-describe("ZIMBABWE_BOUNDS", () => {
-  it("has valid bounds", () => {
-    expect(ZIMBABWE_BOUNDS.north).toBeGreaterThan(ZIMBABWE_BOUNDS.south);
-    expect(ZIMBABWE_BOUNDS.east).toBeGreaterThan(ZIMBABWE_BOUNDS.west);
-  });
-
-  it("center is within bounds", () => {
-    expect(ZIMBABWE_BOUNDS.center.lat).toBeGreaterThan(ZIMBABWE_BOUNDS.south);
-    expect(ZIMBABWE_BOUNDS.center.lat).toBeLessThan(ZIMBABWE_BOUNDS.north);
-    expect(ZIMBABWE_BOUNDS.center.lon).toBeGreaterThan(ZIMBABWE_BOUNDS.west);
-    expect(ZIMBABWE_BOUNDS.center.lon).toBeLessThan(ZIMBABWE_BOUNDS.east);
-  });
-
-  it("is the first entry in SUPPORTED_REGIONS", () => {
-    expect(ZIMBABWE_BOUNDS).toBe(SUPPORTED_REGIONS[0]);
-  });
-});
-
-describe("SUPPORTED_REGIONS", () => {
-  it("contains at least 3 regions", () => {
-    expect(SUPPORTED_REGIONS.length).toBeGreaterThanOrEqual(3);
-  });
-
-  it("every region has required fields", () => {
-    for (const region of SUPPORTED_REGIONS) {
-      expect(region.id).toBeTruthy();
-      expect(region.name).toBeTruthy();
-      expect(region.north).toBeGreaterThan(region.south);
-      expect(region.east).toBeGreaterThan(region.west);
-      expect(region.center.lat).toBeGreaterThanOrEqual(region.south);
-      expect(region.center.lat).toBeLessThanOrEqual(region.north);
-      expect(region.center.lon).toBeGreaterThanOrEqual(region.west);
-      expect(region.center.lon).toBeLessThanOrEqual(region.east);
+  it("coordinates are within plausible global bounds", () => {
+    for (const loc of AFRICA_LOCATIONS) {
+      expect(loc.lat).toBeGreaterThanOrEqual(-90);
+      expect(loc.lat).toBeLessThanOrEqual(90);
+      expect(loc.lon).toBeGreaterThanOrEqual(-180);
+      expect(loc.lon).toBeLessThanOrEqual(180);
     }
   });
 
-  it("has unique IDs", () => {
-    const ids = SUPPORTED_REGIONS.map((r) => r.id);
-    expect(new Set(ids).size).toBe(ids.length);
+  it("all slugs in AFRICA_LOCATIONS are unique", () => {
+    const slugs = AFRICA_LOCATIONS.map((l) => l.slug);
+    expect(new Set(slugs).size).toBe(slugs.length);
   });
 
-  it("includes Zimbabwe, ASEAN, and Africa", () => {
-    const ids = SUPPORTED_REGIONS.map((r) => r.id);
-    expect(ids).toContain("zw");
-    expect(ids).toContain("asean");
-    expect(ids).toContain("africa-dev");
-  });
-});
-
-describe("isInSupportedRegion", () => {
-  it("returns true for Zimbabwe coordinates", () => {
-    expect(isInSupportedRegion(-17.83, 31.05)).toBe(true); // Harare
-    expect(isInSupportedRegion(-20.15, 28.58)).toBe(true); // Bulawayo
-  });
-
-  it("returns true for ASEAN coordinates", () => {
-    expect(isInSupportedRegion(13.75, 100.5)).toBe(true); // Bangkok
-    expect(isInSupportedRegion(1.35, 103.82)).toBe(true); // Singapore
-    expect(isInSupportedRegion(14.6, 120.98)).toBe(true); // Manila
-  });
-
-  it("returns true for African developing country coordinates", () => {
-    expect(isInSupportedRegion(-1.29, 36.82)).toBe(true); // Nairobi
-    expect(isInSupportedRegion(6.52, 3.38)).toBe(true); // Lagos
-    expect(isInSupportedRegion(-33.92, 18.42)).toBe(true); // Cape Town
-  });
-
-  it("returns false for unsupported regions", () => {
-    expect(isInSupportedRegion(51.5, -0.12)).toBe(false); // London
-    expect(isInSupportedRegion(40.71, -74.01)).toBe(false); // New York
-    expect(isInSupportedRegion(-23.55, -46.63)).toBe(false); // São Paulo
+  it("source is set to 'seed' for all entries", () => {
+    for (const loc of AFRICA_LOCATIONS) {
+      expect(loc.source).toBe("seed");
+    }
   });
 });
 

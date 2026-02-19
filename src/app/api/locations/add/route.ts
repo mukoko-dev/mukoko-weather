@@ -12,10 +12,10 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { reverseGeocode, forwardGeocode, getElevation, generateSlug, inferTags } from "@/lib/geocoding";
-import { isInSupportedRegion } from "@/lib/locations";
-import { createLocation, findDuplicateLocation, getLocationFromDb } from "@/lib/db";
+import { createLocation, findDuplicateLocation, getLocationFromDb, upsertCountry, upsertProvince, isInSupportedRegionFromDb, getCountryByCode } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logError } from "@/lib/observability";
+import { generateProvinceSlug } from "@/lib/countries";
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
       const results = await forwardGeocode(body.query.trim(), { count: 5 });
 
       // Filter to supported regions only
-      const supported = results.filter((r) => isInSupportedRegion(r.lat, r.lon));
+      const regionChecks = await Promise.all(results.map((r) => isInSupportedRegionFromDb(r.lat, r.lon)));
+      const supported = results.filter((_, i) => regionChecks[i]);
 
       return NextResponse.json({
         mode: "candidates",
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check supported region
-    if (!isInSupportedRegion(lat, lon)) {
+    if (!(await isInSupportedRegionFromDb(lat, lon))) {
       return NextResponse.json(
         { error: "Coordinates are outside supported regions." },
         { status: 400 },
@@ -115,17 +116,29 @@ export async function POST(request: NextRequest) {
       slug = `${slug}-${suffix}`;
     }
 
+    // Upsert country and province so hierarchy pages show new locations immediately.
+    // Look up the region from the seed data first so $setOnInsert preserves it
+    // if this country was already seeded (e.g. "Southern Africa" for ZA).
+    const province = geocoded.admin1 || geocoded.countryName;
+    const provinceSlug = generateProvinceSlug(province, geocoded.country);
+    const dbCountry = await getCountryByCode(geocoded.country).catch(() => null);
+    await Promise.all([
+      upsertCountry({ code: geocoded.country, name: geocoded.countryName, region: dbCountry?.region ?? "Unknown", supported: true }),
+      upsertProvince({ slug: provinceSlug, name: province, countryCode: geocoded.country }),
+    ]);
+
     // Create location
     const newLocation = await createLocation({
       slug,
       name: geocoded.name,
-      province: geocoded.admin1 || geocoded.countryName,
+      province,
       lat: geocoded.lat,
       lon: geocoded.lon,
       elevation: Math.round(elevation),
       tags: await inferTags(geocoded),
       country: geocoded.country,
       source: "community",
+      provinceSlug,
     });
 
     return NextResponse.json({

@@ -3,44 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-import { getLocationsByTagFromDb } from "@/lib/db";
+import { getLocationsByTagFromDb, getTagBySlug } from "@/lib/db";
 import { logError } from "@/lib/observability";
 import type { LocationDoc } from "@/lib/db";
 
-const VALID_TAGS: Record<string, { label: string; description: string }> = {
-  city: {
-    label: "Cities & Towns",
-    description: "Weather for major urban centres across Zimbabwe",
-  },
-  farming: {
-    label: "Farming Regions",
-    description: "Weather for agricultural areas — critical for crop planning, irrigation, and harvest timing",
-  },
-  mining: {
-    label: "Mining Areas",
-    description: "Weather for mining operations — heat stress, dust conditions, and access road safety",
-  },
-  tourism: {
-    label: "Tourism & Heritage Sites",
-    description: "Weather for national parks, UNESCO sites, and natural wonders",
-  },
-  "national-park": {
-    label: "National Parks",
-    description: "Weather for protected wildlife and wilderness areas — safari planning and trail conditions",
-  },
-  education: {
-    label: "Education Centres",
-    description: "Weather for university towns and mission school areas",
-  },
-  border: {
-    label: "Border Posts",
-    description: "Weather at international border crossings — important for cross-border travel planning",
-  },
-  travel: {
-    label: "Travel Corridors",
-    description: "Weather along key transit routes and stopover points across Zimbabwe",
-  },
-};
+// Cache for 1 hour; regenerates in the background after expiry (ISR).
+export const revalidate = 3600;
 
 interface Props {
   params: Promise<{ tag: string }>;
@@ -48,7 +16,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { tag } = await params;
-  const meta = VALID_TAGS[tag];
+  const meta = await getTagBySlug(tag).catch(() => null);
 
   if (!meta) {
     return { title: "Not Found | mukoko weather" };
@@ -66,7 +34,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ExploreTagPage({ params }: Props) {
   const { tag } = await params;
-  const meta = VALID_TAGS[tag];
+  const meta = await getTagBySlug(tag).catch(() => null);
 
   if (!meta) {
     notFound();
@@ -103,7 +71,7 @@ export default async function ExploreTagPage({ params }: Props) {
     <>
       <Header />
 
-      <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:pl-6 md:pl-8">
+      <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8">
         <ol className="flex items-center gap-1 text-xs text-text-tertiary">
           <li>
             <Link href="/" className="hover:text-text-secondary transition-colors">
@@ -123,7 +91,7 @@ export default async function ExploreTagPage({ params }: Props) {
         </ol>
       </nav>
 
-      <main id="main-content" className="mx-auto max-w-5xl px-4 py-6 sm:pl-6 md:pl-8">
+      <main id="main-content" className="mx-auto max-w-5xl overflow-x-hidden px-4 py-6 pb-24 sm:px-6 sm:pb-6 md:px-8">
         <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
           {meta.label}
         </h1>
@@ -151,20 +119,20 @@ export default async function ExploreTagPage({ params }: Props) {
                   <Link
                     key={loc.slug}
                     href={`/${loc.slug}`}
-                    className="group flex items-center justify-between rounded-[var(--radius-card)] bg-surface-card px-4 py-3 shadow-sm transition-all hover:shadow-md hover:bg-surface-card/80 focus-visible:outline-2 focus-visible:outline-primary"
+                    className="group flex min-w-0 items-center justify-between rounded-[var(--radius-card)] bg-surface-card px-4 py-3 shadow-sm transition-all hover:bg-surface-card/80 hover:shadow-md focus-visible:outline-2 focus-visible:outline-primary"
                   >
-                    <div className="min-w-0">
-                      <span className="block font-medium text-text-primary group-hover:text-primary transition-colors truncate">
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate font-medium text-text-primary transition-colors group-hover:text-primary">
                         {loc.name}
                       </span>
                       <span className="text-xs text-text-tertiary">
                         {loc.elevation}m elevation
                       </span>
                     </div>
-                    <div className="flex flex-wrap gap-1 ml-2">
+                    <div className="ml-2 flex shrink-0 flex-wrap gap-1">
                       {loc.tags
                         .filter((t) => t !== tag)
-                        .slice(0, 2)
+                        .slice(0, 1)
                         .map((t) => (
                           <span
                             key={t}

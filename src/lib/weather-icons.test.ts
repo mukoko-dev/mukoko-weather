@@ -112,6 +112,7 @@ describe("Icon components", () => {
     "CarIcon", "BusIcon", "BinocularsIcon", "BirdIcon", "RunningIcon",
     "BicycleIcon", "MountainIcon", "FootballIcon", "SwimmingIcon", "GolfIcon",
     "CricketIcon", "FootprintsIcon", "GrillIcon", "TentIcon", "CameraIcon",
+    "ShareIcon",
   ];
 
   it("exports all icon components", () => {

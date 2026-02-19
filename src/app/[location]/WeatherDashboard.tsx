@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { CurrentConditions } from "@/components/weather/CurrentConditions";
@@ -10,10 +10,11 @@ import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { SectionSkeleton } from "@/components/weather/SectionSkeleton";
 import { FrostAlertBanner } from "./FrostAlertBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
-import { getZimbabweSeason } from "@/lib/weather";
 import { useAppStore } from "@/lib/store";
-import type { WeatherData, FrostAlert } from "@/lib/weather";
+import type { WeatherData, FrostAlert, ZimbabweSeason } from "@/lib/weather";
 import type { ZimbabweLocation } from "@/lib/locations";
+import type { Activity } from "@/lib/activities";
+import { ACTIVITIES } from "@/lib/activities";
 
 // ── Code-split heavy components ─────────────────────────────────────────────
 // These use React.lazy() so their JS chunks (Chart.js, ReactMarkdown, etc.)
@@ -34,6 +35,9 @@ interface WeatherDashboardProps {
   location: ZimbabweLocation;
   usingFallback: boolean;
   frostAlert: FrostAlert | null;
+  season: ZimbabweSeason;
+  /** Resolved country name — shown in breadcrumbs for non-ZW locations */
+  countryName?: string;
 }
 
 export function WeatherDashboard({
@@ -41,9 +45,24 @@ export function WeatherDashboard({
   location,
   usingFallback,
   frostAlert,
+  season,
+  countryName,
 }: WeatherDashboardProps) {
-  const season = getZimbabweSeason();
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
+  const selectedActivities = useAppStore((s) => s.selectedActivities);
+
+  // Seed with ACTIVITIES so ActivityInsights always renders even if the fetch
+  // fails. The fetch upgrades to MongoDB data (which includes community-added
+  // activities) once it resolves — but only when the user has activities selected,
+  // since ActivityInsights returns null when selectedActivities is empty.
+  const [allActivities, setAllActivities] = useState<Activity[]>(ACTIVITIES);
+  useEffect(() => {
+    if (selectedActivities.length === 0) return;
+    fetch("/api/activities")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data?.activities?.length) setAllActivities(data.activities); })
+      .catch(() => {});
+  }, [selectedActivities.length]);
 
   // Sync the URL-driven location to the global store so other pages
   // (history, etc.) can use it as their default.
@@ -56,14 +75,23 @@ export function WeatherDashboard({
       <Header />
 
       {/* Breadcrumb navigation for SEO and accessibility */}
-      <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:pl-6 md:pl-8">
-        <ol className="flex items-center gap-1 text-xs text-text-tertiary">
+      <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8">
+        <ol className="flex flex-wrap items-center gap-1 text-xs text-text-tertiary">
           <li>
             <a href={BASE_URL} className="hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded">
               Home
             </a>
           </li>
           <li aria-hidden="true">/</li>
+          {/* Show country for non-ZW locations so global users have context */}
+          {countryName && location.country && location.country !== "ZW" && (
+            <>
+              <li>
+                <span className="text-text-secondary">{countryName}</span>
+              </li>
+              <li aria-hidden="true">/</li>
+            </>
+          )}
           <li>
             <span className="text-text-secondary">{location.province}</span>
           </li>
@@ -74,9 +102,11 @@ export function WeatherDashboard({
         </ol>
       </nav>
 
+      {/* pb-24 reserves space on mobile for a future sticky bottom nav bar;
+          sm:pb-6 restores normal padding on larger screens where there is no nav bar. */}
       <main
         id="main-content"
-        className="mx-auto max-w-5xl overflow-hidden px-4 py-6 sm:pl-6 md:pl-8"
+        className="mx-auto max-w-5xl overflow-x-hidden px-4 py-6 pb-24 sm:px-6 sm:pb-6 md:px-8"
         aria-label={`Weather dashboard for ${location.name}`}
       >
         {/* H1 for SEO — visually integrated but semantically correct */}
@@ -84,7 +114,7 @@ export function WeatherDashboard({
 
         {/* Season indicator */}
         <div className="mb-4">
-          <SeasonBadge />
+          <SeasonBadge season={season} />
         </div>
 
         {/* Weather unavailable banner — shown when all providers failed */}
@@ -102,8 +132,16 @@ export function WeatherDashboard({
                 current={weather.current}
                 locationName={location.name}
                 daily={weather.daily}
+                slug={location.slug}
               />
             </ChartErrorBoundary>
+            <LazySection label="hourly-forecast">
+              <ChartErrorBoundary name="hourly forecast">
+                <Suspense fallback={<SectionSkeleton />}>
+                  <HourlyForecast hourly={weather.hourly} />
+                </Suspense>
+              </ChartErrorBoundary>
+            </LazySection>
             <LazySection label="ai-summary">
               <ChartErrorBoundary name="AI summary">
                 <Suspense fallback={<SectionSkeleton />}>
@@ -114,14 +152,7 @@ export function WeatherDashboard({
             <LazySection label="activity-insights">
               <ChartErrorBoundary name="activity insights">
                 <Suspense fallback={<SectionSkeleton />}>
-                  <ActivityInsights insights={weather.insights} />
-                </Suspense>
-              </ChartErrorBoundary>
-            </LazySection>
-            <LazySection label="hourly-forecast">
-              <ChartErrorBoundary name="hourly forecast">
-                <Suspense fallback={<SectionSkeleton />}>
-                  <HourlyForecast hourly={weather.hourly} />
+                  <ActivityInsights insights={weather.insights} activities={allActivities} />
                 </Suspense>
               </ChartErrorBoundary>
             </LazySection>

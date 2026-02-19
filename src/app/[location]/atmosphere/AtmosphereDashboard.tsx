@@ -39,7 +39,7 @@ export function AtmosphereDashboard({
     <>
       <Header />
 
-      <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:pl-6 md:pl-8">
+      <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8">
         <ol className="flex items-center gap-1 text-xs text-text-tertiary">
           <li>
             <Link href="/" className="hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded">
@@ -61,7 +61,7 @@ export function AtmosphereDashboard({
 
       <main
         id="main-content"
-        className="mx-auto max-w-5xl overflow-hidden px-4 py-6 sm:pl-6 md:pl-8"
+        className="mx-auto max-w-5xl overflow-x-hidden px-4 py-6 pb-24 sm:pb-6 sm:px-6 md:px-8"
         aria-label={`Atmospheric conditions for ${location.name}`}
       >
         <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
@@ -72,7 +72,7 @@ export function AtmosphereDashboard({
         </p>
 
         <div className="mt-4 mb-4">
-          <SeasonBadge />
+          <SeasonBadge season={season} />
         </div>
 
         {usingFallback && <WeatherUnavailableBanner />}

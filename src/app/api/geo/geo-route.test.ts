@@ -46,8 +46,8 @@ describe("/api/geo route structure", () => {
     expect(source).toContain("Location service unavailable");
   });
 
-  it("imports isInSupportedRegion from locations", () => {
-    expect(source).toContain("isInSupportedRegion");
+  it("uses async DB-backed region check", () => {
+    expect(source).toContain("isInSupportedRegionFromDb");
   });
 
   it("supports autoCreate query parameter", () => {

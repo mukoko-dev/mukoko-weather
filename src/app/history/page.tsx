@@ -35,7 +35,7 @@ export default function HistoryPage() {
   return (
     <>
       <Header />
-      <main id="main-content" className="mx-auto max-w-5xl px-4 py-6 sm:pl-6 md:pl-8">
+      <main id="main-content" className="mx-auto max-w-5xl px-4 py-6 pb-24 sm:pb-6 sm:px-6 md:px-8">
         <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">
           Historical Weather Data
         </h1>

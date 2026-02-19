@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { checkFrostRisk, createFallbackWeather, getZimbabweSeason } from "@/lib/weather";
-import { getWeatherForLocation, getLocationFromDb } from "@/lib/db";
+import { checkFrostRisk, createFallbackWeather } from "@/lib/weather";
+import { getWeatherForLocation, getLocationFromDb, getSeasonForDate } from "@/lib/db";
 import { ForecastDashboard } from "./ForecastDashboard";
 
 export const dynamic = "force-dynamic";
@@ -74,7 +74,7 @@ export default async function ForecastPage({
 
   const usingFallback = weatherSource === "fallback";
   const frostAlert = usingFallback ? null : checkFrostRisk(weather.hourly);
-  const season = getZimbabweSeason();
+  const season = await getSeasonForDate(new Date(), location.country ?? "ZW");
 
   const breadcrumbSchema = {
     "@context": "https://schema.org",

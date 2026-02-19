@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import robots from "./robots";
 import sitemap from "./sitemap";
 
@@ -120,5 +122,69 @@ describe("sitemap.ts", () => {
     for (const entry of result) {
       expect(entry.url).toMatch(/^https:\/\//);
     }
+  });
+});
+
+describe("country-aware metadata in [location]/page.tsx", () => {
+  const pageSource = readFileSync(
+    resolve(__dirname, "[location]/page.tsx"),
+    "utf-8",
+  );
+
+  it("imports getCountryByCode from db lib for country names", () => {
+    expect(pageSource).toContain("getCountryByCode");
+    expect(pageSource).toContain("@/lib/db");
+  });
+
+  it("derives countryCode from loc.country with ZW fallback", () => {
+    expect(pageSource).toContain('loc.country ?? "ZW"');
+  });
+
+  it("uses countryName variable in metadata description", () => {
+    expect(pageSource).toContain("countryName");
+    expect(pageSource).toContain("countryCode");
+  });
+
+  it("uses addressCountry in JSON-LD schema", () => {
+    expect(pageSource).toContain("addressCountry");
+  });
+
+  it("uses countryCode for addressCountry in JSON-LD", () => {
+    // addressCountry should use the actual ISO code, not hardcoded "ZW"
+    const addressCountrySection = pageSource.slice(
+      pageSource.indexOf("addressCountry"),
+      pageSource.indexOf("addressCountry") + 50,
+    );
+    expect(addressCountrySection).toContain("countryCode");
+  });
+
+  it("containedInPlace uses dynamic country name in JSON-LD", () => {
+    expect(pageSource).toContain("containedInPlace");
+    expect(pageSource).toContain("countryName");
+  });
+
+  it("has generateMetadata function for per-page SEO", () => {
+    expect(pageSource).toContain("generateMetadata");
+  });
+});
+
+describe("[location]/page.tsx — breadcrumb and JSON-LD schemas", () => {
+  const pageSource = readFileSync(
+    resolve(__dirname, "[location]/page.tsx"),
+    "utf-8",
+  );
+
+  it("exports BreadcrumbList JSON-LD schema", () => {
+    expect(pageSource).toContain("BreadcrumbList");
+  });
+
+  it("exports Place/WebPage JSON-LD schema with geo coordinates", () => {
+    expect(pageSource).toContain("GeoCoordinates");
+    expect(pageSource).toContain("location.lat");
+  });
+
+  it("exports FAQPage schema with location-specific questions", () => {
+    expect(pageSource).toContain("FAQPage");
+    expect(pageSource).toContain("Question");
   });
 });

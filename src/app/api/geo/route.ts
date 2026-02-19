@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findNearestLocationsFromDb, createLocation, findDuplicateLocation } from "@/lib/db";
-import { isInSupportedRegion } from "@/lib/locations";
+import { findNearestLocationsFromDb, createLocation, findDuplicateLocation, upsertCountry, upsertProvince, isInSupportedRegionFromDb, getCountryByCode } from "@/lib/db";
 import { reverseGeocode, getElevation, generateSlug, inferTags } from "@/lib/geocoding";
 import { logError } from "@/lib/observability";
+import { generateProvinceSlug } from "@/lib/countries";
 
 /**
  * GET /api/geo?lat=-17.83&lon=31.05&autoCreate=true
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     }
 
     // No nearby location found — check if in a supported region
-    if (!isInSupportedRegion(lat, lon)) {
+    if (!(await isInSupportedRegionFromDb(lat, lon))) {
       return NextResponse.json(
         { error: "Location is outside supported regions", nearest: null },
         { status: 404 },
@@ -67,16 +67,28 @@ export async function GET(request: NextRequest) {
       }
 
       const slug = generateSlug(geocoded.name, geocoded.country);
+      const province = geocoded.admin1 || geocoded.countryName;
+      const provinceSlug = generateProvinceSlug(province, geocoded.country);
+
+      // Upsert country and province for hierarchy pages.
+      // Look up the region from MongoDB so $setOnInsert preserves curated data.
+      const dbCountry = await getCountryByCode(geocoded.country).catch(() => null);
+      await Promise.all([
+        upsertCountry({ code: geocoded.country, name: geocoded.countryName, region: dbCountry?.region ?? "Unknown", supported: true }),
+        upsertProvince({ slug: provinceSlug, name: province, countryCode: geocoded.country }),
+      ]);
+
       const newLocation = await createLocation({
         slug,
         name: geocoded.name,
-        province: geocoded.admin1 || geocoded.countryName,
+        province,
         lat: geocoded.lat,
         lon: geocoded.lon,
         elevation: Math.round(elevation),
         tags: await inferTags(geocoded),
         country: geocoded.country,
         source: "geolocation",
+        provinceSlug,
       });
 
       return NextResponse.json({
