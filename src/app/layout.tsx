@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { MineralsStripe } from "@/components/brand/MineralsStripe";
 import { ThemeProvider } from "@/components/brand/ThemeProvider";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const BASE_URL = "https://weather.mukoko.com";
@@ -310,6 +311,7 @@ export default function RootLayout({
             {children}
           </div>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
