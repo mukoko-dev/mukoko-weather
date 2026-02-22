@@ -31,17 +31,11 @@ jobs:
 
       - name: Call db-init endpoint
         env:
-          DEPLOY_URL: ${{ github.event.deployment_status.target_url }}
           DB_INIT_SECRET: ${{ secrets.DB_INIT_SECRET }}
         run: |
-          # Validate DEPLOY_URL is a known Vercel preview or production domain
-          # to prevent sending DB_INIT_SECRET to an unexpected environment.
-          if [[ "$DEPLOY_URL" =~ ^https://(weather\.mukoko\.com|[a-z0-9-]+-nyuchitech\.vercel\.app)(/|$) ]]; then
-            BASE_URL="$DEPLOY_URL"
-          else
-            echo "::warning::DEPLOY_URL '${DEPLOY_URL}' is not a recognised domain — falling back to production"
-            BASE_URL="https://weather.mukoko.com"
-          fi
+          # Always use the production URL — preview deployments have Vercel
+          # authentication protection which blocks API calls with a 401.
+          BASE_URL="https://weather.mukoko.com"
 
           echo "Triggering db-init on ${BASE_URL}/api/db-init"
 
