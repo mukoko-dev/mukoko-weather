@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { StatusDot, StatusBadge, type ServiceStatus } from "@/components/ui/status-indicator";
 
 interface CheckResult {
   name: string;
-  status: "operational" | "degraded" | "down";
+  status: ServiceStatus;
   latencyMs: number;
   message: string;
 }
@@ -14,36 +15,6 @@ interface StatusResponse {
   timestamp: string;
   totalLatencyMs: number;
   checks: CheckResult[];
-}
-
-function StatusIcon({ status }: { status: CheckResult["status"] }) {
-  if (status === "operational") {
-    return (
-      <span className="inline-flex h-3 w-3 rounded-full bg-severity-low" aria-label="Operational" />
-    );
-  }
-  if (status === "degraded") {
-    return (
-      <span className="inline-flex h-3 w-3 rounded-full bg-severity-moderate" aria-label="Degraded" />
-    );
-  }
-  return (
-    <span className="inline-flex h-3 w-3 rounded-full bg-severity-severe" aria-label="Down" />
-  );
-}
-
-function StatusBadge({ status }: { status: CheckResult["status"] }) {
-  const styles = {
-    operational: "bg-severity-low/10 text-severity-low border-severity-low/20",
-    degraded: "bg-severity-moderate/10 text-severity-moderate border-severity-moderate/20",
-    down: "bg-severity-severe/10 text-severity-severe border-severity-severe/20",
-  };
-
-  return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${styles[status]}`}>
-      {status}
-    </span>
-  );
 }
 
 function OverallBanner({ status, timestamp }: { status: string; timestamp: string }) {
@@ -148,7 +119,7 @@ export function StatusDashboard() {
             className="flex items-start gap-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm"
           >
             <div className="mt-1.5">
-              <StatusIcon status={check.status} />
+              <StatusDot status={check.status} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">

@@ -69,6 +69,10 @@ export interface WeatherInsights {
   dewPoint?: number;            // °C (current)
   precipitationType?: number;   // 0=none, 1=rain, 2=snow, 3=freezing rain, 4=sleet
 
+  // Wind — drone flying, outdoor safety
+  windSpeed?: number;                 // km/h (current)
+  windGust?: number;                  // km/h (current)
+
   // Safety — outdoor activities
   thunderstormProbability?: number;  // % (current)
   heatStressIndex?: number;          // 0–30+ (current)
@@ -79,6 +83,43 @@ export interface WeatherInsights {
   cloudBase?: number | null; // km (current)
   cloudCeiling?: number | null; // km (current)
   visibility?: number;       // km (current)
+}
+
+/**
+ * Synthesize weather insights from Open-Meteo data for suitability evaluation.
+ * Maps available Open-Meteo fields to the WeatherInsights interface so that
+ * suitability rules produce meaningful ratings on the fallback path (when
+ * Tomorrow.io is unavailable). Without these mappings, all conditions fall
+ * through to the "Good" default — e.g. farming shows "Good" during a storm.
+ */
+export function synthesizeOpenMeteoInsights(data: WeatherData): WeatherInsights {
+  const currentUv = data.current.uv_index;
+  const weatherCode = data.current.weather_code;
+
+  // WMO weather codes 95–99 indicate thunderstorm activity.
+  // Graduate probability by severity: 95 = moderate, 96/97 = with hail, 99 = heavy hail.
+  let thunderstormProbability = 0;
+  if (weatherCode >= 99) thunderstormProbability = 95;
+  else if (weatherCode >= 96) thunderstormProbability = 85;
+  else if (weatherCode >= 95) thunderstormProbability = 70;
+
+  // Derive precipitationType from WMO weather codes:
+  //   0=none, 1=rain, 2=snow, 3=freezing rain, 4=ice pellets
+  let precipitationType = 0;
+  if ((weatherCode >= 71 && weatherCode <= 77) || (weatherCode >= 85 && weatherCode <= 86)) precipitationType = 2;       // Snow + snow showers
+  else if (weatherCode === 66 || weatherCode === 67 || weatherCode === 56 || weatherCode === 57) precipitationType = 3; // Freezing rain + freezing drizzle
+  else if (weatherCode >= 51) precipitationType = 1; // Rain/drizzle/thunderstorm
+
+  return {
+    windSpeed: data.current.wind_speed_10m,
+    windGust: data.current.wind_gusts_10m,
+    // Open-Meteo hourly arrays start at midnight UTC; use the current hour's value.
+    visibility: data.hourly?.visibility?.[new Date().getUTCHours()],
+    // Open-Meteo UV index is 0–11+; Tomorrow.io uvHealthConcern uses the same scale
+    uvHealthConcern: currentUv,
+    thunderstormProbability,
+    precipitationType,
+  };
 }
 
 export interface FrostAlert {

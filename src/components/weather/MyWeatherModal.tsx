@@ -7,25 +7,24 @@ import { useAppStore, type ThemePreference } from "@/lib/store";
 import { MapPinIcon, SearchIcon, SunIcon, MoonIcon } from "@/lib/weather-icons";
 import { ActivityIcon } from "@/lib/weather-icons";
 import {
-  LOCATIONS,
   type LocationTag,
   type ZimbabweLocation,
+  LOCATIONS,
 } from "@/lib/locations";
 import { detectUserLocation, type GeoResult } from "@/lib/geolocation";
 import {
-  ACTIVITIES,
-  ACTIVITY_CATEGORIES,
-  CATEGORY_STYLES,
   type Activity,
   type ActivityCategory,
-  type ActivityCategoryInfo,
+  ACTIVITIES,
 } from "@/lib/activities";
-import { TAGS } from "@/lib/seed-tags";
+import type { ActivityCategoryDoc } from "@/lib/db";
+import { CATEGORIES } from "@/lib/seed-categories";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 const POPULAR_SLUGS = [
   "harare", "bulawayo", "mutare", "gweru", "masvingo",
@@ -36,10 +35,18 @@ const TAG_ORDER: LocationTag[] = [
   "city", "farming", "mining", "tourism", "national-park", "education", "border", "travel",
 ];
 
-// Derive tag display labels from the seed-tags source of truth so they stay in sync
-const TAG_LABELS = Object.fromEntries(
-  TAGS.map((t) => [t.slug, t.label]),
-) as Record<LocationTag, string>;
+// Tag labels — fetched from API when available, with inline fallbacks.
+// These are display labels only; not structural data.
+const DEFAULT_TAG_LABELS: Record<string, string> = {
+  city: "Cities", farming: "Farming", mining: "Mining", tourism: "Tourism",
+  "national-park": "National Parks", education: "Education", border: "Border", travel: "Travel",
+};
+
+/** Default category style for unknown categories */
+const DEFAULT_CATEGORY_STYLE = {
+  bg: "bg-primary/10", border: "border-primary", text: "text-primary",
+  badge: "bg-primary text-primary-foreground",
+};
 
 function MonitorIcon({ size = 20 }: { size?: number }) {
   return (
@@ -49,11 +56,6 @@ function MonitorIcon({ size = 20 }: { size?: number }) {
       <line x1="12" x2="12" y1="17" y2="21" />
     </svg>
   );
-}
-
-/** Get the category style or fall back to casual/primary */
-function getCategoryStyle(category: string) {
-  return CATEGORY_STYLES[category] ?? CATEGORY_STYLES.casual;
 }
 
 export function MyWeatherModal() {
@@ -69,16 +71,30 @@ export function MyWeatherModal() {
   const [pendingSlug, setPendingSlug] = useState(currentSlug);
   const [activeTab, setActiveTab] = useState("location");
 
-  // Seed with static arrays so the modal is immediately usable even if API calls fail.
-  // Fetch from MongoDB on mount to upgrade to live data (includes community locations).
-  // ACTIVITY_CATEGORIES is kept as compile-time constant (Tailwind JIT safe).
+  // Seed with static data for instant rendering, then upgrade from MongoDB.
+  // This prevents a blank modal on slow connections or cold starts.
   const [allLocations, setAllLocations] = useState<ZimbabweLocation[]>(LOCATIONS);
   const [allActivities, setAllActivities] = useState<Activity[]>(ACTIVITIES);
-  const [activityCategories, setActivityCategories] = useState<ActivityCategoryInfo[]>(ACTIVITY_CATEGORIES);
+  const [activityCategories, setActivityCategories] = useState<ActivityCategoryDoc[]>(CATEGORIES);
+  const [tagLabels, setTagLabels] = useState<Record<string, string>>(DEFAULT_TAG_LABELS);
   const [dataLoading, setDataLoading] = useState(true);
 
+  // Build a category styles lookup from API data
+  const categoryStyles = useMemo(() => {
+    const map: Record<string, typeof DEFAULT_CATEGORY_STYLE> = {};
+    for (const cat of activityCategories) {
+      if (cat.style) map[cat.id] = cat.style;
+    }
+    return map;
+  }, [activityCategories]);
+
+  /** Get the category style or fall back to default */
+  const getCategoryStyle = useCallback((category: string) => {
+    return categoryStyles[category] ?? DEFAULT_CATEGORY_STYLE;
+  }, [categoryStyles]);
+
   useEffect(() => {
-    // Upgrade seed data with live MongoDB data (includes community-added locations/activities).
+    // Fetch all data from MongoDB API — single source of truth.
     Promise.all([
       fetch("/api/locations")
         .then((res) => (res.ok ? res.json() : null))
@@ -91,6 +107,16 @@ export function MyWeatherModal() {
       fetch("/api/activities?mode=categories")
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => { if (data?.categories?.length) setActivityCategories(data.categories); })
+        .catch(() => {}),
+      fetch("/api/tags")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.tags?.length) {
+            const labels: Record<string, string> = {};
+            for (const t of data.tags) labels[t.slug] = t.label;
+            setTagLabels(labels);
+          }
+        })
         .catch(() => {}),
     ]).finally(() => setDataLoading(false));
   }, []);
@@ -120,13 +146,12 @@ export function MyWeatherModal() {
     setTimeout(() => setActiveTab("activities"), 250);
   }, []);
 
-  /** When a location is detected/created via geolocation, navigate immediately */
+  /** When a location is detected/created via geolocation, set as pending and
+   *  advance to Activities tab — same deferred navigation as manual selection. */
   const handleGeoLocationResolved = useCallback((slug: string) => {
-    completeOnboarding();
-    closeMyWeather();
-    setSelectedLocation(slug);
-    router.push(`/${slug}`);
-  }, [completeOnboarding, closeMyWeather, setSelectedLocation, router]);
+    setPendingSlug(slug);
+    setTimeout(() => setActiveTab("activities"), 250);
+  }, []);
 
   const locationChanged = pendingSlug !== currentSlug;
 
@@ -158,6 +183,7 @@ export function MyWeatherModal() {
               onGeoLocationResolved={handleGeoLocationResolved}
               allLocations={allLocations}
               loading={dataLoading}
+              tagLabels={tagLabels}
             />
           </TabsContent>
 
@@ -165,6 +191,7 @@ export function MyWeatherModal() {
             <ActivitiesTab
               allActivities={allActivities}
               activityCategories={activityCategories}
+              getCategoryStyle={getCategoryStyle}
             />
           </TabsContent>
 
@@ -185,12 +212,14 @@ function LocationTab({
   onGeoLocationResolved,
   allLocations,
   loading,
+  tagLabels,
 }: {
   pendingSlug: string;
   onSelectLocation: (slug: string) => void;
   onGeoLocationResolved: (slug: string) => void;
   allLocations: ZimbabweLocation[];
   loading: boolean;
+  tagLabels: Record<string, string>;
 }) {
   const [query, setQuery] = useState("");
   const [activeTag, setActiveTag] = useState<LocationTag | null>(null);
@@ -203,7 +232,7 @@ function LocationTab({
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
-  // Geolocation detection — auto-navigate on success
+  // Geolocation detection — set pending location and advance to activities
   const handleGeolocate = useCallback(async () => {
     setGeoLoading(true);
     const result = await detectUserLocation();
@@ -293,24 +322,23 @@ function LocationTab({
 
       {/* Tag filter pills */}
       {!query && (
-        <div role="group" aria-label="Filter locations by category" className="flex flex-wrap gap-1.5 px-4 py-2">
+        <ToggleGroup
+          type="single"
+          value={activeTag ?? ""}
+          onValueChange={(val) => setActiveTag((val as LocationTag) || null)}
+          className="flex flex-wrap gap-1.5 px-4 py-2"
+          aria-label="Filter locations by category"
+        >
           {TAG_ORDER.map((tag) => (
-            <Button
-              key={tag}
-              variant={activeTag === tag ? "default" : "secondary"}
-              size="sm"
-              onClick={() => setActiveTag(activeTag === tag ? null : tag)}
-              aria-pressed={activeTag === tag}
-              className="min-h-[44px]"
-            >
-              {TAG_LABELS[tag]}
-            </Button>
+            <ToggleGroupItem key={tag} value={tag} className="min-h-[44px]">
+              {tagLabels[tag] ?? tag}
+            </ToggleGroupItem>
           ))}
-        </div>
+        </ToggleGroup>
       )}
 
       {/* Location list — no nested scroll, uses tab content scroll */}
-      <ul role="listbox" aria-label="Available locations" className="px-2 pb-2">
+      <ul role="listbox" aria-label="Available locations" aria-multiselectable="false" className="px-2 pb-2">
         {loading && allLocations.length === 0 && (
           Array.from({ length: 5 }).map((_, i) => (
             <li key={i} className="px-3 py-2" aria-hidden="true">
@@ -323,35 +351,43 @@ function LocationTab({
             {query ? `No locations found for "${query}"` : "No locations available"}
           </li>
         )}
-        {displayedLocations.map((loc) => (
-          <li key={loc.slug} role="option" aria-selected={loc.slug === pendingSlug}>
-            <button
-              onClick={() => onSelectLocation(loc.slug)}
-              className={`flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-sm transition-colors hover:bg-surface-base focus-visible:outline-2 focus-visible:outline-primary ${
-                loc.slug === pendingSlug
-                  ? "bg-primary/10 text-primary font-semibold"
-                  : "text-text-primary"
-              }`}
-              type="button"
-            >
-              <MapPinIcon
-                size={14}
-                className={loc.slug === pendingSlug ? "text-primary" : "text-text-tertiary"}
-              />
-              <div className="flex flex-col items-start">
-                <span>{loc.name}</span>
-                <span className="text-sm text-text-tertiary">{loc.province}</span>
-              </div>
-              <div className="ml-auto flex gap-1">
-                {loc.tags.slice(0, 2).map((tag) => (
-                  <Badge key={tag} variant="secondary" className="px-1.5 py-0.5">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            </button>
-          </li>
-        ))}
+        {displayedLocations.map((loc) => {
+          const isSelected = loc.slug === pendingSlug;
+          // Country/province are automatic context, not selectable options
+          const countryCode = (loc.country ?? "ZW").toUpperCase();
+          const contextLabel = countryCode !== "ZW"
+            ? `${loc.province}, ${countryCode}`
+            : loc.province;
+          return (
+            <li key={loc.slug} role="option" aria-selected={isSelected}>
+              <button
+                onClick={() => onSelectLocation(loc.slug)}
+                className={`flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-sm transition-colors hover:bg-surface-base focus-visible:outline-2 focus-visible:outline-primary ${
+                  isSelected
+                    ? "bg-primary/10 text-primary font-semibold"
+                    : "text-text-primary"
+                }`}
+                type="button"
+              >
+                <MapPinIcon
+                  size={14}
+                  className={isSelected ? "text-primary" : "text-text-tertiary"}
+                />
+                <div className="min-w-0 flex-1 text-left">
+                  <span className="block truncate">{loc.name}</span>
+                  <span className="block text-xs text-text-tertiary truncate">{contextLabel}</span>
+                </div>
+                {isSelected && (
+                  <span className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary" aria-hidden="true">
+                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" className="stroke-primary-foreground" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </span>
+                )}
+              </button>
+            </li>
+          );
+        })}
       </ul>
 
       {/* Community location stat — prominent to inspire contributions */}
@@ -408,9 +444,11 @@ function LocationCountCard({ allLocations }: { allLocations: ZimbabweLocation[] 
 function ActivitiesTab({
   allActivities,
   activityCategories,
+  getCategoryStyle,
 }: {
   allActivities: Activity[];
-  activityCategories: ActivityCategoryInfo[];
+  activityCategories: ActivityCategoryDoc[];
+  getCategoryStyle: (category: string) => { bg: string; border: string; text: string; badge: string };
 }) {
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const toggleActivity = useAppStore((s) => s.toggleActivity);
@@ -446,23 +484,43 @@ function ActivitiesTab({
       </div>
 
       {/* Category filter pills — 44px touch targets */}
-      <div className="flex gap-2 overflow-x-auto px-4 pt-1 pb-2 scrollbar-hide [overscroll-behavior-x:contain]" role="group" aria-label="Activity categories">
-        <CategoryTab
-          label="All"
-          categoryId="all"
-          active={activeCategory === "all"}
-          onClick={() => setActiveCategory("all")}
-        />
-        {activityCategories.map((cat) => (
-          <CategoryTab
-            key={cat.id}
-            label={cat.label}
-            categoryId={cat.id}
-            active={activeCategory === cat.id}
-            onClick={() => setActiveCategory(cat.id)}
-          />
-        ))}
-      </div>
+      <ToggleGroup
+        type="single"
+        value={activeCategory}
+        onValueChange={(val) => { if (val) setActiveCategory(val as ActivityCategory | "all"); }}
+        variant="unstyled"
+        className="flex gap-2 overflow-x-auto px-4 pt-1 pb-2 scrollbar-hide [overscroll-behavior-x:contain]"
+        aria-label="Activity categories"
+      >
+        <ToggleGroupItem
+          value="all"
+          className={cn(
+            "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[44px] text-sm font-medium transition-colors",
+            activeCategory === "all"
+              ? "bg-primary text-primary-foreground"
+              : "bg-surface-base text-text-secondary hover:text-text-primary",
+          )}
+        >
+          All
+        </ToggleGroupItem>
+        {activityCategories.map((cat) => {
+          const style = getCategoryStyle(cat.id);
+          return (
+            <ToggleGroupItem
+              key={cat.id}
+              value={cat.id}
+              className={cn(
+                "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[44px] text-sm font-medium transition-colors",
+                activeCategory === cat.id
+                  ? style.badge
+                  : "bg-surface-base text-text-secondary hover:text-text-primary",
+              )}
+            >
+              {cat.label}
+            </ToggleGroupItem>
+          );
+        })}
+      </ToggleGroup>
 
       {/* Activity search */}
       <div className="px-4 pb-2">
@@ -499,13 +557,14 @@ function ActivitiesTab({
               >
                 {isSelected && (
                   <span className={`absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full ${style.badge}`} aria-hidden="true">
-                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
                   </span>
                 )}
                 <ActivityIcon
                   activity={activity.id}
+                  icon={activity.icon}
                   size={28}
                   className={isSelected ? style.text : "text-text-tertiary"}
                 />
@@ -524,34 +583,6 @@ function ActivitiesTab({
         )}
       </div>
     </div>
-  );
-}
-
-function CategoryTab({
-  label,
-  categoryId,
-  active,
-  onClick,
-}: {
-  label: string;
-  categoryId: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  const style = categoryId === "all" ? null : getCategoryStyle(categoryId);
-
-  return (
-    <button
-      aria-pressed={active}
-      onClick={onClick}
-      className={`shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[44px] text-sm font-medium transition-colors ${
-        active
-          ? style ? `${style.badge}` : "bg-primary text-primary-foreground"
-          : "bg-surface-base text-text-secondary hover:text-text-primary"
-      }`}
-    >
-      {label}
-    </button>
   );
 }
 
@@ -596,7 +627,7 @@ function SettingsTab() {
             </div>
             {theme === option.value && (
               <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary" aria-hidden="true">
-                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="var(--color-primary-foreground)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" className="stroke-primary-foreground" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               </span>

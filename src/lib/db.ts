@@ -15,7 +15,7 @@
  */
 
 import { getDb } from "./mongo";
-import { fetchWeather, createFallbackWeather, getZimbabweSeason, type WeatherData, type ZimbabweSeason } from "./weather";
+import { fetchWeather, createFallbackWeather, getZimbabweSeason, synthesizeOpenMeteoInsights, type WeatherData, type ZimbabweSeason } from "./weather";
 import { fetchWeatherFromTomorrow, TomorrowRateLimitError } from "./tomorrow";
 import { logWarn, logError } from "./observability";
 import type { ZimbabweLocation } from "./locations";
@@ -24,6 +24,7 @@ import { generateProvinceSlug, type Country, type Province } from "./countries";
 import type { RegionDoc } from "./seed-regions";
 import type { TagDoc } from "./seed-tags";
 import type { SeasonDoc } from "./seed-seasons";
+import type { ActivityCategoryDoc } from "./seed-categories";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,6 +70,50 @@ export interface ActivityDoc extends Activity {
   updatedAt: Date;
 }
 
+// ---------------------------------------------------------------------------
+// Suitability rules — database-driven weather suitability configuration
+// ---------------------------------------------------------------------------
+
+/**
+ * A single condition that evaluates a weather insight field against a threshold.
+ * When matched, produces the given suitability rating.
+ */
+export interface SuitabilityCondition {
+  /** Weather insight field to check (e.g. "thunderstormProbability", "visibility", "heatStressIndex") */
+  field: string;
+  /** Comparison operator */
+  operator: "gt" | "gte" | "lt" | "lte" | "eq";
+  /** Threshold value to compare against */
+  value: number;
+  /** Suitability level when this condition matches */
+  level: "excellent" | "good" | "fair" | "poor";
+  /** Display label for this rating */
+  label: string;
+  /** CSS class for the text color (must use severity tokens) */
+  colorClass: string;
+  /** CSS class for background (must use severity tokens) */
+  bgClass: string;
+  /** Human-readable detail message */
+  detail: string;
+  /** Optional metric template — use {value} as placeholder for the actual value */
+  metricTemplate?: string;
+}
+
+/**
+ * Suitability rule set for a category or specific activity.
+ * Conditions are evaluated in order — first match wins.
+ * A fallback is always provided for when no condition matches.
+ */
+export interface SuitabilityRuleDoc {
+  /** "category:farming", "category:mining", or "activity:drone-flying" */
+  key: string;
+  /** Ordered list of conditions — first match wins */
+  conditions: SuitabilityCondition[];
+  /** Fallback rating when no condition matches */
+  fallback: Omit<SuitabilityCondition, "field" | "operator" | "value">;
+  updatedAt: Date;
+}
+
 export interface CountryDoc extends Country {
   updatedAt: Date;
 }
@@ -78,7 +123,7 @@ export interface ProvinceDoc extends Province {
 }
 
 // Re-export seed types so callers only need to import from db.ts
-export type { RegionDoc, TagDoc, SeasonDoc };
+export type { RegionDoc, TagDoc, SeasonDoc, ActivityCategoryDoc };
 
 // ---------------------------------------------------------------------------
 // Collection accessors
@@ -126,6 +171,14 @@ function tagsCollection() {
 
 function seasonsCollection() {
   return getDb().collection<SeasonDoc>("seasons");
+}
+
+function activityCategoriesCollection() {
+  return getDb().collection<ActivityCategoryDoc>("activity_categories");
+}
+
+function suitabilityRulesCollection() {
+  return getDb().collection<SuitabilityRuleDoc>("suitability_rules");
 }
 
 // ---------------------------------------------------------------------------
@@ -192,6 +245,13 @@ export async function ensureIndexes(): Promise<void> {
 
     // Seasons: by countryCode for date lookups
     seasonsCollection().createIndex({ countryCode: 1 }),
+
+    // Activity categories: by id (unique), by order for display
+    activityCategoriesCollection().createIndex({ id: 1 }, { unique: true }),
+    activityCategoriesCollection().createIndex({ order: 1 }),
+
+    // Suitability rules: by key (unique) for lookups
+    suitabilityRulesCollection().createIndex({ key: 1 }, { unique: true }),
   ]);
 }
 
@@ -294,6 +354,11 @@ export async function getWeatherForLocation(
     try {
       data = await fetchWeather(lat, lon);
       source = "open-meteo";
+      // Synthesize basic insights from Open-Meteo current data so suitability
+      // rules (e.g. drone wind speed) work even when Tomorrow.io is unavailable.
+      if (data && !data.insights && data.current) {
+        data.insights = synthesizeOpenMeteoInsights(data);
+      }
     } catch (err) {
       logError({
         source: "open-meteo",
@@ -531,6 +596,19 @@ export async function getAllLocationsFromDb(): Promise<LocationDoc[]> {
   return locationsCollection().find({}).toArray();
 }
 
+/**
+ * Get a limited number of locations for context building (e.g. AI prompts).
+ * Sorts seed locations first (then community, then geolocation) and by name
+ * so that major cities aren't crowded out by recently-added community locations.
+ */
+export async function getLocationsForContext(limit: number): Promise<LocationDoc[]> {
+  return locationsCollection()
+    .find({})
+    .sort({ source: -1, name: 1 })
+    .limit(limit)
+    .toArray();
+}
+
 /** Insert a new community-contributed location */
 export async function createLocation(
   location: ZimbabweLocation,
@@ -556,7 +634,7 @@ export async function findDuplicateLocation(
 }
 
 // ---------------------------------------------------------------------------
-// Search operations (MongoDB text search + geospatial)
+// Search operations (Atlas Search with $text fallback + geospatial)
 // ---------------------------------------------------------------------------
 
 export interface SearchResult {
@@ -565,9 +643,47 @@ export interface SearchResult {
 }
 
 /**
- * Full-text search across locations using MongoDB text index.
- * Supports fuzzy matching via text score ranking.
- * Results are sorted by relevance (text score).
+ * Track Atlas Search availability as a timestamp-based circuit.
+ * When a missing-index error is detected, the timestamp records when it was
+ * disabled. After ATLAS_RETRY_AFTER_MS (5 min), the next request retries
+ * Atlas Search — if the index was created in the meantime it auto-recovers;
+ * if not, the timer resets.
+ */
+let atlasSearchDisabledAt = 0;
+const ATLAS_RETRY_AFTER_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Check whether a MongoDB error indicates a missing Atlas Search index
+ * (permanent) vs. a transient failure. Only permanent errors should disable
+ * Atlas Search for the instance lifecycle.
+ *
+ * Atlas returns code 40324 or "PlanExecutor error" / "index not found" when
+ * the search index doesn't exist. Transient errors (timeouts, network
+ * partitions) should not permanently disable Atlas Search.
+ */
+function isAtlasSearchIndexMissing(err: unknown): boolean {
+  if (err && typeof err === "object") {
+    const mongoErr = err as { code?: number; codeName?: string; message?: string };
+    // code 40324: Unrecognized pipeline stage or missing search index
+    if (mongoErr.code === 40324) return true;
+    // Explicit "index not found" message from Atlas Search
+    const msg = mongoErr.message ?? "";
+    if (msg.includes("index not found")) return true;
+  }
+  return false;
+}
+
+/**
+ * Search locations using Atlas Search (fuzzy, autocomplete, typo-tolerant).
+ * Falls back to MongoDB $text search if Atlas Search index is not configured.
+ *
+ * Atlas Search advantages over $text:
+ * - Fuzzy matching: "harrar" → Harare, "vic falls" → Victoria Falls
+ * - Autocomplete: partial prefix matching as user types
+ * - Better relevance scoring with configurable boosting
+ *
+ * Requires an Atlas Search index named "location_search" on the locations
+ * collection. See getAtlasSearchIndexDefinitions() for the index spec.
  */
 export async function searchLocationsFromDb(
   query: string,
@@ -576,14 +692,98 @@ export async function searchLocationsFromDb(
   const { tag, limit = 20, skip = 0 } = options;
   const q = query.trim();
 
-  // Build filter
+  // Try Atlas Search first (fuzzy + autocomplete), fall back to $text.
+  // After a missing-index error, wait ATLAS_RETRY_AFTER_MS before retrying.
+  const atlasSearchAvailable = !atlasSearchDisabledAt || Date.now() - atlasSearchDisabledAt > ATLAS_RETRY_AFTER_MS;
+  if (q && atlasSearchAvailable) {
+    try {
+      return await atlasSearchLocations(q, { tag, limit, skip });
+    } catch (err) {
+      // Only disable Atlas Search on missing-index errors (permanent).
+      // Transient errors (network, timeout) retry on next request automatically.
+      if (isAtlasSearchIndexMissing(err)) {
+        atlasSearchDisabledAt = Date.now();
+      }
+    }
+  }
+
+  return textSearchLocations(q, { tag, limit, skip });
+}
+
+/**
+ * Atlas Search aggregation pipeline for location search.
+ * Uses compound operator with fuzzy text + optional tag filter.
+ */
+async function atlasSearchLocations(
+  query: string,
+  options: { tag?: string; limit: number; skip: number },
+): Promise<SearchResult> {
+  const { tag, limit, skip } = options;
+  const col = locationsCollection();
+
+  // Build compound search clauses
+  const must: Record<string, unknown>[] = [
+    {
+      text: {
+        query,
+        path: ["name", "province", "slug"],
+        fuzzy: { maxEdits: 1, prefixLength: 1 },
+        score: { boost: { path: "name", undefined: 1 } },
+      },
+    },
+  ];
+
+  const filter: Record<string, unknown>[] = [];
+  if (tag) {
+    filter.push({ text: { query: tag, path: "tags" } });
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const searchStage: Record<string, any> = {
+    $search: {
+      index: "location_search",
+      compound: {
+        must,
+        ...(filter.length > 0 ? { filter } : {}),
+      },
+      count: { type: "total" },
+    },
+  };
+
+  const pipeline = [
+    searchStage,
+    { $skip: skip },
+    { $limit: limit },
+    {
+      $facet: {
+        results: [{ $replaceRoot: { newRoot: "$$ROOT" } }],
+        metadata: [{ $replaceWith: { total: "$$SEARCH_META.count.total" } }],
+      },
+    },
+  ];
+
+  const [result] = await col.aggregate(pipeline).toArray();
+  const locations = (result?.results ?? []) as LocationDoc[];
+  const total = (result?.metadata?.[0] as { total?: number })?.total ?? locations.length;
+
+  return { locations, total };
+}
+
+/**
+ * Fallback: MongoDB $text search (always available, no Atlas Search required).
+ */
+async function textSearchLocations(
+  query: string,
+  options: { tag?: string; limit: number; skip: number },
+): Promise<SearchResult> {
+  const { tag, limit, skip } = options;
+  const q = query;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const filter: Record<string, any> = {};
-
   if (q) {
     filter.$text = { $search: q };
   }
-
   if (tag) {
     filter.tags = tag;
   }
@@ -703,11 +903,47 @@ export async function getActivityLabelsFromDb(
   return docs.map((d) => d.label);
 }
 
+/** Track Atlas Search availability for activities (same pattern as locations). */
+let atlasActivitySearchDisabledAt = 0;
+
+/**
+ * Search activities using Atlas Search (fuzzy) with $text fallback.
+ * Requires an Atlas Search index named "activity_search" on the activities
+ * collection. See getAtlasSearchIndexDefinitions() for the index spec.
+ */
 export async function searchActivitiesFromDb(
   query: string,
 ): Promise<ActivityDoc[]> {
   const q = query.trim();
   if (!q) return getAllActivitiesFromDb();
+
+  // Try Atlas Search first (auto-recovers after ATLAS_RETRY_AFTER_MS)
+  const activitySearchAvailable = !atlasActivitySearchDisabledAt || Date.now() - atlasActivitySearchDisabledAt > ATLAS_RETRY_AFTER_MS;
+  if (activitySearchAvailable) {
+    try {
+      const col = activitiesCollection();
+      const pipeline = [
+        {
+          $search: {
+            index: "activity_search",
+            text: {
+              query: q,
+              path: ["label", "description", "category"],
+              fuzzy: { maxEdits: 1, prefixLength: 1 },
+            },
+          },
+        },
+        { $limit: 20 },
+      ];
+      return await col.aggregate<ActivityDoc>(pipeline).toArray();
+    } catch (err) {
+      if (isAtlasSearchIndexMissing(err)) {
+        atlasActivitySearchDisabledAt = Date.now();
+      }
+    }
+  }
+
+  // Fallback: $text search
   return activitiesCollection()
     .find({ $text: { $search: q } })
     .project({ score: { $meta: "textScore" as const } })
@@ -717,6 +953,83 @@ export async function searchActivitiesFromDb(
 
 export async function getActivityCategoriesFromDb(): Promise<ActivityCategory[]> {
   return activitiesCollection().distinct("category") as Promise<ActivityCategory[]>;
+}
+
+// ---------------------------------------------------------------------------
+// Suitability rules operations
+// ---------------------------------------------------------------------------
+
+/**
+ * Valid condition field names — must match keys of WeatherInsights.
+ * Checked at seed/sync time to catch typos before they reach the database.
+ */
+export const VALID_CONDITION_FIELDS = new Set([
+  "gdd10To30", "gdd10To31", "gdd08To30", "gdd03To25",
+  "evapotranspiration", "dewPoint", "precipitationType",
+  "windSpeed", "windGust",
+  "thunderstormProbability", "heatStressIndex", "uvHealthConcern",
+  "moonPhase", "cloudBase", "cloudCeiling", "visibility",
+  // Future: precipitationIntensity, snowIntensity
+]);
+
+export async function syncSuitabilityRules(rules: Omit<SuitabilityRuleDoc, "updatedAt">[]): Promise<void> {
+  // Validate condition field names at sync time to catch typos early.
+  for (const rule of rules) {
+    for (const cond of rule.conditions) {
+      if (!VALID_CONDITION_FIELDS.has(cond.field)) {
+        throw new Error(
+          `Invalid condition field "${cond.field}" in rule "${rule.key}". ` +
+          `Valid fields: ${[...VALID_CONDITION_FIELDS].join(", ")}`,
+        );
+      }
+    }
+  }
+
+  const now = new Date();
+  const bulkOps = rules.map((rule) => ({
+    updateOne: {
+      filter: { key: rule.key },
+      update: { $set: { ...rule, updatedAt: now } },
+      upsert: true,
+    },
+  }));
+  if (bulkOps.length > 0) {
+    await suitabilityRulesCollection().bulkWrite(bulkOps);
+  }
+}
+
+export async function getAllSuitabilityRules(): Promise<SuitabilityRuleDoc[]> {
+  return suitabilityRulesCollection().find({}).toArray();
+}
+
+export async function getSuitabilityRuleByKey(key: string): Promise<SuitabilityRuleDoc | null> {
+  return suitabilityRulesCollection().findOne({ key });
+}
+
+// ---------------------------------------------------------------------------
+// Activity category operations (database-driven category styles)
+// ---------------------------------------------------------------------------
+
+export async function syncActivityCategories(categories: ActivityCategoryDoc[]): Promise<void> {
+  const now = new Date();
+  const bulkOps = categories.map((cat) => ({
+    updateOne: {
+      filter: { id: cat.id },
+      update: { $set: { ...cat, updatedAt: now } },
+      upsert: true,
+    },
+  }));
+  if (bulkOps.length > 0) {
+    await activityCategoriesCollection().bulkWrite(bulkOps);
+  }
+}
+
+export async function getAllActivityCategories(): Promise<ActivityCategoryDoc[]> {
+  return activityCategoriesCollection().find({}).sort({ order: 1 }).toArray();
+}
+
+export async function getActivityCategoryById(id: string): Promise<ActivityCategoryDoc | null> {
+  return activityCategoriesCollection().findOne({ id });
 }
 
 // ---------------------------------------------------------------------------
@@ -1045,4 +1358,267 @@ export async function getSeasonForDate(
     // DB unavailable — fall through to sync fallback
   }
   return getZimbabweSeason(date);
+}
+
+// ---------------------------------------------------------------------------
+// Vector Search — semantic location queries for AI chat
+// ---------------------------------------------------------------------------
+
+/**
+ * Search locations by semantic similarity using MongoDB Atlas Vector Search.
+ * Locations must have an `embedding` field (float[] stored via storeLocationEmbedding).
+ * Falls back to text search if the vector index is not configured.
+ *
+ * Requires an Atlas Vector Search index named "location_vector" on the
+ * locations collection. See getAtlasSearchIndexDefinitions() for the spec.
+ *
+ * @param embedding - Pre-computed query embedding (e.g. from Anthropic or OpenAI)
+ * @param options   - limit and optional tag filter
+ */
+/** Track vector search availability (same time-based pattern as Atlas Search). */
+let vectorSearchDisabledAt = 0;
+
+/**
+ * Whether at least one location has a stored embedding. Cached per warm instance.
+ * FOUNDATION FOR FUTURE WORK: No code currently generates or stores embeddings.
+ * This guard prevents the first call from triggering an Atlas error (which would
+ * disable vector search for ATLAS_RETRY_AFTER_MS) when embeddings haven't been
+ * generated yet. Once an embedding pipeline is wired up (e.g., via db-init or a
+ * separate job), this check auto-resolves on the next warm instance.
+ */
+// NOTE: Once set to `true`, this is never reset to `null` within a warm
+// instance — intentional, because embeddings are append-only. If embeddings
+// are ever bulk-deleted, restart the instance or call resetTestState().
+let embeddingsExist: boolean | null = null;
+
+export async function vectorSearchLocations(
+  embedding: number[],
+  options: { limit?: number; tag?: string } = {},
+): Promise<LocationDoc[]> {
+  const vectorAvailable = !vectorSearchDisabledAt || Date.now() - vectorSearchDisabledAt > ATLAS_RETRY_AFTER_MS;
+  if (!vectorAvailable) return [];
+
+  // Check if any location has a stored embedding before attempting $vectorSearch.
+  // Without embeddings, Atlas would return an error that unnecessarily disables
+  // vector search for ATLAS_RETRY_AFTER_MS.
+  if (embeddingsExist === null) {
+    try {
+      const sample = await locationsCollection().findOne(
+        { embedding: { $exists: true } },
+        { projection: { _id: 1 } },
+      );
+      embeddingsExist = sample !== null;
+    } catch {
+      // DB error — don't cache, let it retry next time
+      return [];
+    }
+  }
+  if (!embeddingsExist) return [];
+
+  const { limit = 10, tag } = options;
+
+  try {
+    const col = locationsCollection();
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const filter: Record<string, any> = {};
+    if (tag) {
+      filter.tags = tag;
+    }
+
+    const pipeline = [
+      {
+        $vectorSearch: {
+          index: "location_vector",
+          path: "embedding",
+          queryVector: embedding,
+          numCandidates: limit * 10,
+          limit,
+          ...(Object.keys(filter).length > 0 ? { filter } : {}),
+        },
+      },
+      {
+        $project: {
+          embedding: 0,
+          score: { $meta: "vectorSearchScore" },
+        },
+      },
+    ];
+
+    return await col.aggregate<LocationDoc>(pipeline).toArray();
+  } catch (err) {
+    if (isAtlasSearchIndexMissing(err)) {
+      vectorSearchDisabledAt = Date.now();
+    }
+    return [];
+  }
+}
+
+/**
+ * Store a pre-computed embedding vector on a location document.
+ * Call this when syncing locations or when a new location is created.
+ */
+export async function storeLocationEmbedding(
+  slug: string,
+  embedding: number[],
+): Promise<void> {
+  await locationsCollection().updateOne(
+    { slug },
+    { $set: { embedding } },
+  );
+}
+
+/**
+ * Batch-store embeddings for multiple locations.
+ */
+export async function storeLocationEmbeddings(
+  entries: { slug: string; embedding: number[] }[],
+): Promise<void> {
+  if (entries.length === 0) return;
+  const bulkOps = entries.map(({ slug, embedding }) => ({
+    updateOne: {
+      filter: { slug },
+      update: { $set: { embedding } },
+    },
+  }));
+  await locationsCollection().bulkWrite(bulkOps);
+}
+
+// ---------------------------------------------------------------------------
+// Combined aggregation pipelines (batch multiple queries)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch tag counts and location stats in a single aggregation using $facet.
+ * Replaces separate getTagCounts() + getLocationStats() calls.
+ */
+export async function getTagCountsAndStats(): Promise<{
+  tags: { tag: string; count: number }[];
+  totalLocations: number;
+  totalProvinces: number;
+}> {
+  const col = locationsCollection();
+
+  const [result] = await col.aggregate([
+    {
+      $facet: {
+        tags: [
+          { $unwind: "$tags" },
+          { $group: { _id: "$tags", count: { $sum: 1 } } },
+          { $project: { _id: 0, tag: "$_id", count: 1 } },
+          { $sort: { count: -1 } },
+        ],
+        totalLocations: [
+          { $count: "count" },
+        ],
+        provinces: [
+          { $group: { _id: "$province" } },
+          { $count: "count" },
+        ],
+      },
+    },
+  ]).toArray();
+
+  return {
+    tags: (result?.tags ?? []) as { tag: string; count: number }[],
+    totalLocations: (result?.totalLocations?.[0] as { count?: number })?.count ?? 0,
+    totalProvinces: (result?.provinces?.[0] as { count?: number })?.count ?? 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Atlas Search / Vector Search index definitions
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the Atlas Search and Vector Search index definitions that should be
+ * created via the MongoDB Atlas UI, Atlas CLI, or Atlas Admin API.
+ *
+ * These indexes CANNOT be created via the Node.js driver's createIndex() —
+ * they must be provisioned through Atlas infrastructure.
+ *
+ * Usage:
+ *   1. Go to Atlas → Database → Collections → Search Indexes
+ *   2. Create each index using the JSON definitions below
+ *   3. Or use Atlas CLI: `atlas clusters search indexes create --file <json>`
+ */
+export function getAtlasSearchIndexDefinitions(): {
+  locationSearch: object;
+  activitySearch: object;
+  locationVector: object;
+} {
+  return {
+    /** Atlas Search index for fuzzy location search */
+    locationSearch: {
+      name: "location_search",
+      collectionName: "locations",
+      type: "search",
+      definition: {
+        mappings: {
+          dynamic: false,
+          fields: {
+            name: [
+              { type: "string", analyzer: "luceneStandard" },
+              { type: "autocomplete", analyzer: "luceneStandard", tokenization: "edgeGram", minGrams: 2, maxGrams: 15 },
+            ],
+            province: { type: "string", analyzer: "luceneStandard" },
+            slug: { type: "string", analyzer: "luceneKeyword" },
+            tags: { type: "token" },
+            country: { type: "token" },
+          },
+        },
+      },
+    },
+    /** Atlas Search index for fuzzy activity search */
+    activitySearch: {
+      name: "activity_search",
+      collectionName: "activities",
+      type: "search",
+      definition: {
+        mappings: {
+          dynamic: false,
+          fields: {
+            label: [
+              { type: "string", analyzer: "luceneStandard" },
+              { type: "autocomplete", analyzer: "luceneStandard", tokenization: "edgeGram", minGrams: 2, maxGrams: 15 },
+            ],
+            description: { type: "string", analyzer: "luceneStandard" },
+            category: { type: "token" },
+          },
+        },
+      },
+    },
+    /** Atlas Vector Search index for semantic location queries */
+    locationVector: {
+      name: "location_vector",
+      collectionName: "locations",
+      type: "vectorSearch",
+      definition: {
+        fields: [
+          {
+            type: "vector",
+            path: "embedding",
+            numDimensions: 1024,
+            similarity: "cosine",
+          },
+          {
+            type: "filter",
+            path: "tags",
+          },
+          {
+            type: "filter",
+            path: "country",
+          },
+        ],
+      },
+    },
+  };
+}
+
+/** Reset Atlas Search availability flags and embeddings guard (for testing). */
+export function _resetSearchFlags(): void {
+  atlasSearchDisabledAt = 0;
+  atlasActivitySearchDisabledAt = 0;
+  vectorSearchDisabledAt = 0;
+  embeddingsExist = null;
 }

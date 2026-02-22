@@ -271,6 +271,10 @@ describe("normalizeTomorrowResponse", () => {
     expect(result.insights!.dewPoint).toBe(18);
     expect(result.insights!.precipitationType).toBe(1);
 
+    // Wind insights
+    expect(result.insights!.windSpeed).toBeDefined();
+    expect(result.insights!.windGust).toBeDefined();
+
     // Safety insights
     expect(result.insights!.thunderstormProbability).toBe(25);
     expect(result.insights!.heatStressIndex).toBe(24.5);

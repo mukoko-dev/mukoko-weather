@@ -4,7 +4,11 @@ import {
   precipTypeName,
   uvConcernLabel,
   moonPhaseName,
+  evaluateSuitability,
 } from "./ActivityInsights";
+import type { SuitabilityRuleDoc } from "@/lib/db";
+import type { WeatherInsights } from "@/lib/weather";
+import type { Activity } from "@/lib/activities";
 
 // ── heatStressLevel ──────────────────────────────────────────────────────────
 
@@ -143,5 +147,76 @@ describe("moonPhaseName", () => {
     expect(moonPhaseName(8)).toBe("Unknown");
     expect(moonPhaseName(-1)).toBe("Unknown");
     expect(moonPhaseName(99)).toBe("Unknown");
+  });
+});
+
+// ── evaluateSuitability ──────────────────────────────────────────────────────
+
+describe("evaluateSuitability", () => {
+  const fakeActivity: Activity = {
+    id: "crop-farming",
+    label: "Crop Farming",
+    category: "farming",
+    relevantTags: ["farming"],
+    icon: "wheat",
+    description: "Test",
+  };
+
+  const fakeInsights = { temperatureMax: 35, humidity: 80 } as unknown as WeatherInsights;
+
+  const activityRule: SuitabilityRuleDoc = {
+    key: "activity:crop-farming",
+    conditions: [
+      { field: "temperatureMax", operator: "gt", value: 40, level: "poor", label: "Too Hot", colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10", detail: "Extreme heat" },
+    ],
+    fallback: { level: "good", label: "Good", colorClass: "text-severity-low", bgClass: "bg-severity-low/10", detail: "Conditions OK" },
+    updatedAt: new Date(),
+  };
+
+  const categoryRule: SuitabilityRuleDoc = {
+    key: "category:farming",
+    conditions: [
+      { field: "humidity", operator: "gte", value: 90, level: "poor", label: "Very Humid", colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10", detail: "Oppressive humidity" },
+    ],
+    fallback: { level: "good", label: "OK", colorClass: "text-severity-low", bgClass: "bg-severity-low/10", detail: "Farming conditions acceptable" },
+    updatedAt: new Date(),
+  };
+
+  it("prefers activity-specific rule when present", () => {
+    const rules = new Map<string, SuitabilityRuleDoc>([
+      ["activity:crop-farming", activityRule],
+      ["category:farming", categoryRule],
+    ]);
+    const result = evaluateSuitability(fakeActivity, fakeInsights, rules);
+    // activityRule fallback ("Good") should be returned since temp 35 < 40
+    expect(result.label).toBe("Good");
+    expect(result.detail).toBe("Conditions OK");
+  });
+
+  it("falls back to category rule when no activity rule exists", () => {
+    const rules = new Map<string, SuitabilityRuleDoc>([
+      ["category:farming", categoryRule],
+    ]);
+    const result = evaluateSuitability(fakeActivity, fakeInsights, rules);
+    // categoryRule fallback ("OK") since humidity 80 < 90
+    expect(result.label).toBe("OK");
+    expect(result.detail).toBe("Farming conditions acceptable");
+  });
+
+  it("returns generic fallback when no rules exist at all", () => {
+    const rules = new Map<string, SuitabilityRuleDoc>();
+    const result = evaluateSuitability(fakeActivity, fakeInsights, rules);
+    expect(result.level).toBe("fair");
+    expect(result.detail).toBe("No specific rules available for this activity");
+  });
+
+  it("matches a condition when threshold is met", () => {
+    const hotInsights = { temperatureMax: 45 } as unknown as WeatherInsights;
+    const rules = new Map<string, SuitabilityRuleDoc>([
+      ["activity:crop-farming", activityRule],
+    ]);
+    const result = evaluateSuitability(fakeActivity, hotInsights, rules);
+    expect(result.level).toBe("poor");
+    expect(result.label).toBe("Too Hot");
   });
 });

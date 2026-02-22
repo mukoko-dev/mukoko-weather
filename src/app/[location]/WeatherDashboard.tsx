@@ -13,8 +13,8 @@ import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
 import { useAppStore } from "@/lib/store";
 import type { WeatherData, FrostAlert, ZimbabweSeason } from "@/lib/weather";
 import type { ZimbabweLocation } from "@/lib/locations";
-import type { Activity } from "@/lib/activities";
-import { ACTIVITIES } from "@/lib/activities";
+import { type Activity, ACTIVITIES } from "@/lib/activities";
+import { InfoRow } from "@/components/ui/info-row";
 
 // ── Code-split heavy components ─────────────────────────────────────────────
 // These use React.lazy() so their JS chunks (Chart.js, ReactMarkdown, etc.)
@@ -51,10 +51,8 @@ export function WeatherDashboard({
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
 
-  // Seed with ACTIVITIES so ActivityInsights always renders even if the fetch
-  // fails. The fetch upgrades to MongoDB data (which includes community-added
-  // activities) once it resolves — but only when the user has activities selected,
-  // since ActivityInsights returns null when selectedActivities is empty.
+  // Seed with static ACTIVITIES for instant rendering, then upgrade from MongoDB.
+  // This prevents a blank ActivityInsights section on slow connections or cold starts.
   const [allActivities, setAllActivities] = useState<Activity[]>(ACTIVITIES);
   useEffect(() => {
     if (selectedActivities.length === 0) return;
@@ -198,26 +196,17 @@ export function WeatherDashboard({
                     About {location.name}
                   </h2>
                   <dl className="mt-4 space-y-3 text-sm">
-                    <div className="flex justify-between">
-                      <dt className="text-text-secondary">Province</dt>
-                      <dd className="font-medium text-text-primary">{location.province}</dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-text-secondary">Elevation</dt>
-                      <dd className="font-medium text-text-primary">{location.elevation}m</dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-text-secondary">Coordinates</dt>
-                      <dd className="font-mono text-xs text-text-primary">
-                        {location.lat.toFixed(2)}, {location.lon.toFixed(2)}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-text-secondary">Season</dt>
-                      <dd className="font-medium text-text-primary">
-                        {season.shona} ({season.name})
-                      </dd>
-                    </div>
+                    <InfoRow label="Province" value={location.province} />
+                    <InfoRow label="Elevation" value={`${location.elevation}m`} />
+                    <InfoRow
+                      label="Coordinates"
+                      value={
+                        <span className="font-mono text-xs">
+                          {location.lat.toFixed(2)}, {location.lon.toFixed(2)}
+                        </span>
+                      }
+                    />
+                    <InfoRow label="Season" value={`${season.shona} (${season.name})`} />
                   </dl>
                 </div>
               </section>

@@ -20,7 +20,7 @@ describe("/api/activities route structure", () => {
     expect(source).toContain("getActivityByIdFromDb");
     expect(source).toContain("getActivityLabelsFromDb");
     expect(source).toContain("searchActivitiesFromDb");
-    expect(source).toContain("getActivityCategoriesFromDb");
+    expect(source).toContain("getAllActivityCategories");
   });
 
   it("imports logError from observability", () => {
@@ -38,16 +38,10 @@ describe("/api/activities query modes", () => {
     expect(source).toContain('searchParams.get("mode")');
   });
 
-  it("supports ?mode=categories to list distinct categories", () => {
+  it("supports ?mode=categories to list categories from DB", () => {
     expect(source).toContain('mode === "categories"');
-    expect(source).toContain("getActivityCategoriesFromDb");
+    expect(source).toContain("getAllActivityCategories");
     expect(source).toContain("{ categories }");
-  });
-
-  it("capitalizes category labels", () => {
-    // Label is derived by capitalizing first letter: id.charAt(0).toUpperCase() + id.slice(1)
-    expect(source).toContain("charAt(0).toUpperCase()");
-    expect(source).toContain("id.slice(1)");
   });
 
   it("supports ?id= to get a single activity by ID", () => {

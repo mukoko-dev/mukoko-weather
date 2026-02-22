@@ -155,6 +155,71 @@ describe("searchActivities", () => {
   });
 });
 
+describe("new activities", () => {
+  it("includes drone-flying activity", () => {
+    const drone = getActivityById("drone-flying");
+    expect(drone).toBeDefined();
+    expect(drone!.label).toBe("Drone Flying");
+    expect(drone!.category).toBe("casual");
+    expect(drone!.description).toContain("drone");
+  });
+
+  it("includes fishing activity", () => {
+    const fishing = getActivityById("fishing");
+    expect(fishing).toBeDefined();
+    expect(fishing!.category).toBe("tourism");
+  });
+
+  it("includes camping activity", () => {
+    const camping = getActivityById("camping");
+    expect(camping).toBeDefined();
+    expect(camping!.category).toBe("tourism");
+  });
+
+  it("includes tennis and rugby in sports", () => {
+    const tennis = getActivityById("tennis");
+    const rugby = getActivityById("rugby");
+    expect(tennis).toBeDefined();
+    expect(rugby).toBeDefined();
+    expect(tennis!.category).toBe("sports");
+    expect(rugby!.category).toBe("sports");
+  });
+
+  it("includes stargazing in tourism", () => {
+    const stargazing = getActivityById("stargazing");
+    expect(stargazing).toBeDefined();
+    expect(stargazing!.category).toBe("tourism");
+  });
+
+  it("includes horse-riding in sports", () => {
+    const horseRiding = getActivityById("horse-riding");
+    expect(horseRiding).toBeDefined();
+    expect(horseRiding!.category).toBe("sports");
+  });
+
+  it("includes picnic in casual", () => {
+    const picnic = getActivityById("picnic");
+    expect(picnic).toBeDefined();
+    expect(picnic!.category).toBe("casual");
+  });
+
+  it("includes irrigation in farming", () => {
+    const irrigation = getActivityById("irrigation");
+    expect(irrigation).toBeDefined();
+    expect(irrigation!.category).toBe("farming");
+  });
+
+  it("includes flying in travel", () => {
+    const flying = getActivityById("flying");
+    expect(flying).toBeDefined();
+    expect(flying!.category).toBe("travel");
+  });
+
+  it("has at least 30 total activities", () => {
+    expect(ACTIVITIES.length).toBeGreaterThanOrEqual(30);
+  });
+});
+
 describe("CATEGORY_STYLES", () => {
   it("has styles for every activity category", () => {
     for (const cat of ACTIVITY_CATEGORIES) {

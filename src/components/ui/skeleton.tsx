@@ -103,10 +103,46 @@ function MetricCardSkeleton({ className }: { className?: string }) {
   )
 }
 
+/** Chat interface skeleton (matches ExploreChatbot container shape) */
+function ChatSkeleton({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col h-full",
+        className
+      )}
+      role="status"
+      aria-label="Loading chat"
+    >
+      {/* Message area */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+        <Skeleton className="h-12 w-12 rounded-full mb-4" />
+        <Skeleton className="h-5 w-40 mb-2" />
+        <Skeleton className="h-3 w-64 mb-1" />
+        <Skeleton className="h-3 w-48 mb-6" />
+        <div className="grid grid-cols-2 gap-2 w-full max-w-md">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 rounded-[var(--radius-card)]" />
+          ))}
+        </div>
+      </div>
+      {/* Input area */}
+      <div className="shrink-0 border-t border-border px-4 py-3">
+        <div className="flex gap-2">
+          <Skeleton className="h-11 flex-1 rounded-md" />
+          <Skeleton className="h-11 w-11 rounded-md" />
+        </div>
+      </div>
+      <span className="sr-only">Loading chat interface</span>
+    </div>
+  )
+}
+
 export {
   Skeleton,
   CardSkeleton,
   ChartSkeleton,
   BadgeSkeleton,
   MetricCardSkeleton,
+  ChatSkeleton,
 }

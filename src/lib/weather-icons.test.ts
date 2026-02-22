@@ -1,7 +1,7 @@
 /**
- * Tests for weather-icons.tsx — validates the ActivityIcon and WeatherIcon
- * switch mappings by reading the source file and verifying every expected
- * mapping is present.
+ * Tests for weather-icons.tsx — validates the ICON_REGISTRY, ActivityIcon,
+ * and WeatherIcon mappings by reading the source file and verifying every
+ * expected mapping is present.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
@@ -12,54 +12,55 @@ const source = readFileSync(
   "utf-8",
 );
 
-describe("ActivityIcon mapping", () => {
-  const expectedActivities = [
-    "crop-farming",
-    "livestock",
-    "gardening",
-    "mining",
-    "construction",
-    "driving",
-    "commuting",
-    "safari",
-    "photography",
-    "birdwatching",
-    "running",
-    "cycling",
-    "hiking",
-    "football",
-    "swimming",
-    "golf",
-    "cricket",
-    "walking",
-    "barbecue",
-    "outdoor-events",
+describe("ICON_REGISTRY", () => {
+  const expectedIcons = [
+    "crop", "livestock", "shovel", "water", "pickaxe", "hardhat",
+    "car", "bus", "plane", "binoculars", "camera", "bird", "tent",
+    "star", "fish", "running", "bicycle", "mountain", "football",
+    "swimming", "golf", "cricket", "tennis", "rugby", "horse",
+    "footprints", "grill", "drone", "picnic", "sparkles", "sun",
   ];
 
-  it("maps all 20 activity IDs", () => {
-    for (const id of expectedActivities) {
-      expect(source).toContain(`case "${id}"`);
+  it("maps all 31 icon identifiers in the registry", () => {
+    for (const id of expectedIcons) {
+      expect(source).toContain(`${id}:`);
     }
   });
 
-  it("has a default fallback to SunIcon", () => {
-    // Find the ActivityIcon function and verify it has a default case
-    const activityIconMatch = source.match(
-      /function ActivityIcon[\s\S]*?^}/m,
-    );
-    expect(activityIconMatch).toBeTruthy();
-    expect(activityIconMatch![0]).toContain("default:");
-    expect(activityIconMatch![0]).toContain("SunIcon");
+  it("exports the ICON_REGISTRY", () => {
+    expect(source).toContain("export const ICON_REGISTRY");
   });
 
-  it("has exactly 20 activity cases (no duplicates or missing)", () => {
-    // Extract the ActivityIcon switch block
+  it("has exactly 31 entries in the registry", () => {
+    // Count entries between ICON_REGISTRY and the closing brace
+    const registryStart = source.indexOf("export const ICON_REGISTRY");
+    const registrySection = source.slice(registryStart, source.indexOf("};", registryStart) + 2);
+    // Count lines that have an icon mapping (identifier: ComponentName)
+    const entryMatches = registrySection.match(/^\s+\w+:\s+\w+Icon,?$/gm);
+    expect(entryMatches).toHaveLength(31);
+  });
+});
+
+describe("ActivityIcon component", () => {
+  it("exports the ActivityIcon function", () => {
+    expect(source).toContain("export function ActivityIcon");
+  });
+
+  it("accepts activity and icon props", () => {
+    expect(source).toContain("activity: string");
+    expect(source).toContain("icon?: string");
+  });
+
+  it("looks up icon from ICON_REGISTRY", () => {
+    expect(source).toContain("ICON_REGISTRY[icon]");
+  });
+
+  it("falls back to SunIcon for unknown icons", () => {
     const activityIconSection = source.slice(
-      source.indexOf("function ActivityIcon"),
-      source.indexOf("function WeatherIcon"),
+      source.indexOf("export function ActivityIcon"),
+      source.indexOf("export function WeatherIcon"),
     );
-    const caseMatches = activityIconSection.match(/case "/g);
-    expect(caseMatches).toHaveLength(20);
+    expect(activityIconSection).toContain("SunIcon");
   });
 });
 

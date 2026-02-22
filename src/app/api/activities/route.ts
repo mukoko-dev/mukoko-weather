@@ -5,7 +5,7 @@ import {
   getActivityByIdFromDb,
   getActivityLabelsFromDb,
   searchActivitiesFromDb,
-  getActivityCategoriesFromDb,
+  getAllActivityCategories,
 } from "@/lib/db";
 import { logError } from "@/lib/observability";
 
@@ -17,11 +17,11 @@ import { logError } from "@/lib/observability";
  *   ?category=farming       — filter by category
  *   ?q=cycling              — text search
  *   ?labels=running,cycling — get labels for IDs (comma-separated)
- *   ?mode=categories        — list distinct categories
+ *   ?mode=categories        — list categories with styles from DB
  *   (no params)             — all activities
  *
- * LOCATIONS and ACTIVITIES arrays in locations.ts / activities.ts are
- * seed data only — this route is the runtime source of truth.
+ * ACTIVITIES array in activities.ts is seed data only — this route is the
+ * runtime source of truth.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -32,13 +32,9 @@ export async function GET(request: NextRequest) {
   const mode = searchParams.get("mode");
 
   try {
-    // Mode: list distinct categories (returns {id, label} objects)
+    // Mode: list categories with full style metadata from DB
     if (mode === "categories") {
-      const categoryIds = await getActivityCategoriesFromDb();
-      const categories = categoryIds.map((id) => ({
-        id,
-        label: id.charAt(0).toUpperCase() + id.slice(1),
-      }));
+      const categories = await getAllActivityCategories();
       return NextResponse.json({ categories });
     }
 

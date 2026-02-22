@@ -92,6 +92,16 @@ describe("explore page — data and accessibility", () => {
     expect(usesDb).toBe(true);
   });
 
+  it("explore page links to /shamwari for AI chat", () => {
+    expect(exploreSource).toContain("/shamwari");
+    expect(exploreSource).toContain("Ask Shamwari");
+  });
+
+  it("explore page is browse-only (no chatbot component)", () => {
+    expect(exploreSource).not.toContain("ExplorePageClient");
+    expect(exploreSource).not.toContain("ExploreChatbot");
+  });
+
   it("explore tag page renders a not-found for unknown tags", () => {
     expect(exploreTagSource).toContain("notFound");
   });

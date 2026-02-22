@@ -1,12 +1,22 @@
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import type { FrostAlert } from "@/lib/weather";
 
 export function FrostAlertBanner({ alert }: { alert: FrostAlert }) {
+  const variant = alert.risk === "severe" ? "frost" : "warning";
+
+  const borderColor =
+    alert.risk === "severe"
+      ? "border-frost-severe"
+      : alert.risk === "high"
+        ? "border-earth"
+        : "border-accent";
+
   const bgColor =
     alert.risk === "severe"
-      ? "bg-frost-severe-bg border-frost-severe"
+      ? "bg-frost-severe-bg"
       : alert.risk === "high"
-        ? "bg-frost-high-bg border-earth"
-        : "bg-frost-moderate-bg border-accent";
+        ? "bg-frost-high-bg"
+        : "bg-frost-moderate-bg";
 
   const textColor =
     alert.risk === "severe"
@@ -16,15 +26,15 @@ export function FrostAlertBanner({ alert }: { alert: FrostAlert }) {
         : "text-accent";
 
   return (
-    <div
-      role="alert"
+    <Alert
+      variant={variant}
       aria-live="assertive"
-      className={`mb-6 rounded-[var(--radius-card)] border-l-4 p-4 ${bgColor}`}
+      className={`mb-6 ${borderColor} ${bgColor}`}
     >
-      <p className={`text-sm font-semibold ${textColor}`}>
+      <AlertTitle className={textColor}>
         Frost {alert.risk === "severe" ? "Warning" : "Advisory"} — {alert.risk.toUpperCase()}
-      </p>
-      <p className={`mt-1 text-sm ${textColor}`}>{alert.message}</p>
-    </div>
+      </AlertTitle>
+      <AlertDescription className={textColor}>{alert.message}</AlertDescription>
+    </Alert>
   );
 }

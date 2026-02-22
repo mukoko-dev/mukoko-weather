@@ -15,6 +15,10 @@ AI-powered weather intelligence, starting with Zimbabwe and expanding globally. 
 - **Dynamic locations** — 90+ seed locations in Zimbabwe, with community-driven expansion to ASEAN and developing regions via geolocation and search
 - **Seasonal awareness** — Zimbabwe seasons (Masika, Chirimo, Zhizha, Munakamwe) and regional context
 - **Geolocation** — automatic nearest-location detection via browser GPS, with auto-creation for new areas
+- **Shamwari AI chat** — dedicated `/shamwari` page with full-viewport Claude app-style chat (search locations, check weather, get activity advice, compare cities)
+- **Suitability scoring** — database-driven weather suitability evaluation for activities (excellent/good/fair/poor ratings with structured metrics)
+- **Country/region browse** — explore locations by country, province, and tag across 64 countries (54 AU + ASEAN)
+- **System status** — live health dashboard for all services (MongoDB, weather APIs, AI, cache)
 - **Embeddable widget** — drop-in weather widget for third-party sites
 - **Dedicated detail pages** — `/harare/atmosphere` for 24h atmospheric charts, `/harare/forecast` for hourly + daily forecast detail, `/harare/map` for full-viewport interactive weather map
 - **Smart theming** — light, dark, and system (auto) modes with OS preference detection
@@ -35,7 +39,7 @@ AI-powered weather intelligence, starting with Zimbabwe and expanding globally. 
 | State | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist` middleware |
 | AI | [Anthropic Claude SDK](https://docs.anthropic.com/en/docs) (server-side only) |
 | Weather API | [Tomorrow.io](https://tomorrow.io) (primary) + [Open-Meteo](https://open-meteo.com) (fallback) |
-| Database | [MongoDB Atlas](https://mongodb.com/atlas) (cache, AI summaries, history, locations) |
+| Database | [MongoDB Atlas](https://mongodb.com/atlas) (cache, AI summaries, history, locations; Atlas Search for fuzzy queries) |
 | Analytics | [Google Analytics 4](https://analytics.google.com) |
 | Testing | [Vitest](https://vitest.dev) |
 | CI/CD | [GitHub Actions](https://github.com/features/actions) (tests + lint + typecheck on push/PR) |
@@ -89,6 +93,13 @@ The app redirects `/` to `/harare` by default.
 | `/[location]/atmosphere` | 24-hour atmospheric detail charts (humidity, wind, pressure, UV) |
 | `/[location]/forecast` | Hourly (24h) + daily (7-day) forecast charts + sunrise/sunset |
 | `/[location]/map` | Full-viewport interactive weather map with layer switcher |
+| `/shamwari` | Shamwari AI chat (full-viewport, Claude app style) |
+| `/explore` | Browse locations by category and country |
+| `/explore/[tag]` | Browse locations filtered by tag |
+| `/explore/country` | Browse locations by country index |
+| `/explore/country/[code]` | Browse locations in a specific country |
+| `/explore/country/[code]/[province]` | Browse locations in a specific province |
+| `/status` | System health dashboard (live checks for all services) |
 | `/about` | Company information |
 | `/help` | User help / FAQ |
 | `/history` | Historical weather data dashboard (search, multi-day charts, data table) |
@@ -103,12 +114,20 @@ The main location page is a compact overview. Detail-heavy sections (charts, atm
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/weather?lat=&lon=` | GET | Weather data (Tomorrow.io → Open-Meteo fallback, MongoDB cached 15-min TTL). `X-Weather-Provider` header indicates source |
-| `/api/geo?lat=&lon=` | GET | Nearest location lookup (supports `autoCreate=true` for community locations) |
-| `/api/locations/add` | POST | Add locations via search (`{ query }`) or coordinates (`{ lat, lon }`). Rate-limited |
 | `/api/ai` | POST | AI weather summary. Body: `{ weatherData, location }`. Tiered TTL cache (30/60/120 min) |
+| `/api/explore` | POST | Shamwari Explorer chatbot. Body: `{ message, history }`. Rate-limited 20 req/hour/IP |
+| `/api/search?q=&tag=&lat=&lon=` | GET | Location search (text, tag filter, geospatial nearest) |
+| `/api/geo?lat=&lon=` | GET | Nearest location lookup (supports `autoCreate=true` for community locations) |
+| `/api/locations` | GET | List/filter locations (by slug, tag, all, or stats mode) |
+| `/api/locations/add` | POST | Add locations via search (`{ query }`) or coordinates (`{ lat, lon }`). Rate-limited |
+| `/api/activities` | GET | Activities (by id, category, search, labels, or categories mode) |
+| `/api/suitability` | GET | Suitability rules (all or by key; key format validated) |
+| `/api/tags` | GET | Tag metadata (all or featured) |
+| `/api/regions` | GET | Active supported regions (bounding boxes) |
+| `/api/status` | GET | System health checks (MongoDB, APIs, cache) |
 | `/api/history?location=&days=` | GET | Historical weather data for a location |
 | `/api/map-tiles?z=&x=&y=&layer=` | GET | Tile proxy for Tomorrow.io map layers (keeps API key server-side) |
-| `/api/db-init` | POST | One-time DB setup + optional API key seeding. Protected by `DB_INIT_SECRET` in production |
+| `/api/db-init` | POST | One-time DB setup + seed data. Protected by `DB_INIT_SECRET` in production |
 
 ### Resilience
 
@@ -155,88 +174,88 @@ src/
       FrostAlertBanner.tsx  # Frost risk alert
       WeatherUnavailableBanner.tsx  # Fallback data alert
       atmosphere/           # 24h atmospheric detail charts sub-route
-        page.tsx            # Server wrapper (SEO, data fetch)
-        AtmosphereDashboard.tsx  # Client: atmospheric charts
-        loading.tsx         # Branded skeleton
       forecast/             # Hourly + daily forecast detail sub-route
-        page.tsx            # Server wrapper (SEO, data fetch)
-        ForecastDashboard.tsx  # Client: forecast charts + sun times
-        loading.tsx         # Branded skeleton
       map/                  # Full-viewport weather map sub-route
-        page.tsx            # Server wrapper (SEO, no weather fetch)
-        MapDashboard.tsx    # Client: full-viewport Leaflet map + layer switcher
-        loading.tsx         # Full-viewport skeleton
-    about/page.tsx          # Company info page
-    help/page.tsx           # User help / FAQ
+    explore/                # Browse-only location/tag/country exploration
+      page.tsx              # Explore page (ISR 1h, category + country browse)
+      [tag]/                # Browse locations by tag
+      country/              # Browse by country/province (nested [code]/[province])
+    shamwari/               # Shamwari AI chat (full-viewport, Claude app style)
+      page.tsx              # Server wrapper (metadata)
+      ShamwariPageClient.tsx # Client: full-viewport chatbot layout
+    status/                 # System health dashboard
+      page.tsx
+      StatusDashboard.tsx   # Client: live health checks
+    about/page.tsx
+    help/page.tsx
     history/
-      page.tsx              # Historical data page (metadata, layout)
+      page.tsx              # Historical data page
       HistoryDashboard.tsx  # Client: search, 7 charts, stats, data table
-      error.tsx             # History page error boundary
-    privacy/page.tsx        # Privacy policy
-    terms/page.tsx          # Terms of service
-    embed/page.tsx          # Embeddable widget documentation
+      error.tsx
+    privacy/page.tsx
+    terms/page.tsx
+    embed/page.tsx
     api/
       weather/route.ts      # GET — Tomorrow.io/Open-Meteo proxy + MongoDB cache
-      geo/route.ts          # GET — nearest location lookup (supports autoCreate)
-      locations/add/route.ts # POST — add locations via search or coordinates
       ai/route.ts           # POST — AI summaries (Claude Haiku 3.5, markdown-formatted)
+      explore/route.ts      # POST — Shamwari Explorer chatbot (Claude + tool use)
+      search/route.ts       # GET — location search (text, tag, geo queries)
+      geo/route.ts          # GET — nearest location lookup (supports autoCreate)
+      locations/route.ts    # GET — list/filter locations from MongoDB
+      locations/add/route.ts # POST — add locations via search or coordinates
+      activities/route.ts   # GET — activities (by ID, category, search, labels)
+      suitability/route.ts  # GET — suitability rules from MongoDB
+      tags/route.ts         # GET — tag metadata (all or featured)
+      regions/route.ts      # GET — active supported regions
+      status/route.ts       # GET — system health checks
       history/route.ts      # GET — historical weather data
-      db-init/route.ts      # POST — one-time DB setup + API key seeding
+      map-tiles/route.ts    # GET — tile proxy for Tomorrow.io map layers
+      db-init/route.ts      # POST — one-time DB setup + seed data
   components/
-    ui/                     # shadcn/ui primitives
-      button.tsx            # Button (6 variants, 5 sizes, asChild support)
-      badge.tsx             # Badge (4 variants)
-      card.tsx              # Card, CardHeader, CardContent, etc.
-      chart.tsx             # CanvasChart, resolveColor (wraps Chart.js Canvas 2D)
-      dialog.tsx            # Dialog (Radix, portal, overlay, animations)
-      input.tsx             # Input (CSS custom property styled)
-      tabs.tsx              # Tabs (Radix, border-bottom active indicator)
-    analytics/
-      GoogleAnalytics.tsx   # GA4 integration via next/script
-    brand/
-      MukokoLogo.tsx        # Logo with text fallback
-      MineralsStripe.tsx    # 5-mineral decorative stripe
-      ThemeProvider.tsx     # Syncs Zustand theme to document
-      ThemeToggle.tsx       # Light/dark/system mode toggle (3-state cycle)
-    layout/
-      Header.tsx            # Sticky header, pill icon group, My Weather modal trigger
-      Footer.tsx            # Footer with site stats, copyright, Ubuntu philosophy
+    ui/                     # shadcn/ui primitives (button, badge, card, chart, dialog, input, skeleton, tabs)
+    analytics/              # Google Analytics 4
+    brand/                  # Logo, MineralsStripe, ThemeProvider, ThemeToggle
+    explore/                # ExploreChatbot (AI chat UI, typing indicator, suggested prompts)
+    layout/                 # Header (pill icon group), HeaderSkeleton, Footer
     weather/
       CurrentConditions.tsx  # Large temp display, feels-like, stats grid
       HourlyForecast.tsx     # 24-hour hourly forecast
-      HourlyChart.tsx        # Area chart: temperature + rain over 24h
       DailyForecast.tsx      # 7-day forecast cards
-      DailyChart.tsx         # Area chart: high/low temps over 7 days
-      AtmosphericSummary.tsx # 2x3 compact metric cards (humidity, wind, pressure, UV, cloud, feels-like)
-      AtmosphericDetails.tsx # 4x 24h atmospheric charts (used by atmosphere sub-route + history)
-      LazySection.tsx        # IntersectionObserver lazy-load wrapper
-      ChartErrorBoundary.tsx # Error boundary for chart crash isolation
-      MyWeatherModal.tsx     # Centralized preferences modal (location, activities, settings)
+      AtmosphericSummary.tsx # 2x3 compact metric cards
+      AtmosphericDetails.tsx # 4x 24h atmospheric charts
+      LazySection.tsx        # TikTok-style sequential lazy-load
+      ChartErrorBoundary.tsx # Error boundary for crash isolation
+      StatCard.tsx           # Reusable stat card
+      MyWeatherModal.tsx     # Centralized preferences modal
       AISummary.tsx          # Shamwari AI markdown summary
       ActivityInsights.tsx   # Category-specific weather insight cards
-      SeasonBadge.tsx        # Zimbabwe season indicator
-      SunTimes.tsx           # Sunrise/sunset display
-      LocationSelector.tsx   # Search/filter dropdown, geolocation
-    map/                     # Interactive weather map (Leaflet + Tomorrow.io tiles)
-      MapPreview.tsx         # Compact map card on location page (links to /[location]/map)
-      MapLayerSwitcher.tsx   # Layer toggle buttons
+      charts/                # Reusable Canvas chart components (15 charts)
+      map/                   # Leaflet map (preview, full, layer switcher, skeleton)
     embed/
       MukokoWeatherEmbed.tsx # Embeddable widget (CSS module, self-contained)
   lib/
-    locations.ts            # WeatherLocation type, 90+ seed locations, SUPPORTED_REGIONS
+    locations.ts            # WeatherLocation type, 90+ ZW seed locations, SUPPORTED_REGIONS
+    locations-africa.ts     # African city seed data (54 AU member states)
+    countries.ts            # Country/province types, 64 seed countries, flag emoji
     activities.ts           # 20 activities, 6 categories, mineral color styles
+    suitability.ts          # Database-driven suitability evaluation engine (evaluateRule)
+    suitability-cache.ts    # Client-side cache for suitability rules + category styles
     tomorrow.ts             # Tomorrow.io API client + WMO normalization
     weather.ts              # Open-Meteo client, frost detection, seasons, weather utils
-    db.ts                   # MongoDB CRUD (weather_cache, ai_summaries, weather_history, locations, rate_limits, api_keys)
-    geocoding.ts            # Nominatim reverse geocoding, Open-Meteo forward geocoding, slug generation
+    weather-labels.ts       # Contextual label helpers (humidity, pressure, cloud, feels-like)
+    db.ts                   # MongoDB CRUD + Atlas Search/Vector Search (12 collections)
+    geocoding.ts            # Nominatim + Open-Meteo geocoding, slug generation
     rate-limit.ts           # MongoDB-backed IP rate limiter
     mongo.ts                # MongoDB client (connection-pooled via @vercel/functions)
+    circuit-breaker.ts      # Netflix Hystrix-inspired circuit breaker
     observability.ts        # Structured error logging + GA4 error reporting
-    store.ts                # Zustand state with localStorage persistence (theme, activities)
+    store.ts                # Zustand state (theme, activities, location)
     geolocation.ts          # Browser Geolocation API wrapper
     weather-icons.tsx       # SVG weather + activity icon components
-    i18n.ts                 # Lightweight i18n (en complete, sn/nd structurally ready)
-    utils.ts                # Tailwind class merging helper (cn)
+    i18n.ts                 # Lightweight i18n (en complete, sn/nd ready)
+    error-retry.ts          # Error retry with sessionStorage tracking
+    utils.ts                # Tailwind class merging (cn)
+    seed-*.ts               # Seed data files (categories, tags, regions, seasons, suitability rules)
 public/
   manifest.json             # PWA manifest with app shortcuts
   icons/                    # PWA icons (192x192, 512x512)

@@ -17,16 +17,14 @@ import { VisibilityChart } from "@/components/weather/charts/VisibilityChart";
 import { ThunderstormChart } from "@/components/weather/charts/ThunderstormChart";
 import { GDDChart } from "@/components/weather/charts/GDDChart";
 import { ChartSkeleton } from "@/components/ui/skeleton";
-import { type ZimbabweLocation } from "@/lib/locations";
+import { type ZimbabweLocation, LOCATIONS } from "@/lib/locations";
 import { useAppStore } from "@/lib/store";
 import { weatherCodeToInfo, windDirection, uvLevel } from "@/lib/weather";
 import type { WeatherInsights } from "@/lib/weather";
 import type { WeatherHistoryDoc } from "@/lib/db";
-import {
-  ACTIVITY_CATEGORIES,
-  CATEGORY_STYLES,
-  type ActivityCategory,
-} from "@/lib/activities";
+import type { ActivityCategory } from "@/lib/activities";
+import type { ActivityCategoryDoc } from "@/lib/db";
+import { CATEGORIES } from "@/lib/seed-categories";
 import {
   heatStressLevel,
   uvConcernLabel,
@@ -175,10 +173,13 @@ const DAY_OPTIONS: { value: DayRange; label: string }[] = [
   { value: 365, label: "1 year" },
 ];
 
-const CATEGORY_FILTER_OPTIONS: { id: ActivityCategory | "all"; label: string }[] = [
-  { id: "all", label: "All Data" },
-  ...ACTIVITY_CATEGORIES.map((c) => ({ id: c.id, label: c.label })),
-];
+/** Category style shape */
+interface CategoryStyleShape {
+  bg: string;
+  border: string;
+  text: string;
+  badge: string;
+}
 
 function avg(arr: number[]): number {
   return arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : 0;
@@ -273,7 +274,7 @@ export function computeCategorySuitability(
     let detail = `Avg dew point: ${avgDew}°C`;
     if (avgGdd > 0) detail += ` | Avg GDD: ${avgGdd}`;
     if (avgDew > 20) { level = "fair"; detail = "High avg dew point — crop disease risk elevated"; }
-    else if (avgDew < 5) { level = "poor"; detail = "Low avg dew point — frost risk detected in period"; }
+    else if (avgDew < 5) { level = "poor"; detail = "Low avg dew point — cold, dry air stress for crops"; }
     else if (avgGdd > 15) { level = "excellent"; detail = `Strong growth period (avg GDD: ${avgGdd})`; }
     const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
     results.push({ label: "Farming", level, levelLabel: lvl, colorClass, bgClass, detail, icon: "🌱", category: "farming" });
@@ -374,15 +375,43 @@ export function HistoryDashboard() {
   const [activeTab, setActiveTab] = useState<ViewTab>("weather");
   const [categoryFilter, setCategoryFilter] = useState<ActivityCategory | "all">("all");
   const tableEndRef = useRef<HTMLDivElement>(null);
-  const [allLocations, setAllLocations] = useState<ZimbabweLocation[]>([]);
+  // Seed with static LOCATIONS for instant search rendering, then upgrade from MongoDB.
+  const [allLocations, setAllLocations] = useState<ZimbabweLocation[]>(LOCATIONS);
+  // Seed with static CATEGORIES for instant filter rendering, then upgrade from MongoDB.
+  const [activityCategories, setActivityCategories] = useState<ActivityCategoryDoc[]>(CATEGORIES);
   const didAutoSelect = useRef(false);
 
-  // Fetch all locations from MongoDB on mount
+  // Build category filter options and styles from API data
+  const categoryFilterOptions = useMemo(() => {
+    const opts: { id: ActivityCategory | "all"; label: string }[] = [
+      { id: "all", label: "All Data" },
+    ];
+    for (const cat of activityCategories) {
+      opts.push({ id: cat.id as ActivityCategory, label: cat.label });
+    }
+    return opts;
+  }, [activityCategories]);
+
+  const categoryStyles = useMemo(() => {
+    const map: Record<string, CategoryStyleShape> = {};
+    for (const cat of activityCategories) {
+      if (cat.style) map[cat.id] = cat.style;
+    }
+    return map;
+  }, [activityCategories]);
+
+  // Fetch all locations and categories from MongoDB on mount
   useEffect(() => {
-    fetch("/api/locations")
-      .then((res) => (res.ok ? res.json() : { locations: [] }))
-      .then((data) => setAllLocations(data.locations ?? []))
-      .catch(() => {});
+    Promise.all([
+      fetch("/api/locations")
+        .then((res) => (res.ok ? res.json() : { locations: [] }))
+        .then((data) => setAllLocations(data.locations ?? []))
+        .catch(() => {}),
+      fetch("/api/activities?mode=categories")
+        .then((res) => (res.ok ? res.json() : { categories: [] }))
+        .then((data) => { if (data?.categories?.length) setActivityCategories(data.categories); })
+        .catch(() => {}),
+    ]);
   }, []);
 
   // Auto-select the global location (from My Weather / last visited location page)
@@ -617,9 +646,9 @@ export function HistoryDashboard() {
       {/* Category filter pills */}
       {fetched && !loading && records.length > 0 && (
         <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by activity category">
-          {CATEGORY_FILTER_OPTIONS.map((opt) => {
+          {categoryFilterOptions.map((opt) => {
             const active = categoryFilter === opt.id;
-            const style = opt.id !== "all" ? CATEGORY_STYLES[opt.id] : null;
+            const style = opt.id !== "all" ? (categoryStyles[opt.id] ?? null) : null;
             return (
               <button
                 key={opt.id}
@@ -994,7 +1023,7 @@ export function HistoryDashboard() {
                   <ChartErrorBoundary name="dew point">
                     <section aria-labelledby="history-dewpoint-chart">
                       <h2 id="history-dewpoint-chart" className="text-lg font-semibold text-text-primary font-heading">Dew point</h2>
-                      <p className="mt-1 text-xs text-text-tertiary">Below 5°C indicates frost risk, above 20°C indicates crop disease risk</p>
+                      <p className="mt-1 text-xs text-text-tertiary">Below 5°C indicates cold, dry air stress; above 20°C indicates crop disease risk</p>
                       <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
                         <DewPointChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
                       </div>

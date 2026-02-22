@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { FAQ } from "./FAQ";
 
 export const metadata: Metadata = {
   title: "Help & FAQ",
@@ -259,87 +260,8 @@ export default function HelpPage() {
         {/* FAQ */}
         <section className="mt-10">
           <h2 className="font-heading text-2xl font-bold text-text-primary">Frequently asked questions</h2>
-          <div className="mt-4 divide-y divide-text-tertiary/10">
-            <details className="group py-4">
-              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:rounded">
-                Is mukoko weather free?
-              </summary>
-              <p className="mt-2 text-text-secondary leading-relaxed">
-                Yes, completely free. No account, registration, or payment needed. We believe weather
-                information is a public good.
-              </p>
-            </details>
-
-            <details className="group py-4">
-              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:rounded">
-                How accurate is the weather data?
-              </summary>
-              <p className="mt-2 text-text-secondary leading-relaxed">
-                Weather data comes from Tomorrow.io and Open-Meteo, which aggregate global weather models.
-                Short-range forecasts (1-3 days) are generally very reliable. Longer-range forecasts (4-7
-                days) should be used as general guidance. For life-critical decisions, always consult your
-                local meteorological service.
-              </p>
-            </details>
-
-            <details className="group py-4">
-              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:rounded">
-                Do you collect my personal data?
-              </summary>
-              <p className="mt-2 text-text-secondary leading-relaxed">
-                We use Google Analytics for anonymised usage statistics (page views, visitor counts). We
-                don&apos;t use advertising pixels or fingerprinting. If you use the location feature, your
-                coordinates are only used to find the nearest weather location. See our{" "}
-                <Link href="/privacy" className="text-primary underline">Privacy Policy</Link> for full details.
-              </p>
-            </details>
-
-            <details className="group py-4">
-              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:rounded">
-                Why can&apos;t I find my location?
-              </summary>
-              <p className="mt-2 text-text-secondary leading-relaxed">
-                We cover locations across Zimbabwe, ASEAN countries, and other developing regions — with
-                more being added by the community. If your area isn&apos;t listed, try using the
-                &quot;Use my location&quot; feature — if you&apos;re in a supported region, a new
-                location will be created automatically. You can also search for a location by name in the
-                My Weather modal.
-              </p>
-            </details>
-
-            <details className="group py-4">
-              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:rounded">
-                What does the AI summary do?
-              </summary>
-              <p className="mt-2 text-text-secondary leading-relaxed">
-                Our AI assistant (Shamwari Weather) generates a brief, contextual weather summary
-                with practical advice. For farming areas, you&apos;ll get crop-related tips. For tourism
-                spots, outdoor activity guidance. For mining areas, safety considerations. Summaries are
-                refreshed periodically and cached for performance.
-              </p>
-            </details>
-
-            <details className="group py-4">
-              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:rounded">
-                Does it work offline?
-              </summary>
-              <p className="mt-2 text-text-secondary leading-relaxed">
-                mukoko weather is a PWA (Progressive Web App) and can be installed on your device. However,
-                weather data requires an internet connection to fetch the latest conditions. Previously loaded
-                pages may be available from your browser cache.
-              </p>
-            </details>
-
-            <details className="group py-4">
-              <summary className="cursor-pointer font-semibold text-text-primary group-open:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:rounded">
-                Who built mukoko weather?
-              </summary>
-              <p className="mt-2 text-text-secondary leading-relaxed">
-                mukoko weather is a product of Mukoko Africa, a division of Nyuchi Africa (PVT) Ltd. It is
-                developed and maintained by Nyuchi Web Services. Learn more on our{" "}
-                <Link href="/about" className="text-primary underline">About page</Link>.
-              </p>
-            </details>
+          <div className="mt-4">
+            <FAQ />
           </div>
         </section>
 

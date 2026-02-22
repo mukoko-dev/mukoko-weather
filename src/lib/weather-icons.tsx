@@ -1,4 +1,5 @@
 /* SVG weather icons as React components */
+import type React from "react";
 
 interface IconProps {
   className?: string;
@@ -413,31 +414,147 @@ export function CameraIcon({ className = "", size = 24 }: IconProps) {
   );
 }
 
-/** Map activity IDs to icon components */
-export function ActivityIcon({ activity, className = "", size = 24 }: { activity: string } & IconProps) {
-  switch (activity) {
-    case "crop-farming": return <CropIcon className={className} size={size} />;
-    case "livestock": return <LivestockIcon className={className} size={size} />;
-    case "gardening": return <ShovelIcon className={className} size={size} />;
-    case "mining": return <PickaxeIcon className={className} size={size} />;
-    case "construction": return <HardHatIcon className={className} size={size} />;
-    case "driving": return <CarIcon className={className} size={size} />;
-    case "commuting": return <BusIcon className={className} size={size} />;
-    case "safari": return <BinocularsIcon className={className} size={size} />;
-    case "photography": return <CameraIcon className={className} size={size} />;
-    case "birdwatching": return <BirdIcon className={className} size={size} />;
-    case "running": return <RunningIcon className={className} size={size} />;
-    case "cycling": return <BicycleIcon className={className} size={size} />;
-    case "hiking": return <MountainIcon className={className} size={size} />;
-    case "football": return <FootballIcon className={className} size={size} />;
-    case "swimming": return <SwimmingIcon className={className} size={size} />;
-    case "golf": return <GolfIcon className={className} size={size} />;
-    case "cricket": return <CricketIcon className={className} size={size} />;
-    case "walking": return <FootprintsIcon className={className} size={size} />;
-    case "barbecue": return <GrillIcon className={className} size={size} />;
-    case "outdoor-events": return <TentIcon className={className} size={size} />;
-    default: return <SunIcon className={className} size={size} />;
+// ── Additional Activity Icons ──────────────────────────────────────────────
+
+export function DroneIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h3" /><path d="M18 6h3" /><path d="M3 18h3" /><path d="M18 18h3" />
+      <circle cx="4.5" cy="6" r="1.5" /><circle cx="19.5" cy="6" r="1.5" />
+      <circle cx="4.5" cy="18" r="1.5" /><circle cx="19.5" cy="18" r="1.5" />
+      <path d="M6 7.5L9 10" /><path d="M18 7.5L15 10" />
+      <path d="M6 16.5L9 14" /><path d="M18 16.5L15 14" />
+      <rect x="9" y="10" width="6" height="4" rx="1" />
+    </svg>
+  );
+}
+
+export function TennisIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M18.09 5.91C14.5 2.32 6 5 6 12s8.5 9.68 12.09 6.09" />
+      <path d="M5.91 18.09C9.5 21.68 18 19 18 12S9.5 2.32 5.91 5.91" />
+    </svg>
+  );
+}
+
+export function RugbyIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="12" cy="12" rx="10" ry="6" transform="rotate(-45 12 12)" />
+      <path d="M5 5l14 14" /><path d="M9 9l6 6" />
+    </svg>
+  );
+}
+
+export function HorseIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 3c-1 0-2 .5-2 2v3l-4 3-4-3V5c0-1.5-1-2-2-2" />
+      <path d="M6 5v4l3 3v4l-2 4" /><path d="M18 5v4l-3 3v4l2 4" />
+      <path d="M9 12h6" />
+    </svg>
+  );
+}
+
+export function PlaneIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" />
+    </svg>
+  );
+}
+
+export function WaterIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" />
+      <path d="M7.5 17.5c1.5 1.5 4.5 1.5 6 0" />
+    </svg>
+  );
+}
+
+export function FishIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6.5 12c2-5.5 7-7.5 11.5-5.5 0 0 1.5 2 1.5 5.5s-1.5 5.5-1.5 5.5c-4.5 2-9.5 0-11.5-5.5" />
+      <path d="M3.5 9S2 12 3.5 15" /><circle cx="14" cy="12" r="1" />
+    </svg>
+  );
+}
+
+export function StarIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+}
+
+export function PicnicIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12h18" /><path d="M5 12l-2 8h18l-2-8" />
+      <path d="M12 4v8" /><path d="M8 4c0 2 1.5 4 4 4s4-2 4-4" />
+    </svg>
+  );
+}
+
+/**
+ * Icon registry — maps icon identifiers (stored in MongoDB) to SVG components.
+ * New activities can reference any icon in this registry via their `icon` field.
+ */
+export const ICON_REGISTRY: Record<string, (props: IconProps) => React.JSX.Element> = {
+  crop: CropIcon,
+  livestock: LivestockIcon,
+  shovel: ShovelIcon,
+  water: WaterIcon,
+  pickaxe: PickaxeIcon,
+  hardhat: HardHatIcon,
+  car: CarIcon,
+  bus: BusIcon,
+  plane: PlaneIcon,
+  binoculars: BinocularsIcon,
+  camera: CameraIcon,
+  bird: BirdIcon,
+  tent: TentIcon,
+  star: StarIcon,
+  fish: FishIcon,
+  running: RunningIcon,
+  bicycle: BicycleIcon,
+  mountain: MountainIcon,
+  football: FootballIcon,
+  swimming: SwimmingIcon,
+  golf: GolfIcon,
+  cricket: CricketIcon,
+  tennis: TennisIcon,
+  rugby: RugbyIcon,
+  horse: HorseIcon,
+  footprints: FootprintsIcon,
+  grill: GrillIcon,
+  drone: DroneIcon,
+  picnic: PicnicIcon,
+  sparkles: SparklesIcon,
+  sun: SunIcon,
+};
+
+/**
+ * Render an activity icon by identifier or activity ID.
+ * Looks up the `icon` prop in ICON_REGISTRY first, then falls back to
+ * legacy activity-ID mapping for backward compatibility, then SunIcon.
+ */
+export function ActivityIcon({ activity, icon, className = "", size = 24 }: { activity: string; icon?: string } & IconProps) {
+  // 1. Try icon identifier from DB (data-driven)
+  if (icon) {
+    const IconComponent = ICON_REGISTRY[icon];
+    if (IconComponent) return <IconComponent className={className} size={size} />;
   }
+  // 2. Fallback: try activity ID directly in the registry (for any that match)
+  const DirectMatch = ICON_REGISTRY[activity];
+  if (DirectMatch) return <DirectMatch className={className} size={size} />;
+  // 3. Default
+  return <SunIcon className={className} size={size} />;
 }
 
 /** Map weather icon names to components */

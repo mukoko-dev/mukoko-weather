@@ -65,6 +65,9 @@
   /* Typography — minimum sizes for mobile readability */
   --text-body: 0.875rem;      /* 14px — minimum for body/footer text */
   --text-body-leading: 1.5;
+  /* 10px — matches iOS/Android native bottom nav label conventions.
+     Below WCAG 12px minimum for body text, but intentional for nav chrome. */
+  --text-nav-label: 0.625rem;
 
   /* Radii */
   --radius-button: 12px;
@@ -336,6 +339,20 @@
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
   --spacing-touch: var(--touch-target-min);
+
+  /* Accordion open/close animations */
+  --animate-accordion-down: accordion-down 200ms ease-out;
+  --animate-accordion-up: accordion-up 200ms ease-out;
+}
+
+@keyframes accordion-down {
+  from { height: 0; }
+  to { height: var(--radix-accordion-content-height); }
+}
+
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to { height: 0; }
 }
 
 html {

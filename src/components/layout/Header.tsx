@@ -4,7 +4,7 @@ import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
-import { MapPinIcon, ClockIcon, SearchIcon } from "@/lib/weather-icons";
+import { MapPinIcon, ClockIcon, SearchIcon, SparklesIcon } from "@/lib/weather-icons";
 import { useAppStore } from "@/lib/store";
 
 // Code-split: MyWeatherModal imports LOCATIONS (154 items), ACTIVITIES (20 items),
@@ -66,9 +66,10 @@ export function Header() {
   }, [hasOnboarded, openMyWeather]);
 
   // Determine which mobile nav item is active based on pathname
-  const isHome = pathname === "/" || (pathname !== "/explore" && pathname !== "/history" && !pathname.startsWith("/about") && !pathname.startsWith("/help") && !pathname.startsWith("/privacy") && !pathname.startsWith("/terms") && !pathname.startsWith("/status") && !pathname.startsWith("/embed"));
+  const isShamwari = pathname === "/shamwari";
   const isExplore = pathname === "/explore" || pathname.startsWith("/explore/");
   const isHistory = pathname === "/history";
+  const isHome = !isShamwari && !isExplore && !isHistory && !pathname.startsWith("/about") && !pathname.startsWith("/help") && !pathname.startsWith("/privacy") && !pathname.startsWith("/terms") && !pathname.startsWith("/status") && !pathname.startsWith("/embed");
 
   return (
     <>
@@ -121,7 +122,7 @@ export function Header() {
         </nav>
       </header>
 
-      {/* Mobile bottom navigation — visible only on small screens */}
+      {/* Mobile bottom navigation — 5 items with Shamwari center */}
       <nav
         aria-label="Mobile navigation"
         className="fixed bottom-0 left-0 right-0 z-30 border-t border-text-tertiary/10 bg-surface-base/95 backdrop-blur-xl sm:hidden pb-safe-bottom"
@@ -129,47 +130,59 @@ export function Header() {
         <div className="mx-auto flex items-center justify-around px-1 min-h-[4.5rem]">
           <Link
             href="/"
-            className={`flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-xl transition-colors min-w-[72px] min-h-[56px] ${
+            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-3 rounded-xl transition-colors min-w-[56px] min-h-[56px] ${
               isHome ? "text-primary" : "text-text-tertiary"
             }`}
             aria-label="Weather home"
             aria-current={isHome ? "page" : undefined}
           >
             <HomeIcon size={22} />
-            <span className="text-xs font-medium">Weather</span>
+            <span className="text-[length:var(--text-nav-label)] font-medium">Weather</span>
           </Link>
           <Link
             href="/explore"
             prefetch={false}
-            className={`flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-xl transition-colors min-w-[72px] min-h-[56px] ${
+            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-3 rounded-xl transition-colors min-w-[56px] min-h-[56px] ${
               isExplore ? "text-primary" : "text-text-tertiary"
             }`}
             aria-label="Explore locations"
             aria-current={isExplore ? "page" : undefined}
           >
             <CompassIcon size={22} />
-            <span className="text-xs font-medium">Explore</span>
+            <span className="text-[length:var(--text-nav-label)] font-medium">Explore</span>
+          </Link>
+          <Link
+            href="/shamwari"
+            prefetch={false}
+            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-3 rounded-xl transition-colors min-w-[56px] min-h-[56px] ${
+              isShamwari ? "text-primary" : "text-text-tertiary"
+            }`}
+            aria-label="Shamwari AI assistant"
+            aria-current={isShamwari ? "page" : undefined}
+          >
+            <SparklesIcon size={22} />
+            <span className="text-[length:var(--text-nav-label)] font-medium">Shamwari</span>
           </Link>
           <Link
             href="/history"
             prefetch={false}
-            className={`flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-xl transition-colors min-w-[72px] min-h-[56px] ${
+            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-3 rounded-xl transition-colors min-w-[56px] min-h-[56px] ${
               isHistory ? "text-primary" : "text-text-tertiary"
             }`}
             aria-label="Weather history"
             aria-current={isHistory ? "page" : undefined}
           >
             <ClockIcon size={22} />
-            <span className="text-xs font-medium">History</span>
+            <span className="text-[length:var(--text-nav-label)] font-medium">History</span>
           </Link>
           <button
             onClick={openMyWeather}
-            className="flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-xl transition-colors min-w-[72px] min-h-[56px] text-text-tertiary"
+            className="flex flex-col items-center justify-center gap-0.5 px-2 py-3 rounded-xl transition-colors min-w-[56px] min-h-[56px] text-text-tertiary"
             aria-label="My Weather settings"
             type="button"
           >
             <MapPinIcon size={22} />
-            <span className="text-xs font-medium">My Weather</span>
+            <span className="text-[length:var(--text-nav-label)] font-medium">My Weather</span>
           </button>
         </div>
       </nav>

@@ -266,6 +266,9 @@ export function normalizeTomorrowResponse(data: TomorrowForecastResponse): Weath
     evapotranspiration: first.evapotranspiration ?? today?.evapotranspirationAvg,
     dewPoint: first.dewPoint,
     precipitationType: first.precipitationType,
+    // Wind — drone flying, outdoor safety
+    windSpeed: first.windSpeed,
+    windGust: first.windGust,
     // Safety
     thunderstormProbability: first.thunderstormProbability,
     heatStressIndex: first.ezHeatStressIndex,

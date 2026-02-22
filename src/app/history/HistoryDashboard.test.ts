@@ -277,7 +277,7 @@ describe("computeCategorySuitability", () => {
     expect(farming!.level).toBe("excellent");
   });
 
-  it("computes farming suitability — poor when dew point is low (frost risk)", () => {
+  it("computes farming suitability — poor when dew point is low (cold dry air stress)", () => {
     const records: InsightsRecord[] = [
       { date: "2026-01-01", dewPoint: 2, heatStress: null, thunderstorm: null, visibility: null, uvConcern: null, gddMaize: 5, gddSorghum: null, gddPotato: null, evapotranspiration: null, moonPhase: null },
     ];

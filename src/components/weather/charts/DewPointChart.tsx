@@ -19,7 +19,7 @@ const SERIES: SeriesConfig[] = [
 
 /**
  * Dew point trend chart — shows frost/disease risk for farming.
- * Low dew point (<5°C) indicates frost risk; high (>20°C) indicates crop disease risk.
+ * Low dew point (<5°C) indicates cold, dry air stress; high (>20°C) indicates crop disease risk.
  * Used by HistoryDashboard insights section.
  */
 export function DewPointChart({

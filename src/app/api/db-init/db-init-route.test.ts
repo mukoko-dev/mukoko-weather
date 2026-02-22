@@ -82,4 +82,11 @@ describe("/api/db-init route structure", () => {
     expect(source).toContain("status: 500");
     expect(source).toContain("DB initialization failed");
   });
+
+  it("does not expose Atlas Search index definitions in response", () => {
+    expect(source).not.toContain("getAtlasSearchIndexDefinitions");
+    expect(source).not.toContain("atlasSearchIndexes:");
+    // Definitions remain in codebase but are not disclosed via API
+    expect(source).toContain("Atlas Search index definitions are in the codebase");
+  });
 });

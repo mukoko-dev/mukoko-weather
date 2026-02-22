@@ -5,9 +5,18 @@ import { logError } from "@/lib/observability";
 import { generateProvinceSlug } from "@/lib/countries";
 
 /**
+ * Maximum distance (km) to search for a same-country match when a
+ * closer location exists in a different country. Prevents sending a
+ * user 200km away just because no same-country location is nearby.
+ */
+const COUNTRY_PREFERENCE_MAX_KM = 50;
+
+/**
  * GET /api/geo?lat=-17.83&lon=31.05&autoCreate=true
  *
  * Given a lat/lon, return the nearest location from MongoDB.
+ * Prefers same-country matches to respect political boundaries
+ * (e.g. Woodlands, Singapore should match Singapore, not Johor Bahru).
  * If autoCreate=true and no nearby location exists in a supported region,
  * reverse geocode and auto-create one.
  */
@@ -22,8 +31,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const results = await findNearestLocationsFromDb(lat, lon, { limit: 1 });
-    const nearest = results[0] ?? null;
+    // Fetch top candidates + user's country in parallel.
+    // reverseGeocode is fast (~200ms) and runs concurrently with the DB query.
+    const [results, geocoded] = await Promise.all([
+      findNearestLocationsFromDb(lat, lon, { limit: 5, maxDistanceKm: COUNTRY_PREFERENCE_MAX_KM }),
+      reverseGeocode(lat, lon),
+    ]);
+
+    let nearest = pickBestMatch(results, geocoded?.country ?? null);
+
+    // If no location within the preference radius, try uncapped nearest
+    // so users far from any seed location still get a result instead of 404.
+    if (!nearest) {
+      const uncapped = await findNearestLocationsFromDb(lat, lon, { limit: 1 });
+      nearest = uncapped[0] ?? null;
+    }
 
     if (nearest) {
       return NextResponse.json({
@@ -41,9 +63,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Auto-create if requested
+    // Auto-create if requested (reuse geocoded from the parallel call above)
     if (autoCreate) {
-      const geocoded = await reverseGeocode(lat, lon);
       if (!geocoded) {
         return NextResponse.json(
           { error: "Could not determine location name", nearest: null },
@@ -116,4 +137,34 @@ export async function GET(request: NextRequest) {
       { status: 503 },
     );
   }
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Pick the best location match from a list of candidates.
+ *
+ * Strategy: If the user's country is known and a same-country location
+ * exists in the candidate list, prefer it over a closer cross-border
+ * location. This handles border areas like Woodlands (SG) near
+ * Johor Bahru (MY), where the nearest location by distance is in a
+ * different country.
+ *
+ * Candidates are already sorted by distance (nearest first) from the
+ * MongoDB $near query, so the first same-country match is the closest
+ * one within that country.
+ */
+function pickBestMatch<T extends { country?: string }>(
+  candidates: T[],
+  userCountry: string | null,
+): T | null {
+  if (candidates.length === 0) return null;
+  if (!userCountry) return candidates[0];
+
+  const uc = userCountry.toUpperCase();
+  const sameCountry = candidates.find(
+    (loc) => (loc.country ?? "ZW").toUpperCase() === uc,
+  );
+
+  return sameCountry ?? candidates[0];
 }

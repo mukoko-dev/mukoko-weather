@@ -1,10 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { CATEGORY_STYLES, type Activity } from "@/lib/activities";
+import { type Activity, CATEGORY_STYLES } from "@/lib/activities";
 import type { WeatherInsights } from "@/lib/weather";
-import { ActivityIcon } from "@/lib/weather-icons";
+import { fetchSuitabilityRules, fetchCategoryStyles, type CategoryStyle } from "@/lib/suitability-cache";
+import { reportErrorToAnalytics } from "@/lib/observability";
+import { SectionHeader } from "@/components/ui/section-header";
+import { ActivityCard } from "./ActivityCard";
+import type { SuitabilityRuleDoc } from "@/lib/db";
+
+// Re-export for backward compatibility (tests import from this path)
+export { evaluateSuitability } from "@/lib/suitability";
 
 // ---------------------------------------------------------------------------
 // Label helpers (exported for tests)
@@ -48,155 +55,15 @@ export function uvConcernLabel(concern: number): { label: string; className: str
 }
 
 // ---------------------------------------------------------------------------
-// Suitability rating engine
+// Default category style (when API data hasn't loaded yet)
 // ---------------------------------------------------------------------------
 
-interface SuitabilityRating {
-  level: "excellent" | "good" | "fair" | "poor";
-  label: string;
-  colorClass: string;
-  bgClass: string;
-  /** Key insight line for this activity */
-  detail: string;
-  /** Secondary metric value */
-  metric?: string;
-}
-
-function farmingSuitability(insights: WeatherInsights): SuitabilityRating {
-  const base = { metric: insights.gdd10To30 != null ? `GDD: ${insights.gdd10To30.toFixed(1)}` : undefined };
-  if (insights.dewPoint != null && insights.dewPoint > 20) {
-    return { ...base, level: "fair", label: "Fair", colorClass: "text-severity-high", bgClass: "bg-severity-high/10", detail: "High dew point — disease risk for crops" };
-  }
-  if (insights.dewPoint != null && insights.dewPoint < 5) {
-    return { ...base, level: "poor", label: "Poor", colorClass: "text-severity-cold", bgClass: "bg-severity-cold/10", detail: "Low dew point — frost risk" };
-  }
-  if (insights.precipitationType != null && insights.precipitationType >= 2) {
-    return { ...base, level: "poor", label: "Poor", colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10", detail: `${precipTypeName(insights.precipitationType)} expected — protect crops` };
-  }
-  if (insights.evapotranspiration != null && insights.evapotranspiration > 5) {
-    return { ...base, level: "fair", label: "Fair", colorClass: "text-severity-moderate", bgClass: "bg-severity-moderate/10", detail: `High water loss (${insights.evapotranspiration.toFixed(1)} mm) — irrigate early` };
-  }
-  return { ...base, level: "good", label: "Good", colorClass: "text-severity-low", bgClass: "bg-severity-low/10", detail: "Favorable conditions for fieldwork" };
-}
-
-function miningSuitability(insights: WeatherInsights): SuitabilityRating {
-  if (insights.thunderstormProbability != null && insights.thunderstormProbability > 50) {
-    return { level: "poor", label: "Poor", colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10", detail: "Suspend outdoor operations — lightning risk", metric: `Storm: ${Math.round(insights.thunderstormProbability)}%` };
-  }
-  if (insights.heatStressIndex != null && insights.heatStressIndex >= 28) {
-    return { level: "poor", label: "Poor", colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10", detail: `${heatStressLevel(insights.heatStressIndex).label} heat stress — mandatory rest breaks`, metric: `Heat: ${insights.heatStressIndex.toFixed(0)}` };
-  }
-  if (insights.heatStressIndex != null && insights.heatStressIndex >= 24) {
-    return { level: "fair", label: "Fair", colorClass: "text-severity-moderate", bgClass: "bg-severity-moderate/10", detail: "Moderate heat stress — hydration breaks needed", metric: `Heat: ${insights.heatStressIndex.toFixed(0)}` };
-  }
-  if (insights.thunderstormProbability != null && insights.thunderstormProbability > 20) {
-    return { level: "fair", label: "Fair", colorClass: "text-severity-moderate", bgClass: "bg-severity-moderate/10", detail: "Monitor storm conditions closely", metric: `Storm: ${Math.round(insights.thunderstormProbability)}%` };
-  }
-  return { level: "good", label: "Good", colorClass: "text-severity-low", bgClass: "bg-severity-low/10", detail: "Safe conditions for outdoor work", metric: insights.visibility != null ? `Vis: ${insights.visibility.toFixed(1)} km` : undefined };
-}
-
-function sportsSuitability(insights: WeatherInsights): SuitabilityRating {
-  if (insights.thunderstormProbability != null && insights.thunderstormProbability > 40) {
-    return { level: "poor", label: "Poor", colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10", detail: "Move indoors — thunderstorm risk", metric: `Storm: ${Math.round(insights.thunderstormProbability)}%` };
-  }
-  if (insights.heatStressIndex != null && insights.heatStressIndex >= 28) {
-    return { level: "poor", label: "Poor", colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10", detail: "Too hot for outdoor exercise", metric: `Heat: ${insights.heatStressIndex.toFixed(0)}` };
-  }
-  if (insights.uvHealthConcern != null && insights.uvHealthConcern > 7) {
-    return { level: "fair", label: "Fair", colorClass: "text-severity-high", bgClass: "bg-severity-high/10", detail: "Very high UV — sun protection essential", metric: `UV: ${insights.uvHealthConcern}` };
-  }
-  if (insights.heatStressIndex != null && insights.heatStressIndex >= 24) {
-    return { level: "fair", label: "Fair", colorClass: "text-severity-moderate", bgClass: "bg-severity-moderate/10", detail: "Warm — stay hydrated during exercise", metric: `Heat: ${insights.heatStressIndex.toFixed(0)}` };
-  }
-  return { level: "excellent", label: "Excellent", colorClass: "text-severity-low", bgClass: "bg-severity-low/10", detail: "Great conditions for outdoor activity", metric: insights.uvHealthConcern != null ? `UV: ${insights.uvHealthConcern}` : undefined };
-}
-
-function travelSuitability(insights: WeatherInsights): SuitabilityRating {
-  if (insights.visibility != null && insights.visibility < 1) {
-    return { level: "poor", label: "Poor", colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10", detail: "Very poor visibility — delay travel if possible", metric: `Vis: ${insights.visibility.toFixed(1)} km` };
-  }
-  if (insights.thunderstormProbability != null && insights.thunderstormProbability > 50) {
-    return { level: "poor", label: "Poor", colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10", detail: "Storm risk — avoid unnecessary travel", metric: `Storm: ${Math.round(insights.thunderstormProbability)}%` };
-  }
-  if (insights.visibility != null && insights.visibility < 5) {
-    return { level: "fair", label: "Fair", colorClass: "text-severity-moderate", bgClass: "bg-severity-moderate/10", detail: "Reduced visibility — drive with caution", metric: `Vis: ${insights.visibility.toFixed(1)} km` };
-  }
-  if (insights.precipitationType != null && insights.precipitationType > 0) {
-    return { level: "fair", label: "Fair", colorClass: "text-severity-moderate", bgClass: "bg-severity-moderate/10", detail: `${precipTypeName(insights.precipitationType)} — wet road conditions`, metric: insights.visibility != null ? `Vis: ${insights.visibility.toFixed(1)} km` : undefined };
-  }
-  return { level: "good", label: "Good", colorClass: "text-severity-low", bgClass: "bg-severity-low/10", detail: "Clear conditions for travel", metric: insights.visibility != null ? `Vis: ${insights.visibility.toFixed(1)} km` : undefined };
-}
-
-function tourismSuitability(insights: WeatherInsights): SuitabilityRating {
-  if (insights.uvHealthConcern != null && insights.uvHealthConcern > 7) {
-    return { level: "fair", label: "Fair", colorClass: "text-severity-high", bgClass: "bg-severity-high/10", detail: "Very high UV — seek shade during midday", metric: `UV: ${insights.uvHealthConcern}` };
-  }
-  if (insights.visibility != null && insights.visibility < 5) {
-    return { level: "fair", label: "Fair", colorClass: "text-severity-moderate", bgClass: "bg-severity-moderate/10", detail: "Limited visibility may affect game viewing", metric: `Vis: ${insights.visibility.toFixed(1)} km` };
-  }
-  const moonInfo = insights.moonPhase != null ? moonPhaseName(insights.moonPhase) : undefined;
-  return { level: "good", label: "Good", colorClass: "text-severity-low", bgClass: "bg-severity-low/10", detail: moonInfo ? `${moonInfo} tonight — great for night viewing` : "Good conditions for outdoor activities", metric: insights.visibility != null ? `Vis: ${insights.visibility.toFixed(1)} km` : undefined };
-}
-
-function casualSuitability(insights: WeatherInsights): SuitabilityRating {
-  if (insights.thunderstormProbability != null && insights.thunderstormProbability > 40) {
-    return { level: "poor", label: "Poor", colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10", detail: "Thunderstorm risk — stay indoors", metric: `Storm: ${Math.round(insights.thunderstormProbability)}%` };
-  }
-  if (insights.heatStressIndex != null && insights.heatStressIndex >= 28) {
-    return { level: "fair", label: "Fair", colorClass: "text-severity-high", bgClass: "bg-severity-high/10", detail: "Very warm — limit time outdoors", metric: `Heat: ${insights.heatStressIndex.toFixed(0)}` };
-  }
-  if (insights.uvHealthConcern != null && insights.uvHealthConcern > 7) {
-    return { level: "fair", label: "Fair", colorClass: "text-severity-high", bgClass: "bg-severity-high/10", detail: "High UV — wear sunscreen and a hat", metric: `UV: ${insights.uvHealthConcern}` };
-  }
-  return { level: "excellent", label: "Excellent", colorClass: "text-severity-low", bgClass: "bg-severity-low/10", detail: "Perfect for outdoor plans", metric: insights.uvHealthConcern != null ? `UV: ${insights.uvHealthConcern}` : undefined };
-}
-
-const SUITABILITY_FN: Record<string, (insights: WeatherInsights) => SuitabilityRating> = {
-  farming: farmingSuitability,
-  mining: miningSuitability,
-  sports: sportsSuitability,
-  travel: travelSuitability,
-  tourism: tourismSuitability,
-  casual: casualSuitability,
-  city: casualSuitability,
-  education: sportsSuitability,
-  border: travelSuitability,
-  "national-park": tourismSuitability,
+const DEFAULT_STYLE: CategoryStyle = {
+  bg: "bg-primary/10",
+  border: "border-primary",
+  text: "text-primary",
+  badge: "bg-primary text-primary-foreground",
 };
-
-// ---------------------------------------------------------------------------
-// Activity suitability card (Tomorrow.io style)
-// ---------------------------------------------------------------------------
-
-function ActivityCard({ activity, insights }: { activity: Activity; insights: WeatherInsights }) {
-  const style = CATEGORY_STYLES[activity.category] ?? CATEGORY_STYLES.casual;
-  const getSuitability = SUITABILITY_FN[activity.category] ?? casualSuitability;
-  const rating = getSuitability(insights);
-
-  return (
-    <div className={`flex items-center gap-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm border-l-4 ${style.border}`}>
-      {/* Activity icon */}
-      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${style.bg}`}>
-        <span className={style.text} aria-hidden="true">
-          <ActivityIcon activity={activity.id} size={20} />
-        </span>
-      </div>
-      {/* Activity info */}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-text-primary">{activity.label}</p>
-          <span className={`rounded-[var(--radius-badge)] px-2 py-0.5 text-xs font-bold ${rating.bgClass} ${rating.colorClass}`}>
-            {rating.label}
-          </span>
-          {rating.metric && (
-            <span className="ml-auto text-xs font-medium text-text-tertiary tabular-nums">{rating.metric}</span>
-          )}
-        </div>
-        <p className="mt-0.5 text-sm text-text-secondary">{rating.detail}</p>
-      </div>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -213,6 +80,35 @@ export function ActivityInsights({
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const openMyWeather = useAppStore((s) => s.openMyWeather);
 
+  // Fetch suitability rules from database (module-level cache, 10min TTL)
+  const [dbRules, setDbRules] = useState<Map<string, SuitabilityRuleDoc>>(new Map());
+  // Seed with static CATEGORY_STYLES for instant mineral color rendering;
+  // upgraded with DB-only categories after fetch resolves.
+  const [categoryStyles, setCategoryStyles] = useState<Record<string, CategoryStyle>>(CATEGORY_STYLES);
+
+  useEffect(() => {
+    Promise.all([
+      fetchSuitabilityRules()
+        .then((rules) => {
+          if (rules.length) {
+            const rulesMap = new Map<string, SuitabilityRuleDoc>();
+            for (const rule of rules) rulesMap.set(rule.key, rule);
+            setDbRules(rulesMap);
+          }
+        })
+        .catch((err) => {
+          reportErrorToAnalytics(`Suitability rules fetch failed: ${err instanceof Error ? err.message : "unknown"}`, false);
+        }),
+      fetchCategoryStyles()
+        .then((styles) => {
+          if (Object.keys(styles).length) setCategoryStyles(styles);
+        })
+        .catch((err) => {
+          reportErrorToAnalytics(`Category styles fetch failed: ${err instanceof Error ? err.message : "unknown"}`, false);
+        }),
+    ]);
+  }, []);
+
   const selectedItems = useMemo(() => {
     return selectedActivities
       .map((id) => activities.find((a) => a.id === id))
@@ -225,23 +121,15 @@ export function ActivityInsights({
   if (insights) {
     return (
       <section aria-labelledby="activity-insights-heading">
-        <div className="mb-3 flex items-center justify-between">
-          <h2
-            id="activity-insights-heading"
-            className="text-lg font-semibold text-text-primary font-heading"
-          >
-            My Activities
-          </h2>
-          <button
-            onClick={openMyWeather}
-            className="text-sm font-medium text-primary transition-colors hover:text-primary/80"
-          >
-            Edit
-          </button>
-        </div>
+        <SectionHeader
+          headingId="activity-insights-heading"
+          title="My Activities"
+          action={{ label: "Edit", onClick: openMyWeather }}
+          className="mb-3"
+        />
         <div className="space-y-2">
           {selectedItems.map((activity) => (
-            <ActivityCard key={activity.id} activity={activity} insights={insights} />
+            <ActivityCard key={activity.id} activity={activity} insights={insights} dbRules={dbRules} categoryStyles={categoryStyles} />
           ))}
         </div>
       </section>
@@ -252,18 +140,16 @@ export function ActivityInsights({
   return (
     <section aria-label="Selected activities">
       <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-text-primary font-heading">Your Activities</h3>
-          <button
-            onClick={openMyWeather}
-            className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-          >
-            Edit
-          </button>
-        </div>
+        <SectionHeader
+          headingId="activity-fallback-heading"
+          title="Your Activities"
+          as="h3"
+          action={{ label: "Edit", onClick: openMyWeather }}
+          className="mb-3"
+        />
         <div className="flex flex-wrap gap-2">
           {selectedItems.map((activity) => {
-            const style = CATEGORY_STYLES[activity.category] ?? CATEGORY_STYLES.casual;
+            const style = categoryStyles[activity.category] ?? DEFAULT_STYLE;
             return (
               <span
                 key={activity.id}

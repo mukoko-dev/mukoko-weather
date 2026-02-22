@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server";
-import { ensureIndexes, syncLocations, syncActivities, syncCountries, syncProvinces, syncRegions, syncTags, syncSeasons, setApiKey } from "@/lib/db";
+import { ensureIndexes, syncLocations, syncActivities, syncCountries, syncProvinces, syncRegions, syncTags, syncSeasons, syncSuitabilityRules, syncActivityCategories, setApiKey } from "@/lib/db";
 import { LOCATIONS } from "@/lib/locations";
 import { ACTIVITIES } from "@/lib/activities";
 import { COUNTRIES, PROVINCES } from "@/lib/countries";
 import { REGIONS } from "@/lib/seed-regions";
 import { TAGS } from "@/lib/seed-tags";
 import { SEASONS } from "@/lib/seed-seasons";
+import { SUITABILITY_RULES } from "@/lib/seed-suitability-rules";
+import { CATEGORIES } from "@/lib/seed-categories";
 
 /**
  * POST /api/db-init
  *
  * One-time (idempotent) endpoint to:
  *   1. Create MongoDB indexes (TTL indexes, unique indexes)
- *   2. Sync all 90+ locations from the static array into MongoDB
+ *   2. Sync all seed data into MongoDB (locations, activities, categories, etc.)
  *   3. Optionally store API keys (Tomorrow.io, Stytch, etc.)
  *
  * Call this once after deployment or when the schema changes.
@@ -43,16 +45,16 @@ export async function POST(request: Request) {
     await ensureIndexes();
     // Countries must exist before provinces (provinces reference country codes).
     await syncCountries(COUNTRIES);
-    // Remaining syncs are independent — run in parallel for speed.
+    // Remaining syncs write to independent collections — run all in parallel.
     await Promise.all([
       syncProvinces(PROVINCES),
       syncRegions(REGIONS),
       syncTags(TAGS),
       syncSeasons(SEASONS),
-    ]);
-    await Promise.all([
+      syncActivityCategories(CATEGORIES),
       syncLocations(LOCATIONS),
       syncActivities(ACTIVITIES),
+      syncSuitabilityRules(SUITABILITY_RULES),
     ]);
 
     // Store any provided API keys
@@ -71,10 +73,14 @@ export async function POST(request: Request) {
       provinces: PROVINCES.length,
       locations: LOCATIONS.length,
       activities: ACTIVITIES.length,
+      categories: CATEGORIES.length,
+      suitabilityRules: SUITABILITY_RULES.length,
       regions: REGIONS.length,
       tags: TAGS.length,
       seasons: SEASONS.length,
       apiKeys: storedKeys.length > 0 ? storedKeys : "none provided",
+      // Atlas Search index definitions are in the codebase (db.ts) — not
+      // included in the response to avoid unnecessary schema disclosure.
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
