@@ -164,3 +164,36 @@ describe("WeatherDashboard — props and integration", () => {
     expect(source).toContain("useEffect");
   });
 });
+
+describe("WeatherDashboard — welcome banner (first-time UX)", () => {
+  it("imports WelcomeBanner component", () => {
+    expect(source).toContain("WelcomeBanner");
+    expect(source).toContain("@/components/weather/WelcomeBanner");
+  });
+
+  it("renders WelcomeBanner before the main grid", () => {
+    const bannerPos = source.indexOf("<WelcomeBanner");
+    const gridPos = source.indexOf("Main grid");
+    expect(bannerPos).toBeGreaterThan(-1);
+    expect(gridPos).toBeGreaterThan(-1);
+    expect(bannerPos).toBeLessThan(gridPos);
+  });
+
+  it("renders WelcomeBanner after frost alert banner", () => {
+    const bannerPos = source.indexOf("<WelcomeBanner");
+    const frostJsx = source.indexOf("<FrostAlertBanner");
+    expect(frostJsx).toBeGreaterThan(-1);
+    expect(bannerPos).toBeGreaterThan(-1);
+    expect(frostJsx).toBeLessThan(bannerPos);
+  });
+
+  it("passes location name and openMyWeather to WelcomeBanner", () => {
+    expect(source).toContain("locationName={location.name}");
+    expect(source).toContain("onChangeLocation={openMyWeather}");
+  });
+
+  it("does not auto-open modal for first-time visitors (inline approach)", () => {
+    // The dashboard should NOT contain any setTimeout-based modal auto-opening
+    expect(source).not.toContain("setTimeout(openMyWeather");
+  });
+});

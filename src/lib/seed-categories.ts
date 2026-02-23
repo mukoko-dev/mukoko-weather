@@ -42,7 +42,7 @@ export interface ActivityCategoryDoc {
 export const CATEGORIES: ActivityCategoryDoc[] = [
   {
     id: "farming",
-    label: "Farming",
+    label: "Agriculture & Forestry",
     order: 1,
     style: {
       bg: "bg-mineral-malachite/10",
@@ -53,7 +53,7 @@ export const CATEGORIES: ActivityCategoryDoc[] = [
   },
   {
     id: "mining",
-    label: "Mining",
+    label: "Industry & Construction",
     order: 2,
     style: {
       bg: "bg-mineral-terracotta/10",
@@ -64,7 +64,7 @@ export const CATEGORIES: ActivityCategoryDoc[] = [
   },
   {
     id: "travel",
-    label: "Travel",
+    label: "Transport & Logistics",
     order: 3,
     style: {
       bg: "bg-mineral-cobalt/10",
@@ -75,7 +75,7 @@ export const CATEGORIES: ActivityCategoryDoc[] = [
   },
   {
     id: "tourism",
-    label: "Tourism",
+    label: "Outdoors & Conservation",
     order: 4,
     style: {
       bg: "bg-mineral-tanzanite/10",
@@ -86,7 +86,7 @@ export const CATEGORIES: ActivityCategoryDoc[] = [
   },
   {
     id: "sports",
-    label: "Sports",
+    label: "Sports & Fitness",
     order: 5,
     style: {
       bg: "bg-mineral-gold/10",
@@ -97,7 +97,7 @@ export const CATEGORIES: ActivityCategoryDoc[] = [
   },
   {
     id: "casual",
-    label: "Casual",
+    label: "Lifestyle & Events",
     order: 6,
     style: {
       bg: "bg-primary/10",

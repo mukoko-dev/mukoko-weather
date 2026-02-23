@@ -28,6 +28,7 @@ import {
   getTagCountsAndStats,
   getAtlasSearchIndexDefinitions,
   _resetSearchFlags,
+  getLocationCount,
   VALID_CONDITION_FIELDS,
 } from "./db";
 import { REGIONS } from "./seed-regions";
@@ -157,6 +158,25 @@ describe("new DB helper function exports", () => {
 
   it("getProvincesWithLocationCounts is a function", () => {
     expect(typeof getProvincesWithLocationCounts).toBe("function");
+  });
+
+  it("getLocationCount is a function", () => {
+    expect(typeof getLocationCount).toBe("function");
+  });
+
+  it("getLocationCount uses estimatedDocumentCount (metadata only, no collection scan)", () => {
+    // Verify the implementation uses estimatedDocumentCount (O(1) metadata)
+    // and NOT countDocuments (which does a full collection scan).
+    const dbSource = readFileSync(resolve(__dirname, "db.ts"), "utf-8");
+
+    // Extract the getLocationCount function body
+    const fnStart = dbSource.indexOf("async function getLocationCount");
+    expect(fnStart).toBeGreaterThan(-1);
+    const fnEnd = dbSource.indexOf("}", fnStart) + 1;
+    const fnBody = dbSource.slice(fnStart, fnEnd);
+
+    expect(fnBody).toContain("estimatedDocumentCount");
+    expect(fnBody).not.toContain("countDocuments");
   });
 });
 

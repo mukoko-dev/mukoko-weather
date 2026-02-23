@@ -65,8 +65,8 @@ describe("geolocation source structure", () => {
     expect(source).toContain("Math.round(distanceKm)");
   });
 
-  it("uses the /api/geo endpoint for nearest location lookup", () => {
-    expect(source).toContain("/api/geo?lat=");
+  it("uses the /api/py/geo endpoint for nearest location lookup", () => {
+    expect(source).toContain("/api/py/geo?lat=");
   });
 
   it("uses 10 second timeout for geolocation", () => {

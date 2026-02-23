@@ -278,6 +278,79 @@ export const SUITABILITY_RULES: SeedRule[] = [
     },
   },
 
+  // ── Activity: Conservation (overrides tourism — visibility and storms critical)
+  {
+    key: "activity:conservation",
+    conditions: [
+      {
+        field: "thunderstormProbability", operator: "gt", value: 40,
+        level: "poor", label: "Poor",
+        colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10",
+        detail: "Storm risk — suspend field patrols",
+        metricTemplate: "Storm: {value}%",
+      },
+      {
+        field: "visibility", operator: "lt", value: 2,
+        level: "poor", label: "Poor",
+        colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10",
+        detail: "Very low visibility — unsafe for bush patrols",
+        metricTemplate: "Vis: {value} km",
+      },
+      {
+        field: "heatStressIndex", operator: "gte", value: 28,
+        level: "fair", label: "Fair",
+        colorClass: "text-severity-high", bgClass: "bg-severity-high/10",
+        detail: "Extreme heat — limit patrol duration, carry extra water",
+        metricTemplate: "Heat: {value}",
+      },
+    ],
+    fallback: {
+      level: "good", label: "Good",
+      colorClass: "text-severity-low", bgClass: "bg-severity-low/10",
+      detail: "Good conditions for field operations",
+    },
+  },
+
+  // ── Activity: Shipping/Marine (overrides travel — wind and visibility critical)
+  {
+    key: "activity:shipping",
+    conditions: [
+      {
+        field: "windGust", operator: "gt", value: 50,
+        level: "poor", label: "Dangerous",
+        colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10",
+        detail: "Dangerous gusts — vessels should seek harbour",
+        metricTemplate: "Gust: {value} km/h",
+      },
+      {
+        field: "windSpeed", operator: "gt", value: 40,
+        level: "poor", label: "Poor",
+        colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10",
+        detail: "Strong winds — small craft warning",
+        metricTemplate: "Wind: {value} km/h",
+      },
+      {
+        field: "thunderstormProbability", operator: "gt", value: 30,
+        level: "poor", label: "Poor",
+        colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10",
+        detail: "Storm risk — avoid open water",
+        metricTemplate: "Storm: {value}%",
+      },
+      {
+        field: "visibility", operator: "lt", value: 2,
+        level: "fair", label: "Fair",
+        colorClass: "text-severity-moderate", bgClass: "bg-severity-moderate/10",
+        detail: "Reduced visibility — navigate with caution",
+        metricTemplate: "Vis: {value} km",
+      },
+    ],
+    fallback: {
+      level: "good", label: "Good",
+      colorClass: "text-severity-low", bgClass: "bg-severity-low/10",
+      detail: "Calm conditions for marine operations",
+    },
+  },
+
   // ── Activity: Drone Flying (overrides casual) ───────────────────────────
   {
     key: "activity:drone-flying",

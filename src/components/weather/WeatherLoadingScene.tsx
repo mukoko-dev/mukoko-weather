@@ -6,26 +6,28 @@ import { useRef, useState, useEffect } from "react";
  * Branded weather loading animation.
  *
  * Shows a full-screen loading overlay with the mukoko weather logo and
- * animated dots on ALL devices. On desktop (non-touch devices without
- * reduced-motion preference), a Three.js particle scene is rendered
- * behind the text for a richer experience. On mobile, the text-only
- * version is shown to conserve GPU memory.
+ * animated dots on ALL devices. Three.js particle scene is rendered
+ * behind the text on every device type (with reduced particle counts
+ * on mobile for GPU safety). Only skipped for prefers-reduced-motion.
+ *
+ * Error boundaries and cleanup ensure a Three.js failure never crashes
+ * the loading screen — the text-only version is always the fallback.
  */
 export function WeatherLoadingScene() {
   const containerRef = useRef<HTMLDivElement>(null);
-  // Track whether this device should attempt the 3D scene
   const [use3D, setUse3D] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Decide once on mount whether to load Three.js.
-  // Skip on mobile / touch / reduced-motion to conserve GPU memory.
-  // The branded text overlay always renders regardless.
+  // Enable 3D on all device types. Only skip for prefers-reduced-motion.
+  // Track mobile for adaptive particle counts.
   useEffect(() => {
     try {
-      const isMobile = window.matchMedia("(hover: none), (pointer: coarse)").matches;
       const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (!isMobile && !prefersReduced) {
+      if (!prefersReduced) {
         setUse3D(true);
       }
+      const mobile = window.matchMedia("(hover: none), (pointer: coarse)").matches;
+      setIsMobile(mobile);
     } catch {
       // matchMedia not available — skip 3D
     }
@@ -62,24 +64,28 @@ export function WeatherLoadingScene() {
           return;
       }
       renderer.setSize(width, height);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      // Mobile: cap at 1x pixel ratio to save GPU bandwidth
+      renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 2));
       el.appendChild(renderer.domElement);
 
+      // Adaptive geometry detail: fewer segments on mobile
+      const geoDetail = isMobile ? 8 : 16;
+
       // Sun glow
-      const sunGeo = new THREE.SphereGeometry(3, 16, 16);
+      const sunGeo = new THREE.SphereGeometry(3, geoDetail, geoDetail);
       const sunMat = new THREE.MeshBasicMaterial({ color: 0xffaa33, transparent: true, opacity: 0.25 });
       const sun = new THREE.Mesh(sunGeo, sunMat);
       sun.position.set(6, 5, -10);
       scene.add(sun);
 
-      const glowGeo = new THREE.RingGeometry(3, 6, 32);
+      const glowGeo = new THREE.RingGeometry(3, 6, isMobile ? 16 : 32);
       const glowMat = new THREE.MeshBasicMaterial({ color: 0xffcc66, transparent: true, opacity: 0.08, side: THREE.DoubleSide });
       const glow = new THREE.Mesh(glowGeo, glowMat);
       glow.position.copy(sun.position);
       scene.add(glow);
 
-      // Rain particles
-      const RAIN_COUNT = 300;
+      // Rain particles — fewer on mobile to keep GPU budget low
+      const RAIN_COUNT = isMobile ? 120 : 300;
       const rainPositions = new Float32Array(RAIN_COUNT * 3);
       const rainVelocities = new Float32Array(RAIN_COUNT);
       for (let i = 0; i < RAIN_COUNT; i++) {
@@ -94,8 +100,8 @@ export function WeatherLoadingScene() {
       const rain = new THREE.Points(rainGeo, rainMat);
       scene.add(rain);
 
-      // Cloud particles
-      const CLOUD_COUNT = 40;
+      // Cloud particles — fewer on mobile
+      const CLOUD_COUNT = isMobile ? 20 : 40;
       const cloudPositions = new Float32Array(CLOUD_COUNT * 3);
       for (let i = 0; i < CLOUD_COUNT; i++) {
         cloudPositions[i * 3] = (Math.random() - 0.5) * 35;
@@ -196,7 +202,7 @@ export function WeatherLoadingScene() {
       disposed = true;
       threeCleanup?.();
     };
-  }, [use3D]);
+  }, [use3D, isMobile]);
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-background">

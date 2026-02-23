@@ -1,5 +1,6 @@
 /* SVG weather icons as React components */
 import type React from "react";
+import { icons as lucideIcons } from "lucide-react";
 
 interface IconProps {
   className?: string;
@@ -501,29 +502,200 @@ export function PicnicIcon({ className = "", size = 24 }: IconProps) {
   );
 }
 
+// --- Additional activity icons (expanded categories) ---
+
+export function TreeIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22v-7" /><path d="M7 15l5-11 5 11H7z" />
+    </svg>
+  );
+}
+
+export function BeeIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="10" r="4" /><path d="M12 14v4" /><path d="M9 7l-2-3" /><path d="M15 7l2-3" />
+      <path d="M8 10h8" /><path d="M8 12h8" />
+    </svg>
+  );
+}
+
+export function LeafIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 20A7 7 0 0 1 9.8 6.9C15.5 4.9 17 3.5 19 2c1 2 2 4.5 2 8 0 5.5-4.78 10-10 10Z" />
+      <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" />
+    </svg>
+  );
+}
+
+export function AnchorIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="5" r="3" /><line x1="12" y1="22" x2="12" y2="8" />
+      <path d="M5 12H2a10 10 0 0 0 20 0h-3" />
+    </svg>
+  );
+}
+
+export function FactoryIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
+    </svg>
+  );
+}
+
+export function BoltIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </svg>
+  );
+}
+
+export function TruckIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" />
+      <path d="M15 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 13.52 9H14" />
+      <circle cx="17" cy="18" r="2" /><circle cx="7" cy="18" r="2" />
+    </svg>
+  );
+}
+
+export function ShipIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
+      <path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76" />
+      <path d="M12 2v10" />
+    </svg>
+  );
+}
+
+export function ShieldIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+    </svg>
+  );
+}
+
+export function PawPrintIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="4" r="2" /><circle cx="18" cy="8" r="2" /><circle cx="4" cy="8" r="2" />
+      <path d="M16 16s-3-2-4-2-4 2-4 2-2 3 0 4 4 0 4 0 2 1 4 0 0-4 0-4z" />
+    </svg>
+  );
+}
+
+export function TrophyIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+      <path d="M4 22h16" /><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+    </svg>
+  );
+}
+
+export function WhistleIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="16" cy="14" r="6" /><path d="M2 8l8 4" /><path d="M10 12l3 1" />
+      <line x1="2" y1="6" x2="6" y2="8" />
+    </svg>
+  );
+}
+
+export function CalendarIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 2v4" /><path d="M16 2v4" />
+      <rect width="18" height="18" x="3" y="4" rx="2" />
+      <path d="M3 10h18" />
+    </svg>
+  );
+}
+
+export function MusicIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+    </svg>
+  );
+}
+
+export function HeartPulseIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+      <path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27" />
+    </svg>
+  );
+}
+
+export function GraduationCapIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z" />
+      <path d="M22 10v6" /><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" />
+    </svg>
+  );
+}
+
+export function BoxIcon({ className = "", size = 24 }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+      <path d="m3.3 7 8.7 5 8.7-5" /><path d="M12 22V12" />
+    </svg>
+  );
+}
+
 /**
  * Icon registry — maps icon identifiers (stored in MongoDB) to SVG components.
  * New activities can reference any icon in this registry via their `icon` field.
  */
 export const ICON_REGISTRY: Record<string, (props: IconProps) => React.JSX.Element> = {
+  // Agriculture & Forestry
   crop: CropIcon,
   livestock: LivestockIcon,
   shovel: ShovelIcon,
   water: WaterIcon,
+  tree: TreeIcon,
+  bee: BeeIcon,
+  leaf: LeafIcon,
+  // Industry & Construction
   pickaxe: PickaxeIcon,
   hardhat: HardHatIcon,
+  factory: FactoryIcon,
+  bolt: BoltIcon,
+  box: BoxIcon,
+  // Transport & Logistics
   car: CarIcon,
   bus: BusIcon,
   plane: PlaneIcon,
+  truck: TruckIcon,
+  ship: ShipIcon,
+  // Outdoors & Conservation
   binoculars: BinocularsIcon,
   camera: CameraIcon,
   bird: BirdIcon,
   tent: TentIcon,
   star: StarIcon,
   fish: FishIcon,
+  anchor: AnchorIcon,
+  shield: ShieldIcon,
+  pawprint: PawPrintIcon,
+  mountain: MountainIcon,
+  // Sports & Fitness
   running: RunningIcon,
   bicycle: BicycleIcon,
-  mountain: MountainIcon,
   football: FootballIcon,
   swimming: SwimmingIcon,
   golf: GolfIcon,
@@ -531,29 +703,58 @@ export const ICON_REGISTRY: Record<string, (props: IconProps) => React.JSX.Eleme
   tennis: TennisIcon,
   rugby: RugbyIcon,
   horse: HorseIcon,
+  trophy: TrophyIcon,
+  whistle: WhistleIcon,
+  // Lifestyle & Events
   footprints: FootprintsIcon,
   grill: GrillIcon,
   drone: DroneIcon,
   picnic: PicnicIcon,
   sparkles: SparklesIcon,
+  calendar: CalendarIcon,
+  music: MusicIcon,
+  heartpulse: HeartPulseIcon,
+  graduationcap: GraduationCapIcon,
   sun: SunIcon,
 };
 
 /**
+ * Convert a kebab-case or lowercase icon name to PascalCase for Lucide lookup.
+ * E.g. "tree-pine" → "TreePine", "factory" → "Factory"
+ */
+function toPascalCase(str: string): string {
+  return str.replace(/(^|-)([a-z])/g, (_, __, c: string) => c.toUpperCase());
+}
+
+/**
  * Render an activity icon by identifier or activity ID.
- * Looks up the `icon` prop in ICON_REGISTRY first, then falls back to
- * legacy activity-ID mapping for backward compatibility, then SunIcon.
+ *
+ * Resolution order (scalable — no code changes needed for new icons):
+ * 1. Custom ICON_REGISTRY (app-specific SVG icons)
+ * 2. Lucide icon library (1600+ icons, resolved by PascalCase name)
+ * 3. Activity ID as Lucide lookup (kebab-case → PascalCase)
+ * 4. Default SunIcon fallback
+ *
+ * Activities stored in the database can reference any Lucide icon name
+ * (e.g. "TreePine", "Anchor", "Factory") without requiring code changes.
  */
 export function ActivityIcon({ activity, icon, className = "", size = 24 }: { activity: string; icon?: string } & IconProps) {
-  // 1. Try icon identifier from DB (data-driven)
+  // 1. Try custom icon registry (app-specific SVGs)
   if (icon) {
-    const IconComponent = ICON_REGISTRY[icon];
-    if (IconComponent) return <IconComponent className={className} size={size} />;
+    const CustomIcon = ICON_REGISTRY[icon];
+    if (CustomIcon) return <CustomIcon className={className} size={size} />;
+    // 2. Try Lucide icons by PascalCase name
+    const pascalName = toPascalCase(icon);
+    const LucideIcon = lucideIcons[pascalName as keyof typeof lucideIcons];
+    if (LucideIcon) return <LucideIcon className={className} size={size} />;
   }
-  // 2. Fallback: try activity ID directly in the registry (for any that match)
+  // 3. Fallback: try activity ID in custom registry, then Lucide
   const DirectMatch = ICON_REGISTRY[activity];
   if (DirectMatch) return <DirectMatch className={className} size={size} />;
-  // 3. Default
+  const pascalActivity = toPascalCase(activity);
+  const LucideFallback = lucideIcons[pascalActivity as keyof typeof lucideIcons];
+  if (LucideFallback) return <LucideFallback className={className} size={size} />;
+  // 4. Default
   return <SunIcon className={className} size={size} />;
 }
 

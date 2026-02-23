@@ -52,6 +52,11 @@ describe("shamwari page client — chatbot integration", () => {
     expect(clientSource).toContain("pb-[4.5rem]");
     expect(clientSource).toContain("sm:pb-0");
   });
+
+  it("prevents horizontal overflow on the page", () => {
+    expect(clientSource).toContain("overflow-hidden");
+    expect(clientSource).toContain("max-w-full");
+  });
 });
 
 describe("shamwari loading skeleton", () => {

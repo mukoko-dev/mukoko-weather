@@ -6,11 +6,7 @@ import Link from "next/link";
 import { useAppStore, type ThemePreference } from "@/lib/store";
 import { MapPinIcon, SearchIcon, SunIcon, MoonIcon } from "@/lib/weather-icons";
 import { ActivityIcon } from "@/lib/weather-icons";
-import {
-  type LocationTag,
-  type ZimbabweLocation,
-  LOCATIONS,
-} from "@/lib/locations";
+import type { WeatherLocation } from "@/lib/locations";
 import { detectUserLocation, type GeoResult } from "@/lib/geolocation";
 import {
   type Activity,
@@ -29,10 +25,6 @@ import { cn } from "@/lib/utils";
 const POPULAR_SLUGS = [
   "harare", "bulawayo", "mutare", "gweru", "masvingo",
   "victoria-falls", "kariba", "marondera", "chinhoyi", "kwekwe",
-];
-
-const TAG_ORDER: LocationTag[] = [
-  "city", "farming", "mining", "tourism", "national-park", "education", "border", "travel",
 ];
 
 // Tag labels — fetched from API when available, with inline fallbacks.
@@ -58,6 +50,16 @@ function MonitorIcon({ size = 20 }: { size?: number }) {
   );
 }
 
+/** Debounce hook — returns the debounced value after delay ms */
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
 export function MyWeatherModal() {
   const closeMyWeather = useAppStore((s) => s.closeMyWeather);
   const myWeatherOpen = useAppStore((s) => s.myWeatherOpen);
@@ -71,13 +73,10 @@ export function MyWeatherModal() {
   const [pendingSlug, setPendingSlug] = useState(currentSlug);
   const [activeTab, setActiveTab] = useState("location");
 
-  // Seed with static data for instant rendering, then upgrade from MongoDB.
-  // This prevents a blank modal on slow connections or cold starts.
-  const [allLocations, setAllLocations] = useState<ZimbabweLocation[]>(LOCATIONS);
   const [allActivities, setAllActivities] = useState<Activity[]>(ACTIVITIES);
   const [activityCategories, setActivityCategories] = useState<ActivityCategoryDoc[]>(CATEGORIES);
   const [tagLabels, setTagLabels] = useState<Record<string, string>>(DEFAULT_TAG_LABELS);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [tagOrder, setTagOrder] = useState<string[]>(Object.keys(DEFAULT_TAG_LABELS));
 
   // Build a category styles lookup from API data
   const categoryStyles = useMemo(() => {
@@ -94,31 +93,32 @@ export function MyWeatherModal() {
   }, [categoryStyles]);
 
   useEffect(() => {
-    // Fetch all data from MongoDB API — single source of truth.
+    // Fetch activities, categories, and tags (but NOT all locations)
     Promise.all([
-      fetch("/api/locations")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => { if (data?.locations?.length) setAllLocations(data.locations); })
-        .catch(() => {}),
-      fetch("/api/activities")
+      fetch("/api/py/activities")
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => { if (data?.activities?.length) setAllActivities(data.activities); })
         .catch(() => {}),
-      fetch("/api/activities?mode=categories")
+      fetch("/api/py/activities?mode=categories")
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => { if (data?.categories?.length) setActivityCategories(data.categories); })
         .catch(() => {}),
-      fetch("/api/tags")
+      fetch("/api/py/tags")
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data?.tags?.length) {
             const labels: Record<string, string> = {};
-            for (const t of data.tags) labels[t.slug] = t.label;
+            const order: string[] = [];
+            for (const t of data.tags) {
+              labels[t.slug] = t.label;
+              order.push(t.slug);
+            }
             setTagLabels(labels);
+            setTagOrder(order);
           }
         })
         .catch(() => {}),
-    ]).finally(() => setDataLoading(false));
+    ]);
   }, []);
 
   const handleDone = () => {
@@ -181,9 +181,8 @@ export function MyWeatherModal() {
               pendingSlug={pendingSlug}
               onSelectLocation={handleSelectLocation}
               onGeoLocationResolved={handleGeoLocationResolved}
-              allLocations={allLocations}
-              loading={dataLoading}
               tagLabels={tagLabels}
+              tagOrder={tagOrder}
             />
           </TabsContent>
 
@@ -210,27 +209,87 @@ function LocationTab({
   pendingSlug,
   onSelectLocation,
   onGeoLocationResolved,
-  allLocations,
-  loading,
   tagLabels,
+  tagOrder,
 }: {
   pendingSlug: string;
   onSelectLocation: (slug: string) => void;
   onGeoLocationResolved: (slug: string) => void;
-  allLocations: ZimbabweLocation[];
-  loading: boolean;
   tagLabels: Record<string, string>;
+  tagOrder: string[];
 }) {
   const [query, setQuery] = useState("");
-  const [activeTag, setActiveTag] = useState<LocationTag | null>(null);
+  const [activeTag, setActiveTag] = useState<string | null>(null);
   const [geoState, setGeoState] = useState<GeoResult | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Search-driven location results
+  const [searchResults, setSearchResults] = useState<WeatherLocation[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [popularLocations, setPopularLocations] = useState<WeatherLocation[]>([]);
+  const [popularLoading, setPopularLoading] = useState(true);
+
+  const debouncedQuery = useDebounce(query, 250);
 
   // Focus the search input on mount
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
+
+  // Fetch popular locations on mount (small set, not all)
+  useEffect(() => {
+    const slugParam = POPULAR_SLUGS.join(",");
+    fetch(`/api/py/search?q=${encodeURIComponent(slugParam.slice(0, 200))}&limit=10`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.locations?.length) {
+          setPopularLocations(data.locations);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setPopularLoading(false));
+  }, []);
+
+  // Search when the debounced query or active tag changes.
+  // Loading state is derived from an in-flight fetch counter to avoid
+  // calling setState synchronously inside the effect body.
+  const searchGenRef = useRef(0);
+
+  useEffect(() => {
+    const q = debouncedQuery.trim();
+    if (!q && !activeTag) {
+      // Defer to avoid synchronous setState in effect body
+      const id = requestAnimationFrame(() => setSearchResults([]));
+      return () => cancelAnimationFrame(id);
+    }
+
+    const gen = ++searchGenRef.current;
+    const controller = new AbortController();
+    const url = !q && activeTag
+      ? `/api/py/locations?tag=${encodeURIComponent(activeTag)}&limit=50`
+      : `/api/py/search?q=${encodeURIComponent(q)}&limit=20`;
+
+    const loadId = requestAnimationFrame(() => {
+      if (searchGenRef.current === gen) setSearchLoading(true);
+    });
+
+    fetch(url, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (searchGenRef.current === gen) {
+          setSearchResults(data?.locations ?? []);
+          setSearchLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted && searchGenRef.current === gen) {
+          setSearchResults([]);
+          setSearchLoading(false);
+        }
+      });
+    return () => { controller.abort(); cancelAnimationFrame(loadId); };
+  }, [debouncedQuery, activeTag]);
 
   // Geolocation detection — set pending location and advance to activities
   const handleGeolocate = useCallback(async () => {
@@ -244,22 +303,13 @@ function LocationTab({
     }
   }, [onGeoLocationResolved]);
 
-  // Filtered locations
+  // Determine which locations to display
   const displayedLocations = useMemo(() => {
-    if (query.length > 0) {
-      const q = query.toLowerCase().trim();
-      const prefix: ZimbabweLocation[] = [];
-      const rest: ZimbabweLocation[] = [];
-      for (const loc of allLocations) {
-        const name = loc.name.toLowerCase();
-        if (name.startsWith(q)) prefix.push(loc);
-        else if (name.includes(q) || loc.province.toLowerCase().includes(q)) rest.push(loc);
-      }
-      return [...prefix, ...rest];
-    }
-    if (activeTag) return allLocations.filter((l) => l.tags.includes(activeTag));
-    return allLocations.filter((l) => POPULAR_SLUGS.includes(l.slug));
-  }, [query, activeTag, allLocations]);
+    if (query.trim() || activeTag) return searchResults;
+    return popularLocations;
+  }, [query, activeTag, searchResults, popularLocations]);
+
+  const loading = query.trim() || activeTag ? searchLoading : popularLoading;
 
   return (
     <div className="flex flex-col gap-1">
@@ -325,11 +375,11 @@ function LocationTab({
         <ToggleGroup
           type="single"
           value={activeTag ?? ""}
-          onValueChange={(val) => setActiveTag((val as LocationTag) || null)}
+          onValueChange={(val) => setActiveTag(val || null)}
           className="flex flex-wrap gap-1.5 px-4 py-2"
           aria-label="Filter locations by category"
         >
-          {TAG_ORDER.map((tag) => (
+          {tagOrder.map((tag) => (
             <ToggleGroupItem key={tag} value={tag} className="min-h-[44px]">
               {tagLabels[tag] ?? tag}
             </ToggleGroupItem>
@@ -339,7 +389,7 @@ function LocationTab({
 
       {/* Location list — no nested scroll, uses tab content scroll */}
       <ul role="listbox" aria-label="Available locations" aria-multiselectable="false" className="px-2 pb-2">
-        {loading && allLocations.length === 0 && (
+        {loading && displayedLocations.length === 0 && (
           Array.from({ length: 5 }).map((_, i) => (
             <li key={i} className="px-3 py-2" aria-hidden="true">
               <div className="h-10 animate-pulse rounded-[var(--radius-input)] bg-surface-base" />
@@ -391,33 +441,29 @@ function LocationTab({
       </ul>
 
       {/* Community location stat — prominent to inspire contributions */}
-      <LocationCountCard allLocations={allLocations} />
+      <LocationCountCard />
     </div>
   );
 }
 
 // ── Location Count Card ─────────────────────────────────────────────────────
 
-function LocationCountCard({ allLocations }: { allLocations: ZimbabweLocation[] }) {
+function LocationCountCard() {
   const closeMyWeather = useAppStore((s) => s.closeMyWeather);
-  const countryGroups = useMemo(() => {
-    const groups: Record<string, number> = {};
-    for (const loc of allLocations) {
-      const code = (loc.country ?? "ZW").toUpperCase();
-      groups[code] = (groups[code] ?? 0) + 1;
-    }
-    return groups;
-  }, [allLocations]);
+  const [stats, setStats] = useState<{ totalLocations: number; totalCountries: number } | null>(null);
 
-  const summary = useMemo(() => {
-    const entries = Object.entries(countryGroups).sort((a, b) => b[1] - a[1]);
-    if (entries.length === 0) return `${allLocations.length} locations`;
-    if (entries.length === 1) {
-      const [code, count] = entries[0];
-      return `${count} locations in ${code}`;
-    }
-    return entries.map(([code, count]) => `${code} (${count})`).join(" · ");
-  }, [countryGroups, allLocations.length]);
+  useEffect(() => {
+    fetch("/api/py/locations?mode=stats")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.totalLocations) setStats(data);
+      })
+      .catch(() => {});
+  }, []);
+
+  const summary = stats
+    ? `${stats.totalLocations} locations across ${stats.totalCountries} ${stats.totalCountries === 1 ? "country" : "countries"}`
+    : "Loading locations...";
 
   return (
     <div className="mx-4 mb-3">

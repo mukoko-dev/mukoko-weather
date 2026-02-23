@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Metadata } from "next";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
@@ -6,6 +7,7 @@ import { getTagCountsAndStats, getFeaturedTagsFromDb } from "@/lib/db";
 import { logError } from "@/lib/observability";
 import type { TagDoc } from "@/lib/db";
 import { CTACard } from "@/components/ui/cta-card";
+import { ExploreSearch } from "@/components/explore/ExploreSearch";
 
 // Cache for 1 hour; regenerates in the background after expiry (ISR).
 // Location data changes rarely — this eliminates cold-start DB latency for visitors.
@@ -73,6 +75,13 @@ export default async function ExplorePage() {
         <p className="mt-2 text-text-secondary">
           Browse weather locations across Africa and ASEAN by category, country, and province.
         </p>
+
+        {/* AI Search */}
+        <Suspense fallback={null}>
+          <div className="mt-6">
+            <ExploreSearch />
+          </div>
+        </Suspense>
 
         {/* Shamwari CTA card */}
         <CTACard

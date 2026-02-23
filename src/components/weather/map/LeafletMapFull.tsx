@@ -30,7 +30,7 @@ export default function LeafletMapFull({
       />
       {/* Weather overlay via tile proxy */}
       <TileLayer
-        url={`/api/map-tiles?z={z}&x={x}&y={y}&layer=${layer}`}
+        url={`/api/py/map-tiles?z={z}&x={x}&y={y}&layer=${layer}`}
         opacity={0.6}
       />
       <Marker position={[lat, lon]} />

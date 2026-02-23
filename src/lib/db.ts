@@ -25,6 +25,7 @@ import type { RegionDoc } from "./seed-regions";
 import type { TagDoc } from "./seed-tags";
 import type { SeasonDoc } from "./seed-seasons";
 import type { ActivityCategoryDoc } from "./seed-categories";
+import type { AIPromptDoc, AISuggestedPromptRule } from "./seed-ai-prompts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -123,7 +124,7 @@ export interface ProvinceDoc extends Province {
 }
 
 // Re-export seed types so callers only need to import from db.ts
-export type { RegionDoc, TagDoc, SeasonDoc, ActivityCategoryDoc };
+export type { RegionDoc, TagDoc, SeasonDoc, ActivityCategoryDoc, AIPromptDoc, AISuggestedPromptRule };
 
 // ---------------------------------------------------------------------------
 // Collection accessors
@@ -179,6 +180,14 @@ function activityCategoriesCollection() {
 
 function suitabilityRulesCollection() {
   return getDb().collection<SuitabilityRuleDoc>("suitability_rules");
+}
+
+function aiPromptsCollection() {
+  return getDb().collection<AIPromptDoc & { updatedAt: Date }>("ai_prompts");
+}
+
+function aiSuggestedRulesCollection() {
+  return getDb().collection<AISuggestedPromptRule & { updatedAt: Date }>("ai_suggested_rules");
 }
 
 // ---------------------------------------------------------------------------
@@ -252,6 +261,14 @@ export async function ensureIndexes(): Promise<void> {
 
     // Suitability rules: by key (unique) for lookups
     suitabilityRulesCollection().createIndex({ key: 1 }, { unique: true }),
+
+    // AI prompts: by promptKey (unique), by active + order for queries
+    aiPromptsCollection().createIndex({ promptKey: 1 }, { unique: true }),
+    aiPromptsCollection().createIndex({ active: 1, order: 1 }),
+
+    // AI suggested rules: by ruleId (unique), by active + category + order
+    aiSuggestedRulesCollection().createIndex({ ruleId: 1 }, { unique: true }),
+    aiSuggestedRulesCollection().createIndex({ active: 1, category: 1, order: 1 }),
   ]);
 }
 
@@ -607,6 +624,17 @@ export async function getLocationsForContext(limit: number): Promise<LocationDoc
     .sort({ source: -1, name: 1 })
     .limit(limit)
     .toArray();
+}
+
+/**
+ * Get approximate count of locations — uses collection metadata (no scan).
+ *
+ * Currently used by the Python backend (_chat.py) via its own MongoDB client.
+ * This TypeScript export is provided for future TS callers (e.g., OG route,
+ * sitemap generation) and to maintain API parity with the Python path.
+ */
+export async function getLocationCount(): Promise<number> {
+  return locationsCollection().estimatedDocumentCount();
 }
 
 /** Insert a new community-contributed location */
@@ -1558,11 +1586,11 @@ export function getAtlasSearchIndexDefinitions(): {
           dynamic: false,
           fields: {
             name: [
-              { type: "string", analyzer: "luceneStandard" },
-              { type: "autocomplete", analyzer: "luceneStandard", tokenization: "edgeGram", minGrams: 2, maxGrams: 15 },
+              { type: "string", analyzer: "lucene.standard" },
+              { type: "autocomplete", analyzer: "lucene.standard", tokenization: "edgeGram", minGrams: 2, maxGrams: 15 },
             ],
-            province: { type: "string", analyzer: "luceneStandard" },
-            slug: { type: "string", analyzer: "luceneKeyword" },
+            province: { type: "string", analyzer: "lucene.standard" },
+            slug: { type: "string", analyzer: "lucene.keyword" },
             tags: { type: "token" },
             country: { type: "token" },
           },
@@ -1579,10 +1607,10 @@ export function getAtlasSearchIndexDefinitions(): {
           dynamic: false,
           fields: {
             label: [
-              { type: "string", analyzer: "luceneStandard" },
-              { type: "autocomplete", analyzer: "luceneStandard", tokenization: "edgeGram", minGrams: 2, maxGrams: 15 },
+              { type: "string", analyzer: "lucene.standard" },
+              { type: "autocomplete", analyzer: "lucene.standard", tokenization: "edgeGram", minGrams: 2, maxGrams: 15 },
             ],
-            description: { type: "string", analyzer: "luceneStandard" },
+            description: { type: "string", analyzer: "lucene.standard" },
             category: { type: "token" },
           },
         },
@@ -1613,6 +1641,38 @@ export function getAtlasSearchIndexDefinitions(): {
       },
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// AI Prompts — database-driven AI configuration
+// ---------------------------------------------------------------------------
+
+export async function syncAIPrompts(prompts: Omit<AIPromptDoc, "updatedAt">[]): Promise<void> {
+  const now = new Date();
+  const bulkOps = prompts.map((p) => ({
+    updateOne: {
+      filter: { promptKey: p.promptKey },
+      update: { $set: { ...p, updatedAt: now } },
+      upsert: true,
+    },
+  }));
+  if (bulkOps.length > 0) {
+    await aiPromptsCollection().bulkWrite(bulkOps);
+  }
+}
+
+export async function syncAISuggestedRules(rules: Omit<AISuggestedPromptRule, "updatedAt">[]): Promise<void> {
+  const now = new Date();
+  const bulkOps = rules.map((r) => ({
+    updateOne: {
+      filter: { ruleId: r.ruleId },
+      update: { $set: { ...r, updatedAt: now } },
+      upsert: true,
+    },
+  }));
+  if (bulkOps.length > 0) {
+    await aiSuggestedRulesCollection().bulkWrite(bulkOps);
+  }
 }
 
 /** Reset Atlas Search availability flags and embeddings guard (for testing). */

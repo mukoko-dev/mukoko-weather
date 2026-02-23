@@ -10,6 +10,14 @@ import { WeatherDashboard } from "./WeatherDashboard";
 const loadLocation = cache((slug: string) => getLocationFromDb(slug).catch(() => null));
 const loadCountry = cache((code: string) => getCountryByCode(code).catch(() => null));
 
+// Per-request deduplication only — React cache() does NOT persist across requests.
+// generateMetadata and the page component both call this for the same country code;
+// cache() ensures a single DB round-trip within one SSR pass. Unlike a module-level
+// Map with TTL, this is scoped to the current request and discarded afterward.
+const getCachedSeason = cache((countryCode: string) =>
+  getSeasonForDate(new Date(), countryCode),
+);
+
 export const dynamic = "force-dynamic";
 
 const BASE_URL = "https://weather.mukoko.com";
@@ -29,6 +37,29 @@ export async function generateMetadata({
 
   const title = `${loc.name} Weather Today — Forecast & Conditions`;
   const description = `Current weather conditions, 7-day forecast, and hourly predictions for ${loc.name}, ${loc.province}, ${countryName}. AI-powered weather intelligence with frost alerts, farming insights, and accurate temperature data from mukoko weather.`;
+
+  // Build dynamic OG image URL with location-specific season from database.
+  // Note: the OG route accepts `temp` and `condition` params, but we
+  // intentionally omit them here — fetching weather data purely for OG
+  // metadata would add a DB round-trip to every SSR render.
+  // Wrapped in try/catch — if DB is unavailable, season is simply omitted
+  // from OG params rather than breaking all metadata for the page.
+  let seasonName = "";
+  try {
+    const season = await getCachedSeason(loc.country ?? "ZW");
+    seasonName = season.name;
+  } catch {
+    // Season unavailable — omit from OG params
+  }
+  const ogParams = new URLSearchParams({
+    title: `${loc.name} Weather`,
+    subtitle: `Live forecast for ${loc.province}, ${countryName}`,
+    location: loc.name,
+    province: loc.province,
+    ...(seasonName && { season: seasonName }),
+    template: "location",
+  });
+  const ogImageUrl = `${BASE_URL}/api/og?${ogParams.toString()}`;
 
   return {
     title,
@@ -55,11 +86,13 @@ export async function generateMetadata({
       type: "website",
       locale: "en_ZW",
       siteName: "mukoko weather",
+      images: [{ url: ogImageUrl, width: 1200, height: 630, alt: `${loc.name} weather forecast` }],
     },
     twitter: {
       card: "summary_large_image",
       title: `${loc.name} Weather | mukoko weather`,
       description: `Live weather for ${loc.name}, ${countryName} — current conditions, 7-day forecast, and AI insights.`,
+      images: [ogImageUrl],
     },
   };
 }
@@ -99,7 +132,7 @@ export default async function LocationPage({
   const countryCode = (location.country ?? "ZW").toUpperCase();
   const [countryDoc, season] = await Promise.all([
     loadCountry(countryCode),
-    getSeasonForDate(new Date(), location.country ?? "ZW"),
+    getCachedSeason(location.country ?? "ZW"),
   ]);
   const countryName = countryDoc?.name ?? countryCode;
   const now = new Date().toISOString();

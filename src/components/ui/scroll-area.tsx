@@ -8,15 +8,30 @@ import { cn } from "@/lib/utils"
 function ScrollArea({
   className,
   children,
+  fixRadixTableLayout = false,
+  viewportRef,
   ...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {
+}: React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
+  /** Fix Radix's internal display:table on the viewport wrapper div.
+   *  Radix wraps children in a div with display:table which breaks flex/block
+   *  layouts (e.g. the Shamwari chatbot message list). Set to true to override
+   *  the wrapper to display:block. Only opt in where needed — other ScrollArea
+   *  usages are unaffected.
+   *  Tested with @radix-ui/react-scroll-area@1.4.3 — verify after upgrades.
+   *  See: https://github.com/radix-ui/primitives/issues/926 */
+  fixRadixTableLayout?: boolean;
+  /** Ref forwarded to the Radix Viewport element — use this for scroll
+   *  position tracking or programmatic scrolling instead of querying
+   *  internal Radix attributes. */
+  viewportRef?: React.Ref<HTMLDivElement>;
+}) {
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
       className={cn("relative overflow-hidden", className)}
       {...props}
     >
-      <ScrollAreaPrimitive.Viewport className="h-full w-full rounded-[inherit]">
+      <ScrollAreaPrimitive.Viewport ref={viewportRef} className={cn("h-full w-full rounded-[inherit]", fixRadixTableLayout && "[&>div]:!block")}>
         {children}
       </ScrollAreaPrimitive.Viewport>
       <ScrollBar />

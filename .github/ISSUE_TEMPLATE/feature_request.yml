@@ -12,12 +12,17 @@ body:
         - label: Weather data / forecasts
         - label: Locations (new location or improved data)
         - label: AI summaries (Shamwari)
+        - label: Shamwari AI chat
         - label: Farming / agriculture
         - label: Mining / industry
         - label: Travel / tourism
-        - label: Activity insights
+        - label: Activity insights / suitability
         - label: Atmospheric details
+        - label: Interactive maps
         - label: Historical data
+        - label: Community weather reporting
+        - label: Explore / search
+        - label: Cross-device sync
         - label: Accessibility
         - label: Mobile experience
         - label: Performance
@@ -50,8 +55,12 @@ body:
         - Location page (/[location])
         - Atmosphere sub-page (/[location]/atmosphere)
         - Forecast sub-page (/[location]/forecast)
+        - Map sub-page (/[location]/map)
         - New sub-page (/[location]/...)
+        - Shamwari AI chat (/shamwari)
+        - Explore page (/explore)
         - History page (/history)
+        - Status page (/status)
         - My Weather modal
         - Embed widget
         - New standalone page

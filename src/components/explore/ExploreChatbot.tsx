@@ -6,7 +6,7 @@ import ReactMarkdown from "react-markdown";
 import { SparklesIcon, SearchIcon, MapPinIcon } from "@/lib/weather-icons";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, isShamwariContextValid, type ShamwariContext } from "@/lib/store";
 
 // ---------------------------------------------------------------------------
 // Inline error boundary for ReactMarkdown — prevents malformed markdown from
@@ -54,7 +54,9 @@ function isSafeHref(href: string | undefined): boolean {
   if (href.startsWith("/") || href.startsWith("#")) return true;
   try {
     const url = new URL(href);
-    return url.protocol === "https:" || url.protocol === "http:";
+    // Only allow https: — http: could enable link injection to plaintext targets.
+    // Relative paths and fragment anchors are handled above.
+    return url.protocol === "https:";
   } catch {
     return false;
   }
@@ -81,7 +83,7 @@ const markdownComponents = {
 /** Cap rendered messages to prevent unbounded memory growth in long conversations. */
 const MAX_RENDERED_MESSAGES = 30;
 
-const SUGGESTED_PROMPTS = [
+const DEFAULT_SUGGESTED_PROMPTS = [
   { label: "Drone flying in Harare", query: "Can I fly a drone in Harare today?" },
   { label: "Farming advice", query: "What's the best time to plant maize in Mashonaland?" },
   { label: "Safari weather", query: "What's the weather like for safari in Victoria Falls?" },
@@ -89,6 +91,75 @@ const SUGGESTED_PROMPTS = [
   { label: "Road trip", query: "Is it safe to drive from Harare to Mutare today?" },
   { label: "Weekend plans", query: "What outdoor activities can I do this weekend in Gweru?" },
 ];
+
+/**
+ * Generate contextual suggested prompts based on Shamwari context.
+ * These replace the default prompts when the user arrives with context.
+ */
+function getContextualPrompts(ctx: ShamwariContext): { label: string; query: string }[] {
+  const loc = ctx.locationName || "this location";
+
+  if (ctx.source === "location") {
+    return [
+      { label: `More about ${loc}`, query: `Tell me more about the weather in ${loc}` },
+      { label: "Activity advice", query: `What activities are best for today's weather in ${loc}?` },
+      { label: "Compare locations", query: `Compare ${loc} weather with nearby cities` },
+    ];
+  }
+
+  if (ctx.source === "history") {
+    return [
+      { label: "Explain trends", query: `What do the weather trends in ${loc} over the last ${ctx.historyDays || 30} days tell us?` },
+      { label: "Farming impact", query: `How have recent weather patterns affected farming in ${loc}?` },
+      { label: "Future outlook", query: `Based on recent history, what should I expect next in ${loc}?` },
+    ];
+  }
+
+  if (ctx.source === "explore") {
+    return [
+      { label: "Refine search", query: ctx.exploreQuery ? `Show me more locations like "${ctx.exploreQuery}"` : `What other locations have similar weather?` },
+      { label: "Detailed comparison", query: `Compare the weather conditions of locations you found` },
+      { label: "Best option", query: `Which location is best for outdoor activities right now?` },
+    ];
+  }
+
+  return DEFAULT_SUGGESTED_PROMPTS;
+}
+
+/**
+ * Generate a contextual greeting message based on Shamwari context.
+ * Returns null if no context or if context type is not recognized.
+ *
+ * Note: Greeting templates are also seeded in seed-ai-prompts.ts
+ * (greeting:location_context, etc.) for future DB-driven rendering.
+ * These hardcoded greetings serve as the primary source until
+ * the greeting logic is migrated to fetch from the API.
+ */
+function getContextualGreeting(ctx: ShamwariContext): string | null {
+  if (ctx.source === "location" && ctx.locationName) {
+    const tempInfo = ctx.temperature != null ? ` at ${Math.round(ctx.temperature)}°C` : "";
+    const summaryInfo = ctx.weatherSummary
+      ? (() => {
+          const s = ctx.weatherSummary;
+          if (s.length <= 150) return ` ${s}`;
+          const idx = s.lastIndexOf(" ", 150);
+          const truncated = idx > 0 ? s.slice(0, idx) : s.slice(0, 150);
+          return ` ${truncated}...`;
+        })()
+      : "";
+    return `You're looking at weather in **${ctx.locationName}**${tempInfo}.${summaryInfo} How can I help you plan around this weather?`;
+  }
+
+  if (ctx.source === "history" && ctx.locationName) {
+    return `You were analyzing ${ctx.historyDays || 30}-day weather history for **${ctx.locationName}**. Want me to dive deeper into any trends or help plan around what the data shows?`;
+  }
+
+  if (ctx.source === "explore" && ctx.exploreQuery) {
+    return `You searched for "${ctx.exploreQuery}". I can help you explore more locations or get detailed weather for any of the results. What would you like to know?`;
+  }
+
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -102,25 +173,97 @@ function ArrowUpIcon({ size = 20 }: { size?: number }) {
   );
 }
 
+function ArrowDownIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m19 12-7 7-7-7" /><path d="M12 5v14" />
+    </svg>
+  );
+}
+
 export function ExploreChatbot() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [contextualPrompts, setContextualPrompts] = useState<{ label: string; query: string }[] | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   // Send user's selected activities so Claude can personalise advice
   const selectedActivities = useAppStore((s) => s.selectedActivities);
+  const shamwariContext = useAppStore((s) => s.shamwariContext);
+  const clearShamwariContext = useAppStore((s) => s.clearShamwariContext);
+
+  // Capture context at mount time to avoid stale closure issues
+  const initialContextRef = useRef(shamwariContext);
+
+  // Consume ShamwariContext on mount: generate contextual greeting + prompts
+  useEffect(() => {
+    const ctx = initialContextRef.current;
+    if (!isShamwariContextValid(ctx)) return;
+
+    const greeting = getContextualGreeting(ctx);
+    if (greeting) {
+      const greetingMessage: ChatMessage = {
+        id: `context-${Date.now()}`,
+        role: "assistant",
+        content: greeting,
+        timestamp: new Date(),
+      };
+      setMessages([greetingMessage]);
+    }
+
+    // Set context-aware suggested prompts
+    setContextualPrompts(getContextualPrompts(ctx));
+
+    // Clear context after consuming (one-time use)
+    clearShamwariContext();
+  }, [clearShamwariContext]);
 
   // Cancel in-flight fetch on unmount to prevent state updates on unmounted component
   useEffect(() => {
     return () => { abortRef.current?.abort(); };
   }, []);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive — but only if the user is
+  // already near the bottom. If they scrolled up to re-read context, don't
+  // yank them back down; the scroll-to-bottom button handles that instead.
+  // Uses rAF to defer measurement until after the browser has reflowed with
+  // the new message content, so scrollHeight includes the new message.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const id = requestAnimationFrame(() => {
+      const vp = viewportRef.current;
+      const distanceFromBottom = vp
+        ? vp.scrollHeight - vp.scrollTop - vp.clientHeight
+        : 0;
+      if (distanceFromBottom < 100) {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
+    });
+    return () => cancelAnimationFrame(id);
   }, [messages]);
+
+  // Track scroll position to show/hide scroll-to-bottom button.
+  // Uses viewportRef forwarded through ScrollArea to the Radix Viewport element.
+  // Empty deps [] is correct: viewportRef is a stable useRef object whose identity
+  // never changes. If the entire component remounts (e.g. Suspense boundary reset),
+  // React creates a new component instance and all effects re-run anyway.
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const handleScroll = () => {
+      const distanceFromBottom = vp.scrollHeight - vp.scrollTop - vp.clientHeight;
+      setShowScrollBtn(distanceFromBottom > 100);
+    };
+    vp.addEventListener("scroll", handleScroll, { passive: true });
+    return () => vp.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
 
   const sendMessage = useCallback(async (text: string) => {
     const trimmed = text.trim();
@@ -155,7 +298,7 @@ export function ExploreChatbot() {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const res = await fetch("/api/explore", {
+      const res = await fetch("/api/py/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -211,49 +354,83 @@ export function ExploreChatbot() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Messages area */}
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="px-4 py-4 space-y-4" aria-live="polite" aria-relevant="additions">
-          {messages.length === 0 && (
-            <EmptyState onSuggestionClick={handleSuggestion} />
-          )}
+      <div className="relative flex-1 min-h-0">
+        {/* fixRadixTableLayout: override Radix's display:table on viewport wrapper —
+            without it, the flex message layout breaks.
+            Tested with @radix-ui/react-scroll-area@1.4.3 — verify after upgrades.
+            TODO: Remove when upstream resolves this —
+            https://github.com/radix-ui/primitives/issues/926 */}
+        <ScrollArea viewportRef={viewportRef} className="h-full" fixRadixTableLayout>
+          <div className="px-4 py-4 space-y-5 overflow-x-hidden" aria-live="polite" aria-relevant="additions">
+            {messages.length === 0 && (
+              <EmptyState onSuggestionClick={handleSuggestion} loading={loading} />
+            )}
+            {messages.length > 0 && contextualPrompts && contextualPrompts.length > 0 && messages.length === 1 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {contextualPrompts.map((prompt) => (
+                  <button
+                    key={prompt.query}
+                    onClick={() => handleSuggestion(prompt.query)}
+                    className="flex items-center rounded-[var(--radius-card)] border border-border bg-surface-card px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-surface-base hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
+                    type="button"
+                    disabled={loading}
+                  >
+                    {prompt.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
-          {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} />
-          ))}
+            {messages.map((msg) => (
+              <MessageBubble key={msg.id} message={msg} />
+            ))}
 
-          {loading && <TypingIndicator />}
+            {loading && <TypingIndicator />}
 
-          <div ref={messagesEndRef} />
-        </div>
-      </ScrollArea>
+            <div ref={messagesEndRef} />
+          </div>
+        </ScrollArea>
+
+        {/* Scroll-to-bottom button */}
+        {showScrollBtn && (
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center justify-center h-11 w-11 rounded-full bg-surface-card border border-border shadow-md text-text-secondary transition-colors hover:bg-surface-base hover:text-text-primary"
+            aria-label="Scroll to bottom"
+          >
+            <ArrowDownIcon size={16} />
+          </button>
+        )}
+      </div>
 
       {/* Input area */}
-      <div className="shrink-0 border-t border-border bg-surface-base/50 backdrop-blur-sm px-4 py-3">
-        <form onSubmit={handleSubmit} className="flex items-end gap-2">
-          <div className="relative flex-1">
+      <div className="shrink-0 border-t border-border bg-surface-base/50 backdrop-blur-sm px-4 py-3 overflow-hidden">
+        <form onSubmit={handleSubmit} className="flex items-end gap-2 max-w-full">
+          <div className="relative flex-1 min-w-0">
             <textarea
               ref={inputRef}
               value={input}
               onChange={(e) => {
                 setInput(e.target.value);
-                // Auto-grow: reset height then expand to scrollHeight (capped by max-h).
-                // Uses inline style.height because the value is dynamically calculated
-                // from scrollHeight — not expressible as a static Tailwind class.
+                // Auto-grow: reset height then expand to scrollHeight.
+                // Capped at 128px (max-h-32) so inline style.height doesn't
+                // override the Tailwind max-height constraint.
                 e.target.style.height = "auto";
-                e.target.style.height = `${e.target.scrollHeight}px`;
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`;
               }}
               onKeyDown={(e) => {
                 // Submit on Enter (without Shift); Shift+Enter inserts a newline
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  handleSubmit(e);
+                  sendMessage(input);
                 }
               }}
               placeholder="Ask about weather, locations, activities..."
               rows={1}
-              className="flex w-full resize-none rounded-[var(--radius-input)] bg-surface-base pl-9 pr-4 py-2 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 max-h-32 overflow-y-auto"
+              className="flex w-full resize-none rounded-[var(--radius-input)] bg-surface-base pl-9 pr-4 py-2 text-base text-text-primary placeholder:text-text-tertiary outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 max-h-32 overflow-y-auto break-words"
               aria-label="Ask Shamwari Explorer"
               disabled={loading}
             />
@@ -278,7 +455,9 @@ export function ExploreChatbot() {
 // Empty state with suggested prompts
 // ---------------------------------------------------------------------------
 
-function EmptyState({ onSuggestionClick }: { onSuggestionClick: (query: string) => void }) {
+function EmptyState({ onSuggestionClick, loading }: { onSuggestionClick: (query: string) => void; loading?: boolean }) {
+  const prompts = DEFAULT_SUGGESTED_PROMPTS;
+
   return (
     <div className="flex flex-col items-center justify-center py-8">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
@@ -297,12 +476,13 @@ function EmptyState({ onSuggestionClick }: { onSuggestionClick: (query: string) 
           Try asking
         </p>
         <div className="grid grid-cols-2 gap-2">
-          {SUGGESTED_PROMPTS.map((prompt) => (
+          {prompts.map((prompt) => (
             <button
               key={prompt.query}
               onClick={() => onSuggestionClick(prompt.query)}
-              className="flex items-center rounded-[var(--radius-card)] border border-border bg-surface-card px-3 py-3 text-left text-sm text-text-secondary transition-colors hover:bg-surface-base hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
+              className="flex items-center rounded-[var(--radius-card)] border border-border bg-surface-card px-3 py-3 text-left text-sm text-text-secondary transition-colors hover:bg-surface-base hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[44px] disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
+              disabled={loading}
             >
               {prompt.label}
             </button>
@@ -320,43 +500,49 @@ function EmptyState({ onSuggestionClick }: { onSuggestionClick: (query: string) 
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
 
+  if (isUser) {
+    return (
+      <div className="flex justify-end min-w-0">
+        <div className="max-w-[85%] min-w-0 rounded-[var(--radius-card)] px-4 py-3 bg-primary text-primary-foreground">
+          <p className="text-sm break-words">{message.content}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Assistant messages: full-width, no bubble — like Claude's chat UI
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`max-w-[85%] rounded-[var(--radius-card)] px-4 py-3 ${
-          isUser
-            ? "bg-primary text-primary-foreground"
-            : "bg-surface-card shadow-sm"
-        }`}
-      >
-        {isUser ? (
-          <p className="text-sm">{message.content}</p>
-        ) : (
+    <div className="min-w-0">
+      <div className="flex items-start gap-2.5">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 mt-0.5">
+          <SparklesIcon size={14} className="text-primary" />
+        </div>
+        <div className="min-w-0 flex-1">
           <MarkdownErrorBoundary fallback={message.content}>
-            <div className="prose prose-sm max-w-none text-text-secondary prose-strong:text-text-primary prose-headings:text-text-primary prose-li:marker:text-text-tertiary prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
+            <div className="prose prose-sm max-w-none break-words overflow-hidden text-text-secondary prose-strong:text-text-primary prose-headings:text-text-primary prose-li:marker:text-text-tertiary prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-pre:overflow-x-auto prose-pre:max-w-full prose-code:break-words">
               <ReactMarkdown components={markdownComponents}>{message.content}</ReactMarkdown>
             </div>
           </MarkdownErrorBoundary>
-        )}
 
-        {/* Location references as quick links */}
-        {!isUser && message.references && message.references.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5 border-t border-border/50 pt-2.5">
-            {message.references
-              .filter((ref) => ref.type === "location" || ref.type === "weather")
-              .slice(0, 5)
-              .map((ref) => (
-                <Link
-                  key={ref.slug}
-                  href={`/${ref.slug}`}
-                  className="inline-flex items-center gap-1 rounded-[var(--radius-badge)] bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
-                >
-                  <MapPinIcon size={10} className="shrink-0" />
-                  {ref.name}
-                </Link>
-              ))}
-          </div>
-        )}
+          {/* Location references as quick links */}
+          {message.references && message.references.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5 pt-2">
+              {message.references
+                .filter((ref) => ref.type === "location" || ref.type === "weather")
+                .slice(0, 5)
+                .map((ref) => (
+                  <Link
+                    key={ref.slug}
+                    href={`/${ref.slug}`}
+                    className="inline-flex items-center gap-1 rounded-[var(--radius-badge)] bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+                  >
+                    <MapPinIcon size={10} className="shrink-0" />
+                    {ref.name}
+                  </Link>
+                ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -368,8 +554,11 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
 function TypingIndicator() {
   return (
-    <div className="flex justify-start" role="status">
-      <div className="flex gap-1.5 rounded-[var(--radius-card)] bg-surface-card px-4 py-3 shadow-sm">
+    <div className="flex items-start gap-2.5" role="status">
+      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 mt-0.5">
+        <SparklesIcon size={14} className="text-primary" />
+      </div>
+      <div className="flex gap-1.5 py-2">
         <span className="h-2 w-2 animate-bounce rounded-full bg-text-tertiary [animation-delay:0ms]" />
         <span className="h-2 w-2 animate-bounce rounded-full bg-text-tertiary [animation-delay:150ms]" />
         <span className="h-2 w-2 animate-bounce rounded-full bg-text-tertiary [animation-delay:300ms]" />

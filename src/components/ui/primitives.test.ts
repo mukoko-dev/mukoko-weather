@@ -227,6 +227,24 @@ describe("ScrollArea", () => {
     expect(mod.ScrollArea).toBeDefined();
     expect(mod.ScrollBar).toBeDefined();
   });
+
+  it("supports fixRadixTableLayout prop to scope display:block override", async () => {
+    const { readFileSync } = await import("fs");
+    const { resolve } = await import("path");
+    const src = readFileSync(resolve(__dirname, "scroll-area.tsx"), "utf-8");
+    expect(src).toContain("fixRadixTableLayout");
+    // Override should only apply when fixRadixTableLayout is true, not globally
+    expect(src).toContain('fixRadixTableLayout && "[&>div]:!block"');
+  });
+
+  it("supports viewportRef prop for direct viewport access", async () => {
+    const { readFileSync } = await import("fs");
+    const { resolve } = await import("path");
+    const src = readFileSync(resolve(__dirname, "scroll-area.tsx"), "utf-8");
+    expect(src).toContain("viewportRef");
+    // Ref is forwarded to the Radix Viewport element
+    expect(src).toContain("ref={viewportRef}");
+  });
 });
 
 // ---------------------------------------------------------------------------

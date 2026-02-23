@@ -10,6 +10,7 @@ import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { SectionSkeleton } from "@/components/weather/SectionSkeleton";
 import { FrostAlertBanner } from "./FrostAlertBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
+import { WelcomeBanner } from "@/components/weather/WelcomeBanner";
 import { useAppStore } from "@/lib/store";
 import type { WeatherData, FrostAlert, ZimbabweSeason } from "@/lib/weather";
 import type { ZimbabweLocation } from "@/lib/locations";
@@ -27,6 +28,8 @@ const ActivityInsights = lazy(() => import("@/components/weather/ActivityInsight
 const AtmosphericSummary = lazy(() => import("@/components/weather/AtmosphericSummary").then((m) => ({ default: m.AtmosphericSummary })));
 const SunTimes = lazy(() => import("@/components/weather/SunTimes").then((m) => ({ default: m.SunTimes })));
 const MapPreview = lazy(() => import("@/components/weather/map/MapPreview").then((m) => ({ default: m.MapPreview })));
+const AISummaryChat = lazy(() => import("@/components/weather/AISummaryChat").then((m) => ({ default: m.AISummaryChat })));
+const RecentReports = lazy(() => import("@/components/weather/reports/RecentReports").then((m) => ({ default: m.RecentReports })));
 
 const BASE_URL = "https://weather.mukoko.com";
 
@@ -49,14 +52,16 @@ export function WeatherDashboard({
   countryName,
 }: WeatherDashboardProps) {
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
+  const openMyWeather = useAppStore((s) => s.openMyWeather);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
 
   // Seed with static ACTIVITIES for instant rendering, then upgrade from MongoDB.
   // This prevents a blank ActivityInsights section on slow connections or cold starts.
   const [allActivities, setAllActivities] = useState<Activity[]>(ACTIVITIES);
   useEffect(() => {
     if (selectedActivities.length === 0) return;
-    fetch("/api/activities")
+    fetch("/api/py/activities")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => { if (data?.activities?.length) setAllActivities(data.activities); })
       .catch(() => {});
@@ -121,6 +126,9 @@ export function WeatherDashboard({
         {/* Frost alert banner */}
         {frostAlert && <FrostAlertBanner alert={frostAlert} />}
 
+        {/* Welcome banner for first-time visitors — inline, non-blocking */}
+        <WelcomeBanner locationName={location.name} onChangeLocation={openMyWeather} />
+
         {/* Main grid */}
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Left column: Current + AI Summary */}
@@ -143,10 +151,24 @@ export function WeatherDashboard({
             <LazySection label="ai-summary">
               <ChartErrorBoundary name="AI summary">
                 <Suspense fallback={<SectionSkeleton />}>
-                  {!usingFallback && <AISummary weather={weather} location={location} />}
+                  {!usingFallback && <AISummary weather={weather} location={location} onSummaryLoaded={setAiSummary} />}
                 </Suspense>
               </ChartErrorBoundary>
             </LazySection>
+            {aiSummary && !usingFallback && (
+              <LazySection label="ai-followup-chat">
+                <ChartErrorBoundary name="AI follow-up chat">
+                  <Suspense fallback={<SectionSkeleton />}>
+                    <AISummaryChat
+                      weather={weather}
+                      location={location}
+                      initialSummary={aiSummary}
+                      season={`${season.shona} (${season.name})`}
+                    />
+                  </Suspense>
+                </ChartErrorBoundary>
+              </LazySection>
+            )}
             <LazySection label="activity-insights">
               <ChartErrorBoundary name="activity insights">
                 <Suspense fallback={<SectionSkeleton />}>
@@ -184,6 +206,14 @@ export function WeatherDashboard({
               <ChartErrorBoundary name="weather map">
                 <Suspense fallback={<SectionSkeleton />}>
                   <MapPreview location={location} />
+                </Suspense>
+              </ChartErrorBoundary>
+            </LazySection>
+
+            <LazySection label="community-reports">
+              <ChartErrorBoundary name="community reports">
+                <Suspense fallback={<SectionSkeleton />}>
+                  <RecentReports locationSlug={location.slug} />
                 </Suspense>
               </ChartErrorBoundary>
             </LazySection>

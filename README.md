@@ -9,20 +9,25 @@ AI-powered weather intelligence, starting with Zimbabwe and expanding globally. 
 - **Real-time weather** — current conditions from Tomorrow.io (primary) with Open-Meteo fallback
 - **7-day forecasts** — daily highs, lows, precipitation probability, and weather conditions
 - **24-hour hourly forecasts** — hour-by-hour temperature and rain predictions
-- **AI weather intelligence** — Claude-powered markdown-formatted summaries with farming, mining, and travel advice
-- **Personalised activity insights** — 20 activities across 6 categories (farming, mining, travel, tourism, sports, casual) with mineral-colored cards showing GDD, heat stress, thunderstorm risk, visibility, and more
+- **AI weather intelligence** — Claude-powered markdown-formatted summaries with farming, mining, and travel advice, plus inline follow-up chat (up to 5 messages before seamless handoff to Shamwari)
+- **AI-powered explore search** — natural-language location discovery ("farming areas with low frost risk") using Claude with tool use
+- **AI history analysis** — button-triggered analysis of historical weather trends, patterns, and anomalies with server-side aggregation
+- **Personalised activity insights** — 30+ activities across 6 categories (farming, mining, travel, tourism, sports, casual) with mineral-colored cards showing GDD, heat stress, thunderstorm risk, visibility, and more
+- **Cross-device sync** — device profile sync bridges browser localStorage with a server-side profile, so preferences survive across devices and browser resets
+- **Community weather reporting** — Waze-style ground-truth observations: 10 weather types, 3 severity levels, AI-assisted clarification, cross-validation against API data, community upvoting
 - **Frost alerts** — automated frost risk detection for overnight hours with severity levels
 - **Dynamic locations** — 90+ seed locations in Zimbabwe, with community-driven expansion to ASEAN and developing regions via geolocation and search
 - **Seasonal awareness** — Zimbabwe seasons (Masika, Chirimo, Zhizha, Munakamwe) and regional context
 - **Geolocation** — automatic nearest-location detection via browser GPS, with auto-creation for new areas
-- **Shamwari AI chat** — dedicated `/shamwari` page with full-viewport Claude app-style chat (search locations, check weather, get activity advice, compare cities)
+- **Shamwari AI chat** — dedicated `/shamwari` page with full-viewport Claude app-style chat (search locations, check weather, get activity advice, compare cities). Contextual navigation carries weather/location data from any page
 - **Suitability scoring** — database-driven weather suitability evaluation for activities (excellent/good/fair/poor ratings with structured metrics)
 - **Country/region browse** — explore locations by country, province, and tag across 64 countries (54 AU + ASEAN)
 - **System status** — live health dashboard for all services (MongoDB, weather APIs, AI, cache)
 - **Embeddable widget** — drop-in weather widget for third-party sites
 - **Dedicated detail pages** — `/harare/atmosphere` for 24h atmospheric charts, `/harare/forecast` for hourly + daily forecast detail, `/harare/map` for full-viewport interactive weather map
 - **Smart theming** — light, dark, and system (auto) modes with OS preference detection
-- **Historical data dashboard** — explore recorded weather trends, precipitation, and climate patterns over time
+- **Historical data dashboard** — explore recorded weather trends, precipitation, and climate patterns over time, with AI-powered analysis
+- **Database-driven AI configuration** — all system prompts, suggested prompt rules, and model configs stored in MongoDB for easy updates without code changes
 - **Resilient architecture** — Netflix-style error isolation: per-section error boundaries, 4-stage weather fallback chain, structured observability logging
 - **PWA** — installable as a standalone app on Android, iOS, and desktop
 
@@ -31,18 +36,19 @@ AI-powered weather intelligence, starting with Zimbabwe and expanding globally. 
 | Layer | Technology |
 |-------|-----------|
 | Framework | [Next.js 16](https://nextjs.org) (App Router, TypeScript 5) |
+| Backend API | [Python FastAPI](https://fastapi.tiangolo.com) (Vercel serverless functions under `api/py/`) |
 | UI Components | [shadcn/ui](https://ui.shadcn.com) (Radix UI + CVA) |
 | Charts | [Chart.js 4](https://www.chartjs.org) + [react-chartjs-2](https://react-chartjs-2.js.org) (Canvas 2D) |
 | Maps | [Leaflet](https://leafletjs.com) + [react-leaflet](https://react-leaflet.js.org) (Tomorrow.io tile overlays) |
 | Styling | [Tailwind CSS 4](https://tailwindcss.com) with CSS custom properties |
 | Markdown | [react-markdown 10](https://github.com/remarkjs/react-markdown) |
 | State | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist` middleware |
-| AI | [Anthropic Claude SDK](https://docs.anthropic.com/en/docs) (server-side only) |
+| AI | [Anthropic Claude SDK](https://docs.anthropic.com/en/docs) (server-side via Python FastAPI) |
 | Weather API | [Tomorrow.io](https://tomorrow.io) (primary) + [Open-Meteo](https://open-meteo.com) (fallback) |
 | Database | [MongoDB Atlas](https://mongodb.com/atlas) (cache, AI summaries, history, locations; Atlas Search for fuzzy queries) |
 | Analytics | [Google Analytics 4](https://analytics.google.com) |
 | Testing | [Vitest](https://vitest.dev) |
-| CI/CD | [GitHub Actions](https://github.com/features/actions) (tests + lint + typecheck on push/PR) |
+| CI/CD | [GitHub Actions](https://github.com/features/actions) (tests + lint + typecheck on push/PR, Claude AI review, post-deploy DB init) |
 | Deployment | [Vercel](https://vercel.com) |
 
 ## Getting Started
@@ -111,23 +117,43 @@ The main location page is a compact overview. Detail-heavy sections (charts, atm
 
 ### API
 
+All data, AI, and CRUD operations run in **Python FastAPI** (`api/py/`), deployed as Vercel serverless functions. Routes are proxied via `vercel.json` rewrites (`/api/py/*` → `api/py/index.py`). Only the OG image and DB init routes remain in TypeScript.
+
+**Python API (`/api/py/*`):**
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/weather?lat=&lon=` | GET | Weather data (Tomorrow.io → Open-Meteo fallback, MongoDB cached 15-min TTL). `X-Weather-Provider` header indicates source |
-| `/api/ai` | POST | AI weather summary. Body: `{ weatherData, location }`. Tiered TTL cache (30/60/120 min) |
-| `/api/explore` | POST | Shamwari Explorer chatbot. Body: `{ message, history }`. Rate-limited 20 req/hour/IP |
-| `/api/search?q=&tag=&lat=&lon=` | GET | Location search (text, tag filter, geospatial nearest) |
-| `/api/geo?lat=&lon=` | GET | Nearest location lookup (supports `autoCreate=true` for community locations) |
-| `/api/locations` | GET | List/filter locations (by slug, tag, all, or stats mode) |
-| `/api/locations/add` | POST | Add locations via search (`{ query }`) or coordinates (`{ lat, lon }`). Rate-limited |
-| `/api/activities` | GET | Activities (by id, category, search, labels, or categories mode) |
-| `/api/suitability` | GET | Suitability rules (all or by key; key format validated) |
-| `/api/tags` | GET | Tag metadata (all or featured) |
-| `/api/regions` | GET | Active supported regions (bounding boxes) |
-| `/api/status` | GET | System health checks (MongoDB, APIs, cache) |
-| `/api/history?location=&days=` | GET | Historical weather data for a location |
-| `/api/map-tiles?z=&x=&y=&layer=` | GET | Tile proxy for Tomorrow.io map layers (keeps API key server-side) |
-| `/api/db-init` | POST | One-time DB setup + seed data. Protected by `DB_INIT_SECRET` in production |
+| `/api/py/weather?lat=&lon=` | GET | Weather data (Tomorrow.io → Open-Meteo fallback, MongoDB cached 15-min TTL). `X-Weather-Provider` / `X-Cache` headers |
+| `/api/py/ai` | POST | AI weather summary (Claude Haiku 3.5, markdown). Tiered TTL cache (30/60/120 min) |
+| `/api/py/ai/followup` | POST | Inline follow-up chat for AI summaries (max 5 exchanges). Rate-limited 30 req/hour/IP |
+| `/api/py/ai/prompts` | GET | Database-driven AI prompt library (system prompts + suggested prompt rules) |
+| `/api/py/ai/suggested-rules` | GET | Dynamic suggested prompt rules for contextual prompts |
+| `/api/py/chat` | POST | Shamwari Explorer chatbot (Claude + tool use). Rate-limited 20 req/hour/IP |
+| `/api/py/search?q=&tag=&lat=&lon=` | GET | Location search (text, tag filter, geospatial nearest, pagination) |
+| `/api/py/geo?lat=&lon=` | GET | Nearest location lookup (supports `autoCreate=true` for community locations) |
+| `/api/py/locations` | GET | List/filter locations from MongoDB (by slug, tag, or all; includes stats mode) |
+| `/api/py/locations/add` | POST | Add locations via search or coordinates. Rate-limited 5 req/hour/IP |
+| `/api/py/activities` | GET | Activities (by id, category, search, labels, or categories mode) |
+| `/api/py/suitability` | GET | Suitability rules from MongoDB (all or by key; key format validated) |
+| `/api/py/tags` | GET | Tag metadata (all or featured) |
+| `/api/py/regions` | GET | Active supported regions (bounding boxes) |
+| `/api/py/status` | GET | System health checks (MongoDB, Tomorrow.io, Open-Meteo, Anthropic, cache) |
+| `/api/py/history?location=&days=` | GET | Historical weather data for a location |
+| `/api/py/history/analyze` | POST | AI-powered historical weather analysis (server-side aggregation + Claude). Cached 1h. Rate-limited 10 req/hour/IP |
+| `/api/py/explore/search` | POST | AI-powered natural-language location search (Claude + tool use). Rate-limited 15 req/hour/IP |
+| `/api/py/map-tiles?z=&x=&y=&layer=` | GET | Tile proxy for Tomorrow.io map layers (keeps API key server-side) |
+| `/api/py/reports` | POST/GET | Community weather reports — submit (POST, 5/hour/IP) or list (GET) |
+| `/api/py/reports/upvote` | POST | Upvote a community report (IP-based dedup) |
+| `/api/py/reports/clarify` | POST | AI-generated follow-up questions for weather report clarification. Rate-limited 10 req/hour/IP |
+| `/api/py/devices` | POST/GET/PATCH | Device profile sync for cross-device preferences |
+| `/api/py/health` | GET | Basic health check (MongoDB + Anthropic availability) |
+
+**TypeScript API (remaining):**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/og?title=&subtitle=&template=` | GET | Dynamic OG image generation (Edge runtime, Satori). 6 templates, in-memory rate-limited, 1-day CDN cache |
+| `/api/db-init` | POST | One-time DB setup + seed data (incl. AI prompts). Protected by `DB_INIT_SECRET` in production |
 
 ### Resilience
 
@@ -195,27 +221,14 @@ src/
     privacy/page.tsx
     terms/page.tsx
     embed/page.tsx
-    api/
-      weather/route.ts      # GET — Tomorrow.io/Open-Meteo proxy + MongoDB cache
-      ai/route.ts           # POST — AI summaries (Claude Haiku 3.5, markdown-formatted)
-      explore/route.ts      # POST — Shamwari Explorer chatbot (Claude + tool use)
-      search/route.ts       # GET — location search (text, tag, geo queries)
-      geo/route.ts          # GET — nearest location lookup (supports autoCreate)
-      locations/route.ts    # GET — list/filter locations from MongoDB
-      locations/add/route.ts # POST — add locations via search or coordinates
-      activities/route.ts   # GET — activities (by ID, category, search, labels)
-      suitability/route.ts  # GET — suitability rules from MongoDB
-      tags/route.ts         # GET — tag metadata (all or featured)
-      regions/route.ts      # GET — active supported regions
-      status/route.ts       # GET — system health checks
-      history/route.ts      # GET — historical weather data
-      map-tiles/route.ts    # GET — tile proxy for Tomorrow.io map layers
+    api/                    # Remaining TypeScript API routes (most migrated to Python)
+      og/route.tsx          # GET — dynamic OG image generation (Edge runtime, Satori)
       db-init/route.ts      # POST — one-time DB setup + seed data
   components/
     ui/                     # shadcn/ui primitives (button, badge, card, chart, dialog, input, skeleton, tabs)
     analytics/              # Google Analytics 4
     brand/                  # Logo, MineralsStripe, ThemeProvider, ThemeToggle
-    explore/                # ExploreChatbot (AI chat UI, typing indicator, suggested prompts)
+    explore/                # Shamwari chatbot + AI explore search
     layout/                 # Header (pill icon group), HeaderSkeleton, Footer
     weather/
       CurrentConditions.tsx  # Large temp display, feels-like, stats grid
@@ -226,9 +239,13 @@ src/
       LazySection.tsx        # TikTok-style sequential lazy-load
       ChartErrorBoundary.tsx # Error boundary for crash isolation
       StatCard.tsx           # Reusable stat card
-      MyWeatherModal.tsx     # Centralized preferences modal
-      AISummary.tsx          # Shamwari AI markdown summary
+      WelcomeBanner.tsx       # Inline welcome banner for first-time visitors
+      MyWeatherModal.tsx     # Centralized preferences modal (location, activities, settings)
+      AISummary.tsx          # Shamwari AI markdown summary (onSummaryLoaded callback)
+      AISummaryChat.tsx      # Inline follow-up chat (max 5 messages → Shamwari)
+      HistoryAnalysis.tsx    # AI-powered historical weather analysis
       ActivityInsights.tsx   # Category-specific weather insight cards
+      reports/               # Waze-style community weather reporting
       charts/                # Reusable Canvas chart components (15 charts)
       map/                   # Leaflet map (preview, full, layer switcher, skeleton)
     embed/
@@ -237,25 +254,45 @@ src/
     locations.ts            # WeatherLocation type, 90+ ZW seed locations, SUPPORTED_REGIONS
     locations-africa.ts     # African city seed data (54 AU member states)
     countries.ts            # Country/province types, 64 seed countries, flag emoji
-    activities.ts           # 20 activities, 6 categories, mineral color styles
+    activities.ts           # 30+ activities, 6 categories, mineral color styles
     suitability.ts          # Database-driven suitability evaluation engine (evaluateRule)
     suitability-cache.ts    # Client-side cache for suitability rules + category styles
     tomorrow.ts             # Tomorrow.io API client + WMO normalization
     weather.ts              # Open-Meteo client, frost detection, seasons, weather utils
     weather-labels.ts       # Contextual label helpers (humidity, pressure, cloud, feels-like)
-    db.ts                   # MongoDB CRUD + Atlas Search/Vector Search (12 collections)
-    geocoding.ts            # Nominatim + Open-Meteo geocoding, slug generation
-    rate-limit.ts           # MongoDB-backed IP rate limiter
+    db.ts                   # MongoDB CRUD + Atlas Search/Vector Search (18+ collections)
     mongo.ts                # MongoDB client (connection-pooled via @vercel/functions)
-    circuit-breaker.ts      # Netflix Hystrix-inspired circuit breaker
     observability.ts        # Structured error logging + GA4 error reporting
-    store.ts                # Zustand state (theme, activities, location)
+    store.ts                # Zustand state (theme, activities, location, hasOnboarded, ShamwariContext, reportModal)
+    device-sync.ts          # Device sync — bridges Zustand localStorage with Python device profile API
+    suggested-prompts.ts    # Database-driven suggested prompt generation
     geolocation.ts          # Browser Geolocation API wrapper
     weather-icons.tsx       # SVG weather + activity icon components
     i18n.ts                 # Lightweight i18n (en complete, sn/nd ready)
     error-retry.ts          # Error retry with sessionStorage tracking
     utils.ts                # Tailwind class merging (cn)
-    seed-*.ts               # Seed data files (categories, tags, regions, seasons, suitability rules)
+    seed-*.ts               # Seed data files (categories, tags, regions, seasons, suitability rules, AI prompts)
+api/
+  py/                       # Python FastAPI backend (Vercel serverless functions)
+    index.py                # FastAPI app, router mounting, CORS, error handlers
+    _db.py                  # MongoDB connection, collection accessors, rate limiting
+    _weather.py             # Weather data endpoints (Tomorrow.io/Open-Meteo proxy)
+    _ai.py                  # AI summary endpoint (Claude, tiered TTL cache)
+    _ai_followup.py         # Inline follow-up chat endpoint
+    _ai_prompts.py          # AI prompt library CRUD
+    _chat.py                # Shamwari Explorer chatbot (Claude + tool use)
+    _locations.py           # Location CRUD, search, geo lookup
+    _history.py             # Historical weather data endpoint
+    _history_analyze.py     # AI history analysis
+    _explore_search.py      # AI-powered explore search
+    _reports.py             # Community weather reports (submit, list, upvote, clarify)
+    _suitability.py         # Suitability rules endpoint
+    _data.py                # DB init, seed data, activities, tags, regions
+    _devices.py             # Device sync (preferences across devices)
+    _circuit_breaker.py     # Netflix Hystrix-inspired circuit breaker (per-provider)
+    _embeddings.py          # Vector embedding endpoints (stub)
+    _status.py              # System health checks
+    _tiles.py               # Map tile proxy for Tomorrow.io
 public/
   manifest.json             # PWA manifest with app shortcuts
   icons/                    # PWA icons (192x192, 512x512)
@@ -263,7 +300,9 @@ public/
   ISSUE_TEMPLATE/           # Bug report and feature request templates (YAML forms)
   workflows/
     ci.yml                  # Tests, lint, type check on push/PR
-    claude-review.yml       # Claude AI code review on PRs
+    claude-code-review.yml  # Claude AI code review on PRs
+    claude.yml              # Claude Code for @claude mentions in issues/PRs
+    db-init.yml             # Post-deploy DB seed data sync (Vercel deployment webhook)
 ```
 
 ## Accessibility

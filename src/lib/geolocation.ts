@@ -28,7 +28,7 @@ export function detectUserLocation(): Promise<GeoResult> {
         const { latitude, longitude } = position.coords;
 
         try {
-          const res = await fetch(`/api/geo?lat=${latitude}&lon=${longitude}&autoCreate=true`);
+          const res = await fetch(`/api/py/geo?lat=${latitude}&lon=${longitude}&autoCreate=true`);
           if (res.status === 404) {
             resolve({
               status: "outside-supported",

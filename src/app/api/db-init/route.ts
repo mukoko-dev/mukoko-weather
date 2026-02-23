@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ensureIndexes, syncLocations, syncActivities, syncCountries, syncProvinces, syncRegions, syncTags, syncSeasons, syncSuitabilityRules, syncActivityCategories, setApiKey } from "@/lib/db";
+import { ensureIndexes, syncLocations, syncActivities, syncCountries, syncProvinces, syncRegions, syncTags, syncSeasons, syncSuitabilityRules, syncActivityCategories, syncAIPrompts, syncAISuggestedRules, setApiKey } from "@/lib/db";
 import { LOCATIONS } from "@/lib/locations";
 import { ACTIVITIES } from "@/lib/activities";
 import { COUNTRIES, PROVINCES } from "@/lib/countries";
@@ -8,6 +8,7 @@ import { TAGS } from "@/lib/seed-tags";
 import { SEASONS } from "@/lib/seed-seasons";
 import { SUITABILITY_RULES } from "@/lib/seed-suitability-rules";
 import { CATEGORIES } from "@/lib/seed-categories";
+import { AI_PROMPTS, AI_SUGGESTED_PROMPT_RULES } from "@/lib/seed-ai-prompts";
 
 /**
  * POST /api/db-init
@@ -55,6 +56,8 @@ export async function POST(request: Request) {
       syncLocations(LOCATIONS),
       syncActivities(ACTIVITIES),
       syncSuitabilityRules(SUITABILITY_RULES),
+      syncAIPrompts(AI_PROMPTS),
+      syncAISuggestedRules(AI_SUGGESTED_PROMPT_RULES),
     ]);
 
     // Store any provided API keys
@@ -78,6 +81,8 @@ export async function POST(request: Request) {
       regions: REGIONS.length,
       tags: TAGS.length,
       seasons: SEASONS.length,
+      aiPrompts: AI_PROMPTS.length,
+      aiSuggestedRules: AI_SUGGESTED_PROMPT_RULES.length,
       apiKeys: storedKeys.length > 0 ? storedKeys : "none provided",
       // Atlas Search index definitions are in the codebase (db.ts) — not
       // included in the response to avoid unnecessary schema disclosure.

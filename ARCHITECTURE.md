@@ -83,7 +83,7 @@ Vector Search infrastructure is in place but requires an embedding pipeline to b
 
 ### Circuit Breaker System
 
-Netflix Hystrix-inspired circuit breaker for external API resilience.
+`api/py/_circuit_breaker.py` — Netflix Hystrix-inspired circuit breaker for external API resilience. Python implementation with in-memory state that persists across Vercel warm function starts (~5-15 minutes).
 
 ```
 CLOSED ──(failures >= threshold)──> OPEN ──(cooldown expires)──> HALF_OPEN
@@ -96,11 +96,11 @@ CLOSED ──(failures >= threshold)──> OPEN ──(cooldown expires)──>
 
 **Per-provider singletons:**
 
-| Breaker | Provider | Failure Threshold | Cooldown | Window |
-|---------|----------|:-:|:-:|:-:|
-| `tomorrowBreaker` | Tomorrow.io API | 3 | 2 min | 60s |
-| `openMeteoBreaker` | Open-Meteo API | 5 | 5 min | 120s |
-| `anthropicBreaker` | Anthropic Claude | 3 | 5 min | 120s |
+| Breaker | Provider | Failure Threshold | Cooldown | Window | Timeout |
+|---------|----------|:-:|:-:|:-:|:-:|
+| `tomorrow_breaker` | Tomorrow.io API | 3 | 2 min | 5 min | 5s |
+| `open_meteo_breaker` | Open-Meteo API | 5 | 5 min | 5 min | 8s |
+| `anthropic_breaker` | Anthropic Claude | 3 | 5 min | 10 min | 15s |
 
 ### Weather Fallback Chain
 
@@ -141,15 +141,15 @@ WeatherDashboard
 
 A chart crash, API timeout, or rendering error in any section only affects that section. The page shell (header, navigation, footer) and all other sections remain fully functional.
 
-### Explore Route Resilience
+### Shamwari Chatbot Resilience
 
-The Shamwari chatbot (`/api/explore`) has multiple resilience layers:
+The Shamwari chatbot (`/api/py/chat`) has multiple resilience layers:
 
 | Layer | Mechanism | Scope |
 |-------|-----------|-------|
-| Rate limiter | 20 req/hour/IP | Per-client |
-| Input validation | Type + length checks | Per-request |
-| Circuit breaker | `anthropicBreaker` on all Claude calls | Per-provider |
+| Rate limiter | 20 req/hour/IP (MongoDB-backed) | Per-client |
+| Input validation | Type + length checks, slug regex, tag allowlist | Per-request |
+| Circuit breaker | `anthropic_breaker` on all Claude calls | Per-provider |
 | Tool timeout | 15s per tool execution | Per-tool |
 | Tool loop bound | Max 5 iterations | Per-request |
 | Tool result cap | `list_locations_by_tag` capped to 20 results | Per-tool |
@@ -157,7 +157,7 @@ The Shamwari chatbot (`/api/explore`) has multiple resilience layers:
 | Rules cache | `rulesCache` ref | Per-request |
 | Location context | Module-level, 5-min TTL | Per-instance |
 | Activity context | Module-level, 5-min TTL (dynamic prompt list) | Per-instance |
-| Singleton client | Module-level `_anthropicClient` with key-rotation | Per-instance |
+| Singleton client | Module-level with hash-based key-rotation detection | Per-instance |
 | Markdown boundary | `MarkdownErrorBoundary` in chatbot UI | Per-message |
 
 ## Lazy Loading (TikTok-Style Sequential)
@@ -187,13 +187,20 @@ Sections also UNMOUNT when scrolled 1500px past the viewport (bidirectional), re
 | `weather_cache` | 15 min | Cached weather API responses |
 | `ai_summaries` | 30/60/120 min | Cached AI weather summaries (tiered by location) |
 | `weather_history` | None | Permanent historical weather records |
+| `history_analysis` | 1 hour | Cached AI history analysis results |
 | `locations` | None | Seed + community locations |
-| `activities` | None | Activity definitions (20 activities, 6 categories) |
+| `activities` | None | Activity definitions (30+ activities, 6 categories) |
 | `activity_categories` | None | Category metadata with mineral color styles |
 | `suitability_rules` | None | Condition-based weather suitability rules |
 | `tags` | None | Tag metadata (slug, label, icon, featured) |
 | `regions` | None | Supported geographic regions (bounding boxes) |
 | `seasons` | None | Country-specific season definitions |
+| `countries` | None | Country metadata (54 AU + ASEAN) |
+| `provinces` | None | Province/state metadata |
+| `ai_prompts` | None | Database-driven AI system prompts |
+| `ai_suggested_rules` | None | Dynamic suggested prompt rules |
+| `weather_reports` | TTL on `expiresAt` | Community weather reports (24h/48h/72h by severity) |
+| `device_profiles` | None | Cross-device preference sync (anonymous UUID) |
 | `rate_limits` | TTL on `expiresAt` | IP rate limiting (atomic findOneAndUpdate) |
 | `api_keys` | None | Third-party API keys (Tomorrow.io, Stytch) |
 

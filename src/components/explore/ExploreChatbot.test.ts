@@ -73,8 +73,8 @@ describe("sendMessage logic", () => {
     expect(source).toContain("!trimmed || loading");
   });
 
-  it("sends message to /api/explore", () => {
-    expect(source).toContain('fetch("/api/explore"');
+  it("sends message to /api/py/chat", () => {
+    expect(source).toContain('fetch("/api/py/chat"');
   });
 
   it("includes history and activities in request body", () => {
@@ -111,8 +111,8 @@ describe("error handling", () => {
 });
 
 describe("suggested prompts", () => {
-  it("defines SUGGESTED_PROMPTS array", () => {
-    expect(source).toContain("const SUGGESTED_PROMPTS");
+  it("defines DEFAULT_SUGGESTED_PROMPTS array", () => {
+    expect(source).toContain("const DEFAULT_SUGGESTED_PROMPTS");
   });
 
   it("shows EmptyState when no messages", () => {
@@ -126,6 +126,38 @@ describe("suggested prompts", () => {
 
   it("suggestion buttons meet 44px touch target", () => {
     expect(source).toContain("min-h-[44px]");
+  });
+});
+
+describe("contextual navigation (ShamwariContext)", () => {
+  it("imports isShamwariContextValid and ShamwariContext from store", () => {
+    expect(source).toContain("isShamwariContextValid");
+    expect(source).toContain("ShamwariContext");
+  });
+
+  it("reads shamwariContext from store", () => {
+    expect(source).toContain("shamwariContext");
+    expect(source).toContain("clearShamwariContext");
+  });
+
+  it("generates contextual greeting based on source type", () => {
+    expect(source).toContain("getContextualGreeting");
+    expect(source).toContain('source === "location"');
+    expect(source).toContain('source === "history"');
+    expect(source).toContain('source === "explore"');
+  });
+
+  it("generates contextual prompts based on source type", () => {
+    expect(source).toContain("getContextualPrompts");
+    expect(source).toContain("contextualPrompts");
+  });
+
+  it("clears context after consumption (one-time use)", () => {
+    expect(source).toContain("clearShamwariContext()");
+  });
+
+  it("shows contextual prompt buttons after greeting message", () => {
+    expect(source).toContain("contextualPrompts && contextualPrompts.length > 0");
   });
 });
 
@@ -206,9 +238,10 @@ describe("markdown link sanitisation", () => {
     expect(source).toContain('href.startsWith("#")');
   });
 
-  it("allows https and http protocols via URL constructor", () => {
+  it("allows only https protocol via URL constructor", () => {
     expect(source).toContain('url.protocol === "https:"');
-    expect(source).toContain('url.protocol === "http:"');
+    // http: is intentionally not allowed — prevents link injection to plaintext targets
+    expect(source).not.toContain('url.protocol === "http:"');
   });
 
   it("renders unsafe links as plain <span> text", () => {
@@ -232,7 +265,7 @@ describe("isSafeHref behavioral tests", () => {
     if (href.startsWith("/") || href.startsWith("#")) return true;
     try {
       const url = new URL(href);
-      return url.protocol === "https:" || url.protocol === "http:";
+      return url.protocol === "https:";
     } catch {
       return false;
     }
@@ -254,8 +287,8 @@ describe("isSafeHref behavioral tests", () => {
     expect(isSafeHref("https://weather.mukoko.com/harare")).toBe(true);
   });
 
-  it("allows http URLs", () => {
-    expect(isSafeHref("http://example.com")).toBe(true);
+  it("blocks http URLs (only https allowed)", () => {
+    expect(isSafeHref("http://example.com")).toBe(false);
   });
 
   it("allows relative paths", () => {
@@ -311,5 +344,294 @@ describe("UI patterns", () => {
   it("uses global styles (no hardcoded colors)", () => {
     expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}[^)]/);
     expect(source).not.toContain("style={{");
+  });
+});
+
+describe("overflow containment", () => {
+  it("prevents horizontal overflow on the chat container", () => {
+    expect(source).toContain("overflow-hidden");
+    expect(source).toContain("overflow-x-hidden");
+  });
+
+  it("uses break-words on user message text", () => {
+    expect(source).toContain("break-words");
+  });
+
+  it("uses min-w-0 on message bubble flex containers", () => {
+    expect(source).toContain("min-w-0");
+  });
+
+  it("constrains markdown prose content overflow", () => {
+    expect(source).toContain("prose-pre:overflow-x-auto");
+    expect(source).toContain("prose-pre:max-w-full");
+    // Uses break-words (not break-all) for inline code to avoid splitting mid-word
+    expect(source).toContain("prose-code:break-words");
+    expect(source).not.toContain("prose-code:break-all");
+  });
+
+  it("uses min-w-0 on textarea wrapper for proper flex shrinking", () => {
+    expect(source).toContain("relative flex-1 min-w-0");
+  });
+});
+
+describe("message layout", () => {
+  it("user messages are in right-aligned bubbles with primary bg", () => {
+    expect(source).toContain("justify-end");
+    expect(source).toContain("bg-primary text-primary-foreground");
+  });
+
+  it("assistant messages are full-width without bubble background", () => {
+    // Assistant messages should have a sparkles icon + full-width prose, no bg-surface-card on message
+    expect(source).toContain("SparklesIcon");
+    expect(source).toContain("flex-1");
+  });
+
+  it("assistant messages show a sparkles avatar icon", () => {
+    expect(source).toContain("rounded-full bg-primary/10");
+    expect(source).toContain("SparklesIcon");
+  });
+
+  it("typing indicator matches assistant message layout with sparkles icon", () => {
+    // Typing indicator should also use the sparkles icon layout
+    const typingSection = source.slice(source.indexOf("function TypingIndicator"));
+    expect(typingSection).toContain("SparklesIcon");
+    expect(typingSection).toContain("rounded-full bg-primary/10");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Behavioral tests for pure helper functions (mirrored from source)
+// ---------------------------------------------------------------------------
+
+// Mirror of getContextualGreeting from ExploreChatbot.tsx
+function getContextualGreeting(ctx: { source: string; locationName?: string; temperature?: number; weatherSummary?: string; historyDays?: number; exploreQuery?: string }): string | null {
+  if (ctx.source === "location" && ctx.locationName) {
+    const tempInfo = ctx.temperature != null ? ` at ${Math.round(ctx.temperature)}°C` : "";
+    const summaryInfo = ctx.weatherSummary
+      ? (() => {
+          const s = ctx.weatherSummary;
+          if (s.length <= 150) return ` ${s}`;
+          const idx = s.lastIndexOf(" ", 150);
+          const truncated = idx > 0 ? s.slice(0, idx) : s.slice(0, 150);
+          return ` ${truncated}...`;
+        })()
+      : "";
+    return `You're looking at weather in **${ctx.locationName}**${tempInfo}.${summaryInfo} How can I help you plan around this weather?`;
+  }
+  if (ctx.source === "history" && ctx.locationName) {
+    return `You were analyzing ${ctx.historyDays || 30}-day weather history for **${ctx.locationName}**. Want me to dive deeper into any trends or help plan around what the data shows?`;
+  }
+  if (ctx.source === "explore" && ctx.exploreQuery) {
+    return `You searched for "${ctx.exploreQuery}". I can help you explore more locations or get detailed weather for any of the results. What would you like to know?`;
+  }
+  return null;
+}
+
+// Mirror of getContextualPrompts from ExploreChatbot.tsx
+function getContextualPrompts(ctx: { source: string; locationName?: string; historyDays?: number; exploreQuery?: string }): { label: string; query: string }[] {
+  const loc = ctx.locationName || "this location";
+  if (ctx.source === "location") {
+    return [
+      { label: `More about ${loc}`, query: `Tell me more about the weather in ${loc}` },
+      { label: "Activity advice", query: `What activities are best for today's weather in ${loc}?` },
+      { label: "Compare locations", query: `Compare ${loc} weather with nearby cities` },
+    ];
+  }
+  if (ctx.source === "history") {
+    return [
+      { label: "Explain trends", query: `What do the weather trends in ${loc} over the last ${ctx.historyDays || 30} days tell us?` },
+      { label: "Farming impact", query: `How have recent weather patterns affected farming in ${loc}?` },
+      { label: "Future outlook", query: `Based on recent history, what should I expect next in ${loc}?` },
+    ];
+  }
+  if (ctx.source === "explore") {
+    return [
+      { label: "Refine search", query: ctx.exploreQuery ? `Show me more locations like "${ctx.exploreQuery}"` : `What other locations have similar weather?` },
+      { label: "Detailed comparison", query: `Compare the weather conditions of locations you found` },
+      { label: "Best option", query: `Which location is best for outdoor activities right now?` },
+    ];
+  }
+  // Falls through to DEFAULT_SUGGESTED_PROMPTS in the real component
+  return [];
+}
+
+describe("getContextualGreeting behavioral tests", () => {
+  it("returns greeting with location name for source=location", () => {
+    const result = getContextualGreeting({ source: "location", locationName: "Harare" });
+    expect(result).toContain("**Harare**");
+    expect(result).toContain("How can I help");
+  });
+
+  it("includes rounded temperature when provided", () => {
+    const result = getContextualGreeting({ source: "location", locationName: "Harare", temperature: 25.7 });
+    expect(result).toContain("at 26°C");
+  });
+
+  it("omits temperature when not provided", () => {
+    const result = getContextualGreeting({ source: "location", locationName: "Harare" });
+    expect(result).not.toContain("°C");
+  });
+
+  it("includes short summaries without truncation", () => {
+    const result = getContextualGreeting({ source: "location", locationName: "Harare", weatherSummary: "Clear skies expected." });
+    expect(result).toContain("Clear skies expected.");
+    expect(result).not.toContain("...");
+  });
+
+  it("truncates long summaries at a word boundary", () => {
+    const longSummary = "The weather today is expected to be warm and sunny with clear skies throughout the afternoon. Temperatures will remain above average for this time of year, making it an excellent day for outdoor activities and farming operations in the region.";
+    const result = getContextualGreeting({ source: "location", locationName: "Harare", weatherSummary: longSummary })!;
+    expect(result).toContain("...");
+    // Extract the summary portion between the period after location and "..."
+    const afterLocation = result.indexOf(".");
+    const ellipsis = result.indexOf("...");
+    const summaryText = result.slice(afterLocation + 1, ellipsis).trim();
+    // The truncated text should be shorter than the original
+    expect(summaryText.length).toBeLessThan(longSummary.length);
+    // Should end at a word boundary — last char should be a letter/punctuation, not a space
+    expect(summaryText).not.toMatch(/\s$/);
+    // The truncation point should correspond to a space in the original text
+    // (i.e. the character after our truncated text in the original should be a space)
+    const truncLen = summaryText.length;
+    expect(longSummary[truncLen] === " " || longSummary[truncLen] === undefined).toBe(true);
+  });
+
+  it("handles summaries with no spaces in first 150 chars (edge case)", () => {
+    const noSpaces = "a".repeat(200); // 200-char string with no spaces
+    const result = getContextualGreeting({ source: "location", locationName: "Harare", weatherSummary: noSpaces })!;
+    expect(result).toContain("...");
+    // Should fall back to hard slice at 150, not slice(0, -1)
+    expect(result).toContain("a".repeat(150));
+  });
+
+  it("returns greeting for source=history", () => {
+    const result = getContextualGreeting({ source: "history", locationName: "Bulawayo", historyDays: 14 });
+    expect(result).toContain("**Bulawayo**");
+    expect(result).toContain("14-day");
+  });
+
+  it("defaults to 30 days for history when historyDays not provided", () => {
+    const result = getContextualGreeting({ source: "history", locationName: "Bulawayo" });
+    expect(result).toContain("30-day");
+  });
+
+  it("returns greeting for source=explore", () => {
+    const result = getContextualGreeting({ source: "explore", exploreQuery: "farming areas" });
+    expect(result).toContain('"farming areas"');
+  });
+
+  it("returns null for unrecognized source", () => {
+    const result = getContextualGreeting({ source: "unknown" });
+    expect(result).toBeNull();
+  });
+
+  it("returns null for location source without locationName", () => {
+    const result = getContextualGreeting({ source: "location" });
+    expect(result).toBeNull();
+  });
+
+  it("returns null for explore source without exploreQuery", () => {
+    const result = getContextualGreeting({ source: "explore" });
+    expect(result).toBeNull();
+  });
+});
+
+describe("getContextualPrompts behavioral tests", () => {
+  it("returns 3 location-specific prompts for source=location", () => {
+    const prompts = getContextualPrompts({ source: "location", locationName: "Harare" });
+    expect(prompts).toHaveLength(3);
+    expect(prompts[0].label).toContain("Harare");
+    expect(prompts[0].query).toContain("Harare");
+  });
+
+  it("uses 'this location' when locationName is absent", () => {
+    const prompts = getContextualPrompts({ source: "location" });
+    expect(prompts[0].label).toContain("this location");
+  });
+
+  it("returns 3 history-specific prompts for source=history", () => {
+    const prompts = getContextualPrompts({ source: "history", locationName: "Mutare", historyDays: 7 });
+    expect(prompts).toHaveLength(3);
+    expect(prompts[0].query).toContain("7 days");
+    expect(prompts[1].query).toContain("Mutare");
+  });
+
+  it("defaults to 30 days in history prompts", () => {
+    const prompts = getContextualPrompts({ source: "history", locationName: "Mutare" });
+    expect(prompts[0].query).toContain("30 days");
+  });
+
+  it("returns 3 explore-specific prompts for source=explore", () => {
+    const prompts = getContextualPrompts({ source: "explore", exploreQuery: "low frost" });
+    expect(prompts).toHaveLength(3);
+    expect(prompts[0].query).toContain('"low frost"');
+  });
+
+  it("handles explore without exploreQuery", () => {
+    const prompts = getContextualPrompts({ source: "explore" });
+    expect(prompts[0].query).toContain("similar weather");
+  });
+
+  it("returns empty array for unrecognized source", () => {
+    const prompts = getContextualPrompts({ source: "unknown" });
+    expect(prompts).toHaveLength(0);
+  });
+});
+
+describe("scroll-to-bottom button", () => {
+  it("tracks showScrollBtn state", () => {
+    expect(source).toContain("showScrollBtn");
+    expect(source).toContain("setShowScrollBtn");
+  });
+
+  it("monitors scroll position on the ScrollArea viewport via viewportRef", () => {
+    expect(source).toContain("viewportRef");
+    expect(source).toContain("scrollHeight");
+    expect(source).toContain("distanceFromBottom");
+  });
+
+  it("uses viewportRef instead of querying Radix internal attributes", () => {
+    // viewportRef is forwarded through ScrollArea to the Radix Viewport element
+    expect(source).toContain("viewportRef={viewportRef}");
+    // No internal Radix attribute queries
+    expect(source).not.toContain("data-radix-scroll-area-viewport");
+  });
+
+  it("shows button when scrolled more than 100px from bottom", () => {
+    expect(source).toContain("distanceFromBottom > 100");
+  });
+
+  it("renders scroll-to-bottom button with aria-label", () => {
+    expect(source).toContain('aria-label="Scroll to bottom"');
+  });
+
+  it("calls scrollToBottom on click", () => {
+    expect(source).toContain("onClick={scrollToBottom}");
+    expect(source).toContain("scrollIntoView");
+  });
+
+  it("uses ArrowDownIcon", () => {
+    expect(source).toContain("ArrowDownIcon");
+  });
+
+  it("meets 44px minimum touch target", () => {
+    // h-11 w-11 = 44px
+    expect(source).toContain("h-11 w-11");
+  });
+
+  it("auto-scroll respects user scroll position — only scrolls when near bottom", () => {
+    // The auto-scroll effect should check distanceFromBottom before scrolling,
+    // so users reading previous context aren't yanked to the bottom
+    expect(source).toContain("distanceFromBottom < 100");
+  });
+
+  it("auto-scroll defers measurement with rAF for accurate scrollHeight", () => {
+    expect(source).toContain("requestAnimationFrame");
+    expect(source).toContain("cancelAnimationFrame");
+  });
+
+  it("uses fixRadixTableLayout prop to scope ScrollArea override", () => {
+    // The [&>div]:!block fix should be opt-in via fixRadixTableLayout, not global
+    expect(source).toContain("fixRadixTableLayout");
   });
 });

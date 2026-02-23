@@ -20,16 +20,11 @@ export interface WeatherLocation {
 /** @deprecated Use WeatherLocation instead */
 export type ZimbabweLocation = WeatherLocation;
 
-// Tag categories for filtering
-export type LocationTag =
-  | "city"
-  | "farming"
-  | "mining"
-  | "tourism"
-  | "education"
-  | "border"
-  | "travel"
-  | "national-park";
+/**
+ * Location tag — any string slug from the database `tags` collection.
+ * New tags can be added via db-init without code changes.
+ */
+export type LocationTag = string;
 
 
 export const ZW_LOCATIONS: ZimbabweLocation[] = [

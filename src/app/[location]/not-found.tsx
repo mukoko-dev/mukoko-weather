@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { getAllLocationsFromDb } from "@/lib/db";
+import { getLocationsForContext } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 
 export default async function LocationNotFound() {
   let locations: { slug: string; name: string }[] = [];
   try {
-    locations = await getAllLocationsFromDb();
+    locations = await getLocationsForContext(20);
   } catch {
     // MongoDB unavailable — show a minimal 404 without locations list
   }

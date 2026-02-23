@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense, useState, useEffect, useRef } from "react";
+import { lazy, Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
@@ -13,6 +13,12 @@ import { useAppStore } from "@/lib/store";
 const MyWeatherModal = lazy(() =>
   import("@/components/weather/MyWeatherModal").then((m) => ({
     default: m.MyWeatherModal,
+  })),
+);
+
+const WeatherReportModal = lazy(() =>
+  import("@/components/weather/reports/WeatherReportModal").then((m) => ({
+    default: m.WeatherReportModal,
   })),
 );
 
@@ -37,8 +43,7 @@ function CompassIcon({ size = 20 }: { size?: number }) {
 export function Header() {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
   const myWeatherOpen = useAppStore((s) => s.myWeatherOpen);
-  const hasOnboarded = useAppStore((s) => s.hasOnboarded);
-  const onboardingChecked = useRef(false);
+  const reportModalOpen = useAppStore((s) => s.reportModalOpen);
   const pathname = usePathname();
   const [isScrolled, setIsScrolled] = useState(false);
 
@@ -52,18 +57,6 @@ export function Header() {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
-
-  // Auto-open the My Weather modal for first-time visitors so they can
-  // pick their location and activities. Runs once after Zustand rehydrates.
-  useEffect(() => {
-    if (onboardingChecked.current) return;
-    onboardingChecked.current = true;
-    if (!hasOnboarded) {
-      // Small delay to let the page paint first
-      const timer = setTimeout(openMyWeather, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [hasOnboarded, openMyWeather]);
 
   // Determine which mobile nav item is active based on pathname
   const isShamwari = pathname === "/shamwari";
@@ -100,7 +93,7 @@ export function Header() {
               className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-background/10 hover:bg-background/20 transition-colors"
               type="button"
             >
-              <MapPinIcon size={18} className="text-white" />
+              <MapPinIcon size={18} className="text-primary-foreground" />
             </button>
             <Link
               href="/history"
@@ -108,7 +101,7 @@ export function Header() {
               aria-label="Weather history"
               className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-background/10 hover:bg-background/20 transition-colors"
             >
-              <ClockIcon size={18} className="text-white" />
+              <ClockIcon size={18} className="text-primary-foreground" />
             </Link>
             <button
               onClick={openMyWeather}
@@ -116,7 +109,7 @@ export function Header() {
               className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-background/10 hover:bg-background/20 transition-colors"
               type="button"
             >
-              <SearchIcon size={18} className="text-white" />
+              <SearchIcon size={18} className="text-primary-foreground" />
             </button>
           </div>
         </nav>
@@ -190,6 +183,12 @@ export function Header() {
       {myWeatherOpen && (
         <Suspense>
           <MyWeatherModal />
+        </Suspense>
+      )}
+
+      {reportModalOpen && (
+        <Suspense>
+          <WeatherReportModal />
         </Suspense>
       )}
     </>

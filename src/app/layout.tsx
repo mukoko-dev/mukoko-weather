@@ -54,6 +54,14 @@ export const metadata: Metadata = {
     locale: "en_ZW",
     url: BASE_URL,
     siteName: "mukoko weather",
+    images: [
+      {
+        url: `${BASE_URL}/api/og?${new URLSearchParams({ title: "mukoko weather", subtitle: "Zimbabwe Weather Intelligence", template: "home" })}`,
+        width: 1200,
+        height: 630,
+        alt: "mukoko weather — Zimbabwe Weather Intelligence",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
@@ -62,6 +70,9 @@ export const metadata: Metadata = {
       "AI-powered weather intelligence for Zimbabwe. Forecasts for farming, mining, travel, and daily life.",
     creator: "@mukokoafrica",
     site: "@mukokoafrica",
+    images: [
+      `${BASE_URL}/api/og?${new URLSearchParams({ title: "mukoko weather", subtitle: "Zimbabwe Weather Intelligence", template: "home" })}`,
+    ],
   },
   robots: {
     index: true,

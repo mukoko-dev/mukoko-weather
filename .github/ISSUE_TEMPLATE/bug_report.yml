@@ -7,8 +7,8 @@ body:
     id: location
     attributes:
       label: Location affected
-      description: Which Zimbabwe location(s) does this bug affect?
-      placeholder: e.g., Harare, Bulawayo, all locations
+      description: Which location(s) does this bug affect?
+      placeholder: e.g., Harare, Bulawayo, Nairobi, all locations
     validations:
       required: true
 
@@ -46,14 +46,19 @@ body:
       label: Page / route affected
       description: Which page does this bug occur on?
       options:
-        - Location page (/harare)
-        - Atmosphere page (/harare/atmosphere)
-        - Forecast page (/harare/forecast)
+        - Location page (/[location])
+        - Atmosphere page (/[location]/atmosphere)
+        - Forecast page (/[location]/forecast)
+        - Map page (/[location]/map)
+        - Shamwari AI chat (/shamwari)
+        - Explore page (/explore)
         - History page (/history)
+        - Status page (/status)
         - About page (/about)
         - Help page (/help)
         - Embed widget (/embed)
         - My Weather modal
+        - Community weather reporting
         - Other
     validations:
       required: true

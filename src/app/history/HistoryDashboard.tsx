@@ -17,7 +17,8 @@ import { VisibilityChart } from "@/components/weather/charts/VisibilityChart";
 import { ThunderstormChart } from "@/components/weather/charts/ThunderstormChart";
 import { GDDChart } from "@/components/weather/charts/GDDChart";
 import { ChartSkeleton } from "@/components/ui/skeleton";
-import { type ZimbabweLocation, LOCATIONS } from "@/lib/locations";
+import { HistoryAnalysis } from "@/components/weather/HistoryAnalysis";
+import type { WeatherLocation } from "@/lib/locations";
 import { useAppStore } from "@/lib/store";
 import { weatherCodeToInfo, windDirection, uvLevel } from "@/lib/weather";
 import type { WeatherInsights } from "@/lib/weather";
@@ -363,7 +364,7 @@ export function suitabilityColors(level: "excellent" | "good" | "fair" | "poor")
 export function HistoryDashboard() {
   const globalSlug = useAppStore((s) => s.selectedLocation);
   const [query, setQuery] = useState("");
-  const [selectedLocation, setSelectedLocation] = useState<ZimbabweLocation | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<WeatherLocation | null>(null);
   const [days, setDays] = useState<DayRange>(30);
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [insightsRecords, setInsightsRecords] = useState<InsightsRecord[]>([]);
@@ -375,11 +376,13 @@ export function HistoryDashboard() {
   const [activeTab, setActiveTab] = useState<ViewTab>("weather");
   const [categoryFilter, setCategoryFilter] = useState<ActivityCategory | "all">("all");
   const tableEndRef = useRef<HTMLDivElement>(null);
-  // Seed with static LOCATIONS for instant search rendering, then upgrade from MongoDB.
-  const [allLocations, setAllLocations] = useState<ZimbabweLocation[]>(LOCATIONS);
+  // Search-driven location results (replaces loading all locations)
+  const [searchResults, setSearchResults] = useState<WeatherLocation[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   // Seed with static CATEGORIES for instant filter rendering, then upgrade from MongoDB.
   const [activityCategories, setActivityCategories] = useState<ActivityCategoryDoc[]>(CATEGORIES);
   const didAutoSelect = useRef(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Build category filter options and styles from API data
   const categoryFilterOptions = useMemo(() => {
@@ -400,66 +403,75 @@ export function HistoryDashboard() {
     return map;
   }, [activityCategories]);
 
-  // Fetch all locations and categories from MongoDB on mount
+  // Fetch categories on mount (NOT all locations)
   useEffect(() => {
-    Promise.all([
-      fetch("/api/locations")
-        .then((res) => (res.ok ? res.json() : { locations: [] }))
-        .then((data) => setAllLocations(data.locations ?? []))
-        .catch(() => {}),
-      fetch("/api/activities?mode=categories")
-        .then((res) => (res.ok ? res.json() : { categories: [] }))
-        .then((data) => { if (data?.categories?.length) setActivityCategories(data.categories); })
-        .catch(() => {}),
-    ]);
+    fetch("/api/py/activities?mode=categories")
+      .then((res) => (res.ok ? res.json() : { categories: [] }))
+      .then((data) => { if (data?.categories?.length) setActivityCategories(data.categories); })
+      .catch(() => {});
   }, []);
 
   // Auto-select the global location (from My Weather / last visited location page)
-  // once the locations list has loaded from MongoDB.
+  // by fetching just that one location from the API.
   useEffect(() => {
-    if (didAutoSelect.current || !globalSlug || allLocations.length === 0) return;
-    const loc = allLocations.find((l) => l.slug === globalSlug);
-    if (loc) {
-      didAutoSelect.current = true;
-      setSelectedLocation(loc);
-      setQuery(loc.name);
-      // fetchHistory is defined below — call it via the inline logic to avoid
-      // a circular dependency with useCallback.
-      setLoading(true);
-      setFetched(true);
-      fetch(`/api/history?location=${loc.slug}&days=30`)
-        .then((res) => {
-          if (!res.ok) return res.json().catch(() => ({ error: "Request failed" })).then((b) => { throw new Error(b.error || `HTTP ${res.status}`); });
-          return res.json();
-        })
-        .then((json) => {
-          setRecords(transformHistory(json.data));
-          setInsightsRecords(transformInsights(json.data));
-          setVisibleRowCount(50);
-        })
-        .catch((err) => {
-          setError(err instanceof Error ? err.message : "Failed to fetch history");
-          setRecords([]);
-          setInsightsRecords([]);
-        })
-        .finally(() => setLoading(false));
-    }
-  }, [globalSlug, allLocations]);
+    if (didAutoSelect.current || !globalSlug) return;
+    didAutoSelect.current = true;
 
-  const results = useMemo(() => {
-    if (query.length > 0) {
-      const q = query.toLowerCase().trim();
-      const prefix: ZimbabweLocation[] = [];
-      const rest: ZimbabweLocation[] = [];
-      for (const loc of allLocations) {
-        const name = loc.name.toLowerCase();
-        if (name.startsWith(q)) prefix.push(loc);
-        else if (name.includes(q) || loc.province.toLowerCase().includes(q)) rest.push(loc);
-      }
-      return [...prefix, ...rest];
+    fetch(`/api/py/locations?slug=${encodeURIComponent(globalSlug)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const loc = data?.location;
+        if (!loc) return;
+        setSelectedLocation(loc);
+        setQuery(loc.name);
+        setLoading(true);
+        setFetched(true);
+        return fetch(`/api/py/history?location=${loc.slug}&days=30`);
+      })
+      .then((res) => {
+        if (!res || !res.ok) {
+          if (res) return res.json().catch(() => ({ error: "Request failed" })).then((b: { error?: string }) => { throw new Error(b.error || `HTTP ${res.status}`); });
+          return;
+        }
+        return res.json();
+      })
+      .then((json) => {
+        if (!json) return;
+        setRecords(transformHistory(json.data));
+        setInsightsRecords(transformInsights(json.data));
+        setVisibleRowCount(50);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to fetch history");
+        setRecords([]);
+        setInsightsRecords([]);
+      })
+      .finally(() => setLoading(false));
+  }, [globalSlug]);
+
+  // Debounced search — fetch results from API instead of filtering a full list
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+
+    const q = query.trim();
+    if (!q || selectedLocation?.name === query) {
+      setSearchResults([]);
+      return;
     }
-    return allLocations.slice(0, 10);
-  }, [query, allLocations]);
+
+    searchTimer.current = setTimeout(() => {
+      setSearchLoading(true);
+      fetch(`/api/py/search?q=${encodeURIComponent(q)}&limit=10`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => setSearchResults(data?.locations ?? []))
+        .catch(() => setSearchResults([]))
+        .finally(() => setSearchLoading(false));
+    }, 250);
+
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
+  }, [query, selectedLocation?.name]);
+
+  const results = searchResults;
 
   // ── Infinite scroll for table rows (TikTok-style) ───────────────────────
   useEffect(() => {
@@ -481,12 +493,12 @@ export function HistoryDashboard() {
   }, [records.length, visibleRowCount]);
 
   const fetchHistory = useCallback(
-    async (location: ZimbabweLocation, dayCount: DayRange) => {
+    async (location: WeatherLocation, dayCount: DayRange) => {
       setLoading(true);
       setError(null);
       setFetched(true);
       try {
-        const res = await fetch(`/api/history?location=${location.slug}&days=${dayCount}`);
+        const res = await fetch(`/api/py/history?location=${location.slug}&days=${dayCount}`);
         if (!res.ok) {
           const body = await res.json().catch(() => ({ error: "Request failed" }));
           throw new Error(body.error || `HTTP ${res.status}`);
@@ -506,7 +518,7 @@ export function HistoryDashboard() {
     [],
   );
 
-  const handleSelectLocation = (loc: ZimbabweLocation) => {
+  const handleSelectLocation = (loc: WeatherLocation) => {
     setSelectedLocation(loc);
     setQuery(loc.name);
     setShowDropdown(false);
@@ -618,12 +630,15 @@ export function HistoryDashboard() {
             value={query}
             onChange={(e) => { setQuery(e.target.value); setShowDropdown(true); }}
             onFocus={() => setShowDropdown(true)}
-            placeholder="Search Zimbabwe locations..."
+            placeholder="Search locations..."
             className="w-full rounded-[var(--radius-input)] border border-input bg-surface-card px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary"
             autoComplete="off"
           />
-          {showDropdown && results.length > 0 && (
+          {showDropdown && (results.length > 0 || searchLoading) && (
             <ul className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-[var(--radius-input)] border border-input bg-surface-card shadow-md">
+              {searchLoading && results.length === 0 && (
+                <li className="px-3 py-2 text-sm text-text-tertiary">Searching...</li>
+              )}
               {results.map((loc) => (
                 <li key={loc.slug}>
                   <button type="button" className="w-full px-3 py-2 text-left text-sm text-text-primary hover:bg-surface-dim transition-colors" onClick={() => handleSelectLocation(loc)}>
@@ -756,6 +771,20 @@ export function HistoryDashboard() {
               <StatCard label="Data Points" value={`${records.length}`} />
             </div>
           </section>
+
+          {/* ── AI Analysis ──────────────────────────────────────────── */}
+          {selectedLocation && (
+            <LazySection label="history-ai" fallback={<ChartSkeleton aspect="aspect-[16/4]" />}>
+              <ChartErrorBoundary name="AI analysis">
+                <HistoryAnalysis
+                  locationSlug={selectedLocation.slug}
+                  locationName={selectedLocation.name}
+                  days={days}
+                  dataPoints={records.length}
+                />
+              </ChartErrorBoundary>
+            </LazySection>
+          )}
 
           {/* ── Temperature trend ──────────────────────────────────────── */}
           <LazySection label="history-temp" fallback={<ChartSkeleton aspect="aspect-[16/6]" />}>

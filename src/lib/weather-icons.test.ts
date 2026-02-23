@@ -13,15 +13,28 @@ const source = readFileSync(
 );
 
 describe("ICON_REGISTRY", () => {
+  // Original icons + expanded icons for broadened activity categories
   const expectedIcons = [
-    "crop", "livestock", "shovel", "water", "pickaxe", "hardhat",
-    "car", "bus", "plane", "binoculars", "camera", "bird", "tent",
-    "star", "fish", "running", "bicycle", "mountain", "football",
-    "swimming", "golf", "cricket", "tennis", "rugby", "horse",
-    "footprints", "grill", "drone", "picnic", "sparkles", "sun",
+    // Agriculture & Forestry
+    "crop", "livestock", "shovel", "water", "tree", "bee", "leaf",
+    // Industry & Construction
+    "pickaxe", "hardhat", "factory", "bolt", "box",
+    // Transport & Logistics
+    "car", "bus", "plane", "truck", "ship",
+    // Outdoors & Conservation
+    "binoculars", "camera", "bird", "tent", "star", "fish", "anchor",
+    "shield", "pawprint", "mountain",
+    // Sports & Fitness
+    "running", "bicycle", "football", "swimming", "golf", "cricket",
+    "tennis", "rugby", "horse", "trophy", "whistle",
+    // Lifestyle & Events
+    "footprints", "grill", "drone", "picnic", "sparkles", "calendar",
+    "music", "heartpulse", "graduationcap",
+    // Default
+    "sun",
   ];
 
-  it("maps all 31 icon identifiers in the registry", () => {
+  it("maps all expected icon identifiers in the registry", () => {
     for (const id of expectedIcons) {
       expect(source).toContain(`${id}:`);
     }
@@ -31,13 +44,13 @@ describe("ICON_REGISTRY", () => {
     expect(source).toContain("export const ICON_REGISTRY");
   });
 
-  it("has exactly 31 entries in the registry", () => {
-    // Count entries between ICON_REGISTRY and the closing brace
-    const registryStart = source.indexOf("export const ICON_REGISTRY");
-    const registrySection = source.slice(registryStart, source.indexOf("};", registryStart) + 2);
-    // Count lines that have an icon mapping (identifier: ComponentName)
-    const entryMatches = registrySection.match(/^\s+\w+:\s+\w+Icon,?$/gm);
-    expect(entryMatches).toHaveLength(31);
+  it("every expected icon has a corresponding entry in the registry", () => {
+    // Verify every icon in our expectedIcons list is registered — the
+    // registry can grow beyond this list (via Lucide fallback) without
+    // requiring test updates.
+    for (const id of expectedIcons) {
+      expect(source).toContain(`${id}:`);
+    }
   });
 });
 
@@ -51,16 +64,25 @@ describe("ActivityIcon component", () => {
     expect(source).toContain("icon?: string");
   });
 
-  it("looks up icon from ICON_REGISTRY", () => {
+  it("looks up icon from custom ICON_REGISTRY first", () => {
     expect(source).toContain("ICON_REGISTRY[icon]");
   });
 
-  it("falls back to SunIcon for unknown icons", () => {
+  it("falls back to Lucide icons for dynamic resolution", () => {
+    expect(source).toContain("lucideIcons");
+    expect(source).toContain("toPascalCase");
+  });
+
+  it("falls back to SunIcon as final default", () => {
     const activityIconSection = source.slice(
       source.indexOf("export function ActivityIcon"),
       source.indexOf("export function WeatherIcon"),
     );
     expect(activityIconSection).toContain("SunIcon");
+  });
+
+  it("imports lucide-react icons for scalable icon resolution", () => {
+    expect(source).toContain('import { icons as lucideIcons } from "lucide-react"');
   });
 });
 
@@ -104,16 +126,22 @@ describe("WeatherIcon mapping", () => {
 
 describe("Icon components", () => {
   const allExportedIcons = [
+    // Weather icons
     "SunIcon", "MoonIcon", "CloudIcon", "CloudSunIcon", "CloudRainIcon",
     "CloudDrizzleIcon", "CloudLightningIcon", "CloudFogIcon", "CloudSunRainIcon",
     "CloudHailIcon", "SnowflakeIcon", "WindIcon", "DropletIcon", "ThermometerIcon",
     "SunriseIcon", "SunsetIcon", "EyeIcon", "GaugeIcon", "ClockIcon",
-    "SearchIcon", "MapPinIcon", "SparklesIcon",
+    "SearchIcon", "MapPinIcon", "SparklesIcon", "ShareIcon",
+    // Original activity icons
     "CropIcon", "LivestockIcon", "ShovelIcon", "PickaxeIcon", "HardHatIcon",
     "CarIcon", "BusIcon", "BinocularsIcon", "BirdIcon", "RunningIcon",
     "BicycleIcon", "MountainIcon", "FootballIcon", "SwimmingIcon", "GolfIcon",
     "CricketIcon", "FootprintsIcon", "GrillIcon", "TentIcon", "CameraIcon",
-    "ShareIcon",
+    // Expanded activity icons
+    "TreeIcon", "BeeIcon", "LeafIcon", "AnchorIcon", "FactoryIcon",
+    "BoltIcon", "TruckIcon", "ShipIcon", "ShieldIcon", "PawPrintIcon",
+    "TrophyIcon", "WhistleIcon", "CalendarIcon", "MusicIcon",
+    "HeartPulseIcon", "GraduationCapIcon", "BoxIcon",
   ];
 
   it("exports all icon components", () => {

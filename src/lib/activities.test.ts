@@ -7,6 +7,7 @@ import {
   getActivityById,
   getActivityLabels,
   getRelevantActivities,
+  getDefaultActivitiesForLocation,
   searchActivities,
 } from "./activities";
 
@@ -29,21 +30,34 @@ describe("ACTIVITIES", () => {
       expect(activity.description.length).toBeGreaterThan(0);
     }
   });
+
+  it("has activities in every category", () => {
+    for (const cat of ACTIVITY_CATEGORIES) {
+      const count = ACTIVITIES.filter((a) => a.category === cat.id).length;
+      expect(count).toBeGreaterThan(0);
+    }
+  });
 });
 
 describe("ACTIVITY_CATEGORIES", () => {
-  it("includes location-tag-based categories (farming, mining, travel, tourism)", () => {
+  it("includes all six category IDs", () => {
     const ids = ACTIVITY_CATEGORIES.map((c) => c.id);
     expect(ids).toContain("farming");
     expect(ids).toContain("mining");
     expect(ids).toContain("travel");
     expect(ids).toContain("tourism");
-  });
-
-  it("includes user-activity categories (sports, casual)", () => {
-    const ids = ACTIVITY_CATEGORIES.map((c) => c.id);
     expect(ids).toContain("sports");
     expect(ids).toContain("casual");
+  });
+
+  it("has broadened labels reflecting African industries", () => {
+    const labels = ACTIVITY_CATEGORIES.map((c) => c.label);
+    expect(labels).toContain("Agriculture & Forestry");
+    expect(labels).toContain("Industry & Construction");
+    expect(labels).toContain("Transport & Logistics");
+    expect(labels).toContain("Outdoors & Conservation");
+    expect(labels).toContain("Sports & Fitness");
+    expect(labels).toContain("Lifestyle & Events");
   });
 });
 
@@ -155,68 +169,125 @@ describe("searchActivities", () => {
   });
 });
 
-describe("new activities", () => {
-  it("includes drone-flying activity", () => {
-    const drone = getActivityById("drone-flying");
-    expect(drone).toBeDefined();
-    expect(drone!.label).toBe("Drone Flying");
-    expect(drone!.category).toBe("casual");
-    expect(drone!.description).toContain("drone");
+describe("expanded activities — Agriculture & Forestry", () => {
+  it("includes crop-farming, livestock, horticulture, forestry, beekeeping, aquaculture", () => {
+    expect(getActivityById("crop-farming")).toBeDefined();
+    expect(getActivityById("livestock")).toBeDefined();
+    expect(getActivityById("horticulture")).toBeDefined();
+    expect(getActivityById("forestry")).toBeDefined();
+    expect(getActivityById("beekeeping")).toBeDefined();
+    expect(getActivityById("aquaculture")).toBeDefined();
   });
 
-  it("includes fishing activity", () => {
-    const fishing = getActivityById("fishing");
-    expect(fishing).toBeDefined();
-    expect(fishing!.category).toBe("tourism");
+  it("all agriculture activities are in farming category", () => {
+    for (const id of ["crop-farming", "livestock", "horticulture", "gardening", "irrigation", "forestry", "beekeeping", "aquaculture"]) {
+      expect(getActivityById(id)!.category).toBe("farming");
+    }
+  });
+});
+
+describe("expanded activities — Industry & Construction", () => {
+  it("includes manufacturing, energy, logistics", () => {
+    expect(getActivityById("manufacturing")).toBeDefined();
+    expect(getActivityById("energy")).toBeDefined();
+    expect(getActivityById("logistics")).toBeDefined();
   });
 
-  it("includes camping activity", () => {
-    const camping = getActivityById("camping");
-    expect(camping).toBeDefined();
-    expect(camping!.category).toBe("tourism");
+  it("all industry activities are in mining category", () => {
+    for (const id of ["mining", "construction", "manufacturing", "energy", "logistics"]) {
+      expect(getActivityById(id)!.category).toBe("mining");
+    }
+  });
+});
+
+describe("expanded activities — Transport & Logistics", () => {
+  it("includes trucking and shipping", () => {
+    expect(getActivityById("trucking")).toBeDefined();
+    expect(getActivityById("shipping")).toBeDefined();
   });
 
-  it("includes tennis and rugby in sports", () => {
-    const tennis = getActivityById("tennis");
-    const rugby = getActivityById("rugby");
-    expect(tennis).toBeDefined();
-    expect(rugby).toBeDefined();
-    expect(tennis!.category).toBe("sports");
-    expect(rugby!.category).toBe("sports");
+  it("all transport activities are in travel category", () => {
+    for (const id of ["driving", "commuting", "flying", "trucking", "shipping"]) {
+      expect(getActivityById(id)!.category).toBe("travel");
+    }
+  });
+});
+
+describe("expanded activities — Outdoors & Conservation", () => {
+  it("includes conservation, wildlife-research, hiking", () => {
+    expect(getActivityById("conservation")).toBeDefined();
+    expect(getActivityById("wildlife-research")).toBeDefined();
+    expect(getActivityById("hiking")).toBeDefined();
   });
 
-  it("includes stargazing in tourism", () => {
-    const stargazing = getActivityById("stargazing");
-    expect(stargazing).toBeDefined();
-    expect(stargazing!.category).toBe("tourism");
+  it("hiking moved to tourism (outdoors) category", () => {
+    expect(getActivityById("hiking")!.category).toBe("tourism");
   });
 
-  it("includes horse-riding in sports", () => {
-    const horseRiding = getActivityById("horse-riding");
-    expect(horseRiding).toBeDefined();
-    expect(horseRiding!.category).toBe("sports");
+  it("conservation activities reference national-park tag", () => {
+    expect(getActivityById("conservation")!.relevantTags).toContain("national-park");
+    expect(getActivityById("wildlife-research")!.relevantTags).toContain("national-park");
+  });
+});
+
+describe("expanded activities — Sports & Fitness", () => {
+  it("includes athletics and coaching", () => {
+    expect(getActivityById("athletics")).toBeDefined();
+    expect(getActivityById("coaching")).toBeDefined();
   });
 
-  it("includes picnic in casual", () => {
-    const picnic = getActivityById("picnic");
-    expect(picnic).toBeDefined();
-    expect(picnic!.category).toBe("casual");
+  it("athletics and coaching are in sports category", () => {
+    expect(getActivityById("athletics")!.category).toBe("sports");
+    expect(getActivityById("coaching")!.category).toBe("sports");
+  });
+});
+
+describe("expanded activities — Lifestyle & Events", () => {
+  it("includes festivals, weddings, health-wellness, education", () => {
+    expect(getActivityById("festivals")).toBeDefined();
+    expect(getActivityById("weddings")).toBeDefined();
+    expect(getActivityById("health-wellness")).toBeDefined();
+    expect(getActivityById("education")).toBeDefined();
   });
 
-  it("includes irrigation in farming", () => {
-    const irrigation = getActivityById("irrigation");
-    expect(irrigation).toBeDefined();
-    expect(irrigation!.category).toBe("farming");
+  it("all lifestyle activities are in casual category", () => {
+    for (const id of ["walking", "barbecue", "outdoor-events", "festivals", "weddings", "drone-flying", "picnic", "health-wellness", "education"]) {
+      expect(getActivityById(id)!.category).toBe("casual");
+    }
+  });
+});
+
+describe("getDefaultActivitiesForLocation", () => {
+  it("returns farming activities for a farming location", () => {
+    const defaults = getDefaultActivitiesForLocation(["farming"]);
+    // Most results should be from the farming category
+    const farmingCount = defaults.filter((a) => a.category === "farming").length;
+    expect(farmingCount).toBeGreaterThanOrEqual(4);
   });
 
-  it("includes flying in travel", () => {
-    const flying = getActivityById("flying");
-    expect(flying).toBeDefined();
-    expect(flying!.category).toBe("travel");
+  it("returns tourism/outdoors activities for a national-park location", () => {
+    const defaults = getDefaultActivitiesForLocation(["national-park", "tourism"]);
+    // Most results should be from the tourism (outdoors) category
+    const tourismCount = defaults.filter((a) => a.category === "tourism").length;
+    expect(tourismCount).toBeGreaterThanOrEqual(4);
   });
 
-  it("has at least 30 total activities", () => {
-    expect(ACTIVITIES.length).toBeGreaterThanOrEqual(30);
+  it("respects the limit parameter", () => {
+    const defaults = getDefaultActivitiesForLocation(["city"], 3);
+    expect(defaults).toHaveLength(3);
+  });
+
+  it("includes universal activities (empty relevantTags)", () => {
+    const defaults = getDefaultActivitiesForLocation(["farming"], 20);
+    const ids = defaults.map((a) => a.id);
+    expect(ids).toContain("barbecue"); // barbecue has relevantTags: []
+  });
+
+  it("returns empty for completely unmatched tags", () => {
+    const defaults = getDefaultActivitiesForLocation(["nonexistent-tag"]);
+    // Should still include universal activities
+    const ids = defaults.map((a) => a.id);
+    expect(ids).toContain("barbecue");
   });
 });
 

@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect } from "react";
-import { useAppStore, resolveTheme } from "@/lib/store";
+import { useAppStore, resolveTheme, initializeDeviceSync } from "@/lib/store";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useAppStore((s) => s.theme);
+
+  // Initialize device sync once on mount (after Zustand rehydrates).
+  // Safe against React Strict Mode double-mount: initDeviceSync() in
+  // device-sync.ts uses a module-level `initPromise` guard that persists
+  // across remounts, so calling it twice is a no-op.
+  useEffect(() => {
+    initializeDeviceSync();
+  }, []);
 
   // Apply resolved theme to DOM whenever preference changes
   useEffect(() => {

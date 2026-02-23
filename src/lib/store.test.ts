@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { resolveTheme, useAppStore, type ThemePreference } from "./store";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { resolveTheme, useAppStore, isShamwariContextValid, type ThemePreference, type ShamwariContext } from "./store";
 
 describe("resolveTheme", () => {
   let originalMatchMedia: typeof window.matchMedia | undefined;
@@ -127,6 +127,103 @@ describe("myWeatherOpen", () => {
     useAppStore.getState().openMyWeather();
     useAppStore.getState().closeMyWeather();
     expect(useAppStore.getState().myWeatherOpen).toBe(false);
+  });
+});
+
+describe("shamwariContext", () => {
+  beforeEach(() => {
+    useAppStore.setState({ shamwariContext: null });
+  });
+
+  it("defaults to null", () => {
+    expect(useAppStore.getState().shamwariContext).toBeNull();
+  });
+
+  it("setShamwariContext stores context with auto-timestamp", () => {
+    const ctx: Omit<ShamwariContext, "timestamp"> & { timestamp: number } = {
+      source: "location",
+      locationSlug: "harare",
+      locationName: "Harare",
+      weatherSummary: "Clear skies expected",
+      temperature: 28,
+      condition: "Clear",
+      activities: ["running"],
+      timestamp: 0,
+    };
+    useAppStore.getState().setShamwariContext(ctx);
+    const stored = useAppStore.getState().shamwariContext;
+    expect(stored).not.toBeNull();
+    expect(stored!.locationSlug).toBe("harare");
+    expect(stored!.timestamp).toBeGreaterThan(0);
+  });
+
+  it("clearShamwariContext resets to null", () => {
+    useAppStore.getState().setShamwariContext({
+      source: "location",
+      activities: [],
+      timestamp: Date.now(),
+    });
+    useAppStore.getState().clearShamwariContext();
+    expect(useAppStore.getState().shamwariContext).toBeNull();
+  });
+
+  it("isShamwariContextValid returns false for null", () => {
+    expect(isShamwariContextValid(null)).toBe(false);
+  });
+
+  it("isShamwariContextValid returns true for recent context", () => {
+    const ctx: ShamwariContext = {
+      source: "location",
+      activities: [],
+      timestamp: Date.now(),
+    };
+    expect(isShamwariContextValid(ctx)).toBe(true);
+  });
+
+  it("isShamwariContextValid returns false for expired context (>10 min)", () => {
+    const ctx: ShamwariContext = {
+      source: "location",
+      activities: [],
+      timestamp: Date.now() - 11 * 60 * 1000,
+    };
+    expect(isShamwariContextValid(ctx)).toBe(false);
+  });
+
+  it("is NOT persisted (excluded from partialize)", () => {
+    // Set context
+    useAppStore.getState().setShamwariContext({
+      source: "history",
+      locationSlug: "bulawayo",
+      activities: ["hiking"],
+      timestamp: Date.now(),
+    });
+    // partialize only includes theme, selectedLocation, selectedActivities, hasOnboarded
+    // shamwariContext should NOT be in the serialized output
+    const state = useAppStore.getState();
+    // Access the persist API to check partialize
+    const persistApi = (useAppStore as unknown as { persist: { getOptions: () => { partialize?: (s: unknown) => unknown } } }).persist;
+    if (persistApi?.getOptions?.()?.partialize) {
+      const partialState = persistApi.getOptions().partialize!(state) as Record<string, unknown>;
+      expect(partialState).not.toHaveProperty("shamwariContext");
+      expect(partialState).not.toHaveProperty("reportModalOpen");
+    }
+  });
+});
+
+describe("reportModal", () => {
+  it("defaults to closed", () => {
+    expect(useAppStore.getState().reportModalOpen).toBe(false);
+  });
+
+  it("openReportModal sets it to true", () => {
+    useAppStore.getState().openReportModal();
+    expect(useAppStore.getState().reportModalOpen).toBe(true);
+  });
+
+  it("closeReportModal sets it back to false", () => {
+    useAppStore.getState().openReportModal();
+    useAppStore.getState().closeReportModal();
+    expect(useAppStore.getState().reportModalOpen).toBe(false);
   });
 });
 

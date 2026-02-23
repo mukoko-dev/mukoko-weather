@@ -55,7 +55,7 @@ export function StatusDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/status");
+      const response = await fetch("/api/py/status");
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }

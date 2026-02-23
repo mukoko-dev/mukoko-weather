@@ -29,7 +29,7 @@ export async function fetchSuitabilityRules(): Promise<SuitabilityRuleDoc[]> {
     return cachedRules;
   }
   if (inFlightRules) return inFlightRules;
-  inFlightRules = fetch("/api/suitability")
+  inFlightRules = fetch("/api/py/suitability")
     .then((res) => (res.ok ? res.json() : null))
     .then((data) => {
       const rules = data?.rules;
@@ -62,7 +62,7 @@ export async function fetchCategoryStyles(): Promise<Record<string, CategoryStyl
     return cachedCategoryStyles;
   }
   if (inFlightStyles) return inFlightStyles;
-  inFlightStyles = fetch("/api/activities?mode=categories")
+  inFlightStyles = fetch("/api/py/activities?mode=categories")
     .then((res) => (res.ok ? res.json() : null))
     .then((data) => {
       const styles: Record<string, CategoryStyle> = {};

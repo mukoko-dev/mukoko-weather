@@ -4,7 +4,9 @@
 
 @custom-variant dark (&:is([data-theme="dark"] *));
 
-/* ===== Mukoko Weather Brand System v6 — Cobalt Primary · WCAG 3.0 APCA/AAA Compliant ===== */
+/* ===== Mukoko Weather Brand System v6 — Cobalt Primary · WCAG 3.0 APCA/AAA Compliant =====
+   If you change brand color tokens below, also update src/app/api/og/route.tsx brand object
+   (Satori OG images use inline hex — CSS custom properties are not supported there). */
 
 :root {
   /* Primary — Cobalt (Sky Blue) */
