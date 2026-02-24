@@ -49,17 +49,30 @@ function applyTheme(pref: ThemePreference) {
   document.documentElement.setAttribute("data-brand", "mukoko-weather");
 }
 
+/** Maximum number of saved locations per user */
+export const MAX_SAVED_LOCATIONS = 10;
+
 interface AppState {
   theme: ThemePreference;
   setTheme: (theme: ThemePreference) => void;
   toggleTheme: () => void;
-  selectedLocation: string; // slug
+  selectedLocation: string; // slug — currently viewed location
   setSelectedLocation: (slug: string) => void;
+  /** Saved locations list (up to MAX_SAVED_LOCATIONS slugs, ordered) */
+  savedLocations: string[];
+  /** Add a location to saved list (no-op if already saved or at cap) */
+  saveLocation: (slug: string) => void;
+  /** Remove a location from saved list */
+  removeLocation: (slug: string) => void;
   selectedActivities: string[]; // activity IDs from src/lib/activities.ts
   toggleActivity: (id: string) => void;
   myWeatherOpen: boolean;
   openMyWeather: () => void;
   closeMyWeather: () => void;
+  /** Saved locations modal visibility (transient) */
+  savedLocationsOpen: boolean;
+  openSavedLocations: () => void;
+  closeSavedLocations: () => void;
   hasOnboarded: boolean;
   completeOnboarding: () => void;
   /** Shamwari context — carries weather/location data between pages (transient, not persisted) */
@@ -110,6 +123,22 @@ export const useAppStore = create<AppState>()(
         set({ selectedLocation: slug });
         queueSync({ selectedLocation: slug });
       },
+      savedLocations: [],
+      saveLocation: (slug) =>
+        set((state) => {
+          if (state.savedLocations.includes(slug) || state.savedLocations.length >= MAX_SAVED_LOCATIONS) {
+            return {};
+          }
+          const next = [...state.savedLocations, slug];
+          queueSync({ savedLocations: next });
+          return { savedLocations: next };
+        }),
+      removeLocation: (slug) =>
+        set((state) => {
+          const next = state.savedLocations.filter((s) => s !== slug);
+          queueSync({ savedLocations: next });
+          return { savedLocations: next };
+        }),
       selectedActivities: [],
       toggleActivity: (id) =>
         set((state) => {
@@ -122,6 +151,9 @@ export const useAppStore = create<AppState>()(
       myWeatherOpen: false,
       openMyWeather: () => set({ myWeatherOpen: true }),
       closeMyWeather: () => set({ myWeatherOpen: false }),
+      savedLocationsOpen: false,
+      openSavedLocations: () => set({ savedLocationsOpen: true }),
+      closeSavedLocations: () => set({ savedLocationsOpen: false }),
       hasOnboarded: false,
       completeOnboarding: () => {
         set({ hasOnboarded: true });
@@ -139,6 +171,7 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         theme: state.theme,
         selectedLocation: state.selectedLocation,
+        savedLocations: state.savedLocations,
         selectedActivities: state.selectedActivities,
         hasOnboarded: state.hasOnboarded,
       }),
@@ -166,6 +199,7 @@ export function initializeDeviceSync(): void {
     return {
       theme: s.theme,
       selectedLocation: s.selectedLocation,
+      savedLocations: s.savedLocations,
       selectedActivities: s.selectedActivities,
       hasOnboarded: s.hasOnboarded,
     };
@@ -180,6 +214,9 @@ export function initializeDeviceSync(): void {
     if (prefs.selectedLocation && prefs.selectedLocation !== store.selectedLocation) {
       // Use setState directly to avoid re-triggering sync
       useAppStore.setState({ selectedLocation: prefs.selectedLocation });
+    }
+    if (prefs.savedLocations && prefs.savedLocations.length > 0) {
+      useAppStore.setState({ savedLocations: prefs.savedLocations });
     }
     if (prefs.selectedActivities && prefs.selectedActivities.length > 0) {
       useAppStore.setState({ selectedActivities: prefs.selectedActivities });

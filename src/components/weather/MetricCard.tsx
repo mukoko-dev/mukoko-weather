@@ -91,7 +91,7 @@ export function MetricCard({
   gauge,
 }: MetricCardProps) {
   return (
-    <div className="flex items-center gap-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
+    <div className="flex items-center gap-4 rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-5 shadow-sm transition-shadow hover:shadow-md">
       {/* Radial gauge with value inside */}
       <ArcGauge {...gauge} value={value} />
       {/* Text info */}
@@ -102,7 +102,7 @@ export function MetricCard({
           </span>
           <p className="text-sm font-medium text-text-secondary">{label}</p>
         </div>
-        <p className={`mt-0.5 text-sm ${contextColor}`}>{context}</p>
+        <p className={`mt-1 text-base ${contextColor}`}>{context}</p>
       </div>
     </div>
   )

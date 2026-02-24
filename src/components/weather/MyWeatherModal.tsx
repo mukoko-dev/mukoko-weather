@@ -412,7 +412,7 @@ function LocationTab({
             <li key={loc.slug} role="option" aria-selected={isSelected}>
               <button
                 onClick={() => onSelectLocation(loc.slug)}
-                className={`flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-sm transition-colors hover:bg-surface-base focus-visible:outline-2 focus-visible:outline-primary ${
+                className={`flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-sm transition-all hover:bg-surface-base focus-visible:outline-2 focus-visible:outline-primary ${
                   isSelected
                     ? "bg-primary/10 text-primary font-semibold"
                     : "text-text-primary"
@@ -428,7 +428,7 @@ function LocationTab({
                   <span className="block text-xs text-text-tertiary truncate">{contextLabel}</span>
                 </div>
                 {isSelected && (
-                  <span className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary" aria-hidden="true">
+                  <span className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary animate-[scale-in_200ms_ease-out]" aria-hidden="true">
                     <svg width={12} height={12} viewBox="0 0 24 24" fill="none" className="stroke-primary-foreground" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
@@ -595,14 +595,14 @@ function ActivitiesTab({
                 onClick={() => toggleActivity(activity.id)}
                 aria-pressed={isSelected}
                 aria-label={`${activity.label}: ${activity.description}`}
-                className={`relative flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border-2 p-3 transition-colors ${
+                className={`press-scale relative flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border-2 p-3 transition-all ${
                   isSelected
-                    ? `${style.border} ${style.bg}`
+                    ? `${style.border} ${style.bg} shadow-sm`
                     : "border-transparent bg-surface-base hover:border-text-tertiary/30"
                 }`}
               >
                 {isSelected && (
-                  <span className={`absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full ${style.badge}`} aria-hidden="true">
+                  <span className={`absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full animate-[scale-in_200ms_ease-out] ${style.badge}`} aria-hidden="true">
                     <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
@@ -654,9 +654,9 @@ function SettingsTab() {
             role="radio"
             aria-checked={theme === option.value}
             onClick={() => setTheme(option.value)}
-            className={`flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-card)] border-2 px-4 py-3 text-left transition-colors ${
+            className={`press-scale flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-card)] border-2 px-4 py-3 text-left transition-all ${
               theme === option.value
-                ? "border-primary bg-primary/5"
+                ? "border-primary bg-primary/5 shadow-sm"
                 : "border-transparent bg-surface-base hover:border-text-tertiary/30"
             }`}
           >
@@ -672,7 +672,7 @@ function SettingsTab() {
               <p className="text-xs text-text-tertiary">{option.description}</p>
             </div>
             {theme === option.value && (
-              <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary" aria-hidden="true">
+              <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary animate-[scale-in_200ms_ease-out]" aria-hidden="true">
                 <svg width={12} height={12} viewBox="0 0 24 24" fill="none" className="stroke-primary-foreground" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>

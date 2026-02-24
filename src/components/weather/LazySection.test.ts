@@ -81,6 +81,12 @@ describe("LazySection — bidirectional visibility", () => {
     expect(source).toContain("hasRendered");
   });
 
+  it("skips entrance animation on remount (only animates first mount)", () => {
+    // animate state is true only on first mount, false on remounts
+    expect(source).toContain("setAnimate(!hasRendered.current)");
+    expect(source).toContain('animate ? "animate-fade-in-up" : undefined');
+  });
+
   it("load margin is larger on desktop than mobile", () => {
     expect(source).toContain("100px"); // mobile load margin
     expect(source).toContain("300px"); // desktop load margin

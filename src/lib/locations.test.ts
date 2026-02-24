@@ -3,7 +3,7 @@ import {
   LOCATIONS,
   ZW_LOCATIONS,
 } from "./locations";
-import { AFRICA_LOCATIONS } from "./locations-africa";
+import { GLOBAL_LOCATIONS } from "./locations-global";
 import { ZIMBABWE_BOUNDS } from "./seed-regions";
 import type { WeatherLocation, ZimbabweLocation } from "./locations";
 
@@ -67,16 +67,16 @@ describe("LOCATIONS database", () => {
   });
 });
 
-describe("AFRICA_LOCATIONS data integrity", () => {
+describe("GLOBAL_LOCATIONS data integrity", () => {
   it("every entry has a non-ZW country code", () => {
-    for (const loc of AFRICA_LOCATIONS) {
+    for (const loc of GLOBAL_LOCATIONS) {
       expect(loc.country).toBeDefined();
       expect(loc.country).not.toBe("ZW");
     }
   });
 
   it("every slug is URL-safe and ends with the country code suffix", () => {
-    for (const loc of AFRICA_LOCATIONS) {
+    for (const loc of GLOBAL_LOCATIONS) {
       expect(loc.slug).toMatch(/^[a-z0-9-]+$/);
       // Slug should end with -XX where XX is the lowercase country code
       expect(loc.slug).toMatch(new RegExp(`-${loc.country!.toLowerCase()}$`));
@@ -84,7 +84,7 @@ describe("AFRICA_LOCATIONS data integrity", () => {
   });
 
   it("every entry has a provinceSlug that ends with the lowercase country code", () => {
-    for (const loc of AFRICA_LOCATIONS) {
+    for (const loc of GLOBAL_LOCATIONS) {
       if (loc.provinceSlug) {
         expect(loc.provinceSlug).toMatch(
           new RegExp(`-${loc.country!.toLowerCase()}$`),
@@ -94,7 +94,7 @@ describe("AFRICA_LOCATIONS data integrity", () => {
   });
 
   it("coordinates are within plausible global bounds", () => {
-    for (const loc of AFRICA_LOCATIONS) {
+    for (const loc of GLOBAL_LOCATIONS) {
       expect(loc.lat).toBeGreaterThanOrEqual(-90);
       expect(loc.lat).toBeLessThanOrEqual(90);
       expect(loc.lon).toBeGreaterThanOrEqual(-180);
@@ -102,13 +102,13 @@ describe("AFRICA_LOCATIONS data integrity", () => {
     }
   });
 
-  it("all slugs in AFRICA_LOCATIONS are unique", () => {
-    const slugs = AFRICA_LOCATIONS.map((l) => l.slug);
+  it("all slugs in GLOBAL_LOCATIONS are unique", () => {
+    const slugs = GLOBAL_LOCATIONS.map((l) => l.slug);
     expect(new Set(slugs).size).toBe(slugs.length);
   });
 
   it("source is set to 'seed' for all entries", () => {
-    for (const loc of AFRICA_LOCATIONS) {
+    for (const loc of GLOBAL_LOCATIONS) {
       expect(loc.source).toBe("seed");
     }
   });

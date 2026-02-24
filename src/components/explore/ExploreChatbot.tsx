@@ -3,10 +3,11 @@
 import { useState, useRef, useEffect, useCallback, Component, type ReactNode } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
-import { SparklesIcon, SearchIcon, MapPinIcon } from "@/lib/weather-icons";
+import { SparklesIcon, MapPinIcon } from "@/lib/weather-icons";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAppStore, isShamwariContextValid, type ShamwariContext } from "@/lib/store";
+import { getScrollBehavior } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Inline error boundary for ReactMarkdown — prevents malformed markdown from
@@ -239,7 +240,7 @@ export function ExploreChatbot() {
         ? vp.scrollHeight - vp.scrollTop - vp.clientHeight
         : 0;
       if (distanceFromBottom < 100) {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        messagesEndRef.current?.scrollIntoView({ behavior: getScrollBehavior() });
       }
     });
     return () => cancelAnimationFrame(id);
@@ -262,7 +263,7 @@ export function ExploreChatbot() {
   }, []);
 
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: getScrollBehavior() });
   }, []);
 
   const sendMessage = useCallback(async (text: string) => {
@@ -363,7 +364,7 @@ export function ExploreChatbot() {
             TODO: Remove when upstream resolves this —
             https://github.com/radix-ui/primitives/issues/926 */}
         <ScrollArea viewportRef={viewportRef} className="h-full" fixRadixTableLayout>
-          <div className="px-4 py-4 space-y-5 overflow-x-hidden" aria-live="polite" aria-relevant="additions">
+          <div className="px-4 py-5 space-y-6 overflow-x-hidden" aria-live="polite" aria-relevant="additions">
             {messages.length === 0 && (
               <EmptyState onSuggestionClick={handleSuggestion} loading={loading} />
             )}
@@ -406,20 +407,20 @@ export function ExploreChatbot() {
         )}
       </div>
 
-      {/* Input area */}
-      <div className="shrink-0 border-t border-border bg-surface-base/50 backdrop-blur-sm px-4 py-3 overflow-hidden">
-        <form onSubmit={handleSubmit} className="flex items-end gap-2 max-w-full">
-          <div className="relative flex-1 min-w-0">
+      {/* Input area — Claude-style card */}
+      <div className="shrink-0 px-3 pb-3 pt-2">
+        <form onSubmit={handleSubmit}>
+          <div className="rounded-2xl border border-border bg-surface-card shadow-sm">
             <textarea
               ref={inputRef}
               value={input}
               onChange={(e) => {
                 setInput(e.target.value);
                 // Auto-grow: reset height then expand to scrollHeight.
-                // Capped at 128px (max-h-32) so inline style.height doesn't
+                // Capped at 160px so inline style.height doesn't
                 // override the Tailwind max-height constraint.
                 e.target.style.height = "auto";
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`;
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
               }}
               onKeyDown={(e) => {
                 // Submit on Enter (without Shift); Shift+Enter inserts a newline
@@ -430,21 +431,22 @@ export function ExploreChatbot() {
               }}
               placeholder="Ask about weather, locations, activities..."
               rows={1}
-              className="flex w-full resize-none rounded-[var(--radius-input)] bg-surface-base pl-9 pr-4 py-2 text-base text-text-primary placeholder:text-text-tertiary outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 max-h-32 overflow-y-auto break-words"
+              className="block w-full resize-none bg-transparent px-4 pt-4 pb-2 text-base text-text-primary placeholder:text-text-tertiary outline-none disabled:cursor-not-allowed disabled:opacity-50 max-h-40 overflow-y-auto break-words"
               aria-label="Ask Shamwari Explorer"
               disabled={loading}
             />
-            <SearchIcon size={14} className="absolute left-3 top-3 text-text-tertiary" aria-hidden="true" />
+            <div className="flex items-center justify-end px-3 pb-3">
+              <Button
+                type="submit"
+                size="sm"
+                disabled={loading || !input.trim()}
+                className="h-11 w-11 rounded-full p-0 shrink-0"
+                aria-label="Send message"
+              >
+                <ArrowUpIcon size={18} />
+              </Button>
+            </div>
           </div>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={loading || !input.trim()}
-            className="min-h-[44px] min-w-[44px] px-3 shrink-0"
-            aria-label="Send message"
-          >
-            <ArrowUpIcon size={18} />
-          </Button>
         </form>
       </div>
     </div>
@@ -466,7 +468,7 @@ function EmptyState({ onSuggestionClick, loading }: { onSuggestionClick: (query:
       <h2 className="mt-4 text-lg font-semibold text-text-primary font-heading">
         Shamwari Explorer
       </h2>
-      <p className="mt-2 max-w-sm text-center text-sm text-text-secondary">
+      <p className="mt-2 max-w-sm text-center text-base text-text-secondary">
         Ask me anything about weather, locations, and activities. I can help you
         plan your day, compare conditions, and get activity-specific advice.
       </p>
@@ -503,8 +505,8 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   if (isUser) {
     return (
       <div className="flex justify-end min-w-0">
-        <div className="max-w-[85%] min-w-0 rounded-[var(--radius-card)] px-4 py-3 bg-primary text-primary-foreground">
-          <p className="text-sm break-words">{message.content}</p>
+        <div className="max-w-[85%] min-w-0 rounded-[var(--radius-card)] px-4 py-3.5 bg-primary text-primary-foreground">
+          <p className="text-base break-words leading-relaxed">{message.content}</p>
         </div>
       </div>
     );
@@ -519,7 +521,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         </div>
         <div className="min-w-0 flex-1">
           <MarkdownErrorBoundary fallback={message.content}>
-            <div className="prose prose-sm max-w-none break-words overflow-hidden text-text-secondary prose-strong:text-text-primary prose-headings:text-text-primary prose-li:marker:text-text-tertiary prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-pre:overflow-x-auto prose-pre:max-w-full prose-code:break-words">
+            <div className="prose prose-base max-w-none break-words overflow-hidden text-text-secondary prose-strong:text-text-primary prose-headings:text-text-primary prose-li:marker:text-text-tertiary prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-pre:overflow-x-auto prose-pre:max-w-full prose-code:break-words">
               <ReactMarkdown components={markdownComponents}>{message.content}</ReactMarkdown>
             </div>
           </MarkdownErrorBoundary>

@@ -26,6 +26,7 @@ const SYNC_DEBOUNCE_MS = 1500;
 export interface DevicePreferences {
   theme: string;
   selectedLocation: string;
+  savedLocations: string[];
   selectedActivities: string[];
   hasOnboarded: boolean;
 }
@@ -223,6 +224,7 @@ export function readLocalStoragePrefs(): DevicePreferences | null {
     return {
       theme: state.theme ?? "system",
       selectedLocation: state.selectedLocation ?? "harare",
+      savedLocations: state.savedLocations ?? [],
       selectedActivities: state.selectedActivities ?? [],
       hasOnboarded: state.hasOnboarded ?? false,
     };
@@ -285,11 +287,13 @@ export function initDeviceSync(
           // restore from server (user cleared localStorage or new browser)
           const isLocalDefault =
             localPrefs.selectedLocation === "harare" &&
+            localPrefs.savedLocations.length === 0 &&
             localPrefs.selectedActivities.length === 0 &&
             !localPrefs.hasOnboarded;
 
           const serverHasData =
             serverPrefs.selectedLocation !== "harare" ||
+            serverPrefs.savedLocations.length > 0 ||
             serverPrefs.selectedActivities.length > 0 ||
             serverPrefs.hasOnboarded;
 

@@ -82,6 +82,7 @@ describe("readLocalStoragePrefs", () => {
     expect(result).toEqual({
       theme: "dark",
       selectedLocation: "bulawayo",
+      savedLocations: [],
       selectedActivities: ["running", "hiking"],
       hasOnboarded: true,
     });
@@ -95,6 +96,7 @@ describe("readLocalStoragePrefs", () => {
     expect(result).toEqual({
       theme: "light",
       selectedLocation: "harare",
+      savedLocations: [],
       selectedActivities: [],
       hasOnboarded: false,
     });
@@ -119,7 +121,7 @@ describe("createDeviceProfile", () => {
   it("sends POST request with correct body", async () => {
     const profile = {
       deviceId: "abc-123",
-      preferences: { theme: "dark", selectedLocation: "harare", selectedActivities: [], hasOnboarded: false },
+      preferences: { theme: "dark", selectedLocation: "harare", savedLocations: [], selectedActivities: [], hasOnboarded: false },
       createdAt: "2026-02-22T00:00:00Z",
       updatedAt: "2026-02-22T00:00:00Z",
     };
@@ -131,6 +133,7 @@ describe("createDeviceProfile", () => {
     const result = await createDeviceProfile("abc-123", {
       theme: "dark",
       selectedLocation: "harare",
+      savedLocations: [],
       selectedActivities: [],
       hasOnboarded: false,
     });
@@ -156,6 +159,7 @@ describe("createDeviceProfile", () => {
       createDeviceProfile("abc-123", {
         theme: "invalid",
         selectedLocation: "harare",
+        savedLocations: [],
         selectedActivities: [],
         hasOnboarded: false,
       }),
@@ -167,7 +171,7 @@ describe("fetchDeviceProfile", () => {
   it("returns profile on success", async () => {
     const profile = {
       deviceId: "abc-123",
-      preferences: { theme: "system", selectedLocation: "harare", selectedActivities: [], hasOnboarded: false },
+      preferences: { theme: "system", selectedLocation: "harare", savedLocations: [], selectedActivities: [], hasOnboarded: false },
       createdAt: "2026-02-22T00:00:00Z",
       updatedAt: "2026-02-22T00:00:00Z",
     };
@@ -206,7 +210,7 @@ describe("syncPreferences", () => {
   it("sends PATCH with partial updates", async () => {
     const updated = {
       deviceId: "abc-123",
-      preferences: { theme: "dark", selectedLocation: "harare", selectedActivities: [], hasOnboarded: false },
+      preferences: { theme: "dark", selectedLocation: "harare", savedLocations: [], selectedActivities: [], hasOnboarded: false },
       createdAt: "2026-02-22T00:00:00Z",
       updatedAt: "2026-02-22T01:00:00Z",
     };

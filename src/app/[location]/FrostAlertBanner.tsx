@@ -29,7 +29,7 @@ export function FrostAlertBanner({ alert }: { alert: FrostAlert }) {
     <Alert
       variant={variant}
       aria-live="assertive"
-      className={`mb-6 ${borderColor} ${bgColor}`}
+      className={`mb-7 animate-fade-in-down ${borderColor} ${bgColor}`}
     >
       <AlertTitle className={textColor}>
         Frost {alert.risk === "severe" ? "Warning" : "Advisory"} — {alert.risk.toUpperCase()}

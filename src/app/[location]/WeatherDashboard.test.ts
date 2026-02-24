@@ -197,3 +197,17 @@ describe("WeatherDashboard — welcome banner (first-time UX)", () => {
     expect(source).not.toContain("setTimeout(openMyWeather");
   });
 });
+
+describe("WeatherDashboard — weather scene caching", () => {
+  it("imports cacheWeatherHint from weather-scenes", () => {
+    expect(source).toContain("cacheWeatherHint");
+    expect(source).toContain("@/lib/weather-scenes");
+  });
+
+  it("calls cacheWeatherHint in a useEffect", () => {
+    // cacheWeatherHint should be called inside a useEffect so the weather
+    // hint is cached for the WeatherLoadingScene on next page load
+    expect(source).toContain("cacheWeatherHint");
+    expect(source).toContain("useEffect");
+  });
+});

@@ -20,8 +20,8 @@ const ExploreChatbot = lazy(() =>
  */
 export function ShamwariPageClient() {
   return (
-    <main className="flex flex-col h-[calc(100dvh-3.5rem)] pb-[4.5rem] sm:pb-0 overflow-hidden max-w-full">
-      <div className="mx-auto w-full max-w-3xl flex-1 min-h-0 flex flex-col border-x border-border/50 overflow-hidden">
+    <main className="animate-fade-in flex flex-col h-[calc(100dvh-3.5rem)] pb-[4.5rem] sm:pb-0 overflow-hidden max-w-full">
+      <div className="mx-auto w-full max-w-3xl flex-1 min-h-0 flex flex-col border-x border-border overflow-hidden">
         <ChartErrorBoundary name="Shamwari Chat">
           <Suspense fallback={<ChatSkeleton className="h-full" />}>
             <ExploreChatbot />

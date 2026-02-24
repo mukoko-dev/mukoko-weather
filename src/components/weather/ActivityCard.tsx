@@ -39,7 +39,7 @@ export function ActivityCard({
   const rating = evaluateSuitability(activity, insights, dbRules)
 
   return (
-    <div className={`flex items-center gap-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm border-l-4 ${style.border}`}>
+    <div className={`flex items-center gap-4 rounded-[var(--radius-card)] bg-surface-card p-5 shadow-sm border-l-4 ${style.border}`}>
       {/* Activity icon */}
       <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${style.bg}`}>
         <span className={style.text} aria-hidden="true">

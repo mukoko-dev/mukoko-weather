@@ -369,8 +369,8 @@ describe("overflow containment", () => {
     expect(source).not.toContain("prose-code:break-all");
   });
 
-  it("uses min-w-0 on textarea wrapper for proper flex shrinking", () => {
-    expect(source).toContain("relative flex-1 min-w-0");
+  it("wraps textarea in a card-style container", () => {
+    expect(source).toContain("rounded-2xl border border-border bg-surface-card");
   });
 });
 

@@ -11,7 +11,7 @@ export default function ExploreCountryLoading() {
       </div>
       <main
         aria-label="Loading countries"
-        className="mx-auto max-w-5xl overflow-x-hidden px-4 py-6 pb-24 sm:px-6 sm:pb-6 md:px-8"
+        className="mx-auto max-w-5xl overflow-x-hidden px-4 py-8 pb-24 sm:px-6 sm:pb-8 md:px-8"
       >
         <div role="status" aria-label="Loading" aria-busy="true">
           <span className="sr-only">Loading countries&hellip;</span>

@@ -1,4 +1,4 @@
-import { AFRICA_LOCATIONS } from "./locations-africa";
+import { GLOBAL_LOCATIONS } from "./locations-global";
 
 export interface WeatherLocation {
   slug: string;
@@ -140,6 +140,6 @@ export const ZW_LOCATIONS: ZimbabweLocation[] = [
   { slug: "lion-den", name: "Lion's Den", province: "Mashonaland West", lat: -16.93, lon: 29.65, elevation: 1100, tags: ["travel"] },
 ];
 
-/** Combined location array: Zimbabwe seed locations + African/ASEAN locations */
-export const LOCATIONS: ZimbabweLocation[] = [...ZW_LOCATIONS, ...AFRICA_LOCATIONS];
+/** Combined location array: Zimbabwe seed locations + global locations */
+export const LOCATIONS: ZimbabweLocation[] = [...ZW_LOCATIONS, ...GLOBAL_LOCATIONS];
 

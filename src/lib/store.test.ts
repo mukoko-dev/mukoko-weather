@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { resolveTheme, useAppStore, isShamwariContextValid, type ThemePreference, type ShamwariContext } from "./store";
+import { resolveTheme, useAppStore, isShamwariContextValid, MAX_SAVED_LOCATIONS, type ThemePreference, type ShamwariContext } from "./store";
 
 describe("resolveTheme", () => {
   let originalMatchMedia: typeof window.matchMedia | undefined;
@@ -110,6 +110,92 @@ describe("selectedActivities", () => {
     useAppStore.getState().toggleActivity("running");
     useAppStore.getState().toggleActivity("running");
     expect(useAppStore.getState().selectedActivities).toEqual([]);
+  });
+});
+
+describe("savedLocations", () => {
+  beforeEach(() => {
+    useAppStore.setState({ savedLocations: [] });
+  });
+
+  it("defaults to an empty array", () => {
+    expect(useAppStore.getState().savedLocations).toEqual([]);
+  });
+
+  it("saveLocation adds a slug", () => {
+    useAppStore.getState().saveLocation("bulawayo");
+    expect(useAppStore.getState().savedLocations).toEqual(["bulawayo"]);
+  });
+
+  it("saveLocation is a no-op when slug already saved", () => {
+    useAppStore.setState({ savedLocations: ["bulawayo"] });
+    useAppStore.getState().saveLocation("bulawayo");
+    expect(useAppStore.getState().savedLocations).toEqual(["bulawayo"]);
+  });
+
+  it("saveLocation is a no-op at MAX_SAVED_LOCATIONS cap", () => {
+    const full = Array.from({ length: MAX_SAVED_LOCATIONS }, (_, i) => `loc-${i}`);
+    useAppStore.setState({ savedLocations: full });
+    useAppStore.getState().saveLocation("one-more");
+    expect(useAppStore.getState().savedLocations).toHaveLength(MAX_SAVED_LOCATIONS);
+    expect(useAppStore.getState().savedLocations).not.toContain("one-more");
+  });
+
+  it("removeLocation removes an existing slug", () => {
+    useAppStore.setState({ savedLocations: ["harare", "bulawayo", "mutare"] });
+    useAppStore.getState().removeLocation("bulawayo");
+    expect(useAppStore.getState().savedLocations).toEqual(["harare", "mutare"]);
+  });
+
+  it("removeLocation is a no-op for non-existent slug", () => {
+    useAppStore.setState({ savedLocations: ["harare"] });
+    useAppStore.getState().removeLocation("unknown");
+    expect(useAppStore.getState().savedLocations).toEqual(["harare"]);
+  });
+
+  it("preserves order when adding multiple locations", () => {
+    useAppStore.getState().saveLocation("harare");
+    useAppStore.getState().saveLocation("bulawayo");
+    useAppStore.getState().saveLocation("mutare");
+    expect(useAppStore.getState().savedLocations).toEqual(["harare", "bulawayo", "mutare"]);
+  });
+
+  it("is persisted via partialize", () => {
+    useAppStore.setState({ savedLocations: ["harare", "bulawayo"] });
+    const state = useAppStore.getState();
+    const persistApi = (useAppStore as unknown as { persist: { getOptions: () => { partialize?: (s: unknown) => unknown } } }).persist;
+    if (persistApi?.getOptions?.()?.partialize) {
+      const partialState = persistApi.getOptions().partialize!(state) as Record<string, unknown>;
+      expect(partialState).toHaveProperty("savedLocations");
+      expect(partialState.savedLocations).toEqual(["harare", "bulawayo"]);
+    }
+  });
+});
+
+describe("savedLocationsOpen", () => {
+  it("defaults to false", () => {
+    expect(useAppStore.getState().savedLocationsOpen).toBe(false);
+  });
+
+  it("openSavedLocations sets it to true", () => {
+    useAppStore.getState().openSavedLocations();
+    expect(useAppStore.getState().savedLocationsOpen).toBe(true);
+  });
+
+  it("closeSavedLocations sets it back to false", () => {
+    useAppStore.getState().openSavedLocations();
+    useAppStore.getState().closeSavedLocations();
+    expect(useAppStore.getState().savedLocationsOpen).toBe(false);
+  });
+
+  it("is NOT persisted (excluded from partialize)", () => {
+    useAppStore.getState().openSavedLocations();
+    const state = useAppStore.getState();
+    const persistApi = (useAppStore as unknown as { persist: { getOptions: () => { partialize?: (s: unknown) => unknown } } }).persist;
+    if (persistApi?.getOptions?.()?.partialize) {
+      const partialState = persistApi.getOptions().partialize!(state) as Record<string, unknown>;
+      expect(partialState).not.toHaveProperty("savedLocationsOpen");
+    }
   });
 });
 

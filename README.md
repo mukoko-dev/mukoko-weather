@@ -47,7 +47,8 @@ AI-powered weather intelligence, starting with Zimbabwe and expanding globally. 
 | Weather API | [Tomorrow.io](https://tomorrow.io) (primary) + [Open-Meteo](https://open-meteo.com) (fallback) |
 | Database | [MongoDB Atlas](https://mongodb.com/atlas) (cache, AI summaries, history, locations; Atlas Search for fuzzy queries) |
 | Analytics | [Google Analytics 4](https://analytics.google.com) |
-| Testing | [Vitest](https://vitest.dev) |
+| 3D Animations | [Three.js](https://threejs.org) (weather-aware loading scenes) |
+| Testing | [Vitest](https://vitest.dev) (TypeScript, v8 coverage) + [pytest](https://pytest.org) (Python) |
 | CI/CD | [GitHub Actions](https://github.com/features/actions) (tests + lint + typecheck on push/PR, Claude AI review, post-deploy DB init) |
 | Deployment | [Vercel](https://vercel.com) |
 
@@ -57,6 +58,7 @@ AI-powered weather intelligence, starting with Zimbabwe and expanding globally. 
 
 - Node.js 18+
 - npm 9+
+- Python 3.10+ (for backend tests)
 
 ### Installation
 
@@ -77,16 +79,20 @@ npm install
 ### Development
 
 ```bash
-npm run dev        # Start dev server (http://localhost:3000)
-npm run build      # Production build
-npm start          # Start production server
-npm test           # Run Vitest tests (single run)
-npm run test:watch # Run Vitest in watch mode
-npm run lint       # ESLint
-npx tsc --noEmit   # Type check
+npm run dev           # Start dev server (http://localhost:3000)
+npm run build         # Production build
+npm start             # Start production server
+npm test              # Run Vitest tests (single run)
+npm run test:watch    # Run Vitest in watch mode
+npm run test:coverage # Run Vitest with v8 coverage reporting
+npm run test:python   # Run Python backend tests (pytest)
+npm run test:all      # Run both TypeScript and Python tests
+npm run lint          # ESLint
+npx tsc --noEmit      # Type check
+python -m pytest tests/py/ -v  # Run Python backend tests (direct)
 ```
 
-The app redirects `/` to `/harare` by default.
+The home page (`/`) uses smart redirect: returning users go to their saved location, new users get geolocation detection with a 3-second timeout, and the fallback is `/harare`.
 
 ## Architecture
 
@@ -94,7 +100,7 @@ The app redirects `/` to `/harare` by default.
 
 | Route | Description |
 |-------|-------------|
-| `/` | Redirects to `/harare` |
+| `/` | Smart redirect — saved location (returning users), geolocation (new users), or `/harare` (fallback) |
 | `/[location]` | Weather overview — current conditions, AI summary, activity insights, atmospheric metric cards |
 | `/[location]/atmosphere` | 24-hour atmospheric detail charts (humidity, wind, pressure, UV) |
 | `/[location]/forecast` | Hourly (24h) + daily (7-day) forecast charts + sunrise/sunset |
@@ -185,7 +191,8 @@ Both the location page and history page use feed-style progressive loading via `
 src/
   app/
     layout.tsx              # Root layout, metadata, JSON-LD schemas
-    page.tsx                # Home — redirects to /harare
+    page.tsx                # Home — smart redirect (saved location / geolocation / harare)
+    HomeRedirect.tsx        # Client: smart redirect with Zustand rehydration guard
     globals.css             # Brand System v6 (WCAG 3.0 APCA compliant)
     loading.tsx             # Root loading skeleton
     error.tsx               # Global error boundary
@@ -245,6 +252,7 @@ src/
       AISummaryChat.tsx      # Inline follow-up chat (max 5 messages → Shamwari)
       HistoryAnalysis.tsx    # AI-powered historical weather analysis
       ActivityInsights.tsx   # Category-specific weather insight cards
+      WeatherLoadingScene.tsx # Branded Three.js weather loading animation
       reports/               # Waze-style community weather reporting
       charts/                # Reusable Canvas chart components (15 charts)
       map/                   # Leaflet map (preview, full, layer switcher, skeleton)
@@ -271,6 +279,7 @@ src/
     i18n.ts                 # Lightweight i18n (en complete, sn/nd ready)
     error-retry.ts          # Error retry with sessionStorage tracking
     utils.ts                # Tailwind class merging (cn)
+    weather-scenes/         # Weather-aware Three.js particle animations for loading screens
     seed-*.ts               # Seed data files (categories, tags, regions, seasons, suitability rules, AI prompts)
 api/
   py/                       # Python FastAPI backend (Vercel serverless functions)
@@ -293,13 +302,16 @@ api/
     _embeddings.py          # Vector embedding endpoints (stub)
     _status.py              # System health checks
     _tiles.py               # Map tile proxy for Tomorrow.io
+tests/
+  py/                       # Python backend tests (pytest, 559 tests across 19 files)
+    conftest.py             # Shared fixtures, mock pymongo/anthropic
 public/
   manifest.json             # PWA manifest with app shortcuts
   icons/                    # PWA icons (192x192, 512x512)
 .github/
   ISSUE_TEMPLATE/           # Bug report and feature request templates (YAML forms)
   workflows/
-    ci.yml                  # Tests, lint, type check on push/PR
+    ci.yml                  # Tests (TypeScript + Python), lint, type check on push/PR
     claude-code-review.yml  # Claude AI code review on PRs
     claude.yml              # Claude Code for @claude mentions in issues/PRs
     db-init.yml             # Post-deploy DB seed data sync (Vercel deployment webhook)

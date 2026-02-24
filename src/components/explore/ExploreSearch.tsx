@@ -109,7 +109,7 @@ export function ExploreSearch() {
         </h2>
       </div>
 
-      <p className="text-sm text-text-secondary">
+      <p className="text-base text-text-secondary">
         Search for locations using natural language — try &quot;farming areas
         with low frost risk&quot; or &quot;safari destinations with warm
         weather&quot;.
@@ -160,30 +160,30 @@ export function ExploreSearch() {
             size={14}
             className="mt-0.5 shrink-0 text-primary"
           />
-          <p className="text-sm text-text-secondary">{summary}</p>
+          <p className="text-base text-text-secondary">{summary}</p>
         </div>
       )}
 
       {searched && !loading && results.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           {results.map((loc) => (
             <Link
               key={loc.slug}
               href={`/${loc.slug}`}
-              className="group flex items-start gap-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm transition-all hover:shadow-md hover:bg-surface-card/80 focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
+              className="group card-interactive flex items-start gap-3.5 rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-5 shadow-sm focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
             >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                <MapPinIcon size={14} className="text-primary" />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 transition-colors group-hover:bg-primary/20">
+                <MapPinIcon size={16} className="text-primary" />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-text-primary group-hover:text-primary transition-colors truncate">
                   {loc.name}
                 </p>
                 {loc.province && (
-                  <p className="text-xs text-text-tertiary">{loc.province}</p>
+                  <p className="mt-0.5 text-xs text-text-tertiary">{loc.province}</p>
                 )}
                 {loc.temperature != null && (
-                  <div className="mt-1 flex items-center gap-2 text-xs text-text-secondary">
+                  <div className="mt-1.5 flex items-center gap-2 text-xs text-text-secondary">
                     <span className="font-medium">
                       {Math.round(loc.temperature)}°C
                     </span>
@@ -195,11 +195,11 @@ export function ExploreSearch() {
                   </div>
                 )}
                 {loc.tags && loc.tags.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1">
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     {loc.tags.slice(0, 3).map((tag) => (
                       <span
                         key={tag}
-                        className="rounded-[var(--radius-badge)] bg-surface-dim px-1.5 py-0.5 text-[10px] text-text-tertiary"
+                        className="rounded-[var(--radius-badge)] bg-surface-dim px-2 py-0.5 text-[10px] text-text-tertiary"
                       >
                         {tag}
                       </span>
@@ -225,7 +225,7 @@ export function ExploreSearch() {
           <Link
             href="/shamwari"
             onClick={handleAskShamwari}
-            className="inline-flex items-center gap-1.5 rounded-[var(--radius-input)] bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20 min-h-[44px]"
+            className="press-scale inline-flex items-center gap-1.5 rounded-[var(--radius-input)] bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-all hover:bg-primary/20 min-h-[44px]"
           >
             <SparklesIcon size={14} />
             Ask Shamwari for more

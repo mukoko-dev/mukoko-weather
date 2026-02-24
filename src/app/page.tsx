@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
+import { HomeRedirect } from "./HomeRedirect";
 
 export default function Home() {
-  // Default to Harare
-  redirect("/harare");
+  return <HomeRedirect />;
 }

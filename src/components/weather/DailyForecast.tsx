@@ -27,10 +27,10 @@ export function DailyForecast({ daily }: Props) {
 
   return (
     <section aria-labelledby="daily-forecast-heading">
-      <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
+      <div className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-5 shadow-sm sm:p-6">
         <h2 id="daily-forecast-heading" className="text-lg font-semibold text-text-primary font-heading">{daily.time.length}-Day Forecast</h2>
         <DailyChart daily={daily} />
-        <div className="mt-4 space-y-1" role="list" aria-label="7-day weather forecast">
+        <div className="stagger-children mt-5 space-y-3" role="list" aria-label="7-day weather forecast">
           {daily.time.map((date, i) => {
             const d = new Date(date);
             const info = weatherCodeToInfo(daily.weather_code[i]);
@@ -58,10 +58,10 @@ export function DailyForecast({ daily }: Props) {
                 key={date}
                 role="listitem"
                 aria-label={`${dayName} ${dateNum}: ${info.label}, high ${high} degrees, low ${low} degrees`}
-                className="rounded-[var(--radius-input)] bg-surface-base px-3 py-2.5 sm:px-4 sm:py-3"
+                className="rounded-[var(--radius-input)] bg-surface-base px-3.5 py-3.5 min-h-[44px] transition-colors hover:bg-surface-elevated sm:px-4 sm:py-4"
               >
                 {/* Main row: day, icon, temps, bar */}
-                <div className="flex items-center gap-2 sm:gap-3">
+                <div className="flex items-center gap-3 sm:gap-4">
                   {/* Day + date */}
                   <div className="flex w-12 shrink-0 flex-col items-center sm:w-14">
                     <span className="text-sm font-medium text-text-secondary leading-tight">
@@ -106,7 +106,7 @@ export function DailyForecast({ daily }: Props) {
                 </div>
 
                 {/* Detail row: feels-like, precipitation, wind, UV */}
-                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 pl-12 text-xs text-text-tertiary sm:pl-14">
+                <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 pl-12 text-xs text-text-tertiary sm:pl-14">
                   <span>Feels {feelsLow}°/{feelsHigh}°</span>
                   {precipMm > 0 && <span>{precipMm.toFixed(1)} mm</span>}
                   <span>Wind {windMax} km/h</span>

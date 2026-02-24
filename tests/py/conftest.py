@@ -38,13 +38,31 @@ _mock_pymongo.MongoClient = MagicMock  # type: ignore[attr-defined]
 _mock_pymongo_database = types.ModuleType("pymongo.database")
 _mock_pymongo_database.Database = MagicMock  # type: ignore[attr-defined]
 
+# pymongo.errors — real exception classes that _devices.py and index.py import
+_mock_pymongo_errors = types.ModuleType("pymongo.errors")
+
+
+class _DuplicateKeyError(Exception):
+    pass
+
+
+class _ConnectionFailure(Exception):
+    pass
+
+
+_mock_pymongo_errors.DuplicateKeyError = _DuplicateKeyError  # type: ignore[attr-defined]
+_mock_pymongo_errors.ConnectionFailure = _ConnectionFailure  # type: ignore[attr-defined]
+
 # Force-replace (the real pymongo may already be loaded but broken)
 sys.modules["pymongo"] = _mock_pymongo
 sys.modules["pymongo.database"] = _mock_pymongo_database
+sys.modules["pymongo.errors"] = _mock_pymongo_errors
 
 # Mock anthropic SDK
 _mock_anthropic = types.ModuleType("anthropic")
 _mock_anthropic.Anthropic = MagicMock  # type: ignore[attr-defined]
+_mock_anthropic.RateLimitError = type("RateLimitError", (Exception,), {})  # type: ignore[attr-defined]
+_mock_anthropic.APIError = type("APIError", (Exception,), {})  # type: ignore[attr-defined]
 sys.modules["anthropic"] = _mock_anthropic
 
 # ---------------------------------------------------------------------------

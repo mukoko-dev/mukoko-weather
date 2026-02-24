@@ -105,7 +105,7 @@ export default function AboutPage() {
 
         <section className="mt-10">
           <h2 className="font-heading text-2xl font-bold text-text-primary">Contact us</h2>
-          <dl className="mt-4 space-y-3 text-sm">
+          <dl className="mt-4 space-y-3 text-base">
             <div className="flex gap-4">
               <dt className="w-28 flex-shrink-0 text-text-tertiary">General</dt>
               <dd>

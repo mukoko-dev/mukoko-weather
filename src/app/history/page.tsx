@@ -35,11 +35,11 @@ export default function HistoryPage() {
   return (
     <>
       <Header />
-      <main id="main-content" className="mx-auto max-w-5xl px-4 py-6 pb-24 sm:pb-6 sm:px-6 md:px-8">
+      <main id="main-content" className="animate-fade-in mx-auto max-w-5xl px-4 py-8 pb-24 sm:pb-8 sm:px-6 md:px-8">
         <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">
           Historical Weather Data
         </h1>
-        <p className="mt-2 text-text-secondary">
+        <p className="mt-3 text-text-secondary">
           Explore recorded weather data across Zimbabwe. Select a location and time period to view
           temperature trends, precipitation, and climate patterns.
         </p>

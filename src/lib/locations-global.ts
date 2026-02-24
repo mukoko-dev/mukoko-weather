@@ -1,12 +1,13 @@
 /**
- * African city location seed data for mukoko weather.
- * Covers capital cities + major urban centres across all 54 AU member states.
+ * Global location seed data for mukoko weather (outside Zimbabwe).
+ * Covers capital cities + major urban centres across all 54 AU member states
+ * and ASEAN countries including Singapore.
  * Each entry follows the WeatherLocation pattern with country field set.
  */
 
 import type { WeatherLocation } from "./locations";
 
-export const AFRICA_LOCATIONS: WeatherLocation[] = [
+export const GLOBAL_LOCATIONS: WeatherLocation[] = [
   // ── Kenya (KE) ────────────────────────────────────────────────────────────
   { slug: "nairobi-ke", name: "Nairobi", province: "Nairobi County", lat: -1.29, lon: 36.82, elevation: 1795, tags: ["city", "travel"], country: "KE", source: "seed", provinceSlug: "nairobi-county-ke" },
   { slug: "mombasa-ke", name: "Mombasa", province: "Mombasa County", lat: -4.05, lon: 39.67, elevation: 17, tags: ["city", "tourism", "travel"], country: "KE", source: "seed", provinceSlug: "mombasa-county-ke" },

@@ -43,15 +43,15 @@ export function Footer() {
       className="border-t border-text-tertiary/10 bg-surface-base pb-24 sm:pb-0"
       role="contentinfo"
     >
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 md:px-8">
+      <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 md:px-8">
         {/* Site stats strip */}
-        <div className="mb-6 flex flex-wrap items-center gap-x-8 gap-y-3 border-b border-text-tertiary/10 pb-6">
+        <div className="mb-8 flex flex-wrap items-center gap-x-8 gap-y-4 border-b border-text-tertiary/10 pb-8">
           <div className="flex items-center gap-2 text-text-tertiary">
             <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
               <circle cx="12" cy="10" r="3" />
             </svg>
-            <span><strong className="text-text-secondary">{stats.locations}</strong> locations</span>
+            <span><strong className="font-mono text-text-secondary">{stats.locations}</strong> locations</span>
           </div>
           <div className="flex items-center gap-2 text-text-tertiary">
             <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -59,7 +59,7 @@ export function Footer() {
               <path d="M3 9h18" />
               <path d="M9 3v18" />
             </svg>
-            <span><strong className="text-text-secondary">{stats.provinces}</strong> provinces</span>
+            <span><strong className="font-mono text-text-secondary">{stats.provinces}</strong> provinces</span>
           </div>
           <div className="flex items-center gap-2 text-text-tertiary">
             <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -103,8 +103,8 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-2">
+        <div className="flex flex-col gap-10 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-4">
             <p className="text-text-tertiary">
               &copy; {year}{" "}
               <a href="https://nyuchi.com" className="underline transition-colors hover:text-text-secondary" rel="noopener">
@@ -127,7 +127,7 @@ export function Footer() {
               Built with Ubuntu philosophy — weather as a public good.
             </p>
           </div>
-          <nav aria-label="Footer navigation" className="flex flex-wrap gap-x-5 gap-y-1 text-text-tertiary">
+          <nav aria-label="Footer navigation" className="flex flex-wrap gap-x-6 gap-y-3 text-text-tertiary">
             <Link href="/about" prefetch={false} className={linkClass}>About</Link>
             <Link href="/explore" prefetch={false} className={linkClass}>Explore</Link>
             <Link href="/shamwari" prefetch={false} className={linkClass}>Shamwari</Link>

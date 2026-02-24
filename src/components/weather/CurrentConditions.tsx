@@ -54,22 +54,22 @@ export function CurrentConditions({ current, locationName, daily, slug }: Props)
 
   return (
     <section aria-labelledby="current-conditions-heading">
-      <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
+      <div className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-5 shadow-sm sm:p-6">
         <h2 id="current-conditions-heading" className="sr-only">
           Current weather conditions in {locationName}
         </h2>
         {/* Main temperature display */}
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-text-secondary">{locationName}</p>
+            <p className="text-base font-medium text-text-secondary">{locationName}</p>
             <div className="mt-1 flex items-baseline gap-1">
               <span className="font-mono text-7xl font-bold tracking-tighter text-text-primary sm:text-8xl" aria-label={`${Math.round(current.temperature_2m)} degrees Celsius`}>
                 {Math.round(current.temperature_2m)}
               </span>
               <span className="font-sans text-3xl font-light text-text-tertiary" aria-hidden="true">°</span>
             </div>
-            <p className="mt-1 text-base font-semibold text-text-primary">{info.label}</p>
-            <p className="mt-1 text-sm text-text-secondary">
+            <p className="mt-1 text-lg font-semibold text-text-primary">{info.label}</p>
+            <p className="mt-1 text-base text-text-secondary">
               Feels like {Math.round(current.apparent_temperature)}°C
               {todayHigh !== null && todayLow !== null && (
                 <span className="ml-1">
@@ -88,7 +88,7 @@ export function CurrentConditions({ current, locationName, daily, slug }: Props)
               type="button"
               onClick={handleShare}
               aria-label={`Share weather for ${locationName}`}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-[var(--radius-input)] bg-surface-base px-3 text-sm text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
+              className="press-scale flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-[var(--radius-input)] bg-surface-base px-3 text-sm text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
             >
               <ShareIcon size={16} aria-hidden="true" />
               <span className="sr-only sm:not-sr-only">
@@ -99,7 +99,7 @@ export function CurrentConditions({ current, locationName, daily, slug }: Props)
         </div>
 
         {/* Quick stats grid */}
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3" role="list" aria-label="Weather statistics">
+        <div className="stagger-children mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5" role="list" aria-label="Weather statistics">
           <QuickStat
             icon={<DropletIcon size={18} />}
             label="Humidity"
@@ -150,11 +150,11 @@ export function CurrentConditions({ current, locationName, daily, slug }: Props)
 
 function QuickStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div role="listitem" className="flex min-w-0 items-center gap-3 rounded-[var(--radius-input)] bg-surface-base p-3">
+    <div role="listitem" className="flex min-w-0 items-center gap-3 rounded-[var(--radius-input)] bg-surface-base p-4">
       <span className="shrink-0 text-text-tertiary" aria-hidden="true">{icon}</span>
       <div className="min-w-0">
-        <p className="text-sm text-text-tertiary">{label}</p>
-        <p className="text-sm font-medium text-text-primary" aria-label={`${label}: ${value}`}>{value}</p>
+        <p className="text-xs text-text-tertiary">{label}</p>
+        <p className="text-base font-medium text-text-primary" aria-label={`${label}: ${value}`}>{value}</p>
       </div>
     </div>
   );

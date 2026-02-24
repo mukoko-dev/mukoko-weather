@@ -17,28 +17,28 @@ export function SunTimes({ daily }: Props) {
 
   return (
     <section aria-labelledby="sun-times-heading">
-      <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
+      <div className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-5 shadow-sm sm:p-6">
         <h2 id="sun-times-heading" className="text-lg font-semibold text-text-primary font-heading">Sun</h2>
-        <div className="mt-4 flex flex-wrap gap-6">
+        <div className="mt-5 flex flex-wrap gap-6 sm:gap-8">
           <div className="flex items-center gap-3">
             <SunriseIcon size={24} className="text-warmth" aria-hidden="true" />
             <div>
-              <p className="text-sm text-text-tertiary">Sunrise</p>
-              <p className="text-sm font-semibold text-text-primary" aria-label={`Sunrise at ${fmt(sunrise)}`}>{fmt(sunrise)}</p>
+              <p className="text-xs text-text-tertiary">Sunrise</p>
+              <p className="text-base font-semibold text-text-primary" aria-label={`Sunrise at ${fmt(sunrise)}`}>{fmt(sunrise)}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <SunsetIcon size={24} className="text-accent" aria-hidden="true" />
             <div>
-              <p className="text-sm text-text-tertiary">Sunset</p>
-              <p className="text-sm font-semibold text-text-primary" aria-label={`Sunset at ${fmt(sunset)}`}>{fmt(sunset)}</p>
+              <p className="text-xs text-text-tertiary">Sunset</p>
+              <p className="text-base font-semibold text-text-primary" aria-label={`Sunset at ${fmt(sunset)}`}>{fmt(sunset)}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <SunIcon size={24} className="text-warmth" aria-hidden="true" />
             <div>
-              <p className="text-sm text-text-tertiary">Daylight</p>
-              <p className="text-sm font-semibold text-text-primary" aria-label={`${daylightHours} hours and ${daylightMinutes} minutes of daylight`}>{daylightHours}h {daylightMinutes}m</p>
+              <p className="text-xs text-text-tertiary">Daylight</p>
+              <p className="text-base font-semibold text-text-primary" aria-label={`${daylightHours} hours and ${daylightMinutes} minutes of daylight`}>{daylightHours}h {daylightMinutes}m</p>
             </div>
           </div>
         </div>

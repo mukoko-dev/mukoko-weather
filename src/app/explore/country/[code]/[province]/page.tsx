@@ -117,7 +117,7 @@ export default async function ProvinceDetailPage({ params }: Props) {
 
       <main
         id="main-content"
-        className="mx-auto max-w-5xl overflow-x-hidden px-4 py-6 pb-24 sm:px-6 sm:pb-6 md:px-8"
+        className="mx-auto max-w-5xl overflow-x-hidden px-4 py-8 pb-24 sm:px-6 sm:pb-8 md:px-8"
       >
         <div className="flex items-center gap-3 mb-1">
           <span className="text-3xl" aria-hidden="true">{flag}</span>

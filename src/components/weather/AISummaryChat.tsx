@@ -6,6 +6,7 @@ import ReactMarkdown from "react-markdown";
 import { SparklesIcon, MapPinIcon } from "@/lib/weather-icons";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store";
+import { getScrollBehavior } from "@/lib/utils";
 import {
   generateSuggestedPrompts,
   fetchSuggestedRules,
@@ -137,10 +138,11 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
     });
   }, [weather, location, selectedActivities]);
 
+
   // Scroll to bottom when messages change
   useEffect(() => {
     if (expanded && messages.length > 0) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      messagesEndRef.current?.scrollIntoView({ behavior: getScrollBehavior() });
     }
   }, [messages, expanded]);
 
@@ -293,7 +295,7 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
-                    className={`rounded-lg px-3 py-2 text-sm ${
+                    className={`rounded-lg px-3 py-2.5 text-base ${
                       msg.role === "user"
                         ? "ml-8 bg-primary/10 text-text-primary"
                         : "mr-8 bg-surface-base text-text-secondary"
@@ -301,7 +303,7 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
                   >
                     {msg.role === "assistant" ? (
                       <MarkdownErrorBoundary fallback={msg.content}>
-                        <div className="prose prose-sm max-w-none text-text-secondary prose-strong:text-text-primary prose-headings:text-text-primary prose-li:marker:text-text-tertiary">
+                        <div className="prose prose-base max-w-none text-text-secondary prose-strong:text-text-primary prose-headings:text-text-primary prose-li:marker:text-text-tertiary">
                           <ReactMarkdown components={markdownComponents}>
                             {msg.content}
                           </ReactMarkdown>
@@ -346,10 +348,10 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
               </div>
             )}
 
-            {/* Chat input */}
+            {/* Chat input — card style */}
             {!atMessageLimit && (
-              <form onSubmit={handleSubmit} className="mt-3 flex items-end gap-2">
-                <div className="relative min-w-0 flex-1">
+              <form onSubmit={handleSubmit} className="mt-3">
+                <div className="rounded-2xl border border-border bg-surface-base shadow-sm">
                   <textarea
                     ref={inputRef}
                     value={input}
@@ -367,21 +369,23 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
                       }
                     }}
                     placeholder="Ask about this weather..."
-                    className="flex w-full resize-none rounded-[var(--radius-input)] bg-surface-base py-2 pl-3 pr-4 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 max-h-24 overflow-y-auto"
+                    className="block w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base text-text-primary placeholder:text-text-tertiary outline-none disabled:cursor-not-allowed disabled:opacity-50 max-h-24 overflow-y-auto"
                     rows={1}
                     disabled={loading}
                     aria-label="Follow-up question"
                   />
+                  <div className="flex items-center justify-end px-3 pb-2.5">
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={loading || !input.trim()}
+                      className="h-11 w-11 rounded-full p-0 shrink-0"
+                      aria-label="Send follow-up question"
+                    >
+                      <ArrowUpIcon size={16} />
+                    </Button>
+                  </div>
                 </div>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={loading || !input.trim()}
-                  className="min-h-[44px] min-w-[44px] shrink-0"
-                  aria-label="Send follow-up question"
-                >
-                  <ArrowUpIcon size={18} />
-                </Button>
               </form>
             )}
 

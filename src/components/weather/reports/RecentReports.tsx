@@ -160,7 +160,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
           {reports.map((report) => (
             <div
               key={report.id}
-              className="flex items-center gap-3 rounded-[var(--radius-card)] bg-surface-card p-3 shadow-sm"
+              className="flex items-center gap-3 rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-3 shadow-sm"
             >
               <span className="text-lg shrink-0" aria-hidden="true">
                 {REPORT_ICONS[report.reportType] || "🌤️"}

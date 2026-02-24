@@ -64,9 +64,10 @@
   /* Touch & Interaction */
   --touch-target-min: 44px;
 
-  /* Typography — minimum sizes for mobile readability */
-  --text-body: 0.875rem;      /* 14px — minimum for body/footer text */
-  --text-body-leading: 1.5;
+  /* Typography — 16px base, 18px larger variant */
+  --text-body: 1rem;           /* 16px — base body/footer text */
+  --text-body-lg: 1.125rem;    /* 18px — larger body text variant */
+  --text-body-leading: 1.6;
   /* 10px — matches iOS/Android native bottom nav label conventions.
      Below WCAG 12px minimum for body text, but intentional for nav chrome. */
   --text-nav-label: 0.625rem;
@@ -345,6 +346,13 @@
   /* Accordion open/close animations */
   --animate-accordion-down: accordion-down 200ms ease-out;
   --animate-accordion-up: accordion-up 200ms ease-out;
+
+  /* Section entrance animations — used by LazySection and page transitions */
+  --animate-fade-in: fade-in 400ms ease-out;
+  --animate-fade-in-up: fade-in-up 400ms ease-out;
+  --animate-fade-in-down: fade-in-down 300ms ease-out;
+  --animate-scale-in: scale-in 200ms ease-out;
+  --animate-nav-indicator-in: nav-indicator-in 300ms ease-out;
 }
 
 @keyframes accordion-down {
@@ -357,8 +365,58 @@
   to { height: 0; }
 }
 
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes nav-indicator-in {
+  from { transform: scaleX(0); opacity: 0; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
 html {
   overflow-x: hidden;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Disable entrance animations for users who prefer reduced motion.
+   Three.js loading scene already skips 3D entirely — this covers the
+   CSS animations used on LazySection, WelcomeBanner, WeatherDashboard, etc.
+   Scoped to our own animation classes to avoid breaking Radix UI dialog
+   overlays, accordion animations, and other third-party components that
+   have their own reduced-motion handling. */
+@media (prefers-reduced-motion: reduce) {
+  [class*="animate-fade-in"],
+  [class*="animate-scale-in"],
+  [class*="animate-nav-indicator"] {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .card-interactive,
+  .press-scale {
+    transition-duration: 0.01ms !important;
+  }
 }
 
 body {
@@ -500,4 +558,43 @@ body {
 /* Safe-area utility for mobile bottom navigation — avoids inline style={{}} */
 .pb-safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ===== Card interaction utilities ===== */
+
+/* Subtle card hover lift — use on clickable/interactive cards */
+.card-interactive {
+  transition: box-shadow 200ms ease, transform 200ms ease;
+}
+.card-interactive:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+.card-interactive:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Button press scale — subtle haptic-like feedback */
+.press-scale {
+  transition: transform 100ms ease;
+}
+.press-scale:active {
+  transform: scale(0.97);
+}
+
+/* Staggered children entrance — each child fades in with delay.
+   Only applied when the user has not requested reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .stagger-children > * {
+    animation: fade-in-up 400ms ease-out both;
+  }
+  .stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger-children > *:nth-child(2) { animation-delay: 50ms; }
+  .stagger-children > *:nth-child(3) { animation-delay: 100ms; }
+  .stagger-children > *:nth-child(4) { animation-delay: 150ms; }
+  .stagger-children > *:nth-child(5) { animation-delay: 200ms; }
+  .stagger-children > *:nth-child(6) { animation-delay: 250ms; }
+  .stagger-children > *:nth-child(7) { animation-delay: 300ms; }
+  .stagger-children > *:nth-child(8) { animation-delay: 350ms; }
 }

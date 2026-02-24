@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { cn } from "./utils";
+import { describe, it, expect, vi } from "vitest";
+import { cn, getScrollBehavior } from "./utils";
 
 describe("cn", () => {
   it("merges multiple class strings", () => {
@@ -31,5 +31,23 @@ describe("cn", () => {
 
   it("handles arrays of classes", () => {
     expect(cn(["a", "b"], "c")).toBe("a b c");
+  });
+});
+
+describe("getScrollBehavior", () => {
+  it("returns 'instant' when prefers-reduced-motion matches", () => {
+    vi.stubGlobal("window", {
+      matchMedia: (q: string) => ({ matches: q.includes("prefers-reduced-motion") }),
+    });
+    expect(getScrollBehavior()).toBe("instant");
+    vi.unstubAllGlobals();
+  });
+
+  it("returns 'smooth' when prefers-reduced-motion does not match", () => {
+    vi.stubGlobal("window", {
+      matchMedia: () => ({ matches: false }),
+    });
+    expect(getScrollBehavior()).toBe("smooth");
+    vi.unstubAllGlobals();
   });
 });

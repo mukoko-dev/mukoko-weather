@@ -37,24 +37,24 @@ export function WelcomeBanner({
   return (
     <section
       aria-label="Welcome to mukoko weather"
-      className="mb-6 rounded-[var(--radius-card)] border border-primary/20 bg-primary/5 p-4 sm:p-5"
+      className="mb-7 animate-fade-in-down rounded-[var(--radius-card)] border border-primary/20 bg-primary/5 p-5 sm:p-6"
     >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10" aria-hidden="true">
           <SparklesIcon size={16} className="text-primary" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-text-primary">
+          <p className="text-base font-medium text-text-primary">
             Welcome to mukoko weather
           </p>
-          <p className="mt-1 text-sm text-text-secondary">
+          <p className="mt-1.5 text-base text-text-secondary leading-relaxed">
             You&apos;re viewing weather for <strong>{locationName}</strong>. Pick your own location and activities for personalised forecasts.
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-3">
             <button
               type="button"
               onClick={onChangeLocation}
-              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 min-h-[44px]"
+              className="press-scale inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-md min-h-[44px]"
             >
               <MapPinIcon size={14} />
               Personalise
@@ -62,7 +62,7 @@ export function WelcomeBanner({
             <button
               type="button"
               onClick={completeOnboarding}
-              className="inline-flex items-center rounded-full border border-text-tertiary/20 px-3.5 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-card min-h-[44px]"
+              className="press-scale inline-flex items-center rounded-full border border-text-tertiary/20 px-3.5 py-1.5 text-sm font-medium text-text-secondary transition-all hover:bg-surface-card hover:border-text-tertiary/40 min-h-[44px]"
             >
               Continue with {locationName}
             </button>

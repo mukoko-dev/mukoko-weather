@@ -125,9 +125,9 @@ export function ActivityInsights({
           headingId="activity-insights-heading"
           title="My Activities"
           action={{ label: "Edit", onClick: openMyWeather }}
-          className="mb-3"
+          className="mb-4"
         />
-        <div className="space-y-2">
+        <div className="space-y-3">
           {selectedItems.map((activity) => (
             <ActivityCard key={activity.id} activity={activity} insights={insights} dbRules={dbRules} categoryStyles={categoryStyles} />
           ))}

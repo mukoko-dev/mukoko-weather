@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 // ---------------------------------------------------------------------------
 
 const ctaCardVariants = cva(
-  "rounded-[var(--radius-card)] p-4 shadow-sm",
+  "rounded-[var(--radius-card)] p-5 shadow-sm sm:p-6",
   {
     variants: {
       variant: {
@@ -55,7 +55,7 @@ function CTACard({
           <Heading className="text-base font-semibold text-text-primary font-heading">
             {title}
           </Heading>
-          <p className="mt-1 text-sm text-text-secondary">{description}</p>
+          <p className="mt-1.5 text-sm text-text-secondary leading-relaxed">{description}</p>
         </div>
         {action}
       </div>

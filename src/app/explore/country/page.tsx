@@ -77,10 +77,10 @@ export default async function ExploreCountryPage() {
       </nav>
 
       {/* pb-24 reserves space on mobile for a future sticky bottom nav bar;
-          sm:pb-6 restores normal padding on larger screens. */}
+          sm:pb-8 restores normal padding on larger screens. */}
       <main
         id="main-content"
-        className="mx-auto max-w-5xl overflow-x-hidden px-4 py-6 pb-24 sm:px-6 sm:pb-6 md:px-8"
+        className="mx-auto max-w-5xl overflow-x-hidden px-4 py-8 pb-24 sm:px-6 sm:pb-8 md:px-8"
       >
         <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
           Browse by Country

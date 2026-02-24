@@ -129,6 +129,10 @@ export function LazySection({
 
   // Track if the section has ever been mounted (for unload observer)
   const hasRendered = useRef(false);
+  // Whether to play entrance animation — true only on the initial mount.
+  // Bidirectional remounts (section scrolled off-screen then back) skip the
+  // animation to avoid a visual stutter when content reappears.
+  const [animate, setAnimate] = useState(false);
 
   // ── Load observer: mount when entering viewport ───────────────────────
   useEffect(() => {
@@ -141,6 +145,7 @@ export function LazySection({
         if (entry.isIntersecting) {
           observer.disconnect();
           cancelRef.current = enqueueMount(() => {
+            setAnimate(!hasRendered.current);
             setVisible(true);
             hasRendered.current = true;
           });
@@ -179,11 +184,18 @@ export function LazySection({
   }, [visible]);
 
   // Maintain a persistent ref div that the observer can track even after unmount
-  const content = visible ? children : fallback;
-
   return (
-    <div ref={sentinelRef} data-lazy-section={label}>
-      {content}
+    <div
+      ref={sentinelRef}
+      data-lazy-section={label}
+    >
+      {visible ? (
+        <div className={animate ? "animate-fade-in-up" : undefined}>
+          {children}
+        </div>
+      ) : (
+        fallback
+      )}
     </div>
   );
 }

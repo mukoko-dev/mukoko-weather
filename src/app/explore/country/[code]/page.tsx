@@ -95,7 +95,7 @@ export default async function CountryDetailPage({ params }: Props) {
 
       <main
         id="main-content"
-        className="mx-auto max-w-5xl overflow-x-hidden px-4 py-6 pb-24 sm:px-6 sm:pb-6 md:px-8"
+        className="mx-auto max-w-5xl overflow-x-hidden px-4 py-8 pb-24 sm:px-6 sm:pb-8 md:px-8"
       >
         <div className="flex items-center gap-3">
           <span className="text-4xl" aria-hidden="true">{flag}</span>

@@ -48,8 +48,12 @@ refactor: replace custom modal with shadcn Dialog
 ### Testing
 
 ```bash
-npm test           # Run all tests (single run)
-npm run test:watch # Run tests in watch mode
+npm test              # Run TypeScript tests (single run)
+npm run test:watch    # Run TypeScript tests in watch mode
+npm run test:coverage # Run TypeScript tests with v8 coverage reporting
+npm run test:python   # Run Python backend tests (pytest)
+npm run test:all      # Run both TypeScript and Python tests
+python -m pytest tests/py/ -v  # Run Python backend tests (direct)
 ```
 
 Write tests for:
@@ -135,14 +139,15 @@ Users can add locations at runtime via geolocation auto-detection, search, or co
 
 Before every commit, complete **all** of these steps:
 
-1. `npm test` — all tests pass
-2. `npm run lint` — zero errors
-3. `npx tsc --noEmit` — zero type errors
-4. `npm run build` — production build succeeds
-5. Add/update tests for any new or changed behaviour
-6. Update docs (README.md, CLAUDE.md, CONTRIBUTING.md) if your change affects APIs, structure, dependencies, styling, or workflow
-7. Verify no hardcoded styles (hex colors, rgba, inline style objects) in components
-8. Verify new components follow the layered architecture (error boundary, lazy loading, skeleton, accessibility)
+1. `npm test` — all TypeScript tests pass
+2. `python -m pytest tests/py/ -v` — all Python tests pass
+3. `npm run lint` — zero errors
+4. `npx tsc --noEmit` — zero type errors
+5. `npm run build` — production build succeeds
+6. Add/update tests for any new or changed behaviour
+7. Update docs (README.md, CLAUDE.md, CONTRIBUTING.md) if your change affects APIs, structure, dependencies, styling, or workflow
+8. Verify no hardcoded styles (hex colors, rgba, inline style objects) in components
+9. Verify new components follow the layered architecture (error boundary, lazy loading, skeleton, accessibility)
 
 ## Migration Notes
 

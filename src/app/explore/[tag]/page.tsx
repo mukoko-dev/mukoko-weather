@@ -91,7 +91,7 @@ export default async function ExploreTagPage({ params }: Props) {
         </ol>
       </nav>
 
-      <main id="main-content" className="mx-auto max-w-5xl overflow-x-hidden px-4 py-6 pb-24 sm:px-6 sm:pb-6 md:px-8">
+      <main id="main-content" className="mx-auto max-w-5xl overflow-x-hidden px-4 py-8 pb-24 sm:px-6 sm:pb-8 md:px-8">
         <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
           {meta.label}
         </h1>
