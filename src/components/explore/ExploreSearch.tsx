@@ -123,7 +123,7 @@ export function ExploreSearch() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search locations by weather, activity, or condition..."
-            className="w-full rounded-[var(--radius-input)] border border-input bg-surface-card pl-9 pr-4 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-[var(--radius-input)] border border-input bg-surface-card pl-9 pr-4 py-2 text-base text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Search locations"
             disabled={loading}
           />
@@ -149,7 +149,7 @@ export function ExploreSearch() {
       </form>
 
       {error && (
-        <div className="rounded-[var(--radius-card)] border border-destructive/30 bg-frost-severe-bg p-3 text-sm text-destructive">
+        <div className="rounded-[var(--radius-card)] border border-destructive/30 bg-frost-severe-bg p-3 text-base text-destructive">
           {error}
         </div>
       )}
@@ -180,10 +180,10 @@ export function ExploreSearch() {
                   {loc.name}
                 </p>
                 {loc.province && (
-                  <p className="mt-0.5 text-xs text-text-tertiary">{loc.province}</p>
+                  <p className="mt-0.5 text-base text-text-tertiary">{loc.province}</p>
                 )}
                 {loc.temperature != null && (
-                  <div className="mt-1.5 flex items-center gap-2 text-xs text-text-secondary">
+                  <div className="mt-1.5 flex items-center gap-2 text-base text-text-secondary">
                     <span className="font-medium">
                       {Math.round(loc.temperature)}°C
                     </span>
@@ -199,7 +199,7 @@ export function ExploreSearch() {
                     {loc.tags.slice(0, 3).map((tag) => (
                       <span
                         key={tag}
-                        className="rounded-[var(--radius-badge)] bg-surface-dim px-2 py-0.5 text-[10px] text-text-tertiary"
+                        className="rounded-[var(--radius-badge)] bg-surface-dim px-2 py-0.5 text-base text-text-tertiary"
                       >
                         {tag}
                       </span>
@@ -214,7 +214,7 @@ export function ExploreSearch() {
 
       {searched && !loading && results.length === 0 && !error && (
         <div className="rounded-[var(--radius-card)] bg-surface-card p-6 text-center">
-          <p className="text-sm text-text-secondary">
+          <p className="text-base text-text-secondary">
             No locations found. Try a different search term.
           </p>
         </div>
@@ -225,7 +225,7 @@ export function ExploreSearch() {
           <Link
             href="/shamwari"
             onClick={handleAskShamwari}
-            className="press-scale inline-flex items-center gap-1.5 rounded-[var(--radius-input)] bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-all hover:bg-primary/20 min-h-[44px]"
+            className="press-scale inline-flex items-center gap-1.5 rounded-[var(--radius-input)] bg-primary/10 px-4 py-2 text-base font-medium text-primary transition-all hover:bg-primary/20 min-h-[44px]"
           >
             <SparklesIcon size={14} />
             Ask Shamwari for more

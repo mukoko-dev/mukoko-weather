@@ -61,6 +61,7 @@ export function uvConcernLabel(concern: number): { label: string; className: str
 const DEFAULT_STYLE: CategoryStyle = {
   bg: "bg-primary/10",
   border: "border-primary",
+  borderAccent: "border-l-primary",
   text: "text-primary",
   badge: "bg-primary text-primary-foreground",
 };
@@ -153,14 +154,14 @@ export function ActivityInsights({
             return (
               <span
                 key={activity.id}
-                className={`inline-flex items-center gap-1.5 rounded-[var(--radius-badge)] px-3 py-1.5 text-sm font-medium ${style.badge}`}
+                className={`inline-flex items-center gap-1.5 rounded-[var(--radius-badge)] px-3 py-1.5 text-base font-medium ${style.badge}`}
               >
                 {activity.label}
               </span>
             );
           })}
         </div>
-        <p className="mt-3 text-xs text-text-tertiary">
+        <p className="mt-3 text-base text-text-tertiary">
           Detailed activity insights appear when extended weather data is available.
         </p>
       </div>

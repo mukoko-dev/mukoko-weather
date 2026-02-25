@@ -40,7 +40,7 @@ export function AtmosphereDashboard({
       <Header />
 
       <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8">
-        <ol className="flex items-center gap-1 text-xs text-text-tertiary">
+        <ol className="flex items-center gap-1 text-base text-text-tertiary">
           <li>
             <Link href="/" className="hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded">
               Home
@@ -67,7 +67,7 @@ export function AtmosphereDashboard({
         <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
           {location.name} Atmosphere
         </h1>
-        <p className="mt-1 text-sm text-text-secondary">
+        <p className="mt-1 text-base text-text-secondary">
           {location.province} &middot; {location.elevation}m &middot; {season.shona} ({season.name})
         </p>
 

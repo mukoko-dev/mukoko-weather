@@ -55,7 +55,7 @@ function CTACard({
           <Heading className="text-base font-semibold text-text-primary font-heading">
             {title}
           </Heading>
-          <p className="mt-1.5 text-sm text-text-secondary leading-relaxed">{description}</p>
+          <p className="mt-1.5 text-base text-text-secondary leading-relaxed">{description}</p>
         </div>
         {action}
       </div>

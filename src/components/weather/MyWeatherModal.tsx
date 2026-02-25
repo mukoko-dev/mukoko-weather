@@ -354,17 +354,17 @@ function LocationTab({
           </span>
         </Button>
         {geoState?.status === "denied" && (
-          <p className="px-3 pb-1 text-sm text-text-tertiary">
+          <p className="px-3 pb-1 text-base text-text-tertiary">
             Location access denied. Enable it in your browser settings.
           </p>
         )}
         {geoState?.status === "outside-supported" && (
-          <p className="px-3 pb-1 text-sm text-text-tertiary">
+          <p className="px-3 pb-1 text-base text-text-tertiary">
             Your area isn&apos;t supported yet. Select a location below.
           </p>
         )}
         {geoState?.status === "created" && (
-          <p className="px-3 pb-1 text-sm text-severity-low">
+          <p className="px-3 pb-1 text-base text-severity-low">
             New location added! Weather data is loading.
           </p>
         )}
@@ -397,7 +397,7 @@ function LocationTab({
           ))
         )}
         {!loading && displayedLocations.length === 0 && (
-          <li className="px-3 py-4 text-center text-sm text-text-tertiary">
+          <li className="px-3 py-4 text-center text-base text-text-tertiary">
             {query ? `No locations found for "${query}"` : "No locations available"}
           </li>
         )}
@@ -412,7 +412,7 @@ function LocationTab({
             <li key={loc.slug} role="option" aria-selected={isSelected}>
               <button
                 onClick={() => onSelectLocation(loc.slug)}
-                className={`flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-sm transition-all hover:bg-surface-base focus-visible:outline-2 focus-visible:outline-primary ${
+                className={`flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base transition-all hover:bg-surface-base focus-visible:outline-2 focus-visible:outline-primary ${
                   isSelected
                     ? "bg-primary/10 text-primary font-semibold"
                     : "text-text-primary"
@@ -425,7 +425,7 @@ function LocationTab({
                 />
                 <div className="min-w-0 flex-1 text-left">
                   <span className="block truncate">{loc.name}</span>
-                  <span className="block text-xs text-text-tertiary truncate">{contextLabel}</span>
+                  <span className="block text-base text-text-tertiary truncate">{contextLabel}</span>
                 </div>
                 {isSelected && (
                   <span className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary animate-[scale-in_200ms_ease-out]" aria-hidden="true">
@@ -470,13 +470,13 @@ function LocationCountCard() {
       <div className="flex items-center justify-between gap-2 rounded-[var(--radius-input)] border border-primary/10 bg-primary/5 px-3 py-2">
         <div className="flex items-center gap-2">
           <MapPinIcon size={14} className="shrink-0 text-primary" aria-hidden="true" />
-          <span className="text-sm font-medium text-text-primary">{summary}</span>
+          <span className="text-base font-medium text-text-primary">{summary}</span>
         </div>
         <Link
           href="/explore"
           prefetch={false}
           onClick={closeMyWeather}
-          className="shrink-0 text-xs text-primary underline-offset-2 hover:underline"
+          className="shrink-0 text-base text-primary underline-offset-2 hover:underline"
         >
           Explore all
         </Link>
@@ -519,10 +519,10 @@ function ActivitiesTab({
   return (
     <div className="flex flex-col gap-1">
       <div className="px-4 pt-3 pb-1">
-        <h4 className="text-sm font-semibold text-text-primary">
+        <h4 className="text-base font-semibold text-text-primary">
           Select activities for personalised weather insights
           {selectedActivities.length > 0 && (
-            <span className="ml-2 text-xs font-normal text-text-tertiary">
+            <span className="ml-2 text-base font-normal text-text-tertiary">
               ({selectedActivities.length} selected)
             </span>
           )}
@@ -541,7 +541,7 @@ function ActivitiesTab({
         <ToggleGroupItem
           value="all"
           className={cn(
-            "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[44px] text-sm font-medium transition-colors",
+            "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[44px] text-base font-medium transition-colors",
             activeCategory === "all"
               ? "bg-primary text-primary-foreground"
               : "bg-surface-base text-text-secondary hover:text-text-primary",
@@ -556,7 +556,7 @@ function ActivitiesTab({
               key={cat.id}
               value={cat.id}
               className={cn(
-                "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[44px] text-sm font-medium transition-colors",
+                "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[44px] text-base font-medium transition-colors",
                 activeCategory === cat.id
                   ? style.badge
                   : "bg-surface-base text-text-secondary hover:text-text-primary",
@@ -614,7 +614,7 @@ function ActivitiesTab({
                   size={28}
                   className={isSelected ? style.text : "text-text-tertiary"}
                 />
-                <span className={`text-sm font-medium ${isSelected ? style.text : "text-text-secondary"}`}>
+                <span className={`text-base font-medium ${isSelected ? style.text : "text-text-secondary"}`}>
                   {activity.label}
                 </span>
               </button>
@@ -623,7 +623,7 @@ function ActivitiesTab({
         </div>
 
         {filteredActivities.length === 0 && activityQuery && (
-          <p className="py-8 text-center text-sm text-text-tertiary">
+          <p className="py-8 text-center text-base text-text-tertiary">
             No activities found for &ldquo;{activityQuery}&rdquo;
           </p>
         )}
@@ -646,7 +646,7 @@ function SettingsTab() {
 
   return (
     <div className="p-4">
-      <h4 className="mb-3 text-sm font-semibold text-text-primary">Appearance</h4>
+      <h4 className="mb-3 text-base font-semibold text-text-primary">Appearance</h4>
       <div className="space-y-2" role="radiogroup" aria-label="Theme preference">
         {THEME_OPTIONS.map((option) => (
           <button
@@ -666,10 +666,10 @@ function SettingsTab() {
               {option.value === "system" && <MonitorIcon size={20} />}
             </span>
             <div>
-              <p className={`text-sm font-medium ${theme === option.value ? "text-primary" : "text-text-primary"}`}>
+              <p className={`text-base font-medium ${theme === option.value ? "text-primary" : "text-text-primary"}`}>
                 {option.label}
               </p>
-              <p className="text-xs text-text-tertiary">{option.description}</p>
+              <p className="text-base text-text-tertiary">{option.description}</p>
             </div>
             {theme === option.value && (
               <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary animate-[scale-in_200ms_ease-out]" aria-hidden="true">
@@ -682,7 +682,7 @@ function SettingsTab() {
         ))}
       </div>
 
-      <p className="mt-4 text-xs text-text-tertiary">
+      <p className="mt-4 text-base text-text-tertiary">
         Your preferences are saved on this device.
       </p>
     </div>

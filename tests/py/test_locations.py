@@ -13,6 +13,7 @@ from py._locations import (
     _infer_tags,
     _dedup_radius,
     _is_in_supported_region,
+    _hardcoded_region_check,
     _reverse_geocode,
     _forward_geocode,
     _get_elevation,
@@ -176,11 +177,25 @@ class TestIsInSupportedRegion:
         assert _is_in_supported_region(-17.83, 31.05) is True
 
     @patch("py._locations.get_db")
-    def test_db_lookup_no_region(self, mock_db):
+    def test_db_lookup_no_region_falls_back_to_hardcoded(self, mock_db):
+        """When DB returns no region match, fall back to hardcoded bounds.
+        Zimbabwe (-17.83, 31.05) is within the Africa hardcoded fallback range,
+        so it should still return True (supported), not False."""
         mock_db.return_value.__getitem__ = MagicMock(
             return_value=MagicMock(find_one=MagicMock(return_value=None))
         )
-        assert _is_in_supported_region(-17.83, 31.05) is False
+        # Zimbabwe is in Africa fallback bounds: -23≤lat≤38, -18≤lon≤52
+        assert _is_in_supported_region(-17.83, 31.05) is True
+
+    @patch("py._locations.get_db")
+    def test_db_lookup_no_region_outside_fallback_rejected(self, mock_db):
+        """When DB returns no region match and coords are outside all fallback bounds,
+        return False."""
+        mock_db.return_value.__getitem__ = MagicMock(
+            return_value=MagicMock(find_one=MagicMock(return_value=None))
+        )
+        # New York — outside Africa and ASEAN fallback bounds
+        assert _is_in_supported_region(40.71, -74.01) is False
 
     @patch("py._locations.get_db")
     def test_fallback_africa_accepted(self, mock_db):
@@ -202,6 +217,106 @@ class TestIsInSupportedRegion:
         mock_db.side_effect = Exception("DB down")
         # New York
         assert _is_in_supported_region(40.71, -74.01) is False
+
+
+# ---------------------------------------------------------------------------
+# _hardcoded_region_check — acceptance tests for all 8 regions
+# ---------------------------------------------------------------------------
+
+
+class TestHardcodedRegionCheck:
+    """Direct tests for _hardcoded_region_check to verify all region bounds are correct."""
+
+    def test_africa_zimbabwe(self):
+        """Zimbabwe — should be in Africa region."""
+        assert _hardcoded_region_check(-17.83, 31.05) is True
+
+    def test_africa_north_africa_cairo(self):
+        """Cairo (Egypt) — North Africa should now be included."""
+        assert _hardcoded_region_check(30.06, 31.24) is True
+
+    def test_asean_singapore(self):
+        """Singapore — ASEAN, this was the original reported bug."""
+        assert _hardcoded_region_check(1.35, 103.82) is True
+
+    def test_asean_bangkok(self):
+        """Bangkok (Thailand) — core ASEAN."""
+        assert _hardcoded_region_check(13.75, 100.5) is True
+
+    def test_south_asia_mumbai(self):
+        """Mumbai (India) — South Asia region."""
+        assert _hardcoded_region_check(19.08, 72.88) is True
+
+    def test_south_asia_dhaka(self):
+        """Dhaka (Bangladesh) — South Asia region."""
+        assert _hardcoded_region_check(23.72, 90.41) is True
+
+    def test_middle_east_riyadh(self):
+        """Riyadh (Saudi Arabia) — Middle East region."""
+        assert _hardcoded_region_check(24.69, 46.72) is True
+
+    def test_middle_east_istanbul(self):
+        """Istanbul (Turkey) — northern edge of Middle East region."""
+        assert _hardcoded_region_check(41.01, 28.98) is True
+
+    def test_central_asia_almaty(self):
+        """Almaty (Kazakhstan) — Central Asia region."""
+        assert _hardcoded_region_check(43.26, 76.95) is True
+
+    def test_south_america_sao_paulo(self):
+        """São Paulo (Brazil) — South America region."""
+        assert _hardcoded_region_check(-23.55, -46.63) is True
+
+    def test_south_america_buenos_aires(self):
+        """Buenos Aires (Argentina) — South America region."""
+        assert _hardcoded_region_check(-34.6, -58.38) is True
+
+    def test_central_america_mexico_city(self):
+        """Mexico City — Central America + Mexico region."""
+        assert _hardcoded_region_check(19.43, -99.13) is True
+
+    def test_central_america_guatemala_city(self):
+        """Guatemala City — Central America region."""
+        assert _hardcoded_region_check(14.64, -90.51) is True
+
+    def test_pacific_islands_fiji(self):
+        """Fiji (lon ~178°E) — Pacific Islands, east of antimeridian.
+        This coordinate should be accepted by _hardcoded_region_check but NOT
+        by the MongoDB bounding-box query (which cannot handle antimeridian crossing)."""
+        assert _hardcoded_region_check(-18.14, 178.44) is True
+
+    def test_pacific_islands_tonga(self):
+        """Tonga (lon ~-175.2°W) — Pacific Islands, just west of antimeridian.
+        -175.2 <= -175 (the padded east boundary), so this is within range."""
+        assert _hardcoded_region_check(-21.18, -175.20) is True
+
+    def test_pacific_islands_fiji_db_query_limitation(self):
+        """Pacific Islands (Fiji) is NOT matched by the MongoDB bounding-box query
+        due to the antimeridian crossing (east=-176 fails $gte check for lon=178).
+        The hardcoded fallback is the authoritative source for this region."""
+        # Simulate DB returning None (which is what happens for antimeridian points)
+        # and confirm the overall function still returns True via _hardcoded_region_check.
+        with patch("py._locations.get_db") as mock_db:
+            mock_db.return_value.__getitem__ = MagicMock(
+                return_value=MagicMock(find_one=MagicMock(return_value=None))
+            )
+            assert _is_in_supported_region(-18.14, 178.44) is True
+
+    def test_rejected_new_york(self):
+        """New York (USA) — should be rejected."""
+        assert _hardcoded_region_check(40.71, -74.01) is False
+
+    def test_rejected_london(self):
+        """London (UK) — should be rejected."""
+        assert _hardcoded_region_check(51.51, -0.13) is False
+
+    def test_rejected_sydney(self):
+        """Sydney (Australia) — should be rejected (not a developing country region)."""
+        assert _hardcoded_region_check(-33.87, 151.21) is False
+
+    def test_rejected_tokyo(self):
+        """Tokyo (Japan) — should be rejected (developed, not in ASEAN or developing Asia)."""
+        assert _hardcoded_region_check(35.69, 139.69) is False
 
 
 # ---------------------------------------------------------------------------

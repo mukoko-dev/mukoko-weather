@@ -28,7 +28,7 @@ export function MapLayerSwitcher({
           value={layer.id}
           aria-label={layer.description}
           className={cn(
-            "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[44px] text-sm font-medium transition-colors",
+            "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[44px] text-base font-medium transition-colors",
             activeLayer === layer.id
               ? layer.style.badge
               : "bg-surface-base text-text-secondary hover:text-text-primary",

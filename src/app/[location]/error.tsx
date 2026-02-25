@@ -75,7 +75,7 @@ export default function LocationError({
           })}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-2 text-xs text-text-tertiary underline hover:text-text-secondary transition-colors"
+          className="mt-2 text-base text-text-tertiary underline hover:text-text-secondary transition-colors"
         >
           Report this issue
         </a>

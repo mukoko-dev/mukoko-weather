@@ -41,7 +41,7 @@ function SectionHeader({
         action.href ? (
           <Link
             href={action.href}
-            className="text-sm font-medium text-primary transition-colors hover:text-primary/80 min-h-[var(--touch-target-min)]"
+            className="text-base font-medium text-primary transition-colors hover:text-primary/80 min-h-[var(--touch-target-min)]"
           >
             {action.label}
           </Link>
@@ -49,7 +49,7 @@ function SectionHeader({
           <button
             onClick={action.onClick}
             type="button"
-            className="text-sm font-medium text-primary transition-colors hover:text-primary/80 min-h-[var(--touch-target-min)]"
+            className="text-base font-medium text-primary transition-colors hover:text-primary/80 min-h-[var(--touch-target-min)]"
           >
             {action.label}
           </button>

@@ -74,7 +74,7 @@ export default async function CountryDetailPage({ params }: Props) {
       <Header />
 
       <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8">
-        <ol className="flex items-center gap-1 text-xs text-text-tertiary">
+        <ol className="flex items-center gap-1 text-base text-text-tertiary">
           <li>
             <Link href="/" className="hover:text-text-secondary transition-colors">Home</Link>
           </li>
@@ -103,7 +103,7 @@ export default async function CountryDetailPage({ params }: Props) {
             <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
               {country.name}
             </h1>
-            <p className="text-sm text-text-secondary">
+            <p className="text-base text-text-secondary">
               {country.region} &bull; {country.locationCount} location{country.locationCount !== 1 ? "s" : ""}
             </p>
           </div>
@@ -127,7 +127,7 @@ export default async function CountryDetailPage({ params }: Props) {
                     <h2 className="text-base font-semibold text-text-primary font-heading group-hover:text-primary transition-colors">
                       {province.name}
                     </h2>
-                    <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary shrink-0 ml-2">
+                    <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-base font-medium text-primary shrink-0 ml-2">
                       {province.locationCount}
                     </span>
                   </div>

@@ -40,17 +40,20 @@ export const ACTIVITY_CATEGORIES: ActivityCategoryInfo[] = [
 export interface CategoryStyle {
   bg: string;
   border: string;
+  /** Left-side accent border class (border-l-{color}). Used for activity card accent stripe.
+   * Optional for backward compat with older MongoDB data — ActivityCard derives it from border if absent. */
+  borderAccent?: string;
   text: string;
   badge: string;
 }
 
 export const CATEGORY_STYLES: Record<string, CategoryStyle> = {
-  farming:  { bg: "bg-mineral-malachite/10",  border: "border-mineral-malachite",  text: "text-mineral-malachite",  badge: "bg-mineral-malachite text-mineral-malachite-fg" },
-  mining:   { bg: "bg-mineral-terracotta/10",  border: "border-mineral-terracotta",  text: "text-mineral-terracotta",  badge: "bg-mineral-terracotta text-mineral-terracotta-fg" },
-  travel:   { bg: "bg-mineral-cobalt/10",      border: "border-mineral-cobalt",      text: "text-mineral-cobalt",      badge: "bg-mineral-cobalt text-mineral-cobalt-fg" },
-  tourism:  { bg: "bg-mineral-tanzanite/10",   border: "border-mineral-tanzanite",   text: "text-mineral-tanzanite",   badge: "bg-mineral-tanzanite text-mineral-tanzanite-fg" },
-  sports:   { bg: "bg-mineral-gold/10",        border: "border-mineral-gold",        text: "text-mineral-gold",        badge: "bg-mineral-gold text-mineral-gold-fg" },
-  casual:   { bg: "bg-primary/10",             border: "border-primary",             text: "text-primary",             badge: "bg-primary text-primary-foreground" },
+  farming:  { bg: "bg-mineral-malachite/10",  border: "border-mineral-malachite",  borderAccent: "border-l-mineral-malachite",  text: "text-mineral-malachite",  badge: "bg-mineral-malachite text-mineral-malachite-fg" },
+  mining:   { bg: "bg-mineral-terracotta/10",  border: "border-mineral-terracotta",  borderAccent: "border-l-mineral-terracotta",  text: "text-mineral-terracotta",  badge: "bg-mineral-terracotta text-mineral-terracotta-fg" },
+  travel:   { bg: "bg-mineral-cobalt/10",      border: "border-mineral-cobalt",      borderAccent: "border-l-mineral-cobalt",      text: "text-mineral-cobalt",      badge: "bg-mineral-cobalt text-mineral-cobalt-fg" },
+  tourism:  { bg: "bg-mineral-tanzanite/10",   border: "border-mineral-tanzanite",   borderAccent: "border-l-mineral-tanzanite",   text: "text-mineral-tanzanite",   badge: "bg-mineral-tanzanite text-mineral-tanzanite-fg" },
+  sports:   { bg: "bg-mineral-gold/10",        border: "border-mineral-gold",        borderAccent: "border-l-mineral-gold",        text: "text-mineral-gold",        badge: "bg-mineral-gold text-mineral-gold-fg" },
+  casual:   { bg: "bg-primary/10",             border: "border-primary",             borderAccent: "border-l-primary",             text: "text-primary",             badge: "bg-primary text-primary-foreground" },
 };
 
 export const ACTIVITIES: Activity[] = [

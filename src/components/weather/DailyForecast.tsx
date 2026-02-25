@@ -64,7 +64,7 @@ export function DailyForecast({ daily }: Props) {
                 <div className="flex items-center gap-3 sm:gap-4">
                   {/* Day + date */}
                   <div className="flex w-12 shrink-0 flex-col items-center sm:w-14">
-                    <span className="text-sm font-medium text-text-secondary leading-tight">
+                    <span className="text-base font-medium text-text-secondary leading-tight">
                       {dayName}
                     </span>
                     <span className="text-lg font-bold text-text-primary leading-tight">
@@ -76,14 +76,14 @@ export function DailyForecast({ daily }: Props) {
                   <div className="flex w-10 shrink-0 flex-col items-center gap-0.5">
                     <WeatherIcon icon={info.icon} size={22} className="text-primary" />
                     {rainPct > 0 && (
-                      <span className="text-xs font-semibold text-rain">
+                      <span className="text-base font-semibold text-rain">
                         {rainPct}%
                       </span>
                     )}
                   </div>
 
                   {/* Low temp */}
-                  <span className="w-8 shrink-0 text-right text-sm text-text-tertiary" aria-label={`Low ${low} degrees`}>
+                  <span className="w-8 shrink-0 text-right text-base text-text-tertiary" aria-label={`Low ${low} degrees`}>
                     {low}°
                   </span>
 
@@ -100,13 +100,13 @@ export function DailyForecast({ daily }: Props) {
                   </div>
 
                   {/* High temp */}
-                  <span className="w-8 shrink-0 text-sm font-semibold text-text-primary" aria-label={`High ${high} degrees`}>
+                  <span className="w-8 shrink-0 text-base font-semibold text-text-primary" aria-label={`High ${high} degrees`}>
                     {high}°
                   </span>
                 </div>
 
                 {/* Detail row: feels-like, precipitation, wind, UV */}
-                <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 pl-12 text-xs text-text-tertiary sm:pl-14">
+                <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 pl-12 text-base text-text-tertiary sm:pl-14">
                   <span>Feels {feelsLow}°/{feelsHigh}°</span>
                   {precipMm > 0 && <span>{precipMm.toFixed(1)} mm</span>}
                   <span>Wind {windMax} km/h</span>

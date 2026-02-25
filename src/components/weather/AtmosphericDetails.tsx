@@ -65,26 +65,26 @@ export function AtmosphericDetails({ hourly }: Props) {
         <h2 id="atmospheric-details-heading" className="text-lg font-semibold text-text-primary font-heading">
           Atmospheric Details
         </h2>
-        <p className="mt-1 text-sm text-text-tertiary">24-hour hourly trends</p>
+        <p className="mt-1 text-base text-text-tertiary">24-hour hourly trends</p>
 
         <div className="mt-4 space-y-6">
           <div>
-            <h3 className="mb-2 text-sm font-medium text-text-secondary">Humidity & Cloud Cover</h3>
+            <h3 className="mb-2 text-base font-medium text-text-secondary">Humidity & Cloud Cover</h3>
             <HumidityCloudChart data={data} labelKey="label" />
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-medium text-text-secondary">Wind Speed & Gusts</h3>
+            <h3 className="mb-2 text-base font-medium text-text-secondary">Wind Speed & Gusts</h3>
             <WindSpeedChart data={data} labelKey="label" />
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-medium text-text-secondary">Barometric Pressure</h3>
+            <h3 className="mb-2 text-base font-medium text-text-secondary">Barometric Pressure</h3>
             <PressureChart data={data} labelKey="label" />
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-medium text-text-secondary">UV Index</h3>
+            <h3 className="mb-2 text-base font-medium text-text-secondary">UV Index</h3>
             <UVIndexChart data={data} labelKey="label" />
           </div>
         </div>

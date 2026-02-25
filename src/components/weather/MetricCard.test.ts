@@ -4,16 +4,16 @@ import { describe, it, expect } from "vitest";
 // ArcGauge constants — mirrored from MetricCard.tsx for math validation
 // ---------------------------------------------------------------------------
 
-const ARC_RADIUS = 20;
-const ARC_CIRCUMFERENCE = 2 * Math.PI * ARC_RADIUS; // ~125.6637
+const ARC_RADIUS = 26;
+const ARC_CIRCUMFERENCE = 2 * Math.PI * ARC_RADIUS; // ~163.3628
 const ARC_SWEEP = 0.75; // 270° / 360°
-const ARC_LENGTH = ARC_CIRCUMFERENCE * ARC_SWEEP; // ~94.2478
+const ARC_LENGTH = ARC_CIRCUMFERENCE * ARC_SWEEP; // ~122.5221
 
 // ── ArcGauge math ──────────────────────────────────────────────────────────
 
 describe("ArcGauge math", () => {
   it("ARC_CIRCUMFERENCE is 2πr", () => {
-    expect(ARC_CIRCUMFERENCE).toBeCloseTo(2 * Math.PI * 20, 4);
+    expect(ARC_CIRCUMFERENCE).toBeCloseTo(2 * Math.PI * 26, 4);
   });
 
   it("ARC_SWEEP covers 270° (three-quarter circle)", () => {
@@ -110,10 +110,10 @@ describe("ArcGauge SVG geometry", () => {
   });
 
   it("viewBox and radius are consistent", () => {
-    const viewBoxSize = 48;
-    const center = viewBoxSize / 2; // 24
-    expect(center).toBe(24);
-    // Radius 20 + strokeWidth 5/2 = 22.5, fits within viewBox 48×48
+    const viewBoxSize = 64;
+    const center = viewBoxSize / 2; // 32
+    expect(center).toBe(32);
+    // Radius 26 + strokeWidth 5/2 = 28.5, fits within viewBox 64×64
     expect(ARC_RADIUS + 5 / 2).toBeLessThan(center);
   });
 });

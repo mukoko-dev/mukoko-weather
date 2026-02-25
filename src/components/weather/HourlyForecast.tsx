@@ -37,7 +37,7 @@ export function HourlyForecast({ hourly }: Props) {
                   aria-label={`${timeLabel}: ${temp} degrees, ${info.label}`}
                   className="flex min-w-[72px] flex-col items-center gap-2.5 rounded-[var(--radius-input)] bg-surface-base px-3.5 py-3.5 transition-colors hover:bg-surface-elevated"
                 >
-                  <span className="text-sm font-medium text-text-secondary">
+                  <span className="text-base font-medium text-text-secondary">
                     {timeLabel}
                   </span>
                   <WeatherIcon
@@ -45,11 +45,11 @@ export function HourlyForecast({ hourly }: Props) {
                     size={24}
                     className="text-primary"
                   />
-                  <span className="text-sm font-semibold text-text-primary">
+                  <span className="text-base font-semibold text-text-primary">
                     {temp}°
                   </span>
                   {hourly.precipitation_probability[idx] > 0 && (
-                    <span className="text-sm font-semibold text-rain">
+                    <span className="text-base font-semibold text-rain">
                       {hourly.precipitation_probability[idx]}%
                     </span>
                   )}

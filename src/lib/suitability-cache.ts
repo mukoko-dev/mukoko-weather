@@ -53,7 +53,7 @@ export async function fetchSuitabilityRules(): Promise<SuitabilityRuleDoc[]> {
 let cachedCategoryStyles: Record<string, { bg: string; border: string; text: string; badge: string }> = { ...CATEGORY_STYLES };
 let cachedStylesAt = 0;
 
-export type CategoryStyle = { bg: string; border: string; text: string; badge: string };
+export type CategoryStyle = { bg: string; border: string; borderAccent?: string; text: string; badge: string };
 
 let inFlightStyles: Promise<Record<string, CategoryStyle>> | null = null;
 

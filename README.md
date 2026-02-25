@@ -49,7 +49,7 @@ AI-powered weather intelligence, starting with Zimbabwe and expanding globally. 
 | Analytics | [Google Analytics 4](https://analytics.google.com) |
 | 3D Animations | [Three.js](https://threejs.org) (weather-aware loading scenes) |
 | Testing | [Vitest](https://vitest.dev) (TypeScript, v8 coverage) + [pytest](https://pytest.org) (Python) |
-| CI/CD | [GitHub Actions](https://github.com/features/actions) (tests + lint + typecheck on push/PR, Claude AI review, post-deploy DB init) |
+| CI/CD | [GitHub Actions](https://github.com/features/actions) (single `ci` job: lint → typecheck → TypeScript tests → Python tests; Claude AI review on PRs; post-deploy DB init) |
 | Deployment | [Vercel](https://vercel.com) |
 
 ## Getting Started
@@ -311,7 +311,7 @@ public/
 .github/
   ISSUE_TEMPLATE/           # Bug report and feature request templates (YAML forms)
   workflows/
-    ci.yml                  # Tests (TypeScript + Python), lint, type check on push/PR
+    ci.yml                  # Single job: lint → typecheck → TypeScript tests → Python tests
     claude-code-review.yml  # Claude AI code review on PRs
     claude.yml              # Claude Code for @claude mentions in issues/PRs
     db-init.yml             # Post-deploy DB seed data sync (Vercel deployment webhook)

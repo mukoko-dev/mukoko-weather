@@ -165,7 +165,7 @@ The old analyzer names may have silently fallen through to Atlas defaults — th
 1. Complete the Pre-Commit Checklist above
 2. Ensure the build succeeds: `npm run build`
 3. Submit a PR with a clear description of the change and why it's needed
-4. PRs are automatically reviewed by Claude AI and checked by CI (tests + lint + typecheck)
+4. PRs are automatically reviewed by Claude AI and checked by CI — a single `ci` job runs lint → typecheck → TypeScript tests → Python tests, all visible as named steps in one check
 5. On merge to `main`, the `db-init.yml` workflow automatically syncs seed data to MongoDB after Vercel deploys
 6. Address any review feedback before requesting merge
 
@@ -173,7 +173,7 @@ The old analyzer names may have silently fallen through to Atlas defaults — th
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `ci.yml` | Push/PR to `main` | Runs tests, lint, and type check |
+| `ci.yml` | Push/PR to `main` | Single job with 4 sequential steps: lint → typecheck → TypeScript tests → Python tests. All steps appear under one check in the GitHub PR UI. |
 | `claude-code-review.yml` | PR opened/updated | Claude AI reviews code quality, security, accessibility |
 | `claude.yml` | `@claude` mention in issues/PRs | Claude Code responds to requests in issues and PR comments |
 | `db-init.yml` | Vercel production deploy succeeds | Syncs seed data to MongoDB (locations, activities, rules, prompts) |

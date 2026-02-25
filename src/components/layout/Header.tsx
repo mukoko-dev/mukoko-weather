@@ -106,7 +106,7 @@ export function Header() {
             <Link
               href="/explore"
               prefetch={false}
-              className={`rounded-[var(--radius-input)] px-3 py-2 text-sm font-medium transition-colors ${
+              className={`rounded-[var(--radius-input)] px-3 py-2 text-base font-medium transition-colors ${
                 isExplore ? "text-primary bg-primary/10" : "text-text-secondary hover:text-text-primary hover:bg-surface-base"
               }`}
             >
@@ -115,7 +115,7 @@ export function Header() {
             <Link
               href="/shamwari"
               prefetch={false}
-              className={`rounded-[var(--radius-input)] px-3 py-2 text-sm font-medium transition-colors ${
+              className={`rounded-[var(--radius-input)] px-3 py-2 text-base font-medium transition-colors ${
                 isShamwari ? "text-primary bg-primary/10" : "text-text-secondary hover:text-text-primary hover:bg-surface-base"
               }`}
             >
@@ -124,7 +124,7 @@ export function Header() {
             <Link
               href="/history"
               prefetch={false}
-              className={`rounded-[var(--radius-input)] px-3 py-2 text-sm font-medium transition-colors ${
+              className={`rounded-[var(--radius-input)] px-3 py-2 text-base font-medium transition-colors ${
                 isHistory ? "text-primary bg-primary/10" : "text-text-secondary hover:text-text-primary hover:bg-surface-base"
               }`}
             >

@@ -241,10 +241,15 @@ describe("REGIONS seed data shape", () => {
     }
   });
 
-  it("east is always greater than west in each region (non-antimeridian regions)", () => {
+  it("east is always greater than west for standard regions; antimeridian-crossing regions have east < west", () => {
     for (const r of REGIONS) {
-      // All current regions don't cross the antimeridian
-      expect(r.east).toBeGreaterThan(r.west);
+      // Antimeridian-crossing regions (e.g. Pacific Islands) have east < west by convention
+      if (r.id === "pacific-islands") {
+        // east (-176°) < west (130°) for antimeridian-crossing regions
+        expect(r.east).toBeLessThan(r.west);
+      } else {
+        expect(r.east).toBeGreaterThan(r.west);
+      }
     }
   });
 

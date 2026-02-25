@@ -55,7 +55,7 @@ export default async function ExplorePage() {
       <Header />
 
       <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8">
-        <ol className="flex items-center gap-1 text-xs text-text-tertiary">
+        <ol className="flex items-center gap-1 text-base text-text-tertiary">
           <li>
             <Link href="/" className="hover:text-text-secondary transition-colors">
               Home
@@ -92,7 +92,7 @@ export default async function ExplorePage() {
           action={
             <Link
               href="/shamwari"
-              className="press-scale shrink-0 inline-flex items-center gap-2 rounded-[var(--radius-sm)] bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-all focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
+              className="press-scale shrink-0 inline-flex items-center gap-2 rounded-[var(--radius-sm)] bg-primary px-4 py-2 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-all focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
             >
               Start chatting
             </Link>
@@ -105,7 +105,7 @@ export default async function ExplorePage() {
           <h2 id="browse-heading" className="text-xl font-bold text-text-primary font-heading">
             Browse by Category
           </h2>
-          <p className="mt-1 text-sm text-text-secondary">
+          <p className="mt-1 text-base text-text-secondary">
             {totalLocations || "90+"} locations across Africa and ASEAN
           </p>
 
@@ -130,7 +130,7 @@ export default async function ExplorePage() {
                     <h3 className="text-base font-semibold text-text-primary font-heading group-hover:text-primary transition-colors">
                       {meta.label}
                     </h3>
-                    <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                    <span className="rounded-full bg-primary/10 px-2.5 py-1 text-base font-medium text-primary">
                       {count}
                     </span>
                   </div>
@@ -149,7 +149,7 @@ export default async function ExplorePage() {
             action={
               <Link
                 href="/explore/country"
-                className="press-scale shrink-0 inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-all focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
+                className="press-scale shrink-0 inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-primary px-4 py-2 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-all focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
               >
                 Browse countries
               </Link>

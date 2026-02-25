@@ -26,7 +26,7 @@ class MarkdownErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <p className="text-sm text-text-secondary">{this.props.fallback}</p>
+        <p className="text-base text-text-secondary">{this.props.fallback}</p>
       );
     }
     return this.props.children;
@@ -128,7 +128,7 @@ export function HistoryAnalysis({
 
       {!analysis && !loading && !error && (
         <div className="mt-3">
-          <p className="text-sm text-text-secondary">
+          <p className="text-base text-text-secondary">
             Let Shamwari analyze {dataPoints} data points for{" "}
             <strong>{locationName}</strong> over {days} days to identify trends,
             patterns, and activity recommendations.
@@ -148,7 +148,7 @@ export function HistoryAnalysis({
       {loading && (
         <div className="mt-3 flex items-center gap-2" role="status">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <span className="text-sm text-text-secondary">
+          <span className="text-base text-text-secondary">
             Analyzing {days}-day history...
           </span>
           <span className="sr-only">
@@ -159,7 +159,7 @@ export function HistoryAnalysis({
 
       {error && (
         <div className="mt-3">
-          <p className="text-sm text-destructive">{error}</p>
+          <p className="text-base text-destructive">{error}</p>
           <Button
             onClick={analyze}
             size="sm"
@@ -184,14 +184,14 @@ export function HistoryAnalysis({
               onClick={analyze}
               size="sm"
               variant="outline"
-              className="min-h-[44px] text-xs"
+              className="min-h-[44px] text-base"
             >
               Re-analyze
             </Button>
             <Link
               href="/shamwari"
               onClick={handleContinueInShamwari}
-              className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 min-h-[44px]"
+              className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary px-3 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 min-h-[44px]"
             >
               <SparklesIcon size={12} />
               Discuss in Shamwari

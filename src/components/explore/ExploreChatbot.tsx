@@ -21,7 +21,7 @@ class MarkdownErrorBoundary extends Component<{ children: ReactNode; fallback: s
   static getDerivedStateFromError() { return { hasError: true }; }
   render() {
     if (this.state.hasError) {
-      return <p className="text-sm text-text-secondary">{this.props.fallback}</p>;
+      return <p className="text-base text-text-secondary">{this.props.fallback}</p>;
     }
     return this.props.children;
   }
@@ -374,7 +374,7 @@ export function ExploreChatbot() {
                   <button
                     key={prompt.query}
                     onClick={() => handleSuggestion(prompt.query)}
-                    className="flex items-center rounded-[var(--radius-card)] border border-border bg-surface-card px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-surface-base hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
+                    className="flex items-center rounded-[var(--radius-card)] border border-border bg-surface-card px-3 py-2 text-left text-base text-text-secondary transition-colors hover:bg-surface-base hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
                     type="button"
                     disabled={loading}
                   >
@@ -474,7 +474,7 @@ function EmptyState({ onSuggestionClick, loading }: { onSuggestionClick: (query:
       </p>
 
       <div className="mt-6 w-full max-w-md">
-        <p className="mb-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">
+        <p className="mb-3 text-base font-medium uppercase tracking-wider text-text-tertiary">
           Try asking
         </p>
         <div className="grid grid-cols-2 gap-2">
@@ -482,7 +482,7 @@ function EmptyState({ onSuggestionClick, loading }: { onSuggestionClick: (query:
             <button
               key={prompt.query}
               onClick={() => onSuggestionClick(prompt.query)}
-              className="flex items-center rounded-[var(--radius-card)] border border-border bg-surface-card px-3 py-3 text-left text-sm text-text-secondary transition-colors hover:bg-surface-base hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[44px] disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex items-center rounded-[var(--radius-card)] border border-border bg-surface-card px-3 py-3 text-left text-base text-text-secondary transition-colors hover:bg-surface-base hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[44px] disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               disabled={loading}
             >
@@ -536,7 +536,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
                   <Link
                     key={ref.slug}
                     href={`/${ref.slug}`}
-                    className="inline-flex items-center gap-1 rounded-[var(--radius-badge)] bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+                    className="inline-flex items-center gap-1 rounded-[var(--radius-badge)] bg-primary/10 px-2.5 py-1 text-base font-medium text-primary transition-colors hover:bg-primary/20"
                   >
                     <MapPinIcon size={10} className="shrink-0" />
                     {ref.name}

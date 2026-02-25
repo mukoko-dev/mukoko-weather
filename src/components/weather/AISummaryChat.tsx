@@ -26,7 +26,7 @@ class MarkdownErrorBoundary extends Component<{ children: ReactNode; fallback: s
   static getDerivedStateFromError() { return { hasError: true }; }
   render() {
     if (this.state.hasError) {
-      return <p className="text-sm text-text-secondary">{this.props.fallback}</p>;
+      return <p className="text-base text-text-secondary">{this.props.fallback}</p>;
     }
     return this.props.children;
   }
@@ -258,7 +258,7 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
         >
           <div className="flex items-center gap-2">
             <SparklesIcon size={16} className="text-tanzanite" />
-            <span className="text-sm font-medium text-text-primary">
+            <span className="text-base font-medium text-text-primary">
               Ask a follow-up question
             </span>
           </div>
@@ -270,7 +270,7 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
             {/* Suggested prompts (shown when no messages yet) */}
             {messages.length === 0 && suggestedPrompts.length > 0 && (
               <div className="pb-3 pt-4">
-                <p className="mb-2 text-xs font-medium uppercase tracking-wider text-text-tertiary">
+                <p className="mb-2 text-base font-medium uppercase tracking-wider text-text-tertiary">
                   Suggested questions
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -278,7 +278,7 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
                     <button
                       key={prompt.label}
                       onClick={() => sendMessage(prompt.query)}
-                      className="rounded-[var(--radius-badge)] border border-border bg-surface-base px-3 py-2 text-xs text-text-secondary transition-colors hover:bg-surface-card hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
+                      className="rounded-[var(--radius-badge)] border border-border bg-surface-base px-3 py-2 text-base text-text-secondary transition-colors hover:bg-surface-card hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
                       type="button"
                       disabled={loading}
                     >
@@ -334,13 +334,13 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
             {/* Message limit reached — redirect to Shamwari */}
             {atMessageLimit && (
               <div className="mt-3 rounded-lg border border-tanzanite/20 bg-tanzanite/5 p-3 text-center">
-                <p className="text-sm text-text-secondary">
+                <p className="text-base text-text-secondary">
                   For a deeper conversation, continue in Shamwari chat.
                 </p>
                 <Link
                   href="/shamwari"
                   onClick={handleContinueInShamwari}
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-[var(--radius-badge)] bg-tanzanite px-4 py-2 text-sm font-medium text-mineral-tanzanite-fg transition-colors hover:bg-tanzanite/90 min-h-[44px]"
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-[var(--radius-badge)] bg-tanzanite px-4 py-2 text-base font-medium text-mineral-tanzanite-fg transition-colors hover:bg-tanzanite/90 min-h-[44px]"
                 >
                   <SparklesIcon size={14} />
                   Continue in Shamwari
@@ -395,7 +395,7 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
                 <Link
                   href="/shamwari"
                   onClick={handleContinueInShamwari}
-                  className="inline-flex items-center gap-1 text-xs text-text-tertiary transition-colors hover:text-tanzanite"
+                  className="inline-flex items-center gap-1 text-base text-text-tertiary transition-colors hover:text-tanzanite"
                 >
                   <MapPinIcon size={10} />
                   Continue in Shamwari for a deeper conversation

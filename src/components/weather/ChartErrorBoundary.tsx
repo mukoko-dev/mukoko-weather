@@ -42,12 +42,12 @@ export class ChartErrorBoundary extends Component<Props, State> {
       return (
         <div
           role="alert"
-          className="rounded-[var(--radius-card)] bg-surface-card p-4 text-center text-sm text-text-tertiary"
+          className="rounded-[var(--radius-card)] bg-surface-card p-4 text-center text-base text-text-tertiary"
         >
           <p>Unable to display {this.props.name}.</p>
           <button
             onClick={() => this.setState({ hasError: false })}
-            className="mt-2 text-sm font-medium text-primary transition-colors hover:text-primary/80"
+            className="mt-2 text-base font-medium text-primary transition-colors hover:text-primary/80"
           >
             Try again
           </button>

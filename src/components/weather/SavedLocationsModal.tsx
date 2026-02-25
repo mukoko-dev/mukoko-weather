@@ -76,11 +76,11 @@ export function SavedLocationsModal() {
 
           {/* Saved locations list */}
           <div className="px-2 pt-2">
-            <h3 className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+            <h3 className="px-3 pb-2 text-base font-semibold uppercase tracking-wider text-text-tertiary">
               Saved locations ({savedLocations.length}/{MAX_SAVED_LOCATIONS})
             </h3>
             {savedLocations.length === 0 ? (
-              <p className="px-3 py-4 text-center text-sm text-text-tertiary">
+              <p className="px-3 py-4 text-center text-base text-text-tertiary">
                 No saved locations yet. Tap + to add locations.
               </p>
             ) : (
@@ -165,10 +165,10 @@ function CurrentLocationButton({
             <NavigationIcon size={18} className="shrink-0 text-primary" />
           )}
           <div className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-primary">
+            <span className="block text-base font-semibold text-primary">
               {geoLoading ? "Detecting..." : "Current Location"}
             </span>
-            <span className="block text-xs text-text-tertiary">
+            <span className="block text-base text-text-tertiary">
               {geoState?.location ? geoState.location.name : "Tap to detect your location"}
             </span>
           </div>
@@ -185,12 +185,12 @@ function CurrentLocationButton({
         )}
       </div>
       {geoState?.status === "denied" && (
-        <p className="px-1 text-xs text-text-tertiary">
+        <p className="px-1 text-base text-text-tertiary">
           Location access denied. Enable it in your browser settings.
         </p>
       )}
       {geoState?.status === "outside-supported" && (
-        <p className="px-1 text-xs text-text-tertiary">
+        <p className="px-1 text-base text-text-tertiary">
           Your area isn&apos;t supported yet.
         </p>
       )}
@@ -276,7 +276,7 @@ function SavedLocationsList({
             <div className="flex items-center gap-1 px-1">
               <button
                 onClick={() => onSelect(slug)}
-                className={`flex min-h-[44px] flex-1 items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-sm transition-all hover:bg-surface-base ${
+                className={`flex min-h-[44px] flex-1 items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base transition-all hover:bg-surface-base ${
                   isActive ? "bg-primary/10 text-primary font-semibold" : "text-text-primary"
                 }`}
                 type="button"
@@ -285,7 +285,7 @@ function SavedLocationsList({
                 <div className="min-w-0 flex-1 text-left">
                   <span className="block truncate">{loc?.name ?? slug}</span>
                   {contextLabel && (
-                    <span className="block text-xs text-text-tertiary truncate">{contextLabel}</span>
+                    <span className="block text-base text-text-tertiary truncate">{contextLabel}</span>
                   )}
                 </div>
                 {isActive && (
@@ -405,7 +405,7 @@ function AddLocationSearch({
       )}
 
       {!loading && filteredResults.length === 0 && query.trim() && (
-        <p className="py-3 text-center text-sm text-text-tertiary">
+        <p className="py-3 text-center text-base text-text-tertiary">
           No results for &ldquo;{query}&rdquo;
         </p>
       )}
@@ -421,13 +421,13 @@ function AddLocationSearch({
               <li key={loc.slug}>
                 <button
                   onClick={() => onAdd(loc.slug)}
-                  className="flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-sm transition-all hover:bg-surface-base text-text-primary"
+                  className="flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base transition-all hover:bg-surface-base text-text-primary"
                   type="button"
                 >
                   <MapPinIcon size={14} className="text-text-tertiary" />
                   <div className="min-w-0 flex-1 text-left">
                     <span className="block truncate">{loc.name}</span>
-                    <span className="block text-xs text-text-tertiary truncate">{contextLabel}</span>
+                    <span className="block text-base text-text-tertiary truncate">{contextLabel}</span>
                   </div>
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary" aria-hidden="true">
                     <PlusIcon size={14} />

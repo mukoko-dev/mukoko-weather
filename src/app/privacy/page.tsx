@@ -18,7 +18,7 @@ export default function PrivacyPage() {
       <Header />
       <main id="main-content" className="mx-auto max-w-3xl px-4 py-10 pb-24 sm:pb-10 sm:px-6 md:px-8">
         <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">Privacy Policy</h1>
-        <p className="mt-2 text-sm text-text-tertiary">Last updated: February 2026</p>
+        <p className="mt-2 text-base text-text-tertiary">Last updated: February 2026</p>
 
         <div className="mt-8 space-y-8 text-text-secondary leading-relaxed">
           <section>
@@ -204,13 +204,13 @@ export default function PrivacyPage() {
                 <a href="mailto:support@mukoko.com" className="text-primary underline">support@mukoko.com</a>
               </li>
             </ul>
-            <p className="mt-3 text-sm text-text-tertiary">
+            <p className="mt-3 text-base text-text-tertiary">
               Mukoko Africa, a division of Nyuchi Africa (PVT) Ltd
             </p>
           </section>
         </div>
 
-        <nav className="mt-10 flex gap-4 text-sm" aria-label="Legal pages">
+        <nav className="mt-10 flex gap-4 text-base" aria-label="Legal pages">
           <Link href="/about" className="text-primary underline hover:text-primary/80 transition-colors">
             About
           </Link>

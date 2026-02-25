@@ -72,7 +72,7 @@ export default async function ExploreTagPage({ params }: Props) {
       <Header />
 
       <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8">
-        <ol className="flex items-center gap-1 text-xs text-text-tertiary">
+        <ol className="flex items-center gap-1 text-base text-text-tertiary">
           <li>
             <Link href="/" className="hover:text-text-secondary transition-colors">
               Home
@@ -125,7 +125,7 @@ export default async function ExploreTagPage({ params }: Props) {
                       <span className="block truncate font-medium text-text-primary transition-colors group-hover:text-primary">
                         {loc.name}
                       </span>
-                      <span className="text-xs text-text-tertiary">
+                      <span className="text-base text-text-tertiary">
                         {loc.elevation}m elevation
                       </span>
                     </div>
@@ -136,7 +136,7 @@ export default async function ExploreTagPage({ params }: Props) {
                         .map((t) => (
                           <span
                             key={t}
-                            className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary"
+                            className="rounded-full bg-primary/10 px-2 py-0.5 text-base font-medium text-primary"
                           >
                             {t}
                           </span>
@@ -153,7 +153,7 @@ export default async function ExploreTagPage({ params }: Props) {
         <div className="mt-8">
           <Link
             href="/explore"
-            className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+            className="text-base font-medium text-primary hover:text-primary/80 transition-colors"
           >
             Back to all categories
           </Link>

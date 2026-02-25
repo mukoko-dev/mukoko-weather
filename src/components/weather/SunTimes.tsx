@@ -23,21 +23,21 @@ export function SunTimes({ daily }: Props) {
           <div className="flex items-center gap-3">
             <SunriseIcon size={24} className="text-warmth" aria-hidden="true" />
             <div>
-              <p className="text-xs text-text-tertiary">Sunrise</p>
+              <p className="text-base text-text-tertiary">Sunrise</p>
               <p className="text-base font-semibold text-text-primary" aria-label={`Sunrise at ${fmt(sunrise)}`}>{fmt(sunrise)}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <SunsetIcon size={24} className="text-accent" aria-hidden="true" />
             <div>
-              <p className="text-xs text-text-tertiary">Sunset</p>
+              <p className="text-base text-text-tertiary">Sunset</p>
               <p className="text-base font-semibold text-text-primary" aria-label={`Sunset at ${fmt(sunset)}`}>{fmt(sunset)}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <SunIcon size={24} className="text-warmth" aria-hidden="true" />
             <div>
-              <p className="text-xs text-text-tertiary">Daylight</p>
+              <p className="text-base text-text-tertiary">Daylight</p>
               <p className="text-base font-semibold text-text-primary" aria-label={`${daylightHours} hours and ${daylightMinutes} minutes of daylight`}>{daylightHours}h {daylightMinutes}m</p>
             </div>
           </div>

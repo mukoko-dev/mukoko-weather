@@ -117,12 +117,12 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
           <button
             type="button"
             onClick={openReportModal}
-            className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 min-h-[44px]"
+            className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary/10 px-3 py-1.5 text-base font-medium text-primary transition-colors hover:bg-primary/20 min-h-[44px]"
           >
             + Report Weather
           </button>
         </div>
-        <p className="text-sm text-text-tertiary">No reports in the last 24 hours. Be the first to report!</p>
+        <p className="text-base text-text-tertiary">No reports in the last 24 hours. Be the first to report!</p>
       </section>
     );
   }
@@ -133,7 +133,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
         <h2 id="community-reports-heading" className="text-base font-semibold text-text-primary font-heading">
           Community Reports
           {reports.length > 0 && (
-            <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+            <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-base font-medium text-primary">
               {reports.length}
             </span>
           )}
@@ -141,7 +141,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
         <button
           type="button"
           onClick={openReportModal}
-          className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 min-h-[44px]"
+          className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary/10 px-3 py-1.5 text-base font-medium text-primary transition-colors hover:bg-primary/20 min-h-[44px]"
         >
           + Report Weather
         </button>
@@ -150,7 +150,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
       {loading && (
         <div className="flex items-center gap-2 py-4" role="status">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <span className="text-sm text-text-secondary">Loading reports...</span>
+          <span className="text-base text-text-secondary">Loading reports...</span>
           <span className="sr-only">Loading community weather reports</span>
         </div>
       )}
@@ -167,27 +167,27 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-text-primary">
+                  <span className="text-base font-medium text-text-primary">
                     {REPORT_LABELS[report.reportType] || report.reportType}
                   </span>
-                  <span className={`rounded-[var(--radius-badge)] px-1.5 py-0.5 text-[10px] font-bold uppercase ${SEVERITY_CLASSES[report.severity] || ""}`}>
+                  <span className={`rounded-[var(--radius-badge)] px-1.5 py-0.5 text-base font-bold uppercase ${SEVERITY_CLASSES[report.severity] || ""}`}>
                     {report.severity}
                   </span>
                   {report.verified && (
-                    <span className="rounded-[var(--radius-badge)] bg-severity-low/10 px-1.5 py-0.5 text-[10px] font-bold text-severity-low" title="Verified against API data">
+                    <span className="rounded-[var(--radius-badge)] bg-severity-low/10 px-1.5 py-0.5 text-base font-bold text-severity-low" title="Verified against API data">
                       Verified
                     </span>
                   )}
                 </div>
                 {report.description && (
-                  <p className="mt-0.5 text-xs text-text-secondary line-clamp-1">{report.description}</p>
+                  <p className="mt-0.5 text-base text-text-secondary line-clamp-1">{report.description}</p>
                 )}
-                <p className="mt-0.5 text-[10px] text-text-tertiary">{timeAgo(report.reportedAt)}</p>
+                <p className="mt-0.5 text-base text-text-tertiary">{timeAgo(report.reportedAt)}</p>
               </div>
               <button
                 type="button"
                 onClick={() => handleUpvote(report.id)}
-                className="flex items-center gap-1 rounded-[var(--radius-input)] px-2 py-1 text-xs text-text-tertiary transition-colors hover:text-primary hover:bg-primary/10 min-h-[44px] min-w-[44px] justify-center"
+                className="flex items-center gap-1 rounded-[var(--radius-input)] px-2 py-1 text-base text-text-tertiary transition-colors hover:text-primary hover:bg-primary/10 min-h-[44px] min-w-[44px] justify-center"
                 aria-label={`Upvote report (${report.upvotes} votes)`}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

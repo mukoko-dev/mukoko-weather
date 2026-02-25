@@ -147,7 +147,7 @@ export function WeatherReportModal() {
                 type="button"
                 onClick={() => handleTypeSelect(type.id)}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-[var(--radius-card)] border border-border bg-surface-card px-3 py-3 text-left text-sm transition-colors hover:bg-surface-dim hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[44px] disabled:opacity-50"
+                className="flex items-center gap-2 rounded-[var(--radius-card)] border border-border bg-surface-card px-3 py-3 text-left text-base transition-colors hover:bg-surface-dim hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[44px] disabled:opacity-50"
               >
                 <span className="text-lg" aria-hidden="true">{type.icon}</span>
                 <span className="text-text-primary font-medium">{type.label}</span>
@@ -162,8 +162,8 @@ export function WeatherReportModal() {
             {/* AI clarification questions */}
             {questions.length > 0 && (
               <div className="rounded-[var(--radius-card)] bg-primary/5 p-3">
-                <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-2">Help us understand</p>
-                <ul className="space-y-1 text-sm text-text-secondary">
+                <p className="text-base font-medium text-text-tertiary uppercase tracking-wider mb-2">Help us understand</p>
+                <ul className="space-y-1 text-base text-text-secondary">
                   {questions.map((q, i) => (
                     <li key={i}>{q}</li>
                   ))}
@@ -173,7 +173,7 @@ export function WeatherReportModal() {
 
             {/* Severity selection */}
             <div>
-              <p className="text-sm font-medium text-text-primary mb-2">Severity</p>
+              <p className="text-base font-medium text-text-primary mb-2">Severity</p>
               <div className="flex gap-2" role="radiogroup" aria-label="Report severity">
                 {SEVERITIES.map((s) => (
                   <button
@@ -182,7 +182,7 @@ export function WeatherReportModal() {
                     onClick={() => setSeverity(s.id)}
                     role="radio"
                     aria-checked={severity === s.id}
-                    className={`flex-1 rounded-[var(--radius-input)] border px-3 py-2 text-center text-sm font-medium transition-colors min-h-[44px] ${
+                    className={`flex-1 rounded-[var(--radius-input)] border px-3 py-2 text-center text-base font-medium transition-colors min-h-[44px] ${
                       severity === s.id
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-border text-text-secondary hover:border-primary/30"
@@ -196,7 +196,7 @@ export function WeatherReportModal() {
 
             {/* Description */}
             <div>
-              <label htmlFor="report-description" className="text-sm font-medium text-text-primary">
+              <label htmlFor="report-description" className="text-base font-medium text-text-primary">
                 Description <span className="text-text-tertiary">(optional)</span>
               </label>
               <textarea
@@ -206,13 +206,13 @@ export function WeatherReportModal() {
                 placeholder="Add any details about what you're seeing..."
                 rows={2}
                 maxLength={300}
-                className="mt-1 w-full resize-none rounded-[var(--radius-input)] border border-input bg-surface-card px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary"
+                className="mt-1 w-full resize-none rounded-[var(--radius-input)] border border-input bg-surface-card px-3 py-2 text-base text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary"
               />
-              <p className="mt-1 text-xs text-text-tertiary">{description.length}/300</p>
+              <p className="mt-1 text-base text-text-tertiary">{description.length}/300</p>
             </div>
 
             {error && (
-              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-base text-destructive">{error}</p>
             )}
 
             <div className="flex gap-2">
@@ -242,7 +242,7 @@ export function WeatherReportModal() {
                 {typeInfo?.icon || "✓"}
               </span>
             </div>
-            <p className="text-sm text-text-secondary">
+            <p className="text-base text-text-secondary">
               Your <strong>{typeInfo?.label}</strong> report has been submitted.
               Other users in the area will see it.
             </p>

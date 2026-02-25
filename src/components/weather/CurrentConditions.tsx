@@ -88,7 +88,7 @@ export function CurrentConditions({ current, locationName, daily, slug }: Props)
               type="button"
               onClick={handleShare}
               aria-label={`Share weather for ${locationName}`}
-              className="press-scale flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-[var(--radius-input)] bg-surface-base px-3 text-sm text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
+              className="press-scale flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-[var(--radius-input)] bg-surface-base px-3 text-base text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
             >
               <ShareIcon size={16} aria-hidden="true" />
               <span className="sr-only sm:not-sr-only">
@@ -153,7 +153,7 @@ function QuickStat({ icon, label, value }: { icon: React.ReactNode; label: strin
     <div role="listitem" className="flex min-w-0 items-center gap-3 rounded-[var(--radius-input)] bg-surface-base p-4">
       <span className="shrink-0 text-text-tertiary" aria-hidden="true">{icon}</span>
       <div className="min-w-0">
-        <p className="text-xs text-text-tertiary">{label}</p>
+        <p className="text-base text-text-tertiary">{label}</p>
         <p className="text-base font-medium text-text-primary" aria-label={`${label}: ${value}`}>{value}</p>
       </div>
     </div>

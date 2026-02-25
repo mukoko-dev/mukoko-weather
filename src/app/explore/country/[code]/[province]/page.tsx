@@ -90,7 +90,7 @@ export default async function ProvinceDetailPage({ params }: Props) {
       <Header />
 
       <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8">
-        <ol className="flex flex-wrap items-center gap-1 text-xs text-text-tertiary">
+        <ol className="flex flex-wrap items-center gap-1 text-base text-text-tertiary">
           <li>
             <Link href="/" className="hover:text-text-secondary transition-colors">Home</Link>
           </li>
@@ -125,7 +125,7 @@ export default async function ProvinceDetailPage({ params }: Props) {
             <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
               {provinceName}
             </h1>
-            <p className="text-sm text-text-secondary">
+            <p className="text-base text-text-secondary">
               {countryName} &bull; {locations.length} location{locations.length !== 1 ? "s" : ""}
             </p>
           </div>
@@ -142,7 +142,7 @@ export default async function ProvinceDetailPage({ params }: Props) {
                 {loc.name}
               </h2>
               {loc.elevation > 0 && (
-                <p className="mt-0.5 text-xs text-text-tertiary">
+                <p className="mt-0.5 text-base text-text-tertiary">
                   {loc.elevation.toLocaleString()} m elevation
                 </p>
               )}
@@ -150,7 +150,7 @@ export default async function ProvinceDetailPage({ params }: Props) {
                 {loc.tags.slice(0, 3).map((tag) => (
                   <span
                     key={tag}
-                    className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary"
+                    className="rounded-full bg-primary/10 px-2 py-0.5 text-base text-primary"
                   >
                     {tag}
                   </span>

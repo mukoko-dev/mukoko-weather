@@ -18,7 +18,7 @@ export default async function LocationNotFound() {
       </p>
       {locations.length > 0 && (
         <div className="mt-8">
-          <h2 className="text-sm font-semibold text-text-tertiary">Try one of these cities:</h2>
+          <h2 className="text-base font-semibold text-text-tertiary">Try one of these cities:</h2>
           <ul className="mt-3 flex flex-wrap gap-2">
             {locations.map((loc) => (
               <li key={loc.slug}>

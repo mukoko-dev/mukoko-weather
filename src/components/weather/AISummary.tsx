@@ -126,7 +126,7 @@ export function AISummary({ weather, location, onSummaryLoaded }: Props) {
 
   return (
     <section aria-label="AI weather intelligence summary">
-      <div className="rounded-[var(--radius-card)] border-l-4 border-tanzanite bg-surface-card p-5 shadow-sm sm:p-6">
+      <div className="rounded-[var(--radius-card)] border border-primary/25 border-l-[6px] border-l-tanzanite bg-surface-card p-5 shadow-sm sm:p-6">
         <div className="flex items-center gap-2">
           <SparklesIcon size={20} className="text-tanzanite" />
           <h2 className="text-lg font-semibold text-text-primary font-heading">
@@ -145,7 +145,7 @@ export function AISummary({ weather, location, onSummaryLoaded }: Props) {
           )}
 
           {error && (
-            <p className="text-sm text-text-secondary">{error}</p>
+            <p className="text-base text-text-secondary">{error}</p>
           )}
 
           {insight && !loading && (

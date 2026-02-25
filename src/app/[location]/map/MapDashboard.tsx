@@ -43,7 +43,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
 
       {/* Breadcrumb */}
       <nav aria-label="Breadcrumb" className="shrink-0 px-4 pt-2 pb-1 sm:px-6">
-        <ol className="flex items-center gap-1 text-xs text-text-tertiary">
+        <ol className="flex items-center gap-1 text-base text-text-tertiary">
           <li>
             <a href={BASE_URL} className="hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded">
               Home

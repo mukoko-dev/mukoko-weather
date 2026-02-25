@@ -38,7 +38,7 @@ function OverallBanner({ status, timestamp }: { status: string; timestamp: strin
         <p className={`font-semibold ${isOperational ? "text-severity-low" : "text-severity-moderate"}`}>
           {isOperational ? "All systems operational" : "Some systems are experiencing issues"}
         </p>
-        <p className="text-sm text-text-tertiary">
+        <p className="text-base text-text-tertiary">
           Last checked: {new Date(timestamp).toLocaleString()}
         </p>
       </div>
@@ -95,10 +95,10 @@ export function StatusDashboard() {
         <p className="font-semibold text-severity-severe">
           Unable to fetch status
         </p>
-        <p className="mt-1 text-sm text-text-secondary">{error}</p>
+        <p className="mt-1 text-base text-text-secondary">{error}</p>
         <button
           onClick={fetchStatus}
-          className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-fg transition-colors hover:bg-primary/90"
+          className="mt-4 rounded-md bg-primary px-4 py-2 text-base font-medium text-primary-fg transition-colors hover:bg-primary/90"
         >
           Retry
         </button>
@@ -126,10 +126,10 @@ export function StatusDashboard() {
                 <h3 className="font-semibold text-text-primary">{check.name}</h3>
                 <StatusBadge status={check.status} />
               </div>
-              <p className="mt-0.5 text-sm text-text-secondary">{check.message}</p>
+              <p className="mt-0.5 text-base text-text-secondary">{check.message}</p>
             </div>
             <div className="flex-shrink-0 text-right">
-              <p className="text-sm font-medium text-text-tertiary">
+              <p className="text-base font-medium text-text-tertiary">
                 {check.latencyMs}ms
               </p>
             </div>
@@ -137,7 +137,7 @@ export function StatusDashboard() {
         ))}
       </div>
 
-      <div className="mt-6 flex items-center justify-between text-sm text-text-tertiary">
+      <div className="mt-6 flex items-center justify-between text-base text-text-tertiary">
         <p>Total check time: {data.totalLatencyMs}ms</p>
         <button
           onClick={fetchStatus}
@@ -148,7 +148,7 @@ export function StatusDashboard() {
         </button>
       </div>
 
-      <div className="mt-8 rounded-[var(--radius-card)] bg-surface-card p-4 text-sm text-text-secondary">
+      <div className="mt-8 rounded-[var(--radius-card)] bg-surface-card p-4 text-base text-text-secondary">
         <h3 className="font-semibold text-text-primary">About these checks</h3>
         <ul className="mt-2 space-y-1.5">
           <li>

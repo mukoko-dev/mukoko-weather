@@ -224,8 +224,8 @@ function SuitabilityGauge({
     <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm" role="group" aria-label={label}>
       <div className="flex items-center gap-2">
         <span className="text-lg" aria-hidden="true">{icon}</span>
-        <p className="text-sm font-semibold text-text-primary">{label}</p>
-        <span className={`ml-auto rounded-[var(--radius-badge)] px-2 py-0.5 text-xs font-bold ${bgClass} ${colorClass}`}>
+        <p className="text-base font-semibold text-text-primary">{label}</p>
+        <span className={`ml-auto rounded-[var(--radius-badge)] px-2 py-0.5 text-base font-bold ${bgClass} ${colorClass}`}>
           {levelLabel}
         </span>
       </div>
@@ -233,7 +233,7 @@ function SuitabilityGauge({
       <div className="mt-3 h-2 w-full rounded-full bg-surface-dim" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${label}: ${levelLabel}`}>
         <div className={`h-full rounded-full transition-all ${bgClass.replace("/10", "")}`} style={{ width: `${pct}%` }} />
       </div>
-      <p className="mt-2 text-xs text-text-secondary">{detail}</p>
+      <p className="mt-2 text-base text-text-secondary">{detail}</p>
     </div>
   );
 }
@@ -623,7 +623,7 @@ export function HistoryDashboard() {
       {/* Search and filters */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
         <div className="relative flex-1">
-          <label htmlFor="history-search" className="mb-1 block text-sm font-medium text-text-secondary">Location</label>
+          <label htmlFor="history-search" className="mb-1 block text-base font-medium text-text-secondary">Location</label>
           <input
             id="history-search"
             type="text"
@@ -631,17 +631,17 @@ export function HistoryDashboard() {
             onChange={(e) => { setQuery(e.target.value); setShowDropdown(true); }}
             onFocus={() => setShowDropdown(true)}
             placeholder="Search locations..."
-            className="w-full rounded-[var(--radius-input)] border border-input bg-surface-card px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full rounded-[var(--radius-input)] border border-input bg-surface-card px-3 py-2 text-base text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary"
             autoComplete="off"
           />
           {showDropdown && (results.length > 0 || searchLoading) && (
             <ul className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-[var(--radius-input)] border border-input bg-surface-card shadow-md">
               {searchLoading && results.length === 0 && (
-                <li className="px-3 py-2 text-sm text-text-tertiary">Searching...</li>
+                <li className="px-3 py-2 text-base text-text-tertiary">Searching...</li>
               )}
               {results.map((loc) => (
                 <li key={loc.slug}>
-                  <button type="button" className="w-full px-3 py-2 text-left text-sm text-text-primary hover:bg-surface-dim transition-colors" onClick={() => handleSelectLocation(loc)}>
+                  <button type="button" className="w-full px-3 py-2 text-left text-base text-text-primary hover:bg-surface-dim transition-colors" onClick={() => handleSelectLocation(loc)}>
                     <span className="font-medium">{loc.name}</span>
                     <span className="ml-2 text-text-tertiary">{loc.province}</span>
                   </button>
@@ -651,8 +651,8 @@ export function HistoryDashboard() {
           )}
         </div>
         <div>
-          <label htmlFor="history-days" className="mb-1 block text-sm font-medium text-text-secondary">Time period</label>
-          <select id="history-days" value={days} onChange={(e) => handleDaysChange(Number(e.target.value) as DayRange)} className="rounded-[var(--radius-input)] border border-input bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary">
+          <label htmlFor="history-days" className="mb-1 block text-base font-medium text-text-secondary">Time period</label>
+          <select id="history-days" value={days} onChange={(e) => handleDaysChange(Number(e.target.value) as DayRange)} className="rounded-[var(--radius-input)] border border-input bg-surface-card px-3 py-2 text-base text-text-primary focus:outline-none focus:ring-2 focus:ring-primary">
             {DAY_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
           </select>
         </div>
@@ -669,7 +669,7 @@ export function HistoryDashboard() {
                 key={opt.id}
                 onClick={() => setCategoryFilter(opt.id)}
                 aria-pressed={active}
-                className={`min-h-[44px] rounded-[var(--radius-badge)] px-4 py-2 text-sm font-medium transition-colors ${
+                className={`min-h-[44px] rounded-[var(--radius-badge)] px-4 py-2 text-base font-medium transition-colors ${
                   active
                     ? style ? style.badge : "bg-primary text-primary-foreground"
                     : "bg-surface-base text-text-secondary hover:text-text-primary"
@@ -689,7 +689,7 @@ export function HistoryDashboard() {
             role="tab"
             aria-selected={activeTab === "weather"}
             onClick={() => setActiveTab("weather")}
-            className={`flex-1 min-h-[44px] rounded-[var(--radius-input)] px-4 py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 min-h-[44px] rounded-[var(--radius-input)] px-4 py-2 text-base font-medium transition-colors ${
               activeTab === "weather" ? "bg-surface-card text-text-primary shadow-sm" : "text-text-tertiary hover:text-text-secondary"
             }`}
           >
@@ -699,7 +699,7 @@ export function HistoryDashboard() {
             role="tab"
             aria-selected={activeTab === "insights"}
             onClick={() => setActiveTab("insights")}
-            className={`flex-1 min-h-[44px] rounded-[var(--radius-input)] px-4 py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 min-h-[44px] rounded-[var(--radius-input)] px-4 py-2 text-base font-medium transition-colors ${
               activeTab === "insights" ? "bg-surface-card text-text-primary shadow-sm" : "text-text-tertiary hover:text-text-secondary"
             }`}
           >
@@ -711,25 +711,25 @@ export function HistoryDashboard() {
       {loading && (
         <div className="flex items-center justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <span className="ml-3 text-sm text-text-secondary">Loading history...</span>
+          <span className="ml-3 text-base text-text-secondary">Loading history...</span>
         </div>
       )}
 
       {error && (
-        <div className="rounded-[var(--radius-card)] border border-destructive/30 bg-frost-severe-bg p-4 text-sm text-destructive">{error}</div>
+        <div className="rounded-[var(--radius-card)] border border-destructive/30 bg-frost-severe-bg p-4 text-base text-destructive">{error}</div>
       )}
 
       {fetched && !loading && !error && records.length === 0 && selectedLocation && (
         <div className="rounded-[var(--radius-card)] bg-surface-card p-8 text-center">
           <p className="text-text-secondary">No historical data recorded for {selectedLocation.name} in the last {days} days.</p>
-          <p className="mt-2 text-xs text-text-tertiary">Historical data is recorded each time weather is fetched. Data builds up over time as the service is used.</p>
+          <p className="mt-2 text-base text-text-tertiary">Historical data is recorded each time weather is fetched. Data builds up over time as the service is used.</p>
         </div>
       )}
 
       {!fetched && !loading && (
         <div className="rounded-[var(--radius-card)] bg-surface-card p-8 text-center">
           <p className="text-text-secondary">Select a location above to view its historical weather data.</p>
-          <p className="mt-2 text-xs text-text-tertiary">Browse temperature trends, precipitation totals, UV exposure, wind patterns, and activity insights over time.</p>
+          <p className="mt-2 text-base text-text-tertiary">Browse temperature trends, precipitation totals, UV exposure, wind patterns, and activity insights over time.</p>
         </div>
       )}
 
@@ -740,7 +740,7 @@ export function HistoryDashboard() {
         <>
           <section aria-labelledby="history-summary">
             <h2 id="history-summary" className="text-lg font-semibold text-text-primary font-heading">{selectedLocation?.name} — {DAY_OPTIONS.find((o) => o.value === days)?.label} summary</h2>
-            <h3 className="mt-4 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Temperature</h3>
+            <h3 className="mt-4 text-base font-semibold uppercase tracking-wider text-text-tertiary">Temperature</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Avg High" value={`${stats.avgHigh}°C`} />
               <StatCard label="Avg Low" value={`${stats.avgLow}°C`} />
@@ -749,13 +749,13 @@ export function HistoryDashboard() {
               <StatCard label="Feels-Like High" value={`${stats.avgFeelsHigh}°C`} />
               <StatCard label="Feels-Like Low" value={`${stats.avgFeelsLow}°C`} />
             </div>
-            <h3 className="mt-4 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Precipitation</h3>
+            <h3 className="mt-4 text-base font-semibold uppercase tracking-wider text-text-tertiary">Precipitation</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Total Rain" value={`${stats.totalRain} mm`} />
               <StatCard label="Rainy Days" value={`${stats.rainyDays}`} />
               <StatCard label="Avg Rain Chance" value={`${stats.avgRainProb}%`} />
             </div>
-            <h3 className="mt-4 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Atmosphere</h3>
+            <h3 className="mt-4 text-base font-semibold uppercase tracking-wider text-text-tertiary">Atmosphere</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Avg Humidity" value={`${stats.avgHumidity}%`} />
               <StatCard label="Avg Cloud Cover" value={`${stats.avgCloudCover}%`} />
@@ -763,7 +763,7 @@ export function HistoryDashboard() {
               <StatCard label="Avg UV" value={`${stats.avgUv} (${uvLevel(stats.avgUv).label})`} />
               <StatCard label="Peak UV" value={`${stats.maxUv}`} />
             </div>
-            <h3 className="mt-4 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Wind & Daylight</h3>
+            <h3 className="mt-4 text-base font-semibold uppercase tracking-wider text-text-tertiary">Wind & Daylight</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Avg Wind" value={`${stats.avgWind} km/h`} />
               <StatCard label="Max Gusts" value={`${stats.maxGusts} km/h`} />
@@ -791,10 +791,10 @@ export function HistoryDashboard() {
             <ChartErrorBoundary name="temperature trend">
               <section aria-labelledby="history-temp-chart">
                 <h2 id="history-temp-chart" className="text-lg font-semibold text-text-primary font-heading">Temperature trend</h2>
-                <p className="mt-1 text-xs text-text-tertiary">Actual high/low and feels-like (apparent) temperatures</p>
+                <p className="mt-1 text-base text-text-tertiary">Actual high/low and feels-like (apparent) temperatures</p>
                 <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
                   <TemperatureTrendChart data={chartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                  <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-xs text-text-tertiary">
+                  <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-base text-text-tertiary">
                     <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded-sm bg-chart-1" /> High</span>
                     <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded-sm bg-chart-2" /> Low</span>
                     <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-3" /> Feels High</span>
@@ -812,7 +812,7 @@ export function HistoryDashboard() {
                 <h2 id="history-rain-chart" className="text-lg font-semibold text-text-primary font-heading">Precipitation & rain probability</h2>
                 <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
                   <PrecipitationChart data={chartData} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                  <div className="mt-2 flex items-center justify-center gap-4 text-xs text-text-tertiary">
+                  <div className="mt-2 flex items-center justify-center gap-4 text-base text-text-tertiary">
                     <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-rain opacity-60" /> Rainfall</span>
                     <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-5" /> Probability</span>
                   </div>
@@ -828,7 +828,7 @@ export function HistoryDashboard() {
                 <h2 id="history-uv-cloud-chart" className="text-lg font-semibold text-text-primary font-heading">UV index & cloud cover</h2>
                 <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
                   <UVCloudChart data={chartData} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                  <div className="mt-2 flex items-center justify-center gap-4 text-xs text-text-tertiary">
+                  <div className="mt-2 flex items-center justify-center gap-4 text-base text-text-tertiary">
                     <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-chart-3 opacity-50" /> UV Index</span>
                     <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 bg-chart-2" /> Cloud Cover</span>
                   </div>
@@ -844,7 +844,7 @@ export function HistoryDashboard() {
                 <h2 id="history-wind-chart" className="text-lg font-semibold text-text-primary font-heading">Wind speed & gusts</h2>
                 <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
                   <WindSpeedChart data={chartData} labelKey="date" showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                  <div className="mt-2 flex items-center justify-center gap-4 text-xs text-text-tertiary">
+                  <div className="mt-2 flex items-center justify-center gap-4 text-base text-text-tertiary">
                     <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded-sm bg-chart-1" /> Speed</span>
                     <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-4" /> Gusts</span>
                   </div>
@@ -883,7 +883,7 @@ export function HistoryDashboard() {
               <ChartErrorBoundary name="daylight hours">
                 <section aria-labelledby="history-daylight-chart">
                   <h2 id="history-daylight-chart" className="text-lg font-semibold text-text-primary font-heading">Daylight hours</h2>
-                  <p className="mt-1 text-xs text-text-tertiary">Sunrise to sunset duration — useful for farming and outdoor planning</p>
+                  <p className="mt-1 text-base text-text-tertiary">Sunrise to sunset duration — useful for farming and outdoor planning</p>
                   <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
                     <DaylightChart data={chartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
                   </div>
@@ -897,7 +897,7 @@ export function HistoryDashboard() {
             <section aria-labelledby="history-table-heading">
               <h2 id="history-table-heading" className="text-lg font-semibold text-text-primary font-heading">Daily records</h2>
               <div className="mt-3 overflow-x-auto rounded-[var(--radius-card)] bg-surface-card shadow-sm [overscroll-behavior-x:contain]">
-                <table className="w-full text-left text-sm">
+                <table className="w-full text-left text-base">
                   <thead>
                     <tr className="border-b border-text-tertiary/10">
                       <th className="px-3 py-3 font-medium text-text-secondary">Date</th>
@@ -921,28 +921,28 @@ export function HistoryDashboard() {
                   <tbody>
                     {records.slice().reverse().slice(0, visibleRowCount).map((r) => (
                       <tr key={r.date} className="border-b border-text-tertiary/5 hover:bg-surface-dim/50 transition-colors">
-                        <td className="px-3 py-2 text-text-primary font-mono text-xs whitespace-nowrap">{new Date(r.date).toLocaleDateString("en-ZW", { day: "numeric", month: "short", year: "numeric" })}</td>
-                        <td className="px-3 py-2 text-text-secondary text-xs truncate max-w-[120px]" title={r.condition}>{r.condition}</td>
+                        <td className="px-3 py-2 text-text-primary font-mono text-base whitespace-nowrap">{new Date(r.date).toLocaleDateString("en-ZW", { day: "numeric", month: "short", year: "numeric" })}</td>
+                        <td className="px-3 py-2 text-text-secondary text-base truncate max-w-[120px]" title={r.condition}>{r.condition}</td>
                         <td className="px-3 py-2 text-right text-text-primary">{r.tempHigh}°</td>
                         <td className="px-3 py-2 text-right text-text-secondary">{r.tempLow}°</td>
-                        <td className="hidden px-3 py-2 text-right text-text-tertiary text-xs sm:table-cell">{r.feelsLikeHigh}°/{r.feelsLikeLow}°</td>
+                        <td className="hidden px-3 py-2 text-right text-text-tertiary text-base sm:table-cell">{r.feelsLikeHigh}°/{r.feelsLikeLow}°</td>
                         <td className="px-3 py-2 text-right text-text-secondary">{r.precipitation} mm</td>
                         <td className="hidden px-3 py-2 text-right text-text-tertiary md:table-cell">{r.rainProbability}%</td>
                         <td className="hidden px-3 py-2 text-right text-text-secondary sm:table-cell">{r.humidity}%</td>
                         <td className="hidden px-3 py-2 text-right text-text-tertiary md:table-cell">{r.cloudCover}%</td>
                         <td className="hidden px-3 py-2 text-right text-text-secondary sm:table-cell">{r.windSpeed}</td>
                         <td className="hidden px-3 py-2 text-right text-text-tertiary md:table-cell">{r.windGusts}</td>
-                        <td className="hidden px-3 py-2 text-right text-text-tertiary text-xs lg:table-cell">{r.windDirectionLabel}</td>
+                        <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">{r.windDirectionLabel}</td>
                         <td className="hidden px-3 py-2 text-right text-text-secondary md:table-cell">{Math.round(r.uvIndex)}</td>
-                        <td className="hidden px-3 py-2 text-right text-text-tertiary text-xs lg:table-cell">{r.pressure}</td>
-                        <td className="hidden px-3 py-2 text-right text-text-tertiary text-xs lg:table-cell">{r.sunrise}</td>
-                        <td className="hidden px-3 py-2 text-right text-text-tertiary text-xs lg:table-cell">{r.sunset}</td>
+                        <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">{r.pressure}</td>
+                        <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">{r.sunrise}</td>
+                        <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">{r.sunset}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
                 {records.length > visibleRowCount && (
-                  <div ref={tableEndRef} className="py-4 text-center text-xs text-text-tertiary">Loading more rows...</div>
+                  <div ref={tableEndRef} className="py-4 text-center text-base text-text-tertiary">Loading more rows...</div>
                 )}
               </div>
             </section>
@@ -958,7 +958,7 @@ export function HistoryDashboard() {
           {!hasInsights && (
             <div className="rounded-[var(--radius-card)] bg-surface-card p-8 text-center">
               <p className="text-text-secondary">No insights data available for this period.</p>
-              <p className="mt-2 text-xs text-text-tertiary">
+              <p className="mt-2 text-base text-text-tertiary">
                 Insights (dew point, heat stress, thunderstorm risk, visibility, GDD) are recorded when
                 Tomorrow.io is the weather provider. Data will appear here as it accumulates.
               </p>
@@ -972,7 +972,7 @@ export function HistoryDashboard() {
                 <h2 id="history-suitability" className="text-lg font-semibold text-text-primary font-heading">
                   Activity Suitability — {DAY_OPTIONS.find((o) => o.value === days)?.label} overview
                 </h2>
-                <p className="mt-1 text-xs text-text-tertiary">
+                <p className="mt-1 text-base text-text-tertiary">
                   Based on {insightsStats.insightDays} days of Tomorrow.io insights data
                 </p>
                 {filteredSuitability.length > 0 ? (
@@ -991,14 +991,14 @@ export function HistoryDashboard() {
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-3 text-sm text-text-tertiary">No suitability data for this category.</p>
+                  <p className="mt-3 text-base text-text-tertiary">No suitability data for this category.</p>
                 )}
               </section>
 
               {/* ── Insights summary stats ──────────────────────────────── */}
               <section aria-labelledby="history-insights-stats">
                 <h2 id="history-insights-stats" className="text-lg font-semibold text-text-primary font-heading">Insights summary</h2>
-                <h3 className="mt-4 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Safety & Comfort</h3>
+                <h3 className="mt-4 text-base font-semibold uppercase tracking-wider text-text-tertiary">Safety & Comfort</h3>
                 <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <StatCard label="Avg Heat Stress" value={`${insightsStats.avgHeatStress} (${heatStressLevel(insightsStats.avgHeatStress).label})`} />
                   <StatCard label="Peak Heat Stress" value={`${insightsStats.maxHeatStress} (${heatStressLevel(insightsStats.maxHeatStress).label})`} />
@@ -1007,7 +1007,7 @@ export function HistoryDashboard() {
                   <StatCard label="Avg UV Concern" value={`${insightsStats.avgUvConcern} (${uvConcernLabel(insightsStats.avgUvConcern).label})`} />
                   <StatCard label="Avg Visibility" value={`${insightsStats.avgVisibility} km`} />
                 </div>
-                <h3 className="mt-4 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Farming & Agriculture</h3>
+                <h3 className="mt-4 text-base font-semibold uppercase tracking-wider text-text-tertiary">Farming & Agriculture</h3>
                 <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <StatCard label="Avg Dew Point" value={`${insightsStats.avgDewPoint}°C`} />
                   <StatCard label="Avg GDD (Maize)" value={`${insightsStats.avgGddMaize}`} />
@@ -1022,7 +1022,7 @@ export function HistoryDashboard() {
                   <ChartErrorBoundary name="heat stress">
                     <section aria-labelledby="history-heat-stress-chart">
                       <h2 id="history-heat-stress-chart" className="text-lg font-semibold text-text-primary font-heading">Heat stress index</h2>
-                      <p className="mt-1 text-xs text-text-tertiary">EZ Heat Stress Index — above 24 is moderate, above 28 is severe</p>
+                      <p className="mt-1 text-base text-text-tertiary">EZ Heat Stress Index — above 24 is moderate, above 28 is severe</p>
                       <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
                         <HeatStressChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
                       </div>
@@ -1037,7 +1037,7 @@ export function HistoryDashboard() {
                   <ChartErrorBoundary name="thunderstorm probability">
                     <section aria-labelledby="history-thunderstorm-chart">
                       <h2 id="history-thunderstorm-chart" className="text-lg font-semibold text-text-primary font-heading">Thunderstorm probability</h2>
-                      <p className="mt-1 text-xs text-text-tertiary">Lightning and storm risk — above 40% unsafe for sports, above 50% unsafe for mining</p>
+                      <p className="mt-1 text-base text-text-tertiary">Lightning and storm risk — above 40% unsafe for sports, above 50% unsafe for mining</p>
                       <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
                         <ThunderstormChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
                       </div>
@@ -1052,7 +1052,7 @@ export function HistoryDashboard() {
                   <ChartErrorBoundary name="dew point">
                     <section aria-labelledby="history-dewpoint-chart">
                       <h2 id="history-dewpoint-chart" className="text-lg font-semibold text-text-primary font-heading">Dew point</h2>
-                      <p className="mt-1 text-xs text-text-tertiary">Below 5°C indicates cold, dry air stress; above 20°C indicates crop disease risk</p>
+                      <p className="mt-1 text-base text-text-tertiary">Below 5°C indicates cold, dry air stress; above 20°C indicates crop disease risk</p>
                       <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
                         <DewPointChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
                       </div>
@@ -1067,7 +1067,7 @@ export function HistoryDashboard() {
                   <ChartErrorBoundary name="visibility">
                     <section aria-labelledby="history-visibility-chart">
                       <h2 id="history-visibility-chart" className="text-lg font-semibold text-text-primary font-heading">Visibility</h2>
-                      <p className="mt-1 text-xs text-text-tertiary">Below 5 km is reduced, below 1 km is very poor — affects travel and photography</p>
+                      <p className="mt-1 text-base text-text-tertiary">Below 5 km is reduced, below 1 km is very poor — affects travel and photography</p>
                       <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
                         <VisibilityChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
                       </div>
@@ -1082,10 +1082,10 @@ export function HistoryDashboard() {
                   <ChartErrorBoundary name="growing degree days">
                     <section aria-labelledby="history-gdd-chart">
                       <h2 id="history-gdd-chart" className="text-lg font-semibold text-text-primary font-heading">Growing degree days (GDD)</h2>
-                      <p className="mt-1 text-xs text-text-tertiary">Crop growth potential — higher values mean more growth for that day</p>
+                      <p className="mt-1 text-base text-text-tertiary">Crop growth potential — higher values mean more growth for that day</p>
                       <div className="mt-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
                         <GDDChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                        <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-xs text-text-tertiary">
+                        <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-base text-text-tertiary">
                           <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded-sm bg-mineral-malachite" /> Maize/Soybean</span>
                           <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-3" /> Sorghum</span>
                           <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-4" /> Potatoes</span>

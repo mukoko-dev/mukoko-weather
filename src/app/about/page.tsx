@@ -149,7 +149,7 @@ export default function AboutPage() {
           </dl>
         </section>
 
-        <nav className="mt-10 flex gap-4 text-sm" aria-label="Legal pages">
+        <nav className="mt-10 flex gap-4 text-base" aria-label="Legal pages">
           <Link href="/privacy" className="text-primary underline hover:text-primary/80 transition-colors">
             Privacy Policy
           </Link>

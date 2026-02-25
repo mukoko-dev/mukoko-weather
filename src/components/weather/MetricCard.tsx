@@ -12,10 +12,10 @@ export interface GaugeConfig {
   strokeClass: string
 }
 
-const ARC_RADIUS = 20
-const ARC_CIRCUMFERENCE = 2 * Math.PI * ARC_RADIUS // ~125.66
+const ARC_RADIUS = 26
+const ARC_CIRCUMFERENCE = 2 * Math.PI * ARC_RADIUS // ~163.36
 const ARC_SWEEP = 0.75 // 270° / 360°
-const ARC_LENGTH = ARC_CIRCUMFERENCE * ARC_SWEEP // ~94.25
+const ARC_LENGTH = ARC_CIRCUMFERENCE * ARC_SWEEP // ~122.52
 
 export function ArcGauge({ percent, strokeClass, value }: GaugeConfig & { value: string }) {
   const filledLength = (percent / 100) * ARC_LENGTH
@@ -30,39 +30,39 @@ export function ArcGauge({ percent, strokeClass, value }: GaugeConfig & { value:
       aria-label={`${value}`}
     >
       <svg
-        width="56"
-        height="56"
-        viewBox="0 0 48 48"
+        width="72"
+        height="72"
+        viewBox="0 0 64 64"
         className="overflow-visible"
         aria-hidden="true"
       >
         {/* Track arc (background) */}
         <circle
-          cx="24"
-          cy="24"
+          cx="32"
+          cy="32"
           r={ARC_RADIUS}
           fill="none"
           className="stroke-text-tertiary/15"
           strokeWidth="5"
           strokeLinecap="round"
           strokeDasharray={`${ARC_LENGTH} ${ARC_CIRCUMFERENCE}`}
-          transform="rotate(135 24 24)"
+          transform="rotate(135 32 32)"
         />
         {/* Value arc (foreground) */}
         <circle
-          cx="24"
-          cy="24"
+          cx="32"
+          cy="32"
           r={ARC_RADIUS}
           fill="none"
           className={`${strokeClass} transition-all duration-500`}
           strokeWidth="5"
           strokeLinecap="round"
           strokeDasharray={`${filledLength} ${ARC_CIRCUMFERENCE}`}
-          transform="rotate(135 24 24)"
+          transform="rotate(135 32 32)"
         />
       </svg>
       {/* Value text centered in the arc */}
-      <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-text-primary">
+      <span className="absolute inset-0 flex items-center justify-center text-base font-bold text-text-primary">
         {value}
       </span>
     </div>
@@ -100,7 +100,7 @@ export function MetricCard({
           <span className="text-text-tertiary" aria-hidden="true">
             {icon}
           </span>
-          <p className="text-sm font-medium text-text-secondary">{label}</p>
+          <p className="text-base font-medium text-text-secondary">{label}</p>
         </div>
         <p className={`mt-1 text-base ${contextColor}`}>{context}</p>
       </div>

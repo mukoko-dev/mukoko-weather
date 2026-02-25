@@ -8,8 +8,8 @@ interface SeasonBadgeProps {
 export function SeasonBadge({ season }: SeasonBadgeProps) {
   return (
     <Badge className="max-w-full gap-2 px-3 py-1">
-      <span className="shrink-0 text-sm font-semibold">{season.shona}</span>
-      <span className="truncate text-sm font-normal text-text-secondary">
+      <span className="shrink-0 text-base font-semibold">{season.shona}</span>
+      <span className="truncate text-base font-normal text-text-secondary">
         {season.name} — {season.description}
       </span>
     </Badge>
