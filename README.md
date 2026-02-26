@@ -49,7 +49,7 @@ AI-powered weather intelligence, starting with Zimbabwe and expanding globally. 
 | Analytics | [Google Analytics 4](https://analytics.google.com) |
 | 3D Animations | [Three.js](https://threejs.org) (weather-aware loading scenes) |
 | Testing | [Vitest](https://vitest.dev) (TypeScript, v8 coverage) + [pytest](https://pytest.org) (Python) |
-| CI/CD | [GitHub Actions](https://github.com/features/actions) (single `ci` job: lint → typecheck → TypeScript tests → Python tests; Claude AI review on PRs; post-deploy DB init) |
+| CI/CD | [GitHub Actions](https://github.com/features/actions) (CI: lint → typecheck → tests; [CodeQL](https://codeql.github.com/) security scanning; Claude AI review on PRs; post-deploy DB init) |
 | Deployment | [Vercel](https://vercel.com) |
 
 ## Getting Started
@@ -311,9 +311,10 @@ public/
 .github/
   ISSUE_TEMPLATE/           # Bug report and feature request templates (YAML forms)
   workflows/
-    ci.yml                  # Single job: lint → typecheck → TypeScript tests → Python tests
-    claude-code-review.yml  # Claude AI code review on PRs
+    ci.yml                  # Lint → typecheck → TypeScript tests → Python tests (concurrency-grouped)
+    claude-code-review.yml  # Claude AI code review on PRs (token-guarded, concurrency-grouped)
     claude.yml              # Claude Code for @claude mentions in issues/PRs
+    codeql.yml              # CodeQL security scanning (JS/TS, Python, Actions)
     db-init.yml             # Post-deploy DB seed data sync (Vercel deployment webhook)
 ```
 
@@ -322,14 +323,18 @@ public/
 This app targets **WCAG 3.0 APCA/AAA** compliance:
 
 - APCA-verified color contrast (Lc 106/78/62 for primary/secondary/tertiary text)
-- Skip-to-main-content link
-- 3px focus-visible outlines with theme-aware colors
-- `prefers-reduced-motion` support (disables all animations)
+- Skip-to-main-content link (`<a href="#main-content">` in root layout, visually hidden until focused)
+- ARIA landmarks on all layout components (`role="banner"`, `role="navigation"`, `role="contentinfo"`)
+- Descriptive `aria-label` on navigation regions (e.g., "Main navigation", "Mobile navigation")
+- `aria-current="page"` on active navigation links
+- 3px `focus-visible` outlines with theme-aware colors (`--color-focus-ring`); mouse clicks suppress outlines via `focus:not(:focus-visible)`
+- `prefers-reduced-motion` support (disables all animations and transitions)
 - `prefers-contrast: more` support (maximum contrast overrides)
-- Windows High Contrast / `forced-colors` support
-- Semantic HTML with proper heading hierarchy and ARIA landmarks
+- Windows High Contrast / `forced-colors` support (uses `Highlight` system color for focus)
+- Semantic HTML with proper heading hierarchy
 - Keyboard-navigable location selector with Escape key support
 - Minimum 44px touch targets for mobile
+- Screen reader utilities (`.sr-only` class) on all loading states and decorative elements
 
 ## SEO
 

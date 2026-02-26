@@ -61,6 +61,28 @@ describe("Alert", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Tabs — focus-visible validation
+// ---------------------------------------------------------------------------
+
+describe("Tabs", () => {
+  it("exports Tabs, TabsList, TabsTrigger, TabsContent", async () => {
+    const mod = await import("./tabs");
+    expect(mod.Tabs).toBeDefined();
+    expect(mod.TabsList).toBeDefined();
+    expect(mod.TabsTrigger).toBeDefined();
+    expect(mod.TabsContent).toBeDefined();
+  });
+
+  it("TabsTrigger has focus-visible styles for keyboard accessibility", async () => {
+    const { readFileSync } = await import("fs");
+    const { resolve } = await import("path");
+    const src = readFileSync(resolve(__dirname, "tabs.tsx"), "utf-8");
+    expect(src).toContain("focus-visible:outline");
+    expect(src).toContain("focus-visible:outline-primary");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Accordion — export validation
 // ---------------------------------------------------------------------------
 

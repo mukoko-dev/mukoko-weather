@@ -27,6 +27,7 @@ export interface DevicePreferences {
   theme: string;
   selectedLocation: string;
   savedLocations: string[];
+  locationLabels: Record<string, string>;
   selectedActivities: string[];
   hasOnboarded: boolean;
 }
@@ -225,6 +226,7 @@ export function readLocalStoragePrefs(): DevicePreferences | null {
       theme: state.theme ?? "system",
       selectedLocation: state.selectedLocation ?? "harare",
       savedLocations: state.savedLocations ?? [],
+      locationLabels: state.locationLabels ?? {},
       selectedActivities: state.selectedActivities ?? [],
       hasOnboarded: state.hasOnboarded ?? false,
     };

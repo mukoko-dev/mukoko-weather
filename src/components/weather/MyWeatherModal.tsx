@@ -3,10 +3,9 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { useAppStore, type ThemePreference } from "@/lib/store";
-import { MapPinIcon, SearchIcon, SunIcon, MoonIcon } from "@/lib/weather-icons";
+import { useAppStore, MAX_SAVED_LOCATIONS, type ThemePreference } from "@/lib/store";
+import { MapPinIcon, SearchIcon, SunIcon, MoonIcon, TrashIcon, NavigationIcon } from "@/lib/weather-icons";
 import { ActivityIcon } from "@/lib/weather-icons";
-import type { WeatherLocation } from "@/lib/locations";
 import { detectUserLocation, type GeoResult } from "@/lib/geolocation";
 import {
   type Activity,
@@ -20,19 +19,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useDebounce } from "@/lib/use-debounce";
 import { cn } from "@/lib/utils";
-
-const POPULAR_SLUGS = [
-  "harare", "bulawayo", "mutare", "gweru", "masvingo",
-  "victoria-falls", "kariba", "marondera", "chinhoyi", "kwekwe",
-];
-
-// Tag labels — fetched from API when available, with inline fallbacks.
-// These are display labels only; not structural data.
-const DEFAULT_TAG_LABELS: Record<string, string> = {
-  city: "Cities", farming: "Farming", mining: "Mining", tourism: "Tourism",
-  "national-park": "National Parks", education: "Education", border: "Border", travel: "Travel",
-};
 
 /** Default category style for unknown categories */
 const DEFAULT_CATEGORY_STYLE = {
@@ -51,15 +39,6 @@ function MonitorIcon({ size = 20 }: { size?: number }) {
 }
 
 /** Debounce hook — returns the debounced value after delay ms */
-function useDebounce<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-  return debounced;
-}
-
 export function MyWeatherModal() {
   const closeMyWeather = useAppStore((s) => s.closeMyWeather);
   const myWeatherOpen = useAppStore((s) => s.myWeatherOpen);
@@ -68,15 +47,12 @@ export function MyWeatherModal() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Track pending location selection (deferred navigation)
   const currentSlug = pathname?.replace("/", "") || "harare";
   const [pendingSlug, setPendingSlug] = useState(currentSlug);
-  const [activeTab, setActiveTab] = useState("location");
+  const [activeTab, setActiveTab] = useState("saved");
 
   const [allActivities, setAllActivities] = useState<Activity[]>(ACTIVITIES);
   const [activityCategories, setActivityCategories] = useState<ActivityCategoryDoc[]>(CATEGORIES);
-  const [tagLabels, setTagLabels] = useState<Record<string, string>>(DEFAULT_TAG_LABELS);
-  const [tagOrder, setTagOrder] = useState<string[]>(Object.keys(DEFAULT_TAG_LABELS));
 
   // Build a category styles lookup from API data
   const categoryStyles = useMemo(() => {
@@ -93,7 +69,6 @@ export function MyWeatherModal() {
   }, [categoryStyles]);
 
   useEffect(() => {
-    // Fetch activities, categories, and tags (but NOT all locations)
     Promise.all([
       fetch("/api/py/activities")
         .then((res) => (res.ok ? res.json() : null))
@@ -102,21 +77,6 @@ export function MyWeatherModal() {
       fetch("/api/py/activities?mode=categories")
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => { if (data?.categories?.length) setActivityCategories(data.categories); })
-        .catch(() => {}),
-      fetch("/api/py/tags")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data?.tags?.length) {
-            const labels: Record<string, string> = {};
-            const order: string[] = [];
-            for (const t of data.tags) {
-              labels[t.slug] = t.label;
-              order.push(t.slug);
-            }
-            setTagLabels(labels);
-            setTagOrder(order);
-          }
-        })
         .catch(() => {}),
     ]);
   }, []);
@@ -133,24 +93,15 @@ export function MyWeatherModal() {
   const handleOpenChange = (open: boolean) => {
     if (open) {
       setPendingSlug(currentSlug);
-      setActiveTab("location");
+      setActiveTab("saved");
     } else {
       handleDone();
     }
   };
 
-  /** When user selects a location, auto-advance to activities tab */
-  const handleSelectLocation = useCallback((slug: string) => {
+  /** When user selects a location from saved, navigate and close */
+  const handleSelectSavedLocation = useCallback((slug: string) => {
     setPendingSlug(slug);
-    // Brief delay so user sees their selection highlighted before switching
-    setTimeout(() => setActiveTab("activities"), 250);
-  }, []);
-
-  /** When a location is detected/created via geolocation, set as pending and
-   *  advance to Activities tab — same deferred navigation as manual selection. */
-  const handleGeoLocationResolved = useCallback((slug: string) => {
-    setPendingSlug(slug);
-    setTimeout(() => setActiveTab("activities"), 250);
   }, []);
 
   const locationChanged = pendingSlug !== currentSlug;
@@ -166,23 +117,18 @@ export function MyWeatherModal() {
           </Button>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs — Saved locations first, then Activities, then Settings */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col">
           <TabsList className="shrink-0">
-            <TabsTrigger value="location">Location</TabsTrigger>
-            <TabsTrigger value="activities">
-              Activities
-            </TabsTrigger>
+            <TabsTrigger value="saved">Saved</TabsTrigger>
+            <TabsTrigger value="activities">Activities</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="location">
-            <LocationTab
+          <TabsContent value="saved">
+            <SavedTab
               pendingSlug={pendingSlug}
-              onSelectLocation={handleSelectLocation}
-              onGeoLocationResolved={handleGeoLocationResolved}
-              tagLabels={tagLabels}
-              tagOrder={tagOrder}
+              onSelectLocation={handleSelectSavedLocation}
             />
           </TabsContent>
 
@@ -203,137 +149,103 @@ export function MyWeatherModal() {
   );
 }
 
-// ── Location Tab ───────────────────────────────────────────────────────────
+// ── Saved Locations Tab ─────────────────────────────────────────────────────
 
-function LocationTab({
+function SavedTab({
   pendingSlug,
   onSelectLocation,
-  onGeoLocationResolved,
-  tagLabels,
-  tagOrder,
 }: {
   pendingSlug: string;
   onSelectLocation: (slug: string) => void;
-  onGeoLocationResolved: (slug: string) => void;
-  tagLabels: Record<string, string>;
-  tagOrder: string[];
 }) {
-  const [query, setQuery] = useState("");
-  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const savedLocations = useAppStore((s) => s.savedLocations);
+  const locationLabels = useAppStore((s) => s.locationLabels);
+  const saveLocation = useAppStore((s) => s.saveLocation);
+  const removeLocation = useAppStore((s) => s.removeLocation);
+  const setLocationLabel = useAppStore((s) => s.setLocationLabel);
+  const closeMyWeather = useAppStore((s) => s.closeMyWeather);
+
   const [geoState, setGeoState] = useState<GeoResult | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [editingSlug, setEditingSlug] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
 
-  // Search-driven location results
-  const [searchResults, setSearchResults] = useState<WeatherLocation[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [popularLocations, setPopularLocations] = useState<WeatherLocation[]>([]);
-  const [popularLoading, setPopularLoading] = useState(true);
+  // Add location search
+  const [showAdd, setShowAdd] = useState(false);
+  const [addQuery, setAddQuery] = useState("");
+  const debouncedAddQuery = useDebounce(addQuery, 300);
+  const [addResults, setAddResults] = useState<{ slug: string; name: string; province: string; country?: string }[]>([]);
+  const [addLoading, setAddLoading] = useState(false);
+  const addInputRef = useRef<HTMLInputElement>(null);
 
-  const debouncedQuery = useDebounce(query, 250);
+  const atCap = savedLocations.length >= MAX_SAVED_LOCATIONS;
 
-  // Focus the search input on mount
+  // Focus edit input when editing starts
   useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 50);
-  }, []);
+    if (editingSlug) {
+      setTimeout(() => editInputRef.current?.focus(), 50);
+    }
+  }, [editingSlug]);
 
-  // Fetch popular locations on mount (small set, not all)
+  // Focus add input when add mode opens
   useEffect(() => {
-    const slugParam = POPULAR_SLUGS.join(",");
-    fetch(`/api/py/search?q=${encodeURIComponent(slugParam.slice(0, 200))}&limit=10`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.locations?.length) {
-          setPopularLocations(data.locations);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setPopularLoading(false));
-  }, []);
+    if (showAdd) {
+      const t = setTimeout(() => addInputRef.current?.focus(), 50);
+      return () => clearTimeout(t);
+    }
+  }, [showAdd]);
 
-  // Search when the debounced query or active tag changes.
-  // Loading state is derived from an in-flight fetch counter to avoid
-  // calling setState synchronously inside the effect body.
-  const searchGenRef = useRef(0);
-
+  // Search for locations to add
   useEffect(() => {
-    const q = debouncedQuery.trim();
-    if (!q && !activeTag) {
-      // Defer to avoid synchronous setState in effect body
-      const id = requestAnimationFrame(() => setSearchResults([]));
-      return () => cancelAnimationFrame(id);
+    const q = debouncedAddQuery.trim();
+    if (!q) {
+      const t = requestAnimationFrame(() => { setAddResults([]); });
+      return () => cancelAnimationFrame(t);
     }
 
-    const gen = ++searchGenRef.current;
     const controller = new AbortController();
-    const url = !q && activeTag
-      ? `/api/py/locations?tag=${encodeURIComponent(activeTag)}&limit=50`
-      : `/api/py/search?q=${encodeURIComponent(q)}&limit=20`;
+    const run = async () => {
+      setAddLoading(true);
+      try {
+        const res = await fetch(`/api/py/search?q=${encodeURIComponent(q)}&limit=10`, { signal: controller.signal });
+        const data = res.ok ? await res.json() : null;
+        const locs = (data?.locations ?? []).filter(
+          (l: { slug: string }) => !savedLocations.includes(l.slug),
+        );
+        setAddResults(locs);
+      } catch {
+        if (!controller.signal.aborted) { setAddResults([]); }
+      } finally {
+        if (!controller.signal.aborted) { setAddLoading(false); }
+      }
+    };
+    run();
+    return () => controller.abort();
+  }, [debouncedAddQuery, savedLocations]);
 
-    const loadId = requestAnimationFrame(() => {
-      if (searchGenRef.current === gen) setSearchLoading(true);
-    });
-
-    fetch(url, { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (searchGenRef.current === gen) {
-          setSearchResults(data?.locations ?? []);
-          setSearchLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!controller.signal.aborted && searchGenRef.current === gen) {
-          setSearchResults([]);
-          setSearchLoading(false);
-        }
-      });
-    return () => { controller.abort(); cancelAnimationFrame(loadId); };
-  }, [debouncedQuery, activeTag]);
-
-  // Geolocation detection — set pending location and advance to activities
   const handleGeolocate = useCallback(async () => {
     setGeoLoading(true);
     const result = await detectUserLocation();
     setGeoState(result);
     setGeoLoading(false);
-
     if ((result.status === "success" || result.status === "created") && result.location) {
-      onGeoLocationResolved(result.location.slug);
+      saveLocation(result.location.slug);
+      onSelectLocation(result.location.slug);
     }
-  }, [onGeoLocationResolved]);
+  }, [onSelectLocation, saveLocation]);
 
-  // Determine which locations to display
-  const displayedLocations = useMemo(() => {
-    if (query.trim() || activeTag) return searchResults;
-    return popularLocations;
-  }, [query, activeTag, searchResults, popularLocations]);
+  const handleSaveLabel = useCallback((slug: string, value: string) => {
+    setLocationLabel(slug, value);
+    setEditingSlug(null);
+  }, [setLocationLabel]);
 
-  const loading = query.trim() || activeTag ? searchLoading : popularLoading;
+  const titleCase = (s: string) => s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
-    <div className="flex flex-col gap-1">
-      {/* Search input */}
-      <div className="px-4 pt-3 pb-2">
-        <div className="relative">
-          <Input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setActiveTag(null);
-            }}
-            placeholder="Search locations..."
-            className="pl-9"
-            aria-label="Search locations"
-          />
-          <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-        </div>
-      </div>
-
+    <div className="flex flex-col gap-2">
       {/* Geolocation button */}
-      <div className="px-4">
+      <div className="px-4 pt-3">
         <Button
           variant="ghost"
           onClick={handleGeolocate}
@@ -343,142 +255,161 @@ function LocationTab({
           {geoLoading ? (
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
           ) : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M12 2v4" /><path d="M12 18v4" />
-              <path d="M2 12h4" /><path d="M18 12h4" />
-            </svg>
+            <NavigationIcon size={16} className="text-primary" />
           )}
           <span className="font-medium">
-            {geoLoading ? "Detecting location..." : "Use my location"}
+            {geoLoading ? "Detecting..." : "Use my current location"}
           </span>
         </Button>
         {geoState?.status === "denied" && (
-          <p className="px-3 pb-1 text-base text-text-tertiary">
-            Location access denied. Enable it in your browser settings.
-          </p>
+          <p className="px-3 pb-1 text-base text-text-tertiary">Location access denied.</p>
         )}
         {geoState?.status === "outside-supported" && (
-          <p className="px-3 pb-1 text-base text-text-tertiary">
-            Your area isn&apos;t supported yet. Select a location below.
-          </p>
-        )}
-        {geoState?.status === "created" && (
-          <p className="px-3 pb-1 text-base text-severity-low">
-            New location added! Weather data is loading.
-          </p>
+          <p className="px-3 pb-1 text-base text-text-tertiary">Your area isn&apos;t supported yet.</p>
         )}
       </div>
 
-      {/* Tag filter pills */}
-      {!query && (
-        <ToggleGroup
-          type="single"
-          value={activeTag ?? ""}
-          onValueChange={(val) => setActiveTag(val || null)}
-          className="flex flex-wrap gap-1.5 px-4 py-2"
-          aria-label="Filter locations by category"
-        >
-          {tagOrder.map((tag) => (
-            <ToggleGroupItem key={tag} value={tag} className="min-h-[44px]">
-              {tagLabels[tag] ?? tag}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+      {/* Saved locations list */}
+      <div className="px-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-base font-medium text-text-secondary">
+            {savedLocations.length}/{MAX_SAVED_LOCATIONS} saved
+          </span>
+          {!showAdd && (
+            <Button variant="ghost" size="sm" onClick={() => setShowAdd(true)} disabled={atCap}
+              className="text-primary min-h-[44px]">
+              + Add location
+            </Button>
+          )}
+        </div>
+
+        {savedLocations.length === 0 && !showAdd && (
+          <p className="py-6 text-center text-base text-text-tertiary">
+            No saved locations yet. Add one or use geolocation above.
+          </p>
+        )}
+
+        <ul aria-label="Saved locations" className="space-y-1">
+          {savedLocations.map((slug) => {
+            const label = locationLabels[slug];
+            const isSelected = slug === pendingSlug;
+
+            return (
+              <li key={slug} className="group">
+                <div className={`flex items-center gap-2 rounded-[var(--radius-card)] px-3 py-2 min-h-[44px] transition-colors ${
+                  isSelected ? "bg-primary/10" : "hover:bg-surface-base"
+                }`}>
+                  <button
+                    onClick={() => onSelectLocation(slug)}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    type="button"
+                  >
+                    <MapPinIcon size={14} className={isSelected ? "text-primary" : "text-text-tertiary"} />
+                    <div className="min-w-0 flex-1">
+                      {editingSlug === slug ? (
+                        <Input
+                          ref={editInputRef}
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onBlur={() => handleSaveLabel(slug, editValue)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveLabel(slug, editValue);
+                            if (e.key === "Escape") setEditingSlug(null);
+                          }}
+                          placeholder="Label (e.g. Home)"
+                          className="h-8 text-base"
+                          aria-label={`Label for ${titleCase(slug)}`}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <>
+                          {label && <span className="block text-base font-semibold text-text-primary truncate">{label}</span>}
+                          <span className={`block truncate ${label ? "text-base text-text-tertiary" : "text-base font-medium text-text-primary"}`}>
+                            {titleCase(slug)}
+                          </span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setEditValue(label || ""); setEditingSlug(slug); }}
+                            className="text-base text-primary/60 hover:text-primary"
+                            type="button"
+                          >
+                            {label ? "Edit label" : "+ Add label"}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {isSelected && (
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary" aria-hidden="true">
+                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" className="stroke-primary-foreground" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => removeLocation(slug)}
+                    aria-label={`Remove ${titleCase(slug)}`}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-tertiary hover:text-severity-severe hover:bg-severity-severe/10 transition-colors"
+                    type="button"
+                  >
+                    <TrashIcon size={14} />
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      {/* Add location search */}
+      {showAdd && (
+        <div className="px-4 pb-3">
+          <div className="relative mb-2">
+            <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+            <Input
+              ref={addInputRef}
+              value={addQuery}
+              onChange={(e) => setAddQuery(e.target.value)}
+              placeholder="Search locations to add..."
+              className="pl-9"
+              aria-label="Search locations to add"
+            />
+          </div>
+          {addLoading && <div className="h-10 animate-pulse rounded-[var(--radius-input)] bg-surface-base" role="status" aria-label="Loading"><span className="sr-only">Loading</span></div>}
+          {!addLoading && addQuery.trim() && addResults.length === 0 && (
+            <p className="py-2 text-center text-base text-text-tertiary">No results for &ldquo;{addQuery}&rdquo;</p>
+          )}
+          <ul aria-label="Search results" className="space-y-1">
+            {addResults.map((loc) => (
+              <li key={loc.slug}>
+                <button
+                  onClick={() => { saveLocation(loc.slug); setAddQuery(""); setAddResults([]); }}
+                  className="flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base text-text-primary hover:bg-surface-base transition-colors"
+                  type="button"
+                >
+                  <MapPinIcon size={14} className="text-text-tertiary" />
+                  <div className="min-w-0 flex-1 text-left">
+                    <span className="block truncate">{loc.name}</span>
+                    <span className="block text-base text-text-tertiary truncate">{loc.province}</span>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <Button variant="ghost" size="sm" onClick={() => { setShowAdd(false); setAddQuery(""); setAddResults([]); }}
+            className="mt-1 text-text-tertiary">
+            Cancel
+          </Button>
+        </div>
       )}
 
-      {/* Location list — no nested scroll, uses tab content scroll */}
-      <ul role="listbox" aria-label="Available locations" aria-multiselectable="false" className="px-2 pb-2">
-        {loading && displayedLocations.length === 0 && (
-          Array.from({ length: 5 }).map((_, i) => (
-            <li key={i} className="px-3 py-2" aria-hidden="true">
-              <div className="h-10 animate-pulse rounded-[var(--radius-input)] bg-surface-base" />
-            </li>
-          ))
-        )}
-        {!loading && displayedLocations.length === 0 && (
-          <li className="px-3 py-4 text-center text-base text-text-tertiary">
-            {query ? `No locations found for "${query}"` : "No locations available"}
-          </li>
-        )}
-        {displayedLocations.map((loc) => {
-          const isSelected = loc.slug === pendingSlug;
-          // Country/province are automatic context, not selectable options
-          const countryCode = (loc.country ?? "ZW").toUpperCase();
-          const contextLabel = countryCode !== "ZW"
-            ? `${loc.province}, ${countryCode}`
-            : loc.province;
-          return (
-            <li key={loc.slug} role="option" aria-selected={isSelected}>
-              <button
-                onClick={() => onSelectLocation(loc.slug)}
-                className={`flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base transition-all hover:bg-surface-base focus-visible:outline-2 focus-visible:outline-primary ${
-                  isSelected
-                    ? "bg-primary/10 text-primary font-semibold"
-                    : "text-text-primary"
-                }`}
-                type="button"
-              >
-                <MapPinIcon
-                  size={14}
-                  className={isSelected ? "text-primary" : "text-text-tertiary"}
-                />
-                <div className="min-w-0 flex-1 text-left">
-                  <span className="block truncate">{loc.name}</span>
-                  <span className="block text-base text-text-tertiary truncate">{contextLabel}</span>
-                </div>
-                {isSelected && (
-                  <span className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary animate-[scale-in_200ms_ease-out]" aria-hidden="true">
-                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" className="stroke-primary-foreground" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  </span>
-                )}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-
-      {/* Community location stat — prominent to inspire contributions */}
-      <LocationCountCard />
-    </div>
-  );
-}
-
-// ── Location Count Card ─────────────────────────────────────────────────────
-
-function LocationCountCard() {
-  const closeMyWeather = useAppStore((s) => s.closeMyWeather);
-  const [stats, setStats] = useState<{ totalLocations: number; totalCountries: number } | null>(null);
-
-  useEffect(() => {
-    fetch("/api/py/locations?mode=stats")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.totalLocations) setStats(data);
-      })
-      .catch(() => {});
-  }, []);
-
-  const summary = stats
-    ? `${stats.totalLocations} locations across ${stats.totalCountries} ${stats.totalCountries === 1 ? "country" : "countries"}`
-    : "Loading locations...";
-
-  return (
-    <div className="mx-4 mb-3">
-      <div className="flex items-center justify-between gap-2 rounded-[var(--radius-input)] border border-primary/10 bg-primary/5 px-3 py-2">
-        <div className="flex items-center gap-2">
-          <MapPinIcon size={14} className="shrink-0 text-primary" aria-hidden="true" />
-          <span className="text-base font-medium text-text-primary">{summary}</span>
-        </div>
+      {/* Explore link */}
+      <div className="px-4 pb-3">
         <Link
           href="/explore"
           prefetch={false}
           onClick={closeMyWeather}
-          className="shrink-0 text-base text-primary underline-offset-2 hover:underline"
+          className="flex items-center gap-2 rounded-[var(--radius-input)] border border-primary/10 bg-primary/5 px-3 py-2.5 min-h-[44px] text-base font-medium text-primary hover:bg-primary/10 transition-colors"
         >
-          Explore all
+          <SearchIcon size={14} className="text-primary" aria-hidden="true" />
+          Discover more locations on Explore
         </Link>
       </div>
     </div>

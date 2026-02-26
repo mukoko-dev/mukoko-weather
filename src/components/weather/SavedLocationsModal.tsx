@@ -211,6 +211,31 @@ function SavedLocationsList({
   onSelect: (slug: string) => void;
   onRemove: (slug: string) => void;
 }) {
+  const locationLabels = useAppStore((s) => s.locationLabels);
+  const setLocationLabel = useAppStore((s) => s.setLocationLabel);
+  const [editingSlug, setEditingSlug] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus the edit input when it mounts
+  useEffect(() => {
+    if (editingSlug) {
+      const id = setTimeout(() => editInputRef.current?.focus(), 50);
+      return () => clearTimeout(id);
+    }
+  }, [editingSlug]);
+
+  const handleStartEdit = useCallback((slug: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingSlug(slug);
+    setEditValue(locationLabels[slug] ?? "");
+  }, [locationLabels]);
+
+  const handleSaveLabel = useCallback((slug: string) => {
+    setLocationLabel(slug, editValue);
+    setEditingSlug(null);
+  }, [editValue, setLocationLabel]);
+
   // Resolve slugs to location details
   const [locationMap, setLocationMap] = useState<Record<string, WeatherLocation>>({});
   const [loading, setLoading] = useState(true);
@@ -271,6 +296,9 @@ function SavedLocationsList({
           ? countryCode !== "ZW" ? `${loc.province}, ${countryCode}` : loc.province
           : "";
 
+        const label = locationLabels[slug];
+        const isEditing = editingSlug === slug;
+
         return (
           <li key={slug}>
             <div className="flex items-center gap-1 px-1">
@@ -283,12 +311,55 @@ function SavedLocationsList({
               >
                 <MapPinIcon size={14} className={isActive ? "text-primary" : "text-text-tertiary"} />
                 <div className="min-w-0 flex-1 text-left">
-                  <span className="block truncate">{loc?.name ?? slug}</span>
-                  {contextLabel && (
-                    <span className="block text-base text-text-tertiary truncate">{contextLabel}</span>
+                  {isEditing ? (
+                    <input
+                      ref={editInputRef}
+                      type="text"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => handleSaveLabel(slug)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveLabel(slug);
+                        if (e.key === "Escape") setEditingSlug(null);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      placeholder="Add a label (e.g. Home)"
+                      maxLength={30}
+                      className="w-full rounded border border-primary/30 bg-surface-card px-2 py-0.5 text-base text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      aria-label={`Label for ${loc?.name ?? slug}`}
+                    />
+                  ) : (
+                    <>
+                      {label && (
+                        <span
+                          className="block truncate text-base font-medium text-text-secondary cursor-pointer hover:text-primary"
+                          onClick={(e) => handleStartEdit(slug, e)}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Edit label for ${loc?.name ?? slug}`}
+                        >
+                          {label}
+                        </span>
+                      )}
+                      <span className="block truncate">{loc?.name ?? slug}</span>
+                      {contextLabel && (
+                        <span className="block text-base text-text-tertiary truncate">{contextLabel}</span>
+                      )}
+                      {!label && (
+                        <span
+                          className="block text-base text-text-tertiary/60 cursor-pointer hover:text-primary truncate"
+                          onClick={(e) => handleStartEdit(slug, e)}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Add label for ${loc?.name ?? slug}`}
+                        >
+                          + Add label
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
-                {isActive && (
+                {isActive && !isEditing && (
                   <span className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary" aria-hidden="true">
                     <svg width={12} height={12} viewBox="0 0 24 24" fill="none" className="stroke-primary-foreground" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <polyline points="20 6 9 17 4 12" />

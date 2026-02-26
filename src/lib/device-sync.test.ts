@@ -83,6 +83,7 @@ describe("readLocalStoragePrefs", () => {
       theme: "dark",
       selectedLocation: "bulawayo",
       savedLocations: [],
+      locationLabels: {},
       selectedActivities: ["running", "hiking"],
       hasOnboarded: true,
     });
@@ -97,6 +98,7 @@ describe("readLocalStoragePrefs", () => {
       theme: "light",
       selectedLocation: "harare",
       savedLocations: [],
+      locationLabels: {},
       selectedActivities: [],
       hasOnboarded: false,
     });
@@ -134,6 +136,7 @@ describe("createDeviceProfile", () => {
       theme: "dark",
       selectedLocation: "harare",
       savedLocations: [],
+      locationLabels: {},
       selectedActivities: [],
       hasOnboarded: false,
     });
@@ -160,6 +163,7 @@ describe("createDeviceProfile", () => {
         theme: "invalid",
         selectedLocation: "harare",
         savedLocations: [],
+        locationLabels: {},
         selectedActivities: [],
         hasOnboarded: false,
       }),

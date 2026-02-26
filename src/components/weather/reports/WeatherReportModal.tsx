@@ -206,7 +206,7 @@ export function WeatherReportModal() {
                 placeholder="Add any details about what you're seeing..."
                 rows={2}
                 maxLength={300}
-                className="mt-1 w-full resize-none rounded-[var(--radius-input)] border border-input bg-surface-card px-3 py-2 text-base text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary"
+                className="mt-1 w-full resize-none rounded-[var(--radius-input)] border border-input bg-surface-card px-3 py-2 text-base text-text-primary placeholder:text-text-tertiary outline-none focus-visible:ring-2 focus-visible:ring-primary"
               />
               <p className="mt-1 text-base text-text-tertiary">{description.length}/300</p>
             </div>

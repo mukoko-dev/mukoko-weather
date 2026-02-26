@@ -64,6 +64,10 @@ interface AppState {
   saveLocation: (slug: string) => void;
   /** Remove a location from saved list */
   removeLocation: (slug: string) => void;
+  /** Custom labels for saved locations (e.g., "Home", "Work") — keyed by slug */
+  locationLabels: Record<string, string>;
+  /** Set a custom label for a saved location */
+  setLocationLabel: (slug: string, label: string) => void;
   selectedActivities: string[]; // activity IDs from src/lib/activities.ts
   toggleActivity: (id: string) => void;
   myWeatherOpen: boolean;
@@ -136,8 +140,25 @@ export const useAppStore = create<AppState>()(
       removeLocation: (slug) =>
         set((state) => {
           const next = state.savedLocations.filter((s) => s !== slug);
-          queueSync({ savedLocations: next });
-          return { savedLocations: next };
+          // Clean up label when location is removed
+          const { [slug]: _, ...remainingLabels } = state.locationLabels;
+          queueSync({ savedLocations: next, locationLabels: remainingLabels });
+          return { savedLocations: next, locationLabels: remainingLabels };
+        }),
+      locationLabels: {},
+      setLocationLabel: (slug, label) =>
+        set((state) => {
+          const trimmed = label.trim();
+          let nextLabels: Record<string, string>;
+          if (trimmed) {
+            nextLabels = { ...state.locationLabels, [slug]: trimmed };
+          } else {
+            // Empty label removes custom name
+            const { [slug]: _, ...rest } = state.locationLabels;
+            nextLabels = rest;
+          }
+          queueSync({ locationLabels: nextLabels });
+          return { locationLabels: nextLabels };
         }),
       selectedActivities: [],
       toggleActivity: (id) =>
@@ -172,6 +193,7 @@ export const useAppStore = create<AppState>()(
         theme: state.theme,
         selectedLocation: state.selectedLocation,
         savedLocations: state.savedLocations,
+        locationLabels: state.locationLabels,
         selectedActivities: state.selectedActivities,
         hasOnboarded: state.hasOnboarded,
       }),
@@ -200,6 +222,7 @@ export function initializeDeviceSync(): void {
       theme: s.theme,
       selectedLocation: s.selectedLocation,
       savedLocations: s.savedLocations,
+      locationLabels: s.locationLabels,
       selectedActivities: s.selectedActivities,
       hasOnboarded: s.hasOnboarded,
     };
@@ -217,6 +240,9 @@ export function initializeDeviceSync(): void {
     }
     if (prefs.savedLocations && prefs.savedLocations.length > 0) {
       useAppStore.setState({ savedLocations: prefs.savedLocations });
+    }
+    if (prefs.locationLabels && Object.keys(prefs.locationLabels).length > 0) {
+      useAppStore.setState({ locationLabels: prefs.locationLabels });
     }
     if (prefs.selectedActivities && prefs.selectedActivities.length > 0) {
       useAppStore.setState({ selectedActivities: prefs.selectedActivities });

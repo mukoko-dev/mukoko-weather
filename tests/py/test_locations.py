@@ -746,11 +746,9 @@ class TestGeoLookup:
         assert result["isNew"] is False
 
     @pytest.mark.asyncio
-    @patch("py._locations._reverse_geocode")
     @patch("py._locations.locations_collection")
-    async def test_country_preference(self, mock_coll, mock_geocode):
-        """Should prefer locations in the same country."""
-        mock_geocode.return_value = {"country": "ZW"}
+    async def test_returns_nearest_by_distance(self, mock_coll):
+        """Fast path returns the first $near result (nearest by distance)."""
         mock_find = MagicMock()
         mock_find.limit.return_value = [
             {"slug": "maputo", "name": "Maputo", "country": "MZ"},
@@ -759,7 +757,8 @@ class TestGeoLookup:
         mock_coll.return_value.find.return_value = mock_find
 
         result = await geo_lookup(-17.83, 31.05)
-        assert result["nearest"]["slug"] == "harare"
+        # Returns first result (nearest by $near distance), no geocoding needed
+        assert result["nearest"]["slug"] == "maputo"
 
     @pytest.mark.asyncio
     @patch("py._locations._is_in_supported_region")

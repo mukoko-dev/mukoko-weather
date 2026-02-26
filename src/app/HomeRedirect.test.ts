@@ -79,9 +79,16 @@ describe("HomeRedirect — redirect logic", () => {
     expect(source).toContain("savedLocations");
   });
 
-  it("has a geolocation timeout of 3 seconds", () => {
-    expect(source).toContain("GEO_TIMEOUT_MS");
-    expect(source).toContain("3000");
+  it("waits for geolocation to resolve naturally (no aggressive timeout race)", () => {
+    // Should NOT have a short GEO_TIMEOUT_MS that races against the browser
+    // permission prompt — the old 3s timeout caused premature Harare redirects
+    expect(source).not.toContain("GEO_TIMEOUT_MS");
+    expect(source).not.toContain("Promise.race");
+  });
+
+  it("has a 15-second safety timeout as last resort", () => {
+    expect(source).toContain("SAFETY_TIMEOUT_MS");
+    expect(source).toContain("15000");
   });
 
   it("falls back to harare when geolocation fails", () => {
@@ -102,8 +109,42 @@ describe("HomeRedirect — redirect logic", () => {
     expect(source).toContain("cancelled = true");
   });
 
+  it("clears safety timer on unmount", () => {
+    expect(source).toContain("clearTimeout(safetyTimer)");
+  });
+
   it("handles geolocation promise rejection", () => {
     // .catch() prevents unhandled promise rejections
     expect(source).toContain(".catch(");
+  });
+});
+
+describe("HomeRedirect — location fallback link", () => {
+  it("shows a fallback city link after a short delay", () => {
+    expect(source).toContain("showSkip");
+    expect(source).toContain("setShowSkip");
+    expect(source).toContain("SKIP_DELAY_MS");
+  });
+
+  it("delays fallback link appearance with setTimeout", () => {
+    // The skip link should appear after a timeout, not immediately
+    expect(source).toContain("setTimeout(() => setShowSkip(true)");
+  });
+
+  it("links to /explore as the fallback destination", () => {
+    expect(source).toContain('href="/explore"');
+  });
+
+  it("renders the fallback as an action prop in WeatherLoadingScene", () => {
+    expect(source).toContain("action=");
+    expect(source).toContain("Choose a city instead");
+  });
+
+  it("uses animate-fade-in-up for smooth appearance", () => {
+    expect(source).toContain("animate-fade-in-up");
+  });
+
+  it("has proper min touch target on the fallback link", () => {
+    expect(source).toContain("min-h-[44px]");
   });
 });

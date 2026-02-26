@@ -3,7 +3,7 @@
 export function MapSkeleton({ className }: { className?: string }) {
   return (
     <div
-      className={`relative aspect-[4/3] w-full animate-pulse rounded-[var(--radius-card)] bg-surface-card overflow-hidden ${className ?? ""}`}
+      className={`relative aspect-[16/9] w-full animate-pulse rounded-[var(--radius-card)] bg-surface-card overflow-hidden ${className ?? ""}`}
       role="status"
       aria-label="Loading map"
     >

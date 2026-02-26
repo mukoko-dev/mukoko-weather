@@ -313,6 +313,52 @@ describe("reportModal", () => {
   });
 });
 
+describe("locationLabels", () => {
+  beforeEach(() => {
+    useAppStore.setState({ locationLabels: {}, savedLocations: [] });
+  });
+
+  it("defaults to an empty object", () => {
+    expect(useAppStore.getState().locationLabels).toEqual({});
+  });
+
+  it("setLocationLabel adds a label for a slug", () => {
+    useAppStore.getState().setLocationLabel("harare", "Home");
+    expect(useAppStore.getState().locationLabels).toEqual({ harare: "Home" });
+  });
+
+  it("setLocationLabel removes a label when set to empty string", () => {
+    useAppStore.setState({ locationLabels: { harare: "Home" } });
+    useAppStore.getState().setLocationLabel("harare", "");
+    expect(useAppStore.getState().locationLabels).toEqual({});
+  });
+
+  it("setLocationLabel trims whitespace", () => {
+    useAppStore.getState().setLocationLabel("harare", "  My Home  ");
+    expect(useAppStore.getState().locationLabels).toEqual({ harare: "My Home" });
+  });
+
+  it("removeLocation also cleans up the label", () => {
+    useAppStore.setState({
+      savedLocations: ["harare", "bulawayo"],
+      locationLabels: { harare: "Home", bulawayo: "Work" },
+    });
+    useAppStore.getState().removeLocation("harare");
+    expect(useAppStore.getState().locationLabels).toEqual({ bulawayo: "Work" });
+  });
+
+  it("is persisted via partialize", () => {
+    useAppStore.setState({ locationLabels: { harare: "Home" } });
+    const state = useAppStore.getState();
+    const persistApi = (useAppStore as unknown as { persist: { getOptions: () => { partialize?: (s: unknown) => unknown } } }).persist;
+    if (persistApi?.getOptions?.()?.partialize) {
+      const partialState = persistApi.getOptions().partialize!(state) as Record<string, unknown>;
+      expect(partialState).toHaveProperty("locationLabels");
+      expect(partialState.locationLabels).toEqual({ harare: "Home" });
+    }
+  });
+});
+
 describe("theme actions", () => {
   it("setTheme updates the theme preference", () => {
     useAppStore.getState().setTheme("dark");

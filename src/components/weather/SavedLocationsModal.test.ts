@@ -215,6 +215,37 @@ describe("SavedLocationsModal — HTML validity", () => {
   });
 });
 
+describe("SavedLocationsModal — custom labels", () => {
+  it("reads locationLabels from store", () => {
+    expect(source).toContain("locationLabels");
+    expect(source).toContain("s.locationLabels");
+  });
+
+  it("reads setLocationLabel from store", () => {
+    expect(source).toContain("setLocationLabel");
+    expect(source).toContain("s.setLocationLabel");
+  });
+
+  it("shows Add label prompt for unlabeled locations", () => {
+    expect(source).toContain("Add label");
+  });
+
+  it("tracks editing state for inline label input", () => {
+    expect(source).toContain("editingSlug");
+    expect(source).toContain("editValue");
+  });
+
+  it("saves label on Enter key", () => {
+    expect(source).toContain("Enter");
+    expect(source).toContain("setLocationLabel");
+  });
+
+  it("cancels editing on Escape key", () => {
+    expect(source).toContain("Escape");
+    expect(source).toContain("setEditingSlug(null)");
+  });
+});
+
 describe("SavedLocationsModal — accessibility", () => {
   it("uses minimum 44px touch targets", () => {
     expect(source).toContain("min-h-[44px]");

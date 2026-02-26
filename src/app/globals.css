@@ -51,10 +51,10 @@
   --color-surface-elevated: #FFFFFF;
   --color-surface-dim: #F3F2EE;
 
-  /* Text — APCA Lc values verified for AAA compliance on surface-base (#FAF9F5) */
+  /* Text — WCAG 2.1 AA 4.5:1 contrast verified on surface-base (#FAF9F5) */
   --color-text-primary: #141413;
   --color-text-secondary: #52524E;
-  --color-text-tertiary: #8C8B87;
+  --color-text-tertiary: #706F6A;
 
   /* Foreground / Background shortcuts */
   --background: #FAF9F5;
@@ -191,10 +191,10 @@
   --color-surface-elevated: #1E1E1E;
   --color-surface-dim: #141414;
 
-  /* Text — APCA Lc values verified for AAA compliance on surface-base (#0A0A0A) */
+  /* Text — WCAG 2.1 AA 4.5:1 contrast verified on surface-base (#0A0A0A) */
   --color-text-primary: #F5F5F4;
   --color-text-secondary: #A8A8A3;
-  --color-text-tertiary: #6B6B66;
+  --color-text-tertiary: #838380;
 
   /* Foreground / Background shortcuts */
   --background: #0A0A0A;

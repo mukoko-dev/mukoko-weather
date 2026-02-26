@@ -631,7 +631,7 @@ export function HistoryDashboard() {
             onChange={(e) => { setQuery(e.target.value); setShowDropdown(true); }}
             onFocus={() => setShowDropdown(true)}
             placeholder="Search locations..."
-            className="w-full rounded-[var(--radius-input)] border border-input bg-surface-card px-3 py-2 text-base text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full rounded-[var(--radius-input)] border border-input bg-surface-card px-3 py-2 text-base text-text-primary placeholder:text-text-tertiary outline-none focus-visible:ring-2 focus-visible:ring-primary"
             autoComplete="off"
           />
           {showDropdown && (results.length > 0 || searchLoading) && (
@@ -652,7 +652,7 @@ export function HistoryDashboard() {
         </div>
         <div>
           <label htmlFor="history-days" className="mb-1 block text-base font-medium text-text-secondary">Time period</label>
-          <select id="history-days" value={days} onChange={(e) => handleDaysChange(Number(e.target.value) as DayRange)} className="rounded-[var(--radius-input)] border border-input bg-surface-card px-3 py-2 text-base text-text-primary focus:outline-none focus:ring-2 focus:ring-primary">
+          <select id="history-days" value={days} onChange={(e) => handleDaysChange(Number(e.target.value) as DayRange)} className="rounded-[var(--radius-input)] border border-input bg-surface-card px-3 py-2 text-base text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary">
             {DAY_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
           </select>
         </div>

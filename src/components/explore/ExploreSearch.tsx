@@ -123,7 +123,7 @@ export function ExploreSearch() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search locations by weather, activity, or condition..."
-            className="w-full rounded-[var(--radius-input)] border border-input bg-surface-card pl-9 pr-4 py-2 text-base text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-[var(--radius-input)] border border-input bg-surface-card pl-9 pr-4 py-2 text-base text-text-primary placeholder:text-text-tertiary outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Search locations"
             disabled={loading}
           />

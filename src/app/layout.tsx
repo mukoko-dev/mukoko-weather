@@ -318,7 +318,7 @@ export default function RootLayout({
         </a>
         <ThemeProvider>
           <MineralsStripe />
-          <div className="overflow-x-hidden pl-0 min-[480px]:pl-1">
+          <div className="overflow-x-hidden pl-0 min-[480px]:pl-2">
             {children}
           </div>
         </ThemeProvider>

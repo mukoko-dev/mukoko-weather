@@ -30,7 +30,7 @@ _http_client: Optional[httpx.Client] = None
 def _get_http() -> httpx.Client:
     global _http_client
     if _http_client is None:
-        _http_client = httpx.Client(timeout=10.0)
+        _http_client = httpx.Client(timeout=5.0)
     return _http_client
 
 
@@ -192,8 +192,32 @@ async def search_locations(
         for r in results:
             r.pop("score", None)
 
-        total = coll.count_documents(query_filter) if skip == 0 else len(results)
-        return {"locations": results, "total": total, "source": "mongodb"}
+        # If text search returned no results, fall back to Open-Meteo
+        # geocoding API for address-level discovery (like Apple/Google Weather).
+        # These are geocoded candidates — not yet in our DB.
+        source = "mongodb"
+        if q and not tag and not results:
+            geocoded = _forward_geocode(q, count=limit)
+            # Only include results within supported regions
+            results = [
+                {
+                    "slug": _generate_slug(g["name"], g.get("country", "ZW")),
+                    "name": g["name"],
+                    "province": g.get("admin1", ""),
+                    "lat": g["lat"],
+                    "lon": g["lon"],
+                    "elevation": g.get("elevation", 0),
+                    "tags": [],
+                    "country": g.get("country", "ZW"),
+                    "source": "geocoded",
+                }
+                for g in geocoded
+                if _is_in_supported_region(g["lat"], g["lon"])
+            ]
+            source = "geocoded"
+
+        total = coll.count_documents(query_filter) if skip == 0 and source == "mongodb" else len(results)
+        return {"locations": results, "total": total, "source": source}
     except HTTPException:
         raise
     except Exception:
@@ -442,10 +466,9 @@ async def geo_lookup(
     Find nearest location or auto-create one via reverse geocoding.
     """
     try:
-        # Find nearest locations + reverse geocode in parallel (sequential in sync code)
-        geocoded = _reverse_geocode(lat, lon)
-
-        # Find nearby locations
+        # Fast path: check MongoDB for nearby locations FIRST (sub-100ms)
+        # before making any external API calls. Most geo requests will match
+        # an existing location and return instantly.
         try:
             results = list(
                 locations_collection().find(
@@ -463,43 +486,35 @@ async def geo_lookup(
         except Exception:
             results = []
 
-        # Pick best match (prefer same country)
-        user_country = geocoded.get("country") if geocoded else None
-        nearest = None
+        # If we have nearby results, return immediately — no geocoding needed
         if results:
-            if user_country:
-                uc = user_country.upper()
-                same_country = next(
-                    (r for r in results if (r.get("country", "ZW")).upper() == uc),
-                    None,
-                )
-                nearest = same_country or results[0]
-            else:
-                nearest = results[0]
-
-        # If no local match, try uncapped
-        if not nearest:
-            try:
-                uncapped = locations_collection().find_one(
-                    {
-                        "geo": {
-                            "$near": {
-                                "$geometry": {"type": "Point", "coordinates": [lon, lat]},
-                            }
-                        }
-                    },
-                    {"_id": 0},
-                )
-                nearest = uncapped
-            except Exception:
-                pass
-
-        if nearest:
+            nearest = results[0]
             return {
                 "nearest": nearest,
                 "redirectTo": f"/{nearest['slug']}",
                 "isNew": False,
             }
+
+        # If no local match, try uncapped distance
+        try:
+            uncapped = locations_collection().find_one(
+                {
+                    "geo": {
+                        "$near": {
+                            "$geometry": {"type": "Point", "coordinates": [lon, lat]},
+                        }
+                    }
+                },
+                {"_id": 0},
+            )
+            if uncapped:
+                return {
+                    "nearest": uncapped,
+                    "redirectTo": f"/{uncapped['slug']}",
+                    "isNew": False,
+                }
+        except Exception:
+            pass
 
         # No nearby location — check supported region
         if not _is_in_supported_region(lat, lon):
@@ -508,8 +523,9 @@ async def geo_lookup(
                 detail="Location is outside supported regions",
             )
 
-        # Auto-create if requested
+        # Auto-create if requested — only NOW do we call external APIs
         if autoCreate:
+            geocoded = _reverse_geocode(lat, lon)
             if not geocoded:
                 raise HTTPException(
                     status_code=422,

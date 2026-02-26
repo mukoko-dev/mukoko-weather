@@ -21,9 +21,14 @@ describe("WeatherLoadingScene — component structure", () => {
     expect(source).toContain("export function WeatherLoadingScene");
   });
 
-  it("accepts slug and statusText props", () => {
+  it("accepts slug, statusText, and action props", () => {
     expect(source).toContain("slug?: string");
     expect(source).toContain("statusText?: string");
+    expect(source).toContain("action?: React.ReactNode");
+  });
+
+  it("renders action prop when provided", () => {
+    expect(source).toContain("{action && ");
   });
 
   it("uses usePathname for slug extraction fallback", () => {

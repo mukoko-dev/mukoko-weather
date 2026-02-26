@@ -14,6 +14,8 @@ interface Props {
   slug?: string;
   /** Override the status text shown during loading */
   statusText?: string;
+  /** Optional action rendered below the loading dots (e.g., fallback city link) */
+  action?: React.ReactNode;
 }
 
 /** Known app routes that are NOT location slugs — prevents misinterpreting
@@ -37,7 +39,7 @@ const KNOWN_ROUTES = new Set([
  * Respects prefers-reduced-motion — skips 3D entirely.
  * Error boundaries ensure a Three.js failure never crashes the loading screen.
  */
-export function WeatherLoadingScene({ slug, statusText }: Props) {
+export function WeatherLoadingScene({ slug, statusText, action }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Client-only media query detection via useState + useEffect.
@@ -144,6 +146,7 @@ export function WeatherLoadingScene({ slug, statusText }: Props) {
           <span className="h-2 w-2 animate-pulse rounded-full bg-primary [animation-delay:200ms]" />
           <span className="h-2 w-2 animate-pulse rounded-full bg-primary [animation-delay:400ms]" />
         </div>
+        {action && <div className="mt-4">{action}</div>}
         <span className="sr-only">Loading weather data for your location</span>
       </div>
     </div>

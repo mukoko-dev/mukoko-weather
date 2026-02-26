@@ -28,7 +28,7 @@ Thank you for your interest in contributing to mukoko weather. This project prov
 - **Tests** — run `npm test` and ensure all tests pass
 - **No hardcoded styles** — use Tailwind classes and CSS custom properties from `globals.css`, never inline `style={{}}` or hardcoded hex/rgba values
 - **shadcn/ui components** — use the existing `src/components/ui/` primitives (Button, Badge, Dialog, Input, Tabs, Card, Chart) instead of writing custom equivalents
-- **Accessibility** — all UI changes must maintain WCAG 3.0 APCA/AAA compliance
+- **Accessibility** — all UI changes must maintain WCAG 3.0 APCA/AAA compliance. Layout components must use ARIA landmarks (`role="banner"`, `role="navigation"`, `role="contentinfo"`). Navigation must include `aria-current="page"` on active links. New interactive elements need `focus-visible` outlines.
 - **Mobile-first** — design for mobile screens first, then scale up
 - **44px touch targets** — all interactive elements must meet the minimum touch target size
 
@@ -165,16 +165,19 @@ The old analyzer names may have silently fallen through to Atlas defaults — th
 1. Complete the Pre-Commit Checklist above
 2. Ensure the build succeeds: `npm run build`
 3. Submit a PR with a clear description of the change and why it's needed
-4. PRs are automatically reviewed by Claude AI and checked by CI — a single `ci` job runs lint → typecheck → TypeScript tests → Python tests, all visible as named steps in one check
+4. PRs are automatically checked by CI (lint → typecheck → tests), CodeQL security scanning (JS/TS, Python, Actions), and Claude AI code review — all visible as separate checks in the PR UI
 5. On merge to `main`, the `db-init.yml` workflow automatically syncs seed data to MongoDB after Vercel deploys
 6. Address any review feedback before requesting merge
 
 ## GitHub Workflows
 
+All workflows use `concurrency` groups with `cancel-in-progress: true` — rapid pushes cancel stale runs instead of creating zombie checks.
+
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `ci.yml` | Push/PR to `main` | Single job with 4 sequential steps: lint → typecheck → TypeScript tests → Python tests. All steps appear under one check in the GitHub PR UI. |
-| `claude-code-review.yml` | PR opened/updated | Claude AI reviews code quality, security, accessibility |
+| `ci.yml` | Push/PR to `main` | Single job: lint → typecheck → TypeScript tests → Python tests. All steps appear under one check in the GitHub PR UI. |
+| `codeql.yml` | Push/PR to `main` | CodeQL security scanning for JavaScript/TypeScript, Python, and GitHub Actions workflows. Matrix strategy runs all 3 language analyses in parallel. |
+| `claude-code-review.yml` | PR opened/updated | Claude AI reviews code quality, security, accessibility. Token-guarded: skips gracefully if `CLAUDE_CODE_OAUTH_TOKEN` secret is not configured. |
 | `claude.yml` | `@claude` mention in issues/PRs | Claude Code responds to requests in issues and PR comments |
 | `db-init.yml` | Vercel production deploy succeeds | Syncs seed data to MongoDB (locations, activities, rules, prompts) |
 
