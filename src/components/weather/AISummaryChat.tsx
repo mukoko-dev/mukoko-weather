@@ -14,6 +14,7 @@ import {
 } from "@/lib/suggested-prompts";
 import type { WeatherData } from "@/lib/weather";
 import type { ZimbabweLocation } from "@/lib/locations";
+import { trackEvent } from "@/lib/analytics";
 
 // ---------------------------------------------------------------------------
 // Inline error boundary for ReactMarkdown
@@ -165,6 +166,7 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setLoading(true);
+    trackEvent("ai_chat_sent", { source: "inline", location: location.slug });
 
     // Reset textarea height
     if (inputRef.current) {
@@ -252,7 +254,7 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
         {/* Expand/collapse toggle */}
         <button
           onClick={() => setExpanded(!expanded)}
-          className="flex w-full items-center justify-between px-4 py-3 text-left sm:px-6 min-h-[44px]"
+          className="flex w-full items-center justify-between px-4 py-3 text-left sm:px-6 min-h-[48px]"
           aria-expanded={expanded}
           type="button"
         >
@@ -278,7 +280,7 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
                     <button
                       key={prompt.label}
                       onClick={() => sendMessage(prompt.query)}
-                      className="rounded-[var(--radius-badge)] border border-border bg-surface-base px-3 py-2 text-base text-text-secondary transition-colors hover:bg-surface-card hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
+                      className="rounded-[var(--radius-badge)] border border-border bg-surface-base px-3 py-2 text-base text-text-secondary transition-colors hover:bg-surface-card hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[48px]"
                       type="button"
                       disabled={loading}
                     >
@@ -340,7 +342,7 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
                 <Link
                   href="/shamwari"
                   onClick={handleContinueInShamwari}
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-[var(--radius-badge)] bg-tanzanite px-4 py-2 text-base font-medium text-mineral-tanzanite-fg transition-colors hover:bg-tanzanite/90 min-h-[44px]"
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-[var(--radius-badge)] bg-tanzanite px-4 py-2 text-base font-medium text-mineral-tanzanite-fg transition-colors hover:bg-tanzanite/90 min-h-[48px]"
                 >
                   <SparklesIcon size={14} />
                   Continue in Shamwari

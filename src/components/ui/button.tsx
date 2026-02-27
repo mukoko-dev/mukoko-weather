@@ -24,7 +24,7 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-10 rounded-[var(--radius-button)] px-4 py-2",
-        sm: "h-8 rounded-[var(--radius-badge)] px-3 text-base",
+        sm: "h-8 rounded-[var(--radius-button)] px-3 text-base",
         lg: "h-12 rounded-[var(--radius-button)] px-6 py-3",
         icon: "h-10 w-10 rounded-full",
         "icon-lg": "h-11 w-11 rounded-full",

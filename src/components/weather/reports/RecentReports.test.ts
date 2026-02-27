@@ -74,8 +74,8 @@ describe("upvoting", () => {
   });
 
   it("has 44px minimum touch target for upvote", () => {
-    expect(source).toContain("min-h-[44px]");
-    expect(source).toContain("min-w-[44px]");
+    expect(source).toContain("min-h-[48px]");
+    expect(source).toContain("min-w-[48px]");
   });
 });
 

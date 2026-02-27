@@ -23,10 +23,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   return {
-    title: `${meta.label} Weather — Zimbabwe | mukoko weather`,
+    title: `${meta.label} Weather Locations | mukoko weather`,
     description: meta.description,
+    alternates: {
+      canonical: `https://weather.mukoko.com/explore/${tag}`,
+    },
     openGraph: {
-      title: `${meta.label} Weather — Zimbabwe | mukoko weather`,
+      title: `${meta.label} Weather Locations | mukoko weather`,
       description: meta.description,
     },
   };

@@ -58,7 +58,7 @@ export function DailyForecast({ daily }: Props) {
                 key={date}
                 role="listitem"
                 aria-label={`${dayName} ${dateNum}: ${info.label}, high ${high} degrees, low ${low} degrees`}
-                className="rounded-[var(--radius-input)] bg-surface-base px-3.5 py-3.5 min-h-[44px] transition-colors hover:bg-surface-elevated sm:px-4 sm:py-4"
+                className="rounded-[var(--radius-input)] bg-surface-base px-3.5 py-3.5 min-h-[48px] transition-colors hover:bg-surface-elevated sm:px-4 sm:py-4"
               >
                 {/* Main row: day, icon, temps, bar */}
                 <div className="flex items-center gap-3 sm:gap-4">

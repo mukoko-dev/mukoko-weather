@@ -6,6 +6,7 @@ import { useAppStore, hasStoreHydrated } from "@/lib/store";
 import { detectUserLocation } from "@/lib/geolocation";
 import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
 import Link from "next/link";
+import { trackEvent } from "@/lib/analytics";
 
 const HYDRATION_TIMEOUT_MS = 4000;
 const SKIP_DELAY_MS = 1500;
@@ -104,6 +105,11 @@ export function HomeRedirect() {
         if (cancelled || hasRedirected.current) return;
         hasRedirected.current = true;
 
+        trackEvent("geolocation_result", {
+          status: result.status,
+          location: result.location?.slug,
+        });
+
         if (
           (result.status === "success" || result.status === "created") &&
           result.location
@@ -133,7 +139,7 @@ export function HomeRedirect() {
         showSkip ? (
           <Link
             href="/explore"
-            className="animate-fade-in-up rounded-[var(--radius-button)] bg-surface-card px-5 py-3 text-base font-medium text-text-secondary shadow-md transition-colors hover:text-primary hover:bg-surface-dim min-h-[44px] inline-flex items-center"
+            className="animate-fade-in-up rounded-[var(--radius-button)] bg-surface-card px-5 py-3 text-base font-medium text-text-secondary shadow-md transition-colors hover:text-primary hover:bg-surface-dim min-h-[48px] inline-flex items-center"
           >
             Choose a city instead
           </Link>

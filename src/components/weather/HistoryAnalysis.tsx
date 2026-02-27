@@ -6,6 +6,7 @@ import ReactMarkdown from "react-markdown";
 import { SparklesIcon } from "@/lib/weather-icons";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store";
+import { trackEvent } from "@/lib/analytics";
 
 // ---------------------------------------------------------------------------
 // Markdown error boundary
@@ -86,6 +87,7 @@ export function HistoryAnalysis({
 
       const data = await res.json();
       setAnalysis(data.analysis);
+      trackEvent("history_analysis", { location: locationSlug, days });
     } catch (err) {
       setError(
         err instanceof Error
@@ -136,7 +138,7 @@ export function HistoryAnalysis({
           <Button
             onClick={analyze}
             size="sm"
-            className="mt-3 min-h-[44px]"
+            className="mt-3 min-h-[48px]"
             aria-label="Analyze weather history with AI"
           >
             <SparklesIcon size={14} className="mr-1.5" />
@@ -164,7 +166,7 @@ export function HistoryAnalysis({
             onClick={analyze}
             size="sm"
             variant="outline"
-            className="mt-2 min-h-[44px]"
+            className="mt-2 min-h-[48px]"
           >
             Try again
           </Button>
@@ -184,14 +186,14 @@ export function HistoryAnalysis({
               onClick={analyze}
               size="sm"
               variant="outline"
-              className="min-h-[44px] text-base"
+              className="min-h-[48px] text-base"
             >
               Re-analyze
             </Button>
             <Link
               href="/shamwari"
               onClick={handleContinueInShamwari}
-              className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary px-3 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 min-h-[44px]"
+              className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary px-3 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 min-h-[48px]"
             >
               <SparklesIcon size={12} />
               Discuss in Shamwari

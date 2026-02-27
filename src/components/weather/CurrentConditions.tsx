@@ -88,7 +88,7 @@ export function CurrentConditions({ current, locationName, daily, slug }: Props)
               type="button"
               onClick={handleShare}
               aria-label={`Share weather for ${locationName}`}
-              className="press-scale flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-[var(--radius-input)] bg-surface-base px-3 text-base text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
+              className="press-scale flex min-h-[48px] min-w-[48px] items-center justify-center gap-1.5 rounded-[var(--radius-input)] bg-surface-base px-3 text-base text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
             >
               <ShareIcon size={16} aria-hidden="true" />
               <span className="sr-only sm:not-sr-only">

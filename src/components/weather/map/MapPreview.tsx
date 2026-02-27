@@ -28,7 +28,7 @@ export function MapPreview({ location }: MapPreviewProps) {
           </h2>
           <Link
             href={`/${location.slug}/map`}
-            className="text-base font-medium text-primary transition-colors hover:text-primary/80 min-h-[44px] px-2 flex items-center"
+            className="text-base font-medium text-primary transition-colors hover:text-primary/80 min-h-[48px] px-2 flex items-center"
           >
             Explore map &rarr;
           </Link>

@@ -12,6 +12,7 @@
  *   - Central Asia (Kazakhstan, Kyrgyzstan, Tajikistan, Turkmenistan, Uzbekistan, Mongolia)
  *   - South America (all 12 countries)
  *   - Central America, Mexico & Caribbean (Mexico, Central America, Caribbean islands)
+ *   - Eastern Europe (Ukraine, Romania, Moldova, Bulgaria, Serbia, Bosnia, Albania, etc.)
  */
 
 export interface RegionDoc {
@@ -120,6 +121,18 @@ export const REGIONS: RegionDoc[] = [
     east: -59.0,   // easternmost Caribbean (Barbados ~-59.5°W)
     west: -122.0,  // western Baja California (Cabo San Lucas ~-109°W; extended for margins)
     center: { lat: 20.0, lon: -90.0 },
+    active: true,
+    padding: 1,
+  },
+  // Eastern Europe — Ukraine, Romania, Moldova, Bulgaria, Serbia, Bosnia, Albania, North Macedonia, etc.
+  {
+    id: "eastern-europe",
+    name: "Eastern Europe",
+    north: 56.0,   // northern Ukraine/Belarus border (~55.5°N)
+    south: 35.0,   // southern Greece/Crete (~35°N) / Albania
+    east: 46.0,    // eastern Georgia (Tbilisi ~44.8°E, eastern border ~46.7°E)
+    west: 14.0,    // western Croatia/Slovenia (~14°E)
+    center: { lat: 45.0, lon: 28.0 },
     active: true,
     padding: 1,
   },

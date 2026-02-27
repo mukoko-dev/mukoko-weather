@@ -61,6 +61,63 @@ describe("Alert", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Dialog — bottom-sheet and export tests
+// ---------------------------------------------------------------------------
+
+describe("Dialog", () => {
+  it("exports Dialog, DialogContent, DialogSheetHandle and other parts", async () => {
+    const mod = await import("./dialog");
+    expect(mod.Dialog).toBeDefined();
+    expect(mod.DialogContent).toBeDefined();
+    expect(mod.DialogSheetHandle).toBeDefined();
+    expect(mod.DialogClose).toBeDefined();
+    expect(mod.DialogHeader).toBeDefined();
+    expect(mod.DialogFooter).toBeDefined();
+    expect(mod.DialogTitle).toBeDefined();
+    expect(mod.DialogDescription).toBeDefined();
+    expect(mod.DialogOverlay).toBeDefined();
+    expect(mod.DialogPortal).toBeDefined();
+    expect(mod.DialogTrigger).toBeDefined();
+  });
+
+  it("DialogContent uses bottom-sheet slide-up on mobile and centered dialog on desktop", async () => {
+    const { readFileSync } = await import("fs");
+    const { resolve } = await import("path");
+    const src = readFileSync(resolve(__dirname, "dialog.tsx"), "utf-8");
+    // Mobile: bottom-sheet
+    expect(src).toContain("bottom-0");
+    expect(src).toContain("animate-slide-up");
+    expect(src).toContain("animate-slide-down");
+    expect(src).toContain("rounded-t-[var(--radius-card)]");
+    // Desktop: centered
+    expect(src).toContain("sm:top-[50%]");
+    expect(src).toContain("sm:left-[50%]");
+    expect(src).toContain("sm:rounded-[var(--radius-card)]");
+  });
+
+  it("DialogSheetHandle includes grab handle and minerals accent", async () => {
+    const { readFileSync } = await import("fs");
+    const { resolve } = await import("path");
+    const src = readFileSync(resolve(__dirname, "dialog.tsx"), "utf-8");
+    expect(src).toContain("dialog-sheet-handle");
+    expect(src).toContain("minerals-accent");
+    expect(src).toContain("sm:hidden"); // grab handle only on mobile
+  });
+
+  it("uses CSS custom property radius tokens — no hardcoded border-radius", async () => {
+    const { readFileSync } = await import("fs");
+    const { resolve } = await import("path");
+    const src = readFileSync(resolve(__dirname, "dialog.tsx"), "utf-8");
+    // All rounded-* classes must use CSS variables or "full" — never hardcoded sizes
+    const roundedClasses = src.match(/rounded-[^\s"']*/g) || [];
+    for (const cls of roundedClasses) {
+      expect(cls).toMatch(/rounded-(?:t-)?(?:\[var\(--radius-|full)/);
+    }
+    expect(src).toContain("var(--radius-card)");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Tabs — focus-visible validation
 // ---------------------------------------------------------------------------
 
@@ -234,7 +291,7 @@ describe("ToggleGroup variants", () => {
   it("default and outline variants enforce 44px min touch target", async () => {
     const { toggleGroupItemVariants } = await import("./toggle-group");
     for (const variant of ["default", "outline"] as const) {
-      expect(toggleGroupItemVariants({ variant })).toContain("min-h-[44px]");
+      expect(toggleGroupItemVariants({ variant })).toContain("min-h-[48px]");
     }
   });
 });

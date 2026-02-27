@@ -8,7 +8,7 @@ const BASE_URL = "https://weather.mukoko.com";
 export const metadata: Metadata = {
   title: "Historical Weather Data",
   description:
-    "Explore historical weather data for 90+ Zimbabwe locations. Search temperature trends, precipitation records, and climate patterns across Harare, Bulawayo, Mutare, and more.",
+    "Explore historical weather data for 265+ locations. Search temperature trends, precipitation records, and climate patterns across Harare, Bulawayo, Mutare, and more.",
   keywords: [
     "Zimbabwe historical weather",
     "Zimbabwe weather history",
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Historical Weather Data | mukoko weather",
     description:
-      "Explore historical weather data for 90+ Zimbabwe locations. Temperature trends, precipitation records, and climate patterns.",
+      "Explore historical weather data for 265+ locations. Temperature trends, precipitation records, and climate patterns.",
     url: `${BASE_URL}/history`,
     type: "website",
     locale: "en_ZW",

@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   title: "Embed Weather Widgets",
   description:
     "Add mukoko weather widgets to your website. Current conditions, forecasts, and compact badges for any Zimbabwe location.",
+  alternates: {
+    canonical: "https://weather.mukoko.com/embed",
+  },
 };
 
 export default function EmbedPage() {
@@ -177,7 +180,7 @@ export default function EmbedPage() {
             Available Locations
           </h2>
           <p className="mt-2 text-base text-text-secondary">
-            90+ locations across Zimbabwe. Use the slug value in{" "}
+            265+ locations across the developing world. Use the slug value in{" "}
             <code className="rounded bg-surface-base px-1.5 py-0.5 font-mono text-base">
               data-location
             </code>

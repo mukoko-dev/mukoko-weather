@@ -26,7 +26,7 @@ describe("ExploreSearch component structure", () => {
   });
 
   it("has 44px minimum touch targets", () => {
-    expect(source).toContain("min-h-[44px]");
+    expect(source).toContain("min-h-[48px]");
   });
 });
 

@@ -48,7 +48,11 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-surface-card data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 shadow-lg duration-200 rounded-none sm:rounded-2xl sm:max-h-[85vh]",
+          // Mobile: bottom-sheet that slides up from bottom
+          "bg-surface-card fixed z-50 w-full shadow-lg duration-200",
+          "inset-x-0 bottom-0 max-h-[90dvh] overflow-y-auto rounded-t-[var(--radius-card)] data-[state=open]:animate-slide-up data-[state=closed]:animate-slide-down",
+          // Desktop: centered dialog
+          "sm:inset-auto sm:top-[50%] sm:left-[50%] sm:bottom-auto sm:translate-x-[-50%] sm:translate-y-[-50%] sm:max-w-lg sm:rounded-[var(--radius-card)] sm:data-[state=open]:animate-in sm:data-[state=open]:fade-in-0 sm:data-[state=open]:zoom-in-95 sm:data-[state=closed]:animate-out sm:data-[state=closed]:fade-out-0 sm:data-[state=closed]:zoom-out-95 sm:max-h-[85vh]",
           className
         )}
         {...props}
@@ -56,6 +60,26 @@ function DialogContent({
         {children}
       </DialogPrimitive.Content>
     </DialogPortal>
+  )
+}
+
+/**
+ * Sheet handle — grab pill (mobile only) + minerals accent stripe.
+ * Place as the first child of DialogContent for Spotify-style bottom sheets.
+ */
+function DialogSheetHandle({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-sheet-handle"
+      aria-hidden="true"
+      className={cn("shrink-0", className)}
+      {...props}
+    >
+      <div className="flex justify-center pt-3 sm:pt-0">
+        <div className="h-1 w-10 rounded-full bg-text-tertiary/30 sm:hidden" />
+      </div>
+      <div className="minerals-accent mx-4 mt-2 sm:mx-5 sm:mt-3" />
+    </div>
   )
 }
 
@@ -114,6 +138,7 @@ export {
   DialogHeader,
   DialogOverlay,
   DialogPortal,
+  DialogSheetHandle,
   DialogTitle,
   DialogTrigger,
 }

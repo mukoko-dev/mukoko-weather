@@ -669,7 +669,7 @@ export function HistoryDashboard() {
                 key={opt.id}
                 onClick={() => setCategoryFilter(opt.id)}
                 aria-pressed={active}
-                className={`min-h-[44px] rounded-[var(--radius-badge)] px-4 py-2 text-base font-medium transition-colors ${
+                className={`min-h-[48px] rounded-[var(--radius-badge)] px-4 py-2 text-base font-medium transition-colors ${
                   active
                     ? style ? style.badge : "bg-primary text-primary-foreground"
                     : "bg-surface-base text-text-secondary hover:text-text-primary"
@@ -689,7 +689,7 @@ export function HistoryDashboard() {
             role="tab"
             aria-selected={activeTab === "weather"}
             onClick={() => setActiveTab("weather")}
-            className={`flex-1 min-h-[44px] rounded-[var(--radius-input)] px-4 py-2 text-base font-medium transition-colors ${
+            className={`flex-1 min-h-[48px] rounded-[var(--radius-input)] px-4 py-2 text-base font-medium transition-colors ${
               activeTab === "weather" ? "bg-surface-card text-text-primary shadow-sm" : "text-text-tertiary hover:text-text-secondary"
             }`}
           >
@@ -699,7 +699,7 @@ export function HistoryDashboard() {
             role="tab"
             aria-selected={activeTab === "insights"}
             onClick={() => setActiveTab("insights")}
-            className={`flex-1 min-h-[44px] rounded-[var(--radius-input)] px-4 py-2 text-base font-medium transition-colors ${
+            className={`flex-1 min-h-[48px] rounded-[var(--radius-input)] px-4 py-2 text-base font-medium transition-colors ${
               activeTab === "insights" ? "bg-surface-card text-text-primary shadow-sm" : "text-text-tertiary hover:text-text-secondary"
             }`}
           >

@@ -19,10 +19,10 @@ describe("WeatherReportModal structure", () => {
     expect(source).toContain("export function WeatherReportModal");
   });
 
-  it("uses shadcn Dialog", () => {
+  it("uses shadcn Dialog with sheet handle", () => {
     expect(source).toContain("<Dialog");
     expect(source).toContain("DialogContent");
-    expect(source).toContain("DialogHeader");
+    expect(source).toContain("DialogSheetHandle");
   });
 
   it("reads reportModalOpen from store", () => {
@@ -76,7 +76,7 @@ describe("3-step wizard flow", () => {
 
 describe("accessibility", () => {
   it("has 44px minimum touch targets", () => {
-    expect(source).toContain("min-h-[44px]");
+    expect(source).toContain("min-h-[48px]");
   });
 
   it("uses role=radiogroup for severity selection", () => {

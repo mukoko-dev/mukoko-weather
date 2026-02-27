@@ -66,7 +66,7 @@
   --focus-ring-width: 3px;
 
   /* Touch & Interaction */
-  --touch-target-min: 44px;
+  --touch-target-min: 48px;
 
   /* Typography — 16px base, 18px larger variant */
   --text-body: 1rem;           /* 16px — base body/footer text */
@@ -361,6 +361,8 @@
   --animate-fade-in-up: fade-in-up 400ms ease-out;
   --animate-fade-in-down: fade-in-down 300ms ease-out;
   --animate-scale-in: scale-in 200ms ease-out;
+  --animate-slide-up: slide-up 300ms ease-out;
+  --animate-slide-down: slide-down 200ms ease-out forwards;
   --animate-nav-indicator-in: nav-indicator-in 300ms ease-out;
 }
 
@@ -394,6 +396,16 @@
   to { opacity: 1; transform: scale(1); }
 }
 
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes slide-down {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+
 @keyframes nav-indicator-in {
   from { transform: scaleX(0); opacity: 0; }
   to { transform: scaleX(1); opacity: 1; }
@@ -418,6 +430,7 @@ html {
 @media (prefers-reduced-motion: reduce) {
   [class*="animate-fade-in"],
   [class*="animate-scale-in"],
+  [class*="animate-slide"],
   [class*="animate-nav-indicator"] {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
@@ -436,6 +449,20 @@ body {
   /* overscroll-behavior-x prevents iOS Safari from bubbling horizontal
      scroll from inner containers (e.g. hourly forecast row) to the page */
   overscroll-behavior-x: none;
+}
+
+/* ===== Minerals Accent — Horizontal gradient for dialogs ===== */
+.minerals-accent {
+  height: 3px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--mineral-tanzanite) 0%, var(--mineral-tanzanite) 20%,
+    var(--mineral-cobalt) 20%, var(--mineral-cobalt) 40%,
+    var(--mineral-malachite) 40%, var(--mineral-malachite) 60%,
+    var(--mineral-gold) 60%, var(--mineral-gold) 80%,
+    var(--mineral-terracotta) 80%, var(--mineral-terracotta) 100%
+  );
 }
 
 /* ===== Minerals Stripe — Five African Minerals ===== */

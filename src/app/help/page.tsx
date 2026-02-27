@@ -25,7 +25,7 @@ export default function HelpPage() {
         name: "What is mukoko weather?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "mukoko weather is an AI-powered weather intelligence platform. It provides real-time weather conditions, 7-day forecasts, hourly predictions, frost alerts, and AI-generated weather advice for locations across Zimbabwe and other supported regions.",
+          text: "mukoko weather is an AI-powered weather intelligence platform for the developing world. It provides real-time weather conditions, 7-day forecasts, hourly predictions, frost alerts, and AI-generated weather advice for 265+ locations across Africa, Asia, the Middle East, South America, and Eastern Europe.",
         },
       },
       {
@@ -81,7 +81,7 @@ export default function HelpPage() {
           <h2 className="font-heading text-2xl font-bold text-text-primary">Getting started</h2>
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
-              mukoko weather gives you accurate weather data for locations across Zimbabwe and beyond. No account needed —
+              mukoko weather gives you accurate weather data for 265+ locations across the developing world. No account needed —
               just visit{" "}
               <a href={BASE_URL} className="text-primary underline">weather.mukoko.com</a>{" "}
               and you&apos;re ready to go.

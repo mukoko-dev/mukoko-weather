@@ -115,8 +115,8 @@ describe("Screen reader text — sr-only", () => {
 
 describe("Touch targets — 44px minimum", () => {
   it("CurrentConditions share button meets 44px touch target requirement", () => {
-    expect(currentConditions).toContain("min-h-[44px]");
-    expect(currentConditions).toContain("min-w-[44px]");
+    expect(currentConditions).toContain("min-h-[48px]");
+    expect(currentConditions).toContain("min-w-[48px]");
   });
 });
 

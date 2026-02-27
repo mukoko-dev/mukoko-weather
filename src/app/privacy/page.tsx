@@ -76,10 +76,22 @@ export default function PrivacyPage() {
               </a>.
             </p>
             <p className="mt-2">
+              In addition to page views, we track anonymised user interaction events such as location
+              selections, activity preferences, theme changes, search queries, and weather report submissions.
+              These events contain no personally identifiable information — only action names and metadata
+              like location slugs and activity IDs. This data helps us understand which features are used
+              and improve the service.
+            </p>
+            <p className="mt-2">
+              We also use <strong className="text-text-primary">Vercel Web Analytics</strong> to monitor
+              website performance (Core Web Vitals) and track the same anonymised interaction events.
+              Vercel Analytics does not use cookies and collects no personally identifiable information.
+            </p>
+            <p className="mt-2">
               We do not use advertising pixels, fingerprinting technologies, or any other tracking beyond
-              Google Analytics. Our hosting provider (Cloudflare) may collect standard web server logs
-              (IP address, browser type, request time) as part of their infrastructure. We do not access
-              or analyse these logs.
+              Google Analytics and Vercel Analytics. Our hosting provider (Cloudflare) may collect standard
+              web server logs (IP address, browser type, request time) as part of their infrastructure.
+              We do not access or analyse these logs.
             </p>
           </section>
 

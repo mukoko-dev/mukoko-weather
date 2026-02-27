@@ -43,6 +43,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: `${flag} ${provinceName}, ${countryName} Weather | mukoko weather`,
     description: `Browse weather forecasts for locations in ${provinceName}, ${countryName}.`,
+    alternates: {
+      canonical: `https://weather.mukoko.com/explore/country/${code.toLowerCase()}/${provinceSlug}`,
+    },
   };
 }
 

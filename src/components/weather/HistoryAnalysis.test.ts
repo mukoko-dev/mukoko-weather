@@ -57,7 +57,7 @@ describe("HistoryAnalysis", () => {
     const { readFileSync } = await import("fs");
     const { resolve } = await import("path");
     const source = readFileSync(resolve(__dirname, "HistoryAnalysis.tsx"), "utf-8");
-    expect(source).toContain("min-h-[44px]");
+    expect(source).toContain("min-h-[48px]");
   });
 
   it("sets ShamwariContext for discuss-in-shamwari navigation", async () => {

@@ -13,14 +13,19 @@ import { ExploreSearch } from "@/components/explore/ExploreSearch";
 // Location data changes rarely — this eliminates cold-start DB latency for visitors.
 export const revalidate = 3600;
 
+const BASE_URL = "https://weather.mukoko.com";
+
 export const metadata: Metadata = {
   title: "Explore Weather | mukoko weather",
   description:
-    "Browse weather locations across Africa and ASEAN by category, country, and province. Discover cities, farming regions, national parks, and more.",
+    "Browse weather locations across the developing world by category, country, and province. Discover cities, farming regions, national parks, and more.",
+  alternates: {
+    canonical: `${BASE_URL}/explore`,
+  },
   openGraph: {
     title: "Explore Weather | mukoko weather",
     description:
-      "Browse weather locations across Africa and ASEAN by category, country, and province. Discover cities, farming regions, national parks, and more.",
+      "Browse weather locations across the developing world by category, country, and province. Discover cities, farming regions, national parks, and more.",
   },
 };
 
@@ -73,7 +78,7 @@ export default async function ExplorePage() {
           Explore
         </h1>
         <p className="mt-3 text-text-secondary">
-          Browse weather locations across Africa and ASEAN by category, country, and province.
+          Browse weather locations across the developing world by category, country, and province.
         </p>
 
         {/* AI Search */}
@@ -92,7 +97,7 @@ export default async function ExplorePage() {
           action={
             <Link
               href="/shamwari"
-              className="press-scale shrink-0 inline-flex items-center gap-2 rounded-[var(--radius-sm)] bg-primary px-4 py-2 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-all focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
+              className="press-scale shrink-0 inline-flex items-center gap-2 rounded-[var(--radius-sm)] bg-primary px-4 py-2 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-all focus-visible:outline-2 focus-visible:outline-primary min-h-[48px]"
             >
               Start chatting
             </Link>
@@ -106,7 +111,7 @@ export default async function ExplorePage() {
             Browse by Category
           </h2>
           <p className="mt-1 text-base text-text-secondary">
-            {totalLocations || "90+"} locations across Africa and ASEAN
+            {totalLocations || "265+"} locations across the developing world
           </p>
 
           {tagCounts.length === 0 && (
@@ -145,11 +150,11 @@ export default async function ExplorePage() {
           {/* Country browse card */}
           <CTACard
             title="Browse by Country"
-            description="Explore weather across Africa and ASEAN — grouped by country and province"
+            description="Explore weather across the developing world — grouped by country and province"
             action={
               <Link
                 href="/explore/country"
-                className="press-scale shrink-0 inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-primary px-4 py-2 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-all focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
+                className="press-scale shrink-0 inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-primary px-4 py-2 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-all focus-visible:outline-2 focus-visible:outline-primary min-h-[48px]"
               >
                 Browse countries
               </Link>

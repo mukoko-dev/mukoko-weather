@@ -14,13 +14,14 @@ import {
 } from "@/lib/activities";
 import type { ActivityCategoryDoc } from "@/lib/db";
 import { CATEGORIES } from "@/lib/seed-categories";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogSheetHandle, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/lib/use-debounce";
 import { cn } from "@/lib/utils";
+import { trackEvent } from "@/lib/analytics";
 
 /** Default category style for unknown categories */
 const DEFAULT_CATEGORY_STYLE = {
@@ -49,6 +50,7 @@ export function MyWeatherModal() {
 
   const currentSlug = pathname?.replace("/", "") || "harare";
   const [pendingSlug, setPendingSlug] = useState(currentSlug);
+  const pendingMethodRef = useRef<"saved" | "geolocation" | "search">("saved");
   const [activeTab, setActiveTab] = useState("saved");
 
   const [allActivities, setAllActivities] = useState<Activity[]>(ACTIVITIES);
@@ -86,6 +88,7 @@ export function MyWeatherModal() {
     closeMyWeather();
     setSelectedLocation(pendingSlug);
     if (pendingSlug !== currentSlug) {
+      trackEvent("location_changed", { from: currentSlug, to: pendingSlug, method: pendingMethodRef.current });
       router.push(`/${pendingSlug}`);
     }
   };
@@ -93,15 +96,18 @@ export function MyWeatherModal() {
   const handleOpenChange = (open: boolean) => {
     if (open) {
       setPendingSlug(currentSlug);
+      pendingMethodRef.current = "saved";
       setActiveTab("saved");
+      trackEvent("modal_opened", { modal: "my-weather" });
     } else {
       handleDone();
     }
   };
 
   /** When user selects a location from saved, navigate and close */
-  const handleSelectSavedLocation = useCallback((slug: string) => {
+  const handleSelectSavedLocation = useCallback((slug: string, method: "saved" | "geolocation" | "search" = "saved") => {
     setPendingSlug(slug);
+    pendingMethodRef.current = method;
   }, []);
 
   const locationChanged = pendingSlug !== currentSlug;
@@ -109,6 +115,7 @@ export function MyWeatherModal() {
   return (
     <Dialog open={myWeatherOpen} onOpenChange={handleOpenChange}>
       <DialogContent aria-describedby={undefined} className="flex h-[100dvh] flex-col p-0 sm:h-auto sm:max-h-[85vh]">
+        <DialogSheetHandle />
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
           <DialogTitle>My Weather</DialogTitle>
@@ -156,7 +163,7 @@ function SavedTab({
   onSelectLocation,
 }: {
   pendingSlug: string;
-  onSelectLocation: (slug: string) => void;
+  onSelectLocation: (slug: string, method?: "saved" | "geolocation" | "search") => void;
 }) {
   const savedLocations = useAppStore((s) => s.savedLocations);
   const locationLabels = useAppStore((s) => s.locationLabels);
@@ -231,7 +238,7 @@ function SavedTab({
     setGeoLoading(false);
     if ((result.status === "success" || result.status === "created") && result.location) {
       saveLocation(result.location.slug);
-      onSelectLocation(result.location.slug);
+      onSelectLocation(result.location.slug, "geolocation");
     }
   }, [onSelectLocation, saveLocation]);
 
@@ -250,7 +257,7 @@ function SavedTab({
           variant="ghost"
           onClick={handleGeolocate}
           disabled={geoLoading}
-          className="flex min-h-[44px] w-full items-center justify-start gap-3 text-primary"
+          className="flex min-h-[48px] w-full items-center justify-start gap-3 text-primary"
         >
           {geoLoading ? (
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
@@ -277,7 +284,7 @@ function SavedTab({
           </span>
           {!showAdd && (
             <Button variant="ghost" size="sm" onClick={() => setShowAdd(true)} disabled={atCap}
-              className="text-primary min-h-[44px]">
+              className="text-primary min-h-[48px]">
               + Add location
             </Button>
           )}
@@ -296,7 +303,7 @@ function SavedTab({
 
             return (
               <li key={slug} className="group">
-                <div className={`flex items-center gap-2 rounded-[var(--radius-card)] px-3 py-2 min-h-[44px] transition-colors ${
+                <div className={`flex items-center gap-2 rounded-[var(--radius-card)] px-3 py-2 min-h-[48px] transition-colors ${
                   isSelected ? "bg-primary/10" : "hover:bg-surface-base"
                 }`}>
                   <button
@@ -381,7 +388,7 @@ function SavedTab({
               <li key={loc.slug}>
                 <button
                   onClick={() => { saveLocation(loc.slug); setAddQuery(""); setAddResults([]); }}
-                  className="flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base text-text-primary hover:bg-surface-base transition-colors"
+                  className="flex w-full min-h-[48px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base text-text-primary hover:bg-surface-base transition-colors"
                   type="button"
                 >
                   <MapPinIcon size={14} className="text-text-tertiary" />
@@ -406,7 +413,7 @@ function SavedTab({
           href="/explore"
           prefetch={false}
           onClick={closeMyWeather}
-          className="flex items-center gap-2 rounded-[var(--radius-input)] border border-primary/10 bg-primary/5 px-3 py-2.5 min-h-[44px] text-base font-medium text-primary hover:bg-primary/10 transition-colors"
+          className="flex items-center gap-2 rounded-[var(--radius-input)] border border-primary/10 bg-primary/5 px-3 py-2.5 min-h-[48px] text-base font-medium text-primary hover:bg-primary/10 transition-colors"
         >
           <SearchIcon size={14} className="text-primary" aria-hidden="true" />
           Discover more locations on Explore
@@ -472,7 +479,7 @@ function ActivitiesTab({
         <ToggleGroupItem
           value="all"
           className={cn(
-            "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[44px] text-base font-medium transition-colors",
+            "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[48px] text-base font-medium transition-colors",
             activeCategory === "all"
               ? "bg-primary text-primary-foreground"
               : "bg-surface-base text-text-secondary hover:text-text-primary",
@@ -487,7 +494,7 @@ function ActivitiesTab({
               key={cat.id}
               value={cat.id}
               className={cn(
-                "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[44px] text-base font-medium transition-colors",
+                "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[48px] text-base font-medium transition-colors",
                 activeCategory === cat.id
                   ? style.badge
                   : "bg-surface-base text-text-secondary hover:text-text-primary",
@@ -523,7 +530,7 @@ function ActivitiesTab({
             return (
               <button
                 key={activity.id}
-                onClick={() => toggleActivity(activity.id)}
+                onClick={() => { toggleActivity(activity.id); trackEvent("activity_toggled", { activityId: activity.id, enabled: !isSelected }); }}
                 aria-pressed={isSelected}
                 aria-label={`${activity.label}: ${activity.description}`}
                 className={`press-scale relative flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border-2 p-3 transition-all ${
@@ -584,8 +591,8 @@ function SettingsTab() {
             key={option.value}
             role="radio"
             aria-checked={theme === option.value}
-            onClick={() => setTheme(option.value)}
-            className={`press-scale flex w-full min-h-[44px] items-center gap-3 rounded-[var(--radius-card)] border-2 px-4 py-3 text-left transition-all ${
+            onClick={() => { setTheme(option.value); trackEvent("theme_changed", { theme: option.value }); }}
+            className={`press-scale flex w-full min-h-[48px] items-center gap-3 rounded-[var(--radius-card)] border-2 px-4 py-3 text-left transition-all ${
               theme === option.value
                 ? "border-primary bg-primary/5 shadow-sm"
                 : "border-transparent bg-surface-base hover:border-text-tertiary/30"

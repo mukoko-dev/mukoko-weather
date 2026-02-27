@@ -48,8 +48,8 @@ const FAQ_ITEMS = [
     question: "Why can't I find my location?",
     answer: (
       <p>
-        We cover locations across Zimbabwe, ASEAN countries, and other developing regions — with
-        more being added by the community. If your area isn&apos;t listed, try using the
+        We cover 265+ locations across Africa, Asia, the Middle East, South &amp; Central America,
+        and Eastern Europe — with more being added by the community. If your area isn&apos;t listed, try using the
         &quot;Use my location&quot; feature — if you&apos;re in a supported region, a new
         location will be created automatically. You can also search for a location by name in the
         My Weather modal.

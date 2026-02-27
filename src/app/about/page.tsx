@@ -6,7 +6,7 @@ import { Footer } from "@/components/layout/Footer";
 export const metadata: Metadata = {
   title: "About",
   description:
-    "Learn about mukoko weather — an AI-powered weather intelligence platform starting with Zimbabwe, expanding globally. A Mukoko Africa product, developed by Nyuchi Web Services, a division of Nyuchi Africa (PVT) Ltd.",
+    "Learn about mukoko weather — an AI-powered weather intelligence platform for the developing world. Starting with Zimbabwe, expanding across Africa, Asia, the Middle East, South America, and Eastern Europe. A Mukoko Africa product by Nyuchi Web Services.",
   alternates: {
     canonical: "https://weather.mukoko.com/about",
   },
@@ -22,9 +22,9 @@ export default function AboutPage() {
         <section className="mt-8 space-y-4 text-text-secondary leading-relaxed">
           <p>
             <strong className="text-text-primary">mukoko weather</strong> is an AI-powered weather
-            intelligence platform. Starting with Zimbabwe, we&apos;re expanding to serve communities across
-            Africa, Southeast Asia, and other developing regions — providing accurate, real-time forecasts and
-            actionable weather insights for farming, mining, travel, and daily life.
+            intelligence platform for the developing world. Starting with Zimbabwe, we&apos;re expanding
+            across Africa, Asia, the Middle East, South &amp; Central America, and Eastern Europe — providing
+            accurate, real-time forecasts and actionable weather insights for farming, mining, travel, and daily life.
           </p>
           <p>
             Our mission is simple: <em>weather as a public good</em>. Everyone deserves access to
@@ -47,7 +47,7 @@ export default function AboutPage() {
             <p>
               The platform is developed and maintained by{" "}
               <strong className="text-text-primary">Nyuchi Web Services</strong>, the technology arm of Nyuchi
-              Africa, building digital products that serve African communities.
+              Africa, building digital products that serve communities across the developing world.
             </p>
           </div>
         </section>
@@ -57,7 +57,7 @@ export default function AboutPage() {
           <ul className="mt-4 space-y-2 text-text-secondary">
             <li className="flex items-start gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" aria-hidden="true" />
-              <span>Real-time weather conditions for locations across Zimbabwe and beyond</span>
+              <span>Real-time weather conditions for 265+ locations across the developing world</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" aria-hidden="true" />

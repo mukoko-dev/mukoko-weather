@@ -12,9 +12,9 @@ const toggleGroupItemVariants = cva(
     variants: {
       variant: {
         default:
-          "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[44px] data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=off]:bg-surface-base data-[state=off]:text-text-secondary data-[state=off]:hover:text-text-primary",
+          "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[48px] data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=off]:bg-surface-base data-[state=off]:text-text-secondary data-[state=off]:hover:text-text-primary",
         outline:
-          "shrink-0 rounded-[var(--radius-badge)] border-2 px-4 py-2 min-h-[44px] data-[state=on]:border-primary data-[state=on]:bg-primary/5 data-[state=on]:text-primary data-[state=off]:border-transparent data-[state=off]:bg-surface-base data-[state=off]:text-text-secondary data-[state=off]:hover:text-text-primary",
+          "shrink-0 rounded-[var(--radius-badge)] border-2 px-4 py-2 min-h-[48px] data-[state=on]:border-primary data-[state=on]:bg-primary/5 data-[state=on]:text-primary data-[state=off]:border-transparent data-[state=off]:bg-surface-base data-[state=off]:text-text-secondary data-[state=off]:hover:text-text-primary",
         /** Use "unstyled" when items need fully custom active/inactive styling (e.g. per-item mineral colors). */
         unstyled: "shrink-0",
       },

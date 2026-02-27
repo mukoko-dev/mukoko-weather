@@ -125,6 +125,57 @@ describe("sitemap.ts", () => {
   });
 });
 
+describe("canonical URLs — every page sets its own canonical", () => {
+  const layoutSource = readFileSync(resolve(__dirname, "layout.tsx"), "utf-8");
+
+  it("root layout does NOT set a canonical (prevents bleed to child pages)", () => {
+    // Layout alternates should have languages but NOT canonical.
+    // A layout canonical bleeds into every child page that doesn't override it,
+    // causing Google Search Console to report duplicate canonicals.
+    expect(layoutSource).toContain("alternates");
+    // Canonical must NOT appear anywhere in the layout — each page sets its own
+    expect(layoutSource).not.toMatch(/canonical/);
+  });
+
+  // Pages that MUST have their own canonical to avoid GSC errors
+  const pagesWithCanonicals: [string, string][] = [
+    ["page.tsx", "/harare"],               // home → points to /harare
+    ["[location]/page.tsx", "loc.slug"],   // dynamic locations
+    ["explore/page.tsx", "/explore"],
+    ["shamwari/page.tsx", "/shamwari"],
+    ["history/page.tsx", "/history"],
+    ["about/page.tsx", "/about"],
+    ["help/page.tsx", "/help"],
+    ["privacy/page.tsx", "/privacy"],
+    ["terms/page.tsx", "/terms"],
+    ["status/page.tsx", "/status"],
+    ["embed/page.tsx", "/embed"],
+  ];
+
+  for (const [file, expectedFragment] of pagesWithCanonicals) {
+    it(`${file} sets a canonical containing "${expectedFragment}"`, () => {
+      const src = readFileSync(resolve(__dirname, file), "utf-8");
+      expect(src).toContain("canonical");
+      expect(src).toContain(expectedFragment);
+    });
+  }
+
+  // Dynamic explore sub-routes must set canonicals in generateMetadata
+  const dynamicExplorePages = [
+    "explore/[tag]/page.tsx",
+    "explore/country/[code]/page.tsx",
+    "explore/country/[code]/[province]/page.tsx",
+  ];
+
+  for (const file of dynamicExplorePages) {
+    it(`${file} sets a canonical in generateMetadata`, () => {
+      const src = readFileSync(resolve(__dirname, file), "utf-8");
+      expect(src).toContain("canonical");
+      expect(src).toContain("weather.mukoko.com");
+    });
+  }
+});
+
 describe("country-aware metadata in [location]/page.tsx", () => {
   const pageSource = readFileSync(
     resolve(__dirname, "[location]/page.tsx"),

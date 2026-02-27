@@ -6,6 +6,7 @@ import { SparklesIcon } from "@/lib/weather-icons";
 import { useAppStore } from "@/lib/store";
 import type { WeatherData } from "@/lib/weather";
 import type { ZimbabweLocation } from "@/lib/locations";
+import { trackEvent } from "@/lib/analytics";
 
 interface Props {
   weather: WeatherData;
@@ -103,6 +104,7 @@ export function AISummary({ weather, location, onSummaryLoaded }: Props) {
         if (!cancelled) {
           setInsight(data.insight);
           onSummaryLoaded?.(data.insight);
+          trackEvent("ai_summary_loaded", { location: location.slug });
         }
       } catch (err) {
         // Don't show error for intentional aborts

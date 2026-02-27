@@ -4,19 +4,8 @@ import { lazy, Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
-import { MapPinIcon, ClockIcon, SparklesIcon } from "@/lib/weather-icons";
+import { MapPinIcon, ClockIcon, SparklesIcon, MegaphoneIcon, LayersIcon } from "@/lib/weather-icons";
 import { useAppStore } from "@/lib/store";
-
-/** Layers/stack icon for maps */
-function LayersIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
-  return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
-      <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" />
-      <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" />
-    </svg>
-  );
-}
 
 // Code-split: MyWeatherModal imports LOCATIONS (154 items), ACTIVITIES (20 items),
 // geolocation, router, etc. Lazy-loading prevents this from bloating the initial
@@ -55,6 +44,7 @@ export function Header() {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
   const myWeatherOpen = useAppStore((s) => s.myWeatherOpen);
   const selectedLocation = useAppStore((s) => s.selectedLocation);
+  const openReportModal = useAppStore((s) => s.openReportModal);
   const reportModalOpen = useAppStore((s) => s.reportModalOpen);
   const pathname = usePathname();
   const [isScrolled, setIsScrolled] = useState(false);
@@ -134,7 +124,7 @@ export function Header() {
               href="/explore"
               prefetch={false}
               aria-label="Explore locations"
-              className="flex items-center justify-center w-11 h-11 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
+              className="flex items-center justify-center w-12 h-12 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
             >
               <CompassIcon size={18} className="text-primary-foreground" />
             </Link>
@@ -142,14 +132,22 @@ export function Header() {
               href={`/${selectedLocation || "harare"}/map`}
               prefetch={false}
               aria-label="Weather map"
-              className="flex items-center justify-center w-11 h-11 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
+              className="flex items-center justify-center w-12 h-12 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
             >
               <LayersIcon size={18} className="text-primary-foreground" />
             </Link>
             <button
+              onClick={openReportModal}
+              aria-label="Report current weather"
+              className="flex items-center justify-center w-12 h-12 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
+              type="button"
+            >
+              <MegaphoneIcon size={18} className="text-primary-foreground" />
+            </button>
+            <button
               onClick={openMyWeather}
               aria-label="Open My Weather preferences"
-              className="flex items-center justify-center w-11 h-11 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
+              className="flex items-center justify-center w-12 h-12 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
               type="button"
             >
               <MapPinIcon size={18} className="text-primary-foreground" />

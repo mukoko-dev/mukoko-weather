@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     template: "%s | mukoko weather",
   },
   description:
-    "AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across Harare, Bulawayo, Mutare, and 90+ locations.",
+    "AI-powered weather intelligence for the developing world. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 265+ locations in Africa, Asia, the Middle East, South America, and Eastern Europe.",
   keywords: [
     "Zimbabwe weather",
     "Zimbabwe weather forecast",
@@ -40,7 +40,6 @@ export const metadata: Metadata = {
   creator: "Mukoko Africa",
   publisher: "Nyuchi Africa (PVT) Ltd",
   alternates: {
-    canonical: BASE_URL,
     languages: {
       "en": BASE_URL,
       "x-default": BASE_URL,
@@ -49,7 +48,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "mukoko weather — Zimbabwe Weather Intelligence",
     description:
-      "AI-powered weather intelligence for Zimbabwe. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 90+ locations.",
+      "AI-powered weather intelligence for the developing world. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 265+ locations.",
     type: "website",
     locale: "en_ZW",
     url: BASE_URL,
@@ -67,7 +66,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "mukoko weather — Zimbabwe Weather Intelligence",
     description:
-      "AI-powered weather intelligence for Zimbabwe. Forecasts for farming, mining, travel, and daily life.",
+      "AI-powered weather intelligence for the developing world. Forecasts for farming, mining, travel, and daily life.",
     creator: "@mukokoafrica",
     site: "@mukokoafrica",
     images: [
@@ -100,9 +99,9 @@ export default function RootLayout({
     "@type": "WebApplication",
     "@id": `${BASE_URL}/#app`,
     name: "mukoko weather",
-    alternateName: "Mukoko Weather Zimbabwe",
+    alternateName: "Mukoko Weather",
     description:
-      "AI-powered weather intelligence platform for Zimbabwe, providing actionable forecasts for farming, mining, travel, and daily life across 90+ locations.",
+      "AI-powered weather intelligence platform for the developing world, providing actionable forecasts for farming, mining, travel, and daily life across 265+ locations in Africa, Asia, the Middle East, South America, and Eastern Europe.",
     url: BASE_URL,
     applicationCategory: "WeatherApplication",
     operatingSystem: "Any",
@@ -114,16 +113,16 @@ export default function RootLayout({
     ],
     creator: { "@id": `${BASE_URL}/#org` },
     publisher: { "@id": `${BASE_URL}/#org` },
-    areaServed: {
-      "@type": "Country",
-      name: "Zimbabwe",
-      identifier: "ZW",
-    },
+    areaServed: [
+      { "@type": "Continent", name: "Africa" },
+      { "@type": "Continent", name: "Asia" },
+      { "@type": "Continent", name: "South America" },
+    ],
     offers: {
       "@type": "Offer",
       price: "0",
       priceCurrency: "USD",
-      description: "Free weather intelligence for Zimbabwe",
+      description: "Free weather intelligence for the developing world",
       availability: "https://schema.org/InStock",
     },
     inLanguage: "en",
@@ -133,7 +132,7 @@ export default function RootLayout({
       "24-hour hourly forecasts",
       "AI-powered weather summaries",
       "Frost alerts for farmers",
-      "90+ Zimbabwe locations",
+      "265+ weather locations",
       "Sunrise and sunset times",
     ],
   };

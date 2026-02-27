@@ -142,6 +142,11 @@ describe("Icon components", () => {
     "BoltIcon", "TruckIcon", "ShipIcon", "ShieldIcon", "PawPrintIcon",
     "TrophyIcon", "WhistleIcon", "CalendarIcon", "MusicIcon",
     "HeartPulseIcon", "GraduationCapIcon", "BoxIcon",
+    // Utility / UI icons
+    "DroneIcon", "TennisIcon", "RugbyIcon", "HorseIcon", "PlaneIcon",
+    "WaterIcon", "FishIcon", "StarIcon", "PicnicIcon",
+    "TrashIcon", "PlusIcon", "NavigationIcon",
+    "MegaphoneIcon", "LayersIcon",
   ];
 
   it("exports all icon components", () => {

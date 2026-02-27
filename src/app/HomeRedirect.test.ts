@@ -145,6 +145,6 @@ describe("HomeRedirect — location fallback link", () => {
   });
 
   it("has proper min touch target on the fallback link", () => {
-    expect(source).toContain("min-h-[44px]");
+    expect(source).toContain("min-h-[48px]");
   });
 });

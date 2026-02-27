@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAppStore } from "@/lib/store";
+import { trackEvent } from "@/lib/analytics";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -99,12 +100,13 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
               r.id === reportId ? { ...r, upvotes: r.upvotes + 1 } : r
             )
           );
+          trackEvent("report_upvoted", { reportId, location: locationSlug });
         }
       }
     } catch {
       // Silently fail — upvoting is non-critical
     }
-  }, []);
+  }, [locationSlug]);
 
   // Don't render section if no reports and not loading
   if (!loading && reports.length === 0) {
@@ -117,7 +119,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
           <button
             type="button"
             onClick={openReportModal}
-            className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary/10 px-3 py-1.5 text-base font-medium text-primary transition-colors hover:bg-primary/20 min-h-[44px]"
+            className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary/10 px-3 py-1.5 text-base font-medium text-primary transition-colors hover:bg-primary/20 min-h-[48px]"
           >
             + Report Weather
           </button>
@@ -141,7 +143,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
         <button
           type="button"
           onClick={openReportModal}
-          className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary/10 px-3 py-1.5 text-base font-medium text-primary transition-colors hover:bg-primary/20 min-h-[44px]"
+          className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary/10 px-3 py-1.5 text-base font-medium text-primary transition-colors hover:bg-primary/20 min-h-[48px]"
         >
           + Report Weather
         </button>
@@ -187,7 +189,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
               <button
                 type="button"
                 onClick={() => handleUpvote(report.id)}
-                className="flex items-center gap-1 rounded-[var(--radius-input)] px-2 py-1 text-base text-text-tertiary transition-colors hover:text-primary hover:bg-primary/10 min-h-[44px] min-w-[44px] justify-center"
+                className="flex items-center gap-1 rounded-[var(--radius-input)] px-2 py-1 text-base text-text-tertiary transition-colors hover:text-primary hover:bg-primary/10 min-h-[48px] min-w-[48px] justify-center"
                 aria-label={`Upvote report (${report.upvotes} votes)`}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

@@ -38,9 +38,10 @@ describe("SavedLocationsModal — component structure", () => {
     expect(source).toContain("MAX_SAVED_LOCATIONS");
   });
 
-  it("uses shadcn Dialog component", () => {
+  it("uses shadcn Dialog with sheet handle", () => {
     expect(source).toContain("Dialog");
     expect(source).toContain("DialogContent");
+    expect(source).toContain("DialogSheetHandle");
     expect(source).toContain("DialogTitle");
   });
 });
@@ -248,7 +249,7 @@ describe("SavedLocationsModal — custom labels", () => {
 
 describe("SavedLocationsModal — accessibility", () => {
   it("uses minimum 44px touch targets", () => {
-    expect(source).toContain("min-h-[44px]");
+    expect(source).toContain("min-h-[48px]");
   });
 
   it("has aria-labels on interactive elements", () => {

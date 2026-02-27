@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAppStore, isShamwariContextValid, type ShamwariContext } from "@/lib/store";
 import { getScrollBehavior } from "@/lib/utils";
+import { trackEvent } from "@/lib/analytics";
 
 // ---------------------------------------------------------------------------
 // Inline error boundary for ReactMarkdown — prevents malformed markdown from
@@ -282,6 +283,7 @@ export function ExploreChatbot() {
     // Reset textarea height back to single row after sending
     if (inputRef.current) inputRef.current.style.height = "auto";
     setLoading(true);
+    trackEvent("ai_chat_sent", { source: "shamwari" });
 
     try {
       // Build history from previous messages (text only).
@@ -374,7 +376,7 @@ export function ExploreChatbot() {
                   <button
                     key={prompt.query}
                     onClick={() => handleSuggestion(prompt.query)}
-                    className="flex items-center rounded-[var(--radius-card)] border border-border bg-surface-card px-3 py-2 text-left text-base text-text-secondary transition-colors hover:bg-surface-base hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[44px]"
+                    className="flex items-center rounded-[var(--radius-card)] border border-border bg-surface-card px-3 py-2 text-left text-base text-text-secondary transition-colors hover:bg-surface-base hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[48px]"
                     type="button"
                     disabled={loading}
                   >
@@ -482,7 +484,7 @@ function EmptyState({ onSuggestionClick, loading }: { onSuggestionClick: (query:
             <button
               key={prompt.query}
               onClick={() => onSuggestionClick(prompt.query)}
-              className="flex items-center rounded-[var(--radius-card)] border border-border bg-surface-card px-3 py-3 text-left text-base text-text-secondary transition-colors hover:bg-surface-base hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[44px] disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex items-center rounded-[var(--radius-card)] border border-border bg-surface-card px-3 py-3 text-left text-base text-text-secondary transition-colors hover:bg-surface-base hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[48px] disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               disabled={loading}
             >

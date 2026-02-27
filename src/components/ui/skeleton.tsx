@@ -51,7 +51,6 @@ function CardSkeleton({ className, lines = 3 }: { className?: string; lines?: nu
           />
         ))}
       </div>
-      <span className="sr-only">Loading content</span>
     </div>
   )
 }
@@ -67,7 +66,6 @@ function ChartSkeleton({ aspect = "aspect-[16/5]", className }: { aspect?: strin
       role="status"
       aria-label="Loading chart"
     >
-      <span className="sr-only">Loading chart</span>
     </div>
   )
 }
@@ -98,7 +96,6 @@ function MetricCardSkeleton({ className }: { className?: string }) {
         <Skeleton className="h-3 w-20 mb-1.5" />
         <Skeleton className="h-3 w-24" />
       </div>
-      <span className="sr-only">Loading metric</span>
     </div>
   )
 }
@@ -133,7 +130,6 @@ function ChatSkeleton({ className }: { className?: string }) {
           <Skeleton className="h-11 w-11 rounded-md" />
         </div>
       </div>
-      <span className="sr-only">Loading chat interface</span>
     </div>
   )
 }

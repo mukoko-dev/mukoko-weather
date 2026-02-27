@@ -67,6 +67,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
         <MapLayerSwitcher
           activeLayer={activeLayer}
           onLayerChange={handleLayerChange}
+          locationSlug={location.slug}
         />
       </div>
 

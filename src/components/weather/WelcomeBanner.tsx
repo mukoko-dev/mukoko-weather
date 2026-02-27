@@ -2,6 +2,7 @@
 
 import { useAppStore, hasStoreHydrated } from "@/lib/store";
 import { MapPinIcon, SparklesIcon } from "@/lib/weather-icons";
+import { trackEvent } from "@/lib/analytics";
 
 /**
  * Inline welcome banner for first-time visitors.
@@ -53,16 +54,16 @@ export function WelcomeBanner({
           <div className="mt-4 flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={onChangeLocation}
-              className="press-scale inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-base font-medium text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-md min-h-[44px]"
+              onClick={() => { onChangeLocation(); trackEvent("onboarding_completed", { method: "personalize" }); }}
+              className="press-scale inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-base font-medium text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-md min-h-[48px]"
             >
               <MapPinIcon size={14} />
               Personalise
             </button>
             <button
               type="button"
-              onClick={completeOnboarding}
-              className="press-scale inline-flex items-center rounded-full border border-text-tertiary/20 px-3.5 py-1.5 text-base font-medium text-text-secondary transition-all hover:bg-surface-card hover:border-text-tertiary/40 min-h-[44px]"
+              onClick={() => { completeOnboarding(); trackEvent("onboarding_completed", { method: "continue" }); }}
+              className="press-scale inline-flex items-center rounded-full border border-text-tertiary/20 px-3.5 py-1.5 text-base font-medium text-text-secondary transition-all hover:bg-surface-card hover:border-text-tertiary/40 min-h-[48px]"
             >
               Continue with {locationName}
             </button>

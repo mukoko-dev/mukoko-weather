@@ -9,14 +9,19 @@ import type { CountryDoc } from "@/lib/db";
 
 export const revalidate = 3600;
 
+const BASE_URL = "https://weather.mukoko.com";
+
 export const metadata: Metadata = {
   title: "Browse Weather by Country | mukoko weather",
   description:
-    "Explore weather forecasts across Africa and ASEAN — browse by country and region.",
+    "Explore weather forecasts across the developing world — browse by country and region.",
+  alternates: {
+    canonical: `${BASE_URL}/explore/country`,
+  },
   openGraph: {
     title: "Browse Weather by Country | mukoko weather",
     description:
-      "Explore weather forecasts across Africa and ASEAN — browse by country and region.",
+      "Explore weather forecasts across the developing world — browse by country and region.",
   },
 };
 
@@ -87,7 +92,7 @@ export default async function ExploreCountryPage() {
         </h1>
         <p className="mt-2 text-text-secondary">
           {countries.length > 0
-            ? `${countries.length} countries across Africa and ASEAN`
+            ? `${countries.length} countries across the developing world`
             : "No countries available yet — check back soon."}
         </p>
 

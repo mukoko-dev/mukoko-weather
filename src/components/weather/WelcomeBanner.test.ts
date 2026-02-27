@@ -64,7 +64,7 @@ describe("WelcomeBanner — accessibility", () => {
 
   it("buttons have minimum touch target height", () => {
     // 44px min-height for both buttons (WCAG touch target requirement)
-    expect(source).toContain("min-h-[44px]");
+    expect(source).toContain("min-h-[48px]");
   });
 });
 

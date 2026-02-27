@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   title: "Shamwari | mukoko weather",
   description:
     "Chat with Shamwari, your AI weather assistant. Get real-time weather insights, activity advice, and location comparisons across Africa.",
+  alternates: {
+    canonical: "https://weather.mukoko.com/shamwari",
+  },
   openGraph: {
     title: "Shamwari | mukoko weather",
     description:
