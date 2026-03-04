@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   checkFrostRisk,
   weatherCodeToInfo,
-  getZimbabweSeason,
+  getDefaultSeason,
   windDirection,
   uvLevel,
   createFallbackWeather,
@@ -12,7 +12,7 @@ import {
 
 // Helper to build hourly data for frost testing
 function makeHourlyData(temps: number[], hours?: number[]): HourlyWeather {
-  const baseDate = new Date("2025-06-15T00:00:00"); // Winter in Zimbabwe
+  const baseDate = new Date("2025-06-15T00:00:00"); // Winter in southern hemisphere
   const times = temps.map((_, i) => {
     const d = new Date(baseDate);
     d.setHours(hours ? hours[i] : i);
@@ -147,63 +147,85 @@ describe("weatherCodeToInfo", () => {
   });
 });
 
-describe("getZimbabweSeason", () => {
-  it("returns Main rains (Masika) for November", () => {
-    const season = getZimbabweSeason(new Date("2025-11-15"));
-    expect(season.name).toBe("Main rains");
-    expect(season.shona).toBe("Masika");
+describe("getDefaultSeason", () => {
+  // Southern hemisphere (negative latitude, e.g. -17 for Harare)
+  it("returns Summer for December in southern hemisphere", () => {
+    const season = getDefaultSeason(new Date("2025-12-15"), -17);
+    expect(season.name).toBe("Summer");
+    expect(season.localName).toBe("Summer");
   });
 
-  it("returns Main rains (Masika) for January", () => {
-    const season = getZimbabweSeason(new Date("2025-01-15"));
-    expect(season.name).toBe("Main rains");
-    expect(season.shona).toBe("Masika");
+  it("returns Summer for January in southern hemisphere", () => {
+    const season = getDefaultSeason(new Date("2025-01-15"), -17);
+    expect(season.name).toBe("Summer");
   });
 
-  it("returns Main rains (Masika) for March", () => {
-    const season = getZimbabweSeason(new Date("2025-03-15"));
-    expect(season.name).toBe("Main rains");
-  });
-
-  it("returns Short rains (Munakamwe) for April", () => {
-    const season = getZimbabweSeason(new Date("2025-04-15"));
-    expect(season.name).toBe("Short rains");
-    expect(season.shona).toBe("Munakamwe");
-  });
-
-  it("returns Cool dry (Chirimo) for May-August", () => {
-    for (const month of [5, 6, 7, 8]) {
-      const season = getZimbabweSeason(new Date(`2025-${month.toString().padStart(2, "0")}-15`));
-      expect(season.name).toBe("Cool dry");
-      expect(season.shona).toBe("Chirimo");
+  it("returns Autumn for March-May in southern hemisphere", () => {
+    for (const month of [3, 4, 5]) {
+      const season = getDefaultSeason(new Date(`2025-${month.toString().padStart(2, "0")}-15`), -20);
+      expect(season.name).toBe("Autumn");
     }
   });
 
-  it("returns Hot dry (Zhizha) for September-October", () => {
-    for (const month of [9, 10]) {
-      const season = getZimbabweSeason(new Date(`2025-${month.toString().padStart(2, "0")}-15`));
-      expect(season.name).toBe("Hot dry");
-      expect(season.shona).toBe("Zhizha");
+  it("returns Winter for June-August in southern hemisphere", () => {
+    for (const month of [6, 7, 8]) {
+      const season = getDefaultSeason(new Date(`2025-${month.toString().padStart(2, "0")}-15`), -17);
+      expect(season.name).toBe("Winter");
     }
   });
 
-  it("returns Main rains for December", () => {
-    const season = getZimbabweSeason(new Date("2025-12-15"));
-    expect(season.name).toBe("Main rains");
+  it("returns Spring for September-November in southern hemisphere", () => {
+    for (const month of [9, 10, 11]) {
+      const season = getDefaultSeason(new Date(`2025-${month.toString().padStart(2, "0")}-15`), -17);
+      expect(season.name).toBe("Spring");
+    }
   });
 
-  it("all seasons have descriptions", () => {
+  // Northern hemisphere (positive latitude)
+  it("returns Spring for March-May in northern hemisphere", () => {
+    for (const month of [3, 4, 5]) {
+      const season = getDefaultSeason(new Date(`2025-${month.toString().padStart(2, "0")}-15`), 40);
+      expect(season.name).toBe("Spring");
+    }
+  });
+
+  it("returns Summer for June-August in northern hemisphere", () => {
+    for (const month of [6, 7, 8]) {
+      const season = getDefaultSeason(new Date(`2025-${month.toString().padStart(2, "0")}-15`), 40);
+      expect(season.name).toBe("Summer");
+    }
+  });
+
+  it("returns Autumn for September-November in northern hemisphere", () => {
+    for (const month of [9, 10, 11]) {
+      const season = getDefaultSeason(new Date(`2025-${month.toString().padStart(2, "0")}-15`), 40);
+      expect(season.name).toBe("Autumn");
+    }
+  });
+
+  it("returns Winter for December-February in northern hemisphere", () => {
+    const season = getDefaultSeason(new Date("2025-12-15"), 40);
+    expect(season.name).toBe("Winter");
+  });
+
+  it("all seasons have localName and description", () => {
     for (let m = 1; m <= 12; m++) {
-      const season = getZimbabweSeason(new Date(`2025-${m.toString().padStart(2, "0")}-15`));
+      const season = getDefaultSeason(new Date(`2025-${m.toString().padStart(2, "0")}-15`), -17);
+      expect(season.localName).toBeTruthy();
       expect(season.description).toBeTruthy();
     }
   });
 
-  it("uses current date when no argument is provided", () => {
-    const season = getZimbabweSeason();
+  it("uses current date and equator when no arguments provided", () => {
+    const season = getDefaultSeason();
     expect(season.name).toBeTruthy();
-    expect(season.shona).toBeTruthy();
+    expect(season.localName).toBeTruthy();
     expect(season.description).toBeTruthy();
+  });
+
+  it("defaults to northern hemisphere when lat is 0", () => {
+    const juneSeason = getDefaultSeason(new Date("2025-06-15"), 0);
+    expect(juneSeason.name).toBe("Summer");
   });
 });
 

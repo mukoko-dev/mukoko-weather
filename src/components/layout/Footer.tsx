@@ -124,7 +124,7 @@ export function Footer() {
               .
             </p>
             <p className="text-text-tertiary">
-              Built with Ubuntu philosophy — weather as a public good.
+              Proudly Zimbabwean. Built with Ubuntu philosophy — weather as a public good.
             </p>
           </div>
           <nav aria-label="Footer navigation" className="flex flex-wrap gap-x-6 gap-y-3 text-text-tertiary">

@@ -13,7 +13,7 @@ import {
   type SuggestedPrompt,
 } from "@/lib/suggested-prompts";
 import type { WeatherData } from "@/lib/weather";
-import type { ZimbabweLocation } from "@/lib/locations";
+import type { WeatherLocation } from "@/lib/locations";
 import { trackEvent } from "@/lib/analytics";
 
 // ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ interface ChatMessage {
 
 interface Props {
   weather: WeatherData;
-  location: ZimbabweLocation;
+  location: WeatherLocation;
   initialSummary: string | null;
   season?: string;
 }

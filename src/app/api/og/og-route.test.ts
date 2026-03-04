@@ -379,7 +379,7 @@ describe("OG image wiring in metadata", () => {
   });
 
   it("[location]/page.tsx uses local season from DB with error handling", () => {
-    // Season comes from getSeasonForDate (DB-driven), not getZimbabweSeason (legacy)
+    // Season comes from getSeasonForDate (DB-driven), not getDefaultSeason (generic fallback)
     expect(locationPageSource).toContain("getSeasonForDate");
     // Wrapped in try/catch so DB failure doesn't break all metadata
     expect(locationPageSource).toContain("seasonName");

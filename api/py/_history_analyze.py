@@ -326,14 +326,16 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
     # Verify location exists and get metadata
     loc = locations_collection().find_one(
         {"slug": location_slug},
-        {"_id": 0, "slug": 1, "name": 1, "elevation": 1, "country": 1},
+        {"_id": 0, "slug": 1, "name": 1, "elevation": 1, "country": 1, "lat": 1, "lon": 1},
     )
     if not loc:
         raise HTTPException(status_code=404, detail="Unknown location")
 
     location_name = loc.get("name", location_slug)
     elevation = loc.get("elevation", 0)
-    country = loc.get("country", "ZW")
+    country = loc.get("country", "")
+    loc_lat = loc.get("lat", 0.0)
+    loc_lon = loc.get("lon", 0.0)
 
     # Fetch history from MongoDB
     db = get_db()
@@ -381,7 +383,7 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
 
     # Get season
     from ._ai import _get_season
-    season = _get_season(country)
+    season = _get_season(country, lat=loc_lat, lon=loc_lon)
 
     # Build user prompt with stats
     activities_note = (
@@ -391,7 +393,7 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
     )
 
     user_content = f"""Analyze this weather history for {location_name} (elevation: {elevation}m).
-Season: {season['shona']} ({season['name']}) — {season['description']}
+Season: {season['localName']} ({season['name']}) — {season['description']}
 {activities_note}
 
 Statistical summary:

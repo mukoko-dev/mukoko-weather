@@ -1,6 +1,6 @@
 # mukoko weather
 
-AI-powered weather intelligence, starting with Zimbabwe and expanding globally. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across Zimbabwe, ASEAN countries, and developing regions.
+AI-powered global weather intelligence — real-time forecasts and locally-relevant insights for farming, mining, travel, and daily life. Built in Zimbabwe, serving the world.
 
 **Live:** [weather.mukoko.com](https://weather.mukoko.com)
 
@@ -16,8 +16,8 @@ AI-powered weather intelligence, starting with Zimbabwe and expanding globally. 
 - **Cross-device sync** — device profile sync bridges browser localStorage with a server-side profile, so preferences survive across devices and browser resets
 - **Community weather reporting** — Waze-style ground-truth observations: 10 weather types, 3 severity levels, AI-assisted clarification, cross-validation against API data, community upvoting
 - **Frost alerts** — automated frost risk detection for overnight hours with severity levels
-- **Dynamic locations** — 90+ seed locations in Zimbabwe, with community-driven expansion to ASEAN and developing regions via geolocation and search
-- **Seasonal awareness** — Zimbabwe seasons (Masika, Chirimo, Zhizha, Munakamwe) and regional context
+- **Dynamic locations** — 265 seed locations across 64 countries (98 Zimbabwe + 167 global), with community-driven expansion via geolocation and search. Reverse-geocoded via Nominatim (OpenStreetMap) with structured address storage for formal three-layer breadcrumbs (Country / Province / Location)
+- **Seasonal awareness** — country-specific seasons for 50+ countries (including Zimbabwe's Masika, Chirimo, Zhizha, Munakamwe) with local names and agricultural calendars
 - **Geolocation** — automatic nearest-location detection via browser GPS, with auto-creation for new areas
 - **Shamwari AI chat** — dedicated `/shamwari` page with full-viewport Claude app-style chat (search locations, check weather, get activity advice, compare cities). Contextual navigation carries weather/location data from any page
 - **Suitability scoring** — database-driven weather suitability evaluation for activities (excellent/good/fair/poor ratings with structured metrics)
@@ -39,7 +39,7 @@ AI-powered weather intelligence, starting with Zimbabwe and expanding globally. 
 | Backend API | [Python FastAPI](https://fastapi.tiangolo.com) (Vercel serverless functions under `api/py/`) |
 | UI Components | [shadcn/ui](https://ui.shadcn.com) (Radix UI + CVA) |
 | Charts | [Chart.js 4](https://www.chartjs.org) + [react-chartjs-2](https://react-chartjs-2.js.org) (Canvas 2D) |
-| Maps | [Leaflet](https://leafletjs.com) + [react-leaflet](https://react-leaflet.js.org) (Tomorrow.io tile overlays) |
+| Maps | [Leaflet](https://leafletjs.com) + [react-leaflet](https://react-leaflet.js.org) (Mapbox base tiles + Tomorrow.io weather overlays) |
 | Styling | [Tailwind CSS 4](https://tailwindcss.com) with CSS custom properties |
 | Markdown | [react-markdown 10](https://github.com/remarkjs/react-markdown) |
 | State | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist` middleware |
@@ -142,12 +142,13 @@ All data, AI, and CRUD operations run in **Python FastAPI** (`api/py/`), deploye
 | `/api/py/activities` | GET | Activities (by id, category, search, labels, or categories mode) |
 | `/api/py/suitability` | GET | Suitability rules from MongoDB (all or by key; key format validated) |
 | `/api/py/tags` | GET | Tag metadata (all or featured) |
-| `/api/py/regions` | GET | Active supported regions (bounding boxes) |
+| `/api/py/regions` | GET | Region reference data (bounding boxes) |
 | `/api/py/status` | GET | System health checks (MongoDB, Tomorrow.io, Open-Meteo, Anthropic, cache) |
 | `/api/py/history?location=&days=` | GET | Historical weather data for a location |
 | `/api/py/history/analyze` | POST | AI-powered historical weather analysis (server-side aggregation + Claude). Cached 1h. Rate-limited 10 req/hour/IP |
 | `/api/py/explore/search` | POST | AI-powered natural-language location search (Claude + tool use). Rate-limited 15 req/hour/IP |
-| `/api/py/map-tiles?z=&x=&y=&layer=` | GET | Tile proxy for Tomorrow.io map layers (keeps API key server-side) |
+| `/api/py/map-tiles?z=&x=&y=&layer=` | GET | Tile proxy for Tomorrow.io weather overlay layers (keeps API key server-side) |
+| `/api/py/map-tiles/base?z=&x=&y=&style=` | GET | Tile proxy for Mapbox base map tiles (keeps access token server-side). Styles: streets-v12, dark-v11, light-v11, outdoors-v12, satellite-streets-v12 |
 | `/api/py/reports` | POST/GET | Community weather reports — submit (POST, 5/hour/IP) or list (GET) |
 | `/api/py/reports/upvote` | POST | Upvote a community report (IP-based dedup) |
 | `/api/py/reports/clarify` | POST | AI-generated follow-up questions for weather report clarification. Rate-limited 10 req/hour/IP |
@@ -259,8 +260,8 @@ src/
     embed/
       MukokoWeatherEmbed.tsx # Embeddable widget (CSS module, self-contained)
   lib/
-    locations.ts            # WeatherLocation type, 90+ ZW seed locations, SUPPORTED_REGIONS
-    locations-africa.ts     # African city seed data (54 AU member states)
+    locations.ts            # WeatherLocation + NominatimAddress types, 98 ZW seed locations, SUPPORTED_REGIONS
+    locations-global.ts     # Global city seed data (54 AU member states + ASEAN countries)
     countries.ts            # Country/province types, 64 seed countries, flag emoji
     activities.ts           # 30+ activities, 6 categories, mineral color styles
     suitability.ts          # Database-driven suitability evaluation engine (evaluateRule)
@@ -341,7 +342,7 @@ This app targets **WCAG 3.0 APCA/AAA** compliance:
 - Dynamic `robots.txt` and `sitemap.xml` for all locations and sub-routes
 - Per-page canonical URLs, Open Graph, and Twitter cards
 - FAQPage, BreadcrumbList, WebApplication, Organization, and WebSite JSON-LD schemas
-- Visible breadcrumb navigation
+- Three-layer breadcrumb navigation (Country / Province / Location) with city-state deduplication
 - Semantic H1 on every location page
 
 ## Contributing

@@ -11,13 +11,13 @@ import { trackEvent } from "@/lib/analytics";
 const HYDRATION_TIMEOUT_MS = 4000;
 const SKIP_DELAY_MS = 1500;
 const SAFETY_TIMEOUT_MS = 15000;
-const FALLBACK_LOCATION = "harare";
+const FALLBACK_LOCATION = "explore";
 
 /**
  * Smart home page redirect — like Apple Weather / Google Weather.
  *
- * Waits for geolocation to actually resolve (success, denied, error, or
- * outside-supported) rather than racing against a short timeout. This ensures
+ * Waits for geolocation to actually resolve (success, denied, or error)
+ * rather than racing against a short timeout. This ensures
  * first-time users who need to interact with the browser permission prompt
  * aren't prematurely redirected to the default location.
  *
@@ -27,8 +27,8 @@ const FALLBACK_LOCATION = "harare";
  *
  * Fallback chain (when geo fails):
  * 1. First saved location
- * 2. Selected location (default: harare)
- * 3. Harare
+ * 2. Selected location
+ * 3. Explore page
  *
  * Waits for Zustand rehydration before reading persisted state to avoid
  * acting on default values before localStorage is loaded.
@@ -79,7 +79,7 @@ export function HomeRedirect() {
 
     let cancelled = false;
 
-    /** Redirect to the fallback location (saved → selected → harare). */
+    /** Redirect to the fallback location (saved → selected → explore). */
     const redirectToFallback = () => {
       if (cancelled || hasRedirected.current) return;
       hasRedirected.current = true;
@@ -116,7 +116,7 @@ export function HomeRedirect() {
         ) {
           router.replace(`/${result.location.slug}`);
         } else {
-          // Geo explicitly failed (denied, error, outside-supported, unavailable)
+          // Geo explicitly failed (denied, error, unavailable)
           // → redirect to fallback immediately, no waiting
           redirectToFallback();
         }

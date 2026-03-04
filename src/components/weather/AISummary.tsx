@@ -5,12 +5,12 @@ import ReactMarkdown from "react-markdown";
 import { SparklesIcon } from "@/lib/weather-icons";
 import { useAppStore } from "@/lib/store";
 import type { WeatherData } from "@/lib/weather";
-import type { ZimbabweLocation } from "@/lib/locations";
+import type { WeatherLocation } from "@/lib/locations";
 import { trackEvent } from "@/lib/analytics";
 
 interface Props {
   weather: WeatherData;
-  location: ZimbabweLocation;
+  location: WeatherLocation;
   /** Called when the AI summary is successfully loaded — used to pass context to AISummaryChat */
   onSummaryLoaded?: (text: string) => void;
 }

@@ -187,8 +187,8 @@ describe("country-aware metadata in [location]/page.tsx", () => {
     expect(pageSource).toContain("@/lib/db");
   });
 
-  it("derives countryCode from loc.country with ZW fallback", () => {
-    expect(pageSource).toContain('loc.country ?? "ZW"');
+  it("derives countryCode from loc.country with empty fallback", () => {
+    expect(pageSource).toContain('loc.country ?? ""');
   });
 
   it("uses countryName variable in metadata description", () => {

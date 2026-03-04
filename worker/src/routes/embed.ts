@@ -4,15 +4,15 @@
  * Usage on any website:
  *
  *   <!-- Current conditions widget -->
- *   <div data-mukoko-widget="current" data-location="harare"></div>
+ *   <div data-mukoko-widget="current" data-location="nairobi-ke"></div>
  *   <script src="https://weather.mukoko.com/embed/widget.js" async></script>
  *
  *   <!-- Forecast widget -->
- *   <div data-mukoko-widget="forecast" data-location="bulawayo" data-days="5"></div>
+ *   <div data-mukoko-widget="forecast" data-location="london-gb" data-days="5"></div>
  *   <script src="https://weather.mukoko.com/embed/widget.js" async></script>
  *
  *   <!-- Compact badge -->
- *   <div data-mukoko-widget="badge" data-location="mutare"></div>
+ *   <div data-mukoko-widget="badge" data-location="bangkok-th"></div>
  *   <script src="https://weather.mukoko.com/embed/widget.js" async></script>
  *
  * Widget types:
@@ -79,7 +79,7 @@ embedRoutes.get("/data/:location", async (c) => {
       longitude: location.lon.toString(),
       current: "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,uv_index,is_day",
       daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
-      timezone: "Africa/Harare",
+      timezone: "auto",
       forecast_days: "7",
     });
 

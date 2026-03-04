@@ -27,7 +27,7 @@ SLUG_RE = re.compile(r"^[a-z0-9-]{1,80}$")
 
 class Preferences(BaseModel):
     theme: str = "system"
-    selectedLocation: str = "harare"
+    selectedLocation: str = ""
     savedLocations: list[str] = Field(default_factory=list)
     selectedActivities: list[str] = Field(default_factory=list)
     hasOnboarded: bool = False
@@ -65,7 +65,7 @@ def _validate_theme(theme: str) -> str:
 
 
 def _validate_slug(slug: str) -> str:
-    if not SLUG_RE.match(slug):
+    if slug and not SLUG_RE.match(slug):
         raise HTTPException(status_code=400, detail=f"Invalid location slug: {slug}")
     return slug
 

@@ -2,17 +2,11 @@
  * Seed data for the `regions` MongoDB collection.
  *
  * Read only by `POST /api/db-init` (one-time bootstrap) and tests.
- * At runtime, callers use `isInSupportedRegionFromDb()` from db.ts.
  *
- * Regions cover all developing countries globally:
- *   - All of Africa (full continent, including North Africa)
- *   - ASEAN (10 member nations + Papua New Guinea / Pacific proximity)
- *   - South Asia (India, Pakistan, Bangladesh, Sri Lanka, Nepal, Bhutan, Afghanistan, Maldives)
- *   - Middle East (Arabian Peninsula, Levant, Iran, Iraq)
- *   - Central Asia (Kazakhstan, Kyrgyzstan, Tajikistan, Turkmenistan, Uzbekistan, Mongolia)
- *   - South America (all 12 countries)
- *   - Central America, Mexico & Caribbean (Mexico, Central America, Caribbean islands)
- *   - Eastern Europe (Ukraine, Romania, Moldova, Bulgaria, Serbia, Bosnia, Albania, etc.)
+ * NOTE: The app is fully global — no geographic restrictions. These region
+ * definitions are retained for reference (map centering, analytics, etc.)
+ * but are NOT used to block location creation. `isInSupportedRegionSync()`
+ * always returns true.
  */
 
 export interface RegionDoc {
@@ -157,14 +151,12 @@ export const REGIONS: RegionDoc[] = [
 export const SUPPORTED_REGIONS = REGIONS;
 export const ZIMBABWE_BOUNDS = REGIONS[0];
 
-/** Synchronous region check — for tests and db-init only. Production uses isInSupportedRegionFromDb(). */
-export function isInSupportedRegionSync(lat: number, lon: number): boolean {
-  return REGIONS.some(
-    (r) =>
-      r.active &&
-      lat >= r.south - r.padding &&
-      lat <= r.north + r.padding &&
-      lon >= r.west - r.padding &&
-      lon <= r.east + r.padding,
-  );
+/**
+ * Region check — always returns true (app is fully global).
+ *
+ * Retained for backward compatibility with callers (tests, db-init).
+ * No geographic restrictions are enforced.
+ */
+export function isInSupportedRegionSync(_lat: number, _lon: number): boolean {
+  return true;
 }

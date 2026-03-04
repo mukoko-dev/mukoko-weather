@@ -87,9 +87,10 @@ class TestValidateSlug:
         assert exc_info.value.status_code == 400
         assert "Invalid location slug" in exc_info.value.detail
 
-    def test_empty_slug_raises_400(self):
-        with pytest.raises(HTTPException):
-            _validate_slug("")
+    def test_empty_slug_is_allowed(self):
+        """Empty slug is valid — represents no location selected."""
+        result = _validate_slug("")
+        assert result == ""
 
     def test_slug_with_spaces_raises_400(self):
         with pytest.raises(HTTPException):

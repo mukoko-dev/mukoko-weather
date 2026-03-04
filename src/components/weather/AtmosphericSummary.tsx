@@ -84,7 +84,7 @@ export function feelsLikeGauge(feelsLike: number, actual: number): GaugeConfig {
 
 export function AtmosphericSummary({ current }: Props) {
   const pathname = usePathname();
-  const locationSlug = pathname?.split("/")[1] || "harare";
+  const locationSlug = pathname?.split("/")[1] || "";
   const uv = uvLevel(current.uv_index);
   const wind = Math.round(current.wind_speed_10m);
   const gusts = Math.round(current.wind_gusts_10m);

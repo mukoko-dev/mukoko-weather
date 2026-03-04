@@ -422,6 +422,52 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze.anthropic_breaker")
     @patch("py._history_analyze._get_client")
     @patch("py._history_analyze._get_analysis_prompt", return_value=None)
+    @patch("py._history_analyze.history_analysis_collection")
+    @patch("py._history_analyze.get_db")
+    @patch("py._history_analyze.locations_collection")
+    @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
+    @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
+    async def test_lon_passed_to_get_season(
+        self, _mock_ip, _mock_rate, mock_loc, mock_db,
+        mock_cache_coll, _mock_prompt_get, mock_client, mock_breaker,
+    ):
+        """Verify both lat and lon are extracted from location and passed to _get_season."""
+        mock_loc.return_value.find_one.return_value = {
+            "slug": "nairobi-ke", "name": "Nairobi", "country": "KE",
+            "lat": -1.29, "lon": 36.82, "elevation": 1795,
+        }
+
+        history_records = [
+            {"date": "2025-01-15", "current": {"temperature_2m": 22}, "daily": {}},
+        ]
+        mock_history_coll = MagicMock()
+        mock_history_coll.find.return_value.sort.return_value = history_records
+        mock_db.return_value.__getitem__ = MagicMock(return_value=mock_history_coll)
+
+        mock_cache_coll.return_value.find_one.return_value = None
+        type(mock_breaker).is_allowed = PropertyMock(return_value=True)
+
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "Analysis text."
+        mock_response = MagicMock()
+        mock_response.content = [text_block]
+        mock_client.return_value.messages.create.return_value = mock_response
+
+        body = AnalyzeRequest(location="nairobi-ke", days=30)
+        request = self._make_request()
+
+        with patch("py._ai._get_season") as mock_season:
+            mock_season.return_value = {"name": "Dry season", "localName": "Dry season", "description": "Dry"}
+            await analyze_history(body, request)
+
+            # Verify lon is passed correctly (not 0.0)
+            mock_season.assert_called_once_with("KE", lat=-1.29, lon=36.82)
+
+    @pytest.mark.asyncio
+    @patch("py._history_analyze.anthropic_breaker")
+    @patch("py._history_analyze._get_client")
+    @patch("py._history_analyze._get_analysis_prompt", return_value=None)
     @patch("py._history_analyze._build_analysis_system_prompt", return_value="system prompt")
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
@@ -454,7 +500,7 @@ class TestAnalyzeHistoryEndpoint:
         body = AnalyzeRequest(location="harare", days=30)
         request = self._make_request()
 
-        with patch("py._ai._get_season", return_value={"name": "Hot", "shona": "Zhizha", "description": "Hot season"}):
+        with patch("py._ai._get_season", return_value={"name": "Spring", "localName": "Spring", "description": "Warming temperatures"}):
             result = await analyze_history(body, request)
 
         assert result["error"] is True
@@ -504,7 +550,7 @@ class TestAnalyzeHistoryEndpoint:
         body = AnalyzeRequest(location="harare", days=30)
         request = self._make_request()
 
-        with patch("py._ai._get_season", return_value={"name": "Hot", "shona": "Zhizha", "description": "Hot season"}):
+        with patch("py._ai._get_season", return_value={"name": "Spring", "localName": "Spring", "description": "Warming temperatures"}):
             result = await analyze_history(body, request)
 
         assert result["analysis"] == "The weather has been warming over the past 30 days."
@@ -546,7 +592,7 @@ class TestAnalyzeHistoryEndpoint:
         body = AnalyzeRequest(location="harare", days=30)
         request = self._make_request()
 
-        with patch("py._ai._get_season", return_value={"name": "Hot", "shona": "Zhizha", "description": "Hot season"}):
+        with patch("py._ai._get_season", return_value={"name": "Spring", "localName": "Spring", "description": "Warming temperatures"}):
             with pytest.raises(HTTPException) as exc_info:
                 await analyze_history(body, request)
         assert exc_info.value.status_code == 429
@@ -585,7 +631,7 @@ class TestAnalyzeHistoryEndpoint:
         body = AnalyzeRequest(location="harare", days=30)
         request = self._make_request()
 
-        with patch("py._ai._get_season", return_value={"name": "Hot", "shona": "Zhizha", "description": "Hot season"}):
+        with patch("py._ai._get_season", return_value={"name": "Spring", "localName": "Spring", "description": "Warming temperatures"}):
             result = await analyze_history(body, request)
 
         assert result["error"] is True
@@ -631,7 +677,7 @@ class TestAnalyzeHistoryEndpoint:
         body = AnalyzeRequest(location="harare", days=30, activities=["farming", "running"])
         request = self._make_request()
 
-        with patch("py._ai._get_season", return_value={"name": "Hot", "shona": "Zhizha", "description": "Hot season"}):
+        with patch("py._ai._get_season", return_value={"name": "Spring", "localName": "Spring", "description": "Warming temperatures"}):
             await analyze_history(body, request)
 
         # Check that the user message content includes activities
@@ -679,7 +725,7 @@ class TestAnalyzeHistoryEndpoint:
         body = AnalyzeRequest(location="harare", days=30, activities=[])
         request = self._make_request()
 
-        with patch("py._ai._get_season", return_value={"name": "Hot", "shona": "Zhizha", "description": "Hot season"}):
+        with patch("py._ai._get_season", return_value={"name": "Spring", "localName": "Spring", "description": "Warming temperatures"}):
             await analyze_history(body, request)
 
         call_args = mock_client.return_value.messages.create.call_args

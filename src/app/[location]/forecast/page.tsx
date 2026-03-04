@@ -18,7 +18,7 @@ export async function generateMetadata({
   if (!loc) return { title: "Location not found" };
 
   const title = `${loc.name} 7-Day Forecast — Hourly & Daily Weather`;
-  const description = `Detailed 7-day weather forecast and 24-hour hourly predictions for ${loc.name}, ${loc.province}, Zimbabwe. Temperature charts, rain probability, sunrise/sunset times from mukoko weather.`;
+  const description = `Detailed 7-day weather forecast and 24-hour hourly predictions for ${loc.name}, ${loc.province}. Temperature charts, rain probability, sunrise/sunset times from mukoko weather.`;
 
   return {
     title,
@@ -30,7 +30,7 @@ export async function generateMetadata({
       `${loc.name} rain forecast`,
       `${loc.name} temperature forecast`,
       `${loc.province} weather forecast`,
-      "Zimbabwe weather forecast",
+      "weather forecast",
       "mukoko weather",
     ],
     alternates: {
@@ -38,10 +38,10 @@ export async function generateMetadata({
     },
     openGraph: {
       title: `${loc.name} Forecast | mukoko weather`,
-      description: `7-day weather forecast for ${loc.name}, Zimbabwe — hourly & daily predictions with charts.`,
+      description: `7-day weather forecast for ${loc.name}, ${loc.province} — hourly & daily predictions with charts.`,
       url: `${BASE_URL}/${loc.slug}/forecast`,
       type: "website",
-      locale: "en_ZW",
+      locale: "en",
       siteName: "mukoko weather",
     },
   };
@@ -74,7 +74,7 @@ export default async function ForecastPage({
 
   const usingFallback = weatherSource === "fallback";
   const frostAlert = usingFallback ? null : checkFrostRisk(weather.hourly);
-  const season = await getSeasonForDate(new Date(), location.country ?? "ZW");
+  const season = await getSeasonForDate(new Date(), location.country ?? "", location.lat ?? 0);
 
   const breadcrumbSchema = {
     "@context": "https://schema.org",

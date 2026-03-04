@@ -84,7 +84,7 @@ function MetricCardSkeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "flex items-center gap-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm",
+        "flex flex-col items-center gap-2 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm",
         className
       )}
       role="status"
@@ -92,8 +92,8 @@ function MetricCardSkeleton({ className }: { className?: string }) {
     >
       {/* Arc gauge placeholder */}
       <Skeleton className="h-14 w-14 shrink-0 rounded-full" />
-      <div className="min-w-0 flex-1">
-        <Skeleton className="h-3 w-20 mb-1.5" />
+      <div className="flex flex-col items-center gap-1">
+        <Skeleton className="h-3 w-20" />
         <Skeleton className="h-3 w-24" />
       </div>
     </div>

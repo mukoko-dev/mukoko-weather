@@ -15,7 +15,7 @@ geoRoutes.get("/", (c) => {
   const nearest = findNearestLocation(lat, lon);
 
   if (!nearest) {
-    return c.json({ error: "Location appears to be outside Zimbabwe", nearest: null }, 404);
+    return c.json({ error: "No nearby location found", nearest: null }, 404);
   }
 
   return c.json({ nearest, redirectTo: `/${nearest.slug}` });

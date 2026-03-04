@@ -1,5 +1,5 @@
 /**
- * Global location seed data for mukoko weather (outside Zimbabwe).
+ * Global location seed data for mukoko weather (capitals + major cities worldwide).
  * Covers capital cities + major urban centres across all 54 AU member states
  * and ASEAN countries including Singapore.
  * Each entry follows the WeatherLocation pattern with country field set.

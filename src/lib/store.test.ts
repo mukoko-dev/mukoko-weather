@@ -57,9 +57,9 @@ describe("onboarding state", () => {
 });
 
 describe("selectedLocation", () => {
-  it("defaults to 'harare'", () => {
+  it("defaults to empty string", () => {
     const state = useAppStore.getState();
-    expect(state.selectedLocation).toBe("harare");
+    expect(state.selectedLocation).toBe("");
   });
 
   it("updates via setSelectedLocation", () => {

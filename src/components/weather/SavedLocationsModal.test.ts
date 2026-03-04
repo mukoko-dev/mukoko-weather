@@ -165,9 +165,8 @@ describe("SavedLocationsModal — current location", () => {
     expect(source).toContain("Location access denied");
   });
 
-  it("handles outside-supported region", () => {
-    expect(source).toContain("outside-supported");
-    expect(source).toContain("isn&apos;t supported yet");
+  it("shows error message for failed geolocation with coords", () => {
+    expect(source).toContain("Could not detect your location");
   });
 
   it("allows saving detected location", () => {

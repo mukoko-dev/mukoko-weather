@@ -9,8 +9,10 @@ from fastapi import HTTPException
 
 from py._tiles import (
     VALID_LAYERS,
+    MAPBOX_STYLES,
     TIMESTAMP_RE,
     proxy_map_tile,
+    proxy_base_tile,
 )
 
 
@@ -90,6 +92,22 @@ class TestProxyMapTile:
             with pytest.raises(HTTPException) as exc_info:
                 await proxy_map_tile(z=12, x=0, y=0, layer="temperature")
             assert exc_info.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_tile_coords_out_of_range_raises_400(self):
+        """At zoom z, valid tile coords are [0, 2^z - 1]."""
+        # z=1 → max tile is 1 (0 and 1 valid), so x=2 is invalid
+        with pytest.raises(HTTPException) as exc_info:
+            await proxy_map_tile(z=1, x=2, y=0, layer="temperature")
+        assert exc_info.value.status_code == 400
+        assert "Tile coordinates" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_negative_tile_coords_raises_400(self):
+        with pytest.raises(HTTPException) as exc_info:
+            await proxy_map_tile(z=5, x=-1, y=0, layer="temperature")
+        assert exc_info.value.status_code == 400
+        assert "Tile coordinates" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_invalid_timestamp_raises_400(self):
@@ -174,3 +192,163 @@ class TestProxyMapTile:
         assert url.startswith("https://api.tomorrow.io/")
         assert "/5/18/17/windSpeed/now.png" in url
         assert "apikey=my-key" in url
+
+
+# ---------------------------------------------------------------------------
+# MAPBOX_STYLES
+# ---------------------------------------------------------------------------
+
+
+class TestMapboxStyles:
+    def test_contains_expected_styles(self):
+        expected = {"streets-v12", "satellite-streets-v12", "outdoors-v12", "light-v11", "dark-v11"}
+        assert MAPBOX_STYLES == expected
+
+    def test_has_five_styles(self):
+        assert len(MAPBOX_STYLES) == 5
+
+
+# ---------------------------------------------------------------------------
+# proxy_base_tile endpoint (Mapbox)
+# ---------------------------------------------------------------------------
+
+
+class TestProxyBaseTile:
+    @pytest.mark.asyncio
+    async def test_invalid_style_raises_400(self):
+        with pytest.raises(HTTPException) as exc_info:
+            await proxy_base_tile(z=5, x=18, y=17, style="invalid-style")
+        assert exc_info.value.status_code == 400
+        assert "Invalid style" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_zoom_too_low_raises_400(self):
+        with pytest.raises(HTTPException) as exc_info:
+            await proxy_base_tile(z=-1, x=0, y=0)
+        assert exc_info.value.status_code == 400
+        assert "Zoom out of range" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_zoom_too_high_raises_400(self):
+        with pytest.raises(HTTPException) as exc_info:
+            await proxy_base_tile(z=23, x=0, y=0)
+        assert exc_info.value.status_code == 400
+        assert "Zoom out of range" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_valid_zoom_boundaries(self):
+        """Zoom 0 and 22 should be valid (not raise for zoom)."""
+        with patch("py._tiles.get_api_key", return_value=None):
+            with pytest.raises(HTTPException) as exc_info:
+                await proxy_base_tile(z=0, x=0, y=0)
+            assert exc_info.value.status_code == 503  # no API key, not zoom error
+
+        with patch("py._tiles.get_api_key", return_value=None):
+            with pytest.raises(HTTPException) as exc_info:
+                await proxy_base_tile(z=22, x=0, y=0)
+            assert exc_info.value.status_code == 503
+
+    @patch("py._tiles.get_api_key")
+    @pytest.mark.asyncio
+    async def test_no_api_key_raises_503(self, mock_key):
+        mock_key.return_value = None
+        with pytest.raises(HTTPException) as exc_info:
+            await proxy_base_tile(z=5, x=18, y=17)
+        assert exc_info.value.status_code == 503
+        assert "Base map service unavailable" in exc_info.value.detail
+
+    @patch("py._tiles._get_http")
+    @patch("py._tiles.get_api_key")
+    @pytest.mark.asyncio
+    async def test_successful_proxy_returns_tile(self, mock_key, mock_http):
+        mock_key.return_value = "test-mapbox-key"
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = b"\x89PNG\r\n\x1a\n"
+        mock_response.headers = {"content-type": "image/png"}
+        mock_http.return_value.get.return_value = mock_response
+
+        result = await proxy_base_tile(z=5, x=18, y=17, style="streets-v12")
+        assert result.body == b"\x89PNG\r\n\x1a\n"
+        assert "max-age=3600" in result.headers.get("cache-control", "")
+        assert result.headers.get("x-map-style") == "streets-v12"
+
+    @patch("py._tiles._get_http")
+    @patch("py._tiles.get_api_key")
+    @pytest.mark.asyncio
+    async def test_dark_style_works(self, mock_key, mock_http):
+        mock_key.return_value = "test-mapbox-key"
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = b"tile"
+        mock_response.headers = {"content-type": "image/png"}
+        mock_http.return_value.get.return_value = mock_response
+
+        result = await proxy_base_tile(z=5, x=18, y=17, style="dark-v11")
+        assert result.headers.get("x-map-style") == "dark-v11"
+
+    @patch("py._tiles._get_http")
+    @patch("py._tiles.get_api_key")
+    @pytest.mark.asyncio
+    async def test_rate_limited_proxied(self, mock_key, mock_http):
+        mock_key.return_value = "test-mapbox-key"
+        mock_response = MagicMock()
+        mock_response.status_code = 429
+        mock_http.return_value.get.return_value = mock_response
+
+        result = await proxy_base_tile(z=5, x=18, y=17)
+        assert result.status_code == 429
+
+    @patch("py._tiles._get_http")
+    @patch("py._tiles.get_api_key")
+    @pytest.mark.asyncio
+    async def test_exception_returns_502(self, mock_key, mock_http):
+        mock_key.return_value = "test-mapbox-key"
+        mock_http.return_value.get.side_effect = Exception("Network error")
+
+        result = await proxy_base_tile(z=5, x=18, y=17)
+        assert result.status_code == 502
+
+    @patch("py._tiles._get_http")
+    @patch("py._tiles.get_api_key")
+    @pytest.mark.asyncio
+    async def test_constructs_correct_mapbox_url(self, mock_key, mock_http):
+        mock_key.return_value = "mb-key"
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = b"tile"
+        mock_response.headers = {"content-type": "image/png"}
+        mock_http.return_value.get.return_value = mock_response
+
+        await proxy_base_tile(z=5, x=18, y=17, style="outdoors-v12")
+
+        call_args = mock_http.return_value.get.call_args
+        url = call_args[0][0]
+        assert url.startswith("https://api.mapbox.com/")
+        assert "/styles/v1/mapbox/outdoors-v12/tiles/5/18/17" in url
+        assert "access_token=mb-key" in url
+
+    @pytest.mark.asyncio
+    async def test_tile_coords_out_of_range_raises_400(self):
+        """At zoom z, valid tile coords are [0, 2^z - 1]."""
+        # z=0 → max tile is 0 (only 0 valid), so x=1 is invalid
+        with pytest.raises(HTTPException) as exc_info:
+            await proxy_base_tile(z=0, x=1, y=0)
+        assert exc_info.value.status_code == 400
+        assert "Tile coordinates" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_negative_tile_coords_raises_400(self):
+        with pytest.raises(HTTPException) as exc_info:
+            await proxy_base_tile(z=5, x=0, y=-1)
+        assert exc_info.value.status_code == 400
+        assert "Tile coordinates" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_default_style_is_streets(self):
+        """Default style should be streets-v12 when not specified."""
+        with patch("py._tiles.get_api_key", return_value=None):
+            with pytest.raises(HTTPException) as exc_info:
+                await proxy_base_tile(z=5, x=18, y=17)
+            # Should fail on no API key, not on style
+            assert exc_info.value.status_code == 503

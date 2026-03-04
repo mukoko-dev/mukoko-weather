@@ -1,24 +1,60 @@
 /**
- * Zimbabwe locations data — shared between Worker and Next.js app.
+ * Weather location data — shared between Worker and Next.js app.
  * This is the authoritative source for the Worker bundle.
  * Keep in sync with src/lib/locations.ts in the Next.js app.
+ *
+ * Data model aligned with schema.org/Place:
+ *   slug       → identifier
+ *   name       → name
+ *   lat/lon    → geo (GeoCoordinates)
+ *   elevation  → geo.elevation (QuantitativeValue, unitCode: MTR)
+ *   province   → address.addressRegion (PostalAddress)
+ *   country    → address.addressCountry (ISO 3166-1 alpha-2)
+ *   tags       → additionalType
  */
 
-export interface ZimbabweLocation {
+/** Structured address from Nominatim reverse geocoding (community/geolocation locations only). */
+export interface NominatimAddress {
+  road?: string;
+  suburb?: string;
+  cityDistrict?: string;
+  city?: string;
+  state?: string;
+  stateDistrict?: string;
+  county?: string;
+  postcode?: string;
+  country?: string;
+  countryCode?: string;
+  /** Full formatted address from Nominatim display_name */
+  displayName?: string;
+}
+
+export interface WeatherLocation {
   slug: string;
   name: string;
+  /** Province, state, region, or administrative division */
   province: string;
   lat: number;
   lon: number;
   elevation: number;
   tags: string[];
+  /** ISO 3166-1 alpha-2 country code */
+  country?: string;
+  /** How this location was added */
+  source?: "seed" | "community" | "geolocation";
+  /** Links location to the provinces collection — auto-computed if absent */
+  provinceSlug?: string;
+  /** Structured address from Nominatim — stored for community/geolocation locations */
+  nominatimAddress?: NominatimAddress;
 }
 
-export type LocationTag =
-  | "city" | "farming" | "mining" | "tourism"
-  | "education" | "border" | "travel" | "national-park";
+/**
+ * Location tag — any string slug from the database `tags` collection.
+ * New tags can be added via db-init without code changes.
+ */
+export type LocationTag = string;
 
-export const TAG_LABELS: Record<LocationTag, string> = {
+export const TAG_LABELS: Record<string, string> = {
   city: "Cities & Towns",
   farming: "Farming Regions",
   mining: "Mining Areas",
@@ -29,12 +65,15 @@ export const TAG_LABELS: Record<LocationTag, string> = {
   "national-park": "National Parks",
 };
 
-export const ZIMBABWE_BOUNDS = {
-  north: -15.61, south: -22.42, east: 33.07, west: 25.24,
-  center: { lat: -19.02, lon: 29.15 },
+/** Global coordinate bounds (WGS 84 validation) */
+export const GLOBAL_BOUNDS = {
+  north: 90, south: -90, east: 180, west: -180,
 };
 
-export const LOCATIONS: ZimbabweLocation[] = [
+/** @deprecated Use WeatherLocation instead */
+export type ZimbabweLocation = WeatherLocation;
+
+export const LOCATIONS: WeatherLocation[] = [
   // Cities & Towns
   { slug: "harare", name: "Harare", province: "Harare", lat: -17.83, lon: 31.05, elevation: 1490, tags: ["city", "education"] },
   { slug: "bulawayo", name: "Bulawayo", province: "Bulawayo", lat: -20.15, lon: 28.58, elevation: 1348, tags: ["city", "education"] },
@@ -141,16 +180,25 @@ export const LOCATIONS: ZimbabweLocation[] = [
   { slug: "lion-den", name: "Lion's Den", province: "Mashonaland West", lat: -16.93, lon: 29.65, elevation: 1100, tags: ["travel"] },
 ];
 
-export function getLocationBySlug(slug: string): ZimbabweLocation | undefined {
+export function getLocationBySlug(slug: string): WeatherLocation | undefined {
   return LOCATIONS.find((l) => l.slug === slug);
 }
 
-export function findNearestLocation(lat: number, lon: number): ZimbabweLocation | null {
-  if (lat < ZIMBABWE_BOUNDS.south - 1 || lat > ZIMBABWE_BOUNDS.north + 1 ||
-      lon < ZIMBABWE_BOUNDS.west - 1 || lon > ZIMBABWE_BOUNDS.east + 1) {
+/**
+ * Find the nearest location by Haversine distance.
+ *
+ * NOTE: The worker bundle only contains the 98 ZW seed locations — it does NOT
+ * include global locations or community-created locations (those live in MongoDB
+ * and are served by the Python backend at /api/py/geo). For global coordinates,
+ * this function will return the nearest ZW location, which is incorrect. All
+ * production geo lookups should go through /api/py/geo instead.
+ */
+export function findNearestLocation(lat: number, lon: number): WeatherLocation | null {
+  if (lat < GLOBAL_BOUNDS.south || lat > GLOBAL_BOUNDS.north ||
+      lon < GLOBAL_BOUNDS.west || lon > GLOBAL_BOUNDS.east) {
     return null;
   }
-  let nearest: ZimbabweLocation | null = null;
+  let nearest: WeatherLocation | null = null;
   let minDist = Infinity;
   for (const loc of LOCATIONS) {
     const dLat = ((loc.lat - lat) * Math.PI) / 180;
@@ -163,10 +211,27 @@ export function findNearestLocation(lat: number, lon: number): ZimbabweLocation 
   return nearest;
 }
 
-export function getZimbabweSeason(date: Date = new Date()) {
+/** Hemisphere-aware default season based on latitude. */
+export function getDefaultSeason(date: Date = new Date(), lat: number = 0) {
   const month = date.getMonth() + 1;
-  if (month >= 11 || month <= 3) return { name: "Main rains", shona: "Masika", description: "Flooding, road damage, planting" };
-  if (month >= 5 && month <= 8) return { name: "Cool dry", shona: "Chirimo", description: "Frost, cold snaps, veld fires" };
-  if (month >= 9 && month <= 10) return { name: "Hot dry", shona: "Zhizha", description: "Heat stress, UV, water scarcity" };
-  return { name: "Short rains", shona: "Munakamwe", description: "Harvest, late rains" };
+  const isSouthern = lat < 0;
+  if (isSouthern) {
+    if (month >= 12 || month <= 2) return { name: "Summer", localName: "Summer", description: "Warm, wet season" };
+    if (month >= 3 && month <= 5) return { name: "Autumn", localName: "Autumn", description: "Cooling temperatures" };
+    if (month >= 6 && month <= 8) return { name: "Winter", localName: "Winter", description: "Cool, dry season" };
+    return { name: "Spring", localName: "Spring", description: "Warming temperatures" };
+  }
+  if (month >= 3 && month <= 5) return { name: "Spring", localName: "Spring", description: "Warming temperatures" };
+  if (month >= 6 && month <= 8) return { name: "Summer", localName: "Summer", description: "Warm season" };
+  if (month >= 9 && month <= 11) return { name: "Autumn", localName: "Autumn", description: "Cooling temperatures" };
+  return { name: "Winter", localName: "Winter", description: "Cold season" };
+}
+
+/**
+ * @deprecated Use getDefaultSeason instead.
+ * Wraps getDefaultSeason with lat=-17 (southern hemisphere) to preserve
+ * backward-compatible Zimbabwe seasonal behavior for un-migrated callers.
+ */
+export function getZimbabweSeason(date: Date = new Date()) {
+  return getDefaultSeason(date, -17);
 }

@@ -36,9 +36,9 @@ weatherRoutes.get("/", async (c) => {
     return c.json({ error: "Invalid coordinates" }, 400);
   }
 
-  // Zimbabwe bounds check
-  if (lat < -23 || lat > -15 || lon < 24 || lon > 34) {
-    return c.json({ error: "Coordinates outside Zimbabwe region" }, 400);
+  // Validate coordinates are within WGS 84 bounds
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    return c.json({ error: "Invalid coordinates" }, 400);
   }
 
   // Check KV cache first
@@ -58,7 +58,7 @@ weatherRoutes.get("/", async (c) => {
     current: CURRENT_PARAMS,
     hourly: HOURLY_PARAMS,
     daily: DAILY_PARAMS,
-    timezone: "Africa/Harare",
+    timezone: "auto",
     forecast_days: "7",
   });
 

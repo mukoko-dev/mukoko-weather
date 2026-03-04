@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   LOCATIONS,
-  ZW_LOCATIONS,
+  SEED_LOCATIONS_ZW,
 } from "./locations";
 import { GLOBAL_LOCATIONS } from "./locations-global";
 import { ZIMBABWE_BOUNDS } from "./seed-regions";
-import type { WeatherLocation, ZimbabweLocation } from "./locations";
+import type { WeatherLocation } from "./locations";
 
 describe("LOCATIONS database", () => {
   it("contains at least 90 locations", () => {
@@ -45,7 +45,7 @@ describe("LOCATIONS database", () => {
   });
 
   it("all Zimbabwe coordinates are within Zimbabwe bounds (with padding)", () => {
-    for (const loc of ZW_LOCATIONS) {
+    for (const loc of SEED_LOCATIONS_ZW) {
       expect(loc.lat).toBeGreaterThanOrEqual(ZIMBABWE_BOUNDS.south - 1);
       expect(loc.lat).toBeLessThanOrEqual(ZIMBABWE_BOUNDS.north + 1);
       expect(loc.lon).toBeGreaterThanOrEqual(ZIMBABWE_BOUNDS.west - 1);
@@ -114,9 +114,9 @@ describe("GLOBAL_LOCATIONS data integrity", () => {
   });
 });
 
-describe("WeatherLocation type compatibility", () => {
-  it("ZimbabweLocation is assignable to WeatherLocation", () => {
-    const loc: ZimbabweLocation = {
+describe("WeatherLocation type", () => {
+  it("supports all required fields", () => {
+    const loc: WeatherLocation = {
       slug: "test",
       name: "Test",
       province: "Test Province",
@@ -125,12 +125,12 @@ describe("WeatherLocation type compatibility", () => {
       elevation: 1490,
       tags: ["city"],
     };
-    // ZimbabweLocation should be usable wherever WeatherLocation is expected
-    const weatherLoc: WeatherLocation = loc;
-    expect(weatherLoc.slug).toBe("test");
+    expect(loc.slug).toBe("test");
+    expect(loc.name).toBe("Test");
+    expect(loc.province).toBe("Test Province");
   });
 
-  it("WeatherLocation supports optional country and source fields", () => {
+  it("supports optional country and source fields", () => {
     const loc: WeatherLocation = {
       slug: "manila",
       name: "Manila",

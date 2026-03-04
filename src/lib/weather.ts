@@ -184,7 +184,7 @@ export async function fetchWeather(lat: number, lon: number): Promise<WeatherDat
     current: CURRENT_PARAMS,
     hourly: HOURLY_PARAMS,
     daily: DAILY_PARAMS,
-    timezone: "Africa/Harare",
+    timezone: "auto",
     forecast_days: "7",
   });
 
@@ -257,27 +257,47 @@ export function weatherCodeToInfo(code: number): { label: string; icon: string }
   return map[code] ?? { label: "Unknown", icon: "cloud" };
 }
 
-/** Zimbabwe season info */
-export interface ZimbabweSeason {
+/** Season info (name, local name, description) */
+export interface Season {
   name: string;
-  shona: string;
+  localName: string;
   description: string;
 }
 
-/** Zimbabwe seasons — synchronous fallback (used when DB is unavailable or country has no seasons) */
-export function getZimbabweSeason(date: Date = new Date()): ZimbabweSeason {
+/** @deprecated Use Season instead */
+export type ZimbabweSeason = Season;
+
+/** Default hemisphere-aware season fallback (used when DB has no season data for the location's country) */
+export function getDefaultSeason(date: Date = new Date(), lat: number = 0): Season {
   const month = date.getMonth() + 1; // 1-12
-  if (month >= 11 || month <= 3) {
-    return { name: "Main rains", shona: "Masika", description: "Flooding, road damage, planting" };
+  const southern = lat < 0;
+
+  if (southern) {
+    if (month === 12 || month <= 2)
+      return { name: "Summer", localName: "Summer", description: "Warm season with possible thunderstorms" };
+    if (month >= 3 && month <= 5)
+      return { name: "Autumn", localName: "Autumn", description: "Cooling temperatures, harvest period" };
+    if (month >= 6 && month <= 8)
+      return { name: "Winter", localName: "Winter", description: "Cool and dry with possible frost" };
+    return { name: "Spring", localName: "Spring", description: "Warming temperatures, early rains possible" };
   }
-  if (month >= 5 && month <= 8) {
-    return { name: "Cool dry", shona: "Chirimo", description: "Frost, cold snaps, veld fires" };
-  }
-  if (month >= 9 && month <= 10) {
-    return { name: "Hot dry", shona: "Zhizha", description: "Heat stress, UV, water scarcity" };
-  }
-  // month 4 (April)
-  return { name: "Short rains", shona: "Munakamwe", description: "Harvest, late rains" };
+
+  if (month >= 3 && month <= 5)
+    return { name: "Spring", localName: "Spring", description: "Warming temperatures, new growth" };
+  if (month >= 6 && month <= 8)
+    return { name: "Summer", localName: "Summer", description: "Warmest season with longer days" };
+  if (month >= 9 && month <= 11)
+    return { name: "Autumn", localName: "Autumn", description: "Cooling temperatures, shorter days" };
+  return { name: "Winter", localName: "Winter", description: "Coldest season with shorter days" };
+}
+
+/**
+ * @deprecated Use getDefaultSeason instead.
+ * Wraps getDefaultSeason with lat=-17 (southern hemisphere) to preserve
+ * backward-compatible Zimbabwe seasonal behavior for un-migrated callers.
+ */
+export function getZimbabweSeason(date: Date = new Date()): Season {
+  return getDefaultSeason(date, -17);
 }
 
 
@@ -296,24 +316,24 @@ export function uvLevel(index: number): { label: string; color: string } {
 }
 
 /**
- * Generate fallback weather data using seasonal averages for a Zimbabwe location.
+ * Generate fallback weather data using hemisphere-aware seasonal averages (elevation-adjusted).
  * Used when all weather providers are unavailable so the page still renders.
  * Temperatures are adjusted for elevation (~6.5°C per 1000m lapse rate).
  */
 export function createFallbackWeather(lat: number, lon: number, elevation: number): WeatherData {
   const now = new Date();
-  const season = getZimbabweSeason(now);
+  const season = getDefaultSeason(now, lat);
   const hour = now.getHours();
   const isDay = hour >= 6 && hour < 18 ? 1 : 0;
 
   // Seasonal base temperatures (°C) at ~1200m reference elevation
   const seasonalBase: Record<string, { high: number; low: number; humidity: number; code: number }> = {
-    "Main rains":  { high: 28, low: 17, humidity: 70, code: 2 },
-    "Cool dry":    { high: 22, low: 8,  humidity: 40, code: 0 },
-    "Hot dry":     { high: 32, low: 18, humidity: 30, code: 0 },
-    "Short rains": { high: 25, low: 14, humidity: 55, code: 2 },
+    "Summer": { high: 30, low: 18, humidity: 65, code: 2 },
+    "Autumn": { high: 24, low: 12, humidity: 55, code: 2 },
+    "Winter": { high: 18, low: 5, humidity: 40, code: 0 },
+    "Spring": { high: 24, low: 12, humidity: 50, code: 2 },
   };
-  const base = seasonalBase[season.name] ?? seasonalBase["Main rains"];
+  const base = seasonalBase[season.name] ?? seasonalBase["Summer"];
 
   // Adjust for elevation: −6.5°C per 1000m above reference (1200m)
   const elevAdj = ((elevation - 1200) / 1000) * -6.5;

@@ -5,20 +5,20 @@
  *   - weather_cache   : Short-lived weather API response cache (replaces KV WEATHER_CACHE)
  *   - ai_summaries    : Tiered-TTL AI summary cache (replaces KV AI_SUMMARIES)
  *   - weather_history : Historical weather recordings for analytics
- *   - locations       : Locations (single source of truth — Zimbabwe + Africa + ASEAN)
+ *   - locations       : Locations (single source of truth — global seed + community)
  *   - countries       : Country metadata (auto-grown as locations are added)
  *   - provinces       : Province/state metadata (auto-grown as locations are added)
  *   - activities      : User activities for personalized weather insights
  *   - regions         : Supported geographic regions (replaces SUPPORTED_REGIONS array)
  *   - tags            : Location tag metadata (replaces TAG_LABELS / TAG_META constants)
- *   - seasons         : Country-specific season definitions (replaces getZimbabweSeason logic)
+ *   - seasons         : Country-specific season definitions (replaces getDefaultSeason logic)
  */
 
 import { getDb } from "./mongo";
-import { fetchWeather, createFallbackWeather, getZimbabweSeason, synthesizeOpenMeteoInsights, type WeatherData, type ZimbabweSeason } from "./weather";
+import { fetchWeather, createFallbackWeather, getDefaultSeason, synthesizeOpenMeteoInsights, type WeatherData, type Season } from "./weather";
 import { fetchWeatherFromTomorrow, TomorrowRateLimitError } from "./tomorrow";
 import { logWarn, logError } from "./observability";
-import type { ZimbabweLocation } from "./locations";
+import type { WeatherLocation } from "./locations";
 import type { Activity, ActivityCategory } from "./activities";
 import { generateProvinceSlug, type Country, type Province } from "./countries";
 import type { RegionDoc } from "./seed-regions";
@@ -63,7 +63,7 @@ export interface WeatherHistoryDoc {
   recordedAt: Date;
 }
 
-export interface LocationDoc extends ZimbabweLocation {
+export interface LocationDoc extends WeatherLocation {
   updatedAt: Date;
 }
 
@@ -252,8 +252,9 @@ export async function ensureIndexes(): Promise<void> {
     tagsCollection().createIndex({ slug: 1 }, { unique: true }),
     tagsCollection().createIndex({ featured: 1, order: 1 }),
 
-    // Seasons: by countryCode for date lookups
+    // Seasons: by countryCode for date lookups, TTL for AI-generated entries
     seasonsCollection().createIndex({ countryCode: 1 }),
+    seasonsCollection().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
 
     // Activity categories: by id (unique), by order for display
     activityCategoriesCollection().createIndex({ id: 1 }, { unique: true }),
@@ -411,11 +412,8 @@ export async function getWeatherForLocation(
 // AI summary cache operations (tiered TTL, replaces kv-cache.ts)
 // ---------------------------------------------------------------------------
 
-// Tier 1: Major cities — 30 min TTL
-const TIER_1_SLUGS = new Set([
-  "harare", "bulawayo", "mutare", "gweru", "masvingo",
-  "kwekwe", "kadoma", "marondera", "chinhoyi", "victoria-falls",
-]);
+// Tier 1: Major cities (by tag) — 30 min TTL
+const TIER_1_TAGS = new Set(["city"]);
 
 // Tier 2: Active areas — 60 min TTL
 const TIER_2_TAGS = new Set(["farming", "mining", "education", "border"]);
@@ -425,10 +423,10 @@ const TTL_TIER_2 = 3600;  // 60 minutes
 const TTL_TIER_3 = 7200;  // 120 minutes
 
 export function getTtlForLocation(
-  locationSlug: string,
+  _locationSlug: string,
   tags: string[] = [],
 ): { seconds: number; tier: 1 | 2 | 3 } {
-  if (TIER_1_SLUGS.has(locationSlug)) return { seconds: TTL_TIER_1, tier: 1 };
+  if (tags.some((t) => TIER_1_TAGS.has(t))) return { seconds: TTL_TIER_1, tier: 1 };
   if (tags.some((t) => TIER_2_TAGS.has(t))) return { seconds: TTL_TIER_2, tier: 2 };
   return { seconds: TTL_TIER_3, tier: 3 };
 }
@@ -565,14 +563,14 @@ export async function setApiKey(provider: string, key: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function syncLocations(
-  locations: ZimbabweLocation[],
+  locations: WeatherLocation[],
 ): Promise<void> {
   const now = new Date();
   const bulkOps = locations.map((loc) => {
-    // Always store country — ZW seed locations don't set it on the object
-    // so spreading ...loc would leave the field absent from MongoDB, breaking
-    // all queries that filter by { country: "ZW" } (hierarchy pages, counts, sitemap).
-    const country = loc.country ?? "ZW";
+    // ZW seed locations now include country: "ZW" via _ZW_RAW.map(),
+    // global locations always have country set. The ?? "" fallback is a
+    // safety net for any location missing the field.
+    const country = loc.country ?? "";
     const provinceSlug = loc.provinceSlug ??
       generateProvinceSlug(loc.province, country);
     return {
@@ -639,7 +637,7 @@ export async function getLocationCount(): Promise<number> {
 
 /** Insert a new community-contributed location */
 export async function createLocation(
-  location: ZimbabweLocation,
+  location: WeatherLocation,
 ): Promise<LocationDoc> {
   const now = new Date();
   const doc = {
@@ -1271,40 +1269,19 @@ export async function getAllRegions(): Promise<RegionDoc[]> {
   return regionsCollection().find({}).toArray();
 }
 
-// Module-level cache for active regions. Regions are nearly static (only change
-// when a new region is added to MongoDB), so we load once per warm function
-// instance and skip repeated DB round-trips on subsequent requests.
-let _regionCache: RegionDoc[] | null = null;
-
 /**
- * Async region check — replaces the synchronous isInSupportedRegion() from locations.ts.
- * Falls back to rejecting all coordinates if the regions collection is empty.
+ * Region check — always returns true (app is fully global).
+ *
+ * Retained for backward compatibility with callers. No geographic
+ * restrictions are enforced — any valid coordinates are accepted.
  */
-export async function isInSupportedRegionFromDb(lat: number, lon: number): Promise<boolean> {
-  // Retry when cache is null OR when it's an empty array (db-init may not have run yet).
-  // An empty array is not a valid permanent sentinel — regions could be added shortly after.
-  if (_regionCache === null || _regionCache.length === 0) {
-    try {
-      _regionCache = await getActiveRegions();
-    } catch {
-      // DB unavailable — do not cache failure, reject to be safe
-      return false;
-    }
-  }
-  const regions = _regionCache;
-  if (regions.length === 0) return false;
-  return regions.some(
-    (r) =>
-      lat >= r.south - r.padding &&
-      lat <= r.north + r.padding &&
-      lon >= r.west - r.padding &&
-      lon <= r.east + r.padding,
-  );
+export async function isInSupportedRegionFromDb(_lat: number, _lon: number): Promise<boolean> {
+  return true;
 }
 
-/** Clear the in-memory region cache (for testing). */
+/** No-op — retained for backward compatibility with tests. */
 export function _clearRegionCache(): void {
-  _regionCache = null;
+  // No-op: region cache removed (app is fully global)
 }
 
 // ---------------------------------------------------------------------------
@@ -1337,10 +1314,16 @@ export async function getFeaturedTagsFromDb(): Promise<TagDoc[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Season operations (replaces getZimbabweSeason() hardcoded logic at runtime)
+// Season operations (replaces getDefaultSeason() hardcoded logic at runtime)
 // ---------------------------------------------------------------------------
 
 export async function syncSeasons(seasons: SeasonDoc[]): Promise<void> {
+  // Migrate: rename old "shona" field to "localName" on any pre-existing docs
+  await seasonsCollection().updateMany(
+    { shona: { $exists: true }, localName: { $exists: false } },
+    [{ $set: { localName: "$shona" } }, { $unset: "shona" }],
+  );
+
   const bulkOps = seasons.map((s) => ({
     updateOne: {
       filter: { countryCode: s.countryCode, name: s.name },
@@ -1370,22 +1353,28 @@ export async function getSeasonFromDb(
 
 /**
  * Get the current season for a given date and country code.
- * Reads from the seasons collection; falls back to the sync ZW logic if DB is unavailable.
+ * Reads from the seasons collection; falls back to hemisphere-aware defaults if DB is unavailable.
  * Server-only — do not import in client components.
  */
 export async function getSeasonForDate(
   date: Date = new Date(),
-  countryCode: string = "ZW",
-): Promise<ZimbabweSeason> {
+  countryCode: string = "",
+  lat: number = 0,
+): Promise<Season> {
   try {
-    const doc = await getSeasonFromDb(date, countryCode);
-    if (doc) {
-      return { name: doc.name, shona: doc.localName, description: doc.description };
+    if (countryCode) {
+      const doc = await getSeasonFromDb(date, countryCode);
+      if (doc) {
+        // Guard: old pre-migration docs may have "shona" instead of "localName"
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const localName = doc.localName || (doc as any).shona as string || doc.name;
+        return { name: doc.name, localName, description: doc.description };
+      }
     }
   } catch {
     // DB unavailable — fall through to sync fallback
   }
-  return getZimbabweSeason(date);
+  return getDefaultSeason(date, lat);
 }
 
 // ---------------------------------------------------------------------------

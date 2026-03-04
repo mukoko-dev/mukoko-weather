@@ -35,7 +35,7 @@ describe("t() translation lookup", () => {
 
   it("replaces numeric param values via String()", () => {
     expect(t("location.count", { count: 90 })).toBe(
-      "90 locations across Zimbabwe",
+      "90 locations worldwide",
     );
   });
 

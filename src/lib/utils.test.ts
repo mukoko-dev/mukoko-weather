@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { cn, getScrollBehavior } from "./utils";
+import { cn, formatCoords, getScrollBehavior } from "./utils";
 
 describe("cn", () => {
   it("merges multiple class strings", () => {
@@ -31,6 +31,25 @@ describe("cn", () => {
 
   it("handles arrays of classes", () => {
     expect(cn(["a", "b"], "c")).toBe("a b c");
+  });
+});
+
+describe("formatCoords", () => {
+  it("formats southern/eastern coordinates correctly", () => {
+    expect(formatCoords(-17.83, 31.05)).toBe("17.8300°S, 31.0500°E");
+  });
+
+  it("formats northern/western coordinates correctly", () => {
+    expect(formatCoords(40.7128, -74.006)).toBe("40.7128°N, 74.0060°W");
+  });
+
+  it("formats zero coordinates as north/east", () => {
+    expect(formatCoords(0, 0)).toBe("0.0000°N, 0.0000°E");
+  });
+
+  it("formats extreme coordinates", () => {
+    expect(formatCoords(-90, -180)).toBe("90.0000°S, 180.0000°W");
+    expect(formatCoords(90, 180)).toBe("90.0000°N, 180.0000°E");
   });
 });
 

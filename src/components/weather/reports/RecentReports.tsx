@@ -1,8 +1,23 @@
 "use client";
 
+import type React from "react";
 import { useState, useEffect, useCallback } from "react";
 import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
+import {
+  CloudDrizzleIcon,
+  CloudRainIcon,
+  CloudLightningIcon,
+  CloudHailIcon,
+  WaterIcon,
+  WindIcon,
+  SunIcon,
+  CloudFogIcon,
+  CloudIcon,
+  SnowflakeIcon,
+  CloudSunIcon,
+  MegaphoneIcon,
+} from "@/lib/weather-icons";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,17 +34,18 @@ interface Report {
   locationName?: string;
 }
 
-const REPORT_ICONS: Record<string, string> = {
-  "light-rain": "🌦️",
-  "heavy-rain": "🌧️",
-  thunderstorm: "⛈️",
-  hail: "🌨️",
-  flooding: "🌊",
-  "strong-wind": "💨",
-  "clear-skies": "☀️",
-  fog: "🌫️",
-  dust: "🏜️",
-  frost: "❄️",
+/** Maps report types to SVG weather icons (instead of emoji). */
+const REPORT_ICONS: Record<string, React.ReactElement> = {
+  "light-rain": <CloudDrizzleIcon size={20} />,
+  "heavy-rain": <CloudRainIcon size={20} />,
+  thunderstorm: <CloudLightningIcon size={20} />,
+  hail: <CloudHailIcon size={20} />,
+  flooding: <WaterIcon size={20} />,
+  "strong-wind": <WindIcon size={20} />,
+  "clear-skies": <SunIcon size={20} />,
+  fog: <CloudFogIcon size={20} />,
+  dust: <CloudIcon size={20} />,
+  frost: <SnowflakeIcon size={20} />,
 };
 
 const REPORT_LABELS: Record<string, string> = {
@@ -112,19 +128,20 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
   if (!loading && reports.length === 0) {
     return (
       <section aria-labelledby="community-reports-heading" className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 id="community-reports-heading" className="text-base font-semibold text-text-primary font-heading">
-            Community Reports
-          </h2>
-          <button
-            type="button"
-            onClick={openReportModal}
-            className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary/10 px-3 py-1.5 text-base font-medium text-primary transition-colors hover:bg-primary/20 min-h-[48px]"
-          >
-            + Report Weather
-          </button>
-        </div>
-        <p className="text-base text-text-tertiary">No reports in the last 24 hours. Be the first to report!</p>
+        <h2 id="community-reports-heading" className="text-base font-semibold text-text-primary font-heading">
+          Community Reports
+        </h2>
+        <button
+          type="button"
+          onClick={openReportModal}
+          className="flex w-full items-center gap-3 rounded-[var(--radius-card)] bg-primary p-4 text-left text-primary-foreground shadow-sm transition-shadow hover:shadow-md min-h-[48px]"
+        >
+          <span aria-hidden="true"><MegaphoneIcon size={20} /></span>
+          <div>
+            <p className="text-base font-bold">Report Weather</p>
+            <p className="text-base opacity-80">No reports in the last 24 hours. Be the first!</p>
+          </div>
+        </button>
       </section>
     );
   }
@@ -143,9 +160,10 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
         <button
           type="button"
           onClick={openReportModal}
-          className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary/10 px-3 py-1.5 text-base font-medium text-primary transition-colors hover:bg-primary/20 min-h-[48px]"
+          className="inline-flex items-center gap-2 rounded-[var(--radius-button)] bg-primary px-4 py-2 text-base font-bold text-primary-foreground transition-shadow hover:shadow-md min-h-[48px]"
         >
-          + Report Weather
+          <span aria-hidden="true"><MegaphoneIcon size={18} /></span>
+          Report Weather
         </button>
       </div>
 
@@ -164,8 +182,8 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
               key={report.id}
               className="flex items-center gap-3 rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-3 shadow-sm"
             >
-              <span className="text-lg shrink-0" aria-hidden="true">
-                {REPORT_ICONS[report.reportType] || "🌤️"}
+              <span className="shrink-0 text-text-secondary" aria-hidden="true">
+                {REPORT_ICONS[report.reportType] || <CloudSunIcon size={20} />}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">

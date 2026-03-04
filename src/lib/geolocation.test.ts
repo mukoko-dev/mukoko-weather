@@ -20,7 +20,6 @@ describe("geolocation source structure", () => {
     expect(source).toContain('"created"');
     expect(source).toContain('"denied"');
     expect(source).toContain('"unavailable"');
-    expect(source).toContain('"outside-supported"');
     expect(source).toContain('"error"');
   });
 
@@ -41,8 +40,8 @@ describe("geolocation source structure", () => {
     expect(source).toContain('status: "denied"');
   });
 
-  it("returns 'outside-supported' when location is outside supported regions", () => {
-    expect(source).toContain('status: "outside-supported"');
+  it("does not have region-based rejection (app is fully global)", () => {
+    expect(source).not.toContain("outside-supported");
   });
 
   it("returns 'created' when a new location was auto-created", () => {

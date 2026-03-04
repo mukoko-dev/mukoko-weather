@@ -25,7 +25,7 @@ export const TAGS: TagDoc[] = [
   {
     slug: "city",
     label: "Cities & Towns",
-    description: "Major urban centres across Zimbabwe",
+    description: "Major urban centres worldwide",
     icon: "building",
     featured: true,
     order: 1,

@@ -86,12 +86,12 @@ const markdownComponents = {
 const MAX_RENDERED_MESSAGES = 30;
 
 const DEFAULT_SUGGESTED_PROMPTS = [
-  { label: "Drone flying in Harare", query: "Can I fly a drone in Harare today?" },
-  { label: "Farming advice", query: "What's the best time to plant maize in Mashonaland?" },
-  { label: "Safari weather", query: "What's the weather like for safari in Victoria Falls?" },
-  { label: "Compare cities", query: "Compare weather in Harare and Bulawayo" },
-  { label: "Road trip", query: "Is it safe to drive from Harare to Mutare today?" },
-  { label: "Weekend plans", query: "What outdoor activities can I do this weekend in Gweru?" },
+  { label: "Drone flying today", query: "Can I fly a drone today?" },
+  { label: "Farming advice", query: "What's the best time to plant crops this season?" },
+  { label: "Safari weather", query: "What's the weather like for safari this weekend?" },
+  { label: "Compare cities", query: "Compare weather in Nairobi and Bangkok" },
+  { label: "Road trip", query: "Is it safe for a road trip today?" },
+  { label: "Weekend plans", query: "What outdoor activities can I do this weekend?" },
 ];
 
 /**

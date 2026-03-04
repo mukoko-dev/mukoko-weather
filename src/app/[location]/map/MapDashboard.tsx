@@ -8,7 +8,7 @@ import { Header } from "@/components/layout/Header";
 import { MapLayerSwitcher } from "@/components/weather/map/MapLayerSwitcher";
 import { MapSkeleton } from "@/components/weather/map/MapSkeleton";
 import { DEFAULT_LAYER } from "@/lib/map-layers";
-import type { ZimbabweLocation } from "@/lib/locations";
+import type { WeatherLocation } from "@/lib/locations";
 
 const LeafletMapFull = dynamic(
   () => import("@/components/weather/map/LeafletMapFull"),
@@ -18,7 +18,7 @@ const LeafletMapFull = dynamic(
 const BASE_URL = "https://weather.mukoko.com";
 
 interface MapDashboardProps {
-  location: ZimbabweLocation;
+  location: WeatherLocation;
 }
 
 export function MapDashboard({ location }: MapDashboardProps) {

@@ -8,7 +8,7 @@
  */
 
 import type { WeatherData } from "./weather";
-import type { ZimbabweLocation } from "./locations";
+import type { WeatherLocation } from "./locations";
 
 export interface SuggestedPrompt {
   label: string;
@@ -133,7 +133,7 @@ function compareValues(
 function interpolateQuery(
   template: string,
   weather: WeatherData,
-  location: Pick<ZimbabweLocation, "name" | "slug">,
+  location: Pick<WeatherLocation, "name" | "slug">,
 ): string {
   const c = weather.current;
   return template
@@ -157,7 +157,7 @@ function interpolateQuery(
  */
 export function generateSuggestedPrompts(
   weather: WeatherData,
-  location: Pick<ZimbabweLocation, "name" | "slug">,
+  location: Pick<WeatherLocation, "name" | "slug">,
   activities: string[],
   rules?: SuggestedPromptRule[],
 ): SuggestedPrompt[] {
@@ -210,7 +210,7 @@ export function generateSuggestedPrompts(
  */
 export async function generateSuggestedPromptsAsync(
   weather: WeatherData,
-  location: Pick<ZimbabweLocation, "name" | "slug">,
+  location: Pick<WeatherLocation, "name" | "slug">,
   activities: string[],
 ): Promise<SuggestedPrompt[]> {
   const rules = await fetchSuggestedRules();
@@ -223,7 +223,7 @@ export async function generateSuggestedPromptsAsync(
 
 function _fallbackPrompts(
   weather: WeatherData,
-  location: Pick<ZimbabweLocation, "name" | "slug">,
+  location: Pick<WeatherLocation, "name" | "slug">,
   activities: string[],
 ): SuggestedPrompt[] {
   const prompts: SuggestedPrompt[] = [];

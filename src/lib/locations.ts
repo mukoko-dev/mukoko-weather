@@ -1,5 +1,21 @@
 import { GLOBAL_LOCATIONS } from "./locations-global";
 
+/** Structured address from Nominatim reverse geocoding (community/geolocation locations only). */
+export interface NominatimAddress {
+  road?: string;
+  suburb?: string;
+  cityDistrict?: string;
+  city?: string;
+  state?: string;
+  stateDistrict?: string;
+  county?: string;
+  postcode?: string;
+  country?: string;
+  countryCode?: string;
+  /** Full formatted address from Nominatim display_name */
+  displayName?: string;
+}
+
 export interface WeatherLocation {
   slug: string;
   name: string;
@@ -9,25 +25,37 @@ export interface WeatherLocation {
   lon: number;
   elevation: number;
   tags: string[];
-  /** ISO 3166-1 alpha-2 country code (defaults to "ZW") */
+  /** ISO 3166-1 alpha-2 country code */
   country?: string;
   /** How this location was added */
   source?: "seed" | "community" | "geolocation";
   /** Links location to the provinces collection — auto-computed if absent */
   provinceSlug?: string;
+  /** Structured address from Nominatim — stored for community/geolocation locations */
+  nominatimAddress?: NominatimAddress;
 }
 
-/** @deprecated Use WeatherLocation instead */
-export type ZimbabweLocation = WeatherLocation;
-
 /**
- * Location tag — any string slug from the database `tags` collection.
- * New tags can be added via db-init without code changes.
+ * Location tag — known seed tags get compile-time validation, while the
+ * `string & {}` escape hatch allows DB-driven tags without code changes.
  */
-export type LocationTag = string;
+export type LocationTag =
+  | "city"
+  | "farming"
+  | "mining"
+  | "tourism"
+  | "education"
+  | "border"
+  | "travel"
+  | "national-park"
+  | (string & {});
 
 
-export const ZW_LOCATIONS: ZimbabweLocation[] = [
+/** Zimbabwe seed locations (ZW) — part of the global seed location set. */
+// ZW seed entries — country: "ZW" is injected via .map() at the end so we
+// don't repeat it 98 times, while still ensuring syncLocations writes the
+// correct country code to MongoDB.
+const _ZW_RAW: Omit<WeatherLocation, "country">[] = [
   // ===== CITIES & TOWNS =====
   { slug: "harare", name: "Harare", province: "Harare", lat: -17.83, lon: 31.05, elevation: 1490, tags: ["city", "education"] },
   { slug: "bulawayo", name: "Bulawayo", province: "Bulawayo", lat: -20.15, lon: 28.58, elevation: 1348, tags: ["city", "education"] },
@@ -140,6 +168,22 @@ export const ZW_LOCATIONS: ZimbabweLocation[] = [
   { slug: "lion-den", name: "Lion's Den", province: "Mashonaland West", lat: -16.93, lon: 29.65, elevation: 1100, tags: ["travel"] },
 ];
 
+/** Zimbabwe seed locations with country: "ZW" injected. */
+export const SEED_LOCATIONS_ZW: WeatherLocation[] = _ZW_RAW.map((loc) => ({
+  ...loc,
+  country: "ZW",
+}));
+
 /** Combined location array: Zimbabwe seed locations + global locations */
-export const LOCATIONS: ZimbabweLocation[] = [...ZW_LOCATIONS, ...GLOBAL_LOCATIONS];
+export const LOCATIONS: WeatherLocation[] = [...SEED_LOCATIONS_ZW, ...GLOBAL_LOCATIONS];
+
+// ---------------------------------------------------------------------------
+// Backward-compatibility aliases — retain until all callers are migrated
+// ---------------------------------------------------------------------------
+
+/** @deprecated Use WeatherLocation instead */
+export type ZimbabweLocation = WeatherLocation;
+
+/** @deprecated Use SEED_LOCATIONS_ZW instead */
+export const ZW_LOCATIONS = SEED_LOCATIONS_ZW;
 

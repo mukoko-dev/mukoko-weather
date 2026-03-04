@@ -25,7 +25,7 @@ export default function HelpPage() {
         name: "What is mukoko weather?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "mukoko weather is an AI-powered weather intelligence platform for the developing world. It provides real-time weather conditions, 7-day forecasts, hourly predictions, frost alerts, and AI-generated weather advice for 265+ locations across Africa, Asia, the Middle East, South America, and Eastern Europe.",
+          text: "mukoko weather is an AI-powered global weather intelligence platform. It provides real-time weather conditions, 7-day forecasts, hourly predictions, frost alerts, and AI-generated weather advice for 265+ locations worldwide.",
         },
       },
       {
@@ -41,7 +41,7 @@ export default function HelpPage() {
         name: "How do frost alerts work?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "mukoko weather automatically scans hourly forecasts for temperatures at or below 3°C during nighttime hours (10pm to 8am). Alerts are classified as: Severe (below 0°C), High (0-2°C), or Moderate (2-3°C). These alerts are especially useful for farmers in frost-prone areas like Marondera, Nyanga, and the Eastern Highlands.",
+          text: "mukoko weather automatically scans hourly forecasts for temperatures at or below 3°C during nighttime hours (10pm to 8am). Alerts are classified as: Severe (below 0°C), High (0-2°C), or Moderate (2-3°C). These alerts are especially useful for farmers in frost-prone areas worldwide.",
         },
       },
       {
@@ -81,7 +81,7 @@ export default function HelpPage() {
           <h2 className="font-heading text-2xl font-bold text-text-primary">Getting started</h2>
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
-              mukoko weather gives you accurate weather data for 265+ locations across the developing world. No account needed —
+              mukoko weather gives you accurate weather data for 265+ locations worldwide. No account needed —
               just visit{" "}
               <a href={BASE_URL} className="text-primary underline">weather.mukoko.com</a>{" "}
               and you&apos;re ready to go.
@@ -91,7 +91,7 @@ export default function HelpPage() {
               Tap the location button in the top-right corner of the header. You can:
             </p>
             <ul className="list-disc pl-6 space-y-1">
-              <li>Search by name (e.g. &quot;Harare&quot;, &quot;Vic Falls&quot;)</li>
+              <li>Search by name (e.g. &quot;London&quot;, &quot;Nairobi&quot;, &quot;Bangkok&quot;)</li>
               <li>Filter by category — cities, farming areas, mining, tourism, national parks</li>
               <li>Tap &quot;Use my location&quot; to auto-detect your nearest supported weather location</li>
             </ul>
@@ -150,8 +150,7 @@ export default function HelpPage() {
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
               mukoko weather automatically monitors overnight temperatures and displays a frost alert banner
-              when conditions are risky. This is especially useful for farmers during the cool dry
-              season (May–August).
+              when conditions are risky. This is especially useful for farmers during frost-prone seasons.
             </p>
             <h3 className="font-semibold text-text-primary">Alert levels</h3>
             <dl className="mt-2 space-y-2">
@@ -175,32 +174,19 @@ export default function HelpPage() {
           </div>
         </section>
 
-        {/* Zimbabwe seasons */}
+        {/* Seasonal awareness */}
         <section className="mt-10">
           <h2 className="font-heading text-2xl font-bold text-text-primary">Seasonal awareness</h2>
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
-              mukoko weather displays seasonal context on forecast pages. Zimbabwe, for example, has distinct
-              seasons that affect daily life, agriculture, and travel.
+              mukoko weather displays country-specific seasonal context on forecast pages. Season data
+              covers 50+ countries with local season names and agricultural calendars — from Zimbabwe&apos;s
+              Masika and Chirimo to tropical monsoon and dry seasons across Africa, Asia, and beyond.
             </p>
-            <dl className="mt-2 space-y-3">
-              <div>
-                <dt className="font-semibold text-text-primary">Masika — Main rains (November–March)</dt>
-                <dd className="mt-1">Heavy rainfall, flooding risk, planting season. Roads may be damaged in rural areas.</dd>
-              </div>
-              <div>
-                <dt className="font-semibold text-text-primary">Munakamwe — Short rains (April)</dt>
-                <dd className="mt-1">Harvest time, late rains tapering off. Transition period between wet and dry seasons.</dd>
-              </div>
-              <div>
-                <dt className="font-semibold text-text-primary">Chirimo — Cool dry (May–August)</dt>
-                <dd className="mt-1">Frost risk, cold snaps, veld fires. The driest and coldest time of year, especially in the Eastern Highlands.</dd>
-              </div>
-              <div>
-                <dt className="font-semibold text-text-primary">Zhizha — Hot dry (September–October)</dt>
-                <dd className="mt-1">Heat stress, high UV, water scarcity. The hottest period before the rains return.</dd>
-              </div>
-            </dl>
+            <p>
+              Seasonal information helps you understand how weather patterns affect daily life,
+              agriculture, and travel in each region throughout the year.
+            </p>
           </div>
         </section>
 
@@ -227,7 +213,7 @@ export default function HelpPage() {
             </ol>
             <p>
               Once installed, the app opens in standalone mode (no browser address bar) and supports quick
-              shortcuts to Harare, Bulawayo, and Victoria Falls weather via long-press on the app icon.
+              shortcuts to your favourite locations via long-press on the app icon.
             </p>
           </div>
         </section>

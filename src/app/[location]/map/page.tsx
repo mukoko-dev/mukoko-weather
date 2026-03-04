@@ -38,7 +38,7 @@ export async function generateMetadata({
       description: `Interactive weather map for ${loc.name} — rain, cloud, temperature, wind, humidity layers.`,
       url: `${BASE_URL}/${loc.slug}/map`,
       type: "website",
-      locale: "en_ZW",
+      locale: "en",
       siteName: "mukoko weather",
     },
   };

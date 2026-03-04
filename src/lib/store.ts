@@ -122,7 +122,7 @@ export const useAppStore = create<AppState>()(
           queueSync({ theme: next });
           return { theme: next };
         }),
-      selectedLocation: "harare",
+      selectedLocation: "",
       setSelectedLocation: (slug) => {
         set({ selectedLocation: slug });
         queueSync({ selectedLocation: slug });

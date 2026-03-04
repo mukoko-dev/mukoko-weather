@@ -271,8 +271,8 @@ function SavedTab({
         {geoState?.status === "denied" && (
           <p className="px-3 pb-1 text-base text-text-tertiary">Location access denied.</p>
         )}
-        {geoState?.status === "outside-supported" && (
-          <p className="px-3 pb-1 text-base text-text-tertiary">Your area isn&apos;t supported yet.</p>
+        {geoState?.status === "error" && geoState?.coords && (
+          <p className="px-3 pb-1 text-base text-text-tertiary">Could not detect your location. Try again later.</p>
         )}
       </div>
 

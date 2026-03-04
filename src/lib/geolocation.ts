@@ -1,10 +1,10 @@
 "use client";
 
-import type { ZimbabweLocation } from "./locations";
+import type { WeatherLocation } from "./locations";
 
 export interface GeoResult {
-  status: "success" | "created" | "denied" | "unavailable" | "outside-supported" | "error";
-  location: ZimbabweLocation | null;
+  status: "success" | "created" | "denied" | "unavailable" | "error";
+  location: WeatherLocation | null;
   coords: { lat: number; lon: number } | null;
   distanceKm: number | null;
   /** True when the location was just auto-created via reverse geocoding */
@@ -14,7 +14,7 @@ export interface GeoResult {
 /**
  * Request the user's position via the browser Geolocation API
  * and snap to the nearest location via the /api/geo endpoint.
- * If no nearby location exists in a supported region, auto-creates one.
+ * If no nearby location exists, auto-creates one via reverse geocoding.
  */
 export function detectUserLocation(): Promise<GeoResult> {
   return new Promise((resolve) => {
@@ -29,22 +29,13 @@ export function detectUserLocation(): Promise<GeoResult> {
 
         try {
           const res = await fetch(`/api/py/geo?lat=${latitude}&lon=${longitude}&autoCreate=true`);
-          if (res.status === 404) {
-            resolve({
-              status: "outside-supported",
-              location: null,
-              coords: { lat: latitude, lon: longitude },
-              distanceKm: null,
-            });
-            return;
-          }
           if (!res.ok) {
             resolve({ status: "error", location: null, coords: { lat: latitude, lon: longitude }, distanceKm: null });
             return;
           }
 
           const data = await res.json();
-          const nearest: ZimbabweLocation = data.nearest;
+          const nearest: WeatherLocation = data.nearest;
           const isNew: boolean = data.isNew ?? false;
 
           // Calculate distance to nearest for display

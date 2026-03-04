@@ -1,6 +1,6 @@
 # Contributing to mukoko weather
 
-Thank you for your interest in contributing to mukoko weather. This project provides free weather intelligence starting with Zimbabwe and expanding globally across ASEAN countries and developing regions. Contributions from the community help us serve more people.
+Thank you for your interest in contributing to mukoko weather. This project provides free global weather intelligence — built in Zimbabwe, serving the world. Contributions from the community help us serve more people.
 
 ## Getting Started
 
@@ -31,6 +31,15 @@ Thank you for your interest in contributing to mukoko weather. This project prov
 - **Accessibility** — all UI changes must maintain WCAG 3.0 APCA/AAA compliance. Layout components must use ARIA landmarks (`role="banner"`, `role="navigation"`, `role="contentinfo"`). Navigation must include `aria-current="page"` on active links. New interactive elements need `focus-visible` outlines.
 - **Mobile-first** — design for mobile screens first, then scale up
 - **44px touch targets** — all interactive elements must meet the minimum touch target size
+
+### Data Standards
+
+All data models must align with **schema.org** vocabulary and **OpenAPI** standards. See the **Data Standards & Interoperability** section in `CLAUDE.md` for the full specification.
+
+- **Schema.org mapping** — new data entities must identify their schema.org equivalent before implementation (e.g., locations → `schema.org/Place`, weather → `schema.org/Observation`)
+- **ISO standards** — country codes use ISO 3166-1 alpha-2, dates use ISO 8601, coordinates use WGS 84, measurement units follow UN/CEFACT Recommendation 20
+- **OpenAPI contract** — all Python API endpoints must define Pydantic `BaseModel` request/response schemas. The auto-generated OpenAPI spec (available at `/api/py/docs` in dev) is the source of truth for API consumers
+- **JSON-LD structured data** — all public-facing pages must include schema.org JSON-LD. New page types must add appropriate schemas
 
 ### Commit Messages
 
@@ -127,13 +136,13 @@ Use `LazySection` from `src/components/weather/LazySection.tsx` for any section 
 1. Add the location to `src/lib/locations.ts` in the `LOCATIONS` array
 2. Include: `slug`, `name`, `province`, `lat`, `lon`, `elevation`, `tags`, and optionally `country` (ISO alpha-2, defaults to `"ZW"`)
 3. Tags: `city`, `farming`, `mining`, `tourism`, `education`, `border`, `travel`, `national-park`
-4. Verify coordinates are within a supported region (`isInSupportedRegion` in `locations.ts`)
+4. Verify coordinates are valid WGS 84 values (latitude -90 to 90, longitude -180 to 180)
 5. Run the test suite to ensure no regressions
 6. Run `POST /api/db-init` to sync locations to MongoDB
 
 ### Community locations (dynamic)
 
-Users can add locations at runtime via geolocation auto-detection, search, or coordinates — no code change needed. These are stored in MongoDB and immediately available.
+Users can add locations at runtime via geolocation auto-detection, search, or coordinates — no code change needed. These are stored in MongoDB and immediately available. Community locations are reverse-geocoded via Nominatim (OpenStreetMap) at zoom=18 (building/POI level), producing specific place names (landmarks, schools, roads, suburbs) and structured addresses (`nominatimAddress` field). Province normalization handles city-states (Singapore, Monaco, etc.) by using district-level fields instead of meaningless postal codes.
 
 ## Pre-Commit Checklist
 

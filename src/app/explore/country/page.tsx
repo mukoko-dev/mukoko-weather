@@ -14,14 +14,14 @@ const BASE_URL = "https://weather.mukoko.com";
 export const metadata: Metadata = {
   title: "Browse Weather by Country | mukoko weather",
   description:
-    "Explore weather forecasts across the developing world — browse by country and region.",
+    "Explore weather forecasts worldwide — browse by country and region.",
   alternates: {
     canonical: `${BASE_URL}/explore/country`,
   },
   openGraph: {
     title: "Browse Weather by Country | mukoko weather",
     description:
-      "Explore weather forecasts across the developing world — browse by country and region.",
+      "Explore weather forecasts worldwide — browse by country and region.",
   },
 };
 
@@ -92,7 +92,7 @@ export default async function ExploreCountryPage() {
         </h1>
         <p className="mt-2 text-text-secondary">
           {countries.length > 0
-            ? `${countries.length} countries across the developing world`
+            ? `${countries.length} countries worldwide`
             : "No countries available yet — check back soon."}
         </p>
 

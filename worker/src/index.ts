@@ -5,9 +5,9 @@
  *
  * Routes:
  *   GET  /api/weather?lat=&lon=         — Cached Open-Meteo weather proxy
- *   GET  /api/geo?lat=&lon=             — Nearest Zimbabwe location lookup
+ *   GET  /api/geo?lat=&lon=             — Nearest location lookup
  *   POST /api/ai                        — AI weather summary (KV-cached)
- *   GET  /api/locations                 — All Zimbabwe locations
+ *   GET  /api/locations                 — All locations
  *   GET  /api/locations/:tag            — Locations filtered by tag
  *   GET  /embed/widget.js              — Embeddable widget script
  *   GET  /embed/widget.css             — Widget styles

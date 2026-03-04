@@ -6,12 +6,15 @@ Handles location CRUD, search (text + geospatial), and geo-lookup.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 from ._db import (
     get_db,
@@ -25,6 +28,10 @@ router = APIRouter()
 SLUG_RE = re.compile(r"^[a-z0-9-]{1,80}$")
 COUNTRY_PREFERENCE_MAX_KM = 50
 _http_client: Optional[httpx.Client] = None
+
+# City-states where state/province fields are meaningless (postal codes or same as country).
+# For these, province is derived from district-level fields (city_district, suburb, etc.).
+_CITY_STATES = {"SG", "MC", "VA", "GI", "SM", "AD", "LI", "MT", "BN", "DJ", "BH", "QA", "KW"}
 
 
 def _get_http() -> httpx.Client:
@@ -198,21 +205,19 @@ async def search_locations(
         source = "mongodb"
         if q and not tag and not results:
             geocoded = _forward_geocode(q, count=limit)
-            # Only include results within supported regions
             results = [
                 {
-                    "slug": _generate_slug(g["name"], g.get("country", "ZW")),
+                    "slug": _generate_slug(g["name"], g.get("country", "")),
                     "name": g["name"],
                     "province": g.get("admin1", ""),
                     "lat": g["lat"],
                     "lon": g["lon"],
                     "elevation": g.get("elevation", 0),
                     "tags": [],
-                    "country": g.get("country", "ZW"),
+                    "country": g.get("country", ""),
                     "source": "geocoded",
                 }
                 for g in geocoded
-                if _is_in_supported_region(g["lat"], g["lon"])
             ]
             source = "geocoded"
 
@@ -229,8 +234,109 @@ async def search_locations(
 # ---------------------------------------------------------------------------
 
 
-def _reverse_geocode(lat: float, lon: float) -> dict | None:
-    """Reverse geocode using Nominatim."""
+def _extract_location_name(data: dict, address: dict, country_code: str) -> str:
+    """Extract the most specific location name from Nominatim response.
+
+    Prefers POIs, suburbs, neighborhoods over generic city names.
+    Real-world addresses and landmarks produce names like
+    "Singapore American School", "Meikles Hotel", "525 Canberra Drive".
+    """
+    city = address.get("city") or address.get("town") or ""
+    country_name = address.get("country", "")
+
+    # Most specific: Nominatim's own name for this exact point (POI, building, etc.)
+    poi_name = data.get("name", "")
+    if poi_name and poi_name not in (city, country_name):
+        return poi_name
+
+    # Next: suburb or neighbourhood — e.g., "Woodlands", "Strathaven"
+    suburb = address.get("suburb") or address.get("neighbourhood") or ""
+    if suburb and suburb not in (city, country_name):
+        return suburb
+
+    # Next: road name — e.g., "Orchard Road", "525 Canberra Drive"
+    road = address.get("road", "")
+    if road:
+        return road
+
+    # Fallback: city/town/village level
+    return (
+        city
+        or address.get("village")
+        or address.get("county")
+        or data.get("name", "Unknown")
+    )
+
+
+def _normalize_admin1(address: dict, country_code: str, country_name: str) -> str:
+    """Extract a meaningful province/district from Nominatim address.
+
+    For city-states: uses district/suburb-level fields (e.g., "Woodlands" for SG).
+    For normal countries: uses state/province with numeric rejection.
+    """
+    # City-states: state is meaningless (postal code or same as country).
+    # Use sub-national divisions as "province".
+    if country_code.upper() in _CITY_STATES:
+        return (
+            address.get("city_district")
+            or address.get("suburb")
+            or address.get("state_district")
+            or address.get("county")
+            or country_name
+        )
+
+    raw = address.get("state") or address.get("province") or ""
+    stripped = raw.strip()
+
+    # Validate: reject purely numeric, ≤2 chars, or digit-heavy strings
+    if stripped and not stripped.isdigit() and len(stripped) > 2:
+        digit_ratio = sum(c.isdigit() for c in stripped) / len(stripped)
+        if digit_ratio < 0.5:
+            return stripped
+
+    # Fallback chain for invalid admin1
+    return (
+        address.get("state_district")
+        or address.get("city_district")
+        or address.get("region")
+        or address.get("county")
+        or country_name
+    )
+
+
+def _build_nominatim_address(address: dict, country_code: str, display_name: str) -> dict:
+    """Build structured address dict from Nominatim address fields.
+
+    Stores formal address components separately for contextual display
+    in breadcrumbs, cards, and info panels.
+    """
+    return {
+        k: v for k, v in {
+            "road": address.get("road"),
+            "suburb": address.get("suburb"),
+            "cityDistrict": address.get("city_district"),
+            "city": address.get("city"),
+            "state": address.get("state"),
+            "stateDistrict": address.get("state_district"),
+            "county": address.get("county"),
+            "postcode": address.get("postcode"),
+            "country": address.get("country"),
+            "countryCode": country_code,
+            "displayName": display_name,
+        }.items() if v
+    }
+
+
+def _reverse_geocode(lat: float, lon: float, *, zoom: int = 14) -> dict | None:
+    """Reverse geocode using Nominatim.
+
+    Args:
+        zoom: Nominatim zoom level (10=city, 14=suburb, 18=building/POI).
+              Defaults to 14 (suburb level) as a privacy-safe default.
+              Use zoom=18 only for explicit named search queries where
+              POI-level specificity is expected. GPS auto-creation uses
+              the default to avoid storing exact home addresses.
+    """
     client = _get_http()
     try:
         resp = client.get(
@@ -239,7 +345,7 @@ def _reverse_geocode(lat: float, lon: float) -> dict | None:
                 "lat": str(lat),
                 "lon": str(lon),
                 "format": "jsonv2",
-                "zoom": 10,
+                "zoom": zoom,
                 "accept-language": "en",
             },
             headers={"User-Agent": "mukoko-weather/2.0 (support@mukoko.com)"},
@@ -250,24 +356,21 @@ def _reverse_geocode(lat: float, lon: float) -> dict | None:
         data = resp.json()
         address = data.get("address", {})
 
-        name = (
-            address.get("city")
-            or address.get("town")
-            or address.get("village")
-            or address.get("suburb")
-            or address.get("county")
-            or data.get("name", "Unknown")
-        )
+        country_code = address.get("country_code", "").upper()
+        country_name = address.get("country", "")
 
-        country_code = address.get("country_code", "zw").upper()
-        country_name = address.get("country", "Zimbabwe")
-        admin1 = address.get("state", address.get("province", ""))
+        name = _extract_location_name(data, address, country_code)
+        admin1 = _normalize_admin1(address, country_code, country_name)
+        nominatim_address = _build_nominatim_address(
+            address, country_code, data.get("display_name", ""),
+        )
 
         return {
             "name": name,
             "country": country_code,
             "countryName": country_name,
             "admin1": admin1,
+            "nominatimAddress": nominatim_address,
             "lat": float(data.get("lat", lat)),
             "lon": float(data.get("lon", lon)),
             "elevation": 0,
@@ -322,12 +425,15 @@ def _get_elevation(lat: float, lon: float) -> int:
     return 0
 
 
-def _generate_slug(name: str, country: str = "ZW") -> str:
-    """Generate a URL-safe slug from a location name."""
+def _generate_slug(name: str, country: str = "") -> str:
+    """Generate a URL-safe slug from a location name.
+
+    All locations get country-code suffix (e.g., "harare-zw", "nairobi-ke").
+    """
     import unicodedata
     slug = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
     slug = re.sub(r"[^a-z0-9]+", "-", slug.lower()).strip("-")
-    if country and country.upper() != "ZW":
+    if country:
         slug = f"{slug}-{country.lower()}"
     return slug[:80]
 
@@ -359,88 +465,30 @@ def _infer_tags(geocoded: dict) -> list[str]:
     return tags
 
 
-def _is_in_supported_region(lat: float, lon: float) -> bool:
-    """Check if coordinates are within a supported region from MongoDB.
+def _is_valid_coordinates(lat: float, lon: float) -> bool:
+    """Check if coordinates are valid WGS 84 values.
 
-    Note: The MongoDB bounding-box query does NOT match the Pacific Islands region
-    (west: 130, east: -176) because that region crosses the antimeridian. The
-    standard query ``"east": {"$gte": lon - 1}`` fails for positive longitudes east
-    of 175°E since -176 < 175. The hardcoded fallback below handles this correctly.
+    The app is fully global — any valid latitude/longitude is accepted.
     """
+    return -90 <= lat <= 90 and -180 <= lon <= 180
+
+
+# Dedup radius — tight because location names are now specific (POIs, addresses,
+# suburbs). Two different places 2km apart are legitimately different locations.
+DEDUP_RADIUS_KM = 1
+
+
+
+def _find_duplicate(
+    lat: float,
+    lon: float,
+    radius_km: float = DEDUP_RADIUS_KM,
+    name: str | None = None,
+    country: str | None = None,
+) -> dict | None:
+    """Check for existing locations within radius_km OR with same name+country."""
     try:
-        db = get_db()
-        # Regions are stored with flat top-level fields: south, north, west, east.
-        # The Pacific Islands region (antimeridian-crossing) will never match this
-        # query — it always falls through to _hardcoded_region_check below.
-        region = db["regions"].find_one({
-            "active": True,
-            "south": {"$lte": lat + 1},
-            "north": {"$gte": lat - 1},
-            "west": {"$lte": lon + 1},
-            "east": {"$gte": lon - 1},
-        })
-        if region is not None:
-            return True
-        # Fallback: hardcoded region check when DB returns no match.
-        # Covers all developing-country regions defined in seed-regions.ts,
-        # and is the authoritative check for the Pacific Islands antimeridian region.
-        return _hardcoded_region_check(lat, lon)
-    except Exception:
-        # Fallback on DB error
-        return _hardcoded_region_check(lat, lon)
-
-
-def _hardcoded_region_check(lat: float, lon: float) -> bool:
-    """Hardcoded fallback for supported regions — mirrors seed-regions.ts bounds (+1° padding).
-
-    All bounds include +1° padding to match the MongoDB query padding above.
-    Pacific Islands is always evaluated here (DB query cannot handle antimeridian).
-    """
-    # Africa (full continent, including North Africa)
-    if -36 <= lat <= 39 and -19 <= lon <= 53:
-        return True
-    # ASEAN
-    if -12 <= lat <= 29.5 and 91 <= lon <= 142:
-        return True
-    # South Asia (India, Pakistan, Bangladesh, Sri Lanka, Nepal, Bhutan, Maldives, Afghanistan)
-    if -2 <= lat <= 39.5 and 59 <= lon <= 99:
-        return True
-    # Middle East (Arabian Peninsula, Levant, Iran, Iraq, Turkey)
-    if 11 <= lat <= 43 and 24 <= lon <= 66:
-        return True
-    # Central Asia + Mongolia
-    if 34 <= lat <= 57 and 45 <= lon <= 126:
-        return True
-    # South America
-    if -58 <= lat <= 14.5 and -83 <= lon <= -33:
-        return True
-    # Central America, Mexico & Caribbean
-    if 6 <= lat <= 34 and -123 <= lon <= -58:
-        return True
-    # Eastern Europe (Ukraine, Romania, Moldova, Bulgaria, Serbia, Bosnia, Albania, Georgia, etc.)
-    if 34 <= lat <= 57 and 13 <= lon <= 47:
-        return True
-    # Pacific Islands (bounding box crosses antimeridian: 130°E to 176°W).
-    # DB seed bounds: west=130, east=-176. With +1° padding: west-1=129, east+1=-175.
-    if -26 <= lat <= 21 and (lon >= 129 or lon <= -175):
-        return True
-    return False
-
-
-DEDUP_RADIUS_ZW_KM = 5
-DEDUP_RADIUS_DEFAULT_KM = 10
-
-
-def _dedup_radius(country: str | None) -> float:
-    """Zimbabwe locations use a tighter 5km radius; others use 10km."""
-    if country and country.upper() == "ZW":
-        return DEDUP_RADIUS_ZW_KM
-    return DEDUP_RADIUS_DEFAULT_KM
-
-
-def _find_duplicate(lat: float, lon: float, radius_km: float = DEDUP_RADIUS_DEFAULT_KM) -> dict | None:
-    """Check for existing locations within radius_km."""
-    try:
+        # Geospatial proximity check
         result = locations_collection().find_one(
             {
                 "geo": {
@@ -452,7 +500,19 @@ def _find_duplicate(lat: float, lon: float, radius_km: float = DEDUP_RADIUS_DEFA
             },
             {"_id": 0},
         )
-        return result
+        if result:
+            return result
+
+        # Name + country check — catches same-named locations farther apart
+        if name and country:
+            result = locations_collection().find_one(
+                {"name": name, "country": country.upper()},
+                {"_id": 0},
+            )
+            if result:
+                return result
+
+        return None
     except Exception:
         return None
 
@@ -519,13 +579,6 @@ async def geo_lookup(
         except Exception:
             pass
 
-        # No nearby location — check supported region
-        if not _is_in_supported_region(lat, lon):
-            raise HTTPException(
-                status_code=404,
-                detail="Location is outside supported regions",
-            )
-
         # Auto-create if requested — only NOW do we call external APIs
         if autoCreate:
             geocoded = _reverse_geocode(lat, lon)
@@ -535,9 +588,12 @@ async def geo_lookup(
                     detail="Could not determine location name",
                 )
 
-            # Duplicate check (5km for Zimbabwe, 10km elsewhere)
-            dedup_km = _dedup_radius(geocoded.get("country"))
-            duplicate = _find_duplicate(lat, lon, dedup_km)
+            # Duplicate check (1km radius + name/country match)
+            dedup_km = DEDUP_RADIUS_KM
+            duplicate = _find_duplicate(
+                lat, lon, dedup_km,
+                name=geocoded["name"], country=geocoded["country"],
+            )
             if duplicate:
                 return {
                     "nearest": duplicate,
@@ -601,9 +657,13 @@ async def geo_lookup(
                 "source": "geolocation",
                 "provinceSlug": province_slug,
                 "geo": {"type": "Point", "coordinates": [geocoded["lon"], geocoded["lat"]]},
+                "nominatimAddress": geocoded.get("nominatimAddress", {}),
             }
             locations_collection().insert_one(new_loc)
             new_loc.pop("_id", None)
+
+            # Enrich: resolve seasons for this country if not already known
+            _enrich_location_with_ai(geocoded["country"], lat, lon)
 
             return {
                 "nearest": new_loc,
@@ -635,6 +695,34 @@ class AddLocationBySearch(BaseModel):
     query: str
 
 
+def _enrich_location_with_ai(country_code: str, lat: float, lon: float) -> None:
+    """Trigger AI season resolution for a country if not already in DB.
+
+    Called after creating a community/geolocation location. Runs in a
+    background thread so the HTTP response is not blocked by the Claude API
+    call (~5-15s). If AI is unavailable, season data will be resolved on
+    the next weather request via _get_season().
+    """
+    import threading
+
+    logger.info("Starting AI location enrichment for %s (%.1f, %.1f)", country_code, lat, lon)
+
+    def _run() -> None:
+        try:
+            db = get_db()
+            existing = db["seasons"].find_one({"countryCode": country_code.upper()})
+            if existing:
+                return  # Already have season data for this country
+
+            from ._ai import _resolve_seasons_with_ai
+            _resolve_seasons_with_ai(country_code, lat, lon)
+        except Exception:
+            logger.debug("AI location enrichment skipped for %s", country_code)
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+
+
 @router.post("/api/py/locations/add")
 async def add_location(request: Request):
     """
@@ -655,9 +743,6 @@ async def add_location(request: Request):
 
             results = _forward_geocode(query, count=5)
 
-            # Filter to supported regions
-            supported = [r for r in results if _is_in_supported_region(r["lat"], r["lon"])]
-
             return {
                 "mode": "candidates",
                 "results": [
@@ -670,7 +755,7 @@ async def add_location(request: Request):
                         "lon": r["lon"],
                         "elevation": r.get("elevation", 0),
                     }
-                    for r in supported
+                    for r in results
                 ],
             }
 
@@ -678,11 +763,8 @@ async def add_location(request: Request):
         lat = float(body.get("lat", 0))
         lon = float(body.get("lon", 0))
 
-        if lat < -90 or lat > 90 or lon < -180 or lon > 180:
+        if not _is_valid_coordinates(lat, lon):
             raise HTTPException(status_code=400, detail="Invalid coordinates")
-
-        if not _is_in_supported_region(lat, lon):
-            raise HTTPException(status_code=400, detail="Coordinates are outside supported regions.")
 
         # Rate limit — extract real IP behind Vercel's reverse proxy
         ip = get_client_ip(request) or "unknown"
@@ -690,14 +772,16 @@ async def add_location(request: Request):
         if not rate["allowed"]:
             raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
 
-        # Reverse geocode first so we know the country for dedup radius
-        geocoded = _reverse_geocode(lat, lon)
+        # Reverse geocode with POI-level zoom — user explicitly chose coords
+        geocoded = _reverse_geocode(lat, lon, zoom=18)
         if not geocoded:
             raise HTTPException(status_code=422, detail="Could not determine location name")
 
-        # Duplicate check (5km for Zimbabwe, 10km elsewhere)
-        dedup_km = _dedup_radius(geocoded.get("country"))
-        duplicate = _find_duplicate(lat, lon, dedup_km)
+        # Duplicate check (1km radius + name/country match)
+        duplicate = _find_duplicate(
+            lat, lon, DEDUP_RADIUS_KM,
+            name=geocoded["name"], country=geocoded["country"],
+        )
         if duplicate:
             return {
                 "mode": "duplicate",
@@ -705,7 +789,7 @@ async def add_location(request: Request):
                     "slug": duplicate["slug"],
                     "name": duplicate["name"],
                     "province": duplicate.get("province", ""),
-                    "country": duplicate.get("country", "ZW"),
+                    "country": duplicate.get("country", ""),
                 },
                 "message": f"A location already exists nearby: {duplicate['name']}",
             }
@@ -754,9 +838,13 @@ async def add_location(request: Request):
             "source": "community",
             "provinceSlug": province_slug,
             "geo": {"type": "Point", "coordinates": [geocoded["lon"], geocoded["lat"]]},
+            "nominatimAddress": geocoded.get("nominatimAddress", {}),
         }
         locations_collection().insert_one(new_loc)
         new_loc.pop("_id", None)
+
+        # Enrich: resolve seasons for this country if not already known
+        _enrich_location_with_ai(geocoded["country"], lat, lon)
 
         return {
             "mode": "created",

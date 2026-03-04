@@ -1,8 +1,8 @@
 {
   "name": "mukoko weather — Weather Intelligence",
   "short_name": "mukoko weather",
-  "description": "AI-powered weather intelligence. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across Zimbabwe and beyond.",
-  "start_url": "/harare",
+  "description": "AI-powered global weather intelligence for farming, mining, travel, and daily life.",
+  "start_url": "/",
   "scope": "/",
   "id": "/",
   "display": "standalone",
@@ -42,22 +42,22 @@
   ],
   "shortcuts": [
     {
-      "name": "Harare Weather",
-      "short_name": "Harare",
-      "url": "/harare",
-      "description": "Weather forecast for Harare"
+      "name": "Explore Locations",
+      "short_name": "Explore",
+      "url": "/explore",
+      "description": "Browse weather locations by category and country"
     },
     {
-      "name": "Bulawayo Weather",
-      "short_name": "Bulawayo",
-      "url": "/bulawayo",
-      "description": "Weather forecast for Bulawayo"
+      "name": "Shamwari AI",
+      "short_name": "Shamwari",
+      "url": "/shamwari",
+      "description": "AI-powered weather assistant"
     },
     {
-      "name": "Victoria Falls Weather",
-      "short_name": "Vic Falls",
-      "url": "/victoria-falls",
-      "description": "Weather forecast for Victoria Falls"
+      "name": "Weather History",
+      "short_name": "History",
+      "url": "/history",
+      "description": "Explore historical weather data"
     }
   ]
 }

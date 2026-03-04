@@ -23,8 +23,8 @@ import {
 import { FrostAlertBanner } from "./FrostAlertBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
 import { useAppStore } from "@/lib/store";
-import type { WeatherData, FrostAlert, ZimbabweSeason } from "@/lib/weather";
-import type { ZimbabweLocation } from "@/lib/locations";
+import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
+import type { WeatherLocation } from "@/lib/locations";
 import { type Activity, ACTIVITIES } from "@/lib/activities";
 import { InfoRow } from "@/components/ui/info-row";
 import { SupportBanner } from "@/components/weather/SupportBanner";
@@ -44,14 +44,16 @@ const MapPreview = lazy(() => import("@/components/weather/map/MapPreview").then
 const AISummaryChat = lazy(() => import("@/components/weather/AISummaryChat").then((m) => ({ default: m.AISummaryChat })));
 const RecentReports = lazy(() => import("@/components/weather/reports/RecentReports").then((m) => ({ default: m.RecentReports })));
 
+import { formatCoords } from "@/lib/utils";
+
 const BASE_URL = "https://weather.mukoko.com";
 
 interface WeatherDashboardProps {
   weather: WeatherData;
-  location: ZimbabweLocation;
+  location: WeatherLocation;
   usingFallback: boolean;
   frostAlert: FrostAlert | null;
-  season: ZimbabweSeason;
+  season: Season;
   /** Resolved country name — shown in breadcrumbs for non-ZW locations */
   countryName?: string;
 }
@@ -111,7 +113,7 @@ export function WeatherDashboard({
     <>
       <Header />
 
-      {/* Breadcrumb navigation for SEO and accessibility */}
+      {/* Breadcrumb navigation — always three layers: Country / Province / Location */}
       <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-5 sm:px-6 md:px-8">
         <ol className="flex flex-wrap items-center gap-1.5 text-base text-text-tertiary">
           <li>
@@ -120,8 +122,8 @@ export function WeatherDashboard({
             </a>
           </li>
           <li aria-hidden="true">/</li>
-          {/* Show country for non-ZW locations so global users have context */}
-          {countryName && location.country && location.country !== "ZW" && (
+          {/* Country — always shown */}
+          {countryName && (
             <>
               <li>
                 <span className="text-text-secondary">{countryName}</span>
@@ -129,10 +131,15 @@ export function WeatherDashboard({
               <li aria-hidden="true">/</li>
             </>
           )}
-          <li>
-            <span className="text-text-secondary">{location.province}</span>
-          </li>
-          <li aria-hidden="true">/</li>
+          {/* Province — skip only if identical to location name */}
+          {location.province && location.province !== location.name && (
+            <>
+              <li>
+                <span className="text-text-secondary">{location.province}</span>
+              </li>
+              <li aria-hidden="true">/</li>
+            </>
+          )}
           <li aria-current="page">
             <span className="font-medium text-text-primary">{location.name}</span>
           </li>
@@ -222,7 +229,7 @@ export function WeatherDashboard({
                       weather={weather}
                       location={location}
                       initialSummary={aiSummary}
-                      season={`${season.shona} (${season.name})`}
+                      season={`${season.localName} (${season.name})`}
                     />
                   </Suspense>
                 </ChartErrorBoundary>
@@ -269,17 +276,21 @@ export function WeatherDashboard({
                     About {location.name}
                   </h2>
                   <dl className="mt-5 space-y-3.5 text-base">
+                    {countryName && <InfoRow label="Country" value={countryName} />}
                     <InfoRow label="Province" value={location.province} />
                     <InfoRow label="Elevation" value={`${location.elevation}m`} />
                     <InfoRow
                       label="Coordinates"
                       value={
                         <span className="font-mono text-base">
-                          {location.lat.toFixed(2)}, {location.lon.toFixed(2)}
+                          {formatCoords(location.lat, location.lon)}
                         </span>
                       }
                     />
-                    <InfoRow label="Season" value={`${season.shona} (${season.name})`} />
+                    {location.nominatimAddress?.displayName && (
+                      <InfoRow label="Address" value={location.nominatimAddress.displayName} />
+                    )}
+                    <InfoRow label="Season" value={`${season.localName} (${season.name})`} />
                   </dl>
                 </div>
               </section>

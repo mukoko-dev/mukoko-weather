@@ -91,9 +91,9 @@ describe("HomeRedirect — redirect logic", () => {
     expect(source).toContain("15000");
   });
 
-  it("falls back to harare when geolocation fails", () => {
+  it("falls back to explore when geolocation fails", () => {
     expect(source).toContain("FALLBACK_LOCATION");
-    expect(source).toContain('"harare"');
+    expect(source).toContain('"explore"');
   });
 
   it("uses detectUserLocation for geolocation", () => {

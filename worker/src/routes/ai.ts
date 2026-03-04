@@ -1,19 +1,16 @@
 import { Hono } from "hono";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Env } from "../types";
-import { LOCATIONS, getLocationBySlug, getZimbabweSeason } from "../data/locations";
+import { LOCATIONS, getLocationBySlug, getDefaultSeason } from "../data/locations";
 
-const TIER_1_SLUGS = new Set([
-  "harare", "bulawayo", "mutare", "gweru", "masvingo",
-  "kwekwe", "kadoma", "marondera", "chinhoyi", "victoria-falls",
-]);
+const TIER_1_TAGS = new Set(["city"]);
 const TIER_2_TAGS = new Set(["farming", "mining", "education", "border"]);
 const TTL_TIER_1 = 1800;
 const TTL_TIER_2 = 3600;
 const TTL_TIER_3 = 7200;
 
-function getTtl(slug: string, tags: string[]): number {
-  if (TIER_1_SLUGS.has(slug)) return TTL_TIER_1;
+function getTtl(_slug: string, tags: string[]): number {
+  if (tags.some((t) => TIER_1_TAGS.has(t))) return TTL_TIER_1;
   if (tags.some((t) => TIER_2_TAGS.has(t))) return TTL_TIER_2;
   return TTL_TIER_3;
 }
@@ -25,12 +22,12 @@ interface CachedSummary {
   weatherCode: number;
 }
 
-const SYSTEM_PROMPT = `You are Shamwari Weather, the AI assistant for mukoko weather — Zimbabwe's weather intelligence platform. You provide actionable, contextual weather advice grounded in Zimbabwean geography, agriculture, industry, and culture.
+const SYSTEM_PROMPT = `You are Shamwari Weather, the AI assistant for mukoko weather — a global weather intelligence platform. You provide actionable, contextual weather advice grounded in local geography, agriculture, industry, and culture.
 
 Your personality:
 - Warm, practical, community-minded (Ubuntu philosophy)
-- You speak with authority about Zimbabwe's climate and geography
-- You use local knowledge: seasons (masika, chirimo, zhizha), place names, farming practices, road conditions
+- You adapt your advice to the local climate and geography of each location
+- You use local knowledge: seasons, place names, farming practices, road conditions
 - You prioritize safety and actionable advice
 
 When providing advice:
@@ -79,13 +76,14 @@ aiRoutes.post("/", async (c) => {
     }
   }
 
-  const season = getZimbabweSeason();
+  const lat = location.lat ?? 0;
+  const season = getDefaultSeason(new Date(), lat);
   const apiKey = c.env.ANTHROPIC_API_KEY;
 
   if (!apiKey) {
     const temp = weatherData.current?.temperature_2m;
     const humidity = weatherData.current?.relative_humidity_2m;
-    const insight = `Current conditions in ${location.name}: ${temp !== undefined ? Math.round(temp) + "°C" : "N/A"} with ${humidity !== undefined ? humidity + "%" : "N/A"} humidity. We are in the ${season.shona} season (${season.name}). ${season.description}. Stay informed and plan your day accordingly.`;
+    const insight = `Current conditions in ${location.name}: ${temp !== undefined ? Math.round(temp) + "°C" : "N/A"} with ${humidity !== undefined ? humidity + "%" : "N/A"} humidity. Current season: ${season.name}. ${season.description}. Stay informed and plan your day accordingly.`;
 
     await c.env.AI_SUMMARIES.put(cacheKey, JSON.stringify({
       insight, generatedAt: new Date().toISOString(), temperature: currentTemp, weatherCode: currentCode,
@@ -101,12 +99,12 @@ aiRoutes.post("/", async (c) => {
     system: SYSTEM_PROMPT,
     messages: [{
       role: "user",
-      content: `Generate a weather briefing for ${location.name}, Zimbabwe (elevation: ${location.elevation}m).
+      content: `Generate a weather briefing for ${location.name}${location.country ? ` (${location.country})` : ""} (elevation: ${location.elevation}m).
 ${locationTags.length > 0 ? `This area is relevant to: ${locationTags.join(", ")}.` : ""}
 
 Current conditions: ${JSON.stringify(weatherData.current)}
 3-day forecast summary: max temps ${JSON.stringify(weatherData.daily?.temperature_2m_max)}, min temps ${JSON.stringify(weatherData.daily?.temperature_2m_min)}, weather codes ${JSON.stringify(weatherData.daily?.weather_code)}
-Season: ${season.shona} (${season.name})
+Season: ${season.name}
 
 Provide:
 1. A 2-sentence general summary

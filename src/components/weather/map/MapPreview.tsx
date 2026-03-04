@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { MapSkeleton } from "./MapSkeleton";
-import type { ZimbabweLocation } from "@/lib/locations";
+import type { WeatherLocation } from "@/lib/locations";
 
 // Leaflet requires the DOM — dynamic import with ssr: false
 const LeafletMap = dynamic(() => import("./LeafletMapPreview"), {
@@ -12,7 +12,7 @@ const LeafletMap = dynamic(() => import("./LeafletMapPreview"), {
 });
 
 interface MapPreviewProps {
-  location: ZimbabweLocation;
+  location: WeatherLocation;
 }
 
 export function MapPreview({ location }: MapPreviewProps) {

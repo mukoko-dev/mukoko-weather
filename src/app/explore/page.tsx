@@ -18,14 +18,14 @@ const BASE_URL = "https://weather.mukoko.com";
 export const metadata: Metadata = {
   title: "Explore Weather | mukoko weather",
   description:
-    "Browse weather locations across the developing world by category, country, and province. Discover cities, farming regions, national parks, and more.",
+    "Browse weather locations worldwide by category, country, and province. Discover cities, farming regions, national parks, and more.",
   alternates: {
     canonical: `${BASE_URL}/explore`,
   },
   openGraph: {
     title: "Explore Weather | mukoko weather",
     description:
-      "Browse weather locations across the developing world by category, country, and province. Discover cities, farming regions, national parks, and more.",
+      "Browse weather locations worldwide by category, country, and province. Discover cities, farming regions, national parks, and more.",
   },
 };
 
@@ -78,7 +78,7 @@ export default async function ExplorePage() {
           Explore
         </h1>
         <p className="mt-3 text-text-secondary">
-          Browse weather locations across the developing world by category, country, and province.
+          Browse weather locations worldwide by category, country, and province.
         </p>
 
         {/* AI Search */}
@@ -111,7 +111,7 @@ export default async function ExplorePage() {
             Browse by Category
           </h2>
           <p className="mt-1 text-base text-text-secondary">
-            {totalLocations || "265+"} locations across the developing world
+            {totalLocations || "265+"} locations worldwide
           </p>
 
           {tagCounts.length === 0 && (
@@ -150,7 +150,7 @@ export default async function ExplorePage() {
           {/* Country browse card */}
           <CTACard
             title="Browse by Country"
-            description="Explore weather across the developing world — grouped by country and province"
+            description="Explore weather worldwide — grouped by country and province"
             action={
               <Link
                 href="/explore/country"

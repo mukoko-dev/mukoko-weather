@@ -18,7 +18,7 @@ export async function generateMetadata({
   if (!loc) return { title: "Location not found" };
 
   const title = `${loc.name} Atmospheric Conditions — Humidity, Wind, UV & Pressure`;
-  const description = `24-hour atmospheric trends for ${loc.name}, ${loc.province}, Zimbabwe. Detailed charts for humidity, cloud cover, wind speed, barometric pressure, and UV index from mukoko weather.`;
+  const description = `24-hour atmospheric trends for ${loc.name}, ${loc.province}. Detailed charts for humidity, cloud cover, wind speed, barometric pressure, and UV index from mukoko weather.`;
 
   return {
     title,
@@ -30,7 +30,7 @@ export async function generateMetadata({
       `${loc.name} barometric pressure`,
       `${loc.name} atmospheric conditions`,
       `${loc.province} weather`,
-      "Zimbabwe weather",
+      "weather intelligence",
       "mukoko weather",
     ],
     alternates: {
@@ -38,10 +38,10 @@ export async function generateMetadata({
     },
     openGraph: {
       title: `${loc.name} Atmosphere | mukoko weather`,
-      description: `24-hour atmospheric trends for ${loc.name}, Zimbabwe — humidity, wind, pressure, UV index.`,
+      description: `24-hour atmospheric trends for ${loc.name}, ${loc.province} — humidity, wind, pressure, UV index.`,
       url: `${BASE_URL}/${loc.slug}/atmosphere`,
       type: "website",
-      locale: "en_ZW",
+      locale: "en",
       siteName: "mukoko weather",
     },
   };
@@ -74,7 +74,7 @@ export default async function AtmospherePage({
 
   const usingFallback = weatherSource === "fallback";
   const frostAlert = usingFallback ? null : checkFrostRisk(weather.hourly);
-  const season = await getSeasonForDate(new Date(), location.country ?? "ZW");
+  const season = await getSeasonForDate(new Date(), location.country ?? "", location.lat ?? 0);
 
   const breadcrumbSchema = {
     "@context": "https://schema.org",

@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogSheetHandle, DialogTitle } from "@/compone
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trackEvent } from "@/lib/analytics";
+import { formatCoords } from "@/lib/utils";
 
 export function SavedLocationsModal() {
   const savedLocationsOpen = useAppStore((s) => s.savedLocationsOpen);
@@ -23,7 +24,7 @@ export function SavedLocationsModal() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const currentSlug = pathname?.split("/").filter(Boolean)[0] || "harare";
+  const currentSlug = pathname?.split("/").filter(Boolean)[0] || "";
   const [showSearch, setShowSearch] = useState(false);
 
   const handleSelectLocation = useCallback((slug: string) => {
@@ -196,9 +197,9 @@ function CurrentLocationButton({
           Location access denied. Enable it in your browser settings.
         </p>
       )}
-      {geoState?.status === "outside-supported" && (
+      {geoState?.status === "error" && geoState?.coords && (
         <p className="px-1 text-base text-text-tertiary">
-          Your area isn&apos;t supported yet.
+          Could not detect your location. Try again later.
         </p>
       )}
     </div>
@@ -261,7 +262,7 @@ function SavedLocationsList({
         fetch(`/api/py/locations?slug=${encodeURIComponent(slug)}`, { signal: controller.signal })
           .then((res) => (res.ok ? res.json() : null))
           .then((data) => {
-            if (data?.locations?.[0]) return [slug, data.locations[0]] as const;
+            if (data?.location) return [slug, data.location] as const;
             return [slug, { slug, name: slug.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), province: "", lat: 0, lon: 0, elevation: 0, tags: [] }] as const;
           })
           .catch(() => [slug, { slug, name: slug.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), province: "", lat: 0, lon: 0, elevation: 0, tags: [] }] as const),
@@ -298,10 +299,10 @@ function SavedLocationsList({
       {slugs.map((slug) => {
         const loc = locationMap[slug];
         const isActive = slug === currentSlug;
-        const countryCode = ((loc?.country as string) ?? "ZW").toUpperCase();
+        const countryCode = ((loc?.country as string) ?? "").toUpperCase();
         const contextLabel = loc?.province
-          ? countryCode !== "ZW" ? `${loc.province}, ${countryCode}` : loc.province
-          : "";
+          ? countryCode ? `${loc.province}, ${countryCode}` : loc.province
+          : countryCode;
 
         const label = locationLabels[slug];
         const isEditing = editingSlug === slug;
@@ -351,6 +352,9 @@ function SavedLocationsList({
                       <span className="block truncate">{loc?.name ?? slug}</span>
                       {contextLabel && (
                         <span className="block text-base text-text-tertiary truncate">{contextLabel}</span>
+                      )}
+                      {loc && loc.lat != null && loc.lon != null && loc.source !== "seed" && (
+                        <span className="block text-base text-text-tertiary font-mono truncate">{formatCoords(loc.lat, loc.lon)}</span>
                       )}
                       {!label && (
                         <span
@@ -491,10 +495,10 @@ function AddLocationSearch({
       {filteredResults.length > 0 && (
         <ul className="space-y-0.5" aria-label="Search results">
           {filteredResults.map((loc) => {
-            const countryCode = ((loc.country as string) ?? "ZW").toUpperCase();
-            const contextLabel = countryCode !== "ZW"
-              ? `${loc.province}, ${countryCode}`
-              : loc.province;
+            const countryCode = ((loc.country as string) ?? "").toUpperCase();
+            const contextLabel = loc.province
+              ? countryCode ? `${loc.province}, ${countryCode}` : loc.province
+              : countryCode;
             return (
               <li key={loc.slug}>
                 <button

@@ -6,7 +6,7 @@ import { Footer } from "@/components/layout/Footer";
 export const metadata: Metadata = {
   title: "About",
   description:
-    "Learn about mukoko weather — an AI-powered weather intelligence platform for the developing world. Starting with Zimbabwe, expanding across Africa, Asia, the Middle East, South America, and Eastern Europe. A Mukoko Africa product by Nyuchi Web Services.",
+    "Learn about mukoko weather — an AI-powered global weather intelligence platform providing forecasts for farming, mining, travel, and daily life worldwide. A Mukoko Africa product by Nyuchi Web Services.",
   alternates: {
     canonical: "https://weather.mukoko.com/about",
   },
@@ -21,15 +21,15 @@ export default function AboutPage() {
 
         <section className="mt-8 space-y-4 text-text-secondary leading-relaxed">
           <p>
-            <strong className="text-text-primary">mukoko weather</strong> is an AI-powered weather
-            intelligence platform for the developing world. Starting with Zimbabwe, we&apos;re expanding
-            across Africa, Asia, the Middle East, South &amp; Central America, and Eastern Europe — providing
-            accurate, real-time forecasts and actionable weather insights for farming, mining, travel, and daily life.
+            <strong className="text-text-primary">mukoko weather</strong> is an AI-powered global weather
+            intelligence platform. We provide accurate, real-time forecasts and actionable weather insights
+            for farming, mining, travel, and daily life across Africa, Asia, the Middle East,
+            South &amp; Central America, Eastern Europe, and beyond.
           </p>
           <p>
             Our mission is simple: <em>weather as a public good</em>. Everyone deserves access to
-            reliable, contextual weather information — whether you&apos;re a farmer in Chinhoyi watching for
-            frost, a traveller heading to Victoria Falls, or a family in Manila planning the week ahead.
+            reliable, contextual weather information — whether you&apos;re a farmer watching for
+            frost, a traveller planning a safari, or a family in Manila planning the week ahead.
           </p>
         </section>
 
@@ -47,7 +47,12 @@ export default function AboutPage() {
             <p>
               The platform is developed and maintained by{" "}
               <strong className="text-text-primary">Nyuchi Web Services</strong>, the technology arm of Nyuchi
-              Africa, building digital products that serve communities across the developing world.
+              Africa, building digital products that serve communities worldwide.
+            </p>
+            <p>
+              <strong className="text-text-primary">Proudly Zimbabwean</strong> — designed, built, and operated
+              from Zimbabwe. mukoko weather is African technology serving the world, proving that world-class
+              software can come from anywhere.
             </p>
           </div>
         </section>
@@ -57,7 +62,7 @@ export default function AboutPage() {
           <ul className="mt-4 space-y-2 text-text-secondary">
             <li className="flex items-start gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" aria-hidden="true" />
-              <span>Real-time weather conditions for 265+ locations across the developing world</span>
+              <span>Real-time weather conditions for 265+ locations worldwide</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" aria-hidden="true" />
@@ -73,7 +78,7 @@ export default function AboutPage() {
             </li>
             <li className="flex items-start gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" aria-hidden="true" />
-              <span>Seasonal awareness — including Zimbabwe&apos;s Masika, Chirimo, Zhizha, and Munakamwe</span>
+              <span>Country-specific seasonal awareness with local season names and agricultural calendars</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" aria-hidden="true" />

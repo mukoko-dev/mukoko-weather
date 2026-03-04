@@ -5,7 +5,7 @@ import { Footer } from "@/components/layout/Footer";
 export const metadata: Metadata = {
   title: "Embed Weather Widgets",
   description:
-    "Add mukoko weather widgets to your website. Current conditions, forecasts, and compact badges for any Zimbabwe location.",
+    "Add mukoko weather widgets to your website. Current conditions, forecasts, and compact badges for any location worldwide.",
   alternates: {
     canonical: "https://weather.mukoko.com/embed",
   },
@@ -20,7 +20,7 @@ export default function EmbedPage() {
           Embed Weather Widgets
         </h1>
         <p className="mt-4 text-text-secondary">
-          Add live Zimbabwe weather data to any website. Three widget types
+          Add live weather data to any website. Three widget types
           available — all free, no API key required.
         </p>
 
@@ -31,7 +31,7 @@ export default function EmbedPage() {
           </h2>
           <p className="mt-2 text-base text-text-secondary">
             A card showing live temperature, conditions, humidity, wind, and UV
-            for any Zimbabwe location.
+            for any location worldwide.
           </p>
           <div className="mt-4 overflow-hidden rounded-[var(--radius-card)] bg-surface-card p-4">
             <pre className="overflow-x-auto text-base">
@@ -180,7 +180,7 @@ export default function EmbedPage() {
             Available Locations
           </h2>
           <p className="mt-2 text-base text-text-secondary">
-            265+ locations across the developing world. Use the slug value in{" "}
+            265+ locations worldwide. Use the slug value in{" "}
             <code className="rounded bg-surface-base px-1.5 py-0.5 font-mono text-base">
               data-location
             </code>

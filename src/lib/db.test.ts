@@ -36,30 +36,27 @@ import { TAGS } from "./seed-tags";
 import { SEASONS } from "./seed-seasons";
 
 describe("getTtlForLocation", () => {
-  it("returns tier 1 (1800s) for major cities like harare", () => {
-    const result = getTtlForLocation("harare");
+  it("returns tier 1 (1800s) for locations with city tag", () => {
+    const result = getTtlForLocation("any-city", ["city"]);
     expect(result).toEqual({ seconds: 1800, tier: 1 });
   });
 
-  it("returns tier 1 for all major city slugs", () => {
-    const tier1Cities = [
-      "harare", "bulawayo", "mutare", "gweru", "masvingo",
-      "kwekwe", "kadoma", "marondera", "chinhoyi", "victoria-falls",
-    ];
-    for (const slug of tier1Cities) {
-      const result = getTtlForLocation(slug);
+  it("returns tier 1 for any slug with city tag", () => {
+    const cities = ["nairobi-ke", "harare-zw", "london-gb", "bangkok-th"];
+    for (const slug of cities) {
+      const result = getTtlForLocation(slug, ["city"]);
       expect(result.tier).toBe(1);
       expect(result.seconds).toBe(1800);
     }
   });
 
   it("returns tier 2 (3600s) for locations with farming tag", () => {
-    const result = getTtlForLocation("mazowe", ["farming"]);
+    const result = getTtlForLocation("mazowe-zw", ["farming"]);
     expect(result).toEqual({ seconds: 3600, tier: 2 });
   });
 
   it("returns tier 2 for locations with mining tag", () => {
-    const result = getTtlForLocation("hwange", ["mining"]);
+    const result = getTtlForLocation("hwange-zw", ["mining"]);
     expect(result).toEqual({ seconds: 3600, tier: 2 });
   });
 
@@ -78,14 +75,13 @@ describe("getTtlForLocation", () => {
     expect(result).toEqual({ seconds: 7200, tier: 3 });
   });
 
-  it("returns tier 3 when no tags are provided for non-tier-1 slugs", () => {
+  it("returns tier 3 when no tags are provided", () => {
     const result = getTtlForLocation("random-place");
     expect(result).toEqual({ seconds: 7200, tier: 3 });
   });
 
-  it("tier 1 takes priority over tier 2 tags", () => {
-    // Harare is tier 1, even if it has farming tags
-    const result = getTtlForLocation("harare", ["farming"]);
+  it("tier 1 (city) takes priority over tier 2 tags", () => {
+    const result = getTtlForLocation("nairobi-ke", ["city", "farming"]);
     expect(result.tier).toBe(1);
   });
 
@@ -378,28 +374,28 @@ describe("getSeasonForDate fallback logic", () => {
     expect(typeof getSeasonForDate).toBe("function");
   });
 
-  it("returns a ZimbabweSeason shape with name, shona, description", async () => {
-    // DB is unavailable in unit tests, so this always uses the sync fallback
-    const season = await getSeasonForDate(new Date("2024-07-15"), "ZW");
+  it("returns a Season shape with name, localName, description", async () => {
+    // DB is unavailable in unit tests, so this always uses the hemisphere-aware fallback
+    const season = await getSeasonForDate(new Date("2024-07-15"), "", -17);
     expect(typeof season.name).toBe("string");
-    expect(typeof season.shona).toBe("string");
+    expect(typeof season.localName).toBe("string");
     expect(typeof season.description).toBe("string");
     expect(season.name.length).toBeGreaterThan(0);
   });
 
-  it("returns 'Cool dry' for July (ZW southern hemisphere winter)", async () => {
-    const season = await getSeasonForDate(new Date("2024-07-01"), "ZW");
-    expect(season.name).toBe("Cool dry");
+  it("returns 'Winter' for July in southern hemisphere", async () => {
+    const season = await getSeasonForDate(new Date("2024-07-01"), "", -17);
+    expect(season.name).toBe("Winter");
   });
 
-  it("returns 'Hot dry' for October (ZW pre-rain season)", async () => {
-    const season = await getSeasonForDate(new Date("2024-10-01"), "ZW");
-    expect(season.name).toBe("Hot dry");
+  it("returns 'Spring' for October in southern hemisphere", async () => {
+    const season = await getSeasonForDate(new Date("2024-10-01"), "", -17);
+    expect(season.name).toBe("Spring");
   });
 
-  it("returns 'Main rains' for January (ZW wet season)", async () => {
-    const season = await getSeasonForDate(new Date("2024-01-15"), "ZW");
-    expect(season.name).toBe("Main rains");
+  it("returns 'Summer' for January in southern hemisphere", async () => {
+    const season = await getSeasonForDate(new Date("2024-01-15"), "", -17);
+    expect(season.name).toBe("Summer");
   });
 });
 

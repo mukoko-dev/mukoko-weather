@@ -14,8 +14,10 @@ const loadCountry = cache((code: string) => getCountryByCode(code).catch(() => n
 // generateMetadata and the page component both call this for the same country code;
 // cache() ensures a single DB round-trip within one SSR pass. Unlike a module-level
 // Map with TTL, this is scoped to the current request and discarded afterward.
-const getCachedSeason = cache((countryCode: string) =>
-  getSeasonForDate(new Date(), countryCode),
+// Note: cache key includes both countryCode and lat. Each [location] page is a
+// separate SSR request, so cross-hemisphere collisions cannot occur in practice.
+const getCachedSeason = cache((countryCode: string, lat: number = 0) =>
+  getSeasonForDate(new Date(), countryCode, lat),
 );
 
 export const dynamic = "force-dynamic";
@@ -31,8 +33,8 @@ export async function generateMetadata({
   const loc = await loadLocation(slug);
   if (!loc) return { title: "Location not found" };
 
-  const countryCode = loc.country ?? "ZW";
-  const country = await loadCountry(countryCode);
+  const countryCode = loc.country ?? "";
+  const country = countryCode ? await loadCountry(countryCode) : null;
   const countryName = country?.name ?? countryCode;
 
   const title = `${loc.name} Weather Today — Forecast & Conditions`;
@@ -46,7 +48,7 @@ export async function generateMetadata({
   // from OG params rather than breaking all metadata for the page.
   let seasonName = "";
   try {
-    const season = await getCachedSeason(loc.country ?? "ZW");
+    const season = await getCachedSeason(loc.country ?? "", loc.lat ?? 0);
     seasonName = season.name;
   } catch {
     // Season unavailable — omit from OG params
@@ -84,7 +86,7 @@ export async function generateMetadata({
       description: `Live weather forecast for ${loc.name}, ${loc.province}, ${countryName}. Current conditions, 7-day outlook, and AI-powered insights.`,
       url: `${BASE_URL}/${loc.slug}`,
       type: "website",
-      locale: "en_ZW",
+      locale: "en",
       siteName: "mukoko weather",
       images: [{ url: ogImageUrl, width: 1200, height: 630, alt: `${loc.name} weather forecast` }],
     },
@@ -129,10 +131,10 @@ export default async function LocationPage({
   const usingFallback = weatherSource === "fallback";
   const frostAlert = usingFallback ? null : checkFrostRisk(weather.hourly);
   const conditionInfo = weatherCodeToInfo(weather.current.weather_code);
-  const countryCode = (location.country ?? "ZW").toUpperCase();
+  const countryCode = (location.country ?? "").toUpperCase();
   const [countryDoc, season] = await Promise.all([
-    loadCountry(countryCode),
-    getCachedSeason(location.country ?? "ZW"),
+    countryCode ? loadCountry(countryCode) : Promise.resolve(null),
+    getCachedSeason(location.country ?? "", location.lat ?? 0),
   ]);
   const countryName = countryDoc?.name ?? countryCode;
   const now = new Date().toISOString();

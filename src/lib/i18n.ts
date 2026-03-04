@@ -27,7 +27,7 @@ const messages: Record<string, Record<string, string>> = {
     "nav.useMyLocation": "Use my location",
     "nav.detectingLocation": "Detecting location...",
     "nav.locationDenied": "Location access denied. Enable it in your browser settings.",
-    "nav.outsideZw": "You appear to be outside Zimbabwe. Select a location below.",
+    "nav.locationFailed": "Unable to detect your location. Select one below.",
 
     // Weather
     "weather.current": "Current weather conditions in {location}",
@@ -71,7 +71,7 @@ const messages: Record<string, Record<string, string>> = {
     "location.elevation": "Elevation",
     "location.coordinates": "Coordinates",
     "location.season": "Season",
-    "location.count": "{count} locations across Zimbabwe",
+    "location.count": "{count} locations worldwide",
 
     // Footer
     "footer.copyright": "Nyuchi Africa (PVT) Ltd",
@@ -120,6 +120,8 @@ export function t(
 
 // ── Formatting utilities using Intl APIs ────────────────────────────────
 
+// IETF BCP 47 locale tags — region subtags ensure correct date/number
+// formatting (e.g., DD/MM/YYYY for en-ZW instead of MM/DD/YYYY for en-US).
 const LOCALE_MAP: Record<Locale, string> = {
   en: "en-ZW",
   sn: "sn-ZW",
@@ -128,7 +130,7 @@ const LOCALE_MAP: Record<Locale, string> = {
 
 /** Format temperature with unit, e.g. "28°C" */
 export function formatTemp(value: number, locale: Locale = DEFAULT_LOCALE): string {
-  const intlLocale = LOCALE_MAP[locale] ?? "en-ZW";
+  const intlLocale = LOCALE_MAP[locale] ?? "en";
   return new Intl.NumberFormat(intlLocale, {
     style: "unit",
     unit: "celsius",
@@ -138,7 +140,7 @@ export function formatTemp(value: number, locale: Locale = DEFAULT_LOCALE): stri
 
 /** Format wind speed, e.g. "12 km/h" */
 export function formatWindSpeed(value: number, locale: Locale = DEFAULT_LOCALE): string {
-  const intlLocale = LOCALE_MAP[locale] ?? "en-ZW";
+  const intlLocale = LOCALE_MAP[locale] ?? "en";
   return new Intl.NumberFormat(intlLocale, {
     style: "unit",
     unit: "kilometer-per-hour",
@@ -148,7 +150,7 @@ export function formatWindSpeed(value: number, locale: Locale = DEFAULT_LOCALE):
 
 /** Format percentage, e.g. "62%" */
 export function formatPercent(value: number, locale: Locale = DEFAULT_LOCALE): string {
-  const intlLocale = LOCALE_MAP[locale] ?? "en-ZW";
+  const intlLocale = LOCALE_MAP[locale] ?? "en";
   return new Intl.NumberFormat(intlLocale, {
     style: "unit",
     unit: "percent",
@@ -158,7 +160,7 @@ export function formatPercent(value: number, locale: Locale = DEFAULT_LOCALE): s
 
 /** Format time (24h), e.g. "14:30" */
 export function formatTime(date: Date, locale: Locale = DEFAULT_LOCALE): string {
-  const intlLocale = LOCALE_MAP[locale] ?? "en-ZW";
+  const intlLocale = LOCALE_MAP[locale] ?? "en";
   return new Intl.DateTimeFormat(intlLocale, {
     hour: "2-digit",
     minute: "2-digit",
@@ -168,13 +170,13 @@ export function formatTime(date: Date, locale: Locale = DEFAULT_LOCALE): string 
 
 /** Format day name, e.g. "Mon" */
 export function formatDayName(date: Date, locale: Locale = DEFAULT_LOCALE): string {
-  const intlLocale = LOCALE_MAP[locale] ?? "en-ZW";
+  const intlLocale = LOCALE_MAP[locale] ?? "en";
   return new Intl.DateTimeFormat(intlLocale, { weekday: "short" }).format(date);
 }
 
 /** Format full date, e.g. "9 February 2026" */
 export function formatDate(date: Date, locale: Locale = DEFAULT_LOCALE): string {
-  const intlLocale = LOCALE_MAP[locale] ?? "en-ZW";
+  const intlLocale = LOCALE_MAP[locale] ?? "en";
   return new Intl.DateTimeFormat(intlLocale, {
     day: "numeric",
     month: "long",
