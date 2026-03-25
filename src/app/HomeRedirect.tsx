@@ -139,7 +139,7 @@ export function HomeRedirect() {
         showSkip ? (
           <Link
             href="/explore"
-            className="animate-fade-in-up rounded-[var(--radius-button)] bg-surface-card px-5 py-3 text-base font-medium text-text-secondary shadow-md transition-colors hover:text-primary hover:bg-surface-dim min-h-[48px] inline-flex items-center"
+            className="animate-fade-in-up rounded-[var(--radius-button)] bg-surface-card px-5 py-3 text-base font-medium text-text-secondary shadow-md transition-colors hover:text-primary hover:bg-surface-dim min-h-[var(--touch-target-min)] inline-flex items-center"
           >
             Choose a city instead
           </Link>

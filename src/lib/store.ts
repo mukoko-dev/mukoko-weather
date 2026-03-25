@@ -1,6 +1,7 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { queueSync, flushSync, initDeviceSync, type DevicePreferences } from "./device-sync";
+import { updatePreferences, initRxDBBridge } from "./rxdb/bridge";
+import { startReplication } from "./rxdb/replication";
+import type { PreferencesDocType } from "./rxdb/schemas";
 
 export type ThemePreference = "light" | "dark" | "system";
 
@@ -93,170 +94,163 @@ interface AppState {
 const THEME_CYCLE: ThemePreference[] = ["light", "dark", "system"];
 
 /**
- * Module-level hydration flag — set by onRehydrateStorage once Zustand
- * finishes reading from localStorage. Components that depend on persisted
- * state (e.g. WelcomeBanner checking hasOnboarded) should wait for this
- * to avoid a flash of incorrect content.
+ * Module-level hydration flag — set once RxDB bridge finishes loading
+ * preferences into the store. Components that depend on persisted state
+ * (e.g. WelcomeBanner checking hasOnboarded) should wait for this to
+ * avoid a flash of incorrect content.
  */
 let _hasHydrated = false;
 
-/** Check if the Zustand store has finished hydrating from localStorage. */
+/** Check if the Zustand store has finished hydrating from RxDB. */
 export function hasStoreHydrated(): boolean {
   return _hasHydrated;
 }
 
-export const useAppStore = create<AppState>()(
-  persist(
-    (set) => ({
-      theme: "system" as ThemePreference,
-      setTheme: (theme: ThemePreference) => {
-        applyTheme(theme);
-        set({ theme });
-        queueSync({ theme });
-      },
-      toggleTheme: () =>
-        set((state) => {
-          const idx = THEME_CYCLE.indexOf(state.theme);
-          const next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
-          applyTheme(next);
-          queueSync({ theme: next });
-          return { theme: next };
-        }),
-      selectedLocation: "",
-      setSelectedLocation: (slug) => {
-        set({ selectedLocation: slug });
-        queueSync({ selectedLocation: slug });
-      },
-      savedLocations: [],
-      saveLocation: (slug) =>
-        set((state) => {
-          if (state.savedLocations.includes(slug) || state.savedLocations.length >= MAX_SAVED_LOCATIONS) {
-            return {};
-          }
-          const next = [...state.savedLocations, slug];
-          queueSync({ savedLocations: next });
-          return { savedLocations: next };
-        }),
-      removeLocation: (slug) =>
-        set((state) => {
-          const next = state.savedLocations.filter((s) => s !== slug);
-          // Clean up label when location is removed
-          const { [slug]: _, ...remainingLabels } = state.locationLabels;
-          queueSync({ savedLocations: next, locationLabels: remainingLabels });
-          return { savedLocations: next, locationLabels: remainingLabels };
-        }),
-      locationLabels: {},
-      setLocationLabel: (slug, label) =>
-        set((state) => {
-          const trimmed = label.trim();
-          let nextLabels: Record<string, string>;
-          if (trimmed) {
-            nextLabels = { ...state.locationLabels, [slug]: trimmed };
-          } else {
-            // Empty label removes custom name
-            const { [slug]: _, ...rest } = state.locationLabels;
-            nextLabels = rest;
-          }
-          queueSync({ locationLabels: nextLabels });
-          return { locationLabels: nextLabels };
-        }),
-      selectedActivities: [],
-      toggleActivity: (id) =>
-        set((state) => {
-          const next = state.selectedActivities.includes(id)
-            ? state.selectedActivities.filter((a) => a !== id)
-            : [...state.selectedActivities, id];
-          queueSync({ selectedActivities: next });
-          return { selectedActivities: next };
-        }),
-      myWeatherOpen: false,
-      openMyWeather: () => set({ myWeatherOpen: true }),
-      closeMyWeather: () => set({ myWeatherOpen: false }),
-      savedLocationsOpen: false,
-      openSavedLocations: () => set({ savedLocationsOpen: true }),
-      closeSavedLocations: () => set({ savedLocationsOpen: false }),
-      hasOnboarded: false,
-      completeOnboarding: () => {
-        set({ hasOnboarded: true });
-        queueSync({ hasOnboarded: true });
-      },
-      shamwariContext: null,
-      setShamwariContext: (ctx) => set({ shamwariContext: { ...ctx, timestamp: Date.now() } }),
-      clearShamwariContext: () => set({ shamwariContext: null }),
-      reportModalOpen: false,
-      openReportModal: () => set({ reportModalOpen: true }),
-      closeReportModal: () => set({ reportModalOpen: false }),
+// ---------------------------------------------------------------------------
+// Flag to suppress RxDB writes during bridge hydration (prevents echo loop)
+// ---------------------------------------------------------------------------
+let _suppressRxDBWrites = false;
+
+export const useAppStore = create<AppState>()((set) => ({
+  theme: "system" as ThemePreference,
+  setTheme: (theme: ThemePreference) => {
+    applyTheme(theme);
+    set({ theme });
+    if (!_suppressRxDBWrites) updatePreferences({ theme });
+  },
+  toggleTheme: () =>
+    set((state) => {
+      const idx = THEME_CYCLE.indexOf(state.theme);
+      const next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
+      applyTheme(next);
+      if (!_suppressRxDBWrites) updatePreferences({ theme: next });
+      return { theme: next };
     }),
-    {
-      name: "mukoko-weather-prefs",
-      partialize: (state) => ({
-        theme: state.theme,
-        selectedLocation: state.selectedLocation,
-        savedLocations: state.savedLocations,
-        locationLabels: state.locationLabels,
-        selectedActivities: state.selectedActivities,
-        hasOnboarded: state.hasOnboarded,
-      }),
-      onRehydrateStorage: () => (state) => {
-        if (state) applyTheme(state.theme);
-        _hasHydrated = true;
-      },
-    },
-  ),
-);
+  selectedLocation: "",
+  setSelectedLocation: (slug) => {
+    set({ selectedLocation: slug });
+    if (!_suppressRxDBWrites) updatePreferences({ selectedLocation: slug });
+  },
+  savedLocations: [],
+  saveLocation: (slug) =>
+    set((state) => {
+      if (state.savedLocations.includes(slug) || state.savedLocations.length >= MAX_SAVED_LOCATIONS) {
+        return {};
+      }
+      const next = [...state.savedLocations, slug];
+      if (!_suppressRxDBWrites) updatePreferences({ savedLocations: next });
+      return { savedLocations: next };
+    }),
+  removeLocation: (slug) =>
+    set((state) => {
+      const next = state.savedLocations.filter((s) => s !== slug);
+      const { [slug]: _, ...remainingLabels } = state.locationLabels;
+      if (!_suppressRxDBWrites) updatePreferences({ savedLocations: next, locationLabels: remainingLabels });
+      return { savedLocations: next, locationLabels: remainingLabels };
+    }),
+  locationLabels: {},
+  setLocationLabel: (slug, label) =>
+    set((state) => {
+      const trimmed = label.trim();
+      let nextLabels: Record<string, string>;
+      if (trimmed) {
+        nextLabels = { ...state.locationLabels, [slug]: trimmed };
+      } else {
+        const { [slug]: _, ...rest } = state.locationLabels;
+        nextLabels = rest;
+      }
+      if (!_suppressRxDBWrites) updatePreferences({ locationLabels: nextLabels });
+      return { locationLabels: nextLabels };
+    }),
+  selectedActivities: [],
+  toggleActivity: (id) =>
+    set((state) => {
+      const next = state.selectedActivities.includes(id)
+        ? state.selectedActivities.filter((a) => a !== id)
+        : [...state.selectedActivities, id];
+      if (!_suppressRxDBWrites) updatePreferences({ selectedActivities: next });
+      return { selectedActivities: next };
+    }),
+  myWeatherOpen: false,
+  openMyWeather: () => set({ myWeatherOpen: true }),
+  closeMyWeather: () => set({ myWeatherOpen: false }),
+  savedLocationsOpen: false,
+  openSavedLocations: () => set({ savedLocationsOpen: true }),
+  closeSavedLocations: () => set({ savedLocationsOpen: false }),
+  hasOnboarded: false,
+  completeOnboarding: () => {
+    set({ hasOnboarded: true });
+    if (!_suppressRxDBWrites) updatePreferences({ hasOnboarded: true });
+  },
+  shamwariContext: null,
+  setShamwariContext: (ctx) => set({ shamwariContext: { ...ctx, timestamp: Date.now() } }),
+  clearShamwariContext: () => set({ shamwariContext: null }),
+  reportModalOpen: false,
+  openReportModal: () => set({ reportModalOpen: true }),
+  closeReportModal: () => set({ reportModalOpen: false }),
+}));
 
 // ---------------------------------------------------------------------------
-// Device sync initialization — runs once on client-side app load
+// RxDB initialization — replaces old device-sync + persist middleware
 // ---------------------------------------------------------------------------
 
-/** Guard against duplicate beforeunload listeners (e.g. React Strict Mode). */
-let _beforeUnloadRegistered = false;
-
-/** Initialize device sync after Zustand rehydrates. */
+/**
+ * Initialize the local-first storage layer:
+ *   1. RxDB bridge: migrates localStorage → IndexedDB, hydrates Zustand
+ *   2. Replication: bidirectional sync with Python backend
+ *
+ * Call once from a client-side layout/provider component.
+ */
 export function initializeDeviceSync(): void {
   if (typeof window === "undefined") return;
 
-  const getCurrentPrefs = (): DevicePreferences => {
-    const s = useAppStore.getState();
-    return {
-      theme: s.theme,
-      selectedLocation: s.selectedLocation,
-      savedLocations: s.savedLocations,
-      locationLabels: s.locationLabels,
-      selectedActivities: s.selectedActivities,
-      hasOnboarded: s.hasOnboarded,
-    };
-  };
+  initRxDBBridge({
+    applyToStore: (prefs: Partial<PreferencesDocType>) => {
+      _suppressRxDBWrites = true;
+      try {
+        if (prefs.theme !== undefined) {
+          applyTheme(prefs.theme as ThemePreference);
+          useAppStore.setState({ theme: prefs.theme as ThemePreference });
+        }
+        if (prefs.selectedLocation !== undefined) {
+          useAppStore.setState({ selectedLocation: prefs.selectedLocation });
+        }
+        if (prefs.savedLocations !== undefined) {
+          useAppStore.setState({ savedLocations: prefs.savedLocations });
+        }
+        if (prefs.locationLabels !== undefined) {
+          useAppStore.setState({ locationLabels: prefs.locationLabels });
+        }
+        if (prefs.selectedActivities !== undefined) {
+          useAppStore.setState({ selectedActivities: prefs.selectedActivities });
+        }
+        if (prefs.hasOnboarded !== undefined) {
+          useAppStore.setState({ hasOnboarded: prefs.hasOnboarded });
+        }
+      } finally {
+        _suppressRxDBWrites = false;
+      }
+    },
 
-  const applyPrefs = (prefs: DevicePreferences): void => {
-    const store = useAppStore.getState();
-
-    if (prefs.theme && prefs.theme !== store.theme) {
-      store.setTheme(prefs.theme as ThemePreference);
-    }
-    if (prefs.selectedLocation && prefs.selectedLocation !== store.selectedLocation) {
-      // Use setState directly to avoid re-triggering sync
-      useAppStore.setState({ selectedLocation: prefs.selectedLocation });
-    }
-    if (prefs.savedLocations && prefs.savedLocations.length > 0) {
-      useAppStore.setState({ savedLocations: prefs.savedLocations });
-    }
-    if (prefs.locationLabels && Object.keys(prefs.locationLabels).length > 0) {
-      useAppStore.setState({ locationLabels: prefs.locationLabels });
-    }
-    if (prefs.selectedActivities && prefs.selectedActivities.length > 0) {
-      useAppStore.setState({ selectedActivities: prefs.selectedActivities });
-    }
-    if (prefs.hasOnboarded) {
-      useAppStore.setState({ hasOnboarded: true });
-    }
-  };
-
-  initDeviceSync(getCurrentPrefs, applyPrefs);
-
-  // Flush pending syncs before the page unloads (guard against duplicate registration)
-  if (!_beforeUnloadRegistered) {
-    _beforeUnloadRegistered = true;
-    window.addEventListener("beforeunload", flushSync);
-  }
+    getCurrentPrefs: () => {
+      const s = useAppStore.getState();
+      return {
+        theme: s.theme,
+        selectedLocation: s.selectedLocation,
+        savedLocations: s.savedLocations,
+        locationLabels: s.locationLabels,
+        selectedActivities: s.selectedActivities,
+        hasOnboarded: s.hasOnboarded,
+      };
+    },
+  })
+    .then(() => {
+      _hasHydrated = true;
+      return startReplication();
+    })
+    .catch(() => {
+      // RxDB init failed — store still works with defaults.
+      // This handles cases like private browsing where IndexedDB may be unavailable.
+      _hasHydrated = true;
+    });
 }

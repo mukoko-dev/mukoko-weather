@@ -288,10 +288,10 @@ describe("ToggleGroup variants", () => {
     }
   });
 
-  it("default and outline variants enforce 44px min touch target", async () => {
+  it("default and outline variants enforce 56px min touch target", async () => {
     const { toggleGroupItemVariants } = await import("./toggle-group");
     for (const variant of ["default", "outline"] as const) {
-      expect(toggleGroupItemVariants({ variant })).toContain("min-h-[48px]");
+      expect(toggleGroupItemVariants({ variant })).toContain("min-h-[var(--touch-target-min)]");
     }
   });
 });

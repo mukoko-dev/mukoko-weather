@@ -55,7 +55,7 @@ export function WelcomeBanner({
             <button
               type="button"
               onClick={() => { onChangeLocation(); trackEvent("onboarding_completed", { method: "personalize" }); }}
-              className="press-scale inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-base font-medium text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-md min-h-[48px]"
+              className="press-scale inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-base font-medium text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-md min-h-[var(--touch-target-min)]"
             >
               <MapPinIcon size={14} />
               Personalise
@@ -63,7 +63,7 @@ export function WelcomeBanner({
             <button
               type="button"
               onClick={() => { completeOnboarding(); trackEvent("onboarding_completed", { method: "continue" }); }}
-              className="press-scale inline-flex items-center rounded-full border border-text-tertiary/20 px-3.5 py-1.5 text-base font-medium text-text-secondary transition-all hover:bg-surface-card hover:border-text-tertiary/40 min-h-[48px]"
+              className="press-scale inline-flex items-center rounded-full border border-text-tertiary/20 px-3.5 py-1.5 text-base font-medium text-text-secondary transition-all hover:bg-surface-card hover:border-text-tertiary/40 min-h-[var(--touch-target-min)]"
             >
               Continue with {locationName}
             </button>

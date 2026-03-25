@@ -33,10 +33,14 @@ describe("WeatherDashboard — section ordering (Google Weather pattern)", () =>
     expect(dailyPos).toBeLessThan(aiPos);
   });
 
-  it("renders AISummary before AtmosphericSummary", () => {
-    const aiPos = source.indexOf('label="ai-summary"');
-    const atmosphericPos = source.indexOf('label="atmospheric-summary"');
-    expect(aiPos).toBeLessThan(atmosphericPos);
+  it("renders AtmosphericSummary eagerly after CurrentConditions (not lazy)", () => {
+    const currentPos = source.indexOf("<CurrentConditions");
+    const atmosphericPos = source.indexOf("<AtmosphericSummary");
+    expect(currentPos).toBeGreaterThan(-1);
+    expect(atmosphericPos).toBeGreaterThan(-1);
+    expect(currentPos).toBeLessThan(atmosphericPos);
+    // AtmosphericSummary is no longer in a LazySection
+    expect(source).not.toContain('label="atmospheric-summary"');
   });
 
   it("renders CurrentConditions eagerly (before any LazySection)", () => {
@@ -59,7 +63,6 @@ describe("WeatherDashboard — lazy loading", () => {
     "hourly-forecast",
     "ai-summary",
     "activity-insights",
-    "atmospheric-summary",
     "daily-forecast",
     "sun-times",
     "weather-map",

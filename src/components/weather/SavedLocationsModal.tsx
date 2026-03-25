@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogSheetHandle, DialogTitle } from "@/compone
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trackEvent } from "@/lib/analytics";
-import { formatCoords } from "@/lib/utils";
+import { formatCoords, slugToDisplayName } from "@/lib/utils";
 
 export function SavedLocationsModal() {
   const savedLocationsOpen = useAppStore((s) => s.savedLocationsOpen);
@@ -106,7 +106,7 @@ export function SavedLocationsModal() {
             {!showSearch ? (
               <Button
                 variant="ghost"
-                className="flex w-full min-h-[48px] items-center justify-center gap-2 text-primary"
+                className="flex w-full min-h-[var(--touch-target-min)] items-center justify-center gap-2 text-primary"
                 onClick={() => setShowSearch(true)}
                 disabled={atCap}
               >
@@ -160,7 +160,7 @@ function CurrentLocationButton({
 
   return (
     <div className="space-y-1">
-      <div className="flex w-full min-h-[48px] items-center gap-3 rounded-[var(--radius-card)] border border-primary/25 bg-primary/5 px-4 py-3 transition-all hover:bg-primary/10">
+      <div className="flex w-full min-h-[var(--touch-target-min)] items-center gap-3 rounded-[var(--radius-card)] border border-primary/25 bg-primary/5 px-4 py-3 transition-all hover:bg-primary/10">
         <button
           onClick={handleGeolocate}
           disabled={geoLoading}
@@ -263,9 +263,9 @@ function SavedLocationsList({
           .then((res) => (res.ok ? res.json() : null))
           .then((data) => {
             if (data?.location) return [slug, data.location] as const;
-            return [slug, { slug, name: slug.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), province: "", lat: 0, lon: 0, elevation: 0, tags: [] }] as const;
+            return [slug, { slug, name: slugToDisplayName(slug), province: "", lat: 0, lon: 0, elevation: 0, tags: [] }] as const;
           })
-          .catch(() => [slug, { slug, name: slug.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), province: "", lat: 0, lon: 0, elevation: 0, tags: [] }] as const),
+          .catch(() => [slug, { slug, name: slugToDisplayName(slug), province: "", lat: 0, lon: 0, elevation: 0, tags: [] }] as const),
       ),
     ).then((entries) => {
       const map: Record<string, WeatherLocation> = {};
@@ -312,7 +312,7 @@ function SavedLocationsList({
             <div className="flex items-center gap-1 px-1">
               <button
                 onClick={() => onSelect(slug)}
-                className={`flex min-h-[48px] flex-1 items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base transition-all hover:bg-surface-base ${
+                className={`flex min-h-[var(--touch-target-min)] flex-1 items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base transition-all hover:bg-surface-base ${
                   isActive ? "bg-primary/10 text-primary font-semibold" : "text-text-primary"
                 }`}
                 type="button"
@@ -503,7 +503,7 @@ function AddLocationSearch({
               <li key={loc.slug}>
                 <button
                   onClick={() => onAdd(loc.slug)}
-                  className="flex w-full min-h-[48px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base transition-all hover:bg-surface-base text-text-primary"
+                  className="flex w-full min-h-[var(--touch-target-min)] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base transition-all hover:bg-surface-base text-text-primary"
                   type="button"
                 >
                   <MapPinIcon size={14} className="text-text-tertiary" />

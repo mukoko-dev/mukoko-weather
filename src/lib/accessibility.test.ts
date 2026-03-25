@@ -12,7 +12,7 @@
  * - role="alert" on error states
  * - role="status" on loading states
  * - sr-only text for screen readers
- * - 44px minimum touch targets on interactive elements
+ * - 56px minimum touch targets on interactive elements
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
@@ -50,8 +50,8 @@ describe("Sections — aria-labelledby", () => {
     expect(weatherDashboard).toContain('aria-label="Breadcrumb"');
   });
 
-  it("WeatherDashboard stats section has aria-label for screen readers", () => {
-    expect(currentConditions).toContain('aria-label="Weather statistics"');
+  it("CurrentConditions no longer contains inline stats (moved to gauge cards)", () => {
+    expect(currentConditions).not.toContain('aria-label="Weather statistics"');
   });
 });
 
@@ -113,20 +113,17 @@ describe("Screen reader text — sr-only", () => {
   });
 });
 
-describe("Touch targets — 44px minimum", () => {
-  it("CurrentConditions share button meets 44px touch target requirement", () => {
-    expect(currentConditions).toContain("min-h-[48px]");
-    expect(currentConditions).toContain("min-w-[48px]");
+describe("Touch targets — 56px minimum", () => {
+  it("CurrentConditions share button meets 56px touch target requirement", () => {
+    expect(currentConditions).toContain("min-h-[var(--touch-target-min)]");
+    expect(currentConditions).toContain("min-w-[var(--touch-target-min)]");
   });
 });
 
 describe("Semantic structure — lists", () => {
-  it("CurrentConditions stats grid uses role=\"list\"", () => {
-    expect(currentConditions).toContain('role="list"');
-  });
-
-  it("CurrentConditions stats items use role=\"listitem\"", () => {
-    expect(currentConditions).toContain('role="listitem"');
+  it("CurrentConditions does not render inline stat boxes (moved to AtmosphericSummary gauges)", () => {
+    expect(currentConditions).not.toContain('role="list"');
+    expect(currentConditions).not.toContain('role="listitem"');
   });
 
   it("WeatherDashboard breadcrumb uses <ol> for ordered list", () => {

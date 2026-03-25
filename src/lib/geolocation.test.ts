@@ -72,8 +72,8 @@ describe("geolocation source structure", () => {
     expect(source).toContain("timeout: 10000");
   });
 
-  it("caches position for 5 minutes", () => {
-    expect(source).toContain("maximumAge: 300000");
+  it("caches position for 1 minute", () => {
+    expect(source).toContain("maximumAge: 60000");
   });
 });
 

@@ -20,7 +20,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/lib/use-debounce";
-import { cn } from "@/lib/utils";
+import { cn, slugToDisplayName } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 
 /** Default category style for unknown categories */
@@ -247,7 +247,7 @@ function SavedTab({
     setEditingSlug(null);
   }, [setLocationLabel]);
 
-  const titleCase = (s: string) => s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const titleCase = slugToDisplayName;
 
   return (
     <div className="flex flex-col gap-2">
@@ -257,7 +257,7 @@ function SavedTab({
           variant="ghost"
           onClick={handleGeolocate}
           disabled={geoLoading}
-          className="flex min-h-[48px] w-full items-center justify-start gap-3 text-primary"
+          className="flex min-h-[var(--touch-target-min)] w-full items-center justify-start gap-3 text-primary"
         >
           {geoLoading ? (
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
@@ -284,7 +284,7 @@ function SavedTab({
           </span>
           {!showAdd && (
             <Button variant="ghost" size="sm" onClick={() => setShowAdd(true)} disabled={atCap}
-              className="text-primary min-h-[48px]">
+              className="text-primary min-h-[var(--touch-target-min)]">
               + Add location
             </Button>
           )}
@@ -303,7 +303,7 @@ function SavedTab({
 
             return (
               <li key={slug} className="group">
-                <div className={`flex items-center gap-2 rounded-[var(--radius-card)] px-3 py-2 min-h-[48px] transition-colors ${
+                <div className={`flex items-center gap-2 rounded-[var(--radius-card)] px-3 py-2 min-h-[var(--touch-target-min)] transition-colors ${
                   isSelected ? "bg-primary/10" : "hover:bg-surface-base"
                 }`}>
                   <button
@@ -388,7 +388,7 @@ function SavedTab({
               <li key={loc.slug}>
                 <button
                   onClick={() => { saveLocation(loc.slug); setAddQuery(""); setAddResults([]); }}
-                  className="flex w-full min-h-[48px] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base text-text-primary hover:bg-surface-base transition-colors"
+                  className="flex w-full min-h-[var(--touch-target-min)] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base text-text-primary hover:bg-surface-base transition-colors"
                   type="button"
                 >
                   <MapPinIcon size={14} className="text-text-tertiary" />
@@ -413,7 +413,7 @@ function SavedTab({
           href="/explore"
           prefetch={false}
           onClick={closeMyWeather}
-          className="flex items-center gap-2 rounded-[var(--radius-input)] border border-primary/10 bg-primary/5 px-3 py-2.5 min-h-[48px] text-base font-medium text-primary hover:bg-primary/10 transition-colors"
+          className="flex items-center gap-2 rounded-[var(--radius-input)] border border-primary/10 bg-primary/5 px-3 py-2.5 min-h-[var(--touch-target-min)] text-base font-medium text-primary hover:bg-primary/10 transition-colors"
         >
           <SearchIcon size={14} className="text-primary" aria-hidden="true" />
           Discover more locations on Explore
@@ -479,7 +479,7 @@ function ActivitiesTab({
         <ToggleGroupItem
           value="all"
           className={cn(
-            "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[48px] text-base font-medium transition-colors",
+            "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[var(--touch-target-min)] text-base font-medium transition-colors",
             activeCategory === "all"
               ? "bg-primary text-primary-foreground"
               : "bg-surface-base text-text-secondary hover:text-text-primary",
@@ -494,7 +494,7 @@ function ActivitiesTab({
               key={cat.id}
               value={cat.id}
               className={cn(
-                "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[48px] text-base font-medium transition-colors",
+                "shrink-0 rounded-[var(--radius-badge)] px-4 py-2 min-h-[var(--touch-target-min)] text-base font-medium transition-colors",
                 activeCategory === cat.id
                   ? style.badge
                   : "bg-surface-base text-text-secondary hover:text-text-primary",
@@ -592,7 +592,7 @@ function SettingsTab() {
             role="radio"
             aria-checked={theme === option.value}
             onClick={() => { setTheme(option.value); trackEvent("theme_changed", { theme: option.value }); }}
-            className={`press-scale flex w-full min-h-[48px] items-center gap-3 rounded-[var(--radius-card)] border-2 px-4 py-3 text-left transition-all ${
+            className={`press-scale flex w-full min-h-[var(--touch-target-min)] items-center gap-3 rounded-[var(--radius-card)] border-2 px-4 py-3 text-left transition-all ${
               theme === option.value
                 ? "border-primary bg-primary/5 shadow-sm"
                 : "border-transparent bg-surface-base hover:border-text-tertiary/30"

@@ -446,6 +446,33 @@ def _generate_province_slug(province: str, country: str) -> str:
     return f"{slug}-{country.lower()}"[:80]
 
 
+def _resolve_slug_collision(slug: str, geocoded: dict) -> str:
+    """Try suburb/road enriched slugs before falling back to numeric suffix."""
+    existing = locations_collection().find_one({"slug": slug})
+    if not existing:
+        return slug
+
+    address = geocoded.get("nominatimAddress", {})
+    location_name = geocoded.get("name", "").lower()
+    # Try suburb-enriched slug
+    suburb = address.get("suburb") or address.get("cityDistrict") or ""
+    if suburb and suburb.lower() != location_name:
+        enriched = _generate_slug(suburb, geocoded.get("country", ""))
+        if not locations_collection().find_one({"slug": enriched}):
+            return enriched
+    # Try road-enriched slug
+    road = address.get("road") or ""
+    if road and road.lower() != location_name:
+        enriched = _generate_slug(road, geocoded.get("country", ""))
+        if not locations_collection().find_one({"slug": enriched}):
+            return enriched
+    # Last resort: numeric suffix
+    suffix = 2
+    while locations_collection().find_one({"slug": f"{slug}-{suffix}"}):
+        suffix += 1
+    return f"{slug}-{suffix}"
+
+
 def _infer_tags(geocoded: dict) -> list[str]:
     """Infer tags from geocoded location data."""
     tags = []
@@ -558,30 +585,31 @@ async def geo_lookup(
                 "isNew": False,
             }
 
-        # If no local match, try uncapped distance
-        try:
-            uncapped = locations_collection().find_one(
-                {
-                    "geo": {
-                        "$near": {
-                            "$geometry": {"type": "Point", "coordinates": [lon, lat]},
+        # If no local match and not auto-creating, try uncapped distance
+        if not autoCreate:
+            try:
+                uncapped = locations_collection().find_one(
+                    {
+                        "geo": {
+                            "$near": {
+                                "$geometry": {"type": "Point", "coordinates": [lon, lat]},
+                            }
                         }
+                    },
+                    {"_id": 0},
+                )
+                if uncapped:
+                    return {
+                        "nearest": uncapped,
+                        "redirectTo": f"/{uncapped['slug']}",
+                        "isNew": False,
                     }
-                },
-                {"_id": 0},
-            )
-            if uncapped:
-                return {
-                    "nearest": uncapped,
-                    "redirectTo": f"/{uncapped['slug']}",
-                    "isNew": False,
-                }
-        except Exception:
-            pass
+            except Exception:
+                pass
 
         # Auto-create if requested — only NOW do we call external APIs
         if autoCreate:
-            geocoded = _reverse_geocode(lat, lon)
+            geocoded = _reverse_geocode(lat, lon, zoom=18)
             if not geocoded:
                 raise HTTPException(
                     status_code=422,
@@ -635,13 +663,7 @@ async def geo_lookup(
                 upsert=True,
             )
 
-            # Handle slug collisions
-            existing = locations_collection().find_one({"slug": slug})
-            if existing:
-                suffix = 2
-                while locations_collection().find_one({"slug": f"{slug}-{suffix}"}):
-                    suffix += 1
-                slug = f"{slug}-{suffix}"
+            slug = _resolve_slug_collision(slug, geocoded)
 
             tags = _infer_tags(geocoded)
 
@@ -800,13 +822,7 @@ async def add_location(request: Request):
 
         slug = _generate_slug(geocoded["name"], geocoded["country"])
 
-        # Slug collision handling
-        existing = locations_collection().find_one({"slug": slug})
-        if existing:
-            suffix = 2
-            while locations_collection().find_one({"slug": f"{slug}-{suffix}"}):
-                suffix += 1
-            slug = f"{slug}-{suffix}"
+        slug = _resolve_slug_collision(slug, geocoded)
 
         province = geocoded.get("admin1") or geocoded.get("countryName", "")
         province_slug = _generate_province_slug(province, geocoded["country"])

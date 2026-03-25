@@ -1,6 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { resolveTheme, useAppStore, isShamwariContextValid, MAX_SAVED_LOCATIONS, type ThemePreference, type ShamwariContext } from "./store";
 
+// Mock RxDB bridge to prevent IndexedDB access in tests
+vi.mock("./rxdb/bridge", () => ({
+  updatePreferences: vi.fn(),
+  initRxDBBridge: vi.fn().mockResolvedValue(undefined),
+  getDeviceId: () => "test-device-id",
+  migrateLocalStorageToRxDB: vi.fn().mockResolvedValue(undefined),
+  _resetBridge: vi.fn(),
+}));
+
+vi.mock("./rxdb/replication", () => ({
+  startReplication: vi.fn().mockResolvedValue(undefined),
+  stopReplication: vi.fn().mockResolvedValue(undefined),
+}));
+
 describe("resolveTheme", () => {
   let originalMatchMedia: typeof window.matchMedia | undefined;
 
@@ -160,15 +174,13 @@ describe("savedLocations", () => {
     expect(useAppStore.getState().savedLocations).toEqual(["harare", "bulawayo", "mutare"]);
   });
 
-  it("is persisted via partialize", () => {
-    useAppStore.setState({ savedLocations: ["harare", "bulawayo"] });
-    const state = useAppStore.getState();
-    const persistApi = (useAppStore as unknown as { persist: { getOptions: () => { partialize?: (s: unknown) => unknown } } }).persist;
-    if (persistApi?.getOptions?.()?.partialize) {
-      const partialState = persistApi.getOptions().partialize!(state) as Record<string, unknown>;
-      expect(partialState).toHaveProperty("savedLocations");
-      expect(partialState.savedLocations).toEqual(["harare", "bulawayo"]);
-    }
+  it("saveLocation triggers RxDB persistence", async () => {
+    const { updatePreferences } = await import("./rxdb/bridge");
+    vi.mocked(updatePreferences).mockClear();
+    useAppStore.getState().saveLocation("gweru");
+    expect(updatePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({ savedLocations: expect.arrayContaining(["gweru"]) }),
+    );
   });
 });
 
@@ -188,14 +200,12 @@ describe("savedLocationsOpen", () => {
     expect(useAppStore.getState().savedLocationsOpen).toBe(false);
   });
 
-  it("is NOT persisted (excluded from partialize)", () => {
+  it("is NOT persisted to RxDB (transient state)", async () => {
+    const { updatePreferences } = await import("./rxdb/bridge");
+    vi.mocked(updatePreferences).mockClear();
     useAppStore.getState().openSavedLocations();
-    const state = useAppStore.getState();
-    const persistApi = (useAppStore as unknown as { persist: { getOptions: () => { partialize?: (s: unknown) => unknown } } }).persist;
-    if (persistApi?.getOptions?.()?.partialize) {
-      const partialState = persistApi.getOptions().partialize!(state) as Record<string, unknown>;
-      expect(partialState).not.toHaveProperty("savedLocationsOpen");
-    }
+    // Transient state should NOT trigger RxDB persistence
+    expect(updatePreferences).not.toHaveBeenCalled();
   });
 });
 
@@ -275,24 +285,17 @@ describe("shamwariContext", () => {
     expect(isShamwariContextValid(ctx)).toBe(false);
   });
 
-  it("is NOT persisted (excluded from partialize)", () => {
-    // Set context
+  it("is NOT persisted to RxDB (transient state)", async () => {
+    const { updatePreferences } = await import("./rxdb/bridge");
+    vi.mocked(updatePreferences).mockClear();
     useAppStore.getState().setShamwariContext({
       source: "history",
       locationSlug: "bulawayo",
       activities: ["hiking"],
       timestamp: Date.now(),
     });
-    // partialize only includes theme, selectedLocation, selectedActivities, hasOnboarded
-    // shamwariContext should NOT be in the serialized output
-    const state = useAppStore.getState();
-    // Access the persist API to check partialize
-    const persistApi = (useAppStore as unknown as { persist: { getOptions: () => { partialize?: (s: unknown) => unknown } } }).persist;
-    if (persistApi?.getOptions?.()?.partialize) {
-      const partialState = persistApi.getOptions().partialize!(state) as Record<string, unknown>;
-      expect(partialState).not.toHaveProperty("shamwariContext");
-      expect(partialState).not.toHaveProperty("reportModalOpen");
-    }
+    // Transient state should NOT trigger RxDB persistence
+    expect(updatePreferences).not.toHaveBeenCalled();
   });
 });
 
@@ -347,15 +350,13 @@ describe("locationLabels", () => {
     expect(useAppStore.getState().locationLabels).toEqual({ bulawayo: "Work" });
   });
 
-  it("is persisted via partialize", () => {
-    useAppStore.setState({ locationLabels: { harare: "Home" } });
-    const state = useAppStore.getState();
-    const persistApi = (useAppStore as unknown as { persist: { getOptions: () => { partialize?: (s: unknown) => unknown } } }).persist;
-    if (persistApi?.getOptions?.()?.partialize) {
-      const partialState = persistApi.getOptions().partialize!(state) as Record<string, unknown>;
-      expect(partialState).toHaveProperty("locationLabels");
-      expect(partialState.locationLabels).toEqual({ harare: "Home" });
-    }
+  it("setLocationLabel triggers RxDB persistence", async () => {
+    const { updatePreferences } = await import("./rxdb/bridge");
+    vi.mocked(updatePreferences).mockClear();
+    useAppStore.getState().setLocationLabel("harare", "Home");
+    expect(updatePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({ locationLabels: { harare: "Home" } }),
+    );
   });
 });
 

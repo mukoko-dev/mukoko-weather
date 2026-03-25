@@ -71,7 +71,7 @@ export function detectUserLocation(): Promise<GeoResult> {
       {
         enableHighAccuracy: false,
         timeout: 10000,
-        maximumAge: 300000, // cache for 5 minutes
+        maximumAge: 60000, // cache for 1 minute — fresher position for returning users
       },
     );
   });

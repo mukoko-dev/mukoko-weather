@@ -22,7 +22,7 @@ const WeatherReportModal = lazy(() =>
   })),
 );
 
-function HomeIcon({ size = 20 }: { size?: number }) {
+function HomeIcon({ size = 22 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
@@ -31,9 +31,9 @@ function HomeIcon({ size = 20 }: { size?: number }) {
   );
 }
 
-function CompassIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+function CompassIcon({ size = 22 }: { size?: number }) {
   return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="10" />
       <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
     </svg>
@@ -76,10 +76,11 @@ export function Header() {
         }`}
         role="banner"
       >
-        <nav aria-label="Primary navigation" className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 py-3 sm:px-6 md:px-8">
-          <div className="flex min-w-0 shrink items-center gap-4">
-            <Link href="/" aria-label="mukoko weather — return to home page">
-              <MukokoLogo className="text-[16px] sm:text-[20px]" />
+        <nav aria-label="Primary navigation" className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 md:px-8">
+          {/* Brand mark — icon + "weather" (Netflix-style icon recognition) */}
+          <div className="flex flex-1 min-w-0 items-center sm:flex-none">
+            <Link href="/" aria-label="mukoko weather — return to home page" className="mx-auto sm:mx-0">
+              <MukokoLogo className="text-xl sm:text-2xl" />
             </Link>
           </div>
 
@@ -88,7 +89,7 @@ export function Header() {
             <Link
               href="/explore"
               prefetch={false}
-              className={`rounded-[var(--radius-input)] px-3 py-2 text-base font-medium transition-colors ${
+              className={`rounded-[var(--radius-input)] px-4 py-2.5 text-base font-medium transition-colors ${
                 isExplore ? "text-primary bg-primary/10" : "text-text-secondary hover:text-text-primary hover:bg-surface-base"
               }`}
             >
@@ -97,7 +98,7 @@ export function Header() {
             <Link
               href="/shamwari"
               prefetch={false}
-              className={`rounded-[var(--radius-input)] px-3 py-2 text-base font-medium transition-colors ${
+              className={`rounded-[var(--radius-input)] px-4 py-2.5 text-base font-medium transition-colors ${
                 isShamwari ? "text-primary bg-primary/10" : "text-text-secondary hover:text-text-primary hover:bg-surface-base"
               }`}
             >
@@ -106,7 +107,7 @@ export function Header() {
             <Link
               href="/history"
               prefetch={false}
-              className={`rounded-[var(--radius-input)] px-3 py-2 text-base font-medium transition-colors ${
+              className={`rounded-[var(--radius-input)] px-4 py-2.5 text-base font-medium transition-colors ${
                 isHistory ? "text-primary bg-primary/10" : "text-text-secondary hover:text-text-primary hover:bg-surface-base"
               }`}
             >
@@ -114,49 +115,43 @@ export function Header() {
             </Link>
           </div>
 
-          {/* Action pill — 3 distinct quick actions: Explore, Maps, My Weather */}
+          {/* Action pill — 3 quick actions: Maps, Report, My Weather */}
+          {/* 56px touch targets (optimal), 20px icons for clarity */}
           <div
             className="flex shrink-0 items-center gap-1 rounded-full bg-primary p-1"
             role="toolbar"
             aria-label="Quick actions"
           >
             <Link
-              href="/explore"
-              prefetch={false}
-              aria-label="Explore locations"
-              className="flex items-center justify-center w-12 h-12 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
-            >
-              <CompassIcon size={18} className="text-primary-foreground" />
-            </Link>
-            <Link
               href={`/${selectedLocation || "harare"}/map`}
               prefetch={false}
               aria-label="Weather map"
-              className="flex items-center justify-center w-12 h-12 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
+              className="flex items-center justify-center w-14 h-14 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
             >
-              <LayersIcon size={18} className="text-primary-foreground" />
+              <LayersIcon size={20} className="text-primary-foreground" />
             </Link>
             <button
               onClick={openReportModal}
               aria-label="Report current weather"
-              className="flex items-center justify-center w-12 h-12 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
+              className="flex items-center justify-center w-14 h-14 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
               type="button"
             >
-              <MegaphoneIcon size={18} className="text-primary-foreground" />
+              <MegaphoneIcon size={20} className="text-primary-foreground" />
             </button>
             <button
               onClick={openMyWeather}
               aria-label="Open My Weather preferences"
-              className="flex items-center justify-center w-12 h-12 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
+              className="flex items-center justify-center w-14 h-14 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
               type="button"
             >
-              <MapPinIcon size={18} className="text-primary-foreground" />
+              <MapPinIcon size={20} className="text-primary-foreground" />
             </button>
           </div>
         </nav>
       </header>
 
       {/* Mobile bottom navigation — 5 items with Shamwari center */}
+      {/* 56px min touch targets, 22px icons, 10px labels */}
       <nav
         aria-label="Mobile navigation"
         className="fixed bottom-0 left-0 right-0 z-40 border-t border-text-tertiary/10 bg-surface-base/95 backdrop-blur-xl sm:hidden"
@@ -165,63 +160,63 @@ export function Header() {
         <div className="mx-auto flex items-center justify-around px-1 min-h-[5rem]">
           <Link
             href="/"
-            className={`relative flex flex-col items-center justify-center gap-0.5 px-1.5 py-2 rounded-xl transition-all min-w-[52px] min-h-[52px] active:scale-95 ${
+            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[56px] min-h-[56px] active:scale-95 ${
               isHome ? "text-primary" : "text-text-tertiary hover:text-text-secondary"
             }`}
             aria-label="Weather home"
             aria-current={isHome ? "page" : undefined}
           >
-            <HomeIcon size={20} />
-            <span className="text-[9px] leading-tight font-medium truncate max-w-[52px]">Weather</span>
+            <HomeIcon size={22} />
+            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">Weather</span>
             {isHome && <span className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary" aria-hidden="true" />}
           </Link>
           <Link
             href="/explore"
             prefetch={false}
-            className={`relative flex flex-col items-center justify-center gap-0.5 px-1.5 py-2 rounded-xl transition-all min-w-[52px] min-h-[52px] active:scale-95 ${
+            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[56px] min-h-[56px] active:scale-95 ${
               isExplore ? "text-primary" : "text-text-tertiary hover:text-text-secondary"
             }`}
             aria-label="Explore locations"
             aria-current={isExplore ? "page" : undefined}
           >
-            <CompassIcon size={20} />
-            <span className="text-[9px] leading-tight font-medium truncate max-w-[52px]">Explore</span>
+            <CompassIcon size={22} />
+            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">Explore</span>
             {isExplore && <span className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary" aria-hidden="true" />}
           </Link>
           <Link
             href="/shamwari"
             prefetch={false}
-            className={`relative flex flex-col items-center justify-center gap-0.5 px-1.5 py-2 rounded-xl transition-all min-w-[52px] min-h-[52px] active:scale-95 ${
+            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[56px] min-h-[56px] active:scale-95 ${
               isShamwari ? "text-primary" : "text-text-tertiary hover:text-text-secondary"
             }`}
             aria-label="Shamwari AI assistant"
             aria-current={isShamwari ? "page" : undefined}
           >
-            <SparklesIcon size={20} />
-            <span className="text-[9px] leading-tight font-medium truncate max-w-[52px]">Shamwari</span>
+            <SparklesIcon size={22} />
+            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">Shamwari</span>
             {isShamwari && <span className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary" aria-hidden="true" />}
           </Link>
           <Link
             href="/history"
             prefetch={false}
-            className={`relative flex flex-col items-center justify-center gap-0.5 px-1.5 py-2 rounded-xl transition-all min-w-[52px] min-h-[52px] active:scale-95 ${
+            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[56px] min-h-[56px] active:scale-95 ${
               isHistory ? "text-primary" : "text-text-tertiary hover:text-text-secondary"
             }`}
             aria-label="Weather history"
             aria-current={isHistory ? "page" : undefined}
           >
-            <ClockIcon size={20} />
-            <span className="text-[9px] leading-tight font-medium truncate max-w-[52px]">History</span>
+            <ClockIcon size={22} />
+            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">History</span>
             {isHistory && <span className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary" aria-hidden="true" />}
           </Link>
           <button
             onClick={openMyWeather}
-            className="relative flex flex-col items-center justify-center gap-0.5 px-1.5 py-2 rounded-xl transition-all min-w-[52px] min-h-[52px] text-text-tertiary hover:text-text-secondary active:scale-95"
+            className="relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[56px] min-h-[56px] text-text-tertiary hover:text-text-secondary active:scale-95"
             aria-label="My Weather settings"
             type="button"
           >
-            <MapPinIcon size={20} />
-            <span className="text-[9px] leading-tight font-medium truncate max-w-[52px]">My Weather</span>
+            <MapPinIcon size={22} />
+            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">My Weather</span>
           </button>
         </div>
       </nav>

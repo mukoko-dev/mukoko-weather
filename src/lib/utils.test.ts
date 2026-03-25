@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { cn, formatCoords, getScrollBehavior } from "./utils";
+import { cn, formatCoords, getScrollBehavior, slugToDisplayName } from "./utils";
 
 describe("cn", () => {
   it("merges multiple class strings", () => {
@@ -50,6 +50,45 @@ describe("formatCoords", () => {
   it("formats extreme coordinates", () => {
     expect(formatCoords(-90, -180)).toBe("90.0000°S, 180.0000°W");
     expect(formatCoords(90, 180)).toBe("90.0000°N, 180.0000°E");
+  });
+});
+
+describe("slugToDisplayName", () => {
+  it("title-cases simple slugs", () => {
+    expect(slugToDisplayName("harare")).toBe("Harare");
+  });
+
+  it("uppercases 2-letter country code suffix", () => {
+    expect(slugToDisplayName("singapore-sg")).toBe("Singapore SG");
+    expect(slugToDisplayName("nairobi-ke")).toBe("Nairobi KE");
+  });
+
+  it("strips trailing numeric collision suffixes", () => {
+    expect(slugToDisplayName("singapore-sg-14")).toBe("Singapore SG");
+    expect(slugToDisplayName("singapore-sg-2")).toBe("Singapore SG");
+  });
+
+  it("handles multi-word names with country code", () => {
+    expect(slugToDisplayName("orchard-road-sg")).toBe("Orchard Road SG");
+    expect(slugToDisplayName("canberra-drive-sg")).toBe("Canberra Drive SG");
+  });
+
+  it("handles multi-word names with country code and numeric suffix", () => {
+    expect(slugToDisplayName("canberra-drive-sg-3")).toBe("Canberra Drive SG");
+  });
+
+  it("does not uppercase segments longer than 2 chars", () => {
+    expect(slugToDisplayName("bulawayo")).toBe("Bulawayo");
+    expect(slugToDisplayName("new-york-usa")).toBe("New York Usa");
+  });
+
+  it("handles empty string", () => {
+    expect(slugToDisplayName("")).toBe("");
+  });
+
+  it("uppercases bare 2-char slug (country code only)", () => {
+    expect(slugToDisplayName("bo")).toBe("BO");
+    expect(slugToDisplayName("sg")).toBe("SG");
   });
 });
 

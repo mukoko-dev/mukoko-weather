@@ -124,8 +124,8 @@ describe("suggested prompts", () => {
     expect(source).toContain("onSuggestionClick(prompt.query)");
   });
 
-  it("suggestion buttons meet 44px touch target", () => {
-    expect(source).toContain("min-h-[48px]");
+  it("suggestion buttons meet 56px touch target", () => {
+    expect(source).toContain("min-h-[var(--touch-target-min)]");
   });
 });
 
@@ -614,7 +614,7 @@ describe("scroll-to-bottom button", () => {
     expect(source).toContain("ArrowDownIcon");
   });
 
-  it("meets 44px minimum touch target", () => {
+  it("meets 56px minimum touch target", () => {
     // h-11 w-11 = 44px
     expect(source).toContain("h-11 w-11");
   });

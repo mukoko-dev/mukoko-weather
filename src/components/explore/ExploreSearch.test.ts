@@ -25,8 +25,8 @@ describe("ExploreSearch component structure", () => {
     expect(source).toContain('id="explore-search-heading"');
   });
 
-  it("has 44px minimum touch targets", () => {
-    expect(source).toContain("min-h-[48px]");
+  it("has 56px minimum touch targets", () => {
+    expect(source).toContain("min-h-[var(--touch-target-min)]");
   });
 });
 

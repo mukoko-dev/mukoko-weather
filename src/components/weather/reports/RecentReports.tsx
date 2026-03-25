@@ -134,7 +134,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
         <button
           type="button"
           onClick={openReportModal}
-          className="flex w-full items-center gap-3 rounded-[var(--radius-card)] bg-primary p-4 text-left text-primary-foreground shadow-sm transition-shadow hover:shadow-md min-h-[48px]"
+          className="flex w-full items-center gap-3 rounded-[var(--radius-card)] bg-primary p-4 text-left text-primary-foreground shadow-sm transition-shadow hover:shadow-md min-h-[var(--touch-target-min)]"
         >
           <span aria-hidden="true"><MegaphoneIcon size={20} /></span>
           <div>
@@ -160,7 +160,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
         <button
           type="button"
           onClick={openReportModal}
-          className="inline-flex items-center gap-2 rounded-[var(--radius-button)] bg-primary px-4 py-2 text-base font-bold text-primary-foreground transition-shadow hover:shadow-md min-h-[48px]"
+          className="inline-flex items-center gap-2 rounded-[var(--radius-button)] bg-primary px-4 py-2 text-base font-bold text-primary-foreground transition-shadow hover:shadow-md min-h-[var(--touch-target-min)]"
         >
           <span aria-hidden="true"><MegaphoneIcon size={18} /></span>
           Report Weather
@@ -207,7 +207,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
               <button
                 type="button"
                 onClick={() => handleUpvote(report.id)}
-                className="flex items-center gap-1 rounded-[var(--radius-input)] px-2 py-1 text-base text-text-tertiary transition-colors hover:text-primary hover:bg-primary/10 min-h-[48px] min-w-[48px] justify-center"
+                className="flex items-center gap-1 rounded-[var(--radius-input)] px-2 py-1 text-base text-text-tertiary transition-colors hover:text-primary hover:bg-primary/10 min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] justify-center"
                 aria-label={`Upvote report (${report.upvotes} votes)`}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

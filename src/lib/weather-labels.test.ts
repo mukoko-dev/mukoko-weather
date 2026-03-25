@@ -3,6 +3,7 @@ import {
   humidityLabel,
   pressureLabel,
   cloudLabel,
+  precipitationLabel,
   feelsLikeContext,
 } from "./weather-labels";
 
@@ -105,6 +106,28 @@ describe("cloudLabel", () => {
 
   it("returns 'Overcast' for 100%", () => {
     expect(cloudLabel(100)).toBe("Overcast");
+  });
+});
+
+describe("precipitationLabel", () => {
+  it("returns 'None' for 0 mm", () => {
+    expect(precipitationLabel(0)).toBe("None");
+  });
+
+  it("returns 'Light' for < 2 mm", () => {
+    expect(precipitationLabel(0.5)).toBe("Light");
+    expect(precipitationLabel(1.9)).toBe("Light");
+  });
+
+  it("returns 'Moderate' for 2–9.9 mm", () => {
+    expect(precipitationLabel(2)).toBe("Moderate");
+    expect(precipitationLabel(5)).toBe("Moderate");
+    expect(precipitationLabel(9.9)).toBe("Moderate");
+  });
+
+  it("returns 'Heavy' for >= 10 mm", () => {
+    expect(precipitationLabel(10)).toBe("Heavy");
+    expect(precipitationLabel(50)).toBe("Heavy");
   });
 });
 

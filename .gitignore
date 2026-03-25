@@ -22,6 +22,10 @@ __pycache__/
 /.next/
 /out/
 
+# serwist service worker (build artifact)
+/public/sw.js
+/public/sw.js.map
+
 # production
 /build
 

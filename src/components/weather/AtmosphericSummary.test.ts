@@ -6,6 +6,7 @@ import {
   windGauge,
   pressureGauge,
   feelsLikeGauge,
+  precipitationGauge,
 } from "./AtmosphericSummary";
 
 // ── uvGauge ────────────────────────────────────────────────────────────────
@@ -133,6 +134,38 @@ describe("pressureGauge", () => {
     expect(low.percent).toBe(0);
     const high = pressureGauge(1100);
     expect(high.percent).toBe(100);
+  });
+});
+
+// ── precipitationGauge ────────────────────────────────────────────────────
+
+describe("precipitationGauge", () => {
+  it("returns low severity with 0% for no precipitation", () => {
+    const g = precipitationGauge(0);
+    expect(g.percent).toBe(0);
+    expect(g.strokeClass).toBe("stroke-severity-low");
+  });
+
+  it("returns moderate for light rain (< 2mm)", () => {
+    expect(precipitationGauge(1).strokeClass).toBe("stroke-severity-moderate");
+  });
+
+  it("returns high for moderate rain (2-9.9mm)", () => {
+    expect(precipitationGauge(5).strokeClass).toBe("stroke-severity-high");
+  });
+
+  it("returns severe for heavy rain (>= 10mm)", () => {
+    expect(precipitationGauge(15).strokeClass).toBe("stroke-severity-severe");
+  });
+
+  it("caps percent at 100 for values > 20mm", () => {
+    expect(precipitationGauge(30).percent).toBe(100);
+  });
+
+  it("uses severity stroke classes", () => {
+    for (const p of [0, 1, 5, 15]) {
+      expect(precipitationGauge(p).strokeClass).toMatch(/^stroke-severity-/);
+    }
   });
 });
 

@@ -1,6 +1,9 @@
 /**
  * Client-side cache for suitability rules and category styles.
  *
+ * Backed by RxDB (IndexedDB) for offline persistence.
+ * In-memory layer with TTL for fast synchronous access.
+ *
  * Extracted from ActivityInsights.tsx so that:
  *   - Cache state is separate from component rendering logic
  *   - Tests can call resetCaches() for clean isolation
@@ -9,6 +12,7 @@
 
 import { CATEGORY_STYLES } from "./activities";
 import type { SuitabilityRuleDoc, ActivityCategoryDoc } from "./db";
+import { getCachedRules, cacheSuitabilityRules } from "./rxdb/collections";
 
 // ---------------------------------------------------------------------------
 // Suitability rules cache
@@ -29,19 +33,61 @@ export async function fetchSuitabilityRules(): Promise<SuitabilityRuleDoc[]> {
     return cachedRules;
   }
   if (inFlightRules) return inFlightRules;
-  inFlightRules = fetch("/api/py/suitability")
-    .then((res) => (res.ok ? res.json() : null))
-    .then((data) => {
-      const rules = data?.rules;
-      if (rules && rules.length > 0) {
-        cachedRules = rules;
-        cachedRulesAt = Date.now(); // only cache TTL when we got real data
+
+  inFlightRules = (async () => {
+    // Try RxDB first (offline-capable)
+    const localRules = await getCachedRules();
+    if (localRules.length > 0) {
+      const parsed = localRules.map((r) => {
+        try {
+          return { key: r.key, conditions: JSON.parse(r.conditions) };
+        } catch {
+          return null;
+        }
+      }).filter(Boolean) as SuitabilityRuleDoc[];
+
+      if (parsed.length > 0) {
+        cachedRules = parsed;
+        cachedRulesAt = Date.now();
       }
-      return cachedRules ?? [];
-    })
-    .catch(() => cachedRules ?? [])
-    .finally(() => { inFlightRules = null; });
-  return inFlightRules;
+    }
+
+    // Only fetch from network if the cache is stale or empty.
+    // Without this guard, every call would issue a network request even
+    // when RxDB just returned fresh data — defeating the TTL purpose.
+    const cacheIsWarm = cachedRules && cachedRules.length > 0 && Date.now() - cachedRulesAt < RULES_CACHE_TTL;
+    if (!cacheIsWarm) {
+      try {
+        const res = await fetch("/api/py/suitability");
+        if (res.ok) {
+          const data = await res.json();
+          const rules = data?.rules;
+          if (rules && rules.length > 0) {
+            cachedRules = rules;
+            cachedRulesAt = Date.now();
+
+            // Persist to RxDB for offline access (fire-and-forget)
+            cacheSuitabilityRules(
+              rules.map((r: SuitabilityRuleDoc) => ({
+                key: r.key,
+                conditions: JSON.stringify(r.conditions),
+              })),
+            ).catch(() => {});
+          }
+        }
+      } catch {
+        // Network error — use whatever we got from RxDB
+      }
+    }
+
+    return cachedRules ?? [];
+  })();
+
+  try {
+    return await inFlightRules;
+  } finally {
+    inFlightRules = null;
+  }
 }
 
 // ---------------------------------------------------------------------------

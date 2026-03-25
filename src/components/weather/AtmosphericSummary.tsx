@@ -4,10 +4,11 @@ import { usePathname } from "next/navigation";
 import type { CurrentWeather } from "@/lib/weather";
 import { SectionHeader } from "@/components/ui/section-header";
 import { windDirection, uvLevel } from "@/lib/weather";
-import { humidityLabel, pressureLabel, cloudLabel, feelsLikeContext } from "@/lib/weather-labels";
+import { humidityLabel, pressureLabel, cloudLabel, feelsLikeContext, precipitationLabel } from "@/lib/weather-labels";
 import {
   DropletIcon,
   CloudIcon,
+  CloudRainIcon,
   WindIcon,
   GaugeIcon,
   SunIcon,
@@ -68,6 +69,15 @@ export function pressureGauge(p: number): GaugeConfig {
   if (p < 1000) return { percent, strokeClass: "stroke-severity-moderate" };
   if (p <= 1020) return { percent, strokeClass: "stroke-severity-low" };
   return { percent, strokeClass: "stroke-severity-moderate" };
+}
+
+/** Precipitation: 0–20mm scale */
+export function precipitationGauge(p: number): GaugeConfig {
+  const percent = Math.min((p / 20) * 100, 100);
+  if (p === 0) return { percent: 0, strokeClass: "stroke-severity-low" };
+  if (p < 2) return { percent, strokeClass: "stroke-severity-moderate" };
+  if (p < 10) return { percent, strokeClass: "stroke-severity-high" };
+  return { percent, strokeClass: "stroke-severity-severe" };
 }
 
 /** Feels-like difference from actual */
@@ -140,6 +150,13 @@ export function AtmosphericSummary({ current }: Props) {
           value={`${Math.round(current.apparent_temperature)}°`}
           context={feelsLikeContext(current.apparent_temperature, current.temperature_2m)}
           gauge={feelsLikeGauge(current.apparent_temperature, current.temperature_2m)}
+        />
+        <MetricCard
+          icon={<CloudRainIcon size={16} />}
+          label="Precipitation"
+          value={`${current.precipitation}mm`}
+          context={precipitationLabel(current.precipitation)}
+          gauge={precipitationGauge(current.precipitation)}
         />
       </div>
     </section>

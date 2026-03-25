@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { MineralsStripe } from "@/components/brand/MineralsStripe";
 import { ThemeProvider } from "@/components/brand/ThemeProvider";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
+import { PWAInstallPrompt } from "@/components/weather/PWAInstallPrompt";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
@@ -305,6 +306,7 @@ export default function RootLayout({
           <div className="overflow-x-hidden pl-0 min-[480px]:pl-2">
             {children}
           </div>
+          <PWAInstallPrompt />
         </ThemeProvider>
         <Analytics />
       </body>

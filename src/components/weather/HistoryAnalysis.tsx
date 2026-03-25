@@ -138,7 +138,7 @@ export function HistoryAnalysis({
           <Button
             onClick={analyze}
             size="sm"
-            className="mt-3 min-h-[48px]"
+            className="mt-3 min-h-[var(--touch-target-min)]"
             aria-label="Analyze weather history with AI"
           >
             <SparklesIcon size={14} className="mr-1.5" />
@@ -166,7 +166,7 @@ export function HistoryAnalysis({
             onClick={analyze}
             size="sm"
             variant="outline"
-            className="mt-2 min-h-[48px]"
+            className="mt-2 min-h-[var(--touch-target-min)]"
           >
             Try again
           </Button>
@@ -186,14 +186,14 @@ export function HistoryAnalysis({
               onClick={analyze}
               size="sm"
               variant="outline"
-              className="min-h-[48px] text-base"
+              className="min-h-[var(--touch-target-min)] text-base"
             >
               Re-analyze
             </Button>
             <Link
               href="/shamwari"
               onClick={handleContinueInShamwari}
-              className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary px-3 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 min-h-[48px]"
+              className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary px-3 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 min-h-[var(--touch-target-min)]"
             >
               <SparklesIcon size={12} />
               Discuss in Shamwari

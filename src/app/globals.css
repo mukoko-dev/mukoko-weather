@@ -65,8 +65,8 @@
   --focus-ring-offset: 2px;
   --focus-ring-width: 3px;
 
-  /* Touch & Interaction */
-  --touch-target-min: 48px;
+  /* Touch & Interaction — 56px optimal (Material Design 3 recommended) */
+  --touch-target-min: 56px;
 
   /* Typography — 16px base, 18px larger variant */
   --text-body: 1rem;           /* 16px — base body/footer text */
@@ -572,7 +572,7 @@ body {
     @apply border-border outline-ring/50;
   }
 
-  /* Global 44px minimum touch targets for interactive elements (WCAG 2.5.8) */
+  /* Global 56px minimum touch targets for interactive elements (WCAG 2.5.8, Material Design 3) */
   a,
   button,
   [role="button"],

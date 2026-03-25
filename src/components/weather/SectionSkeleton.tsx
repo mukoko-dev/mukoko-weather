@@ -11,6 +11,31 @@ export function SectionSkeleton({ className }: { className?: string } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Hourly Scroll Cards skeleton
+// Matches: card > horizontal row of 7 compact hour items
+// ---------------------------------------------------------------------------
+
+export function HourlyScrollCardsSkeleton() {
+  return (
+    <div
+      className="overflow-hidden rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-4 shadow-sm sm:p-5"
+      role="status"
+      aria-label="Loading hourly weather"
+    >
+      <div className="flex gap-4 sm:gap-5">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div key={i} className="flex min-w-[72px] shrink-0 flex-col items-center gap-2.5 rounded-[var(--radius-input)] bg-surface-base px-3.5 py-3.5">
+            <Skeleton className="h-4 w-10" />
+            <Skeleton className="h-6 w-6 rounded-full" />
+            <Skeleton className="h-4 w-8" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Community Reports skeleton
 // Matches: heading + button row, then empty-state text line
 // ---------------------------------------------------------------------------
@@ -115,7 +140,7 @@ export function DailyForecastSkeleton() {
       {/* 7 daily rows */}
       <div className="mt-5 space-y-3">
         {Array.from({ length: 7 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 rounded-[var(--radius-input)] bg-surface-base px-3.5 py-3.5 min-h-[48px] sm:gap-4">
+          <div key={i} className="flex items-center gap-3 rounded-[var(--radius-input)] bg-surface-base px-3.5 py-3.5 min-h-[var(--touch-target-min)] sm:gap-4">
             {/* Day + date */}
             <div className="flex w-12 shrink-0 flex-col items-center gap-1 sm:w-14">
               <Skeleton className="h-3.5 w-8" />
@@ -178,7 +203,7 @@ export function AISummaryChatSkeleton() {
       aria-label="Loading follow-up chat"
     >
       {/* Collapsed header */}
-      <div className="flex items-center justify-between px-4 py-3 min-h-[48px]">
+      <div className="flex items-center justify-between px-4 py-3 min-h-[var(--touch-target-min)]">
         <div className="flex items-center gap-2">
           <Skeleton className="h-5 w-5 rounded" />
           <Skeleton className="h-5 w-48" />
@@ -191,7 +216,7 @@ export function AISummaryChatSkeleton() {
 
 // ---------------------------------------------------------------------------
 // Atmospheric Summary skeleton
-// Matches: SectionHeader + 2×3 grid of MetricCards
+// Matches: SectionHeader + grid of 7 MetricCards
 // ---------------------------------------------------------------------------
 
 export function AtmosphericSummarySkeleton() {
@@ -204,7 +229,7 @@ export function AtmosphericSummarySkeleton() {
       </div>
       {/* 2×3 grid of metric cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5">
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: 7 }).map((_, i) => (
           <MetricCardSkeleton key={i} />
         ))}
       </div>

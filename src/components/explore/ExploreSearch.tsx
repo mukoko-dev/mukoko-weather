@@ -140,7 +140,7 @@ export function ExploreSearch() {
           type="submit"
           size="sm"
           disabled={loading || !query.trim()}
-          className="min-h-[48px] min-w-[48px] shrink-0"
+          className="min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] shrink-0"
           aria-label="Search"
         >
           {loading ? (
@@ -173,7 +173,7 @@ export function ExploreSearch() {
             <Link
               key={loc.slug}
               href={`/${loc.slug}`}
-              className="group card-interactive flex items-start gap-3.5 rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-5 shadow-sm focus-visible:outline-2 focus-visible:outline-primary min-h-[48px]"
+              className="group card-interactive flex items-start gap-3.5 rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-5 shadow-sm focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)]"
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 transition-colors group-hover:bg-primary/20">
                 <MapPinIcon size={16} className="text-primary" />
@@ -228,7 +228,7 @@ export function ExploreSearch() {
           <Link
             href="/shamwari"
             onClick={handleAskShamwari}
-            className="press-scale inline-flex items-center gap-1.5 rounded-[var(--radius-input)] bg-primary/10 px-4 py-2 text-base font-medium text-primary transition-all hover:bg-primary/20 min-h-[48px]"
+            className="press-scale inline-flex items-center gap-1.5 rounded-[var(--radius-input)] bg-primary/10 px-4 py-2 text-base font-medium text-primary transition-all hover:bg-primary/20 min-h-[var(--touch-target-min)]"
           >
             <SparklesIcon size={14} />
             Ask Shamwari for more

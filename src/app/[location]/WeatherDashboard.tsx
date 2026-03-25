@@ -4,6 +4,8 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { CurrentConditions } from "@/components/weather/CurrentConditions";
+import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";
+import { HourlyScrollCards } from "@/components/weather/HourlyScrollCards";
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { LazySection } from "@/components/weather/LazySection";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
@@ -14,7 +16,6 @@ import {
   DailyForecastSkeleton,
   AISummarySkeleton,
   AISummaryChatSkeleton,
-  AtmosphericSummarySkeleton,
   SunTimesSkeleton,
   MapPreviewSkeleton,
   SupportBannerSkeleton,
@@ -38,7 +39,6 @@ const HourlyForecast = lazy(() => import("@/components/weather/HourlyForecast").
 const DailyForecast = lazy(() => import("@/components/weather/DailyForecast").then((m) => ({ default: m.DailyForecast })));
 const AISummary = lazy(() => import("@/components/weather/AISummary").then((m) => ({ default: m.AISummary })));
 const ActivityInsights = lazy(() => import("@/components/weather/ActivityInsights").then((m) => ({ default: m.ActivityInsights })));
-const AtmosphericSummary = lazy(() => import("@/components/weather/AtmosphericSummary").then((m) => ({ default: m.AtmosphericSummary })));
 const SunTimes = lazy(() => import("@/components/weather/SunTimes").then((m) => ({ default: m.SunTimes })));
 const MapPreview = lazy(() => import("@/components/weather/map/MapPreview").then((m) => ({ default: m.MapPreview })));
 const AISummaryChat = lazy(() => import("@/components/weather/AISummaryChat").then((m) => ({ default: m.AISummaryChat })));
@@ -178,6 +178,9 @@ export function WeatherDashboard({
         <div className="grid gap-8 lg:grid-cols-3 lg:gap-10">
           {/* Primary content — lg:col-span-2 */}
           <div className="min-w-0 space-y-8 lg:col-span-2">
+            <ChartErrorBoundary name="hourly scroll cards">
+              <HourlyScrollCards hourly={weather.hourly} />
+            </ChartErrorBoundary>
             <ChartErrorBoundary name="current conditions">
               <CurrentConditions
                 current={weather.current}
@@ -185,6 +188,9 @@ export function WeatherDashboard({
                 daily={weather.daily}
                 slug={location.slug}
               />
+            </ChartErrorBoundary>
+            <ChartErrorBoundary name="atmospheric conditions">
+              <AtmosphericSummary current={weather.current} />
             </ChartErrorBoundary>
             <LazySection label="community-reports" fallback={<ReportsSkeleton />}>
               <ChartErrorBoundary name="community reports">
@@ -235,13 +241,6 @@ export function WeatherDashboard({
                 </ChartErrorBoundary>
               </LazySection>
             )}
-            <LazySection label="atmospheric-summary" fallback={<AtmosphericSummarySkeleton />}>
-              <ChartErrorBoundary name="atmospheric conditions">
-                <Suspense fallback={<AtmosphericSummarySkeleton />}>
-                  <AtmosphericSummary current={weather.current} />
-                </Suspense>
-              </ChartErrorBoundary>
-            </LazySection>
           </div>
 
           {/* Sidebar — stacks below on mobile */}

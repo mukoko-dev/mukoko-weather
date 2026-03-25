@@ -20,6 +20,7 @@ from py._locations import (
     _build_nominatim_address,
     _find_duplicate,
     _enrich_location_with_ai,
+    _resolve_slug_collision,
     _CITY_STATES,
     list_locations,
     search_locations,
@@ -707,7 +708,7 @@ class TestGeoLookup:
         mock_find = MagicMock()
         mock_find.limit.return_value = []
         mock_coll.return_value.find.return_value = mock_find
-        mock_coll.return_value.find_one.side_effect = [None, None]  # No uncapped, no slug collision
+        mock_coll.return_value.find_one.return_value = None  # No slug collision (uncapped skipped for autoCreate)
         mock_dedup.return_value = None
         mock_elev.return_value = 1200
         mock_db_inst = MagicMock()
@@ -740,6 +741,99 @@ class TestGeoLookup:
             await geo_lookup(40.71, -74.01)
         assert exc_info.value.status_code == 404
         assert "autoCreate" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    @patch("py._locations._reverse_geocode")
+    @patch("py._locations.locations_collection")
+    async def test_autocreate_skips_uncapped_nearest(self, mock_coll, mock_geocode):
+        """With autoCreate=true, uncapped $near should be skipped so auto-creation works."""
+        mock_geocode.return_value = {
+            "country": "US", "countryName": "United States",
+            "name": "New York", "admin1": "New York",
+            "lat": 40.71, "lon": -74.01, "elevation": 10,
+        }
+        mock_find = MagicMock()
+        mock_find.limit.return_value = []  # No nearby within 50km
+        mock_coll.return_value.find.return_value = mock_find
+
+        # find_one calls: dedup check (None), slug collision check (None)
+        mock_coll.return_value.find_one.side_effect = [None, None]
+
+        # The reverse_geocode should be called (not blocked by uncapped nearest)
+        mock_geocode.return_value = None  # Simulate geocode failure to simplify
+        with pytest.raises(HTTPException) as exc_info:
+            await geo_lookup(40.71, -74.01, autoCreate=True)
+        assert exc_info.value.status_code == 422
+        mock_geocode.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("py._locations._enrich_location_with_ai")
+    @patch("py._locations.get_db")
+    @patch("py._locations._get_elevation")
+    @patch("py._locations._find_duplicate")
+    @patch("py._locations._reverse_geocode")
+    @patch("py._locations.locations_collection")
+    async def test_slug_collision_uses_suburb(self, mock_coll, mock_geocode,
+                                              mock_dedup, mock_elev, mock_db, mock_enrich):
+        """Slug collision should try suburb-enriched slug before numeric suffix."""
+        mock_geocode.return_value = {
+            "country": "SG", "countryName": "Singapore",
+            "name": "Woodlands", "admin1": "North",
+            "lat": 1.43, "lon": 103.78, "elevation": 10,
+            "nominatimAddress": {"suburb": "Marsiling", "road": "Woodlands Ave 3"},
+        }
+        mock_find = MagicMock()
+        mock_find.limit.return_value = []
+        mock_coll.return_value.find.return_value = mock_find
+        # find_one calls: suburb slug check (None = available)
+        mock_coll.return_value.find_one.side_effect = [
+            {"slug": "woodlands-sg"},  # base slug exists
+            None,  # suburb slug "marsiling-sg" available
+        ]
+        mock_dedup.return_value = None
+        mock_elev.return_value = 10
+        mock_db_inst = MagicMock()
+        mock_db.return_value = mock_db_inst
+        mock_db_inst.__getitem__ = MagicMock(return_value=MagicMock())
+
+        result = await geo_lookup(1.43, 103.78, autoCreate=True)
+        assert result["isNew"] is True
+        assert result["nearest"]["slug"] == "marsiling-sg"
+
+    @pytest.mark.asyncio
+    @patch("py._locations._enrich_location_with_ai")
+    @patch("py._locations.get_db")
+    @patch("py._locations._get_elevation")
+    @patch("py._locations._find_duplicate")
+    @patch("py._locations._reverse_geocode")
+    @patch("py._locations.locations_collection")
+    async def test_slug_collision_falls_back_to_road(self, mock_coll, mock_geocode,
+                                                      mock_dedup, mock_elev, mock_db, mock_enrich):
+        """When suburb slug also collides, try road-enriched slug."""
+        mock_geocode.return_value = {
+            "country": "SG", "countryName": "Singapore",
+            "name": "Woodlands", "admin1": "North",
+            "lat": 1.43, "lon": 103.78, "elevation": 10,
+            "nominatimAddress": {"suburb": "Marsiling", "road": "Woodlands Ave 3"},
+        }
+        mock_find = MagicMock()
+        mock_find.limit.return_value = []
+        mock_coll.return_value.find.return_value = mock_find
+        # find_one calls: base slug (exists), suburb slug (exists), road slug (available)
+        mock_coll.return_value.find_one.side_effect = [
+            {"slug": "woodlands-sg"},  # base exists
+            {"slug": "marsiling-sg"},  # suburb exists
+            None,  # road slug "woodlands-ave-3-sg" available
+        ]
+        mock_dedup.return_value = None
+        mock_elev.return_value = 10
+        mock_db_inst = MagicMock()
+        mock_db.return_value = mock_db_inst
+        mock_db_inst.__getitem__ = MagicMock(return_value=MagicMock())
+
+        result = await geo_lookup(1.43, 103.78, autoCreate=True)
+        assert result["isNew"] is True
+        assert result["nearest"]["slug"] == "woodlands-ave-3-sg"
 
 
 # ---------------------------------------------------------------------------
@@ -1302,3 +1396,128 @@ class TestReverseGeocodeNominatimAddress:
         call_args = mock_http.return_value.get.call_args
         params = call_args.kwargs.get("params", call_args[1].get("params", {}))
         assert params.get("zoom") == 18
+
+
+# ---------------------------------------------------------------------------
+# _resolve_slug_collision
+# ---------------------------------------------------------------------------
+
+
+class TestResolveSlugCollision:
+    @patch("py._locations.locations_collection")
+    def test_no_collision_returns_original(self, mock_col):
+        mock_col.return_value.find_one.return_value = None
+        geocoded = {"name": "Harare", "country": "ZW", "nominatimAddress": {}}
+        result = _resolve_slug_collision("harare-zw", geocoded)
+        assert result == "harare-zw"
+
+    @patch("py._locations.locations_collection")
+    def test_suburb_enriched_slug(self, mock_col):
+        """When base slug collides, try suburb-enriched slug."""
+        def find_one_side(query):
+            slug = query.get("slug", "")
+            if slug == "harare-zw":
+                return {"slug": "harare-zw"}  # collision
+            return None  # suburb slug is free
+
+        mock_col.return_value.find_one.side_effect = find_one_side
+        geocoded = {
+            "name": "Harare",
+            "country": "ZW",
+            "nominatimAddress": {"suburb": "Avondale", "road": "King George Rd"},
+        }
+        result = _resolve_slug_collision("harare-zw", geocoded)
+        assert result == "avondale-zw"
+
+    @patch("py._locations.locations_collection")
+    def test_road_enriched_slug_when_suburb_also_collides(self, mock_col):
+        """When both base and suburb collide, try road-enriched slug."""
+        def find_one_side(query):
+            slug = query.get("slug", "")
+            if slug in ("harare-zw", "avondale-zw"):
+                return {"slug": slug}  # both collide
+            return None
+
+        mock_col.return_value.find_one.side_effect = find_one_side
+        geocoded = {
+            "name": "Harare",
+            "country": "ZW",
+            "nominatimAddress": {"suburb": "Avondale", "road": "King George Rd"},
+        }
+        result = _resolve_slug_collision("harare-zw", geocoded)
+        assert result == "king-george-rd-zw"
+
+    @patch("py._locations.locations_collection")
+    def test_numeric_suffix_fallback(self, mock_col):
+        """When all descriptive slugs collide, fall back to numeric suffix."""
+        def find_one_side(query):
+            slug = query.get("slug", "")
+            if slug in ("harare-zw", "avondale-zw", "king-george-rd-zw"):
+                return {"slug": slug}
+            if slug == "harare-zw-2":
+                return {"slug": slug}  # -2 also taken
+            return None
+
+        mock_col.return_value.find_one.side_effect = find_one_side
+        geocoded = {
+            "name": "Harare",
+            "country": "ZW",
+            "nominatimAddress": {"suburb": "Avondale", "road": "King George Rd"},
+        }
+        result = _resolve_slug_collision("harare-zw", geocoded)
+        assert result == "harare-zw-3"
+
+    @patch("py._locations.locations_collection")
+    def test_skips_suburb_when_same_as_name(self, mock_col):
+        """Suburb matching location name should be skipped."""
+        call_count = [0]
+
+        def find_one_side(query):
+            slug = query.get("slug", "")
+            call_count[0] += 1
+            if slug == "avondale-zw":
+                return {"slug": "avondale-zw"}  # collision
+            return None
+
+        mock_col.return_value.find_one.side_effect = find_one_side
+        geocoded = {
+            "name": "Avondale",
+            "country": "ZW",
+            "nominatimAddress": {"suburb": "Avondale", "road": "Main St"},
+        }
+        result = _resolve_slug_collision("avondale-zw", geocoded)
+        # Should skip suburb (same as name) and use road
+        assert result == "main-st-zw"
+
+    @patch("py._locations.locations_collection")
+    def test_handles_missing_name_key(self, mock_col):
+        """Should not raise KeyError when geocoded dict has no 'name' key."""
+        def find_one_side(query):
+            slug = query.get("slug", "")
+            if slug == "unknown-zw":
+                return {"slug": "unknown-zw"}  # collision
+            return None
+
+        mock_col.return_value.find_one.side_effect = find_one_side
+        geocoded = {
+            "country": "ZW",
+            "nominatimAddress": {"suburb": "Avondale"},
+        }
+        # Should not raise — .get("name", "") provides safe default
+        result = _resolve_slug_collision("unknown-zw", geocoded)
+        assert result == "avondale-zw"
+
+    @patch("py._locations.locations_collection")
+    def test_handles_missing_country_key(self, mock_col):
+        """Should not raise KeyError when geocoded dict has no 'country' key."""
+        # First call: collision on original slug; second call: suburb slug free
+        mock_col.return_value.find_one.side_effect = [
+            {"slug": "test"},  # original slug exists
+            None,              # suburb-enriched slug is available
+        ]
+        geocoded = {
+            "name": "Test",
+            "nominatimAddress": {"suburb": "Downtown"},
+        }
+        result = _resolve_slug_collision("test", geocoded)
+        assert isinstance(result, str)

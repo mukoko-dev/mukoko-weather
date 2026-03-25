@@ -30,7 +30,7 @@ Thank you for your interest in contributing to mukoko weather. This project prov
 - **shadcn/ui components** — use the existing `src/components/ui/` primitives (Button, Badge, Dialog, Input, Tabs, Card, Chart) instead of writing custom equivalents
 - **Accessibility** — all UI changes must maintain WCAG 3.0 APCA/AAA compliance. Layout components must use ARIA landmarks (`role="banner"`, `role="navigation"`, `role="contentinfo"`). Navigation must include `aria-current="page"` on active links. New interactive elements need `focus-visible` outlines.
 - **Mobile-first** — design for mobile screens first, then scale up
-- **44px touch targets** — all interactive elements must meet the minimum touch target size
+- **56px touch targets** — all interactive elements must meet the minimum touch target size
 
 ### Data Standards
 

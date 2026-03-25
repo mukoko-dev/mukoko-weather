@@ -49,10 +49,10 @@ export type AnalyticsEvents = {
   /** User changed the weather map layer */
   map_layer_changed: { layer: string; location: string };
   /** User completed the onboarding welcome banner */
-  onboarding_completed: { method: "personalize" | "continue" };
+  onboarding_completed: { method: "personalize" | "continue" | "pwa_install_accepted" | "pwa_install_dismissed" };
   /** User opened a modal */
   modal_opened: {
-    modal: "my-weather" | "saved-locations" | "weather-report";
+    modal: "my-weather" | "saved-locations" | "weather-report" | "pwa_install";
   };
 };
 
