@@ -27,10 +27,10 @@ export function DailyForecast({ daily }: Props) {
 
   return (
     <section aria-labelledby="daily-forecast-heading">
-      <div className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-5 shadow-sm sm:p-6">
-        <h2 id="daily-forecast-heading" className="text-lg font-semibold text-text-primary font-heading">{daily.time.length}-Day Forecast</h2>
+      <div className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-4 shadow-sm">
+        <h2 id="daily-forecast-heading" className="text-base font-semibold text-text-primary font-heading">{daily.time.length}-Day Forecast</h2>
         <DailyChart daily={daily} />
-        <div className="stagger-children mt-5 space-y-3" role="list" aria-label="7-day weather forecast">
+        <div className="stagger-children mt-3 space-y-1.5" role="list" aria-label="7-day weather forecast">
           {daily.time.map((date, i) => {
             const d = new Date(date);
             const info = weatherCodeToInfo(daily.weather_code[i]);
@@ -58,12 +58,12 @@ export function DailyForecast({ daily }: Props) {
                 key={date}
                 role="listitem"
                 aria-label={`${dayName} ${dateNum}: ${info.label}, high ${high} degrees, low ${low} degrees`}
-                className="rounded-[var(--radius-input)] bg-surface-base px-3.5 py-3.5 min-h-[var(--touch-target-min)] transition-colors hover:bg-surface-elevated sm:px-4 sm:py-4"
+                className="rounded-[var(--radius-input)] bg-surface-base px-3 py-2.5 min-h-[var(--touch-target-min)] transition-colors hover:bg-surface-elevated"
               >
                 {/* Main row: day, icon, temps, bar */}
-                <div className="flex items-center gap-3 sm:gap-4">
+                <div className="flex items-center gap-2 sm:gap-3">
                   {/* Day + date */}
-                  <div className="flex w-12 shrink-0 flex-col items-center sm:w-14">
+                  <div className="flex w-10 shrink-0 flex-col items-center sm:w-12">
                     <span className="text-base font-medium text-text-secondary leading-tight">
                       {dayName}
                     </span>
@@ -73,8 +73,8 @@ export function DailyForecast({ daily }: Props) {
                   </div>
 
                   {/* Icon + rain */}
-                  <div className="flex w-10 shrink-0 flex-col items-center gap-0.5">
-                    <WeatherIcon icon={info.icon} size={22} className="text-primary" />
+                  <div className="flex w-8 shrink-0 flex-col items-center gap-0.5">
+                    <WeatherIcon icon={info.icon} size={18} className="text-primary" />
                     {rainPct > 0 && (
                       <span className="text-base font-semibold text-rain">
                         {rainPct}%
@@ -106,7 +106,7 @@ export function DailyForecast({ daily }: Props) {
                 </div>
 
                 {/* Detail row: feels-like, precipitation, wind, UV */}
-                <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 pl-12 text-base text-text-tertiary sm:pl-14">
+                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 pl-[46px] text-base text-text-tertiary sm:pl-[52px]">
                   <span>Feels {feelsLow}°/{feelsHigh}°</span>
                   {precipMm > 0 && <span>{precipMm.toFixed(1)} mm</span>}
                   <span>Wind {windMax} km/h</span>

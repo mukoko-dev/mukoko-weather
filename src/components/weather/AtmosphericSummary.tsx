@@ -105,9 +105,9 @@ export function AtmosphericSummary({ current }: Props) {
         headingId="atmospheric-heading"
         title="Conditions"
         action={{ label: "24h trends →", href: `/${locationSlug}/atmosphere` }}
-        className="mb-4"
+        className="mb-3"
       />
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3">
         <MetricCard
           icon={<DropletIcon size={16} />}
           label="Humidity"
