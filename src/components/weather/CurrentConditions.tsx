@@ -52,7 +52,7 @@ export function CurrentConditions({ current, locationName, daily, slug }: Props)
 
   return (
     <section aria-labelledby="current-conditions-heading">
-      <div className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-5 shadow-sm sm:p-6">
+      <div className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-4 shadow-sm">
         <h2 id="current-conditions-heading" className="sr-only">
           Current weather conditions in {locationName}
         </h2>
@@ -61,7 +61,7 @@ export function CurrentConditions({ current, locationName, daily, slug }: Props)
           <div className="min-w-0">
             <p className="text-base font-medium text-text-secondary">{locationName}</p>
             <div className="mt-1 flex items-baseline gap-1">
-              <span className="font-mono text-7xl font-bold tracking-tighter text-text-primary sm:text-8xl" aria-label={`${Math.round(current.temperature_2m)} degrees Celsius`}>
+              <span className="font-mono text-6xl font-bold tracking-tighter text-text-primary sm:text-7xl" aria-label={`${Math.round(current.temperature_2m)} degrees Celsius`}>
                 {Math.round(current.temperature_2m)}
               </span>
               <span className="font-sans text-3xl font-light text-text-tertiary" aria-hidden="true">°</span>
@@ -79,7 +79,7 @@ export function CurrentConditions({ current, locationName, daily, slug }: Props)
           <div className="flex shrink-0 flex-col items-end gap-2">
             <WeatherIcon
               icon={current.is_day ? info.icon : "moon"}
-              size={80}
+              size={64}
               className="text-primary"
             />
             <button

@@ -18,9 +18,9 @@ export function HourlyScrollCards({ hourly }: Props) {
   const hours = hourly.time.slice(start, start + 24);
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-4 shadow-sm sm:p-5">
+    <div className="overflow-hidden rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-3 shadow-sm">
       <ScrollArea className="w-full" type="hover">
-        <div className="flex gap-4 pb-2 sm:gap-5 [overscroll-behavior-x:contain]" role="list" aria-label="Hourly weather forecast">
+        <div className="flex gap-2.5 pb-2 [overscroll-behavior-x:contain]" role="list" aria-label="Hourly weather forecast">
           {hours.map((time, i) => {
             const idx = start + i;
             const date = new Date(time);
@@ -33,14 +33,14 @@ export function HourlyScrollCards({ hourly }: Props) {
                 key={time}
                 role="listitem"
                 aria-label={`${timeLabel}: ${temp} degrees, ${info.label}`}
-                className="flex min-w-[72px] flex-col items-center gap-2.5 rounded-[var(--radius-input)] bg-surface-base px-3.5 py-3.5 transition-colors hover:bg-surface-elevated"
+                className="flex min-w-[60px] flex-col items-center gap-1.5 rounded-[var(--radius-input)] bg-surface-base px-2.5 py-2 transition-colors hover:bg-surface-elevated"
               >
                 <span className="text-base font-medium text-text-secondary">
                   {timeLabel}
                 </span>
                 <WeatherIcon
                   icon={isDay ? info.icon : "moon"}
-                  size={24}
+                  size={20}
                   className="text-primary"
                 />
                 <span className="text-base font-semibold text-text-primary">
