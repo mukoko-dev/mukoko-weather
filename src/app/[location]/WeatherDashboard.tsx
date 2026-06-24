@@ -29,6 +29,7 @@ import type { WeatherLocation } from "@/lib/locations";
 import { type Activity, ACTIVITIES } from "@/lib/activities";
 import { InfoRow } from "@/components/ui/info-row";
 import { SupportBanner } from "@/components/weather/SupportBanner";
+import { LiveClock } from "@/components/weather/LiveClock";
 import { cacheWeatherHint } from "@/lib/weather-scenes";
 
 // ── Code-split heavy components ─────────────────────────────────────────────
@@ -145,6 +146,8 @@ export function WeatherDashboard({
           </li>
         </ol>
       </nav>
+
+      <LiveClock />
 
       {/* pb-24 reserves space on mobile for a future sticky bottom nav bar;
           sm:pb-6 restores normal padding on larger screens where there is no nav bar. */}
