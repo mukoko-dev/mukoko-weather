@@ -65,13 +65,35 @@ describe("HomeLanding — detected city state", () => {
   });
 });
 
+describe("HomeLanding — GPS button (stage 2)", () => {
+  it("has a GPS button for explicit location detection", () => {
+    expect(source).toContain("Use my current location");
+    expect(source).toContain("handleGps");
+    expect(source).toContain("detectUserLocation");
+  });
+
+  it("shows detecting state while GPS is running", () => {
+    expect(source).toContain("Detecting");
+    expect(source).toContain("gpsState");
+  });
+
+  it("shows error message when GPS is denied", () => {
+    expect(source).toContain("denied");
+    expect(source).toContain("Location access denied");
+  });
+});
+
 describe("HomeLanding — no detection state", () => {
   it("shows a heading when no location detected", () => {
-    expect(source).toContain("Where are you?");
+    expect(source).toContain("Find your weather");
   });
 
   it("links to explore from the fallback state", () => {
-    expect(source).toContain("Browse locations");
+    expect(source).toContain("Browse all locations");
+  });
+
+  it("shows GPS button as primary action in fallback state", () => {
+    expect(source).toContain("NavigationIcon");
   });
 });
 
