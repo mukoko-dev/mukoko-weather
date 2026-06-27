@@ -87,6 +87,10 @@ def history_analysis_collection():
     return get_db()["history_analysis"]
 
 
+def metar_cache_collection():
+    return get_db()["metar_cache"]
+
+
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------

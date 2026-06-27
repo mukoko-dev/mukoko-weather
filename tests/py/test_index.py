@@ -199,6 +199,10 @@ class TestRouterMounting:
         paths = self._get_route_paths()
         assert "/api/py/reports" in paths
 
+    def test_metar_router_mounted(self):
+        paths = self._get_route_paths()
+        assert "/api/py/metar" in paths
+
     def test_health_endpoint_mounted(self):
         paths = self._get_route_paths()
         assert "/api/py/health" in paths

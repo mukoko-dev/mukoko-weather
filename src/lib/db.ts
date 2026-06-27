@@ -270,6 +270,10 @@ export async function ensureIndexes(): Promise<void> {
     // AI suggested rules: by ruleId (unique), by active + category + order
     aiSuggestedRulesCollection().createIndex({ ruleId: 1 }, { unique: true }),
     aiSuggestedRulesCollection().createIndex({ active: 1, category: 1, order: 1 }),
+
+    // METAR cache: one doc per ICAO station, auto-expire after 30 minutes
+    getDb().collection("metar_cache").createIndex({ icao: 1 }, { unique: true }),
+    getDb().collection("metar_cache").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   ]);
 }
 

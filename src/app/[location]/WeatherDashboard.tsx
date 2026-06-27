@@ -10,6 +10,7 @@ import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { LazySection } from "@/components/weather/LazySection";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import {
+  SectionSkeleton,
   ReportsSkeleton,
   HourlyForecastSkeleton,
   ActivityInsightsSkeleton,
@@ -30,6 +31,7 @@ import { type Activity, ACTIVITIES } from "@/lib/activities";
 import { InfoRow } from "@/components/ui/info-row";
 import { SupportBanner } from "@/components/weather/SupportBanner";
 import { LiveClock } from "@/components/weather/LiveClock";
+import { getIcaoForSlug } from "@/lib/icao-codes";
 import { cacheWeatherHint } from "@/lib/weather-scenes";
 
 // ── Code-split heavy components ─────────────────────────────────────────────
@@ -42,6 +44,7 @@ const AISummary = lazy(() => import("@/components/weather/AISummary").then((m) =
 const ActivityInsights = lazy(() => import("@/components/weather/ActivityInsights").then((m) => ({ default: m.ActivityInsights })));
 const SunTimes = lazy(() => import("@/components/weather/SunTimes").then((m) => ({ default: m.SunTimes })));
 const MapPreview = lazy(() => import("@/components/weather/map/MapPreview").then((m) => ({ default: m.MapPreview })));
+const AviationWeather = lazy(() => import("@/components/weather/AviationWeather").then((m) => ({ default: m.AviationWeather })));
 const AISummaryChat = lazy(() => import("@/components/weather/AISummaryChat").then((m) => ({ default: m.AISummaryChat })));
 const RecentReports = lazy(() => import("@/components/weather/reports/RecentReports").then((m) => ({ default: m.RecentReports })));
 
@@ -72,6 +75,7 @@ export function WeatherDashboard({
   const hasOnboarded = useAppStore((s) => s.hasOnboarded);
   const completeOnboarding = useAppStore((s) => s.completeOnboarding);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const icao = getIcaoForSlug(location.slug);
 
   // Seed with static ACTIVITIES for instant rendering, then upgrade from MongoDB.
   // This prevents a blank ActivityInsights section on slow connections or cold starts.
@@ -263,6 +267,16 @@ export function WeatherDashboard({
                 </Suspense>
               </ChartErrorBoundary>
             </LazySection>
+
+            {icao && (
+              <LazySection label="aviation-weather" fallback={<SectionSkeleton />}>
+                <ChartErrorBoundary name="aviation weather">
+                  <Suspense fallback={<SectionSkeleton />}>
+                    <AviationWeather slug={location.slug} icao={icao} />
+                  </Suspense>
+                </ChartErrorBoundary>
+              </LazySection>
+            )}
 
             <LazySection label="support-banner" fallback={<SupportBannerSkeleton />}>
               <ChartErrorBoundary name="support banner">
