@@ -39,19 +39,16 @@ function isRateLimited(ip: string): boolean {
 
 // ─── Brand Tokens ────────────────────────────────────────────────────────────
 // NOTE: next/og (Satori) does not support CSS custom properties — inline hex
-// values are required here. Keep in sync with globals.css brand tokens:
-//   tanzanite  → --color-tanzanite (#4B0082)
-//   cobalt     → --color-primary   (#0047AB)
-//   malachite  → --color-secondary (#004D40)
-//   gold       → --color-warmth    (base: #5D4037, gold accent: #F9A825)
-//   terracotta → --color-earth     (base: #8B4513, OG accent: #D4634A)
-// If globals.css brand tokens change, update these values too.
+// values are required here. Keep in sync with globals.css mineral tokens
+// (doctrine v4.1.0 — nyuchi_design_db → styling-minerals).
 const brand = {
-  tanzanite: "#4B0082",
-  cobalt: "#0047AB",
-  malachite: "#004D40",
-  gold: "#F9A825",
-  terracotta: "#D4634A",
+  tanzanite: "#4B0082",   // --mineral-tanzanite (core / brand)
+  cobalt:    "#0047AB",   // --mineral-cobalt    (CTAs, primary)
+  malachite: "#004D40",   // --mineral-malachite (success, growth)
+  gold:      "#5D4037",   // --mineral-gold      (warmth, rewards)
+  terracotta: "#A0522D",  // --mineral-terracotta (community)
+  sodalite:  "#283593",   // --mineral-sodalite  (AI/Shamwari)
+  copper:    "#BF5A36",   // --mineral-copper    (community features)
 };
 
 // ─── Templates ────────────────────────────────────────────────────────────────
@@ -165,7 +162,7 @@ function OGImage({
           left: 0,
           right: 0,
           height: 5,
-          background: `linear-gradient(90deg, ${brand.tanzanite} 0%, ${brand.tanzanite} 20%, ${brand.cobalt} 20%, ${brand.cobalt} 40%, ${brand.malachite} 40%, ${brand.malachite} 60%, ${brand.gold} 60%, ${brand.gold} 80%, ${brand.terracotta} 80%, ${brand.terracotta} 100%)`,
+          background: `linear-gradient(90deg, ${brand.tanzanite} 0%, ${brand.tanzanite} 14.28%, ${brand.cobalt} 14.28%, ${brand.cobalt} 28.57%, ${brand.gold} 28.57%, ${brand.gold} 42.86%, ${brand.malachite} 42.86%, ${brand.malachite} 57.14%, ${brand.copper} 57.14%, ${brand.copper} 71.43%, ${brand.sodalite} 71.43%, ${brand.sodalite} 85.71%, ${brand.terracotta} 85.71%, ${brand.terracotta} 100%)`,
           opacity: 0.65,
         }}
       />

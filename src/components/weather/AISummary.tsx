@@ -128,9 +128,9 @@ export function AISummary({ weather, location, onSummaryLoaded }: Props) {
 
   return (
     <section aria-label="AI weather intelligence summary">
-      <div className="rounded-[var(--radius-card)] border border-primary/25 border-l-[6px] border-l-tanzanite bg-surface-card p-4 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-mineral-sodalite/25 border-l-[6px] border-l-mineral-sodalite bg-surface-card p-4 shadow-sm">
         <div className="flex items-center gap-2">
-          <SparklesIcon size={16} className="text-tanzanite" />
+          <SparklesIcon size={16} className="text-mineral-sodalite" />
           <h2 className="text-base font-semibold text-text-primary font-heading">
             Shamwari Weather Insight
           </h2>
