@@ -53,10 +53,32 @@ export async function getDatabase(): Promise<MukokoDatabase | null> {
 }
 
 async function createDb(): Promise<MukokoDatabase> {
+  try {
+    return await _initDb();
+  } catch (err: unknown) {
+    // RxDB DB9: storageToken mismatch — happens after a major RxDB upgrade
+    // (v16→v17 changed internal metadata). Wipe the stale IndexedDB and retry.
+    const code = (err as { code?: string })?.code;
+    const msg = String(err);
+    if (code === "DB9" || msg.includes("DB9") || msg.includes("storageToken")) {
+      try {
+        const { deleteRxDatabase } = await import("rxdb");
+        await deleteRxDatabase("mukoko_weather", getRxStorageDexie());
+      } catch {
+        // Best-effort cleanup — ignore if deletion fails
+      }
+      dbPromise = null;
+      return await _initDb();
+    }
+    throw err;
+  }
+}
+
+async function _initDb(): Promise<MukokoDatabase> {
   const db = await createRxDatabase<MukokoCollections>({
     name: "mukoko_weather",
     storage: getRxStorageDexie(),
-    multiInstance: true, // leader election for multi-tab
+    multiInstance: true,
     ignoreDuplicate: true,
   });
 
