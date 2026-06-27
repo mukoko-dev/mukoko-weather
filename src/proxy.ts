@@ -17,7 +17,7 @@ const SLUG_RE = /^[a-z0-9-]{1,80}$/;
  * 2. Location pages (GET /{slug}/*): sets lastLocation cookie so the next
  *    home visit redirects them back without any geo lookup.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // ── Home page: instant returning-user redirect ───────────────────────────

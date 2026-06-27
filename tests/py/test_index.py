@@ -124,11 +124,24 @@ class TestRouterMounting:
     """Verify all expected routers are mounted on the app."""
 
     def _get_route_paths(self) -> set[str]:
-        """Extract all route paths from the app."""
-        paths = set()
-        for route in app.routes:
-            if hasattr(route, "path"):
-                paths.add(route.path)
+        """Extract all route paths from the app.
+
+        FastAPI 0.130+ wraps included routers in _IncludedRouter objects that
+        expose their sub-routes via .original_router.routes rather than .routes.
+        """
+        paths: set[str] = set()
+
+        def collect(routes: list) -> None:
+            for route in routes:
+                if hasattr(route, "path"):
+                    paths.add(route.path)
+                # FastAPI 0.130+: _IncludedRouter wraps the original APIRouter
+                if hasattr(route, "original_router") and route.original_router:
+                    collect(route.original_router.routes)
+                elif hasattr(route, "routes"):
+                    collect(route.routes)
+
+        collect(app.routes)
         return paths
 
     def test_devices_router_mounted(self):
