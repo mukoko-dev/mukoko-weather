@@ -64,7 +64,8 @@ export function Header() {
   const isShamwari = pathname === "/shamwari";
   const isExplore = pathname === "/explore" || pathname.startsWith("/explore/");
   const isHistory = pathname === "/history";
-  const isHome = !isShamwari && !isExplore && !isHistory && !pathname.startsWith("/about") && !pathname.startsWith("/help") && !pathname.startsWith("/privacy") && !pathname.startsWith("/terms") && !pathname.startsWith("/status") && !pathname.startsWith("/embed");
+  const isAviation = pathname === "/aviation";
+  const isHome = !isShamwari && !isExplore && !isHistory && !isAviation && !pathname.startsWith("/about") && !pathname.startsWith("/help") && !pathname.startsWith("/privacy") && !pathname.startsWith("/terms") && !pathname.startsWith("/status") && !pathname.startsWith("/embed");
 
   return (
     <>
@@ -112,6 +113,15 @@ export function Header() {
               }`}
             >
               History
+            </Link>
+            <Link
+              href="/aviation"
+              prefetch={false}
+              className={`rounded-[var(--radius-input)] px-4 py-2.5 text-base font-medium transition-colors ${
+                isAviation ? "text-primary bg-primary/10" : "text-text-secondary hover:text-text-primary hover:bg-surface-base"
+              }`}
+            >
+              Aviation
             </Link>
           </div>
 
