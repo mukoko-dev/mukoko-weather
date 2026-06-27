@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 /** Routes that are NOT location slugs — must match WeatherLoadingScene KNOWN_ROUTES */
 const KNOWN_ROUTES = new Set([
-  "explore", "shamwari", "history", "about", "help",
+  "explore", "shamwari", "history", "aviation", "about", "help",
   "privacy", "terms", "status", "embed", "offline", "api",
 ]);
 

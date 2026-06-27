@@ -53,3 +53,12 @@ const ICAO_MAP: Record<string, string> = {
 export function getIcaoForSlug(slug: string): string | null {
   return ICAO_MAP[slug] ?? null;
 }
+
+/** Returns the location slug for an ICAO code, or null if not mapped. */
+export function getSlugForIcao(icao: string): string | null {
+  const upper = icao.toUpperCase();
+  const entry = Object.entries(ICAO_MAP).find(([, code]) => code === upper);
+  return entry ? entry[0] : null;
+}
+
+export { ICAO_MAP };

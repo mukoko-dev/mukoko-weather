@@ -21,7 +21,7 @@ interface Props {
 /** Known app routes that are NOT location slugs — prevents misinterpreting
  *  /explore, /shamwari, etc. as weather locations when extracting from pathname. */
 const KNOWN_ROUTES = new Set([
-  "explore", "shamwari", "history", "about", "help",
+  "explore", "shamwari", "history", "aviation", "about", "help",
   "privacy", "terms", "status", "embed",
 ]);
 
