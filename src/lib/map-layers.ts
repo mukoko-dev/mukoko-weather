@@ -2,7 +2,15 @@
  * Map layer configuration for Tomorrow.io weather tile overlays.
  * Each layer maps to a Tomorrow.io tile API layer name and has
  * mineral-color styles following the CATEGORY_STYLES pattern.
+ *
+ * Base map tiles are served directly from MapTiler CDN (no proxy):
+ * MAPTILER_STYLE_LIGHT / MAPTILER_STYLE_DARK
  */
+
+const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
+
+export const MAPTILER_STYLE_LIGHT = `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_KEY}`;
+export const MAPTILER_STYLE_DARK = `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${MAPTILER_KEY}`;
 
 export interface MapLayer {
   id: string;
