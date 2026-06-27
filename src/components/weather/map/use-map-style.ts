@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
+import { MAPTILER_STYLE_LIGHT, MAPTILER_STYLE_DARK } from "@/lib/map-layers";
 
 /**
- * Resolves the current Mapbox style based on the user's theme preference.
+ * Resolves the MapTiler style URL based on the user's theme preference.
  * Subscribes to OS `prefers-color-scheme` changes when theme is `"system"`.
+ * Used by MapLibreMap for theme-aware base map rendering.
  */
 export function useMapStyle(): string {
   const theme = useAppStore((s) => s.theme);
@@ -22,5 +24,5 @@ export function useMapStyle(): string {
   }, [theme]);
 
   const isDark = theme === "dark" || (theme === "system" && osDark);
-  return isDark ? "dark-v11" : "streets-v12";
+  return isDark ? MAPTILER_STYLE_DARK : MAPTILER_STYLE_LIGHT;
 }

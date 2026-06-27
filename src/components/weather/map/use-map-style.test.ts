@@ -8,7 +8,16 @@ vi.mock("@/lib/store", () => ({
     selector({ theme: mockTheme() }),
 }));
 
-// Mock React hooks — useMapStyle uses useState and useEffect
+// Mock map-layers to avoid env var dependency in tests
+vi.mock("@/lib/map-layers", () => ({
+  MAPTILER_STYLE_LIGHT: "https://api.maptiler.com/maps/streets-v2/style.json?key=test",
+  MAPTILER_STYLE_DARK: "https://api.maptiler.com/maps/streets-v2-dark/style.json?key=test",
+  MAP_LAYERS: [],
+  DEFAULT_LAYER: "precipitationIntensity",
+  getMapLayerById: vi.fn(),
+}));
+
+// Mock React hooks
 let capturedEffect: (() => (() => void) | void) | null = null;
 let stateValue = false;
 vi.mock("react", () => ({
@@ -24,7 +33,6 @@ describe("useMapStyle", () => {
     mockTheme.mockReturnValue("light");
     capturedEffect = null;
     stateValue = false;
-    // Default: OS prefers light
     vi.stubGlobal("window", {
       matchMedia: () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
     });
@@ -34,34 +42,45 @@ describe("useMapStyle", () => {
     expect(typeof useMapStyle).toBe("function");
   });
 
-  it('returns "streets-v12" when theme is "light"', () => {
+  it("returns light MapTiler style URL when theme is light", () => {
     mockTheme.mockReturnValue("light");
     const result = useMapStyle();
-    expect(result).toBe("streets-v12");
+    expect(result).toContain("streets-v2/style.json");
+    expect(result).not.toContain("dark");
   });
 
-  it('returns "dark-v11" when theme is "dark"', () => {
+  it("returns dark MapTiler style URL when theme is dark", () => {
     mockTheme.mockReturnValue("dark");
     const result = useMapStyle();
-    expect(result).toBe("dark-v11");
+    expect(result).toContain("streets-v2-dark/style.json");
   });
 
-  it('returns "streets-v12" when theme is "system" and OS prefers light', () => {
+  it("returns light style when theme is system and OS prefers light", () => {
     mockTheme.mockReturnValue("system");
     vi.stubGlobal("window", {
       matchMedia: () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
     });
     const result = useMapStyle();
-    expect(result).toBe("streets-v12");
+    expect(result).toContain("streets-v2/style.json");
+    expect(result).not.toContain("dark");
   });
 
-  it('returns "dark-v11" when theme is "system" and OS prefers dark', () => {
+  it("returns dark style when theme is system and OS prefers dark", () => {
     mockTheme.mockReturnValue("system");
     vi.stubGlobal("window", {
       matchMedia: () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
     });
     const result = useMapStyle();
-    expect(result).toBe("dark-v11");
+    expect(result).toContain("streets-v2-dark/style.json");
+  });
+
+  it("returns a MapTiler URL (not Mapbox) for all themes", () => {
+    for (const theme of ["light", "dark", "system"]) {
+      mockTheme.mockReturnValue(theme);
+      const result = useMapStyle();
+      expect(result).toContain("maptiler.com");
+      expect(result).not.toContain("mapbox.com");
+    }
   });
 
   it("subscribes to matchMedia changes when theme is system", () => {
@@ -72,7 +91,6 @@ describe("useMapStyle", () => {
       matchMedia: () => ({ matches: false, addEventListener, removeEventListener }),
     });
     useMapStyle();
-    // The effect should have been captured
     expect(capturedEffect).toBeDefined();
     const cleanup = capturedEffect!();
     expect(addEventListener).toHaveBeenCalledWith("change", expect.any(Function));
@@ -89,19 +107,7 @@ describe("useMapStyle", () => {
       matchMedia: () => ({ matches: false, addEventListener, removeEventListener: vi.fn() }),
     });
     useMapStyle();
-    if (capturedEffect) {
-      capturedEffect();
-    }
+    if (capturedEffect) capturedEffect();
     expect(addEventListener).not.toHaveBeenCalled();
-  });
-
-  it("returns only valid Mapbox style IDs for light theme", () => {
-    mockTheme.mockReturnValue("light");
-    expect(["streets-v12", "dark-v11"]).toContain(useMapStyle());
-  });
-
-  it("returns only valid Mapbox style IDs for system theme", () => {
-    mockTheme.mockReturnValue("system");
-    expect(["streets-v12", "dark-v11"]).toContain(useMapStyle());
   });
 });

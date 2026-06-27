@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { MAP_LAYERS, DEFAULT_LAYER, getMapLayerById } from "./map-layers";
+import { MAP_LAYERS, DEFAULT_LAYER, getMapLayerById, MAPTILER_STYLE_LIGHT, MAPTILER_STYLE_DARK } from "./map-layers";
 
 describe("MAP_LAYERS", () => {
   it("has at least 3 layers (issue requirement)", () => {
@@ -52,5 +52,21 @@ describe("getMapLayerById", () => {
 
   it("returns undefined for an invalid ID", () => {
     expect(getMapLayerById("nonexistent")).toBeUndefined();
+  });
+});
+
+describe("MapTiler style URLs", () => {
+  it("MAPTILER_STYLE_LIGHT points to streets-v2", () => {
+    expect(MAPTILER_STYLE_LIGHT).toContain("streets-v2/style.json");
+    expect(MAPTILER_STYLE_LIGHT).toContain("maptiler.com");
+  });
+
+  it("MAPTILER_STYLE_DARK points to streets-v2-dark", () => {
+    expect(MAPTILER_STYLE_DARK).toContain("streets-v2-dark/style.json");
+    expect(MAPTILER_STYLE_DARK).toContain("maptiler.com");
+  });
+
+  it("light and dark styles are different URLs", () => {
+    expect(MAPTILER_STYLE_LIGHT).not.toBe(MAPTILER_STYLE_DARK);
   });
 });
