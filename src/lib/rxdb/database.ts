@@ -61,12 +61,14 @@ async function createDb(): Promise<MukokoDatabase> {
     const code = (err as { code?: string })?.code;
     const msg = String(err);
     if (code === "DB9" || msg.includes("DB9") || msg.includes("storageToken")) {
-      try {
-        const { deleteRxDatabase } = await import("rxdb");
-        await deleteRxDatabase("mukoko_weather", getRxStorageDexie());
-      } catch {
-        // Best-effort cleanup — ignore if deletion fails
-      }
+      // Use native IndexedDB API to wipe stale v16 data — more reliable than
+      // deleteRxDatabase which may itself fail when the schema is incompatible.
+      await new Promise<void>((resolve) => {
+        const req = indexedDB.deleteDatabase("mukoko_weather");
+        req.onsuccess = () => resolve();
+        req.onerror = () => resolve();   // best-effort; proceed regardless
+        req.onblocked = () => resolve();
+      });
       dbPromise = null;
       return await _initDb();
     }
