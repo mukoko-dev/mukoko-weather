@@ -9,7 +9,10 @@ const withSerwist = withSerwistInit({
 
 const nextConfig: NextConfig = {
   // @serwist/next uses a webpack plugin — tell Next.js 16 to accept both configs
-  turbopack: {},
+  turbopack: {
+    // Silence the multiple-lockfiles warning — parent dir has a lockfile from oss-weather
+    root: __dirname,
+  },
   async headers() {
     return [
       {

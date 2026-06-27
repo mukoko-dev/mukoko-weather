@@ -9,7 +9,7 @@ import { resolve } from "path";
 const source = readFileSync(resolve(__dirname, "HomeLanding.tsx"), "utf-8");
 const pageSource = readFileSync(resolve(__dirname, "page.tsx"), "utf-8");
 const middlewareSource = readFileSync(
-  resolve(__dirname, "../middleware.ts"),
+  resolve(__dirname, "../proxy.ts"),
   "utf-8",
 );
 
