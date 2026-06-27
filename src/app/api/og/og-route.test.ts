@@ -53,16 +53,18 @@ describe("brand tokens", () => {
     expect(source).toContain("#004D40");
   });
 
-  it("uses gold accent color", () => {
-    expect(source).toContain("#F9A825");
+  it("uses gold mineral color (doctrine v4.1.0)", () => {
+    expect(source).toContain("#5D4037"); // gold light
   });
 
-  it("includes mineral colors for accent stripe", () => {
+  it("includes all 7 mineral colors for accent stripe (doctrine v4.1.0)", () => {
     expect(source).toContain("#4B0082"); // tanzanite
     expect(source).toContain("#0047AB"); // cobalt
     expect(source).toContain("#004D40"); // malachite
-    expect(source).toContain("#F9A825"); // gold
-    expect(source).toContain("#D4634A"); // terracotta
+    expect(source).toContain("#5D4037"); // gold
+    expect(source).toContain("#A0522D"); // terracotta
+    expect(source).toContain("#283593"); // sodalite
+    expect(source).toContain("#BF5A36"); // copper
   });
 
   it("shows mukoko weather brand name", () => {
@@ -86,9 +88,9 @@ describe("brand tokens", () => {
   it("cross-references globals.css for brand token sync", () => {
     // Prevents silent drift — both files should reference each other
     expect(source).toContain("globals.css");
-    expect(source).toContain("--color-tanzanite");
-    expect(source).toContain("--color-primary");
-    expect(source).toContain("--color-secondary");
+    expect(source).toContain("--mineral-tanzanite");
+    expect(source).toContain("--mineral-cobalt");
+    expect(source).toContain("doctrine v4.1.0");
   });
 });
 
