@@ -14,7 +14,15 @@
  *   - seasons         : Country-specific season definitions (replaces getDefaultSeason logic)
  */
 
-import { getDb } from "./mongo";
+import {
+  getDb,
+  weatherDb,
+  placesDb,
+  identityDb,
+  shamwariDb,
+  deviceDb,
+  integrationsDb,
+} from "./mongo";
 import { fetchWeather, createFallbackWeather, getDefaultSeason, synthesizeOpenMeteoInsights, type WeatherData, type Season } from "./weather";
 import { fetchWeatherFromTomorrow, TomorrowRateLimitError } from "./tomorrow";
 import { logWarn, logError } from "./observability";
@@ -127,67 +135,72 @@ export interface ProvinceDoc extends Province {
 export type { RegionDoc, TagDoc, SeasonDoc, ActivityCategoryDoc, AIPromptDoc, AISuggestedPromptRule };
 
 // ---------------------------------------------------------------------------
-// Collection accessors
+// Collection accessors — legacy mukoko collections (now in `weather` DB)
+//
+// Phase 0B: existing accessors keep working untouched. They now route through
+// the appropriate platform DB (mostly `weather`) via the named helpers in
+// mongo.ts. Platform collection accessors (camelCase, schema-validated) live
+// further down in the "Platform collection accessors" section.
 // ---------------------------------------------------------------------------
 
 function weatherCacheCollection() {
-  return getDb().collection<WeatherCacheDoc>("weather_cache");
+  return weatherDb().collection<WeatherCacheDoc>("weather_cache");
 }
 
 function aiSummariesCollection() {
-  return getDb().collection<AISummaryDoc>("ai_summaries");
+  return weatherDb().collection<AISummaryDoc>("ai_summaries");
 }
 
 function weatherHistoryCollection() {
-  return getDb().collection<WeatherHistoryDoc>("weather_history");
+  return weatherDb().collection<WeatherHistoryDoc>("weather_history");
 }
 
 function locationsCollection() {
-  return getDb().collection<LocationDoc>("locations");
+  return weatherDb().collection<LocationDoc>("locations");
 }
 
 function activitiesCollection() {
-  return getDb().collection<ActivityDoc>("activities");
+  return weatherDb().collection<ActivityDoc>("activities");
 }
 
 export function rateLimitsCollection() {
-  return getDb().collection<{ key: string; count: number; expiresAt: Date }>("rate_limits");
+  return weatherDb().collection<{ key: string; count: number; expiresAt: Date }>("rate_limits");
 }
 
 function countriesCollection() {
-  return getDb().collection<CountryDoc>("countries");
+  return weatherDb().collection<CountryDoc>("countries");
 }
 
 function provincesCollection() {
-  return getDb().collection<ProvinceDoc>("provinces");
+  return weatherDb().collection<ProvinceDoc>("provinces");
 }
 
 function regionsCollection() {
-  return getDb().collection<RegionDoc>("regions");
+  return weatherDb().collection<RegionDoc>("regions");
 }
 
 function tagsCollection() {
-  return getDb().collection<TagDoc>("tags");
+  return weatherDb().collection<TagDoc>("tags");
 }
 
 function seasonsCollection() {
-  return getDb().collection<SeasonDoc>("seasons");
+  return weatherDb().collection<SeasonDoc>("seasons");
 }
 
 function activityCategoriesCollection() {
-  return getDb().collection<ActivityCategoryDoc>("activity_categories");
+  return weatherDb().collection<ActivityCategoryDoc>("activity_categories");
 }
 
 function suitabilityRulesCollection() {
-  return getDb().collection<SuitabilityRuleDoc>("suitability_rules");
+  return weatherDb().collection<SuitabilityRuleDoc>("suitability_rules");
 }
 
 function aiPromptsCollection() {
-  return getDb().collection<AIPromptDoc & { updatedAt: Date }>("ai_prompts");
+  return weatherDb().collection<AIPromptDoc & { updatedAt: Date }>("ai_prompts");
 }
 
 function aiSuggestedRulesCollection() {
-  return getDb().collection<AISuggestedPromptRule & { updatedAt: Date }>("ai_suggested_rules");
+  return weatherDb().collection<AISuggestedPromptRule & { updatedAt: Date }>("ai_suggested_rules");
 }
 
 // ---------------------------------------------------------------------------
@@ -272,9 +285,228 @@ export async function ensureIndexes(): Promise<void> {
     aiSuggestedRulesCollection().createIndex({ active: 1, category: 1, order: 1 }),
 
     // METAR cache: one doc per ICAO station, auto-expire after 30 minutes
-    getDb().collection("metar_cache").createIndex({ icao: 1 }, { unique: true }),
-    getDb().collection("metar_cache").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    weatherDb().collection("metar_cache").createIndex({ icao: 1 }, { unique: true }),
+    weatherDb().collection("metar_cache").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   ]);
+}
+
+// ---------------------------------------------------------------------------
+// Platform schema constants + helpers (Phase 0B)
+//
+// All writes into a platform-validated collection MUST include _schemaVersion,
+// createdAt, updatedAt, and a `bundu` sub-document. Strict validators
+// (validationAction: "error") will reject writes that don't conform.
+// See docs/mongodb-schema-map.md for the full schema map.
+// ---------------------------------------------------------------------------
+
+/** Schema version stamped onto every new document we write. */
+export const PLATFORM_SCHEMA_VERSION = "v3.1";
+
+/** Default country code for the Bundu sub-document. */
+export const DEFAULT_COUNTRY_CODE = "ZW";
+
+export interface PlatformStampOptions {
+  /** ISO 3166-1 alpha-2 country code (defaults to "ZW"). */
+  countryCode?: string;
+  /** Optional province slug for the Bundu sub-document. */
+  provinceSlug?: string;
+}
+
+/**
+ * Stamp the platform-required fields onto a document in place and return it.
+ *
+ * Stamps:
+ *   - `_id`            — UUID string (only if missing)
+ *   - `_schemaVersion` — `"v3.1"` (only if missing)
+ *   - `createdAt`      — UTC now (only if missing)
+ *   - `updatedAt`      — UTC now (always overwritten)
+ *   - `bundu`          — sub-doc with `countryCode` (+ `provinceSlug` if given)
+ *
+ * Existing values are preserved — safe to call on a partially-built doc.
+ * Call this on every insert into a platform collection.
+ */
+export function stampPlatformFields<T extends Record<string, unknown>>(
+  doc: T,
+  opts: PlatformStampOptions = {},
+): T & {
+  _id: string;
+  _schemaVersion: string;
+  createdAt: Date;
+  updatedAt: Date;
+  bundu: { countryCode: string; provinceSlug?: string };
+} {
+  const { countryCode = DEFAULT_COUNTRY_CODE, provinceSlug } = opts;
+  const now = new Date();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = doc as Record<string, any>;
+  if (d._id === undefined || d._id === null) d._id = randomUuid();
+  if (d._schemaVersion === undefined) d._schemaVersion = PLATFORM_SCHEMA_VERSION;
+  if (d.createdAt === undefined) d.createdAt = now;
+  d.updatedAt = now;
+
+  const bundu = (d.bundu ??= {} as Record<string, unknown>);
+  if (bundu.countryCode === undefined) bundu.countryCode = countryCode;
+  if (provinceSlug && bundu.provinceSlug === undefined) bundu.provinceSlug = provinceSlug;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return d as any;
+}
+
+/** RFC4122-ish UUID v4 using crypto.randomUUID when available. */
+function randomUuid(): string {
+  // Node 18+ and modern browsers expose globalThis.crypto.randomUUID().
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const c = (globalThis as any).crypto;
+  if (c && typeof c.randomUUID === "function") {
+    return c.randomUUID() as string;
+  }
+  // Last-resort fallback. Not cryptographically strong, but acceptable for
+  // _id generation; environments without crypto.randomUUID are vanishingly
+  // rare on the deploy target (Vercel Node 20).
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Platform collection accessors (Phase 0B)
+//
+// New camelCase, schema-validated collections on the shared platform cluster.
+// Use these for any new code. Existing call sites can keep using the legacy
+// accessors above — both coexist during Phase 0.
+// ---------------------------------------------------------------------------
+
+// weather domain
+/** StationKit hardware registry — `weather.stations`. */
+export function stationsCollection() {
+  return weatherDb().collection("stations");
+}
+
+/** QC-validated station observations — `weather.observations`. */
+export function observationsCollection() {
+  return weatherDb().collection("observations");
+}
+
+/** Raw station payloads — `weather.stationObservations`. */
+export function stationObservationsCollection() {
+  return weatherDb().collection("stationObservations");
+}
+
+/** CAP-format severe weather alerts — `weather.alerts`. */
+export function alertsCollection() {
+  return weatherDb().collection("alerts");
+}
+
+/** Community weather reports (Waze-style) — `weather.communityReports` (camelCase). */
+export function communityReportsCollection() {
+  return weatherDb().collection("communityReports");
+}
+
+// places domain
+/** Places (landmarks, businesses, parks, etc.) — `places.places`. */
+export function placesCollection() {
+  return placesDb().collection("places");
+}
+
+/** Administrative geography — `places.placesGeo` (camelCase). */
+export function placesGeoCollection() {
+  return placesDb().collection("placesGeo");
+}
+
+export function categoriesCollection() {
+  return placesDb().collection("categories");
+}
+
+export function routesCollection() {
+  return placesDb().collection("routes");
+}
+
+/** Per-place community condition reports — `places.conditionReports`. */
+export function conditionReportsCollection() {
+  return placesDb().collection("conditionReports");
+}
+
+// identity domain
+/** Canonical user records (OIDC-compliant) — `identity.persons`. */
+export function personsCollection() {
+  return identityDb().collection("persons");
+}
+
+/** Per-person credentials (passkey, WorkOS, OAuth, etc.) — `identity.credentials`. */
+export function credentialsCollection() {
+  return identityDb().collection("credentials");
+}
+
+/** Auth audit trail — `identity.activityLog` (camelCase). */
+export function activityLogCollection() {
+  return identityDb().collection("activityLog");
+}
+
+// shamwari domain
+/** Per-user chat sessions — `shamwari.conversations`. */
+export function conversationsCollection() {
+  return shamwariDb().collection("conversations");
+}
+
+/** Chat messages (Anthropic content-block format) — `shamwari.messages`. */
+export function messagesCollection() {
+  return shamwariDb().collection("messages");
+}
+
+/** Cross-app guardrails — `shamwari.guardrails`. */
+export function guardrailsCollection() {
+  return shamwariDb().collection("guardrails");
+}
+
+/** Vector-embedded knowledge resources (RAG) — `shamwari.knowledgeBase`. */
+export function knowledgeBaseCollection() {
+  return shamwariDb().collection("knowledgeBase");
+}
+
+/** Per-person Shamwari preferences — `shamwari.preferences`. */
+export function preferencesCollection() {
+  return shamwariDb().collection("preferences");
+}
+
+// device domain
+/** Every device on the platform — `device.devices`. */
+export function devicesCollection() {
+  return deviceDb().collection("devices");
+}
+
+export function commandsCollection() {
+  return deviceDb().collection("commands");
+}
+
+export function telemetryCollection() {
+  return deviceDb().collection("telemetry");
+}
+
+/** Device state transition audit log — `device.deviceHistory` (camelCase). */
+export function deviceHistoryCollection() {
+  return deviceDb().collection("deviceHistory");
+}
+
+/**
+ * Legacy mukoko device profile sync — now lives in the platform `device` DB.
+ * Phase 0D will migrate writers to `device.devices`.
+ */
+export function deviceProfilesCollection() {
+  return deviceDb().collection("device_profiles");
+}
+
+// integrations domain
+/** External provider catalog (WorkOS, Tomorrow.io, etc.) — `integrations.providers`. */
+export function providersCollection() {
+  return integrationsDb().collection("providers");
+}
+
+/** Per-env/per-country provider configs — `integrations.providerConfigurations`. */
+export function providerConfigurationsCollection() {
+  return integrationsDb().collection("providerConfigurations");
 }
 
 // ---------------------------------------------------------------------------
@@ -546,7 +778,10 @@ export interface ApiKeyDoc {
 }
 
 function apiKeysCollection() {
-  return getDb().collection<ApiKeyDoc>("api_keys");
+  // Legacy mukoko API key store. Phase 0D replaces reads from this collection
+  // with `integrations.providerConfigurations`. Kept here so existing code
+  // keeps working in the meantime.
+  return weatherDb().collection<ApiKeyDoc>("api_keys");
 }
 
 export async function getApiKey(provider: string): Promise<string | null> {
