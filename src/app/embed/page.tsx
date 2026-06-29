@@ -26,14 +26,14 @@ export default function EmbedPage() {
 
         {/* Current Conditions Widget */}
         <section className="mt-10">
-          <h2 className="text-xl font-semibold text-text-primary">
+          <h2 className="eagle">
             Current Conditions
           </h2>
           <p className="mt-2 text-base text-text-secondary">
             A card showing live temperature, conditions, humidity, wind, and UV
             for any location worldwide.
           </p>
-          <div className="mt-4 overflow-hidden rounded-[var(--radius-card)] bg-surface-card p-4">
+          <div className="mt-4 tortoise">
             <pre className="overflow-x-auto text-base">
               <code className="font-mono text-text-primary">{`<!-- Current conditions for Harare -->
 <div data-mukoko-widget="current"
@@ -46,13 +46,13 @@ export default function EmbedPage() {
 
         {/* Forecast Widget */}
         <section className="mt-10">
-          <h2 className="text-xl font-semibold text-text-primary">
+          <h2 className="eagle">
             Forecast
           </h2>
           <p className="mt-2 text-base text-text-secondary">
             A multi-day forecast strip. Configure 3, 5, or 7 days.
           </p>
-          <div className="mt-4 overflow-hidden rounded-[var(--radius-card)] bg-surface-card p-4">
+          <div className="mt-4 tortoise">
             <pre className="overflow-x-auto text-base">
               <code className="font-mono text-text-primary">{`<!-- 5-day forecast for Bulawayo -->
 <div data-mukoko-widget="forecast"
@@ -66,14 +66,14 @@ export default function EmbedPage() {
 
         {/* Badge Widget */}
         <section className="mt-10">
-          <h2 className="text-xl font-semibold text-text-primary">
+          <h2 className="eagle">
             Compact Badge
           </h2>
           <p className="mt-2 text-base text-text-secondary">
             An inline badge that fits in navbars, headers, or sidebars. Shows
             temperature and condition at a glance.
           </p>
-          <div className="mt-4 overflow-hidden rounded-[var(--radius-card)] bg-surface-card p-4">
+          <div className="mt-4 tortoise">
             <pre className="overflow-x-auto text-base">
               <code className="font-mono text-text-primary">{`<!-- Compact badge for Mutare -->
 <div data-mukoko-widget="badge"
@@ -86,14 +86,14 @@ export default function EmbedPage() {
 
         {/* iframe embed */}
         <section className="mt-10">
-          <h2 className="text-xl font-semibold text-text-primary">
+          <h2 className="eagle">
             iframe Embed
           </h2>
           <p className="mt-2 text-base text-text-secondary">
             For complete isolation, use an iframe. Useful for CMS platforms
             that don&apos;t allow custom scripts.
           </p>
-          <div className="mt-4 overflow-hidden rounded-[var(--radius-card)] bg-surface-card p-4">
+          <div className="mt-4 tortoise">
             <pre className="overflow-x-auto text-base">
               <code className="font-mono text-text-primary">{`<iframe
   src="https://weather.mukoko.com/embed/iframe/harare?type=current&theme=auto"
@@ -108,7 +108,7 @@ export default function EmbedPage() {
 
         {/* React/Next.js integration */}
         <section className="mt-10">
-          <h2 className="text-xl font-semibold text-text-primary">
+          <h2 className="eagle">
             React / Next.js
           </h2>
           <p className="mt-2 text-base text-text-secondary">
@@ -118,7 +118,7 @@ export default function EmbedPage() {
             </code>{" "}
             component directly.
           </p>
-          <div className="mt-4 overflow-hidden rounded-[var(--radius-card)] bg-surface-card p-4">
+          <div className="mt-4 tortoise">
             <pre className="overflow-x-auto text-base">
               <code className="font-mono text-text-primary">{`import { MukokoWeatherEmbed } from "@mukoko/weather-embed";
 
@@ -136,7 +136,7 @@ export default function EmbedPage() {
 
         {/* Configuration options */}
         <section className="mt-10">
-          <h2 className="text-xl font-semibold text-text-primary">
+          <h2 className="eagle">
             Configuration
           </h2>
           <div className="mt-4 overflow-x-auto">
@@ -176,7 +176,7 @@ export default function EmbedPage() {
 
         {/* Available locations */}
         <section className="mt-10 mb-10">
-          <h2 className="text-xl font-semibold text-text-primary">
+          <h2 className="eagle">
             Available Locations
           </h2>
           <p className="mt-2 text-base text-text-secondary">

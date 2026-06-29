@@ -175,7 +175,7 @@ export function ExploreSearch() {
               href={`/${loc.slug}`}
               className="group card-interactive flex items-start gap-3.5 baobab p-5 focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)]"
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 transition-colors group-hover:bg-primary/20">
+              <div className="hoopoe-lg transition-colors group-hover:bg-primary/20">
                 <MapPinIcon size={16} className="text-primary" />
               </div>
               <div className="min-w-0 flex-1">

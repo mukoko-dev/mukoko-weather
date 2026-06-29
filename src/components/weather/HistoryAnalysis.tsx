@@ -117,7 +117,7 @@ export function HistoryAnalysis({
       className="rounded-[var(--radius-card)] border-l-4 border-mineral-tanzanite bg-surface-card p-4 shadow-sm"
     >
       <div className="flex items-center gap-2">
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10">
+        <div className="hoopoe">
           <SparklesIcon size={14} className="text-primary" />
         </div>
         <h2

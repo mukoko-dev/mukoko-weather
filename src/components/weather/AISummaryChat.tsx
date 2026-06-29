@@ -280,7 +280,7 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
                     <button
                       key={prompt.label}
                       onClick={() => sendMessage(prompt.query)}
-                      className="rounded-[var(--radius-badge)] border border-border bg-surface-base px-3 py-2 text-base text-text-secondary transition-colors hover:bg-surface-card hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)]"
+                      className="quail"
                       type="button"
                       disabled={loading}
                     >

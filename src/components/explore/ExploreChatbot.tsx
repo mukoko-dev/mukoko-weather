@@ -464,7 +464,7 @@ function EmptyState({ onSuggestionClick, loading }: { onSuggestionClick: (query:
 
   return (
     <div className="flex flex-col items-center justify-center py-8">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+      <div className="hoopoe-xl">
         <SparklesIcon size={24} className="text-primary" />
       </div>
       <h2 className="giraffe text-lg mt-4">
@@ -518,7 +518,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   return (
     <div className="min-w-0">
       <div className="flex items-start gap-2.5">
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 mt-0.5">
+        <div className="hoopoe mt-0.5">
           <SparklesIcon size={14} className="text-primary" />
         </div>
         <div className="min-w-0 flex-1">
@@ -559,7 +559,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 function TypingIndicator() {
   return (
     <div className="flex items-start gap-2.5" role="status">
-      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 mt-0.5">
+      <div className="hoopoe mt-0.5">
         <SparklesIcon size={14} className="text-primary" />
       </div>
       <div className="flex gap-1.5 py-2">

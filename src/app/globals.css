@@ -669,6 +669,52 @@ body {
            text-sm font-medium text-text-primary;
   }
 
+  /* .flamingo-link — clickable badge link (location reference chips) */
+  .flamingo-link {
+    @apply inline-flex items-center gap-1
+           rounded-[var(--radius-badge)] bg-primary/10 px-2.5 py-1
+           text-base font-medium text-primary transition-colors
+           hover:bg-primary/20;
+  }
+
+  /* .quail — suggested-prompt chip (small foraging bird, picks suggestions) */
+  .quail {
+    @apply rounded-[var(--radius-badge)] border border-border
+           bg-surface-base px-3 py-2
+           text-base text-text-secondary transition-colors
+           hover:bg-surface-card hover:text-text-primary hover:border-primary/30
+           focus-visible:outline-2 focus-visible:outline-primary
+           min-h-[var(--touch-target-min)];
+  }
+
+  /* .hoopoe — round avatar circle (small crested bird, AI avatar default size) */
+  .hoopoe {
+    @apply flex h-6 w-6 shrink-0 items-center justify-center
+           rounded-full bg-primary/10;
+  }
+
+  /* .hoopoe-lg — round avatar at h-9 (search results, etc.) */
+  .hoopoe-lg {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center
+           rounded-full bg-primary/10;
+  }
+
+  /* .hoopoe-xl — round avatar at h-12 (empty-state hero icons) */
+  .hoopoe-xl {
+    @apply flex h-12 w-12 items-center justify-center
+           rounded-full bg-primary/10;
+  }
+
+  /* .tortoise — flat, borderless, shadowless surface (code blocks, neutral wrappers) */
+  .tortoise {
+    @apply overflow-hidden rounded-[var(--radius-card)] bg-surface-card p-4;
+  }
+
+  /* .eagle — large heading (text-xl, stands above giraffe in hierarchy) */
+  .eagle {
+    @apply text-xl font-semibold text-text-primary;
+  }
+
   /* .alert-banner — soft severity banner (moderate by default) */
   .alert-banner {
     @apply rounded-[var(--radius-card)] border border-severity-moderate/30
@@ -715,9 +761,14 @@ body {
     @apply text-base text-text-secondary leading-relaxed;
   }
 
-  /* .dove — muted secondary text (gentle, recedes) */
+  /* .dove — muted secondary small text (gentle, recedes) */
   .dove {
     @apply text-sm text-text-tertiary;
+  }
+
+  /* .dove-lg — muted body text at 16px (mobile readability, modals) */
+  .dove-lg {
+    @apply text-base text-text-tertiary;
   }
 
   /* .hornbill — uppercase tracking label (distinctive call, group heading) */
