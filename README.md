@@ -6,19 +6,22 @@ AI-powered global weather intelligence — real-time forecasts and locally-relev
 
 ## Features
 
+- **Instant location detection** — three-stage onboarding pipeline: Vercel IP geo (server-side, no prompt) → user-triggered browser GPS → manual search. Returning users redirect via `lastLocation` cookie at the edge for zero-JS location landing
 - **Real-time weather** — current conditions from Tomorrow.io (primary) with Open-Meteo fallback
 - **7-day forecasts** — daily highs, lows, precipitation probability, and weather conditions
 - **24-hour hourly forecasts** — hour-by-hour temperature and rain predictions
+- **Aviation weather (METAR/TAF)** — `/aviation` page with pre-flight briefings, departure/destination/alternate airport selection, VFR/MVFR/IFR/LIFR flight category badges, and full **PDF briefing export** (`@react-pdf/renderer`). Data from NOAA Aviation Weather Center; 37 ICAO airports mapped with haversine nearest-airport lookup for community locations
 - **AI weather intelligence** — Claude-powered markdown-formatted summaries with farming, mining, and travel advice, plus inline follow-up chat (up to 5 messages before seamless handoff to Shamwari)
 - **AI-powered explore search** — natural-language location discovery ("farming areas with low frost risk") using Claude with tool use
 - **AI history analysis** — button-triggered analysis of historical weather trends, patterns, and anomalies with server-side aggregation
 - **Personalised activity insights** — 30+ activities across 6 categories (farming, mining, travel, tourism, sports, casual) with mineral-colored cards showing GDD, heat stress, thunderstorm risk, visibility, and more
+- **User-reorderable sections** — drag-and-drop reorder of weather page sections via `@dnd-kit`, persisted to local storage; "Customise layout" toggle enters reorder mode
+- **Live clock** — browser date and time in the location page header, updates every minute
 - **Cross-device sync** — device profile sync bridges browser localStorage with a server-side profile, so preferences survive across devices and browser resets
 - **Community weather reporting** — Waze-style ground-truth observations: 10 weather types, 3 severity levels, AI-assisted clarification, cross-validation against API data, community upvoting
 - **Frost alerts** — automated frost risk detection for overnight hours with severity levels
-- **Dynamic locations** — 265 seed locations across 64 countries (98 Zimbabwe + 167 global), with community-driven expansion via geolocation and search. Reverse-geocoded via Nominatim (OpenStreetMap) with structured address storage for formal three-layer breadcrumbs (Country / Province / Location)
+- **Dynamic locations** — 265 seed locations across 64 countries (98 Zimbabwe + 167 global), with community-driven expansion via geolocation and search. Three-layer dedup (10km wide geo / name+country / 1km exact) prevents duplicate location creation. Reverse-geocoded via Nominatim (OpenStreetMap) with structured address storage for formal three-layer breadcrumbs
 - **Seasonal awareness** — country-specific seasons for 50+ countries (including Zimbabwe's Masika, Chirimo, Zhizha, Munakamwe) with local names and agricultural calendars
-- **Geolocation** — automatic nearest-location detection via browser GPS, with auto-creation for new areas
 - **Shamwari AI chat** — dedicated `/shamwari` page with full-viewport Claude app-style chat (search locations, check weather, get activity advice, compare cities). Contextual navigation carries weather/location data from any page
 - **Suitability scoring** — database-driven weather suitability evaluation for activities (excellent/good/fair/poor ratings with structured metrics)
 - **Country/region browse** — explore locations by country, province, and tag across 64 countries (54 AU + ASEAN)
@@ -29,6 +32,7 @@ AI-powered global weather intelligence — real-time forecasts and locally-relev
 - **Historical data dashboard** — explore recorded weather trends, precipitation, and climate patterns over time, with AI-powered analysis
 - **Database-driven AI configuration** — all system prompts, suggested prompt rules, and model configs stored in MongoDB for easy updates without code changes
 - **Resilient architecture** — Netflix-style error isolation: per-section error boundaries, 4-stage weather fallback chain, structured observability logging
+- **Brand system** — full Mukoko brand kit (doctrine v4.1.0): 7 African minerals (cobalt, tanzanite, malachite, gold, terracotta, sodalite, copper), Noto Serif/Sans/JetBrains Mono typography, official Seed of Life mark. Semantic Fauna component classes (`.kudu`, `.impala`, `.bee`, `.baobab`, `.weaver`, etc.) centralise repeated styles in `globals.css`
 - **PWA** — installable as a standalone app on Android, iOS, and desktop
 
 ## Tech Stack
@@ -39,7 +43,10 @@ AI-powered global weather intelligence — real-time forecasts and locally-relev
 | Backend API | [Python FastAPI](https://fastapi.tiangolo.com) (Vercel serverless functions under `api/py/`) |
 | UI Components | [shadcn/ui](https://ui.shadcn.com) (Radix UI + CVA) |
 | Charts | [Chart.js 4](https://www.chartjs.org) + [react-chartjs-2](https://react-chartjs-2.js.org) (Canvas 2D) |
-| Maps | [Leaflet](https://leafletjs.com) + [react-leaflet](https://react-leaflet.js.org) (Mapbox base tiles + Tomorrow.io weather overlays) |
+| Maps | [MapLibre GL JS](https://maplibre.org) + [MapTiler Cloud](https://www.maptiler.com) (vector tiles direct from CDN — no proxy, GPU-rendered) + [Tomorrow.io](https://tomorrow.io) raster weather overlays |
+| PDF generation | [@react-pdf/renderer](https://react-pdf.org) — aviation briefing PDFs |
+| Drag & drop | [@dnd-kit](https://dndkit.com) — section reorder on weather page |
+| Aviation data | [NOAA Aviation Weather Center](https://aviationweather.gov) — METAR + TAF |
 | Styling | [Tailwind CSS 4](https://tailwindcss.com) with CSS custom properties |
 | Markdown | [react-markdown 10](https://github.com/remarkjs/react-markdown) |
 | State | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist` middleware |
