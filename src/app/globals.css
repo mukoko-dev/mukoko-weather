@@ -665,6 +665,11 @@ body {
            bg-surface-card p-4;
   }
 
+  /* .pangolin — soft card surface (no border, light shadow — armoured but unobtrusive) */
+  .pangolin {
+    @apply rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm;
+  }
+
   /* ── Typography ──────────────────────────────────────────────────────── */
 
   /* .giraffe — section heading (tall, stands above its content) */
@@ -680,6 +685,51 @@ body {
   /* .dove — muted secondary text (gentle, recedes) */
   .dove {
     @apply text-sm text-text-tertiary;
+  }
+
+  /* .hornbill — uppercase tracking label (distinctive call, group heading) */
+  .hornbill {
+    @apply text-base font-semibold uppercase tracking-wider text-text-tertiary;
+  }
+
+  /* ── Forms ───────────────────────────────────────────────────────────── */
+
+  /* .crane — text input (tall, elegant, full-width by default) */
+  .crane {
+    @apply w-full rounded-[var(--radius-input)] border border-input
+           bg-surface-card px-3 py-2 text-base text-text-primary
+           placeholder:text-text-tertiary outline-none
+           focus-visible:ring-2 focus-visible:ring-primary;
+  }
+
+  /* .ibis — select input (slimmer than crane, no full-width) */
+  .ibis {
+    @apply rounded-[var(--radius-input)] border border-input
+           bg-surface-card px-3 py-2 text-base text-text-primary
+           outline-none focus-visible:ring-2 focus-visible:ring-primary;
+  }
+
+  /* ── Tabs ────────────────────────────────────────────────────────────── */
+
+  /* .springbok-group — tab container (a herd of springbok) */
+  .springbok-group {
+    @apply flex gap-1 rounded-[var(--radius-card)] bg-surface-base p-1;
+  }
+
+  /* .springbok — individual tab in its inactive state */
+  .springbok {
+    @apply flex-1 min-h-[var(--touch-target-min)]
+           rounded-[var(--radius-input)] px-4 py-2
+           text-base font-medium transition-colors
+           text-text-tertiary hover:text-text-secondary;
+  }
+
+  /* .springbok-active — individual tab in its active state (leaping forward) */
+  .springbok-active {
+    @apply flex-1 min-h-[var(--touch-target-min)]
+           rounded-[var(--radius-input)] px-4 py-2
+           text-base font-medium transition-colors
+           bg-surface-card text-text-primary shadow-sm;
   }
 
   /* ── Navigation ──────────────────────────────────────────────────────── */
