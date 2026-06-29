@@ -17,6 +17,7 @@ AI-powered global weather intelligence — real-time forecasts and locally-relev
 - **Personalised activity insights** — 30+ activities across 6 categories (farming, mining, travel, tourism, sports, casual) with mineral-colored cards showing GDD, heat stress, thunderstorm risk, visibility, and more
 - **User-reorderable sections** — drag-and-drop reorder of weather page sections via `@dnd-kit`, persisted to local storage; "Customise layout" toggle enters reorder mode
 - **Live clock** — browser date and time in the location page header, updates every minute
+- **User accounts via WorkOS AuthKit** — sign-in / sign-up via WorkOS AuthKit (`@workos-inc/authkit-nextjs`), with sessions managed by signed cookies. On first sign-in, the user is upserted into the shared platform `identity.persons` collection (OIDC-compliant `_id`, `workosUserId`, OIDC standard claims). Dedup is airtight — never two persons docs for the same WorkOS user
 - **Cross-device sync** — device profile sync bridges browser localStorage with a server-side profile, so preferences survive across devices and browser resets
 - **Community weather reporting** — Waze-style ground-truth observations: 10 weather types, 3 severity levels, AI-assisted clarification, cross-validation against API data, community upvoting
 - **Frost alerts** — automated frost risk detection for overnight hours with severity levels
@@ -40,6 +41,7 @@ AI-powered global weather intelligence — real-time forecasts and locally-relev
 | Layer | Technology |
 |-------|-----------|
 | Framework | [Next.js 16](https://nextjs.org) (App Router, TypeScript 5) |
+| Authentication | [WorkOS AuthKit](https://workos.com/docs/authkit) (`@workos-inc/authkit-nextjs`) — hosted sign-in, signed-cookie sessions, persons mirrored into the shared platform `identity.persons` |
 | Backend API | [Python FastAPI](https://fastapi.tiangolo.com) (Vercel serverless functions under `api/py/`) |
 | UI Components | [shadcn/ui](https://ui.shadcn.com) (Radix UI + CVA) |
 | Charts | [Chart.js 4](https://www.chartjs.org) + [react-chartjs-2](https://react-chartjs-2.js.org) (Canvas 2D) |
@@ -80,6 +82,10 @@ npm install
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `MONGODB_URI` | Yes | MongoDB Atlas connection string for caching and data storage |
+| `WORKOS_API_KEY` | Yes | Server-side WorkOS API key (sk_...). Required for AuthKit middleware, callback exchange, and `identity.persons` upsert |
+| `WORKOS_CLIENT_ID` | Yes | WorkOS Client ID (client_...) from the WorkOS dashboard |
+| `WORKOS_COOKIE_PASSWORD` | Yes | 32+ character secret used to sign the session cookie. Rotate carefully — rotating invalidates all sessions |
+| `NEXT_PUBLIC_WORKOS_REDIRECT_URI` | Yes | OAuth callback URL (e.g. `http://localhost:3000/callback` in dev, `https://weather.mukoko.com/callback` in prod). Must match the Redirect URI registered in the WorkOS dashboard |
 | `ANTHROPIC_API_KEY` | No | Anthropic API key for AI weather summaries. Without it, a basic fallback summary is generated |
 | `DB_INIT_SECRET` | No | Protects the `/api/db-init` endpoint in production (via `x-init-secret` header) |
 

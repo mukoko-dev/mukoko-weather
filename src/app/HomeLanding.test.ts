@@ -150,7 +150,10 @@ describe("page.tsx — server component", () => {
 describe("middleware — edge routing", () => {
   it("redirects home page with lastLocation cookie", () => {
     expect(middlewareSource).toContain("lastLocation");
-    expect(middlewareSource).toContain("NextResponse.redirect");
+    // Phase 1a (WorkOS): redirect goes via AuthKit's handleAuthkitProxy so
+    // session headers are preserved across the redirect. The previous
+    // implementation used NextResponse.redirect directly.
+    expect(middlewareSource).toMatch(/handleAuthkitProxy|NextResponse\.redirect/);
     expect(middlewareSource).toContain('pathname === "/"');
   });
 
@@ -172,5 +175,15 @@ describe("middleware — edge routing", () => {
     expect(middlewareSource).toContain("KNOWN_ROUTES");
     expect(middlewareSource).toContain('"explore"');
     expect(middlewareSource).toContain('"shamwari"');
+  });
+
+  it("composes WorkOS AuthKit session refresh into the middleware chain", () => {
+    // Phase 1a: every request must run authkit() so withAuth() sees a fresh
+    // session, and "auth" / "callback" must be in KNOWN_ROUTES so they
+    // aren't mistaken for location slugs.
+    expect(middlewareSource).toContain("@workos-inc/authkit-nextjs");
+    expect(middlewareSource).toMatch(/authkit\s*\(/);
+    expect(middlewareSource).toContain('"auth"');
+    expect(middlewareSource).toContain('"callback"');
   });
 });
