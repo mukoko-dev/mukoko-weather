@@ -56,7 +56,7 @@ describe("HomeLanding — detected city state", () => {
 
   it("links to explore for choosing a different city", () => {
     expect(source).toContain('href="/explore"');
-    expect(source).toContain("Choose a different city");
+    expect(source).toContain("Choose a city");
   });
 
   it("cleans up timers on unmount", () => {

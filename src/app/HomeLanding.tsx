@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { WeatherLocation } from "@/lib/locations";
 import { detectUserLocation } from "@/lib/geolocation";
 import { MapPinIcon, SearchIcon, NavigationIcon } from "@/lib/weather-icons";
+import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
 
 interface Props {
   detectedLocation: WeatherLocation | null;
@@ -17,7 +18,7 @@ const REDIRECT_DELAY_MS = 2000;
 
 /**
  * Home landing — three-stage location pipeline:
- * 1. IP geo detected (server-side, no prompt): "Taking you to [City]..." countdown
+ * 1. IP geo detected (server-side, no prompt): weather scene + "Taking you to [City]..." countdown
  * 2. "Use my current location" button: explicit browser GPS (user-triggered only)
  * 3. "Browse all locations": search / explore
  */
@@ -63,30 +64,16 @@ export function HomeLanding({ detectedLocation }: Props) {
     }
   };
 
-  return (
-    <main
-      id="main-content"
-      className="flex min-h-[calc(100dvh-4rem)] flex-col items-center justify-center px-4 py-12"
-      aria-label="Location selection"
-    >
-      <div className="w-full max-w-sm space-y-8 text-center">
-
-        {detectedLocation ? (
-          /* ── Stage 1: IP geo detected ── */
-          <section aria-label="Detected location" className="animate-fade-in space-y-6">
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10" aria-hidden="true">
-                <MapPinIcon size={22} className="text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-text-secondary">Taking you to</p>
-                <h1 className="mt-0.5 text-2xl font-semibold text-text-primary">{detectedLocation.name}</h1>
-                <p className="mt-0.5 text-sm text-text-tertiary">{detectedLocation.province}</p>
-              </div>
-            </div>
-
+  // ── Stage 1: IP geo detected — full weather scene with countdown ──
+  if (detectedLocation && !cancelled.current) {
+    return (
+      <WeatherLoadingScene
+        slug={detectedLocation.slug}
+        statusText={`Taking you to ${detectedLocation.name}…`}
+        action={
+          <div className="flex flex-col items-center gap-3">
             <div
-              className="mx-auto h-1 w-32 overflow-hidden rounded-full bg-surface-dim"
+              className="h-1 w-32 overflow-hidden rounded-full bg-white/20"
               role="progressbar"
               aria-label={`Redirecting in ${countdown} second${countdown !== 1 ? "s" : ""}`}
               aria-valuenow={REDIRECT_DELAY_MS - countdown * 1000}
@@ -94,71 +81,82 @@ export function HomeLanding({ detectedLocation }: Props) {
               aria-valuemax={REDIRECT_DELAY_MS}
             >
               <div
-                className="h-full rounded-full bg-primary transition-all"
+                className="h-full rounded-full bg-white/80 transition-all"
                 style={{ width: `${((REDIRECT_DELAY_MS - countdown * 1000) / REDIRECT_DELAY_MS) * 100}%`, transitionDuration: "1s" }}
               />
             </div>
-
-            <div className="flex flex-col gap-3">
+            <div className="flex gap-3">
               <button
                 type="button"
                 onClick={handleGps}
-                disabled={gpsState === "detecting"}
-                className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center justify-center gap-2 rounded-[var(--radius-button)] border border-text-tertiary/20 px-5 py-3 text-sm font-medium text-text-secondary transition-all hover:border-text-tertiary/40 hover:bg-surface-card hover:text-text-primary disabled:opacity-50"
+                className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center gap-1.5 rounded-[var(--radius-button)] bg-white/15 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur-sm transition-all hover:bg-white/25"
               >
-                <NavigationIcon size={15} aria-hidden="true" />
-                {gpsState === "detecting" ? "Detecting…" : "Use my current location"}
+                <NavigationIcon size={13} aria-hidden="true" />
+                Use GPS instead
               </button>
               <Link
                 href="/explore"
                 onClick={handleCancel}
-                className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center justify-center gap-2 rounded-[var(--radius-button)] border border-text-tertiary/20 px-5 py-3 text-sm font-medium text-text-secondary transition-all hover:border-text-tertiary/40 hover:bg-surface-card hover:text-text-primary"
+                className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center gap-1.5 rounded-[var(--radius-button)] bg-white/15 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur-sm transition-all hover:bg-white/25"
               >
-                <SearchIcon size={15} aria-hidden="true" />
-                Choose a different city
+                <SearchIcon size={13} aria-hidden="true" />
+                Choose a city
               </Link>
             </div>
+          </div>
+        }
+      />
+    );
+  }
 
-            {(gpsState === "denied" || gpsState === "error") && (
-              <p className="text-sm text-severity-moderate" role="alert">
-                {gpsState === "denied" ? "Location access denied — please search for your city." : "Could not detect location — please search for your city."}
-              </p>
-            )}
-          </section>
-        ) : (
-          /* ── Stages 2 + 3: No IP geo — GPS button + browse ── */
-          <section aria-label="Find your location" className="animate-fade-in space-y-6">
-            <div>
-              <h1 className="text-2xl font-semibold text-text-primary">Find your weather</h1>
-              <p className="mt-2 text-sm text-text-secondary">Use your device location or search for any city worldwide.</p>
-            </div>
+  // ── Stage 2: GPS detecting — full weather scene while waiting ──
+  if (gpsState === "detecting") {
+    return (
+      <WeatherLoadingScene
+        statusText="Detecting your location…"
+      />
+    );
+  }
 
-            <div className="flex flex-col gap-3">
-              <button
-                type="button"
-                onClick={handleGps}
-                disabled={gpsState === "detecting"}
-                className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center justify-center gap-2 rounded-[var(--radius-button)] bg-primary px-5 py-3 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-md disabled:opacity-50"
-              >
-                <NavigationIcon size={15} aria-hidden="true" />
-                {gpsState === "detecting" ? "Detecting…" : "Use my current location"}
-              </button>
-              <Link
-                href="/explore"
-                className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center justify-center gap-2 rounded-[var(--radius-button)] border border-text-tertiary/20 px-5 py-3 text-sm font-medium text-text-secondary transition-all hover:border-text-tertiary/40 hover:bg-surface-card hover:text-text-primary"
-              >
-                <SearchIcon size={15} aria-hidden="true" />
-                Browse all locations
-              </Link>
-            </div>
+  // ── Stages 2+3: No IP geo or GPS done — city chooser ──
+  return (
+    <main
+      id="main-content"
+      className="flex min-h-[calc(100dvh-4rem)] flex-col items-center justify-center px-4 py-12"
+      aria-label="Location selection"
+    >
+      <div className="w-full max-w-sm space-y-8 text-center">
+        <section aria-label="Find your location" className="animate-fade-in space-y-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-text-primary">Find your weather</h1>
+            <p className="mt-2 text-sm text-text-secondary">Use your device location or search for any city worldwide.</p>
+          </div>
 
-            {(gpsState === "denied" || gpsState === "error") && (
-              <p className="text-sm text-severity-moderate" role="alert">
-                {gpsState === "denied" ? "Location access denied — please search for your city." : "Could not detect location — please search for your city."}
-              </p>
-            )}
-          </section>
-        )}
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={handleGps}
+              disabled={gpsState === "detecting"}
+              className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center justify-center gap-2 rounded-[var(--radius-button)] bg-primary px-5 py-3 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-md disabled:opacity-50"
+            >
+              <NavigationIcon size={15} aria-hidden="true" />
+              Use my current location
+            </button>
+            <Link
+              href="/explore"
+              className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center justify-center gap-2 rounded-[var(--radius-button)] border border-text-tertiary/20 px-5 py-3 text-sm font-medium text-text-secondary transition-all hover:border-text-tertiary/40 hover:bg-surface-card hover:text-text-primary"
+            >
+              <SearchIcon size={15} aria-hidden="true" />
+              Browse all locations
+            </Link>
+          </div>
+
+          {(gpsState === "denied" || gpsState === "error") && (
+            <p className="text-sm text-severity-moderate" role="alert">
+              {gpsState === "denied" ? "Location access denied — please search for your city." : "Could not detect location — please search for your city."}
+            </p>
+          )}
+        </section>
       </div>
     </main>
   );
