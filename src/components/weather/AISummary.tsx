@@ -131,7 +131,7 @@ export function AISummary({ weather, location, onSummaryLoaded }: Props) {
       <div className="rounded-[var(--radius-card)] border border-mineral-sodalite/25 border-l-[6px] border-l-mineral-sodalite bg-surface-card p-4 shadow-sm">
         <div className="flex items-center gap-2">
           <SparklesIcon size={16} className="text-mineral-sodalite" />
-          <h2 className="text-base font-semibold text-text-primary font-heading">
+          <h2 className="giraffe">
             Shamwari Weather Insight
           </h2>
         </div>

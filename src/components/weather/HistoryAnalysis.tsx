@@ -122,7 +122,7 @@ export function HistoryAnalysis({
         </div>
         <h2
           id="history-analysis-heading"
-          className="text-base font-semibold text-text-primary font-heading"
+          className="giraffe"
         >
           AI Analysis
         </h2>

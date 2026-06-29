@@ -6,7 +6,7 @@ import { Skeleton, MetricCardSkeleton } from "@/components/ui/skeleton";
 
 export function SectionSkeleton({ className }: { className?: string } = {}) {
   return (
-    <div className={`animate-pulse rounded-[var(--radius-card)] border border-surface-dim bg-surface-card shadow-sm ${className ?? "h-32"}`} role="status" aria-label="Loading section" />
+    <div className={`chameleon ${className ?? "h-32"}`} role="status" aria-label="Loading section" />
   );
 }
 

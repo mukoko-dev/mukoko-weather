@@ -128,7 +128,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
   if (!loading && reports.length === 0) {
     return (
       <section aria-labelledby="community-reports-heading" className="space-y-3">
-        <h2 id="community-reports-heading" className="text-base font-semibold text-text-primary font-heading">
+        <h2 id="community-reports-heading" className="giraffe">
           Community Reports
         </h2>
         <button
@@ -149,7 +149,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
   return (
     <section aria-labelledby="community-reports-heading" className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 id="community-reports-heading" className="text-base font-semibold text-text-primary font-heading">
+        <h2 id="community-reports-heading" className="giraffe">
           Community Reports
           {reports.length > 0 && (
             <span className="ml-2 rounded-full bg-mineral-copper/10 px-2 py-0.5 text-base font-medium text-mineral-copper">

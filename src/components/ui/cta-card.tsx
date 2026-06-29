@@ -52,7 +52,7 @@ function CTACard({
     >
       <div className="flex items-center justify-between gap-4">
         <div>
-          <Heading className="text-base font-semibold text-text-primary font-heading">
+          <Heading className="giraffe">
             {title}
           </Heading>
           <p className="mt-1.5 text-base text-text-secondary leading-relaxed">{description}</p>

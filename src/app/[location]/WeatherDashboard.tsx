@@ -399,7 +399,7 @@ export function WeatherDashboard({
             <LazySection label="location-info" fallback={<LocationInfoSkeleton />}>
               <section aria-labelledby={`about-${location.slug}`}>
                 <div className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-4 shadow-sm">
-                  <h2 id={`about-${location.slug}`} className="text-base font-semibold text-text-primary font-heading">
+                  <h2 id={`about-${location.slug}`} className="giraffe">
                     About {location.name}
                   </h2>
                   <dl className="mt-3 space-y-2 text-base">

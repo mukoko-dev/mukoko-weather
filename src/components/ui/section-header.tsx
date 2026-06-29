@@ -34,7 +34,7 @@ function SectionHeader({
       className={cn("flex items-center justify-between gap-2", className)}
       {...props}
     >
-      <Tag id={headingId} className="text-base font-semibold text-text-primary font-heading">
+      <Tag id={headingId} className="giraffe">
         {title}
       </Tag>
       {action && (

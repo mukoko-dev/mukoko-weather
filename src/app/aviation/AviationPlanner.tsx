@@ -183,7 +183,7 @@ function AirportBriefingCard({ briefing, title }: { briefing: AirportBriefing; t
   return (
     <section aria-labelledby={`${briefing.icao}-heading`} className="space-y-3">
       <div className="flex items-center gap-3">
-        <h2 id={`${briefing.icao}-heading`} className="text-base font-semibold text-text-primary font-heading">
+        <h2 id={`${briefing.icao}-heading`} className="giraffe">
           {title}: <span className="font-mono text-primary">{briefing.icao}</span> — {briefing.name}
         </h2>
         {latest && <FlightCategoryBadge fc={latest.flight_category} />}

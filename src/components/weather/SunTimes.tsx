@@ -17,8 +17,8 @@ export function SunTimes({ daily }: Props) {
 
   return (
     <section aria-labelledby="sun-times-heading">
-      <div className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-4 shadow-sm">
-        <h2 id="sun-times-heading" className="text-base font-semibold text-text-primary font-heading">Sun</h2>
+      <div className="baobab">
+        <h2 id="sun-times-heading" className="giraffe">Sun</h2>
         <div className="mt-3 flex flex-wrap gap-4">
           <div className="flex items-center gap-2">
             <SunriseIcon size={20} className="text-warmth" aria-hidden="true" />

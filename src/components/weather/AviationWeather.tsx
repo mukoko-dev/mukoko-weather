@@ -102,7 +102,7 @@ export function AviationWeather({ slug: _slug, icao }: Props) {
   if (loading) {
     return (
       <section aria-labelledby={headingId} aria-label="Loading aviation weather">
-        <div className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-4 shadow-sm" role="status" aria-label="Loading">
+        <div className="baobab" role="status" aria-label="Loading">
           <Skeleton className="h-5 w-48 mb-4" />
           <Skeleton className="h-4 w-full mb-2" />
           <Skeleton className="h-4 w-3/4 mb-4" />
@@ -115,8 +115,8 @@ export function AviationWeather({ slug: _slug, icao }: Props) {
   if (error || !data) {
     return (
       <section aria-labelledby={headingId}>
-        <div className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-4 shadow-sm">
-          <h2 id={headingId} className="text-base font-semibold text-text-primary font-heading">
+        <div className="baobab">
+          <h2 id={headingId} className="giraffe">
             Aviation Weather · {icao}
           </h2>
           <p className="mt-3 text-sm text-text-tertiary">Aviation data temporarily unavailable.</p>
@@ -127,8 +127,8 @@ export function AviationWeather({ slug: _slug, icao }: Props) {
 
   return (
     <section aria-labelledby={headingId}>
-      <div className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-4 shadow-sm">
-        <h2 id={headingId} className="text-base font-semibold text-text-primary font-heading">
+      <div className="baobab">
+        <h2 id={headingId} className="giraffe">
           Aviation Weather · {data.icao}
         </h2>
 

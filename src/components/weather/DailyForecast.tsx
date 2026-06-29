@@ -27,8 +27,8 @@ export function DailyForecast({ daily }: Props) {
 
   return (
     <section aria-labelledby="daily-forecast-heading">
-      <div className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-4 shadow-sm">
-        <h2 id="daily-forecast-heading" className="text-base font-semibold text-text-primary font-heading">{daily.time.length}-Day Forecast</h2>
+      <div className="baobab">
+        <h2 id="daily-forecast-heading" className="giraffe">{daily.time.length}-Day Forecast</h2>
         <DailyChart daily={daily} />
         <div className="stagger-children mt-3 space-y-1.5" role="list" aria-label="7-day weather forecast">
           {daily.time.map((date, i) => {
