@@ -30,6 +30,9 @@ import {
   _resetSearchFlags,
   getLocationCount,
   VALID_CONDITION_FIELDS,
+  stampPlatformFields,
+  PLATFORM_SCHEMA_VERSION,
+  DEFAULT_COUNTRY_CODE,
 } from "./db";
 import { REGIONS } from "./seed-regions";
 import { TAGS } from "./seed-tags";
@@ -574,5 +577,90 @@ describe("VALID_CONDITION_FIELDS", () => {
         ).toBe(true);
       }
     }
+  });
+});
+
+describe("stampPlatformFields", () => {
+  it("exposes the expected schema version + default country", () => {
+    expect(PLATFORM_SCHEMA_VERSION).toBe("v3.1");
+    expect(DEFAULT_COUNTRY_CODE).toBe("ZW");
+  });
+
+  it("stamps all required fields on an empty doc", () => {
+    const result = stampPlatformFields({});
+    expect(typeof result._id).toBe("string");
+    expect(result._id.length).toBeGreaterThan(0);
+    expect(result._schemaVersion).toBe("v3.1");
+    expect(result.createdAt).toBeInstanceOf(Date);
+    expect(result.updatedAt).toBeInstanceOf(Date);
+    expect(result.bundu).toEqual({ countryCode: "ZW" });
+  });
+
+  it("defaults country code to ZW", () => {
+    const result = stampPlatformFields({});
+    expect(result.bundu.countryCode).toBe("ZW");
+  });
+
+  it("respects the countryCode option", () => {
+    const result = stampPlatformFields({}, { countryCode: "KE" });
+    expect(result.bundu.countryCode).toBe("KE");
+  });
+
+  it("includes provinceSlug when provided", () => {
+    const result = stampPlatformFields({}, { countryCode: "ZW", provinceSlug: "harare" });
+    expect(result.bundu.provinceSlug).toBe("harare");
+  });
+
+  it("omits provinceSlug when not provided", () => {
+    const result = stampPlatformFields({}, { countryCode: "ZW" });
+    expect(result.bundu.provinceSlug).toBeUndefined();
+  });
+
+  it("preserves an existing _id", () => {
+    const result = stampPlatformFields({ _id: "abc-123" });
+    expect(result._id).toBe("abc-123");
+  });
+
+  it("preserves an existing _schemaVersion (e.g. v3.2)", () => {
+    const result = stampPlatformFields({ _schemaVersion: "v3.2" });
+    expect(result._schemaVersion).toBe("v3.2");
+  });
+
+  it("preserves an existing createdAt", () => {
+    const original = new Date("2024-01-01T00:00:00Z");
+    const result = stampPlatformFields({ createdAt: original });
+    expect(result.createdAt).toBe(original);
+  });
+
+  it("always refreshes updatedAt", () => {
+    const original = new Date("2024-01-01T00:00:00Z");
+    const result = stampPlatformFields({ updatedAt: original });
+    expect(result.updatedAt).not.toBe(original);
+    expect(result.updatedAt.getTime()).toBeGreaterThan(original.getTime());
+  });
+
+  it("preserves existing bundu fields and only adds missing ones", () => {
+    const result = stampPlatformFields(
+      { bundu: { countryCode: "TZ", verificationTier: 2, trustSignals: ["caretaker"] } },
+      { countryCode: "ZW" },
+    );
+    // Existing countryCode kept, not overwritten
+    expect(result.bundu.countryCode).toBe("TZ");
+    expect((result.bundu as Record<string, unknown>).verificationTier).toBe(2);
+    expect((result.bundu as Record<string, unknown>).trustSignals).toEqual(["caretaker"]);
+  });
+
+  it("mutates the input document in place", () => {
+    const doc: Record<string, unknown> = { name: "test" };
+    const result = stampPlatformFields(doc);
+    expect(result).toBe(doc);
+    expect(doc.name).toBe("test");
+    expect(doc._schemaVersion).toBe("v3.1");
+  });
+
+  it("generates unique _id values across calls", () => {
+    const a = stampPlatformFields({});
+    const b = stampPlatformFields({});
+    expect(a._id).not.toBe(b._id);
   });
 });
