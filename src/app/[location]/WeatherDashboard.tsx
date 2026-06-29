@@ -43,7 +43,7 @@ import { InfoRow } from "@/components/ui/info-row";
 import { SupportBanner } from "@/components/weather/SupportBanner";
 import { DraggableSection } from "@/components/weather/DraggableSection";
 import { LiveClock } from "@/components/weather/LiveClock";
-import { getIcaoForSlug } from "@/lib/icao-codes";
+import { getIcaoForSlug, getNearestIcao } from "@/lib/icao-codes";
 import { cacheWeatherHint } from "@/lib/weather-scenes";
 
 // ── Code-split heavy components ─────────────────────────────────────────────
@@ -90,7 +90,7 @@ export function WeatherDashboard({
   const setSectionOrder = useAppStore((s) => s.setSectionOrder);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
-  const icao = getIcaoForSlug(location.slug);
+  const icao = getIcaoForSlug(location.slug) ?? getNearestIcao(location.lat, location.lon);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -182,13 +182,37 @@ export function WeatherDashboard({
         </ol>
       </nav>
 
-      <LiveClock />
+      {/* Clock + customise layout — same row, no extra vertical space */}
+      <div className="mx-auto max-w-7xl px-4 pt-1 pb-0 sm:px-6 md:px-8 flex items-center justify-between">
+        <LiveClock />
+        {reordering ? (
+          <button
+            type="button"
+            onClick={() => setReordering(false)}
+            className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90"
+          >
+            Done
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setReordering(true)}
+            className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center gap-1.5 rounded-full border border-text-tertiary/20 px-3 py-1 text-sm text-text-tertiary transition-all hover:border-text-tertiary/40 hover:text-text-secondary"
+            aria-label="Customise section layout"
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M5 3a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 7a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 11a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2z" />
+            </svg>
+            Customise layout
+          </button>
+        )}
+      </div>
 
       {/* pb-24 reserves space on mobile for a future sticky bottom nav bar;
           sm:pb-6 restores normal padding on larger screens where there is no nav bar. */}
       <main
         id="main-content"
-        className="animate-fade-in mx-auto max-w-7xl overflow-x-hidden px-4 py-5 pb-20 sm:px-6 sm:pb-6 md:px-8"
+        className="animate-fade-in mx-auto max-w-7xl overflow-x-hidden px-4 py-3 pb-20 sm:px-6 sm:pb-6 md:px-8"
         aria-label={`Weather dashboard for ${location.name}`}
       >
         {/* H1 for SEO — visually integrated but semantically correct */}
@@ -209,31 +233,6 @@ export function WeatherDashboard({
 
         {/* Frost alert banner */}
         {frostAlert && <FrostAlertBanner alert={frostAlert} />}
-
-        {/* Customise layout toggle */}
-        <div className="mb-3 flex justify-end">
-          {reordering ? (
-            <button
-              type="button"
-              onClick={() => setReordering(false)}
-              className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90"
-            >
-              Done
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setReordering(true)}
-              className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center gap-1.5 rounded-full border border-text-tertiary/20 px-3 py-1 text-sm text-text-tertiary transition-all hover:border-text-tertiary/40 hover:text-text-secondary"
-              aria-label="Customise section layout"
-            >
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                <path d="M5 3a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 7a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 11a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2z" />
-              </svg>
-              Customise layout
-            </button>
-          )}
-        </div>
 
         {/* Main grid: mobile = 1 col, lg = 3 col (2+1), xl = 4 col (3+1) */}
         <div className="grid gap-4 lg:grid-cols-3 lg:gap-6 xl:grid-cols-4">

@@ -79,7 +79,7 @@ describe("PWAInstallPrompt — accessibility", () => {
   });
 
   it("install button has 56px height touch target", () => {
-    expect(src).toContain("h-14");
+    expect(src).toContain("min-h-[var(--touch-target-min)]");
   });
 });
 

@@ -26,7 +26,7 @@ export function LiveClock() {
   if (!label) return null;
 
   return (
-    <p className="mx-auto max-w-7xl px-4 pt-1 text-sm text-text-tertiary sm:px-6 md:px-8" aria-label={`Current time: ${label}`}>
+    <p className="text-sm text-text-tertiary" aria-label={`Current time: ${label}`}>
       {label}
     </p>
   );

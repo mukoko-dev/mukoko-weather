@@ -80,49 +80,36 @@ export function Header() {
         <nav aria-label="Primary navigation" className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 md:px-8">
           {/* Brand mark — icon + "weather" (Netflix-style icon recognition) */}
           <div className="flex flex-1 min-w-0 items-center sm:flex-none">
-            <Link href="/" aria-label="mukoko weather — return to home page" className="mx-auto sm:mx-0">
-              <MukokoLogo className="text-xl sm:text-2xl" />
+            <Link
+              href="/"
+              aria-label="mukoko weather — return to home page"
+              className="mx-auto sm:mx-0 flex items-center"
+            >
+              <MukokoLogo />
             </Link>
           </div>
 
           {/* Desktop nav links — hidden on mobile where bottom nav is used */}
-          <div className="hidden sm:flex items-center gap-1">
-            <Link
-              href="/explore"
-              prefetch={false}
-              className={`rounded-[var(--radius-input)] px-4 py-2.5 text-base font-medium transition-colors ${
-                isExplore ? "text-primary bg-primary/10" : "text-text-secondary hover:text-text-primary hover:bg-surface-base"
-              }`}
-            >
-              Explore
-            </Link>
-            <Link
-              href="/shamwari"
-              prefetch={false}
-              className={`rounded-[var(--radius-input)] px-4 py-2.5 text-base font-medium transition-colors ${
-                isShamwari ? "text-primary bg-primary/10" : "text-text-secondary hover:text-text-primary hover:bg-surface-base"
-              }`}
-            >
-              Shamwari
-            </Link>
-            <Link
-              href="/history"
-              prefetch={false}
-              className={`rounded-[var(--radius-input)] px-4 py-2.5 text-base font-medium transition-colors ${
-                isHistory ? "text-primary bg-primary/10" : "text-text-secondary hover:text-text-primary hover:bg-surface-base"
-              }`}
-            >
-              History
-            </Link>
-            <Link
-              href="/aviation"
-              prefetch={false}
-              className={`rounded-[var(--radius-input)] px-4 py-2.5 text-base font-medium transition-colors ${
-                isAviation ? "text-primary bg-primary/10" : "text-text-secondary hover:text-text-primary hover:bg-surface-base"
-              }`}
-            >
-              Aviation
-            </Link>
+          <div className="hidden sm:flex items-center gap-0.5">
+            {[
+              { href: "/explore", label: "Explore", active: isExplore },
+              { href: "/shamwari", label: "Shamwari", active: isShamwari },
+              { href: "/history", label: "History", active: isHistory },
+              { href: "/aviation", label: "Aviation", active: isAviation },
+            ].map(({ href, label, active }) => (
+              <Link
+                key={href}
+                href={href}
+                prefetch={false}
+                className={`rounded-full px-4 py-1.5 text-base font-medium transition-colors leading-none ${
+                  active
+                    ? "text-primary bg-primary/10"
+                    : "text-text-secondary hover:text-text-primary hover:bg-surface-dim"
+                }`}
+              >
+                {label}
+              </Link>
+            ))}
           </div>
 
           {/* Action pill — 3 quick actions: Maps, Report, My Weather */}
