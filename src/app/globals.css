@@ -4,6 +4,14 @@
 
 @custom-variant dark (&:is([data-theme="dark"] *));
 
+/* Tailwind v4: declare press-scale as a utility so .kudu / .kudu-sm can @apply it. */
+@utility press-scale {
+  transition: transform 100ms ease;
+  &:active {
+    transform: scale(0.97);
+  }
+}
+
 /* ===== Mukoko Weather Brand System v7 — Seven African Minerals · doctrine v4.1.0 =====
    Token source: nyuchi_design_db → component_documents (collection=styling-minerals)
    If you change brand color tokens below, also update src/app/api/og/route.tsx brand object
@@ -968,13 +976,7 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-/* Button press scale — subtle haptic-like feedback */
-.press-scale {
-  transition: transform 100ms ease;
-}
-.press-scale:active {
-  transform: scale(0.97);
-}
+/* .press-scale is defined as a Tailwind v4 @utility at the top of this file. */
 
 /* Staggered children entrance — each child fades in with delay.
    Only applied when the user has not requested reduced motion. */
