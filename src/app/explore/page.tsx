@@ -132,7 +132,7 @@ export default async function ExplorePage() {
                   className="group card-interactive baobab p-5 focus-visible:outline-2 focus-visible:outline-primary"
                 >
                   <div className="flex items-start justify-between">
-                    <h3 className="text-base font-semibold text-text-primary font-heading group-hover:text-primary transition-colors">
+                    <h3 className="giraffe group-hover:text-primary transition-colors">
                       {meta.label}
                     </h3>
                     <span className="rounded-full bg-primary/10 px-2.5 py-1 text-base font-medium text-primary">

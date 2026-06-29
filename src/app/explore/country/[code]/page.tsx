@@ -127,7 +127,7 @@ export default async function CountryDetailPage({ params }: Props) {
                   className="group rounded-[var(--radius-card)] bg-surface-card p-5 shadow-sm transition-all hover:shadow-md hover:bg-surface-card/80 focus-visible:outline-2 focus-visible:outline-primary"
                 >
                   <div className="flex items-start justify-between">
-                    <h2 className="text-base font-semibold text-text-primary font-heading group-hover:text-primary transition-colors">
+                    <h2 className="giraffe group-hover:text-primary transition-colors">
                       {province.name}
                     </h2>
                     <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-base font-medium text-primary shrink-0 ml-2">

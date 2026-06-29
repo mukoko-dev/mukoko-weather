@@ -139,7 +139,7 @@ export default async function ProvinceDetailPage({ params }: Props) {
             <Link
               key={loc.slug}
               href={`/${loc.slug}`}
-              className="group rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm transition-all hover:shadow-md hover:bg-surface-card/80 focus-visible:outline-2 focus-visible:outline-primary"
+              className="group pangolin transition-all hover:shadow-md hover:bg-surface-card/80 focus-visible:outline-2 focus-visible:outline-primary"
             >
               <h2 className="font-medium text-text-primary group-hover:text-primary transition-colors">
                 {loc.name}
