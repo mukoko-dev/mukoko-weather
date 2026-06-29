@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components";
+import { withAuth } from "@workos-inc/authkit-nextjs";
 import { MineralsStripe } from "@/components/brand/MineralsStripe";
 import { ThemeProvider } from "@/components/brand/ThemeProvider";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
@@ -85,11 +87,32 @@ export const metadata: Metadata = {
   verification: {},
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Hydrate AuthKitProvider with the server-resolved session so client
+  // components (UserMenu, etc.) render with the right state on first paint
+  // instead of fetching it. `accessToken` is stripped — the client never
+  // needs it; server reads via withAuth() are always fresh.
+  // Wrapped in try/catch: AuthKit throws when its env vars are missing,
+  // and we don't want that to break the entire layout in dev.
+  let initialAuth: Parameters<typeof AuthKitProvider>[0]["initialAuth"];
+  try {
+    const auth = await withAuth();
+    // Strip accessToken — the client doesn't need it and we don't want it in
+    // the HTML payload. The `as unknown as` shuffle is intentional: AuthKit's
+    // union type (UserInfo | NoUserInfo) doesn't satisfy Record<string, unknown>
+    // structurally even though it always is one at runtime.
+    const { accessToken: _accessToken, ...rest } = auth as unknown as {
+      accessToken?: string;
+    } & Record<string, unknown>;
+    void _accessToken;
+    initialAuth = rest as typeof initialAuth;
+  } catch {
+    initialAuth = undefined;
+  }
   // Schema.org structured data for WebApplication
   const webAppSchema = {
     "@context": "https://schema.org",
@@ -308,13 +331,15 @@ export default function RootLayout({
         >
           Skip to main content
         </a>
-        <ThemeProvider>
-          <MineralsStripe />
-          <div className="overflow-x-hidden pl-0 min-[480px]:pl-2">
-            {children}
-          </div>
-          <PWAInstallPrompt />
-        </ThemeProvider>
+        <AuthKitProvider initialAuth={initialAuth}>
+          <ThemeProvider>
+            <MineralsStripe />
+            <div className="overflow-x-hidden pl-0 min-[480px]:pl-2">
+              {children}
+            </div>
+            <PWAInstallPrompt />
+          </ThemeProvider>
+        </AuthKitProvider>
         <Analytics />
       </body>
     </html>

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
 import { MapPinIcon, ClockIcon, SparklesIcon, MegaphoneIcon, LayersIcon } from "@/lib/weather-icons";
 import { useAppStore } from "@/lib/store";
+import { UserMenu } from "@/components/auth/UserMenu";
 
 // Code-split: MyWeatherModal imports LOCATIONS (154 items), ACTIVITIES (20 items),
 // geolocation, router, etc. Lazy-loading prevents this from bloating the initial
@@ -109,37 +110,41 @@ export function Header() {
             ))}
           </nav>
 
-          {/* Action pill — 3 quick actions: Maps, Report, My Weather */}
+          {/* Action pill — quick actions: Maps, Report, My Weather + auth slot */}
           {/* 44px buttons, 18px icons — compact desktop pill */}
-          <div
-            className="flex shrink-0 items-center gap-0.5 rounded-full bg-primary p-0.5"
-            role="toolbar"
-            aria-label="Quick actions"
-          >
-            <Link
-              href={`/${selectedLocation || "harare"}/map`}
-              prefetch={false}
-              aria-label="Weather map"
-              className="bee"
+          <div className="flex shrink-0 items-center gap-2">
+            <div
+              className="flex items-center gap-0.5 rounded-full bg-primary p-0.5"
+              role="toolbar"
+              aria-label="Quick actions"
             >
-              <LayersIcon size={20} className="text-primary-foreground" />
-            </Link>
-            <button
-              onClick={openReportModal}
-              aria-label="Report current weather"
-              className="bee"
-              type="button"
-            >
-              <MegaphoneIcon size={20} className="text-primary-foreground" />
-            </button>
-            <button
-              onClick={openMyWeather}
-              aria-label="Open My Weather preferences"
-              className="bee"
-              type="button"
-            >
-              <MapPinIcon size={20} className="text-primary-foreground" />
-            </button>
+              <Link
+                href={`/${selectedLocation || "harare"}/map`}
+                prefetch={false}
+                aria-label="Weather map"
+                className="bee"
+              >
+                <LayersIcon size={20} className="text-primary-foreground" />
+              </Link>
+              <button
+                onClick={openReportModal}
+                aria-label="Report current weather"
+                className="bee"
+                type="button"
+              >
+                <MegaphoneIcon size={20} className="text-primary-foreground" />
+              </button>
+              <button
+                onClick={openMyWeather}
+                aria-label="Open My Weather preferences"
+                className="bee"
+                type="button"
+              >
+                <MapPinIcon size={20} className="text-primary-foreground" />
+              </button>
+            </div>
+            {/* WorkOS AuthKit auth slot — UserMenu reads `useAuth()` from AuthKitProvider */}
+            <UserMenu />
           </div>
         </nav>
       </header>

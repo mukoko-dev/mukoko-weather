@@ -68,10 +68,31 @@ OIDC-compliant. Already supports WorkOS + Stytch. **This is where mukoko's users
 
 | Collection | Purpose | Notes for mukoko |
 |---|---|---|
-| `persons` | Canonical user records. `_id` is UUID used as OIDC `sub` claim. | Has `workosUserId`, `stytchUserId`, `preferredLanguages`, `bundu.familyMembership`, `bundu.verificationTier` (0-3). On WorkOS sign-in, upsert by `workosUserId`. |
-| `credentials` | Per-person credentials (password, passkey, WebAuthn, OAuth, TOTP, etc.) | `provider: "workos"` is a first-class supported value. |
-| `activityLog` | Audit trail of signup/signin/MFA/credential events | Mukoko should write `{eventType: "signin", surfaceContext: "mukoko-weather"}` on every auth event. |
+| `persons` | Canonical user records. `_id` is UUID used as OIDC `sub` claim. | Has `workosUserId`, `stytchUserId`, `preferredLanguages`, `bundu.familyMembership`, `bundu.verificationTier` (0-3). On WorkOS sign-in, upsert by `workosUserId`. **Phase 1a — wired up via `src/lib/auth.ts → upsertPlatformPerson()`.** |
+| `credentials` | Per-person credentials (password, passkey, WebAuthn, OAuth, TOTP, etc.) | `provider: "workos"` is a first-class supported value. Phase 1a writes a `(workos, oauth_token)` credential per person on sign-in, deduped on `(personId, provider, credentialType)`. |
+| `activityLog` | Audit trail of signup/signin/MFA/credential events | Mukoko writes `{eventType: "signin"|"signup", source: "api", surfaceContext: "mukoko-weather", provider: "workos", success: true}` on every WorkOS callback (Phase 1a). |
 | `personSkills` | Skills + ISCO-08 codes per person | Not relevant to mukoko unless integrating activities → skills. |
+
+##### Mukoko auth flow (Phase 1a)
+
+```
+Browser → /auth/signin → getSignInUrl() → WorkOS hosted sign-in
+                                                ↓
+                       /callback ← OAuth code ←
+                          │
+                          ├─ handleAuth() (AuthKit) sets the session cookie
+                          └─ onSuccess(user) → upsertPlatformPerson(user)
+                                                      │
+                                ┌─────────────────────┼─────────────────────┐
+                                ▼                     ▼                     ▼
+                       identity.persons     identity.credentials   identity.activityLog
+                      (dedup by workosUserId    (dedup by             (append-only,
+                       → email → insert)        personId+provider+    eventType=signup
+                                                credentialType)        on first; signin
+                                                                       on subsequent)
+```
+
+The implementation lives in `src/lib/auth.ts`. Dedup is enforced in code (Phase 0E lesson) — `upsertPlatformPerson` never creates a second persons doc for the same WorkOS user, and never creates a second `(workos, oauth_token)` credential for the same person. See `CLAUDE.md` → "Authentication" for the full breakdown.
 
 #### `places` — Locations / geography (P0 dependency, replaces our `locations`)
 
