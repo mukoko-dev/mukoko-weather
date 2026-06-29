@@ -84,7 +84,7 @@ export function SavedLocationsModal() {
 
           {/* Saved locations list */}
           <div className="px-2 pt-2">
-            <h3 className="px-3 pb-2 text-base font-semibold uppercase tracking-wider text-text-tertiary">
+            <h3 className="hornbill px-3 pb-2">
               Saved locations ({savedLocations.length}/{MAX_SAVED_LOCATIONS})
             </h3>
             {savedLocations.length === 0 ? (

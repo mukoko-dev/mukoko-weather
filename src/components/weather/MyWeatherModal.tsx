@@ -457,7 +457,7 @@ function ActivitiesTab({
   return (
     <div className="flex flex-col gap-1">
       <div className="px-4 pt-3 pb-1">
-        <h4 className="text-base font-semibold text-text-primary">
+        <h4 className="giraffe">
           Select activities for personalised weather insights
           {selectedActivities.length > 0 && (
             <span className="ml-2 text-base font-normal text-text-tertiary">
@@ -584,7 +584,7 @@ function SettingsTab() {
 
   return (
     <div className="p-4">
-      <h4 className="mb-3 text-base font-semibold text-text-primary">Appearance</h4>
+      <h4 className="giraffe mb-3">Appearance</h4>
       <div className="space-y-2" role="radiogroup" aria-label="Theme preference">
         {THEME_OPTIONS.map((option) => (
           <button

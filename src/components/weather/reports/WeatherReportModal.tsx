@@ -169,7 +169,7 @@ export function WeatherReportModal() {
             {/* AI clarification questions */}
             {questions.length > 0 && (
               <div className="rounded-[var(--radius-button)] bg-primary/5 p-3">
-                <p className="text-base font-medium text-text-tertiary uppercase tracking-wider mb-2">Help us understand</p>
+                <p className="hornbill font-medium mb-2">Help us understand</p>
                 <ul className="space-y-1 text-base text-text-secondary">
                   {questions.map((q, i) => (
                     <li key={i}>{q}</li>
@@ -213,7 +213,7 @@ export function WeatherReportModal() {
                 placeholder="Add any details about what you're seeing..."
                 rows={2}
                 maxLength={300}
-                className="mt-1 w-full resize-none rounded-[var(--radius-button)] border border-input bg-surface-card px-3 py-2 text-base text-text-primary placeholder:text-text-tertiary outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="crane mt-1 resize-none rounded-[var(--radius-button)]"
               />
               <p className="mt-1 text-base text-text-tertiary">{description.length}/300</p>
             </div>
