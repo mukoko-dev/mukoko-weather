@@ -785,8 +785,10 @@ class TestGeoLookup:
         mock_find = MagicMock()
         mock_find.limit.return_value = []
         mock_coll.return_value.find.return_value = mock_find
-        # find_one calls: suburb slug check (None = available)
+        # find_one calls: 2 new dedup checks (None=no match), then slug checks
         mock_coll.return_value.find_one.side_effect = [
+            None,  # wide_match (no nearby location)
+            None,  # name_match (no name/country match)
             {"slug": "woodlands-sg"},  # base slug exists
             None,  # suburb slug "marsiling-sg" available
         ]
@@ -819,8 +821,10 @@ class TestGeoLookup:
         mock_find = MagicMock()
         mock_find.limit.return_value = []
         mock_coll.return_value.find.return_value = mock_find
-        # find_one calls: base slug (exists), suburb slug (exists), road slug (available)
+        # find_one calls: 2 new dedup checks, then slug collision checks
         mock_coll.return_value.find_one.side_effect = [
+            None,  # wide_match (no nearby location)
+            None,  # name_match (no name/country match)
             {"slug": "woodlands-sg"},  # base exists
             {"slug": "marsiling-sg"},  # suburb exists
             None,  # road slug "woodlands-ave-3-sg" available

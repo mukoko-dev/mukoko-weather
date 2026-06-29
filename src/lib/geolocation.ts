@@ -13,10 +13,14 @@ export interface GeoResult {
 
 /**
  * Request the user's position via the browser Geolocation API
- * and snap to the nearest location via the /api/geo endpoint.
- * If no nearby location exists, auto-creates one via reverse geocoding.
+ * and snap to the nearest location via the /api/py/geo endpoint.
+ *
+ * @param autoCreate - If true, auto-creates a new location via reverse geocoding when
+ *   none is found nearby. Default false — find nearest only, never create duplicates.
+ *   Only pass true when the user explicitly wants to add their position to the DB
+ *   (e.g. "Save my location" in SavedLocationsModal).
  */
-export function detectUserLocation(): Promise<GeoResult> {
+export function detectUserLocation({ autoCreate = false }: { autoCreate?: boolean } = {}): Promise<GeoResult> {
   return new Promise((resolve) => {
     if (!("geolocation" in navigator)) {
       resolve({ status: "unavailable", location: null, coords: null, distanceKm: null });
@@ -28,7 +32,7 @@ export function detectUserLocation(): Promise<GeoResult> {
         const { latitude, longitude } = position.coords;
 
         try {
-          const res = await fetch(`/api/py/geo?lat=${latitude}&lon=${longitude}&autoCreate=true`);
+          const res = await fetch(`/api/py/geo?lat=${latitude}&lon=${longitude}${autoCreate ? "&autoCreate=true" : ""}`);
           if (!res.ok) {
             resolve({ status: "error", location: null, coords: { lat: latitude, lon: longitude }, distanceKm: null });
             return;

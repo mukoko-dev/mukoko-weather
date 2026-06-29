@@ -233,7 +233,7 @@ function SavedTab({
 
   const handleGeolocate = useCallback(async () => {
     setGeoLoading(true);
-    const result = await detectUserLocation();
+    const result = await detectUserLocation({ autoCreate: true });
     setGeoState(result);
     setGeoLoading(false);
     if ((result.status === "success" || result.status === "created") && result.location) {

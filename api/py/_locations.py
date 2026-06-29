@@ -616,7 +616,48 @@ async def geo_lookup(
                     detail="Could not determine location name",
                 )
 
-            # Duplicate check (1km radius + name/country match)
+            # ── Thorough duplicate checks before creating ─────────────────────
+            # 1) Wide-radius geospatial check (10km) in case the index missed it
+            try:
+                wide_match = locations_collection().find_one(
+                    {
+                        "geo": {
+                            "$near": {
+                                "$geometry": {"type": "Point", "coordinates": [lon, lat]},
+                                "$maxDistance": 10_000,  # 10km
+                            }
+                        }
+                    },
+                    {"_id": 0},
+                )
+                if wide_match:
+                    return {
+                        "nearest": wide_match,
+                        "redirectTo": f"/{wide_match['slug']}",
+                        "isNew": False,
+                    }
+            except Exception:
+                pass
+
+            # 2) Name + country exact match anywhere in the DB (catches index failures)
+            try:
+                name_match = locations_collection().find_one(
+                    {
+                        "name": {"$regex": f"^{geocoded['name']}$", "$options": "i"},
+                        "country": geocoded["country"],
+                    },
+                    {"_id": 0},
+                )
+                if name_match:
+                    return {
+                        "nearest": name_match,
+                        "redirectTo": f"/{name_match['slug']}",
+                        "isNew": False,
+                    }
+            except Exception:
+                pass
+
+            # 3) Standard 1km dedup check
             dedup_km = DEDUP_RADIUS_KM
             duplicate = _find_duplicate(
                 lat, lon, dedup_km,

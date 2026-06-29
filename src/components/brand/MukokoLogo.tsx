@@ -1,24 +1,28 @@
 "use client";
 
 import Image from "next/image";
-import { useAppStore } from "@/lib/store";
+import { useEffect, useState } from "react";
 
 /**
- * Mukoko brand mark — official Seed of Life icon + "weather" wordmark.
- * Uses the brand kit SVGs (logo-light.svg / logo-dark.svg) from /public.
- * Theme-aware: switches between light and dark variant automatically.
+ * Mukoko brand mark — full 7-mineral Seed of Life icon + "weather" wordmark.
+ *
+ * Uses the official brand kit SVGs (logo-light.svg / logo-dark.svg).
+ * Defaults to the light variant for SSR; switches client-side to match
+ * the active theme by watching the data-theme attribute on <html>.
  */
 export function MukokoLogo({ className = "" }: { className?: string }) {
-  const theme = useAppStore((s) => s.theme);
+  const [isDark, setIsDark] = useState(false);
 
-  // Resolve system theme at render time
-  const isDark =
-    theme === "dark" ||
-    (theme === "system" &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
+  useEffect(() => {
+    const html = document.documentElement;
 
-  const src = isDark ? "/logo-dark.svg" : "/logo-light.svg";
+    const update = () => setIsDark(html.dataset.theme === "dark");
+    update();
+
+    const observer = new MutationObserver(update);
+    observer.observe(html, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <span
@@ -26,7 +30,7 @@ export function MukokoLogo({ className = "" }: { className?: string }) {
       aria-label="mukoko weather"
     >
       <Image
-        src={src}
+        src={isDark ? "/logo-dark.svg" : "/logo-light.svg"}
         alt="mukoko mark"
         width={32}
         height={32}

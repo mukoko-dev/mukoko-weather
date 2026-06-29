@@ -147,7 +147,7 @@ function CurrentLocationButton({
 
   const handleGeolocate = useCallback(async () => {
     setGeoLoading(true);
-    const result = await detectUserLocation();
+    const result = await detectUserLocation({ autoCreate: true });
     setGeoState(result);
     setGeoLoading(false);
 
