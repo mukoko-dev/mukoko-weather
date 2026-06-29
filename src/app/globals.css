@@ -615,6 +615,99 @@ body {
   }
 }
 
+/* ====================================================================== */
+/* Fauna — semantic component classes (named after African animals/birds) */
+/* Single source of truth for styles repeated 3+ times across the app.    */
+/* Update once here, every consumer picks it up. Composition over chains. */
+/* ====================================================================== */
+
+@layer components {
+  /* ── Buttons ─────────────────────────────────────────────────────────── */
+
+  /* .kudu — primary pill button (strong, leaping action) */
+  .kudu {
+    @apply inline-flex items-center justify-center gap-2
+           rounded-[var(--radius-button)] bg-primary
+           px-5 py-3 text-sm font-medium text-primary-foreground
+           transition-all hover:bg-primary/90 hover:shadow-md
+           disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  /* .impala — secondary / outline pill button (lighter, paired with kudu) */
+  .impala {
+    @apply inline-flex items-center justify-center gap-2
+           rounded-[var(--radius-button)] border border-border bg-transparent
+           px-5 py-3 text-sm font-medium text-text-secondary
+           transition-all hover:border-text-tertiary/40 hover:bg-surface-card hover:text-text-primary
+           disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  /* .bee — small round icon button (a swarm forms the action pill) */
+  .bee {
+    @apply flex items-center justify-center
+           w-[var(--touch-target-min)] h-[var(--touch-target-min)]
+           rounded-full bg-background/10
+           hover:bg-background/20 active:bg-background/30 active:scale-90
+           transition-all;
+  }
+
+  /* ── Surfaces ────────────────────────────────────────────────────────── */
+
+  /* .baobab — primary card surface (foundational, holds content) */
+  .baobab {
+    @apply rounded-[var(--radius-card)] border border-primary/25
+           bg-surface-card p-4 shadow-sm;
+  }
+
+  /* .acacia — quieter card surface (no primary border, lighter shadow) */
+  .acacia {
+    @apply rounded-[var(--radius-card)] border border-border
+           bg-surface-card p-4;
+  }
+
+  /* ── Typography ──────────────────────────────────────────────────────── */
+
+  /* .giraffe — section heading (tall, stands above its content) */
+  .giraffe {
+    @apply text-base font-semibold text-text-primary font-heading;
+  }
+
+  /* .gazelle — body paragraph copy (light, flowing) */
+  .gazelle {
+    @apply text-base text-text-secondary leading-relaxed;
+  }
+
+  /* .dove — muted secondary text (gentle, recedes) */
+  .dove {
+    @apply text-sm text-text-tertiary;
+  }
+
+  /* ── Navigation ──────────────────────────────────────────────────────── */
+
+  /* .weaver — primary nav link (builds the navigation network) */
+  .weaver {
+    @apply inline-flex items-center text-base font-medium
+           text-text-secondary transition-colors
+           hover:text-text-primary hover:underline hover:underline-offset-4
+           hover:decoration-text-tertiary/50 hover:decoration-2;
+  }
+
+  /* .weaver-active — nav link in active/current state */
+  .weaver-active {
+    @apply inline-flex items-center text-base font-medium
+           text-primary underline underline-offset-4
+           decoration-primary decoration-2;
+  }
+
+  /* ── Loading / Skeleton ──────────────────────────────────────────────── */
+
+  /* .chameleon — skeleton placeholder (changes/loads, blends with background) */
+  .chameleon {
+    @apply animate-pulse rounded-[var(--radius-card)]
+           border border-surface-dim bg-surface-card shadow-sm;
+  }
+}
+
 /* ===== Scrollbar styling ===== */
 .scrollbar-hide::-webkit-scrollbar {
   display: none;

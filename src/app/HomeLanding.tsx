@@ -137,15 +137,12 @@ export function HomeLanding({ detectedLocation }: Props) {
               type="button"
               onClick={handleGps}
               disabled={gpsState === "detecting"}
-              className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center justify-center gap-2 rounded-[var(--radius-button)] bg-primary px-5 py-3 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-md disabled:opacity-50"
+              className="kudu press-scale"
             >
               <NavigationIcon size={15} aria-hidden="true" />
               Use my current location
             </button>
-            <Link
-              href="/explore"
-              className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center justify-center gap-2 rounded-[var(--radius-button)] border border-text-tertiary/20 px-5 py-3 text-sm font-medium text-text-secondary transition-all hover:border-text-tertiary/40 hover:bg-surface-card hover:text-text-primary"
-            >
+            <Link href="/explore" className="impala press-scale">
               <SearchIcon size={15} aria-hidden="true" />
               Browse all locations
             </Link>

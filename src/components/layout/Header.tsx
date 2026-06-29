@@ -102,11 +102,7 @@ export function Header() {
                 href={href}
                 prefetch={false}
                 aria-current={active ? "page" : undefined}
-                className={`inline-flex items-center text-base font-medium transition-colors ${
-                  active
-                    ? "text-primary underline underline-offset-4 decoration-primary decoration-2"
-                    : "text-text-secondary hover:text-text-primary hover:underline hover:underline-offset-4 hover:decoration-text-tertiary/50 hover:decoration-2"
-                }`}
+                className={active ? "weaver-active" : "weaver"}
               >
                 {label}
               </Link>
@@ -124,14 +120,14 @@ export function Header() {
               href={`/${selectedLocation || "harare"}/map`}
               prefetch={false}
               aria-label="Weather map"
-              className="flex items-center justify-center w-[var(--touch-target-min)] h-[var(--touch-target-min)] rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
+              className="bee"
             >
               <LayersIcon size={20} className="text-primary-foreground" />
             </Link>
             <button
               onClick={openReportModal}
               aria-label="Report current weather"
-              className="flex items-center justify-center w-[var(--touch-target-min)] h-[var(--touch-target-min)] rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
+              className="bee"
               type="button"
             >
               <MegaphoneIcon size={20} className="text-primary-foreground" />
@@ -139,7 +135,7 @@ export function Header() {
             <button
               onClick={openMyWeather}
               aria-label="Open My Weather preferences"
-              className="flex items-center justify-center w-[var(--touch-target-min)] h-[var(--touch-target-min)] rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
+              className="bee"
               type="button"
             >
               <MapPinIcon size={20} className="text-primary-foreground" />
