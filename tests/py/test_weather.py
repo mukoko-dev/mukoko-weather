@@ -15,6 +15,10 @@ from py._weather import (
     _get_cached_weather,
     _set_cached_weather,
     _record_weather_history,
+    nearest_station_observation,
+    station_observation_to_current,
+    STATION_MAX_AGE_MINUTES,
+    STATION_MAX_DISTANCE_KM,
     WEATHER_CACHE_TTL,
     get_weather,
 )
@@ -699,3 +703,382 @@ class TestGetWeatherEndpoint:
 
                 response = await get_weather(-17.83, 31.05)
                 assert response.headers.get("x-weather-provider") == "fallback"
+
+
+# ---------------------------------------------------------------------------
+# StationKit — nearest_station_observation
+# ---------------------------------------------------------------------------
+
+
+class TestNearestStationObservation:
+    """Geospatial query against `weather.observations` for ground-truth data."""
+
+    def test_defaults_match_module_constants(self):
+        """Function defaults must align with module-level StationKit constants."""
+        assert STATION_MAX_DISTANCE_KM == 50
+        assert STATION_MAX_AGE_MINUTES == 60
+
+    @patch("py._weather.observations_collection")
+    def test_returns_none_when_no_station_nearby(self, mock_coll):
+        """Empty cursor → returns None (no nearby station)."""
+        mock_cursor = MagicMock()
+        mock_cursor.sort.return_value = mock_cursor
+        mock_cursor.limit.return_value = iter([])  # list(iter([])) == []
+        mock_coll.return_value.find.return_value = mock_cursor
+
+        result = nearest_station_observation(-17.83, 31.05)
+        assert result is None
+
+    @patch("py._weather.observations_collection")
+    def test_returns_latest_observation_when_one_nearby(self, mock_coll):
+        """Cursor with one doc → returns the doc."""
+        observed_at = datetime(2026, 6, 29, 12, 0, tzinfo=timezone.utc)
+        doc = {
+            "_id": "obs-1",
+            "observedAt": observed_at,
+            "qcStatus": "validated",
+            "stationId": "nyuchi-africa-hq-harare",
+            "location": {"type": "Point", "coordinates": [31.05, -17.83]},
+            "metrics": {"airTemperatureCelsius": 22.4},
+        }
+        mock_cursor = MagicMock()
+        mock_cursor.sort.return_value = mock_cursor
+        mock_cursor.limit.return_value = iter([doc])
+        mock_coll.return_value.find.return_value = mock_cursor
+
+        result = nearest_station_observation(-17.83, 31.05)
+        assert result is not None
+        assert result["_id"] == "obs-1"
+        assert result["stationId"] == "nyuchi-africa-hq-harare"
+        assert result["metrics"]["airTemperatureCelsius"] == 22.4
+
+    @patch("py._weather.observations_collection")
+    def test_query_uses_near_sphere_with_max_distance_metres(self, mock_coll):
+        """Geospatial filter is $nearSphere on `location` with $maxDistance in metres."""
+        mock_cursor = MagicMock()
+        mock_cursor.sort.return_value = mock_cursor
+        mock_cursor.limit.return_value = iter([])
+        mock_coll.return_value.find.return_value = mock_cursor
+
+        nearest_station_observation(-17.83, 31.05, max_distance_km=25)
+
+        call_args = mock_coll.return_value.find.call_args
+        query = call_args[0][0]
+        assert "location" in query
+        near = query["location"]["$nearSphere"]
+        assert near["$geometry"]["type"] == "Point"
+        assert near["$geometry"]["coordinates"] == [31.05, -17.83]  # [lon, lat]
+        assert near["$maxDistance"] == 25 * 1000.0
+        assert query["qcStatus"] == "validated"
+        assert "$gte" in query["observedAt"]
+
+    @patch("py._weather.observations_collection")
+    def test_sorts_by_observed_at_descending_and_limits_one(self, mock_coll):
+        """The cursor is sorted observedAt desc and limited to 1."""
+        mock_cursor = MagicMock()
+        mock_cursor.sort.return_value = mock_cursor
+        mock_cursor.limit.return_value = iter([])
+        mock_coll.return_value.find.return_value = mock_cursor
+
+        nearest_station_observation(-17.83, 31.05)
+
+        mock_cursor.sort.assert_called_once_with([("observedAt", -1)])
+        mock_cursor.limit.assert_called_once_with(1)
+
+    @patch("py._weather.observations_collection")
+    def test_returns_none_on_db_exception(self, mock_coll):
+        """Missing 2dsphere index / DB error → returns None gracefully."""
+        mock_coll.return_value.find.side_effect = Exception("no 2dsphere index")
+
+        result = nearest_station_observation(-17.83, 31.05)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# StationKit — station_observation_to_current mapping
+# ---------------------------------------------------------------------------
+
+
+class TestStationObservationToCurrent:
+    """Mapping from platform field names to mukoko's `current` block shape."""
+
+    def test_maps_all_metric_fields(self):
+        observed_at = datetime(2026, 6, 29, 14, 30, tzinfo=timezone.utc)
+        obs = {
+            "observedAt": observed_at,
+            "metrics": {
+                "airTemperatureCelsius": 21.8,
+                "relativeHumidityPercent": 58,
+                "atmosphericPressureMillibar": 1014,
+                "windSpeedKph": 12,
+                "windDirectionDegrees": 195,
+                "precipitationMillimeters": 0.4,
+                "uvIndex": 6,
+                "solarRadiationWattsPerSquareMeter": 720,  # not in current shape, ignored
+            },
+        }
+
+        current = station_observation_to_current(obs)
+        assert current["temperature_2m"] == 21.8
+        assert current["relative_humidity_2m"] == 58
+        assert current["surface_pressure"] == 1014
+        assert current["wind_speed_10m"] == 12
+        assert current["wind_direction_10m"] == 195
+        assert current["precipitation"] == 0.4
+        assert current["uv_index"] == 6
+        # Solar radiation has no slot in the current block — it should be omitted.
+        assert "solarRadiationWattsPerSquareMeter" not in current
+
+    def test_serialises_observed_at_to_isoformat(self):
+        observed_at = datetime(2026, 6, 29, 14, 30, tzinfo=timezone.utc)
+        obs = {"observedAt": observed_at, "metrics": {"airTemperatureCelsius": 20}}
+        current = station_observation_to_current(obs)
+        assert current["time"] == observed_at.isoformat()
+
+    def test_passes_through_string_observed_at(self):
+        obs = {"observedAt": "2026-06-29T14:30:00Z", "metrics": {}}
+        current = station_observation_to_current(obs)
+        assert current["time"] == "2026-06-29T14:30:00Z"
+
+    def test_handles_missing_observed_at(self):
+        """Falls back to "now" when observedAt is absent."""
+        obs = {"metrics": {"airTemperatureCelsius": 20}}
+        current = station_observation_to_current(obs)
+        assert isinstance(current["time"], str) and len(current["time"]) > 0
+
+    def test_missing_metrics_returns_none_values(self):
+        """Fields that the station does not report come back as None — never fabricated."""
+        obs = {"observedAt": datetime(2026, 6, 29, tzinfo=timezone.utc), "metrics": {}}
+        current = station_observation_to_current(obs)
+        assert current["temperature_2m"] is None
+        assert current["relative_humidity_2m"] is None
+        assert current["uv_index"] is None
+
+    def test_handles_null_metrics_block(self):
+        obs = {"observedAt": datetime(2026, 6, 29, tzinfo=timezone.utc), "metrics": None}
+        current = station_observation_to_current(obs)
+        # Should not crash; all measurement fields are None.
+        assert current["temperature_2m"] is None
+
+
+# ---------------------------------------------------------------------------
+# StationKit — endpoint blending
+# ---------------------------------------------------------------------------
+
+
+class TestStationKitEndpointBlending:
+    """The /api/py/weather endpoint replaces `current` with station data when present."""
+
+    @pytest.mark.asyncio
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather.nearest_station_observation")
+    @patch("py._weather._find_nearest_location")
+    async def test_station_hit_with_cache_uses_stationkit_current(
+        self, mock_nearest, mock_station, mock_cache, mock_set, mock_record
+    ):
+        """Station hit + cache hit: current replaced, forecast preserved, header tagged."""
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
+        mock_station.return_value = {
+            "observedAt": datetime(2026, 6, 29, 14, 0, tzinfo=timezone.utc),
+            "metrics": {
+                "airTemperatureCelsius": 19.2,
+                "relativeHumidityPercent": 65,
+            },
+        }
+        mock_cache.return_value = {
+            "data": {
+                "current": {"temperature_2m": 25.0},  # from Tomorrow.io (will be replaced)
+                "hourly": {"time": ["2026-06-29T14:00:00Z"], "temperature_2m": [25.0]},
+                "daily": {"time": ["2026-06-29"], "temperature_2m_max": [27.0]},
+            },
+            "provider": "tomorrow",
+        }
+
+        response = await get_weather(-17.83, 31.05)
+
+        assert response.headers.get("x-cache") == "HIT"
+        assert response.headers.get("x-weather-provider") == "tomorrow"
+        assert response.headers.get("x-current-source") == "stationkit"
+
+    @pytest.mark.asyncio
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._fetch_tomorrow")
+    @patch("py._weather.get_api_key")
+    @patch("py._weather.tomorrow_breaker")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather.nearest_station_observation")
+    @patch("py._weather._find_nearest_location")
+    async def test_station_hit_blends_into_fresh_tomorrow_data(
+        self, mock_nearest, mock_station, mock_cache, mock_breaker, mock_key,
+        mock_fetch, mock_set, mock_record,
+    ):
+        """Station hit + Tomorrow.io fetch: hourly/daily kept, current overlaid."""
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
+        mock_station.return_value = {
+            "observedAt": datetime(2026, 6, 29, 14, 0, tzinfo=timezone.utc),
+            "metrics": {"airTemperatureCelsius": 19.5},
+        }
+        mock_cache.return_value = None
+        mock_breaker.is_allowed = True
+        mock_key.return_value = "fake-tomorrow-key"
+        mock_fetch.return_value = {
+            "current": {"temperature_2m": 24.0},
+            "hourly": {"time": ["t1"], "temperature_2m": [24.0]},
+            "daily": {"time": ["d1"], "temperature_2m_max": [26.0]},
+            "insights": None,
+        }
+
+        response = await get_weather(-17.83, 31.05)
+
+        assert response.headers.get("x-cache") == "MISS"
+        assert response.headers.get("x-weather-provider") == "tomorrow"
+        assert response.headers.get("x-current-source") == "stationkit"
+
+    @pytest.mark.asyncio
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._fetch_tomorrow")
+    @patch("py._weather.get_api_key")
+    @patch("py._weather.tomorrow_breaker")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather.nearest_station_observation")
+    @patch("py._weather._find_nearest_location")
+    async def test_no_station_uses_provider_for_current_source(
+        self, mock_nearest, mock_station, mock_cache, mock_breaker, mock_key,
+        mock_fetch, mock_set, mock_record,
+    ):
+        """No station within range → X-Current-Source matches the provider that filled `current`."""
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
+        mock_station.return_value = None
+        mock_cache.return_value = None
+        mock_breaker.is_allowed = True
+        mock_key.return_value = "fake-tomorrow-key"
+        mock_fetch.return_value = {"current": {"temperature_2m": 24.0}, "hourly": {}, "daily": {}, "insights": None}
+
+        response = await get_weather(-17.83, 31.05)
+
+        assert response.headers.get("x-current-source") == "tomorrow"
+        assert response.headers.get("x-weather-provider") == "tomorrow"
+
+    @pytest.mark.asyncio
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._fetch_open_meteo")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._fetch_tomorrow")
+    @patch("py._weather.get_api_key")
+    @patch("py._weather.tomorrow_breaker")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather.nearest_station_observation")
+    @patch("py._weather._find_nearest_location")
+    async def test_open_meteo_fallback_sets_current_source_open_meteo(
+        self, mock_nearest, mock_station, mock_cache, mock_tmrw_breaker, mock_key,
+        mock_fetch_tmrw, mock_om_breaker, mock_fetch_om, mock_set, mock_record,
+    ):
+        """No station, Tomorrow.io fails, Open-Meteo wins → X-Current-Source: open-meteo."""
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
+        mock_station.return_value = None
+        mock_cache.return_value = None
+        mock_tmrw_breaker.is_allowed = True
+        mock_key.return_value = "fake-tomorrow-key"
+        mock_fetch_tmrw.return_value = None
+        mock_om_breaker.is_allowed = True
+        mock_fetch_om.return_value = {"current": {"temperature_2m": 23.0}, "hourly": {}, "daily": {}, "insights": None}
+
+        response = await get_weather(-17.83, 31.05)
+
+        assert response.headers.get("x-current-source") == "open-meteo"
+        assert response.headers.get("x-weather-provider") == "open-meteo"
+
+    @pytest.mark.asyncio
+    @patch("py._weather._create_fallback_weather")
+    @patch("py._weather._fetch_open_meteo")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._fetch_tomorrow")
+    @patch("py._weather.get_api_key")
+    @patch("py._weather.tomorrow_breaker")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather.nearest_station_observation")
+    @patch("py._weather._find_nearest_location")
+    async def test_fallback_sets_current_source_fallback(
+        self, mock_nearest, mock_station, mock_cache, mock_tmrw_breaker, mock_key,
+        mock_fetch_tmrw, mock_om_breaker, mock_fetch_om, mock_fallback,
+    ):
+        """No station and every provider down → X-Current-Source: fallback."""
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
+        mock_station.return_value = None
+        mock_cache.return_value = None
+        mock_tmrw_breaker.is_allowed = False
+        mock_om_breaker.is_allowed = False
+        mock_fallback.return_value = {
+            "current": {"temperature_2m": 18},
+            "hourly": {},
+            "daily": {},
+            "insights": None,
+        }
+
+        response = await get_weather(-17.83, 31.05)
+        assert response.headers.get("x-current-source") == "fallback"
+        assert response.headers.get("x-weather-provider") == "fallback"
+
+    @pytest.mark.asyncio
+    @patch("py._weather._create_fallback_weather")
+    @patch("py._weather._fetch_open_meteo")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._fetch_tomorrow")
+    @patch("py._weather.get_api_key")
+    @patch("py._weather.tomorrow_breaker")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather.nearest_station_observation")
+    @patch("py._weather._find_nearest_location")
+    async def test_station_overrides_fallback_current(
+        self, mock_nearest, mock_station, mock_cache, mock_tmrw_breaker, mock_key,
+        mock_fetch_tmrw, mock_om_breaker, mock_fetch_om, mock_fallback,
+    ):
+        """Even when every commercial provider fails, a nearby station still wins for `current`."""
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
+        mock_station.return_value = {
+            "observedAt": datetime(2026, 6, 29, 14, 0, tzinfo=timezone.utc),
+            "metrics": {"airTemperatureCelsius": 21.0},
+        }
+        mock_cache.return_value = None
+        mock_tmrw_breaker.is_allowed = False
+        mock_om_breaker.is_allowed = False
+        mock_fallback.return_value = {
+            "current": {"temperature_2m": 18},
+            "hourly": {},
+            "daily": {},
+            "insights": None,
+        }
+
+        response = await get_weather(-17.83, 31.05)
+        assert response.headers.get("x-weather-provider") == "fallback"
+        assert response.headers.get("x-current-source") == "stationkit"
+
+    @pytest.mark.asyncio
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather.nearest_station_observation")
+    @patch("py._weather._find_nearest_location")
+    async def test_cache_hit_does_not_mutate_cached_doc(
+        self, mock_nearest, mock_station, mock_cache, mock_set, mock_record
+    ):
+        """Blending must not mutate the dict returned by the cache layer (shallow-copy)."""
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
+        mock_station.return_value = {
+            "observedAt": datetime(2026, 6, 29, 14, 0, tzinfo=timezone.utc),
+            "metrics": {"airTemperatureCelsius": 19.2},
+        }
+        cached_current = {"temperature_2m": 25.0}
+        cached_data = {"current": cached_current, "hourly": {}, "daily": {}}
+        mock_cache.return_value = {"data": cached_data, "provider": "tomorrow"}
+
+        await get_weather(-17.83, 31.05)
+
+        # Cached doc's current must still be the original Tomorrow.io value.
+        assert cached_data["current"] is cached_current
+        assert cached_data["current"]["temperature_2m"] == 25.0
