@@ -77,8 +77,8 @@ describe("Aviation page", () => {
   it("is NOT a client component", () => {
     expect(pageSrc).not.toContain('"use client"');
   });
-  it("exports default page component", () => {
-    expect(pageSrc).toContain("export default function AviationPage");
+  it("exports default page component (now async for auth gating)", () => {
+    expect(pageSrc).toContain("export default async function AviationPage");
   });
   it("has metadata", () => {
     expect(pageSrc).toContain("export const metadata");
@@ -90,5 +90,16 @@ describe("Aviation page", () => {
   });
   it("renders AviationPlanner", () => {
     expect(pageSrc).toContain("AviationPlanner");
+  });
+});
+
+describe("Aviation page — auth gating (Phase 1D)", () => {
+  it("imports requireUser from the auth helper", () => {
+    expect(pageSrc).toContain("requireUser");
+    expect(pageSrc).toContain("@/lib/auth");
+  });
+
+  it("awaits requireUser() inside the page export", () => {
+    expect(pageSrc).toContain("await requireUser()");
   });
 });

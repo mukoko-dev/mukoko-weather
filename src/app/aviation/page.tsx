@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { requireUser } from "@/lib/auth";
 import { AviationPlanner } from "./AviationPlanner";
 
 const BASE_URL = "https://weather.mukoko.com";
@@ -15,7 +16,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function AviationPage() {
+export default async function AviationPage() {
+  await requireUser(); // redirects to AuthKit sign-in if not signed in
   return (
     <>
       <Header />

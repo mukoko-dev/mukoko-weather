@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, Component, type ReactNode } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { SparklesIcon, MapPinIcon } from "@/lib/weather-icons";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import {
 import type { WeatherData } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
 import { trackEvent } from "@/lib/analytics";
+import type { AISummaryUser } from "./AISummary";
 
 // ---------------------------------------------------------------------------
 // Inline error boundary for ReactMarkdown
@@ -49,6 +51,12 @@ interface Props {
   location: WeatherLocation;
   initialSummary: string | null;
   season?: string;
+  /**
+   * Signed-in user, or `null` when anonymous. Anonymous visitors see a
+   * sign-in CTA instead of the follow-up chat (the `/api/ai/*` proxy is
+   * gated server-side and would 401 every send anyway).
+   */
+  user: AISummaryUser | null;
 }
 
 /** Max follow-up messages before redirecting to Shamwari */
@@ -115,7 +123,7 @@ const markdownComponents = {
 // Component
 // ---------------------------------------------------------------------------
 
-export function AISummaryChat({ weather, location, initialSummary, season }: Props) {
+export function AISummaryChat({ weather, location, initialSummary, season, user }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -184,7 +192,7 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
         content: m.content.slice(0, 2000),
       }));
 
-      const res = await fetch("/api/py/ai/followup", {
+      const res = await fetch("/api/ai/followup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -247,6 +255,7 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
   };
 
   if (!initialSummary) return null;
+  if (!user) return <AISummaryChatSignInCTA locationName={location.name} />;
 
   return (
     <section aria-label="AI weather follow-up chat">
@@ -406,6 +415,33 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
             )}
           </div>
         )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Sign-in prompt shown to anonymous visitors in place of the follow-up
+ * chat. Mirrors the AISummary CTA shape for consistency.
+ */
+function AISummaryChatSignInCTA({ locationName }: { locationName: string }) {
+  const pathname = usePathname() ?? "/";
+  const href = `/auth/signin?returnTo=${encodeURIComponent(pathname)}`;
+  return (
+    <section aria-label="Sign in to chat with Shamwari">
+      <div className="baobab border-tanzanite/25 border-l-[6px] border-l-tanzanite">
+        <div className="flex items-center gap-2">
+          <SparklesIcon size={16} className="text-tanzanite" />
+          <span className="giraffe">Ask Shamwari about this weather</span>
+        </div>
+        <p className="gazelle mt-3">
+          Sign in to chat with Mukoko&apos;s AI about {locationName}.
+        </p>
+        <div className="mt-4">
+          <Link href={href} prefetch={false} className="kudu-sm" aria-label={`Sign in to chat about ${locationName}`}>
+            Sign in
+          </Link>
+        </div>
       </div>
     </section>
   );

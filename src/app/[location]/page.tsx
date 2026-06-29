@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { checkFrostRisk, createFallbackWeather, weatherCodeToInfo } from "@/lib/weather";
 import { getWeatherForLocation, getLocationFromDb, getCountryByCode, getSeasonForDate } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
 import { WeatherDashboard } from "./WeatherDashboard";
 
 // Deduplicate DB calls between generateMetadata and the page component.
@@ -134,11 +135,17 @@ export default async function LocationPage({
   const frostAlert = usingFallback ? null : checkFrostRisk(weather.hourly);
   const conditionInfo = weatherCodeToInfo(weather.current.weather_code);
   const countryCode = (location.country ?? "").toUpperCase();
-  const [countryDoc, season] = await Promise.all([
+  const [countryDoc, season, currentUser] = await Promise.all([
     countryCode ? loadCountry(countryCode) : Promise.resolve(null),
     getCachedSeason(location.country ?? "", location.lat ?? 0),
+    getCurrentUser(),
   ]);
   const countryName = countryDoc?.name ?? countryCode;
+  // Strip AuthKit-specific fields before crossing the server/client boundary.
+  // AISummary/AISummaryChat only need id + email to decide signed-in vs CTA.
+  const aiUser = currentUser
+    ? { id: currentUser.id, email: currentUser.email ?? null }
+    : null;
   const now = new Date().toISOString();
 
   // ── Schema.org structured data (SEO — server only) ──────────────────────
@@ -259,6 +266,7 @@ export default async function LocationPage({
         frostAlert={frostAlert}
         season={season}
         countryName={countryName}
+        user={aiUser}
       />
     </>
   );

@@ -50,7 +50,10 @@ export async function fetchSuggestedRules(): Promise<SuggestedPromptRule[]> {
   }
 
   try {
-    const res = await fetch("/api/py/ai/suggested-rules");
+    // Phase 1D: routed through the auth-gated /api/ai/* proxy. The only
+    // caller (AISummaryChat) is itself gated, so an anonymous browser will
+    // never reach this fetch — the CTA is shown instead.
+    const res = await fetch("/api/ai/suggested-rules");
     if (res.ok) {
       const data = await res.json();
       const rules: SuggestedPromptRule[] = data.rules ?? [];

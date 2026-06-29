@@ -120,7 +120,7 @@ Mukoko owns most of this but **must adopt the new schemas** (`_schemaVersion`, `
 | `stationObservations` | (didn't have it) | **NEW** — Raw station payloads. |
 | `alerts` | (didn't have it) | **NEW — P0 GAP NOW FILLED**. CAP-format severe weather alerts with `severity`, `urgency`, `certainty`, `area.polygon`. **Mukoko should consume + push-notify.** |
 | `weather_cache` | `weather_cache` | Same name, but new schema. Migrate forward. |
-| `ai_summaries` | `ai_summaries` | Stays in `weather` DB (mukoko-specific). |
+| `ai_summaries` | `ai_summaries` | Stays in `weather` DB (mukoko-specific). **Phase 1D:** the write-side endpoint (`/api/py/ai`) is only reachable through the auth-gated Next.js proxy `/api/ai/*` — every cache fill happens for a signed-in WorkOS user, and `X-Mukoko-User-Id` is forwarded for audit. |
 | `history_analysis` | `history_analysis` | Stays. |
 | `weather_history` | `weather_history` | Stays. |
 | `communityReports` | `weather_reports` (snake_case) | **RENAME + RESCHEMA.** Now camelCase, includes `imageUrls`, `reporterPersonId` (→ identity), `qcStatus`. |
