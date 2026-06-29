@@ -109,7 +109,7 @@ export default async function ExploreCountryPage() {
                 <Link
                   key={country.code}
                   href={`/explore/country/${country.code.toLowerCase()}`}
-                  className="group flex items-center gap-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm transition-all hover:shadow-md hover:bg-surface-card/80 focus-visible:outline-2 focus-visible:outline-primary"
+                  className="group pangolin flex items-center gap-3 transition-all hover:shadow-md hover:bg-surface-card/80 focus-visible:outline-2 focus-visible:outline-primary"
                 >
                   <span className="text-2xl" aria-hidden="true">
                     {getFlagEmoji(country.code)}
