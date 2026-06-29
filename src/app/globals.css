@@ -756,58 +756,6 @@ body {
     @apply animate-pulse rounded-[var(--radius-card)]
            border border-surface-dim bg-surface-card shadow-sm;
   }
-
-  /* ── Forms ───────────────────────────────────────────────────────────── */
-
-  /* .crane — text input (tall, elegant, stands at attention) */
-  .crane {
-    @apply w-full rounded-[var(--radius-input)] border border-input
-           bg-surface-card px-3 py-2 text-base text-text-primary
-           placeholder:text-text-tertiary outline-none
-           focus-visible:ring-2 focus-visible:ring-primary;
-  }
-
-  /* .ibis — select dropdown (curved beak, similar to crane but standalone) */
-  .ibis {
-    @apply rounded-[var(--radius-input)] border border-input
-           bg-surface-card px-3 py-2 text-base text-text-primary
-           outline-none focus-visible:ring-2 focus-visible:ring-primary;
-  }
-
-  /* ── Tabs / Toggles ──────────────────────────────────────────────────── */
-
-  /* .springbok-group — tab group container (band of grazing springbok) */
-  .springbok-group {
-    @apply flex gap-1 rounded-[var(--radius-card)] bg-surface-base p-1;
-  }
-
-  /* .springbok — single tab in a group (springs into focus) */
-  .springbok {
-    @apply flex-1 min-h-[var(--touch-target-min)]
-           rounded-[var(--radius-input)] px-4 py-2
-           text-base font-medium transition-colors
-           text-text-tertiary hover:text-text-secondary;
-  }
-
-  /* .springbok-active — currently selected tab */
-  .springbok-active {
-    @apply flex-1 min-h-[var(--touch-target-min)]
-           rounded-[var(--radius-input)] px-4 py-2
-           text-base font-medium transition-colors
-           bg-surface-card text-text-primary shadow-sm;
-  }
-
-  /* ── Other surfaces ──────────────────────────────────────────────────── */
-
-  /* .pangolin — soft card without border (rolled, smooth surface) */
-  .pangolin {
-    @apply rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm;
-  }
-
-  /* .hornbill — small uppercase tracking-wider label (distinctive header) */
-  .hornbill {
-    @apply text-base font-semibold uppercase tracking-wider text-text-tertiary;
-  }
 }
 
 /* ===== Scrollbar styling ===== */
