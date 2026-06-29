@@ -129,7 +129,7 @@ export default async function ExplorePage() {
                 <Link
                   key={tag}
                   href={`/explore/${tag}`}
-                  className="group card-interactive rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-5 shadow-sm focus-visible:outline-2 focus-visible:outline-primary"
+                  className="group card-interactive baobab p-5 focus-visible:outline-2 focus-visible:outline-primary"
                 >
                   <div className="flex items-start justify-between">
                     <h3 className="text-base font-semibold text-text-primary font-heading group-hover:text-primary transition-colors">

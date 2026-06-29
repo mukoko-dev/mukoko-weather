@@ -18,7 +18,7 @@ export function HourlyScrollCards({ hourly }: Props) {
   const hours = hourly.time.slice(start, start + 24);
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-3 shadow-sm">
+    <div className="baobab overflow-hidden p-3">
       <ScrollArea className="w-full" type="hover">
         <div className="flex gap-2.5 pb-2 [overscroll-behavior-x:contain]" role="list" aria-label="Hourly weather forecast">
           {hours.map((time, i) => {

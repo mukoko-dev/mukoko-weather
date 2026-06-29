@@ -69,7 +69,8 @@ describe("HourlyScrollCards — weather data", () => {
   it("uses global styles only (no hardcoded colors)", () => {
     expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}/);
     expect(source).not.toContain("style={{");
-    expect(source).toContain("bg-surface-card");
+    // .baobab fauna class (defined in globals.css) resolves to bg-surface-card + border + shadow
+    expect(source).toMatch(/baobab|bg-surface-card/);
     expect(source).toContain("text-text-primary");
   });
 });

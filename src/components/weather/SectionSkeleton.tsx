@@ -18,7 +18,7 @@ export function SectionSkeleton({ className }: { className?: string } = {}) {
 export function HourlyScrollCardsSkeleton() {
   return (
     <div
-      className="overflow-hidden rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-4 shadow-sm sm:p-5"
+      className="baobab overflow-hidden sm:p-5"
       role="status"
       aria-label="Loading hourly weather"
     >
@@ -62,7 +62,7 @@ export function ReportsSkeleton() {
 export function HourlyForecastSkeleton() {
   return (
     <div
-      className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-5 shadow-sm sm:p-6"
+      className="baobab p-5 sm:p-6"
       role="status"
       aria-label="Loading hourly forecast"
     >
@@ -129,7 +129,7 @@ export function ActivityInsightsSkeleton() {
 export function DailyForecastSkeleton() {
   return (
     <div
-      className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-5 shadow-sm sm:p-6"
+      className="baobab p-5 sm:p-6"
       role="status"
       aria-label="Loading daily forecast"
     >
@@ -245,7 +245,7 @@ export function AtmosphericSummarySkeleton() {
 export function SunTimesSkeleton() {
   return (
     <div
-      className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-5 shadow-sm sm:p-6"
+      className="baobab p-5 sm:p-6"
       role="status"
       aria-label="Loading sun times"
     >
@@ -275,7 +275,7 @@ export function SunTimesSkeleton() {
 export function MapPreviewSkeleton() {
   return (
     <div
-      className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card shadow-sm overflow-hidden"
+      className="baobab p-0 overflow-hidden"
       role="status"
       aria-label="Loading weather map"
     >
@@ -325,7 +325,7 @@ export function SupportBannerSkeleton() {
 export function LocationInfoSkeleton() {
   return (
     <div
-      className="rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-5 shadow-sm sm:p-6"
+      className="baobab p-5 sm:p-6"
       role="status"
       aria-label="Loading location information"
     >

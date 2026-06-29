@@ -91,7 +91,7 @@ export function MetricCard({
   gauge,
 }: MetricCardProps) {
   return (
-    <div className="flex flex-col items-center gap-1.5 rounded-[var(--radius-card)] border border-primary/25 bg-surface-card p-3 shadow-sm transition-shadow hover:shadow-md text-center">
+    <div className="flex flex-col items-center gap-1.5 baobab p-3 transition-shadow hover:shadow-md text-center">
       {/* Radial gauge with value inside */}
       <ArcGauge {...gauge} value={value} />
       {/* Text info */}
