@@ -128,7 +128,7 @@
   --text-nav-label: 1rem;
 
   /* Radii */
-  --radius-button: 12px;
+  --radius-button: 9999px;
   --radius-card: 16px;
   --radius-input: 8px;
   --radius-badge: 9999px;
