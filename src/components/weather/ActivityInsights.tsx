@@ -140,7 +140,7 @@ export function ActivityInsights({
   // Fallback: show selected activities as badges when insights data isn't available
   return (
     <section aria-label="Selected activities">
-      <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
+      <div className="pangolin sm:p-6">
         <SectionHeader
           headingId="activity-fallback-heading"
           title="Your Activities"

@@ -102,7 +102,7 @@ export function ActivityInsightsSkeleton() {
         {Array.from({ length: 2 }).map((_, i) => (
           <div
             key={i}
-            className="flex items-center gap-4 rounded-[var(--radius-card)] bg-surface-card p-5 shadow-sm border border-primary/25 border-l-[6px] border-l-text-tertiary/20"
+            className="baobab flex items-center gap-4 p-5 border-l-[6px] border-l-text-tertiary/20"
           >
             {/* Icon circle */}
             <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
@@ -169,7 +169,7 @@ export function DailyForecastSkeleton() {
 export function AISummarySkeleton() {
   return (
     <div
-      className="rounded-[var(--radius-card)] border border-primary/25 border-l-[6px] border-l-tanzanite bg-surface-card p-5 shadow-sm sm:p-6"
+      className="baobab border-l-[6px] border-l-tanzanite p-5 sm:p-6"
       role="status"
       aria-label="Loading AI summary"
     >

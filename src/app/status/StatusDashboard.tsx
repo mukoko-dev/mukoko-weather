@@ -82,7 +82,7 @@ export function StatusDashboard() {
         {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}
-            className="h-20 animate-pulse rounded-[var(--radius-card)] bg-surface-card"
+            className="chameleon h-20"
           />
         ))}
       </div>
@@ -116,7 +116,7 @@ export function StatusDashboard() {
         {data.checks.map((check) => (
           <div
             key={check.name}
-            className="flex items-start gap-3 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm"
+            className="pangolin flex items-start gap-3"
           >
             <div className="mt-1.5">
               <StatusDot status={check.status} />

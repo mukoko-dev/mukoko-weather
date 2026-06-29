@@ -43,7 +43,7 @@ export function ActivityCard({
   const borderAccent = style.borderAccent ?? style.border.replace(/^border-/, "border-l-")
 
   return (
-    <div className={`flex items-center gap-3 rounded-[var(--radius-card)] bg-surface-card p-3.5 shadow-sm border border-primary/25 border-l-[6px] ${borderAccent}`}>
+    <div className={`baobab flex items-center gap-3 p-3.5 border-l-[6px] ${borderAccent}`}>
       {/* Activity icon */}
       <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${style.bg}`}>
         <span className={style.text} aria-hidden="true">
