@@ -272,7 +272,7 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
             {/* Suggested prompts (shown when no messages yet) */}
             {messages.length === 0 && suggestedPrompts.length > 0 && (
               <div className="pb-3 pt-4">
-                <p className="mb-2 text-base font-medium uppercase tracking-wider text-text-tertiary">
+                <p className="hornbill font-medium mb-2">
                   Suggested questions
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -336,7 +336,7 @@ export function AISummaryChat({ weather, location, initialSummary, season }: Pro
             {/* Message limit reached — redirect to Shamwari */}
             {atMessageLimit && (
               <div className="mt-3 rounded-lg border border-tanzanite/20 bg-tanzanite/5 p-3 text-center">
-                <p className="text-base text-text-secondary">
+                <p className="gazelle">
                   For a deeper conversation, continue in Shamwari chat.
                 </p>
                 <Link

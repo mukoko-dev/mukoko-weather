@@ -128,7 +128,7 @@ export function AISummary({ weather, location, onSummaryLoaded }: Props) {
 
   return (
     <section aria-label="AI weather intelligence summary">
-      <div className="rounded-[var(--radius-card)] border border-mineral-sodalite/25 border-l-[6px] border-l-mineral-sodalite bg-surface-card p-4 shadow-sm">
+      <div className="baobab border-mineral-sodalite/25 border-l-[6px] border-l-mineral-sodalite">
         <div className="flex items-center gap-2">
           <SparklesIcon size={16} className="text-mineral-sodalite" />
           <h2 className="giraffe">
