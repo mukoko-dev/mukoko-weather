@@ -102,7 +102,7 @@ export function Header() {
                 href={href}
                 prefetch={false}
                 aria-current={active ? "page" : undefined}
-                className={`text-base font-medium transition-colors ${
+                className={`inline-flex items-center text-base font-medium transition-colors ${
                   active
                     ? "text-primary underline underline-offset-4 decoration-primary decoration-2"
                     : "text-text-secondary hover:text-text-primary hover:underline hover:underline-offset-4 hover:decoration-text-tertiary/50 hover:decoration-2"
