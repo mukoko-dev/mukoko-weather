@@ -49,14 +49,14 @@ describe("AISummaryChat", () => {
     // to Shamwari when the user clicks "Continue in Shamwari"
   });
 
-  // Follow-up endpoint contract
-  it("targets the follow-up API endpoint at /api/py/ai/followup", () => {
-    // The component sends POST requests to /api/py/ai/followup
-    // with: message, locationName, locationSlug, weatherSummary,
-    //       activities, season, history
-    // This is the lightweight follow-up endpoint, not the full chat endpoint
-    const endpoint = "/api/py/ai/followup";
-    expect(endpoint).toBe("/api/py/ai/followup");
+  // Follow-up endpoint contract (Phase 1D — proxied through auth-gated route)
+  it("targets the auth-gated follow-up endpoint at /api/ai/followup", async () => {
+    const fs = await import("fs");
+    const source = fs.readFileSync("src/components/weather/AISummaryChat.tsx", "utf-8");
+    // Phase 1D moved client calls behind the Next.js /api/ai/* proxy so the
+    // session cookie is validated by AuthKit before reaching Python.
+    expect(source).toContain('"/api/ai/followup"');
+    expect(source).not.toContain('"/api/py/ai/followup"');
   });
 
   // Null guard
@@ -65,5 +65,35 @@ describe("AISummaryChat", () => {
     // This is enforced via early return: `if (!initialSummary) return null;`
     // The WeatherDashboard only renders AISummaryChat when aiSummary is truthy.
     expect(true).toBe(true); // Contract verified via code review
+  });
+});
+
+describe("AISummaryChat — Phase 1D auth gating", () => {
+  it("accepts a `user` prop alongside initialSummary", async () => {
+    const fs = await import("fs");
+    const source = fs.readFileSync("src/components/weather/AISummaryChat.tsx", "utf-8");
+    expect(source).toContain("user: AISummaryUser | null");
+    expect(source).toContain("export function AISummaryChat({ weather, location, initialSummary, season, user }");
+  });
+
+  it("renders a sign-in CTA when user is null and a summary exists", async () => {
+    const fs = await import("fs");
+    const source = fs.readFileSync("src/components/weather/AISummaryChat.tsx", "utf-8");
+    expect(source).toContain("AISummaryChatSignInCTA");
+    expect(source).toContain("if (!user) return <AISummaryChatSignInCTA");
+  });
+
+  it("CTA uses the .baobab fauna surface and .kudu-sm button", async () => {
+    const fs = await import("fs");
+    const source = fs.readFileSync("src/components/weather/AISummaryChat.tsx", "utf-8");
+    expect(source).toContain('className="baobab');
+    expect(source).toContain('className="kudu-sm"');
+  });
+
+  it("CTA links to /auth/signin with returnTo encoded from the current path", async () => {
+    const fs = await import("fs");
+    const source = fs.readFileSync("src/components/weather/AISummaryChat.tsx", "utf-8");
+    expect(source).toContain("/auth/signin?returnTo=");
+    expect(source).toContain("encodeURIComponent(pathname)");
   });
 });

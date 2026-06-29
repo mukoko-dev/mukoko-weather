@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import { Header } from "@/components/layout/Header";
+import { requireUser } from "@/lib/auth";
 import { ShamwariPageClient } from "./ShamwariPageClient";
 
 export const metadata: Metadata = {
@@ -16,7 +17,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function ShamwariPage() {
+export default async function ShamwariPage() {
+  await requireUser(); // redirects to AuthKit sign-in if not signed in
   return (
     <>
       <Header />

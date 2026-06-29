@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { SparklesIcon } from "@/lib/weather-icons";
 import { useAppStore } from "@/lib/store";
@@ -8,9 +10,25 @@ import type { WeatherData } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
 import { trackEvent } from "@/lib/analytics";
 
+/**
+ * Minimal user shape needed to gate the AI summary. Mirrors the subset of
+ * `WorkOSUser` we read here; declared locally so this client component
+ * doesn't have to import server-only WorkOS types.
+ */
+export interface AISummaryUser {
+  id: string;
+  email?: string | null;
+}
+
 interface Props {
   weather: WeatherData;
   location: WeatherLocation;
+  /**
+   * Signed-in user, or `null` when anonymous. Anonymous visitors see a
+   * sign-in CTA instead of the AI summary (the underlying endpoint is
+   * gated behind auth via `/api/ai/*`).
+   */
+  user: AISummaryUser | null;
   /** Called when the AI summary is successfully loaded — used to pass context to AISummaryChat */
   onSummaryLoaded?: (text: string) => void;
 }
@@ -30,7 +48,7 @@ function waitForIdle(): Promise<void> {
   });
 }
 
-export function AISummary({ weather, location, onSummaryLoaded }: Props) {
+export function AISummary({ weather, location, user, onSummaryLoaded }: Props) {
   const [insight, setInsight] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,8 +62,11 @@ export function AISummary({ weather, location, onSummaryLoaded }: Props) {
   const locationKey = `${location.slug}:${location.lat}:${location.lon}`;
   const weatherKey = `${weather.current.temperature_2m}:${weather.current.weather_code}`;
   const fetchKey = `${locationKey}:${weatherKey}:${activitiesKey}`;
+  const isAuthed = user !== null;
 
   useEffect(() => {
+    // Skip when anonymous — the CTA card is shown instead.
+    if (!isAuthed) return;
     // Skip duplicate fetches (e.g. from redirect double-render)
     if (lastFetchedKeyRef.current === fetchKey && insight) {
       return;
@@ -78,7 +99,7 @@ export function AISummary({ weather, location, onSummaryLoaded }: Props) {
             // Activity labels unavailable — continue without them
           }
         }
-        const res = await fetch("/api/py/ai", {
+        const res = await fetch("/api/ai", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: controller.signal,
@@ -124,7 +145,12 @@ export function AISummary({ weather, location, onSummaryLoaded }: Props) {
       controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchKey]);
+  }, [fetchKey, isAuthed]);
+
+  // ── Anonymous: sign-in CTA ──────────────────────────────────────────────
+  if (!isAuthed) {
+    return <AISummarySignInCTA locationName={location.name} />;
+  }
 
   return (
     <section aria-label="AI weather intelligence summary">
@@ -155,6 +181,34 @@ export function AISummary({ weather, location, onSummaryLoaded }: Props) {
               <ReactMarkdown>{insight}</ReactMarkdown>
             </div>
           )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Sign-in prompt shown to anonymous visitors in place of the AI summary.
+ * Uses the `.baobab` fauna surface and `.kudu-sm` button per Phase 1D
+ * styling guidance.
+ */
+function AISummarySignInCTA({ locationName }: { locationName: string }) {
+  const pathname = usePathname() ?? "/";
+  const href = `/auth/signin?returnTo=${encodeURIComponent(pathname)}`;
+  return (
+    <section aria-label="Sign in to unlock AI weather insights">
+      <div className="baobab border-mineral-sodalite/25 border-l-[6px] border-l-mineral-sodalite">
+        <div className="flex items-center gap-2">
+          <SparklesIcon size={16} className="text-mineral-sodalite" />
+          <h2 className="giraffe">Shamwari Weather Insight</h2>
+        </div>
+        <p className="gazelle mt-3">
+          Sign in to see Mukoko&apos;s AI insights for {locationName}.
+        </p>
+        <div className="mt-4">
+          <Link href={href} prefetch={false} className="kudu-sm" aria-label={`Sign in to see AI insights for ${locationName}`}>
+            Sign in
+          </Link>
         </div>
       </div>
     </section>

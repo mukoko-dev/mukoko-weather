@@ -38,6 +38,7 @@ import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
 import { useAppStore } from "@/lib/store";
 import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
+import type { AISummaryUser } from "@/components/weather/AISummary";
 import { type Activity, ACTIVITIES } from "@/lib/activities";
 import { InfoRow } from "@/components/ui/info-row";
 import { SupportBanner } from "@/components/weather/SupportBanner";
@@ -72,6 +73,12 @@ interface WeatherDashboardProps {
   season: Season;
   /** Resolved country name — shown in breadcrumbs for non-ZW locations */
   countryName?: string;
+  /**
+   * Signed-in WorkOS user (id + email subset) or `null` when anonymous.
+   * Drives the AI summary auth gate — anon users see a sign-in CTA in
+   * place of the AI summary and follow-up chat.
+   */
+  user: AISummaryUser | null;
 }
 
 export function WeatherDashboard({
@@ -81,6 +88,7 @@ export function WeatherDashboard({
   frostAlert,
   season,
   countryName,
+  user,
 }: WeatherDashboardProps) {
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
@@ -334,7 +342,7 @@ export function WeatherDashboard({
                           <LazySection label="ai-summary" fallback={<AISummarySkeleton />}>
                             <ChartErrorBoundary name="AI summary">
                               <Suspense fallback={<AISummarySkeleton />}>
-                                {!usingFallback && <AISummary weather={weather} location={location} onSummaryLoaded={setAiSummary} />}
+                                {!usingFallback && <AISummary weather={weather} location={location} user={user} onSummaryLoaded={setAiSummary} />}
                               </Suspense>
                             </ChartErrorBoundary>
                           </LazySection>
@@ -351,6 +359,7 @@ export function WeatherDashboard({
                                   location={location}
                                   initialSummary={aiSummary}
                                   season={`${season.localName} (${season.name})`}
+                                  user={user}
                                 />
                               </Suspense>
                             </ChartErrorBoundary>

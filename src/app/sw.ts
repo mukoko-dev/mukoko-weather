@@ -76,14 +76,15 @@ const serwist = new Serwist({
       }),
     },
 
-    // Reference data — StaleWhileRevalidate (rules, activities, tags, prompts)
+    // Reference data — StaleWhileRevalidate (rules, activities, tags, prompts).
+    // Phase 1D: AI prompts/rules now flow through /api/ai/* (auth-gated proxy).
     {
       matcher: ({ url }) =>
         url.pathname.startsWith("/api/py/suitability") ||
         url.pathname.startsWith("/api/py/activities") ||
         url.pathname.startsWith("/api/py/tags") ||
-        url.pathname.startsWith("/api/py/ai/prompts") ||
-        url.pathname.startsWith("/api/py/ai/suggested-rules"),
+        url.pathname.startsWith("/api/ai/prompts") ||
+        url.pathname.startsWith("/api/ai/suggested-rules"),
       handler: new StaleWhileRevalidate({
         cacheName: "reference-data",
         plugins: [
@@ -158,10 +159,13 @@ const serwist = new Serwist({
       }),
     },
 
-    // AI endpoints — NetworkOnly (personalized, never cached)
+    // AI endpoints — NetworkOnly (personalized, never cached). Both the
+    // direct Python paths (legacy/internal) and the new auth-gated
+    // /api/ai/* proxy are matched so a stale SW never traps a request.
     {
       matcher: ({ url }) =>
         url.pathname.startsWith("/api/py/ai") ||
+        url.pathname.startsWith("/api/ai") ||
         url.pathname.startsWith("/api/py/chat") ||
         url.pathname.startsWith("/api/py/explore/search"),
       handler: new NetworkOnly(),

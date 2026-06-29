@@ -387,6 +387,28 @@ describe("computeCategorySuitability", () => {
 // db.ts — recordWeatherHistory with insights
 // ---------------------------------------------------------------------------
 
+describe("history page — auth gating (Phase 1D)", () => {
+  it("imports requireUser from @/lib/auth", async () => {
+    const fs = await import("fs");
+    const pageSrc = fs.readFileSync("src/app/history/page.tsx", "utf-8");
+    expect(pageSrc).toContain("requireUser");
+    expect(pageSrc).toContain("@/lib/auth");
+  });
+
+  it("awaits requireUser() inside the page default export", async () => {
+    const fs = await import("fs");
+    const pageSrc = fs.readFileSync("src/app/history/page.tsx", "utf-8");
+    expect(pageSrc).toContain("await requireUser()");
+    expect(pageSrc).toContain("export default async function HistoryPage");
+  });
+
+  it("history page is a server component (not client)", async () => {
+    const fs = await import("fs");
+    const pageSrc = fs.readFileSync("src/app/history/page.tsx", "utf-8");
+    expect(pageSrc).not.toContain('"use client"');
+  });
+});
+
 describe("WeatherHistoryDoc insights field", () => {
   it("WeatherHistoryDoc interface includes optional insights field", async () => {
     // Read the source to verify the interface definition

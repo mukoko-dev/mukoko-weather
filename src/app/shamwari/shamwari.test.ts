@@ -29,6 +29,22 @@ describe("shamwari page — structure", () => {
   });
 });
 
+describe("shamwari page — auth gating (Phase 1D)", () => {
+  it("imports requireUser from the auth helper", () => {
+    expect(pageSource).toContain("requireUser");
+    expect(pageSource).toContain("@/lib/auth");
+  });
+
+  it("invokes requireUser() inside the default export so anonymous users are redirected to sign-in", () => {
+    expect(pageSource).toContain("await requireUser()");
+  });
+
+  it("is an async server component (requireUser is awaited)", () => {
+    expect(pageSource).toContain("export default async function");
+    expect(pageSource).not.toContain('"use client"');
+  });
+});
+
 describe("shamwari page client — chatbot integration", () => {
   it("lazy-loads ExploreChatbot", () => {
     expect(clientSource).toContain("lazy(");
