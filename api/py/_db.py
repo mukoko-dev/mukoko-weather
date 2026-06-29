@@ -204,6 +204,11 @@ def community_reports_collection():
     return weather_db()["communityReports"]
 
 
+def air_quality_cache_collection():
+    """Air quality cache (1-h TTL, _id keyed by {lat:.4f}_{lon:.4f}) — weather.air_quality_cache."""
+    return weather_db()["air_quality_cache"]
+
+
 # places domain
 def places_collection():
     """Places — landmarks, businesses, parks, etc. (schema.org-aligned)."""

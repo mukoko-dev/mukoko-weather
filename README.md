@@ -20,6 +20,7 @@ AI-powered global weather intelligence — real-time forecasts and locally-relev
 - **User accounts via WorkOS AuthKit** — sign-in / sign-up via WorkOS AuthKit (`@workos-inc/authkit-nextjs`), with sessions managed by signed cookies. On first sign-in, the user is upserted into the shared platform `identity.persons` collection (OIDC-compliant `_id`, `workosUserId`, OIDC standard claims). Dedup is airtight — never two persons docs for the same WorkOS user
 - **Cross-device sync** — device profile sync bridges browser localStorage with a server-side profile, so preferences survive across devices and browser resets
 - **Community weather reporting** — Waze-style ground-truth observations: 10 weather types, 3 severity levels, AI-assisted clarification, cross-validation against API data, community upvoting
+- **Air Quality Index (AQI) with full pollutant breakdown** — PM2.5, PM10, O3, NO2, SO2, CO, NH3 — EPA-standard severity (Good → Hazardous), 8th gauge alongside humidity/wind/pressure, full per-pollutant grid with WHO 2021 guideline comparison on the atmosphere detail page
 - **Frost alerts** — automated frost risk detection for overnight hours with severity levels
 - **Dynamic locations** — 265 seed locations across 64 countries (98 Zimbabwe + 167 global), with community-driven expansion via geolocation and search. Three-layer dedup (10km wide geo / name+country / 1km exact) prevents duplicate location creation. Reverse-geocoded via Nominatim (OpenStreetMap) with structured address storage for formal three-layer breadcrumbs
 - **Seasonal awareness** — country-specific seasons for 50+ countries (including Zimbabwe's Masika, Chirimo, Zhizha, Munakamwe) with local names and agricultural calendars
@@ -166,6 +167,7 @@ All data, AI, and CRUD operations run in **Python FastAPI** (`api/py/`), deploye
 | `/api/py/reports/upvote` | POST | Upvote a community report (IP-based dedup) |
 | `/api/py/reports/clarify` | POST | AI-generated follow-up questions for weather report clarification. Rate-limited 10 req/hour/IP |
 | `/api/py/devices` | POST/GET/PATCH | Device profile sync for cross-device preferences |
+| `/api/py/airquality?lat=&lon=` | GET | EPA-standard AQI (0-500) + per-pollutant breakdown (PM2.5/PM10/O3/NO2/SO2/CO/NH3) from Open-Meteo. Cached 1h in `air_quality_cache` (`_id` = `{lat:.4f}_{lon:.4f}`) |
 | `/api/py/health` | GET | Basic health check (MongoDB + Anthropic availability) |
 
 **TypeScript API (remaining):**

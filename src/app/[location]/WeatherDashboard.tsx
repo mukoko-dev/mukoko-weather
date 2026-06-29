@@ -272,7 +272,11 @@ export function WeatherDashboard({
                       return (
                         <DraggableSection key="atmospheric" id="atmospheric" reordering={reordering}>
                           <ChartErrorBoundary name="atmospheric conditions">
-                            <AtmosphericSummary current={weather.current} />
+                            <AtmosphericSummary
+                              current={weather.current}
+                              lat={location.lat}
+                              lon={location.lon}
+                            />
                           </ChartErrorBoundary>
                         </DraggableSection>
                       );

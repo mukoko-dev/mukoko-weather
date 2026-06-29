@@ -287,6 +287,10 @@ export async function ensureIndexes(): Promise<void> {
     // METAR cache: one doc per ICAO station, auto-expire after 30 minutes
     weatherDb().collection("metar_cache").createIndex({ icao: 1 }, { unique: true }),
     weatherDb().collection("metar_cache").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+
+    // Air quality cache: 1-hour TTL — _id is deterministic ({lat:.4f}_{lon:.4f}),
+    // so the unique-by-_id index MongoDB provides for free is the only key index needed.
+    weatherDb().collection("air_quality_cache").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   ]);
 }
 
@@ -403,6 +407,19 @@ export function alertsCollection() {
 /** Community weather reports (Waze-style) — `weather.communityReports` (camelCase). */
 export function communityReportsCollection() {
   return weatherDb().collection("communityReports");
+}
+
+/**
+ * Air quality cache — `weather.air_quality_cache`. Deterministic `_id`
+ * (`{lat:.4f}_{lon:.4f}`), 1-hour TTL via `expiresAt` index.
+ *
+ * Read/write owned by the Python backend (`api/py/_air_quality.py`); this
+ * accessor exists for parity so future TS callers (e.g., OG image generation
+ * with an AQ badge, or a server-rendered AQ chip) don't have to reach into
+ * `weatherDb()` directly.
+ */
+export function airQualityCacheCollection() {
+  return weatherDb().collection("air_quality_cache");
 }
 
 // places domain
