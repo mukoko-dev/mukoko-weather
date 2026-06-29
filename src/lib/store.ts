@@ -53,6 +53,38 @@ function applyTheme(pref: ThemePreference) {
 /** Maximum number of saved locations per user */
 export const MAX_SAVED_LOCATIONS = 10;
 
+/** Default section order for the location page primary column */
+export const DEFAULT_SECTION_ORDER = [
+  "hourlyScroll",
+  "current",
+  "atmospheric",
+  "reports",
+  "hourlyForecast",
+  "activityInsights",
+  "dailyForecast",
+  "aiSummary",
+  "aiChat",
+] as const;
+
+const SECTION_ORDER_KEY = "mukoko-section-order";
+
+function loadSectionOrder(): string[] {
+  if (typeof window === "undefined") return [...DEFAULT_SECTION_ORDER];
+  try {
+    const stored = localStorage.getItem(SECTION_ORDER_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored) as string[];
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch { /* ignore */ }
+  return [...DEFAULT_SECTION_ORDER];
+}
+
+function saveSectionOrder(order: string[]): void {
+  if (typeof window === "undefined") return;
+  try { localStorage.setItem(SECTION_ORDER_KEY, JSON.stringify(order)); } catch { /* ignore */ }
+}
+
 interface AppState {
   theme: ThemePreference;
   setTheme: (theme: ThemePreference) => void;
@@ -89,6 +121,9 @@ interface AppState {
   reportModalOpen: boolean;
   openReportModal: () => void;
   closeReportModal: () => void;
+  /** User-defined section order for the location page primary column */
+  sectionOrder: string[];
+  setSectionOrder: (order: string[]) => void;
 }
 
 const THEME_CYCLE: ThemePreference[] = ["light", "dark", "system"];
@@ -188,6 +223,11 @@ export const useAppStore = create<AppState>()((set) => ({
   reportModalOpen: false,
   openReportModal: () => set({ reportModalOpen: true }),
   closeReportModal: () => set({ reportModalOpen: false }),
+  sectionOrder: loadSectionOrder(),
+  setSectionOrder: (order) => {
+    saveSectionOrder(order);
+    set({ sectionOrder: order });
+  },
 }));
 
 // ---------------------------------------------------------------------------

@@ -382,3 +382,28 @@ describe("theme actions", () => {
     expect(useAppStore.getState().theme).toBe("light");
   });
 });
+
+describe("sectionOrder", () => {
+  it("has a default section order with all expected sections", () => {
+    const { sectionOrder } = useAppStore.getState();
+    expect(sectionOrder).toContain("hourlyScroll");
+    expect(sectionOrder).toContain("current");
+    expect(sectionOrder).toContain("atmospheric");
+    expect(sectionOrder).toContain("dailyForecast");
+    expect(sectionOrder).toContain("aiSummary");
+    expect(sectionOrder.length).toBeGreaterThan(5);
+  });
+
+  it("setSectionOrder updates the order", () => {
+    const newOrder = ["current", "hourlyScroll", "atmospheric"];
+    useAppStore.getState().setSectionOrder(newOrder);
+    expect(useAppStore.getState().sectionOrder).toEqual(newOrder);
+  });
+
+  it("setSectionOrder accepts any string array", () => {
+    // localStorage is not available in Node test environment — only test store state
+    const custom = ["atmospheric", "current", "dailyForecast"];
+    useAppStore.getState().setSectionOrder(custom);
+    expect(useAppStore.getState().sectionOrder).toEqual(custom);
+  });
+});
