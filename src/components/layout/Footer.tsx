@@ -17,13 +17,13 @@ export function Footer() {
       .catch(() => {});
   }, []);
 
-  const col = "flex flex-col gap-3";
-  const heading = "text-xs font-semibold uppercase tracking-widest text-text-tertiary";
+  const col = "flex flex-col gap-1";
+  const heading = "mb-2 text-xs font-semibold uppercase tracking-widest text-text-tertiary";
   const link = "text-base text-text-secondary transition-colors hover:text-text-primary";
 
   return (
     <footer className="border-t border-text-tertiary/10 bg-surface-base pb-24 sm:pb-0" role="contentinfo">
-      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 md:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 md:px-8">
 
         {/* ── Main columns ── */}
         <div className="grid grid-cols-2 gap-x-8 gap-y-12 sm:grid-cols-4">
