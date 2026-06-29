@@ -132,6 +132,7 @@ export function Footer() {
             <Link href="/explore" prefetch={false} className={linkClass}>Explore</Link>
             <Link href="/shamwari" prefetch={false} className={linkClass}>Shamwari</Link>
             <Link href="/history" prefetch={false} className={linkClass}>History</Link>
+            <Link href="/aviation" prefetch={false} className={linkClass}>Aviation</Link>
             <Link href="/status" prefetch={false} className={linkClass}>Status</Link>
             <Link href="/privacy" prefetch={false} className={linkClass}>Privacy</Link>
             <Link href="/terms" prefetch={false} className={linkClass}>Terms</Link>
