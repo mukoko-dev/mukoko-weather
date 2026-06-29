@@ -80,7 +80,8 @@ Far richer than our local `LOCATIONS`. Includes conservation, hospitality, comme
 | Collection | Purpose | Notes for mukoko |
 |---|---|---|
 | `places` | Every place — landmarks, businesses, parks, mountains, lakes, towns. Schema.org-aligned (`LocalBusiness`, `TouristAttraction`, `Park`, etc.) Includes `conservation.bigFive`, `hospitality`, `commerce`, `bundu.trustSignals`, `bundu.communityCaretakers`. | Mukoko reads from this. **Stop maintaining `src/lib/locations.ts` seed array.** Add a Python helper `place_by_slug()` that reads from `places.places`. |
-| `placesGeo` | Administrative geography (continent → country → province → city → town → village). ISO 3166 codes. 2dsphere-indexed boundaries. | Use for breadcrumbs (Country / Province / Location). Replaces our hardcoded `COUNTRIES`/`PROVINCES`. |
+| `placesGeo` | Administrative geography (continent → country → province → city → town → village). ISO 3166 codes. 2dsphere-indexed boundaries. `sourceProvenance.dataOrigin` enum includes `mukoko_seed` (Phase 0C-1 city seed) and `mukoko_user` (Phase 0E — written from `add_location` when a user adds a new place). | Use for breadcrumbs (Country / Province / Location). Replaces our hardcoded `COUNTRIES`/`PROVINCES`. |
+| `seedRequests` | **NEW (Phase 0E)** — validatorless queue of Fundi Places seed requests. Mukoko writes one entry per search-miss; the Fundi worker polls and processes them. See "Search-miss flow" section below. | Mukoko writes only. Fundi consumes. |
 | `categories` | OSM-tagged categories with translations + schema.org type mappings | Could replace our `TAGS` system. |
 | `seasonalInfo` | RRule-based seasonal patterns per place (closed seasons, harvest, migration) | Mukoko's `seasons` collection should reference these. |
 | `routes` | Hiking/cycling/driving routes (GeoJSON LineString) | Future: integrate with activity insights ("good day for the {route name} cycle"). |
@@ -246,6 +247,101 @@ Every collection (except `device_profiles` legacy) uses these patterns:
 - **StationKit is live (1 station).** The integration loop must be wired up before Phase 1, otherwise we can't validate the priority chain (Station → Tomorrow.io → Open-Meteo).
 - **Provider configs are partial.** Tomorrow.io, Open-Meteo, WorkOS configured for ZW. MapTiler and Anthropic missing. Need to register them (or use platform-managed secrets).
 - **Guardrails are platform-wide.** Mukoko's existing AI prompts must respect the 6 core categories.
+
+---
+
+## Search-miss flow (Phase 0E — Fundi integration)
+
+When a user adds a new location via `POST /api/py/locations/add`, mukoko fans the write out to three places:
+
+```
+POST /api/py/locations/add
+        │
+        ├──► weather.locations            (legacy mukoko slug — unchanged)
+        │
+        ├──► places.placesGeo             (admin/geographic mirror,
+        │                                   dataOrigin: "mukoko_user")
+        │
+        └──► places.seedRequests          (Fundi queue — POI enrichment)
+                                              │
+                                              ▼
+                                       Fundi Places worker
+                                              │
+                                              ├──► places.places   (POIs from OSM)
+                                              └──► places.placesGeo (admin gaps Fundi
+                                                                    discovers — uses its
+                                                                    own dataOrigin)
+```
+
+### Why queue-based?
+
+Fundi Places is a **separate service** exposed only via MCP. Python cannot call MCP tools directly, so mukoko cannot synchronously trigger a Fundi seed. The integration is therefore queue-based:
+
+1. Mukoko writes a `places.seedRequests` doc with `status: "queued"`.
+2. Fundi's worker polls the queue, processes each request, and updates its own status field (`processing` → `complete`/`error`).
+3. Mukoko **fires and forgets** — there is no polling endpoint on the mukoko side. The user-facing response from `/api/py/locations/add` does not wait for Fundi.
+
+### `places.seedRequests` shape
+
+The collection is **validatorless** (Fundi owns the schema). The document mukoko writes:
+
+```jsonc
+{
+  "_id": "<uuid>",
+  "_schemaVersion": "v3.1",
+  "status": "queued",
+  "region": {
+    "kind": "point_radius",
+    "center": [lon, lat],      // GeoJSON-order [lon, lat]
+    "radiusMeters": 5000
+  },
+  "source": {
+    "kind": "search_miss",
+    "surface": "mukoko-weather",
+    "query": "<location name>",
+    "requestedByPersonId": null   // populated once auth is wired
+  },
+  "categories": "all",
+  "createdAt": "<iso datetime>",
+  "updatedAt": "<iso datetime>",
+  "startedAt": null,
+  "finishedAt": null,
+  "error": null,
+  "placesCreated": null,
+  "placesGeoCreated": null
+}
+```
+
+### Dedup guarantees (Phase 0E hardening)
+
+These rules prevent the duplicate-record corruption (`windsor-avenue-2`, `-3`, …) that earlier iterations produced:
+
+| Collection | Dedup strategy |
+|---|---|
+| `places.placesGeo` | `upsert_placesgeo_city()` always calls `find_nearby_placesgeo()` first — **5 km radius**, normalised-name match (strips diacritics, road-type suffixes, leading house numbers), scoped by `parentPlaceId` (country _id). If a match is found, the existing doc is returned with `wasExisting: true` — **no auto-suffixed slug is ever generated**. |
+| `places.seedRequests` | `enqueue_fundi_seed()` checks for an in-flight (`queued` or `processing`) request within **1 km**. If one exists, its `_id` is returned and no new doc is inserted. |
+| `weather.locations` | `_resolve_slug_collision()` tries suburb- then road-enriched slugs. If both still collide, it raises `SlugCollisionError` and `add_location` returns `mode: "duplicate"` pointing to the existing record. The numeric-suffix fallback (`-2`, `-3`, …) was removed in Phase 0E. |
+
+### Response shape changes
+
+`/api/py/locations/add` now returns two extra platform-canonical identifiers when a new location is created:
+
+```jsonc
+{
+  "mode": "created",
+  "location": { /* legacy locations doc */ },
+  "placesGeoId": "<placesGeo._id>",     // null only if the platform write failed
+  "placesGeoSlug": "<placesGeo.slug>"   // hash-suffixed: "harare-a1b2c3"
+}
+```
+
+The frontend can use these to resolve weather queries through `placesGeo` once the legacy `weather.locations` collection is decommissioned.
+
+### Failure handling
+
+The platform write is wrapped in `try/except` in `_locations.py:add_location` — **a Fundi or placesGeo failure must never break the user-facing 201 response**. The legacy `weather.locations` write happens first and is the source of truth for the response. Platform failures are logged as warnings.
+
+---
 
 ### Phase 0 work list (locked plan)
 
