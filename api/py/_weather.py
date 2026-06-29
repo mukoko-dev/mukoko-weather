@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 from ._db import (
     get_api_key,
     locations_collection,
+    observations_collection,
     weather_cache_collection,
 )
 from ._circuit_breaker import tomorrow_breaker, open_meteo_breaker, CircuitOpenError
@@ -29,6 +30,11 @@ router = APIRouter()
 _http_client: Optional[httpx.Client] = None
 
 WEATHER_CACHE_TTL = 900  # 15 minutes
+
+# StationKit defaults: prefer a recent QC-validated observation from a Nyuchi
+# weather station within this radius/age over any commercial-API current data.
+STATION_MAX_DISTANCE_KM = 50
+STATION_MAX_AGE_MINUTES = 60
 
 
 def _get_http_client() -> httpx.Client:
@@ -335,6 +341,95 @@ def _create_fallback_weather(lat: float, lon: float, elevation: int) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Nyuchi StationKit — ground-truth observation reader (priority 0)
+# ---------------------------------------------------------------------------
+
+
+def nearest_station_observation(
+    lat: float,
+    lon: float,
+    max_distance_km: float = STATION_MAX_DISTANCE_KM,
+    max_age_minutes: int = STATION_MAX_AGE_MINUTES,
+) -> dict | None:
+    """
+    Find the most recent QC-validated observation from any active StationKit
+    station within ``max_distance_km`` of (lat, lon), no older than
+    ``max_age_minutes``.
+
+    Returns ``None`` when no station matches or the underlying geospatial
+    query fails (e.g. missing 2dsphere index) — the caller falls through to
+    the commercial-API chain.
+
+    Uses MongoDB ``$nearSphere`` on ``observations.location`` (a 2dsphere
+    GeoJSON Point), filters by ``qcStatus == "validated"`` and a recent
+    ``observedAt``, and returns the freshest match.
+    """
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
+        max_distance_m = float(max_distance_km) * 1000.0
+        query = {
+            "location": {
+                "$nearSphere": {
+                    "$geometry": {
+                        "type": "Point",
+                        "coordinates": [lon, lat],
+                    },
+                    "$maxDistance": max_distance_m,
+                }
+            },
+            "qcStatus": "validated",
+            "observedAt": {"$gte": cutoff},
+        }
+        cursor = (
+            observations_collection()
+            .find(query)
+            .sort([("observedAt", -1)])
+            .limit(1)
+        )
+        docs = list(cursor)
+        return docs[0] if docs else None
+    except Exception as e:
+        # 2dsphere index missing or any other DB error — fall through gracefully.
+        try:
+            print(f"[stationkit] nearest_station_observation failed: {e}")
+        except Exception:
+            pass
+        return None
+
+
+def station_observation_to_current(obs: dict) -> dict:
+    """
+    Map a platform ``weather.observations`` document to the ``current``
+    block shape used by the rest of mukoko (Tomorrow.io / Open-Meteo style:
+    ``temperature_2m``, ``relative_humidity_2m``, etc.).
+
+    Only fields the station provides are populated — others are left out so
+    the UI shows "no data" rather than a fabricated zero. The platform field
+    names live under ``metrics`` (see ``docs/mongodb-schema-map.md``).
+    """
+    metrics = obs.get("metrics") or {}
+    observed_at = obs.get("observedAt")
+    if isinstance(observed_at, datetime):
+        time_str = observed_at.isoformat()
+    elif observed_at is None:
+        time_str = datetime.now(timezone.utc).isoformat()
+    else:
+        time_str = str(observed_at)
+
+    current: dict = {
+        "time": time_str,
+        "temperature_2m": metrics.get("airTemperatureCelsius"),
+        "relative_humidity_2m": metrics.get("relativeHumidityPercent"),
+        "surface_pressure": metrics.get("atmosphericPressureMillibar"),
+        "wind_speed_10m": metrics.get("windSpeedKph"),
+        "wind_direction_10m": metrics.get("windDirectionDegrees"),
+        "precipitation": metrics.get("precipitationMillimeters"),
+        "uv_index": metrics.get("uvIndex"),
+    }
+    return current
+
+
+# ---------------------------------------------------------------------------
 # Cache operations
 # ---------------------------------------------------------------------------
 
@@ -436,10 +531,20 @@ async def get_weather(lat: float = -17.83, lon: float = 31.05):
     GET /api/py/weather?lat=-17.83&lon=31.05
 
     Weather proxy with multi-provider fallback chain:
-    1. MongoDB cache (15-min TTL)
-    2. Tomorrow.io (primary, richer data)
-    3. Open-Meteo (free fallback)
-    4. Seasonal estimates (never fails)
+
+    * **Priority 0** — Nyuchi StationKit observation (within 50 km, last 60 min).
+      Used as the ``current`` block only; hourly/daily forecast still come from
+      a commercial provider so callers get a full response.
+    * **Priority 1** — MongoDB cache (15-min TTL)
+    * **Priority 2** — Tomorrow.io (primary, richer data)
+    * **Priority 3** — Open-Meteo (free fallback)
+    * **Priority 4** — Seasonal estimates (never fails)
+
+    Response headers:
+      * ``X-Cache`` — ``HIT`` | ``MISS``
+      * ``X-Weather-Provider`` — origin of the hourly/daily forecast
+      * ``X-Current-Source`` — origin of the ``current`` block
+        (``stationkit`` | ``tomorrow`` | ``open-meteo`` | ``fallback``)
     """
     if lat < -90 or lat > 90 or lon < -180 or lon > 180:
         raise HTTPException(status_code=400, detail="Invalid coordinates")
@@ -455,66 +560,84 @@ async def get_weather(lat: float = -17.83, lon: float = 31.05):
     except Exception:
         pass
 
+    # 0. Look for a nearby StationKit observation. Cheap (single MongoDB query)
+    # and graceful — returns None on any error.
+    station_current: dict | None = None
+    station_obs = nearest_station_observation(lat, lon)
+    if station_obs:
+        try:
+            station_current = station_observation_to_current(station_obs)
+        except Exception:
+            station_current = None
+
     # 1. Try cache
+    data: dict | None = None
+    source: str | None = None
+    cache_status = "MISS"
     try:
         cached = _get_cached_weather(location_slug)
         if cached:
-            return JSONResponse(
-                content=cached.get("data", {}),
-                headers={
-                    "X-Cache": "HIT",
-                    "X-Weather-Provider": cached.get("provider", "cache"),
-                },
-            )
+            data = cached.get("data", {})
+            source = cached.get("provider", "cache")
+            cache_status = "HIT"
     except Exception:
         pass
 
-    # 2. Try Tomorrow.io (circuit breaker protected)
-    data = None
-    source = "open-meteo"
+    # 2-4. Fetch fresh forecast data if no cache hit
+    if data is None:
+        # 2. Try Tomorrow.io (circuit breaker protected)
+        if tomorrow_breaker.is_allowed:
+            try:
+                tomorrow_key = get_api_key("tomorrow")
+                if tomorrow_key:
+                    data = _fetch_tomorrow(lat, lon, tomorrow_key)
+                    if data:
+                        source = "tomorrow"
+                        tomorrow_breaker.record_success()
+                    else:
+                        tomorrow_breaker.record_failure()
+            except Exception:
+                tomorrow_breaker.record_failure()
 
-    if tomorrow_breaker.is_allowed:
-        try:
-            tomorrow_key = get_api_key("tomorrow")
-            if tomorrow_key:
-                data = _fetch_tomorrow(lat, lon, tomorrow_key)
+        # 3. Try Open-Meteo (circuit breaker protected)
+        if not data and open_meteo_breaker.is_allowed:
+            try:
+                data = _fetch_open_meteo(lat, lon)
                 if data:
-                    source = "tomorrow"
-                    tomorrow_breaker.record_success()
+                    source = "open-meteo"
+                    open_meteo_breaker.record_success()
                 else:
-                    tomorrow_breaker.record_failure()
-        except Exception:
-            tomorrow_breaker.record_failure()
-
-    # 3. Try Open-Meteo (circuit breaker protected)
-    if not data and open_meteo_breaker.is_allowed:
-        try:
-            data = _fetch_open_meteo(lat, lon)
-            if data:
-                source = "open-meteo"
-                open_meteo_breaker.record_success()
-            else:
+                    open_meteo_breaker.record_failure()
+            except Exception:
                 open_meteo_breaker.record_failure()
-        except Exception:
-            open_meteo_breaker.record_failure()
 
-    # 4. Seasonal fallback
-    if not data:
-        data = _create_fallback_weather(lat, lon, elevation)
-        source = "fallback"
+        # 4. Seasonal fallback (never fails)
+        if not data:
+            data = _create_fallback_weather(lat, lon, elevation)
+            source = "fallback"
 
-    # Cache + record history (fire-and-forget)
-    if source != "fallback":
-        try:
-            _set_cached_weather(location_slug, lat, lon, data, source)
-            _record_weather_history(location_slug, data)
-        except Exception:
-            pass
+        # Cache + record history (skip the seasonal fallback so we keep retrying upstream)
+        if source and source != "fallback":
+            try:
+                _set_cached_weather(location_slug, lat, lon, data, source)
+                _record_weather_history(location_slug, data)
+            except Exception:
+                pass
+
+    # Blend StationKit observation into the response: replace only `current`,
+    # keep hourly/daily from the commercial provider. Shallow-copy first so we
+    # don't mutate any cached object held by callers / the cache layer.
+    current_source = source or "fallback"
+    if station_current:
+        data = dict(data) if data else {}
+        data["current"] = station_current
+        current_source = "stationkit"
 
     return JSONResponse(
         content=data,
         headers={
-            "X-Cache": "MISS",
-            "X-Weather-Provider": source,
+            "X-Cache": cache_status,
+            "X-Weather-Provider": source or "fallback",
+            "X-Current-Source": current_source,
         },
     )
