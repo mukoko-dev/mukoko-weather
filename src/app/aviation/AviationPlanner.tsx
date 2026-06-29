@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useDebounce } from "@/lib/use-debounce";
 import { getIcaoForSlug } from "@/lib/icao-codes";
 import { SearchIcon, MapPinIcon, NavigationIcon } from "@/lib/weather-icons";
@@ -64,8 +64,14 @@ function AirportSearch({
     } finally { setLoading(false); }
   }, []);
 
-  // Trigger search on debounced value
-  useState(() => { if (debounced !== (value?.name ?? "")) search(debounced); });
+  // Trigger search on debounced value (must be useEffect to re-fire as user types)
+  useEffect(() => {
+    if (debounced.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    if (debounced !== (value?.name ?? "")) search(debounced);
+  }, [debounced, value, search]);
 
   const icaoForResult = (r: LocationResult) => getIcaoForSlug(r.slug);
 

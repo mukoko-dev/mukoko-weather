@@ -136,7 +136,6 @@ export function HomeLanding({ detectedLocation }: Props) {
             <button
               type="button"
               onClick={handleGps}
-              disabled={gpsState === "detecting"}
               className="kudu press-scale"
             >
               <NavigationIcon size={15} aria-hidden="true" />
