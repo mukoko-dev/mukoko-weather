@@ -89,8 +89,8 @@ export function Header() {
             </Link>
           </div>
 
-          {/* Desktop nav links — hidden on mobile where bottom nav is used */}
-          <div className="hidden sm:flex items-center gap-0.5">
+          {/* Desktop nav — plain links with underline active/hover indicator */}
+          <nav className="hidden sm:flex items-center gap-6" aria-label="Main navigation">
             {[
               { href: "/explore", label: "Explore", active: isExplore },
               { href: "/shamwari", label: "Shamwari", active: isShamwari },
@@ -101,16 +101,22 @@ export function Header() {
                 key={href}
                 href={href}
                 prefetch={false}
-                className={`rounded-full px-4 py-1.5 text-base font-medium transition-colors leading-none ${
-                  active
-                    ? "text-primary bg-primary/10"
-                    : "text-text-secondary hover:text-text-primary hover:bg-surface-dim"
+                aria-current={active ? "page" : undefined}
+                className={`relative py-1 text-base font-medium transition-colors group ${
+                  active ? "text-primary" : "text-text-secondary hover:text-text-primary"
                 }`}
               >
                 {label}
+                {/* Underline indicator */}
+                <span
+                  className={`absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-primary transition-transform origin-left ${
+                    active ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100 opacity-40"
+                  }`}
+                  aria-hidden="true"
+                />
               </Link>
             ))}
-          </div>
+          </nav>
 
           {/* Action pill — 3 quick actions: Maps, Report, My Weather */}
           {/* 56px touch targets (optimal), 20px icons for clarity */}
