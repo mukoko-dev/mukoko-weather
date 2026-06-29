@@ -119,7 +119,7 @@ export function WeatherDashboard({
       <Header />
 
       {/* Breadcrumb navigation — always three layers: Country / Province / Location */}
-      <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-3 sm:px-6 md:px-8">
+      <nav aria-label="Breadcrumb" className="mx-auto max-w-7xl px-4 pt-3 sm:px-6 md:px-8">
         <ol className="flex flex-wrap items-center gap-1.5 text-base text-text-tertiary">
           <li>
             <a href={BASE_URL} className="hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded">
@@ -157,7 +157,7 @@ export function WeatherDashboard({
           sm:pb-6 restores normal padding on larger screens where there is no nav bar. */}
       <main
         id="main-content"
-        className="animate-fade-in mx-auto max-w-5xl overflow-x-hidden px-4 py-5 pb-20 sm:px-6 sm:pb-6 md:px-8"
+        className="animate-fade-in mx-auto max-w-7xl overflow-x-hidden px-4 py-5 pb-20 sm:px-6 sm:pb-6 md:px-8"
         aria-label={`Weather dashboard for ${location.name}`}
       >
         {/* H1 for SEO — visually integrated but semantically correct */}
@@ -182,9 +182,10 @@ export function WeatherDashboard({
         {/* Main grid — simple 2-section layout.
             Mobile: single column, natural DOM order
             Desktop (lg): 3 columns — primary content in cols 1-2, sidebar in col 3 */}
-        <div className="grid gap-4 lg:grid-cols-3 lg:gap-6">
-          {/* Primary content — lg:col-span-2 */}
-          <div className="min-w-0 space-y-4 lg:col-span-2">
+        {/* Main grid: mobile = 1 col, lg = 3 col (2+1), xl = 4 col (3+1) */}
+        <div className="grid gap-4 lg:grid-cols-3 lg:gap-6 xl:grid-cols-4">
+          {/* Primary content — lg:col-span-2, xl:col-span-3 */}
+          <div className="min-w-0 space-y-4 lg:col-span-2 xl:col-span-3">
             <ChartErrorBoundary name="hourly scroll cards">
               <HourlyScrollCards hourly={weather.hourly} />
             </ChartErrorBoundary>
@@ -199,24 +200,29 @@ export function WeatherDashboard({
             <ChartErrorBoundary name="atmospheric conditions">
               <AtmosphericSummary current={weather.current} />
             </ChartErrorBoundary>
-            <LazySection label="community-reports" fallback={<ReportsSkeleton />}>
-              <ChartErrorBoundary name="community reports">
-                <Suspense fallback={<ReportsSkeleton />}>
-                  <RecentReports locationSlug={location.slug} />
-                </Suspense>
-              </ChartErrorBoundary>
-            </LazySection>
+
+            {/* On xl+: RecentReports and ActivityInsights sit side-by-side */}
+            <div className="xl:grid xl:grid-cols-2 xl:gap-4 space-y-4 xl:space-y-0">
+              <LazySection label="community-reports" fallback={<ReportsSkeleton />}>
+                <ChartErrorBoundary name="community reports">
+                  <Suspense fallback={<ReportsSkeleton />}>
+                    <RecentReports locationSlug={location.slug} />
+                  </Suspense>
+                </ChartErrorBoundary>
+              </LazySection>
+              <LazySection label="activity-insights" fallback={<ActivityInsightsSkeleton />}>
+                <ChartErrorBoundary name="activity insights">
+                  <Suspense fallback={<ActivityInsightsSkeleton />}>
+                    <ActivityInsights insights={weather.insights} activities={allActivities} />
+                  </Suspense>
+                </ChartErrorBoundary>
+              </LazySection>
+            </div>
+
             <LazySection label="hourly-forecast" fallback={<HourlyForecastSkeleton />}>
               <ChartErrorBoundary name="hourly forecast">
                 <Suspense fallback={<HourlyForecastSkeleton />}>
                   <HourlyForecast hourly={weather.hourly} />
-                </Suspense>
-              </ChartErrorBoundary>
-            </LazySection>
-            <LazySection label="activity-insights" fallback={<ActivityInsightsSkeleton />}>
-              <ChartErrorBoundary name="activity insights">
-                <Suspense fallback={<ActivityInsightsSkeleton />}>
-                  <ActivityInsights insights={weather.insights} activities={allActivities} />
                 </Suspense>
               </ChartErrorBoundary>
             </LazySection>
@@ -250,8 +256,8 @@ export function WeatherDashboard({
             )}
           </div>
 
-          {/* Sidebar — stacks below on mobile */}
-          <div className="min-w-0 space-y-4">
+          {/* Sidebar — stacks below on mobile, col-span-1 on lg and xl */}
+          <div className="min-w-0 space-y-4 lg:col-span-1 xl:col-span-1">
             <LazySection label="sun-times" fallback={<SunTimesSkeleton />}>
               <ChartErrorBoundary name="sun times">
                 <Suspense fallback={<SunTimesSkeleton />}>

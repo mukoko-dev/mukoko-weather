@@ -43,7 +43,7 @@ export function Footer() {
       className="border-t border-text-tertiary/10 bg-surface-base pb-24 sm:pb-0"
       role="contentinfo"
     >
-      <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 md:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 md:px-8">
         {/* Site stats strip */}
         <div className="mb-8 flex flex-wrap items-center gap-x-8 gap-y-4 border-b border-text-tertiary/10 pb-8">
           <div className="flex items-center gap-2 text-text-tertiary">
