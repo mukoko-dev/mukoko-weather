@@ -15,9 +15,13 @@ import {
   EyeIcon,
 } from "@/lib/weather-icons";
 import { MetricCard, type GaugeConfig } from "./MetricCard";
+import { AirQualityCard } from "./AirQualityCard";
 
 interface Props {
   current: CurrentWeather;
+  /** Optional location coords — when supplied, an 8th AQI card is rendered. */
+  lat?: number;
+  lon?: number;
 }
 
 // ── Gauge configurations ─────────────────────────────────────────────────────
@@ -92,12 +96,13 @@ export function feelsLikeGauge(feelsLike: number, actual: number): GaugeConfig {
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export function AtmosphericSummary({ current }: Props) {
+export function AtmosphericSummary({ current, lat, lon }: Props) {
   const pathname = usePathname();
   const locationSlug = pathname?.split("/")[1] || "";
   const uv = uvLevel(current.uv_index);
   const wind = Math.round(current.wind_speed_10m);
   const gusts = Math.round(current.wind_gusts_10m);
+  const showAqi = typeof lat === "number" && typeof lon === "number";
 
   return (
     <section aria-labelledby="atmospheric-heading">
@@ -107,7 +112,7 @@ export function AtmosphericSummary({ current }: Props) {
         action={{ label: "24h trends →", href: `/${locationSlug}/atmosphere` }}
         className="mb-3"
       />
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 sm:gap-3">
         <MetricCard
           icon={<DropletIcon size={16} />}
           label="Humidity"
@@ -158,6 +163,7 @@ export function AtmosphericSummary({ current }: Props) {
           context={precipitationLabel(current.precipitation)}
           gauge={precipitationGauge(current.precipitation)}
         />
+        {showAqi && <AirQualityCard lat={lat!} lon={lon!} />}
       </div>
     </section>
   );

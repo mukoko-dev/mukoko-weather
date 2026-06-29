@@ -20,6 +20,12 @@ const AtmosphericDetails = lazy(() =>
   })),
 );
 
+const AirQualityDetails = lazy(() =>
+  import("@/components/weather/AirQualityDetails").then((m) => ({
+    default: m.AirQualityDetails,
+  })),
+);
+
 interface Props {
   weather: WeatherData;
   location: WeatherLocation;
@@ -81,7 +87,7 @@ export function AtmosphereDashboard({
         {/* Current conditions summary cards */}
         <div className="mt-6">
           <ChartErrorBoundary name="atmospheric conditions">
-            <AtmosphericSummary current={weather.current} />
+            <AtmosphericSummary current={weather.current} lat={location.lat} lon={location.lon} />
           </ChartErrorBoundary>
         </div>
 
@@ -91,6 +97,17 @@ export function AtmosphereDashboard({
             <ChartErrorBoundary name="atmospheric details charts">
               <Suspense fallback={<SectionSkeleton />}>
                 <AtmosphericDetails hourly={weather.hourly} />
+              </Suspense>
+            </ChartErrorBoundary>
+          </LazySection>
+        </div>
+
+        {/* Air quality — full pollutant breakdown with WHO comparison */}
+        <div className="mt-8">
+          <LazySection label="air-quality-details">
+            <ChartErrorBoundary name="air quality details">
+              <Suspense fallback={<SectionSkeleton />}>
+                <AirQualityDetails lat={location.lat} lon={location.lon} />
               </Suspense>
             </ChartErrorBoundary>
           </LazySection>
