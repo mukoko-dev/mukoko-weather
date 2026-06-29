@@ -53,34 +53,38 @@ export async function getDatabase(): Promise<MukokoDatabase | null> {
 }
 
 async function createDb(): Promise<MukokoDatabase> {
-  try {
-    return await _initDb();
-  } catch (err: unknown) {
-    // RxDB DB9: storageToken mismatch — happens after a major RxDB upgrade
-    // (v16→v17 changed internal metadata). Wipe the stale IndexedDB and retry.
-    const code = (err as { code?: string })?.code;
-    const msg = String(err);
-    if (code === "DB9" || msg.includes("DB9") || msg.includes("storageToken")) {
-      // Use native IndexedDB API to wipe stale v16 data — more reliable than
-      // deleteRxDatabase which may itself fail when the schema is incompatible.
-      await new Promise<void>((resolve) => {
-        const req = indexedDB.deleteDatabase("mukoko_weather");
-        req.onsuccess = () => resolve();
-        req.onerror = () => resolve();   // best-effort; proceed regardless
-        req.onblocked = () => resolve();
-      });
-      dbPromise = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
       return await _initDb();
+    } catch (err: unknown) {
+      const msg = String(err);
+      const isDB9 = msg.includes("DB9");
+      if (isDB9 && attempt === 0) {
+        // DB9: stale v16 database or multiInstance conflict.
+        // Wipe via native IndexedDB then retry once.
+        await new Promise<void>((resolve) => {
+          const req = indexedDB.deleteDatabase("mukoko_weather");
+          req.onsuccess = () => resolve();
+          req.onerror = () => resolve();
+          req.onblocked = () => resolve();
+        });
+        dbPromise = null;
+        continue;
+      }
+      // On second attempt or non-DB9 error — give up gracefully.
+      // App still works; preferences just won't persist via RxDB.
+      console.warn("[RxDB] Failed to initialise database, using in-memory fallback:", msg);
+      throw err;
     }
-    throw err;
   }
+  throw new Error("unreachable");
 }
 
 async function _initDb(): Promise<MukokoDatabase> {
   const db = await createRxDatabase<MukokoCollections>({
     name: "mukoko_weather",
     storage: getRxStorageDexie(),
-    multiInstance: true,
+    multiInstance: false, // single-tab app — avoids DB9 leader-election conflicts
     ignoreDuplicate: true,
   });
 

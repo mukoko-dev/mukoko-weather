@@ -105,8 +105,10 @@ export default async function LocationPage({
   params: Promise<{ location: string }>;
 }) {
   const { location: slug } = await params;
-  const location = await loadLocation(slug);
-  if (!location) notFound();
+  const rawLocation = await loadLocation(slug);
+  if (!rawLocation) notFound();
+  // Strip MongoDB _id (ObjectId with .toJSON()) before passing to Client Components
+  const { _id: _removed, ...location } = rawLocation as typeof rawLocation & { _id?: unknown };
 
   // Fetch weather — double-caught so the page shell ALWAYS renders.
   // getWeatherForLocation already has a 4-stage fallback (cache -> Tomorrow.io
