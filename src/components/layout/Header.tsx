@@ -114,9 +114,9 @@ export function Header() {
           </nav>
 
           {/* Action pill — 3 quick actions: Maps, Report, My Weather */}
-          {/* 56px touch targets (optimal), 20px icons for clarity */}
+          {/* 44px buttons, 18px icons — compact desktop pill */}
           <div
-            className="flex shrink-0 items-center gap-1 rounded-full bg-primary p-1"
+            className="flex shrink-0 items-center gap-0.5 rounded-full bg-primary p-0.5"
             role="toolbar"
             aria-label="Quick actions"
           >
@@ -124,14 +124,14 @@ export function Header() {
               href={`/${selectedLocation || "harare"}/map`}
               prefetch={false}
               aria-label="Weather map"
-              className="flex items-center justify-center w-14 h-14 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
+              className="flex items-center justify-center w-[var(--touch-target-min)] h-[var(--touch-target-min)] rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
             >
               <LayersIcon size={20} className="text-primary-foreground" />
             </Link>
             <button
               onClick={openReportModal}
               aria-label="Report current weather"
-              className="flex items-center justify-center w-14 h-14 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
+              className="flex items-center justify-center w-[var(--touch-target-min)] h-[var(--touch-target-min)] rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
               type="button"
             >
               <MegaphoneIcon size={20} className="text-primary-foreground" />
@@ -139,7 +139,7 @@ export function Header() {
             <button
               onClick={openMyWeather}
               aria-label="Open My Weather preferences"
-              className="flex items-center justify-center w-14 h-14 rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
+              className="flex items-center justify-center w-[var(--touch-target-min)] h-[var(--touch-target-min)] rounded-full bg-background/10 hover:bg-background/20 active:bg-background/30 active:scale-90 transition-all"
               type="button"
             >
               <MapPinIcon size={20} className="text-primary-foreground" />
@@ -158,7 +158,7 @@ export function Header() {
         <div className="mx-auto flex items-center justify-around px-1 min-h-[5rem]">
           <Link
             href="/"
-            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[56px] min-h-[56px] active:scale-95 ${
+            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] active:scale-95 ${
               isHome ? "text-primary" : "text-text-tertiary hover:text-text-secondary"
             }`}
             aria-label="Weather home"
@@ -171,7 +171,7 @@ export function Header() {
           <Link
             href="/explore"
             prefetch={false}
-            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[56px] min-h-[56px] active:scale-95 ${
+            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] active:scale-95 ${
               isExplore ? "text-primary" : "text-text-tertiary hover:text-text-secondary"
             }`}
             aria-label="Explore locations"
@@ -184,7 +184,7 @@ export function Header() {
           <Link
             href="/shamwari"
             prefetch={false}
-            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[56px] min-h-[56px] active:scale-95 ${
+            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] active:scale-95 ${
               isShamwari ? "text-primary" : "text-text-tertiary hover:text-text-secondary"
             }`}
             aria-label="Shamwari AI assistant"
@@ -197,7 +197,7 @@ export function Header() {
           <Link
             href="/history"
             prefetch={false}
-            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[56px] min-h-[56px] active:scale-95 ${
+            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] active:scale-95 ${
               isHistory ? "text-primary" : "text-text-tertiary hover:text-text-secondary"
             }`}
             aria-label="Weather history"
@@ -209,7 +209,7 @@ export function Header() {
           </Link>
           <button
             onClick={openMyWeather}
-            className="relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[56px] min-h-[56px] text-text-tertiary hover:text-text-secondary active:scale-95"
+            className="relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] text-text-tertiary hover:text-text-secondary active:scale-95"
             aria-label="My Weather settings"
             type="button"
           >
