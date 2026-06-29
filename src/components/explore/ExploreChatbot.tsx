@@ -467,7 +467,7 @@ function EmptyState({ onSuggestionClick, loading }: { onSuggestionClick: (query:
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
         <SparklesIcon size={24} className="text-primary" />
       </div>
-      <h2 className="mt-4 text-lg font-semibold text-text-primary font-heading">
+      <h2 className="giraffe text-lg mt-4">
         Shamwari Explorer
       </h2>
       <p className="mt-2 max-w-sm text-center text-base text-text-secondary">
@@ -476,7 +476,7 @@ function EmptyState({ onSuggestionClick, loading }: { onSuggestionClick: (query:
       </p>
 
       <div className="mt-6 w-full max-w-md">
-        <p className="mb-3 text-base font-medium uppercase tracking-wider text-text-tertiary">
+        <p className="hornbill font-medium mb-3">
           Try asking
         </p>
         <div className="grid grid-cols-2 gap-2">

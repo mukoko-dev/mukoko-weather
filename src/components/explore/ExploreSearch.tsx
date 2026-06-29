@@ -106,7 +106,7 @@ export function ExploreSearch() {
         <SparklesIcon size={18} className="text-primary" />
         <h2
           id="explore-search-heading"
-          className="text-lg font-semibold text-text-primary font-heading"
+          className="giraffe text-lg"
         >
           AI Search
         </h2>
