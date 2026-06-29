@@ -990,19 +990,26 @@ class TestAddLocation:
     @patch("py._locations.check_rate_limit")
     @patch("py._locations.get_client_ip")
     @patch("py._locations.locations_collection")
-    async def test_slug_collision_handling(self, mock_coll, mock_ip,
-                                           mock_rate, mock_geocode, mock_dedup,
-                                           mock_elev, mock_db, mock_enrich):
-        """When slug already exists, should append a numeric suffix."""
+    async def test_slug_collision_resolved_via_suburb_enrichment(
+        self, mock_coll, mock_ip, mock_rate, mock_geocode, mock_dedup,
+        mock_elev, mock_db, mock_enrich,
+    ):
+        """When the base slug collides, suburb-enrichment yields a different slug.
+
+        Replaces the old numeric-suffix behaviour — Phase 0E removed
+        ``harare-zw-2`` style auto-suffixing because it created duplicate
+        records for the same place.
+        """
         mock_ip.return_value = "1.2.3.4"
         mock_rate.return_value = {"allowed": True, "remaining": 4}
         mock_geocode.return_value = {
             "country": "ZW", "countryName": "Zimbabwe", "name": "Harare",
             "admin1": "Harare", "lat": -17.9, "lon": 31.1, "elevation": 1400,
+            "nominatimAddress": {"suburb": "Avondale"},
         }
         mock_dedup.return_value = None
         mock_elev.return_value = 1400
-        # First find_one: slug exists. Second find_one (slug-2): does not exist
+        # First find_one (base slug): exists. Second find_one (suburb slug): free.
         mock_coll.return_value.find_one.side_effect = [{"slug": "harare-zw"}, None]
         mock_db_inst = MagicMock()
         mock_db.return_value = mock_db_inst
@@ -1013,7 +1020,11 @@ class TestAddLocation:
 
         result = await add_location(request)
         assert result["mode"] == "created"
-        assert result["location"]["slug"] == "harare-zw-2"
+        # Suburb-enriched slug was used — NOT a numeric suffix.
+        assert result["location"]["slug"] == "avondale-zw"
+        # Make sure we didn't fall through to a numeric-suffix slug.
+        import re as _re
+        assert _re.search(r"-\d+$", result["location"]["slug"]) is None
 
 
 # ---------------------------------------------------------------------------
@@ -1452,14 +1463,20 @@ class TestResolveSlugCollision:
         assert result == "king-george-rd-zw"
 
     @patch("py._locations.locations_collection")
-    def test_numeric_suffix_fallback(self, mock_col):
-        """When all descriptive slugs collide, fall back to numeric suffix."""
+    def test_raises_when_all_descriptive_paths_collide(self, mock_col):
+        """When base + suburb + road slugs all collide, raise SlugCollisionError.
+
+        Phase 0E removed the numeric-suffix fallback because it generated
+        duplicate records for the same physical place (e.g. ``harare-zw-2``,
+        ``-3``, …). The caller now catches the exception and surfaces the
+        existing record as a duplicate.
+        """
+        from py._locations import SlugCollisionError
+
         def find_one_side(query):
             slug = query.get("slug", "")
             if slug in ("harare-zw", "avondale-zw", "king-george-rd-zw"):
                 return {"slug": slug}
-            if slug == "harare-zw-2":
-                return {"slug": slug}  # -2 also taken
             return None
 
         mock_col.return_value.find_one.side_effect = find_one_side
@@ -1468,8 +1485,9 @@ class TestResolveSlugCollision:
             "country": "ZW",
             "nominatimAddress": {"suburb": "Avondale", "road": "King George Rd"},
         }
-        result = _resolve_slug_collision("harare-zw", geocoded)
-        assert result == "harare-zw-3"
+        with pytest.raises(SlugCollisionError) as exc:
+            _resolve_slug_collision("harare-zw", geocoded)
+        assert exc.value.existing_slug == "harare-zw"
 
     @patch("py._locations.locations_collection")
     def test_skips_suburb_when_same_as_name(self, mock_col):
@@ -1525,3 +1543,282 @@ class TestResolveSlugCollision:
         }
         result = _resolve_slug_collision("test", geocoded)
         assert isinstance(result, str)
+
+
+# ---------------------------------------------------------------------------
+# add_location — Phase 0E platform integration (placesGeo + Fundi)
+# ---------------------------------------------------------------------------
+
+
+class TestAddLocationPlatformIntegration:
+    """Verifies the placesGeo mirror + Fundi seed queue are wired into add_location."""
+
+    @staticmethod
+    def _geocoded_zim_zw():
+        return {
+            "country": "ZW",
+            "countryName": "Zimbabwe",
+            "name": "NewPlace",
+            "admin1": "Manicaland",
+            "lat": -19.0,
+            "lon": 32.0,
+            "elevation": 1000,
+        }
+
+    @pytest.mark.asyncio
+    @patch("py._places_geo.enqueue_fundi_seed")
+    @patch("py._places_geo.upsert_placesgeo_city")
+    @patch("py._locations._enrich_location_with_ai")
+    @patch("py._locations.get_db")
+    @patch("py._locations._get_elevation")
+    @patch("py._locations._find_duplicate")
+    @patch("py._locations._reverse_geocode")
+    @patch("py._locations.check_rate_limit")
+    @patch("py._locations.get_client_ip")
+    @patch("py._locations.locations_collection")
+    async def test_writes_to_placesgeo_when_new(
+        self, mock_coll, mock_ip, mock_rate, mock_geocode, mock_dedup,
+        mock_elev, mock_db, mock_enrich, mock_upsert, mock_queue,
+    ):
+        mock_ip.return_value = "1.2.3.4"
+        mock_rate.return_value = {"allowed": True, "remaining": 4}
+        mock_geocode.return_value = self._geocoded_zim_zw()
+        mock_dedup.return_value = None
+        mock_elev.return_value = 1200
+        mock_coll.return_value.find_one.return_value = None
+        mock_db_inst = MagicMock()
+        mock_db.return_value = mock_db_inst
+        mock_db_inst.__getitem__ = MagicMock(return_value=MagicMock())
+
+        # Fresh placesGeo entry (wasExisting not set)
+        mock_upsert.return_value = {
+            "_id": "new-placesgeo-uuid",
+            "slug": "newplace-abc123",
+        }
+
+        request = MagicMock()
+        request.json = AsyncMock(return_value={"lat": -19.0, "lon": 32.0})
+
+        result = await add_location(request)
+
+        assert result["mode"] == "created"
+        mock_coll.return_value.insert_one.assert_called_once()
+
+        mock_upsert.assert_called_once()
+        upsert_kwargs = mock_upsert.call_args.kwargs
+        assert upsert_kwargs["name"] == "NewPlace"
+        assert upsert_kwargs["country_iso"] == "ZW"
+        assert upsert_kwargs["lat"] == -19.0
+        assert upsert_kwargs["lon"] == 32.0
+
+        mock_queue.assert_called_once()
+        queue_kwargs = mock_queue.call_args.kwargs
+        assert queue_kwargs["lat"] == -19.0
+        assert queue_kwargs["lon"] == 32.0
+        assert queue_kwargs["radius_meters"] == 5000
+        assert queue_kwargs["query"] == "NewPlace"
+
+    @pytest.mark.asyncio
+    @patch("py._places_geo.enqueue_fundi_seed")
+    @patch("py._places_geo.upsert_placesgeo_city")
+    @patch("py._locations._enrich_location_with_ai")
+    @patch("py._locations.get_db")
+    @patch("py._locations._get_elevation")
+    @patch("py._locations._find_duplicate")
+    @patch("py._locations._reverse_geocode")
+    @patch("py._locations.check_rate_limit")
+    @patch("py._locations.get_client_ip")
+    @patch("py._locations.locations_collection")
+    async def test_uses_existing_placesgeo_when_dedup_match(
+        self, mock_coll, mock_ip, mock_rate, mock_geocode, mock_dedup,
+        mock_elev, mock_db, mock_enrich, mock_upsert, mock_queue,
+    ):
+        """When upsert returns an existing doc (wasExisting=True), surface its IDs."""
+        mock_ip.return_value = "1.2.3.4"
+        mock_rate.return_value = {"allowed": True, "remaining": 4}
+        mock_geocode.return_value = self._geocoded_zim_zw()
+        mock_dedup.return_value = None
+        mock_elev.return_value = 1200
+        mock_coll.return_value.find_one.return_value = None
+        mock_db_inst = MagicMock()
+        mock_db.return_value = mock_db_inst
+        mock_db_inst.__getitem__ = MagicMock(return_value=MagicMock())
+
+        mock_upsert.return_value = {
+            "_id": "existing-uuid",
+            "slug": "newplace-existing",
+            "wasExisting": True,
+        }
+
+        request = MagicMock()
+        request.json = AsyncMock(return_value={"lat": -19.0, "lon": 32.0})
+
+        result = await add_location(request)
+        assert result["mode"] == "created"
+        assert result["placesGeoId"] == "existing-uuid"
+        assert result["placesGeoSlug"] == "newplace-existing"
+        mock_queue.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("py._places_geo.enqueue_fundi_seed")
+    @patch("py._places_geo.upsert_placesgeo_city")
+    @patch("py._locations._enrich_location_with_ai")
+    @patch("py._locations.get_db")
+    @patch("py._locations._get_elevation")
+    @patch("py._locations._find_duplicate")
+    @patch("py._locations._reverse_geocode")
+    @patch("py._locations.check_rate_limit")
+    @patch("py._locations.get_client_ip")
+    @patch("py._locations.locations_collection")
+    async def test_response_includes_placesgeo_id(
+        self, mock_coll, mock_ip, mock_rate, mock_geocode, mock_dedup,
+        mock_elev, mock_db, mock_enrich, mock_upsert, mock_queue,
+    ):
+        mock_ip.return_value = "1.2.3.4"
+        mock_rate.return_value = {"allowed": True, "remaining": 4}
+        mock_geocode.return_value = self._geocoded_zim_zw()
+        mock_dedup.return_value = None
+        mock_elev.return_value = 1200
+        mock_coll.return_value.find_one.return_value = None
+        mock_db_inst = MagicMock()
+        mock_db.return_value = mock_db_inst
+        mock_db_inst.__getitem__ = MagicMock(return_value=MagicMock())
+
+        mock_upsert.return_value = {
+            "_id": "fresh-placesgeo-uuid",
+            "slug": "newplace-fresh1",
+        }
+
+        request = MagicMock()
+        request.json = AsyncMock(return_value={"lat": -19.0, "lon": 32.0})
+
+        result = await add_location(request)
+        assert result["placesGeoId"] == "fresh-placesgeo-uuid"
+        assert result["placesGeoSlug"] == "newplace-fresh1"
+
+    @pytest.mark.asyncio
+    @patch("py._places_geo.enqueue_fundi_seed")
+    @patch("py._places_geo.upsert_placesgeo_city")
+    @patch("py._locations._enrich_location_with_ai")
+    @patch("py._locations.get_db")
+    @patch("py._locations._get_elevation")
+    @patch("py._locations._find_duplicate")
+    @patch("py._locations._reverse_geocode")
+    @patch("py._locations.check_rate_limit")
+    @patch("py._locations.get_client_ip")
+    @patch("py._locations.locations_collection")
+    async def test_continues_when_platform_write_fails(
+        self, mock_coll, mock_ip, mock_rate, mock_geocode, mock_dedup,
+        mock_elev, mock_db, mock_enrich, mock_upsert, mock_queue,
+    ):
+        """A platform failure must NOT take down the user-facing 201 response."""
+        mock_ip.return_value = "1.2.3.4"
+        mock_rate.return_value = {"allowed": True, "remaining": 4}
+        mock_geocode.return_value = self._geocoded_zim_zw()
+        mock_dedup.return_value = None
+        mock_elev.return_value = 1200
+        mock_coll.return_value.find_one.return_value = None
+        mock_db_inst = MagicMock()
+        mock_db.return_value = mock_db_inst
+        mock_db_inst.__getitem__ = MagicMock(return_value=MagicMock())
+
+        mock_upsert.side_effect = RuntimeError("placesGeo validator rejected doc")
+
+        request = MagicMock()
+        request.json = AsyncMock(return_value={"lat": -19.0, "lon": 32.0})
+
+        # Should still succeed and return the legacy location data
+        result = await add_location(request)
+        assert result["mode"] == "created"
+        assert result["location"]["name"] == "NewPlace"
+        # placesGeo ids are None because the platform write failed
+        assert result["placesGeoId"] is None
+        assert result["placesGeoSlug"] is None
+
+
+# ---------------------------------------------------------------------------
+# Dedup hardening — SlugCollisionError, no numeric-suffix slugs
+# ---------------------------------------------------------------------------
+
+
+class TestSlugCollisionHardening:
+    """Phase 0E hardening — the auto-suffix path is gone. Slug collisions that
+    cannot be resolved via suburb/road enrichment must raise
+    SlugCollisionError so the caller can return the existing record.
+    """
+
+    @patch("py._locations.locations_collection")
+    def test_raises_when_all_paths_exhausted(self, mock_col):
+        """If suburb AND road enrichment both still collide, raise."""
+        from py._locations import SlugCollisionError
+
+        # Every find_one returns a doc → every candidate slug is taken.
+        mock_col.return_value.find_one.return_value = {"slug": "taken"}
+        geocoded = {
+            "name": "Test",
+            "country": "ZW",
+            "nominatimAddress": {"suburb": "Avondale", "road": "Main St"},
+        }
+        with pytest.raises(SlugCollisionError) as exc_info:
+            _resolve_slug_collision("test-zw", geocoded)
+        assert exc_info.value.existing_slug == "test-zw"
+
+    @patch("py._locations.locations_collection")
+    def test_no_numeric_suffix_slug_returned(self, mock_col):
+        """Sanity — _resolve_slug_collision must never return a `-\\d+$` slug."""
+        from py._locations import SlugCollisionError
+
+        mock_col.return_value.find_one.return_value = {"slug": "taken"}
+        geocoded = {"name": "Test", "country": "ZW", "nominatimAddress": {}}
+        with pytest.raises(SlugCollisionError):
+            _resolve_slug_collision("test-zw", geocoded)
+        # Verify the regression — no numeric suffix was generated.
+        # (If the old code path ran, it would have called find_one for "test-zw-2", "-3"…)
+
+    @pytest.mark.asyncio
+    @patch("py._places_geo.enqueue_fundi_seed")
+    @patch("py._places_geo.upsert_placesgeo_city")
+    @patch("py._locations._enrich_location_with_ai")
+    @patch("py._locations.get_db")
+    @patch("py._locations._get_elevation")
+    @patch("py._locations._find_duplicate")
+    @patch("py._locations._reverse_geocode")
+    @patch("py._locations.check_rate_limit")
+    @patch("py._locations.get_client_ip")
+    @patch("py._locations.locations_collection")
+    async def test_add_location_returns_existing_when_slug_collision_unresolvable(
+        self, mock_coll, mock_ip, mock_rate, mock_geocode, mock_dedup,
+        mock_elev, mock_db, mock_enrich, mock_upsert, mock_queue,
+    ):
+        """add_location should return mode=duplicate, NOT create -2/-3/... slugs."""
+        mock_ip.return_value = "1.2.3.4"
+        mock_rate.return_value = {"allowed": True, "remaining": 4}
+        mock_geocode.return_value = {
+            "country": "ZW", "countryName": "Zimbabwe", "name": "Windsor",
+            "admin1": "Harare", "lat": -17.83, "lon": 31.05, "elevation": 1490,
+            "nominatimAddress": {},
+        }
+        mock_dedup.return_value = None
+        mock_elev.return_value = 1490
+        # Every slug lookup returns a doc — collision cannot be resolved.
+        existing_record = {
+            "slug": "windsor-zw",
+            "name": "Windsor",
+            "province": "Harare",
+            "country": "ZW",
+        }
+        mock_coll.return_value.find_one.return_value = existing_record
+        mock_db_inst = MagicMock()
+        mock_db.return_value = mock_db_inst
+        mock_db_inst.__getitem__ = MagicMock(return_value=MagicMock())
+
+        request = MagicMock()
+        request.json = AsyncMock(return_value={"lat": -17.83, "lon": 31.05})
+
+        result = await add_location(request)
+        assert result["mode"] == "duplicate"
+        assert result["existing"]["slug"] == "windsor-zw"
+        # Verify we did NOT insert a new doc.
+        mock_coll.return_value.insert_one.assert_not_called()
+        # And we did NOT mirror to placesGeo for a duplicate.
+        mock_upsert.assert_not_called()

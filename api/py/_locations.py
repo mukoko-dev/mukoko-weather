@@ -446,8 +446,27 @@ def _generate_province_slug(province: str, country: str) -> str:
     return f"{slug}-{country.lower()}"[:80]
 
 
+class SlugCollisionError(Exception):
+    """Raised when every disambiguation path is exhausted for a slug.
+
+    When suburb- and road-enrichment both still collide with an existing
+    record, the new location is almost certainly the *same* place — we must
+    NEVER manufacture a fresh slug with a numeric suffix. The caller
+    catches this exception and returns the existing record as a duplicate.
+    """
+
+    def __init__(self, existing_slug: str):
+        super().__init__(f"Slug collision unresolvable; existing slug: {existing_slug}")
+        self.existing_slug = existing_slug
+
+
 def _resolve_slug_collision(slug: str, geocoded: dict) -> str:
-    """Try suburb/road enriched slugs before falling back to numeric suffix."""
+    """Try suburb/road enriched slugs; raise SlugCollisionError if all fail.
+
+    NEVER returns a numeric-suffixed slug. If both enrichment paths still
+    collide, the caller should treat this as a duplicate and surface the
+    existing record instead of creating a new one.
+    """
     existing = locations_collection().find_one({"slug": slug})
     if not existing:
         return slug
@@ -466,11 +485,8 @@ def _resolve_slug_collision(slug: str, geocoded: dict) -> str:
         enriched = _generate_slug(road, geocoded.get("country", ""))
         if not locations_collection().find_one({"slug": enriched}):
             return enriched
-    # Last resort: numeric suffix
-    suffix = 2
-    while locations_collection().find_one({"slug": f"{slug}-{suffix}"}):
-        suffix += 1
-    return f"{slug}-{suffix}"
+    # All enrichment paths exhausted — this is the same place. Never auto-suffix.
+    raise SlugCollisionError(existing_slug=slug)
 
 
 def _infer_tags(geocoded: dict) -> list[str]:
@@ -704,7 +720,25 @@ async def geo_lookup(
                 upsert=True,
             )
 
-            slug = _resolve_slug_collision(slug, geocoded)
+            try:
+                slug = _resolve_slug_collision(slug, geocoded)
+            except SlugCollisionError as exc:
+                # Same place — surface the existing record instead of creating
+                # a numeric-suffixed duplicate.
+                existing = locations_collection().find_one(
+                    {"slug": exc.existing_slug}, {"_id": 0},
+                )
+                if existing:
+                    return {
+                        "nearest": existing,
+                        "redirectTo": f"/{existing['slug']}",
+                        "isNew": False,
+                    }
+                # Existing record disappeared between checks — extremely unlikely.
+                raise HTTPException(
+                    status_code=409,
+                    detail="Slug collision could not be resolved",
+                )
 
             tags = _infer_tags(geocoded)
 
@@ -863,7 +897,32 @@ async def add_location(request: Request):
 
         slug = _generate_slug(geocoded["name"], geocoded["country"])
 
-        slug = _resolve_slug_collision(slug, geocoded)
+        try:
+            slug = _resolve_slug_collision(slug, geocoded)
+        except SlugCollisionError as exc:
+            # All enrichment paths collide — same place. Return the existing
+            # record as a duplicate instead of creating a numeric-suffixed copy.
+            existing = locations_collection().find_one(
+                {"slug": exc.existing_slug}, {"_id": 0},
+            )
+            if existing:
+                return {
+                    "mode": "duplicate",
+                    "existing": {
+                        "slug": existing["slug"],
+                        "name": existing.get("name", ""),
+                        "province": existing.get("province", ""),
+                        "country": existing.get("country", ""),
+                    },
+                    "message": (
+                        f"A location already exists nearby: "
+                        f"{existing.get('name', exc.existing_slug)}"
+                    ),
+                }
+            raise HTTPException(
+                status_code=409,
+                detail="Slug collision could not be resolved",
+            )
 
         province = geocoded.get("admin1") or geocoded.get("countryName", "")
         province_slug = _generate_province_slug(province, geocoded["country"])
@@ -903,6 +962,48 @@ async def add_location(request: Request):
         # Enrich: resolve seasons for this country if not already known
         _enrich_location_with_ai(geocoded["country"], lat, lon)
 
+        # ── Platform integration — placesGeo mirror + Fundi POI seed ─────────
+        # Wrapped in try/except so platform failures NEVER break the user-
+        # facing response. The legacy `weather.locations` write above already
+        # succeeded; this is a fan-out write to the shared Nyuchi platform.
+        #
+        # ``upsert_placesgeo_city`` performs its own 5 km parent-scoped dedup
+        # and returns the existing doc (with ``wasExisting: True``) when it
+        # finds one — so we don't need a separate dedup call here.
+        places_geo_id: Optional[str] = None
+        places_geo_slug: Optional[str] = None
+        try:
+            from ._places_geo import upsert_placesgeo_city, enqueue_fundi_seed
+
+            placesgeo_doc = upsert_placesgeo_city(
+                name=geocoded["name"],
+                lat=lat,
+                lon=lon,
+                country_iso=geocoded["country"],
+                province=province,
+                elevation=elevation,
+            )
+            places_geo_id = placesgeo_doc.get("_id")
+            places_geo_slug = placesgeo_doc.get("slug")
+            if not placesgeo_doc.get("wasExisting"):
+                logger.info(
+                    "Created placesGeo entry %s for %s",
+                    places_geo_id, geocoded["name"],
+                )
+
+            # Fire-and-forget — Fundi worker polls places.seedRequests.
+            # enqueue_fundi_seed itself dedupes against in-flight requests.
+            enqueue_fundi_seed(
+                lat=lat,
+                lon=lon,
+                radius_meters=5000,
+                query=geocoded["name"],
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Platform placesGeo/Fundi integration failed: %s", exc,
+            )
+
         return {
             "mode": "created",
             "location": {
@@ -914,6 +1015,8 @@ async def add_location(request: Request):
                 "lon": new_loc["lon"],
                 "elevation": new_loc["elevation"],
             },
+            "placesGeoId": places_geo_id,
+            "placesGeoSlug": places_geo_slug,
         }
     except HTTPException:
         raise
