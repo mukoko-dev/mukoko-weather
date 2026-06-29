@@ -96,7 +96,7 @@ function AirportSearch({
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder="Search city or airport name…"
-          className="w-full rounded-[var(--radius-input)] border border-text-tertiary/20 bg-surface-base pl-9 pr-4 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          className="crane pl-9 pr-4"
           aria-label={label}
           aria-expanded={open}
           aria-autocomplete="list"
@@ -107,7 +107,7 @@ function AirportSearch({
       </div>
 
       {value && (
-        <div className="mt-1.5 flex items-center gap-2 rounded-[var(--radius-input)] bg-primary/8 px-3 py-1.5">
+        <div className="mt-1.5 flamingo">
           <MapPinIcon size={14} className="text-primary shrink-0" aria-hidden="true" />
           <span className="text-sm font-medium text-text-primary flex-1 truncate">{value.name}</span>
           {icaoForResult(value)
@@ -314,7 +314,7 @@ export function AviationPlanner() {
       <p className="text-sm text-text-secondary mb-6">Pre-flight weather for pilots. Select your departure and destination to get METAR, TAF, and generate a PDF briefing.</p>
 
       {/* Route selection */}
-      <div className="rounded-[var(--radius-card)] border border-primary/20 bg-surface-card p-5 shadow-sm mb-6 space-y-4">
+      <div className="baobab p-5 mb-6 space-y-4">
         <AirportSearch label="Departure Airport" value={dep} onChange={setDep} />
         <AirportSearch label="Destination Airport" value={dest} onChange={setDest} />
 
@@ -331,7 +331,7 @@ export function AviationPlanner() {
             type="button"
             onClick={getBriefing}
             disabled={!canBrief || loading}
-            className="press-scale inline-flex items-center gap-2 rounded-[var(--radius-button)] bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed min-h-[var(--touch-target-min)]"
+            className="kudu-sm"
           >
             <NavigationIcon size={15} aria-hidden="true" />
             {loading ? "Loading…" : "Get Briefing"}
@@ -346,7 +346,7 @@ export function AviationPlanner() {
       </div>
 
       {error && (
-        <div className="rounded-[var(--radius-card)] border border-severity-moderate/30 bg-severity-moderate/5 p-4 mb-6" role="alert">
+        <div className="alert-banner mb-6" role="alert">
           <p className="text-sm text-severity-moderate">{error}</p>
         </div>
       )}
@@ -368,14 +368,14 @@ export function AviationPlanner() {
               type="button"
               onClick={generatePdf}
               disabled={pdfLoading}
-              className="press-scale inline-flex items-center gap-2 rounded-[var(--radius-button)] border border-primary/30 bg-surface-card px-4 py-2.5 text-sm font-medium text-primary transition-all hover:bg-primary/5 hover:border-primary/60 disabled:opacity-50 min-h-[var(--touch-target-min)]"
+              className="impala-primary"
             >
               {pdfLoading ? "Generating…" : "↓ Download PDF Briefing"}
             </button>
           </div>
 
           {/* Flight conditions summary */}
-          <div className="rounded-[var(--radius-card)] border border-primary/20 bg-surface-card p-4 shadow-sm">
+          <div className="baobab">
             <h3 className="text-sm font-medium text-text-secondary mb-3">Flight Conditions at Briefing Time</h3>
             <div className="flex gap-6">
               <div className="text-center">

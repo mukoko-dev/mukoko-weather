@@ -633,6 +633,16 @@ body {
            disabled:opacity-50 disabled:pointer-events-none;
   }
 
+  /* .kudu-sm — smaller primary pill (compact toolbars, secondary actions) */
+  .kudu-sm {
+    @apply press-scale inline-flex items-center gap-2
+           rounded-[var(--radius-button)] bg-primary
+           px-5 py-2.5 text-sm font-medium text-primary-foreground
+           transition-all hover:bg-primary/90 hover:shadow-md
+           disabled:opacity-40 disabled:pointer-events-none disabled:cursor-not-allowed
+           min-h-[var(--touch-target-min)];
+  }
+
   /* .impala — secondary / outline pill button (lighter, paired with kudu) */
   .impala {
     @apply inline-flex items-center justify-center gap-2
@@ -640,6 +650,29 @@ body {
            px-5 py-3 text-sm font-medium text-text-secondary
            transition-all hover:border-text-tertiary/40 hover:bg-surface-card hover:text-text-primary
            disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  /* .impala-primary — outline button in brand colour (download/secondary CTA) */
+  .impala-primary {
+    @apply press-scale inline-flex items-center gap-2
+           rounded-[var(--radius-button)] border border-primary/30 bg-surface-card
+           px-4 py-2.5 text-sm font-medium text-primary
+           transition-all hover:bg-primary/5 hover:border-primary/60
+           disabled:opacity-50 disabled:pointer-events-none
+           min-h-[var(--touch-target-min)];
+  }
+
+  /* .flamingo — selected-state chip / pill (subtle primary tint) */
+  .flamingo {
+    @apply inline-flex items-center gap-2
+           rounded-[var(--radius-input)] bg-primary/10 px-3 py-1.5
+           text-sm font-medium text-text-primary;
+  }
+
+  /* .alert-banner — soft severity banner (moderate by default) */
+  .alert-banner {
+    @apply rounded-[var(--radius-card)] border border-severity-moderate/30
+           bg-severity-moderate/5 p-4;
   }
 
   /* .bee — small round icon button (a swarm forms the action pill) */
