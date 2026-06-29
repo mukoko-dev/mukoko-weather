@@ -89,7 +89,7 @@ export function Header() {
             </Link>
           </div>
 
-          {/* Desktop nav — plain links with underline active/hover indicator */}
+          {/* Desktop nav — plain text links, underline on active/hover */}
           <nav className="hidden sm:flex items-center gap-6" aria-label="Main navigation">
             {[
               { href: "/explore", label: "Explore", active: isExplore },
@@ -102,18 +102,13 @@ export function Header() {
                 href={href}
                 prefetch={false}
                 aria-current={active ? "page" : undefined}
-                className={`relative py-1 text-base font-medium transition-colors group ${
-                  active ? "text-primary" : "text-text-secondary hover:text-text-primary"
+                className={`text-base font-medium transition-colors ${
+                  active
+                    ? "text-primary underline underline-offset-4 decoration-primary decoration-2"
+                    : "text-text-secondary hover:text-text-primary hover:underline hover:underline-offset-4 hover:decoration-text-tertiary/50 hover:decoration-2"
                 }`}
               >
                 {label}
-                {/* Underline indicator */}
-                <span
-                  className={`absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-primary transition-transform origin-left ${
-                    active ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100 opacity-40"
-                  }`}
-                  aria-hidden="true"
-                />
               </Link>
             ))}
           </nav>
