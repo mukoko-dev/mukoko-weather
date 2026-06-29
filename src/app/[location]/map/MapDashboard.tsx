@@ -53,7 +53,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
               href={`/${location.slug}`}
               className="inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-surface-card/90 px-3 py-1.5 text-sm font-medium text-text-secondary shadow backdrop-blur-sm transition-colors hover:bg-surface-card hover:text-text-primary"
             >
-              ← {location.name}
+              ← Back to weather
             </Link>
           </div>
         </div>

@@ -43,7 +43,7 @@ export function MapPreview({ location }: MapPreviewProps) {
           <MapLibreMap
             lat={location.lat}
             lon={location.lon}
-            zoom={7}
+            zoom={10}
             interactive={false}
             className="h-full w-full"
           />
