@@ -387,15 +387,16 @@ describe("message layout", () => {
   });
 
   it("assistant messages show a sparkles avatar icon", () => {
-    expect(source).toContain("rounded-full bg-primary/10");
+    // .hoopoe fauna class (defined in globals.css) resolves to rounded-full bg-primary/10
+    expect(source).toMatch(/hoopoe|rounded-full bg-primary\/10/);
     expect(source).toContain("SparklesIcon");
   });
 
   it("typing indicator matches assistant message layout with sparkles icon", () => {
-    // Typing indicator should also use the sparkles icon layout
     const typingSection = source.slice(source.indexOf("function TypingIndicator"));
     expect(typingSection).toContain("SparklesIcon");
-    expect(typingSection).toContain("rounded-full bg-primary/10");
+    // .hoopoe fauna class encapsulates the avatar circle styling
+    expect(typingSection).toMatch(/hoopoe|rounded-full bg-primary\/10/);
   });
 });
 
