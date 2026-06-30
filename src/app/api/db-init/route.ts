@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { ensureIndexes, syncLocations, syncActivities, syncCountries, syncProvinces, syncRegions, syncTags, syncSeasons, syncSuitabilityRules, syncActivityCategories, syncAIPrompts, syncAISuggestedRules, setApiKey } from "@/lib/db";
-import { LOCATIONS } from "@/lib/locations";
+import { ensureIndexes, syncActivities, syncCountries, syncProvinces, syncRegions, syncTags, syncSeasons, syncSuitabilityRules, syncActivityCategories, syncAIPrompts, syncAISuggestedRules, setApiKey } from "@/lib/db";
+import { weatherDb } from "@/lib/mongo";
 import { ACTIVITIES } from "@/lib/activities";
 import { COUNTRIES, PROVINCES } from "@/lib/countries";
 import { REGIONS } from "@/lib/seed-regions";
@@ -32,12 +32,20 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Parse optional body for API keys
+    // Parse optional body for API keys + destructive flags
     let apiKeys: Record<string, string> = {};
+    let dropLegacyLocations = false;
     try {
       const body = await request.json();
       if (body?.apiKeys && typeof body.apiKeys === "object") {
         apiKeys = body.apiKeys;
+      }
+      // Phase 0F: destructive drop of `weather.locations` is OPT-IN so a
+      // routine db-init never wipes the collection while Python readers are
+      // still being migrated. Set `{ "dropLegacyLocations": true }` in the
+      // request body once Python is fully migrated to read from placesGeo.
+      if (body?.dropLegacyLocations === true) {
+        dropLegacyLocations = true;
       }
     } catch {
       // No body or invalid JSON — that's fine, keys are optional
@@ -47,18 +55,35 @@ export async function POST(request: Request) {
     // Countries must exist before provinces (provinces reference country codes).
     await syncCountries(COUNTRIES);
     // Remaining syncs write to independent collections — run all in parallel.
+    // Phase 0F: location seeding is gone. Mukoko-weather no longer maintains
+    // its own siloed `weather.locations` collection — location reads go
+    // through `places.placesGeo` via `src/lib/places.ts`.
     await Promise.all([
       syncProvinces(PROVINCES),
       syncRegions(REGIONS),
       syncTags(TAGS),
       syncSeasons(SEASONS),
       syncActivityCategories(CATEGORIES),
-      syncLocations(LOCATIONS),
       syncActivities(ACTIVITIES),
       syncSuitabilityRules(SUITABILITY_RULES),
       syncAIPrompts(AI_PROMPTS),
       syncAISuggestedRules(AI_SUGGESTED_PROMPT_RULES),
     ]);
+
+    // Drop the legacy `weather.locations` collection — opt-in only.
+    // Idempotent: a missing collection is fine, only real errors propagate.
+    let droppedLegacyLocations = false;
+    if (dropLegacyLocations) {
+      try {
+        const dropped = await weatherDb().dropCollection("locations");
+        droppedLegacyLocations = !!dropped;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!msg.includes("ns not found")) {
+          console.warn("[db-init] Could not drop weather.locations:", msg);
+        }
+      }
+    }
 
     // Store any provided API keys
     const storedKeys: string[] = [];
@@ -74,7 +99,6 @@ export async function POST(request: Request) {
       indexes: "created",
       countries: COUNTRIES.length,
       provinces: PROVINCES.length,
-      locations: LOCATIONS.length,
       activities: ACTIVITIES.length,
       categories: CATEGORIES.length,
       suitabilityRules: SUITABILITY_RULES.length,
@@ -84,6 +108,7 @@ export async function POST(request: Request) {
       aiPrompts: AI_PROMPTS.length,
       aiSuggestedRules: AI_SUGGESTED_PROMPT_RULES.length,
       apiKeys: storedKeys.length > 0 ? storedKeys : "none provided",
+      droppedLegacyLocations,
       // Atlas Search index definitions are in the codebase (db.ts) — not
       // included in the response to avoid unnecessary schema disclosure.
     });

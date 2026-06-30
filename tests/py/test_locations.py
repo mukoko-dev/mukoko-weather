@@ -1610,13 +1610,14 @@ class TestAddLocationPlatformIntegration:
         assert upsert_kwargs["country_iso"] == "ZW"
         assert upsert_kwargs["lat"] == -19.0
         assert upsert_kwargs["lon"] == 32.0
+        # Phase 0F: mukoko clean URL slug + tags must be stamped onto the
+        # placesGeo entry so the TS resolveLocationSlug helper can find it.
+        assert upsert_kwargs["mukoko_slug"]
+        assert upsert_kwargs["mukoko_tags"]
 
-        mock_queue.assert_called_once()
-        queue_kwargs = mock_queue.call_args.kwargs
-        assert queue_kwargs["lat"] == -19.0
-        assert queue_kwargs["lon"] == 32.0
-        assert queue_kwargs["radius_meters"] == 5000
-        assert queue_kwargs["query"] == "NewPlace"
+        # Phase 0F: Fundi POI enrichment is intentionally NOT triggered —
+        # POI seeding (places.places) is a separate optional concern.
+        mock_queue.assert_not_called()
 
     @pytest.mark.asyncio
     @patch("py._places_geo.enqueue_fundi_seed")
@@ -1657,7 +1658,8 @@ class TestAddLocationPlatformIntegration:
         assert result["mode"] == "created"
         assert result["placesGeoId"] == "existing-uuid"
         assert result["placesGeoSlug"] == "newplace-existing"
-        mock_queue.assert_called_once()
+        # Phase 0F: Fundi POI enrichment is not triggered.
+        mock_queue.assert_not_called()
 
     @pytest.mark.asyncio
     @patch("py._places_geo.enqueue_fundi_seed")
