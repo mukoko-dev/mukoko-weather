@@ -60,14 +60,25 @@ app = FastAPI(
 
 _ALLOWED_ORIGINS = [
     "https://weather.mukoko.com",
-    "http://localhost:3000",  # local dev
+    "http://localhost:3000",   # web dev (Next.js)
+    "http://localhost:8081",   # Expo Metro web bundler
+    "http://localhost:8082",   # Expo web dev server
+    "http://localhost:19006",  # legacy Expo web port
 ]
+
+# Allow LAN-IP origins so the mobile dev flow (phone or local network) can hit
+# the Mac running the Next.js + Python API. Matches RFC 1918 ranges only.
+_ALLOWED_ORIGIN_REGEX = (
+    r"^http://(10|127|192\.168|172\.(1[6-9]|2[0-9]|3[01]))"
+    r"\.\d{1,3}(\.\d{1,3}){0,2}(:\d+)?$"
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
+    allow_origin_regex=_ALLOWED_ORIGIN_REGEX,
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-Mukoko-User-Id", "X-Mukoko-User-Email"],
 )
 
 # ---------------------------------------------------------------------------
