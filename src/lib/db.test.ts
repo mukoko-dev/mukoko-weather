@@ -163,19 +163,18 @@ describe("new DB helper function exports", () => {
     expect(typeof getLocationCount).toBe("function");
   });
 
-  it("getLocationCount uses estimatedDocumentCount (metadata only, no collection scan)", () => {
-    // Verify the implementation uses estimatedDocumentCount (O(1) metadata)
-    // and NOT countDocuments (which does a full collection scan).
+  it("getLocationCount returns the static seed catalog length (Phase 0F)", () => {
+    // Phase 0F: weather.locations is dropped, so getLocationCount returns
+    // LOCATIONS.length from the static seed array (no DB round-trip).
     const dbSource = readFileSync(resolve(__dirname, "db.ts"), "utf-8");
 
-    // Extract the getLocationCount function body
     const fnStart = dbSource.indexOf("async function getLocationCount");
     expect(fnStart).toBeGreaterThan(-1);
     const fnEnd = dbSource.indexOf("}", fnStart) + 1;
     const fnBody = dbSource.slice(fnStart, fnEnd);
 
-    expect(fnBody).toContain("estimatedDocumentCount");
-    expect(fnBody).not.toContain("countDocuments");
+    expect(fnBody).toContain("LOCATIONS.length");
+    expect(fnBody).not.toContain("estimatedDocumentCount");
   });
 });
 
@@ -452,16 +451,14 @@ describe("Atlas Search time-based recovery", () => {
     expect(dbSource).toContain("5 * 60 * 1000");
   });
 
-  it("disables Atlas Search with a timestamp, not a permanent boolean", () => {
+  it("disables activity Atlas Search with a timestamp, not a permanent boolean", () => {
+    // Phase 0F: location Atlas Search / Vector Search disabling removed —
+    // those paths now run against `places.placesGeo` (managed by the
+    // platform). Only the activity Atlas Search retains the local
+    // time-based circuit breaker.
     const dbSource = readFileSync(resolve(__dirname, "db.ts"), "utf-8");
-    // Should use timestamp-based disabling (Date.now())
-    expect(dbSource).toContain("atlasSearchDisabledAt = Date.now()");
     expect(dbSource).toContain("atlasActivitySearchDisabledAt = Date.now()");
-    expect(dbSource).toContain("vectorSearchDisabledAt = Date.now()");
-    // Should NOT have permanent boolean flags
-    expect(dbSource).not.toContain("atlasSearchAvailable = false");
     expect(dbSource).not.toContain("atlasActivitySearchAvailable = false");
-    expect(dbSource).not.toContain("vectorSearchAvailable = false");
   });
 
   it("only matches code 40324 and 'index not found' — not broad $search or PlanExecutor strings", () => {
@@ -474,31 +471,27 @@ describe("Atlas Search time-based recovery", () => {
     expect(dbSource).not.toContain('msg.includes("PlanExecutor")');
   });
 
-  it("checks time elapsed since disable before skipping Atlas Search", () => {
+  it("checks time elapsed since disable before skipping activity Atlas Search", () => {
     const dbSource = readFileSync(resolve(__dirname, "db.ts"), "utf-8");
-    // All three search functions should check Date.now() - disabledAt > ATLAS_RETRY_AFTER_MS
-    expect(dbSource).toContain("Date.now() - atlasSearchDisabledAt > ATLAS_RETRY_AFTER_MS");
     expect(dbSource).toContain("Date.now() - atlasActivitySearchDisabledAt > ATLAS_RETRY_AFTER_MS");
-    expect(dbSource).toContain("Date.now() - vectorSearchDisabledAt > ATLAS_RETRY_AFTER_MS");
   });
 });
 
-describe("Vector Search embedding guard", () => {
-  it("checks for existing embeddings before running $vectorSearch", () => {
-    const dbSource = readFileSync(resolve(__dirname, "db.ts"), "utf-8");
-    expect(dbSource).toContain("embeddingsExist");
-    expect(dbSource).toContain("embedding: { $exists: true }");
+describe("Vector Search (Phase 0F neutralised)", () => {
+  it("vectorSearchLocations returns an empty array (no weather.locations to search)", async () => {
+    // Phase 0F: weather.locations is dropped. Vector search will be
+    // reimplemented against shamwari.knowledgeBase or places.places later.
+    const result = await vectorSearchLocations([0.1, 0.2, 0.3]);
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(0);
   });
 
-  it("documents vector search as foundation for future work", () => {
-    const dbSource = readFileSync(resolve(__dirname, "db.ts"), "utf-8");
-    expect(dbSource).toContain("FOUNDATION FOR FUTURE WORK");
-    expect(dbSource).toContain("No code currently generates or stores embeddings");
+  it("storeLocationEmbedding is a no-op", async () => {
+    await expect(storeLocationEmbedding("anywhere", [0.1])).resolves.toBeUndefined();
   });
 
-  it("returns empty array when no embeddings exist", () => {
-    const dbSource = readFileSync(resolve(__dirname, "db.ts"), "utf-8");
-    expect(dbSource).toContain("if (!embeddingsExist) return []");
+  it("storeLocationEmbeddings is a no-op", async () => {
+    await expect(storeLocationEmbeddings([])).resolves.toBeUndefined();
   });
 });
 

@@ -45,7 +45,7 @@ This is **why** we're rebuilding on the new schema — to plug straight into Sta
 | Concern | Old approach | New approach |
 |---|---|---|
 | **Users / auth** | Anonymous device UUIDs | `identity.persons` collection (OIDC-compliant; already supports `workosUserId`) |
-| **Locations** | `weather.locations` + hardcoded `LOCATIONS` array (265 seeds) | `places.places` + `places.placesGeo` (full schema.org Place, OSM-sourced, with `bundu.trustSignals`, `conservation`, `informalEconomy`) |
+| **Locations** | ~~`weather.locations`~~ (dropped Phase 0F) — clean URL slugs resolve through `places.placesGeo` via `src/lib/places.ts`; static `LOCATIONS` array kept only as a slug→display-metadata fallback (not a DB seed source) | `places.places` (POIs) + `places.placesGeo` (admin geography) |
 | **Device sync** | Local `device_profiles` keyed by random UUID | `device.devices` with `userDevice` sub-document, `associatedUsers`, content filter profiles, `mukokoAppVersion` already in `softwareInventory` |
 | **AI / Shamwari** | `ai_summaries`, `ai_prompts`, `ai_suggested_rules` in app-local DB | `shamwari.conversations` + `shamwari.messages` + `shamwari.guardrails` + `shamwari.knowledgeBase` (vector-embedded) + `shamwari.preferences` |
 | **Severe weather alerts** | Not implemented | `weather.alerts` (already exists, **CAP-format**) |
@@ -271,36 +271,70 @@ Every collection (except `device_profiles` legacy) uses these patterns:
 
 ---
 
-## Search-miss flow (Phase 0E — Fundi integration)
+## Location resolution (Phase 0F — placesGeo canonical)
 
-When a user adds a new location via `POST /api/py/locations/add`, mukoko fans the write out to three places:
+`weather.locations` is **dropped**. Mukoko-weather reads/writes every location through
+`places.placesGeo` (admin geography) + `places.places` (POIs from OSM/Fundi) via the
+helpers in `src/lib/places.ts`.
+
+### Clean URL slug → placesGeo entry
+
+Mukoko URLs use clean slugs (`/harare`, `/victoria-falls`) — NOT the hash-suffixed
+platform slugs (`/harare-35c223`). The resolver in `src/lib/places.ts`
+(`resolveLocationSlug`) maps clean → platform via three strategies (first hit wins):
+
+1. **Stamped lookup**: `placesGeo.sourceProvenance.mukokoSlug = "harare"` (exact match)
+2. **Name lookup via static seed**: clean slug `→ LOCATIONS[slug].name → placesGeo` by
+   normalised name (case-insensitive, diacritic-stripped), preferring `geoType:
+   city > town > village`
+3. **Name lookup via slug inference**: `"nairobi-ke" → "Nairobi"` (strips trailing
+   2-letter country code, title-cases) → same name lookup
+
+The adapter (`adaptPlacesGeoToLocationDoc`) reshapes the platform doc to the legacy
+`LocationDoc` consumers in `src/app/[location]/*` expect (`lat`, `lon`, `name`,
+`country`, `province`, `elevation`, `slug`, `_id`). Fields placesGeo doesn't carry
+(tags, elevation, provinceSlug) fall back to `sourceProvenance.mukoko*` first, then
+to the static `LOCATIONS` seed entry, then to `["city"]` / `0` defaults.
+
+### Create-on-demand flow
+
+When `resolveLocationSlug(slug)` returns null AND the request has lat/lon (IP geo
+header or GPS coords), `POST /api/py/locations/add` runs:
 
 ```
-POST /api/py/locations/add
-        │
-        ├──► weather.locations            (legacy mukoko slug — unchanged)
-        │
-        ├──► places.placesGeo             (admin/geographic mirror,
-        │                                   dataOrigin: "mukoko_user")
-        │
-        └──► places.seedRequests          (Fundi queue — POI enrichment)
-                                              │
-                                              ▼
-                                       Fundi Places worker
-                                              │
-                                              ├──► places.places   (POIs from OSM)
-                                              └──► places.placesGeo (admin gaps Fundi
-                                                                    discovers — uses its
-                                                                    own dataOrigin)
+1. Reverse-geocode lat/lon → { name, country ISO, province, nominatimAddress }
+2. upsert_placesgeo_city(...) — Phase 0E helper:
+     a. find_nearby_placesgeo() — 5 km radius, normalised-name match,
+        scoped by parentPlaceId (country _id)
+     b. If a pre-existing platform doc matches:
+        - patch in mukokoSlug / mukokoTags / mukokoProvince /
+          mukokoElevation / mukokoNominatimAddress
+        - return { wasExisting: true, ... }
+     c. Else insert a new placesGeo doc with sourceProvenance.dataOrigin:
+        "mukoko_user" and all the mukoko* fields stamped
+3. Return the new/existing placesGeo _id + slug to the caller
+4. Caller redirects browser to /<clean-slug>
+5. resolveLocationSlug() now finds the entry via sourceProvenance.mukokoSlug
+   → render page
 ```
 
-### Why queue-based?
+Phase 0F note: the `enqueue_fundi_seed()` POI enrichment call from the Phase 0E
+flow is intentionally NOT triggered any more. POI seeding (`places.places` from
+OSM via the Fundi worker) is a separate optional concern, not a P0 feature for
+mukoko-weather. Re-enable behind a flag like `MUKOKO_ENRICH_POIS_VIA_FUNDI` once
+the POI surface is wired up.
 
-Fundi Places is a **separate service** exposed only via MCP. Python cannot call MCP tools directly, so mukoko cannot synchronously trigger a Fundi seed. The integration is therefore queue-based:
+### Why queue-based? (Phase 0E historical — disabled in Phase 0F)
+
+Fundi Places is a **separate service** exposed only via MCP. Python cannot call MCP tools directly, so mukoko cannot synchronously trigger a Fundi seed. The integration was therefore queue-based:
 
 1. Mukoko writes a `places.seedRequests` doc with `status: "queued"`.
 2. Fundi's worker polls the queue, processes each request, and updates its own status field (`processing` → `complete`/`error`).
 3. Mukoko **fires and forgets** — there is no polling endpoint on the mukoko side. The user-facing response from `/api/py/locations/add` does not wait for Fundi.
+
+**Phase 0F**: the `enqueue_fundi_seed()` call is no longer triggered by `add_location` /
+`geo_lookup`. POI enrichment is a separate optional concern; re-enable behind a feature
+flag once we actually consume `places.places` POIs in mukoko-weather.
 
 ### `places.seedRequests` shape
 

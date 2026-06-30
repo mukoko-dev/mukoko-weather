@@ -759,6 +759,28 @@ async def geo_lookup(
             locations_collection().insert_one(new_loc)
             new_loc.pop("_id", None)
 
+            # Phase 0F: mirror into placesGeo with mukokoSlug so the TS
+            # resolveLocationSlug helper picks it up on the redirect target.
+            try:
+                from ._places_geo import upsert_placesgeo_city
+
+                upsert_placesgeo_city(
+                    name=geocoded["name"],
+                    lat=lat,
+                    lon=lon,
+                    country_iso=geocoded["country"],
+                    province=province,
+                    elevation=elevation,
+                    geo_type="city" if "city" in tags else "town",
+                    mukoko_slug=slug,
+                    mukoko_tags=tags,
+                    mukoko_nominatim_address=geocoded.get("nominatimAddress"),
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Platform placesGeo write failed (geo autoCreate): %s", exc,
+                )
+
             # Enrich: resolve seasons for this country if not already known
             _enrich_location_with_ai(geocoded["country"], lat, lon)
 
@@ -962,18 +984,23 @@ async def add_location(request: Request):
         # Enrich: resolve seasons for this country if not already known
         _enrich_location_with_ai(geocoded["country"], lat, lon)
 
-        # ── Platform integration — placesGeo mirror + Fundi POI seed ─────────
+        # ── Platform integration — placesGeo write (Phase 0F) ────────────────
         # Wrapped in try/except so platform failures NEVER break the user-
-        # facing response. The legacy `weather.locations` write above already
-        # succeeded; this is a fan-out write to the shared Nyuchi platform.
+        # facing response. ``upsert_placesgeo_city`` performs its own 5 km
+        # parent-scoped dedup and returns the existing doc with
+        # ``wasExisting: True`` when it finds one — and patches an existing
+        # entry with our ``mukokoSlug`` so the TS resolver can find it by
+        # clean URL slug.
         #
-        # ``upsert_placesgeo_city`` performs its own 5 km parent-scoped dedup
-        # and returns the existing doc (with ``wasExisting: True``) when it
-        # finds one — so we don't need a separate dedup call here.
+        # Phase 0F note: the Fundi POI enrichment call (``enqueue_fundi_seed``)
+        # is intentionally NOT triggered here. POI seeding is a separate
+        # concern (``places.places`` from OSM via the Fundi worker), not a
+        # P0 feature for mukoko-weather. Re-enable behind a flag like
+        # ``MUKOKO_ENRICH_POIS_VIA_FUNDI`` when the POI surface is wired up.
         places_geo_id: Optional[str] = None
         places_geo_slug: Optional[str] = None
         try:
-            from ._places_geo import upsert_placesgeo_city, enqueue_fundi_seed
+            from ._places_geo import upsert_placesgeo_city
 
             placesgeo_doc = upsert_placesgeo_city(
                 name=geocoded["name"],
@@ -982,6 +1009,10 @@ async def add_location(request: Request):
                 country_iso=geocoded["country"],
                 province=province,
                 elevation=elevation,
+                geo_type="city" if "city" in tags else "town",
+                mukoko_slug=slug,
+                mukoko_tags=tags,
+                mukoko_nominatim_address=geocoded.get("nominatimAddress"),
             )
             places_geo_id = placesgeo_doc.get("_id")
             places_geo_slug = placesgeo_doc.get("slug")
@@ -990,18 +1021,9 @@ async def add_location(request: Request):
                     "Created placesGeo entry %s for %s",
                     places_geo_id, geocoded["name"],
                 )
-
-            # Fire-and-forget — Fundi worker polls places.seedRequests.
-            # enqueue_fundi_seed itself dedupes against in-flight requests.
-            enqueue_fundi_seed(
-                lat=lat,
-                lon=lon,
-                radius_meters=5000,
-                query=geocoded["name"],
-            )
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "Platform placesGeo/Fundi integration failed: %s", exc,
+                "Platform placesGeo write failed: %s", exc,
             )
 
         return {

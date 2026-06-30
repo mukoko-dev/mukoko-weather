@@ -257,6 +257,9 @@ def upsert_placesgeo_city(
     geo_type: str = "town",
     data_origin: str = "mukoko_user",
     data_confidence: float = 0.6,
+    mukoko_slug: Optional[str] = None,
+    mukoko_tags: Optional[list[str]] = None,
+    mukoko_nominatim_address: Optional[dict] = None,
 ) -> dict:
     """Insert a new ``places.placesGeo`` document, or return the existing one.
 
@@ -268,9 +271,19 @@ def upsert_placesgeo_city(
          added ``wasExisting: True`` marker. NO insert is performed and NO
          suffixed/alternate slug is generated — that would create the kind
          of duplicate-record corruption Phase 0E is meant to prevent.
+
+         When ``mukoko_slug`` is provided and the existing doc lacks one,
+         the existing doc is **patched** in place to stamp the slug. This
+         lets pre-existing platform-seeded entries become discoverable by
+         the mukoko clean-slug resolver without creating a duplicate.
       3. Otherwise, a new doc is built and inserted. The platform validator
          does NOT include a ``bundu`` field on placesGeo, so the document
          is constructed manually instead of via ``stamp_platform_fields``.
+
+    Phase 0F: ``mukoko_slug``, ``mukoko_tags``, and
+    ``mukoko_nominatim_address`` are now stored under ``sourceProvenance``
+    so the TypeScript ``resolveLocationSlug`` helper can find user-added
+    placesGeo entries by their clean mukoko URL slug without a name lookup.
     """
     parent_place_id = get_country_id(country_iso) if country_iso else None
 
@@ -283,8 +296,36 @@ def upsert_placesgeo_city(
         parent_place_id=parent_place_id,
     )
     if existing is not None:
-        # Caller checks the ``wasExisting`` flag to know not to log a fresh insert.
         existing = dict(existing)
+        # Phase 0F: stamp the mukoko slug onto a pre-existing platform doc
+        # if it's missing. This is critical for platform-seeded city entries
+        # (e.g. Phase 0C-1 mukoko_seed cities) so the clean-slug resolver
+        # picks them up without duplicating.
+        if mukoko_slug:
+            existing_prov = existing.get("sourceProvenance") or {}
+            if not existing_prov.get("mukokoSlug"):
+                patch: dict = {
+                    "updatedAt": datetime.now(timezone.utc),
+                    "sourceProvenance.mukokoSlug": mukoko_slug,
+                }
+                if mukoko_tags and not existing_prov.get("mukokoTags"):
+                    patch["sourceProvenance.mukokoTags"] = list(mukoko_tags)
+                if province and not existing_prov.get("mukokoProvince"):
+                    patch["sourceProvenance.mukokoProvince"] = province
+                if elevation is not None and not existing_prov.get("mukokoElevation"):
+                    patch["sourceProvenance.mukokoElevation"] = elevation
+                if mukoko_nominatim_address and not existing_prov.get("mukokoNominatimAddress"):
+                    patch["sourceProvenance.mukokoNominatimAddress"] = mukoko_nominatim_address
+                try:
+                    places_geo_collection().update_one(
+                        {"_id": existing["_id"]},
+                        {"$set": patch},
+                    )
+                    existing.setdefault("sourceProvenance", {}).update(
+                        {k.split(".", 1)[1]: v for k, v in patch.items() if k.startswith("sourceProvenance.")}
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Failed to stamp mukokoSlug on existing placesGeo: %s", exc)
         existing["wasExisting"] = True
         return existing
 
@@ -297,6 +338,12 @@ def upsert_placesgeo_city(
         source_provenance["mukokoProvince"] = province
     if elevation is not None:
         source_provenance["mukokoElevation"] = elevation
+    if mukoko_slug:
+        source_provenance["mukokoSlug"] = mukoko_slug
+    if mukoko_tags:
+        source_provenance["mukokoTags"] = list(mukoko_tags)
+    if mukoko_nominatim_address:
+        source_provenance["mukokoNominatimAddress"] = mukoko_nominatim_address
 
     doc: dict = {
         "_id": str(uuid.uuid4()),

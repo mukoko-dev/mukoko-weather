@@ -35,8 +35,14 @@ describe("/api/db-init route structure", () => {
     expect(source).toContain("ensureIndexes()");
   });
 
-  it("syncs all locations from the static LOCATIONS array", () => {
-    expect(source).toContain("syncLocations(LOCATIONS)");
+  it("does NOT sync locations (Phase 0F — weather.locations is dropped)", () => {
+    expect(source).not.toContain("syncLocations");
+    expect(source).not.toContain('from "@/lib/locations"');
+  });
+
+  it("drops the legacy weather.locations collection idempotently", () => {
+    expect(source).toContain('dropCollection("locations")');
+    expect(source).toContain("ns not found");
   });
 
   it("syncs regions, tags, and seasons from seed files", () => {
@@ -63,10 +69,11 @@ describe("/api/db-init route structure", () => {
   it("returns success response with counts for all synced collections", () => {
     expect(source).toContain("success: true");
     expect(source).toContain('indexes: "created"');
-    expect(source).toContain("locations: LOCATIONS.length");
     expect(source).toContain("regions: REGIONS.length");
     expect(source).toContain("tags: TAGS.length");
     expect(source).toContain("seasons: SEASONS.length");
+    // Phase 0F: locations are no longer synced; instead the drop is reported.
+    expect(source).toContain("droppedLegacyLocations");
   });
 
   it("reports stored key names in response", () => {

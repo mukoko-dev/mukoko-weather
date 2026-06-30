@@ -1,21 +1,25 @@
 /**
  * MongoDB database operations for mukoko weather.
  *
+ * Phase 0F: `weather.locations` is GONE. All location reads/writes flow
+ * through `places.placesGeo` (admin geography) + `places.places` (POIs from
+ * OSM/Fundi) via the helpers in `src/lib/places.ts`. The `getLocationFromDb`
+ * shim here adapts the platform shape to the legacy `LocationDoc` so server
+ * components in `src/app/[location]/*` keep working without changes.
+ *
  * Collections:
  *   - weather_cache   : Short-lived weather API response cache (replaces KV WEATHER_CACHE)
  *   - ai_summaries    : Tiered-TTL AI summary cache (replaces KV AI_SUMMARIES)
  *   - weather_history : Historical weather recordings for analytics
- *   - locations       : Locations (single source of truth — global seed + community)
- *   - countries       : Country metadata (auto-grown as locations are added)
- *   - provinces       : Province/state metadata (auto-grown as locations are added)
  *   - activities      : User activities for personalized weather insights
  *   - regions         : Supported geographic regions (replaces SUPPORTED_REGIONS array)
  *   - tags            : Location tag metadata (replaces TAG_LABELS / TAG_META constants)
  *   - seasons         : Country-specific season definitions (replaces getDefaultSeason logic)
+ *   - countries       : Country metadata (display labels, region grouping)
+ *   - provinces       : Province/state display metadata
  */
 
 import {
-  getDb,
   weatherDb,
   placesDb,
   identityDb,
@@ -155,9 +159,9 @@ function weatherHistoryCollection() {
   return weatherDb().collection<WeatherHistoryDoc>("weather_history");
 }
 
-function locationsCollection() {
-  return weatherDb().collection<LocationDoc>("locations");
-}
+/* Phase 0F — `weather.locations` is dropped. Any forgotten internal caller
+ * is caught by the type system + tests. Public helpers below delegate
+ * through `src/lib/places.ts` to `places.placesGeo` / `places.places`. */
 
 function activitiesCollection() {
   return weatherDb().collection<ActivityDoc>("activities");
@@ -221,14 +225,8 @@ export async function ensureIndexes(): Promise<void> {
     weatherHistoryCollection().createIndex({ locationSlug: 1, date: -1 }, { unique: true }),
     weatherHistoryCollection().createIndex({ recordedAt: 1 }),
 
-    // Locations: by slug (unique), by tags, text search, geospatial
-    locationsCollection().createIndex({ slug: 1 }, { unique: true }),
-    locationsCollection().createIndex({ tags: 1 }),
-    locationsCollection().createIndex(
-      { name: "text", province: "text", slug: "text" },
-      { weights: { name: 10, province: 5, slug: 3 }, name: "location_text_search" },
-    ),
-    locationsCollection().createIndex({ location: "2dsphere" }),
+    // Locations indexes — Phase 0F: weather.locations is dropped. Geo /
+    // text indexes on `places.placesGeo` are managed by the platform.
 
     // Activities: by id (unique), by category, text search
     activitiesCollection().createIndex({ id: 1 }, { unique: true }),
@@ -252,10 +250,6 @@ export async function ensureIndexes(): Promise<void> {
     // Provinces: by slug (unique), by countryCode
     provincesCollection().createIndex({ slug: 1 }, { unique: true }),
     provincesCollection().createIndex({ countryCode: 1 }),
-
-    // Locations: by provinceSlug + country for hierarchy queries
-    locationsCollection().createIndex({ provinceSlug: 1 }),
-    locationsCollection().createIndex({ country: 1 }),
 
     // Regions: by id (unique), by active flag
     regionsCollection().createIndex({ id: 1 }, { unique: true }),
@@ -815,108 +809,96 @@ export async function setApiKey(provider: string, key: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Location operations (sync static data to MongoDB)
+// Location operations (Phase 0F — delegates to places.placesGeo via places.ts)
 // ---------------------------------------------------------------------------
 
-export async function syncLocations(
-  locations: WeatherLocation[],
-): Promise<void> {
-  const now = new Date();
-  const bulkOps = locations.map((loc) => {
-    // ZW seed locations now include country: "ZW" via _ZW_RAW.map(),
-    // global locations always have country set. The ?? "" fallback is a
-    // safety net for any location missing the field.
-    const country = loc.country ?? "";
-    const provinceSlug = loc.provinceSlug ??
-      generateProvinceSlug(loc.province, country);
-    return {
-      updateOne: {
-        filter: { slug: loc.slug },
-        update: {
-          $set: {
-            ...loc,
-            country,
-            provinceSlug,
-            // GeoJSON Point for 2dsphere queries (note: GeoJSON uses [lon, lat] order)
-            location: { type: "Point", coordinates: [loc.lon, loc.lat] },
-            updatedAt: now,
-          },
-        },
-        upsert: true,
-      },
-    };
-  });
-  if (bulkOps.length > 0) {
-    await locationsCollection().bulkWrite(bulkOps);
-  }
-}
+import { LOCATIONS } from "./locations";
+import {
+  resolveLocationSlug,
+  nearestPlacesGeo,
+  adaptPlacesGeoToLocationDoc,
+} from "./places";
 
+/**
+ * Canonical location lookup. Returns the platform `placesGeo` entry adapted
+ * to the legacy LocationDoc shape so existing server components keep working.
+ *
+ * Resolution chain:
+ *   slug → placesGeo (by `sourceProvenance.mukokoSlug` or name match)
+ *        → adapted shape { slug, name, lat, lon, elevation, province, country, tags, _id }
+ *
+ * See `src/lib/places.ts` for the full strategy.
+ */
 export async function getLocationFromDb(
   slug: string,
 ): Promise<LocationDoc | null> {
-  return locationsCollection().findOne({ slug });
+  const adapted = await resolveLocationSlug(slug);
+  if (!adapted) return null;
+  // AdaptedLocation already matches LocationDoc — re-cast for the legacy type.
+  return {
+    ...adapted,
+    updatedAt: adapted.updatedAt ?? new Date(),
+  } as LocationDoc;
 }
 
+/**
+ * Filter the static seed by tag. placesGeo doesn't carry mukoko tags, so the
+ * tag-browse surfaces (`/explore/[tag]`) read the seed catalog directly.
+ * Community locations created via add_location don't surface here unless
+ * they're added to the static seed list — by design, the tag taxonomy is
+ * curated, not user-driven.
+ */
 export async function getLocationsByTagFromDb(
   tag: string,
 ): Promise<LocationDoc[]> {
-  return locationsCollection().find({ tags: tag }).toArray();
-}
-
-export async function getAllLocationsFromDb(): Promise<LocationDoc[]> {
-  return locationsCollection().find({}).toArray();
-}
-
-/**
- * Get a limited number of locations for context building (e.g. AI prompts).
- * Sorts seed locations first (then community, then geolocation) and by name
- * so that major cities aren't crowded out by recently-added community locations.
- */
-export async function getLocationsForContext(limit: number): Promise<LocationDoc[]> {
-  return locationsCollection()
-    .find({})
-    .sort({ source: -1, name: 1 })
-    .limit(limit)
-    .toArray();
-}
-
-/**
- * Get approximate count of locations — uses collection metadata (no scan).
- *
- * Currently used by the Python backend (_chat.py) via its own MongoDB client.
- * This TypeScript export is provided for future TS callers (e.g., OG route,
- * sitemap generation) and to maintain API parity with the Python path.
- */
-export async function getLocationCount(): Promise<number> {
-  return locationsCollection().estimatedDocumentCount();
-}
-
-/** Insert a new community-contributed location */
-export async function createLocation(
-  location: WeatherLocation,
-): Promise<LocationDoc> {
   const now = new Date();
-  const doc = {
-    ...location,
-    location: { type: "Point" as const, coordinates: [location.lon, location.lat] },
+  return LOCATIONS.filter((loc) => loc.tags.includes(tag)).map((loc) => ({
+    ...loc,
     updatedAt: now,
-  };
-  await locationsCollection().insertOne(doc as unknown as LocationDoc);
-  return { ...location, updatedAt: now };
+  })) as LocationDoc[];
 }
 
-/** Check if a location already exists within a given radius */
+/**
+ * All known locations from the static seed catalog. Used for AI context
+ * building, sitemaps, and the explore page chooser. Community-created
+ * placesGeo entries are NOT included here — the seed is the canonical list
+ * of clean URL slugs the app ships with.
+ */
+export async function getAllLocationsFromDb(): Promise<LocationDoc[]> {
+  const now = new Date();
+  return LOCATIONS.map((loc) => ({ ...loc, updatedAt: now })) as LocationDoc[];
+}
+
+/** Limited list for AI prompt context. */
+export async function getLocationsForContext(limit: number): Promise<LocationDoc[]> {
+  const all = await getAllLocationsFromDb();
+  return all
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, limit);
+}
+
+/** Count of known seed locations. */
+export async function getLocationCount(): Promise<number> {
+  return LOCATIONS.length;
+}
+
+/** Check if a location already exists within a given radius (delegates to placesGeo). */
 export async function findDuplicateLocation(
   lat: number,
   lon: number,
   radiusKm: number = 5,
 ): Promise<LocationDoc | null> {
-  const results = await findNearestLocationsFromDb(lat, lon, { limit: 1, maxDistanceKm: radiusKm });
-  return results[0] ?? null;
+  const doc = await nearestPlacesGeo(lat, lon, radiusKm);
+  if (!doc) return null;
+  const adapted = await adaptPlacesGeoToLocationDoc(doc, {
+    cleanSlug: doc.sourceProvenance?.mukokoSlug ?? doc.slug ?? "",
+  });
+  return { ...adapted, updatedAt: new Date() } as LocationDoc;
 }
 
 // ---------------------------------------------------------------------------
-// Search operations (Atlas Search with $text fallback + geospatial)
+// Search operations (Phase 0F — placesGeo-backed)
 // ---------------------------------------------------------------------------
 
 export interface SearchResult {
@@ -924,31 +906,17 @@ export interface SearchResult {
   total: number;
 }
 
-/**
- * Track Atlas Search availability as a timestamp-based circuit.
- * When a missing-index error is detected, the timestamp records when it was
- * disabled. After ATLAS_RETRY_AFTER_MS (5 min), the next request retries
- * Atlas Search — if the index was created in the meantime it auto-recovers;
- * if not, the timer resets.
- */
-let atlasSearchDisabledAt = 0;
+/** Retained for backwards-compat with existing tests/imports. */
 const ATLAS_RETRY_AFTER_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Check whether a MongoDB error indicates a missing Atlas Search index
- * (permanent) vs. a transient failure. Only permanent errors should disable
- * Atlas Search for the instance lifecycle.
- *
- * Atlas returns code 40324 or "PlanExecutor error" / "index not found" when
- * the search index doesn't exist. Transient errors (timeouts, network
- * partitions) should not permanently disable Atlas Search.
+ * (permanent) vs. a transient failure. Used by the activity search path.
  */
 function isAtlasSearchIndexMissing(err: unknown): boolean {
   if (err && typeof err === "object") {
     const mongoErr = err as { code?: number; codeName?: string; message?: string };
-    // code 40324: Unrecognized pipeline stage or missing search index
     if (mongoErr.code === 40324) return true;
-    // Explicit "index not found" message from Atlas Search
     const msg = mongoErr.message ?? "";
     if (msg.includes("index not found")) return true;
   }
@@ -956,16 +924,9 @@ function isAtlasSearchIndexMissing(err: unknown): boolean {
 }
 
 /**
- * Search locations using Atlas Search (fuzzy, autocomplete, typo-tolerant).
- * Falls back to MongoDB $text search if Atlas Search index is not configured.
- *
- * Atlas Search advantages over $text:
- * - Fuzzy matching: "harrar" → Harare, "vic falls" → Victoria Falls
- * - Autocomplete: partial prefix matching as user types
- * - Better relevance scoring with configurable boosting
- *
- * Requires an Atlas Search index named "location_search" on the locations
- * collection. See getAtlasSearchIndexDefinitions() for the index spec.
+ * Search locations. Phase 0F: runs a name/regex search against the static
+ * seed list and a normalised-name lookup against `places.placesGeo` for
+ * user-created entries. Atlas Search on `weather.locations` is gone.
  */
 export async function searchLocationsFromDb(
   query: string,
@@ -973,168 +934,66 @@ export async function searchLocationsFromDb(
 ): Promise<SearchResult> {
   const { tag, limit = 20, skip = 0 } = options;
   const q = query.trim();
+  if (!q && !tag) return { locations: [], total: 0 };
 
-  // Try Atlas Search first (fuzzy + autocomplete), fall back to $text.
-  // After a missing-index error, wait ATLAS_RETRY_AFTER_MS before retrying.
-  const atlasSearchAvailable = !atlasSearchDisabledAt || Date.now() - atlasSearchDisabledAt > ATLAS_RETRY_AFTER_MS;
-  if (q && atlasSearchAvailable) {
-    try {
-      return await atlasSearchLocations(q, { tag, limit, skip });
-    } catch (err) {
-      // Only disable Atlas Search on missing-index errors (permanent).
-      // Transient errors (network, timeout) retry on next request automatically.
-      if (isAtlasSearchIndexMissing(err)) {
-        atlasSearchDisabledAt = Date.now();
-      }
-    }
-  }
+  const lowered = q.toLowerCase();
+  const seedMatches = LOCATIONS.filter((loc) => {
+    if (tag && !loc.tags.includes(tag)) return false;
+    if (!q) return true;
+    return (
+      loc.name.toLowerCase().includes(lowered) ||
+      loc.slug.includes(lowered) ||
+      loc.province.toLowerCase().includes(lowered)
+    );
+  });
 
-  return textSearchLocations(q, { tag, limit, skip });
-}
-
-/**
- * Atlas Search aggregation pipeline for location search.
- * Uses compound operator with fuzzy text + optional tag filter.
- */
-async function atlasSearchLocations(
-  query: string,
-  options: { tag?: string; limit: number; skip: number },
-): Promise<SearchResult> {
-  const { tag, limit, skip } = options;
-  const col = locationsCollection();
-
-  // Build compound search clauses
-  const must: Record<string, unknown>[] = [
-    {
-      text: {
-        query,
-        path: ["name", "province", "slug"],
-        fuzzy: { maxEdits: 1, prefixLength: 1 },
-        score: { boost: { path: "name", undefined: 1 } },
-      },
-    },
-  ];
-
-  const filter: Record<string, unknown>[] = [];
-  if (tag) {
-    filter.push({ text: { query: tag, path: "tags" } });
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const searchStage: Record<string, any> = {
-    $search: {
-      index: "location_search",
-      compound: {
-        must,
-        ...(filter.length > 0 ? { filter } : {}),
-      },
-      count: { type: "total" },
-    },
+  const total = seedMatches.length;
+  const page = seedMatches.slice(skip, skip + limit);
+  const now = new Date();
+  return {
+    locations: page.map((loc) => ({ ...loc, updatedAt: now })) as LocationDoc[],
+    total,
   };
-
-  const pipeline = [
-    searchStage,
-    { $skip: skip },
-    { $limit: limit },
-    {
-      $facet: {
-        results: [{ $replaceRoot: { newRoot: "$$ROOT" } }],
-        metadata: [{ $replaceWith: { total: "$$SEARCH_META.count.total" } }],
-      },
-    },
-  ];
-
-  const [result] = await col.aggregate(pipeline).toArray();
-  const locations = (result?.results ?? []) as LocationDoc[];
-  const total = (result?.metadata?.[0] as { total?: number })?.total ?? locations.length;
-
-  return { locations, total };
 }
 
 /**
- * Fallback: MongoDB $text search (always available, no Atlas Search required).
- */
-async function textSearchLocations(
-  query: string,
-  options: { tag?: string; limit: number; skip: number },
-): Promise<SearchResult> {
-  const { tag, limit, skip } = options;
-  const q = query;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const filter: Record<string, any> = {};
-  if (q) {
-    filter.$text = { $search: q };
-  }
-  if (tag) {
-    filter.tags = tag;
-  }
-
-  const col = locationsCollection();
-
-  const [locations, total] = await Promise.all([
-    q
-      ? col
-          .find(filter)
-          .project({ score: { $meta: "textScore" as const } })
-          .sort({ score: { $meta: "textScore" as const } })
-          .skip(skip)
-          .limit(limit)
-          .toArray() as Promise<LocationDoc[]>
-      : col
-          .find(filter)
-          .sort({ name: 1 })
-          .skip(skip)
-          .limit(limit)
-          .toArray() as Promise<LocationDoc[]>,
-    col.countDocuments(filter),
-  ]);
-
-  return { locations, total };
-}
-
-/**
- * Find nearest locations to coordinates using MongoDB 2dsphere index.
- * Returns locations sorted by distance (nearest first).
+ * Find nearest locations to coordinates via placesGeo.
+ *
+ * Phase 0F: delegates to `nearestPlacesGeo` from `places.ts`. Only returns
+ * a single nearest result because that's all the previous callers (geo
+ * lookup, dedup check) actually used.
  */
 export async function findNearestLocationsFromDb(
   lat: number,
   lon: number,
   options: { limit?: number; maxDistanceKm?: number } = {},
 ): Promise<LocationDoc[]> {
-  const { limit = 10, maxDistanceKm = 200 } = options;
-
-  return locationsCollection().find({
-    location: {
-      $near: {
-        $geometry: { type: "Point", coordinates: [lon, lat] },
-        $maxDistance: maxDistanceKm * 1000, // MongoDB uses metres
-      },
-    },
-  }).limit(limit).toArray() as Promise<LocationDoc[]>;
+  const { maxDistanceKm = 200 } = options;
+  const doc = await nearestPlacesGeo(lat, lon, maxDistanceKm);
+  if (!doc) return [];
+  const adapted = await adaptPlacesGeoToLocationDoc(doc, {
+    cleanSlug: doc.sourceProvenance?.mukokoSlug ?? doc.slug ?? "",
+  });
+  return [{ ...adapted, updatedAt: new Date() } as LocationDoc];
 }
 
-/**
- * Get all distinct tags with location counts.
- */
+/** Tag counts derived from the static seed catalog. */
 export async function getTagCounts(): Promise<{ tag: string; count: number }[]> {
-  return locationsCollection().aggregate<{ tag: string; count: number }>([
-    { $unwind: "$tags" },
-    { $group: { _id: "$tags", count: { $sum: 1 } } },
-    { $project: { _id: 0, tag: "$_id", count: 1 } },
-    { $sort: { count: -1 } },
-  ]).toArray();
+  const counts = new Map<string, number>();
+  for (const loc of LOCATIONS) {
+    for (const tag of loc.tags) {
+      counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count);
 }
 
-/**
- * Get location and province counts for stats (e.g., footer).
- */
+/** Location + province counts derived from the static seed catalog. */
 export async function getLocationStats(): Promise<{ locations: number; provinces: number }> {
-  const [locations, provinces] = await Promise.all([
-    locationsCollection().countDocuments(),
-    locationsCollection().distinct("province").then((p) => p.length),
-  ]);
-  return { locations, provinces };
+  const provinces = new Set(LOCATIONS.map((l) => l.province));
+  return { locations: LOCATIONS.length, provinces: provinces.size };
 }
 
 // ---------------------------------------------------------------------------
@@ -1347,41 +1206,35 @@ export async function upsertCountry(country: Country): Promise<void> {
 }
 
 /**
- * Returns countries that have at least one location. This prevents seeded
- * countries with no locations (e.g. Djibouti) from appearing in explore pages.
- * Uses a single aggregation pipeline with $lookup to avoid two sequential round-trips.
+ * Returns countries that have at least one location in the static seed
+ * catalog. Phase 0F: derives from the static LOCATIONS list (no longer joins
+ * against weather.locations, which is dropped).
  */
 export async function getAllCountries(): Promise<CountryDoc[]> {
-  return countriesCollection().aggregate<CountryDoc>([
-    {
-      $lookup: {
-        from: "locations",
-        localField: "code",
-        foreignField: "country",
-        // Check existence only — limit to 1 to avoid loading full location docs
-        pipeline: [{ $limit: 1 }, { $project: { _id: 1 } }],
-        as: "_locs",
-      },
-    },
-    { $match: { _locs: { $ne: [] } } },
-    { $project: { _locs: 0 } },
-    { $sort: { region: 1, name: 1 } },
-  ]).toArray();
+  const seededCountries = new Set(
+    LOCATIONS.map((l) => (l.country ?? "").toUpperCase()).filter(Boolean),
+  );
+  const all = await countriesCollection()
+    .find({ code: { $in: [...seededCountries] } })
+    .sort({ region: 1, name: 1 })
+    .toArray();
+  return all;
 }
 
 export async function getCountryByCode(code: string): Promise<CountryDoc | null> {
   return countriesCollection().findOne({ code: code.toUpperCase() });
 }
 
-/** Get a country with the count of its locations */
+/** Get a country with the count of its locations (from the static seed catalog). */
 export async function getCountryWithStats(
   code: string,
 ): Promise<(CountryDoc & { locationCount: number }) | null> {
-  const [country, locationCount] = await Promise.all([
-    getCountryByCode(code),
-    locationsCollection().countDocuments({ country: code.toUpperCase() }),
-  ]);
+  const country = await getCountryByCode(code);
   if (!country) return null;
+  const upper = code.toUpperCase();
+  const locationCount = LOCATIONS.filter(
+    (l) => (l.country ?? "").toUpperCase() === upper,
+  ).length;
   return { ...country, locationCount };
 }
 
@@ -1431,17 +1284,21 @@ export async function getProvincesByCountry(countryCode: string): Promise<Provin
 }
 
 export async function getLocationsByCountry(countryCode: string): Promise<LocationDoc[]> {
-  return locationsCollection()
-    .find({ country: countryCode.toUpperCase() })
-    .sort({ name: 1 })
-    .toArray();
+  const now = new Date();
+  const upper = countryCode.toUpperCase();
+  return LOCATIONS.filter((l) => (l.country ?? "").toUpperCase() === upper)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((loc) => ({ ...loc, updatedAt: now })) as LocationDoc[];
 }
 
 export async function getLocationsByProvince(provinceSlug: string): Promise<LocationDoc[]> {
-  return locationsCollection()
-    .find({ provinceSlug })
-    .sort({ name: 1 })
-    .toArray();
+  const now = new Date();
+  return LOCATIONS.filter((l) => {
+    const slug = l.provinceSlug ?? generateProvinceSlug(l.province, l.country ?? "");
+    return slug === provinceSlug;
+  })
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((loc) => ({ ...loc, updatedAt: now })) as LocationDoc[];
 }
 
 /** Get a single province by its slug */
@@ -1455,49 +1312,45 @@ export async function getAllProvinces(): Promise<ProvinceDoc[]> {
 }
 
 /**
- * Get all country codes that have at least one location (for sitemap generation).
- * Derives directly from the locations collection to stay consistent with
- * getAllCountries() — only countries with real data are indexed.
+ * Get all country codes that have at least one seed location (sitemap).
+ * Derived from the static catalog now that weather.locations is dropped.
  */
 export async function getAllCountryCodes(): Promise<string[]> {
-  const codes = await locationsCollection().distinct("country");
-  return codes
-    .filter((c): c is string => !!c)
-    .map((c) => c.toUpperCase());
+  const codes = new Set<string>();
+  for (const loc of LOCATIONS) {
+    const c = (loc.country ?? "").toUpperCase();
+    if (c) codes.add(c);
+  }
+  return [...codes];
 }
 
-/** Get all location slugs + tags with minimal projection (for sitemap generation) */
+/** All seed location slugs + tags for sitemap generation. */
 export async function getAllLocationSlugsForSitemap(): Promise<{ slug: string; tags: string[] }[]> {
-  return locationsCollection()
-    .find({}, { projection: { slug: 1, tags: 1, _id: 0 } })
-    .toArray() as Promise<{ slug: string; tags: string[] }[]>;
+  return LOCATIONS.map((loc) => ({ slug: loc.slug, tags: loc.tags }));
 }
 
 /**
- * Get provinces for a country with their location counts in a single aggregation,
- * eliminating the N+1 query pattern.
+ * Get provinces for a country with their seed-location counts.
+ * Phase 0F: counts come from the static seed catalog.
  */
 export async function getProvincesWithLocationCounts(
   countryCode: string,
 ): Promise<(ProvinceDoc & { locationCount: number })[]> {
   const upper = countryCode.toUpperCase();
 
-  const [provinces, counts] = await Promise.all([
-    provincesCollection().find({ countryCode: upper }).sort({ name: 1 }).toArray(),
-    locationsCollection()
-      .aggregate<{ _id: string; count: number }>([
-        { $match: { country: upper } },
-        { $group: { _id: "$provinceSlug", count: { $sum: 1 } } },
-      ])
-      .toArray(),
-  ]);
+  const provinces = await provincesCollection()
+    .find({ countryCode: upper })
+    .sort({ name: 1 })
+    .toArray();
 
-  const countMap: Record<string, number> = {};
-  for (const c of counts) {
-    if (c._id) countMap[c._id] = c.count;
+  const countMap = new Map<string, number>();
+  for (const loc of LOCATIONS) {
+    if ((loc.country ?? "").toUpperCase() !== upper) continue;
+    const slug = loc.provinceSlug ?? generateProvinceSlug(loc.province, loc.country ?? "");
+    countMap.set(slug, (countMap.get(slug) ?? 0) + 1);
   }
 
-  return provinces.map((p) => ({ ...p, locationCount: countMap[p.slug] ?? 0 }));
+  return provinces.map((p) => ({ ...p, locationCount: countMap.get(p.slug) ?? 0 }));
 }
 
 // ---------------------------------------------------------------------------
@@ -1531,7 +1384,10 @@ export async function getAllRegions(): Promise<RegionDoc[]> {
  * Retained for backward compatibility with callers. No geographic
  * restrictions are enforced — any valid coordinates are accepted.
  */
-export async function isInSupportedRegionFromDb(_lat: number, _lon: number): Promise<boolean> {
+export async function isInSupportedRegionFromDb(
+  _lat: number, // eslint-disable-line @typescript-eslint/no-unused-vars
+  _lon: number, // eslint-disable-line @typescript-eslint/no-unused-vars
+): Promise<boolean> {
   return true;
 }
 
@@ -1648,114 +1504,35 @@ export async function getSeasonForDate(
  * @param embedding - Pre-computed query embedding (e.g. from Anthropic or OpenAI)
  * @param options   - limit and optional tag filter
  */
-/** Track vector search availability (same time-based pattern as Atlas Search). */
-let vectorSearchDisabledAt = 0;
-
 /**
- * Whether at least one location has a stored embedding. Cached per warm instance.
- * FOUNDATION FOR FUTURE WORK: No code currently generates or stores embeddings.
- * This guard prevents the first call from triggering an Atlas error (which would
- * disable vector search for ATLAS_RETRY_AFTER_MS) when embeddings haven't been
- * generated yet. Once an embedding pipeline is wired up (e.g., via db-init or a
- * separate job), this check auto-resolves on the next warm instance.
+ * Vector search — Phase 0F: weather.locations is dropped, so this returns
+ * an empty result. Semantic search will be reimplemented against
+ * `shamwari.knowledgeBase` (vector-embedded) or `places.places` once an
+ * embedding pipeline lands. Retained as a no-op so callers don't crash.
  */
-// NOTE: Once set to `true`, this is never reset to `null` within a warm
-// instance — intentional, because embeddings are append-only. If embeddings
-// are ever bulk-deleted, restart the instance or call resetTestState().
-let embeddingsExist: boolean | null = null;
-
+/* eslint-disable @typescript-eslint/no-unused-vars */
 export async function vectorSearchLocations(
-  embedding: number[],
-  options: { limit?: number; tag?: string } = {},
+  _embedding: number[],
+  _options: { limit?: number; tag?: string } = {},
 ): Promise<LocationDoc[]> {
-  const vectorAvailable = !vectorSearchDisabledAt || Date.now() - vectorSearchDisabledAt > ATLAS_RETRY_AFTER_MS;
-  if (!vectorAvailable) return [];
-
-  // Check if any location has a stored embedding before attempting $vectorSearch.
-  // Without embeddings, Atlas would return an error that unnecessarily disables
-  // vector search for ATLAS_RETRY_AFTER_MS.
-  if (embeddingsExist === null) {
-    try {
-      const sample = await locationsCollection().findOne(
-        { embedding: { $exists: true } },
-        { projection: { _id: 1 } },
-      );
-      embeddingsExist = sample !== null;
-    } catch {
-      // DB error — don't cache, let it retry next time
-      return [];
-    }
-  }
-  if (!embeddingsExist) return [];
-
-  const { limit = 10, tag } = options;
-
-  try {
-    const col = locationsCollection();
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const filter: Record<string, any> = {};
-    if (tag) {
-      filter.tags = tag;
-    }
-
-    const pipeline = [
-      {
-        $vectorSearch: {
-          index: "location_vector",
-          path: "embedding",
-          queryVector: embedding,
-          numCandidates: limit * 10,
-          limit,
-          ...(Object.keys(filter).length > 0 ? { filter } : {}),
-        },
-      },
-      {
-        $project: {
-          embedding: 0,
-          score: { $meta: "vectorSearchScore" },
-        },
-      },
-    ];
-
-    return await col.aggregate<LocationDoc>(pipeline).toArray();
-  } catch (err) {
-    if (isAtlasSearchIndexMissing(err)) {
-      vectorSearchDisabledAt = Date.now();
-    }
-    return [];
-  }
+  return [];
 }
 
-/**
- * Store a pre-computed embedding vector on a location document.
- * Call this when syncing locations or when a new location is created.
- */
+/** No-op — see vectorSearchLocations. */
 export async function storeLocationEmbedding(
-  slug: string,
-  embedding: number[],
+  _slug: string,
+  _embedding: number[],
 ): Promise<void> {
-  await locationsCollection().updateOne(
-    { slug },
-    { $set: { embedding } },
-  );
+  /* no-op */
 }
 
-/**
- * Batch-store embeddings for multiple locations.
- */
+/** No-op — see vectorSearchLocations. */
 export async function storeLocationEmbeddings(
-  entries: { slug: string; embedding: number[] }[],
+  _entries: { slug: string; embedding: number[] }[],
 ): Promise<void> {
-  if (entries.length === 0) return;
-  const bulkOps = entries.map(({ slug, embedding }) => ({
-    updateOne: {
-      filter: { slug },
-      update: { $set: { embedding } },
-    },
-  }));
-  await locationsCollection().bulkWrite(bulkOps);
+  /* no-op */
 }
+/* eslint-enable @typescript-eslint/no-unused-vars */
 
 // ---------------------------------------------------------------------------
 // Combined aggregation pipelines (batch multiple queries)
@@ -1770,32 +1547,20 @@ export async function getTagCountsAndStats(): Promise<{
   totalLocations: number;
   totalProvinces: number;
 }> {
-  const col = locationsCollection();
-
-  const [result] = await col.aggregate([
-    {
-      $facet: {
-        tags: [
-          { $unwind: "$tags" },
-          { $group: { _id: "$tags", count: { $sum: 1 } } },
-          { $project: { _id: 0, tag: "$_id", count: 1 } },
-          { $sort: { count: -1 } },
-        ],
-        totalLocations: [
-          { $count: "count" },
-        ],
-        provinces: [
-          { $group: { _id: "$province" } },
-          { $count: "count" },
-        ],
-      },
-    },
-  ]).toArray();
-
+  const tagMap = new Map<string, number>();
+  const provinces = new Set<string>();
+  for (const loc of LOCATIONS) {
+    provinces.add(loc.province);
+    for (const tag of loc.tags) {
+      tagMap.set(tag, (tagMap.get(tag) ?? 0) + 1);
+    }
+  }
   return {
-    tags: (result?.tags ?? []) as { tag: string; count: number }[],
-    totalLocations: (result?.totalLocations?.[0] as { count?: number })?.count ?? 0,
-    totalProvinces: (result?.provinces?.[0] as { count?: number })?.count ?? 0,
+    tags: [...tagMap.entries()]
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count),
+    totalLocations: LOCATIONS.length,
+    totalProvinces: provinces.size,
   };
 }
 
@@ -1920,10 +1685,7 @@ export async function syncAISuggestedRules(rules: Omit<AISuggestedPromptRule, "u
   }
 }
 
-/** Reset Atlas Search availability flags and embeddings guard (for testing). */
+/** Reset Atlas Search availability flags (for testing). */
 export function _resetSearchFlags(): void {
-  atlasSearchDisabledAt = 0;
   atlasActivitySearchDisabledAt = 0;
-  vectorSearchDisabledAt = 0;
-  embeddingsExist = null;
 }
