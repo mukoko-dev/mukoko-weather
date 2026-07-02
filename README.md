@@ -10,7 +10,7 @@ AI-powered global weather intelligence — real-time forecasts and locally-relev
 - **Real-time weather** — current conditions from Tomorrow.io (primary) with Open-Meteo fallback
 - **7-day forecasts** — daily highs, lows, precipitation probability, and weather conditions
 - **24-hour hourly forecasts** — hour-by-hour temperature and rain predictions
-- **Aviation weather (METAR/TAF)** — `/aviation` page with pre-flight briefings, departure/destination/alternate airport selection, VFR/MVFR/IFR/LIFR flight category badges, and full **PDF briefing export** (`@react-pdf/renderer`). Data from NOAA Aviation Weather Center; 37 ICAO airports mapped with haversine nearest-airport lookup for community locations
+- **Aviation weather (METAR/TAF)** — `/aviation` page with pre-flight briefings, departure/destination/alternate airport selection, VFR/MVFR/IFR/LIFR flight category badges, and full **PDF briefing export** (`@react-pdf/renderer`). Data from NOAA Aviation Weather Center; 70+ ICAO airports mapped (verified coordinates) with haversine nearest-airport lookup and a selectable list of the nearest stations for community locations
 - **AI weather intelligence** — Claude-powered markdown-formatted summaries with farming, mining, and travel advice, plus inline follow-up chat (up to 5 messages before seamless handoff to Shamwari)
 - **AI-powered explore search** — natural-language location discovery ("farming areas with low frost risk") using Claude with tool use
 - **AI history analysis** — button-triggered analysis of historical weather trends, patterns, and anomalies with server-side aggregation

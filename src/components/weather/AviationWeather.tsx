@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getAirportByIcao } from "@/lib/icao-codes";
 
 interface CloudLayer {
   cover: string;
@@ -31,9 +32,21 @@ interface MetarData {
   source: string;
 }
 
+/** A selectable aviation station shown in the airport picker. */
+export interface NearbyAirport {
+  icao: string;
+  name: string;
+  distanceKm?: number;
+}
+
 interface Props {
   slug: string;
   icao: string;
+  /**
+   * Additional nearby ICAO stations the user can switch between. The primary
+   * `icao` is always shown first; any entries here are merged in (deduped).
+   */
+  nearby?: NearbyAirport[];
 }
 
 const FLIGHT_CATEGORY_STYLES: Record<string, string> = {
@@ -69,10 +82,34 @@ function formatTime(iso: string): string {
   }
 }
 
-export function AviationWeather({ slug: _slug, icao }: Props) {
+export function AviationWeather({ slug: _slug, icao, nearby }: Props) {
+  // Build the list of selectable stations: the primary icao first, then any
+  // nearby stations (deduped). Names are resolved from the airport registry.
+  const stations = useMemo<NearbyAirport[]>(() => {
+    const seen = new Set<string>();
+    const list: NearbyAirport[] = [];
+    const push = (a: NearbyAirport) => {
+      const code = a.icao.toUpperCase();
+      if (seen.has(code)) return;
+      seen.add(code);
+      list.push({ ...a, icao: code });
+    };
+    push({ icao, name: getAirportByIcao(icao)?.name ?? icao });
+    for (const a of nearby ?? []) push(a);
+    return list;
+  }, [icao, nearby]);
+
+  // Currently-selected station, derived so it auto-resets to the primary icao
+  // whenever that prop changes (e.g. navigating between locations) without
+  // calling setState inside an effect. `selection` remembers which primary icao
+  // the user's choice was made against; if the primary changes, we fall back.
+  const [selection, setSelection] = useState<{ base: string; icao: string } | null>(null);
+  const selectedIcao = selection?.base === icao ? selection.icao : icao;
+  const setSelectedIcao = (next: string) => setSelection({ base: icao, icao: next });
+
   // Store the full response keyed by the icao it was fetched for. Loading,
   // error, and data are *derived* from whether the latest response matches the
-  // currently-requested icao — this avoids setState-in-effect when icao changes
+  // currently-selected icao — this avoids setState-in-effect when icao changes
   // (the previous pattern called setLoading(true) / setError(false) synchronously
   // at the top of the effect, which trips react-hooks/set-state-in-effect).
   const [response, setResponse] = useState<{
@@ -81,7 +118,7 @@ export function AviationWeather({ slug: _slug, icao }: Props) {
     error: boolean;
   } | null>(null);
 
-  const isCurrentResponse = response?.icao === icao;
+  const isCurrentResponse = response?.icao === selectedIcao;
   const loading = !isCurrentResponse;
   const error = isCurrentResponse && response.error;
   const data = isCurrentResponse ? response.data : null;
@@ -89,56 +126,82 @@ export function AviationWeather({ slug: _slug, icao }: Props) {
   useEffect(() => {
     let cancelled = false;
 
-    fetch(`/api/py/metar?icao=${encodeURIComponent(icao)}`)
+    fetch(`/api/py/metar?icao=${encodeURIComponent(selectedIcao)}`)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
       .then((d: MetarData) => {
-        if (!cancelled) setResponse({ icao, data: d, error: false });
+        if (!cancelled) setResponse({ icao: selectedIcao, data: d, error: false });
       })
       .catch(() => {
-        if (!cancelled) setResponse({ icao, data: null, error: true });
+        if (!cancelled) setResponse({ icao: selectedIcao, data: null, error: true });
       });
 
     return () => { cancelled = true; };
-  }, [icao]);
+  }, [selectedIcao]);
 
   const headingId = `aviation-heading-${icao}`;
 
-  if (loading) {
-    return (
-      <section aria-labelledby={headingId} aria-label="Loading aviation weather">
-        <div className="baobab" role="status" aria-label="Loading">
-          <Skeleton className="h-5 w-48 mb-4" />
-          <Skeleton className="h-4 w-full mb-2" />
-          <Skeleton className="h-4 w-3/4 mb-4" />
-          <Skeleton className="h-32 w-full" />
-        </div>
-      </section>
-    );
-  }
+  // Airport picker — only rendered when there is more than one station to choose
+  // between. Lets the user switch which nearby station's METAR/TAF they view.
+  const picker =
+    stations.length > 1 ? (
+      <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Nearby aviation stations">
+        {stations.map((s) => {
+          const active = s.icao === selectedIcao;
+          const base =
+            "inline-flex items-center gap-1 rounded-[var(--radius-input)] px-3 py-1.5 text-sm font-medium transition-colors";
+          const cls = active
+            ? "bg-primary/10 text-text-primary ring-1 ring-primary/40"
+            : "border border-border bg-transparent text-text-secondary hover:text-text-primary hover:border-text-tertiary/40";
+          return (
+            <button
+              key={s.icao}
+              type="button"
+              onClick={() => setSelectedIcao(s.icao)}
+              aria-pressed={active}
+              className={`${base} ${cls}`}
+              title={s.name}
+            >
+              <span className="font-mono text-xs font-bold">{s.icao}</span>
+              {s.distanceKm !== undefined && (
+                <span className="text-xs opacity-70">{Math.round(s.distanceKm)}km</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    ) : null;
 
-  if (error || !data) {
-    return (
-      <section aria-labelledby={headingId}>
-        <div className="baobab">
-          <h2 id={headingId} className="giraffe">
-            Aviation Weather · {icao}
-          </h2>
-          <p className="mt-3 text-sm text-text-tertiary">Aviation data temporarily unavailable.</p>
-        </div>
-      </section>
-    );
-  }
+  const selectedName = stations.find((s) => s.icao === selectedIcao)?.name;
 
   return (
     <section aria-labelledby={headingId}>
       <div className="baobab">
         <h2 id={headingId} className="giraffe">
-          Aviation Weather · {data.icao}
+          Aviation Weather · {selectedIcao}
         </h2>
+        {selectedName && selectedName !== selectedIcao && (
+          <p className="mt-0.5 text-sm text-text-tertiary">{selectedName}</p>
+        )}
 
+        {picker}
+
+        {loading && (
+          <div className="mt-4" role="status" aria-label="Loading">
+            <Skeleton className="h-4 w-full mb-2" />
+            <Skeleton className="h-4 w-3/4 mb-4" />
+            <Skeleton className="h-32 w-full" />
+          </div>
+        )}
+
+        {!loading && (error || !data) && (
+          <p className="mt-4 text-sm text-text-tertiary">Aviation data temporarily unavailable.</p>
+        )}
+
+        {!loading && !error && data && (
+          <>
         {/* TAF */}
         <div className="mt-4">
           <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wide mb-2">TAF</h3>
@@ -217,6 +280,8 @@ export function AviationWeather({ slug: _slug, icao }: Props) {
           <span className="font-medium">Aviation Weather Center (NOAA)</span>
           {" · "}{data.icao}
         </p>
+          </>
+        )}
       </div>
     </section>
   );
