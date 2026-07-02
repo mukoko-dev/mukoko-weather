@@ -25,43 +25,79 @@ interface Props {
 }
 
 // ── Gauge configurations ─────────────────────────────────────────────────────
-// Each metric gets a radial arc gauge showing where its value falls
-// on a severity-colored scale. The arc spans 270° (open at bottom).
+// Each metric gets a radial arc gauge showing where its value falls on a
+// severity-colored scale. The arc spans 270° (open at bottom) and is painted
+// with a multi-colour SVG gradient (`gradient`) resolved from the globals.css
+// mineral/severity CSS custom properties. `strokeClass` is retained for the
+// current-severity semantics and as the gradient fallback.
+
+// Gradient ramps (ordered CSS custom-property tokens). Severity-monotonic
+// metrics sweep the natural malachite→gold→terracotta→red ramp; non-monotonic
+// metrics (humidity, pressure) use a bespoke ramp that reads light→saturated.
+const SEVERITY_GRADIENT = [
+  "var(--color-severity-low)",
+  "var(--color-severity-moderate)",
+  "var(--color-severity-high)",
+  "var(--color-severity-severe)",
+];
+const SEVERITY_GRADIENT_EXTREME = [...SEVERITY_GRADIENT, "var(--color-severity-extreme)"];
+// Dry (warm) → comfortable (green) → humid (cool/blue).
+const HUMIDITY_GRADIENT = [
+  "var(--color-severity-moderate)",
+  "var(--color-severity-low)",
+  "var(--color-severity-cold)",
+];
+// Clear → partly → overcast.
+const CLOUD_GRADIENT = [
+  "var(--color-severity-low)",
+  "var(--color-severity-moderate)",
+  "var(--color-severity-high)",
+];
+// Low (unsettled) → normal → high pressure.
+const PRESSURE_GRADIENT = [
+  "var(--color-severity-moderate)",
+  "var(--color-severity-low)",
+  "var(--color-severity-moderate)",
+];
 
 /** UV Index: 0–11+ scale */
 export function uvGauge(uv: number): GaugeConfig {
   const percent = Math.min((uv / 11) * 100, 100);
-  if (uv <= 2) return { percent, strokeClass: "stroke-severity-low" };
-  if (uv <= 5) return { percent, strokeClass: "stroke-severity-moderate" };
-  if (uv <= 7) return { percent, strokeClass: "stroke-severity-high" };
-  if (uv <= 10) return { percent, strokeClass: "stroke-severity-severe" };
-  return { percent, strokeClass: "stroke-severity-extreme" };
+  const gradient = SEVERITY_GRADIENT_EXTREME;
+  if (uv <= 2) return { percent, strokeClass: "stroke-severity-low", gradient };
+  if (uv <= 5) return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  if (uv <= 7) return { percent, strokeClass: "stroke-severity-high", gradient };
+  if (uv <= 10) return { percent, strokeClass: "stroke-severity-severe", gradient };
+  return { percent, strokeClass: "stroke-severity-extreme", gradient };
 }
 
 /** Humidity: 0–100%, comfort zone is 30–60% */
 export function humidityGauge(h: number): GaugeConfig {
   const percent = Math.min(h, 100);
-  if (h < 30) return { percent, strokeClass: "stroke-severity-moderate" };
-  if (h <= 60) return { percent, strokeClass: "stroke-severity-low" };
-  if (h <= 80) return { percent, strokeClass: "stroke-severity-moderate" };
-  return { percent, strokeClass: "stroke-severity-high" };
+  const gradient = HUMIDITY_GRADIENT;
+  if (h < 30) return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  if (h <= 60) return { percent, strokeClass: "stroke-severity-low", gradient };
+  if (h <= 80) return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  return { percent, strokeClass: "stroke-severity-high", gradient };
 }
 
 /** Cloud cover: 0–100% */
 export function cloudGauge(c: number): GaugeConfig {
   const percent = Math.min(c, 100);
-  if (c <= 50) return { percent, strokeClass: "stroke-severity-low" };
-  if (c <= 75) return { percent, strokeClass: "stroke-severity-moderate" };
-  return { percent, strokeClass: "stroke-severity-high" };
+  const gradient = CLOUD_GRADIENT;
+  if (c <= 50) return { percent, strokeClass: "stroke-severity-low", gradient };
+  if (c <= 75) return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  return { percent, strokeClass: "stroke-severity-high", gradient };
 }
 
 /** Wind speed: 0–80+ km/h scale */
 export function windGauge(speed: number): GaugeConfig {
   const percent = Math.min((speed / 80) * 100, 100);
-  if (speed <= 19) return { percent, strokeClass: "stroke-severity-low" };
-  if (speed <= 38) return { percent, strokeClass: "stroke-severity-moderate" };
-  if (speed <= 61) return { percent, strokeClass: "stroke-severity-high" };
-  return { percent, strokeClass: "stroke-severity-severe" };
+  const gradient = SEVERITY_GRADIENT;
+  if (speed <= 19) return { percent, strokeClass: "stroke-severity-low", gradient };
+  if (speed <= 38) return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  if (speed <= 61) return { percent, strokeClass: "stroke-severity-high", gradient };
+  return { percent, strokeClass: "stroke-severity-severe", gradient };
 }
 
 /** Pressure: 980–1040 hPa range mapped to gauge */
@@ -70,28 +106,31 @@ export function pressureGauge(p: number): GaugeConfig {
   const max = 1040;
   const clamped = Math.max(min, Math.min(p, max));
   const percent = ((clamped - min) / (max - min)) * 100;
-  if (p < 1000) return { percent, strokeClass: "stroke-severity-moderate" };
-  if (p <= 1020) return { percent, strokeClass: "stroke-severity-low" };
-  return { percent, strokeClass: "stroke-severity-moderate" };
+  const gradient = PRESSURE_GRADIENT;
+  if (p < 1000) return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  if (p <= 1020) return { percent, strokeClass: "stroke-severity-low", gradient };
+  return { percent, strokeClass: "stroke-severity-moderate", gradient };
 }
 
 /** Precipitation: 0–20mm scale */
 export function precipitationGauge(p: number): GaugeConfig {
   const percent = Math.min((p / 20) * 100, 100);
-  if (p === 0) return { percent: 0, strokeClass: "stroke-severity-low" };
-  if (p < 2) return { percent, strokeClass: "stroke-severity-moderate" };
-  if (p < 10) return { percent, strokeClass: "stroke-severity-high" };
-  return { percent, strokeClass: "stroke-severity-severe" };
+  const gradient = SEVERITY_GRADIENT;
+  if (p === 0) return { percent: 0, strokeClass: "stroke-severity-low", gradient };
+  if (p < 2) return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  if (p < 10) return { percent, strokeClass: "stroke-severity-high", gradient };
+  return { percent, strokeClass: "stroke-severity-severe", gradient };
 }
 
 /** Feels-like difference from actual */
 export function feelsLikeGauge(feelsLike: number, actual: number): GaugeConfig {
   const diff = Math.abs(feelsLike - actual);
   const percent = Math.min((diff / 15) * 100, 100);
-  if (diff <= 2) return { percent: Math.max(percent, 8), strokeClass: "stroke-severity-low" };
-  if (diff <= 5) return { percent, strokeClass: "stroke-severity-moderate" };
-  if (diff <= 10) return { percent, strokeClass: "stroke-severity-high" };
-  return { percent, strokeClass: "stroke-severity-severe" };
+  const gradient = SEVERITY_GRADIENT;
+  if (diff <= 2) return { percent: Math.max(percent, 8), strokeClass: "stroke-severity-low", gradient };
+  if (diff <= 5) return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  if (diff <= 10) return { percent, strokeClass: "stroke-severity-high", gradient };
+  return { percent, strokeClass: "stroke-severity-severe", gradient };
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
@@ -116,14 +155,14 @@ export function AtmosphericSummary({ current, lat, lon }: Props) {
         <MetricCard
           icon={<DropletIcon size={16} />}
           label="Humidity"
-          value={`${current.relative_humidity_2m}%`}
+          value={`${Math.round(current.relative_humidity_2m)}%`}
           context={humidityLabel(current.relative_humidity_2m)}
           gauge={humidityGauge(current.relative_humidity_2m)}
         />
         <MetricCard
           icon={<CloudIcon size={16} />}
           label="Cloud Cover"
-          value={`${current.cloud_cover}%`}
+          value={`${Math.round(current.cloud_cover)}%`}
           context={cloudLabel(current.cloud_cover)}
           gauge={cloudGauge(current.cloud_cover)}
         />

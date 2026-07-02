@@ -91,7 +91,7 @@ function MetricCardSkeleton({ className }: { className?: string }) {
       aria-label="Loading metric"
     >
       {/* Arc gauge placeholder */}
-      <Skeleton className="h-14 w-14 shrink-0 rounded-full" />
+      <Skeleton className="h-24 w-24 shrink-0 rounded-full" />
       <div className="flex flex-col items-center gap-1">
         <Skeleton className="h-3 w-20" />
         <Skeleton className="h-3 w-24" />

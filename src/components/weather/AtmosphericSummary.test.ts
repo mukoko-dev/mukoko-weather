@@ -8,6 +8,55 @@ import {
   feelsLikeGauge,
   precipitationGauge,
 } from "./AtmosphericSummary";
+import type { GaugeConfig } from "./MetricCard";
+
+// ── gradient ramps ───────────────────────────────────────────────────────────
+
+describe("gauge gradients", () => {
+  const cases: Array<[string, GaugeConfig]> = [
+    ["uv", uvGauge(6)],
+    ["humidity", humidityGauge(50)],
+    ["cloud", cloudGauge(50)],
+    ["wind", windGauge(25)],
+    ["pressure", pressureGauge(1010)],
+    ["feelsLike", feelsLikeGauge(30, 25)],
+    ["precipitation", precipitationGauge(5)],
+  ];
+
+  it("every gauge supplies a multi-colour gradient ramp", () => {
+    for (const [, cfg] of cases) {
+      expect(Array.isArray(cfg.gradient)).toBe(true);
+      expect(cfg.gradient!.length).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it("gradient stops are CSS custom properties, never hardcoded hex", () => {
+    for (const [, cfg] of cases) {
+      for (const stop of cfg.gradient!) {
+        expect(stop).toMatch(/^var\(--/);
+        expect(stop).not.toMatch(/#/);
+      }
+    }
+  });
+
+  it("UV sweeps the full malachite→gold→terracotta→red→extreme severity ramp", () => {
+    expect(uvGauge(6).gradient).toEqual([
+      "var(--color-severity-low)",
+      "var(--color-severity-moderate)",
+      "var(--color-severity-high)",
+      "var(--color-severity-severe)",
+      "var(--color-severity-extreme)",
+    ]);
+  });
+
+  it("humidity uses a bespoke dry→comfortable→humid ramp (non-monotonic severity)", () => {
+    expect(humidityGauge(50).gradient).toEqual([
+      "var(--color-severity-moderate)",
+      "var(--color-severity-low)",
+      "var(--color-severity-cold)",
+    ]);
+  });
+});
 
 // ── uvGauge ────────────────────────────────────────────────────────────────
 
