@@ -15,18 +15,22 @@ function formatDateTime(date: Date): string {
 
 /** Displays the user's current browser date and time, updated every minute. */
 export function LiveClock() {
-  const [label, setLabel] = useState<string | null>(null);
+  // Initialise with the current time so first paint is correct (avoids
+  // setState-in-effect). SSR may produce a different string than the client,
+  // so suppressHydrationWarning is applied to the rendered element below.
+  const [label, setLabel] = useState<string>(() => formatDateTime(new Date()));
 
   useEffect(() => {
-    setLabel(formatDateTime(new Date()));
     const id = setInterval(() => setLabel(formatDateTime(new Date())), 60_000);
     return () => clearInterval(id);
   }, []);
 
-  if (!label) return null;
-
   return (
-    <p className="text-sm text-text-tertiary" aria-label={`Current time: ${label}`}>
+    <p
+      className="text-sm text-text-tertiary"
+      aria-label={`Current time: ${label}`}
+      suppressHydrationWarning
+    >
       {label}
     </p>
   );

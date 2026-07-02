@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { WeatherLocation } from "@/lib/locations";
@@ -26,13 +26,16 @@ export function HomeLanding({ detectedLocation }: Props) {
   const router = useRouter();
   const [countdown, setCountdown] = useState(Math.ceil(REDIRECT_DELAY_MS / 1000));
   const [gpsState, setGpsState] = useState<GpsState>("idle");
-  const cancelled = useRef(false);
+  // `cancelled` participates in render (the Stage 1 branch below short-circuits
+  // when the user has dismissed the auto-redirect), so it must be state rather
+  // than a ref — react-hooks/refs forbids reading refs during render.
+  const [cancelled, setCancelled] = useState(false);
 
   useEffect(() => {
-    if (!detectedLocation || cancelled.current) return;
+    if (!detectedLocation || cancelled) return;
 
     const redirectTimer = setTimeout(() => {
-      if (!cancelled.current) router.replace(`/${detectedLocation.slug}`);
+      router.replace(`/${detectedLocation.slug}`);
     }, REDIRECT_DELAY_MS);
 
     const countdownInterval = setInterval(() => {
@@ -43,13 +46,13 @@ export function HomeLanding({ detectedLocation }: Props) {
       clearTimeout(redirectTimer);
       clearInterval(countdownInterval);
     };
-  }, [detectedLocation, router]);
+  }, [detectedLocation, router, cancelled]);
 
-  const handleCancel = () => { cancelled.current = true; };
+  const handleCancel = () => { setCancelled(true); };
 
   const handleGps = async () => {
     setGpsState("detecting");
-    cancelled.current = true;
+    setCancelled(true);
     try {
       const result = await detectUserLocation();
       if ((result.status === "success" || result.status === "created") && result.location) {
@@ -65,7 +68,7 @@ export function HomeLanding({ detectedLocation }: Props) {
   };
 
   // ── Stage 1: IP geo detected — full weather scene with countdown ──
-  if (detectedLocation && !cancelled.current) {
+  if (detectedLocation && !cancelled) {
     return (
       <WeatherLoadingScene
         slug={detectedLocation.slug}

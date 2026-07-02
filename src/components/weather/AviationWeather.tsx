@@ -70,14 +70,24 @@ function formatTime(iso: string): string {
 }
 
 export function AviationWeather({ slug: _slug, icao }: Props) {
-  const [data, setData] = useState<MetarData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  // Store the full response keyed by the icao it was fetched for. Loading,
+  // error, and data are *derived* from whether the latest response matches the
+  // currently-requested icao — this avoids setState-in-effect when icao changes
+  // (the previous pattern called setLoading(true) / setError(false) synchronously
+  // at the top of the effect, which trips react-hooks/set-state-in-effect).
+  const [response, setResponse] = useState<{
+    icao: string;
+    data: MetarData | null;
+    error: boolean;
+  } | null>(null);
+
+  const isCurrentResponse = response?.icao === icao;
+  const loading = !isCurrentResponse;
+  const error = isCurrentResponse && response.error;
+  const data = isCurrentResponse ? response.data : null;
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(false);
 
     fetch(`/api/py/metar?icao=${encodeURIComponent(icao)}`)
       .then((r) => {
@@ -85,13 +95,10 @@ export function AviationWeather({ slug: _slug, icao }: Props) {
         return r.json();
       })
       .then((d: MetarData) => {
-        if (!cancelled) setData(d);
+        if (!cancelled) setResponse({ icao, data: d, error: false });
       })
       .catch(() => {
-        if (!cancelled) setError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setResponse({ icao, data: null, error: true });
       });
 
     return () => { cancelled = true; };

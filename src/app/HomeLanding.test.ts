@@ -27,9 +27,11 @@ describe("HomeLanding — component structure", () => {
     expect(source).toContain("router.replace");
   });
 
-  it("uses a ref to track cancellation", () => {
+  it("uses state to track cancellation", () => {
+    // Previously a useRef — converted to useState so the render-time read
+    // (Stage 1 short-circuit) is legal under react-hooks/refs.
     expect(source).toContain("cancelled");
-    expect(source).toContain("useRef(false)");
+    expect(source).toContain("useState(false)");
   });
 });
 
@@ -51,7 +53,7 @@ describe("HomeLanding — detected city state", () => {
 
   it("cancels redirect when user chooses different city", () => {
     expect(source).toContain("handleCancel");
-    expect(source).toContain("cancelled.current = true");
+    expect(source).toContain("setCancelled(true)");
   });
 
   it("links to explore for choosing a different city", () => {

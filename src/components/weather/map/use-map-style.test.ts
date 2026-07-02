@@ -77,6 +77,12 @@ describe("useMapStyle", () => {
   it("returns a MapTiler URL (not Mapbox) for all themes", () => {
     for (const theme of ["light", "dark", "system"]) {
       mockTheme.mockReturnValue(theme);
+      // This test intentionally calls the hook multiple times in a loop to
+      // exercise each theme branch with the mocked React hooks (see the
+      // vi.mock("react", ...) block above). The rules-of-hooks lint rule
+      // doesn't apply here — there is no real React render lifecycle in this
+      // test, only the captured useState / useEffect callbacks.
+      // eslint-disable-next-line react-hooks/rules-of-hooks
       const result = useMapStyle();
       expect(result).toContain("maptiler.com");
       expect(result).not.toContain("mapbox.com");
