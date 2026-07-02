@@ -172,10 +172,11 @@ All data, AI, and CRUD operations run in **Python FastAPI** (`api/py/`), deploye
 
 **TypeScript API (remaining):**
 
-| Endpoint                             | Method | Description                                                                                              |
-| ------------------------------------ | ------ | -------------------------------------------------------------------------------------------------------- |
-| `/api/og?title=&subtitle=&template=` | GET    | Dynamic OG image generation (Edge runtime, Satori). 6 templates, in-memory rate-limited, 1-day CDN cache |
-| `/api/db-init`                       | POST   | One-time DB setup + seed data (incl. AI prompts). Protected by `DB_INIT_SECRET` in production            |
+| Endpoint                              | Method | Description                                                                                                                                                                      |
+| ------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/og?title=&subtitle=&template=`  | GET    | Dynamic OG image generation (Edge runtime, Satori). 6 templates, in-memory rate-limited, 1-day CDN cache                                                                         |
+| `/api/db-init`                        | POST   | One-time DB setup + seed data (incl. AI prompts). Protected by `DB_INIT_SECRET` in production                                                                                    |
+| `/api/embed/current?slug=\|lat=&lon=` | GET    | Public embed API (Edge, open CORS). Compact current weather + up to 7 daily entries. No params → visitor's IP location (Vercel `x-vercel-ip-*` headers). Powers the embed widget |
 
 ### Resilience
 

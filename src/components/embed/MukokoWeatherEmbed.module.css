@@ -59,67 +59,119 @@
   font-weight: 600;
 }
 
-/* ---- Current Widget ---- */
+/* ---- Current Condition (compact) ---- */
 .currentCard {
+  composes: card;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  max-width: 320px;
+}
+
+.currentIcon {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.currentBody {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.currentTemp {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--mkw-text);
+  line-height: 1;
+  font-family: 'Noto Serif', Georgia, serif;
+}
+
+.currentMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.currentCondition {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--mkw-text);
+}
+
+.currentLocationName {
+  font-size: 12px;
+  color: var(--mkw-text-tertiary);
+}
+
+/* ---- Today Card ---- */
+.todayCard {
   composes: card;
   max-width: 360px;
 }
 
-.currentHeader {
+.todayHeader {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   margin-bottom: 12px;
 }
 
-.currentLocationName {
+.todayLocationName {
   font-weight: 600;
   font-size: 14px;
   color: var(--mkw-text);
 }
 
-.currentProvince {
+.todayProvince {
   font-size: 12px;
   color: var(--mkw-text-tertiary);
 }
 
-.currentBody {
+.todayBody {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.todayIcon {
+  font-size: 48px;
+  line-height: 1;
+}
+
+.todayTempBlock {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-bottom: 16px;
 }
 
-.currentTemp {
-  font-size: 48px;
+.todayTemp {
+  font-size: 46px;
   font-weight: 700;
   color: var(--mkw-text);
-  line-height: 1.1;
+  line-height: 1.05;
   font-family: 'Noto Serif', Georgia, serif;
 }
 
-.currentCondition {
-  font-size: 16px;
+.todayCondition {
+  font-size: 15px;
   font-weight: 500;
   color: var(--mkw-text);
 }
 
-.currentFeelsLike {
-  font-size: 13px;
-  color: var(--mkw-text-secondary);
-}
-
-.currentStats {
+.todayStats {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--mkw-border);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--mkw-text-secondary);
 }
 
-/* ---- Forecast Widget ---- */
+/* ---- Forecast Card (5-day / 7-day) ---- */
 .forecastCard {
   composes: card;
   max-width: 440px;
@@ -152,6 +204,11 @@
   color: var(--mkw-text-secondary);
 }
 
+.forecastIcon {
+  font-size: 18px;
+  line-height: 1;
+}
+
 .forecastCondition {
   flex: 1;
   color: var(--mkw-text-secondary);
@@ -161,39 +218,4 @@
   font-weight: 600;
   font-family: monospace;
   font-size: 12px;
-}
-
-/* ---- Badge Widget ---- */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: var(--mkw-bg);
-  border: 1px solid var(--mkw-border);
-  border-radius: 9999px;
-  font-size: 13px;
-  color: var(--mkw-text);
-  text-decoration: none;
-  white-space: nowrap;
-  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-}
-
-.badgeTemp {
-  font-weight: 700;
-}
-
-.badgeCondition {
-  color: var(--mkw-text-secondary);
-}
-
-.badgeLocation {
-  color: var(--mkw-text-tertiary);
-  font-size: 11px;
-}
-
-.badgeBrand {
-  color: var(--mkw-primary);
-  font-size: 10px;
-  font-weight: 600;
 }

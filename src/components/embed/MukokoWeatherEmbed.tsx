@@ -3,99 +3,136 @@
 import { useState, useEffect } from "react";
 import styles from "./MukokoWeatherEmbed.module.css";
 
+/** The four supported embed variants. */
+export type EmbedType = "current" | "today" | "5day" | "7day";
+
 interface MukokoWeatherEmbedProps {
-  /** Location slug (e.g. "harare", "bulawayo", "marondera") */
-  location: string;
-  /** Widget type */
-  type?: "current" | "forecast" | "badge";
-  /** Number of forecast days (for type="forecast") */
-  days?: number;
+  /**
+   * Widget variant:
+   * - `current` — compact current temp + condition + icon
+   * - `today`   — fuller current-day card (temp, condition, feels-like, high/low)
+   * - `5day`    — 5-day forecast strip
+   * - `7day`    — 7-day forecast strip
+   */
+  type?: EmbedType;
+  /**
+   * Optional location slug (e.g. "harare"). When omitted, the widget shows the
+   * VISITOR's local weather via the IP-based public embed API.
+   */
+  location?: string;
+  /** Optional explicit coordinates (override slug + IP detection). */
+  lat?: number;
+  lon?: number;
   /** Theme override */
   theme?: "light" | "dark" | "auto";
-  /** Base API URL (defaults to weather.mukoko.com) */
+  /** Base URL of the mukoko weather deployment (defaults to weather.mukoko.com) */
   apiUrl?: string;
   /** Additional CSS class */
   className?: string;
 }
 
-interface WeatherData {
-  location: {
-    name: string;
-    slug: string;
-    province: string;
-    elevation: number;
-    tags: string[];
+interface EmbedData {
+  location: { name: string; province: string; slug: string; country: string };
+  current: {
+    temp: number | null;
+    feelsLike: number | null;
+    code: number;
+    condition: string;
+    high: number | null;
+    low: number | null;
+    humidity: number | null;
+    windSpeed: number | null;
+    windDirection: string | null;
+    isDay: boolean;
   };
-  weather: {
-    current: {
-      temperature_2m: number;
-      relative_humidity_2m: number;
-      apparent_temperature: number;
-      weather_code: number;
-      wind_speed_10m: number;
-      wind_direction_10m: number;
-      uv_index: number;
-      is_day: number;
-    };
-    daily: {
-      time: string[];
-      weather_code: number[];
-      temperature_2m_max: number[];
-      temperature_2m_min: number[];
-      precipitation_probability_max: number[];
-    };
-  };
-  _meta: { url: string };
+  daily: Array<{
+    date: string;
+    day: string;
+    code: number;
+    condition: string;
+    high: number | null;
+    low: number | null;
+    precipitationProbability: number | null;
+  }>;
+  attribution: { name: string; url: string };
 }
 
-function weatherLabel(code: number): string {
-  const map: Record<number, string> = {
-    0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
-    45: "Fog", 48: "Fog", 51: "Drizzle", 53: "Drizzle", 55: "Drizzle",
-    61: "Rain", 63: "Rain", 65: "Heavy rain", 80: "Showers", 81: "Showers",
-    95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm",
-  };
-  return map[code] ?? "Unknown";
+/** WMO 4677 weather-code → emoji glyph (self-contained icon, no assets). */
+function weatherEmoji(code: number, isDay = true): string {
+  if (code === 0 || code === 1) return isDay ? "☀️" : "🌙";
+  if (code === 2) return isDay ? "⛅" : "☁️";
+  if (code === 3) return "☁️";
+  if (code === 45 || code === 48) return "🌫️";
+  if (code >= 51 && code <= 57) return "🌦️";
+  if (code >= 61 && code <= 67) return "🌧️";
+  if (code >= 71 && code <= 77) return "❄️";
+  if (code >= 80 && code <= 82) return "🌧️";
+  if (code >= 85 && code <= 86) return "🌨️";
+  if (code >= 95) return "⛈️";
+  return "🌡️";
 }
 
-function windDir(deg: number): string {
-  const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-  return dirs[Math.round(deg / 45) % 8];
+function temp(n: number | null): string {
+  return n === null ? "--" : `${n}°`;
 }
 
 export function MukokoWeatherEmbed({
-  location,
   type = "current",
-  days = 5,
+  location,
+  lat,
+  lon,
   theme = "auto",
   apiUrl = "https://weather.mukoko.com",
   className = "",
 }: MukokoWeatherEmbedProps) {
-  const [data, setData] = useState<WeatherData | null>(null);
+  const [data, setData] = useState<EmbedData | null>(null);
   const [error, setError] = useState(false);
 
   const isDark =
     theme === "dark" ||
-    (theme === "auto" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    (theme === "auto" &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   const themeClass = isDark ? `${styles.widget} ${styles.widgetDark}` : styles.widget;
 
   useEffect(() => {
-    fetch(`${apiUrl}/embed/data/${encodeURIComponent(location)}`)
+    const qs = new URLSearchParams();
+    if (typeof lat === "number" && typeof lon === "number") {
+      qs.set("lat", String(lat));
+      qs.set("lon", String(lon));
+    } else if (location) {
+      qs.set("slug", location);
+    }
+    const query = qs.toString();
+    let cancelled = false;
+    fetch(`${apiUrl}/api/embed/current${query ? `?${query}` : ""}`)
       .then((r) => {
         if (!r.ok) throw new Error(String(r.status));
         return r.json();
       })
-      .then((d) => setData(d as WeatherData))
-      .catch(() => setError(true));
-  }, [location, apiUrl]);
+      .then((d) => {
+        if (!cancelled) setData(d as EmbedData);
+      })
+      .catch(() => {
+        if (!cancelled) setError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [location, lat, lon, apiUrl]);
 
   if (error) {
     return (
       <div className={`${themeClass} ${className}`}>
         <div className={styles.errorMessage}>
           Weather unavailable —{" "}
-          <a href={`${apiUrl}/${location}`} target="_blank" rel="noopener noreferrer" className={styles.errorLink}>
+          <a
+            href={location ? `${apiUrl}/${location}` : apiUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.errorLink}
+          >
             view on mukoko weather
           </a>
         </div>
@@ -111,86 +148,135 @@ export function MukokoWeatherEmbed({
     );
   }
 
-  if (type === "badge") {
-    return <BadgeWidget data={data} themeClass={themeClass} className={className} />;
+  if (type === "today") {
+    return <TodayCard data={data} themeClass={themeClass} className={className} />;
   }
-
-  if (type === "forecast") {
-    return <ForecastWidget data={data} days={days} themeClass={themeClass} className={className} />;
+  if (type === "5day") {
+    return <ForecastCard data={data} days={5} themeClass={themeClass} className={className} />;
   }
-
-  return <CurrentWidget data={data} themeClass={themeClass} className={className} />;
+  if (type === "7day") {
+    return <ForecastCard data={data} days={7} themeClass={themeClass} className={className} />;
+  }
+  return <CurrentCondition data={data} themeClass={themeClass} className={className} />;
 }
 
-function CurrentWidget({ data, themeClass, className }: { data: WeatherData; themeClass: string; className: string }) {
-  const c = data.weather.current;
+function Attribution({ data }: { data: EmbedData }) {
+  return (
+    <a
+      href={data.attribution.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={styles.attribution}
+    >
+      {data.attribution.name}
+    </a>
+  );
+}
+
+/** current condition — compact current temp + condition + icon */
+function CurrentCondition({
+  data,
+  themeClass,
+  className,
+}: {
+  data: EmbedData;
+  themeClass: string;
+  className: string;
+}) {
+  const c = data.current;
   return (
     <div className={`${themeClass} ${className}`}>
       <div className={styles.currentCard}>
-        <div className={styles.currentHeader}>
-          <span className={styles.currentLocationName}>{data.location.name}</span>
-          <span className={styles.currentProvince}>{data.location.province}</span>
-        </div>
+        <span className={styles.currentIcon} aria-hidden="true">
+          {weatherEmoji(c.code, c.isDay)}
+        </span>
         <div className={styles.currentBody}>
-          <span className={styles.currentTemp}>
-            {Math.round(c.temperature_2m)}°C
+          <span className={styles.currentTemp}>{temp(c.temp)}</span>
+          <span className={styles.currentMeta}>
+            <span className={styles.currentCondition}>{c.condition}</span>
+            <span className={styles.currentLocationName}>{data.location.name}</span>
           </span>
-          <span className={styles.currentCondition}>{weatherLabel(c.weather_code)}</span>
-          <span className={styles.currentFeelsLike}>Feels like {Math.round(c.apparent_temperature)}°C</span>
         </div>
-        <div className={styles.currentStats}>
-          <span>Humidity {c.relative_humidity_2m}%</span>
-          <span>Wind {Math.round(c.wind_speed_10m)} km/h {windDir(c.wind_direction_10m)}</span>
-          <span>UV {c.uv_index}</span>
-        </div>
-        <a href={data._meta.url} target="_blank" rel="noopener noreferrer" className={styles.attribution}>
-          mukoko weather
-        </a>
       </div>
     </div>
   );
 }
 
-function ForecastWidget({ data, days, themeClass, className }: { data: WeatherData; days: number; themeClass: string; className: string }) {
-  const d = data.weather.daily;
-  const n = Math.min(days, d.time.length);
+/** today card — temp, condition, feels-like, high/low */
+function TodayCard({
+  data,
+  themeClass,
+  className,
+}: {
+  data: EmbedData;
+  themeClass: string;
+  className: string;
+}) {
+  const c = data.current;
+  return (
+    <div className={`${themeClass} ${className}`}>
+      <div className={styles.todayCard}>
+        <div className={styles.todayHeader}>
+          <span className={styles.todayLocationName}>{data.location.name}</span>
+          {data.location.province && (
+            <span className={styles.todayProvince}>{data.location.province}</span>
+          )}
+        </div>
+        <div className={styles.todayBody}>
+          <span className={styles.todayIcon} aria-hidden="true">
+            {weatherEmoji(c.code, c.isDay)}
+          </span>
+          <div className={styles.todayTempBlock}>
+            <span className={styles.todayTemp}>{temp(c.temp)}</span>
+            <span className={styles.todayCondition}>{c.condition}</span>
+          </div>
+        </div>
+        <div className={styles.todayStats}>
+          <span>Feels like {temp(c.feelsLike)}</span>
+          <span>
+            H {temp(c.high)} · L {temp(c.low)}
+          </span>
+        </div>
+        <Attribution data={data} />
+      </div>
+    </div>
+  );
+}
+
+/** 5-day / 7-day forecast strip */
+function ForecastCard({
+  data,
+  days,
+  themeClass,
+  className,
+}: {
+  data: EmbedData;
+  days: number;
+  themeClass: string;
+  className: string;
+}) {
+  const n = Math.min(days, data.daily.length);
   return (
     <div className={`${themeClass} ${className}`}>
       <div className={styles.forecastCard}>
-        <div className={styles.forecastTitle}>
-          {data.location.name} Forecast
-        </div>
-        {Array.from({ length: n }).map((_, i) => {
-          const date = new Date(d.time[i]);
-          const dayName = i === 0 ? "Today" : date.toLocaleDateString("en-ZW", { weekday: "short" });
-          return (
-            <div key={d.time[i]} className={i < n - 1 ? styles.forecastRowBorder : styles.forecastRow}>
-              <span className={styles.forecastDay}>{dayName}</span>
-              <span className={styles.forecastCondition}>{weatherLabel(d.weather_code[i])}</span>
-              <span className={styles.forecastTemps}>
-                {Math.round(d.temperature_2m_max[i])}° / {Math.round(d.temperature_2m_min[i])}°
-              </span>
-            </div>
-          );
-        })}
-        <a href={data._meta.url} target="_blank" rel="noopener noreferrer" className={styles.attribution}>
-          mukoko weather
-        </a>
+        <div className={styles.forecastTitle}>{data.location.name} · {days}-day forecast</div>
+        {data.daily.slice(0, n).map((d, i) => (
+          <div
+            key={d.date}
+            className={i < n - 1 ? styles.forecastRowBorder : styles.forecastRow}
+          >
+            <span className={styles.forecastDay}>{d.day}</span>
+            <span className={styles.forecastIcon} aria-hidden="true">
+              {weatherEmoji(d.code)}
+            </span>
+            <span className={styles.forecastCondition}>{d.condition}</span>
+            <span className={styles.forecastTemps}>
+              {temp(d.high)} / {temp(d.low)}
+            </span>
+          </div>
+        ))}
+        <Attribution data={data} />
       </div>
-    </div>
-  );
-}
-
-function BadgeWidget({ data, themeClass, className }: { data: WeatherData; themeClass: string; className: string }) {
-  const c = data.weather.current;
-  return (
-    <div className={`${themeClass} ${className}`}>
-      <a href={data._meta.url} target="_blank" rel="noopener noreferrer" className={styles.badge}>
-        <span className={styles.badgeTemp}>{Math.round(c.temperature_2m)}°C</span>
-        <span className={styles.badgeCondition}>{weatherLabel(c.weather_code)}</span>
-        <span className={styles.badgeLocation}>{data.location.name}</span>
-        <span className={styles.badgeBrand}>mukoko</span>
-      </a>
     </div>
   );
 }

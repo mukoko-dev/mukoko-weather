@@ -5,7 +5,7 @@ import { Footer } from "@/components/layout/Footer";
 export const metadata: Metadata = {
   title: "Embed Weather Widgets",
   description:
-    "Add mukoko weather widgets to your website. Current conditions, forecasts, and compact badges for any location worldwide.",
+    "Add mukoko weather widgets to your website. Four widget types — current condition, today card, 5-day and 7-day forecast cards — for any location worldwide, or the visitor's own location automatically.",
   alternates: {
     canonical: "https://weather.mukoko.com/embed",
   },
@@ -20,176 +20,178 @@ export default function EmbedPage() {
           Embed Weather Widgets
         </h1>
         <p className="mt-4 text-text-secondary">
-          Add live weather data to any website. Three widget types
-          available — all free, no API key required.
+          Add live weather to any React or Next.js site — all free, no API key
+          required. Four widget types are available. Omit the{" "}
+          <code className="rounded bg-surface-base px-1.5 py-0.5 font-mono text-base">
+            location
+          </code>{" "}
+          prop and the widget automatically shows the visitor&apos;s local
+          weather (detected from their IP).
         </p>
 
-        {/* Current Conditions Widget */}
+        {/* Install */}
         <section className="mt-10">
-          <h2 className="eagle">
-            Current Conditions
-          </h2>
-          <p className="mt-2 text-base text-text-secondary">
-            A card showing live temperature, conditions, humidity, wind, and UV
-            for any location worldwide.
-          </p>
+          <h2 className="eagle">Install</h2>
           <div className="mt-4 tortoise">
             <pre className="overflow-x-auto text-base">
-              <code className="font-mono text-text-primary">{`<!-- Current conditions for Harare -->
-<div data-mukoko-widget="current"
-     data-location="harare">
-</div>
-<script src="https://weather.mukoko.com/embed/widget.js" async></script>`}</code>
+              <code className="font-mono text-text-primary">{`import { MukokoWeatherEmbed } from "@mukoko/weather-embed";`}</code>
             </pre>
           </div>
         </section>
 
-        {/* Forecast Widget */}
+        {/* 1. Current condition */}
         <section className="mt-10">
-          <h2 className="eagle">
-            Forecast
-          </h2>
+          <h2 className="eagle">1 · Current condition</h2>
           <p className="mt-2 text-base text-text-secondary">
-            A multi-day forecast strip. Configure 3, 5, or 7 days.
+            A compact inline card — current temperature, condition, and an icon.
+            Great for navbars, headers, or sidebars.
           </p>
           <div className="mt-4 tortoise">
             <pre className="overflow-x-auto text-base">
-              <code className="font-mono text-text-primary">{`<!-- 5-day forecast for Bulawayo -->
-<div data-mukoko-widget="forecast"
-     data-location="bulawayo"
-     data-days="5">
-</div>
-<script src="https://weather.mukoko.com/embed/widget.js" async></script>`}</code>
+              <code className="font-mono text-text-primary">{`{/* A specific location */}
+<MukokoWeatherEmbed type="current" location="harare" />
+
+{/* The visitor's own location (IP-based) */}
+<MukokoWeatherEmbed type="current" />`}</code>
             </pre>
           </div>
         </section>
 
-        {/* Badge Widget */}
+        {/* 2. Today card */}
         <section className="mt-10">
-          <h2 className="eagle">
-            Compact Badge
-          </h2>
+          <h2 className="eagle">2 · Today card</h2>
           <p className="mt-2 text-base text-text-secondary">
-            An inline badge that fits in navbars, headers, or sidebars. Shows
-            temperature and condition at a glance.
+            A fuller current-day card — temperature, condition, feels-like, and
+            today&apos;s high / low.
           </p>
           <div className="mt-4 tortoise">
             <pre className="overflow-x-auto text-base">
-              <code className="font-mono text-text-primary">{`<!-- Compact badge for Mutare -->
-<div data-mukoko-widget="badge"
-     data-location="mutare">
-</div>
-<script src="https://weather.mukoko.com/embed/widget.js" async></script>`}</code>
+              <code className="font-mono text-text-primary">{`<MukokoWeatherEmbed type="today" location="bulawayo" />`}</code>
             </pre>
           </div>
         </section>
 
-        {/* iframe embed */}
+        {/* 3. 5-day card */}
         <section className="mt-10">
-          <h2 className="eagle">
-            iframe Embed
-          </h2>
+          <h2 className="eagle">3 · 5-day card</h2>
           <p className="mt-2 text-base text-text-secondary">
-            For complete isolation, use an iframe. Useful for CMS platforms
-            that don&apos;t allow custom scripts.
+            A five-day forecast strip — day, condition, and high / low per day.
           </p>
           <div className="mt-4 tortoise">
             <pre className="overflow-x-auto text-base">
-              <code className="font-mono text-text-primary">{`<iframe
-  src="https://weather.mukoko.com/embed/iframe/harare?type=current&theme=auto"
-  width="380"
-  height="280"
-  frameborder="0"
-  title="Harare Weather"
-></iframe>`}</code>
+              <code className="font-mono text-text-primary">{`<MukokoWeatherEmbed type="5day" location="victoria-falls" />`}</code>
             </pre>
           </div>
         </section>
 
-        {/* React/Next.js integration */}
+        {/* 4. 7-day card */}
         <section className="mt-10">
-          <h2 className="eagle">
-            React / Next.js
-          </h2>
+          <h2 className="eagle">4 · 7-day card</h2>
           <p className="mt-2 text-base text-text-secondary">
-            For Nyuchi products and React apps, use the{" "}
-            <code className="rounded bg-surface-base px-1.5 py-0.5 font-mono text-base">
-              MukokoWeatherEmbed
-            </code>{" "}
-            component directly.
+            A seven-day forecast strip — same layout as the 5-day card, extended
+            to a full week.
           </p>
           <div className="mt-4 tortoise">
             <pre className="overflow-x-auto text-base">
-              <code className="font-mono text-text-primary">{`import { MukokoWeatherEmbed } from "@mukoko/weather-embed";
-
-// Current conditions
-<MukokoWeatherEmbed location="harare" type="current" />
-
-// Forecast
-<MukokoWeatherEmbed location="victoria-falls" type="forecast" days={5} />
-
-// Badge
-<MukokoWeatherEmbed location="marondera" type="badge" />`}</code>
+              <code className="font-mono text-text-primary">{`<MukokoWeatherEmbed type="7day" location="mutare" />`}</code>
             </pre>
           </div>
         </section>
 
-        {/* Configuration options */}
+        {/* Props */}
         <section className="mt-10">
-          <h2 className="eagle">
-            Configuration
-          </h2>
+          <h2 className="eagle">Props</h2>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-base">
               <thead>
                 <tr className="border-b border-text-tertiary/10 text-left">
-                  <th className="pb-2 pr-4 font-semibold text-text-primary">Attribute</th>
+                  <th className="pb-2 pr-4 font-semibold text-text-primary">Prop</th>
                   <th className="pb-2 pr-4 font-semibold text-text-primary">Values</th>
                   <th className="pb-2 font-semibold text-text-primary">Description</th>
                 </tr>
               </thead>
               <tbody className="text-text-secondary">
                 <tr className="border-b border-text-tertiary/10">
-                  <td className="py-2 pr-4 font-mono text-base">data-mukoko-widget</td>
-                  <td className="py-2 pr-4">current, forecast, badge</td>
-                  <td className="py-2">Widget type (required)</td>
+                  <td className="py-2 pr-4 font-mono text-base">type</td>
+                  <td className="py-2 pr-4">current, today, 5day, 7day</td>
+                  <td className="py-2">Widget variant (default: current)</td>
                 </tr>
                 <tr className="border-b border-text-tertiary/10">
-                  <td className="py-2 pr-4 font-mono text-base">data-location</td>
+                  <td className="py-2 pr-4 font-mono text-base">location</td>
                   <td className="py-2 pr-4">harare, bulawayo, ...</td>
-                  <td className="py-2">Location slug (required)</td>
+                  <td className="py-2">Location slug. Omit for the visitor&apos;s IP location</td>
                 </tr>
                 <tr className="border-b border-text-tertiary/10">
-                  <td className="py-2 pr-4 font-mono text-base">data-days</td>
-                  <td className="py-2 pr-4">3, 5, 7</td>
-                  <td className="py-2">Forecast days (default: 5)</td>
+                  <td className="py-2 pr-4 font-mono text-base">lat / lon</td>
+                  <td className="py-2 pr-4">numbers</td>
+                  <td className="py-2">Explicit coordinates (override slug + IP)</td>
                 </tr>
                 <tr className="border-b border-text-tertiary/10">
-                  <td className="py-2 pr-4 font-mono text-base">data-theme</td>
+                  <td className="py-2 pr-4 font-mono text-base">theme</td>
                   <td className="py-2 pr-4">light, dark, auto</td>
                   <td className="py-2">Theme (default: auto)</td>
+                </tr>
+                <tr className="border-b border-text-tertiary/10">
+                  <td className="py-2 pr-4 font-mono text-base">apiUrl</td>
+                  <td className="py-2 pr-4">URL</td>
+                  <td className="py-2">API origin (default: weather.mukoko.com)</td>
                 </tr>
               </tbody>
             </table>
           </div>
         </section>
 
-        {/* Available locations */}
+        {/* Public API */}
         <section className="mt-10 mb-10">
-          <h2 className="eagle">
-            Available Locations
-          </h2>
+          <h2 className="eagle">Public API</h2>
           <p className="mt-2 text-base text-text-secondary">
-            265+ locations worldwide. Use the slug value in{" "}
+            The widget is powered by a public JSON endpoint you can call directly
+            from any site. With no parameters it returns weather for the
+            visitor&apos;s location (derived from their IP); pass{" "}
             <code className="rounded bg-surface-base px-1.5 py-0.5 font-mono text-base">
-              data-location
-            </code>
-            . Full list available at{" "}
+              slug
+            </code>{" "}
+            or{" "}
             <code className="rounded bg-surface-base px-1.5 py-0.5 font-mono text-base">
-              GET /api/locations
-            </code>
-            .
+              lat
+            </code>{" "}
+            &amp;{" "}
+            <code className="rounded bg-surface-base px-1.5 py-0.5 font-mono text-base">
+              lon
+            </code>{" "}
+            to pin a location. CORS is open to all origins.
           </p>
+          <div className="mt-4 tortoise">
+            <pre className="overflow-x-auto text-base">
+              <code className="font-mono text-text-primary">{`# Visitor's local weather (IP-based)
+GET https://weather.mukoko.com/api/embed/current
+
+# A specific location
+GET https://weather.mukoko.com/api/embed/current?slug=harare
+
+# Explicit coordinates
+GET https://weather.mukoko.com/api/embed/current?lat=-17.83&lon=31.05`}</code>
+            </pre>
+          </div>
+          <p className="mt-4 text-base text-text-secondary">Response shape:</p>
+          <div className="mt-4 tortoise">
+            <pre className="overflow-x-auto text-base">
+              <code className="font-mono text-text-primary">{`{
+  "location": { "name": "Harare", "province": "Harare",
+                "slug": "harare", "country": "ZW" },
+  "current":  { "temp": 24, "feelsLike": 23, "code": 2,
+                "condition": "Partly cloudy", "high": 27, "low": 14,
+                "humidity": 55, "windSpeed": 9, "windDirection": "SE",
+                "isDay": true },
+  "daily": [ { "date": "2026-06-30", "day": "Today", "code": 2,
+               "condition": "Partly cloudy", "high": 27, "low": 14,
+               "precipitationProbability": 0 } /* up to 7 */ ],
+  "source": "ip",
+  "attribution": { "name": "mukoko weather",
+                   "url": "https://weather.mukoko.com/harare" }
+}`}</code>
+            </pre>
+          </div>
         </section>
       </main>
       <Footer />
