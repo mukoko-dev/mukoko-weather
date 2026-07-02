@@ -31,13 +31,15 @@ export const runtime = "edge";
 const DEFAULT_LAT = -17.83;
 const DEFAULT_LON = 31.05;
 
-// Trusted base URL for internal API calls. Derived ONLY from server env — never
-// from the incoming request (`req.url`/Host is attacker-controllable, which
-// would make the internal fetches an SSRF sink). Mirrors src/app/page.tsx.
+// Trusted base URL for internal API calls. A FIXED value — never derived from
+// the incoming request (`req.url`/Host is attacker-controllable, which would
+// make the internal fetches an SSRF sink). In production this is the canonical
+// public domain (reachable from the Edge runtime; VERCEL_URL is a per-deploy
+// host that isn't reliably reachable here). Falls back to localhost in dev.
 const INTERNAL_BASE =
   process.env.NEXT_PUBLIC_APP_URL ??
-  (process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
+  (process.env.NODE_ENV === "production"
+    ? "https://weather.mukoko.com"
     : "http://localhost:3000");
 
 const CORS_HEADERS: Record<string, string> = {
