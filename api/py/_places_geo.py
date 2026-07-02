@@ -25,7 +25,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from ._db import places_db, places_geo_collection
+from ._db import places_collection, places_db, places_geo_collection
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +234,70 @@ def find_nearby_placesgeo(
 
 
 # ---------------------------------------------------------------------------
+# places.places — nearest POI matching (location refinement)
+# ---------------------------------------------------------------------------
+
+#: Tight radius for POI-nearest matching. POIs are point features (a school, a
+#: shop, a clinic); we only prefer one when the user is essentially standing on
+#: it. Intentionally small (≤250 m) — this is NOT a coarse city snap.
+POI_MATCH_RADIUS_KM: float = 0.25
+
+
+def poi_type_from_place(doc: Optional[dict]) -> Optional[str]:
+    """Return a single human-facing POI type from a ``places.places`` doc.
+
+    Prefers the first ``placeType`` entry, then the first
+    ``additionalCategories`` entry. Returns ``None`` when neither carries a
+    usable string.
+    """
+    if not doc:
+        return None
+    place_type = doc.get("placeType")
+    if isinstance(place_type, str) and place_type.strip():
+        return place_type.strip()
+    if isinstance(place_type, list):
+        for entry in place_type:
+            if isinstance(entry, str) and entry.strip():
+                return entry.strip()
+    extra = doc.get("additionalCategories")
+    if isinstance(extra, list):
+        for entry in extra:
+            if isinstance(entry, str) and entry.strip():
+                return entry.strip()
+    return None
+
+
+def find_nearest_place(
+    lat: float,
+    lon: float,
+    max_distance_km: float = POI_MATCH_RADIUS_KM,
+) -> Optional[dict]:
+    """Return the nearest ``places.places`` POI within ``max_distance_km``.
+
+    Uses the 2dsphere ``$nearSphere`` index on ``places.places.geo`` (assumed
+    present; guarded below). Returns ``None`` if nothing is in range, the index
+    is missing, or any error occurs — POI matching must NEVER break location
+    resolution, so every failure path falls back to ``None`` and the caller
+    keeps its reverse-geocode result.
+    """
+    max_meters = max(0.0, max_distance_km) * 1000
+    try:
+        result = places_collection().find_one({
+            "geo": {
+                "$nearSphere": {
+                    "$geometry": {"type": "Point", "coordinates": [lon, lat]},
+                    "$maxDistance": max_meters,
+                }
+            }
+        })
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("places.places $nearSphere failed: %s", exc)
+        return None
+    # Real POI docs are plain dicts; guard against non-dict mocks/None.
+    return result if isinstance(result, dict) else None
+
+
+# ---------------------------------------------------------------------------
 # placesGeo insert
 # ---------------------------------------------------------------------------
 
@@ -260,6 +324,7 @@ def upsert_placesgeo_city(
     mukoko_slug: Optional[str] = None,
     mukoko_tags: Optional[list[str]] = None,
     mukoko_nominatim_address: Optional[dict] = None,
+    mukoko_poi_type: Optional[str] = None,
 ) -> dict:
     """Insert a new ``places.placesGeo`` document, or return the existing one.
 
@@ -316,6 +381,8 @@ def upsert_placesgeo_city(
                     patch["sourceProvenance.mukokoElevation"] = elevation
                 if mukoko_nominatim_address and not existing_prov.get("mukokoNominatimAddress"):
                     patch["sourceProvenance.mukokoNominatimAddress"] = mukoko_nominatim_address
+                if mukoko_poi_type and not existing_prov.get("mukokoPoiType"):
+                    patch["sourceProvenance.mukokoPoiType"] = mukoko_poi_type
                 try:
                     places_geo_collection().update_one(
                         {"_id": existing["_id"]},
@@ -344,6 +411,8 @@ def upsert_placesgeo_city(
         source_provenance["mukokoTags"] = list(mukoko_tags)
     if mukoko_nominatim_address:
         source_provenance["mukokoNominatimAddress"] = mukoko_nominatim_address
+    if mukoko_poi_type:
+        source_provenance["mukokoPoiType"] = mukoko_poi_type
 
     doc: dict = {
         "_id": str(uuid.uuid4()),

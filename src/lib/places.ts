@@ -71,6 +71,8 @@ export interface PlacesGeoDoc {
     mukokoTags?: string[];
     /** Cached Nominatim structured address. */
     mukokoNominatimAddress?: NominatimAddress;
+    /** Nearest-POI type stamped at create time (e.g. "school", "hospital"). */
+    mukokoPoiType?: string;
   };
 }
 
@@ -101,6 +103,13 @@ export interface AdaptedLocation extends WeatherLocation {
   _id: string;
   /** Platform placesGeo.slug (hash-suffixed, e.g. "harare-a1b2c3"). */
   platformSlug?: string;
+  /**
+   * Nearest-POI type (e.g. "school", "hospital", "market", "park") when a
+   * named POI was within POI_MATCH_RADIUS_KM at create time. Surfaced from
+   * `sourceProvenance.mukokoPoiType` so the location page + AI summary can
+   * mention it.
+   */
+  poiType?: string;
   /** Always set when adapted from placesGeo. */
   updatedAt?: Date;
 }
@@ -237,6 +246,7 @@ export async function adaptPlacesGeoToLocationDoc(
     elevation,
     tags,
     country: country || undefined,
+    poiType: provenance.mukokoPoiType,
     provinceSlug: hint.seed?.provinceSlug,
     nominatimAddress: provenance.mukokoNominatimAddress ?? hint.seed?.nominatimAddress,
     source: hint.seed?.source ?? "community",
@@ -359,6 +369,58 @@ export async function nearestPlacesGeo(
         },
       },
     })) as unknown as PlacesGeoDoc | null;
+    return doc;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Nearest place (POI) — tight-radius matching for location refinement
+// ---------------------------------------------------------------------------
+
+/**
+ * Tight radius (km) for POI-nearest matching. POIs are point features (a
+ * school, a shop, a clinic) — we only prefer one when the user is essentially
+ * standing on it. Intentionally small (≤250 m): this is NOT a coarse city snap.
+ */
+export const POI_MATCH_RADIUS_KM = 0.25;
+
+/**
+ * Extract a single human-facing POI type from a `places.places` document.
+ * Prefers the first `placeType`, then the first `additionalCategories` entry.
+ * Returns `undefined` when neither carries a usable string.
+ */
+export function poiTypeFromPlace(doc: PlaceDoc | null | undefined): string | undefined {
+  if (!doc) return undefined;
+  const primary = doc.placeType?.find((t) => typeof t === "string" && t.trim());
+  if (primary) return primary.trim();
+  const extra = doc.additionalCategories?.find((t) => typeof t === "string" && t.trim());
+  return extra ? extra.trim() : undefined;
+}
+
+/**
+ * Find the nearest `places.places` POI to (lat, lon) within `maxKm`.
+ * Uses `$nearSphere` on the 2dsphere index against `places.places.geo`.
+ *
+ * Returns `null` on any error, a missing index, or when nothing is in range —
+ * POI matching must NEVER break location resolution, so every failure path
+ * falls back to `null` and the caller keeps its reverse-geocode result.
+ */
+export async function nearestPlace(
+  lat: number,
+  lon: number,
+  maxKm: number = POI_MATCH_RADIUS_KM,
+): Promise<PlaceDoc | null> {
+  try {
+    const doc = (await placesCollection().findOne({
+      geo: {
+        $nearSphere: {
+          $geometry: { type: "Point", coordinates: [lon, lat] },
+          $maxDistance: Math.max(0, maxKm) * 1000,
+        },
+      },
+    })) as unknown as PlaceDoc | null;
     return doc;
   } catch {
     return null;

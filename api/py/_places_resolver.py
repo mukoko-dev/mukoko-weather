@@ -194,6 +194,8 @@ def adapt_placesgeo_to_location(
         adapted["country"] = iso
     if doc.get("slug"):
         adapted["platformSlug"] = doc["slug"]
+    if provenance.get("mukokoPoiType"):
+        adapted["poiType"] = provenance["mukokoPoiType"]
     if provenance.get("mukokoNominatimAddress"):
         adapted["nominatimAddress"] = provenance["mukokoNominatimAddress"]
     if geo:

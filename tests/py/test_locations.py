@@ -19,6 +19,7 @@ from py._locations import (
     _normalize_admin1,
     _build_nominatim_address,
     _find_duplicate,
+    _match_nearby_poi,
     _enrich_location_with_ai,
     _resolve_slug_collision,
     _CITY_STATES,
@@ -1917,3 +1918,113 @@ class TestSlugCollisionHardening:
         assert result["existing"]["slug"] == "windsor-zw"
         # And we did NOT mirror to placesGeo for a duplicate.
         mock_upsert.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _match_nearby_poi — tight-radius POI refinement
+# ---------------------------------------------------------------------------
+
+
+class TestMatchNearbyPoi:
+    @patch("py._locations.find_nearest_place")
+    def test_returns_name_and_type_for_named_poi(self, mock_nearest):
+        mock_nearest.return_value = {
+            "name": "Prince Edward School",
+            "placeType": ["school"],
+        }
+        result = _match_nearby_poi(-17.83, 31.05)
+        assert result == {"name": "Prince Edward School", "poiType": "school"}
+
+    @patch("py._locations.find_nearest_place")
+    def test_uses_tight_250m_radius(self, mock_nearest):
+        mock_nearest.return_value = None
+        _match_nearby_poi(-17.83, 31.05)
+        # Radius passed is POI_MATCH_RADIUS_KM (0.25 km) — a tight match, not a snap.
+        assert mock_nearest.call_args.args[2] == 0.25
+
+    @patch("py._locations.find_nearest_place", return_value=None)
+    def test_none_when_no_poi(self, _mock_nearest):
+        assert _match_nearby_poi(0, 0) is None
+
+    @patch("py._locations.find_nearest_place")
+    def test_none_when_poi_unnamed(self, mock_nearest):
+        mock_nearest.return_value = {"name": "  ", "placeType": ["school"]}
+        assert _match_nearby_poi(0, 0) is None
+
+    @patch("py._locations.find_nearest_place")
+    def test_poi_type_none_when_untyped(self, mock_nearest):
+        mock_nearest.return_value = {"name": "Some Place"}
+        result = _match_nearby_poi(0, 0)
+        assert result == {"name": "Some Place", "poiType": None}
+
+    @patch("py._locations.find_nearest_place", side_effect=RuntimeError("boom"))
+    def test_swallows_errors(self, _mock_nearest):
+        """POI matching must never break resolution — errors fall back to None."""
+        assert _match_nearby_poi(0, 0) is None
+
+
+class TestGeoLookupPoiRefinement:
+    @pytest.mark.asyncio
+    @patch("py._locations.upsert_placesgeo_city")
+    @patch("py._locations._enrich_location_with_ai")
+    @patch("py._locations._get_elevation")
+    @patch("py._locations._find_duplicate")
+    @patch("py._locations._match_nearby_poi")
+    @patch("py._locations._reverse_geocode")
+    @patch("py._locations.find_nearest_location")
+    @patch("py._locations.places_geo_collection")
+    async def test_poi_overrides_name_and_flows_through(
+        self, mock_coll, mock_nearest, mock_geocode, mock_poi, mock_dedup,
+        mock_elev, mock_enrich, mock_upsert,
+    ):
+        """A close POI replaces the reverse-geocode name and poiType is surfaced."""
+        mock_nearest.return_value = None
+        mock_geocode.return_value = {
+            "country": "ZW", "countryName": "Zimbabwe",
+            "name": "Fourth Street",  # raw reverse-geocode name
+            "admin1": "Harare", "lat": -17.83, "lon": 31.05, "elevation": 1490,
+        }
+        mock_poi.return_value = {"name": "Prince Edward School", "poiType": "school"}
+        mock_dedup.return_value = None
+        mock_elev.return_value = 1490
+        mock_coll.return_value.find_one.return_value = None
+        mock_upsert.return_value = {"_id": "u", "slug": "prince-edward-school-abc123"}
+
+        result = await geo_lookup(-17.83, 31.05, autoCreate=True)
+        assert result["isNew"] is True
+        # POI name won over the reverse-geocode name.
+        assert result["nearest"]["name"] == "Prince Edward School"
+        assert result["nearest"]["poiType"] == "school"
+        # And the POI type was stamped into the placesGeo write.
+        assert mock_upsert.call_args.kwargs["mukoko_poi_type"] == "school"
+
+    @pytest.mark.asyncio
+    @patch("py._locations.upsert_placesgeo_city")
+    @patch("py._locations._enrich_location_with_ai")
+    @patch("py._locations._get_elevation")
+    @patch("py._locations._find_duplicate")
+    @patch("py._locations._match_nearby_poi")
+    @patch("py._locations._reverse_geocode")
+    @patch("py._locations.find_nearest_location")
+    @patch("py._locations.places_geo_collection")
+    async def test_no_poi_keeps_reverse_geocode_name(
+        self, mock_coll, mock_nearest, mock_geocode, mock_poi, mock_dedup,
+        mock_elev, mock_enrich, mock_upsert,
+    ):
+        """No nearby POI — the reverse-geocode result is used unchanged (fallback)."""
+        mock_nearest.return_value = None
+        mock_geocode.return_value = {
+            "country": "ZW", "countryName": "Zimbabwe",
+            "name": "Fourth Street", "admin1": "Harare",
+            "lat": -17.83, "lon": 31.05, "elevation": 1490,
+        }
+        mock_poi.return_value = None
+        mock_dedup.return_value = None
+        mock_elev.return_value = 1490
+        mock_coll.return_value.find_one.return_value = None
+        mock_upsert.return_value = {"_id": "u", "slug": "fourth-street-abc123"}
+
+        result = await geo_lookup(-17.83, 31.05, autoCreate=True)
+        assert result["nearest"]["name"] == "Fourth Street"
+        assert "poiType" not in result["nearest"]
+        assert mock_upsert.call_args.kwargs["mukoko_poi_type"] is None

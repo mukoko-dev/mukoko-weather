@@ -12,7 +12,10 @@ import {
   inferNameFromSlug,
   adaptPlacesGeoToLocationDoc,
   listSeedLocations,
+  poiTypeFromPlace,
+  POI_MATCH_RADIUS_KM,
   type PlacesGeoDoc,
+  type PlaceDoc,
 } from "./places";
 import { LOCATIONS } from "./locations";
 
@@ -130,6 +133,89 @@ describe("adaptPlacesGeoToLocationDoc", () => {
       cleanSlug: "some-new-place",
     });
     expect(adapted.tags).toEqual(["city"]);
+  });
+});
+
+describe("poiTypeFromPlace", () => {
+  it("prefers the first placeType entry", () => {
+    expect(
+      poiTypeFromPlace({
+        _id: "p1",
+        name: "Prince Edward School",
+        placeType: ["school", "college"],
+      }),
+    ).toBe("school");
+  });
+
+  it("falls back to additionalCategories when placeType is empty", () => {
+    expect(
+      poiTypeFromPlace({
+        _id: "p2",
+        name: "Mbare Musika",
+        placeType: [],
+        additionalCategories: ["market"],
+      }),
+    ).toBe("market");
+  });
+
+  it("trims whitespace and skips blank entries", () => {
+    expect(
+      poiTypeFromPlace({
+        _id: "p3",
+        name: "Clinic",
+        placeType: ["", "  ", " clinic "],
+      }),
+    ).toBe("clinic");
+  });
+
+  it("returns undefined when no type present", () => {
+    expect(poiTypeFromPlace({ _id: "p4", name: "Nowhere" })).toBeUndefined();
+  });
+
+  it("returns undefined for null/undefined input", () => {
+    expect(poiTypeFromPlace(null)).toBeUndefined();
+    expect(poiTypeFromPlace(undefined)).toBeUndefined();
+  });
+
+  it("keeps the POI-match radius tight (≤250 m)", () => {
+    expect(POI_MATCH_RADIUS_KM).toBe(0.25);
+    expect(POI_MATCH_RADIUS_KM).toBeLessThanOrEqual(0.25);
+  });
+});
+
+describe("adaptPlacesGeoToLocationDoc — POI type", () => {
+  const poiDoc: PlacesGeoDoc = {
+    _id: "poi-placegeo",
+    name: "Prince Edward School",
+    slug: "prince-edward-school-a1b2c3",
+    geoType: "town",
+    geo: { type: "Point", coordinates: [31.05, -17.83] },
+    sourceProvenance: {
+      dataOrigin: "mukoko_user",
+      dataConfidence: 0.6,
+      mukokoPoiType: "school",
+    },
+  };
+
+  it("surfaces sourceProvenance.mukokoPoiType as poiType", async () => {
+    const adapted = await adaptPlacesGeoToLocationDoc(poiDoc, {
+      cleanSlug: "prince-edward-school-zw",
+    });
+    expect(adapted.poiType).toBe("school");
+  });
+
+  it("leaves poiType undefined when not stamped", async () => {
+    const adapted = await adaptPlacesGeoToLocationDoc(
+      { ...poiDoc, sourceProvenance: { dataOrigin: "mukoko_user" } },
+      { cleanSlug: "prince-edward-school-zw" },
+    );
+    expect(adapted.poiType).toBeUndefined();
+  });
+
+  // Type-only guard: PlaceDoc must remain importable/usable here.
+  it("PlaceDoc shape is usable", () => {
+    const doc: PlaceDoc = { _id: "x", name: "X", placeType: ["park"] };
+    expect(poiTypeFromPlace(doc)).toBe("park");
   });
 });
 

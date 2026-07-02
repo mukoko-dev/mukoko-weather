@@ -33,8 +33,11 @@ from ._places_resolver import (
 )
 from ._places_geo import (
     find_nearby_placesgeo,
+    find_nearest_place,
+    poi_type_from_place,
     upsert_placesgeo_city,
     get_country_id,
+    POI_MATCH_RADIUS_KM,
 )
 
 router = APIRouter()
@@ -627,6 +630,31 @@ def _find_duplicate(
         return None
 
 
+def _match_nearby_poi(lat: float, lon: float) -> dict | None:
+    """Best-effort nearest-POI lookup against ``places.places``.
+
+    Returns ``{"name": str, "poiType": str | None}`` when a *named* POI exists
+    within ``POI_MATCH_RADIUS_KM`` (≤250 m) of (lat, lon), else ``None``.
+
+    A very close named POI (a school, hospital, market, park) gives a richer,
+    more consistent location name than a raw reverse-geocode. This is
+    intentionally tight — it is NOT a coarse distance-snap to far-away places.
+    Wrapped so a POI-lookup failure never breaks location resolution: any
+    error, missing index, or empty result falls through to ``None`` and the
+    caller keeps its reverse-geocoded name.
+    """
+    try:
+        poi = find_nearest_place(lat, lon, POI_MATCH_RADIUS_KM)
+    except Exception:  # noqa: BLE001
+        return None
+    if not poi:
+        return None
+    name = (poi.get("name") or "").strip()
+    if not name:
+        return None
+    return {"name": name, "poiType": poi_type_from_place(poi)}
+
+
 @router.get("/api/py/geo")
 async def geo_lookup(
     lat: float,
@@ -667,6 +695,16 @@ async def geo_lookup(
                     status_code=422,
                     detail="Could not determine location name",
                 )
+
+            # ── POI refinement — prefer a very-close named POI (≤250 m) ──────
+            # If the user is essentially standing on a named POI (school,
+            # hospital, market, park), use its name/type instead of the raw
+            # reverse-geocode — richer and consistent with the platform's POI
+            # catalog. Best-effort; falls back to the reverse-geocode on miss.
+            poi_match = _match_nearby_poi(lat, lon)
+            poi_type = poi_match.get("poiType") if poi_match else None
+            if poi_match:
+                geocoded["name"] = poi_match["name"]
 
             # ── Tight duplicate check against placesGeo (Phase 0G) ───────────
             # ONLY a 1km same-name dedup. Anything wider would snap a specific
@@ -730,6 +768,7 @@ async def geo_lookup(
                     mukoko_slug=slug,
                     mukoko_tags=tags,
                     mukoko_nominatim_address=geocoded.get("nominatimAddress"),
+                    mukoko_poi_type=poi_type,
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
@@ -751,6 +790,8 @@ async def geo_lookup(
                 "geo": {"type": "Point", "coordinates": [geocoded["lon"], geocoded["lat"]]},
                 "nominatimAddress": geocoded.get("nominatimAddress", {}),
             }
+            if poi_type:
+                new_loc["poiType"] = poi_type
 
             # Enrich: resolve seasons for this country if not already known
             _enrich_location_with_ai(geocoded["country"], lat, lon)
@@ -867,6 +908,13 @@ async def add_location(request: Request):
         if not geocoded:
             raise HTTPException(status_code=422, detail="Could not determine location name")
 
+        # POI refinement — prefer a very-close named POI (≤250 m) over the raw
+        # reverse-geocode (best-effort; falls back to the reverse-geocode name).
+        poi_match = _match_nearby_poi(lat, lon)
+        poi_type = poi_match.get("poiType") if poi_match else None
+        if poi_match:
+            geocoded["name"] = poi_match["name"]
+
         # Duplicate check (1km radius + name/country match)
         duplicate = _find_duplicate(
             lat, lon, DEDUP_RADIUS_KM,
@@ -948,6 +996,7 @@ async def add_location(request: Request):
                 mukoko_slug=slug,
                 mukoko_tags=tags,
                 mukoko_nominatim_address=geocoded.get("nominatimAddress"),
+                mukoko_poi_type=poi_type,
             )
             places_geo_id = placesgeo_doc.get("_id")
             places_geo_slug = placesgeo_doc.get("slug")
@@ -979,17 +1028,21 @@ async def add_location(request: Request):
         # Enrich: resolve seasons for this country if not already known
         _enrich_location_with_ai(geocoded["country"], lat, lon)
 
+        location_payload = {
+            "slug": new_loc["slug"],
+            "name": new_loc["name"],
+            "province": new_loc["province"],
+            "country": new_loc.get("country", geocoded["country"]),
+            "lat": new_loc["lat"],
+            "lon": new_loc["lon"],
+            "elevation": new_loc["elevation"],
+        }
+        if poi_type:
+            location_payload["poiType"] = poi_type
+
         return {
             "mode": "created",
-            "location": {
-                "slug": new_loc["slug"],
-                "name": new_loc["name"],
-                "province": new_loc["province"],
-                "country": new_loc.get("country", geocoded["country"]),
-                "lat": new_loc["lat"],
-                "lon": new_loc["lon"],
-                "elevation": new_loc["elevation"],
-            },
+            "location": location_payload,
             "placesGeoId": places_geo_id,
             "placesGeoSlug": places_geo_slug,
         }

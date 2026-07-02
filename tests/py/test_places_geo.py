@@ -392,3 +392,120 @@ class TestEnqueueFundiSeed:
         assert request_id == "in-progress"
         coll.insert_not_called = MagicMock()
         coll.insert_one.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# poi_type_from_place — extract a single human-facing POI type
+# ---------------------------------------------------------------------------
+
+
+class TestPoiTypeFromPlace:
+    def test_prefers_first_placetype_list_entry(self):
+        assert pg.poi_type_from_place({"placeType": ["school", "college"]}) == "school"
+
+    def test_accepts_placetype_string(self):
+        assert pg.poi_type_from_place({"placeType": "hospital"}) == "hospital"
+
+    def test_falls_back_to_additional_categories(self):
+        assert pg.poi_type_from_place(
+            {"placeType": [], "additionalCategories": ["market"]}
+        ) == "market"
+
+    def test_strips_whitespace(self):
+        assert pg.poi_type_from_place({"placeType": ["  park  "]}) == "park"
+
+    def test_skips_blank_entries(self):
+        assert pg.poi_type_from_place({"placeType": ["", "  ", "clinic"]}) == "clinic"
+
+    def test_none_when_no_type(self):
+        assert pg.poi_type_from_place({"name": "Somewhere"}) is None
+
+    def test_none_for_empty_doc(self):
+        assert pg.poi_type_from_place(None) is None
+        assert pg.poi_type_from_place({}) is None
+
+
+# ---------------------------------------------------------------------------
+# find_nearest_place — tight-radius POI matching against places.places
+# ---------------------------------------------------------------------------
+
+
+class TestFindNearestPlace:
+    @patch("py._places_geo.places_collection")
+    def test_returns_dict_result(self, mock_coll):
+        poi = {"_id": "poi-1", "name": "Prince Edward School", "placeType": ["school"]}
+        mock_coll.return_value.find_one.return_value = poi
+        result = pg.find_nearest_place(-17.83, 31.05)
+        assert result == poi
+
+    @patch("py._places_geo.places_collection")
+    def test_uses_nearsphere_with_lon_lat_and_meters(self, mock_coll):
+        mock_coll.return_value.find_one.return_value = None
+        pg.find_nearest_place(-17.83, 31.05, 0.25)
+        query = mock_coll.return_value.find_one.call_args.args[0]
+        near = query["geo"]["$nearSphere"]
+        assert near["$geometry"]["coordinates"] == [31.05, -17.83]  # [lon, lat]
+        assert near["$maxDistance"] == 250  # 0.25 km -> 250 m
+
+    @patch("py._places_geo.places_collection")
+    def test_none_when_nothing_in_range(self, mock_coll):
+        mock_coll.return_value.find_one.return_value = None
+        assert pg.find_nearest_place(0, 0) is None
+
+    @patch("py._places_geo.places_collection")
+    def test_non_dict_result_becomes_none(self, mock_coll):
+        """A non-dict result (e.g. mock/missing index) must fall back to None."""
+        mock_coll.return_value.find_one.return_value = MagicMock()
+        assert pg.find_nearest_place(0, 0) is None
+
+    @patch("py._places_geo.places_collection")
+    def test_swallows_errors_returns_none(self, mock_coll):
+        """POI matching must never break resolution — errors fall back to None."""
+        mock_coll.return_value.find_one.side_effect = RuntimeError("no 2dsphere index")
+        assert pg.find_nearest_place(0, 0) is None
+
+
+# ---------------------------------------------------------------------------
+# upsert_placesgeo_city — mukoko_poi_type stamped into sourceProvenance
+# ---------------------------------------------------------------------------
+
+
+class TestUpsertStampsPoiType:
+    @patch("py._places_geo.find_nearby_placesgeo", return_value=None)
+    @patch("py._places_geo.get_country_id", return_value="zw-parent")
+    @patch("py._places_geo.places_geo_collection")
+    def test_new_doc_stamps_poi_type(self, mock_coll, _parent, _dedup):
+        result = pg.upsert_placesgeo_city(
+            name="Prince Edward School", lat=-17.83, lon=31.05,
+            country_iso="ZW", mukoko_poi_type="school",
+        )
+        assert result["sourceProvenance"]["mukokoPoiType"] == "school"
+
+    @patch("py._places_geo.find_nearby_placesgeo", return_value=None)
+    @patch("py._places_geo.get_country_id", return_value="zw-parent")
+    @patch("py._places_geo.places_geo_collection")
+    def test_poi_type_omitted_when_none(self, mock_coll, _parent, _dedup):
+        result = pg.upsert_placesgeo_city(
+            name="Harare", lat=-17.83, lon=31.05, country_iso="ZW",
+        )
+        assert "mukokoPoiType" not in result["sourceProvenance"]
+
+    @patch("py._places_geo.find_nearby_placesgeo")
+    @patch("py._places_geo.get_country_id", return_value="zw-parent")
+    @patch("py._places_geo.places_geo_collection")
+    def test_patches_poi_type_onto_existing_doc(self, mock_coll, _parent, mock_dedup):
+        """A pre-existing doc missing a POI type gets it stamped alongside the slug."""
+        mock_dedup.return_value = {
+            "_id": "existing-uuid",
+            "slug": "prince-edward-existing",
+            "name": "Prince Edward School",
+            "sourceProvenance": {},
+        }
+        result = pg.upsert_placesgeo_city(
+            name="Prince Edward School", lat=-17.83, lon=31.05,
+            country_iso="ZW", mukoko_slug="prince-edward-school-zw",
+            mukoko_poi_type="school",
+        )
+        assert result["wasExisting"] is True
+        patch_set = mock_coll.return_value.update_one.call_args.args[1]["$set"]
+        assert patch_set["sourceProvenance.mukokoPoiType"] == "school"
