@@ -19,6 +19,12 @@
  *   - provinces       : Province/state display metadata
  */
 
+import type {
+  Collection,
+  Document,
+  IndexSpecification,
+  CreateIndexesOptions,
+} from "mongodb";
 import {
   weatherDb,
   placesDb,
@@ -236,85 +242,200 @@ function airportsCollection() {
 // Indexes — call once on app startup (idempotent)
 // ---------------------------------------------------------------------------
 
+/**
+ * MongoDB error codes for index conflicts.
+ *   85 (IndexOptionsConflict)  — an index with the same name exists but with
+ *        different options (e.g. requested `unique: true` but the existing one
+ *        is non-unique). This is the error that was aborting the whole seed.
+ *   86 (IndexKeySpecsConflict) — an index with the same name exists on a
+ *        different key spec.
+ *   68 (IndexAlreadyExists)    — an equivalent index already exists (benign).
+ */
+export function isIndexConflictError(err: unknown): boolean {
+  const code = (err as { code?: number } | null)?.code;
+  return code === 85 || code === 86 || code === 68;
+}
+
+/**
+ * MongoDB duplicate-key error (11000) — surfaces when trying to build a unique
+ * index over a collection that already contains duplicate values, so a
+ * drop-and-recreate to `unique` is genuinely unsafe.
+ */
+function isDuplicateKeyError(err: unknown): boolean {
+  return (err as { code?: number } | null)?.code === 11000;
+}
+
+/** Compute the default index name MongoDB assigns to a simple key spec. */
+function defaultIndexName(keys: IndexSpecification): string {
+  return Object.entries(keys as Record<string, unknown>)
+    .map(([field, direction]) => `${field}_${direction}`)
+    .join("_");
+}
+
+/**
+ * Create an index resiliently. A single conflicting or failing index must NEVER
+ * abort the whole `ensureIndexes` seed run (BUG 2). This helper:
+ *
+ *   1. Tries `createIndex` normally.
+ *   2. On an index-options/spec conflict (Mongo 85/86) for a UNIQUE index,
+ *      drop-and-recreate the index to reconcile the options. If that fails
+ *      because real duplicate values exist (11000), downgrade to a non-unique
+ *      index so reality is matched and seeding continues.
+ *   3. Any other error is logged and swallowed — never rethrown.
+ *
+ * Always resolves; never rejects.
+ */
+async function safeCreateIndex<T extends Document>(
+  collection: Collection<T>,
+  keys: IndexSpecification,
+  options?: CreateIndexesOptions,
+): Promise<void> {
+  try {
+    await collection.createIndex(keys, options);
+    return;
+  } catch (err) {
+    const namespace = collection.collectionName;
+
+    if (!isIndexConflictError(err)) {
+      // Non-conflict failure (e.g. transient): log and continue seeding.
+      logWarn({
+        source: "mongodb",
+        message: `ensureIndexes: skipped index on ${namespace}`,
+        error: err instanceof Error ? err : new Error(String(err)),
+        meta: { keys },
+      });
+      return;
+    }
+
+    // Conflict. If we genuinely need a unique index, try to reconcile it by
+    // dropping the existing (differently-optioned) index and recreating.
+    if (options?.unique) {
+      const indexName = options.name ?? defaultIndexName(keys);
+      try {
+        await collection.dropIndex(indexName);
+        await collection.createIndex(keys, options);
+        return;
+      } catch (recreateErr) {
+        if (isDuplicateKeyError(recreateErr)) {
+          // Real duplicate data — a unique index can't exist. Downgrade to a
+          // non-unique index so lookups stay fast and seeding proceeds.
+          const { unique: _unique, ...nonUnique } = options;
+          try {
+            await collection.createIndex(keys, nonUnique);
+          } catch {
+            /* give up on this one index — never abort the seed */
+          }
+          logWarn({
+            source: "mongodb",
+            message: `ensureIndexes: ${namespace}.${indexName} has duplicate values — created non-unique index instead of unique`,
+            meta: { keys },
+          });
+          return;
+        }
+        // Drop/recreate failed for another reason — log and continue.
+        logWarn({
+          source: "mongodb",
+          message: `ensureIndexes: could not reconcile unique index ${namespace}.${indexName}`,
+          error: recreateErr instanceof Error ? recreateErr : new Error(String(recreateErr)),
+          meta: { keys },
+        });
+        return;
+      }
+    }
+
+    // Non-unique conflict — the existing index is good enough. Log and move on.
+    logWarn({
+      source: "mongodb",
+      message: `ensureIndexes: index already exists with different options on ${namespace} — leaving existing index in place`,
+      meta: { keys },
+    });
+  }
+}
+
 export async function ensureIndexes(): Promise<void> {
-  await Promise.all([
+  // Each index is created independently and resiliently — one conflicting or
+  // failing index NEVER aborts the whole seed (so `weather.airports` and every
+  // other collection still gets seeded). `safeCreateIndex` never rejects, but
+  // we use `allSettled` as a belt-and-braces guard.
+  await Promise.allSettled([
     // Weather cache: one doc per location, auto-expire
-    weatherCacheCollection().createIndex({ locationSlug: 1 }, { unique: true }),
-    weatherCacheCollection().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    safeCreateIndex(weatherCacheCollection(), { locationSlug: 1 }, { unique: true }),
+    safeCreateIndex(weatherCacheCollection(), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
 
     // AI summaries: one doc per location, auto-expire
-    aiSummariesCollection().createIndex({ locationSlug: 1 }, { unique: true }),
-    aiSummariesCollection().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    safeCreateIndex(aiSummariesCollection(), { locationSlug: 1 }, { unique: true }),
+    safeCreateIndex(aiSummariesCollection(), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
 
     // Weather history: one doc per location per day, query by date range
-    weatherHistoryCollection().createIndex({ locationSlug: 1, date: -1 }, { unique: true }),
-    weatherHistoryCollection().createIndex({ recordedAt: 1 }),
+    safeCreateIndex(weatherHistoryCollection(), { locationSlug: 1, date: -1 }, { unique: true }),
+    safeCreateIndex(weatherHistoryCollection(), { recordedAt: 1 }),
 
     // Locations indexes — Phase 0F: weather.locations is dropped. Geo /
     // text indexes on `places.placesGeo` are managed by the platform.
 
     // Activities: by id (unique), by category, text search
-    activitiesCollection().createIndex({ id: 1 }, { unique: true }),
-    activitiesCollection().createIndex({ category: 1 }),
-    activitiesCollection().createIndex(
+    safeCreateIndex(activitiesCollection(), { id: 1 }, { unique: true }),
+    safeCreateIndex(activitiesCollection(), { category: 1 }),
+    safeCreateIndex(
+      activitiesCollection(),
       { label: "text", description: "text", category: "text" },
       { weights: { label: 10, description: 5, category: 3 }, name: "activity_text_search" },
     ),
 
     // API keys: one key per provider
-    apiKeysCollection().createIndex({ provider: 1 }, { unique: true }),
+    safeCreateIndex(apiKeysCollection(), { provider: 1 }, { unique: true }),
 
     // Rate limits: auto-expire counters for abuse prevention
-    rateLimitsCollection().createIndex({ key: 1 }, { unique: true }),
-    rateLimitsCollection().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    safeCreateIndex(rateLimitsCollection(), { key: 1 }, { unique: true }),
+    safeCreateIndex(rateLimitsCollection(), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
 
     // Countries: by code (unique), by region
-    countriesCollection().createIndex({ code: 1 }, { unique: true }),
-    countriesCollection().createIndex({ region: 1 }),
+    safeCreateIndex(countriesCollection(), { code: 1 }, { unique: true }),
+    safeCreateIndex(countriesCollection(), { region: 1 }),
 
     // Provinces: by slug (unique), by countryCode
-    provincesCollection().createIndex({ slug: 1 }, { unique: true }),
-    provincesCollection().createIndex({ countryCode: 1 }),
+    safeCreateIndex(provincesCollection(), { slug: 1 }, { unique: true }),
+    safeCreateIndex(provincesCollection(), { countryCode: 1 }),
 
     // Regions: by id (unique), by active flag
-    regionsCollection().createIndex({ id: 1 }, { unique: true }),
-    regionsCollection().createIndex({ active: 1 }),
+    safeCreateIndex(regionsCollection(), { id: 1 }, { unique: true }),
+    safeCreateIndex(regionsCollection(), { active: 1 }),
 
     // Tags: by slug (unique), by featured + order for explore page
-    tagsCollection().createIndex({ slug: 1 }, { unique: true }),
-    tagsCollection().createIndex({ featured: 1, order: 1 }),
+    safeCreateIndex(tagsCollection(), { slug: 1 }, { unique: true }),
+    safeCreateIndex(tagsCollection(), { featured: 1, order: 1 }),
 
     // Seasons: by countryCode for date lookups, TTL for AI-generated entries
-    seasonsCollection().createIndex({ countryCode: 1 }),
-    seasonsCollection().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    safeCreateIndex(seasonsCollection(), { countryCode: 1 }),
+    safeCreateIndex(seasonsCollection(), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
 
     // Activity categories: by id (unique), by order for display
-    activityCategoriesCollection().createIndex({ id: 1 }, { unique: true }),
-    activityCategoriesCollection().createIndex({ order: 1 }),
+    safeCreateIndex(activityCategoriesCollection(), { id: 1 }, { unique: true }),
+    safeCreateIndex(activityCategoriesCollection(), { order: 1 }),
 
     // Suitability rules: by key (unique) for lookups
-    suitabilityRulesCollection().createIndex({ key: 1 }, { unique: true }),
+    safeCreateIndex(suitabilityRulesCollection(), { key: 1 }, { unique: true }),
 
     // AI prompts: by promptKey (unique), by active + order for queries
-    aiPromptsCollection().createIndex({ promptKey: 1 }, { unique: true }),
-    aiPromptsCollection().createIndex({ active: 1, order: 1 }),
+    safeCreateIndex(aiPromptsCollection(), { promptKey: 1 }, { unique: true }),
+    safeCreateIndex(aiPromptsCollection(), { active: 1, order: 1 }),
 
     // AI suggested rules: by ruleId (unique), by active + category + order
-    aiSuggestedRulesCollection().createIndex({ ruleId: 1 }, { unique: true }),
-    aiSuggestedRulesCollection().createIndex({ active: 1, category: 1, order: 1 }),
+    safeCreateIndex(aiSuggestedRulesCollection(), { ruleId: 1 }, { unique: true }),
+    safeCreateIndex(aiSuggestedRulesCollection(), { active: 1, category: 1, order: 1 }),
 
     // METAR cache: one doc per ICAO station, auto-expire after 30 minutes
-    weatherDb().collection("metar_cache").createIndex({ icao: 1 }, { unique: true }),
-    weatherDb().collection("metar_cache").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    safeCreateIndex(weatherDb().collection("metar_cache"), { icao: 1 }, { unique: true }),
+    safeCreateIndex(weatherDb().collection("metar_cache"), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
 
     // Air quality cache: 1-hour TTL — _id is deterministic ({lat:.4f}_{lon:.4f}),
     // so the unique-by-_id index MongoDB provides for free is the only key index needed.
-    weatherDb().collection("air_quality_cache").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    safeCreateIndex(weatherDb().collection("air_quality_cache"), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
 
     // Airports: ICAO reference data for METAR/TAF. `_id` is the ICAO code
     // (unique for free); the 2dsphere index powers the $nearSphere
     // nearest-airport lookup in api/py/_airports.py.
-    airportsCollection().createIndex({ location: "2dsphere" }),
+    safeCreateIndex(airportsCollection(), { location: "2dsphere" }),
   ]);
 }
 

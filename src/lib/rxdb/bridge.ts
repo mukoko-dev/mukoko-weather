@@ -106,10 +106,50 @@ function readLegacyPrefs(): LegacyState | null {
 }
 
 /**
+ * Persist preferences to the legacy localStorage key.
+ *
+ * Used as the fallback persistence layer when RxDB is unavailable (private
+ * browsing, DB9, quota, etc.) so `selectedForecastModel` and every other
+ * preference still survive reloads via Zustand + localStorage. When RxDB is
+ * healthy this is never called (RxDB owns persistence and clears this key
+ * during migration), so the two paths never fight.
+ */
+function writeLegacyPrefs(updates: Partial<Omit<PreferencesDocType, "id">>): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    const raw = localStorage.getItem(LEGACY_PREFS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const state = { ...(parsed?.state ?? {}), ...updates };
+    localStorage.setItem(LEGACY_PREFS_KEY, JSON.stringify({ ...parsed, state }));
+  } catch {
+    // localStorage unavailable/full — nothing more we can do.
+  }
+}
+
+/** Hydrate Zustand from legacy localStorage (RxDB-unavailable fallback path). */
+function hydrateFromLegacy(callbacks: BridgeCallbacks): void {
+  const legacy = readLegacyPrefs();
+  if (!legacy) return;
+  try {
+    callbacks.applyToStore(legacy as Partial<PreferencesDocType>);
+  } catch {
+    // applyToStore should never throw, but guard anyway.
+  }
+}
+
+/**
  * Migrate legacy localStorage preferences to RxDB.
  * Safe to call multiple times — no-ops if RxDB already has data.
  */
 export async function migrateLocalStorageToRxDB(): Promise<void> {
+  try {
+    await _doMigrate();
+  } catch {
+    // Migration is best-effort — legacy localStorage stays intact on failure.
+  }
+}
+
+async function _doMigrate(): Promise<void> {
   const col = await preferencesCollection();
   if (!col) return;
 
@@ -177,57 +217,72 @@ export function initRxDBBridge(callbacks: BridgeCallbacks): Promise<void> {
 }
 
 async function _doInitBridge(callbacks: BridgeCallbacks): Promise<void> {
-  const col = await preferencesCollection();
-  if (!col) {
-    // Allow retry on next call — IndexedDB may become available later
+  try {
+    const col = await preferencesCollection();
+    if (!col) {
+      // RxDB unavailable — hydrate from legacy localStorage so preferences
+      // (theme, selectedForecastModel, …) still work this session, and allow
+      // a retry on the next call (IndexedDB may become available later).
+      hydrateFromLegacy(callbacks);
+      _initPromise = null;
+      return;
+    }
+
+    // Step 1: Migrate legacy data
+    await migrateLocalStorageToRxDB();
+
+    const deviceId = getDeviceId();
+
+    // Step 2: Ensure preferences doc exists
+    let doc = await col.findOne(deviceId).exec();
+    if (!doc) {
+      const currentPrefs = callbacks.getCurrentPrefs();
+      await col.upsert({
+        id: deviceId,
+        ...currentPrefs,
+        updatedAt: Date.now(),
+      });
+      doc = await col.findOne(deviceId).exec();
+    }
+
+    // Step 3: Hydrate Zustand from RxDB
+    if (doc) {
+      callbacks.applyToStore({
+        theme: doc.theme,
+        selectedLocation: doc.selectedLocation,
+        savedLocations: doc.savedLocations,
+        locationLabels: doc.locationLabels as Record<string, string>,
+        selectedActivities: doc.selectedActivities,
+        hasOnboarded: doc.hasOnboarded,
+        selectedForecastModel: doc.selectedForecastModel,
+      });
+    }
+
+    // Step 4: Subscribe to RxDB changes (multi-tab sync via leader election)
+    const query = col.findOne(deviceId);
+    _subscription = query.$.subscribe((rxDoc) => {
+      if (!rxDoc) return;
+      try {
+        callbacks.applyToStore({
+          theme: rxDoc.theme,
+          selectedLocation: rxDoc.selectedLocation,
+          savedLocations: rxDoc.savedLocations,
+          locationLabels: rxDoc.locationLabels as Record<string, string>,
+          selectedActivities: rxDoc.selectedActivities,
+          hasOnboarded: rxDoc.hasOnboarded,
+          selectedForecastModel: rxDoc.selectedForecastModel,
+        });
+      } catch {
+        // never let a subscription callback bubble into RxDB internals
+      }
+    });
+  } catch (err) {
+    // Any RxDB failure (DB9, schema conflict, storage error) must never crash
+    // the app — fall back to localStorage-hydrated Zustand and allow retry.
+    console.warn("[RxDB] bridge init failed — using localStorage fallback:", String(err));
+    hydrateFromLegacy(callbacks);
     _initPromise = null;
-    return;
   }
-
-  // Step 1: Migrate legacy data
-  await migrateLocalStorageToRxDB();
-
-  const deviceId = getDeviceId();
-
-  // Step 2: Ensure preferences doc exists
-  let doc = await col.findOne(deviceId).exec();
-  if (!doc) {
-    const currentPrefs = callbacks.getCurrentPrefs();
-    await col.upsert({
-      id: deviceId,
-      ...currentPrefs,
-      updatedAt: Date.now(),
-    });
-    doc = await col.findOne(deviceId).exec();
-  }
-
-  // Step 3: Hydrate Zustand from RxDB
-  if (doc) {
-    callbacks.applyToStore({
-      theme: doc.theme,
-      selectedLocation: doc.selectedLocation,
-      savedLocations: doc.savedLocations,
-      locationLabels: doc.locationLabels as Record<string, string>,
-      selectedActivities: doc.selectedActivities,
-      hasOnboarded: doc.hasOnboarded,
-      selectedForecastModel: doc.selectedForecastModel,
-    });
-  }
-
-  // Step 4: Subscribe to RxDB changes (multi-tab sync via leader election)
-  const query = col.findOne(deviceId);
-  _subscription = query.$.subscribe((rxDoc) => {
-    if (!rxDoc) return;
-    callbacks.applyToStore({
-      theme: rxDoc.theme,
-      selectedLocation: rxDoc.selectedLocation,
-      savedLocations: rxDoc.savedLocations,
-      locationLabels: rxDoc.locationLabels as Record<string, string>,
-      selectedActivities: rxDoc.selectedActivities,
-      hasOnboarded: rxDoc.hasOnboarded,
-      selectedForecastModel: rxDoc.selectedForecastModel,
-    });
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -240,28 +295,37 @@ async function _doInitBridge(callbacks: BridgeCallbacks): Promise<void> {
 export async function updatePreferences(
   updates: Partial<Omit<PreferencesDocType, "id">>,
 ): Promise<void> {
-  const col = await preferencesCollection();
-  if (!col) return;
+  try {
+    const col = await preferencesCollection();
+    if (!col) {
+      // RxDB unavailable — persist to localStorage so the preference survives.
+      writeLegacyPrefs(updates);
+      return;
+    }
 
-  const deviceId = getDeviceId();
-  const doc = await col.findOne(deviceId).exec();
+    const deviceId = getDeviceId();
+    const doc = await col.findOne(deviceId).exec();
 
-  if (doc) {
-    await doc.patch({ ...updates, updatedAt: Date.now() });
-  } else {
-    // Shouldn't happen after init, but handle gracefully
-    await col.upsert({
-      id: deviceId,
-      theme: "system",
-      selectedLocation: "",
-      savedLocations: [],
-      locationLabels: {},
-      selectedActivities: [],
-      hasOnboarded: false,
-      selectedForecastModel: "best_match",
-      ...updates,
-      updatedAt: Date.now(),
-    });
+    if (doc) {
+      await doc.patch({ ...updates, updatedAt: Date.now() });
+    } else {
+      // Shouldn't happen after init, but handle gracefully
+      await col.upsert({
+        id: deviceId,
+        theme: "system",
+        selectedLocation: "",
+        savedLocations: [],
+        locationLabels: {},
+        selectedActivities: [],
+        hasOnboarded: false,
+        selectedForecastModel: "best_match",
+        ...updates,
+        updatedAt: Date.now(),
+      });
+    }
+  } catch {
+    // RxDB write failed — fall back to localStorage, never throw to the caller.
+    writeLegacyPrefs(updates);
   }
 }
 

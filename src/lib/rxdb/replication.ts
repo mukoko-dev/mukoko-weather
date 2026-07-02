@@ -162,9 +162,15 @@ async function refreshSuitabilityRules(): Promise<void> {
  * Call once after RxDB bridge is initialized.
  */
 export async function startReplication(): Promise<void> {
-  await startPrefsReplication();
+  // Replication is an optional sync enhancement — any RxDB/replication failure
+  // must never crash the app or bubble into render.
+  try {
+    await startPrefsReplication();
+  } catch (err) {
+    console.warn("[RxDB] prefs replication failed to start:", String(err));
+  }
 
-  // Initial rules fetch
+  // Initial rules fetch (already internally guarded)
   await refreshSuitabilityRules();
 
   // Periodic rules refresh
@@ -177,8 +183,13 @@ export async function startReplication(): Promise<void> {
  * Stop all replication (for cleanup/testing).
  */
 export async function stopReplication(): Promise<void> {
-  if (prefsReplication) {
-    await prefsReplication.cancel();
+  try {
+    if (prefsReplication) {
+      await prefsReplication.cancel();
+      prefsReplication = null;
+    }
+  } catch {
+    // best-effort teardown
     prefsReplication = null;
   }
 

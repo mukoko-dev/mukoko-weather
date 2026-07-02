@@ -33,6 +33,7 @@ import {
   stampPlatformFields,
   PLATFORM_SCHEMA_VERSION,
   DEFAULT_COUNTRY_CODE,
+  isIndexConflictError,
 } from "./db";
 import { REGIONS } from "./seed-regions";
 import { TAGS } from "./seed-tags";
@@ -655,5 +656,31 @@ describe("stampPlatformFields", () => {
     const a = stampPlatformFields({});
     const b = stampPlatformFields({});
     expect(a._id).not.toBe(b._id);
+  });
+});
+
+describe("isIndexConflictError", () => {
+  it("returns true for IndexOptionsConflict (85)", () => {
+    expect(isIndexConflictError({ code: 85 })).toBe(true);
+  });
+
+  it("returns true for IndexKeySpecsConflict (86)", () => {
+    expect(isIndexConflictError({ code: 86 })).toBe(true);
+  });
+
+  it("returns true for IndexAlreadyExists (68)", () => {
+    expect(isIndexConflictError({ code: 68 })).toBe(true);
+  });
+
+  it("returns false for a duplicate-key error (11000)", () => {
+    expect(isIndexConflictError({ code: 11000 })).toBe(false);
+  });
+
+  it("returns false for unrelated errors and non-error values", () => {
+    expect(isIndexConflictError({ code: 1 })).toBe(false);
+    expect(isIndexConflictError(new Error("boom"))).toBe(false);
+    expect(isIndexConflictError(null)).toBe(false);
+    expect(isIndexConflictError(undefined)).toBe(false);
+    expect(isIndexConflictError("nope")).toBe(false);
   });
 });

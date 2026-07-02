@@ -38,19 +38,24 @@ export async function weatherCacheCollection() {
  * Get cached weather data for a location (returns null if expired or missing).
  */
 export async function getCachedWeather(slug: string): Promise<{ data: string; provider: string } | null> {
-  const col = await weatherCacheCollection();
-  if (!col) return null;
+  try {
+    const col = await weatherCacheCollection();
+    if (!col) return null;
 
-  const doc = await col.findOne(slug).exec();
-  if (!doc) return null;
+    const doc = await col.findOne(slug).exec();
+    if (!doc) return null;
 
-  // Check TTL
-  if (Date.now() > doc.expiresAt) {
-    await doc.remove();
+    // Check TTL
+    if (Date.now() > doc.expiresAt) {
+      await doc.remove();
+      return null;
+    }
+
+    return { data: doc.data, provider: doc.provider };
+  } catch {
+    // RxDB unavailable/errored — treat as cache miss.
     return null;
   }
-
-  return { data: doc.data, provider: doc.provider };
 }
 
 /**
@@ -62,17 +67,21 @@ export async function cacheWeather(
   provider: string,
   ttlMs: number = 15 * 60 * 1000,
 ): Promise<void> {
-  const col = await weatherCacheCollection();
-  if (!col) return;
+  try {
+    const col = await weatherCacheCollection();
+    if (!col) return;
 
-  const now = Date.now();
-  await col.upsert({
-    slug,
-    data,
-    provider,
-    cachedAt: now,
-    expiresAt: now + ttlMs,
-  });
+    const now = Date.now();
+    await col.upsert({
+      slug,
+      data,
+      provider,
+      cachedAt: now,
+      expiresAt: now + ttlMs,
+    });
+  } catch {
+    // RxDB unavailable/errored — caching is best-effort, never throw.
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -91,18 +100,22 @@ export async function weatherHintsCollection() {
  * Get a cached weather hint for a location (null if expired/missing).
  */
 export async function getCachedHint(slug: string) {
-  const col = await weatherHintsCollection();
-  if (!col) return null;
+  try {
+    const col = await weatherHintsCollection();
+    if (!col) return null;
 
-  const doc = await col.findOne(slug).exec();
-  if (!doc) return null;
+    const doc = await col.findOne(slug).exec();
+    if (!doc) return null;
 
-  if (Date.now() - doc.timestamp > HINT_MAX_AGE_MS) {
-    await doc.remove();
+    if (Date.now() - doc.timestamp > HINT_MAX_AGE_MS) {
+      await doc.remove();
+      return null;
+    }
+
+    return { sceneType: doc.sceneType, weatherCode: doc.weatherCode, isDay: doc.isDay, timestamp: doc.timestamp };
+  } catch {
     return null;
   }
-
-  return { sceneType: doc.sceneType, weatherCode: doc.weatherCode, isDay: doc.isDay, timestamp: doc.timestamp };
 }
 
 /**
@@ -112,23 +125,27 @@ export async function cacheHint(
   slug: string,
   hint: { sceneType: string; weatherCode: number; isDay: boolean },
 ): Promise<void> {
-  const col = await weatherHintsCollection();
-  if (!col) return;
+  try {
+    const col = await weatherHintsCollection();
+    if (!col) return;
 
-  await col.upsert({
-    slug,
-    ...hint,
-    timestamp: Date.now(),
-  });
+    await col.upsert({
+      slug,
+      ...hint,
+      timestamp: Date.now(),
+    });
 
-  // Evict oldest if over cap
-  const allDocs = await col.find().exec();
-  if (allDocs.length > HINT_MAX_ENTRIES) {
-    const sorted = [...allDocs].sort((a, b) => a.timestamp - b.timestamp);
-    const toRemove = sorted.slice(0, sorted.length - HINT_MAX_ENTRIES);
-    for (const doc of toRemove) {
-      await doc.remove();
+    // Evict oldest if over cap
+    const allDocs = await col.find().exec();
+    if (allDocs.length > HINT_MAX_ENTRIES) {
+      const sorted = [...allDocs].sort((a, b) => a.timestamp - b.timestamp);
+      const toRemove = sorted.slice(0, sorted.length - HINT_MAX_ENTRIES);
+      for (const doc of toRemove) {
+        await doc.remove();
+      }
     }
+  } catch {
+    // best-effort — never throw from a hint write
   }
 }
 
@@ -145,11 +162,15 @@ export async function suitabilityRulesCollection() {
  * Get all cached suitability rules. Returns empty array if none cached.
  */
 export async function getCachedRules(): Promise<Array<{ key: string; conditions: string; updatedAt: number }>> {
-  const col = await suitabilityRulesCollection();
-  if (!col) return [];
+  try {
+    const col = await suitabilityRulesCollection();
+    if (!col) return [];
 
-  const docs = await col.find().exec();
-  return docs.map((d) => ({ key: d.key, conditions: d.conditions, updatedAt: d.updatedAt }));
+    const docs = await col.find().exec();
+    return docs.map((d) => ({ key: d.key, conditions: d.conditions, updatedAt: d.updatedAt }));
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -158,11 +179,15 @@ export async function getCachedRules(): Promise<Array<{ key: string; conditions:
 export async function cacheSuitabilityRules(
   rules: Array<{ key: string; conditions: string }>,
 ): Promise<void> {
-  const col = await suitabilityRulesCollection();
-  if (!col) return;
+  try {
+    const col = await suitabilityRulesCollection();
+    if (!col) return;
 
-  const now = Date.now();
-  for (const rule of rules) {
-    await col.upsert({ ...rule, updatedAt: now });
+    const now = Date.now();
+    for (const rule of rules) {
+      await col.upsert({ ...rule, updatedAt: now });
+    }
+  } catch {
+    // best-effort — never throw from a rules write
   }
 }

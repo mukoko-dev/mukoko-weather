@@ -35,21 +35,46 @@ export type MukokoDatabase = RxDatabase<MukokoCollections>;
 
 // ---------------------------------------------------------------------------
 // Singleton
+//
+// RxDB is an OPTIONAL enhancement layer. It must NEVER crash the app — every
+// failure mode (DB9 duplicate-database creation, schema-version conflict,
+// StrictMode double-mount, IndexedDB unavailable in private browsing, etc.)
+// resolves to `null` so callers seamlessly fall back to Zustand/localStorage.
+//
+// `getDatabase()` caches a single promise that resolves to `MukokoDatabase |
+// null` and NEVER rejects — guaranteeing no unhandled rejection can bubble
+// into React render.
 // ---------------------------------------------------------------------------
 
-let dbPromise: Promise<MukokoDatabase> | null = null;
+let dbPromise: Promise<MukokoDatabase | null> | null = null;
 
 /**
  * Get (or create) the RxDB database instance.
- * Returns null on server — caller must guard.
+ * Returns null on the server, or whenever RxDB is unavailable/failed.
+ * Idempotent + singleton — the underlying init runs at most once.
  */
 export async function getDatabase(): Promise<MukokoDatabase | null> {
   if (typeof window === "undefined") return null;
 
   if (!dbPromise) {
-    dbPromise = createDb();
+    // createDbSafe never rejects, so the cached promise never rejects either.
+    dbPromise = createDbSafe();
   }
   return dbPromise;
+}
+
+/** Wraps createDb so any failure resolves to null instead of throwing. */
+async function createDbSafe(): Promise<MukokoDatabase | null> {
+  try {
+    return await createDb();
+  } catch (err: unknown) {
+    // App still works; preferences fall back to Zustand + localStorage.
+    console.warn(
+      "[RxDB] Failed to initialise database, using in-memory/localStorage fallback:",
+      String(err),
+    );
+    return null;
+  }
 }
 
 async function createDb(): Promise<MukokoDatabase> {
@@ -58,26 +83,33 @@ async function createDb(): Promise<MukokoDatabase> {
       return await _initDb();
     } catch (err: unknown) {
       const msg = String(err);
+      // DB9 = "database created twice with the same name" / schema-version
+      // conflict — common under React StrictMode double-mount or a stale
+      // IndexedDB from a previous schema version. Wipe + retry once.
       const isDB9 = msg.includes("DB9");
       if (isDB9 && attempt === 0) {
-        // DB9: stale v16 database or multiInstance conflict.
-        // Wipe via native IndexedDB then retry once.
-        await new Promise<void>((resolve) => {
-          const req = indexedDB.deleteDatabase("mukoko_weather");
-          req.onsuccess = () => resolve();
-          req.onerror = () => resolve();
-          req.onblocked = () => resolve();
-        });
-        dbPromise = null;
+        await wipeIndexedDb("mukoko_weather");
         continue;
       }
-      // On second attempt or non-DB9 error — give up gracefully.
-      // App still works; preferences just won't persist via RxDB.
-      console.warn("[RxDB] Failed to initialise database, using in-memory fallback:", msg);
+      // Give up gracefully — createDbSafe swallows this and returns null.
       throw err;
     }
   }
-  throw new Error("unreachable");
+  throw new Error("[RxDB] unreachable init state");
+}
+
+/** Best-effort native IndexedDB delete — never throws, always resolves. */
+async function wipeIndexedDb(name: string): Promise<void> {
+  try {
+    await new Promise<void>((resolve) => {
+      const req = indexedDB.deleteDatabase(name);
+      req.onsuccess = () => resolve();
+      req.onerror = () => resolve();
+      req.onblocked = () => resolve();
+    });
+  } catch {
+    // indexedDB itself unavailable — nothing to wipe.
+  }
 }
 
 async function _initDb(): Promise<MukokoDatabase> {
@@ -85,7 +117,7 @@ async function _initDb(): Promise<MukokoDatabase> {
     name: "mukoko_weather",
     storage: getRxStorageDexie(),
     multiInstance: false, // single-tab app — avoids DB9 leader-election conflicts
-    ignoreDuplicate: true,
+    ignoreDuplicate: true, // singleton guard — swallow "duplicate DB" (DB9) races
   });
 
   await db.addCollections({
@@ -108,12 +140,16 @@ async function _initDb(): Promise<MukokoDatabase> {
 }
 
 /**
- * Destroy the database (for testing / cleanup).
+ * Destroy the database (for testing / cleanup). Never throws.
  */
 export async function destroyDatabase(): Promise<void> {
-  if (dbPromise) {
+  if (!dbPromise) return;
+  try {
     const db = await dbPromise;
-    await db.close();
+    if (db) await db.close();
+  } catch {
+    // ignore — best-effort teardown
+  } finally {
     dbPromise = null;
   }
 }
