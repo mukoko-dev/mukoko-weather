@@ -28,19 +28,24 @@ export function DraggableSection({ id, reordering, children }: Props) {
 
   return (
     <div ref={setNodeRef} style={style} className="relative">
-      {/* Drag handle */}
+      {/* Drag handle — always visible while in reorder mode. It previously tried to
+          reveal itself on hover of the card, but the hovered element was a SIBLING of
+          this button (not an ancestor), so the hover selector never matched and the
+          handle stayed hidden for mouse/touch users — making reordering impossible.
+          Since DraggableSection only mounts this button when `reordering` is true, we
+          show it outright. */}
       <button
         {...attributes}
         {...listeners}
-        aria-label={`Drag to reorder section`}
-        className="absolute -left-1 top-1/2 z-10 -translate-y-1/2 cursor-grab touch-none rounded p-1 text-text-tertiary opacity-0 transition-opacity hover:text-text-secondary focus-visible:opacity-100 group-hover/draggable:opacity-100 active:cursor-grabbing"
-        style={{ transform: "translateY(-50%)" }}
+        aria-label="Drag to reorder section"
+        className="absolute left-1 top-2 z-10 flex h-8 min-h-0 w-8 cursor-grab touch-none items-center justify-center rounded-full border border-primary/25 bg-surface-card text-text-secondary shadow-sm transition-colors hover:border-primary/40 hover:text-text-primary focus-visible:outline-2 focus-visible:outline-primary active:cursor-grabbing"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
           <path d="M5 3a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 7a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 11a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2z" />
         </svg>
       </button>
-      <div className="group/draggable rounded-[var(--radius-card)] ring-2 ring-transparent transition-all focus-within:ring-primary/30 hover:ring-primary/20">
+      {/* Left padding reserves room for the always-on handle so it doesn't overlap content. */}
+      <div className="rounded-[var(--radius-card)] pl-10 ring-2 ring-primary/20 transition-all focus-within:ring-primary/40">
         {children}
       </div>
     </div>

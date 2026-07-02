@@ -52,22 +52,24 @@ export function CurrentConditions({ current, locationName, daily, slug }: Props)
 
   return (
     <section aria-labelledby="current-conditions-heading">
-      <div className="baobab">
+      {/* Hero card — the main current-conditions block sits at the very top of the
+          page and reads as the visual anchor: oversized temperature, extra padding. */}
+      <div className="baobab p-5 sm:p-7">
         <h2 id="current-conditions-heading" className="sr-only">
           Current weather conditions in {locationName}
         </h2>
         {/* Main temperature display */}
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-base font-medium text-text-secondary">{locationName}</p>
+            <p className="text-lg font-medium text-text-secondary">{locationName}</p>
             <div className="mt-1 flex items-baseline gap-1">
-              <span className="font-mono text-6xl font-bold tracking-tighter text-text-primary sm:text-7xl" aria-label={`${Math.round(current.temperature_2m)} degrees Celsius`}>
+              <span className="font-mono text-7xl font-bold tracking-tighter text-text-primary sm:text-8xl" aria-label={`${Math.round(current.temperature_2m)} degrees Celsius`}>
                 {Math.round(current.temperature_2m)}
               </span>
-              <span className="font-sans text-3xl font-light text-text-tertiary" aria-hidden="true">°</span>
+              <span className="font-sans text-4xl font-light text-text-tertiary sm:text-5xl" aria-hidden="true">°</span>
             </div>
-            <p className="mt-1 text-lg font-semibold text-text-primary">{info.label}</p>
-            <p className="mt-1 text-base text-text-secondary">
+            <p className="mt-2 text-xl font-semibold text-text-primary sm:text-2xl">{info.label}</p>
+            <p className="mt-1.5 text-lg text-text-secondary">
               Feels like {Math.round(current.apparent_temperature)}°C
               {todayHigh !== null && todayLow !== null && (
                 <span className="ml-1">
@@ -79,7 +81,7 @@ export function CurrentConditions({ current, locationName, daily, slug }: Props)
           <div className="flex shrink-0 flex-col items-end gap-2">
             <WeatherIcon
               icon={current.is_day ? info.icon : "moon"}
-              size={64}
+              size={88}
               className="text-primary"
             />
             <button

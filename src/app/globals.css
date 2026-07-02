@@ -111,10 +111,12 @@
   --color-surface-elevated: #FFFFFF;
   --color-surface-dim: #F3F2EE;
 
-  /* Text — WCAG 2.1 AA 4.5:1 contrast verified on surface-base (#FAF9F5) */
+  /* Text — WCAG 2.1 AAA 7:1+ contrast verified on surface-base (#FAF9F5).
+     Secondary/tertiary were darkened (from #52524E / #706F6A) because the old
+     tertiary sat at only 4.78:1 and read as faded/washed-out on the cream base. */
   --color-text-primary: #141413;
-  --color-text-secondary: #52524E;
-  --color-text-tertiary: #706F6A;
+  --color-text-secondary: #403F3B;
+  --color-text-tertiary: #57564F;
 
   /* Foreground / Background shortcuts */
   --background: #FAF9F5;

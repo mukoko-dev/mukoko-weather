@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { resolveTheme, useAppStore, isShamwariContextValid, MAX_SAVED_LOCATIONS, type ThemePreference, type ShamwariContext } from "./store";
+import { resolveTheme, useAppStore, isShamwariContextValid, MAX_SAVED_LOCATIONS, DEFAULT_SECTION_ORDER, type ThemePreference, type ShamwariContext } from "./store";
 
 // Mock RxDB bridge to prevent IndexedDB access in tests
 vi.mock("./rxdb/bridge", () => ({
@@ -392,6 +392,15 @@ describe("sectionOrder", () => {
     expect(sectionOrder).toContain("dailyForecast");
     expect(sectionOrder).toContain("aiSummary");
     expect(sectionOrder.length).toBeGreaterThan(5);
+  });
+
+  it("puts the current-conditions hero first, before the hourly scroll strip", () => {
+    // The main current-conditions card is the page hero and must render at the
+    // very top of the primary column, above HourlyScrollCards.
+    const currentIdx = DEFAULT_SECTION_ORDER.indexOf("current");
+    const hourlyIdx = DEFAULT_SECTION_ORDER.indexOf("hourlyScroll");
+    expect(currentIdx).toBe(0);
+    expect(currentIdx).toBeLessThan(hourlyIdx);
   });
 
   it("setSectionOrder updates the order", () => {

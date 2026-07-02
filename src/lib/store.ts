@@ -55,8 +55,8 @@ export const MAX_SAVED_LOCATIONS = 10;
 
 /** Default section order for the location page primary column */
 export const DEFAULT_SECTION_ORDER = [
-  "hourlyScroll",
   "current",
+  "hourlyScroll",
   "atmospheric",
   "reports",
   "hourlyForecast",
