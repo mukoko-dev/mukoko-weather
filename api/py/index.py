@@ -78,7 +78,13 @@ app.add_middleware(
     allow_origins=_ALLOWED_ORIGINS,
     allow_origin_regex=_ALLOWED_ORIGIN_REGEX,
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
-    allow_headers=["Content-Type", "X-Mukoko-User-Id", "X-Mukoko-User-Email"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",  # mobile client sends a Bearer token when signed in
+        "X-Mukoko-Client",  # mobile client stamps "mukoko-mobile/<platform>"
+        "X-Mukoko-User-Id",
+        "X-Mukoko-User-Email",
+    ],
 )
 
 # ---------------------------------------------------------------------------

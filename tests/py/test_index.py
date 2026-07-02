@@ -29,6 +29,27 @@ class TestAllowedOrigins:
         assert "*" not in _ALLOWED_ORIGINS
 
 
+class TestCorsPreflight:
+    """The mobile client stamps X-Mukoko-Client and (when signed in) an
+    Authorization header. A CORS preflight for those must succeed, or the
+    browser blocks the request — see the mukoko-mobile fetch client."""
+
+    def test_preflight_allows_mobile_client_headers(self):
+        client = TestClient(app)
+        resp = client.options(
+            "/api/py/weather",
+            headers={
+                "Origin": "http://localhost:8081",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "x-mukoko-client, authorization",
+            },
+        )
+        assert resp.status_code == 200
+        allowed = resp.headers.get("access-control-allow-headers", "").lower()
+        assert "x-mukoko-client" in allowed
+        assert "authorization" in allowed
+
+
 # ---------------------------------------------------------------------------
 # Health endpoint
 # ---------------------------------------------------------------------------
