@@ -759,6 +759,135 @@ body {
     @apply rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm;
   }
 
+  /* ── Hero weather background ──────────────────────────────────────────────
+     Condition-tinted gradient sky painted behind the CurrentConditions hero
+     card. All hues come from the Mukoko mineral tokens (never hardcoded) so the
+     glow tracks light/dark automatically. Also serves as the static fallback
+     when prefers-reduced-motion is set and the Three.js layer is skipped. */
+  .weaver-sky {
+    /* fauna: the weaverbird's woven nest sky — base neutral wash */
+    background:
+      radial-gradient(
+        120% 100% at 85% 0%,
+        color-mix(in srgb, var(--mineral-cobalt) 14%, transparent),
+        transparent 60%
+      ),
+      linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--color-surface-card) 0%, transparent),
+        color-mix(in srgb, var(--color-surface-dim) 55%, transparent)
+      );
+  }
+  .weaver-sky-clear-day {
+    background:
+      radial-gradient(
+        90% 120% at 82% -10%,
+        color-mix(in srgb, var(--mineral-gold) 32%, transparent),
+        transparent 55%
+      ),
+      linear-gradient(
+        155deg,
+        color-mix(in srgb, var(--mineral-cobalt) 20%, transparent),
+        transparent 70%
+      );
+  }
+  .weaver-sky-clear-night {
+    background:
+      radial-gradient(
+        90% 120% at 80% -10%,
+        color-mix(in srgb, var(--mineral-tanzanite) 30%, transparent),
+        transparent 55%
+      ),
+      linear-gradient(
+        155deg,
+        color-mix(in srgb, var(--mineral-sodalite) 34%, transparent),
+        transparent 72%
+      );
+  }
+  .weaver-sky-cloudy {
+    background:
+      radial-gradient(
+        110% 120% at 80% 0%,
+        color-mix(in srgb, var(--mineral-cobalt) 16%, transparent),
+        transparent 60%
+      ),
+      linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--color-surface-dim) 60%, transparent),
+        transparent 75%
+      );
+  }
+  .weaver-sky-rain {
+    background:
+      radial-gradient(
+        110% 120% at 80% -5%,
+        color-mix(in srgb, var(--mineral-cobalt) 28%, transparent),
+        transparent 58%
+      ),
+      linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--mineral-sodalite) 22%, transparent),
+        transparent 76%
+      );
+  }
+  .weaver-sky-thunderstorm {
+    background:
+      radial-gradient(
+        110% 120% at 78% -5%,
+        color-mix(in srgb, var(--mineral-tanzanite) 30%, transparent),
+        transparent 55%
+      ),
+      linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--mineral-sodalite) 30%, transparent),
+        transparent 74%
+      );
+  }
+  .weaver-sky-snow {
+    background:
+      radial-gradient(
+        110% 120% at 80% -5%,
+        color-mix(in srgb, var(--mineral-cobalt) 18%, transparent),
+        transparent 62%
+      ),
+      linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--color-surface-base) 40%, transparent),
+        transparent 78%
+      );
+  }
+  .weaver-sky-fog {
+    background:
+      linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--color-surface-dim) 70%, transparent),
+        color-mix(in srgb, var(--mineral-cobalt) 8%, transparent)
+      );
+  }
+  .weaver-sky-windy {
+    background:
+      radial-gradient(
+        110% 120% at 82% -5%,
+        color-mix(in srgb, var(--mineral-malachite) 20%, transparent),
+        transparent 58%
+      ),
+      linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--mineral-cobalt) 16%, transparent),
+        transparent 74%
+      );
+  }
+  /* .weaver-scrim — readability veil over the animation so the hero text keeps
+     APCA-safe contrast. Heavier on the left where the temperature/labels sit. */
+  .weaver-scrim {
+    background: linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--color-surface-card) 78%, transparent) 0%,
+      color-mix(in srgb, var(--color-surface-card) 45%, transparent) 55%,
+      color-mix(in srgb, var(--color-surface-card) 30%, transparent) 100%
+    );
+  }
+
   /* ── Typography ──────────────────────────────────────────────────────── */
 
   /* .giraffe — section heading (tall, stands above its content) */

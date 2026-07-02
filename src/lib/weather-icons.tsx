@@ -7,77 +7,85 @@ interface IconProps {
   size?: number;
 }
 
+/*
+ * Weather condition icons — refreshed to a modern two-tone treatment: a soft
+ * currentColor fill under a crisp 1.75px outline, with solid accents (sun core,
+ * lightning bolt). Everything is driven by `currentColor` so the icons inherit
+ * the mineral/severity token applied by the consumer — no hardcoded colours.
+ * Shared cloud silhouette keeps the family visually consistent.
+ */
+
 export function SunIcon({ className = "", size = 24 }: IconProps) {
   return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2" /><path d="M12 20v2" />
-      <path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" />
-      <path d="M2 12h2" /><path d="M20 12h2" />
-      <path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" />
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="4.25" fill="currentColor" fillOpacity="0.18" />
+      <path d="M12 2.5v2.25" /><path d="M12 19.25v2.25" />
+      <path d="m5.1 5.1 1.6 1.6" /><path d="m17.3 17.3 1.6 1.6" />
+      <path d="M2.5 12h2.25" /><path d="M19.25 12h2.25" />
+      <path d="m5.1 18.9 1.6-1.6" /><path d="m17.3 6.7 1.6-1.6" />
     </svg>
   );
 }
 
 export function MoonIcon({ className = "", size = 24 }: IconProps) {
   return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" fill="currentColor" fillOpacity="0.18" />
+      <path d="M17 4.5v2.5" /><path d="M18.25 5.75h-2.5" />
     </svg>
   );
 }
 
 export function CloudIcon({ className = "", size = 24 }: IconProps) {
   return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" fill="currentColor" fillOpacity="0.15" />
     </svg>
   );
 }
 
 export function CloudSunIcon({ className = "", size = 24 }: IconProps) {
   return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="M20 12h2" />
-      <path d="m19.07 4.93-1.41 1.41" /><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128" />
-      <path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z" />
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="3" fill="currentColor" fillOpacity="0.18" />
+      <path d="M12 1.75v1.5" /><path d="m5.9 4.4 1.05 1.05" /><path d="M18.1 4.4l-1.05 1.05" />
+      <path d="M20.25 11.5h1.5" /><path d="M2.25 11.5h1.5" />
+      <path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z" fill="currentColor" fillOpacity="0.15" />
     </svg>
   );
 }
 
 export function CloudRainIcon({ className = "", size = 24 }: IconProps) {
   return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
-      <path d="M16 14v6" /><path d="M8 14v6" /><path d="M12 16v6" />
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" fill="currentColor" fillOpacity="0.15" />
+      <path d="M16 15v4" /><path d="M8 15v4" /><path d="M12 17v4" />
     </svg>
   );
 }
 
 export function CloudDrizzleIcon({ className = "", size = 24 }: IconProps) {
   return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
-      <path d="M8 19v1" /><path d="M8 14v1" />
-      <path d="M16 19v1" /><path d="M16 14v1" />
-      <path d="M12 21v1" /><path d="M12 16v1" />
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" fill="currentColor" fillOpacity="0.15" />
+      <path d="M8 19v1.5" /><path d="M16 19v1.5" /><path d="M12 20.5V22" />
     </svg>
   );
 }
 
 export function CloudLightningIcon({ className = "", size = 24 }: IconProps) {
   return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 16.326A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 .5 8.973" />
-      <path d="m13 12-3 5h4l-3 5" />
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 16.326A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 .5 8.973" fill="currentColor" fillOpacity="0.15" />
+      <path d="m13 12-3 5h4l-3 5" fill="currentColor" fillOpacity="0.9" stroke="none" />
     </svg>
   );
 }
 
 export function CloudFogIcon({ className = "", size = 24 }: IconProps) {
   return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" fill="currentColor" fillOpacity="0.15" />
       <path d="M16 17H7" /><path d="M17 21H9" />
     </svg>
   );
@@ -85,39 +93,46 @@ export function CloudFogIcon({ className = "", size = 24 }: IconProps) {
 
 export function CloudSunRainIcon({ className = "", size = 24 }: IconProps) {
   return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="M20 12h2" />
-      <path d="m19.07 4.93-1.41 1.41" /><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128" />
-      <path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z" />
-      <path d="M8 19v2" /><path d="M11 20v2" />
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="3" fill="currentColor" fillOpacity="0.18" />
+      <path d="M12 1.75v1.5" /><path d="m5.9 4.4 1.05 1.05" /><path d="M18.1 4.4l-1.05 1.05" />
+      <path d="M20.25 11.5h1.5" /><path d="M2.25 11.5h1.5" />
+      <path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z" fill="currentColor" fillOpacity="0.15" />
+      <path d="M8 20v2" /><path d="M11 20v2" />
     </svg>
   );
 }
 
 export function CloudHailIcon({ className = "", size = 24 }: IconProps) {
   return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
-      <path d="M16 14v2" /><path d="M8 14v2" /><path d="M16 20h.01" /><path d="M8 20h.01" />
-      <path d="M12 16v2" /><path d="M12 22h.01" />
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" fill="currentColor" fillOpacity="0.15" />
+      <circle cx="8" cy="16" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="16" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="18" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="20.5" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="20.5" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="22" r="0.9" fill="currentColor" stroke="none" />
     </svg>
   );
 }
 
 export function SnowflakeIcon({ className = "", size = 24 }: IconProps) {
   return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="2" x2="22" y1="12" y2="12" />
-      <line x1="12" x2="12" y1="2" y2="22" />
-      <path d="m20 16-4-4 4-4" /><path d="m4 8 4 4-4 4" />
-      <path d="m16 4-4 4-4-4" /><path d="m8 20 4-4 4 4" />
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="2.5" x2="21.5" y1="12" y2="12" />
+      <line x1="12" x2="12" y1="2.5" y2="21.5" />
+      <line x1="5.5" x2="18.5" y1="5.5" y2="18.5" />
+      <line x1="18.5" x2="5.5" y1="5.5" y2="18.5" />
+      <path d="m9.5 3 2.5 2.5L14.5 3" /><path d="m9.5 21 2.5-2.5 2.5 2.5" />
+      <path d="m3 9.5 2.5 2.5L3 14.5" /><path d="m21 9.5-2.5 2.5 2.5 2.5" />
     </svg>
   );
 }
 
 export function WindIcon({ className = "", size = 24 }: IconProps) {
   return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2" />
       <path d="M9.6 4.6A2 2 0 1 1 11 8H2" />
       <path d="M12.6 19.4A2 2 0 1 0 14 16H2" />

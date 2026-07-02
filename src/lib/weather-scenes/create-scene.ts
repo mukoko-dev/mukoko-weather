@@ -1,4 +1,8 @@
-import type { WeatherSceneConfig, SceneElements } from "./types";
+import type {
+  WeatherSceneConfig,
+  SceneElements,
+  WeatherSceneHandle,
+} from "./types";
 
 /**
  * Dynamically import the matching scene builder for a WeatherSceneType.
@@ -60,13 +64,15 @@ async function loadSceneBuilder(
  * Dynamically imports Three.js and the matching scene module,
  * sets up the renderer/camera/animation loop, and returns a dispose function.
  *
- * Gracefully handles WebGL failures — returns a no-op dispose if setup fails.
+ * Gracefully handles WebGL failures — returns a no-op handle if setup fails.
+ * The returned handle exposes pause/resume so persistent scenes can idle the
+ * animation loop when hidden or off-screen.
  */
 export async function createWeatherScene(
   container: HTMLElement,
   config: WeatherSceneConfig,
-): Promise<{ dispose: () => void }> {
-  const noop = { dispose() {} };
+): Promise<WeatherSceneHandle> {
+  const noop: WeatherSceneHandle = { dispose() {}, pause() {}, resume() {} };
 
   const width = container.clientWidth;
   const height = container.clientHeight;
@@ -87,7 +93,9 @@ export async function createWeatherScene(
   }
 
   renderer.setSize(width, height);
-  renderer.setPixelRatio(config.isMobile ? 1 : Math.min(window.devicePixelRatio, 2));
+  // Cap the pixel ratio: caller override first, else 1 on mobile / 2 on desktop.
+  const maxPixelRatio = config.maxPixelRatio ?? (config.isMobile ? 1 : 2);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxPixelRatio));
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -111,11 +119,13 @@ export async function createWeatherScene(
 
   // Animation loop
   let disposed = false;
+  let paused = false;
   let frameId: number;
   const clock = new THREE.Clock();
 
   function animate() {
     if (disposed) return;
+    if (paused) return;
     frameId = requestAnimationFrame(animate);
     const elapsed = clock.getElapsedTime();
 
@@ -152,6 +162,17 @@ export async function createWeatherScene(
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
+    },
+    pause() {
+      if (disposed || paused) return;
+      paused = true;
+      cancelAnimationFrame(frameId);
+    },
+    resume() {
+      if (disposed || !paused) return;
+      paused = false;
+      clock.getDelta(); // discard the idle gap so motion resumes smoothly
+      animate();
     },
   };
 }

@@ -18,6 +18,12 @@ export interface WeatherSceneConfig {
   isMobile: boolean;
   temperature?: number;
   windSpeed?: number;
+  /**
+   * Hard cap on the renderer pixel ratio. Defaults to 1 on mobile and 2 on
+   * desktop. Persistent (always-mounted) scenes should pass 1 to keep the GPU
+   * cost low regardless of device — the loading overlay leaves it unset.
+   */
+  maxPixelRatio?: number;
 }
 
 /** Returned by each scene builder — drives the animation loop and cleanup */
@@ -26,6 +32,18 @@ export interface SceneElements {
   update(elapsed: number): void;
   /** Dispose all geometries, materials, and objects */
   dispose(): void;
+}
+
+/**
+ * Handle returned by createWeatherScene. `dispose` tears everything down;
+ * `pause`/`resume` stop and restart the animation loop without destroying the
+ * WebGL context — used to idle a persistent scene when its tab is hidden or it
+ * scrolls off-screen.
+ */
+export interface WeatherSceneHandle {
+  dispose(): void;
+  pause(): void;
+  resume(): void;
 }
 
 /** Cached weather data stored per location for instant scene selection */

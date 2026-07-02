@@ -25,7 +25,41 @@ describe("createWeatherScene — exports and signature", () => {
   });
 
   it("returns a dispose function", () => {
-    expect(source).toContain("Promise<{ dispose: () => void }>");
+    expect(source).toContain("Promise<WeatherSceneHandle>");
+    expect(source).toContain("WeatherSceneHandle");
+  });
+});
+
+describe("createWeatherScene — pause / resume", () => {
+  it("tracks a paused flag", () => {
+    expect(source).toContain("let paused = false");
+  });
+
+  it("skips the animation frame while paused", () => {
+    expect(source).toContain("if (paused) return");
+  });
+
+  it("exposes pause() that cancels the frame", () => {
+    expect(source).toMatch(/pause\(\)\s*\{[\s\S]*?cancelAnimationFrame\(frameId\)/);
+  });
+
+  it("exposes resume() that restarts the loop", () => {
+    expect(source).toMatch(/resume\(\)\s*\{[\s\S]*?animate\(\)/);
+  });
+
+  it("noop handle also implements pause and resume", () => {
+    expect(source).toContain("pause() {}");
+    expect(source).toContain("resume() {}");
+  });
+});
+
+describe("createWeatherScene — pixel ratio", () => {
+  it("honours a caller-provided maxPixelRatio cap", () => {
+    expect(source).toContain("config.maxPixelRatio");
+  });
+
+  it("defaults to 1 on mobile and 2 on desktop", () => {
+    expect(source).toContain("config.isMobile ? 1 : 2");
   });
 });
 
