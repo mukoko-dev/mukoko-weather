@@ -303,7 +303,7 @@ export default async function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="format-detection" content="telephone=no" />
         <link rel="manifest" href="/manifest.json" />
-        {/* Favicons — brand kit doctrine v4.1.0 mono tanzanite for legibility below 32px */}
+        {/* Favicons — full-colour 7-mineral Seed of Life mark (matches the header logo) */}
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" media="(prefers-color-scheme: light)" />
         <link rel="icon" type="image/svg+xml" href="/favicon-dark.svg" media="(prefers-color-scheme: dark)" />
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />

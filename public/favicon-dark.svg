@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200"><polygon points="199.607,135.569 180.607,168.478 142.607,168.478 123.607,135.569 142.607,102.660 180.607,102.660" fill="#B388FF" stroke="#B388FF" stroke-width="5.32" stroke-linejoin="round"/>
-<polygon points="138.000,171.138 119.000,204.047 81.000,204.047 62.000,171.138 81.000,138.229 119.000,138.229" fill="#B388FF" stroke="#B388FF" stroke-width="5.32" stroke-linejoin="round"/>
-<polygon points="76.393,135.569 57.393,168.478 19.393,168.478 0.393,135.569 19.393,102.660 57.393,102.660" fill="#B388FF" stroke="#B388FF" stroke-width="5.32" stroke-linejoin="round"/>
-<polygon points="76.393,64.431 57.393,97.340 19.393,97.340 0.393,64.431 19.393,31.522 57.393,31.522" fill="#B388FF" stroke="#B388FF" stroke-width="5.32" stroke-linejoin="round"/>
-<polygon points="138.000,28.862 119.000,61.771 81.000,61.771 62.000,28.862 81.000,-4.047 119.000,-4.047" fill="#B388FF" stroke="#B388FF" stroke-width="5.32" stroke-linejoin="round"/>
-<polygon points="199.607,64.431 180.607,97.340 142.607,97.340 123.607,64.431 142.607,31.522 180.607,31.522" fill="#B388FF" stroke="#B388FF" stroke-width="5.32" stroke-linejoin="round"/>
-<polygon points="138.000,100.000 119.000,132.909 81.000,132.909 62.000,100.000 81.000,67.091 119.000,67.091" fill="#B388FF" stroke="#B388FF" stroke-width="5.32" stroke-linejoin="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200"><polygon points="188.828,131.655 171.828,161.100 137.828,161.100 120.828,131.655 137.828,102.210 171.828,102.210" fill="#00B0FF" stroke="#00B0FF" stroke-width="3.74" stroke-linejoin="round"/>
+<polygon points="134.000,163.310 117.000,192.755 83.000,192.755 66.000,163.310 83.000,133.865 117.000,133.865" fill="#FFD740" stroke="#FFD740" stroke-width="3.74" stroke-linejoin="round"/>
+<polygon points="79.172,131.655 62.172,161.100 28.172,161.100 11.172,131.655 28.172,102.210 62.172,102.210" fill="#64FFDA" stroke="#64FFDA" stroke-width="3.74" stroke-linejoin="round"/>
+<polygon points="79.172,68.345 62.172,97.790 28.172,97.790 11.172,68.345 28.172,38.900 62.172,38.900" fill="#FF8A65" stroke="#FF8A65" stroke-width="3.74" stroke-linejoin="round"/>
+<polygon points="134.000,36.690 117.000,66.135 83.000,66.135 66.000,36.690 83.000,7.245 117.000,7.245" fill="#3D5AFE" stroke="#3D5AFE" stroke-width="3.74" stroke-linejoin="round"/>
+<polygon points="188.828,68.345 171.828,97.790 137.828,97.790 120.828,68.345 137.828,38.900 171.828,38.900" fill="#E1B07E" stroke="#E1B07E" stroke-width="3.74" stroke-linejoin="round"/>
+<polygon points="134.000,100.000 117.000,129.445 83.000,129.445 66.000,100.000 83.000,70.555 117.000,70.555" fill="#B388FF" stroke="#B388FF" stroke-width="3.74" stroke-linejoin="round"/></svg>
