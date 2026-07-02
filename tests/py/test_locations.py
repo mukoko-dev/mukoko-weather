@@ -29,6 +29,7 @@ from py._locations import (
     MAX_LOCATIONS_LIMIT,
     DEFAULT_LOCATIONS_LIMIT,
     SLUG_RE,
+    DEDUP_RADIUS_KM,
 )
 
 
@@ -669,10 +670,11 @@ class TestGeoLookup:
     @patch("py._locations._reverse_geocode")
     @patch("py._locations.find_nearest_location")
     async def test_duplicate_detection(self, mock_nearest, mock_geocode, mock_dedup):
-        """Auto-create should return existing location when duplicate found."""
-        mock_nearest.return_value = None  # No nearby on the 50km fast path
+        """Auto-create should return existing location when a 1km same-name
+        duplicate is found."""
+        mock_nearest.return_value = None
         mock_geocode.return_value = {"country": "ZW", "name": "Harare", "admin1": "Harare"}
-        # First _find_duplicate call (10km wide_match) returns the duplicate
+        # The tight 1km _find_duplicate call returns the existing entry.
         mock_dedup.return_value = {"slug": "harare", "name": "Harare"}
 
         result = await geo_lookup(-17.83, 31.05, autoCreate=True)
@@ -809,6 +811,108 @@ class TestGeoLookup:
         result = await geo_lookup(1.43, 103.78, autoCreate=True)
         assert result["isNew"] is True
         assert result["nearest"]["slug"] == "woodlands-ave-3-sg"
+
+    # ------------------------------------------------------------------
+    # GPS granularity — autoCreate must NEVER snap to a nearby city
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    @patch("py._locations.upsert_placesgeo_city")
+    @patch("py._locations._enrich_location_with_ai")
+    @patch("py._locations._get_elevation")
+    @patch("py._locations._find_duplicate")
+    @patch("py._locations._reverse_geocode")
+    @patch("py._locations.find_nearest_location")
+    @patch("py._locations.places_geo_collection")
+    async def test_autocreate_does_not_snap_to_nearby_city(
+        self, mock_coll, mock_nearest, mock_geocode, mock_dedup,
+        mock_elev, mock_enrich, mock_upsert,
+    ):
+        """GPS autoCreate must reverse-geocode to the user's EXACT place and
+        create a distinct fine-grained entry — never snap to a nearby city,
+        no matter how close it is. There is no distance-based snap at all in
+        the autoCreate path, so ``find_nearest_location`` is not consulted.
+        """
+        # Even if a same-named city existed nearby, the autoCreate path ignores
+        # it entirely — no find_nearest_location call is made.
+        mock_nearest.return_value = {"slug": "harare", "name": "Harare", "country": "ZW"}
+        # Reverse geocode (zoom=18) resolves to a specific road, not the city.
+        mock_geocode.return_value = {
+            "country": "ZW",
+            "countryName": "Zimbabwe",
+            "name": "Enterprise Road",
+            "admin1": "Harare",
+            "lat": -17.78,
+            "lon": 31.12,
+            "elevation": 1490,
+        }
+        mock_dedup.return_value = None  # no existing 1km same-name duplicate
+        mock_elev.return_value = 1490
+        mock_coll.return_value.find_one.return_value = None  # no slug collision
+        mock_upsert.return_value = {"_id": "new-uuid", "slug": "enterprise-road-abc123"}
+
+        result = await geo_lookup(-17.78, 31.12, autoCreate=True)
+
+        # A distinct fine-grained location was created — never the city.
+        assert result["isNew"] is True
+        assert result["nearest"]["name"] == "Enterprise Road"
+        assert result["nearest"]["name"] != "Harare"
+        mock_geocode.assert_called_once()
+        mock_upsert.assert_called_once()
+        # No distance snap: nearest-location lookup is never used for autoCreate.
+        mock_nearest.assert_not_called()
+        # Exactly one (tight, 1km) dedup check — no wider radius check.
+        assert mock_dedup.call_count == 1
+        assert mock_dedup.call_args.args[2] == DEDUP_RADIUS_KM
+
+    @pytest.mark.asyncio
+    @patch("py._locations.upsert_placesgeo_city")
+    @patch("py._locations._find_duplicate")
+    @patch("py._locations._reverse_geocode")
+    @patch("py._locations.find_nearest_location")
+    async def test_autocreate_repeat_request_returns_existing_fine_grained(
+        self, mock_nearest, mock_geocode, mock_dedup, mock_upsert,
+    ):
+        """A second identical GPS autoCreate request for the SAME spot (within
+        the tight 1km same-name dedup) returns the EXISTING fine-grained entry
+        (isNew false) rather than creating a duplicate.
+        """
+        mock_geocode.return_value = {
+            "country": "ZW",
+            "countryName": "Zimbabwe",
+            "name": "Enterprise Road",
+            "admin1": "Harare",
+            "lat": -17.78,
+            "lon": 31.12,
+            "elevation": 1490,
+        }
+        # Tight 1km name-scoped dedup finds the existing fine-grained entry.
+        mock_dedup.return_value = {"slug": "enterprise-road-zw", "name": "Enterprise Road"}
+
+        result = await geo_lookup(-17.78, 31.12, autoCreate=True)
+
+        assert result["isNew"] is False
+        assert result["nearest"]["slug"] == "enterprise-road-zw"
+        # Dedup short-circuits BEFORE any write, using the tight 1km radius.
+        mock_upsert.assert_not_called()
+        assert mock_dedup.call_args.args[2] == DEDUP_RADIUS_KM
+
+    @pytest.mark.asyncio
+    @patch("py._locations._reverse_geocode")
+    @patch("py._locations.find_nearest_location")
+    async def test_find_only_returns_nearest_existing(
+        self, mock_nearest, mock_geocode,
+    ):
+        """autoCreate=false (IP-geo find-only) returns the nearest EXISTING
+        entry with no coarse cap, and never reverse-geocodes.
+        """
+        mock_nearest.return_value = {"slug": "harare", "name": "Harare", "country": "ZW"}
+
+        result = await geo_lookup(-17.78, 31.12, autoCreate=False)
+
+        assert result["isNew"] is False
+        assert result["nearest"]["slug"] == "harare"
+        mock_geocode.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

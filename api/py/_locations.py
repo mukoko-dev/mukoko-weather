@@ -40,7 +40,6 @@ from ._places_geo import (
 router = APIRouter()
 
 SLUG_RE = re.compile(r"^[a-z0-9-]{1,80}$")
-COUNTRY_PREFERENCE_MAX_KM = 50
 _http_client: Optional[httpx.Client] = None
 
 # City-states where state/province fields are meaningless (postal codes or same as country).
@@ -640,26 +639,23 @@ async def geo_lookup(
     Find nearest location or auto-create one via reverse geocoding.
     """
     try:
-        # Fast path: check placesGeo for nearby locations FIRST (sub-100ms)
-        # before making any external API calls. Most geo requests will match
-        # an existing location and return instantly (Phase 0G).
-        nearest = find_nearest_location(lat, lon, max_km=COUNTRY_PREFERENCE_MAX_KM)
-        if nearest and nearest.get("slug"):
-            nearest.pop("_id", None)
-            return {
-                "nearest": nearest,
-                "redirectTo": f"/{nearest['slug']}",
-                "isNew": False,
-            }
-
-        # If no local match and not auto-creating, try uncapped distance.
+        # There is deliberately NO distance-based nearest-snap for GPS.
+        # Explicit "use my current location" (autoCreate=true) must resolve to
+        # the user's EXACT reverse-geocoded place — a road, shop, address, or
+        # suburb — never snap to a distant city. This mirrors how top weather
+        # apps behave: they show where you actually are, not the nearest city.
+        #
+        # Find-only path (autoCreate=false, e.g. IP-geo lookups): best-effort
+        # return the nearest EXISTING placesGeo entry with no coarse cap. If
+        # nothing exists we fall through to the 404 below that tells the caller
+        # to retry with autoCreate=true.
         if not autoCreate:
-            uncapped = find_nearest_location(lat, lon, max_km=20_000)
-            if uncapped and uncapped.get("slug"):
-                uncapped.pop("_id", None)
+            nearest = find_nearest_location(lat, lon, max_km=20_000)
+            if nearest and nearest.get("slug"):
+                nearest.pop("_id", None)
                 return {
-                    "nearest": uncapped,
-                    "redirectTo": f"/{uncapped['slug']}",
+                    "nearest": nearest,
+                    "redirectTo": f"/{nearest['slug']}",
                     "isNew": False,
                 }
 
@@ -672,21 +668,12 @@ async def geo_lookup(
                     detail="Could not determine location name",
                 )
 
-            # ── Thorough duplicate checks against placesGeo (Phase 0G) ───────
-            # 1) Wide-radius geospatial check (10km) via placesGeo.
-            wide_match = _find_duplicate(
-                lat, lon, 10.0,
-                name=geocoded["name"], country=geocoded["country"],
-            )
-            if wide_match and wide_match.get("slug"):
-                wide_match.pop("_id", None)
-                return {
-                    "nearest": wide_match,
-                    "redirectTo": f"/{wide_match['slug']}",
-                    "isNew": False,
-                }
-
-            # 2) Standard 1km dedup check
+            # ── Tight duplicate check against placesGeo (Phase 0G) ───────────
+            # ONLY a 1km same-name dedup. Anything wider would snap a specific
+            # road/shop/address to a same-named entry up to that distance away,
+            # re-introducing the coarse-snap bug this fix removes. Distinct
+            # nearby places each resolve to their own fine-grained entry; only
+            # the exact same spot (within 1km, same name) collapses to one.
             duplicate = _find_duplicate(
                 lat, lon, DEDUP_RADIUS_KM,
                 name=geocoded["name"], country=geocoded["country"],
