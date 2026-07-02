@@ -103,6 +103,9 @@ interface AppState {
   setLocationLabel: (slug: string, label: string) => void;
   selectedActivities: string[]; // activity IDs from src/lib/activities.ts
   toggleActivity: (id: string) => void;
+  /** Windy-style forecast model preference (Open-Meteo model id or "best_match") */
+  selectedForecastModel: string;
+  setSelectedForecastModel: (model: string) => void;
   myWeatherOpen: boolean;
   openMyWeather: () => void;
   closeMyWeather: () => void;
@@ -206,6 +209,11 @@ export const useAppStore = create<AppState>()((set) => ({
       if (!_suppressRxDBWrites) updatePreferences({ selectedActivities: next });
       return { selectedActivities: next };
     }),
+  selectedForecastModel: "best_match",
+  setSelectedForecastModel: (model) => {
+    set({ selectedForecastModel: model });
+    if (!_suppressRxDBWrites) updatePreferences({ selectedForecastModel: model });
+  },
   myWeatherOpen: false,
   openMyWeather: () => set({ myWeatherOpen: true }),
   closeMyWeather: () => set({ myWeatherOpen: false }),
@@ -267,6 +275,9 @@ export function initializeDeviceSync(): void {
         if (prefs.hasOnboarded !== undefined) {
           useAppStore.setState({ hasOnboarded: prefs.hasOnboarded });
         }
+        if (prefs.selectedForecastModel !== undefined) {
+          useAppStore.setState({ selectedForecastModel: prefs.selectedForecastModel });
+        }
       } finally {
         _suppressRxDBWrites = false;
       }
@@ -281,6 +292,7 @@ export function initializeDeviceSync(): void {
         locationLabels: s.locationLabels,
         selectedActivities: s.selectedActivities,
         hasOnboarded: s.hasOnboarded,
+        selectedForecastModel: s.selectedForecastModel,
       };
     },
   })

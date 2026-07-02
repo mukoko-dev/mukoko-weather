@@ -17,6 +17,12 @@ from py._weather import (
     _record_weather_history,
     nearest_station_observation,
     station_observation_to_current,
+    _sanitize_models,
+    _parse_minutely,
+    _parse_models,
+    _fetch_open_meteo_extras,
+    DEFAULT_FORECAST_MODELS,
+    KNOWN_FORECAST_MODELS,
     STATION_MAX_AGE_MINUTES,
     STATION_MAX_DISTANCE_KM,
     WEATHER_CACHE_TTL,
@@ -1082,3 +1088,324 @@ class TestStationKitEndpointBlending:
         # Cached doc's current must still be the original Tomorrow.io value.
         assert cached_data["current"] is cached_current
         assert cached_data["current"]["temperature_2m"] == 25.0
+
+
+# ---------------------------------------------------------------------------
+# Multi-model — _sanitize_models
+# ---------------------------------------------------------------------------
+
+
+class TestSanitizeModels:
+    def test_none_falls_back_to_defaults(self):
+        assert _sanitize_models(None) == DEFAULT_FORECAST_MODELS
+
+    def test_empty_falls_back_to_defaults(self):
+        assert _sanitize_models([]) == DEFAULT_FORECAST_MODELS
+
+    def test_keeps_only_known_models(self):
+        result = _sanitize_models(["ecmwf_ifs04", "not_a_model", "gfs_seamless"])
+        assert result == ["ecmwf_ifs04", "gfs_seamless"]
+
+    def test_drops_best_match_from_upstream_request(self):
+        # best_match is the unsuffixed baseline — never forwarded as a model.
+        result = _sanitize_models(["best_match", "icon_seamless"])
+        assert "best_match" not in result
+        assert result == ["icon_seamless"]
+
+    def test_best_match_only_falls_back_to_defaults(self):
+        assert _sanitize_models(["best_match"]) == DEFAULT_FORECAST_MODELS
+
+    def test_deduplicates(self):
+        result = _sanitize_models(["gfs_seamless", "gfs_seamless"])
+        assert result == ["gfs_seamless"]
+
+    def test_strips_whitespace(self):
+        result = _sanitize_models([" ecmwf_ifs04 ", "meteofrance_seamless"])
+        assert result == ["ecmwf_ifs04", "meteofrance_seamless"]
+
+    def test_all_known_models_present(self):
+        assert KNOWN_FORECAST_MODELS == {
+            "best_match", "gfs_seamless", "ecmwf_ifs04",
+            "icon_seamless", "meteofrance_seamless",
+        }
+
+
+# ---------------------------------------------------------------------------
+# Multi-model — _parse_minutely
+# ---------------------------------------------------------------------------
+
+
+class TestParseMinutely:
+    def test_returns_none_when_absent(self):
+        assert _parse_minutely({}) is None
+        assert _parse_minutely({"minutely_15": {}}) is None
+
+    def test_returns_none_when_no_times(self):
+        assert _parse_minutely({"minutely_15": {"precipitation": []}}) is None
+
+    def test_extracts_time_and_precip(self):
+        data = {"minutely_15": {
+            "time": ["2025-01-01T00:00", "2025-01-01T00:15", "2025-01-01T00:30", "2025-01-01T00:45"],
+            "precipitation": [0.0, 0.2, 0.5, 0.1],
+        }}
+        result = _parse_minutely(data)
+        assert result == {
+            "time": ["2025-01-01T00:00", "2025-01-01T00:15", "2025-01-01T00:30", "2025-01-01T00:45"],
+            "precipitation": [0.0, 0.2, 0.5, 0.1],
+        }
+
+    def test_caps_at_four_steps(self):
+        data = {"minutely_15": {
+            "time": [f"t{i}" for i in range(8)],
+            "precipitation": [float(i) for i in range(8)],
+        }}
+        result = _parse_minutely(data)
+        assert len(result["time"]) == 4
+        assert len(result["precipitation"]) == 4
+
+    def test_null_precip_coerced_to_zero(self):
+        data = {"minutely_15": {"time": ["t0", "t1"], "precipitation": [None, 0.3]}}
+        result = _parse_minutely(data)
+        assert result["precipitation"] == [0, 0.3]
+
+
+# ---------------------------------------------------------------------------
+# Multi-model — _parse_models
+# ---------------------------------------------------------------------------
+
+
+class TestParseModels:
+    def test_suffixed_keys_per_model(self):
+        data = {"hourly": {
+            "time": ["t0", "t1"],
+            "temperature_2m_gfs_seamless": [20.0, 21.0],
+            "precipitation_gfs_seamless": [0.0, 0.5],
+            "temperature_2m_ecmwf_ifs04": [19.0, 20.5],
+            "precipitation_ecmwf_ifs04": [0.1, 0.2],
+        }}
+        series, available = _parse_models(data, ["gfs_seamless", "ecmwf_ifs04"])
+        assert available == ["gfs_seamless", "ecmwf_ifs04"]
+        assert series[0]["model"] == "gfs_seamless"
+        assert series[0]["temperature_2m"] == [20.0, 21.0]
+        assert series[1]["temperature_2m"] == [19.0, 20.5]
+
+    def test_falls_back_to_unsuffixed_best_match(self):
+        data = {"hourly": {
+            "time": ["t0"],
+            "temperature_2m": [18.0],
+            "precipitation": [0.0],
+        }}
+        series, available = _parse_models(data, ["gfs_seamless"])
+        # No suffixed key → uses unsuffixed baseline
+        assert available == ["gfs_seamless"]
+        assert series[0]["temperature_2m"] == [18.0]
+
+    def test_model_with_all_null_temps_excluded(self):
+        data = {"hourly": {
+            "time": ["t0", "t1"],
+            "temperature_2m_icon_seamless": [None, None],
+        }}
+        series, available = _parse_models(data, ["icon_seamless"])
+        assert available == []
+        assert series == []
+
+    def test_caps_at_24(self):
+        data = {"hourly": {
+            "time": [f"t{i}" for i in range(48)],
+            "temperature_2m_gfs_seamless": [float(i) for i in range(48)],
+            "precipitation_gfs_seamless": [0.0] * 48,
+        }}
+        series, _ = _parse_models(data, ["gfs_seamless"])
+        assert len(series[0]["temperature_2m"]) == 24
+        assert len(series[0]["precipitation"]) == 24
+
+
+# ---------------------------------------------------------------------------
+# Multi-model — _fetch_open_meteo_extras
+# ---------------------------------------------------------------------------
+
+
+class TestFetchOpenMeteoExtras:
+    def _mock_client(self, status_code: int, payload: dict) -> MagicMock:
+        resp = MagicMock()
+        resp.status_code = status_code
+        resp.json.return_value = payload
+        client = MagicMock()
+        client.get.return_value = resp
+        return client
+
+    @patch("py._weather._get_http_client")
+    def test_returns_none_on_non_200(self, mock_client_fn):
+        mock_client_fn.return_value = self._mock_client(500, {})
+        assert _fetch_open_meteo_extras(-17.83, 31.05) is None
+
+    @patch("py._weather._get_http_client")
+    def test_returns_minutely_and_models(self, mock_client_fn):
+        payload = {
+            "hourly": {
+                "time": ["t0", "t1"],
+                "temperature_2m_gfs_seamless": [20.0, 21.0],
+                "precipitation_gfs_seamless": [0.0, 0.2],
+                "temperature_2m_ecmwf_ifs04": [19.5, 20.0],
+                "precipitation_ecmwf_ifs04": [0.1, 0.0],
+                "temperature_2m_icon_seamless": [18.0, 18.5],
+                "precipitation_icon_seamless": [0.0, 0.0],
+            },
+            "minutely_15": {
+                "time": ["m0", "m1", "m2", "m3"],
+                "precipitation": [0.0, 0.1, 0.4, 0.2],
+            },
+        }
+        mock_client_fn.return_value = self._mock_client(200, payload)
+        result = _fetch_open_meteo_extras(-17.83, 31.05)
+        assert result is not None
+        assert result["minutely"]["precipitation"] == [0.0, 0.1, 0.4, 0.2]
+        assert result["models_available"] == DEFAULT_FORECAST_MODELS
+        assert result["models_time"] == ["t0", "t1"]
+        assert len(result["models"]) == 3
+
+    @patch("py._weather._get_http_client")
+    def test_requests_minutely_and_models_params(self, mock_client_fn):
+        client = self._mock_client(200, {"hourly": {"time": []}, "minutely_15": {}})
+        mock_client_fn.return_value = client
+        _fetch_open_meteo_extras(-17.83, 31.05, ["ecmwf_ifs04"])
+        _, kwargs = client.get.call_args
+        params = kwargs["params"]
+        assert params["minutely_15"] == "precipitation"
+        assert params["forecast_minutely_15"] == "4"
+        assert params["models"] == "ecmwf_ifs04"
+
+
+# ---------------------------------------------------------------------------
+# Multi-model — endpoint integration
+# ---------------------------------------------------------------------------
+
+
+class TestEndpointMultiModel:
+    @pytest.mark.asyncio
+    @patch("py._weather._fetch_open_meteo_extras")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather.nearest_station_observation")
+    @patch("py._weather._find_nearest_location")
+    async def test_merges_extras_into_response(
+        self, mock_nearest, mock_station, mock_cache, mock_set, mock_record,
+        mock_breaker, mock_extras,
+    ):
+        """minutely + models are merged onto the base response."""
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
+        mock_station.return_value = None
+        mock_cache.return_value = {
+            "data": {"current": {"temperature_2m": 25.0}, "hourly": {}, "daily": {}},
+            "provider": "tomorrow",
+        }
+        mock_breaker.is_allowed = True
+        mock_extras.return_value = {
+            "minutely": {"time": ["m0"], "precipitation": [0.3]},
+            "models": [{"model": "gfs_seamless", "temperature_2m": [20.0], "precipitation": [0.0]}],
+            "models_available": ["gfs_seamless"],
+            "models_time": ["t0"],
+        }
+
+        response = await get_weather(-17.83, 31.05)
+        import json
+        body = json.loads(bytes(response.body))
+        assert body["minutely"] == {"time": ["m0"], "precipitation": [0.3]}
+        assert body["models_available"] == ["gfs_seamless"]
+        assert body["models"][0]["model"] == "gfs_seamless"
+
+    @pytest.mark.asyncio
+    @patch("py._weather._fetch_open_meteo_extras")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather.nearest_station_observation")
+    @patch("py._weather._find_nearest_location")
+    async def test_models_query_forwarded_to_extras(
+        self, mock_nearest, mock_station, mock_cache, mock_set, mock_record,
+        mock_breaker, mock_extras,
+    ):
+        """The ?models= query is parsed and passed to the extras fetch."""
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
+        mock_station.return_value = None
+        mock_cache.return_value = {"data": {"current": {}, "hourly": {}, "daily": {}}, "provider": "tomorrow"}
+        mock_breaker.is_allowed = True
+        mock_extras.return_value = None
+
+        await get_weather(-17.83, 31.05, models="gfs_seamless,ecmwf_ifs04")
+        args, _ = mock_extras.call_args
+        assert args[2] == ["gfs_seamless", "ecmwf_ifs04"]
+
+    @pytest.mark.asyncio
+    @patch("py._weather._fetch_open_meteo_extras")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather.nearest_station_observation")
+    @patch("py._weather._find_nearest_location")
+    async def test_extras_failure_does_not_break_response(
+        self, mock_nearest, mock_station, mock_cache, mock_set, mock_record,
+        mock_breaker, mock_extras,
+    ):
+        """An exception in the extras fetch must not fail the whole response."""
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
+        mock_station.return_value = None
+        mock_cache.return_value = {"data": {"current": {"temperature_2m": 25.0}}, "provider": "tomorrow"}
+        mock_breaker.is_allowed = True
+        mock_extras.side_effect = Exception("open-meteo down")
+
+        response = await get_weather(-17.83, 31.05)
+        assert response.headers.get("x-weather-provider") == "tomorrow"
+
+    @pytest.mark.asyncio
+    @patch("py._weather._fetch_open_meteo_extras")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather.nearest_station_observation")
+    @patch("py._weather._find_nearest_location")
+    async def test_extras_skipped_when_breaker_open(
+        self, mock_nearest, mock_station, mock_cache, mock_set, mock_record,
+        mock_breaker, mock_extras,
+    ):
+        """When the Open-Meteo circuit is open, the extras fetch is not attempted."""
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
+        mock_station.return_value = None
+        mock_cache.return_value = {"data": {"current": {}}, "provider": "tomorrow"}
+        mock_breaker.is_allowed = False
+
+        await get_weather(-17.83, 31.05)
+        mock_extras.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("py._weather._fetch_open_meteo_extras")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather.nearest_station_observation")
+    @patch("py._weather._find_nearest_location")
+    async def test_extras_merge_does_not_mutate_cached_doc(
+        self, mock_nearest, mock_station, mock_cache, mock_set, mock_record,
+        mock_breaker, mock_extras,
+    ):
+        """Merging extras must not mutate the dict returned by the cache layer."""
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
+        mock_station.return_value = None
+        cached_data = {"current": {"temperature_2m": 25.0}, "hourly": {}, "daily": {}}
+        mock_cache.return_value = {"data": cached_data, "provider": "tomorrow"}
+        mock_breaker.is_allowed = True
+        mock_extras.return_value = {
+            "minutely": {"time": ["m0"], "precipitation": [0.3]},
+            "models": [],
+            "models_available": [],
+            "models_time": [],
+        }
+
+        await get_weather(-17.83, 31.05)
+        assert "minutely" not in cached_data

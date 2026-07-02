@@ -7,6 +7,12 @@ import {
   uvLevel,
   createFallbackWeather,
   synthesizeOpenMeteoInsights,
+  parseMinutely,
+  parseModelSeries,
+  normalizeMultiModel,
+  ForecastModel,
+  FORECAST_MODEL_LABELS,
+  COMPARISON_MODELS,
   type HourlyWeather,
 } from "./weather";
 
@@ -459,5 +465,97 @@ describe("synthesizeOpenMeteoInsights", () => {
     const heavyStorm = createFallbackWeather(-17.83, 31.05, 1483);
     heavyStorm.current.weather_code = 99;
     expect(synthesizeOpenMeteoInsights(heavyStorm).thunderstormProbability).toBe(95);
+  });
+});
+
+describe("multi-model + minutely (Windy-style)", () => {
+  it("ForecastModel enum exposes the expected model ids", () => {
+    expect(ForecastModel.BestMatch).toBe("best_match");
+    expect(ForecastModel.GFS).toBe("gfs_seamless");
+    expect(ForecastModel.ECMWF).toBe("ecmwf_ifs04");
+    expect(ForecastModel.ICON).toBe("icon_seamless");
+    expect(ForecastModel.MeteoFrance).toBe("meteofrance_seamless");
+  });
+
+  it("COMPARISON_MODELS excludes best_match", () => {
+    expect(COMPARISON_MODELS).not.toContain(ForecastModel.BestMatch);
+    expect(COMPARISON_MODELS).toContain(ForecastModel.ECMWF);
+  });
+
+  it("FORECAST_MODEL_LABELS has a label for every model", () => {
+    for (const m of Object.values(ForecastModel)) {
+      expect(typeof FORECAST_MODEL_LABELS[m]).toBe("string");
+    }
+  });
+
+  describe("parseMinutely", () => {
+    it("returns undefined when no minutely data", () => {
+      expect(parseMinutely({})).toBeUndefined();
+      expect(parseMinutely({ minutely_15: { time: [] } })).toBeUndefined();
+    });
+
+    it("extracts up to 4 steps and coerces null precip to 0", () => {
+      const result = parseMinutely({
+        minutely_15: {
+          time: ["a", "b", "c", "d", "e"],
+          precipitation: [0, null, 0.5, 0.2, 9],
+        },
+      });
+      expect(result).toEqual({
+        time: ["a", "b", "c", "d"],
+        precipitation: [0, 0, 0.5, 0.2],
+      });
+    });
+  });
+
+  describe("parseModelSeries", () => {
+    it("reads suffixed keys per model", () => {
+      const raw = {
+        hourly: {
+          time: ["t0", "t1"],
+          temperature_2m_gfs_seamless: [20, 21],
+          precipitation_gfs_seamless: [0, 0.5],
+          temperature_2m_ecmwf_ifs04: [19, 20],
+          precipitation_ecmwf_ifs04: [0.1, 0.2],
+        },
+      };
+      const out = parseModelSeries(raw, ["gfs_seamless", "ecmwf_ifs04"]);
+      expect(out.models_available).toEqual(["gfs_seamless", "ecmwf_ifs04"]);
+      expect(out.models[0].temperature_2m).toEqual([20, 21]);
+      expect(out.models_time).toEqual(["t0", "t1"]);
+    });
+
+    it("falls back to the unsuffixed best_match key", () => {
+      const raw = { hourly: { time: ["t0"], temperature_2m: [18], precipitation: [0] } };
+      const out = parseModelSeries(raw, ["gfs_seamless"]);
+      expect(out.models[0].temperature_2m).toEqual([18]);
+    });
+
+    it("excludes models whose temps are all null", () => {
+      const raw = { hourly: { time: ["t0", "t1"], temperature_2m_icon_seamless: [null, null] } };
+      const out = parseModelSeries(raw, ["icon_seamless"]);
+      expect(out.models_available).toEqual([]);
+    });
+  });
+
+  describe("normalizeMultiModel", () => {
+    it("attaches minutely without models when none requested", () => {
+      const raw = {
+        current: {}, hourly: {}, daily: {}, current_units: {},
+        minutely_15: { time: ["m0"], precipitation: [0.3] },
+      };
+      const data = normalizeMultiModel(raw, []);
+      expect(data.minutely).toEqual({ time: ["m0"], precipitation: [0.3] });
+      expect(data.models).toBeUndefined();
+    });
+
+    it("attaches per-model series when models requested", () => {
+      const raw = {
+        current: {}, hourly: { time: ["t0"], temperature_2m_gfs_seamless: [20] }, daily: {}, current_units: {},
+      };
+      const data = normalizeMultiModel(raw, ["gfs_seamless"]);
+      expect(data.models_available).toEqual(["gfs_seamless"]);
+      expect(data.models_time).toEqual(["t0"]);
+    });
   });
 });

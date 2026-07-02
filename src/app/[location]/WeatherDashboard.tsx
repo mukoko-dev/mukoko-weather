@@ -36,7 +36,8 @@ import {
 import { FrostAlertBanner } from "./FrostAlertBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
 import { useAppStore } from "@/lib/store";
-import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
+import type { WeatherData, FrostAlert, Season, MinutelyData, ModelForecast } from "@/lib/weather";
+import { fetchWeather, COMPARISON_MODELS } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
 import type { AISummaryUser } from "@/components/weather/AISummary";
 import { type Activity, ACTIVITIES } from "@/lib/activities";
@@ -60,6 +61,8 @@ const MapPreview = lazy(() => import("@/components/weather/map/MapPreview").then
 const AviationWeather = lazy(() => import("@/components/weather/AviationWeather").then((m) => ({ default: m.AviationWeather })));
 const AISummaryChat = lazy(() => import("@/components/weather/AISummaryChat").then((m) => ({ default: m.AISummaryChat })));
 const RecentReports = lazy(() => import("@/components/weather/reports/RecentReports").then((m) => ({ default: m.RecentReports })));
+const MinutelyNowcast = lazy(() => import("@/components/weather/MinutelyNowcast").then((m) => ({ default: m.MinutelyNowcast })));
+const ModelComparisonChart = lazy(() => import("@/components/weather/charts/ModelComparisonChart").then((m) => ({ default: m.ModelComparisonChart })));
 
 import { formatCoords } from "@/lib/utils";
 
@@ -92,12 +95,19 @@ export function WeatherDashboard({
 }: WeatherDashboardProps) {
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
+  const selectedForecastModel = useAppStore((s) => s.selectedForecastModel);
   const hasOnboarded = useAppStore((s) => s.hasOnboarded);
   const completeOnboarding = useAppStore((s) => s.completeOnboarding);
   const sectionOrder = useAppStore((s) => s.sectionOrder);
   const setSectionOrder = useAppStore((s) => s.setSectionOrder);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
+  // Windy-style ADDITIONAL data — multi-model comparison + minutely nowcast.
+  // Fetched client-side from Open-Meteo (free, keyless) so it never blocks the
+  // server-rendered base forecast. Re-fetched when the user changes model.
+  const [minutely, setMinutely] = useState<MinutelyData | null>(null);
+  const [modelSeries, setModelSeries] = useState<ModelForecast[]>([]);
+  const [modelsTime, setModelsTime] = useState<string[]>([]);
   const icao = getIcaoForSlug(location.slug) ?? getNearestIcao(location.lat, location.lon);
   // Nearby stations the user can switch between in the aviation section.
   const nearbyIcaos = getNearestIcaos(location.lat, location.lon, 5);
@@ -154,6 +164,27 @@ export function WeatherDashboard({
       timestamp: Date.now(),
     });
   }, [location.slug, weather.current.weather_code, weather.current.is_day, weather.current.temperature_2m, weather.current.wind_speed_10m]);
+
+  // Fetch multi-model comparison + minutely nowcast from Open-Meteo. Best-effort
+  // — failures are swallowed so the base page is never affected. The selected
+  // model is unioned into the comparison set so the user's pick is always shown.
+  useEffect(() => {
+    let cancelled = false;
+    const models = Array.from(new Set([selectedForecastModel, ...COMPARISON_MODELS]));
+    fetchWeather(location.lat, location.lon, models)
+      .then((data) => {
+        if (cancelled) return;
+        setMinutely(data.minutely ?? null);
+        setModelSeries(data.models ?? []);
+        setModelsTime(data.models_time ?? []);
+      })
+      .catch(() => {
+        // Non-critical enhancement — leave sections hidden on failure.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [location.lat, location.lon, selectedForecastModel]);
 
   return (
     <>
@@ -439,6 +470,31 @@ export function WeatherDashboard({
             </LazySection>
           </div>
         </div>
+
+        {/* Windy-style additions — full width, only when Open-Meteo returned data */}
+        {minutely && (
+          <div className="mt-4">
+            <LazySection label="minutely-nowcast" fallback={<SectionSkeleton />}>
+              <ChartErrorBoundary name="minutely nowcast">
+                <Suspense fallback={<SectionSkeleton />}>
+                  <MinutelyNowcast minutely={minutely} />
+                </Suspense>
+              </ChartErrorBoundary>
+            </LazySection>
+          </div>
+        )}
+
+        {modelSeries.length > 0 && modelsTime.length > 0 && (
+          <div className="mt-4">
+            <LazySection label="model-comparison" fallback={<SectionSkeleton />}>
+              <ChartErrorBoundary name="model comparison">
+                <Suspense fallback={<SectionSkeleton />}>
+                  <ModelComparisonChart models={modelSeries} time={modelsTime} />
+                </Suspense>
+              </ChartErrorBoundary>
+            </LazySection>
+          </div>
+        )}
       </main>
 
       <Footer />

@@ -22,11 +22,13 @@ export interface PreferencesDocType {
   locationLabels: Record<string, string>;
   selectedActivities: string[];
   hasOnboarded: boolean;
+  /** Windy-style forecast model preference (Open-Meteo model id or "best_match") */
+  selectedForecastModel: string;
   updatedAt: number;
 }
 
 export const preferencesSchema: RxJsonSchema<PreferencesDocType> = {
-  version: 0,
+  version: 1,
   primaryKey: "id",
   type: "object",
   properties: {
@@ -37,9 +39,10 @@ export const preferencesSchema: RxJsonSchema<PreferencesDocType> = {
     locationLabels: { type: "object", additionalProperties: { type: "string" }, default: {} },
     selectedActivities: { type: "array", items: { type: "string" }, default: [] },
     hasOnboarded: { type: "boolean", default: false },
+    selectedForecastModel: { type: "string", default: "best_match" },
     updatedAt: { type: "number" },
   },
-  required: ["id", "theme", "selectedLocation", "savedLocations", "locationLabels", "selectedActivities", "hasOnboarded", "updatedAt"],
+  required: ["id", "theme", "selectedLocation", "savedLocations", "locationLabels", "selectedActivities", "hasOnboarded", "selectedForecastModel", "updatedAt"],
 };
 
 // ---------------------------------------------------------------------------

@@ -20,6 +20,14 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 VALID_THEMES = {"light", "dark", "system"}
+# Windy-style multi-model forecast selection (Open-Meteo model ids + "Auto").
+VALID_FORECAST_MODELS = {
+    "best_match",
+    "gfs_seamless",
+    "ecmwf_ifs04",
+    "icon_seamless",
+    "meteofrance_seamless",
+}
 MAX_ACTIVITIES = 30
 MAX_SAVED_LOCATIONS = 10
 SLUG_RE = re.compile(r"^[a-z0-9-]{1,80}$")
@@ -31,6 +39,7 @@ class Preferences(BaseModel):
     savedLocations: list[str] = Field(default_factory=list)
     selectedActivities: list[str] = Field(default_factory=list)
     hasOnboarded: bool = False
+    selectedForecastModel: str = "best_match"
 
 
 class CreateDeviceRequest(BaseModel):
@@ -44,6 +53,7 @@ class UpdatePreferencesRequest(BaseModel):
     savedLocations: Optional[list[str]] = None
     selectedActivities: Optional[list[str]] = None
     hasOnboarded: Optional[bool] = None
+    selectedForecastModel: Optional[str] = None
 
 
 class DeviceProfileResponse(BaseModel):
@@ -76,6 +86,12 @@ def _validate_activities(activities: list[str]) -> list[str]:
     return activities
 
 
+def _validate_forecast_model(model: str) -> str:
+    if model not in VALID_FORECAST_MODELS:
+        raise HTTPException(status_code=400, detail=f"Invalid forecast model: {model}")
+    return model
+
+
 def _validate_saved_locations(locations: list[str]) -> list[str]:
     """Validate saved locations — format and cap only.
 
@@ -103,6 +119,7 @@ def _doc_to_response(doc: dict) -> DeviceProfileResponse:
             savedLocations=prefs.get("savedLocations", []),
             selectedActivities=prefs.get("selectedActivities", []),
             hasOnboarded=prefs.get("hasOnboarded", False),
+            selectedForecastModel=prefs.get("selectedForecastModel", "best_match"),
         ),
         createdAt=doc.get("createdAt", datetime.now(timezone.utc)).isoformat(),
         updatedAt=doc.get("updatedAt", datetime.now(timezone.utc)).isoformat(),
@@ -133,6 +150,7 @@ async def create_device(body: CreateDeviceRequest):
     _validate_slug(body.preferences.selectedLocation)
     _validate_saved_locations(body.preferences.savedLocations)
     _validate_activities(body.preferences.selectedActivities)
+    _validate_forecast_model(body.preferences.selectedForecastModel)
 
     now = datetime.now(timezone.utc)
     doc = {
@@ -182,6 +200,9 @@ async def update_preferences(device_id: str, body: UpdatePreferencesRequest):
         updates["preferences.selectedActivities"] = body.selectedActivities
     if body.hasOnboarded is not None:
         updates["preferences.hasOnboarded"] = body.hasOnboarded
+    if body.selectedForecastModel is not None:
+        _validate_forecast_model(body.selectedForecastModel)
+        updates["preferences.selectedForecastModel"] = body.selectedForecastModel
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")

@@ -16,8 +16,8 @@ import {
 
 describe("RxDB schemas", () => {
   describe("preferencesSchema", () => {
-    it("has version 0", () => {
-      expect(preferencesSchema.version).toBe(0);
+    it("has version 1", () => {
+      expect(preferencesSchema.version).toBe(1);
     });
 
     it("uses 'id' as primary key", () => {
@@ -32,6 +32,7 @@ describe("RxDB schemas", () => {
       expect(preferencesSchema.required).toContain("locationLabels");
       expect(preferencesSchema.required).toContain("selectedActivities");
       expect(preferencesSchema.required).toContain("hasOnboarded");
+      expect(preferencesSchema.required).toContain("selectedForecastModel");
       expect(preferencesSchema.required).toContain("updatedAt");
     });
 
@@ -102,6 +103,7 @@ describe("schema type compatibility", () => {
       locationLabels: { harare: "Home" },
       selectedActivities: ["running"],
       hasOnboarded: true,
+      selectedForecastModel: "best_match",
       updatedAt: Date.now(),
     };
     expect(doc.id).toBe("test-uuid");

@@ -56,6 +56,56 @@ export interface WeatherData {
   current_units: Record<string, string>;
   /** Activity-specific insights — only available when Tomorrow.io is the provider */
   insights?: WeatherInsights;
+  /** Next-hour precipitation nowcast (4 × 15-min steps) from Open-Meteo */
+  minutely?: MinutelyData;
+  /** Per-model hourly temperature/precip comparison series (Windy-style) */
+  models?: ModelForecast[];
+  /** Model ids that returned usable data (subset of the requested set) */
+  models_available?: string[];
+  /** Shared hourly time axis (ISO 8601) for the per-model comparison series */
+  models_time?: string[];
+}
+
+/**
+ * Open-Meteo forecast models exposed for the Windy-style multi-model
+ * comparison. `best_match` is Open-Meteo's auto-selected blend.
+ */
+export enum ForecastModel {
+  BestMatch = "best_match",
+  GFS = "gfs_seamless",
+  ECMWF = "ecmwf_ifs04",
+  ICON = "icon_seamless",
+  MeteoFrance = "meteofrance_seamless",
+}
+
+/** Human-readable labels for each forecast model (short national/agency names). */
+export const FORECAST_MODEL_LABELS: Record<ForecastModel, string> = {
+  [ForecastModel.BestMatch]: "Auto (best match)",
+  [ForecastModel.GFS]: "GFS (NOAA, USA)",
+  [ForecastModel.ECMWF]: "ECMWF (Europe)",
+  [ForecastModel.ICON]: "ICON (DWD, Germany)",
+  [ForecastModel.MeteoFrance]: "Météo-France",
+};
+
+/** The comparison set overlaid on the ModelComparisonChart (excludes Auto). */
+export const COMPARISON_MODELS: ForecastModel[] = [
+  ForecastModel.GFS,
+  ForecastModel.ECMWF,
+  ForecastModel.ICON,
+  ForecastModel.MeteoFrance,
+];
+
+/** Next-hour precipitation nowcast — 15-minute steps. */
+export interface MinutelyData {
+  time: string[];
+  precipitation: number[];
+}
+
+/** A single model's hourly temperature/precipitation series. */
+export interface ModelForecast {
+  model: string;
+  temperature_2m: (number | null)[];
+  precipitation: (number | null)[];
 }
 
 /** Extended weather data from Tomorrow.io for activity-aware insight cards */
@@ -177,16 +227,32 @@ const DAILY_PARAMS = [
   "wind_gusts_10m_max",
 ].join(",");
 
-export async function fetchWeather(lat: number, lon: number): Promise<WeatherData> {
+export async function fetchWeather(
+  lat: number,
+  lon: number,
+  models?: string[],
+): Promise<WeatherData> {
+  // Only forward real model ids to Open-Meteo — `best_match` is the unsuffixed
+  // baseline the API always returns, so it isn't sent as an explicit model.
+  const requestedModels = (models ?? []).filter(
+    (m) => m && m !== ForecastModel.BestMatch,
+  );
+
   const params = new URLSearchParams({
     latitude: lat.toString(),
     longitude: lon.toString(),
     current: CURRENT_PARAMS,
     hourly: HOURLY_PARAMS,
     daily: DAILY_PARAMS,
+    // Next-hour precipitation nowcast (4 × 15-min steps).
+    minutely_15: "precipitation",
+    forecast_minutely_15: "4",
     timezone: "auto",
     forecast_days: "7",
   });
+  if (requestedModels.length > 0) {
+    params.set("models", requestedModels.join(","));
+  }
 
   const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, {
     next: { revalidate: 900 }, // cache for 15 minutes
@@ -197,7 +263,76 @@ export async function fetchWeather(lat: number, lon: number): Promise<WeatherDat
     throw new Error(`Weather API error: ${res.status}`);
   }
 
-  return res.json();
+  const raw = await res.json();
+  return normalizeMultiModel(raw, requestedModels);
+}
+
+/**
+ * Parse Open-Meteo's `minutely_15` block into the next-hour nowcast shape.
+ * Returns `undefined` when the API returned no minutely data.
+ */
+export function parseMinutely(raw: {
+  minutely_15?: { time?: string[]; precipitation?: (number | null)[] };
+}): MinutelyData | undefined {
+  const m = raw.minutely_15;
+  if (!m?.time?.length) return undefined;
+  return {
+    time: m.time.slice(0, 4),
+    precipitation: (m.precipitation ?? []).slice(0, 4).map((p) => p ?? 0),
+  };
+}
+
+/**
+ * Build per-model hourly temperature/precip series from an Open-Meteo hourly
+ * block. Open-Meteo suffixes fields per model (`temperature_2m_ecmwf_ifs04`),
+ * falling back to the unsuffixed `temperature_2m` (best_match) key. A model is
+ * "available" when it has at least one non-null temperature reading.
+ */
+export function parseModelSeries(
+  raw: { hourly?: Record<string, unknown> },
+  models: string[],
+): { models: ModelForecast[]; models_available: string[]; models_time: string[] } {
+  const hourly = raw.hourly ?? {};
+  const baseTemp = (hourly["temperature_2m"] as (number | null)[]) ?? [];
+  const basePrecip = (hourly["precipitation"] as (number | null)[]) ?? [];
+  const time = ((hourly["time"] as string[]) ?? []).slice(0, 24);
+
+  const series: ModelForecast[] = [];
+  const available: string[] = [];
+  for (const model of models) {
+    const temp = (hourly[`temperature_2m_${model}`] as (number | null)[]) ?? baseTemp;
+    const precip = (hourly[`precipitation_${model}`] as (number | null)[]) ?? basePrecip;
+    if (temp.some((v) => v !== null && v !== undefined)) {
+      series.push({
+        model,
+        temperature_2m: temp.slice(0, 24),
+        precipitation: (precip ?? []).slice(0, 24),
+      });
+      available.push(model);
+    }
+  }
+  return { models: series, models_available: available, models_time: time };
+}
+
+/**
+ * Merge Open-Meteo's raw multi-model/minutely fields into the WeatherData
+ * shape. When no models were requested, the base fields are returned as-is
+ * plus the minutely nowcast (which is always requested).
+ */
+export function normalizeMultiModel(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  raw: any,
+  models: string[],
+): WeatherData {
+  const data = raw as WeatherData;
+  data.minutely = parseMinutely(raw);
+  if (models.length > 0) {
+    const parsed = parseModelSeries(raw, models);
+    data.models = parsed.models;
+    data.models_available = parsed.models_available;
+    data.models_time = parsed.models_time;
+  }
+  return data;
 }
 
 export function checkFrostRisk(hourly: HourlyWeather): FrostAlert | null {

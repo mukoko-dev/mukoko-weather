@@ -208,6 +208,130 @@ def _tomorrow_code_to_wmo(code: int) -> int:
     return mapping.get(code, 0)
 
 
+# ---------------------------------------------------------------------------
+# Open-Meteo multi-model + minutely nowcast (Windy-style)
+# ---------------------------------------------------------------------------
+
+# Default comparison models requested from Open-Meteo. Open-Meteo returns
+# model-suffixed hourly fields (e.g. `temperature_2m_ecmwf_ifs04`) when
+# `models` is set, falling back to the unsuffixed best_match key otherwise.
+DEFAULT_FORECAST_MODELS = ["gfs_seamless", "ecmwf_ifs04", "icon_seamless"]
+
+# Allowlist of models we forward to Open-Meteo — guards against a caller
+# injecting arbitrary strings into the upstream request via `?models=`.
+KNOWN_FORECAST_MODELS = {
+    "best_match",
+    "gfs_seamless",
+    "ecmwf_ifs04",
+    "icon_seamless",
+    "meteofrance_seamless",
+}
+
+
+def _sanitize_models(models: list[str] | None) -> list[str]:
+    """Filter a requested model list down to the known allowlist.
+
+    Falls back to :data:`DEFAULT_FORECAST_MODELS` when nothing valid is given.
+    ``best_match`` is dropped from the upstream request (it is the unsuffixed
+    baseline Open-Meteo always returns) but its data is still available via the
+    unsuffixed keys.
+    """
+    cleaned: list[str] = []
+    for m in models or []:
+        m = (m or "").strip()
+        if m in KNOWN_FORECAST_MODELS and m != "best_match" and m not in cleaned:
+            cleaned.append(m)
+    return cleaned or list(DEFAULT_FORECAST_MODELS)
+
+
+def _parse_minutely(data: dict) -> dict | None:
+    """Extract the next-hour precipitation nowcast from an Open-Meteo payload.
+
+    Returns ``{"time": [...], "precipitation": [...]}`` (next 60 min in 15-min
+    steps) or ``None`` when no minutely data is present.
+    """
+    minutely = data.get("minutely_15") or {}
+    times = minutely.get("time") or []
+    precip = minutely.get("precipitation") or []
+    if not times:
+        return None
+    return {
+        "time": list(times[:4]),
+        "precipitation": [p if p is not None else 0 for p in precip[:4]],
+    }
+
+
+def _parse_models(data: dict, models: list[str]) -> tuple[list[dict], list[str]]:
+    """Build per-model hourly temperature/precip series from Open-Meteo hourly.
+
+    Open-Meteo returns model-suffixed hourly keys (``temperature_2m_gfs_seamless``)
+    when ``models`` is requested, falling back to the unsuffixed ``temperature_2m``
+    (best_match) key. A model is considered available when it has at least one
+    non-null temperature reading.
+    """
+    hourly = data.get("hourly") or {}
+    base_temp = hourly.get("temperature_2m") or []
+    base_precip = hourly.get("precipitation") or []
+
+    series: list[dict] = []
+    available: list[str] = []
+    for model in models:
+        temp = hourly.get(f"temperature_2m_{model}")
+        precip = hourly.get(f"precipitation_{model}")
+        if temp is None:
+            temp = base_temp
+        if precip is None:
+            precip = base_precip
+        if any(v is not None for v in temp):
+            series.append({
+                "model": model,
+                "temperature_2m": list(temp[:24]),
+                "precipitation": list((precip or [])[:24]),
+            })
+            available.append(model)
+    return series, available
+
+
+def _fetch_open_meteo_extras(lat: float, lon: float, models: list[str] | None = None) -> dict | None:
+    """Fetch the ADDITIONAL Windy-style data from Open-Meteo (free, keyless).
+
+    Returns a dict with ``minutely`` (next-hour 15-min precip nowcast),
+    ``models`` (per-model hourly temperature/precip series), ``models_available``
+    and ``models_time`` (the shared Open-Meteo hourly time axis). Best-effort —
+    returns ``None`` on any failure so the caller degrades gracefully.
+    """
+    resolved_models = _sanitize_models(models)
+    client = _get_http_client()
+
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": str(lat),
+        "longitude": str(lon),
+        "hourly": "temperature_2m,precipitation",
+        "models": ",".join(resolved_models),
+        "minutely_15": "precipitation",
+        "forecast_minutely_15": "4",
+        "timezone": "auto",
+        "forecast_days": "2",
+    }
+
+    resp = client.get(url, params=params)
+    if resp.status_code != 200:
+        return None
+
+    data = resp.json()
+    minutely = _parse_minutely(data)
+    series, available = _parse_models(data, resolved_models)
+    hourly = data.get("hourly") or {}
+
+    return {
+        "minutely": minutely,
+        "models": series,
+        "models_available": available,
+        "models_time": list((hourly.get("time") or [])[:24]),
+    }
+
+
 def _fetch_open_meteo(lat: float, lon: float) -> dict | None:
     """Fetch weather from Open-Meteo API (free fallback)."""
     client = _get_http_client()
@@ -219,6 +343,8 @@ def _fetch_open_meteo(lat: float, lon: float) -> dict | None:
         "current": "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,cloud_cover",
         "hourly": "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,cloud_cover,uv_index",
         "daily": "weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,sunrise,sunset,uv_index_max,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant",
+        "minutely_15": "precipitation",
+        "forecast_minutely_15": "4",
         "timezone": "auto",
         "forecast_days": "7",
     }
@@ -244,6 +370,7 @@ def _fetch_open_meteo(lat: float, lon: float) -> dict | None:
         "hourly": data.get("hourly", {}),
         "daily": data.get("daily", {}),
         "insights": insights if insights else None,
+        "minutely": _parse_minutely(data),
     }
     return result
 
@@ -524,9 +651,9 @@ def _find_nearest_location(lat: float, lon: float) -> dict | None:
 
 
 @router.get("/api/py/weather")
-async def get_weather(lat: float = -17.83, lon: float = 31.05):
+async def get_weather(lat: float = -17.83, lon: float = 31.05, models: str | None = None):
     """
-    GET /api/py/weather?lat=-17.83&lon=31.05
+    GET /api/py/weather?lat=-17.83&lon=31.05&models=gfs_seamless,ecmwf_ifs04
 
     Weather proxy with multi-provider fallback chain:
 
@@ -538,6 +665,16 @@ async def get_weather(lat: float = -17.83, lon: float = 31.05):
     * **Priority 3** — Open-Meteo (free fallback)
     * **Priority 4** — Seasonal estimates (never fails)
 
+    In addition to the base current/hourly/daily forecast, the endpoint attaches
+    Windy-style ADDITIONAL data sourced from Open-Meteo (free, keyless):
+
+    * ``minutely`` — next-hour precipitation nowcast (4 × 15-min steps). Always
+      attempted, best-effort.
+    * ``models`` / ``models_available`` / ``models_time`` — per-model hourly
+      temperature/precip comparison series. The optional ``?models=`` query is a
+      comma list (``gfs_seamless,ecmwf_ifs04,icon_seamless,meteofrance_seamless``);
+      unknown models are dropped and a sensible default set is used otherwise.
+
     Response headers:
       * ``X-Cache`` — ``HIT`` | ``MISS``
       * ``X-Weather-Provider`` — origin of the hourly/daily forecast
@@ -546,6 +683,8 @@ async def get_weather(lat: float = -17.83, lon: float = 31.05):
     """
     if lat < -90 or lat > 90 or lon < -180 or lon > 180:
         raise HTTPException(status_code=400, detail="Invalid coordinates")
+
+    requested_models = [m for m in (models or "").split(",") if m.strip()] or None
 
     # Resolve to nearest known location for cache key
     location_slug = f"{lat:.2f}_{lon:.2f}"
@@ -630,6 +769,25 @@ async def get_weather(lat: float = -17.83, lon: float = 31.05):
         data = dict(data) if data else {}
         data["current"] = station_current
         current_source = "stationkit"
+
+    # ADDITIONAL Windy-style data — multi-model comparison + minutely nowcast.
+    # Always attempted (Open-Meteo, free), best-effort, circuit-breaker gated so
+    # a base commercial forecast is never held hostage to this extra call.
+    # Shallow-copy `data` before merging so we never mutate the cache layer's
+    # object (which may be shared across warm invocations).
+    if open_meteo_breaker.is_allowed:
+        try:
+            extras = _fetch_open_meteo_extras(lat, lon, requested_models)
+            if extras:
+                data = dict(data) if data else {}
+                data["minutely"] = extras.get("minutely")
+                data["models"] = extras.get("models", [])
+                data["models_available"] = extras.get("models_available", [])
+                data["models_time"] = extras.get("models_time", [])
+        except Exception:
+            # Multi-model/minutely is a non-critical enhancement — never fail
+            # the whole response because the extras call errored.
+            pass
 
     return JSONResponse(
         content=data,

@@ -416,3 +416,16 @@ describe("sectionOrder", () => {
     expect(useAppStore.getState().sectionOrder).toEqual(custom);
   });
 });
+
+describe("selectedForecastModel", () => {
+  it("defaults to best_match", () => {
+    expect(useAppStore.getState().selectedForecastModel).toBe("best_match");
+  });
+
+  it("setSelectedForecastModel updates state", () => {
+    useAppStore.getState().setSelectedForecastModel("ecmwf_ifs04");
+    expect(useAppStore.getState().selectedForecastModel).toBe("ecmwf_ifs04");
+    // reset for other tests
+    useAppStore.getState().setSelectedForecastModel("best_match");
+  });
+});

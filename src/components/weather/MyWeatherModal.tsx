@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/lib/use-debounce";
 import { cn, slugToDisplayName } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
+import { ForecastModel, FORECAST_MODEL_LABELS } from "@/lib/weather";
 
 /** Default category style for unknown categories */
 const DEFAULT_CATEGORY_STYLE = {
@@ -620,9 +621,66 @@ function SettingsTab() {
         ))}
       </div>
 
+      <ModelSelector />
+
       <p className="mt-4 text-base text-text-tertiary">
         Your preferences are saved on this device.
       </p>
+    </div>
+  );
+}
+
+// ── Forecast model selector ─────────────────────────────────────────────────
+
+/** Auto (best_match) first, then the individual national/agency models. */
+const MODEL_OPTIONS: { value: ForecastModel; label: string }[] = [
+  { value: ForecastModel.BestMatch, label: FORECAST_MODEL_LABELS[ForecastModel.BestMatch] },
+  { value: ForecastModel.GFS, label: FORECAST_MODEL_LABELS[ForecastModel.GFS] },
+  { value: ForecastModel.ECMWF, label: FORECAST_MODEL_LABELS[ForecastModel.ECMWF] },
+  { value: ForecastModel.ICON, label: FORECAST_MODEL_LABELS[ForecastModel.ICON] },
+  { value: ForecastModel.MeteoFrance, label: FORECAST_MODEL_LABELS[ForecastModel.MeteoFrance] },
+];
+
+function ModelSelector() {
+  const selectedForecastModel = useAppStore((s) => s.selectedForecastModel);
+  const setSelectedForecastModel = useAppStore((s) => s.setSelectedForecastModel);
+
+  return (
+    <div className="mt-6">
+      <h4 className="giraffe mb-1">Forecast model</h4>
+      <p className="mb-3 text-base text-text-tertiary">
+        Choose which weather model to highlight. &ldquo;Auto&rdquo; blends the best
+        available model for your location.
+      </p>
+      <div className="space-y-2" role="radiogroup" aria-label="Forecast model preference">
+        {MODEL_OPTIONS.map((option) => {
+          const isSelected = selectedForecastModel === option.value;
+          return (
+            <button
+              key={option.value}
+              role="radio"
+              aria-checked={isSelected}
+              onClick={() => setSelectedForecastModel(option.value)}
+              className={`press-scale flex w-full min-h-[var(--touch-target-min)] items-center gap-3 rounded-[var(--radius-card)] border-2 px-4 py-3 text-left transition-all ${
+                isSelected
+                  ? "border-primary bg-primary/5 shadow-sm"
+                  : "border-transparent bg-surface-base hover:border-text-tertiary/30"
+              }`}
+            >
+              <p className={`text-base font-medium ${isSelected ? "text-primary" : "text-text-primary"}`}>
+                {option.label}
+              </p>
+              {isSelected && (
+                <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary animate-[scale-in_200ms_ease-out]" aria-hidden="true">
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" className="stroke-primary-foreground" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

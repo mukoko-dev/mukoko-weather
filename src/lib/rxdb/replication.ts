@@ -71,6 +71,7 @@ async function startPrefsReplication(): Promise<void> {
                 locationLabels: prefs.locationLabels,
                 selectedActivities: prefs.selectedActivities,
                 hasOnboarded: prefs.hasOnboarded,
+                selectedForecastModel: prefs.selectedForecastModel,
               }),
             });
           } catch {
@@ -103,6 +104,7 @@ async function startPrefsReplication(): Promise<void> {
             locationLabels: serverPrefs.locationLabels ?? {},
             selectedActivities: serverPrefs.selectedActivities ?? [],
             hasOnboarded: serverPrefs.hasOnboarded ?? false,
+            selectedForecastModel: serverPrefs.selectedForecastModel ?? "best_match",
             updatedAt: Date.now(),
             _deleted: false,
           };

@@ -62,6 +62,7 @@ function makeCallbacks(overrides?: Partial<BridgeCallbacks>): BridgeCallbacks {
       locationLabels: {},
       selectedActivities: [],
       hasOnboarded: false,
+      selectedForecastModel: "best_match",
     })),
     ...overrides,
   };
@@ -239,6 +240,7 @@ describe("bridge — initRxDBBridge", () => {
         locationLabels: {},
         selectedActivities: ["farming"],
         hasOnboarded: true,
+        selectedForecastModel: "best_match",
       })),
     });
 

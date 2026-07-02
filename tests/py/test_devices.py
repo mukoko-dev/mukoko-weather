@@ -473,3 +473,63 @@ class TestUpdatePreferences:
         with pytest.raises(HTTPException) as exc_info:
             await update_preferences("abc-123", body)
         assert exc_info.value.status_code == 400
+
+    @patch("py._devices.device_profiles_collection")
+    @pytest.mark.asyncio
+    async def test_forecast_model_update(self, mock_coll):
+        now = datetime.now(timezone.utc)
+        mock_coll.return_value.find_one_and_update.return_value = {
+            "deviceId": "abc-123",
+            "preferences": {
+                "theme": "system",
+                "selectedLocation": "harare",
+                "selectedForecastModel": "ecmwf_ifs04",
+            },
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        body = UpdatePreferencesRequest(selectedForecastModel="ecmwf_ifs04")
+        result = await update_preferences("abc-123", body)
+        assert result.preferences.selectedForecastModel == "ecmwf_ifs04"
+
+    @patch("py._devices.device_profiles_collection")
+    @pytest.mark.asyncio
+    async def test_invalid_forecast_model_raises_400(self, mock_coll):
+        body = UpdatePreferencesRequest(selectedForecastModel="not_a_model")
+        with pytest.raises(HTTPException) as exc_info:
+            await update_preferences("abc-123", body)
+        assert exc_info.value.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Forecast model validation
+# ---------------------------------------------------------------------------
+
+
+class TestForecastModelValidation:
+    def test_default_preference_is_best_match(self):
+        prefs = Preferences()
+        assert prefs.selectedForecastModel == "best_match"
+
+    def test_doc_to_response_defaults_forecast_model(self):
+        now = datetime.now(timezone.utc)
+        doc = {"deviceId": "abc", "preferences": {}, "createdAt": now, "updatedAt": now}
+        result = _doc_to_response(doc)
+        assert result.preferences.selectedForecastModel == "best_match"
+
+    def test_valid_forecast_models_set(self):
+        from py._devices import VALID_FORECAST_MODELS
+        assert "best_match" in VALID_FORECAST_MODELS
+        assert "ecmwf_ifs04" in VALID_FORECAST_MODELS
+        assert "meteofrance_seamless" in VALID_FORECAST_MODELS
+
+    @patch("py._devices.device_profiles_collection")
+    @pytest.mark.asyncio
+    async def test_create_rejects_invalid_forecast_model(self, mock_coll):
+        body = CreateDeviceRequest(
+            deviceId="abc-123",
+            preferences=Preferences(selectedForecastModel="bogus"),
+        )
+        with pytest.raises(HTTPException) as exc_info:
+            await create_device(body)
+        assert exc_info.value.status_code == 400

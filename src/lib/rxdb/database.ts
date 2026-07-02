@@ -89,7 +89,16 @@ async function _initDb(): Promise<MukokoDatabase> {
   });
 
   await db.addCollections({
-    preferences: { schema: preferencesSchema },
+    preferences: {
+      schema: preferencesSchema,
+      // v0 → v1: added `selectedForecastModel` (Windy-style model preference).
+      migrationStrategies: {
+        1: (oldDoc: PreferencesDocType) => ({
+          ...oldDoc,
+          selectedForecastModel: oldDoc.selectedForecastModel ?? "best_match",
+        }),
+      },
+    },
     weather_cache: { schema: weatherCacheSchema },
     weather_hints: { schema: weatherHintSchema },
     suitability_rules: { schema: suitabilityRuleSchema },
