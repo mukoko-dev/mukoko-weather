@@ -50,8 +50,13 @@ export default async function Home() {
 
   if (lat && lon) {
     try {
+      // autoCreate=true: create-on-demand from the IP-derived position so a
+      // first-time visitor from a city we haven't seen still lands on a real,
+      // resolvable location instead of the "not found" page. Dedup in
+      // upsert_placesgeo_city (5 km + normalised-name) prevents duplicates, so
+      // repeat visits from the same city resolve the existing entry.
       const res = await fetch(
-        `${APP_URL}/api/py/geo?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`,
+        `${APP_URL}/api/py/geo?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&autoCreate=true`,
         { cache: "no-store" },
       );
       if (res.ok) {

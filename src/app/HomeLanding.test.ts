@@ -74,6 +74,14 @@ describe("HomeLanding — GPS button (stage 2)", () => {
     expect(source).toContain("detectUserLocation");
   });
 
+  it("creates the location on demand from GPS (autoCreate)", () => {
+    // "Use my current location" must create the location when none exists
+    // nearby, not just find-nearest — otherwise sparse regions dead-end.
+    expect(source).toContain("detectUserLocation({ autoCreate: true })");
+    // handleGps treats a freshly-created location as a valid redirect target.
+    expect(source).toContain('result.status === "created"');
+  });
+
   it("shows detecting state while GPS is running", () => {
     expect(source).toContain("Detecting");
     expect(source).toContain("gpsState");

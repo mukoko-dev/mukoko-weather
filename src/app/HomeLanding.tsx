@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { WeatherLocation } from "@/lib/locations";
 import { detectUserLocation } from "@/lib/geolocation";
-import { MapPinIcon, SearchIcon, NavigationIcon } from "@/lib/weather-icons";
+import { SearchIcon, NavigationIcon } from "@/lib/weather-icons";
 import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
 
 interface Props {
@@ -54,7 +54,10 @@ export function HomeLanding({ detectedLocation }: Props) {
     setGpsState("detecting");
     setCancelled(true);
     try {
-      const result = await detectUserLocation();
+      // autoCreate: the app creates the location from the user's GPS position
+      // when none exists nearby (create-on-demand). Dedup in upsert_placesgeo_city
+      // (5 km + normalised-name) prevents duplicates.
+      const result = await detectUserLocation({ autoCreate: true });
       if ((result.status === "success" || result.status === "created") && result.location) {
         router.replace(`/${result.location.slug}`);
       } else if (result.status === "denied") {
