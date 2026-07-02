@@ -67,6 +67,45 @@ describe("HomeLanding — detected city state", () => {
   });
 });
 
+describe("HomeLanding — auto GPS on first visit", () => {
+  it("auto-triggers GPS detection on mount for first-time visitors", () => {
+    // GPS is the default — first visit auto-detects the user's precise location
+    // instead of landing on the imprecise IP-guessed place.
+    expect(source).toContain("autoDetecting");
+    expect(source).toContain("detectUserLocation({ autoCreate: true })");
+  });
+
+  it("shows a 'Finding your location' state while auto-GPS runs", () => {
+    expect(source).toContain("Finding your location");
+    // Reuses the branded WeatherLoadingScene.
+    expect(source).toContain("WeatherLoadingScene");
+  });
+
+  it("uses a one-time flag so returning users are not re-prompted", () => {
+    expect(source).toContain("mukoko-gps-autoprompted");
+    expect(source).toContain("localStorage");
+  });
+
+  it("respects returning users via store state", () => {
+    // hasOnboarded / saved / selected location means the visitor is returning.
+    expect(source).toContain("useAppStore");
+    expect(source).toContain("hasOnboarded");
+    expect(source).toContain("savedLocations");
+  });
+
+  it("falls back to the IP-detected location on GPS failure", () => {
+    // On denied/unavailable/error with an IP location present, re-enable the
+    // countdown redirect instead of hanging.
+    expect(source).toContain("setCancelled(false)");
+    expect(source).toContain("detectedLocation");
+  });
+
+  it("defers the auto-GPS setState via requestAnimationFrame (lint-safe)", () => {
+    expect(source).toContain("requestAnimationFrame");
+    expect(source).toContain("cancelAnimationFrame");
+  });
+});
+
 describe("HomeLanding — GPS button (stage 2)", () => {
   it("has a GPS button for explicit location detection", () => {
     expect(source).toContain("Use my current location");

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { WeatherLocation } from "@/lib/locations";
 import { detectUserLocation } from "@/lib/geolocation";
+import { useAppStore } from "@/lib/store";
 import { SearchIcon, NavigationIcon } from "@/lib/weather-icons";
 import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
 
@@ -17,20 +18,115 @@ type GpsState = "idle" | "detecting" | "denied" | "error";
 const REDIRECT_DELAY_MS = 2000;
 
 /**
- * Home landing — three-stage location pipeline:
- * 1. IP geo detected (server-side, no prompt): weather scene + "Taking you to [City]..." countdown
- * 2. "Use my current location" button: explicit browser GPS (user-triggered only)
- * 3. "Browse all locations": search / explore
+ * One-time flag: once we've auto-prompted a visitor for GPS (whatever the
+ * outcome), we never auto-prompt again on future visits. Kept in localStorage
+ * — independent of the RxDB-backed store, so it's readable synchronously on
+ * mount without waiting for hydration and survives a cleared IndexedDB.
+ */
+const GPS_AUTOPROMPT_KEY = "mukoko-gps-autoprompted";
+
+/**
+ * Home landing — GPS-first location pipeline (mirrors Apple/Google Weather):
+ *
+ * 1. First visit / unresolved visitor → AUTO-trigger browser GPS on mount
+ *    (`detectUserLocation({ autoCreate: true })`). Shows a "Finding your
+ *    location…" scene while the browser permission prompt + lookup run.
+ *      • success/created → replace to the precise GPS location.
+ *      • denied / unavailable / error → gracefully fall back to the IP-detected
+ *        location countdown (if any), else the city chooser. Never hangs.
+ * 2. IP geo detected (server-side, no prompt): weather scene + "Taking you to
+ *    [City]…" countdown — used as the fallback when GPS is unavailable.
+ * 3. "Use my current location" button: explicit browser GPS (manual re-try).
+ * 4. "Browse all locations": search / explore.
+ *
+ * Returning users are never re-prompted: a returning visitor is detected via
+ * the one-time GPS_AUTOPROMPT_KEY flag or existing store state (hasOnboarded /
+ * saved / selected location). The middleware/`lastLocation` cookie fast path
+ * already redirects most returning users before this component ever renders.
  */
 export function HomeLanding({ detectedLocation }: Props) {
   const router = useRouter();
   const [countdown, setCountdown] = useState(Math.ceil(REDIRECT_DELAY_MS / 1000));
   const [gpsState, setGpsState] = useState<GpsState>("idle");
-  // `cancelled` participates in render (the Stage 1 branch below short-circuits
+  // `cancelled` participates in render (the Stage 2 branch below short-circuits
   // when the user has dismissed the auto-redirect), so it must be state rather
   // than a ref — react-hooks/refs forbids reading refs during render.
   const [cancelled, setCancelled] = useState(false);
+  // `autoDetecting` is true while the first-visit auto-GPS attempt is in flight,
+  // so we render the "Finding your location…" scene instead of the IP countdown.
+  const [autoDetecting, setAutoDetecting] = useState(false);
 
+  // ── Auto-GPS on first visit ──────────────────────────────────────────────
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Returning-user guards — never nag on every load.
+    let shouldAutoDetect = true;
+    try {
+      if (localStorage.getItem(GPS_AUTOPROMPT_KEY)) shouldAutoDetect = false;
+    } catch {
+      // Storage blocked (private mode) — skip auto-prompt rather than risk nagging.
+      shouldAutoDetect = false;
+    }
+    // Best-effort store check (may still be hydrating; the flag above is the
+    // authoritative one-time gate). A user who has onboarded or already has a
+    // saved/selected location is clearly returning.
+    const s = useAppStore.getState();
+    if (s.hasOnboarded || s.savedLocations.length > 0 || s.selectedLocation) {
+      shouldAutoDetect = false;
+    }
+
+    if (!shouldAutoDetect) return;
+
+    let disposed = false;
+
+    // Defer the state flip + async work out of the effect body to satisfy the
+    // lint rule against synchronous setState in effects (same pattern as
+    // WeatherLoadingScene). Setting the flag here (not synchronously above)
+    // also keeps React StrictMode's double-invoke from swallowing the prompt.
+    const raf = requestAnimationFrame(() => {
+      if (disposed) return;
+      try {
+        localStorage.setItem(GPS_AUTOPROMPT_KEY, "1");
+      } catch {
+        /* ignore */
+      }
+      setAutoDetecting(true);
+      setCancelled(true); // suppress the IP countdown while GPS runs
+
+      void (async () => {
+        try {
+          // autoCreate: create the fine-grained location from the user's GPS
+          // position when none exists nearby (create-on-demand).
+          const result = await detectUserLocation({ autoCreate: true });
+          if (disposed) return;
+          if ((result.status === "success" || result.status === "created") && result.location) {
+            router.replace(`/${result.location.slug}`);
+            return;
+          }
+          // denied / unavailable / error → graceful fallback, never hang.
+          setAutoDetecting(false);
+          if (detectedLocation) {
+            setCancelled(false); // re-enable the IP-detected countdown fallback
+          } else {
+            setGpsState(result.status === "denied" ? "denied" : "error");
+          }
+        } catch {
+          if (disposed) return;
+          setAutoDetecting(false);
+          if (detectedLocation) setCancelled(false);
+          else setGpsState("error");
+        }
+      })();
+    });
+
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [router, detectedLocation]);
+
+  // ── IP-geo auto-redirect countdown (fallback when GPS is unavailable) ──────
   useEffect(() => {
     if (!detectedLocation || cancelled) return;
 
@@ -70,7 +166,16 @@ export function HomeLanding({ detectedLocation }: Props) {
     }
   };
 
-  // ── Stage 1: IP geo detected — full weather scene with countdown ──
+  // ── Stage 1: GPS in flight (auto on first visit, or manual re-try) ──
+  if (autoDetecting || gpsState === "detecting") {
+    return (
+      <WeatherLoadingScene
+        statusText={autoDetecting ? "Finding your location…" : "Detecting your location…"}
+      />
+    );
+  }
+
+  // ── Stage 2: IP geo detected — full weather scene with countdown ──
   if (detectedLocation && !cancelled) {
     return (
       <WeatherLoadingScene
@@ -115,16 +220,7 @@ export function HomeLanding({ detectedLocation }: Props) {
     );
   }
 
-  // ── Stage 2: GPS detecting — full weather scene while waiting ──
-  if (gpsState === "detecting") {
-    return (
-      <WeatherLoadingScene
-        statusText="Detecting your location…"
-      />
-    );
-  }
-
-  // ── Stages 2+3: No IP geo or GPS done — city chooser ──
+  // ── Stage 3: No IP geo or GPS done — city chooser ──
   return (
     <main
       id="main-content"
