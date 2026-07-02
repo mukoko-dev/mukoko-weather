@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { ensureIndexes, syncActivities, syncCountries, syncProvinces, syncRegions, syncTags, syncSeasons, syncSuitabilityRules, syncActivityCategories, syncAIPrompts, syncAISuggestedRules, syncAirports, setApiKey } from "@/lib/db";
+import { ensureIndexes, syncActivities, syncRegions, syncTags, syncSeasons, syncSuitabilityRules, syncActivityCategories, syncAIPrompts, syncAISuggestedRules, syncAirports, setApiKey } from "@/lib/db";
 import { weatherDb } from "@/lib/mongo";
 import { ACTIVITIES } from "@/lib/activities";
-import { COUNTRIES, PROVINCES } from "@/lib/countries";
 import { REGIONS } from "@/lib/seed-regions";
 import { TAGS } from "@/lib/seed-tags";
 import { SEASONS } from "@/lib/seed-seasons";
@@ -53,14 +52,14 @@ export async function POST(request: Request) {
     }
 
     await ensureIndexes();
-    // Countries must exist before provinces (provinces reference country codes).
-    await syncCountries(COUNTRIES);
-    // Remaining syncs write to independent collections — run all in parallel.
+    // Sync reference seed data to independent collections — run all in parallel.
     // Phase 0F: location seeding is gone. Mukoko-weather no longer maintains
     // its own siloed `weather.locations` collection — location reads go
     // through `places.placesGeo` via `src/lib/places.ts`.
+    // Phase 0G: country/province seeding is gone too — the canonical geographic
+    // hierarchy lives in `places.placesGeo` (Fundi-seeded); display/flag data
+    // comes from the static COUNTRIES/PROVINCES arrays in `src/lib/countries.ts`.
     await Promise.all([
-      syncProvinces(PROVINCES),
       syncRegions(REGIONS),
       syncTags(TAGS),
       syncSeasons(SEASONS),
@@ -100,8 +99,6 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       indexes: "created",
-      countries: COUNTRIES.length,
-      provinces: PROVINCES.length,
       activities: ACTIVITIES.length,
       categories: CATEGORIES.length,
       suitabilityRules: SUITABILITY_RULES.length,

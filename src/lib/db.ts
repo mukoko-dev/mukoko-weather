@@ -38,7 +38,7 @@ import { fetchWeatherFromTomorrow, TomorrowRateLimitError } from "./tomorrow";
 import { logWarn, logError } from "./observability";
 import type { WeatherLocation } from "./locations";
 import type { Activity, ActivityCategory } from "./activities";
-import { generateProvinceSlug, type Country, type Province } from "./countries";
+import { generateProvinceSlug, COUNTRIES, PROVINCES, type Country, type Province } from "./countries";
 import type { RegionDoc } from "./seed-regions";
 import type { TagDoc } from "./seed-tags";
 import type { SeasonDoc } from "./seed-seasons";
@@ -175,14 +175,6 @@ function activitiesCollection() {
 
 export function rateLimitsCollection() {
   return weatherDb().collection<{ key: string; count: number; expiresAt: Date }>("rate_limits");
-}
-
-function countriesCollection() {
-  return weatherDb().collection<CountryDoc>("countries");
-}
-
-function provincesCollection() {
-  return weatherDb().collection<ProvinceDoc>("provinces");
 }
 
 function regionsCollection() {
@@ -389,13 +381,10 @@ export async function ensureIndexes(): Promise<void> {
     safeCreateIndex(rateLimitsCollection(), { key: 1 }, { unique: true }),
     safeCreateIndex(rateLimitsCollection(), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
 
-    // Countries: by code (unique), by region
-    safeCreateIndex(countriesCollection(), { code: 1 }, { unique: true }),
-    safeCreateIndex(countriesCollection(), { region: 1 }),
-
-    // Provinces: by slug (unique), by countryCode
-    safeCreateIndex(provincesCollection(), { slug: 1 }, { unique: true }),
-    safeCreateIndex(provincesCollection(), { countryCode: 1 }),
+    // Phase 0G: `weather.countries` / `weather.provinces` are dropped. The
+    // canonical geographic hierarchy lives in `places.placesGeo` (Fundi-seeded);
+    // display/flag data comes from the static COUNTRIES/PROVINCES arrays in
+    // `src/lib/countries.ts`. No indexes are managed here anymore.
 
     // Regions: by id (unique), by active flag
     safeCreateIndex(regionsCollection(), { id: 1 }, { unique: true }),
@@ -1326,54 +1315,34 @@ export async function getActivityCategoryById(id: string): Promise<ActivityCateg
 
 // ---------------------------------------------------------------------------
 // Country operations
+//
+// Phase 0G: `weather.countries` is dropped. Country display/flag/region data
+// comes from the static COUNTRIES array in `src/lib/countries.ts`; the
+// canonical geographic hierarchy lives in `places.placesGeo` (Fundi-seeded).
+// These readers keep their async signatures + CountryDoc return shape so every
+// existing caller (`/explore/country`, breadcrumbs, `[location]/page.tsx`)
+// works unchanged.
 // ---------------------------------------------------------------------------
-
-export async function syncCountries(countries: Country[]): Promise<void> {
-  const now = new Date();
-  const bulkOps = countries.map((c) => ({
-    updateOne: {
-      filter: { code: c.code },
-      update: { $set: { ...c, updatedAt: now } },
-      upsert: true,
-    },
-  }));
-  if (bulkOps.length > 0) {
-    await countriesCollection().bulkWrite(bulkOps);
-  }
-}
-
-export async function upsertCountry(country: Country): Promise<void> {
-  await countriesCollection().updateOne(
-    { code: country.code },
-    {
-      // Always update mutable fields; use $setOnInsert for region so curated
-      // seed data (e.g. "Southern Africa") is never overwritten by "Unknown"
-      // from a geocoding call.
-      $set: { name: country.name, supported: country.supported, updatedAt: new Date() },
-      $setOnInsert: { region: country.region },
-    },
-    { upsert: true },
-  );
-}
 
 /**
  * Returns countries that have at least one location in the static seed
- * catalog. Phase 0F: derives from the static LOCATIONS list (no longer joins
- * against weather.locations, which is dropped).
+ * catalog. Phase 0F/0G: derives entirely from the static LOCATIONS +
+ * COUNTRIES arrays (no weather-DB collection).
  */
 export async function getAllCountries(): Promise<CountryDoc[]> {
   const seededCountries = new Set(
     LOCATIONS.map((l) => (l.country ?? "").toUpperCase()).filter(Boolean),
   );
-  const all = await countriesCollection()
-    .find({ code: { $in: [...seededCountries] } })
-    .sort({ region: 1, name: 1 })
-    .toArray();
-  return all;
+  const now = new Date();
+  return COUNTRIES.filter((c) => seededCountries.has(c.code.toUpperCase()))
+    .sort((a, b) => a.region.localeCompare(b.region) || a.name.localeCompare(b.name))
+    .map((c) => ({ ...c, updatedAt: now }));
 }
 
 export async function getCountryByCode(code: string): Promise<CountryDoc | null> {
-  return countriesCollection().findOne({ code: code.toUpperCase() });
+  const upper = code.toUpperCase();
+  const country = COUNTRIES.find((c) => c.code.toUpperCase() === upper);
+  return country ? { ...country, updatedAt: new Date() } : null;
 }
 
 /** Get a country with the count of its locations (from the static seed catalog). */
@@ -1391,48 +1360,12 @@ export async function getCountryWithStats(
 
 // ---------------------------------------------------------------------------
 // Province operations
+//
+// Phase 0G: `weather.provinces` is dropped. Province display data comes from
+// the static PROVINCES array in `src/lib/countries.ts`; the canonical
+// geographic hierarchy lives in `places.placesGeo` (Fundi-seeded). Readers keep
+// their async signatures + ProvinceDoc return shape for caller compatibility.
 // ---------------------------------------------------------------------------
-
-export async function syncProvinces(provinces: Province[]): Promise<void> {
-  const now = new Date();
-  const bulkOps = provinces.map((p) => ({
-    updateOne: {
-      filter: { slug: p.slug },
-      update: { $set: { ...p, updatedAt: now } },
-      upsert: true,
-    },
-  }));
-  if (bulkOps.length > 0) {
-    await provincesCollection().bulkWrite(bulkOps);
-  }
-}
-
-export async function upsertProvince(province: Province): Promise<void> {
-  await provincesCollection().updateOne(
-    { slug: province.slug },
-    {
-      // name uses $setOnInsert so geocoded data never overwrites curated seed names.
-      // syncProvinces() (db-init) always uses $set and will overwrite with seeded data.
-      $set: { countryCode: province.countryCode, updatedAt: new Date() },
-      $setOnInsert: { name: province.name },
-    },
-    { upsert: true },
-  );
-}
-
-/**
- * Get provinces for a country without location counts.
- * Use `getProvincesWithLocationCounts` instead when rendering province cards
- * that need to show how many locations each province has (avoids N+1 queries).
- * This simpler version is useful when you only need the province list itself
- * (e.g., admin tools, data migration scripts).
- */
-export async function getProvincesByCountry(countryCode: string): Promise<ProvinceDoc[]> {
-  return provincesCollection()
-    .find({ countryCode: countryCode.toUpperCase() })
-    .sort({ name: 1 })
-    .toArray();
-}
 
 export async function getLocationsByCountry(countryCode: string): Promise<LocationDoc[]> {
   const now = new Date();
@@ -1452,14 +1385,18 @@ export async function getLocationsByProvince(provinceSlug: string): Promise<Loca
     .map((loc) => ({ ...loc, updatedAt: now })) as LocationDoc[];
 }
 
-/** Get a single province by its slug */
+/** Get a single province by its slug (from the static PROVINCES catalog) */
 export async function getProvinceBySlug(slug: string): Promise<ProvinceDoc | null> {
-  return provincesCollection().findOne({ slug });
+  const province = PROVINCES.find((p) => p.slug === slug);
+  return province ? { ...province, updatedAt: new Date() } : null;
 }
 
-/** Get all provinces (for sitemap generation) */
+/** Get all provinces (for sitemap generation) from the static PROVINCES catalog */
 export async function getAllProvinces(): Promise<ProvinceDoc[]> {
-  return provincesCollection().find({}).sort({ countryCode: 1, name: 1 }).toArray();
+  const now = new Date();
+  return [...PROVINCES]
+    .sort((a, b) => a.countryCode.localeCompare(b.countryCode) || a.name.localeCompare(b.name))
+    .map((p) => ({ ...p, updatedAt: now }));
 }
 
 /**
@@ -1488,11 +1425,11 @@ export async function getProvincesWithLocationCounts(
   countryCode: string,
 ): Promise<(ProvinceDoc & { locationCount: number })[]> {
   const upper = countryCode.toUpperCase();
+  const now = new Date();
 
-  const provinces = await provincesCollection()
-    .find({ countryCode: upper })
-    .sort({ name: 1 })
-    .toArray();
+  const provinces = PROVINCES.filter((p) => p.countryCode.toUpperCase() === upper)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((p) => ({ ...p, updatedAt: now }));
 
   const countMap = new Map<string, number>();
   for (const loc of LOCATIONS) {

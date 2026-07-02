@@ -40,6 +40,12 @@ describe("/api/db-init route structure", () => {
     expect(source).not.toContain('from "@/lib/locations"');
   });
 
+  it("does NOT sync countries/provinces (Phase 0G — silos dropped, use placesGeo)", () => {
+    expect(source).not.toContain("syncCountries");
+    expect(source).not.toContain("syncProvinces");
+    expect(source).not.toContain('from "@/lib/countries"');
+  });
+
   it("drops the legacy weather.locations collection idempotently", () => {
     expect(source).toContain('dropCollection("locations")');
     expect(source).toContain("ns not found");
