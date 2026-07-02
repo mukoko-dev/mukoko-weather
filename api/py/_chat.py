@@ -31,11 +31,16 @@ from ._db import (
     get_client_ip,
     get_api_key,
     get_known_tags,
-    locations_collection,
     weather_cache_collection,
     activities_collection,
     suitability_rules_collection,
     ai_prompts_collection,
+)
+from ._places_resolver import (
+    find_all_locations,
+    find_location,
+    find_locations_by_tag,
+    count_all_locations,
 )
 from ._circuit_breaker import anthropic_breaker, CircuitOpenError
 
@@ -105,18 +110,23 @@ def _get_location_context() -> tuple[list[dict], str]:
         return _location_context, _location_count or "many"
 
     try:
-        coll = locations_collection()
-        # Sample cap — Claude uses this for orientation only.
+        # Phase 0G: sample drawn from `places.placesGeo` via the resolver.
         # The LOCATION DISCOVERY guardrails mandate using search_locations
         # for all queries, so Claude does not treat this as an exhaustive list.
-        docs = list(
-            coll.find({}, {"slug": 1, "name": 1, "province": 1, "tags": 1, "_id": 0})
-            .sort([("source", -1), ("name", 1)])
-            .limit(20)
-        )
+        all_locs = find_all_locations(limit=20)
+        docs = [
+            {
+                "slug": loc.get("slug", ""),
+                "name": loc.get("name", ""),
+                "province": loc.get("province", ""),
+                "tags": loc.get("tags", []),
+            }
+            for loc in all_locs
+        ]
         # Cache count alongside context (same TTL, same DB round-trip window)
         try:
-            _location_count = str(coll.estimated_document_count())
+            total = count_all_locations()
+            _location_count = str(total) if total else "many"
         except Exception:
             _location_count = "many"
         _location_context = docs
@@ -221,75 +231,56 @@ TOOLS = [
 
 
 def _execute_search_locations(query: str) -> dict:
-    """Search locations via Atlas Search (fuzzy) → $text → $regex fallback."""
+    """Search placesGeo by name/slug via case-insensitive regex (Phase 0G).
+
+    Atlas Search and ``$text`` indexes lived on ``weather.locations``, which
+    is being dropped. Until equivalent indexes are provisioned on
+    ``places.placesGeo``, we fall back to a regex name match scoped to
+    cities/towns/villages.
+    """
     q = query.strip()[:200]
     if not q:
         return {"locations": [], "total": 0}
 
-    projection = {"slug": 1, "name": 1, "province": 1, "tags": 1, "country": 1, "_id": 0}
+    from ._db import places_geo_collection
+    from ._places_resolver import adapt_placesgeo_to_location
 
-    def _format_results(docs: list) -> dict:
+    def _format(docs: list) -> dict:
+        adapted = [
+            adapt_placesgeo_to_location(d) for d in docs
+        ]
         return {
             "locations": [
-                {"slug": r["slug"], "name": r["name"], "province": r.get("province", ""), "tags": r.get("tags", [])}
-                for r in docs
+                {
+                    "slug": r.get("slug", ""),
+                    "name": r.get("name", ""),
+                    "province": r.get("province", ""),
+                    "tags": r.get("tags", []),
+                }
+                for r in adapted
+                if r and r.get("slug")
             ],
-            "total": len(docs),
+            "total": len(adapted),
         }
 
-    coll = locations_collection()
-
-    # 1. Try Atlas Search (fuzzy matching + autocomplete)
-    try:
-        pipeline = [
-            {
-                "$search": {
-                    "index": "location_search",
-                    "compound": {
-                        "should": [
-                            {"autocomplete": {"query": q, "path": "name", "fuzzy": {"maxEdits": 1, "prefixLength": 1}}},
-                            {"text": {"query": q, "path": ["name", "province", "slug", "tags"], "fuzzy": {"maxEdits": 1, "prefixLength": 1}}},
-                        ],
-                    },
-                }
-            },
-            {"$limit": 10},
-            {"$project": {**projection, "score": {"$meta": "searchScore"}}},
-        ]
-        results = list(coll.aggregate(pipeline))
-        if results:
-            return _format_results(results)
-    except Exception:
-        pass  # Atlas Search index may not exist — fall through
-
-    # 2. Fallback: $text index search
-    try:
-        results = list(
-            coll.find(
-                {"$text": {"$search": q}},
-                {"score": {"$meta": "textScore"}, **projection},
-            )
-            .sort([("score", {"$meta": "textScore"})])
-            .limit(10)
-        )
-        if results:
-            return _format_results(results)
-    except Exception:
-        pass  # $text index may not exist — fall through
-
-    # 3. Last resort: case-insensitive regex on name/province.
-    # Capped with maxTimeMS to prevent slow collection scans in serverless.
     try:
         regex = {"$regex": re.escape(q), "$options": "i"}
+        # Search name + mukokoSlug + platform slug; scope to consumer-facing
+        # geoTypes so we never return a country/province as a "location".
         results = list(
-            coll.find(
-                {"$or": [{"name": regex}, {"province": regex}, {"slug": regex}]},
-                projection,
-            )
+            places_geo_collection()
+            .find({
+                "geoType": {"$in": ["city", "town", "village"]},
+                "$or": [
+                    {"name": regex},
+                    {"slug": regex},
+                    {"sourceProvenance.mukokoSlug": regex},
+                ],
+            })
             .limit(10)
             .max_time_ms(3000)
         )
-        return _format_results(results)
+        return _format(results)
     except Exception:
         return {"locations": [], "total": 0, "error": "Search unavailable"}
 
@@ -310,11 +301,12 @@ def _execute_get_weather(slug: str, weather_cache: dict) -> dict:
         if not doc:
             return {"error": f"No cached weather for {slug}. Weather data may not be available yet."}
 
-        # Resolve location name for reference extraction (runs in executor thread)
+        # Resolve location name for reference extraction (runs in executor thread).
+        # Phase 0G: resolved via places.placesGeo through the canonical resolver.
         loc_name = slug
         try:
-            loc_doc = locations_collection().find_one({"slug": slug}, {"name": 1, "_id": 0})
-            if loc_doc:
+            loc_doc = find_location(slug)
+            if loc_doc and loc_doc.get("name"):
                 loc_name = loc_doc["name"]
         except Exception:
             pass
@@ -486,12 +478,17 @@ def _execute_list_by_tag(tag: str) -> dict:
         return {"error": f"Unknown tag: {tag}. Valid tags: {', '.join(sorted(known))}"}
 
     try:
-        results = list(
-            locations_collection()
-            .find({"tags": tag}, {"slug": 1, "name": 1, "province": 1, "_id": 0})
-            .sort([("name", 1)])
-            .limit(20)
-        )
+        # Phase 0G: locations queried via places.placesGeo (mukokoTags).
+        adapted = find_locations_by_tag(tag, limit=20)
+        results = [
+            {
+                "slug": loc.get("slug", ""),
+                "name": loc.get("name", ""),
+                "province": loc.get("province", ""),
+            }
+            for loc in adapted
+            if loc.get("slug")
+        ]
         return {
             "tag": tag,
             "locations": results,

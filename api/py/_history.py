@@ -10,7 +10,8 @@ from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, HTTPException
 
-from ._db import get_db, locations_collection
+from ._db import get_db
+from ._places_resolver import find_location
 
 router = APIRouter()
 
@@ -29,9 +30,9 @@ async def get_history(location: str, days: int = 30):
     if days < 1 or days > 365:
         raise HTTPException(status_code=400, detail="days must be between 1 and 365")
 
-    # Verify location exists
+    # Verify location exists (Phase 0G: resolved via places.placesGeo)
     try:
-        loc = locations_collection().find_one({"slug": location}, {"_id": 0, "slug": 1})
+        loc = find_location(location)
     except Exception:
         raise HTTPException(status_code=503, detail="Location service unavailable")
 

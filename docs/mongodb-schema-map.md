@@ -42,17 +42,17 @@ This is **why** we're rebuilding on the new schema — to plug straight into Sta
 
 ## TL;DR — what changes for mukoko-weather
 
-| Concern | Old approach | New approach |
-|---|---|---|
-| **Users / auth** | Anonymous device UUIDs | `identity.persons` collection (OIDC-compliant; already supports `workosUserId`) |
-| **Locations** | ~~`weather.locations`~~ (dropped Phase 0F) — clean URL slugs resolve through `places.placesGeo` via `src/lib/places.ts`; static `LOCATIONS` array kept only as a slug→display-metadata fallback (not a DB seed source) | `places.places` (POIs) + `places.placesGeo` (admin geography) |
-| **Device sync** | Local `device_profiles` keyed by random UUID | `device.devices` with `userDevice` sub-document, `associatedUsers`, content filter profiles, `mukokoAppVersion` already in `softwareInventory` |
-| **AI / Shamwari** | `ai_summaries`, `ai_prompts`, `ai_suggested_rules` in app-local DB | `shamwari.conversations` + `shamwari.messages` + `shamwari.guardrails` + `shamwari.knowledgeBase` (vector-embedded) + `shamwari.preferences` |
-| **Severe weather alerts** | Not implemented | `weather.alerts` (already exists, **CAP-format**) |
-| **Weather stations** | Not implemented | `weather.stations` + `weather.observations` (Bundu hardware integration ready) |
-| **Provider keys** (Tomorrow.io, MapTiler, etc.) | `api_keys` collection in app DB | `integrations.providerConfigurations` with secrets refs |
-| **Community reports** | `weather_reports` (snake_case, simple) | `weather.communityReports` (camelCase, schema-validated, with image URLs, `reporterPersonId` → identity) |
-| **Audit / activity** | Not tracked | `identity.activityLog` + `device.deviceHistory` (full event stream) |
+| Concern                                         | Old approach                                                                                                                                                                                                           | New approach                                                                                                                                   |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Users / auth**                                | Anonymous device UUIDs                                                                                                                                                                                                 | `identity.persons` collection (OIDC-compliant; already supports `workosUserId`)                                                                |
+| **Locations**                                   | ~~`weather.locations`~~ (dropped Phase 0F) — clean URL slugs resolve through `places.placesGeo` via `src/lib/places.ts`; static `LOCATIONS` array kept only as a slug→display-metadata fallback (not a DB seed source) | `places.places` (POIs) + `places.placesGeo` (admin geography)                                                                                  |
+| **Device sync**                                 | Local `device_profiles` keyed by random UUID                                                                                                                                                                           | `device.devices` with `userDevice` sub-document, `associatedUsers`, content filter profiles, `mukokoAppVersion` already in `softwareInventory` |
+| **AI / Shamwari**                               | `ai_summaries`, `ai_prompts`, `ai_suggested_rules` in app-local DB                                                                                                                                                     | `shamwari.conversations` + `shamwari.messages` + `shamwari.guardrails` + `shamwari.knowledgeBase` (vector-embedded) + `shamwari.preferences`   |
+| **Severe weather alerts**                       | Not implemented                                                                                                                                                                                                        | `weather.alerts` (already exists, **CAP-format**)                                                                                              |
+| **Weather stations**                            | Not implemented                                                                                                                                                                                                        | `weather.stations` + `weather.observations` (Bundu hardware integration ready)                                                                 |
+| **Provider keys** (Tomorrow.io, MapTiler, etc.) | `api_keys` collection in app DB                                                                                                                                                                                        | `integrations.providerConfigurations` with secrets refs                                                                                        |
+| **Community reports**                           | `weather_reports` (snake_case, simple)                                                                                                                                                                                 | `weather.communityReports` (camelCase, schema-validated, with image URLs, `reporterPersonId` → identity)                                       |
+| **Audit / activity**                            | Not tracked                                                                                                                                                                                                            | `identity.activityLog` + `device.deviceHistory` (full event stream)                                                                            |
 
 The local `mukoko-weather` MongoDB is essentially **deprecated**. Mukoko is now a **client** of the shared platform.
 
@@ -66,12 +66,12 @@ The local `mukoko-weather` MongoDB is essentially **deprecated**. Mukoko is now 
 
 OIDC-compliant. Already supports WorkOS + Stytch. **This is where mukoko's users live.**
 
-| Collection | Purpose | Notes for mukoko |
-|---|---|---|
-| `persons` | Canonical user records. `_id` is UUID used as OIDC `sub` claim. | Has `workosUserId`, `stytchUserId`, `preferredLanguages`, `bundu.familyMembership`, `bundu.verificationTier` (0-3). On WorkOS sign-in, upsert by `workosUserId`. **Phase 1a — wired up via `src/lib/auth.ts → upsertPlatformPerson()`.** |
-| `credentials` | Per-person credentials (password, passkey, WebAuthn, OAuth, TOTP, etc.) | `provider: "workos"` is a first-class supported value. Phase 1a writes a `(workos, oauth_token)` credential per person on sign-in, deduped on `(personId, provider, credentialType)`. |
-| `activityLog` | Audit trail of signup/signin/MFA/credential events | Mukoko writes `{eventType: "signin"|"signup", source: "api", surfaceContext: "mukoko-weather", provider: "workos", success: true}` on every WorkOS callback (Phase 1a). |
-| `personSkills` | Skills + ISCO-08 codes per person | Not relevant to mukoko unless integrating activities → skills. |
+| Collection     | Purpose                                                                 | Notes for mukoko                                                                                                                                                                                                                         |
+| -------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `persons`      | Canonical user records. `_id` is UUID used as OIDC `sub` claim.         | Has `workosUserId`, `stytchUserId`, `preferredLanguages`, `bundu.familyMembership`, `bundu.verificationTier` (0-3). On WorkOS sign-in, upsert by `workosUserId`. **Phase 1a — wired up via `src/lib/auth.ts → upsertPlatformPerson()`.** |
+| `credentials`  | Per-person credentials (password, passkey, WebAuthn, OAuth, TOTP, etc.) | `provider: "workos"` is a first-class supported value. Phase 1a writes a `(workos, oauth_token)` credential per person on sign-in, deduped on `(personId, provider, credentialType)`.                                                    |
+| `activityLog`  | Audit trail of signup/signin/MFA/credential events                      | Mukoko writes `{eventType: "signin"                                                                                                                                                                                                      | "signup", source: "api", surfaceContext: "mukoko-weather", provider: "workos", success: true}` on every WorkOS callback (Phase 1a). |
+| `personSkills` | Skills + ISCO-08 codes per person                                       | Not relevant to mukoko unless integrating activities → skills.                                                                                                                                                                           |
 
 ##### Mukoko auth flow (Phase 1a)
 
@@ -98,95 +98,95 @@ The implementation lives in `src/lib/auth.ts`. Dedup is enforced in code (Phase 
 
 Far richer than our local `LOCATIONS`. Includes conservation, hospitality, commerce, accessibility, content completeness, ubuntu trust signals.
 
-| Collection | Purpose | Notes for mukoko |
-|---|---|---|
-| `places` | Every place — landmarks, businesses, parks, mountains, lakes, towns. Schema.org-aligned (`LocalBusiness`, `TouristAttraction`, `Park`, etc.) Includes `conservation.bigFive`, `hospitality`, `commerce`, `bundu.trustSignals`, `bundu.communityCaretakers`. | Mukoko reads from this. **Stop maintaining `src/lib/locations.ts` seed array.** Add a Python helper `place_by_slug()` that reads from `places.places`. |
-| `placesGeo` | Administrative geography (continent → country → province → city → town → village). ISO 3166 codes. 2dsphere-indexed boundaries. `sourceProvenance.dataOrigin` enum includes `mukoko_seed` (Phase 0C-1 city seed) and `mukoko_user` (Phase 0E — written from `add_location` when a user adds a new place). | Use for breadcrumbs (Country / Province / Location). Replaces our hardcoded `COUNTRIES`/`PROVINCES`. |
-| `seedRequests` | **NEW (Phase 0E)** — validatorless queue of Fundi Places seed requests. Mukoko writes one entry per search-miss; the Fundi worker polls and processes them. See "Search-miss flow" section below. | Mukoko writes only. Fundi consumes. |
-| `categories` | OSM-tagged categories with translations + schema.org type mappings | Could replace our `TAGS` system. |
-| `seasonalInfo` | RRule-based seasonal patterns per place (closed seasons, harvest, migration) | Mukoko's `seasons` collection should reference these. |
-| `routes` | Hiking/cycling/driving routes (GeoJSON LineString) | Future: integrate with activity insights ("good day for the {route name} cycle"). |
-| `conditionReports` | Community condition reports per place (accessible/closed/hazard/etc.) | Sibling concept to weather reports. Can cross-link. |
-| `placeSnapshots`, `routeSnapshots` | Versioned history | Read-only audit. |
+| Collection                         | Purpose                                                                                                                                                                                                                                                                                                   | Notes for mukoko                                                                                                                                       |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `places`                           | Every place — landmarks, businesses, parks, mountains, lakes, towns. Schema.org-aligned (`LocalBusiness`, `TouristAttraction`, `Park`, etc.) Includes `conservation.bigFive`, `hospitality`, `commerce`, `bundu.trustSignals`, `bundu.communityCaretakers`.                                               | Mukoko reads from this. **Stop maintaining `src/lib/locations.ts` seed array.** Add a Python helper `place_by_slug()` that reads from `places.places`. |
+| `placesGeo`                        | Administrative geography (continent → country → province → city → town → village). ISO 3166 codes. 2dsphere-indexed boundaries. `sourceProvenance.dataOrigin` enum includes `mukoko_seed` (Phase 0C-1 city seed) and `mukoko_user` (Phase 0E — written from `add_location` when a user adds a new place). | Use for breadcrumbs (Country / Province / Location). Replaces our hardcoded `COUNTRIES`/`PROVINCES`.                                                   |
+| `seedRequests`                     | **NEW (Phase 0E)** — validatorless queue of Fundi Places seed requests. Mukoko writes one entry per search-miss; the Fundi worker polls and processes them. See "Search-miss flow" section below.                                                                                                         | Mukoko writes only. Fundi consumes.                                                                                                                    |
+| `categories`                       | OSM-tagged categories with translations + schema.org type mappings                                                                                                                                                                                                                                        | Could replace our `TAGS` system.                                                                                                                       |
+| `seasonalInfo`                     | RRule-based seasonal patterns per place (closed seasons, harvest, migration)                                                                                                                                                                                                                              | Mukoko's `seasons` collection should reference these.                                                                                                  |
+| `routes`                           | Hiking/cycling/driving routes (GeoJSON LineString)                                                                                                                                                                                                                                                        | Future: integrate with activity insights ("good day for the {route name} cycle").                                                                      |
+| `conditionReports`                 | Community condition reports per place (accessible/closed/hazard/etc.)                                                                                                                                                                                                                                     | Sibling concept to weather reports. Can cross-link.                                                                                                    |
+| `placeSnapshots`, `routeSnapshots` | Versioned history                                                                                                                                                                                                                                                                                         | Read-only audit.                                                                                                                                       |
 
 #### `weather` — Weather domain (Mukoko's primary home)
 
 Mukoko owns most of this but **must adopt the new schemas** (`_schemaVersion`, `bundu` sub-doc, camelCase, validators).
 
-| Collection | Mukoko's old equivalent | Migration needed? |
-|---|---|---|
-| `stations` | (didn't have it) | **NEW** — Bundu hardware weather stations. Owned by entities. Sensors, QC ratings, firmware. |
-| `observations` | (didn't have it) | **NEW** — Validated/QC'd observations from stations or model outputs. Replaces parts of `weather_cache`. |
-| `stationObservations` | (didn't have it) | **NEW** — Raw station payloads. |
-| `alerts` | (didn't have it) | **NEW — P0 GAP NOW FILLED**. CAP-format severe weather alerts with `severity`, `urgency`, `certainty`, `area.polygon`. **Mukoko should consume + push-notify.** |
-| `weather_cache` | `weather_cache` | Same name, but new schema. Migrate forward. |
-| `ai_summaries` | `ai_summaries` | Stays in `weather` DB (mukoko-specific). **Phase 1D:** the write-side endpoint (`/api/py/ai`) is only reachable through the auth-gated Next.js proxy `/api/ai/*` — every cache fill happens for a signed-in WorkOS user, and `X-Mukoko-User-Id` is forwarded for audit. |
-| `history_analysis` | `history_analysis` | Stays. |
-| `weather_history` | `weather_history` | Stays. |
-| `communityReports` | `weather_reports` (snake_case) | **RENAME + RESCHEMA.** Now camelCase, includes `imageUrls`, `reporterPersonId` (→ identity), `qcStatus`. |
-| `activities`, `activity_categories`, `suitability_rules`, `ai_prompts`, `ai_suggested_rules`, `seasons`, `locations` | Same | Existing; need to adopt `_schemaVersion` + `bundu` patterns. |
+| Collection                                                                                                           | Mukoko's old equivalent        | Migration needed?                                                                                                                                                                                                                                                       |
+| -------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stations`                                                                                                           | (didn't have it)               | **NEW** — Bundu hardware weather stations. Owned by entities. Sensors, QC ratings, firmware.                                                                                                                                                                            |
+| `observations`                                                                                                       | (didn't have it)               | **NEW** — Validated/QC'd observations from stations or model outputs. Replaces parts of `weather_cache`.                                                                                                                                                                |
+| `stationObservations`                                                                                                | (didn't have it)               | **NEW** — Raw station payloads.                                                                                                                                                                                                                                         |
+| `alerts`                                                                                                             | (didn't have it)               | **NEW — P0 GAP NOW FILLED**. CAP-format severe weather alerts with `severity`, `urgency`, `certainty`, `area.polygon`. **Mukoko should consume + push-notify.**                                                                                                         |
+| `weather_cache`                                                                                                      | `weather_cache`                | Same name, but new schema. Migrate forward.                                                                                                                                                                                                                             |
+| `ai_summaries`                                                                                                       | `ai_summaries`                 | Stays in `weather` DB (mukoko-specific). **Phase 1D:** the write-side endpoint (`/api/py/ai`) is only reachable through the auth-gated Next.js proxy `/api/ai/*` — every cache fill happens for a signed-in WorkOS user, and `X-Mukoko-User-Id` is forwarded for audit. |
+| `history_analysis`                                                                                                   | `history_analysis`             | Stays.                                                                                                                                                                                                                                                                  |
+| `weather_history`                                                                                                    | `weather_history`              | Stays.                                                                                                                                                                                                                                                                  |
+| `communityReports`                                                                                                   | `weather_reports` (snake_case) | **RENAME + RESCHEMA.** Now camelCase, includes `imageUrls`, `reporterPersonId` (→ identity), `qcStatus`.                                                                                                                                                                |
+| `activities`, `activity_categories`, `suitability_rules`, `ai_prompts`, `ai_suggested_rules`, `seasons`, `locations` | Same                           | Existing; need to adopt `_schemaVersion` + `bundu` patterns.                                                                                                                                                                                                            |
 
 #### `shamwari` — AI / chatbot (replaces our local AI tables)
 
 Our `ai_summaries` + `ai_prompts` + `ai_suggested_rules` in `weather` DB stay (mukoko-specific). But **conversations** move here.
 
-| Collection | Purpose | Notes |
-|---|---|---|
-| `conversations` | Per-user chat sessions. `surfaceContext: "mukoko-weather"` namespaces mukoko chats. Stores model provider/version, system prompt hash. | Replaces our ephemeral `ShamwariContext`. |
-| `messages` | Anthropic content-block format. `conversationId`, `role`, `sequence`, token counts. | Persists chat history. Allows resuming. |
-| `toolUsage` | MCP tool call audit log. | Tracks every tool call (search, get_weather, etc.) — useful for debugging + analytics. |
-| `guardrails` | Cross-app guardrails. `isCore: true` cannot be disabled. Has `mukoko` sub-doc for app-specific overrides. | We pull these into the AI system prompt. |
-| `knowledgeBase` | Vector-embedded knowledge resources (RAG). `embedding` array for Atlas Vector Search. | Future: index our weather expertise here for retrieval. |
-| `preferences` | Per-person Shamwari preferences. | Replaces our local activity prefs. |
+| Collection      | Purpose                                                                                                                                | Notes                                                                                  |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `conversations` | Per-user chat sessions. `surfaceContext: "mukoko-weather"` namespaces mukoko chats. Stores model provider/version, system prompt hash. | Replaces our ephemeral `ShamwariContext`.                                              |
+| `messages`      | Anthropic content-block format. `conversationId`, `role`, `sequence`, token counts.                                                    | Persists chat history. Allows resuming.                                                |
+| `toolUsage`     | MCP tool call audit log.                                                                                                               | Tracks every tool call (search, get_weather, etc.) — useful for debugging + analytics. |
+| `guardrails`    | Cross-app guardrails. `isCore: true` cannot be disabled. Has `mukoko` sub-doc for app-specific overrides.                              | We pull these into the AI system prompt.                                               |
+| `knowledgeBase` | Vector-embedded knowledge resources (RAG). `embedding` array for Atlas Vector Search.                                                  | Future: index our weather expertise here for retrieval.                                |
+| `preferences`   | Per-person Shamwari preferences.                                                                                                       | Replaces our local activity prefs.                                                     |
 
 #### `device` — Device registry (Bundu fleet)
 
 This is huge — covers user devices, weather stations, kiosks, datacentre nodes.
 
-| Collection | Purpose | Notes for mukoko |
-|---|---|---|
-| `devices` | Every device on the platform. Has `category: "user_device" | "weather_station" | "kiosk" | "datacentre_node"`. `userDevice.associatedUsers[]` links to people. Tracks `mukokoAppVersion` in `softwareInventory`. **Built-in content filter profile** with strict/moderate/permissive categories. | Mukoko mobile app (Expo) registers here. Weather stations register too. |
-| `commands` | Async commands sent to devices (revoke_trust, wipe_local_state, force_sync, calibration_request, etc.) | Mukoko native app should poll for these. |
-| `telemetry` | Health/heartbeat/sync outcomes/crash reports per device | Mukoko crash reports go here. |
-| `deviceHistory` | State transition audit log | Read-only. |
-| `device_profiles` | Legacy collection (no validator) | Our current cross-device sync writes here. Migrate forward to `devices`. |
-| `firmware`, `pairings`, `sessions`, `managementPolicies` | Bundu hardware management | Not directly used by mukoko web/mobile yet. |
+| Collection                                               | Purpose                                                                                                | Notes for mukoko                                                         |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `devices`                                                | Every device on the platform. Has `category: "user_device"                                             | "weather_station"                                                        | "kiosk" | "datacentre_node"`. `userDevice.associatedUsers[]`links to people. Tracks`mukokoAppVersion`in`softwareInventory`. **Built-in content filter profile** with strict/moderate/permissive categories. | Mukoko mobile app (Expo) registers here. Weather stations register too. |
+| `commands`                                               | Async commands sent to devices (revoke_trust, wipe_local_state, force_sync, calibration_request, etc.) | Mukoko native app should poll for these.                                 |
+| `telemetry`                                              | Health/heartbeat/sync outcomes/crash reports per device                                                | Mukoko crash reports go here.                                            |
+| `deviceHistory`                                          | State transition audit log                                                                             | Read-only.                                                               |
+| `device_profiles`                                        | Legacy collection (no validator)                                                                       | Our current cross-device sync writes here. Migrate forward to `devices`. |
+| `firmware`, `pairings`, `sessions`, `managementPolicies` | Bundu hardware management                                                                              | Not directly used by mukoko web/mobile yet.                              |
 
 #### `integrations` — Third-party provider registry (P1 dependency)
 
 Replaces our `api_keys` MongoDB collection.
 
-| Collection | Purpose | Notes |
-|---|---|---|
-| `providers` | Catalog of every external provider (WorkOS, Tomorrow.io, MapTiler, Anthropic, etc.). Tracks `category`, `providerType`, `license`, `bundu.sovereigntyAssessment`. | Read-only for mukoko. |
-| `providerConfigurations` | Per-environment/per-country configs with `credentialsReference` (secret-store pointer). Has `appliesToCountryCodes` for region-specific instances. | Mukoko calls these to know how to talk to each provider. |
-| `standards` | Adopted standards (BCP 47, schema.org, ActivityPub, OGC, etc.) with `bundu.isFoundational`. | Read-only documentation. |
+| Collection               | Purpose                                                                                                                                                           | Notes                                                    |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `providers`              | Catalog of every external provider (WorkOS, Tomorrow.io, MapTiler, Anthropic, etc.). Tracks `category`, `providerType`, `license`, `bundu.sovereigntyAssessment`. | Read-only for mukoko.                                    |
+| `providerConfigurations` | Per-environment/per-country configs with `credentialsReference` (secret-store pointer). Has `appliesToCountryCodes` for region-specific instances.                | Mukoko calls these to know how to talk to each provider. |
+| `standards`              | Adopted standards (BCP 47, schema.org, ActivityPub, OGC, etc.) with `bundu.isFoundational`.                                                                       | Read-only documentation.                                 |
 
 ### Other databases (not Mukoko's concern unless cross-app feature)
 
-| DB | What it likely is | Mukoko interest? |
-|---|---|---|
-| `bytes` | Bytes (the social / posts app) | No |
-| `campfire` | Campfire — group conversations | No |
-| `circles` | Circles — social graph | No |
-| `commerce` | Commerce app — payments, products, orders | Possible: monetisation tier |
-| `engagement` | Cross-app engagement tracking | Yes (later): mukoko interactions feed `places.discovery.viewCount` rollups |
-| `entity` | Entities (organisations, families, communities) — owners of devices/places | Yes: every place + device has `ownerEntityId` |
-| `events` | Events / activities (concerts, gatherings) | No |
-| `health` | Health domain | Future: malaria/dengue risk integration |
-| `hospitality` | Hotels, restaurants, accommodation | No (now folded into `places.places.hospitality`) |
-| `jobs` | Async job queue | Yes: long-running tasks (DB init, etc.) |
-| `knowledge` | Cross-app knowledge graph | Yes: future RAG sources |
-| `lingo` | Localisation / translations | **Yes — P1**: replace our `src/lib/i18n.ts` |
-| `logistics` | Logistics app | No |
-| `news` | News app (65MB — biggest DB) | No |
-| `novels` | Novels app | No |
-| `planner` | Trip / event planner | Future: weather forecast integration |
-| `platform` | Core platform metadata (feature flags, versions, etc.) | Yes: feature flags? |
-| `pulse` | System health / status | Yes: status page should consume from here |
-| `suggestions` | Suggested prompts / actions cross-app | Maybe |
-| `transport` | Transport / public-transit app | No |
-| `ubuntu` | Bundu doctrine / philosophy content | Yes: pull doctrine content into mukoko's About page |
+| DB            | What it likely is                                                          | Mukoko interest?                                                           |
+| ------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `bytes`       | Bytes (the social / posts app)                                             | No                                                                         |
+| `campfire`    | Campfire — group conversations                                             | No                                                                         |
+| `circles`     | Circles — social graph                                                     | No                                                                         |
+| `commerce`    | Commerce app — payments, products, orders                                  | Possible: monetisation tier                                                |
+| `engagement`  | Cross-app engagement tracking                                              | Yes (later): mukoko interactions feed `places.discovery.viewCount` rollups |
+| `entity`      | Entities (organisations, families, communities) — owners of devices/places | Yes: every place + device has `ownerEntityId`                              |
+| `events`      | Events / activities (concerts, gatherings)                                 | No                                                                         |
+| `health`      | Health domain                                                              | Future: malaria/dengue risk integration                                    |
+| `hospitality` | Hotels, restaurants, accommodation                                         | No (now folded into `places.places.hospitality`)                           |
+| `jobs`        | Async job queue                                                            | Yes: long-running tasks (DB init, etc.)                                    |
+| `knowledge`   | Cross-app knowledge graph                                                  | Yes: future RAG sources                                                    |
+| `lingo`       | Localisation / translations                                                | **Yes — P1**: replace our `src/lib/i18n.ts`                                |
+| `logistics`   | Logistics app                                                              | No                                                                         |
+| `news`        | News app (65MB — biggest DB)                                               | No                                                                         |
+| `novels`      | Novels app                                                                 | No                                                                         |
+| `planner`     | Trip / event planner                                                       | Future: weather forecast integration                                       |
+| `platform`    | Core platform metadata (feature flags, versions, etc.)                     | Yes: feature flags?                                                        |
+| `pulse`       | System health / status                                                     | Yes: status page should consume from here                                  |
+| `suggestions` | Suggested prompts / actions cross-app                                      | Maybe                                                                      |
+| `transport`   | Transport / public-transit app                                             | No                                                                         |
+| `ubuntu`      | Bundu doctrine / philosophy content                                        | Yes: pull doctrine content into mukoko's About page                        |
 
 ---
 
@@ -250,16 +250,16 @@ Every collection (except `device_profiles` legacy) uses these patterns:
 
 ## Pre-flight findings (verified via MongoDB MCP)
 
-| DB | Collection | Count | What's there | Mukoko action |
-|---|---|---|---|---|
-| `places` | `places` | **1567** | Real-world places (e.g. "Miekles Hotel" `accommodation+localbusiness` in Harare). `hierarchy.containedInPlaceId` not yet linked. Type-mix is hotels/businesses/landmarks, **not** city centroids. | Mukoko needs to **seed African cities/towns** as places (placeType: `["Place"]`) so weather-page slugs like `/harare` work. Use `placesGeo` admin units to compute centroids, then write into `places.places`. |
-| `places` | `placesGeo` | **1437** | Administrative geography seeded — countries (Algeria, ISO `DZ`, population 45.4M), provinces, presumably cities. | Use as canonical source for breadcrumbs (Country / Province / City). Replaces our hardcoded `COUNTRIES` and `PROVINCES`. |
-| `identity` | `persons` | **1** | Single founder user. | Auth integration: WorkOS sign-in → upsert `identity.persons` by `workosUserId`. No migration needed. |
-| `integrations` | `providerConfigurations` | **8** | All Zimbabwe-scoped (`appliesToCountryCodes: ["ZW"]`): tomorrow_io, open_meteo, workos, openstreetmap, geoboundaries, crowdsec, intercom, newsdata_io. **No MapTiler** yet. | Read configs by `providerSlug + appliesToCountryCodes`. Add MapTiler + Anthropic configs (for current country). Stop using local `api_keys` collection. |
-| `integrations` | `providers` | (catalog) | Each provider's metadata (license, sovereignty assessment, support flag). | Read-only reference. |
-| `weather` | `stations` | **1** | **The first StationKit station is live:** `nyuchi-africa-hq-harare`. Sensors: temperature, humidity, pressure, wind speed, wind direction, rainfall, UV index, solar radiation. QC rating: **excellent**. Status: **active**. | Mukoko must consume this. Build the `nearest_station_observation(lat, lon)` helper and prefer station data over Tomorrow.io when within 50 km of Harare. |
-| `weather` | `observations` | (check) | QC-validated observations from station(s). | Primary read path for mukoko. |
-| `shamwari` | `guardrails` | **6** | All `isCore: true`, all `appliesTo: []` (platform-wide). Sexual content, hate speech, harassment, violence, self-harm, abuse. | Mukoko's AI system prompt must include `promptGuidance` from these guardrails. Read at startup, cache 5 min. |
+| DB             | Collection               | Count     | What's there                                                                                                                                                                                                                  | Mukoko action                                                                                                                                                                                                  |
+| -------------- | ------------------------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `places`       | `places`                 | **1567**  | Real-world places (e.g. "Miekles Hotel" `accommodation+localbusiness` in Harare). `hierarchy.containedInPlaceId` not yet linked. Type-mix is hotels/businesses/landmarks, **not** city centroids.                             | Mukoko needs to **seed African cities/towns** as places (placeType: `["Place"]`) so weather-page slugs like `/harare` work. Use `placesGeo` admin units to compute centroids, then write into `places.places`. |
+| `places`       | `placesGeo`              | **1437**  | Administrative geography seeded — countries (Algeria, ISO `DZ`, population 45.4M), provinces, presumably cities.                                                                                                              | Use as canonical source for breadcrumbs (Country / Province / City). Replaces our hardcoded `COUNTRIES` and `PROVINCES`.                                                                                       |
+| `identity`     | `persons`                | **1**     | Single founder user.                                                                                                                                                                                                          | Auth integration: WorkOS sign-in → upsert `identity.persons` by `workosUserId`. No migration needed.                                                                                                           |
+| `integrations` | `providerConfigurations` | **8**     | All Zimbabwe-scoped (`appliesToCountryCodes: ["ZW"]`): tomorrow_io, open_meteo, workos, openstreetmap, geoboundaries, crowdsec, intercom, newsdata_io. **No MapTiler** yet.                                                   | Read configs by `providerSlug + appliesToCountryCodes`. Add MapTiler + Anthropic configs (for current country). Stop using local `api_keys` collection.                                                        |
+| `integrations` | `providers`              | (catalog) | Each provider's metadata (license, sovereignty assessment, support flag).                                                                                                                                                     | Read-only reference.                                                                                                                                                                                           |
+| `weather`      | `stations`               | **1**     | **The first StationKit station is live:** `nyuchi-africa-hq-harare`. Sensors: temperature, humidity, pressure, wind speed, wind direction, rainfall, UV index, solar radiation. QC rating: **excellent**. Status: **active**. | Mukoko must consume this. Build the `nearest_station_observation(lat, lon)` helper and prefer station data over Tomorrow.io when within 50 km of Harare.                                                       |
+| `weather`      | `observations`           | (check)   | QC-validated observations from station(s).                                                                                                                                                                                    | Primary read path for mukoko.                                                                                                                                                                                  |
+| `shamwari`     | `guardrails`             | **6**     | All `isCore: true`, all `appliesTo: []` (platform-wide). Sexual content, hate speech, harassment, violence, self-harm, abuse.                                                                                                 | Mukoko's AI system prompt must include `promptGuidance` from these guardrails. Read at startup, cache 5 min.                                                                                                   |
 
 ### Conclusions
 
@@ -271,11 +271,18 @@ Every collection (except `device_profiles` legacy) uses these patterns:
 
 ---
 
-## Location resolution (Phase 0F — placesGeo canonical)
+## Location resolution (Phase 0F/0G — placesGeo canonical)
 
-`weather.locations` is **dropped**. Mukoko-weather reads/writes every location through
-`places.placesGeo` (admin geography) + `places.places` (POIs from OSM/Fundi) via the
-helpers in `src/lib/places.ts`.
+`weather.locations` is **dropped**. As of Phase 0G the Python backend also reads
+exclusively through `places.placesGeo` — `api/py/_places_resolver.py` mirrors the
+TypeScript resolver in `src/lib/places.ts`, and every read/write in `_history.py`,
+`_chat.py`, `_explore_search.py`, `_reports.py`, `_weather.py`, and `_locations.py`
+flows through it. The legacy `weather.countries` and `weather.provinces` collections
+are also dropped — `placesGeo.geoType=country/province` is the canonical source.
+
+Mukoko-weather reads/writes every location through `places.placesGeo` (admin
+geography) + `places.places` (POIs from OSM/Fundi) via the helpers in
+`src/lib/places.ts` (TypeScript) and `api/py/_places_resolver.py` (Python).
 
 ### Clean URL slug → placesGeo entry
 
@@ -286,7 +293,7 @@ platform slugs (`/harare-35c223`). The resolver in `src/lib/places.ts`
 1. **Stamped lookup**: `placesGeo.sourceProvenance.mukokoSlug = "harare"` (exact match)
 2. **Name lookup via static seed**: clean slug `→ LOCATIONS[slug].name → placesGeo` by
    normalised name (case-insensitive, diacritic-stripped), preferring `geoType:
-   city > town > village`
+city > town > village`
 3. **Name lookup via slug inference**: `"nairobi-ke" → "Nairobi"` (strips trailing
    2-letter country code, title-cases) → same name lookup
 
@@ -371,11 +378,11 @@ The collection is **validatorless** (Fundi owns the schema). The document mukoko
 
 These rules prevent the duplicate-record corruption (`windsor-avenue-2`, `-3`, …) that earlier iterations produced:
 
-| Collection | Dedup strategy |
-|---|---|
-| `places.placesGeo` | `upsert_placesgeo_city()` always calls `find_nearby_placesgeo()` first — **5 km radius**, normalised-name match (strips diacritics, road-type suffixes, leading house numbers), scoped by `parentPlaceId` (country _id). If a match is found, the existing doc is returned with `wasExisting: true` — **no auto-suffixed slug is ever generated**. |
-| `places.seedRequests` | `enqueue_fundi_seed()` checks for an in-flight (`queued` or `processing`) request within **1 km**. If one exists, its `_id` is returned and no new doc is inserted. |
-| `weather.locations` | `_resolve_slug_collision()` tries suburb- then road-enriched slugs. If both still collide, it raises `SlugCollisionError` and `add_location` returns `mode: "duplicate"` pointing to the existing record. The numeric-suffix fallback (`-2`, `-3`, …) was removed in Phase 0E. |
+| Collection                      | Dedup strategy                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `places.placesGeo`              | `upsert_placesgeo_city()` always calls `find_nearby_placesgeo()` first — **5 km radius**, normalised-name match (strips diacritics, road-type suffixes, leading house numbers), scoped by `parentPlaceId` (country \_id). If a match is found, the existing doc is returned with `wasExisting: true` — **no auto-suffixed slug is ever generated**.                      |
+| `places.seedRequests`           | `enqueue_fundi_seed()` checks for an in-flight (`queued` or `processing`) request within **1 km**. If one exists, its `_id` is returned and no new doc is inserted.                                                                                                                                                                                                      |
+| `places.placesGeo` mukoko slugs | Phase 0G: `_resolve_slug_collision()` queries `placesGeo.sourceProvenance.mukokoSlug` (mukoko's slug namespace) and tries suburb- then road-enriched variants. If all still collide, it raises `SlugCollisionError` and `add_location` returns `mode: "duplicate"` pointing to the existing record. The numeric-suffix fallback (`-2`, `-3`, …) was removed in Phase 0E. |
 
 ### Response shape changes
 
@@ -394,7 +401,7 @@ The frontend can use these to resolve weather queries through `placesGeo` once t
 
 ### Failure handling
 
-The platform write is wrapped in `try/except` in `_locations.py:add_location` — **a Fundi or placesGeo failure must never break the user-facing 201 response**. The legacy `weather.locations` write happens first and is the source of truth for the response. Platform failures are logged as warnings.
+The platform write is wrapped in `try/except` in `_locations.py:add_location` — **a placesGeo failure must never break the user-facing 201 response**. Phase 0G: the legacy `weather.locations` write is gone — `placesGeo` is now the only write target, and if it fails the response still includes the geocoded location data with `placesGeoId: null` / `placesGeoSlug: null`. Platform failures are logged as warnings.
 
 ---
 

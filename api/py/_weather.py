@@ -18,10 +18,10 @@ from fastapi.responses import JSONResponse
 
 from ._db import (
     get_api_key,
-    locations_collection,
     observations_collection,
     weather_cache_collection,
 )
+from ._places_resolver import find_nearest_location
 from ._circuit_breaker import tomorrow_breaker, open_meteo_breaker, CircuitOpenError
 
 router = APIRouter()
@@ -503,19 +503,17 @@ def _record_weather_history(slug: str, data: dict):
 
 
 def _find_nearest_location(lat: float, lon: float) -> dict | None:
-    """Find the nearest location from MongoDB using 2dsphere index."""
+    """Find the nearest location via places.placesGeo (Phase 0G).
+
+    Delegates to :func:`api.py._places_resolver.find_nearest_location` which
+    uses ``$nearSphere`` on the platform 2dsphere index. Returns the adapted
+    legacy LocationDoc shape so the caller's existing ``slug`` / ``elevation``
+    field reads keep working.
+    """
     try:
-        result = locations_collection().find_one(
-            {
-                "geo": {
-                    "$near": {
-                        "$geometry": {"type": "Point", "coordinates": [lon, lat]},
-                    }
-                }
-            },
-            {"_id": 0},
-        )
-        return result
+        # Wide radius — this fn is used for cache-key derivation, so we want a
+        # best-effort match anywhere on the globe rather than a tight 50 km cap.
+        return find_nearest_location(lat, lon, max_km=20_000)
     except Exception:
         return None
 

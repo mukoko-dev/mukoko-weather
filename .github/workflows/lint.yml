@@ -1,0 +1,30 @@
+# Lint CI for nyuchi/mukoko-weather.
+#
+# Thin caller of the org's reusable lint workflow. The org's lint
+# policy lives in ONE place — reusable-lint.yml in nyuchi/.github —
+# and every consuming repo references it the same way.
+#
+# All five jobs (actionlint, JSON validity, prettier, markdownlint,
+# yamllint) are blocking and are the required status checks in the
+# org-wide main-branch ruleset. CI never auto-fixes; fix locally
+# (`prettier --write`, `markdownlint-cli2 --fix`, manual yamllint)
+# and push the corrected commit.
+
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    uses: nyuchi/.github/.github/workflows/reusable-lint.yml@main

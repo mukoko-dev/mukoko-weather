@@ -19,8 +19,22 @@ logger = logging.getLogger(__name__)
 from ._db import (
     get_db,
     get_client_ip,
-    locations_collection,
+    places_geo_collection,
     check_rate_limit,
+)
+from ._places_resolver import (
+    adapt_placesgeo_to_location,
+    count_all_locations,
+    find_all_locations,
+    find_location,
+    find_locations_by_tag,
+    find_locations_in_country,
+    find_nearest_location,
+)
+from ._places_geo import (
+    find_nearby_placesgeo,
+    upsert_placesgeo_city,
+    get_country_id,
 )
 
 router = APIRouter()
@@ -72,47 +86,66 @@ async def list_locations(
     skip = max(0, skip)
 
     try:
-        coll = locations_collection()
-
+        # Phase 0G: every read flows through places.placesGeo via the
+        # canonical resolver. Response shape preserved for backward compat.
         if slug:
-            loc = coll.find_one({"slug": slug}, {"_id": 0})
+            loc = find_location(slug)
             if not loc:
                 raise HTTPException(status_code=404, detail="Location not found")
+            # Strip internal _id so the response shape matches the legacy
+            # `_id: 0` projection callers were getting before.
+            loc.pop("_id", None)
             return {"location": loc}
 
         if mode == "tags":
             pipeline = [
-                {"$unwind": "$tags"},
-                {"$group": {"_id": "$tags", "count": {"$sum": 1}}},
+                {"$match": {"sourceProvenance.mukokoTags": {"$exists": True}}},
+                {"$unwind": "$sourceProvenance.mukokoTags"},
+                {"$group": {"_id": "$sourceProvenance.mukokoTags", "count": {"$sum": 1}}},
                 {"$sort": {"count": -1}},
             ]
-            tags = list(coll.aggregate(pipeline))
-            return {"tags": {t["_id"]: t["count"] for t in tags}}
+            tags_agg = list(places_geo_collection().aggregate(pipeline))
+            return {"tags": {t["_id"]: t["count"] for t in tags_agg}}
 
         if mode == "stats":
-            total = coll.count_documents({})
-            provinces = len(coll.distinct("province"))
-            countries = len(coll.distinct("country"))
+            total = count_all_locations()
+            coll = places_geo_collection()
+            try:
+                provinces = len(coll.distinct(
+                    "sourceProvenance.mukokoProvince",
+                    {"sourceProvenance.mukokoProvince": {"$ne": None}},
+                ))
+            except Exception:
+                provinces = 0
+            try:
+                countries = len(coll.distinct("isoCode", {"isoCode": {"$ne": None}}))
+            except Exception:
+                countries = 0
             return {
                 "totalLocations": total,
                 "totalProvinces": provinces,
                 "totalCountries": countries,
             }
 
-        # Build query filter
-        query_filter: dict = {}
-        if tag:
-            query_filter["tags"] = tag
+        # List / filter mode (Phase 0G: all routes delegate to the resolver).
         if country:
-            query_filter["country"] = country.upper()
+            locs = find_locations_in_country(country, limit=limit)
+            paged = locs[skip:skip + limit]
+            for loc in paged:
+                loc.pop("_id", None)
+            return {"locations": paged, "total": len(locs), "limit": limit, "skip": skip}
 
-        total = coll.count_documents(query_filter)
-        locs = list(
-            coll.find(query_filter, {"_id": 0})
-            .sort("name", 1)
-            .skip(skip)
-            .limit(limit)
-        )
+        if tag:
+            locs = find_locations_by_tag(tag, limit=limit + skip)
+            paged = locs[skip:skip + limit]
+            for loc in paged:
+                loc.pop("_id", None)
+            return {"locations": paged, "total": len(locs), "limit": limit, "skip": skip}
+
+        locs = find_all_locations(limit=limit, skip=skip)
+        for loc in locs:
+            loc.pop("_id", None)
+        total = count_all_locations()
         return {"locations": locs, "total": total, "limit": limit, "skip": skip}
     except HTTPException:
         raise
@@ -142,67 +175,94 @@ async def search_locations(
     GET /api/py/search?mode=tags
     """
     limit = min(limit, 50)
-    coll = locations_collection()
 
     try:
-        # Tag counts mode
+        # Tag counts mode — aggregated from placesGeo mukokoTags (Phase 0G).
         if mode == "tags":
             pipeline = [
-                {"$unwind": "$tags"},
-                {"$group": {"_id": "$tags", "count": {"$sum": 1}}},
+                {"$match": {"sourceProvenance.mukokoTags": {"$exists": True}}},
+                {"$unwind": "$sourceProvenance.mukokoTags"},
+                {"$group": {"_id": "$sourceProvenance.mukokoTags", "count": {"$sum": 1}}},
                 {"$sort": {"count": -1}},
             ]
-            tags = list(coll.aggregate(pipeline))
-            return {"tags": {t["_id"]: t["count"] for t in tags}}
+            tags_agg = list(places_geo_collection().aggregate(pipeline))
+            return {"tags": {t["_id"]: t["count"] for t in tags_agg}}
 
-        # Geospatial nearest
+        # Geospatial nearest (Phase 0G: placesGeo via $nearSphere).
         if lat and lon:
             lat_f = float(lat)
             lon_f = float(lon)
-            results = list(
-                coll.find(
-                    {
+            try:
+                docs = list(
+                    places_geo_collection().find({
+                        "geoType": {"$in": ["city", "town", "village"]},
                         "geo": {
-                            "$near": {
+                            "$nearSphere": {
                                 "$geometry": {"type": "Point", "coordinates": [lon_f, lat_f]},
                                 "$maxDistance": 100000,  # 100km
                             }
-                        }
-                    },
-                    {"_id": 0},
-                ).limit(limit)
-            )
+                        },
+                    }).limit(limit)
+                )
+            except Exception:
+                docs = []
+            results = []
+            for doc in docs:
+                adapted = adapt_placesgeo_to_location(doc)
+                if not adapted:
+                    continue
+                adapted.pop("_id", None)
+                results.append(adapted)
             return {"locations": results, "total": len(results), "source": "mongodb"}
 
         # Text search
         if not q and not tag:
             raise HTTPException(status_code=400, detail="Provide q (search query) or tag (filter)")
 
-        query_filter: dict = {}
-        if q:
-            query_filter["$text"] = {"$search": q.strip()[:200]}
-        if tag:
-            query_filter["tags"] = tag
+        # Phase 0G: name regex against placesGeo for text search; tag-only
+        # uses mukokoTags. Atlas Search will be reimplemented against
+        # placesGeo in a follow-up.
+        results: list[dict] = []
+        source = "mongodb"
 
-        projection = {"_id": 0}
-        if q:
-            projection["score"] = {"$meta": "textScore"}
-
-        cursor = coll.find(query_filter, projection)
-        if q:
-            cursor = cursor.sort([("score", {"$meta": "textScore"})])
-        else:
-            cursor = cursor.sort([("name", 1)])
-
-        results = list(cursor.skip(skip).limit(limit))
-        # Remove score from output
-        for r in results:
-            r.pop("score", None)
+        if tag and not q:
+            adapted = find_locations_by_tag(tag, limit=limit + skip)
+            results = adapted[skip:skip + limit]
+            for r in results:
+                r.pop("_id", None)
+        elif q:
+            q_clean = q.strip()[:200]
+            regex = {"$regex": re.escape(q_clean), "$options": "i"}
+            query_filter = {
+                "geoType": {"$in": ["city", "town", "village"]},
+                "$or": [
+                    {"name": regex},
+                    {"slug": regex},
+                    {"sourceProvenance.mukokoSlug": regex},
+                ],
+            }
+            if tag:
+                query_filter["sourceProvenance.mukokoTags"] = tag
+            try:
+                docs = list(
+                    places_geo_collection().find(query_filter)
+                    .sort([("name", 1)])
+                    .skip(skip)
+                    .limit(limit)
+                    .max_time_ms(3000)
+                )
+            except Exception:
+                docs = []
+            for doc in docs:
+                adapted = adapt_placesgeo_to_location(doc)
+                if not adapted:
+                    continue
+                adapted.pop("_id", None)
+                results.append(adapted)
 
         # If text search returned no results, fall back to Open-Meteo
         # geocoding API for address-level discovery (like Apple/Google Weather).
         # These are geocoded candidates — not yet in our DB.
-        source = "mongodb"
         if q and not tag and not results:
             geocoded = _forward_geocode(q, count=limit)
             results = [
@@ -221,8 +281,7 @@ async def search_locations(
             ]
             source = "geocoded"
 
-        total = coll.count_documents(query_filter) if skip == 0 and source == "mongodb" else len(results)
-        return {"locations": results, "total": total, "source": source}
+        return {"locations": results, "total": len(results), "source": source}
     except HTTPException:
         raise
     except Exception:
@@ -466,9 +525,14 @@ def _resolve_slug_collision(slug: str, geocoded: dict) -> str:
     NEVER returns a numeric-suffixed slug. If both enrichment paths still
     collide, the caller should treat this as a duplicate and surface the
     existing record instead of creating a new one.
+
+    Phase 0G: collision lookup uses ``places.placesGeo`` against the
+    ``sourceProvenance.mukokoSlug`` stamped field, since that's the slug
+    namespace mukoko-weather owns. Hash-suffixed platform slugs are not
+    in scope — those are guaranteed unique by ``upsert_placesgeo_city``.
     """
-    existing = locations_collection().find_one({"slug": slug})
-    if not existing:
+    coll = places_geo_collection()
+    if not coll.find_one({"sourceProvenance.mukokoSlug": slug}):
         return slug
 
     address = geocoded.get("nominatimAddress", {})
@@ -477,13 +541,13 @@ def _resolve_slug_collision(slug: str, geocoded: dict) -> str:
     suburb = address.get("suburb") or address.get("cityDistrict") or ""
     if suburb and suburb.lower() != location_name:
         enriched = _generate_slug(suburb, geocoded.get("country", ""))
-        if not locations_collection().find_one({"slug": enriched}):
+        if not coll.find_one({"sourceProvenance.mukokoSlug": enriched}):
             return enriched
     # Try road-enriched slug
     road = address.get("road") or ""
     if road and road.lower() != location_name:
         enriched = _generate_slug(road, geocoded.get("country", ""))
-        if not locations_collection().find_one({"slug": enriched}):
+        if not coll.find_one({"sourceProvenance.mukokoSlug": enriched}):
             return enriched
     # All enrichment paths exhausted — this is the same place. Never auto-suffix.
     raise SlugCollisionError(existing_slug=slug)
@@ -529,31 +593,35 @@ def _find_duplicate(
     name: str | None = None,
     country: str | None = None,
 ) -> dict | None:
-    """Check for existing locations within radius_km OR with same name+country."""
-    try:
-        # Geospatial proximity check
-        result = locations_collection().find_one(
-            {
-                "geo": {
-                    "$near": {
-                        "$geometry": {"type": "Point", "coordinates": [lon, lat]},
-                        "$maxDistance": radius_km * 1000,
-                    }
-                }
-            },
-            {"_id": 0},
-        )
-        if result:
-            return result
+    """Check for existing locations within radius_km OR with same name+country.
 
-        # Name + country check — catches same-named locations farther apart
+    Phase 0G: queries ``places.placesGeo`` via the same dedup primitives the
+    Phase 0E ``upsert_placesgeo_city`` helper uses, then adapts the result
+    to the legacy LocationDoc shape so callers keep working unchanged.
+    """
+    try:
+        parent_place_id = get_country_id(country) if country else None
+        existing = find_nearby_placesgeo(
+            lat=lat,
+            lon=lon,
+            max_distance_km=radius_km,
+            name=name,
+            parent_place_id=parent_place_id,
+        )
+        if existing:
+            return adapt_placesgeo_to_location(existing)
+
+        # Name + country fallback — catches same-named entries farther apart.
         if name and country:
-            result = locations_collection().find_one(
-                {"name": name, "country": country.upper()},
-                {"_id": 0},
-            )
-            if result:
-                return result
+            try:
+                doc = places_geo_collection().find_one({
+                    "name": {"$regex": f"^{re.escape(name)}$", "$options": "i"},
+                    "isoCode": country.upper(),
+                })
+                if doc:
+                    return adapt_placesgeo_to_location(doc)
+            except Exception:
+                pass
 
         return None
     except Exception:
@@ -572,56 +640,28 @@ async def geo_lookup(
     Find nearest location or auto-create one via reverse geocoding.
     """
     try:
-        # Fast path: check MongoDB for nearby locations FIRST (sub-100ms)
+        # Fast path: check placesGeo for nearby locations FIRST (sub-100ms)
         # before making any external API calls. Most geo requests will match
-        # an existing location and return instantly.
-        try:
-            results = list(
-                locations_collection().find(
-                    {
-                        "geo": {
-                            "$near": {
-                                "$geometry": {"type": "Point", "coordinates": [lon, lat]},
-                                "$maxDistance": COUNTRY_PREFERENCE_MAX_KM * 1000,
-                            }
-                        }
-                    },
-                    {"_id": 0},
-                ).limit(5)
-            )
-        except Exception:
-            results = []
-
-        # If we have nearby results, return immediately — no geocoding needed
-        if results:
-            nearest = results[0]
+        # an existing location and return instantly (Phase 0G).
+        nearest = find_nearest_location(lat, lon, max_km=COUNTRY_PREFERENCE_MAX_KM)
+        if nearest and nearest.get("slug"):
+            nearest.pop("_id", None)
             return {
                 "nearest": nearest,
                 "redirectTo": f"/{nearest['slug']}",
                 "isNew": False,
             }
 
-        # If no local match and not auto-creating, try uncapped distance
+        # If no local match and not auto-creating, try uncapped distance.
         if not autoCreate:
-            try:
-                uncapped = locations_collection().find_one(
-                    {
-                        "geo": {
-                            "$near": {
-                                "$geometry": {"type": "Point", "coordinates": [lon, lat]},
-                            }
-                        }
-                    },
-                    {"_id": 0},
-                )
-                if uncapped:
-                    return {
-                        "nearest": uncapped,
-                        "redirectTo": f"/{uncapped['slug']}",
-                        "isNew": False,
-                    }
-            except Exception:
-                pass
+            uncapped = find_nearest_location(lat, lon, max_km=20_000)
+            if uncapped and uncapped.get("slug"):
+                uncapped.pop("_id", None)
+                return {
+                    "nearest": uncapped,
+                    "redirectTo": f"/{uncapped['slug']}",
+                    "isNew": False,
+                }
 
         # Auto-create if requested — only NOW do we call external APIs
         if autoCreate:
@@ -632,54 +672,27 @@ async def geo_lookup(
                     detail="Could not determine location name",
                 )
 
-            # ── Thorough duplicate checks before creating ─────────────────────
-            # 1) Wide-radius geospatial check (10km) in case the index missed it
-            try:
-                wide_match = locations_collection().find_one(
-                    {
-                        "geo": {
-                            "$near": {
-                                "$geometry": {"type": "Point", "coordinates": [lon, lat]},
-                                "$maxDistance": 10_000,  # 10km
-                            }
-                        }
-                    },
-                    {"_id": 0},
-                )
-                if wide_match:
-                    return {
-                        "nearest": wide_match,
-                        "redirectTo": f"/{wide_match['slug']}",
-                        "isNew": False,
-                    }
-            except Exception:
-                pass
-
-            # 2) Name + country exact match anywhere in the DB (catches index failures)
-            try:
-                name_match = locations_collection().find_one(
-                    {
-                        "name": {"$regex": f"^{geocoded['name']}$", "$options": "i"},
-                        "country": geocoded["country"],
-                    },
-                    {"_id": 0},
-                )
-                if name_match:
-                    return {
-                        "nearest": name_match,
-                        "redirectTo": f"/{name_match['slug']}",
-                        "isNew": False,
-                    }
-            except Exception:
-                pass
-
-            # 3) Standard 1km dedup check
-            dedup_km = DEDUP_RADIUS_KM
-            duplicate = _find_duplicate(
-                lat, lon, dedup_km,
+            # ── Thorough duplicate checks against placesGeo (Phase 0G) ───────
+            # 1) Wide-radius geospatial check (10km) via placesGeo.
+            wide_match = _find_duplicate(
+                lat, lon, 10.0,
                 name=geocoded["name"], country=geocoded["country"],
             )
-            if duplicate:
+            if wide_match and wide_match.get("slug"):
+                wide_match.pop("_id", None)
+                return {
+                    "nearest": wide_match,
+                    "redirectTo": f"/{wide_match['slug']}",
+                    "isNew": False,
+                }
+
+            # 2) Standard 1km dedup check
+            duplicate = _find_duplicate(
+                lat, lon, DEDUP_RADIUS_KM,
+                name=geocoded["name"], country=geocoded["country"],
+            )
+            if duplicate and duplicate.get("slug"):
+                duplicate.pop("_id", None)
                 return {
                     "nearest": duplicate,
                     "redirectTo": f"/{duplicate['slug']}",
@@ -694,41 +707,14 @@ async def geo_lookup(
             province = geocoded.get("admin1") or geocoded.get("countryName", "")
             province_slug = _generate_province_slug(province, geocoded["country"])
 
-            # Upsert country and province
-            db = get_db()
-            db["countries"].update_one(
-                {"code": geocoded["country"]},
-                {
-                    "$setOnInsert": {
-                        "code": geocoded["country"],
-                        "name": geocoded["countryName"],
-                        "region": "Unknown",
-                        "supported": True,
-                    },
-                },
-                upsert=True,
-            )
-            db["provinces"].update_one(
-                {"slug": province_slug},
-                {
-                    "$setOnInsert": {
-                        "slug": province_slug,
-                        "name": province,
-                        "countryCode": geocoded["country"],
-                    },
-                },
-                upsert=True,
-            )
-
             try:
                 slug = _resolve_slug_collision(slug, geocoded)
             except SlugCollisionError as exc:
                 # Same place — surface the existing record instead of creating
-                # a numeric-suffixed duplicate.
-                existing = locations_collection().find_one(
-                    {"slug": exc.existing_slug}, {"_id": 0},
-                )
+                # a numeric-suffixed duplicate (Phase 0G: queried via placesGeo).
+                existing = find_location(exc.existing_slug)
                 if existing:
+                    existing.pop("_id", None)
                     return {
                         "nearest": existing,
                         "redirectTo": f"/{existing['slug']}",
@@ -742,29 +728,11 @@ async def geo_lookup(
 
             tags = _infer_tags(geocoded)
 
-            new_loc = {
-                "slug": slug,
-                "name": geocoded["name"],
-                "province": province,
-                "lat": geocoded["lat"],
-                "lon": geocoded["lon"],
-                "elevation": round(elevation),
-                "tags": tags,
-                "country": geocoded["country"],
-                "source": "geolocation",
-                "provinceSlug": province_slug,
-                "geo": {"type": "Point", "coordinates": [geocoded["lon"], geocoded["lat"]]},
-                "nominatimAddress": geocoded.get("nominatimAddress", {}),
-            }
-            locations_collection().insert_one(new_loc)
-            new_loc.pop("_id", None)
-
-            # Phase 0F: mirror into placesGeo with mukokoSlug so the TS
-            # resolveLocationSlug helper picks it up on the redirect target.
+            # Phase 0G: write only to placesGeo. The legacy weather.locations
+            # collection is being dropped; placesGeo is the canonical store
+            # and the resolver bridges clean URL slugs back to it.
             try:
-                from ._places_geo import upsert_placesgeo_city
-
-                upsert_placesgeo_city(
+                placesgeo_doc = upsert_placesgeo_city(
                     name=geocoded["name"],
                     lat=lat,
                     lon=lon,
@@ -780,6 +748,22 @@ async def geo_lookup(
                 logger.warning(
                     "Platform placesGeo write failed (geo autoCreate): %s", exc,
                 )
+                placesgeo_doc = None
+
+            new_loc = {
+                "slug": slug,
+                "name": geocoded["name"],
+                "province": province,
+                "lat": geocoded["lat"],
+                "lon": geocoded["lon"],
+                "elevation": round(elevation),
+                "tags": tags,
+                "country": geocoded["country"],
+                "source": "geolocation",
+                "provinceSlug": province_slug,
+                "geo": {"type": "Point", "coordinates": [geocoded["lon"], geocoded["lat"]]},
+                "nominatimAddress": geocoded.get("nominatimAddress", {}),
+            }
 
             # Enrich: resolve seasons for this country if not already known
             _enrich_location_with_ai(geocoded["country"], lat, lon)
@@ -924,9 +908,8 @@ async def add_location(request: Request):
         except SlugCollisionError as exc:
             # All enrichment paths collide — same place. Return the existing
             # record as a duplicate instead of creating a numeric-suffixed copy.
-            existing = locations_collection().find_one(
-                {"slug": exc.existing_slug}, {"_id": 0},
-            )
+            # Phase 0G: existing record resolved via places.placesGeo.
+            existing = find_location(exc.existing_slug)
             if existing:
                 return {
                     "mode": "duplicate",
@@ -949,59 +932,24 @@ async def add_location(request: Request):
         province = geocoded.get("admin1") or geocoded.get("countryName", "")
         province_slug = _generate_province_slug(province, geocoded["country"])
 
-        # Upsert country/province
-        db = get_db()
-        db["countries"].update_one(
-            {"code": geocoded["country"]},
-            {"$setOnInsert": {"code": geocoded["country"], "name": geocoded["countryName"], "region": "Unknown", "supported": True}},
-            upsert=True,
-        )
-        db["provinces"].update_one(
-            {"slug": province_slug},
-            {"$setOnInsert": {"slug": province_slug, "name": province, "countryCode": geocoded["country"]}},
-            upsert=True,
-        )
-
         tags = _infer_tags(geocoded)
 
-        new_loc = {
-            "slug": slug,
-            "name": geocoded["name"],
-            "province": province,
-            "lat": geocoded["lat"],
-            "lon": geocoded["lon"],
-            "elevation": round(elevation),
-            "tags": tags,
-            "country": geocoded["country"],
-            "source": "community",
-            "provinceSlug": province_slug,
-            "geo": {"type": "Point", "coordinates": [geocoded["lon"], geocoded["lat"]]},
-            "nominatimAddress": geocoded.get("nominatimAddress", {}),
-        }
-        locations_collection().insert_one(new_loc)
-        new_loc.pop("_id", None)
-
-        # Enrich: resolve seasons for this country if not already known
-        _enrich_location_with_ai(geocoded["country"], lat, lon)
-
-        # ── Platform integration — placesGeo write (Phase 0F) ────────────────
-        # Wrapped in try/except so platform failures NEVER break the user-
-        # facing response. ``upsert_placesgeo_city`` performs its own 5 km
-        # parent-scoped dedup and returns the existing doc with
-        # ``wasExisting: True`` when it finds one — and patches an existing
-        # entry with our ``mukokoSlug`` so the TS resolver can find it by
-        # clean URL slug.
+        # ── Platform integration — placesGeo write (Phase 0G) ────────────────
+        # Phase 0G: ``weather.locations``, ``weather.countries``, and
+        # ``weather.provinces`` are being dropped. ``places.placesGeo`` is
+        # now the canonical store — every read flows through the resolver
+        # and writes happen here exclusively. The Phase 0E helper performs
+        # its own 5 km parent-scoped dedup, returns the existing doc with
+        # ``wasExisting: True`` when it finds one, and patches mukokoSlug /
+        # mukokoTags / nominatimAddress onto pre-existing entries so the TS
+        # resolver can find them by clean URL slug.
         #
-        # Phase 0F note: the Fundi POI enrichment call (``enqueue_fundi_seed``)
-        # is intentionally NOT triggered here. POI seeding is a separate
-        # concern (``places.places`` from OSM via the Fundi worker), not a
-        # P0 feature for mukoko-weather. Re-enable behind a flag like
+        # Fundi POI enrichment (``enqueue_fundi_seed``) stays disabled —
+        # see Phase 0F note above. Re-enable behind a flag like
         # ``MUKOKO_ENRICH_POIS_VIA_FUNDI`` when the POI surface is wired up.
         places_geo_id: Optional[str] = None
         places_geo_slug: Optional[str] = None
         try:
-            from ._places_geo import upsert_placesgeo_city
-
             placesgeo_doc = upsert_placesgeo_city(
                 name=geocoded["name"],
                 lat=lat,
@@ -1025,6 +973,24 @@ async def add_location(request: Request):
             logger.warning(
                 "Platform placesGeo write failed: %s", exc,
             )
+
+        new_loc = {
+            "slug": slug,
+            "name": geocoded["name"],
+            "province": province,
+            "lat": geocoded["lat"],
+            "lon": geocoded["lon"],
+            "elevation": round(elevation),
+            "tags": tags,
+            "country": geocoded["country"],
+            "source": "community",
+            "provinceSlug": province_slug,
+            "geo": {"type": "Point", "coordinates": [geocoded["lon"], geocoded["lat"]]},
+            "nominatimAddress": geocoded.get("nominatimAddress", {}),
+        }
+
+        # Enrich: resolve seasons for this country if not already known
+        _enrich_location_with_ai(geocoded["country"], lat, lon)
 
         return {
             "mode": "created",

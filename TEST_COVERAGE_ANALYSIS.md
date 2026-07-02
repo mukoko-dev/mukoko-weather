@@ -13,6 +13,7 @@
 ### What IS tested (52 files, ~1097 tests)
 
 The project now has comprehensive test coverage including:
+
 - All library utility functions (weather, locations, activities, suitability, countries, i18n, circuit breaker, etc.)
 - All API routes (weather, ai, explore, search, geo, locations, activities, suitability, tags, regions, history, map-tiles, db-init, status)
 - Page/component structure tests (SEO, explore, shamwari, weather dashboard, history dashboard, frost alerts, chatbot, embed)
@@ -22,18 +23,18 @@ The project now has comprehensive test coverage including:
 
 ### Historical: What WAS tested at initial analysis (10 files, ~183 tests)
 
-| Test File | Module Tested | Tests | Coverage Quality |
-|-----------|--------------|-------|-----------------|
-| `lib/weather.test.ts` | Weather utilities | 45 | Excellent — frost detection, WMO codes, seasons, wind, UV, fallback data |
-| `lib/locations.test.ts` | Location database | 27 | Excellent — data integrity, search, filtering, geolookup, bounds |
-| `lib/activities.test.ts` | Activity system | 26 | Excellent — definitions, categories, search, filtering, styles |
-| `lib/tomorrow.test.ts` | Tomorrow.io client | 22 | Good — code mapping, normalization, insights extraction |
-| `components/weather/charts.test.ts` | Chart data prep | 20 | Good — hourly, daily, atmospheric data formatting |
-| `app/seo.test.ts` | SEO config | 14 | Good — robots.txt, sitemap completeness |
-| `app/api/ai/ai-prompt.test.ts` | AI prompt | 8 | Moderate — static string checks on prompt content |
-| `app/[location]/FrostAlertBanner.test.ts` | Frost banner CSS | 8 | Good — severity class mapping, design token compliance |
-| `components/embed/MukokoWeatherEmbed.test.ts` | Embed widget | 7 | Good — CSS module structure, no hardcoded colors |
-| `lib/store.test.ts` | Zustand store | 6 | Basic — theme resolution, onboarding; missing activity/location state |
+| Test File                                     | Module Tested      | Tests | Coverage Quality                                                         |
+| --------------------------------------------- | ------------------ | ----- | ------------------------------------------------------------------------ |
+| `lib/weather.test.ts`                         | Weather utilities  | 45    | Excellent — frost detection, WMO codes, seasons, wind, UV, fallback data |
+| `lib/locations.test.ts`                       | Location database  | 27    | Excellent — data integrity, search, filtering, geolookup, bounds         |
+| `lib/activities.test.ts`                      | Activity system    | 26    | Excellent — definitions, categories, search, filtering, styles           |
+| `lib/tomorrow.test.ts`                        | Tomorrow.io client | 22    | Good — code mapping, normalization, insights extraction                  |
+| `components/weather/charts.test.ts`           | Chart data prep    | 20    | Good — hourly, daily, atmospheric data formatting                        |
+| `app/seo.test.ts`                             | SEO config         | 14    | Good — robots.txt, sitemap completeness                                  |
+| `app/api/ai/ai-prompt.test.ts`                | AI prompt          | 8     | Moderate — static string checks on prompt content                        |
+| `app/[location]/FrostAlertBanner.test.ts`     | Frost banner CSS   | 8     | Good — severity class mapping, design token compliance                   |
+| `components/embed/MukokoWeatherEmbed.test.ts` | Embed widget       | 7     | Good — CSS module structure, no hardcoded colors                         |
+| `lib/store.test.ts`                           | Zustand store      | 6     | Basic — theme resolution, onboarding; missing activity/location state    |
 
 ### What is NOT tested (94 source files)
 
@@ -50,6 +51,7 @@ These are exported pure functions with no external dependencies — straightforw
 **Why it matters:** Every user-facing string goes through this module. Translation lookup failures silently return the raw key, which could ship broken UI without anyone noticing.
 
 **What to test:**
+
 - `t(key)` returns correct English translation for known keys
 - `t(unknownKey)` falls back to returning the raw key
 - `t(key, { param: value })` replaces `{param}` placeholders correctly
@@ -67,6 +69,7 @@ These are exported pure functions with no external dependencies — straightforw
 **Why it matters:** These two pure functions control caching behavior. A bug in TTL assignment wastes API credits or serves stale data. A bug in staleness detection causes users to see outdated AI summaries.
 
 **What to test:**
+
 - `getTtlForLocation("harare")` returns tier 1 (1800s)
 - `getTtlForLocation("mazowe", ["farming"])` returns tier 2 (3600s)
 - `getTtlForLocation("unknown-place")` returns tier 3 (7200s)
@@ -82,6 +85,7 @@ These are exported pure functions with no external dependencies — straightforw
 **Why it matters:** These functions produce the contextual labels users see on every location page ("Dry", "Humid", "Low pressure", etc.). Incorrect boundary handling means misleading labels.
 
 **What to test (requires exporting the helpers or extracting them):**
+
 - `humidityLabel()` at all boundaries: 0, 30, 31, 60, 61, 80, 81, 100
 - `pressureLabel()` at boundaries: 999, 1000, 1020, 1021
 - `cloudLabel()` at all 5 tiers: 0, 10, 11, 30, 31, 70, 71, 90, 91, 100
@@ -95,6 +99,7 @@ These are exported pure functions with no external dependencies — straightforw
 **Why it matters:** This prevents infinite reload loops in error boundaries. If `getRetryCount()` always returns 0 due to a bug, the page could reload forever on error.
 
 **What to test:**
+
 - `getRetryCount()` returns 0 when sessionStorage is empty
 - `getRetryCount()` returns stored count when URL matches
 - `getRetryCount()` returns 0 when URL doesn't match (reset on navigation)
@@ -111,6 +116,7 @@ These are exported pure functions with no external dependencies — straightforw
 **Why it matters:** Used in virtually every component. Tailwind class conflict resolution is the whole point.
 
 **What to test:**
+
 - Merges multiple class strings
 - Later Tailwind classes override earlier ones (`cn("p-4", "p-2")` → `"p-2"`)
 - Filters out falsy values (`false`, `undefined`, `null`)
@@ -129,6 +135,7 @@ API routes contain the core business logic orchestration. They currently have **
 **Why it matters:** This is the most-called endpoint. It has coordinate validation, fallback logic, and header-setting behavior that are all testable.
 
 **What to test:**
+
 - Missing lat/lon uses Harare defaults
 - Invalid (NaN) coordinates return 400
 - Out-of-bounds coordinates return 400 with descriptive message
@@ -143,6 +150,7 @@ API routes contain the core business logic orchestration. They currently have **
 ### 7. `src/app/api/geo/route.ts` — Geolocation API
 
 **What to test:**
+
 - Missing lat/lon returns 400
 - Non-numeric params return 400
 - Valid coordinates with nearest location returns 200 with `nearest` and `redirectTo`
@@ -154,6 +162,7 @@ API routes contain the core business logic orchestration. They currently have **
 ### 8. `src/app/api/history/route.ts` — History API
 
 **What to test:**
+
 - Missing `location` returns 400
 - Unknown location returns 404
 - Missing `days` defaults to 30
@@ -167,6 +176,7 @@ API routes contain the core business logic orchestration. They currently have **
 ### 9. `src/app/api/ai/route.ts` — AI Summary API
 
 **What to test:**
+
 - Missing `weatherData` or `location` returns 400
 - Cache hit with fresh summary returns cached result
 - Cache hit but stale summary triggers regeneration
@@ -180,6 +190,7 @@ API routes contain the core business logic orchestration. They currently have **
 ### 10. `src/app/api/db-init/route.ts` — DB Init API
 
 **What to test:**
+
 - Production mode without secret returns 401
 - Production mode with correct secret proceeds
 - Non-production mode skips secret check
@@ -198,6 +209,7 @@ API routes contain the core business logic orchestration. They currently have **
 **Why it matters:** If the logging functions break, production errors become invisible. Testing ensures the structured JSON output has the expected shape.
 
 **What to test:**
+
 - `logError()` with Error object includes `errorName` and `stack`
 - `logError()` with string error includes `errorValue`
 - `logWarn()` outputs `"warn"` level
@@ -212,6 +224,7 @@ API routes contain the core business logic orchestration. They currently have **
 **Current gap:** Only tests `resolveTheme()` and `hasOnboarded`. Missing coverage for activity toggling, location state, and My Weather modal state.
 
 **What to add:**
+
 - `toggleActivity()` adds/removes an activity ID
 - `toggleActivity()` with duplicate ID removes it
 - `selectedActivities` defaults to empty array
@@ -228,6 +241,7 @@ API routes contain the core business logic orchestration. They currently have **
 ### 13. `src/lib/weather-icons.tsx` — Icon mapping functions
 
 **What to test:**
+
 - `WeatherIcon` maps all known icon names to the correct component
 - `WeatherIcon` returns `CloudIcon` for unknown names
 - `ActivityIcon` maps all 20 activity IDs to the correct component
@@ -247,6 +261,7 @@ These require more setup (React testing library, DOM mocking) but cover importan
 The 4-stage fallback chain (cache → Tomorrow.io → Open-Meteo → seasonal fallback) is the most critical business logic in the application and has no direct tests.
 
 **What to test (with mocked DB and API calls):**
+
 - Cache hit returns immediately without calling APIs
 - Cache miss calls Tomorrow.io first
 - Tomorrow.io rate limit triggers Open-Meteo fallback
@@ -269,25 +284,25 @@ Requires mocking the Geolocation API. Tests should cover permission denied, unav
 
 ## Summary: Recommended Test Additions by Priority
 
-| Priority | Area | New Tests | Difficulty |
-|----------|------|-----------|------------|
-| **P1** | `i18n.ts` — translation + formatting | ~20 | Easy |
-| **P1** | `db.ts` — `getTtlForLocation` + `isSummaryStale` | ~10 | Easy |
-| **P1** | `AtmosphericSummary` label helpers | ~15 | Easy (after extraction) |
-| **P1** | `error-retry.ts` — retry count management | ~8 | Easy |
-| **P1** | `utils.ts` — `cn()` class merging | ~5 | Easy |
-| **P2** | Weather API route (`/api/weather`) | ~10 | Medium |
-| **P2** | Geo API route (`/api/geo`) | ~5 | Medium |
-| **P2** | History API route (`/api/history`) | ~8 | Medium |
-| **P2** | AI API route (`/api/ai`) | ~8 | Medium |
-| **P2** | DB Init API route (`/api/db-init`) | ~6 | Medium |
-| **P3** | `observability.ts` — logging functions | ~10 | Easy-Medium |
-| **P3** | `store.test.ts` — expand existing tests | ~8 | Easy |
-| **P4** | `weather-icons.tsx` — icon mapping | ~25 | Easy |
-| **P5** | `getWeatherForLocation()` orchestration | ~10 | Medium-Hard |
-| **P5** | Error boundaries | ~5 | Medium |
-| **P5** | `geolocation.ts` — browser API wrapper | ~8 | Medium |
-| | **Total** | **~161** | |
+| Priority | Area                                             | New Tests | Difficulty              |
+| -------- | ------------------------------------------------ | --------- | ----------------------- |
+| **P1**   | `i18n.ts` — translation + formatting             | ~20       | Easy                    |
+| **P1**   | `db.ts` — `getTtlForLocation` + `isSummaryStale` | ~10       | Easy                    |
+| **P1**   | `AtmosphericSummary` label helpers               | ~15       | Easy (after extraction) |
+| **P1**   | `error-retry.ts` — retry count management        | ~8        | Easy                    |
+| **P1**   | `utils.ts` — `cn()` class merging                | ~5        | Easy                    |
+| **P2**   | Weather API route (`/api/weather`)               | ~10       | Medium                  |
+| **P2**   | Geo API route (`/api/geo`)                       | ~5        | Medium                  |
+| **P2**   | History API route (`/api/history`)               | ~8        | Medium                  |
+| **P2**   | AI API route (`/api/ai`)                         | ~8        | Medium                  |
+| **P2**   | DB Init API route (`/api/db-init`)               | ~6        | Medium                  |
+| **P3**   | `observability.ts` — logging functions           | ~10       | Easy-Medium             |
+| **P3**   | `store.test.ts` — expand existing tests          | ~8        | Easy                    |
+| **P4**   | `weather-icons.tsx` — icon mapping               | ~25       | Easy                    |
+| **P5**   | `getWeatherForLocation()` orchestration          | ~10       | Medium-Hard             |
+| **P5**   | Error boundaries                                 | ~5        | Medium                  |
+| **P5**   | `geolocation.ts` — browser API wrapper           | ~8        | Medium                  |
+|          | **Total**                                        | **~161**  |                         |
 
 This would roughly double the test count from 183 to ~344 tests and cover the most impactful gaps first.
 

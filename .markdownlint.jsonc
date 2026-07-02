@@ -1,0 +1,42 @@
+// markdownlint-cli2 config for nyuchi/mukoko-weather.
+//
+// Relaxed defaults that accommodate:
+//   - Long prose lines in docs (we format for readability, not width)
+//   - Inline HTML in the org profile (<div align="center">)
+//   - Files that start with an HTML comment or a <div> instead of an H1
+//   - Fenced code blocks without a language tag
+//
+// See https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+{
+  "default": true,
+
+  // Line length — we wrap for readability, not at a fixed column.
+  "MD013": false,
+
+  // Inline HTML — READMEs use <div align="center"> for layout and
+  // that's intentional.
+  "MD033": false,
+
+  // First line must be a top-level heading — some docs open with an
+  // HTML comment or badge block, which is correct.
+  "MD041": false,
+
+  // Fenced code blocks without a language — acceptable for output
+  // blocks and plain-text fences.
+  "MD040": false,
+
+  // Duplicate headings are fine as long as they aren't siblings
+  // (e.g. "## Summary" appears in multiple docs; that's expected).
+  "MD024": { "siblings_only": true },
+
+  // Unordered list indentation — 2 spaces, matching our house style.
+  "MD007": { "indent": 2 },
+
+  // Table-column-style — disabled for this repo. Prettier only
+  // reformats tables that are preceded by a blank line; the docs here
+  // (CLAUDE.md etc.) have many tables that follow a bold label with no
+  // blank line, so Prettier parses them as paragraphs and leaves them
+  // compact while markdownlint parses them as tables and flags MD060.
+  // Rather than hand-edit dozens of tables, we disable the rule here.
+  "MD060": false,
+}

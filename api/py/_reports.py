@@ -28,9 +28,9 @@ from ._db import (
     get_api_key,
     weather_reports_collection,
     weather_cache_collection,
-    locations_collection,
     ai_prompts_collection,
 )
+from ._places_resolver import find_location
 from ._circuit_breaker import anthropic_breaker
 
 router = APIRouter()
@@ -173,11 +173,8 @@ async def submit_report(body: SubmitReportRequest, request: Request):
     # Validate severity
     severity = body.severity if body.severity in SEVERITY_LEVELS else "moderate"
 
-    # Verify location exists
-    loc = locations_collection().find_one(
-        {"slug": body.locationSlug},
-        {"_id": 0, "slug": 1, "name": 1, "lat": 1, "lon": 1},
-    )
+    # Verify location exists (Phase 0G: places.placesGeo via canonical resolver)
+    loc = find_location(body.locationSlug)
     if not loc:
         raise HTTPException(status_code=404, detail="Unknown location")
 
@@ -354,12 +351,9 @@ async def clarify_report(body: ClarifyRequest, request: Request):
     if not rate["allowed"]:
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
-    # Get location name
-    loc = locations_collection().find_one(
-        {"slug": body.locationSlug},
-        {"_id": 0, "name": 1},
-    )
-    location_name = loc["name"] if loc else body.locationSlug
+    # Get location name (Phase 0G: places.placesGeo via canonical resolver)
+    loc = find_location(body.locationSlug)
+    location_name = loc.get("name") if loc else body.locationSlug
 
     client = _get_client()
     if not client or not anthropic_breaker.is_allowed:

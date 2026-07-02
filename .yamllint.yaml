@@ -1,0 +1,60 @@
+# yamllint config for nyuchi/mukoko-weather.
+#
+# Relaxed defaults that accommodate:
+#   - GitHub Actions workflows (which use `on:` — a YAML 1.1 boolean)
+#   - Long lines in shell heredocs and comment blocks inside workflows
+#   - Files without `---` document-start markers
+#
+# See https://yamllint.readthedocs.io/en/stable/configuration.html
+
+extends: default
+
+ignore: |
+  node_modules/
+  .next/
+  .vercel/
+  .worktrees/
+
+rules:
+  # 140-char limit. Workflow files have legitimately long shell URLs
+  # (the actionlint download script, action references) and issue-
+  # template `about:` strings render as a single line in the picker,
+  # so wrapping them would change user-visible behaviour. 140 is
+  # tight enough to flag truly excessive lines without forcing
+  # awkward breaks on URLs. Strict CI fails on any violation.
+  line-length:
+    max: 140
+    level: error
+    allow-non-breakable-words: true
+    allow-non-breakable-inline-mappings: true
+
+  # GitHub Actions uses `on:` as a key, which YAML 1.1 treats as a
+  # boolean. Disable the truthy check on keys to stop yamllint from
+  # rejecting every workflow.
+  truthy:
+    check-keys: false
+    level: error
+
+  # We don't prefix YAML files with `---`.
+  document-start: disable
+
+  # Be lenient about how many spaces follow `#` in comments.
+  comments:
+    min-spaces-from-content: 1
+
+  # Comments-indentation flags standalone comments that don't match the
+  # indent of surrounding content. Real-world configs use comments to
+  # delimit sections (long `# ----` separator banners) and to mark
+  # commented-out blocks at the level of the code they replace, neither
+  # of which fits the rule cleanly. Disabled.
+  comments-indentation: disable
+
+  # GitHub issue forms have deeply nested lists and mappings.
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+
+  # Stops a warning on the trailing-empty-line check for files that
+  # end cleanly with a single newline.
+  empty-lines:
+    max-end: 1

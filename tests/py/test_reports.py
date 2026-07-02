@@ -294,12 +294,12 @@ class TestSubmitReport:
     @pytest.mark.asyncio
     @patch("py._reports.check_rate_limit")
     @patch("py._reports.get_client_ip")
-    @patch("py._reports.locations_collection")
+    @patch("py._reports.find_location")
     async def test_invalid_severity_defaults_to_moderate(self, mock_loc, mock_ip, mock_rate):
         """Unknown severity should default to moderate."""
         mock_ip.return_value = "1.2.3.4"
         mock_rate.return_value = {"allowed": True, "remaining": 4}
-        mock_loc.return_value.find_one.return_value = {
+        mock_loc.return_value = {
             "slug": "harare", "name": "Harare", "lat": -17.83, "lon": 31.05,
         }
 
@@ -322,11 +322,11 @@ class TestSubmitReport:
     @pytest.mark.asyncio
     @patch("py._reports.check_rate_limit")
     @patch("py._reports.get_client_ip")
-    @patch("py._reports.locations_collection")
+    @patch("py._reports.find_location")
     async def test_location_not_found(self, mock_loc, mock_ip, mock_rate):
         mock_ip.return_value = "1.2.3.4"
         mock_rate.return_value = {"allowed": True, "remaining": 4}
-        mock_loc.return_value.find_one.return_value = None
+        mock_loc.return_value = None
 
         body = SubmitReportRequest(locationSlug="nonexistent", reportType="light-rain")
         with pytest.raises(Exception) as exc_info:
@@ -337,14 +337,14 @@ class TestSubmitReport:
     @patch("py._reports._cross_validate")
     @patch("py._reports.weather_cache_collection")
     @patch("py._reports.weather_reports_collection")
-    @patch("py._reports.locations_collection")
+    @patch("py._reports.find_location")
     @patch("py._reports.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_successful_submission(self, mock_ip, mock_rate, mock_loc,
                                           mock_reports, mock_cache, mock_validate):
         mock_ip.return_value = "1.2.3.4"
         mock_rate.return_value = {"allowed": True, "remaining": 4}
-        mock_loc.return_value.find_one.return_value = {
+        mock_loc.return_value = {
             "slug": "harare", "name": "Harare", "lat": -17.83, "lon": 31.05,
         }
         mock_cache.return_value.find_one.return_value = {
@@ -372,14 +372,14 @@ class TestSubmitReport:
     @pytest.mark.asyncio
     @patch("py._reports.weather_cache_collection")
     @patch("py._reports.weather_reports_collection")
-    @patch("py._reports.locations_collection")
+    @patch("py._reports.find_location")
     @patch("py._reports.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_weather_snapshot_captured(self, mock_ip, mock_rate, mock_loc,
                                               mock_reports, mock_cache):
         mock_ip.return_value = "1.2.3.4"
         mock_rate.return_value = {"allowed": True, "remaining": 4}
-        mock_loc.return_value.find_one.return_value = {
+        mock_loc.return_value = {
             "slug": "harare", "name": "Harare", "lat": -17.83, "lon": 31.05,
         }
         mock_cache.return_value.find_one.return_value = {
@@ -592,13 +592,13 @@ class TestClarifyReport:
 
     @pytest.mark.asyncio
     @patch("py._reports._get_client")
-    @patch("py._reports.locations_collection")
+    @patch("py._reports.find_location")
     @patch("py._reports.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_ai_unavailable_returns_fallback(self, mock_ip, mock_rate, mock_loc, mock_client):
         mock_ip.return_value = "1.2.3.4"
         mock_rate.return_value = {"allowed": True, "remaining": 9}
-        mock_loc.return_value.find_one.return_value = {"name": "Harare"}
+        mock_loc.return_value = {"name": "Harare"}
         mock_client.return_value = None  # No AI client
 
         body = ClarifyRequest(locationSlug="harare", reportType="thunderstorm")
@@ -611,14 +611,14 @@ class TestClarifyReport:
     @pytest.mark.asyncio
     @patch("py._reports.anthropic_breaker")
     @patch("py._reports._get_client")
-    @patch("py._reports.locations_collection")
+    @patch("py._reports.find_location")
     @patch("py._reports.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_circuit_open_returns_fallback(self, mock_ip, mock_rate, mock_loc,
                                                   mock_client, mock_breaker):
         mock_ip.return_value = "1.2.3.4"
         mock_rate.return_value = {"allowed": True, "remaining": 9}
-        mock_loc.return_value.find_one.return_value = {"name": "Harare"}
+        mock_loc.return_value = {"name": "Harare"}
         mock_client.return_value = MagicMock()
         mock_breaker.is_allowed = False  # Circuit open
 
@@ -631,14 +631,14 @@ class TestClarifyReport:
     @patch("py._reports._get_clarification_prompt")
     @patch("py._reports.anthropic_breaker")
     @patch("py._reports._get_client")
-    @patch("py._reports.locations_collection")
+    @patch("py._reports.find_location")
     @patch("py._reports.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_ai_available_returns_parsed_questions(self, mock_ip, mock_rate, mock_loc,
                                                           mock_client, mock_breaker, mock_prompt):
         mock_ip.return_value = "1.2.3.4"
         mock_rate.return_value = {"allowed": True, "remaining": 9}
-        mock_loc.return_value.find_one.return_value = {"name": "Harare"}
+        mock_loc.return_value = {"name": "Harare"}
         mock_breaker.is_allowed = True
         mock_prompt.return_value = None  # Use fallback prompt template
 
@@ -662,7 +662,7 @@ class TestClarifyReport:
     @patch("py._reports._get_clarification_prompt")
     @patch("py._reports.anthropic_breaker")
     @patch("py._reports._get_client")
-    @patch("py._reports.locations_collection")
+    @patch("py._reports.find_location")
     @patch("py._reports.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_ai_error_falls_back(self, mock_ip, mock_rate, mock_loc,
@@ -670,7 +670,7 @@ class TestClarifyReport:
         """AI exception should fall back to hardcoded questions."""
         mock_ip.return_value = "1.2.3.4"
         mock_rate.return_value = {"allowed": True, "remaining": 9}
-        mock_loc.return_value.find_one.return_value = {"name": "Harare"}
+        mock_loc.return_value = {"name": "Harare"}
         mock_breaker.is_allowed = True
         mock_prompt.return_value = None
 
@@ -688,7 +688,7 @@ class TestClarifyReport:
     @patch("py._reports._get_clarification_prompt")
     @patch("py._reports.anthropic_breaker")
     @patch("py._reports._get_client")
-    @patch("py._reports.locations_collection")
+    @patch("py._reports.find_location")
     @patch("py._reports.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_ai_returns_no_numbered_lines_falls_back(self, mock_ip, mock_rate, mock_loc,
@@ -696,7 +696,7 @@ class TestClarifyReport:
         """If AI response has no numbered lines, fall back to hardcoded questions."""
         mock_ip.return_value = "1.2.3.4"
         mock_rate.return_value = {"allowed": True, "remaining": 9}
-        mock_loc.return_value.find_one.return_value = {"name": "Harare"}
+        mock_loc.return_value = {"name": "Harare"}
         mock_breaker.is_allowed = True
         mock_prompt.return_value = None
 
@@ -719,7 +719,7 @@ class TestClarifyReport:
     @patch("py._reports._get_clarification_prompt")
     @patch("py._reports.anthropic_breaker")
     @patch("py._reports._get_client")
-    @patch("py._reports.locations_collection")
+    @patch("py._reports.find_location")
     @patch("py._reports.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_ai_returns_more_than_2_questions_capped(self, mock_ip, mock_rate, mock_loc,
@@ -727,7 +727,7 @@ class TestClarifyReport:
         """AI may return more than 2 questions; should be capped at 2."""
         mock_ip.return_value = "1.2.3.4"
         mock_rate.return_value = {"allowed": True, "remaining": 9}
-        mock_loc.return_value.find_one.return_value = {"name": "Harare"}
+        mock_loc.return_value = {"name": "Harare"}
         mock_breaker.is_allowed = True
         mock_prompt.return_value = None
 

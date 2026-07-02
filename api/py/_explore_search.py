@@ -24,10 +24,10 @@ from ._db import (
     check_rate_limit,
     get_client_ip,
     get_api_key,
-    locations_collection,
     weather_cache_collection,
     ai_prompts_collection,
 )
+from ._places_resolver import find_all_locations
 from ._circuit_breaker import anthropic_breaker, CircuitOpenError
 
 router = APIRouter()
@@ -130,11 +130,21 @@ def _get_location_context() -> list[dict]:
         return _location_context
 
     try:
-        _location_context = list(
-            locations_collection()
-            .find({}, {"_id": 0, "slug": 1, "name": 1, "province": 1, "tags": 1, "country": 1})
-            .limit(200)
-        )
+        # Phase 0G: location context now sourced from places.placesGeo via the
+        # canonical resolver. Returned shape matches the previous projection so
+        # downstream tool execution keeps working unchanged.
+        adapted = find_all_locations(limit=200)
+        _location_context = [
+            {
+                "slug": loc.get("slug", ""),
+                "name": loc.get("name", ""),
+                "province": loc.get("province", ""),
+                "tags": loc.get("tags", []),
+                "country": loc.get("country", "ZW"),
+            }
+            for loc in adapted
+            if loc.get("slug")
+        ]
         _location_context_at = now
         return _location_context
     except Exception:

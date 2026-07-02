@@ -1,0 +1,25 @@
+# Prettier ignore for nyuchi/mukoko-weather.
+
+# Standard ignores
+node_modules/
+.git/
+.next/
+.vercel/
+
+# Files with structural meaning that Prettier would harm
+LICENSE
+CODEOWNERS
+CODEOWNERS.example
+.github/CODEOWNERS
+
+# YAML is handled by yamllint and actionlint, not Prettier — they have
+# stronger guarantees about GitHub Actions semantics that Prettier does
+# not understand (e.g. the `on:` truthy quirk).
+*.yml
+*.yaml
+
+# Lockfiles, generated output
+*-lock.json
+*-lock.yaml
+package-lock.json
+pnpm-lock.yaml

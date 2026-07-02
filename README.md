@@ -39,28 +39,28 @@ AI-powered global weather intelligence — real-time forecasts and locally-relev
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | [Next.js 16](https://nextjs.org) (App Router, TypeScript 5) |
-| Authentication | [WorkOS AuthKit](https://workos.com/docs/authkit) (`@workos-inc/authkit-nextjs`) — hosted sign-in, signed-cookie sessions, persons mirrored into the shared platform `identity.persons` |
-| Backend API | [Python FastAPI](https://fastapi.tiangolo.com) (Vercel serverless functions under `api/py/`) |
-| UI Components | [shadcn/ui](https://ui.shadcn.com) (Radix UI + CVA) |
-| Charts | [Chart.js 4](https://www.chartjs.org) + [react-chartjs-2](https://react-chartjs-2.js.org) (Canvas 2D) |
-| Maps | [MapLibre GL JS](https://maplibre.org) + [MapTiler Cloud](https://www.maptiler.com) (vector tiles direct from CDN — no proxy, GPU-rendered) + [Tomorrow.io](https://tomorrow.io) raster weather overlays |
-| PDF generation | [@react-pdf/renderer](https://react-pdf.org) — aviation briefing PDFs |
-| Drag & drop | [@dnd-kit](https://dndkit.com) — section reorder on weather page |
-| Aviation data | [NOAA Aviation Weather Center](https://aviationweather.gov) — METAR + TAF |
-| Styling | [Tailwind CSS 4](https://tailwindcss.com) with CSS custom properties |
-| Markdown | [react-markdown 10](https://github.com/remarkjs/react-markdown) |
-| State | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist` middleware |
-| AI | [Anthropic Claude SDK](https://docs.anthropic.com/en/docs) (server-side via Python FastAPI) |
-| Weather API | [Tomorrow.io](https://tomorrow.io) (primary) + [Open-Meteo](https://open-meteo.com) (fallback) |
-| Database | [MongoDB Atlas](https://mongodb.com/atlas) (cache, AI summaries, history, locations; Atlas Search for fuzzy queries) |
-| Analytics | [Google Analytics 4](https://analytics.google.com) |
-| 3D Animations | [Three.js](https://threejs.org) (weather-aware loading scenes) |
-| Testing | [Vitest](https://vitest.dev) (TypeScript, v8 coverage) + [pytest](https://pytest.org) (Python) |
-| CI/CD | [GitHub Actions](https://github.com/features/actions) (CI: lint → typecheck → tests; [CodeQL](https://codeql.github.com/) security scanning; Claude AI review on PRs; post-deploy DB init) |
-| Deployment | [Vercel](https://vercel.com) |
+| Layer          | Technology                                                                                                                                                                                               |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework      | [Next.js 16](https://nextjs.org) (App Router, TypeScript 5)                                                                                                                                              |
+| Authentication | [WorkOS AuthKit](https://workos.com/docs/authkit) (`@workos-inc/authkit-nextjs`) — hosted sign-in, signed-cookie sessions, persons mirrored into the shared platform `identity.persons`                  |
+| Backend API    | [Python FastAPI](https://fastapi.tiangolo.com) (Vercel serverless functions under `api/py/`)                                                                                                             |
+| UI Components  | [shadcn/ui](https://ui.shadcn.com) (Radix UI + CVA)                                                                                                                                                      |
+| Charts         | [Chart.js 4](https://www.chartjs.org) + [react-chartjs-2](https://react-chartjs-2.js.org) (Canvas 2D)                                                                                                    |
+| Maps           | [MapLibre GL JS](https://maplibre.org) + [MapTiler Cloud](https://www.maptiler.com) (vector tiles direct from CDN — no proxy, GPU-rendered) + [Tomorrow.io](https://tomorrow.io) raster weather overlays |
+| PDF generation | [@react-pdf/renderer](https://react-pdf.org) — aviation briefing PDFs                                                                                                                                    |
+| Drag & drop    | [@dnd-kit](https://dndkit.com) — section reorder on weather page                                                                                                                                         |
+| Aviation data  | [NOAA Aviation Weather Center](https://aviationweather.gov) — METAR + TAF                                                                                                                                |
+| Styling        | [Tailwind CSS 4](https://tailwindcss.com) with CSS custom properties                                                                                                                                     |
+| Markdown       | [react-markdown 10](https://github.com/remarkjs/react-markdown)                                                                                                                                          |
+| State          | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist` middleware                                                                                                                                      |
+| AI             | [Anthropic Claude SDK](https://docs.anthropic.com/en/docs) (server-side via Python FastAPI)                                                                                                              |
+| Weather API    | [Tomorrow.io](https://tomorrow.io) (primary) + [Open-Meteo](https://open-meteo.com) (fallback)                                                                                                           |
+| Database       | [MongoDB Atlas](https://mongodb.com/atlas) (cache, AI summaries, history, locations; Atlas Search for fuzzy queries)                                                                                     |
+| Analytics      | [Google Analytics 4](https://analytics.google.com)                                                                                                                                                       |
+| 3D Animations  | [Three.js](https://threejs.org) (weather-aware loading scenes)                                                                                                                                           |
+| Testing        | [Vitest](https://vitest.dev) (TypeScript, v8 coverage) + [pytest](https://pytest.org) (Python)                                                                                                           |
+| CI/CD          | [GitHub Actions](https://github.com/features/actions) (CI: lint → typecheck → tests; [CodeQL](https://codeql.github.com/) security scanning; Claude AI review on PRs; post-deploy DB init)               |
+| Deployment     | [Vercel](https://vercel.com)                                                                                                                                                                             |
 
 ## Getting Started
 
@@ -80,15 +80,15 @@ npm install
 
 ### Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `MONGODB_URI` | Yes | MongoDB Atlas connection string for caching and data storage |
-| `WORKOS_API_KEY` | Yes | Server-side WorkOS API key (sk_...). Required for AuthKit middleware, callback exchange, and `identity.persons` upsert |
-| `WORKOS_CLIENT_ID` | Yes | WorkOS Client ID (client_...) from the WorkOS dashboard |
-| `WORKOS_COOKIE_PASSWORD` | Yes | 32+ character secret used to sign the session cookie. Rotate carefully — rotating invalidates all sessions |
-| `NEXT_PUBLIC_WORKOS_REDIRECT_URI` | Yes | OAuth callback URL (e.g. `http://localhost:3000/callback` in dev, `https://weather.mukoko.com/callback` in prod). Must match the Redirect URI registered in the WorkOS dashboard |
-| `ANTHROPIC_API_KEY` | No | Anthropic API key for AI weather summaries. Without it, a basic fallback summary is generated |
-| `DB_INIT_SECRET` | No | Protects the `/api/db-init` endpoint in production (via `x-init-secret` header) |
+| Variable                          | Required | Description                                                                                                                                                                      |
+| --------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MONGODB_URI`                     | Yes      | MongoDB Atlas connection string for caching and data storage                                                                                                                     |
+| `WORKOS_API_KEY`                  | Yes      | Server-side WorkOS API key (sk\_...). Required for AuthKit middleware, callback exchange, and `identity.persons` upsert                                                          |
+| `WORKOS_CLIENT_ID`                | Yes      | WorkOS Client ID (client\_...) from the WorkOS dashboard                                                                                                                         |
+| `WORKOS_COOKIE_PASSWORD`          | Yes      | 32+ character secret used to sign the session cookie. Rotate carefully — rotating invalidates all sessions                                                                       |
+| `NEXT_PUBLIC_WORKOS_REDIRECT_URI` | Yes      | OAuth callback URL (e.g. `http://localhost:3000/callback` in dev, `https://weather.mukoko.com/callback` in prod). Must match the Redirect URI registered in the WorkOS dashboard |
+| `ANTHROPIC_API_KEY`               | No       | Anthropic API key for AI weather summaries. Without it, a basic fallback summary is generated                                                                                    |
+| `DB_INIT_SECRET`                  | No       | Protects the `/api/db-init` endpoint in production (via `x-init-secret` header)                                                                                                  |
 
 ### Development
 
@@ -112,26 +112,26 @@ The home page (`/`) uses smart redirect: returning users go to their saved locat
 
 ### Routes
 
-| Route | Description |
-|-------|-------------|
-| `/` | Smart redirect — saved location (returning users), geolocation (new users), or `/harare` (fallback) |
-| `/[location]` | Weather overview — current conditions, AI summary, activity insights, atmospheric metric cards |
-| `/[location]/atmosphere` | 24-hour atmospheric detail charts (humidity, wind, pressure, UV) |
-| `/[location]/forecast` | Hourly (24h) + daily (7-day) forecast charts + sunrise/sunset |
-| `/[location]/map` | Full-viewport interactive weather map with layer switcher |
-| `/shamwari` | Shamwari AI chat (full-viewport, Claude app style) |
-| `/explore` | Browse locations by category and country |
-| `/explore/[tag]` | Browse locations filtered by tag |
-| `/explore/country` | Browse locations by country index |
-| `/explore/country/[code]` | Browse locations in a specific country |
-| `/explore/country/[code]/[province]` | Browse locations in a specific province |
-| `/status` | System health dashboard (live checks for all services) |
-| `/about` | Company information |
-| `/help` | User help / FAQ |
-| `/history` | Historical weather data dashboard (search, multi-day charts, data table) |
-| `/privacy` | Privacy policy |
-| `/terms` | Terms of service |
-| `/embed` | Embeddable widget documentation |
+| Route                                | Description                                                                                         |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `/`                                  | Smart redirect — saved location (returning users), geolocation (new users), or `/harare` (fallback) |
+| `/[location]`                        | Weather overview — current conditions, AI summary, activity insights, atmospheric metric cards      |
+| `/[location]/atmosphere`             | 24-hour atmospheric detail charts (humidity, wind, pressure, UV)                                    |
+| `/[location]/forecast`               | Hourly (24h) + daily (7-day) forecast charts + sunrise/sunset                                       |
+| `/[location]/map`                    | Full-viewport interactive weather map with layer switcher                                           |
+| `/shamwari`                          | Shamwari AI chat (full-viewport, Claude app style)                                                  |
+| `/explore`                           | Browse locations by category and country                                                            |
+| `/explore/[tag]`                     | Browse locations filtered by tag                                                                    |
+| `/explore/country`                   | Browse locations by country index                                                                   |
+| `/explore/country/[code]`            | Browse locations in a specific country                                                              |
+| `/explore/country/[code]/[province]` | Browse locations in a specific province                                                             |
+| `/status`                            | System health dashboard (live checks for all services)                                              |
+| `/about`                             | Company information                                                                                 |
+| `/help`                              | User help / FAQ                                                                                     |
+| `/history`                           | Historical weather data dashboard (search, multi-day charts, data table)                            |
+| `/privacy`                           | Privacy policy                                                                                      |
+| `/terms`                             | Terms of service                                                                                    |
+| `/embed`                             | Embeddable widget documentation                                                                     |
 
 The main location page is a compact overview. Detail-heavy sections (charts, atmospheric trends, hourly/daily forecasts) live on dedicated sub-route pages. This reduces initial page load weight and prevents mobile OOM crashes.
 
@@ -141,58 +141,61 @@ All data, AI, and CRUD operations run in **Python FastAPI** (`api/py/`), deploye
 
 **Python API (`/api/py/*`):**
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/py/weather?lat=&lon=` | GET | Weather data (Tomorrow.io → Open-Meteo fallback, MongoDB cached 15-min TTL). `X-Weather-Provider` / `X-Cache` headers |
-| `/api/py/ai` | POST | AI weather summary (Claude Haiku 3.5, markdown). Tiered TTL cache (30/60/120 min) |
-| `/api/py/ai/followup` | POST | Inline follow-up chat for AI summaries (max 5 exchanges). Rate-limited 30 req/hour/IP |
-| `/api/py/ai/prompts` | GET | Database-driven AI prompt library (system prompts + suggested prompt rules) |
-| `/api/py/ai/suggested-rules` | GET | Dynamic suggested prompt rules for contextual prompts |
-| `/api/py/chat` | POST | Shamwari Explorer chatbot (Claude + tool use). Rate-limited 20 req/hour/IP |
-| `/api/py/search?q=&tag=&lat=&lon=` | GET | Location search (text, tag filter, geospatial nearest, pagination) |
-| `/api/py/geo?lat=&lon=` | GET | Nearest location lookup (supports `autoCreate=true` for community locations) |
-| `/api/py/locations` | GET | List/filter locations from MongoDB (by slug, tag, or all; includes stats mode) |
-| `/api/py/locations/add` | POST | Add locations via search or coordinates. Rate-limited 5 req/hour/IP |
-| `/api/py/activities` | GET | Activities (by id, category, search, labels, or categories mode) |
-| `/api/py/suitability` | GET | Suitability rules from MongoDB (all or by key; key format validated) |
-| `/api/py/tags` | GET | Tag metadata (all or featured) |
-| `/api/py/regions` | GET | Region reference data (bounding boxes) |
-| `/api/py/status` | GET | System health checks (MongoDB, Tomorrow.io, Open-Meteo, Anthropic, cache) |
-| `/api/py/history?location=&days=` | GET | Historical weather data for a location |
-| `/api/py/history/analyze` | POST | AI-powered historical weather analysis (server-side aggregation + Claude). Cached 1h. Rate-limited 10 req/hour/IP |
-| `/api/py/explore/search` | POST | AI-powered natural-language location search (Claude + tool use). Rate-limited 15 req/hour/IP |
-| `/api/py/map-tiles?z=&x=&y=&layer=` | GET | Tile proxy for Tomorrow.io weather overlay layers (keeps API key server-side) |
-| `/api/py/map-tiles/base?z=&x=&y=&style=` | GET | Tile proxy for Mapbox base map tiles (keeps access token server-side). Styles: streets-v12, dark-v11, light-v11, outdoors-v12, satellite-streets-v12 |
-| `/api/py/reports` | POST/GET | Community weather reports — submit (POST, 5/hour/IP) or list (GET) |
-| `/api/py/reports/upvote` | POST | Upvote a community report (IP-based dedup) |
-| `/api/py/reports/clarify` | POST | AI-generated follow-up questions for weather report clarification. Rate-limited 10 req/hour/IP |
-| `/api/py/devices` | POST/GET/PATCH | Device profile sync for cross-device preferences |
-| `/api/py/airquality?lat=&lon=` | GET | EPA-standard AQI (0-500) + per-pollutant breakdown (PM2.5/PM10/O3/NO2/SO2/CO/NH3) from Open-Meteo. Cached 1h in `air_quality_cache` (`_id` = `{lat:.4f}_{lon:.4f}`) |
-| `/api/py/health` | GET | Basic health check (MongoDB + Anthropic availability) |
+| Endpoint                                 | Method         | Description                                                                                                                                                         |
+| ---------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/py/weather?lat=&lon=`              | GET            | Weather data (Tomorrow.io → Open-Meteo fallback, MongoDB cached 15-min TTL). `X-Weather-Provider` / `X-Cache` headers                                               |
+| `/api/py/ai`                             | POST           | AI weather summary (Claude Haiku 3.5, markdown). Tiered TTL cache (30/60/120 min)                                                                                   |
+| `/api/py/ai/followup`                    | POST           | Inline follow-up chat for AI summaries (max 5 exchanges). Rate-limited 30 req/hour/IP                                                                               |
+| `/api/py/ai/prompts`                     | GET            | Database-driven AI prompt library (system prompts + suggested prompt rules)                                                                                         |
+| `/api/py/ai/suggested-rules`             | GET            | Dynamic suggested prompt rules for contextual prompts                                                                                                               |
+| `/api/py/chat`                           | POST           | Shamwari Explorer chatbot (Claude + tool use). Rate-limited 20 req/hour/IP                                                                                          |
+| `/api/py/search?q=&tag=&lat=&lon=`       | GET            | Location search (text, tag filter, geospatial nearest, pagination)                                                                                                  |
+| `/api/py/geo?lat=&lon=`                  | GET            | Nearest location lookup (supports `autoCreate=true` for community locations)                                                                                        |
+| `/api/py/locations`                      | GET            | List/filter locations from MongoDB (by slug, tag, or all; includes stats mode)                                                                                      |
+| `/api/py/locations/add`                  | POST           | Add locations via search or coordinates. Rate-limited 5 req/hour/IP                                                                                                 |
+| `/api/py/activities`                     | GET            | Activities (by id, category, search, labels, or categories mode)                                                                                                    |
+| `/api/py/suitability`                    | GET            | Suitability rules from MongoDB (all or by key; key format validated)                                                                                                |
+| `/api/py/tags`                           | GET            | Tag metadata (all or featured)                                                                                                                                      |
+| `/api/py/regions`                        | GET            | Region reference data (bounding boxes)                                                                                                                              |
+| `/api/py/status`                         | GET            | System health checks (MongoDB, Tomorrow.io, Open-Meteo, Anthropic, cache)                                                                                           |
+| `/api/py/history?location=&days=`        | GET            | Historical weather data for a location                                                                                                                              |
+| `/api/py/history/analyze`                | POST           | AI-powered historical weather analysis (server-side aggregation + Claude). Cached 1h. Rate-limited 10 req/hour/IP                                                   |
+| `/api/py/explore/search`                 | POST           | AI-powered natural-language location search (Claude + tool use). Rate-limited 15 req/hour/IP                                                                        |
+| `/api/py/map-tiles?z=&x=&y=&layer=`      | GET            | Tile proxy for Tomorrow.io weather overlay layers (keeps API key server-side)                                                                                       |
+| `/api/py/map-tiles/base?z=&x=&y=&style=` | GET            | Tile proxy for Mapbox base map tiles (keeps access token server-side). Styles: streets-v12, dark-v11, light-v11, outdoors-v12, satellite-streets-v12                |
+| `/api/py/reports`                        | POST/GET       | Community weather reports — submit (POST, 5/hour/IP) or list (GET)                                                                                                  |
+| `/api/py/reports/upvote`                 | POST           | Upvote a community report (IP-based dedup)                                                                                                                          |
+| `/api/py/reports/clarify`                | POST           | AI-generated follow-up questions for weather report clarification. Rate-limited 10 req/hour/IP                                                                      |
+| `/api/py/devices`                        | POST/GET/PATCH | Device profile sync for cross-device preferences                                                                                                                    |
+| `/api/py/airquality?lat=&lon=`           | GET            | EPA-standard AQI (0-500) + per-pollutant breakdown (PM2.5/PM10/O3/NO2/SO2/CO/NH3) from Open-Meteo. Cached 1h in `air_quality_cache` (`_id` = `{lat:.4f}_{lon:.4f}`) |
+| `/api/py/health`                         | GET            | Basic health check (MongoDB + Anthropic availability)                                                                                                               |
 
 **TypeScript API (remaining):**
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/og?title=&subtitle=&template=` | GET | Dynamic OG image generation (Edge runtime, Satori). 6 templates, in-memory rate-limited, 1-day CDN cache |
-| `/api/db-init` | POST | One-time DB setup + seed data (incl. AI prompts). Protected by `DB_INIT_SECRET` in production |
+| Endpoint                             | Method | Description                                                                                              |
+| ------------------------------------ | ------ | -------------------------------------------------------------------------------------------------------- |
+| `/api/og?title=&subtitle=&template=` | GET    | Dynamic OG image generation (Edge runtime, Satori). 6 templates, in-memory rate-limited, 1-day CDN cache |
+| `/api/db-init`                       | POST   | One-time DB setup + seed data (incl. AI prompts). Protected by `DB_INIT_SECRET` in production            |
 
 ### Resilience
 
 The app follows a Netflix-style resilience philosophy — the shell never crashes, failures are isolated per-section.
 
 **4-stage weather fallback chain:**
+
 1. MongoDB cache (15-min TTL)
 2. Tomorrow.io API (primary provider)
 3. Open-Meteo API (free fallback)
 4. `createFallbackWeather` seasonal estimates (always succeeds)
 
 **3-layer error isolation:**
+
 1. **Server-side safety net** — `page.tsx` wraps data fetching in try/catch; even if all providers fail, the page renders with seasonal estimates
 2. **Per-section error boundaries** — every weather section is wrapped in `ChartErrorBoundary`; a chart crash only affects that section
 3. **Page-level error boundaries** — last resort `error.tsx` pages with retry tracking (max 3 retries via sessionStorage)
 
 **Observability:**
+
 - Server-side: structured JSON logging (`logError`/`logWarn` in `src/lib/observability.ts`) for Vercel Log Drains
 - Client-side: GA4 exception events via `reportErrorToAnalytics` in error boundaries and error pages
 - Provider failure tracking: `reportProviderFailure` for weather API monitoring

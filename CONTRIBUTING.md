@@ -66,6 +66,7 @@ python -m pytest tests/py/ -v  # Run Python backend tests (direct)
 ```
 
 Write tests for:
+
 - All utility functions in `src/lib/`
 - New location data (validate slugs, coordinates, province)
 - CSS class mappings (e.g. frost severity to design tokens)
@@ -82,6 +83,7 @@ Tests live next to the code they test (co-located). Use the `describe`/`it`/`exp
 Next.js serves as the **presentation layer only**. All data handling, AI operations, database CRUD, and rule evaluation run in **Python FastAPI** (`api/py/`), deployed as Vercel serverless functions. Routes are proxied via `vercel.json` rewrites (`/api/py/*` → `api/py/index.py`).
 
 Only two TypeScript API routes remain:
+
 - `/api/og` — dynamic OG image generation (Edge runtime, Satori)
 - `/api/db-init` — one-time DB setup + seed data
 
@@ -182,21 +184,22 @@ The old analyzer names may have silently fallen through to Atlas defaults — th
 
 All workflows use `concurrency` groups with `cancel-in-progress: true` — rapid pushes cancel stale runs instead of creating zombie checks.
 
-| Workflow | Trigger | Purpose |
-|----------|---------|---------|
-| `ci.yml` | Push/PR to `main` | Single job: lint → typecheck → TypeScript tests → Python tests. All steps appear under one check in the GitHub PR UI. |
-| `codeql.yml` | Push/PR to `main` | CodeQL security scanning for JavaScript/TypeScript, Python, and GitHub Actions workflows. Matrix strategy runs all 3 language analyses in parallel. |
-| `claude-code-review.yml` | PR opened/updated | Claude AI reviews code quality, security, accessibility. Token-guarded: skips gracefully if `CLAUDE_CODE_OAUTH_TOKEN` secret is not configured. |
-| `claude.yml` | `@claude` mention in issues/PRs | Claude Code responds to requests in issues and PR comments |
-| `db-init.yml` | Vercel production deploy succeeds | Syncs seed data to MongoDB (locations, activities, rules, prompts) |
+| Workflow                 | Trigger                           | Purpose                                                                                                                                             |
+| ------------------------ | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`                 | Push/PR to `main`                 | Single job: lint → typecheck → TypeScript tests → Python tests. All steps appear under one check in the GitHub PR UI.                               |
+| `codeql.yml`             | Push/PR to `main`                 | CodeQL security scanning for JavaScript/TypeScript, Python, and GitHub Actions workflows. Matrix strategy runs all 3 language analyses in parallel. |
+| `claude-code-review.yml` | PR opened/updated                 | Claude AI reviews code quality, security, accessibility. Token-guarded: skips gracefully if `CLAUDE_CODE_OAUTH_TOKEN` secret is not configured.     |
+| `claude.yml`             | `@claude` mention in issues/PRs   | Claude Code responds to requests in issues and PR comments                                                                                          |
+| `db-init.yml`            | Vercel production deploy succeeds | Syncs seed data to MongoDB (locations, activities, rules, prompts)                                                                                  |
 
 ## Reporting Issues
 
 Use the [GitHub Issues](https://github.com/nyuchitech/mukoko-weather/issues) page. We have templates for:
+
 - **Bug reports** — include the affected location/page, device info, and steps to reproduce
 - **Feature requests** — describe the problem, proposed solution, and which category it relates to
 
-For security vulnerabilities, email **legal@nyuchi.com** — do not open a public issue.
+For security vulnerabilities, email **<legal@nyuchi.com>** — do not open a public issue.
 
 ## Code of Conduct
 

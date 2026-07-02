@@ -155,16 +155,17 @@ class TestConstants:
 
 
 class TestListByTag:
-    @patch("py._chat.locations_collection")
-    def test_rejects_unknown_tag(self, _mock_coll):
+    @patch("py._chat.find_locations_by_tag")
+    def test_rejects_unknown_tag(self, _mock_find):
         result = _execute_list_by_tag("not-a-tag")
         assert "error" in result
         assert "Unknown tag" in result["error"]
 
-    @patch("py._chat.locations_collection")
-    def test_valid_tag_returns_results(self, mock_coll):
-        mock_coll.return_value.find.return_value.sort.return_value.limit.return_value = [
-            {"slug": "chinhoyi", "name": "Chinhoyi", "province": "Mashonaland West"}
+    @patch("py._chat.find_locations_by_tag")
+    def test_valid_tag_returns_results(self, mock_find):
+        # Phase 0G: returns adapted placesGeo entries (LocationDoc shape)
+        mock_find.return_value = [
+            {"slug": "chinhoyi", "name": "Chinhoyi", "province": "Mashonaland West", "tags": ["farming"]},
         ]
 
         result = _execute_list_by_tag("farming")
@@ -324,11 +325,12 @@ class TestGetActivityAdvice:
 
 
 class TestListByTagCap:
-    @patch("py._chat.locations_collection")
-    def test_caps_results_at_20(self, mock_coll):
+    @patch("py._chat.find_locations_by_tag")
+    def test_caps_results_at_20(self, mock_find):
         """list_locations_by_tag should return at most 20 results."""
-        locs = [{"slug": f"loc{i}", "name": f"Loc{i}", "province": "P"} for i in range(20)]
-        mock_coll.return_value.find.return_value.sort.return_value.limit.return_value = locs
+        # Phase 0G: caller passes limit=20 and we return adapted shape
+        locs = [{"slug": f"loc{i}", "name": f"Loc{i}", "province": "P", "tags": ["farming"]} for i in range(20)]
+        mock_find.return_value = locs
 
         result = _execute_list_by_tag("farming")
         assert result["total"] == 20
@@ -344,16 +346,19 @@ class TestListByTagCap:
 class TestLocationCountFallback:
     @patch("py._chat._get_chat_prompt_template", return_value=None)
     @patch("py._chat._get_activities_list", return_value=[])
-    @patch("py._chat.locations_collection")
-    def test_estimated_document_count_exception_returns_many(self, mock_coll, _mock_act, _mock_tmpl):
-        """If estimated_document_count() fails, location count should be 'many'."""
+    @patch("py._chat.count_all_locations")
+    @patch("py._chat.find_all_locations")
+    def test_estimated_document_count_exception_returns_many(
+        self, mock_find_all, mock_count, _mock_act, _mock_tmpl,
+    ):
+        """If count_all_locations() fails, location count should be 'many'."""
         # Reset cache to force re-fetch
         import py._chat as chat_mod
         chat_mod._location_context = None
         chat_mod._location_context_at = 0
 
-        mock_coll.return_value.find.return_value.sort.return_value.limit.return_value = []
-        mock_coll.return_value.estimated_document_count.side_effect = Exception("DB error")
+        mock_find_all.return_value = []
+        mock_count.side_effect = Exception("DB error")
 
         prompt = _build_chat_system_prompt([])
         assert "many" in prompt
