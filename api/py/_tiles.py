@@ -9,6 +9,7 @@ the Tomorrow.io API key server-side.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Optional
 
@@ -19,6 +20,8 @@ from fastapi.responses import Response
 from ._db import get_api_key
 
 router = APIRouter()
+
+logger = logging.getLogger("mukoko.tiles")
 
 VALID_LAYERS = {
     "precipitationIntensity",
@@ -71,6 +74,11 @@ async def proxy_map_tile(
     try:
         api_key = get_api_key("tomorrow")
         if not api_key:
+            logger.warning(
+                "Tomorrow.io tile request rejected: no 'tomorrow' API key in "
+                "api_keys collection. Seed it via POST /api/db-init with "
+                "apiKeys.tomorrow so weather overlays can render."
+            )
             raise HTTPException(status_code=503, detail="Map service unavailable")
 
         tile_url = f"{TOMORROW_TILE_ORIGIN}/v4/map/tile/{z}/{x}/{y}/{layer}/{timestamp}.png?apikey={api_key}"
@@ -79,9 +87,14 @@ async def proxy_map_tile(
         resp = client.get(tile_url)
 
         if resp.status_code == 429:
+            logger.warning("Tomorrow.io tile rate limited (429) for layer=%s z=%s", layer, z)
             return Response(status_code=429)
 
         if resp.status_code != 200:
+            logger.warning(
+                "Tomorrow.io tile upstream error: status=%s layer=%s z/x/y=%s/%s/%s",
+                resp.status_code, layer, z, x, y,
+            )
             return Response(status_code=resp.status_code)
 
         return Response(
@@ -95,4 +108,5 @@ async def proxy_map_tile(
     except HTTPException:
         raise
     except Exception:
+        logger.exception("Tomorrow.io tile proxy failed for layer=%s z/x/y=%s/%s/%s", layer, z, x, y)
         return Response(status_code=502)

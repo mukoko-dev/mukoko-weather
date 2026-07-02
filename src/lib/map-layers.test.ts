@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { MAP_LAYERS, DEFAULT_LAYER, getMapLayerById, MAPTILER_STYLE_LIGHT, MAPTILER_STYLE_DARK } from "./map-layers";
+import {
+  MAP_LAYERS,
+  DEFAULT_LAYER,
+  getMapLayerById,
+  MAPTILER_STYLE_LIGHT,
+  MAPTILER_STYLE_DARK,
+  WEATHER_OVERLAY_ID,
+  WEATHER_OVERLAY_MIN_ZOOM,
+  WEATHER_OVERLAY_MAX_ZOOM,
+  weatherOverlayTileUrl,
+  buildWeatherOverlaySource,
+} from "./map-layers";
 
 describe("MAP_LAYERS", () => {
   it("has at least 3 layers (issue requirement)", () => {
@@ -52,6 +63,61 @@ describe("getMapLayerById", () => {
 
   it("returns undefined for an invalid ID", () => {
     expect(getMapLayerById("nonexistent")).toBeUndefined();
+  });
+});
+
+describe("weatherOverlayTileUrl", () => {
+  it("targets the server-side proxy (keeps the Tomorrow.io key server-side)", () => {
+    const url = weatherOverlayTileUrl("precipitationIntensity");
+    expect(url.startsWith("/api/py/map-tiles?")).toBe(true);
+    expect(url).not.toContain("api.tomorrow.io");
+    expect(url).not.toContain("apikey");
+  });
+
+  it("includes MapLibre {z}/{x}/{y} placeholders and the layer id", () => {
+    const url = weatherOverlayTileUrl("windSpeed");
+    expect(url).toContain("z={z}");
+    expect(url).toContain("x={x}");
+    expect(url).toContain("y={y}");
+    expect(url).toContain("layer=windSpeed");
+  });
+
+  it("URL-encodes the layer id", () => {
+    // Placeholders must survive encoding; the layer value is encoded.
+    const url = weatherOverlayTileUrl("temp erature");
+    expect(url).toContain("layer=temp%20erature");
+    expect(url).toContain("{z}");
+  });
+
+  it("builds valid URLs for every configured layer", () => {
+    for (const layer of MAP_LAYERS) {
+      expect(weatherOverlayTileUrl(layer.id)).toContain(`layer=${layer.id}`);
+    }
+  });
+});
+
+describe("buildWeatherOverlaySource", () => {
+  it("is a 256px raster source pinned to the Tomorrow.io zoom range (1–12)", () => {
+    const src = buildWeatherOverlaySource("cloudCover");
+    expect(src.type).toBe("raster");
+    expect(src.tileSize).toBe(256);
+    // Pinning maxzoom to 12 makes MapLibre overzoom instead of requesting
+    // z13+ tiles the proxy rejects (which would make the overlay vanish).
+    expect(src.minzoom).toBe(WEATHER_OVERLAY_MIN_ZOOM);
+    expect(src.maxzoom).toBe(WEATHER_OVERLAY_MAX_ZOOM);
+    expect(WEATHER_OVERLAY_MIN_ZOOM).toBe(1);
+    expect(WEATHER_OVERLAY_MAX_ZOOM).toBe(12);
+  });
+
+  it("uses the proxied tile URL for the requested layer", () => {
+    const src = buildWeatherOverlaySource("temperature");
+    expect(src.tiles).toEqual([weatherOverlayTileUrl("temperature")]);
+  });
+});
+
+describe("WEATHER_OVERLAY_ID", () => {
+  it("is a stable, non-empty id shared by source and layer", () => {
+    expect(WEATHER_OVERLAY_ID).toBe("weather-overlay");
   });
 });
 

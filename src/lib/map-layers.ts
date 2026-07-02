@@ -88,3 +88,40 @@ export const DEFAULT_LAYER = "precipitationIntensity";
 export function getMapLayerById(id: string): MapLayer | undefined {
   return MAP_LAYERS.find((l) => l.id === id);
 }
+
+/**
+ * Tomorrow.io weather overlay tiles are only served for zoom levels 1–12
+ * (see the `/api/py/map-tiles` proxy, which rejects z<1 or z>12 with HTTP 400).
+ * Pinning the raster source to this range makes MapLibre overzoom the z12 tile
+ * when the user zooms in past 12 instead of requesting z13+ tiles the proxy
+ * rejects — which would otherwise make the overlay vanish when zoomed in.
+ */
+export const WEATHER_OVERLAY_MIN_ZOOM = 1;
+export const WEATHER_OVERLAY_MAX_ZOOM = 12;
+
+/** Shared MapLibre source/layer id for the weather overlay. */
+export const WEATHER_OVERLAY_ID = "weather-overlay";
+
+/**
+ * Builds the proxied tile URL template for a Tomorrow.io weather overlay layer.
+ * MapLibre substitutes {z}/{x}/{y} at request time. Tiles are proxied through
+ * the Python backend (`/api/py/map-tiles`) so the Tomorrow.io key stays server-side.
+ */
+export function weatherOverlayTileUrl(layerId: string): string {
+  return `/api/py/map-tiles?z={z}&x={x}&y={y}&layer=${encodeURIComponent(layerId)}`;
+}
+
+/**
+ * Raster source spec for a weather overlay layer, with minzoom/maxzoom pinned
+ * to the Tomorrow.io tile availability range so the overlay keeps rendering
+ * (via overzoom) at high map zooms instead of silently disappearing.
+ */
+export function buildWeatherOverlaySource(layerId: string) {
+  return {
+    type: "raster" as const,
+    tiles: [weatherOverlayTileUrl(layerId)],
+    tileSize: 256,
+    minzoom: WEATHER_OVERLAY_MIN_ZOOM,
+    maxzoom: WEATHER_OVERLAY_MAX_ZOOM,
+  };
+}
