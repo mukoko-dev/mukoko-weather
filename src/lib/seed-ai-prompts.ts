@@ -402,7 +402,7 @@ export const AI_SUGGESTED_PROMPT_RULES: Omit<AISuggestedPromptRule, "updatedAt">
     condition: {
       field: "activities",
       operator: "in",
-      value: ["crop-farming", "livestock", "horticulture", "irrigation", "aquaculture"],
+      value: ["crop-farming", "livestock", "tobacco-farming", "cotton-farming", "horticulture", "irrigation", "planting", "harvest", "aquaculture"],
       source: "activities",
     },
     active: true,

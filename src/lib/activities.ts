@@ -58,44 +58,51 @@ export const CATEGORY_STYLES: Record<string, CategoryStyle> = {
 
 export const ACTIVITIES: Activity[] = [
   // ── Agriculture & Forestry (category: "farming") ──────────────────────
-  { id: "crop-farming", label: "Crop Farming", category: "farming", relevantTags: ["farming"], description: "Maize, tobacco, cotton, soya, and other crop cultivation", icon: "crop" },
-  { id: "livestock", label: "Livestock", category: "farming", relevantTags: ["farming"], description: "Cattle ranching, poultry, and animal husbandry", icon: "livestock" },
-  { id: "horticulture", label: "Horticulture", category: "farming", relevantTags: ["farming"], description: "Vegetables, fruit orchards, and commercial growing", icon: "leaf" },
-  { id: "gardening", label: "Gardening", category: "farming", relevantTags: ["farming"], description: "Home gardens and small-scale growing", icon: "shovel" },
+  // Labels use Southern-African (Zimbabwe-first) framing. IDs are stable — they
+  // are referenced by suitability rules and persisted in the user's Zustand store.
+  { id: "crop-farming", label: "Maize & Crop Farming", category: "farming", relevantTags: ["farming"], description: "Mielie (maize), soya, and staple crop cultivation", icon: "crop" },
+  { id: "livestock", label: "Cattle Herding & Livestock", category: "farming", relevantTags: ["farming"], description: "Cattle (mombe) herding, goats, poultry, and animal husbandry", icon: "livestock" },
+  { id: "tobacco-farming", label: "Tobacco Farming", category: "farming", relevantTags: ["farming"], description: "Flue-cured tobacco growing, curing barns, and grading", icon: "leaf" },
+  { id: "cotton-farming", label: "Cotton Farming", category: "farming", relevantTags: ["farming"], description: "Cotton (donje) planting, spraying, and picking", icon: "flower-2" },
+  { id: "horticulture", label: "Horticulture & Market Gardening", category: "farming", relevantTags: ["farming"], description: "Vegetables, fruit orchards, and commercial growing for market", icon: "leaf" },
+  { id: "gardening", label: "Communal Gardening (Nhimbe)", category: "farming", relevantTags: ["farming"], description: "Home gardens, nhimbe work parties, and small-scale growing", icon: "shovel" },
   { id: "irrigation", label: "Irrigation", category: "farming", relevantTags: ["farming"], description: "Irrigation scheduling and water management", icon: "water" },
+  { id: "planting", label: "Planting Season Prep", category: "farming", relevantTags: ["farming"], description: "First-rains land preparation, ploughing, and sowing", icon: "sprout" },
+  { id: "harvest", label: "Harvest (Kukohwa)", category: "farming", relevantTags: ["farming"], description: "Reaping, threshing, and storing the season's crop", icon: "wheat" },
   { id: "forestry", label: "Forestry", category: "farming", relevantTags: ["farming", "national-park"], description: "Timber, plantations, and forest management", icon: "tree" },
-  { id: "beekeeping", label: "Beekeeping", category: "farming", relevantTags: ["farming"], description: "Apiary management and honey production", icon: "bee" },
-  { id: "aquaculture", label: "Aquaculture", category: "farming", relevantTags: ["farming"], description: "Fish farming, tilapia ponds, and shrimp culture", icon: "fish" },
+  { id: "beekeeping", label: "Beekeeping (Mukoko)", category: "farming", relevantTags: ["farming"], description: "Apiary management, mukoko log hives, and honey production", icon: "bee" },
+  { id: "aquaculture", label: "Fish Farming", category: "farming", relevantTags: ["farming"], description: "Tilapia (bream) ponds, dams, and fish rearing", icon: "fish" },
 
   // ── Industry & Construction (category: "mining") ─────────────────────
-  { id: "mining", label: "Mining", category: "mining", relevantTags: ["mining"], description: "Mining operations and outdoor extraction", icon: "pickaxe" },
+  { id: "mining", label: "Mining", category: "mining", relevantTags: ["mining"], description: "Gold, platinum, chrome, and outdoor extraction", icon: "pickaxe" },
   { id: "construction", label: "Construction", category: "mining", relevantTags: ["mining", "city"], description: "Building and construction work", icon: "hardhat" },
   { id: "manufacturing", label: "Manufacturing", category: "mining", relevantTags: ["city"], description: "Factory operations, warehousing, and shift work", icon: "factory" },
   { id: "energy", label: "Energy & Utilities", category: "mining", relevantTags: ["mining", "city"], description: "Solar, hydro, and power line maintenance", icon: "bolt" },
   { id: "logistics", label: "Warehousing", category: "mining", relevantTags: ["city"], description: "Loading docks, cold chain, and inventory management", icon: "box" },
 
   // ── Transport & Logistics (category: "travel") ───────────────────────
-  { id: "driving", label: "Driving", category: "travel", relevantTags: ["travel", "border"], description: "Road trips and long-distance driving", icon: "car" },
-  { id: "commuting", label: "Commuting", category: "travel", relevantTags: ["travel", "city"], description: "Daily commute to work or school", icon: "bus" },
+  { id: "driving", label: "Driving", category: "travel", relevantTags: ["travel", "border"], description: "Highway trips (Harare–Bulawayo, Beitbridge) and long-distance driving", icon: "car" },
+  { id: "commuting", label: "Commuting", category: "travel", relevantTags: ["travel", "city"], description: "Daily kombi, bus, and walking commute to work or school", icon: "bus" },
   { id: "flying", label: "Flying", category: "travel", relevantTags: ["travel", "city"], description: "Air travel and flight planning", icon: "plane" },
-  { id: "trucking", label: "Trucking", category: "travel", relevantTags: ["travel", "border"], description: "Long-haul freight and cross-border transport", icon: "truck" },
-  { id: "shipping", label: "Marine & Shipping", category: "travel", relevantTags: ["travel", "border"], description: "Port operations, fishing vessels, and marine transport", icon: "ship" },
+  { id: "trucking", label: "Cross-Border Trucking", category: "travel", relevantTags: ["travel", "border"], description: "Long-haul freight via Beitbridge, Chirundu, and regional corridors", icon: "truck" },
+  { id: "shipping", label: "Marine & Ferry", category: "travel", relevantTags: ["travel", "border"], description: "Lake Kariba ferries, fishing vessels, and dam transport", icon: "ship" },
 
   // ── Outdoors & Conservation (category: "tourism") ────────────────────
-  { id: "safari", label: "Safari", category: "tourism", relevantTags: ["tourism", "national-park"], description: "Game drives and wildlife viewing", icon: "binoculars" },
+  { id: "safari", label: "Safari & Game Drives", category: "tourism", relevantTags: ["tourism", "national-park"], description: "Game drives and wildlife viewing (Hwange, Mana Pools)", icon: "binoculars" },
   { id: "photography", label: "Photography", category: "tourism", relevantTags: ["tourism", "national-park"], description: "Outdoor and landscape photography", icon: "camera" },
   { id: "birdwatching", label: "Birdwatching", category: "tourism", relevantTags: ["tourism", "national-park"], description: "Birding and wildlife observation", icon: "bird" },
   { id: "camping", label: "Camping", category: "tourism", relevantTags: ["tourism", "national-park"], description: "Outdoor camping and overnight stays", icon: "tent" },
   { id: "stargazing", label: "Stargazing", category: "tourism", relevantTags: ["tourism", "national-park"], description: "Night sky observation and astronomy", icon: "star" },
-  { id: "fishing", label: "Fishing", category: "tourism", relevantTags: ["tourism", "national-park"], description: "Lake and river fishing excursions", icon: "anchor" },
-  { id: "conservation", label: "Conservation", category: "tourism", relevantTags: ["national-park", "tourism"], description: "Park rangers, anti-poaching patrols, and wildlife management", icon: "shield" },
+  { id: "fishing", label: "Fishing (Kariba)", category: "tourism", relevantTags: ["tourism", "national-park"], description: "Tiger fishing and bream on Lake Kariba, the Zambezi, and dams", icon: "anchor" },
+  { id: "conservation", label: "Conservation", category: "tourism", relevantTags: ["national-park", "tourism"], description: "Rangers, anti-poaching patrols, and wildlife management", icon: "shield" },
   { id: "wildlife-research", label: "Wildlife Research", category: "tourism", relevantTags: ["national-park", "tourism"], description: "Field research, animal tracking, and ecological monitoring", icon: "pawprint" },
-  { id: "hiking", label: "Hiking", category: "tourism", relevantTags: ["tourism", "national-park"], description: "Trail hiking and mountain walks", icon: "mountain" },
+  { id: "hiking", label: "Hiking", category: "tourism", relevantTags: ["tourism", "national-park"], description: "Trail hiking and mountain walks (Nyanga, Chimanimani, Matobo)", icon: "mountain" },
 
   // ── Sports & Fitness (category: "sports") ────────────────────────────
-  { id: "running", label: "Running", category: "sports", relevantTags: ["city"], description: "Outdoor running, jogging, and marathons", icon: "running" },
+  { id: "running", label: "Running", category: "sports", relevantTags: ["city"], description: "Outdoor running, jogging, and road races", icon: "running" },
   { id: "cycling", label: "Cycling", category: "sports", relevantTags: ["city", "travel"], description: "Road and trail cycling, competitive or recreational", icon: "bicycle" },
-  { id: "football", label: "Football", category: "sports", relevantTags: ["city", "education"], description: "Football training, matches, and tournaments", icon: "football" },
+  { id: "football", label: "Soccer (Football)", category: "sports", relevantTags: ["city", "education"], description: "Soccer training, matches, and tournaments", icon: "football" },
+  { id: "netball", label: "Netball", category: "sports", relevantTags: ["city", "education"], description: "Netball training, matches, and school leagues", icon: "volleyball" },
   { id: "swimming", label: "Swimming", category: "sports", relevantTags: ["tourism", "city"], description: "Outdoor swimming, water polo, and aquatics", icon: "swimming" },
   { id: "golf", label: "Golf", category: "sports", relevantTags: ["tourism", "city"], description: "Golf rounds and practice", icon: "golf" },
   { id: "cricket", label: "Cricket", category: "sports", relevantTags: ["city", "education"], description: "Cricket training and matches", icon: "cricket" },
@@ -107,13 +114,16 @@ export const ACTIVITIES: Activity[] = [
 
   // ── Lifestyle & Events (category: "casual") ─────────────────────────
   { id: "walking", label: "Walking", category: "casual", relevantTags: ["city"], description: "Leisure walks and strolling", icon: "footprints" },
-  { id: "barbecue", label: "Barbecue", category: "casual", relevantTags: [], description: "Braai and outdoor cooking", icon: "grill" },
-  { id: "outdoor-events", label: "Outdoor Events", category: "casual", relevantTags: ["city", "tourism"], description: "Markets, exhibitions, and outdoor gatherings", icon: "sparkles" },
-  { id: "festivals", label: "Festivals & Concerts", category: "casual", relevantTags: ["city", "tourism"], description: "Music festivals, cultural events, and live performances", icon: "music" },
-  { id: "weddings", label: "Weddings & Ceremonies", category: "casual", relevantTags: ["city", "tourism"], description: "Outdoor weddings, receptions, and celebrations", icon: "calendar" },
+  { id: "barbecue", label: "Braai", category: "casual", relevantTags: [], description: "Braai, shisanyama, and outdoor grilling with friends and family", icon: "grill" },
+  { id: "potjie", label: "Potjie (Three-Legged Pot)", category: "casual", relevantTags: [], description: "Slow-cooked potjiekos and stews over open coals", icon: "cooking-pot" },
+  { id: "market-day", label: "Market Day (Musika)", category: "casual", relevantTags: ["city"], description: "Musika trading, flea markets, and vendor days", icon: "store" },
+  { id: "church-gathering", label: "Church Gathering", category: "casual", relevantTags: ["city"], description: "Outdoor church services, crusades, and prayer meetings", icon: "church" },
+  { id: "outdoor-events", label: "Outdoor Events", category: "casual", relevantTags: ["city", "tourism"], description: "Agricultural shows, exhibitions, and outdoor gatherings", icon: "sparkles" },
+  { id: "festivals", label: "Festivals (Mbira & Cultural)", category: "casual", relevantTags: ["city", "tourism"], description: "Mbira nights, cultural galas, and live music performances", icon: "music" },
+  { id: "weddings", label: "Weddings & Ceremonies", category: "casual", relevantTags: ["city", "tourism"], description: "Roora/lobola, weddings, and outdoor celebrations", icon: "calendar" },
   { id: "drone-flying", label: "Drone Flying", category: "casual", relevantTags: ["city", "tourism", "farming"], description: "Recreational and commercial drone operations", icon: "drone" },
   { id: "picnic", label: "Picnic", category: "casual", relevantTags: ["city", "tourism"], description: "Outdoor picnics and lunch in the park", icon: "picnic" },
-  { id: "health-wellness", label: "Health & Wellness", category: "casual", relevantTags: ["city"], description: "Outdoor yoga, tai chi, and wellness activities", icon: "heartpulse" },
+  { id: "health-wellness", label: "Health & Wellness", category: "casual", relevantTags: ["city"], description: "Outdoor yoga, aerobics, and wellness activities", icon: "heartpulse" },
   { id: "education", label: "School & Education", category: "casual", relevantTags: ["city", "education"], description: "Outdoor school activities, athletics day, and field trips", icon: "graduationcap" },
 ];
 

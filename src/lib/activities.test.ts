@@ -88,7 +88,7 @@ describe("getActivityById", () => {
   it("returns the correct activity", () => {
     const result = getActivityById("crop-farming");
     expect(result).toBeDefined();
-    expect(result!.label).toBe("Crop Farming");
+    expect(result!.label).toBe("Maize & Crop Farming");
     expect(result!.category).toBe("farming");
   });
 
@@ -288,6 +288,59 @@ describe("getDefaultActivitiesForLocation", () => {
     // Should still include universal activities
     const ids = defaults.map((a) => a.id);
     expect(ids).toContain("barbecue");
+  });
+});
+
+describe("African / Southern-African localization", () => {
+  it("uses Braai instead of Barbecue (id stays stable for persistence + rules)", () => {
+    const braai = getActivityById("barbecue");
+    expect(braai).toBeDefined();
+    expect(braai!.label).toBe("Braai");
+    // relevantTags stays empty so it remains a universal activity
+    expect(braai!.relevantTags).toEqual([]);
+  });
+
+  it("frames football locally as Soccer", () => {
+    expect(getActivityById("football")!.label).toBe("Soccer (Football)");
+  });
+
+  it("adds authentically African farming activities with stable new ids", () => {
+    for (const id of ["tobacco-farming", "cotton-farming", "planting", "harvest"]) {
+      const activity = getActivityById(id);
+      expect(activity).toBeDefined();
+      expect(activity!.category).toBe("farming");
+      expect(activity!.relevantTags).toContain("farming");
+    }
+  });
+
+  it("adds netball as a Southern-African sport", () => {
+    const netball = getActivityById("netball");
+    expect(netball).toBeDefined();
+    expect(netball!.category).toBe("sports");
+  });
+
+  it("adds African lifestyle activities (potjie, market day, church gatherings)", () => {
+    expect(getActivityById("potjie")!.category).toBe("casual");
+    expect(getActivityById("market-day")!.category).toBe("casual");
+    expect(getActivityById("church-gathering")!.category).toBe("casual");
+  });
+
+  it("uses regional framing in labels and descriptions", () => {
+    expect(getActivityById("livestock")!.label).toContain("Cattle Herding");
+    expect(getActivityById("gardening")!.label).toContain("Nhimbe");
+    expect(getActivityById("harvest")!.label).toContain("Kukohwa");
+    expect(getActivityById("fishing")!.label).toContain("Kariba");
+    expect(getActivityById("festivals")!.label).toContain("Mbira");
+    expect(getActivityById("crop-farming")!.description.toLowerCase()).toContain("mielie");
+  });
+
+  it("every new activity resolves through an existing category suitability rule", () => {
+    // New activities inherit the category:<category> rule, so they evaluate
+    // correctly without a per-activity override. Confirm they use known categories.
+    const ruledCategories = new Set(["farming", "mining", "travel", "tourism", "sports", "casual"]);
+    for (const id of ["tobacco-farming", "cotton-farming", "planting", "harvest", "netball", "potjie", "market-day", "church-gathering"]) {
+      expect(ruledCategories.has(getActivityById(id)!.category)).toBe(true);
+    }
   });
 });
 
