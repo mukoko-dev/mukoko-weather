@@ -75,34 +75,31 @@ export function ForecastDashboard({
         {usingFallback && <WeatherUnavailableBanner />}
         {frostAlert && <FrostAlertBanner alert={frostAlert} />}
 
-        {/* Hourly forecast (24h) */}
-        <div className="mt-6">
+        {/* Forecast charts — 2-column grid on desktop, stacked on mobile */}
+        <div className="mt-6 grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+          {/* Hourly forecast (24h) */}
           <ChartErrorBoundary name="hourly forecast">
             <Suspense fallback={<SectionSkeleton />}>
               <HourlyForecast hourly={weather.hourly} />
             </Suspense>
           </ChartErrorBoundary>
-        </div>
 
-        {/* 7-day daily forecast */}
-        <div className="mt-8">
+          {/* 7-day daily forecast */}
           <ChartErrorBoundary name="daily forecast">
             <Suspense fallback={<SectionSkeleton />}>
               <DailyForecast daily={weather.daily} />
             </Suspense>
           </ChartErrorBoundary>
-        </div>
 
-        {/* Sunrise & sunset */}
-        <LazySection label="sun-times">
-          <div className="mt-8">
+          {/* Sunrise & sunset — spans both columns */}
+          <LazySection label="sun-times" className="lg:col-span-2">
             <ChartErrorBoundary name="sun times">
               <Suspense fallback={<SectionSkeleton />}>
                 <SunTimes daily={weather.daily} />
               </Suspense>
             </ChartErrorBoundary>
-          </div>
-        </LazySection>
+          </LazySection>
+        </div>
       </main>
 
       <Footer />

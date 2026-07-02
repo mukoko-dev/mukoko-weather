@@ -10,6 +10,8 @@ interface LazySectionProps {
   rootMargin?: string;
   /** Debug label for console logging */
   label?: string;
+  /** Optional class applied to the persistent wrapper div (e.g. grid column spans) */
+  className?: string;
 }
 
 const DEFAULT_FALLBACK = (
@@ -117,6 +119,7 @@ export function LazySection({
   fallback = DEFAULT_FALLBACK,
   rootMargin,
   label = "unknown",
+  className,
 }: LazySectionProps) {
   const loadMargin = rootMargin ?? getLoadMargin();
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -188,6 +191,7 @@ export function LazySection({
     <div
       ref={sentinelRef}
       data-lazy-section={label}
+      className={className}
     >
       {visible ? (
         <div className={animate ? "animate-fade-in-up" : undefined}>

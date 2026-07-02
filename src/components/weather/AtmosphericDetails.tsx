@@ -67,7 +67,7 @@ export function AtmosphericDetails({ hourly }: Props) {
         </h2>
         <p className="mt-1 text-base text-text-tertiary">24-hour hourly trends</p>
 
-        <div className="mt-4 space-y-6">
+        <div className="mt-4 grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 text-base font-medium text-text-secondary">Humidity & Cloud Cover</h3>
             <HumidityCloudChart data={data} labelKey="label" />

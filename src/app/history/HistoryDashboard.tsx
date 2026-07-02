@@ -782,6 +782,8 @@ export function HistoryDashboard() {
             </LazySection>
           )}
 
+          {/* Charts — 2-column grid on desktop, single column on mobile */}
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
           {/* ── Temperature trend ──────────────────────────────────────── */}
           <LazySection label="history-temp" fallback={<ChartSkeleton aspect="aspect-[16/6]" />}>
             <ChartErrorBoundary name="temperature trend">
@@ -887,6 +889,7 @@ export function HistoryDashboard() {
               </ChartErrorBoundary>
             </LazySection>
           )}
+          </div>
 
           {/* ── Daily Records Table ────────────────────────────────────── */}
           <LazySection label="history-table" fallback={<ChartSkeleton aspect="aspect-[16/8]" />}>
@@ -1012,6 +1015,8 @@ export function HistoryDashboard() {
                 </div>
               </section>
 
+              {/* Insight charts — 2-column grid on desktop, single column on mobile */}
+              <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
               {/* ── Heat Stress chart ───────────────────────────────────── */}
               {insightsRecords.some((r) => r.heatStress != null) && (
                 <LazySection label="history-heat-stress" fallback={<ChartSkeleton />}>
@@ -1091,6 +1096,7 @@ export function HistoryDashboard() {
                   </ChartErrorBoundary>
                 </LazySection>
               )}
+              </div>
             </>
           )}
         </>
