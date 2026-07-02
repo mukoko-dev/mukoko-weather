@@ -25,10 +25,10 @@ export function buildCloudyScene(
   const upperGeo = new THREE.BufferGeometry();
   upperGeo.setAttribute("position", new THREE.BufferAttribute(upperPos, 3));
   const upperMat = new THREE.PointsMaterial({
-    color: isDay ? 0xcccccc : 0x555566,
-    size: 1.8,
+    color: isDay ? 0xd4d4d4 : 0x666678,
+    size: 2.0,
     transparent: true,
-    opacity: 0.25,
+    opacity: 0.42,
   });
   const upper = new THREE.Points(upperGeo, upperMat);
   scene.add(upper);
@@ -45,10 +45,10 @@ export function buildCloudyScene(
   const midGeo = new THREE.BufferGeometry();
   midGeo.setAttribute("position", new THREE.BufferAttribute(midPos, 3));
   const midMat = new THREE.PointsMaterial({
-    color: isDay ? 0xbbbbbb : 0x444455,
-    size: 1.4,
+    color: isDay ? 0xc4c4c4 : 0x555568,
+    size: 1.6,
     transparent: true,
-    opacity: 0.2,
+    opacity: 0.34,
   });
   const mid = new THREE.Points(midGeo, midMat);
   scene.add(mid);
@@ -73,7 +73,7 @@ export function buildCloudyScene(
       mpos.needsUpdate = true;
 
       // Subtle opacity pulse
-      upperMat.opacity = 0.25 + Math.sin(elapsed * 0.5) * 0.03;
+      upperMat.opacity = 0.42 + Math.sin(elapsed * 0.5) * 0.05;
     },
     dispose() {
       for (const d of disposables) d.dispose();

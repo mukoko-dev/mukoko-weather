@@ -17,7 +17,7 @@ export function buildSnowScene(
   scene.fog = new THREE.FogExp2(isDay ? 0xd0d8e8 : 0x101828, 0.015);
 
   // Snowflakes — larger and slower than rain
-  const SNOW_COUNT = isMobile ? 60 : 150;
+  const SNOW_COUNT = isMobile ? 95 : 210;
   const snowPos = new Float32Array(SNOW_COUNT * 3);
   const snowVel = new Float32Array(SNOW_COUNT);
   const snowSway = new Float32Array(SNOW_COUNT);
@@ -32,9 +32,9 @@ export function buildSnowScene(
   snowGeo.setAttribute("position", new THREE.BufferAttribute(snowPos, 3));
   const snowMat = new THREE.PointsMaterial({
     color: 0xffffff,
-    size: 0.25, // bigger than rain
+    size: 0.32, // bigger than rain
     transparent: true,
-    opacity: 0.7,
+    opacity: 0.92,
   });
   const snow = new THREE.Points(snowGeo, snowMat);
   scene.add(snow);
@@ -56,9 +56,9 @@ export function buildSnowScene(
   // Dim sun/moon behind clouds
   const bodyGeo = new THREE.SphereGeometry(2, geoDetail, geoDetail);
   const bodyMat = new THREE.MeshBasicMaterial({
-    color: isDay ? 0xaabbcc : 0x8888aa,
+    color: isDay ? 0xbccadb : 0x9a9ac0,
     transparent: true,
-    opacity: 0.1,
+    opacity: 0.22,
   });
   const body = new THREE.Mesh(bodyGeo, bodyMat);
   body.position.set(5, 8, -15);
@@ -80,7 +80,7 @@ export function buildSnowScene(
       pos.needsUpdate = true;
 
       // Gentle opacity pulse on ground
-      groundMat.opacity = 0.08 + Math.sin(elapsed * 0.4) * 0.02;
+      groundMat.opacity = 0.14 + Math.sin(elapsed * 0.4) * 0.03;
     },
     dispose() {
       for (const d of disposables) d.dispose();

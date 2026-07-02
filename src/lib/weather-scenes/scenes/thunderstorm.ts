@@ -26,17 +26,17 @@ export function buildThunderstormScene(
   const cloudGeo = new THREE.BufferGeometry();
   cloudGeo.setAttribute("position", new THREE.BufferAttribute(cloudPos, 3));
   const cloudMat = new THREE.PointsMaterial({
-    color: 0x333344,
-    size: 2.0,
+    color: 0x3d3d52,
+    size: 2.2,
     transparent: true,
-    opacity: 0.3,
+    opacity: 0.45,
   });
   const clouds = new THREE.Points(cloudGeo, cloudMat);
   scene.add(clouds);
   disposables.push(cloudGeo, cloudMat);
 
   // Heavy rain
-  const RAIN_COUNT = isMobile ? 150 : 350;
+  const RAIN_COUNT = isMobile ? 210 : 480;
   const rainPos = new Float32Array(RAIN_COUNT * 3);
   const rainVel = new Float32Array(RAIN_COUNT);
   for (let i = 0; i < RAIN_COUNT; i++) {
@@ -48,10 +48,10 @@ export function buildThunderstormScene(
   const rainGeo = new THREE.BufferGeometry();
   rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
   const rainMat = new THREE.PointsMaterial({
-    color: 0x5577aa,
-    size: 0.14,
+    color: 0x6f93c8,
+    size: 0.18,
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.78,
   });
   const rain = new THREE.Points(rainGeo, rainMat);
   scene.add(rain);
@@ -98,12 +98,12 @@ export function buildThunderstormScene(
         if (flashIntensity < 0) flashIntensity = 0;
         flashLight.intensity = flashIntensity * 2;
         // Flash brightens clouds and rain momentarily
-        cloudMat.opacity = 0.3 + flashIntensity * 0.4;
-        rainMat.opacity = 0.5 + flashIntensity * 0.3;
+        cloudMat.opacity = 0.45 + flashIntensity * 0.4;
+        rainMat.opacity = 0.78 + flashIntensity * 0.2;
       } else {
         flashLight.intensity = 0;
-        cloudMat.opacity = 0.3 + Math.sin(elapsed * 0.4) * 0.03;
-        rainMat.opacity = 0.5;
+        cloudMat.opacity = 0.45 + Math.sin(elapsed * 0.4) * 0.04;
+        rainMat.opacity = 0.78;
       }
     },
     dispose() {

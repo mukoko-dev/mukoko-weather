@@ -28,10 +28,10 @@ export function buildFogScene(
   const fogGeo = new THREE.BufferGeometry();
   fogGeo.setAttribute("position", new THREE.BufferAttribute(fogPos, 3));
   const fogMat = new THREE.PointsMaterial({
-    color: isDay ? 0xdddddd : 0x666677,
-    size: 2.0,
+    color: isDay ? 0xe4e4e4 : 0x77778a,
+    size: 2.3,
     transparent: true,
-    opacity: 0.12,
+    opacity: 0.26,
   });
   const fogParticles = new THREE.Points(fogGeo, fogMat);
   scene.add(fogParticles);
@@ -48,10 +48,10 @@ export function buildFogScene(
   const mistGeo = new THREE.BufferGeometry();
   mistGeo.setAttribute("position", new THREE.BufferAttribute(mistPos, 3));
   const mistMat = new THREE.PointsMaterial({
-    color: isDay ? 0xeeeeee : 0x555566,
-    size: 0.8,
+    color: isDay ? 0xf4f4f4 : 0x66667a,
+    size: 0.95,
     transparent: true,
-    opacity: 0.15,
+    opacity: 0.3,
   });
   const mist = new THREE.Points(mistGeo, mistMat);
   scene.add(mist);
@@ -78,7 +78,7 @@ export function buildFogScene(
       mpos.needsUpdate = true;
 
       // Opacity undulates slowly
-      fogMat.opacity = 0.12 + Math.sin(elapsed * 0.3) * 0.02;
+      fogMat.opacity = 0.26 + Math.sin(elapsed * 0.3) * 0.04;
     },
     dispose() {
       for (const d of disposables) d.dispose();

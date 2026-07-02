@@ -19,9 +19,9 @@ export function buildPartlyCloudyScene(
   // Sun or moon
   const bodyGeo = new THREE.SphereGeometry(3, geoDetail, geoDetail);
   const bodyMat = new THREE.MeshBasicMaterial({
-    color: isDay ? 0xffaa33 : 0xc0c0d0,
+    color: isDay ? 0xffaa33 : 0xd2d2e0,
     transparent: true,
-    opacity: 0.2,
+    opacity: 0.42,
   });
   const body = new THREE.Mesh(bodyGeo, bodyMat);
   body.position.set(isDay ? 6 : -5, 6, -10);
@@ -33,7 +33,7 @@ export function buildPartlyCloudyScene(
   const glowMat = new THREE.MeshBasicMaterial({
     color: isDay ? 0xffcc66 : 0x8888bb,
     transparent: true,
-    opacity: 0.06,
+    opacity: 0.18,
     side: THREE.DoubleSide,
   });
   const glow = new THREE.Mesh(glowGeo, glowMat);
@@ -42,7 +42,7 @@ export function buildPartlyCloudyScene(
   disposables.push(glowGeo, glowMat);
 
   // Cloud clusters
-  const CLOUD_COUNT = isMobile ? 15 : 30;
+  const CLOUD_COUNT = isMobile ? 22 : 42;
   const cloudPos = new Float32Array(CLOUD_COUNT * 3);
   for (let i = 0; i < CLOUD_COUNT; i++) {
     cloudPos[i * 3] = (Math.random() - 0.5) * 40;
@@ -52,10 +52,10 @@ export function buildPartlyCloudyScene(
   const cloudGeo = new THREE.BufferGeometry();
   cloudGeo.setAttribute("position", new THREE.BufferAttribute(cloudPos, 3));
   const cloudMat = new THREE.PointsMaterial({
-    color: isDay ? 0xffffff : 0x8888aa,
-    size: 1.4,
+    color: isDay ? 0xffffff : 0x9a9ac0,
+    size: 1.6,
     transparent: true,
-    opacity: 0.2,
+    opacity: 0.36,
   });
   const clouds = new THREE.Points(cloudGeo, cloudMat);
   scene.add(clouds);
@@ -72,10 +72,10 @@ export function buildPartlyCloudyScene(
   const breezeGeo = new THREE.BufferGeometry();
   breezeGeo.setAttribute("position", new THREE.BufferAttribute(breezePos, 3));
   const breezeMat = new THREE.PointsMaterial({
-    color: isDay ? 0xdddddd : 0x6666aa,
-    size: 0.08,
+    color: isDay ? 0xdddddd : 0x7f7fbb,
+    size: 0.11,
     transparent: true,
-    opacity: 0.3,
+    opacity: 0.5,
   });
   const breeze = new THREE.Points(breezeGeo, breezeMat);
   scene.add(breeze);
@@ -83,7 +83,7 @@ export function buildPartlyCloudyScene(
 
   return {
     update(elapsed) {
-      bodyMat.opacity = 0.2 + Math.sin(elapsed * 1.0) * 0.05;
+      bodyMat.opacity = 0.42 + Math.sin(elapsed * 1.0) * 0.08;
 
       // Clouds drift right
       const cpos = cloudGeo.attributes.position as InstanceType<typeof THREE.BufferAttribute>;

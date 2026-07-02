@@ -878,13 +878,16 @@ body {
       );
   }
   /* .weaver-scrim — readability veil over the animation so the hero text keeps
-     APCA-safe contrast. Heavier on the left where the temperature/labels sit. */
+     APCA-safe contrast. Strong on the left third where the big temperature and
+     labels sit, then fades to FULLY TRANSPARENT past ~66% so the animated
+     weather scene reads clearly on the open right side of the card (behind the
+     condition icon / empty sky) instead of being washed out edge-to-edge. */
   .weaver-scrim {
     background: linear-gradient(
-      100deg,
-      color-mix(in srgb, var(--color-surface-card) 78%, transparent) 0%,
-      color-mix(in srgb, var(--color-surface-card) 45%, transparent) 55%,
-      color-mix(in srgb, var(--color-surface-card) 30%, transparent) 100%
+      104deg,
+      color-mix(in srgb, var(--color-surface-card) 74%, transparent) 0%,
+      color-mix(in srgb, var(--color-surface-card) 42%, transparent) 40%,
+      transparent 66%
     );
   }
 
