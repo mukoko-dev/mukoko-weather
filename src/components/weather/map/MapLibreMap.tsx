@@ -62,6 +62,11 @@ export function MapLibreMap({
   const weatherLayerRef = useRef<string | null>(weatherLayer);
   weatherLayerRef.current = weatherLayer;
   const [overlayError, setOverlayError] = useState(false);
+  // The MapTiler base tiles load client-side directly from the CDN using
+  // NEXT_PUBLIC_MAPTILER_API_KEY. When the key is missing the style request
+  // fails and the map renders as a blank surface — surface that explicitly
+  // instead of a silent empty area so it's obvious the key needs configuring.
+  const [baseMapMissingKey] = useState(() => !MAPTILER_KEY);
   const theme = useAppStore((s) => s.theme);
 
   const isDark =
@@ -72,6 +77,9 @@ export function MapLibreMap({
 
   useEffect(() => {
     if (!containerRef.current) return;
+    // Without a MapTiler key the base style can't load — skip init and show the
+    // notice below rather than letting MapLibre repeatedly fail on a broken URL.
+    if (baseMapMissingKey) return;
 
     let map: MapLibreGLMap;
 
@@ -147,7 +155,19 @@ export function MapLibreMap({
   return (
     <div className={cn("relative", className)}>
       <div ref={containerRef} className="absolute inset-0" aria-hidden="true" />
-      {overlayError && (
+      {baseMapMissingKey && (
+        <div
+          role="status"
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-surface-base p-6 text-center"
+        >
+          <p className="text-sm font-semibold text-text-primary">Map unavailable</p>
+          <p className="max-w-xs text-xs text-text-tertiary">
+            The base map key is not configured. Set NEXT_PUBLIC_MAPTILER_API_KEY to enable
+            the interactive weather map.
+          </p>
+        </div>
+      )}
+      {overlayError && !baseMapMissingKey && (
         <div
           role="status"
           className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-[var(--radius-button)] border border-severity-high/30 bg-surface-card/95 px-3 py-1.5 text-xs font-medium text-severity-high shadow-lg backdrop-blur-sm"

@@ -69,6 +69,66 @@ function formatClouds(clouds: CloudLayer[]): string {
     .join(", ");
 }
 
+/**
+ * Cloud-cover codes that constitute a *ceiling* for aviation — the lowest
+ * BKN (broken) or OVC (overcast) layer. FEW/SCT layers do not form a ceiling.
+ */
+const CEILING_COVERS = new Set(["BKN", "OVC"]);
+
+/** Ranking of cloud-cover codes by density (sky clear → overcast). */
+const COVER_RANK: Record<string, number> = {
+  SKC: 0, CLR: 0, NCD: 0, NSC: 0,
+  FEW: 1, SCT: 2, BKN: 3, OVC: 4, VV: 5,
+};
+
+const COVER_LABELS: Record<string, string> = {
+  SKC: "Sky clear", CLR: "Clear", NCD: "No cloud", NSC: "No sig. cloud",
+  FEW: "Few", SCT: "Scattered", BKN: "Broken", OVC: "Overcast",
+  VV: "Vertical vis.",
+};
+
+/**
+ * Cloud ceiling in feet — the lowest broken/overcast layer base. Returns null
+ * when no BKN/OVC layer is present (aviation "unlimited" ceiling). Critical for
+ * VFR/MVFR/IFR/LIFR flight-category determination.
+ */
+export function deriveCeilingFt(clouds: CloudLayer[]): number | null {
+  let ceiling: number | null = null;
+  for (const c of clouds) {
+    if (CEILING_COVERS.has(c.cover) && c.base_ft !== null) {
+      if (ceiling === null || c.base_ft < ceiling) ceiling = c.base_ft;
+    }
+  }
+  return ceiling;
+}
+
+/**
+ * Lowest cloud base (feet) across *all* reported layers, or null when the sky
+ * is clear / no bases are reported.
+ */
+export function deriveCloudBaseFt(clouds: CloudLayer[]): number | null {
+  let base: number | null = null;
+  for (const c of clouds) {
+    if (c.base_ft !== null && (base === null || c.base_ft < base)) base = c.base_ft;
+  }
+  return base;
+}
+
+/** Human-readable overall cloud cover, taken from the densest reported layer. */
+export function summarizeCloudCover(clouds: CloudLayer[]): string {
+  if (!clouds.length) return "Clear";
+  let densest = clouds[0];
+  for (const c of clouds) {
+    if ((COVER_RANK[c.cover] ?? -1) > (COVER_RANK[densest.cover] ?? -1)) densest = c;
+  }
+  return COVER_LABELS[densest.cover] ?? densest.cover;
+}
+
+/** Format a feet altitude for display, e.g. 2500 → "2,500 ft". */
+function formatFt(ft: number | null): string {
+  return ft === null ? "—" : `${ft.toLocaleString("en-GB")} ft`;
+}
+
 function formatTime(iso: string): string {
   try {
     return new Intl.DateTimeFormat("en-GB", {
@@ -202,6 +262,54 @@ export function AviationWeather({ slug: _slug, icao, nearby }: Props) {
 
         {!loading && !error && data && (
           <>
+        {/* Clouds & Ceiling — prominent aviation summary for the latest METAR.
+            Cloud ceiling (lowest BKN/OVC layer) is the driver of the VFR/MVFR/
+            IFR/LIFR flight category (computed server-side in _metar.py). */}
+        {data.metar.length > 0 && (() => {
+          const latest = data.metar[0];
+          const ceiling = deriveCeilingFt(latest.clouds);
+          const base = deriveCloudBaseFt(latest.clouds);
+          const cover = summarizeCloudCover(latest.clouds);
+          return (
+            <div className="mt-4 acacia" aria-labelledby={`clouds-heading-${icao}`}>
+              <div className="flex items-center justify-between gap-2">
+                <h3
+                  id={`clouds-heading-${icao}`}
+                  className="text-sm font-semibold text-text-secondary uppercase tracking-wide"
+                >
+                  Clouds &amp; Ceiling
+                </h3>
+                <span
+                  className={`inline-flex items-center justify-center rounded-[var(--radius-input)] px-2 py-0.5 text-xs font-bold min-w-[3rem] ${FLIGHT_CATEGORY_STYLES[latest.flight_category] ?? "bg-surface-dim text-text-secondary"}`}
+                  aria-label={`Flight category: ${latest.flight_category}`}
+                >
+                  {latest.flight_category}
+                </span>
+              </div>
+              <dl className="mt-3 grid grid-cols-3 gap-3">
+                <div>
+                  <dt className="text-xs text-text-tertiary">Cloud Cover</dt>
+                  <dd className="mt-0.5 text-base font-semibold text-text-primary">{cover}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-text-tertiary">Cloud Base</dt>
+                  <dd className="mt-0.5 text-base font-semibold text-text-primary">{formatFt(base)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-text-tertiary">Ceiling</dt>
+                  <dd className="mt-0.5 text-base font-semibold text-text-primary">
+                    {ceiling === null ? "Unlimited" : formatFt(ceiling)}
+                  </dd>
+                </div>
+              </dl>
+              <p className="mt-2 text-xs text-text-tertiary">
+                Ceiling is the lowest broken (BKN) or overcast (OVC) layer — the primary
+                driver of the flight category.
+              </p>
+            </div>
+          );
+        })()}
+
         {/* TAF */}
         <div className="mt-4">
           <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wide mb-2">TAF</h3>

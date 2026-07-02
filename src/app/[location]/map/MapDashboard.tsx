@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { MapSkeleton } from "@/components/weather/map/MapSkeleton";
 import { WeatherLayerPanel } from "@/components/weather/map/WeatherLayerPanel";
+import { DEFAULT_LAYER } from "@/lib/map-layers";
 import type { WeatherLocation } from "@/lib/locations";
 
 const MapLibreMap = dynamic(
@@ -18,7 +19,7 @@ interface MapDashboardProps {
 }
 
 export function MapDashboard({ location }: MapDashboardProps) {
-  const [activeLayer, setActiveLayer] = useState<string | null>("precipitationIntensity");
+  const [activeLayer, setActiveLayer] = useState<string | null>(DEFAULT_LAYER);
 
   const handleLayerChange = useCallback((layerId: string | null) => {
     setActiveLayer(layerId);

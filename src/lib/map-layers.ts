@@ -16,6 +16,12 @@ export interface MapLayer {
   id: string;
   label: string;
   description: string;
+  /**
+   * Lucide icon name for the compact overlay icon group. Resolved to a
+   * `lucide-react` component in `WeatherLayerPanel` (kept out of this data
+   * module so it stays a plain, testable config with no React imports).
+   */
+  icon: string;
   /** Mineral color CSS classes for the layer toggle button */
   style: {
     bg: string;
@@ -30,6 +36,7 @@ export const MAP_LAYERS: MapLayer[] = [
     id: "precipitationIntensity",
     label: "Rain",
     description: "Precipitation intensity radar",
+    icon: "CloudRain",
     style: {
       bg: "bg-mineral-cobalt/10",
       border: "border-mineral-cobalt/30",
@@ -41,6 +48,7 @@ export const MAP_LAYERS: MapLayer[] = [
     id: "cloudCover",
     label: "Cloud",
     description: "Cloud cover satellite",
+    icon: "Cloud",
     style: {
       bg: "bg-text-tertiary/10",
       border: "border-text-tertiary/30",
@@ -52,6 +60,7 @@ export const MAP_LAYERS: MapLayer[] = [
     id: "temperature",
     label: "Temp",
     description: "Temperature map",
+    icon: "Thermometer",
     style: {
       bg: "bg-mineral-terracotta/10",
       border: "border-mineral-terracotta/30",
@@ -63,6 +72,7 @@ export const MAP_LAYERS: MapLayer[] = [
     id: "windSpeed",
     label: "Wind",
     description: "Wind speed and direction",
+    icon: "Wind",
     style: {
       bg: "bg-mineral-malachite/10",
       border: "border-mineral-malachite/30",
@@ -74,6 +84,7 @@ export const MAP_LAYERS: MapLayer[] = [
     id: "humidity",
     label: "Humidity",
     description: "Relative humidity",
+    icon: "Droplets",
     style: {
       bg: "bg-mineral-tanzanite/10",
       border: "border-mineral-tanzanite/30",
@@ -83,7 +94,14 @@ export const MAP_LAYERS: MapLayer[] = [
   },
 ];
 
-export const DEFAULT_LAYER = "precipitationIntensity";
+/**
+ * Cloud cover is the default overlay — it renders reliably (a non-time-indexed
+ * Tomorrow.io field, like temperature) whereas the precipitation radar tile can
+ * 400 without a valid recent timestamp. Defaulting to a known-good layer means
+ * the map opens with a working overlay instead of an error banner. Cloud is also
+ * the most flight-relevant layer (see aviation ceilings work).
+ */
+export const DEFAULT_LAYER = "cloudCover";
 
 export function getMapLayerById(id: string): MapLayer | undefined {
   return MAP_LAYERS.find((l) => l.id === id);

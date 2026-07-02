@@ -22,6 +22,7 @@ describe("MAP_LAYERS", () => {
       expect(layer.id).toBeTruthy();
       expect(layer.label).toBeTruthy();
       expect(layer.description).toBeTruthy();
+      expect(layer.icon).toBeTruthy();
       expect(layer.style).toBeDefined();
       expect(layer.style.bg).toBeTruthy();
       expect(layer.style.border).toBeTruthy();
@@ -51,6 +52,12 @@ describe("MAP_LAYERS", () => {
 describe("DEFAULT_LAYER", () => {
   it("is a valid layer ID", () => {
     expect(MAP_LAYERS.some((l) => l.id === DEFAULT_LAYER)).toBe(true);
+  });
+
+  it("defaults to a reliably-rendering (non-time-indexed) overlay, not precipitation", () => {
+    // Precipitation radar tiles can 400 without a valid recent timestamp, so the
+    // map opens on cloud cover to avoid an error banner on first paint.
+    expect(DEFAULT_LAYER).toBe("cloudCover");
   });
 });
 
