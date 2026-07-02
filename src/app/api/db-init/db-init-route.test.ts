@@ -51,6 +51,12 @@ describe("/api/db-init route structure", () => {
     expect(source).toContain("syncSeasons(SEASONS)");
   });
 
+  it("seeds aviation ICAO airports from the icao-codes catalog", () => {
+    expect(source).toContain('import { AIRPORTS } from "@/lib/icao-codes"');
+    expect(source).toContain("syncAirports(AIRPORTS)");
+    expect(source).toContain("airports: AIRPORTS.length");
+  });
+
   it("stores API keys from request body", () => {
     expect(source).toContain("setApiKey(provider, key)");
   });

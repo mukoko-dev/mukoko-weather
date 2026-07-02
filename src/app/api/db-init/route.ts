@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ensureIndexes, syncActivities, syncCountries, syncProvinces, syncRegions, syncTags, syncSeasons, syncSuitabilityRules, syncActivityCategories, syncAIPrompts, syncAISuggestedRules, setApiKey } from "@/lib/db";
+import { ensureIndexes, syncActivities, syncCountries, syncProvinces, syncRegions, syncTags, syncSeasons, syncSuitabilityRules, syncActivityCategories, syncAIPrompts, syncAISuggestedRules, syncAirports, setApiKey } from "@/lib/db";
 import { weatherDb } from "@/lib/mongo";
 import { ACTIVITIES } from "@/lib/activities";
 import { COUNTRIES, PROVINCES } from "@/lib/countries";
@@ -9,6 +9,7 @@ import { SEASONS } from "@/lib/seed-seasons";
 import { SUITABILITY_RULES } from "@/lib/seed-suitability-rules";
 import { CATEGORIES } from "@/lib/seed-categories";
 import { AI_PROMPTS, AI_SUGGESTED_PROMPT_RULES } from "@/lib/seed-ai-prompts";
+import { AIRPORTS } from "@/lib/icao-codes";
 
 /**
  * POST /api/db-init
@@ -68,6 +69,8 @@ export async function POST(request: Request) {
       syncSuitabilityRules(SUITABILITY_RULES),
       syncAIPrompts(AI_PROMPTS),
       syncAISuggestedRules(AI_SUGGESTED_PROMPT_RULES),
+      // Aviation ICAO airports → weather.airports (2dsphere for $nearSphere).
+      syncAirports(AIRPORTS),
     ]);
 
     // Drop the legacy `weather.locations` collection — opt-in only.
@@ -107,6 +110,7 @@ export async function POST(request: Request) {
       seasons: SEASONS.length,
       aiPrompts: AI_PROMPTS.length,
       aiSuggestedRules: AI_SUGGESTED_PROMPT_RULES.length,
+      airports: AIRPORTS.length,
       apiKeys: storedKeys.length > 0 ? storedKeys : "none provided",
       droppedLegacyLocations,
       // Atlas Search index definitions are in the codebase (db.ts) — not

@@ -207,6 +207,31 @@ function aiSuggestedRulesCollection() {
   return weatherDb().collection<AISuggestedPromptRule & { updatedAt: Date }>("ai_suggested_rules");
 }
 
+/**
+ * A seeded ICAO airport used for the aviation METAR/TAF feature.
+ *
+ * Stored in `weather.airports` — a plain reference collection (no strict
+ * platform validator), keyed by the ICAO code as its natural `_id` so
+ * re-seeding is idempotent and never creates duplicates (same deterministic-id
+ * discipline as `air_quality_cache`). The `location` GeoJSON Point powers the
+ * `$nearSphere` nearest-airport lookup in `api/py/_airports.py`.
+ */
+export interface AirportDoc {
+  /** ICAO code, uppercase — also the document `_id`. */
+  _id: string;
+  icao: string;
+  name: string;
+  lat: number;
+  lon: number;
+  /** GeoJSON Point `[lon, lat]` for the 2dsphere index. */
+  location: { type: "Point"; coordinates: [number, number] };
+  updatedAt: Date;
+}
+
+function airportsCollection() {
+  return weatherDb().collection<AirportDoc>("airports");
+}
+
 // ---------------------------------------------------------------------------
 // Indexes — call once on app startup (idempotent)
 // ---------------------------------------------------------------------------
@@ -285,6 +310,11 @@ export async function ensureIndexes(): Promise<void> {
     // Air quality cache: 1-hour TTL — _id is deterministic ({lat:.4f}_{lon:.4f}),
     // so the unique-by-_id index MongoDB provides for free is the only key index needed.
     weatherDb().collection("air_quality_cache").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+
+    // Airports: ICAO reference data for METAR/TAF. `_id` is the ICAO code
+    // (unique for free); the 2dsphere index powers the $nearSphere
+    // nearest-airport lookup in api/py/_airports.py.
+    airportsCollection().createIndex({ location: "2dsphere" }),
   ]);
 }
 
@@ -1415,6 +1445,45 @@ export async function syncTags(tags: TagDoc[]): Promise<void> {
 
 export async function getAllTagsFromDb(): Promise<TagDoc[]> {
   return tagsCollection().find({}).sort({ order: 1 }).toArray();
+}
+
+// ---------------------------------------------------------------------------
+// Airport operations (aviation METAR/TAF nearest-station lookup)
+// ---------------------------------------------------------------------------
+
+/**
+ * Seed the `weather.airports` collection from the static ICAO catalog
+ * (`AIRPORTS` in `src/lib/icao-codes.ts`). Idempotent — upserts by ICAO code
+ * (the document `_id`), so re-running never creates duplicates. Each doc carries
+ * a GeoJSON `location` Point so the Python `$nearSphere` query can find the
+ * nearest airports to a lat/lon.
+ */
+export async function syncAirports(
+  airports: { icao: string; name: string; lat: number; lon: number }[],
+): Promise<void> {
+  const now = new Date();
+  const bulkOps = airports.map((a) => {
+    const icao = a.icao.toUpperCase();
+    return {
+      updateOne: {
+        filter: { _id: icao },
+        update: {
+          $set: {
+            icao,
+            name: a.name,
+            lat: a.lat,
+            lon: a.lon,
+            location: { type: "Point" as const, coordinates: [a.lon, a.lat] as [number, number] },
+            updatedAt: now,
+          },
+        },
+        upsert: true,
+      },
+    };
+  });
+  if (bulkOps.length > 0) {
+    await airportsCollection().bulkWrite(bulkOps);
+  }
 }
 
 export async function getTagBySlug(slug: string): Promise<TagDoc | null> {

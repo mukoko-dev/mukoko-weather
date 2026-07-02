@@ -7,7 +7,7 @@
  * verified against OurAirports / the Great Circle Mapper.
  */
 
-interface Airport {
+export interface Airport {
   icao: string;
   name: string;
   lat: number;
@@ -21,8 +21,16 @@ export interface AirportDistance {
   distanceKm: number;
 }
 
-/** ICAO airports with coordinates for distance lookup and METAR/TAF briefings. */
-const AIRPORTS: Airport[] = [
+/**
+ * ICAO airports with coordinates for distance lookup and METAR/TAF briefings.
+ *
+ * This is the canonical seed source for the DB-backed `weather.airports`
+ * collection (seeded via `POST /api/db-init` → `syncAirports`). At runtime the
+ * aviation UI prefers the DB-backed `$nearSphere` lookup and falls back to the
+ * in-memory haversine scan below when the DB/API is unavailable, so nothing
+ * breaks offline.
+ */
+export const AIRPORTS: Airport[] = [
   // Zimbabwe
   { icao: "FVHA", name: "Harare (Robert Gabriel Mugabe Intl)", lat: -17.932, lon: 31.093 },
   { icao: "FVBU", name: "Bulawayo (Joshua Mqabuko Nkomo Intl)", lat: -20.017, lon: 28.618 },
@@ -182,6 +190,48 @@ export function getNearestIcao(lat: number, lon: number, maxDistanceKm = 150): s
 /** Returns airport metadata (name + coords) for an ICAO code, or null. */
 export function getAirportByIcao(icao: string): { icao: string; name: string; lat: number; lon: number } | null {
   return AIRPORT_BY_ICAO[icao.toUpperCase()] ?? null;
+}
+
+/**
+ * DB-backed nearest-airport lookup with a resilient static fallback.
+ *
+ * Calls `GET /api/py/airports/nearest` which runs a MongoDB `$nearSphere`
+ * geospatial query over the seeded `weather.airports` collection. If the
+ * request fails, times out, or returns nothing usable, this falls back to the
+ * in-memory haversine scan (`getNearestIcaos`) so the aviation UI keeps working
+ * offline or before the DB is seeded.
+ *
+ * Client-only (uses `fetch` with a relative URL).
+ */
+export async function fetchNearestAirports(
+  lat: number,
+  lon: number,
+  count = 5,
+  maxDistanceKm = 500,
+): Promise<AirportDistance[]> {
+  try {
+    const params = new URLSearchParams({
+      lat: String(lat),
+      lon: String(lon),
+      count: String(count),
+      maxDistanceKm: String(maxDistanceKm),
+    });
+    const res = await fetch(`/api/py/airports/nearest?${params.toString()}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = (await res.json()) as { airports?: AirportDistance[] };
+    const airports = body?.airports;
+    if (Array.isArray(airports) && airports.length > 0) {
+      return airports.map((a) => ({
+        icao: a.icao,
+        name: a.name,
+        distanceKm: a.distanceKm,
+      }));
+    }
+    // Empty DB result (unseeded collection, no airport in range) — use static.
+    return getNearestIcaos(lat, lon, count, maxDistanceKm);
+  } catch {
+    return getNearestIcaos(lat, lon, count, maxDistanceKm);
+  }
 }
 
 /** Returns the location slug for an ICAO code, or null if not mapped. */

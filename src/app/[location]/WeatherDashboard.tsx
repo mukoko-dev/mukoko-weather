@@ -45,7 +45,7 @@ import { InfoRow } from "@/components/ui/info-row";
 import { SupportBanner } from "@/components/weather/SupportBanner";
 import { DraggableSection } from "@/components/weather/DraggableSection";
 import { LiveClock } from "@/components/weather/LiveClock";
-import { getIcaoForSlug, getNearestIcao, getNearestIcaos } from "@/lib/icao-codes";
+import { getIcaoForSlug, getNearestIcao, getNearestIcaos, fetchNearestAirports, type AirportDistance } from "@/lib/icao-codes";
 import { cacheWeatherHint } from "@/lib/weather-scenes";
 
 // ── Code-split heavy components ─────────────────────────────────────────────
@@ -110,7 +110,24 @@ export function WeatherDashboard({
   const [modelsTime, setModelsTime] = useState<string[]>([]);
   const icao = getIcaoForSlug(location.slug) ?? getNearestIcao(location.lat, location.lon);
   // Nearby stations the user can switch between in the aviation section.
-  const nearbyIcaos = getNearestIcaos(location.lat, location.lon, 5);
+  // Seeded with the static haversine scan (instant, works offline), then
+  // upgraded to the DB-backed $nearSphere result once it resolves. If the DB
+  // call fails, `fetchNearestAirports` already returns the static fallback.
+  const [nearbyIcaos, setNearbyIcaos] = useState<AirportDistance[]>(() =>
+    getNearestIcaos(location.lat, location.lon, 5),
+  );
+  useEffect(() => {
+    let cancelled = false;
+    // `fetchNearestAirports` prefers the DB $nearSphere result and already
+    // falls back to the static haversine scan on failure, so whatever it
+    // resolves is the best available list for the current coordinates.
+    fetchNearestAirports(location.lat, location.lon, 5).then((airports) => {
+      if (!cancelled && airports.length > 0) setNearbyIcaos(airports);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [location.lat, location.lon]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),

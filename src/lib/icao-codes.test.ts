@@ -1,10 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   getIcaoForSlug,
   getSlugForIcao,
   getNearestIcao,
   getNearestIcaos,
   getAirportByIcao,
+  fetchNearestAirports,
+  AIRPORTS,
   ICAO_MAP,
 } from "./icao-codes";
 
@@ -154,5 +156,74 @@ describe("getNearestIcaos", () => {
 
   it("respects the maxDistanceKm filter", () => {
     expect(getNearestIcaos(-40, -20, 5, 150)).toHaveLength(0);
+  });
+});
+
+describe("AIRPORTS (DB seed source)", () => {
+  it("exports the airport catalog with the corrected 72+ airports", () => {
+    expect(Array.isArray(AIRPORTS)).toBe(true);
+    expect(AIRPORTS.length).toBeGreaterThanOrEqual(72);
+  });
+
+  it("every airport has a 4-letter ICAO, name, and valid WGS 84 coords", () => {
+    for (const a of AIRPORTS) {
+      expect(a.icao).toMatch(/^[A-Z]{4}$/);
+      expect(a.name.length).toBeGreaterThan(0);
+      expect(a.lat).toBeGreaterThanOrEqual(-90);
+      expect(a.lat).toBeLessThanOrEqual(90);
+      expect(a.lon).toBeGreaterThanOrEqual(-180);
+      expect(a.lon).toBeLessThanOrEqual(180);
+    }
+  });
+
+  it("has unique ICAO codes (safe as a natural _id for upsert seeding)", () => {
+    const codes = AIRPORTS.map((a) => a.icao);
+    expect(new Set(codes).size).toBe(codes.length);
+  });
+});
+
+describe("fetchNearestAirports (DB-backed with static fallback)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("returns the DB result when the API responds with airports", async () => {
+    const dbResult = [
+      { icao: "FVHA", name: "Harare", distanceKm: 12.3 },
+      { icao: "FVCP", name: "Charles Prince", distanceKm: 20.1 },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ airports: dbResult }),
+      }),
+    );
+    const result = await fetchNearestAirports(-17.85, 31.05, 5);
+    expect(result).toEqual(dbResult);
+  });
+
+  it("falls back to the static haversine scan when the request fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+    const result = await fetchNearestAirports(-17.85, 31.05, 3);
+    // Static fallback still finds Harare closest.
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0].icao).toBe("FVHA");
+  });
+
+  it("falls back to static when the DB returns an empty list", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ airports: [] }) }),
+    );
+    const result = await fetchNearestAirports(-17.85, 31.05, 3);
+    expect(result[0].icao).toBe("FVHA");
+  });
+
+  it("falls back to static on a non-OK HTTP response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    const result = await fetchNearestAirports(-17.85, 31.05, 3);
+    expect(result[0].icao).toBe("FVHA");
   });
 });
