@@ -1,9 +1,21 @@
 "use client";
 
-export function MapSkeleton({ className }: { className?: string }) {
+/**
+ * Map loading placeholder. Defaults to a 16:9 card (matches the compact
+ * MapPreview). Pass `fill` for full-height contexts (the full-viewport map
+ * dashboard) so the skeleton box matches the final map and there's no layout
+ * shift when the real map mounts.
+ */
+export function MapSkeleton({
+  className,
+  fill = false,
+}: {
+  className?: string;
+  fill?: boolean;
+}) {
   return (
     <div
-      className={`relative aspect-[16/9] w-full animate-pulse rounded-[var(--radius-card)] bg-surface-card overflow-hidden ${className ?? ""}`}
+      className={`relative ${fill ? "h-full w-full" : "aspect-[16/9] w-full"} animate-pulse rounded-[var(--radius-card)] bg-surface-card overflow-hidden ${className ?? ""}`}
       role="status"
       aria-label="Loading map"
     >

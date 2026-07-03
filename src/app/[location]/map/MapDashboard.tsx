@@ -11,7 +11,7 @@ import type { WeatherLocation } from "@/lib/locations";
 
 const MapLibreMap = dynamic(
   () => import("@/components/weather/map/MapLibreMap").then((m) => ({ default: m.MapLibreMap })),
-  { ssr: false, loading: () => <MapSkeleton className="h-full rounded-none" /> },
+  { ssr: false, loading: () => <MapSkeleton fill className="rounded-none" /> },
 );
 
 interface MapDashboardProps {
