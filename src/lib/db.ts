@@ -421,6 +421,11 @@ export async function ensureIndexes(): Promise<void> {
     // so the unique-by-_id index MongoDB provides for free is the only key index needed.
     safeCreateIndex(weatherDb().collection("air_quality_cache"), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
 
+    // Map tile cache: ~90-min TTL — _id is deterministic ({layer}/{z}/{x}/{y}/{hourBucket}),
+    // so the unique-by-_id index MongoDB provides for free is the only key index needed.
+    // Drastically cuts Tomorrow.io overlay-tile calls (free tier is ~25 req/hour).
+    safeCreateIndex(weatherDb().collection("map_tile_cache"), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
+
     // Airports: ICAO reference data for METAR/TAF. `_id` is the ICAO code
     // (unique for free); the 2dsphere index powers the $nearSphere
     // nearest-airport lookup in api/py/_airports.py.
