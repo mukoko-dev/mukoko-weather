@@ -194,6 +194,29 @@ describe("page.tsx — server component", () => {
     expect(pageSource).toContain("/harare");
     expect(pageSource).toContain("canonical");
   });
+
+  it("uses autoCreate=false on the server IP-geo path (find-only, no junk locations)", () => {
+    expect(pageSource).toContain("autoCreate=false");
+    expect(pageSource).not.toContain("autoCreate=true");
+  });
+
+  it("bounds the self-fetch with an AbortController timeout", () => {
+    expect(pageSource).toContain("AbortController");
+    expect(pageSource).toContain("controller.abort()");
+    expect(pageSource).toContain("signal: controller.signal");
+    expect(pageSource).toContain("GEO_FETCH_TIMEOUT_MS");
+  });
+
+  it("uses a stable base URL for the self-fetch (not VERCEL_URL)", () => {
+    expect(pageSource).not.toContain("VERCEL_URL");
+    expect(pageSource).toContain('process.env.NODE_ENV === "production"');
+  });
+
+  it("only redirects on a lastLocation cookie that actually resolves", () => {
+    expect(pageSource).toContain("getLocationFromDb(lastLocation)");
+    // The resolution check must gate the redirect, breaking the stale-cookie loop.
+    expect(pageSource).toContain("if (resolved)");
+  });
 });
 
 describe("middleware — edge routing", () => {

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { checkFrostRisk, createFallbackWeather, weatherCodeToInfo } from "@/lib/weather";
 import { getWeatherForLocation, getLocationFromDb, getCountryByCode, getSeasonForDate } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { safeJsonLd } from "@/lib/json-ld";
 import { WeatherDashboard } from "./WeatherDashboard";
 
 // Deduplicate DB calls between generateMetadata and the page component.
@@ -134,6 +135,12 @@ export default async function LocationPage({
   const usingFallback = weatherSource === "fallback";
   const frostAlert = usingFallback ? null : checkFrostRisk(weather.hourly);
   const conditionInfo = weatherCodeToInfo(weather.current.weather_code);
+  // Guard against empty daily arrays — Math.max(...[]) is -Infinity and
+  // Math.min(...[]) is Infinity, which would render as garbage in the FAQ schema.
+  const dailyHighs = weather.daily.temperature_2m_max;
+  const dailyLows = weather.daily.temperature_2m_min;
+  const weekHigh = dailyHighs.length ? Math.round(Math.max(...dailyHighs)) : null;
+  const weekLow = dailyLows.length ? Math.round(Math.min(...dailyLows)) : null;
   const countryCode = (location.country ?? "").toUpperCase();
   const [countryDoc, season, currentUser] = await Promise.all([
     countryCode ? loadCountry(countryCode) : Promise.resolve(null),
@@ -234,7 +241,10 @@ export default async function LocationPage({
         name: `What is the 7-day forecast for ${location.name}, ${countryName}?`,
         acceptedAnswer: {
           "@type": "Answer",
-          text: `The 7-day forecast for ${location.name} shows highs of ${Math.round(Math.max(...weather.daily.temperature_2m_max))}\u00b0C and lows of ${Math.round(Math.min(...weather.daily.temperature_2m_min))}\u00b0C. Check mukoko weather for detailed daily and hourly forecasts.`,
+          text:
+            weekHigh !== null && weekLow !== null
+              ? `The 7-day forecast for ${location.name} shows highs of ${weekHigh}\u00b0C and lows of ${weekLow}\u00b0C. Check mukoko weather for detailed daily and hourly forecasts.`
+              : `Check mukoko weather for the detailed daily and hourly forecast for ${location.name}.`,
         },
       },
       {
@@ -253,7 +263,7 @@ export default async function LocationPage({
       {/* SEO schemas — server rendered only */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(
           usingFallback ? [breadcrumbSchema] : [pageSchema, breadcrumbSchema, faqSchema]
         ) }}
       />

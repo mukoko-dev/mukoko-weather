@@ -16,8 +16,14 @@ interface Props {
 
 export function CurrentConditions({ current, locationName, daily, slug }: Props) {
   const info = weatherCodeToInfo(current.weather_code);
-  const todayHigh = daily ? Math.round(daily.temperature_2m_max[0]) : null;
-  const todayLow = daily ? Math.round(daily.temperature_2m_min[0]) : null;
+  // Guard empty daily arrays — daily.temperature_2m_max[0] would be undefined and
+  // Math.round(undefined) is NaN, rendering as "High NaN°".
+  const todayHigh = daily?.temperature_2m_max?.length
+    ? Math.round(daily.temperature_2m_max[0])
+    : null;
+  const todayLow = daily?.temperature_2m_min?.length
+    ? Math.round(daily.temperature_2m_min[0])
+    : null;
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
 
