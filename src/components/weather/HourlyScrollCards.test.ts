@@ -51,6 +51,24 @@ describe("HourlyScrollCards — hour slicing", () => {
   });
 });
 
+describe("HourlyScrollCards — deterministic render (no #418)", () => {
+  it("gates the wall-clock start index on useHydrated", () => {
+    expect(source).toContain("useHydrated");
+    // The current-hour slice must only apply once hydrated; SSR + first client
+    // render start at index 0 so the HTML matches and there is no text mismatch.
+    expect(source).toContain("hydrated");
+    expect(source).toContain("startIndex = hydrated");
+  });
+
+  it('only shows the "Now" label after hydration', () => {
+    expect(source).toContain('hydrated && i === 0 ? "Now"');
+  });
+
+  it("is a client component (uses the browser clock)", () => {
+    expect(source).toContain('"use client"');
+  });
+});
+
 describe("HourlyScrollCards — weather data", () => {
   it("displays temperature", () => {
     expect(source).toContain("temperature_2m");
