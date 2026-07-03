@@ -149,14 +149,15 @@ export function Header() {
         </nav>
       </header>
 
-      {/* Mobile bottom navigation — 5 items with Shamwari center */}
-      {/* 56px min touch targets, 22px icons, 10px labels */}
+      {/* Mobile bottom navigation — floating glass pill, 5 items with Shamwari center */}
+      {/* Detached from the edges (floats above the safe-area) so mobile browser */}
+      {/* chrome never obscures it; stays put on scroll because it's fixed. */}
+      {/* 48px min touch targets, 22px icons, 10px labels */}
       <nav
         aria-label="Mobile navigation"
-        className="fixed bottom-0 left-0 right-0 z-40 border-t border-text-tertiary/10 bg-surface-base/95 backdrop-blur-xl sm:hidden"
-        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+        className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] left-1/2 z-40 -translate-x-1/2 rounded-full border border-text-tertiary/10 bg-surface-base/90 shadow-lg backdrop-blur-xl sm:hidden"
       >
-        <div className="mx-auto flex items-center justify-around px-1 min-h-[5rem]">
+        <div className="flex items-center gap-1 px-2 py-1.5">
           <Link
             href="/"
             className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] active:scale-95 ${
