@@ -68,16 +68,64 @@ export const DEFAULT_SECTION_ORDER = [
 
 const SECTION_ORDER_KEY = "mukoko-section-order";
 
-function loadSectionOrder(): string[] {
-  if (typeof window === "undefined") return [...DEFAULT_SECTION_ORDER];
+const DEFAULT_SECTION_INDEX = new Map<string, number>(
+  DEFAULT_SECTION_ORDER.map((id, i) => [id, i]),
+);
+
+/**
+ * Reconcile a persisted section order against the current DEFAULT_SECTION_ORDER.
+ *
+ * A user who saved a layout months ago has an array that predates any sections
+ * added since (e.g. `hourlyScroll`, `reports`, `aiSummary`, `aiChat`, plus any
+ * new multi-model/nowcast sections). The dashboard only renders ids present in
+ * the order, so those newer sections would silently never appear. Conversely a
+ * removed/renamed section id lingering in storage would be a dead entry.
+ *
+ * This UNIONs the two: keep the stored ids that still exist in DEFAULT (drop the
+ * rest), then splice in every missing DEFAULT id at its default position (before
+ * the first existing section that follows it in the default layout). The user's
+ * custom ordering of the sections they DID arrange is preserved.
+ *
+ * Exported for testing.
+ */
+export function mergeSectionOrder(stored: string[]): string[] {
+  // Drop ids that are no longer part of the default schema, and de-dupe.
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const id of stored) {
+    if (DEFAULT_SECTION_INDEX.has(id) && !seen.has(id)) {
+      seen.add(id);
+      result.push(id);
+    }
+  }
+  // Insert any missing default ids at their default position. Processing in
+  // default order keeps newly-inserted ids in their relative default order.
+  for (const id of DEFAULT_SECTION_ORDER) {
+    if (seen.has(id)) continue;
+    const defaultIdx = DEFAULT_SECTION_INDEX.get(id)!;
+    let insertPos = result.findIndex(
+      (existing) => (DEFAULT_SECTION_INDEX.get(existing) ?? Infinity) > defaultIdx,
+    );
+    if (insertPos === -1) insertPos = result.length;
+    result.splice(insertPos, 0, id);
+    seen.add(id);
+  }
+  return result;
+}
+
+/** Read the raw persisted section order from localStorage, or null if absent/invalid. */
+function readStoredSectionOrder(): string[] | null {
+  if (typeof window === "undefined") return null;
   try {
     const stored = localStorage.getItem(SECTION_ORDER_KEY);
     if (stored) {
-      const parsed = JSON.parse(stored) as string[];
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      const parsed = JSON.parse(stored) as unknown;
+      if (Array.isArray(parsed) && parsed.every((x) => typeof x === "string")) {
+        return parsed as string[];
+      }
     }
   } catch { /* ignore */ }
-  return [...DEFAULT_SECTION_ORDER];
+  return null;
 }
 
 function saveSectionOrder(order: string[]): void {
@@ -127,6 +175,13 @@ interface AppState {
   /** User-defined section order for the location page primary column */
   sectionOrder: string[];
   setSectionOrder: (order: string[]) => void;
+  /**
+   * Load the persisted section order from localStorage AFTER hydration and apply
+   * it (unioned with the current defaults). Call this from a client `useEffect`
+   * so the server and first client render both use `DEFAULT_SECTION_ORDER` —
+   * reading localStorage during store init would desync SSR and hydration.
+   */
+  hydrateSectionOrder: () => void;
 }
 
 const THEME_CYCLE: ThemePreference[] = ["light", "dark", "system"];
@@ -231,10 +286,24 @@ export const useAppStore = create<AppState>()((set) => ({
   reportModalOpen: false,
   openReportModal: () => set({ reportModalOpen: true }),
   closeReportModal: () => set({ reportModalOpen: false }),
-  sectionOrder: loadSectionOrder(),
+  // Initialise to the defaults on BOTH the server and the first client render so
+  // hydration matches. The persisted order (if any) is applied post-hydration via
+  // `hydrateSectionOrder()`, mirroring how RxDB-backed prefs are deferred.
+  sectionOrder: [...DEFAULT_SECTION_ORDER],
   setSectionOrder: (order) => {
     saveSectionOrder(order);
     set({ sectionOrder: order });
+  },
+  hydrateSectionOrder: () => {
+    const stored = readStoredSectionOrder();
+    if (!stored) return;
+    const merged = mergeSectionOrder(stored);
+    set({ sectionOrder: merged });
+    // Normalise storage so future loads (and the drag handler) start from the
+    // reconciled order. Only rewrite when the merge actually changed something.
+    if (merged.length !== stored.length || merged.some((id, i) => id !== stored[i])) {
+      saveSectionOrder(merged);
+    }
   },
 }));
 

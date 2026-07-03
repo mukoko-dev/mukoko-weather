@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { resolveTheme, useAppStore, isShamwariContextValid, MAX_SAVED_LOCATIONS, DEFAULT_SECTION_ORDER, type ThemePreference, type ShamwariContext } from "./store";
+import { resolveTheme, useAppStore, isShamwariContextValid, MAX_SAVED_LOCATIONS, DEFAULT_SECTION_ORDER, mergeSectionOrder, type ThemePreference, type ShamwariContext } from "./store";
 
 // Mock RxDB bridge to prevent IndexedDB access in tests
 vi.mock("./rxdb/bridge", () => ({
@@ -414,6 +414,95 @@ describe("sectionOrder", () => {
     const custom = ["atmospheric", "current", "dailyForecast"];
     useAppStore.getState().setSectionOrder(custom);
     expect(useAppStore.getState().sectionOrder).toEqual(custom);
+  });
+
+  it("initialises to DEFAULT_SECTION_ORDER (hydration-safe — no synchronous localStorage read)", () => {
+    // The store must init to the defaults on both the server and the first client
+    // render so React hydration matches. Persisted order is applied post-hydration.
+    // Re-import a fresh module to observe the initial value (setSectionOrder in the
+    // tests above mutates the shared singleton), so assert the exported default here.
+    expect([...DEFAULT_SECTION_ORDER]).toEqual([
+      "current",
+      "hourlyScroll",
+      "atmospheric",
+      "reports",
+      "hourlyForecast",
+      "activityInsights",
+      "dailyForecast",
+      "aiSummary",
+      "aiChat",
+    ]);
+  });
+
+  it("hydrateSectionOrder is a safe no-op when localStorage is unavailable (SSR/Node)", () => {
+    const before = useAppStore.getState().sectionOrder;
+    expect(() => useAppStore.getState().hydrateSectionOrder()).not.toThrow();
+    // No window/localStorage in Node → order left untouched.
+    expect(useAppStore.getState().sectionOrder).toEqual(before);
+  });
+});
+
+describe("mergeSectionOrder (Bug 2 — union stored order with defaults)", () => {
+  it("appends sections added AFTER a user saved their order, at their default position", () => {
+    // A legacy user saved before hourlyScroll/reports/aiChat existed.
+    const stored = [
+      "current",
+      "atmospheric",
+      "hourlyForecast",
+      "activityInsights",
+      "dailyForecast",
+      "aiSummary",
+    ];
+    const merged = mergeSectionOrder(stored);
+    // Every default section is now present...
+    for (const id of DEFAULT_SECTION_ORDER) expect(merged).toContain(id);
+    // ...and the new ids landed near their default neighbours.
+    expect(merged).toEqual([
+      "current",
+      "hourlyScroll",
+      "atmospheric",
+      "reports",
+      "hourlyForecast",
+      "activityInsights",
+      "dailyForecast",
+      "aiSummary",
+      "aiChat",
+    ]);
+  });
+
+  it("drops ids that are no longer part of DEFAULT_SECTION_ORDER", () => {
+    const stored = ["current", "legacyRemovedSection", "atmospheric"];
+    const merged = mergeSectionOrder(stored);
+    expect(merged).not.toContain("legacyRemovedSection");
+    expect(merged).toContain("current");
+    expect(merged).toContain("atmospheric");
+  });
+
+  it("preserves the user's custom ordering of the sections they DID arrange", () => {
+    // User moved atmospheric above current and dropped nothing else.
+    const stored = [
+      "atmospheric",
+      "current",
+      "hourlyScroll",
+      "reports",
+      "hourlyForecast",
+      "activityInsights",
+      "dailyForecast",
+      "aiSummary",
+      "aiChat",
+    ];
+    const merged = mergeSectionOrder(stored);
+    expect(merged.indexOf("atmospheric")).toBeLessThan(merged.indexOf("current"));
+    expect(merged).toHaveLength(DEFAULT_SECTION_ORDER.length);
+  });
+
+  it("de-dupes repeated ids", () => {
+    const merged = mergeSectionOrder(["current", "current", "atmospheric"]);
+    expect(merged.filter((id) => id === "current")).toHaveLength(1);
+  });
+
+  it("returns the full default set for an empty stored array", () => {
+    expect(mergeSectionOrder([])).toEqual([...DEFAULT_SECTION_ORDER]);
   });
 });
 

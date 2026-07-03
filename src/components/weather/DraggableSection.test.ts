@@ -23,8 +23,20 @@ describe("DraggableSection — client component", () => {
     expect(source).toContain("@dnd-kit/sortable");
   });
 
-  it("renders children with zero overhead when not reordering", () => {
-    expect(source).toContain("if (!reordering) return <>{children}</>");
+  it("renders a STABLE wrapper element in both modes (no unmount/remount)", () => {
+    // The wrapper must not swap element type between modes — that would force
+    // React to unmount/remount every section (refetch AI summary, drop chat,
+    // rebuild charts, recreate the Three.js hero) when toggling reorder mode.
+    // The old early-return fragment is gone; a single ref'd <div> always renders.
+    expect(source).not.toContain("if (!reordering) return <>{children}</>");
+    expect(source).toContain("<div ref={setNodeRef}");
+  });
+
+  it("toggles only drag props/handle/styling on the reordering flag, never the element type", () => {
+    // The handle button is conditionally mounted, and styling is gated on the
+    // flag, but the wrapper <div> and inner children wrapper are unconditional.
+    expect(source).toContain("{reordering && (");
+    expect(source).toContain("className={reordering ? \"relative\" : undefined}");
   });
 });
 

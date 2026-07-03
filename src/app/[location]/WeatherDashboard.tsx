@@ -100,6 +100,7 @@ export function WeatherDashboard({
   const completeOnboarding = useAppStore((s) => s.completeOnboarding);
   const sectionOrder = useAppStore((s) => s.sectionOrder);
   const setSectionOrder = useAppStore((s) => s.setSectionOrder);
+  const hydrateSectionOrder = useAppStore((s) => s.hydrateSectionOrder);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
   // Windy-style ADDITIONAL data — multi-model comparison + minutely nowcast.
@@ -155,6 +156,14 @@ export function WeatherDashboard({
       .then((data) => { if (data?.activities?.length) setAllActivities(data.activities); })
       .catch(() => {});
   }, [selectedActivities.length]);
+
+  // Apply the persisted section order AFTER hydration. The store initialises to
+  // DEFAULT_SECTION_ORDER on the server and first client render (so hydration
+  // matches); this effect reads localStorage and applies the saved/reconciled
+  // order once mounted, avoiding a React hydration mismatch + flash.
+  useEffect(() => {
+    hydrateSectionOrder();
+  }, [hydrateSectionOrder]);
 
   // Sync the URL-driven location to the global store so other pages
   // (history, etc.) can use it as their default.
