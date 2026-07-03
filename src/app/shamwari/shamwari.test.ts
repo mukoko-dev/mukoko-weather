@@ -35,8 +35,8 @@ describe("shamwari page — auth gating (Phase 1D)", () => {
     expect(pageSource).toContain("@/lib/auth");
   });
 
-  it("invokes requireUser() inside the default export so anonymous users are redirected to sign-in", () => {
-    expect(pageSource).toContain("await requireUser()");
+  it("invokes requireUser() inside the default export, passing its own path as returnTo so anonymous users return here after sign-in", () => {
+    expect(pageSource).toContain('await requireUser("/shamwari")');
   });
 
   it("is an async server component (requireUser is awaited)", () => {

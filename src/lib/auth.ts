@@ -17,6 +17,7 @@
  * See docs/mongodb-schema-map.md → `identity` for the full schema.
  */
 
+import { redirect } from "next/navigation";
 import {
   withAuth,
   getSignInUrl,
@@ -92,13 +93,30 @@ export async function getCurrentUser(): Promise<WorkOSUser | null> {
 }
 
 /**
- * Require a signed-in user; redirects to the WorkOS sign-in flow if not.
+ * Require a signed-in user; redirects anonymous users to sign-in.
  * Returns the WorkOS user object — guaranteed non-null on a successful return.
+ *
+ * Anonymous users are routed through our own `/auth/signin?returnTo=<path>`
+ * handler rather than AuthKit's `ensureSignedIn` middleware redirect. That
+ * handler seals `returnTo` into the PKCE state via `getSignInUrl({ returnTo })`
+ * in a plain route-handler response (whose Set-Cookie survives), so after the
+ * WorkOS exchange the callback lands the user back on the page they requested.
+ * The `ensureSignedIn` path sets its PKCE cookie from inside a React Server
+ * Component, where our custom `proxy.ts` middleware drops it — losing the
+ * intended path and bouncing the user to their lastLocation instead.
+ *
+ * @param returnTo Absolute in-app path (e.g. `/aviation`) to return to after
+ *   sign-in. When omitted, sign-in falls back to its own default landing.
  */
-export async function requireUser(): Promise<WorkOSUser> {
-  const { user } = await withAuth({ ensureSignedIn: true });
-  // `ensureSignedIn: true` either returns a user or throws/redirects.
-  return user as WorkOSUser;
+export async function requireUser(returnTo?: string): Promise<WorkOSUser> {
+  const user = await getCurrentUser();
+  if (!user) {
+    const target = returnTo
+      ? `/auth/signin?returnTo=${encodeURIComponent(returnTo)}`
+      : "/auth/signin";
+    redirect(target); // throws — never returns
+  }
+  return user;
 }
 
 // ---------------------------------------------------------------------------

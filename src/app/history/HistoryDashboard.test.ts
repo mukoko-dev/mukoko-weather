@@ -395,10 +395,10 @@ describe("history page — auth gating (Phase 1D)", () => {
     expect(pageSrc).toContain("@/lib/auth");
   });
 
-  it("awaits requireUser() inside the page default export", async () => {
+  it("awaits requireUser() inside the page default export, passing its own path as returnTo", async () => {
     const fs = await import("fs");
     const pageSrc = fs.readFileSync("src/app/history/page.tsx", "utf-8");
-    expect(pageSrc).toContain("await requireUser()");
+    expect(pageSrc).toContain('await requireUser("/history")');
     expect(pageSrc).toContain("export default async function HistoryPage");
   });
 

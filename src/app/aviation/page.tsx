@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AviationPage() {
-  await requireUser(); // redirects to AuthKit sign-in if not signed in
+  await requireUser("/aviation"); // redirects anon users to sign-in, returns here after
   return (
     <>
       <Header />

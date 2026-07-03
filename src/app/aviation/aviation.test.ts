@@ -147,7 +147,7 @@ describe("Aviation page — auth gating (Phase 1D)", () => {
     expect(pageSrc).toContain("@/lib/auth");
   });
 
-  it("awaits requireUser() inside the page export", () => {
-    expect(pageSrc).toContain("await requireUser()");
+  it("awaits requireUser() inside the page export, passing its own path as returnTo", () => {
+    expect(pageSrc).toContain('await requireUser("/aviation")');
   });
 });

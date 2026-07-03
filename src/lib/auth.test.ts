@@ -30,15 +30,26 @@ vi.mock("./db", async () => {
   };
 });
 
+const mockWithAuth = vi.hoisted(() => vi.fn());
+
 // AuthKit is server-only and imports Next.js internals — stub it so importing
 // auth.ts in a unit test environment doesn't blow up.
 vi.mock("@workos-inc/authkit-nextjs", () => ({
-  withAuth: vi.fn(),
+  withAuth: mockWithAuth,
   getSignInUrl: vi.fn(),
   signOut: vi.fn(),
 }));
 
-import { upsertPlatformPerson, type WorkOSUser } from "./auth";
+// `redirect()` throws a control-flow signal in Next.js. Emulate that so tests
+// can assert the target and confirm requireUser never returns for anon users.
+const mockRedirect = vi.hoisted(() =>
+  vi.fn((url: string) => {
+    throw new Error(`NEXT_REDIRECT:${url}`);
+  }),
+);
+vi.mock("next/navigation", () => ({ redirect: mockRedirect }));
+
+import { upsertPlatformPerson, requireUser, type WorkOSUser } from "./auth";
 
 const sampleUser: WorkOSUser = {
   id: "user_01HZX",
@@ -251,5 +262,47 @@ describe("upsertPlatformPerson", () => {
     await expect(
       upsertPlatformPerson({ id: "", email: "x@y.com" } as WorkOSUser),
     ).rejects.toThrow(/workosUser\.id is required/);
+  });
+});
+
+describe("requireUser", () => {
+  beforeEach(() => {
+    mockWithAuth.mockReset();
+    mockRedirect.mockClear();
+  });
+
+  it("returns the signed-in user without redirecting", async () => {
+    mockWithAuth.mockResolvedValue({ user: sampleUser });
+
+    const user = await requireUser("/aviation");
+
+    expect(user).toEqual(sampleUser);
+    expect(mockRedirect).not.toHaveBeenCalled();
+  });
+
+  it("redirects anonymous users through /auth/signin with an encoded returnTo", async () => {
+    mockWithAuth.mockResolvedValue({ user: null });
+
+    await expect(requireUser("/aviation")).rejects.toThrow(
+      "NEXT_REDIRECT:/auth/signin?returnTo=%2Faviation",
+    );
+    expect(mockRedirect).toHaveBeenCalledWith(
+      "/auth/signin?returnTo=%2Faviation",
+    );
+  });
+
+  it("preserves query strings in the returnTo path (encoded)", async () => {
+    mockWithAuth.mockResolvedValue({ user: null });
+
+    await expect(requireUser("/history?days=30")).rejects.toThrow(
+      "NEXT_REDIRECT:/auth/signin?returnTo=%2Fhistory%3Fdays%3D30",
+    );
+  });
+
+  it("falls back to bare /auth/signin when no returnTo is given", async () => {
+    mockWithAuth.mockResolvedValue({ user: null });
+
+    await expect(requireUser()).rejects.toThrow("NEXT_REDIRECT:/auth/signin");
+    expect(mockRedirect).toHaveBeenCalledWith("/auth/signin");
   });
 });

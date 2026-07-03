@@ -33,7 +33,7 @@ export const metadata: Metadata = {
 };
 
 export default async function HistoryPage() {
-  await requireUser(); // redirects to AuthKit sign-in if not signed in
+  await requireUser("/history"); // redirects anon users to sign-in, returns here after
   return (
     <>
       <Header />
