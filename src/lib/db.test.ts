@@ -38,6 +38,8 @@ import {
 import { REGIONS } from "./seed-regions";
 import { TAGS } from "./seed-tags";
 import { SEASONS } from "./seed-seasons";
+import { LOCATIONS } from "./locations";
+import { PROVINCES, generateProvinceSlug } from "./countries";
 
 describe("getTtlForLocation", () => {
   it("returns tier 1 (1800s) for locations with city tag", () => {
@@ -176,6 +178,86 @@ describe("new DB helper function exports", () => {
 
     expect(fnBody).toContain("LOCATIONS.length");
     expect(fnBody).not.toContain("estimatedDocumentCount");
+  });
+});
+
+describe("province readers derive from LOCATIONS (union with static PROVINCES)", () => {
+  const slugForLoc = (l: (typeof LOCATIONS)[number]) =>
+    l.provinceSlug ?? generateProvinceSlug(l.province, l.country ?? "");
+
+  // Pick a country that has seed LOCATIONS but NO static PROVINCES rows, so its
+  // provinces MUST be derived. Singapore (SG) is the canonical example.
+  const derivedOnlyCode = "SG";
+
+  it("derives provinces for a country with no static PROVINCES rows", async () => {
+    const sgLocations = LOCATIONS.filter(
+      (l) => (l.country ?? "").toUpperCase() === derivedOnlyCode,
+    );
+    expect(sgLocations.length).toBeGreaterThan(0);
+    // Precondition for the test: SG genuinely has no static province rows.
+    expect(PROVINCES.some((p) => p.countryCode.toUpperCase() === derivedOnlyCode)).toBe(false);
+
+    const provinces = await getProvincesWithLocationCounts(derivedOnlyCode);
+
+    // Every SG location's province slug is represented exactly once.
+    const expectedSlugs = new Set(sgLocations.map(slugForLoc));
+    const returnedSlugs = provinces.map((p) => p.slug);
+    expect(new Set(returnedSlugs).size).toBe(returnedSlugs.length); // no dupes
+    for (const slug of expectedSlugs) {
+      expect(returnedSlugs).toContain(slug);
+    }
+
+    // Counts are correct: sum of derived counts equals SG's location total.
+    const total = provinces.reduce((sum, p) => sum + p.locationCount, 0);
+    expect(total).toBe(sgLocations.length);
+    // Each derived province carries its human province name, not the slug.
+    for (const p of provinces) {
+      expect(p.name.length).toBeGreaterThan(0);
+      expect(p.name).not.toBe(p.slug);
+    }
+  });
+
+  it("getProvinceBySlug resolves a derived (non-static) province", async () => {
+    const sgLoc = LOCATIONS.find((l) => (l.country ?? "").toUpperCase() === derivedOnlyCode);
+    expect(sgLoc).toBeTruthy();
+    const slug = slugForLoc(sgLoc!);
+
+    // Not present in the static catalog — must be derived.
+    expect(PROVINCES.some((p) => p.slug === slug)).toBe(false);
+
+    const province = await getProvinceBySlug(slug);
+    expect(province).not.toBeNull();
+    expect(province!.slug).toBe(slug);
+    expect(province!.name).toBe(sgLoc!.province);
+    expect(province!.countryCode).toBe(derivedOnlyCode);
+  });
+
+  it("every seed location is reachable via exactly one province card (all countries)", async () => {
+    const codes = new Set(
+      LOCATIONS.map((l) => (l.country ?? "").toUpperCase()).filter(Boolean),
+    );
+    for (const code of codes) {
+      const countryLocs = LOCATIONS.filter((l) => (l.country ?? "").toUpperCase() === code);
+      const provinces = await getProvincesWithLocationCounts(code);
+      const bySlug = new Map(provinces.map((p) => [p.slug, p.locationCount]));
+      // Each location's province slug exists in the returned catalog.
+      for (const loc of countryLocs) {
+        expect(bySlug.has(slugForLoc(loc))).toBe(true);
+      }
+      // Total counted equals the number of seed locations in the country.
+      const total = provinces.reduce((sum, p) => sum + p.locationCount, 0);
+      expect(total).toBe(countryLocs.length);
+    }
+  });
+
+  it("getAllProvinces includes derived provinces for sitemap coverage", async () => {
+    const all = await getAllProvinces();
+    const allSlugs = new Set(all.map((p) => p.slug));
+    // Every province slug that any seed location maps to is present.
+    for (const loc of LOCATIONS) {
+      if (!(loc.country ?? "")) continue;
+      expect(allSlugs.has(slugForLoc(loc))).toBe(true);
+    }
   });
 });
 

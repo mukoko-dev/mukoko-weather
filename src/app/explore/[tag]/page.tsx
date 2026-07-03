@@ -104,7 +104,7 @@ export default async function ExploreTagPage({ params }: Props) {
 
         {locations.length === 0 && (
           <div className="mt-8 rounded-[var(--radius-card)] bg-surface-card p-6 text-center text-text-tertiary">
-            <p>No locations found. Please run database initialisation.</p>
+            <p>No locations available here yet.</p>
           </div>
         )}
 

@@ -6,7 +6,6 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { getCountryByCode, getLocationsByProvince, getProvinceBySlug } from "@/lib/db";
 import { getFlagEmoji, PROVINCES } from "@/lib/countries";
-import { logError } from "@/lib/observability";
 
 export const revalidate = 3600;
 
@@ -55,35 +54,18 @@ export default async function ProvinceDetailPage({ params }: Props) {
 
   if (!/^[A-Z]{2}$/.test(upperCode)) notFound();
 
-  let locations: Awaited<ReturnType<typeof getLocationsByProvince>> = [];
-  let countryName = upperCode;
-  let provinceName = provinceSlug;
+  // These are pure static-array reads (LOCATIONS / COUNTRIES / PROVINCES) — they
+  // never throw, so no try/catch is needed.
+  const [locations, country, province] = await Promise.all([
+    getLocationsByProvince(provinceSlug),
+    loadCountry(upperCode),
+    loadProvince(provinceSlug),
+  ]);
+  const countryName = country?.name ?? upperCode;
+  // Use the stored province name rather than reconstructing from the slug.
+  const provinceName = province?.name ?? provinceSlug;
 
-  try {
-    const [locs, country, province] = await Promise.all([
-      getLocationsByProvince(provinceSlug),
-      loadCountry(upperCode),
-      loadProvince(provinceSlug),
-    ]);
-    locations = locs;
-    countryName = country?.name ?? upperCode;
-    // Use the stored province name rather than reconstructing from the slug
-    provinceName = province?.name ?? provinceSlug;
-  } catch (err) {
-    logError({
-      source: "mongodb",
-      severity: "high",
-      message: "Failed to load province detail page",
-      error: err,
-      meta: { code: upperCode, provinceSlug },
-    });
-    // Re-throw at request time so Next.js routes to error.tsx instead of a silent 404.
-    // During build-time static generation (MONGODB_URI absent), fall through to notFound()
-    // so the build succeeds and ISR handles the route on first real request.
-    if (process.env.MONGODB_URI) throw err;
-  }
-
-  // DB succeeded but the province has no locations — genuine 404.
+  // The province has no locations — genuine 404.
   if (locations.length === 0) notFound();
 
   const flag = getFlagEmoji(upperCode);

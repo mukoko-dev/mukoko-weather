@@ -1390,18 +1390,60 @@ export async function getLocationsByProvince(provinceSlug: string): Promise<Loca
     .map((loc) => ({ ...loc, updatedAt: now })) as LocationDoc[];
 }
 
-/** Get a single province by its slug (from the static PROVINCES catalog) */
-export async function getProvinceBySlug(slug: string): Promise<ProvinceDoc | null> {
-  const province = PROVINCES.find((p) => p.slug === slug);
-  return province ? { ...province, updatedAt: new Date() } : null;
+/**
+ * Compute the province slug for a seed location: prefer its explicit
+ * `provinceSlug`, otherwise derive it from the province name + country code.
+ */
+function provinceSlugForLocation(loc: WeatherLocation): string {
+  return loc.provinceSlug ?? generateProvinceSlug(loc.province, loc.country ?? "");
 }
 
-/** Get all provinces (for sitemap generation) from the static PROVINCES catalog */
+/**
+ * Get a single province by its slug. Prefers the static PROVINCES catalog (for
+ * curated name/metadata) and falls back to DERIVING the province from the seed
+ * LOCATIONS — so provinces that have seed locations but no static row (e.g.
+ * Singapore's "Central Region") still resolve instead of dead-ending in a 404.
+ */
+export async function getProvinceBySlug(slug: string): Promise<ProvinceDoc | null> {
+  const now = new Date();
+  const province = PROVINCES.find((p) => p.slug === slug);
+  if (province) return { ...province, updatedAt: now };
+
+  const loc = LOCATIONS.find((l) => provinceSlugForLocation(l) === slug);
+  if (!loc) return null;
+  return {
+    slug,
+    name: loc.province,
+    countryCode: (loc.country ?? "").toUpperCase(),
+    updatedAt: now,
+  };
+}
+
+/**
+ * Get all provinces (for sitemap generation). UNIONs the static PROVINCES
+ * catalog with provinces DERIVED from the seed LOCATIONS (static row wins on
+ * name/metadata), so every province that has at least one location — including
+ * countries with no static PROVINCES rows — is present in the sitemap.
+ */
 export async function getAllProvinces(): Promise<ProvinceDoc[]> {
   const now = new Date();
-  return [...PROVINCES]
-    .sort((a, b) => a.countryCode.localeCompare(b.countryCode) || a.name.localeCompare(b.name))
-    .map((p) => ({ ...p, updatedAt: now }));
+  const bySlug = new Map<string, ProvinceDoc>();
+
+  for (const p of PROVINCES) {
+    bySlug.set(p.slug, { ...p, updatedAt: now });
+  }
+  for (const loc of LOCATIONS) {
+    const countryCode = (loc.country ?? "").toUpperCase();
+    if (!countryCode) continue;
+    const slug = provinceSlugForLocation(loc);
+    if (!bySlug.has(slug)) {
+      bySlug.set(slug, { slug, name: loc.province, countryCode, updatedAt: now });
+    }
+  }
+
+  return [...bySlug.values()].sort(
+    (a, b) => a.countryCode.localeCompare(b.countryCode) || a.name.localeCompare(b.name),
+  );
 }
 
 /**
@@ -1424,7 +1466,16 @@ export async function getAllLocationSlugsForSitemap(): Promise<{ slug: string; t
 
 /**
  * Get provinces for a country with their seed-location counts.
- * Phase 0F: counts come from the static seed catalog.
+ *
+ * Provinces are DERIVED from the actual seed LOCATIONS (grouped by
+ * `provinceSlug ?? generateProvinceSlug(province, country)`) and UNIONed with
+ * any static PROVINCES rows for the country. The static row wins for
+ * name/metadata; derived groups fill the gaps for the ~41 countries that have
+ * seed locations but no static PROVINCES entry (SG, DZ, MG, LY, SZ, …) and for
+ * orphaned locations whose province slug has no matching static row. This
+ * guarantees every location is reachable via exactly one province card with a
+ * correct count. Static provinces with no seed locations are retained (count 0)
+ * to preserve the previous browse behaviour.
  */
 export async function getProvincesWithLocationCounts(
   countryCode: string,
@@ -1432,18 +1483,33 @@ export async function getProvincesWithLocationCounts(
   const upper = countryCode.toUpperCase();
   const now = new Date();
 
-  const provinces = PROVINCES.filter((p) => p.countryCode.toUpperCase() === upper)
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((p) => ({ ...p, updatedAt: now }));
+  const bySlug = new Map<string, ProvinceDoc & { locationCount: number }>();
 
-  const countMap = new Map<string, number>();
-  for (const loc of LOCATIONS) {
-    if ((loc.country ?? "").toUpperCase() !== upper) continue;
-    const slug = loc.provinceSlug ?? generateProvinceSlug(loc.province, loc.country ?? "");
-    countMap.set(slug, (countMap.get(slug) ?? 0) + 1);
+  // Seed static rows first so their curated name/metadata win.
+  for (const p of PROVINCES) {
+    if (p.countryCode.toUpperCase() !== upper) continue;
+    bySlug.set(p.slug, { ...p, updatedAt: now, locationCount: 0 });
   }
 
-  return provinces.map((p) => ({ ...p, locationCount: countMap.get(p.slug) ?? 0 }));
+  // Derive from actual locations: fill gaps and count every location.
+  for (const loc of LOCATIONS) {
+    if ((loc.country ?? "").toUpperCase() !== upper) continue;
+    const slug = provinceSlugForLocation(loc);
+    const existing = bySlug.get(slug);
+    if (existing) {
+      existing.locationCount += 1;
+    } else {
+      bySlug.set(slug, {
+        slug,
+        name: loc.province,
+        countryCode: upper,
+        updatedAt: now,
+        locationCount: 1,
+      });
+    }
+  }
+
+  return [...bySlug.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // ---------------------------------------------------------------------------

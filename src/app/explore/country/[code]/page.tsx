@@ -6,7 +6,6 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { getCountryWithStats, getProvincesWithLocationCounts } from "@/lib/db";
 import { getFlagEmoji, COUNTRIES } from "@/lib/countries";
-import { logError } from "@/lib/observability";
 
 export const revalidate = 3600;
 
@@ -45,29 +44,14 @@ export default async function CountryDetailPage({ params }: Props) {
   // Reject obviously invalid codes early — valid ISO 3166-1 alpha-2 are exactly 2 letters
   if (!/^[A-Z]{2}$/.test(upperCode)) notFound();
 
-  let country: Awaited<ReturnType<typeof getCountryWithStats>> = null;
-  let provinces: Awaited<ReturnType<typeof getProvincesWithLocationCounts>> = [];
+  // These are pure static-array reads (LOCATIONS / COUNTRIES / PROVINCES) — they
+  // never throw, so no try/catch is needed.
+  const [country, provinces] = await Promise.all([
+    loadCountry(upperCode),
+    getProvincesWithLocationCounts(upperCode),
+  ]);
 
-  try {
-    [country, provinces] = await Promise.all([
-      loadCountry(upperCode),
-      getProvincesWithLocationCounts(upperCode),
-    ]);
-  } catch (err) {
-    logError({
-      source: "mongodb",
-      severity: "high",
-      message: "Failed to load country detail page",
-      error: err,
-      meta: { code: upperCode },
-    });
-    // Re-throw at request time so Next.js routes to error.tsx instead of a silent 404.
-    // During build-time static generation (MONGODB_URI absent), fall through to notFound()
-    // so the build succeeds and ISR handles the route on first real request.
-    if (process.env.MONGODB_URI) throw err;
-  }
-
-  // DB succeeded but the country doesn't exist — genuine 404.
+  // The country doesn't exist — genuine 404.
   if (!country) notFound();
 
   const flag = getFlagEmoji(upperCode);
@@ -114,7 +98,7 @@ export default async function CountryDetailPage({ params }: Props) {
 
         {provinces.filter((p) => p.locationCount > 0).length === 0 ? (
           <div className="mt-8 rounded-[var(--radius-card)] bg-surface-card p-6 text-center text-text-tertiary">
-            <p>No provinces found. Run database initialisation to populate data.</p>
+            <p>No locations available here yet.</p>
           </div>
         ) : (
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

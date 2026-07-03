@@ -116,7 +116,7 @@ export default async function ExplorePage() {
 
           {tagCounts.length === 0 && (
             <div className="mt-6 rounded-[var(--radius-card)] bg-surface-card p-6 text-center text-text-tertiary">
-              <p>Location data is loading. Please run database initialisation first.</p>
+              <p>No locations available here yet.</p>
             </div>
           )}
 
