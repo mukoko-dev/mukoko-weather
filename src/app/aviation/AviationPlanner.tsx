@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useDebounce } from "@/lib/use-debounce";
-import { getIcaoForSlug } from "@/lib/icao-codes";
+import { getIcaoForSlug, getAirportByIcao } from "@/lib/icao-codes";
 import { SearchIcon, MapPinIcon, NavigationIcon } from "@/lib/weather-icons";
 import type { AirportBriefing, BriefingData, MetarObs } from "./AviationBriefingPDF";
 
@@ -47,12 +47,14 @@ function AirportSearch({
   const [results, setResults] = useState<LocationResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const debounced = useDebounce(query, 300);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const search = useCallback(async (q: string) => {
     if (q.trim().length < 2) { setResults([]); return; }
     setLoading(true);
+    setSearchError(null);
     try {
       const res = await fetch(`/api/py/search?q=${encodeURIComponent(q)}&limit=8`);
       if (res.ok) {
@@ -60,7 +62,15 @@ function AirportSearch({
         setResults((data.locations ?? []).map((l: { slug: string; name: string; province: string; country?: string }) => ({
           slug: l.slug, name: l.name, province: l.province, country: l.country,
         })));
+      } else {
+        setResults([]);
+        setSearchError("Airport search failed. Please try again.");
       }
+    } catch {
+      // A network failure here previously escaped as an unhandled rejection and
+      // left the spinner stuck — surface it and clear the loading state instead.
+      setResults([]);
+      setSearchError("Airport search failed. Check your connection and try again.");
     } finally { setLoading(false); }
   }, []);
 
@@ -82,7 +92,7 @@ function AirportSearch({
     setResults([]);
   };
 
-  const clear = () => { onChange(null); setQuery(""); setResults([]); };
+  const clear = () => { onChange(null); setQuery(""); setResults([]); setSearchError(null); };
 
   return (
     <div ref={containerRef} className="relative">
@@ -105,6 +115,10 @@ function AirportSearch({
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-xs">…</span>
         )}
       </div>
+
+      {searchError && !value && (
+        <p className="mt-1.5 text-xs text-severity-moderate" role="alert">{searchError}</p>
+      )}
 
       {value && (
         <div className="mt-1.5 flamingo">
@@ -230,10 +244,16 @@ export function AviationPlanner() {
   const altIcao = alt ? getIcaoForSlug(alt.slug) : null;
   const canBrief = !!depIcao && !!destIcao;
 
-  const fetchAirport = async (slug: string, name: string, icao: string): Promise<AirportBriefing> => {
+  const fetchAirport = async (name: string, icao: string): Promise<AirportBriefing> => {
+    // `/api/py/weather` takes lat/lon ONLY — it ignores any `location`/`slug`
+    // param and defaults to Harare. Resolve the airport's own coordinates from
+    // the ICAO record so each airport gets its real weather (sunrise/sunset).
+    const airport = getAirportByIcao(icao);
     const [metarRes, wxRes] = await Promise.allSettled([
       fetch(`/api/py/metar?icao=${icao}`),
-      fetch(`/api/py/weather?location=${slug}`),
+      airport
+        ? fetch(`/api/py/weather?lat=${airport.lat}&lon=${airport.lon}`)
+        : Promise.reject(new Error(`No coordinates for ${icao}`)),
     ]);
 
     let metar: MetarObs[] = [];
@@ -248,7 +268,8 @@ export function AviationPlanner() {
     let sunset: string | undefined;
     if (wxRes.status === "fulfilled" && wxRes.value.ok) {
       const d = await wxRes.value.json();
-      const daily = d.weather?.daily;
+      // `/api/py/weather` returns `daily` at the TOP LEVEL (not under `weather`).
+      const daily = d.daily;
       if (daily?.sunrise?.[0]) {
         sunrise = new Date(daily.sunrise[0]).toLocaleTimeString("en-ZW", { hour: "2-digit", minute: "2-digit", hour12: false });
         sunset = new Date(daily.sunset[0]).toLocaleTimeString("en-ZW", { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -265,9 +286,9 @@ export function AviationPlanner() {
     setBriefingData(null);
     try {
       const [departure, destination, alternate] = await Promise.all([
-        fetchAirport(dep.slug, dep.name, depIcao),
-        fetchAirport(dest.slug, dest.name, destIcao),
-        alt && altIcao ? fetchAirport(alt.slug, alt.name, altIcao) : Promise.resolve(undefined),
+        fetchAirport(dep.name, depIcao),
+        fetchAirport(dest.name, destIcao),
+        alt && altIcao ? fetchAirport(alt.name, altIcao) : Promise.resolve(undefined),
       ]);
       setBriefingData({
         departure,

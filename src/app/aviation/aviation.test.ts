@@ -5,6 +5,8 @@ import { resolve } from "path";
 const plannerSrc = readFileSync(resolve(__dirname, "AviationPlanner.tsx"), "utf-8");
 const pdfSrc = readFileSync(resolve(__dirname, "AviationBriefingPDF.tsx"), "utf-8");
 const pageSrc = readFileSync(resolve(__dirname, "page.tsx"), "utf-8");
+const errorSrc = readFileSync(resolve(__dirname, "error.tsx"), "utf-8");
+const loadingSrc = readFileSync(resolve(__dirname, "loading.tsx"), "utf-8");
 
 describe("AviationPlanner", () => {
   it("is a client component", () => {
@@ -40,6 +42,52 @@ describe("AviationPlanner", () => {
   it("has alternate airport option", () => {
     expect(plannerSrc).toContain("Alternate Airport");
     expect(plannerSrc).toContain("alternate");
+  });
+});
+
+describe("AviationPlanner — Harare-bug fixes", () => {
+  it("resolves airport coordinates for the weather fetch (not a slug/location param)", () => {
+    expect(plannerSrc).toContain("getAirportByIcao");
+    // The weather endpoint takes lat/lon ONLY — a `location=` param is ignored
+    // and silently defaults to Harare, so it must never be used here.
+    expect(plannerSrc).toContain("/api/py/weather?lat=");
+    expect(plannerSrc).not.toContain("/api/py/weather?location=");
+  });
+
+  it("reads daily from the top level of the weather response, not d.weather.daily", () => {
+    expect(plannerSrc).toContain("const daily = d.daily");
+    expect(plannerSrc).not.toContain("d.weather?.daily");
+  });
+
+  it("catches airport-search failures so the spinner never sticks", () => {
+    expect(plannerSrc).toContain("catch");
+    expect(plannerSrc).toContain("searchError");
+    // The search callback must clear loading in finally after catching.
+    expect(plannerSrc).toContain("finally { setLoading(false); }");
+  });
+});
+
+describe("Aviation error boundary", () => {
+  it("is a client component", () => {
+    expect(errorSrc).toContain('"use client"');
+  });
+  it("exports a default error component with error + reset props", () => {
+    expect(errorSrc).toContain("export default function AviationError");
+    expect(errorSrc).toContain("reset");
+  });
+  it("reports to analytics and offers retry", () => {
+    expect(errorSrc).toContain("reportErrorToAnalytics");
+    expect(errorSrc).toContain("Try again");
+  });
+});
+
+describe("Aviation loading boundary", () => {
+  it("exports a default loading component", () => {
+    expect(loadingSrc).toContain("export default function AviationLoading");
+  });
+  it("renders the Header and an accessible loading status", () => {
+    expect(loadingSrc).toContain("Header");
+    expect(loadingSrc).toContain('role="status"');
   });
 });
 

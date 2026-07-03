@@ -87,10 +87,19 @@ export async function GET(req: NextRequest): Promise<Response> {
     source = "coords";
   } else if (slug && /^[a-z0-9-]{1,80}$/.test(slug)) {
     // 2. Known location slug — resolve to coordinates via internal locations API.
-    const loc = await fetchJson<Record<string, unknown> | Record<string, unknown>[]>(
-      `${INTERNAL_BASE}/api/py/locations?slug=${encodeURIComponent(slug)}`,
-    );
-    const doc = Array.isArray(loc) ? loc[0] : loc;
+    // `/api/py/locations?slug=` returns a `{ location: {…} }` WRAPPER (not the
+    // bare doc), so unwrap it — reading `loc.lat` directly yields undefined → NaN
+    // → a silent Harare fallback for every non-Harare embed.
+    const loc = await fetchJson<
+      | Record<string, unknown>
+      | Record<string, unknown>[]
+      | { location?: Record<string, unknown> }
+    >(`${INTERNAL_BASE}/api/py/locations?slug=${encodeURIComponent(slug)}`);
+    const doc = Array.isArray(loc)
+      ? loc[0]
+      : ((loc as { location?: Record<string, unknown> } | null)?.location ??
+        (loc as Record<string, unknown> | null) ??
+        undefined);
     const dLat = doc ? Number(doc.lat) : NaN;
     const dLon = doc ? Number(doc.lon) : NaN;
     if (doc && Number.isFinite(dLat) && Number.isFinite(dLon)) {

@@ -130,6 +130,17 @@ describe("route structure", () => {
     expect(source).toContain("/api/py/locations");
   });
 
+  it("unwraps the { location: {…} } wrapper from the locations endpoint", () => {
+    // The locations endpoint returns `{ location: {…} }`, not a bare doc.
+    // Reading `loc.lat` directly would be undefined → NaN → a silent Harare
+    // fallback for every non-Harare slug embed. Guard that the unwrap stays.
+    expect(source).toContain("?.location");
+  });
+
+  it("resolves weather by the resolved lat/lon (never a hardcoded default)", () => {
+    expect(source).toContain("/api/py/weather?lat=${lat}&lon=${lon}");
+  });
+
   it("does not shared-cache IP-derived responses", () => {
     expect(source).toContain("private, max-age=300");
     expect(source).toContain("Cache-Control");
