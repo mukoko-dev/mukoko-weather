@@ -5,6 +5,7 @@ import { MineralsStripe } from "@/components/brand/MineralsStripe";
 import { ThemeProvider } from "@/components/brand/ThemeProvider";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { PWAInstallPrompt } from "@/components/weather/PWAInstallPrompt";
+import { ServiceWorkerUpdater } from "@/components/pwa/ServiceWorkerUpdater";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
@@ -340,6 +341,7 @@ export default async function RootLayout({
             <PWAInstallPrompt />
           </ThemeProvider>
         </AuthKitProvider>
+        <ServiceWorkerUpdater />
         <Analytics />
       </body>
     </html>

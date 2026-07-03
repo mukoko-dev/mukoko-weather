@@ -16,6 +16,16 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // The service worker script must never be served stale — always
+        // revalidate so a new deploy's /sw.js is fetched, letting the
+        // ServiceWorkerUpdater detect the new version and auto-reload.
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+      {
         // Allow embed endpoints to be loaded from any origin
         source: "/embed/:path*",
         headers: [
