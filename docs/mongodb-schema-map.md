@@ -66,12 +66,12 @@ The local `mukoko-weather` MongoDB is essentially **deprecated**. Mukoko is now 
 
 OIDC-compliant. Already supports WorkOS + Stytch. **This is where mukoko's users live.**
 
-| Collection     | Purpose                                                                 | Notes for mukoko                                                                                                                                                                                                                         |
+| Collection | Purpose | Notes for mukoko |
 | -------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `persons`      | Canonical user records. `_id` is UUID used as OIDC `sub` claim.         | Has `workosUserId`, `stytchUserId`, `preferredLanguages`, `bundu.familyMembership`, `bundu.verificationTier` (0-3). On WorkOS sign-in, upsert by `workosUserId`. **Phase 1a — wired up via `src/lib/auth.ts → upsertPlatformPerson()`.** |
-| `credentials`  | Per-person credentials (password, passkey, WebAuthn, OAuth, TOTP, etc.) | `provider: "workos"` is a first-class supported value. Phase 1a writes a `(workos, oauth_token)` credential per person on sign-in, deduped on `(personId, provider, credentialType)`.                                                    |
-| `activityLog`  | Audit trail of signup/signin/MFA/credential events                      | Mukoko writes `{eventType: "signin"                                                                                                                                                                                                      | "signup", source: "api", surfaceContext: "mukoko-weather", provider: "workos", success: true}` on every WorkOS callback (Phase 1a). |
-| `personSkills` | Skills + ISCO-08 codes per person                                       | Not relevant to mukoko unless integrating activities → skills.                                                                                                                                                                           |
+| `persons` | Canonical user records. `_id` is UUID used as OIDC `sub` claim. | Has `workosUserId`, `stytchUserId`, `preferredLanguages`, `bundu.familyMembership`, `bundu.verificationTier` (0-3). On WorkOS sign-in, upsert by `workosUserId`. **Phase 1a — wired up via `src/lib/auth.ts → upsertPlatformPerson()`.** |
+| `credentials` | Per-person credentials (password, passkey, WebAuthn, OAuth, TOTP, etc.) | `provider: "workos"` is a first-class supported value. Phase 1a writes a `(workos, oauth_token)` credential per person on sign-in, deduped on `(personId, provider, credentialType)`. |
+| `activityLog` | Audit trail of signup/signin/MFA/credential events | Mukoko writes `{eventType: "signin"                                                                                                                                                                                                      | "signup", source: "api", surfaceContext: "mukoko-weather", provider: "workos", success: true}` on every WorkOS callback (Phase 1a). |
+| `personSkills` | Skills + ISCO-08 codes per person | Not relevant to mukoko unless integrating activities → skills. |
 
 ##### Mukoko auth flow (Phase 1a)
 
@@ -143,14 +143,14 @@ Our `ai_summaries` + `ai_prompts` + `ai_suggested_rules` in `weather` DB stay (m
 
 This is huge — covers user devices, weather stations, kiosks, datacentre nodes.
 
-| Collection                                               | Purpose                                                                                                | Notes for mukoko                                                         |
+| Collection | Purpose | Notes for mukoko |
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `devices`                                                | Every device on the platform. Has `category: "user_device"                                             | "weather_station"                                                        | "kiosk" | "datacentre_node"`. `userDevice.associatedUsers[]`links to people. Tracks`mukokoAppVersion`in`softwareInventory`. **Built-in content filter profile** with strict/moderate/permissive categories. | Mukoko mobile app (Expo) registers here. Weather stations register too. |
-| `commands`                                               | Async commands sent to devices (revoke_trust, wipe_local_state, force_sync, calibration_request, etc.) | Mukoko native app should poll for these.                                 |
-| `telemetry`                                              | Health/heartbeat/sync outcomes/crash reports per device                                                | Mukoko crash reports go here.                                            |
-| `deviceHistory`                                          | State transition audit log                                                                             | Read-only.                                                               |
-| `device_profiles`                                        | Legacy collection (no validator)                                                                       | Our current cross-device sync writes here. Migrate forward to `devices`. |
-| `firmware`, `pairings`, `sessions`, `managementPolicies` | Bundu hardware management                                                                              | Not directly used by mukoko web/mobile yet.                              |
+| `devices` | Every device on the platform. Has `category: "user_device"                                             | "weather_station"                                                        | "kiosk" | "datacentre_node"`. `userDevice.associatedUsers[]`links to people. Tracks`mukokoAppVersion`in`softwareInventory`. **Built-in content filter profile** with strict/moderate/permissive categories. | Mukoko mobile app (Expo) registers here. Weather stations register too. |
+| `commands` | Async commands sent to devices (revoke_trust, wipe_local_state, force_sync, calibration_request, etc.) | Mukoko native app should poll for these. |
+| `telemetry` | Health/heartbeat/sync outcomes/crash reports per device | Mukoko crash reports go here. |
+| `deviceHistory` | State transition audit log | Read-only. |
+| `device_profiles` | Legacy collection (no validator) | Our current cross-device sync writes here. Migrate forward to `devices`. |
+| `firmware`, `pairings`, `sessions`, `managementPolicies` | Bundu hardware management | Not directly used by mukoko web/mobile yet. |
 
 #### `integrations` — Third-party provider registry (P1 dependency)
 
