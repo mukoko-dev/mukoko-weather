@@ -34,6 +34,15 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // The iframe widget target must be embeddable on ANY third-party site.
+        // The app sets no X-Frame-Options (so framing is already allowed); this
+        // makes it explicit and future-proof via CSP frame-ancestors.
+        source: "/embed/widget",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors *" },
+        ],
+      },
+      {
         // API CORS headers
         source: "/api/:path*",
         headers: [

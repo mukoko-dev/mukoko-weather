@@ -1,0 +1,35 @@
+/* Standalone iframe target for the weather widget.
+ *
+ * This is a PLAIN (non-module) global stylesheet, imported only by the widget
+ * route's page.tsx — so it is included solely on /embed/widget, never elsewhere.
+ * A CSS Module can't be used here: this file's whole job is to override the
+ * root layout's GLOBAL brand chrome (mineral stripe, body background, left
+ * gutter), and the project's css-loader runs in pure mode, which rejects
+ * global-only module selectors.
+ *
+ * All class names are namespaced with `mkw-embed-` to avoid collisions. */
+
+.mkw-embed-host {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+
+/* Hide the root-layout decorative mineral stripe so the iframe shows only the widget. */
+.minerals-stripe {
+  display: none !important;
+}
+
+/* Let the host page's background show through the iframe (transparent embed). */
+body {
+  background: transparent !important;
+}
+
+/* Remove the root layout's left gutter so the widget sits flush at 0,0. */
+body > div {
+  padding-left: 0 !important;
+}

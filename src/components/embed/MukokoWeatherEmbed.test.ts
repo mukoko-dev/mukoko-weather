@@ -99,4 +99,37 @@ describe("MukokoWeatherEmbed component", () => {
     expect(componentContent).toContain("styles.todayCard");
     expect(componentContent).toContain("styles.forecastCard");
   });
+
+  it("is re-exported from the embed barrel for external consumers", () => {
+    const indexContent = readFileSync(resolve(__dirname, "./index.ts"), "utf-8");
+    expect(indexContent).toContain(
+      'export { MukokoWeatherEmbed } from "./MukokoWeatherEmbed"',
+    );
+    expect(indexContent).toContain('export type { EmbedType }');
+  });
+});
+
+describe("MukokoWeatherEmbed consumers", () => {
+  it("is rendered by the standalone iframe widget route", () => {
+    const widgetPage = readFileSync(
+      resolve(__dirname, "../../app/embed/widget/page.tsx"),
+      "utf-8",
+    );
+    expect(widgetPage).toContain('from "@/components/embed"');
+    expect(widgetPage).toContain("<MukokoWeatherEmbed");
+  });
+
+  it("powers the live preview on the /embed docs page", () => {
+    const docsPage = readFileSync(
+      resolve(__dirname, "../../app/embed/page.tsx"),
+      "utf-8",
+    );
+    expect(docsPage).toContain("MukokoWeatherEmbed");
+    // The docs page leads with a copy-paste iframe pointing at the widget route.
+    expect(docsPage).toContain("/embed/widget?type=");
+    // The broken npm import must NOT be presented as usable.
+    expect(docsPage).not.toContain(
+      'import { MukokoWeatherEmbed } from "@mukoko/weather-embed"',
+    );
+  });
 });
