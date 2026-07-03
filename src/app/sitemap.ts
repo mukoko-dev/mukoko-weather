@@ -1,5 +1,10 @@
 import type { MetadataRoute } from "next";
-import { getAllLocationSlugsForSitemap, getAllCountryCodes, getAllProvinces, getFeaturedTagsFromDb } from "@/lib/db";
+import {
+  getAllLocationSlugsForSitemap,
+  getAllCountryCodes,
+  getAllProvinces,
+  getFeaturedTagsFromDb,
+} from "@/lib/db";
 import { TAGS } from "@/lib/seed-tags";
 import { logError } from "@/lib/observability";
 
@@ -89,6 +94,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.5,
     },
     {
+      url: `${baseUrl}/developers`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.6,
+    },
+    {
       url: `${baseUrl}/privacy`,
       lastModified: now,
       changeFrequency: "yearly",
@@ -118,7 +129,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     countryCodes = codes;
     provinces = provs;
     // Fall back to seed tags if DB returns nothing (e.g. cold start / test environment)
-    featuredTagSlugs = tags.length > 0 ? tags.map((t) => t.slug) : TAGS.filter((t) => t.featured).map((t) => t.slug);
+    featuredTagSlugs =
+      tags.length > 0
+        ? tags.map((t) => t.slug)
+        : TAGS.filter((t) => t.featured).map((t) => t.slug);
   } catch (err) {
     logError({
       source: "mongodb",
@@ -195,5 +209,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }));
 
-  return [...staticPages, ...explorePages, ...countryPages, ...provincePages, ...locationPages, ...subRoutePages];
+  return [
+    ...staticPages,
+    ...explorePages,
+    ...countryPages,
+    ...provincePages,
+    ...locationPages,
+    ...subRoutePages,
+  ];
 }

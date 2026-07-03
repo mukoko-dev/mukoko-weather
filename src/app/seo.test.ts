@@ -42,7 +42,9 @@ describe("sitemap.ts", () => {
   // static pages + explore tag pages (locations array will be empty).
   it("includes the homepage", async () => {
     const result = await sitemap();
-    const home = result.find((entry) => entry.url === "https://weather.mukoko.com");
+    const home = result.find(
+      (entry) => entry.url === "https://weather.mukoko.com",
+    );
     expect(home).toBeDefined();
     expect(home!.priority).toBe(1.0);
     expect(home!.changeFrequency).toBe("hourly");
@@ -51,37 +53,60 @@ describe("sitemap.ts", () => {
   it("includes static pages (about, help, history, privacy, terms)", async () => {
     const result = await sitemap();
 
-    const aboutEntry = result.find((e) => e.url === "https://weather.mukoko.com/about");
+    const aboutEntry = result.find(
+      (e) => e.url === "https://weather.mukoko.com/about",
+    );
     expect(aboutEntry).toBeDefined();
     expect(aboutEntry!.changeFrequency).toBe("monthly");
 
-    const helpEntry = result.find((e) => e.url === "https://weather.mukoko.com/help");
+    const helpEntry = result.find(
+      (e) => e.url === "https://weather.mukoko.com/help",
+    );
     expect(helpEntry).toBeDefined();
     expect(helpEntry!.changeFrequency).toBe("monthly");
 
-    const historyEntry = result.find((e) => e.url === "https://weather.mukoko.com/history");
+    const historyEntry = result.find(
+      (e) => e.url === "https://weather.mukoko.com/history",
+    );
     expect(historyEntry).toBeDefined();
     expect(historyEntry!.changeFrequency).toBe("daily");
     expect(historyEntry!.priority).toBe(0.8);
 
-    const privacyEntry = result.find((e) => e.url === "https://weather.mukoko.com/privacy");
+    const privacyEntry = result.find(
+      (e) => e.url === "https://weather.mukoko.com/privacy",
+    );
     expect(privacyEntry).toBeDefined();
     expect(privacyEntry!.changeFrequency).toBe("yearly");
 
-    const termsEntry = result.find((e) => e.url === "https://weather.mukoko.com/terms");
+    const termsEntry = result.find(
+      (e) => e.url === "https://weather.mukoko.com/terms",
+    );
     expect(termsEntry).toBeDefined();
     expect(termsEntry!.changeFrequency).toBe("yearly");
   });
 
   it("includes explore page and tag pages", async () => {
     const result = await sitemap();
-    const explore = result.find((e) => e.url === "https://weather.mukoko.com/explore");
+    const explore = result.find(
+      (e) => e.url === "https://weather.mukoko.com/explore",
+    );
     expect(explore).toBeDefined();
     expect(explore!.priority).toBe(0.8);
 
-    const exploreTags = ["city", "farming", "mining", "tourism", "national-park", "education", "border", "travel"];
+    const exploreTags = [
+      "city",
+      "farming",
+      "mining",
+      "tourism",
+      "national-park",
+      "education",
+      "border",
+      "travel",
+    ];
     for (const tag of exploreTags) {
-      const entry = result.find((e) => e.url === `https://weather.mukoko.com/explore/${tag}`);
+      const entry = result.find(
+        (e) => e.url === `https://weather.mukoko.com/explore/${tag}`,
+      );
       expect(entry).toBeDefined();
       expect(entry!.priority).toBe(0.7);
     }
@@ -89,15 +114,21 @@ describe("sitemap.ts", () => {
 
   it("includes boosted city entries (harare, bulawayo, victoria-falls)", async () => {
     const result = await sitemap();
-    const harare = result.find((e) => e.url === "https://weather.mukoko.com/harare");
+    const harare = result.find(
+      (e) => e.url === "https://weather.mukoko.com/harare",
+    );
     expect(harare).toBeDefined();
     expect(harare!.priority).toBe(0.9);
 
-    const bulawayo = result.find((e) => e.url === "https://weather.mukoko.com/bulawayo");
+    const bulawayo = result.find(
+      (e) => e.url === "https://weather.mukoko.com/bulawayo",
+    );
     expect(bulawayo).toBeDefined();
     expect(bulawayo!.priority).toBe(0.9);
 
-    const vicfalls = result.find((e) => e.url === "https://weather.mukoko.com/victoria-falls");
+    const vicfalls = result.find(
+      (e) => e.url === "https://weather.mukoko.com/victoria-falls",
+    );
     expect(vicfalls).toBeDefined();
     expect(vicfalls!.priority).toBe(0.9);
   });
@@ -139,8 +170,8 @@ describe("canonical URLs — every page sets its own canonical", () => {
 
   // Pages that MUST have their own canonical to avoid GSC errors
   const pagesWithCanonicals: [string, string][] = [
-    ["page.tsx", "/harare"],               // home → points to /harare
-    ["[location]/page.tsx", "loc.slug"],   // dynamic locations
+    ["page.tsx", "/harare"], // home → points to /harare
+    ["[location]/page.tsx", "loc.slug"], // dynamic locations
     ["explore/page.tsx", "/explore"],
     ["shamwari/page.tsx", "/shamwari"],
     ["history/page.tsx", "/history"],
@@ -150,6 +181,7 @@ describe("canonical URLs — every page sets its own canonical", () => {
     ["terms/page.tsx", "/terms"],
     ["status/page.tsx", "/status"],
     ["embed/page.tsx", "/embed"],
+    ["developers/page.tsx", "/developers"],
   ];
 
   for (const [file, expectedFragment] of pagesWithCanonicals) {
