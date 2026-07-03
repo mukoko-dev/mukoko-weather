@@ -75,8 +75,8 @@ export function UserMenu({ user: userProp, compact = true }: UserMenuProps) {
   // ── Signed in ─────────────────────────────────────────────────────────
   const initials = initialsFor(user);
   const displayName =
-    user.email ??
-    [user.firstName, user.lastName].filter(Boolean).join(" ") ??
+    user.email ||
+    [user.firstName, user.lastName].filter(Boolean).join(" ") ||
     "Signed in";
   const hasPicture = Boolean(user.profilePictureUrl);
 

@@ -17,6 +17,22 @@ from ._db import get_db, get_api_key
 
 router = APIRouter()
 
+# Model the app actually runs (Haiku). Kept in sync with api/py/_ai.py.
+ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+
+# Server-side cache for the assembled status payload. The dashboard polls this
+# endpoint (and multiple tabs multiply that), so without a short TTL every poll
+# fans out to live MongoDB / Tomorrow.io / Open-Meteo checks — which burns the
+# shared Tomorrow.io free-tier quota (25/hr) and can 429 real weather serving.
+_STATUS_CACHE_TTL_S = 60.0
+_status_cache: dict = {"data": None, "ts": 0.0}
+
+
+def _reset_status_cache() -> None:
+    """Clear the cached status payload (used by tests)."""
+    _status_cache["data"] = None
+    _status_cache["ts"] = 0.0
+
 
 def _check_mongodb() -> dict:
     start = time.time()
@@ -137,9 +153,16 @@ def _check_open_meteo() -> dict:
 
 
 def _check_anthropic() -> dict:
-    start = time.time()
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    """Check Anthropic availability WITHOUT spending tokens.
 
+    A live /v1/messages ping bills a request every time the status page is
+    polled (and anonymous users could burn credits at will). Instead we verify
+    the key is present and report the model the app is actually configured to
+    run — a key-presence + model-config check that costs nothing.
+    """
+    start = time.time()
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         try:
             api_key = get_api_key("anthropic")
@@ -154,59 +177,12 @@ def _check_anthropic() -> dict:
             "message": "API key not configured — basic summary fallback active",
         }
 
-    try:
-        with httpx.Client(timeout=15.0) as client:
-            resp = client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": "claude-sonnet-4-20250514",
-                    "max_tokens": 1,
-                    "messages": [{"role": "user", "content": "ping"}],
-                },
-            )
-
-        if resp.status_code == 401:
-            return {
-                "name": "Anthropic AI (Shamwari)",
-                "status": "down",
-                "latencyMs": round((time.time() - start) * 1000),
-                "message": "Invalid API key",
-            }
-
-        if resp.status_code == 429:
-            return {
-                "name": "Anthropic AI (Shamwari)",
-                "status": "degraded",
-                "latencyMs": round((time.time() - start) * 1000),
-                "message": "Rate limited — AI summaries may be delayed",
-            }
-
-        if 200 <= resp.status_code < 300:
-            return {
-                "name": "Anthropic AI (Shamwari)",
-                "status": "operational",
-                "latencyMs": round((time.time() - start) * 1000),
-                "message": "Responding normally",
-            }
-
-        return {
-            "name": "Anthropic AI (Shamwari)",
-            "status": "degraded",
-            "latencyMs": round((time.time() - start) * 1000),
-            "message": f"HTTP {resp.status_code}",
-        }
-    except Exception as e:
-        return {
-            "name": "Anthropic AI (Shamwari)",
-            "status": "down",
-            "latencyMs": round((time.time() - start) * 1000),
-            "message": str(e)[:200],
-        }
+    return {
+        "name": "Anthropic AI (Shamwari)",
+        "status": "operational",
+        "latencyMs": round((time.time() - start) * 1000),
+        "message": f"API key configured (model: {ANTHROPIC_MODEL})",
+    }
 
 
 def _check_weather_cache() -> dict:
@@ -263,7 +239,16 @@ def _check_ai_cache() -> dict:
 
 @router.get("/api/py/status")
 async def system_status():
-    """GET /api/py/status — Live system health checks."""
+    """GET /api/py/status — Live system health checks.
+
+    Result is cached server-side for ~60s so rapid/multi-tab polling doesn't
+    multiply upstream calls (protects the shared Tomorrow.io free-tier quota).
+    """
+    now = time.time()
+    cached = _status_cache["data"]
+    if cached is not None and (now - _status_cache["ts"]) < _STATUS_CACHE_TTL_S:
+        return cached
+
     start = time.time()
 
     checks = [
@@ -281,9 +266,13 @@ async def system_status():
     elif any(c["status"] == "degraded" for c in checks):
         overall = "degraded"
 
-    return {
+    result = {
         "status": overall,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "totalLatencyMs": round((time.time() - start) * 1000),
         "checks": checks,
     }
+
+    _status_cache["data"] = result
+    _status_cache["ts"] = time.time()
+    return result

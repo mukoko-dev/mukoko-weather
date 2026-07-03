@@ -196,6 +196,23 @@ describe("transformHistory", () => {
     expect(result[0].tempHigh).toBe(28); // current.temperature_2m
     expect(result[0].precipitation).toBe(0); // current.precipitation
   });
+
+  it("skips docs missing the current block without throwing", () => {
+    const good = makeDoc("2026-01-02");
+    const broken = makeDoc("2026-01-01");
+    // Simulate a persisted doc that never got a `current` block.
+    delete (broken as Partial<WeatherHistoryDoc>).current;
+    const result = transformHistory([good, broken]);
+    expect(result).toHaveLength(1);
+    expect(result[0].date).toBe("2026-01-02");
+  });
+
+  it("returns empty array when all docs lack current (no crash)", () => {
+    const broken = makeDoc("2026-01-01");
+    delete (broken as Partial<WeatherHistoryDoc>).current;
+    expect(() => transformHistory([broken])).not.toThrow();
+    expect(transformHistory([broken])).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

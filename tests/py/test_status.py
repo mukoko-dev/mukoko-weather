@@ -7,14 +7,24 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from py._status import (
+    ANTHROPIC_MODEL,
     _check_mongodb,
     _check_tomorrow_io,
     _check_open_meteo,
     _check_anthropic,
     _check_weather_cache,
     _check_ai_cache,
+    _reset_status_cache,
     system_status,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_status_cache():
+    """Ensure the server-side status cache never leaks between tests."""
+    _reset_status_cache()
+    yield
+    _reset_status_cache()
 
 
 # ---------------------------------------------------------------------------
@@ -170,18 +180,16 @@ class TestCheckOpenMeteo:
 
 
 class TestCheckAnthropic:
-    @patch("py._status.httpx.Client")
-    def test_operational_on_2xx(self, mock_client_cls):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_client_cls.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_client_cls.return_value.__enter__.return_value.post.return_value = mock_resp
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+    """The check is now key/model-presence only — it must NOT spend tokens."""
 
+    def test_operational_with_env_key(self):
         with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}):
             result = _check_anthropic()
         assert result["status"] == "operational"
-        assert "Responding normally" in result["message"]
+        assert result["name"] == "Anthropic AI (Shamwari)"
+        # Reports the model the app actually runs (Haiku), not Sonnet.
+        assert ANTHROPIC_MODEL in result["message"]
+        assert "claude-haiku-4-5-20251001" in result["message"]
 
     def test_degraded_on_no_key(self):
         with patch.dict("os.environ", {}, clear=True):
@@ -190,64 +198,31 @@ class TestCheckAnthropic:
         assert result["status"] == "degraded"
         assert "not configured" in result["message"]
 
-    @patch("py._status.httpx.Client")
-    def test_degraded_on_429(self, mock_client_cls):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 429
-        mock_client_cls.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_client_cls.return_value.__enter__.return_value.post.return_value = mock_resp
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
-
-        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}):
-            result = _check_anthropic()
-        assert result["status"] == "degraded"
-        assert "Rate limited" in result["message"]
-
-    @patch("py._status.httpx.Client")
-    def test_down_on_401(self, mock_client_cls):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 401
-        mock_client_cls.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_client_cls.return_value.__enter__.return_value.post.return_value = mock_resp
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
-
-        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-invalid"}):
-            result = _check_anthropic()
-        assert result["status"] == "down"
-        assert "Invalid API key" in result["message"]
-
-    def test_down_on_exception(self):
-        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}):
-            with patch("py._status.httpx.Client", side_effect=Exception("Connection error")):
-                result = _check_anthropic()
-        assert result["status"] == "down"
-        assert "Connection error" in result["message"]
-
-    @patch("py._status.httpx.Client")
-    def test_uses_db_key_when_env_absent(self, mock_client_cls):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_client_cls.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_client_cls.return_value.__enter__.return_value.post.return_value = mock_resp
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
-
+    def test_uses_db_key_when_env_absent(self):
         with patch.dict("os.environ", {}, clear=True):
             with patch("py._status.get_api_key", return_value="sk-from-db"):
                 result = _check_anthropic()
         assert result["status"] == "operational"
+        assert ANTHROPIC_MODEL in result["message"]
 
-    @patch("py._status.httpx.Client")
-    def test_degraded_on_other_status(self, mock_client_cls):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 503
-        mock_client_cls.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_client_cls.return_value.__enter__.return_value.post.return_value = mock_resp
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
-
-        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}):
-            result = _check_anthropic()
+    def test_degraded_when_db_key_lookup_raises(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with patch("py._status.get_api_key", side_effect=Exception("DB down")):
+                result = _check_anthropic()
         assert result["status"] == "degraded"
-        assert "503" in result["message"]
+        assert "not configured" in result["message"]
+
+    def test_does_not_spend_tokens(self):
+        """No live Anthropic request should ever be made (no token spend)."""
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}):
+            with patch("py._status.httpx.Client") as mock_client_cls:
+                result = _check_anthropic()
+        mock_client_cls.assert_not_called()
+        assert result["status"] == "operational"
+
+    def test_model_matches_configured_model(self):
+        # Guards against the Sonnet/Haiku mismatch regressing.
+        assert ANTHROPIC_MODEL == "claude-haiku-4-5-20251001"
 
 
 # ---------------------------------------------------------------------------
@@ -385,3 +360,25 @@ class TestSystemStatus:
 
         result = await system_status()
         assert result["status"] == "degraded"
+
+    @patch("py._status._check_ai_cache")
+    @patch("py._status._check_weather_cache")
+    @patch("py._status._check_anthropic")
+    @patch("py._status._check_open_meteo")
+    @patch("py._status._check_tomorrow_io")
+    @patch("py._status._check_mongodb")
+    @pytest.mark.asyncio
+    async def test_result_is_cached_between_calls(
+        self, mock_mongo, mock_tomorrow, mock_meteo, mock_anthro, mock_weather, mock_ai
+    ):
+        for m in [mock_mongo, mock_tomorrow, mock_meteo, mock_anthro, mock_weather, mock_ai]:
+            m.return_value = {"name": "test", "status": "operational", "latencyMs": 1, "message": "ok"}
+
+        first = await system_status()
+        # A rapid second poll must be served from cache — no extra upstream calls.
+        second = await system_status()
+
+        assert second is first
+        # Each check ran exactly once despite two endpoint calls.
+        for m in [mock_mongo, mock_tomorrow, mock_meteo, mock_anthro, mock_weather, mock_ai]:
+            assert m.call_count == 1

@@ -71,8 +71,10 @@ export function StatusDashboard() {
   useEffect(() => {
     fetchStatus();
 
-    // Auto-refresh every 60 seconds
-    const interval = setInterval(fetchStatus, 60000);
+    // Auto-refresh every 5 minutes. The server caches the payload for ~60s, so
+    // spacing client polls well beyond that avoids piling requests on top of a
+    // still-fresh cache while keeping the dashboard reasonably live.
+    const interval = setInterval(fetchStatus, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
@@ -98,7 +100,7 @@ export function StatusDashboard() {
         <p className="mt-1 text-base text-text-secondary">{error}</p>
         <button
           onClick={fetchStatus}
-          className="mt-4 rounded-md bg-primary px-4 py-2 text-base font-medium text-primary-fg transition-colors hover:bg-primary/90"
+          className="mt-4 rounded-md bg-primary px-4 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           Retry
         </button>
@@ -171,7 +173,7 @@ export function StatusDashboard() {
           </li>
         </ul>
         <p className="mt-3 text-text-tertiary">
-          Status auto-refreshes every 60 seconds. All checks run in parallel for minimum latency.
+          Status auto-refreshes every 5 minutes and is cached server-side for ~60 seconds. All checks run in parallel for minimum latency.
         </p>
       </div>
     </div>

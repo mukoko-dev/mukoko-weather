@@ -98,6 +98,9 @@ function formatSunTime(iso: string): string {
 
 export function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
   return docs
+    // A persisted doc missing `current` would throw on the unguarded
+    // `current.*` reads below and blank the whole dashboard. Skip such docs.
+    .filter((doc) => doc.current != null)
     .map((doc) => {
       const daily = doc.daily;
       const current = doc.current;

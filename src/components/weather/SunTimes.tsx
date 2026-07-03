@@ -6,14 +6,25 @@ interface Props {
 }
 
 export function SunTimes({ daily }: Props) {
-  const sunrise = new Date(daily.sunrise[0]);
-  const sunset = new Date(daily.sunset[0]);
-  const fmt = (d: Date) =>
-    d.toLocaleTimeString("en-ZW", { hour: "2-digit", minute: "2-digit", hour12: false });
+  const sunriseRaw = daily.sunrise?.[0];
+  const sunsetRaw = daily.sunset?.[0];
+  const sunrise = sunriseRaw != null ? new Date(sunriseRaw) : null;
+  const sunset = sunsetRaw != null ? new Date(sunsetRaw) : null;
 
-  const daylightMs = sunset.getTime() - sunrise.getTime();
-  const daylightHours = Math.floor(daylightMs / (1000 * 60 * 60));
-  const daylightMinutes = Math.round((daylightMs % (1000 * 60 * 60)) / (1000 * 60));
+  const isValid = (d: Date | null): d is Date => d != null && !Number.isNaN(d.getTime());
+
+  const fmt = (d: Date | null) =>
+    isValid(d)
+      ? d.toLocaleTimeString("en-ZW", { hour: "2-digit", minute: "2-digit", hour12: false })
+      : "--:--";
+
+  const hasDaylight = isValid(sunrise) && isValid(sunset);
+  const daylightMs = hasDaylight ? sunset.getTime() - sunrise.getTime() : 0;
+  const daylightHours = hasDaylight ? Math.floor(daylightMs / (1000 * 60 * 60)) : 0;
+  const daylightMinutes = hasDaylight
+    ? Math.round((daylightMs % (1000 * 60 * 60)) / (1000 * 60))
+    : 0;
+  const daylightLabel = hasDaylight ? `${daylightHours}h ${daylightMinutes}m` : "--";
 
   return (
     <section aria-labelledby="sun-times-heading">
@@ -38,7 +49,7 @@ export function SunTimes({ daily }: Props) {
             <SunIcon size={20} className="text-warmth" aria-hidden="true" />
             <div>
               <p className="text-base text-text-tertiary">Daylight</p>
-              <p className="text-base font-semibold text-text-primary" aria-label={`${daylightHours} hours and ${daylightMinutes} minutes of daylight`}>{daylightHours}h {daylightMinutes}m</p>
+              <p className="text-base font-semibold text-text-primary" aria-label={hasDaylight ? `${daylightHours} hours and ${daylightMinutes} minutes of daylight` : "Daylight unavailable"}>{daylightLabel}</p>
             </div>
           </div>
         </div>
