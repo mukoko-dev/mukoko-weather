@@ -10,7 +10,10 @@ import { DEFAULT_LAYER } from "@/lib/map-layers";
 import type { WeatherLocation } from "@/lib/locations";
 
 const MapLibreMap = dynamic(
-  () => import("@/components/weather/map/MapLibreMap").then((m) => ({ default: m.MapLibreMap })),
+  () =>
+    import("@/components/weather/map/MapLibreMap").then((m) => ({
+      default: m.MapLibreMap,
+    })),
   { ssr: false, loading: () => <MapSkeleton fill className="rounded-none" /> },
 );
 
@@ -59,8 +62,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
           </div>
         </div>
 
-        {/* Bottom-left overlay: weather layer panel */}
-        <div className="pointer-events-none absolute bottom-6 left-3 z-10 sm:bottom-4">
+        {/* Bottom-right overlay: weather layer panel. The map's attribution
+            control is pinned bottom-left (see MapLibreMap) so the two never
+            collide; the zoom control stays top-right. */}
+        <div className="pointer-events-none absolute bottom-6 right-3 z-10 sm:bottom-4">
           <WeatherLayerPanel
             activeLayer={activeLayer}
             onLayerChange={handleLayerChange}
@@ -69,7 +74,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
         </div>
 
         {/* Mobile nav bottom padding — transparent spacer */}
-        <div className="absolute inset-x-0 bottom-0 h-16 sm:hidden" aria-hidden="true" />
+        <div
+          className="absolute inset-x-0 bottom-0 h-16 sm:hidden"
+          aria-hidden="true"
+        />
       </main>
     </div>
   );

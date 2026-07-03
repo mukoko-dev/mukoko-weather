@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import type { Map as MapLibreGLMap, Marker } from "maplibre-gl";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { WEATHER_OVERLAY_ID, buildWeatherOverlaySource } from "@/lib/map-layers";
+import {
+  WEATHER_OVERLAY_ID,
+  buildWeatherOverlaySource,
+} from "@/lib/map-layers";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
 
@@ -77,6 +80,11 @@ export function MapLibreMap({
   const weatherLayerRef = useRef<string | null>(weatherLayer);
   weatherLayerRef.current = weatherLayer;
   const [overlayError, setOverlayError] = useState(false);
+  // Dedupes overlay tile-load logging. A single map view fires one `error` event
+  // per failed raster tile (≈10 per pan/zoom), so without this guard a transient
+  // decode failure spams the console 10× and re-runs the handler needlessly. We
+  // log at most once per layer selection; reset when the layer changes below.
+  const overlayErrorLoggedRef = useRef(false);
   // Set when the base map style / base tiles fail to load at runtime (e.g. an
   // expired or over-quota MapTiler key returning 403/429). Without this the map
   // renders as a silent blank/partial surface with no feedback.
@@ -105,59 +113,83 @@ export function MapLibreMap({
     // never getting `.remove()`d by the cleanup below.
     let cancelled = false;
 
-    import("maplibre-gl").then(({ Map, Marker: MLMarker, NavigationControl }) => {
-      if (cancelled || !containerRef.current) return;
-      import("maplibre-gl/dist/maplibre-gl.css");
+    import("maplibre-gl").then(
+      ({ Map, Marker: MLMarker, NavigationControl, AttributionControl }) => {
+        if (cancelled || !containerRef.current) return;
+        import("maplibre-gl/dist/maplibre-gl.css");
 
-      const map: MapLibreGLMap = new Map({
-        container: containerRef.current,
-        style: getMapTilerStyle(isDark),
-        center: [lon, lat],
-        zoom,
-        interactive,
-        attributionControl: {
-          customAttribution: '© <a href="https://www.maptiler.com/">MapTiler</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        },
-      });
+        const map: MapLibreGLMap = new Map({
+          container: containerRef.current,
+          style: getMapTilerStyle(isDark),
+          center: [lon, lat],
+          zoom,
+          interactive,
+          // The default attribution control sits bottom-right, which would collide
+          // with the bottom-right overlay layer switcher. Disable it here and re-add
+          // it explicitly at bottom-left below.
+          attributionControl: false,
+        });
 
-      // Unmounted while the Map was constructing — tear it down immediately.
-      if (cancelled) {
-        map.remove();
-        return;
-      }
-
-      mapRef.current = map;
-
-      if (interactive) {
-        map.addControl(new NavigationControl({ showCompass: false }), "top-right");
-      }
-
-      const restore = () => {
-        markerRef.current?.remove();
-        markerRef.current = new MLMarker({ color: "#0047AB" })
-          .setLngLat([lon, lat])
-          .addTo(map);
-        applyWeatherOverlay(map, weatherLayerRef.current);
-      };
-      restoreRef.current = restore;
-
-      map.on("load", restore);
-
-      // Surface tile/style failures (missing/expired API key → 403/503, rate
-      // limit → 429, upstream error) instead of showing a silent blank map.
-      // Overlay errors show the transient overlay notice; base-map/style errors
-      // show the "Base map unavailable" notice so a blank base map is never
-      // silent.
-      map.on("error", (e: { error?: Error; sourceId?: string }) => {
-        if (classifyMapError(e, WEATHER_OVERLAY_ID) === "overlay") {
-          setOverlayError(true);
-          console.error("[weather-map] overlay tile failed to load", e?.error);
-        } else {
-          setBaseMapError(true);
-          console.error("[weather-map] base map failed to load", e?.error);
+        // Unmounted while the Map was constructing — tear it down immediately.
+        if (cancelled) {
+          map.remove();
+          return;
         }
-      });
-    });
+
+        mapRef.current = map;
+
+        map.addControl(
+          new AttributionControl({
+            customAttribution:
+              '© <a href="https://www.maptiler.com/">MapTiler</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          }),
+          "bottom-left",
+        );
+
+        if (interactive) {
+          map.addControl(
+            new NavigationControl({ showCompass: false }),
+            "top-right",
+          );
+        }
+
+        const restore = () => {
+          markerRef.current?.remove();
+          markerRef.current = new MLMarker({ color: "#0047AB" })
+            .setLngLat([lon, lat])
+            .addTo(map);
+          applyWeatherOverlay(map, weatherLayerRef.current);
+        };
+        restoreRef.current = restore;
+
+        map.on("load", restore);
+
+        // Surface tile/style failures (missing/expired API key → 403/503, rate
+        // limit → 429, upstream error) instead of showing a silent blank map.
+        // Overlay errors show the transient overlay notice; base-map/style errors
+        // show the "Base map unavailable" notice so a blank base map is never
+        // silent.
+        map.on("error", (e: { error?: Error; sourceId?: string }) => {
+          if (classifyMapError(e, WEATHER_OVERLAY_ID) === "overlay") {
+            // Overlay tile failures (e.g. a single raster tile that can't be
+            // decoded) are non-fatal — MapLibre keeps the rest of the layer, so we
+            // never blank it. Fire the notice once and log at most once per layer
+            // selection so a burst of ~10 per-tile errors doesn't spam the console.
+            setOverlayError(true);
+            if (!overlayErrorLoggedRef.current) {
+              overlayErrorLoggedRef.current = true;
+              console.warn(
+                "[weather-map] weather overlay tile failed to load (non-fatal)",
+                e?.error,
+              );
+            }
+          } else {
+            setBaseMapError(true);
+            console.error("[weather-map] base map failed to load", e?.error);
+          }
+        });
+      },
+    );
 
     return () => {
       cancelled = true;
@@ -186,6 +218,7 @@ export function MapLibreMap({
     const map = mapRef.current;
     if (!map) return;
     setOverlayError(false);
+    overlayErrorLoggedRef.current = false;
     if (!map.isStyleLoaded()) {
       const apply = () => applyWeatherOverlay(map, weatherLayer);
       map.once("idle", apply);
@@ -204,10 +237,12 @@ export function MapLibreMap({
           role="status"
           className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-surface-base p-6 text-center"
         >
-          <p className="text-sm font-semibold text-text-primary">Map unavailable</p>
+          <p className="text-sm font-semibold text-text-primary">
+            Base map unavailable — map key not configured
+          </p>
           <p className="max-w-xs text-xs text-text-tertiary">
-            The base map key is not configured. Set NEXT_PUBLIC_MAPTILER_API_KEY to enable
-            the interactive weather map.
+            Set NEXT_PUBLIC_MAPTILER_API_KEY to enable the interactive weather
+            map.
           </p>
         </div>
       )}
@@ -216,10 +251,12 @@ export function MapLibreMap({
           role="status"
           className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-surface-base p-6 text-center"
         >
-          <p className="text-sm font-semibold text-text-primary">Base map unavailable</p>
+          <p className="text-sm font-semibold text-text-primary">
+            Base map unavailable
+          </p>
           <p className="max-w-xs text-xs text-text-tertiary">
-            The base map could not be loaded. This is usually a temporary issue — please try
-            again later.
+            The base map could not be loaded. This is usually a temporary issue
+            — please try again later.
           </p>
         </div>
       )}

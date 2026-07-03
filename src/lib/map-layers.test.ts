@@ -37,7 +37,9 @@ describe("MAP_LAYERS", () => {
   });
 
   it("includes precipitationIntensity layer", () => {
-    expect(MAP_LAYERS.some((l) => l.id === "precipitationIntensity")).toBe(true);
+    expect(MAP_LAYERS.some((l) => l.id === "precipitationIntensity")).toBe(
+      true,
+    );
   });
 
   it("includes cloudCover layer", () => {
@@ -46,6 +48,19 @@ describe("MAP_LAYERS", () => {
 
   it("includes temperature layer", () => {
     expect(MAP_LAYERS.some((l) => l.id === "temperature")).toBe(true);
+  });
+
+  it("gives EVERY layer a non-empty icon name (switcher must never be iconless)", () => {
+    for (const layer of MAP_LAYERS) {
+      expect(typeof layer.icon).toBe("string");
+      expect(layer.icon.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("gives the cloud layer a Cloud icon (was previously missing in the switcher)", () => {
+    const cloud = MAP_LAYERS.find((l) => l.id === "cloudCover");
+    expect(cloud).toBeDefined();
+    expect(cloud!.icon).toBe("Cloud");
   });
 });
 
