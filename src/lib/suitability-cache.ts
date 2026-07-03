@@ -35,12 +35,15 @@ export async function fetchSuitabilityRules(): Promise<SuitabilityRuleDoc[]> {
   if (inFlightRules) return inFlightRules;
 
   inFlightRules = (async () => {
-    // Try RxDB first (offline-capable)
+    // Try RxDB first (offline-capable). Reconstruct the FULL rule shape —
+    // dropping `fallback` here would make every rule with no matching
+    // condition fall through to the hardcoded generic "fair" rating.
     const localRules = await getCachedRules();
+    let localFetchedAt = 0;
     if (localRules.length > 0) {
       const parsed = localRules.map((r) => {
         try {
-          return { key: r.key, conditions: JSON.parse(r.conditions) };
+          return { key: r.key, conditions: JSON.parse(r.conditions), fallback: JSON.parse(r.fallback) };
         } catch {
           return null;
         }
@@ -48,14 +51,20 @@ export async function fetchSuitabilityRules(): Promise<SuitabilityRuleDoc[]> {
 
       if (parsed.length > 0) {
         cachedRules = parsed;
-        cachedRulesAt = Date.now();
+        // Use the RxDB doc's own `updatedAt` (when it was actually fetched
+        // from the network) rather than "now" — otherwise a full page
+        // reload makes a days-old local copy look freshly-fetched every
+        // time, and the network fetch below never fires again to pick up
+        // rule changes shipped via db-init.
+        localFetchedAt = Math.max(...localRules.map((r) => r.updatedAt));
+        cachedRulesAt = localFetchedAt;
       }
     }
 
     // Only fetch from network if the cache is stale or empty.
     // Without this guard, every call would issue a network request even
     // when RxDB just returned fresh data — defeating the TTL purpose.
-    const cacheIsWarm = cachedRules && cachedRules.length > 0 && Date.now() - cachedRulesAt < RULES_CACHE_TTL;
+    const cacheIsWarm = cachedRules && cachedRules.length > 0 && Date.now() - localFetchedAt < RULES_CACHE_TTL;
     if (!cacheIsWarm) {
       try {
         const res = await fetch("/api/py/suitability");
@@ -71,6 +80,7 @@ export async function fetchSuitabilityRules(): Promise<SuitabilityRuleDoc[]> {
               rules.map((r: SuitabilityRuleDoc) => ({
                 key: r.key,
                 conditions: JSON.stringify(r.conditions),
+                fallback: JSON.stringify(r.fallback),
               })),
             ).catch(() => {});
           }

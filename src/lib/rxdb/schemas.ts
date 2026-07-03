@@ -105,17 +105,25 @@ export const weatherHintSchema: RxJsonSchema<WeatherHintDocType> = {
 export interface SuitabilityRuleDocType {
   key: string; // "category:farming" or "activity:stargazing"
   conditions: string; // JSON-stringified condition array
+  fallback: string; // JSON-stringified fallback rating (used when no condition matches)
   updatedAt: number;
 }
 
 export const suitabilityRuleSchema: RxJsonSchema<SuitabilityRuleDocType> = {
-  version: 0,
+  // v0 → v1: added `fallback`. v0 docs cached rules without their fallback
+  // rating, which made every uncached-condition activity evaluate to the
+  // hardcoded generic "fair" fallback in suitability.ts — the migration
+  // drops those incomplete v0 docs (returning null deletes them) so the
+  // cache reports empty and the next fetch pulls complete rules over the
+  // network instead of silently keeping the broken local copy.
+  version: 1,
   primaryKey: "key",
   type: "object",
   properties: {
     key: { type: "string", maxLength: 100 },
     conditions: { type: "string" }, // JSON-stringified to avoid deep schema
+    fallback: { type: "string" }, // JSON-stringified to avoid deep schema
     updatedAt: { type: "number" },
   },
-  required: ["key", "conditions", "updatedAt"],
+  required: ["key", "conditions", "fallback", "updatedAt"],
 };

@@ -179,22 +179,22 @@ describe("WeatherDashboard — props and integration", () => {
   });
 });
 
-describe("WeatherDashboard — auto-onboarding (Apple/Google Weather pattern)", () => {
-  it("does not render WelcomeBanner (no forced personalization step)", () => {
-    // Top-tier weather apps don't interrupt the first weather view with an
-    // onboarding prompt — seeing your forecast IS the onboarding.
-    expect(source).not.toContain("<WelcomeBanner");
-    expect(source).not.toContain("@/components/weather/WelcomeBanner");
+describe("WeatherDashboard — welcome banner onboarding", () => {
+  it("renders WelcomeBanner inline for first-time visitors", () => {
+    // The banner itself gates on hasOnboarded (returns null once onboarded),
+    // so mounting it unconditionally here is safe and lets first-time
+    // visitors see it instead of silently skipping onboarding.
+    expect(source).toContain("<WelcomeBanner");
+    expect(source).toContain("@/components/weather/WelcomeBanner");
   });
 
-  it("auto-completes onboarding via useEffect", () => {
-    expect(source).toContain("hasOnboarded");
-    expect(source).toContain("completeOnboarding");
+  it("wires WelcomeBanner's personalise action to the My Weather modal", () => {
+    expect(source).toContain("openMyWeather");
+    expect(source).toContain("onChangeLocation={openMyWeather}");
   });
 
-  it("reads hasOnboarded and completeOnboarding from store", () => {
-    expect(source).toContain("s.hasOnboarded");
-    expect(source).toContain("s.completeOnboarding");
+  it("passes the current location name to WelcomeBanner", () => {
+    expect(source).toContain("locationName={location.name}");
   });
 
   it("does not auto-open modal for first-time visitors", () => {

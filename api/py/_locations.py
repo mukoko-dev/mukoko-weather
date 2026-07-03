@@ -674,11 +674,17 @@ async def geo_lookup(
         # apps behave: they show where you actually are, not the nearest city.
         #
         # Find-only path (autoCreate=false, e.g. IP-geo lookups): best-effort
-        # return the nearest EXISTING placesGeo entry with no coarse cap. If
-        # nothing exists we fall through to the 404 below that tells the caller
-        # to retry with autoCreate=true.
+        # return the nearest EXISTING placesGeo entry, capped to a radius that
+        # roughly matches IP-geolocation accuracy. IP-based lat/lon (e.g.
+        # Vercel's x-vercel-ip-latitude/longitude) is a coarse ISP/datacenter
+        # estimate that can be off by tens to a couple hundred km — but with no
+        # cap at all, `$nearSphere` will always return SOME seed location, even
+        # one on another continent, which then gets presented to the user as
+        # "Taking you to {city}…". Cap it so a genuinely distant nearest match
+        # falls through to the 404 below (told to retry with autoCreate=true /
+        # the city chooser) instead of silently mislabeling the user's location.
         if not autoCreate:
-            nearest = find_nearest_location(lat, lon, max_km=20_000)
+            nearest = find_nearest_location(lat, lon, max_km=150)
             if nearest and nearest.get("slug"):
                 nearest.pop("_id", None)
                 return {

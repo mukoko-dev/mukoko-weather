@@ -30,6 +30,7 @@ from py._ai import (
     TTL_TIER_1,
     TTL_TIER_2,
     TTL_TIER_3,
+    TTL_FALLBACK,
     _FALLBACK_SYSTEM_PROMPT,
 )
 
@@ -844,12 +845,14 @@ class TestGetCachedSummary:
             "insight": "Sunny weather today.",
             "generatedAt": now,
             "weatherSnapshot": {"temperature": 25, "weatherCode": 0},
+            "source": "ai",
         }
 
         result = _get_cached_summary("test-location")
         assert result is not None
         assert result["insight"] == "Sunny weather today."
         assert result["generatedAt"] == now
+        assert result["source"] == "ai"
 
     @patch("py._ai.get_db")
     def test_returns_none_when_not_cached(self, mock_db):
@@ -859,6 +862,21 @@ class TestGetCachedSummary:
 
         result = _get_cached_summary("test-location")
         assert result is None
+
+    @patch("py._ai.get_db")
+    def test_defaults_source_to_ai_for_legacy_docs(self, mock_db):
+        """Docs written before the `source` field existed should be treated
+        as real AI summaries (the only kind previously cached at full TTL)."""
+        mock_coll = MagicMock()
+        mock_db.return_value.__getitem__ = MagicMock(return_value=mock_coll)
+        mock_coll.find_one.return_value = {
+            "insight": "Legacy cached insight.",
+            "generatedAt": datetime.now(timezone.utc),
+            "weatherSnapshot": {"temperature": 25, "weatherCode": 0},
+        }
+
+        result = _get_cached_summary("test-location")
+        assert result["source"] == "ai"
 
 
 # ---------------------------------------------------------------------------
@@ -910,6 +928,32 @@ class TestSetCachedSummary:
         update_doc = call_args[0][1]["$set"]
         diff = (update_doc["expiresAt"] - update_doc["generatedAt"]).total_seconds()
         assert diff == TTL_TIER_3
+
+    @patch("py._ai.get_db")
+    def test_defaults_source_to_ai(self, mock_db):
+        mock_coll = MagicMock()
+        mock_db.return_value.__getitem__ = MagicMock(return_value=mock_coll)
+
+        _set_cached_summary("any-city", "Summary.", {"temperature": 25}, ["city"])
+        call_args = mock_coll.update_one.call_args
+        update_doc = call_args[0][1]["$set"]
+        assert update_doc["source"] == "ai"
+
+    @patch("py._ai.get_db")
+    def test_fallback_source_gets_short_ttl_regardless_of_tier(self, mock_db):
+        """A fallback summary must never be cached with the same long TTL as a
+        real AI summary — that's what causes 'AI stuck for hours' after a
+        single transient Anthropic failure."""
+        mock_coll = MagicMock()
+        mock_db.return_value.__getitem__ = MagicMock(return_value=mock_coll)
+
+        # Even a tier-3 (120 min) location should get the short fallback TTL.
+        _set_cached_summary("tiny-village", "Fallback text.", {"temperature": 25}, ["tourism"], source="fallback")
+        call_args = mock_coll.update_one.call_args
+        update_doc = call_args[0][1]["$set"]
+        diff = (update_doc["expiresAt"] - update_doc["generatedAt"]).total_seconds()
+        assert diff == TTL_FALLBACK
+        assert update_doc["source"] == "fallback"
 
 
 # ---------------------------------------------------------------------------
@@ -1014,6 +1058,7 @@ class TestGenerateSummary:
         assert "Nairobi" in result["insight"]
         assert result["cached"] is False
         mock_set.assert_called_once()
+        assert mock_set.call_args.kwargs["source"] == "fallback"
 
     @pytest.mark.asyncio
     @patch("py._ai._set_cached_summary")
@@ -1039,6 +1084,10 @@ class TestGenerateSummary:
         result = await generate_summary(self._make_request())
         assert "Winter" in result["insight"]
         assert result["cached"] is False
+        # Circuit-open fallback must be tagged so it gets the short TTL,
+        # not the full tiered TTL a real AI summary would get.
+        mock_set.assert_called_once()
+        assert mock_set.call_args.kwargs["source"] == "fallback"
 
     @pytest.mark.asyncio
     @patch("py._ai._set_cached_summary")
@@ -1078,6 +1127,7 @@ class TestGenerateSummary:
         assert result["cached"] is False
         mock_breaker.record_success.assert_called_once()
         mock_set.assert_called_once()
+        assert mock_set.call_args.kwargs["source"] == "ai"
 
     @pytest.mark.asyncio
     @patch("py._ai._set_cached_summary")
@@ -1110,6 +1160,8 @@ class TestGenerateSummary:
         assert "Summer" in result["insight"]
         assert "Nairobi" in result["insight"]
         mock_breaker.record_failure.assert_called_once()
+        mock_set.assert_called_once()
+        assert mock_set.call_args.kwargs["source"] == "fallback"
 
     @pytest.mark.asyncio
     @patch("py._ai._set_cached_summary")

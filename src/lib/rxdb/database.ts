@@ -133,7 +133,15 @@ async function _initDb(): Promise<MukokoDatabase> {
     },
     weather_cache: { schema: weatherCacheSchema },
     weather_hints: { schema: weatherHintSchema },
-    suitability_rules: { schema: suitabilityRuleSchema },
+    suitability_rules: {
+      schema: suitabilityRuleSchema,
+      // v0 → v1: added `fallback`. v0 docs never stored it, so returning
+      // null deletes them — the cache reads back empty and refetches
+      // complete rules from the network instead of keeping the broken copy.
+      migrationStrategies: {
+        1: () => null,
+      },
+    },
   });
 
   return db;

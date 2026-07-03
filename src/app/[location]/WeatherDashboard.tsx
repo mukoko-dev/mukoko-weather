@@ -35,6 +35,7 @@ import {
 } from "@/components/weather/SectionSkeleton";
 import { FrostAlertBanner } from "./FrostAlertBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
+import { WelcomeBanner } from "@/components/weather/WelcomeBanner";
 import { useAppStore } from "@/lib/store";
 import type { WeatherData, FrostAlert, Season, MinutelyData, ModelForecast } from "@/lib/weather";
 import { fetchWeather, COMPARISON_MODELS } from "@/lib/weather";
@@ -96,8 +97,7 @@ export function WeatherDashboard({
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const selectedForecastModel = useAppStore((s) => s.selectedForecastModel);
-  const hasOnboarded = useAppStore((s) => s.hasOnboarded);
-  const completeOnboarding = useAppStore((s) => s.completeOnboarding);
+  const openMyWeather = useAppStore((s) => s.openMyWeather);
   const sectionOrder = useAppStore((s) => s.sectionOrder);
   const setSectionOrder = useAppStore((s) => s.setSectionOrder);
   const hydrateSectionOrder = useAppStore((s) => s.hydrateSectionOrder);
@@ -170,14 +170,6 @@ export function WeatherDashboard({
   useEffect(() => {
     setSelectedLocation(location.slug);
   }, [location.slug, setSelectedLocation]);
-
-  // Auto-complete onboarding — seeing your forecast IS the onboarding.
-  // No forced personalization step. Matches Apple/Google Weather pattern:
-  // detect location → show weather → done. Users who want to personalize
-  // can tap the map pin icon in the header at any time.
-  useEffect(() => {
-    if (!hasOnboarded) completeOnboarding();
-  }, [hasOnboarded, completeOnboarding]);
 
   // Cache weather hint for the loading scene — enables weather-aware
   // Three.js animation on subsequent visits to this location.
@@ -294,6 +286,9 @@ export function WeatherDashboard({
         <div className="mb-3">
           <SeasonBadge season={season} />
         </div>
+
+        {/* Welcome banner — first-time visitors only, dismissed via its own buttons */}
+        <WelcomeBanner locationName={location.name} onChangeLocation={openMyWeather} />
 
         {/* Weather unavailable banner — shown when all providers failed */}
         {usingFallback && <WeatherUnavailableBanner />}

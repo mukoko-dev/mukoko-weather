@@ -161,13 +161,13 @@ export async function suitabilityRulesCollection() {
 /**
  * Get all cached suitability rules. Returns empty array if none cached.
  */
-export async function getCachedRules(): Promise<Array<{ key: string; conditions: string; updatedAt: number }>> {
+export async function getCachedRules(): Promise<Array<{ key: string; conditions: string; fallback: string; updatedAt: number }>> {
   try {
     const col = await suitabilityRulesCollection();
     if (!col) return [];
 
     const docs = await col.find().exec();
-    return docs.map((d) => ({ key: d.key, conditions: d.conditions, updatedAt: d.updatedAt }));
+    return docs.map((d) => ({ key: d.key, conditions: d.conditions, fallback: d.fallback, updatedAt: d.updatedAt }));
   } catch {
     return [];
   }
@@ -177,7 +177,7 @@ export async function getCachedRules(): Promise<Array<{ key: string; conditions:
  * Bulk upsert suitability rules into local cache.
  */
 export async function cacheSuitabilityRules(
-  rules: Array<{ key: string; conditions: string }>,
+  rules: Array<{ key: string; conditions: string; fallback: string }>,
 ): Promise<void> {
   try {
     const col = await suitabilityRulesCollection();

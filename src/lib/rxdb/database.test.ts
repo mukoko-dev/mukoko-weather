@@ -83,8 +83,20 @@ describe("RxDB schemas", () => {
       expect(suitabilityRuleSchema.primaryKey).toBe("key");
     });
 
+    it("has version 1 (added fallback)", () => {
+      expect(suitabilityRuleSchema.version).toBe(1);
+    });
+
     it("stores conditions as string (JSON-stringified)", () => {
       expect(suitabilityRuleSchema.properties.conditions.type).toBe("string");
+    });
+
+    it("stores fallback as string (JSON-stringified)", () => {
+      expect(suitabilityRuleSchema.properties.fallback.type).toBe("string");
+    });
+
+    it("requires fallback", () => {
+      expect(suitabilityRuleSchema.required).toContain("fallback");
     });
   });
 });
@@ -137,9 +149,11 @@ describe("schema type compatibility", () => {
     const doc: SuitabilityRuleDocType = {
       key: "category:farming",
       conditions: JSON.stringify([{ field: "gdd10To30", operator: "gte", value: 10 }]),
+      fallback: JSON.stringify({ level: "fair", label: "Fair", colorClass: "", bgClass: "", detail: "" }),
       updatedAt: Date.now(),
     };
     expect(JSON.parse(doc.conditions)).toHaveLength(1);
+    expect(JSON.parse(doc.fallback)).toHaveProperty("level", "fair");
   });
 });
 

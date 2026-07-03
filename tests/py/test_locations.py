@@ -667,6 +667,22 @@ class TestGeoLookup:
         assert result["nearest"]["slug"] == "maputo"
 
     @pytest.mark.asyncio
+    @patch("py._locations.find_nearest_location")
+    async def test_ip_geo_caps_nearest_search_radius(self, mock_nearest):
+        """The autoCreate=false (IP-geo) fast path must cap `max_km` to a
+        realistic IP-geolocation accuracy radius. IP-derived lat/lon can be
+        off by hundreds of km, and with an unbounded/near-planetary cap
+        `$nearSphere` always returns SOME seed location — even one on
+        another continent — which then gets presented to the user as their
+        detected location. A tight cap makes a genuinely-far match fall
+        through to the 404 (retry with autoCreate=true) instead."""
+        mock_nearest.return_value = None
+        with pytest.raises(HTTPException):
+            await geo_lookup(-17.83, 31.05)
+
+        assert mock_nearest.call_args.kwargs["max_km"] <= 200
+
+    @pytest.mark.asyncio
     @patch("py._locations._find_duplicate")
     @patch("py._locations._reverse_geocode")
     @patch("py._locations.find_nearest_location")

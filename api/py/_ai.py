@@ -35,6 +35,13 @@ TTL_TIER_1 = 1800   # 30 min — cities with "city" tag
 TTL_TIER_2 = 3600   # 60 min — locations with industry/education/border tags
 TTL_TIER_3 = 7200   # 120 min — all other locations
 
+# Fallback summaries (no API key, open circuit breaker, or Anthropic error) get a
+# much shorter TTL than a real AI-generated insight. Without this, a single
+# transient Anthropic failure gets cached with the SAME tiered TTL as a genuine
+# summary — up to 2 hours of every user seeing the generic fallback text per
+# location, long after the underlying failure (or the breaker itself) recovered.
+TTL_FALLBACK = 60  # 1 min
+
 
 def _get_ttl(slug: str, tags: list[str]) -> int:
     """Data-driven TTL — cities get shortest TTL, industry tags get medium."""
@@ -378,6 +385,9 @@ def _get_cached_summary(slug: str) -> dict | None:
         "insight": doc.get("insight", ""),
         "generatedAt": doc.get("generatedAt", datetime.now(timezone.utc)),
         "weatherSnapshot": doc.get("weatherSnapshot", {}),
+        # Docs written before this field existed are assumed "ai" (the only
+        # kind previously cached with the full tiered TTL).
+        "source": doc.get("source", "ai"),
     }
 
 
@@ -400,9 +410,12 @@ def _set_cached_summary(
     insight: str,
     weather_snapshot: dict,
     tags: list[str],
+    source: str = "ai",
 ):
     db = get_db()
-    ttl = _get_ttl(slug, tags)
+    # Fallback text (no client, open breaker, or Anthropic error) gets a short
+    # TTL regardless of location tier — see TTL_FALLBACK for why.
+    ttl = TTL_FALLBACK if source == "fallback" else _get_ttl(slug, tags)
     now = datetime.now(timezone.utc)
 
     db["ai_summaries"].update_one(
@@ -413,6 +426,7 @@ def _set_cached_summary(
                 "generatedAt": now,
                 "weatherSnapshot": weather_snapshot,
                 "expiresAt": now + timedelta(seconds=ttl),
+                "source": source,
             },
         },
         upsert=True,
@@ -504,6 +518,7 @@ async def generate_summary(body: AISummaryRequest):
             location_slug, insight,
             {"temperature": current_temp, "weatherCode": current_code},
             location_tags,
+            source="fallback",
         )
         return {"insight": insight, "cached": False}
 
@@ -562,8 +577,10 @@ Provide:
     model = (prompt_doc or {}).get("model", "claude-haiku-4-5-20251001")
     max_tokens = (prompt_doc or {}).get("maxTokens", 400)
 
+    summary_source = "ai"
     if not anthropic_breaker.is_allowed:
         # Circuit is open — skip AI and use fallback
+        summary_source = "fallback"
         temp = weather_data.get("current", {}).get("temperature_2m")
         humidity = weather_data.get("current", {}).get("relative_humidity_2m")
         insight = (
@@ -587,6 +604,7 @@ Provide:
             insight = text_block.text if text_block else "No insight available."
         except Exception:
             anthropic_breaker.record_failure()
+            summary_source = "fallback"
             # Fallback on any AI error
             temp = weather_data.get("current", {}).get("temperature_2m")
             humidity = weather_data.get("current", {}).get("relative_humidity_2m")
@@ -598,11 +616,14 @@ Provide:
                 f"{season['description']}. Stay informed and plan your day accordingly."
             )
 
-    # Cache the summary
+    # Cache the summary — fallback text gets a short TTL (TTL_FALLBACK) so a
+    # transient failure doesn't lock users out of real AI summaries for the
+    # full tiered TTL window.
     _set_cached_summary(
         location_slug, insight,
         {"temperature": current_temp, "weatherCode": current_code},
         location_tags,
+        source=summary_source,
     )
 
     return {"insight": insight, "cached": False, "generatedAt": datetime.now(timezone.utc).isoformat()}
