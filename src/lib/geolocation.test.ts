@@ -68,12 +68,21 @@ describe("geolocation source structure", () => {
     expect(source).toContain("/api/py/geo?lat=");
   });
 
-  it("uses 10 second timeout for geolocation", () => {
-    expect(source).toContain("timeout: 10000");
+  it("defaults to a 10 second timeout for geolocation", () => {
+    expect(source).toContain("DEFAULT_TIMEOUT_MS = 10000");
+    expect(source).toContain("timeout: timeoutMs");
   });
 
-  it("caches position for 1 minute", () => {
-    expect(source).toContain("maximumAge: 60000");
+  it("defaults to caching position for 1 minute", () => {
+    expect(source).toContain("DEFAULT_MAXIMUM_AGE_MS = 60000");
+    expect(source).toContain("maximumAge: maximumAgeMs");
+  });
+
+  it("allows callers to override the timeout and cache window", () => {
+    // Enables a fast, cache-friendly "silent recheck" (e.g. HomeLanding's
+    // travel detection) without changing the defaults for existing callers.
+    expect(source).toContain("timeoutMs?: number");
+    expect(source).toContain("maximumAgeMs?: number");
   });
 });
 

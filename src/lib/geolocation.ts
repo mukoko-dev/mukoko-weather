@@ -11,16 +11,35 @@ export interface GeoResult {
   isNew?: boolean;
 }
 
+/** Default GPS timeout — used for user-initiated lookups (first-visit auto-prompt, explicit "Use my current location"). */
+const DEFAULT_TIMEOUT_MS = 10000;
+/** Default browser position-cache window — 1 minute. */
+const DEFAULT_MAXIMUM_AGE_MS = 60000;
+
+export interface DetectUserLocationOptions {
+  /** If true, auto-creates a new location via reverse geocoding when
+   *  none is found nearby. Default false — find nearest only, never create
+   *  duplicates. Only pass true when the user explicitly wants to add their
+   *  position to the DB (e.g. "Save my location" in SavedLocationsModal). */
+  autoCreate?: boolean;
+  /** Override the GPS timeout (ms). Defaults to 10s. A shorter value suits a
+   *  background/silent recheck that must never visibly stall the UI. */
+  timeoutMs?: number;
+  /** Override the browser's cached-position window (ms). Defaults to 1 minute.
+   *  A longer value lets a background recheck return near-instantly from an
+   *  already-fresh on-device fix instead of forcing a brand-new GPS read. */
+  maximumAgeMs?: number;
+}
+
 /**
  * Request the user's position via the browser Geolocation API
  * and snap to the nearest location via the /api/py/geo endpoint.
- *
- * @param autoCreate - If true, auto-creates a new location via reverse geocoding when
- *   none is found nearby. Default false — find nearest only, never create duplicates.
- *   Only pass true when the user explicitly wants to add their position to the DB
- *   (e.g. "Save my location" in SavedLocationsModal).
  */
-export function detectUserLocation({ autoCreate = false }: { autoCreate?: boolean } = {}): Promise<GeoResult> {
+export function detectUserLocation({
+  autoCreate = false,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  maximumAgeMs = DEFAULT_MAXIMUM_AGE_MS,
+}: DetectUserLocationOptions = {}): Promise<GeoResult> {
   return new Promise((resolve) => {
     if (!("geolocation" in navigator)) {
       resolve({ status: "unavailable", location: null, coords: null, distanceKm: null });
@@ -74,8 +93,8 @@ export function detectUserLocation({ autoCreate = false }: { autoCreate?: boolea
       },
       {
         enableHighAccuracy: false,
-        timeout: 10000,
-        maximumAge: 60000, // cache for 1 minute — fresher position for returning users
+        timeout: timeoutMs,
+        maximumAge: maximumAgeMs,
       },
     );
   });

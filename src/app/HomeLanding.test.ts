@@ -37,7 +37,9 @@ describe("HomeLanding — component structure", () => {
 
 describe("HomeLanding — detected city state", () => {
   it("shows the detected city name", () => {
-    expect(source).toContain("detectedLocation.name");
+    // Renders effectiveLocation (overridable by the silent travel recheck),
+    // not the raw detectedLocation prop.
+    expect(source).toContain("effectiveLocation.name");
   });
 
   it("shows countdown before redirecting", () => {
@@ -93,6 +95,13 @@ describe("HomeLanding — auto GPS on first visit", () => {
     expect(source).toContain("savedLocations");
   });
 
+  it("also skips the auto-prompt for server-resolved returning visitors", () => {
+    // isReturningUser (a resolved lastLocation cookie) is authoritative —
+    // skip straight past the client-side heuristics when the server already
+    // knows this is a returning visitor.
+    expect(source).toContain("if (isReturningUser || isKnownReturningVisitor()) return;");
+  });
+
   it("falls back to the IP-detected location on GPS failure", () => {
     // On denied/unavailable/error with an IP location present, re-enable the
     // countdown redirect instead of hanging.
@@ -103,6 +112,39 @@ describe("HomeLanding — auto GPS on first visit", () => {
   it("defers the auto-GPS setState via requestAnimationFrame (lint-safe)", () => {
     expect(source).toContain("requestAnimationFrame");
     expect(source).toContain("cancelAnimationFrame");
+  });
+});
+
+describe("HomeLanding — silent travel recheck for returning visitors", () => {
+  it("accepts an isReturningUser prop", () => {
+    expect(source).toContain("isReturningUser: boolean");
+  });
+
+  it("runs a silent, fast-timeout GPS recheck for returning visitors", () => {
+    expect(source).toContain("SILENT_RECHECK_TIMEOUT_MS");
+    expect(source).toContain("SILENT_RECHECK_MAX_AGE_MS");
+    expect(source).toContain("timeoutMs: SILENT_RECHECK_TIMEOUT_MS");
+    expect(source).toContain("maximumAgeMs: SILENT_RECHECK_MAX_AGE_MS");
+  });
+
+  it("swaps the redirect target when GPS resolves a different location", () => {
+    expect(source).toContain("result.location.slug !== detectedLocation.slug");
+    expect(source).toContain("setEffectiveLocation(result.location)");
+  });
+
+  it("never blocks or delays the visible countdown — failures are silent", () => {
+    // The recheck's .catch() is a no-op: GPS denial/failure/timeout must
+    // leave the cached-location countdown completely untouched.
+    expect(source).toContain(".catch(() => {");
+  });
+
+  it("uses effectiveLocation (not the raw prop) as the redirect/render target", () => {
+    // effectiveLocation starts equal to detectedLocation but can be
+    // overridden by the silent recheck — the countdown effect and the
+    // rendered "Taking you to X" text must read the overridable value.
+    expect(source).toContain("useState(detectedLocation)");
+    expect(source).toContain("router.replace(`/${effectiveLocation.slug}`)");
+    expect(source).toContain("Taking you to ${effectiveLocation.name}");
   });
 });
 
@@ -174,7 +216,7 @@ describe("page.tsx — server component", () => {
     expect(pageSource).toContain("x-vercel-ip-longitude");
   });
 
-  it("reads lastLocation cookie for belt-and-suspenders redirect", () => {
+  it("reads the lastLocation cookie to resolve a returning visitor's cached location", () => {
     expect(pageSource).toContain("lastLocation");
     expect(pageSource).toContain("cookies()");
   });
@@ -185,9 +227,10 @@ describe("page.tsx — server component", () => {
     expect(pageSource).toContain("lon=");
   });
 
-  it("renders HomeLanding with detectedLocation prop", () => {
+  it("renders HomeLanding with detectedLocation and isReturningUser props", () => {
     expect(pageSource).toContain("HomeLanding");
     expect(pageSource).toContain("detectedLocation");
+    expect(pageSource).toContain("isReturningUser");
   });
 
   it("keeps canonical URL pointing to /harare for SEO", () => {
@@ -212,25 +255,41 @@ describe("page.tsx — server component", () => {
     expect(pageSource).toContain('process.env.NODE_ENV === "production"');
   });
 
-  it("only redirects on a lastLocation cookie that actually resolves", () => {
+  it("only trusts a lastLocation cookie that actually resolves", () => {
     expect(pageSource).toContain("getLocationFromDb(lastLocation)");
-    // The resolution check must gate the redirect, breaking the stale-cookie loop.
+    // The resolution check gates isReturningUser, breaking the stale-cookie loop
+    // (an unresolvable slug falls through to fresh IP-geo detection instead).
     expect(pageSource).toContain("if (resolved)");
+  });
+
+  it("does not redirect the cookie-resolved case — GPS recheck happens client-side", () => {
+    // Device GPS only exists in the browser. Server-side redirecting straight
+    // to the cached location (as before) would skip HomeLanding's silent
+    // travel recheck entirely and strand travelers on their old city.
+    expect(pageSource).not.toContain("redirect(");
+    expect(pageSource).not.toContain('from "next/navigation"');
+  });
+
+  it("skips the IP-geo lookup entirely when a cached location was already resolved", () => {
+    expect(pageSource).toContain("if (!detectedLocation) {");
   });
 });
 
 describe("middleware — edge routing", () => {
-  it("redirects home page with lastLocation cookie", () => {
-    expect(middlewareSource).toContain("lastLocation");
-    // Phase 1a (WorkOS): redirect goes via AuthKit's handleAuthkitProxy so
-    // session headers are preserved across the redirect. The previous
-    // implementation used NextResponse.redirect directly.
-    expect(middlewareSource).toMatch(/handleAuthkitProxy|NextResponse\.redirect/);
-    expect(middlewareSource).toContain('pathname === "/"');
+  it("does NOT redirect the home page at the edge", () => {
+    // Device GPS only exists in the browser — the edge middleware has no way
+    // to check whether a returning visitor has travelled since their last
+    // visit. An instant edge redirect straight to the cached lastLocation
+    // would skip that check entirely and strand travelers on their old city
+    // every time they open the app. The redirect decision (and the silent
+    // GPS recheck that can override it) now lives entirely in HomeLanding.
+    expect(middlewareSource).not.toContain('pathname === "/"');
+    expect(middlewareSource).not.toContain("redirect:");
+    expect(middlewareSource).toContain("HomeLanding");
   });
 
-  it("uses 307 status for temporary redirect", () => {
-    expect(middlewareSource).toContain("307");
+  it("still composes AuthKit session headers onto every response", () => {
+    expect(middlewareSource).toMatch(/handleAuthkitProxy/);
   });
 
   it("sets lastLocation cookie on location page visits", () => {
