@@ -1,9 +1,9 @@
 "use client";
 
 import { lazy, Suspense } from "react";
-import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { LazySection } from "@/components/weather/LazySection";
@@ -45,25 +45,13 @@ export function AtmosphereDashboard({
     <>
       <Header />
 
-      <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8">
-        <ol className="flex items-center gap-1 text-base text-text-tertiary">
-          <li>
-            <Link href="/" className="hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded">
-              Home
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li>
-            <Link href={`/${location.slug}`} className="hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded">
-              {location.name}
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li aria-current="page">
-            <span className="font-medium text-text-primary">Atmosphere</span>
-          </li>
-        </ol>
-      </nav>
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/" },
+          { label: location.name, href: `/${location.slug}` },
+          { label: "Atmosphere" },
+        ]}
+      />
 
       <main
         id="main-content"

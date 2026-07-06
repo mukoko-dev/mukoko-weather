@@ -2,8 +2,8 @@
 
 import { useCallback, useState } from "react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { Header } from "@/components/layout/Header";
+import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { MapSkeleton } from "@/components/weather/map/MapSkeleton";
 import { WeatherLayerPanel } from "@/components/weather/map/WeatherLayerPanel";
 import { DEFAULT_LAYER } from "@/lib/map-layers";
@@ -32,6 +32,15 @@ export function MapDashboard({ location }: MapDashboardProps) {
     <div className="flex h-[100dvh] flex-col">
       <Header />
 
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/" },
+          { label: location.name, href: `/${location.slug}` },
+          { label: "Map" },
+        ]}
+        className="pb-3"
+      />
+
       {/* Full-viewport map with overlaid controls */}
       <main
         id="main-content"
@@ -49,18 +58,6 @@ export function MapDashboard({ location }: MapDashboardProps) {
           weatherLayer={activeLayer}
           className="h-full w-full"
         />
-
-        {/* Top-left overlay: location name + back link */}
-        <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-col gap-1.5">
-          <div className="pointer-events-auto">
-            <Link
-              href={`/${location.slug}`}
-              className="inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-surface-card/90 px-3 py-1.5 text-sm font-medium text-text-secondary shadow backdrop-blur-sm transition-colors hover:bg-surface-card hover:text-text-primary"
-            >
-              ← Back to weather
-            </Link>
-          </div>
-        </div>
 
         {/* Bottom-right overlay: weather layer panel. The map's attribution
             control is pinned bottom-left (see MapLibreMap) so the two never
