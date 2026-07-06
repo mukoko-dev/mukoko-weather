@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import { SearchIcon, MapPinIcon, SparklesIcon } from "@/lib/weather-icons";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,14 @@ import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { weatherCodeToInfo } from "@/lib/weather";
 import { trackEvent } from "@/lib/analytics";
+import { useDebounce } from "@/lib/use-debounce";
+
+interface QuickResult {
+  slug: string;
+  name: string;
+  province?: string;
+  country?: string;
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,6 +52,35 @@ export function ExploreSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
   const setShamwariContext = useAppStore((s) => s.setShamwariContext);
   const shamwariEnabled = isFeatureEnabled("shamwari_chat");
+
+  // Instant quick matches (same fast name/tag search + debounce pattern as
+  // the My Weather modal's location search) — shown live as the user types,
+  // before they commit to the slower AI-powered search below. This is the
+  // "functions like other weather searches" part: type a city name, see it
+  // immediately, same as every other location search in the app.
+  const [quickResults, setQuickResults] = useState<QuickResult[]>([]);
+  const [quickLoading, setQuickLoading] = useState(false);
+  const debouncedQuery = useDebounce(query, 300);
+
+  useEffect(() => {
+    const q = debouncedQuery.trim();
+    if (!q) {
+      setQuickResults([]);
+      return;
+    }
+    const controller = new AbortController();
+    setQuickLoading(true);
+    fetch(`/api/py/search?q=${encodeURIComponent(q)}&limit=6`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setQuickResults(data?.locations ?? []))
+      .catch(() => {
+        if (!controller.signal.aborted) setQuickResults([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setQuickLoading(false);
+      });
+    return () => controller.abort();
+  }, [debouncedQuery]);
 
   const search = useCallback(
     async (searchQuery: string) => {
@@ -110,14 +147,14 @@ export function ExploreSearch() {
           id="explore-search-heading"
           className="giraffe text-lg"
         >
-          AI Search
+          Search
         </h2>
       </div>
 
       <p className="text-base text-text-secondary">
-        Search for locations using natural language — try &quot;farming areas
-        with low frost risk&quot; or &quot;safari destinations with warm
-        weather&quot;.
+        Type a city name for instant matches, or search naturally — try
+        &quot;farming areas with low frost risk&quot; or &quot;safari
+        destinations with warm weather&quot; — for AI-powered results.
       </p>
 
       <form onSubmit={handleSubmit} className="flex gap-2">
@@ -152,6 +189,35 @@ export function ExploreSearch() {
           )}
         </Button>
       </form>
+
+      {/* Instant quick matches — same fast search everywhere else in the app
+          uses, shown live as you type. The AI search below is a deliberate
+          extra step (submit) since it's a slower, rate-limited AI call. */}
+      {query.trim() && (quickLoading || quickResults.length > 0) && (
+        <ul aria-label="Quick location matches" className="space-y-1">
+          {quickLoading && quickResults.length === 0 && (
+            <li className="h-10 animate-pulse rounded-[var(--radius-input)] bg-surface-base" role="status" aria-label="Loading">
+              <span className="sr-only">Loading</span>
+            </li>
+          )}
+          {quickResults.map((loc) => (
+            <li key={loc.slug}>
+              <Link
+                href={`/${loc.slug}`}
+                className="flex min-h-[var(--touch-target-min)] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base text-text-primary hover:bg-surface-card transition-colors"
+              >
+                <MapPinIcon size={14} className="text-text-tertiary" />
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate">{loc.name}</span>
+                  {loc.province && (
+                    <span className="block text-base text-text-tertiary truncate">{loc.province}</span>
+                  )}
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {error && (
         <div className="rounded-[var(--radius-card)] border border-destructive/30 bg-frost-severe-bg p-3 text-base text-destructive">

@@ -11,6 +11,27 @@ const source = readFileSync(resolve(__dirname, "ExploreSearch.tsx"), "utf-8");
  * and architecture compliance.
  */
 
+describe("ExploreSearch — instant quick matches", () => {
+  it("debounces the query and calls the same fast search endpoint used elsewhere in the app", () => {
+    // Same endpoint + debounce pattern as MyWeatherModal's location search,
+    // so typing a city name here behaves the same way it does everywhere
+    // else in the app — the AI search below is a separate, deliberate step.
+    expect(source).toContain('from "@/lib/use-debounce"');
+    expect(source).toContain("useDebounce(query, 300)");
+    expect(source).toContain("/api/py/search?q=");
+  });
+
+  it("shows quick results as plain location links, independent of the AI search results", () => {
+    expect(source).toContain("quickResults");
+    expect(source).toContain('aria-label="Quick location matches"');
+  });
+
+  it("cancels in-flight quick searches on rapid typing", () => {
+    expect(source).toContain("AbortController");
+    expect(source).toContain("controller.signal");
+  });
+});
+
 describe("ExploreSearch component structure", () => {
   it("is a client component", () => {
     expect(source).toContain('"use client"');
