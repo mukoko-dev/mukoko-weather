@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
 import { ShamwariCTA } from "./ShamwariCTA";
+import { Spinner } from "@/components/ui/spinner";
 
 // ---------------------------------------------------------------------------
 // Markdown error boundary
@@ -145,7 +146,7 @@ export function HistoryAnalysis({
 
       {loading && (
         <div className="mt-3 flex items-center gap-2" role="status">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <Spinner />
           <span className="text-base text-text-secondary">
             Analyzing {days}-day history...
           </span>

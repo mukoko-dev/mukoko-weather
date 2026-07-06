@@ -37,7 +37,8 @@ describe("data fetching", () => {
   it("shows loading spinner", () => {
     expect(source).toContain('role="status"');
     expect(source).toContain("sr-only");
-    expect(source).toContain("animate-spin");
+    // Spinner is the shared primitive (src/components/ui/spinner.tsx)
+    expect(source).toContain("<Spinner");
   });
 });
 

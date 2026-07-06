@@ -7,6 +7,7 @@ import type { WeatherLocation } from "@/lib/locations";
 import { detectUserLocation } from "@/lib/geolocation";
 import { useAppStore } from "@/lib/store";
 import { SearchIcon, NavigationIcon } from "@/lib/weather-icons";
+import { t } from "@/lib/i18n";
 import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
 
 interface Props {
@@ -314,7 +315,7 @@ export function HomeLanding({ detectedLocation, isReturningUser }: Props) {
 
           {(gpsState === "denied" || gpsState === "error") && (
             <p className="text-sm text-severity-moderate" role="alert">
-              {gpsState === "denied" ? "Location access denied — please search for your city." : "Could not detect location — please search for your city."}
+              {gpsState === "denied" ? t("geo.denied") : t("geo.error")}
             </p>
           )}
         </section>

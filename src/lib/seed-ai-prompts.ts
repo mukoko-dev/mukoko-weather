@@ -56,6 +56,12 @@ export interface AISuggestedPromptRule {
   active: boolean;
   /** Sort order within its category (lower = higher priority) */
   order: number;
+  /**
+   * Which surface the rule targets. Missing/"location" = weather-page
+   * follow-up chat; "explore" = the standalone Shamwari chat's default
+   * prompt chips (context-free — no {placeholders}, condition null).
+   */
+  surface?: "location" | "explore";
 }
 
 // ---------------------------------------------------------------------------
@@ -489,5 +495,71 @@ export const AI_SUGGESTED_PROMPT_RULES: Omit<AISuggestedPromptRule, "updatedAt">
     condition: null,
     active: true,
     order: 100,
+  },
+
+  // --- Explore-surface default prompts (standalone Shamwari chat) ---
+  // Context-free by design: the empty chat has no weather or location, so
+  // these templates must contain NO {placeholders}. Consumed exclusively by
+  // getExplorePrompts() — generateSuggestedPrompts() skips surface:"explore".
+
+  {
+    ruleId: "explore:drone",
+    label: "Drone flying today",
+    queryTemplate: "Can I fly a drone today?",
+    category: "generic",
+    condition: null,
+    active: true,
+    order: 200,
+    surface: "explore",
+  },
+  {
+    ruleId: "explore:farming",
+    label: "Farming advice",
+    queryTemplate: "What's the best time to plant crops this season?",
+    category: "generic",
+    condition: null,
+    active: true,
+    order: 201,
+    surface: "explore",
+  },
+  {
+    ruleId: "explore:safari",
+    label: "Safari weather",
+    queryTemplate: "What's the weather like for safari this weekend?",
+    category: "generic",
+    condition: null,
+    active: true,
+    order: 202,
+    surface: "explore",
+  },
+  {
+    ruleId: "explore:compare",
+    label: "Compare cities",
+    queryTemplate: "Compare weather in Nairobi and Bangkok",
+    category: "generic",
+    condition: null,
+    active: true,
+    order: 203,
+    surface: "explore",
+  },
+  {
+    ruleId: "explore:road_trip",
+    label: "Road trip",
+    queryTemplate: "Is it safe for a road trip today?",
+    category: "generic",
+    condition: null,
+    active: true,
+    order: 204,
+    surface: "explore",
+  },
+  {
+    ruleId: "explore:weekend",
+    label: "Weekend plans",
+    queryTemplate: "What outdoor activities can I do this weekend?",
+    category: "generic",
+    condition: null,
+    active: true,
+    order: 205,
+    surface: "explore",
   },
 ];

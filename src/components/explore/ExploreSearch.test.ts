@@ -136,7 +136,8 @@ describe("UI patterns", () => {
   });
 
   it("shows loading spinner in button", () => {
-    expect(source).toContain("animate-spin");
+    // Spinner is the shared primitive (src/components/ui/spinner.tsx)
+    expect(source).toContain("<Spinner");
   });
 
   it("shows empty state when no results", () => {

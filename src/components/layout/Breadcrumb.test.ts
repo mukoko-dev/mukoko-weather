@@ -56,3 +56,31 @@ describe("Breadcrumb usage sites", () => {
     expect(mapSource).not.toContain("Back to weather");
   });
 });
+
+describe("BreadcrumbSkeleton (issue #104)", () => {
+  const source = readFileSync(resolve(__dirname, "Breadcrumb.tsx"), "utf-8");
+
+  it("exports a skeleton matching the real trail's container classes", () => {
+    expect(source).toContain("export function BreadcrumbSkeleton");
+    // Same outer classes as the real Breadcrumb nav — no layout shift on hydrate.
+    const occurrences = source.split("mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8").length - 1;
+    expect(occurrences).toBe(2); // skeleton + real component
+  });
+
+  it("is announced as a loading status", () => {
+    expect(source).toContain('role="status"');
+    expect(source).toContain('aria-label="Loading"');
+  });
+
+  it("replaces the hand-rolled skeletons in all three sub-route loading files", () => {
+    for (const file of [
+      "../../app/[location]/atmosphere/loading.tsx",
+      "../../app/[location]/forecast/loading.tsx",
+      "../../app/[location]/map/loading.tsx",
+    ]) {
+      const loadingSource = readFileSync(resolve(__dirname, file), "utf-8");
+      expect(loadingSource).toContain("<BreadcrumbSkeleton");
+      expect(loadingSource).not.toContain('<span className="text-text-tertiary/30">/</span>');
+    }
+  });
+});

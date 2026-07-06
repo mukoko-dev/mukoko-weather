@@ -95,9 +95,16 @@ describe("AI_SUGGESTED_PROMPT_RULES uniqueness and structure", () => {
     }
   });
 
-  it("queryTemplate includes at least one interpolation placeholder", () => {
+  it("location-surface templates interpolate; explore-surface templates are context-free", () => {
     for (const rule of AI_SUGGESTED_PROMPT_RULES) {
-      expect(rule.queryTemplate).toMatch(/\{[a-zA-Z]+\}/);
+      if (rule.surface === "explore") {
+        // The standalone chat's empty state has no weather/location context —
+        // a placeholder here would render literally as "{location}".
+        expect(rule.queryTemplate).not.toMatch(/\{[a-zA-Z]+\}/);
+        expect(rule.condition).toBeNull();
+      } else {
+        expect(rule.queryTemplate).toMatch(/\{[a-zA-Z]+\}/);
+      }
     }
   });
 

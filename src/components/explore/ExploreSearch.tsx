@@ -8,6 +8,7 @@ import { weatherCodeToInfo } from "@/lib/weather";
 import { trackEvent } from "@/lib/analytics";
 import { ShamwariCTA } from "@/components/weather/ShamwariCTA";
 import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
+import { Spinner } from "@/components/ui/spinner";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -147,7 +148,7 @@ export function ExploreSearch() {
           aria-label="Search"
         >
           {loading ? (
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+            <Spinner className="border-primary-foreground" />
           ) : (
             <SearchIcon size={16} />
           )}

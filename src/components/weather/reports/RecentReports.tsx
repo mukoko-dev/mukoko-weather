@@ -5,6 +5,7 @@ import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
 import { CloudSunIcon, MegaphoneIcon } from "@/lib/weather-icons";
 import { getReportTypeInfo } from "@/lib/report-types";
+import { Spinner } from "@/components/ui/spinner";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -129,7 +130,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
 
       {loading && (
         <div className="flex items-center gap-2 py-4" role="status">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-mineral-copper border-t-transparent" />
+          <Spinner className="border-mineral-copper" />
           <span className="text-base text-text-secondary">Loading reports...</span>
           <span className="sr-only">Loading community weather reports</span>
         </div>

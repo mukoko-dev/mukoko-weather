@@ -341,3 +341,47 @@ describe("generateSuggestedPrompts", () => {
     expect(result.some((p) => p.label === "Rain impact")).toBe(true);
   });
 });
+
+describe("getExplorePrompts (explore-surface rules)", () => {
+  const exploreRule: SuggestedPromptRule = {
+    ruleId: "explore:drone",
+    label: "Drone flying today",
+    queryTemplate: "Can I fly a drone today?",
+    category: "generic",
+    condition: null,
+    active: true,
+    order: 200,
+    surface: "explore",
+  };
+
+  it("returns only active explore-surface rules, sorted by order", async () => {
+    const { getExplorePrompts } = await import("./suggested-prompts");
+    const second: SuggestedPromptRule = { ...exploreRule, ruleId: "explore:b", label: "B", order: 201 };
+    const inactive: SuggestedPromptRule = { ...exploreRule, ruleId: "explore:c", label: "C", active: false };
+    const locationRule: SuggestedPromptRule = {
+      ...exploreRule, ruleId: "generic:plan", label: "Plan my day",
+      queryTemplate: "What should I plan for today in {location}?", surface: undefined,
+    };
+    const prompts = getExplorePrompts([second, inactive, locationRule, exploreRule]);
+    expect(prompts).toEqual([
+      { label: "Drone flying today", query: "Can I fly a drone today?" },
+      { label: "B", query: "Can I fly a drone today?" },
+    ]);
+  });
+
+  it("skips explore rules whose template still has placeholders (would render literally)", async () => {
+    const { getExplorePrompts } = await import("./suggested-prompts");
+    const bad: SuggestedPromptRule = { ...exploreRule, queryTemplate: "Plan my day in {location}" };
+    expect(getExplorePrompts([bad])).toEqual([]);
+  });
+
+  it("generateSuggestedPrompts never surfaces explore rules on the location page", () => {
+    const prompts = generateSuggestedPrompts(
+      makeWeather(),
+      { name: "Harare", slug: "harare" },
+      [],
+      [exploreRule],
+    );
+    expect(prompts.find((p) => p.label === "Drone flying today")).toBeUndefined();
+  });
+});

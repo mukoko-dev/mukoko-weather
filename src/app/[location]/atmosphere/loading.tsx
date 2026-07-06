@@ -1,20 +1,12 @@
 import { HeaderSkeleton } from "@/components/layout/HeaderSkeleton";
+import { BreadcrumbSkeleton } from "@/components/layout/Breadcrumb";
 
 export default function AtmosphereLoading() {
   return (
     <>
       <HeaderSkeleton />
 
-      {/* Breadcrumb skeleton */}
-      <div className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8">
-        <div className="flex items-center gap-1">
-          <div className="h-3 w-10 animate-pulse rounded bg-text-tertiary/15" />
-          <span className="text-text-tertiary/30">/</span>
-          <div className="h-3 w-14 animate-pulse rounded bg-text-tertiary/15" />
-          <span className="text-text-tertiary/30">/</span>
-          <div className="h-3 w-20 animate-pulse rounded bg-text-tertiary/15" />
-        </div>
-      </div>
+      <BreadcrumbSkeleton />
 
       <main className="mx-auto max-w-5xl px-4 py-8 pb-24 sm:pb-8 sm:px-6 md:px-8">
         {/* Title skeleton */}

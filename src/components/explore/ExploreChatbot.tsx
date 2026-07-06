@@ -9,6 +9,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAppStore, isShamwariContextValid, type ShamwariContext } from "@/lib/store";
 import { getScrollBehavior } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
+import {
+  fetchSuggestedRules,
+  getExplorePrompts,
+  type SuggestedPrompt,
+} from "@/lib/suggested-prompts";
 
 // ---------------------------------------------------------------------------
 // Inline error boundary for ReactMarkdown — prevents malformed markdown from
@@ -85,7 +90,13 @@ const markdownComponents = {
 /** Cap rendered messages to prevent unbounded memory growth in long conversations. */
 const MAX_RENDERED_MESSAGES = 30;
 
-const DEFAULT_SUGGESTED_PROMPTS = [
+/**
+ * Hardcoded safety net for when the database-driven prompt rules are
+ * unavailable. The live defaults come from the AI prompt library
+ * (`ai_suggested_rules` with surface:"explore") via getExplorePrompts() —
+ * same DB-first-with-fallback pattern as AISummaryChat.
+ */
+const FALLBACK_SUGGESTED_PROMPTS: SuggestedPrompt[] = [
   { label: "Drone flying today", query: "Can I fly a drone today?" },
   { label: "Farming advice", query: "What's the best time to plant crops this season?" },
   { label: "Safari weather", query: "What's the weather like for safari this weekend?" },
@@ -125,7 +136,7 @@ function getContextualPrompts(ctx: ShamwariContext): { label: string; query: str
     ];
   }
 
-  return DEFAULT_SUGGESTED_PROMPTS;
+  return FALLBACK_SUGGESTED_PROMPTS;
 }
 
 /**
@@ -189,6 +200,9 @@ export function ExploreChatbot() {
   const [loading, setLoading] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [contextualPrompts, setContextualPrompts] = useState<{ label: string; query: string }[] | null>(null);
+  // Database-driven default prompts (surface:"explore" rules from the AI
+  // prompt library); the hardcoded set is only the unavailable-DB fallback.
+  const [defaultPrompts, setDefaultPrompts] = useState<SuggestedPrompt[]>(FALLBACK_SUGGESTED_PROMPTS);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -227,6 +241,22 @@ export function ExploreChatbot() {
   // Cancel in-flight fetch on unmount to prevent state updates on unmounted component
   useEffect(() => {
     return () => { abortRef.current?.abort(); };
+  }, []);
+
+  // Load the database-driven default prompts (5-min client cache inside
+  // fetchSuggestedRules). Keep the hardcoded fallback when the DB has no
+  // explore-surface rules or the API is unavailable.
+  useEffect(() => {
+    let alive = true;
+    fetchSuggestedRules()
+      .then((rules) => {
+        const fromDb = getExplorePrompts(rules);
+        if (alive && fromDb.length > 0) setDefaultPrompts(fromDb);
+      })
+      .catch(() => {
+        // API unavailable — the hardcoded fallback stays in place.
+      });
+    return () => { alive = false; };
   }, []);
 
   // Auto-scroll to bottom when new messages arrive — but only if the user is
@@ -368,7 +398,7 @@ export function ExploreChatbot() {
         <ScrollArea viewportRef={viewportRef} className="h-full" fixRadixTableLayout>
           <div className="px-4 py-5 space-y-6 overflow-x-hidden" aria-live="polite" aria-relevant="additions">
             {messages.length === 0 && (
-              <EmptyState onSuggestionClick={handleSuggestion} loading={loading} />
+              <EmptyState prompts={defaultPrompts} onSuggestionClick={handleSuggestion} loading={loading} />
             )}
             {messages.length > 0 && contextualPrompts && contextualPrompts.length > 0 && messages.length === 1 && (
               <div className="mt-2 flex flex-wrap gap-2">
@@ -376,7 +406,7 @@ export function ExploreChatbot() {
                   <button
                     key={prompt.query}
                     onClick={() => handleSuggestion(prompt.query)}
-                    className="flex items-center rounded-[var(--radius-card)] border border-border bg-surface-card px-3 py-2 text-left text-base text-text-secondary transition-colors hover:bg-surface-base hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)]"
+                    className="quail flex items-center text-left"
                     type="button"
                     disabled={loading}
                   >
@@ -459,9 +489,15 @@ export function ExploreChatbot() {
 // Empty state with suggested prompts
 // ---------------------------------------------------------------------------
 
-function EmptyState({ onSuggestionClick, loading }: { onSuggestionClick: (query: string) => void; loading?: boolean }) {
-  const prompts = DEFAULT_SUGGESTED_PROMPTS;
-
+function EmptyState({
+  prompts,
+  onSuggestionClick,
+  loading,
+}: {
+  prompts: SuggestedPrompt[];
+  onSuggestionClick: (query: string) => void;
+  loading?: boolean;
+}) {
   return (
     <div className="flex flex-col items-center justify-center py-8">
       <div className="hoopoe-xl">
@@ -484,7 +520,7 @@ function EmptyState({ onSuggestionClick, loading }: { onSuggestionClick: (query:
             <button
               key={prompt.query}
               onClick={() => onSuggestionClick(prompt.query)}
-              className="flex items-center rounded-[var(--radius-card)] border border-border bg-surface-card px-3 py-3 text-left text-base text-text-secondary transition-colors hover:bg-surface-base hover:text-text-primary hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="quail flex items-center text-left disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               disabled={loading}
             >

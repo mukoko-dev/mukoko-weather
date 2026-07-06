@@ -29,6 +29,13 @@ export interface SuggestedPromptRule {
   } | null;
   active: boolean;
   order: number;
+  /**
+   * Which surface the rule targets. Missing/"location" = the weather-page
+   * follow-up chat (needs weather + location context for interpolation);
+   * "explore" = the standalone Shamwari chat's default prompts (must be
+   * context-free — no {placeholders}, no weather condition).
+   */
+  surface?: "location" | "explore";
 }
 
 // ---------------------------------------------------------------------------
@@ -185,6 +192,9 @@ export function generateSuggestedPrompts(
 
   for (const rule of sorted) {
     if (!rule.active) continue;
+    // Explore-surface rules are context-free chips for the standalone chat's
+    // empty state (see getExplorePrompts) — never location-page follow-ups.
+    if (rule.surface === "explore") continue;
     if (evaluateCondition(rule.condition, weather, activities)) {
       prompts.push({
         label: rule.label,
@@ -205,6 +215,26 @@ export function generateSuggestedPrompts(
   }
 
   return unique;
+}
+
+/**
+ * Database-driven default prompts for the standalone Shamwari chat's empty
+ * state — the surface with NO weather or location context. Only explore-surface
+ * rules with a context-free template (no {placeholders}) qualify; anything
+ * else would render raw template variables. Returns [] when the database has
+ * no explore rules, so the caller falls back to its hardcoded set.
+ */
+export function getExplorePrompts(rules: SuggestedPromptRule[]): SuggestedPrompt[] {
+  return rules
+    .filter(
+      (r) =>
+        r.active &&
+        r.surface === "explore" &&
+        r.condition === null &&
+        !/\{\w+\}/.test(r.queryTemplate),
+    )
+    .sort((a, b) => a.order - b.order)
+    .map((r) => ({ label: r.label, query: r.queryTemplate }));
 }
 
 /**

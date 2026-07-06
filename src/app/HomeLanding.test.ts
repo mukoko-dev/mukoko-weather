@@ -168,9 +168,13 @@ describe("HomeLanding — GPS button (stage 2)", () => {
     expect(source).toContain("gpsState");
   });
 
-  it("shows error message when GPS is denied", () => {
+  it("shows error message when GPS is denied (via shared i18n copy)", () => {
     expect(source).toContain("denied");
-    expect(source).toContain("Location access denied");
+    // Copy is single-sourced in i18n's geo.denied / geo.error keys — the
+    // literal string must NOT be hand-rolled here anymore.
+    expect(source).toContain('t("geo.denied")');
+    expect(source).toContain('t("geo.error")');
+    expect(source).not.toContain("Location access denied —");
   });
 });
 

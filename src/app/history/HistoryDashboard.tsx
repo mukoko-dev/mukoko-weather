@@ -30,6 +30,7 @@ import {
   heatStressLevel,
   uvConcernLabel,
 } from "@/components/weather/ActivityInsights";
+import { Spinner } from "@/components/ui/spinner";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -709,7 +710,7 @@ export function HistoryDashboard() {
 
       {loading && (
         <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <Spinner className="h-8 w-8" />
           <span className="ml-3 text-base text-text-secondary">Loading history...</span>
         </div>
       )}

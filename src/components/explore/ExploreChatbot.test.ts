@@ -111,8 +111,11 @@ describe("error handling", () => {
 });
 
 describe("suggested prompts", () => {
-  it("defines DEFAULT_SUGGESTED_PROMPTS array", () => {
-    expect(source).toContain("const DEFAULT_SUGGESTED_PROMPTS");
+  it("routes default prompts through the shared suggested-prompts module with a hardcoded fallback", () => {
+    expect(source).toContain("fetchSuggestedRules");
+    expect(source).toContain("getExplorePrompts");
+    expect(source).toContain("const FALLBACK_SUGGESTED_PROMPTS");
+    expect(source).not.toContain("DEFAULT_SUGGESTED_PROMPTS");
   });
 
   it("shows EmptyState when no messages", () => {
@@ -124,8 +127,9 @@ describe("suggested prompts", () => {
     expect(source).toContain("onSuggestionClick(prompt.query)");
   });
 
-  it("suggestion buttons meet 56px touch target", () => {
-    expect(source).toContain("min-h-[var(--touch-target-min)]");
+  it("suggestion chips use the shared .quail fauna class (touch target included)", () => {
+    // .quail carries min-h-[var(--touch-target-min)] in globals.css
+    expect(source).toContain('className="quail');
   });
 });
 
@@ -452,7 +456,7 @@ function getContextualPrompts(ctx: { source: string; locationName?: string; hist
       { label: "Best option", query: `Which location is best for outdoor activities right now?` },
     ];
   }
-  // Falls through to DEFAULT_SUGGESTED_PROMPTS in the real component
+  // Falls through to FALLBACK_SUGGESTED_PROMPTS in the real component
   return [];
 }
 

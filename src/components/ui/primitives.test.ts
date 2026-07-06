@@ -381,3 +381,31 @@ describe("ActivityCard", () => {
     expect(mod.ActivityCard).toBeDefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Spinner — shared loading-ring primitive (issue #104)
+// ---------------------------------------------------------------------------
+
+describe("Spinner", () => {
+  it("exports the Spinner component", async () => {
+    const mod = await import("./spinner");
+    expect(mod.Spinner).toBeDefined();
+  });
+
+  it("is the single spinning-ring implementation — no hand-rolled copies remain", async () => {
+    const { readFileSync } = await import("fs");
+    const { resolve } = await import("path");
+    const callSites = [
+      "../explore/ExploreSearch.tsx",
+      "../weather/MyWeatherModal.tsx",
+      "../weather/HistoryAnalysis.tsx",
+      "../weather/reports/RecentReports.tsx",
+      "../../app/history/HistoryDashboard.tsx",
+    ];
+    for (const file of callSites) {
+      const source = readFileSync(resolve(__dirname, file), "utf-8");
+      expect(source).toContain("<Spinner");
+      expect(source).not.toContain("animate-spin rounded-full border-2");
+    }
+  });
+});

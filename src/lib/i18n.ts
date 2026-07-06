@@ -26,8 +26,12 @@ const messages: Record<string, Record<string, string>> = {
     "nav.searchLocations": "Search locations...",
     "nav.useMyLocation": "Use my location",
     "nav.detectingLocation": "Detecting location...",
-    "nav.locationDenied": "Location access denied. Enable it in your browser settings.",
     "nav.locationFailed": "Unable to detect your location. Select one below.",
+
+    // Geolocation status — the single source for denied/error copy, shared
+    // by HomeLanding and MyWeatherModal (previously three hand-rolled copies).
+    "geo.denied": "Location access denied — please search for your city.",
+    "geo.error": "Could not detect location — please search for your city.",
 
     // Weather
     "weather.current": "Current weather conditions in {location}",

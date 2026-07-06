@@ -1,20 +1,12 @@
 import { HeaderSkeleton } from "@/components/layout/HeaderSkeleton";
+import { BreadcrumbSkeleton } from "@/components/layout/Breadcrumb";
 
 export default function MapLoading() {
   return (
     <div className="flex h-[100dvh] flex-col">
       <HeaderSkeleton />
 
-      {/* Breadcrumb skeleton */}
-      <div className="shrink-0 px-4 pt-2 pb-1 sm:px-6">
-        <div className="flex items-center gap-1">
-          <div className="h-3 w-10 animate-pulse rounded bg-text-tertiary/15" />
-          <span className="text-text-tertiary/30">/</span>
-          <div className="h-3 w-14 animate-pulse rounded bg-text-tertiary/15" />
-          <span className="text-text-tertiary/30">/</span>
-          <div className="h-3 w-8 animate-pulse rounded bg-text-tertiary/15" />
-        </div>
-      </div>
+      <BreadcrumbSkeleton className="w-full shrink-0 pb-3" />
 
       {/* Layer switcher skeleton */}
       <div className="flex shrink-0 gap-2 px-4 py-2">

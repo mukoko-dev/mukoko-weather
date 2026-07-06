@@ -23,6 +23,8 @@ import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 import { cn, slugToDisplayName } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { ForecastModel, FORECAST_MODEL_LABELS } from "@/lib/weather";
+import { t } from "@/lib/i18n";
+import { Spinner } from "@/components/ui/spinner";
 
 /** Default category style for unknown categories */
 const DEFAULT_CATEGORY_STYLE = {
@@ -235,7 +237,7 @@ function SavedTab({
           className="flex min-h-[var(--touch-target-min)] w-full items-center justify-start gap-3 text-primary"
         >
           {geoLoading ? (
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+            <Spinner className="border-primary/30 border-t-primary" />
           ) : (
             <NavigationIcon size={16} className="text-primary" />
           )}
@@ -244,10 +246,10 @@ function SavedTab({
           </span>
         </Button>
         {geoState?.status === "denied" && (
-          <p className="px-3 pb-1 text-base text-text-tertiary">Location access denied.</p>
+          <p className="px-3 pb-1 text-base text-text-tertiary">{t("geo.denied")}</p>
         )}
         {geoState?.status === "error" && geoState?.coords && (
-          <p className="px-3 pb-1 text-base text-text-tertiary">Could not detect your location. Try again later.</p>
+          <p className="px-3 pb-1 text-base text-text-tertiary">{t("geo.error")}</p>
         )}
       </div>
 
