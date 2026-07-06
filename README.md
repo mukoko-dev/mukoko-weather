@@ -89,6 +89,7 @@ npm install
 | `NEXT_PUBLIC_WORKOS_REDIRECT_URI` | Yes      | OAuth callback URL (e.g. `http://localhost:3000/callback` in dev, `https://weather.mukoko.com/callback` in prod). Must match the Redirect URI registered in the WorkOS dashboard |
 | `ANTHROPIC_API_KEY`               | No       | Anthropic API key for AI weather summaries. Without it, a basic fallback summary is generated                                                                                    |
 | `DB_INIT_SECRET`                  | No       | Protects the `/api/db-init` endpoint in production (via `x-init-secret` header)                                                                                                  |
+| `INTERNAL_API_BASE_URL`           | No       | Base URL for server-to-server SSR calls into our own `/api/py/*` functions (defaults to `https://$VERCEL_URL` on Vercel, `http://localhost:3000` otherwise)                      |
 
 ### Development
 
@@ -286,7 +287,6 @@ src/
     activities.ts           # 30+ activities, 6 categories, mineral color styles
     suitability.ts          # Database-driven suitability evaluation engine (evaluateRule)
     suitability-cache.ts    # Client-side cache for suitability rules + category styles
-    tomorrow.ts             # Tomorrow.io API client + WMO normalization
     weather.ts              # Open-Meteo client, frost detection, seasons, weather utils
     weather-labels.ts       # Contextual label helpers (humidity, pressure, cloud, feels-like)
     db.ts                   # MongoDB CRUD + Atlas Search/Vector Search (18+ collections)

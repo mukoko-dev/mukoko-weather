@@ -766,3 +766,35 @@ describe("isIndexConflictError", () => {
     expect(isIndexConflictError("nope")).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Single weather-cache writer (issue #101)
+// ---------------------------------------------------------------------------
+
+describe("getWeatherForLocation — read-only SSR path (issue #101)", () => {
+  it("never writes weather_cache or weather_history from TypeScript", async () => {
+    const fs = await import("fs");
+    const source = fs.readFileSync("src/lib/db.ts", "utf-8");
+    // The Python endpoint is the single writer — the TS second-writer path
+    // (setCachedWeather / recordWeatherHistory / fetchWeatherFromTomorrow)
+    // produced incompatible cache shapes and a diverging WMO mapping.
+    expect(source).not.toContain("setCachedWeather");
+    expect(source).not.toContain("recordWeatherHistory");
+    expect(source).not.toContain("fetchWeatherFromTomorrow");
+    expect(source).not.toContain('from "./tomorrow"');
+  });
+
+  it("delegates cache misses to the canonical Python endpoint", async () => {
+    const fs = await import("fs");
+    const source = fs.readFileSync("src/lib/db.ts", "utf-8");
+    expect(source).toContain("/api/py/weather?lat=");
+    expect(source).toContain("x-weather-provider");
+    // Direct Open-Meteo remains ONLY as a read-only local-dev fallback.
+    expect(source).toContain("fetchWeather(lat, lon)");
+  });
+
+  it("the TS Tomorrow.io client is gone", async () => {
+    const fs = await import("fs");
+    expect(fs.existsSync("src/lib/tomorrow.ts")).toBe(false);
+  });
+});

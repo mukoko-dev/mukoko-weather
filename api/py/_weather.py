@@ -74,8 +74,57 @@ def _fetch_tomorrow(lat: float, lon: float, api_key: str) -> dict | None:
     return _normalize_tomorrow(data)
 
 
+def _compute_is_day(time_str: str, daily_raw: list[dict]) -> int:
+    """Determine if an hour is daytime from the daily sunrise/sunset data.
+
+    Mirrors the day/night computation the UI's Open-Meteo path gets natively
+    (``is_day``); Tomorrow.io has no such field so it's derived here. Falls
+    back to a 6am–6pm heuristic when timestamps are missing/unparseable.
+    """
+    try:
+        t = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return 1
+
+    for day in daily_raw:
+        v = day.get("values", {})
+        try:
+            sunrise = datetime.fromisoformat(str(v.get("sunriseTime", "")).replace("Z", "+00:00"))
+            sunset = datetime.fromisoformat(str(v.get("sunsetTime", "")).replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            continue
+        if sunrise <= t <= sunset:
+            return 1
+        # Same day (within 24h of sunrise) but outside daylight → night.
+        if abs((t - sunrise).total_seconds()) < 24 * 3600:
+            return 0
+
+    return 1 if 6 <= t.hour < 18 else 0
+
+
+#: Units for the ``current`` block — Tomorrow.io metric units, matching what
+#: Open-Meteo reports for the same fields so consumers see one shape.
+_CURRENT_UNITS = {
+    "temperature_2m": "°C",
+    "relative_humidity_2m": "%",
+    "apparent_temperature": "°C",
+    "precipitation": "mm",
+    "wind_speed_10m": "km/h",
+    "wind_gusts_10m": "km/h",
+    "uv_index": "",
+    "surface_pressure": "hPa",
+    "cloud_cover": "%",
+}
+
+
 def _normalize_tomorrow(raw: dict) -> dict:
-    """Normalize Tomorrow.io response to our WeatherData shape."""
+    """Normalize Tomorrow.io response to our WeatherData shape.
+
+    This is the CANONICAL Tomorrow.io normalization — the TypeScript copy was
+    removed (issue #101) because the two produced incompatible cache documents
+    (missing ``is_day``/``current_units``/``precipitation_probability`` here,
+    diverging WMO code values there).
+    """
     timelines = raw.get("timelines", {})
     hourly_raw = timelines.get("hourly", [])
     daily_raw = timelines.get("daily", [])
@@ -97,6 +146,7 @@ def _normalize_tomorrow(raw: dict) -> dict:
             "surface_pressure": first.get("pressureSurfaceLevel"),
             "cloud_cover": first.get("cloudCover"),
             "uv_index": first.get("uvIndex"),
+            "is_day": _compute_is_day(hourly_raw[0].get("time", ""), daily_raw),
         }
 
     # Hourly arrays
@@ -106,6 +156,7 @@ def _normalize_tomorrow(raw: dict) -> dict:
         "relative_humidity_2m": [],
         "apparent_temperature": [],
         "precipitation": [],
+        "precipitation_probability": [],
         "weather_code": [],
         "wind_speed_10m": [],
         "wind_direction_10m": [],
@@ -113,6 +164,8 @@ def _normalize_tomorrow(raw: dict) -> dict:
         "surface_pressure": [],
         "cloud_cover": [],
         "uv_index": [],
+        "visibility": [],
+        "is_day": [],
     }
 
     for h in hourly_raw[:24]:
@@ -122,6 +175,7 @@ def _normalize_tomorrow(raw: dict) -> dict:
         hourly["relative_humidity_2m"].append(v.get("humidity"))
         hourly["apparent_temperature"].append(v.get("temperatureApparent"))
         hourly["precipitation"].append(v.get("precipitationIntensity", 0))
+        hourly["precipitation_probability"].append(v.get("precipitationProbability", 0))
         hourly["weather_code"].append(_tomorrow_code_to_wmo(v.get("weatherCode", 0)))
         hourly["wind_speed_10m"].append(v.get("windSpeed"))
         hourly["wind_direction_10m"].append(v.get("windDirection"))
@@ -129,6 +183,11 @@ def _normalize_tomorrow(raw: dict) -> dict:
         hourly["surface_pressure"].append(v.get("pressureSurfaceLevel"))
         hourly["cloud_cover"].append(v.get("cloudCover"))
         hourly["uv_index"].append(v.get("uvIndex"))
+        # Tomorrow.io reports visibility in km; the shared shape uses meters
+        # (Open-Meteo convention).
+        vis = v.get("visibility")
+        hourly["visibility"].append(vis * 1000 if vis is not None else None)
+        hourly["is_day"].append(_compute_is_day(h.get("time", ""), daily_raw))
 
     # Daily arrays
     daily = {
@@ -191,19 +250,45 @@ def _normalize_tomorrow(raw: dict) -> dict:
         "current": current,
         "hourly": hourly,
         "daily": daily,
+        "current_units": dict(_CURRENT_UNITS),
         "insights": insights if insights else None,
     }
 
 
 def _tomorrow_code_to_wmo(code: int) -> int:
-    """Map Tomorrow.io weather codes to WMO codes."""
+    """Map Tomorrow.io weather codes to WMO 4677 codes.
+
+    The SINGLE canonical mapping (issue #101) — a diverging TypeScript copy
+    (e.g. 4200 "Light Rain" mapped to 63/moderate there vs 61/slight here)
+    meant a location's condition/icon depended on which writer last populated
+    the cache. Values follow Tomorrow.io's documented labels: 4001 "Rain" →
+    63 (moderate), 4200 "Light Rain" → 61 (slight), 5000 "Snow" → 73
+    (moderate), 5100 "Light Snow" → 71 (slight), ice pellets → 77.
+    """
     mapping = {
-        0: 0, 1000: 0, 1100: 1, 1101: 2, 1102: 3,
-        1001: 3, 2000: 45, 2100: 48, 4000: 51,
-        4001: 61, 4200: 63, 4201: 65, 5000: 71,
-        5001: 73, 5100: 75, 5101: 77, 6000: 56,
-        6001: 66, 6200: 67, 6201: 67, 7000: 77,
-        7101: 85, 7102: 86, 8000: 95,
+        1000: 0,   # Clear, Sunny → Clear sky
+        1100: 1,   # Mostly Clear → Mainly clear
+        1101: 2,   # Partly Cloudy → Partly cloudy
+        1102: 3,   # Mostly Cloudy → Overcast
+        1001: 3,   # Cloudy → Overcast
+        2000: 45,  # Fog → Fog
+        2100: 45,  # Light Fog → Fog
+        4000: 51,  # Drizzle → Light drizzle
+        4001: 63,  # Rain → Moderate rain
+        4200: 61,  # Light Rain → Slight rain
+        4201: 65,  # Heavy Rain → Heavy rain
+        5000: 73,  # Snow → Moderate snow
+        5001: 71,  # Flurries → Slight snow
+        5100: 71,  # Light Snow → Slight snow
+        5101: 75,  # Heavy Snow → Heavy snow
+        6000: 66,  # Freezing Drizzle → Light freezing rain
+        6001: 67,  # Freezing Rain → Heavy freezing rain
+        6200: 66,  # Light Freezing Rain → Light freezing rain
+        6201: 67,  # Heavy Freezing Rain → Heavy freezing rain
+        7000: 77,  # Ice Pellets → Snow grains
+        7101: 77,  # Heavy Ice Pellets → Snow grains
+        7102: 77,  # Light Ice Pellets → Snow grains
+        8000: 95,  # Thunderstorm → Thunderstorm
     }
     return mapping.get(code, 0)
 
@@ -340,8 +425,8 @@ def _fetch_open_meteo(lat: float, lon: float) -> dict | None:
     params = {
         "latitude": str(lat),
         "longitude": str(lon),
-        "current": "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,cloud_cover",
-        "hourly": "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,cloud_cover,uv_index",
+        "current": "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,cloud_cover,uv_index,is_day",
+        "hourly": "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,cloud_cover,uv_index,visibility,is_day",
         "daily": "weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,sunrise,sunset,uv_index_max,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant",
         "minutely_15": "precipitation",
         "forecast_minutely_15": "4",
@@ -369,6 +454,7 @@ def _fetch_open_meteo(lat: float, lon: float) -> dict | None:
         "current": current,
         "hourly": data.get("hourly", {}),
         "daily": data.get("daily", {}),
+        "current_units": data.get("current_units", dict(_CURRENT_UNITS)),
         "insights": insights if insights else None,
         "minutely": _parse_minutely(data),
     }
@@ -419,6 +505,7 @@ def _create_fallback_weather(lat: float, lon: float, elevation: int) -> dict:
     times = [(datetime.now(timezone.utc) + timedelta(hours=i)).isoformat() for i in range(24)]
     daily_times = [(datetime.now(timezone.utc) + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
 
+    now_dt = datetime.now(timezone.utc)
     return {
         "current": {
             "time": now,
@@ -432,6 +519,8 @@ def _create_fallback_weather(lat: float, lon: float, elevation: int) -> dict:
             "wind_gusts_10m": 15,
             "surface_pressure": 1013,
             "cloud_cover": 30,
+            "uv_index": 5,
+            "is_day": 1 if 6 <= now_dt.hour < 18 else 0,
         },
         "hourly": {
             "time": times,
@@ -446,6 +535,7 @@ def _create_fallback_weather(lat: float, lon: float, elevation: int) -> dict:
             "surface_pressure": [1013] * 24,
             "cloud_cover": [30] * 24,
             "uv_index": [5] * 24,
+            "is_day": [1 if 6 <= (now_dt + timedelta(hours=i)).hour < 18 else 0 for i in range(24)],
         },
         "daily": {
             "time": daily_times,
@@ -463,6 +553,7 @@ def _create_fallback_weather(lat: float, lon: float, elevation: int) -> dict:
             "sunrise": ["06:00"] * 7,
             "sunset": ["18:00"] * 7,
         },
+        "current_units": dict(_CURRENT_UNITS),
         "insights": None,
     }
 
@@ -768,13 +859,15 @@ async def get_weather(lat: float = -17.83, lon: float = 31.05, models: str | Non
             except Exception:
                 pass
 
-    # Blend StationKit observation into the response: replace only `current`,
-    # keep hourly/daily from the commercial provider. Shallow-copy first so we
-    # don't mutate any cached object held by callers / the cache layer.
+    # Blend StationKit observation into the response: overlay the station's
+    # sensor fields onto the forecast `current` (keeping forecast-only fields
+    # like is_day/uv_index that the hardware doesn't measure), keep hourly/
+    # daily from the commercial provider. Shallow-copy first so we don't
+    # mutate any cached object held by callers / the cache layer.
     current_source = source or "fallback"
     if station_current:
         data = dict(data) if data else {}
-        data["current"] = station_current
+        data["current"] = {**(data.get("current") or {}), **station_current}
         current_source = "stationkit"
 
     # ADDITIONAL Windy-style data — multi-model comparison + minutely nowcast.

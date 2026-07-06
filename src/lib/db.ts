@@ -34,7 +34,6 @@ import {
   integrationsDb,
 } from "./mongo";
 import { fetchWeather, createFallbackWeather, getDefaultSeason, synthesizeOpenMeteoInsights, type WeatherData, type Season } from "./weather";
-import { fetchWeatherFromTomorrow, TomorrowRateLimitError } from "./tomorrow";
 import { logWarn, logError } from "./observability";
 import type { WeatherLocation } from "./locations";
 import type { Activity, ActivityCategory } from "./activities";
@@ -669,8 +668,6 @@ export function providerConfigurationsCollection() {
 // Weather cache operations
 // ---------------------------------------------------------------------------
 
-const WEATHER_CACHE_TTL_SECONDS = 900; // 15 minutes
-
 export async function getCachedWeather(
   locationSlug: string,
 ): Promise<WeatherData | null> {
@@ -681,30 +678,8 @@ export async function getCachedWeather(
   return doc?.data ?? null;
 }
 
-export async function setCachedWeather(
-  locationSlug: string,
-  lat: number,
-  lon: number,
-  data: WeatherData,
-): Promise<void> {
-  const now = new Date();
-  await weatherCacheCollection().updateOne(
-    { locationSlug },
-    {
-      $set: {
-        lat,
-        lon,
-        data,
-        fetchedAt: now,
-        expiresAt: new Date(now.getTime() + WEATHER_CACHE_TTL_SECONDS * 1000),
-      },
-    },
-    { upsert: true },
-  );
-}
-
 // ---------------------------------------------------------------------------
-// Unified weather fetch — cache-first, then APIs, then seasonal fallback
+// Unified weather fetch — cache read, then the canonical Python endpoint
 // ---------------------------------------------------------------------------
 
 export interface WeatherResult {
@@ -714,11 +689,28 @@ export interface WeatherResult {
 }
 
 /**
- * Get weather data for a location, checking MongoDB cache first.
- * On cache miss, fetches from Tomorrow.io → Open-Meteo → seasonal fallback.
- * Results are stored in MongoDB so subsequent requests are served from cache.
- * This ensures external APIs are called at most once per 15-min TTL window
- * regardless of how many users request the same location.
+ * Base URL for server-to-server calls into our own deployment (the Python
+ * FastAPI functions live behind the same origin via vercel.json rewrites).
+ */
+function internalApiBase(): string {
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return process.env.INTERNAL_API_BASE_URL ?? "http://localhost:3000";
+}
+
+/**
+ * Get weather data for a location for SSR, checking the MongoDB cache first.
+ *
+ * On cache miss this delegates to GET /api/py/weather — the SINGLE canonical
+ * weather fetch/cache/history implementation (issue #101). This TS path is
+ * deliberately READ-ONLY against weather_cache/weather_history: it used to be
+ * a second independent writer whose document shape (is_day, current_units)
+ * and Tomorrow→WMO mapping had drifted from the Python writer's, so the two
+ * poisoned each other's cache rows.
+ *
+ * Fallback order when the internal endpoint is unreachable (e.g. plain
+ * `next dev` without the Python functions): a direct Open-Meteo fetch
+ * (read-only, no cache write), then the seasonal estimate — the page always
+ * renders.
  */
 export async function getWeatherForLocation(
   slug: string,
@@ -726,78 +718,60 @@ export async function getWeatherForLocation(
   lon: number,
   elevation: number,
 ): Promise<WeatherResult> {
-  // 1. Try MongoDB cache
+  // 1. MongoDB cache — fast path, no HTTP hop. Written only by Python.
   try {
     const cached = await getCachedWeather(slug);
     if (cached) return { data: cached, source: "cache" };
   } catch {
-    // DB unavailable — proceed to fetch from APIs
+    // DB unavailable — proceed to the endpoint
   }
 
-  // 2. Try Tomorrow.io (richer data with activity insights)
-  let data: WeatherData | null = null;
-  let source = "open-meteo";
-
+  // 2. Canonical fetch path — Python does the provider chain (StationKit →
+  // Tomorrow.io → Open-Meteo → seasonal), writes the cache, records history.
   try {
-    const tomorrowKey = await getApiKey("tomorrow").catch(() => null);
-    if (tomorrowKey) {
-      try {
-        data = await fetchWeatherFromTomorrow(lat, lon, tomorrowKey);
-        source = "tomorrow";
-      } catch (err) {
-        logWarn({
-          source: "tomorrow-io",
-          location: slug,
-          message: err instanceof TomorrowRateLimitError
-            ? "Tomorrow.io rate limit, falling back to Open-Meteo"
-            : "Tomorrow.io fetch failed, falling back to Open-Meteo",
-          error: err,
-        });
-      }
+    const res = await fetch(
+      `${internalApiBase()}/api/py/weather?lat=${lat}&lon=${lon}`,
+      { cache: "no-store", signal: AbortSignal.timeout(15_000) },
+    );
+    if (res.ok) {
+      const data = (await res.json()) as WeatherData;
+      return { data, source: res.headers.get("x-weather-provider") ?? "open-meteo" };
     }
-  } catch {
-    // getApiKey failed (DB down) — skip Tomorrow.io
+    logWarn({
+      source: "weather-api",
+      location: slug,
+      message: `Internal weather endpoint returned ${res.status}, falling back to direct Open-Meteo`,
+    });
+  } catch (err) {
+    logWarn({
+      source: "weather-api",
+      location: slug,
+      message: "Internal weather endpoint unreachable, falling back to direct Open-Meteo",
+      error: err,
+    });
   }
 
-  // 3. Try Open-Meteo
-  if (!data) {
-    try {
-      data = await fetchWeather(lat, lon);
-      source = "open-meteo";
-      // Synthesize basic insights from Open-Meteo current data so suitability
-      // rules (e.g. drone wind speed) work even when Tomorrow.io is unavailable.
-      if (data && !data.insights && data.current) {
-        data.insights = synthesizeOpenMeteoInsights(data);
-      }
-    } catch (err) {
-      logError({
-        source: "open-meteo",
-        severity: "high",
-        location: slug,
-        message: "Open-Meteo fetch failed",
-        error: err,
-      });
+  // 3. Direct Open-Meteo (read-only — no cache write, so this can never
+  // reintroduce a second writer). Keeps local `next dev` working without
+  // the Python functions.
+  try {
+    const data = await fetchWeather(lat, lon);
+    if (data && !data.insights && data.current) {
+      data.insights = synthesizeOpenMeteoInsights(data);
     }
+    return { data, source: "open-meteo" };
+  } catch (err) {
+    logError({
+      source: "open-meteo",
+      severity: "high",
+      location: slug,
+      message: "Open-Meteo fetch failed",
+      error: err,
+    });
   }
 
   // 4. Seasonal fallback — guarantees the page always renders
-  if (!data) {
-    return { data: createFallbackWeather(lat, lon, elevation), source: "fallback" };
-  }
-
-  // Store in MongoDB cache + record history (fire-and-forget, don't block response)
-  Promise.all([
-    setCachedWeather(slug, lat, lon, data),
-    recordWeatherHistory(slug, data),
-  ]).catch((err) => logError({
-    source: "mongodb",
-    severity: "low",
-    location: slug,
-    message: "Failed to cache weather data",
-    error: err,
-  }));
-
-  return { data, source };
+  return { data: createFallbackWeather(lat, lon, elevation), source: "fallback" };
 }
 
 // ---------------------------------------------------------------------------
@@ -881,31 +855,9 @@ export function isSummaryStale(
 }
 
 // ---------------------------------------------------------------------------
-// Historical weather recording
+// Historical weather reads (recording happens in api/py/_weather.py — the
+// single writer; see getWeatherForLocation)
 // ---------------------------------------------------------------------------
-
-export async function recordWeatherHistory(
-  locationSlug: string,
-  data: WeatherData,
-): Promise<void> {
-  const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fields: Record<string, any> = {
-    current: data.current,
-    hourly: data.hourly,
-    daily: data.daily,
-    recordedAt: now,
-  };
-  if (data.insights) fields.insights = data.insights;
-
-  await weatherHistoryCollection().updateOne(
-    { locationSlug, date: dateStr },
-    { $set: fields },
-    { upsert: true },
-  );
-}
 
 export async function getWeatherHistory(
   locationSlug: string,
