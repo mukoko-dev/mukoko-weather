@@ -531,12 +531,17 @@ async def generate_summary(body: AISummaryRequest, request: Request = None):
             f"{season['description']}. Stay informed and plan your day accordingly."
         )
 
-        _set_cached_summary(
-            location_slug, insight,
-            {"temperature": current_temp, "weatherCode": current_code},
-            location_tags,
-            source="fallback",
-        )
+        # Best-effort cache write — same serve-first discipline as the main
+        # cache write below: a blocked write must never 500 the response.
+        try:
+            _set_cached_summary(
+                location_slug, insight,
+                {"temperature": current_temp, "weatherCode": current_code},
+                location_tags,
+                source="fallback",
+            )
+        except Exception:
+            pass
         return {"insight": insight, "cached": False}
 
     # Build insights section
@@ -635,12 +640,18 @@ Provide:
 
     # Cache the summary — fallback text gets a short TTL (TTL_FALLBACK) so a
     # transient failure doesn't lock users out of real AI summaries for the
-    # full tiered TTL window.
-    _set_cached_summary(
-        location_slug, insight,
-        {"temperature": current_temp, "weatherCode": current_code},
-        location_tags,
-        source=summary_source,
-    )
+    # full tiered TTL window. Best-effort: the insight above is already
+    # generated (Claude tokens spent), so a failed cache write (storage
+    # quota, transient outage) must never turn a good response into a 500 —
+    # same serve-first discipline as the weather endpoint's cache writes.
+    try:
+        _set_cached_summary(
+            location_slug, insight,
+            {"temperature": current_temp, "weatherCode": current_code},
+            location_tags,
+            source=summary_source,
+        )
+    except Exception:
+        pass
 
     return {"insight": insight, "cached": False, "generatedAt": datetime.now(timezone.utc).isoformat()}

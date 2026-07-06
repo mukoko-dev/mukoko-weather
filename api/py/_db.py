@@ -492,15 +492,25 @@ def check_rate_limit(ip: str, action: str, max_requests: int, window_seconds: in
     now = datetime.now(timezone.utc)
     expires = now + timedelta(seconds=window_seconds)
 
-    result = rate_limits_collection().find_one_and_update(
-        {"key": key},
-        {
-            "$inc": {"count": 1},
-            "$setOnInsert": {"expiresAt": expires},
-        },
-        upsert=True,
-        return_document=True,
-    )
+    try:
+        result = rate_limits_collection().find_one_and_update(
+            {"key": key},
+            {
+                "$inc": {"count": 1},
+                "$setOnInsert": {"expiresAt": expires},
+            },
+            upsert=True,
+            return_document=True,
+        )
+    except Exception:
+        # Fail OPEN. The limiter is abuse protection, not a core function —
+        # its upsert is a DB write that runs BEFORE the actual work on every
+        # rate-limited endpoint. When the cluster can't accept writes
+        # (storage quota reached, credential rotation, transient outage),
+        # raising here 500s all nine rate-limited endpoints at once even
+        # though most of them could still serve. Serving unmetered during a
+        # DB outage is the lesser harm.
+        return {"allowed": True, "remaining": 0}
 
     count = result.get("count", 1) if result else 1
     allowed = count <= max_requests

@@ -108,6 +108,26 @@ class TestCheckRateLimit:
         assert result["allowed"] is True
         assert result["remaining"] == 19
 
+    @patch("py._db.rate_limits_collection")
+    def test_fails_open_when_write_raises(self, mock_coll):
+        # The limiter's upsert is a DB write that runs BEFORE the real work.
+        # When the cluster rejects writes (storage quota, credential
+        # rotation), the limiter must fail OPEN — serving unmetered beats
+        # 500ing every rate-limited endpoint at once.
+        mock_coll.return_value.find_one_and_update.side_effect = Exception(
+            "you are over your space quota"
+        )
+
+        result = check_rate_limit("1.2.3.4", "chat", 20, 3600)
+        assert result["allowed"] is True
+
+    @patch("py._db.rate_limits_collection")
+    def test_fails_open_when_collection_accessor_raises(self, mock_coll):
+        mock_coll.side_effect = Exception("connection refused")
+
+        result = check_rate_limit("1.2.3.4", "chat", 20, 3600)
+        assert result["allowed"] is True
+
 
 # ---------------------------------------------------------------------------
 # filter_known_activities — validates user-supplied activities against known
