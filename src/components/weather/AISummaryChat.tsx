@@ -4,10 +4,11 @@ import { useState, useRef, useEffect, useCallback, Component, type ReactNode } f
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ReactMarkdown from "react-markdown";
-import { SparklesIcon, MapPinIcon } from "@/lib/weather-icons";
+import { SparklesIcon } from "@/lib/weather-icons";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { ShamwariCTA } from "./ShamwariCTA";
 import { getScrollBehavior } from "@/lib/utils";
 import {
   generateSuggestedPrompts,
@@ -131,7 +132,6 @@ export function AISummaryChat({ weather, location, initialSummary, season, user 
   const [loading, setLoading] = useState(false);
   const [suggestedPrompts, setSuggestedPrompts] = useState<SuggestedPrompt[]>([]);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
-  const setShamwariContext = useAppStore((s) => s.setShamwariContext);
   const shamwariEnabled = isFeatureEnabled("shamwari_chat");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -242,18 +242,15 @@ export function AISummaryChat({ weather, location, initialSummary, season, user 
     sendMessage(input);
   };
 
-  const handleContinueInShamwari = () => {
-    setShamwariContext({
-      source: "location",
-      locationSlug: location.slug,
-      locationName: location.name,
-      province: location.province,
-      weatherSummary: initialSummary || undefined,
-      temperature: weather.current.temperature_2m,
-      condition: String(weather.current.weather_code),
-      activities: selectedActivities,
-      timestamp: Date.now(),
-    });
+  const shamwariContext = {
+    source: "location" as const,
+    locationSlug: location.slug,
+    locationName: location.name,
+    province: location.province,
+    weatherSummary: initialSummary || undefined,
+    temperature: weather.current.temperature_2m,
+    condition: String(weather.current.weather_code),
+    activities: selectedActivities,
   };
 
   if (!initialSummary) return null;
@@ -354,14 +351,12 @@ export function AISummaryChat({ weather, location, initialSummary, season, user 
                     <p className="gazelle">
                       For a deeper conversation, continue in Shamwari chat.
                     </p>
-                    <Link
-                      href="/shamwari"
-                      onClick={handleContinueInShamwari}
-                      className="mt-2 inline-flex items-center gap-1.5 rounded-[var(--radius-badge)] bg-tanzanite px-4 py-2 text-base font-medium text-mineral-tanzanite-fg transition-colors hover:bg-tanzanite/90 min-h-[var(--touch-target-min)]"
-                    >
-                      <SparklesIcon size={14} />
-                      Continue in Shamwari
-                    </Link>
+                    <ShamwariCTA
+                      context={shamwariContext}
+                      label="Continue in Shamwari"
+                      variant="tanzanite"
+                      className="mt-2"
+                    />
                   </>
                 ) : (
                   <p className="gazelle">
@@ -413,16 +408,14 @@ export function AISummaryChat({ weather, location, initialSummary, season, user 
             )}
 
             {/* Link to Shamwari (always visible when there are messages) */}
-            {shamwariEnabled && messages.length > 0 && !atMessageLimit && (
+            {messages.length > 0 && !atMessageLimit && (
               <div className="mt-2 text-center">
-                <Link
-                  href="/shamwari"
-                  onClick={handleContinueInShamwari}
-                  className="inline-flex items-center gap-1 text-base text-text-tertiary transition-colors hover:text-tanzanite"
-                >
-                  <MapPinIcon size={10} />
-                  Continue in Shamwari for a deeper conversation
-                </Link>
+                <ShamwariCTA
+                  context={shamwariContext}
+                  label="Continue in Shamwari for a deeper conversation"
+                  variant="text"
+                  icon="map-pin"
+                />
               </div>
             )}
           </div>

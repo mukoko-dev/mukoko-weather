@@ -60,22 +60,23 @@ describe("HistoryAnalysis", () => {
     expect(source).toContain("min-h-[var(--touch-target-min)]");
   });
 
-  it("sets ShamwariContext for discuss-in-shamwari navigation", async () => {
+  it("builds ShamwariContext for discuss-in-shamwari navigation", async () => {
     const { readFileSync } = await import("fs");
     const { resolve } = await import("path");
     const source = readFileSync(resolve(__dirname, "HistoryAnalysis.tsx"), "utf-8");
-    expect(source).toContain("setShamwariContext");
     expect(source).toContain('source: "history"');
     expect(source).toContain("historyDays");
     expect(source).toContain("historyAnalysis");
   });
 
-  it("gates the Discuss in Shamwari link behind the shamwari_chat feature flag", async () => {
+  it("uses the shared ShamwariCTA component for the Discuss link", async () => {
+    // The feature-flag gate + setShamwariContext handoff + link rendering
+    // now live in @/components/weather/ShamwariCTA — see its own tests.
     const { readFileSync } = await import("fs");
     const { resolve } = await import("path");
     const source = readFileSync(resolve(__dirname, "HistoryAnalysis.tsx"), "utf-8");
-    expect(source).toContain('isFeatureEnabled("shamwari_chat")');
-    expect(source).toContain("{shamwariEnabled &&");
+    expect(source).toContain("ShamwariCTA");
+    expect(source).toContain("./ShamwariCTA");
   });
 
   it("uses tanzanite border for AI styling", async () => {

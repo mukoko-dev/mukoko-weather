@@ -111,9 +111,13 @@ describe("results rendering", () => {
 });
 
 describe("Shamwari context integration", () => {
-  it("imports useAppStore for context setting", () => {
-    expect(source).toContain("useAppStore");
-    expect(source).toContain("setShamwariContext");
+  // The feature-flag gate + setShamwariContext handoff + link rendering now
+  // live in the shared <ShamwariCTA> component (@/components/weather/ShamwariCTA)
+  // instead of being hand-rolled here — see ShamwariCTA's own tests for that
+  // behavior. This file only asserts ExploreSearch builds the right context.
+  it("imports ShamwariCTA", () => {
+    expect(source).toContain("ShamwariCTA");
+    expect(source).toContain("@/components/weather/ShamwariCTA");
   });
 
   it("sets explore context when navigating to Shamwari", () => {
@@ -121,14 +125,8 @@ describe("Shamwari context integration", () => {
     expect(source).toContain("exploreQuery: query");
   });
 
-  it("has an 'Ask Shamwari for more' link", () => {
+  it("has an 'Ask Shamwari for more' CTA", () => {
     expect(source).toContain("Ask Shamwari for more");
-    expect(source).toContain('href="/shamwari"');
-  });
-
-  it("gates the link behind the shamwari_chat feature flag", () => {
-    expect(source).toContain('isFeatureEnabled("shamwari_chat")');
-    expect(source).toContain("shamwariEnabled &&");
   });
 });
 
