@@ -5,6 +5,7 @@ import Link from "next/link";
 import { SearchIcon, MapPinIcon, SparklesIcon } from "@/lib/weather-icons";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import { weatherCodeToInfo } from "@/lib/weather";
 import { trackEvent } from "@/lib/analytics";
 
@@ -42,6 +43,7 @@ export function ExploreSearch() {
   const [searched, setSearched] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const setShamwariContext = useAppStore((s) => s.setShamwariContext);
+  const shamwariEnabled = isFeatureEnabled("shamwari_chat");
 
   const search = useCallback(
     async (searchQuery: string) => {
@@ -223,7 +225,7 @@ export function ExploreSearch() {
         </div>
       )}
 
-      {searched && results.length > 0 && (
+      {shamwariEnabled && searched && results.length > 0 && (
         <div className="flex justify-center">
           <Link
             href="/shamwari"

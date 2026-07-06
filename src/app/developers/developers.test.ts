@@ -78,8 +78,9 @@ describe("developers page — documented public endpoints", () => {
     expect(pageSource).toContain("X-Current-Source");
   });
 
-  it("links to Shamwari for the AI endpoints", () => {
+  it("links to Shamwari for the AI endpoints, gated behind the shamwari_chat feature flag", () => {
     expect(pageSource).toContain('href="/shamwari"');
+    expect(pageSource).toContain('isFeatureEnabled("shamwari_chat")');
   });
 
   it("includes a terms / fair use note", () => {

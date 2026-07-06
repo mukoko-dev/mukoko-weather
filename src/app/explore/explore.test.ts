@@ -92,9 +92,10 @@ describe("explore page — data and accessibility", () => {
     expect(usesDb).toBe(true);
   });
 
-  it("explore page links to /shamwari for AI chat", () => {
+  it("explore page links to /shamwari for AI chat, gated behind the shamwari_chat feature flag", () => {
     expect(exploreSource).toContain("/shamwari");
     expect(exploreSource).toContain("Ask Shamwari");
+    expect(exploreSource).toContain('isFeatureEnabled("shamwari_chat")');
   });
 
   it("explore page is browse-only (no chatbot component)", () => {

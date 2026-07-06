@@ -1,7 +1,8 @@
 /**
  * Tests for Header — validates the mobile bottom navigation is a floating
  * glass pill (detached, rounded, stays visible on scroll) while preserving
- * the 5 nav items, accessibility, and touch-target sizing.
+ * its nav items, accessibility, and touch-target sizing. Shamwari is a 5th
+ * item gated behind the shamwari_chat feature flag (paused by default).
  * Reads source file directly (no DOM renderer needed for structural checks).
  */
 import { describe, it, expect } from "vitest";
@@ -50,16 +51,18 @@ describe("Header — mobile nav floating pill", () => {
 });
 
 describe("Header — mobile nav preserved behaviour", () => {
-  it("keeps all 5 nav items and their labels", () => {
-    for (const label of [
-      "Weather",
-      "Explore",
-      "Shamwari",
-      "History",
-      "My Weather",
-    ]) {
+  it("keeps the 4 always-on nav items and their labels", () => {
+    for (const label of ["Weather", "Explore", "History", "My Weather"]) {
       expect(source).toContain(`>${label}</span>`);
     }
+  });
+
+  it("gates the Shamwari nav item behind the shamwari_chat feature flag (paused by default)", () => {
+    expect(source).toContain("shamwariEnabled");
+    expect(source).toContain('isFeatureEnabled("shamwari_chat")');
+    expect(source).toContain("{shamwariEnabled &&");
+    // Still present in source (so re-enabling the flag brings it back), just gated.
+    expect(source).toContain(">Shamwari</span>");
   });
 
   it("preserves the active indicator dot and active text colour", () => {

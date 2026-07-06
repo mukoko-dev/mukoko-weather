@@ -104,6 +104,11 @@ describe("Shamwari context integration", () => {
     expect(source).toContain("Ask Shamwari for more");
     expect(source).toContain('href="/shamwari"');
   });
+
+  it("gates the link behind the shamwari_chat feature flag", () => {
+    expect(source).toContain('isFeatureEnabled("shamwari_chat")');
+    expect(source).toContain("shamwariEnabled &&");
+  });
 });
 
 describe("UI patterns", () => {

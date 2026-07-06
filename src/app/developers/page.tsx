@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { getCurrentUser } from "@/lib/auth";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 
 export const metadata: Metadata = {
   title: "Developers & Public API",
@@ -296,17 +297,25 @@ curl "https://weather.mukoko.com/api/py/search?q=nairobi"`}</code>
         <section className="mt-10">
           <h2 className="eagle">AI endpoints</h2>
           <p className="mt-2 text-base text-text-secondary">
-            mukoko also runs AI-powered weather summaries and the Shamwari
-            chatbot. These are rate-limited and evolve quickly, so we don&apos;t
-            document their internals here — try them live at{" "}
-            <Link
-              href="/shamwari"
-              prefetch={false}
-              className="text-primary underline hover:text-primary/80 transition-colors"
-            >
-              Shamwari
-            </Link>
-            .
+            mukoko also runs AI-powered weather summaries and a Shamwari-branded
+            chatbot backend. These are rate-limited and evolve quickly, so we
+            don&apos;t document their internals here
+            {isFeatureEnabled("shamwari_chat") ? (
+              <>
+                {" "}
+                — try them live at{" "}
+                <Link
+                  href="/shamwari"
+                  prefetch={false}
+                  className="text-primary underline hover:text-primary/80 transition-colors"
+                >
+                  Shamwari
+                </Link>
+                .
+              </>
+            ) : (
+              "."
+            )}
           </p>
         </section>
 

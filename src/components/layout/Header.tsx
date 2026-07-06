@@ -7,6 +7,7 @@ import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
 import { MapPinIcon, ClockIcon, SparklesIcon, LayersIcon, BellIcon, UserIcon } from "@/lib/weather-icons";
 import { useAppStore } from "@/lib/store";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import { initialsFor, type PublicUser } from "@/lib/user-display";
 
 // Code-split: MyWeatherModal imports LOCATIONS (154 items), ACTIVITIES (20 items),
@@ -80,11 +81,11 @@ export function Header() {
   }, [notificationsOpen]);
 
   // Determine which mobile nav item is active based on pathname
-  const isShamwari = pathname === "/shamwari";
   const isExplore = pathname === "/explore" || pathname.startsWith("/explore/");
   const isHistory = pathname === "/history";
   const isAviation = pathname === "/aviation";
-  const isHome = !isShamwari && !isExplore && !isHistory && !isAviation && !pathname.startsWith("/about") && !pathname.startsWith("/help") && !pathname.startsWith("/privacy") && !pathname.startsWith("/terms") && !pathname.startsWith("/status") && !pathname.startsWith("/embed");
+  const isHome = !isExplore && !isHistory && !isAviation && !pathname.startsWith("/about") && !pathname.startsWith("/help") && !pathname.startsWith("/privacy") && !pathname.startsWith("/terms") && !pathname.startsWith("/status") && !pathname.startsWith("/embed") && !pathname.startsWith("/shamwari");
+  const shamwariEnabled = isFeatureEnabled("shamwari_chat");
 
   return (
     <>
@@ -112,7 +113,8 @@ export function Header() {
           <nav className="hidden sm:flex items-center gap-6" aria-label="Main navigation">
             {[
               { href: "/explore", label: "Explore", active: isExplore },
-              { href: "/shamwari", label: "Shamwari", active: isShamwari },
+              // Paused as a standalone destination — see FLAGS.shamwari_chat.
+              ...(shamwariEnabled ? [{ href: "/shamwari", label: "Shamwari", active: pathname === "/shamwari" }] : []),
               { href: "/history", label: "History", active: isHistory },
               { href: "/aviation", label: "Aviation", active: isAviation },
             ].map(({ href, label, active }) => (
@@ -210,7 +212,8 @@ export function Header() {
         </nav>
       </header>
 
-      {/* Mobile bottom navigation — floating glass pill, 5 items with Shamwari center */}
+      {/* Mobile bottom navigation — floating glass pill, 4 items */}
+      {/* (Shamwari paused as a standalone destination — see FLAGS.shamwari_chat) */}
       {/* Detached from the edges (floats above the safe-area) so mobile browser */}
       {/* chrome never obscures it; stays put on scroll because it's fixed. */}
       {/* 48px min touch targets, 22px icons, 10px labels */}
@@ -244,19 +247,21 @@ export function Header() {
             <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">Explore</span>
             {isExplore && <span className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary" aria-hidden="true" />}
           </Link>
-          <Link
-            href="/shamwari"
-            prefetch={false}
-            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] active:scale-95 ${
-              isShamwari ? "text-primary" : "text-text-tertiary hover:text-text-secondary"
-            }`}
-            aria-label="Shamwari AI assistant"
-            aria-current={isShamwari ? "page" : undefined}
-          >
-            <SparklesIcon size={22} />
-            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">Shamwari</span>
-            {isShamwari && <span className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary" aria-hidden="true" />}
-          </Link>
+          {shamwariEnabled && (
+            <Link
+              href="/shamwari"
+              prefetch={false}
+              className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] active:scale-95 ${
+                pathname === "/shamwari" ? "text-primary" : "text-text-tertiary hover:text-text-secondary"
+              }`}
+              aria-label="Shamwari AI assistant"
+              aria-current={pathname === "/shamwari" ? "page" : undefined}
+            >
+              <SparklesIcon size={22} />
+              <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">Shamwari</span>
+              {pathname === "/shamwari" && <span className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary" aria-hidden="true" />}
+            </Link>
+          )}
           <Link
             href="/history"
             prefetch={false}

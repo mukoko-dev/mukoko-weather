@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import { SparklesIcon, MapPinIcon } from "@/lib/weather-icons";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import { getScrollBehavior } from "@/lib/utils";
 import {
   generateSuggestedPrompts,
@@ -131,6 +132,7 @@ export function AISummaryChat({ weather, location, initialSummary, season, user 
   const [suggestedPrompts, setSuggestedPrompts] = useState<SuggestedPrompt[]>([]);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const setShamwariContext = useAppStore((s) => s.setShamwariContext);
+  const shamwariEnabled = isFeatureEnabled("shamwari_chat");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -342,20 +344,30 @@ export function AISummaryChat({ weather, location, initialSummary, season, user 
               </div>
             )}
 
-            {/* Message limit reached — redirect to Shamwari */}
+            {/* Message limit reached — redirect to Shamwari when it's a
+                reachable destination; otherwise just say the limit was hit,
+                no dead link to a paused page. */}
             {atMessageLimit && (
               <div className="mt-3 rounded-lg border border-tanzanite/20 bg-tanzanite/5 p-3 text-center">
-                <p className="gazelle">
-                  For a deeper conversation, continue in Shamwari chat.
-                </p>
-                <Link
-                  href="/shamwari"
-                  onClick={handleContinueInShamwari}
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-[var(--radius-badge)] bg-tanzanite px-4 py-2 text-base font-medium text-mineral-tanzanite-fg transition-colors hover:bg-tanzanite/90 min-h-[var(--touch-target-min)]"
-                >
-                  <SparklesIcon size={14} />
-                  Continue in Shamwari
-                </Link>
+                {shamwariEnabled ? (
+                  <>
+                    <p className="gazelle">
+                      For a deeper conversation, continue in Shamwari chat.
+                    </p>
+                    <Link
+                      href="/shamwari"
+                      onClick={handleContinueInShamwari}
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-[var(--radius-badge)] bg-tanzanite px-4 py-2 text-base font-medium text-mineral-tanzanite-fg transition-colors hover:bg-tanzanite/90 min-h-[var(--touch-target-min)]"
+                    >
+                      <SparklesIcon size={14} />
+                      Continue in Shamwari
+                    </Link>
+                  </>
+                ) : (
+                  <p className="gazelle">
+                    You&apos;ve reached the follow-up limit for this conversation.
+                  </p>
+                )}
               </div>
             )}
 
@@ -401,7 +413,7 @@ export function AISummaryChat({ weather, location, initialSummary, season, user 
             )}
 
             {/* Link to Shamwari (always visible when there are messages) */}
-            {messages.length > 0 && !atMessageLimit && (
+            {shamwariEnabled && messages.length > 0 && !atMessageLimit && (
               <div className="mt-2 text-center">
                 <Link
                   href="/shamwari"

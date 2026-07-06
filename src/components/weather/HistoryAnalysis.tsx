@@ -6,6 +6,7 @@ import ReactMarkdown from "react-markdown";
 import { SparklesIcon } from "@/lib/weather-icons";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import { trackEvent } from "@/lib/analytics";
 
 // ---------------------------------------------------------------------------
@@ -60,6 +61,7 @@ export function HistoryAnalysis({
   const [error, setError] = useState<string | null>(null);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const setShamwariContext = useAppStore((s) => s.setShamwariContext);
+  const shamwariEnabled = isFeatureEnabled("shamwari_chat");
 
   const analyze = useCallback(async () => {
     setLoading(true);
@@ -190,14 +192,16 @@ export function HistoryAnalysis({
             >
               Re-analyze
             </Button>
-            <Link
-              href="/shamwari"
-              onClick={handleContinueInShamwari}
-              className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary px-3 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 min-h-[var(--touch-target-min)]"
-            >
-              <SparklesIcon size={12} />
-              Discuss in Shamwari
-            </Link>
+            {shamwariEnabled && (
+              <Link
+                href="/shamwari"
+                onClick={handleContinueInShamwari}
+                className="inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary px-3 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 min-h-[var(--touch-target-min)]"
+              >
+                <SparklesIcon size={12} />
+                Discuss in Shamwari
+              </Link>
+            )}
           </div>
         </div>
       )}

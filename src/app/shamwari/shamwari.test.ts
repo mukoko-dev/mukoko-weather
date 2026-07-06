@@ -29,6 +29,22 @@ describe("shamwari page — structure", () => {
   });
 });
 
+describe("shamwari page — feature flag gate", () => {
+  it("checks isFeatureEnabled(\"shamwari_chat\") before requireUser", () => {
+    expect(pageSource).toContain('isFeatureEnabled("shamwari_chat")');
+    expect(pageSource).toContain("@/lib/feature-flags");
+    const flagCheckIndex = pageSource.indexOf('isFeatureEnabled("shamwari_chat")');
+    const requireUserIndex = pageSource.indexOf('await requireUser("/shamwari")');
+    expect(flagCheckIndex).toBeGreaterThan(-1);
+    expect(flagCheckIndex).toBeLessThan(requireUserIndex);
+  });
+
+  it("calls notFound() when the flag is off", () => {
+    expect(pageSource).toContain("notFound()");
+    expect(pageSource).toContain('from "next/navigation"');
+  });
+});
+
 describe("shamwari page — auth gating (Phase 1D)", () => {
   it("imports requireUser from the auth helper", () => {
     expect(pageSource).toContain("requireUser");

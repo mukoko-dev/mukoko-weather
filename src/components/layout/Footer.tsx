@@ -2,9 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 
 export function Footer() {
   const year = new Date().getFullYear();
+  const shamwariEnabled = isFeatureEnabled("shamwari_chat");
 
   const col = "flex flex-col gap-1";
   const heading =
@@ -94,9 +96,11 @@ export function Footer() {
             <Link href="/history" prefetch={false} className={link}>
               Historical data
             </Link>
-            <Link href="/shamwari" prefetch={false} className={link}>
-              Shamwari AI
-            </Link>
+            {shamwariEnabled && (
+              <Link href="/shamwari" prefetch={false} className={link}>
+                Shamwari AI
+              </Link>
+            )}
             <Link href="/aviation" prefetch={false} className={link}>
               Aviation
             </Link>

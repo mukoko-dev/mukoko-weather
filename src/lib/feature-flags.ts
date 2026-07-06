@@ -35,8 +35,16 @@ export const FLAGS = {
   explore_search: true,
   /** Historical weather AI analysis */
   history_analysis: true,
-  /** Full-viewport Shamwari AI chat */
-  shamwari_chat: true,
+  /**
+   * Full-viewport Shamwari AI chat as a standalone destination page.
+   * Disabled — a dedicated chatbot destination in primary nav doesn't match
+   * how weather apps work (users open a weather app to see the weather, not
+   * to choose between weather and a chat page). AI stays available as an
+   * ambient enhancement (inline AI summaries, AI-powered explore search)
+   * rather than a first-class nav destination. `/shamwari` 404s while this
+   * is false; flip to `true` to bring it back as a reachable page.
+   */
+  shamwari_chat: false,
   /** Interactive weather map layers */
   map_layers: true,
   /** Premium map layers (radar, satellite) — requires subscription */

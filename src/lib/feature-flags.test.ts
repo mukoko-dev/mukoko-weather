@@ -67,14 +67,17 @@ describe("feature-flags", () => {
       expect(FLAGS.ai_summary_chat).toBe(true);
       expect(FLAGS.explore_search).toBe(true);
       expect(FLAGS.history_analysis).toBe(true);
-      expect(FLAGS.shamwari_chat).toBe(true);
       expect(FLAGS.map_layers).toBe(true);
     });
 
-    it("has experimental/future features disabled by default", () => {
+    it("has experimental/future/paused features disabled by default", () => {
       expect(FLAGS.premium_maps).toBe(false);
       expect(FLAGS.vector_search).toBe(false);
       expect(FLAGS.multi_language).toBe(false);
+      // Paused, not experimental: a standalone chatbot destination doesn't
+      // match how weather apps work. AI stays available as an ambient
+      // enhancement (inline summaries, AI-powered explore search) instead.
+      expect(FLAGS.shamwari_chat).toBe(false);
     });
   });
 

@@ -49,6 +49,17 @@ describe("AISummaryChat", () => {
     // to Shamwari when the user clicks "Continue in Shamwari"
   });
 
+  // Shamwari feature flag — the redirect CTA must not dead-end when the
+  // standalone /shamwari destination is paused (FLAGS.shamwari_chat).
+  it("gates the Shamwari redirect CTAs behind the shamwari_chat feature flag", async () => {
+    const fs = await import("fs");
+    const source = fs.readFileSync("src/components/weather/AISummaryChat.tsx", "utf-8");
+    expect(source).toContain('isFeatureEnabled("shamwari_chat")');
+    expect(source).toContain("shamwariEnabled");
+    // Falls back to a plain message instead of a dead link when disabled.
+    expect(source).toContain("You&apos;ve reached the follow-up limit for this conversation.");
+  });
+
   // Follow-up endpoint contract (Phase 1D — proxied through auth-gated route)
   it("targets the auth-gated follow-up endpoint at /api/ai/followup", async () => {
     const fs = await import("fs");

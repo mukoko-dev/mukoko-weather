@@ -7,6 +7,7 @@ import {
 } from "@/lib/db";
 import { TAGS } from "@/lib/seed-tags";
 import { logError } from "@/lib/observability";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 3600;
@@ -81,12 +82,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly",
       priority: 0.8,
     },
-    {
-      url: `${baseUrl}/shamwari`,
-      lastModified: now,
-      changeFrequency: "daily",
-      priority: 0.8,
-    },
+    // Shamwari is omitted while paused (FLAGS.shamwari_chat) — the route
+    // 404s, so it shouldn't be indexed.
+    ...(isFeatureEnabled("shamwari_chat")
+      ? [{
+          url: `${baseUrl}/shamwari`,
+          lastModified: now,
+          changeFrequency: "daily" as const,
+          priority: 0.8,
+        }]
+      : []),
     {
       url: `${baseUrl}/embed`,
       lastModified: now,

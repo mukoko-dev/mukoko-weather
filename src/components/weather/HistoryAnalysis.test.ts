@@ -70,6 +70,14 @@ describe("HistoryAnalysis", () => {
     expect(source).toContain("historyAnalysis");
   });
 
+  it("gates the Discuss in Shamwari link behind the shamwari_chat feature flag", async () => {
+    const { readFileSync } = await import("fs");
+    const { resolve } = await import("path");
+    const source = readFileSync(resolve(__dirname, "HistoryAnalysis.tsx"), "utf-8");
+    expect(source).toContain('isFeatureEnabled("shamwari_chat")');
+    expect(source).toContain("{shamwariEnabled &&");
+  });
+
   it("uses tanzanite border for AI styling", async () => {
     const { readFileSync } = await import("fs");
     const { resolve } = await import("path");

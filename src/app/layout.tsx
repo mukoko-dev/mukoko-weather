@@ -7,6 +7,7 @@ import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { PWAInstallPrompt } from "@/components/weather/PWAInstallPrompt";
 import { ServiceWorkerUpdater } from "@/components/pwa/ServiceWorkerUpdater";
 import { Analytics } from "@vercel/analytics/next";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import "./globals.css";
 
 const BASE_URL = "https://weather.mukoko.com";
@@ -214,55 +215,54 @@ export default async function RootLayout({
 
   // SiteNavigationElement — tells Google which pages are the primary
   // navigation structure. These become sitelink candidates in SERP.
+  // Shamwari is omitted while paused (FLAGS.shamwari_chat) — we don't want
+  // search engines indexing a page that 404s. Positions are stamped after
+  // filtering so they stay contiguous regardless of the flag.
+  const navItems = [
+    {
+      name: "Explore Locations",
+      description: "Browse weather locations by category and country worldwide",
+      url: `${BASE_URL}/explore`,
+    },
+    ...(isFeatureEnabled("shamwari_chat")
+      ? [{
+          name: "Shamwari AI",
+          description: "AI-powered weather assistant for contextual advice and insights",
+          url: `${BASE_URL}/shamwari`,
+        }]
+      : []),
+    {
+      name: "Historical Weather Data",
+      description: "Explore recorded weather trends and historical data worldwide",
+      url: `${BASE_URL}/history`,
+    },
+    {
+      name: "Help & FAQ",
+      description: "How to use mukoko weather, frequently asked questions, and support",
+      url: `${BASE_URL}/help`,
+    },
+    {
+      name: "About",
+      description: "About mukoko weather, Nyuchi Africa, and our data sources",
+      url: `${BASE_URL}/about`,
+    },
+    {
+      name: "System Status",
+      description: "Real-time health status of mukoko weather services",
+      url: `${BASE_URL}/status`,
+    },
+  ];
+
   const siteNavSchema = {
     "@context": "https://schema.org",
     "@type": "ItemList",
     "@id": `${BASE_URL}/#navigation`,
     name: "Main Navigation",
-    itemListElement: [
-      {
-        "@type": "SiteNavigationElement",
-        position: 1,
-        name: "Explore Locations",
-        description: "Browse weather locations by category and country worldwide",
-        url: `${BASE_URL}/explore`,
-      },
-      {
-        "@type": "SiteNavigationElement",
-        position: 2,
-        name: "Shamwari AI",
-        description: "AI-powered weather assistant for contextual advice and insights",
-        url: `${BASE_URL}/shamwari`,
-      },
-      {
-        "@type": "SiteNavigationElement",
-        position: 3,
-        name: "Historical Weather Data",
-        description: "Explore recorded weather trends and historical data worldwide",
-        url: `${BASE_URL}/history`,
-      },
-      {
-        "@type": "SiteNavigationElement",
-        position: 4,
-        name: "Help & FAQ",
-        description: "How to use mukoko weather, frequently asked questions, and support",
-        url: `${BASE_URL}/help`,
-      },
-      {
-        "@type": "SiteNavigationElement",
-        position: 5,
-        name: "About",
-        description: "About mukoko weather, Nyuchi Africa, and our data sources",
-        url: `${BASE_URL}/about`,
-      },
-      {
-        "@type": "SiteNavigationElement",
-        position: 6,
-        name: "System Status",
-        description: "Real-time health status of mukoko weather services",
-        url: `${BASE_URL}/status`,
-      },
-    ],
+    itemListElement: navItems.map((item, i) => ({
+      "@type": "SiteNavigationElement",
+      position: i + 1,
+      ...item,
+    })),
   };
 
   // BreadcrumbList for site hierarchy — root level

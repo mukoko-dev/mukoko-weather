@@ -8,6 +8,7 @@ import { logError } from "@/lib/observability";
 import type { TagDoc } from "@/lib/db";
 import { CTACard } from "@/components/ui/cta-card";
 import { ExploreSearch } from "@/components/explore/ExploreSearch";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 
 // Cache for 1 hour; regenerates in the background after expiry (ISR).
 // Location data changes rarely — this eliminates cold-start DB latency for visitors.
@@ -88,22 +89,24 @@ export default async function ExplorePage() {
           </div>
         </Suspense>
 
-        {/* Shamwari CTA card */}
-        <CTACard
-          variant="accent"
-          as="h2"
-          title="Ask Shamwari"
-          description="Chat with our AI weather assistant for real-time insights and activity advice"
-          action={
-            <Link
-              href="/shamwari"
-              className="press-scale shrink-0 inline-flex items-center gap-2 rounded-[var(--radius-sm)] bg-primary px-4 py-2 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-all focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)]"
-            >
-              Start chatting
-            </Link>
-          }
-          className="mt-6"
-        />
+        {/* Shamwari CTA card — paused as a standalone destination, see FLAGS.shamwari_chat */}
+        {isFeatureEnabled("shamwari_chat") && (
+          <CTACard
+            variant="accent"
+            as="h2"
+            title="Ask Shamwari"
+            description="Chat with our AI weather assistant for real-time insights and activity advice"
+            action={
+              <Link
+                href="/shamwari"
+                className="press-scale shrink-0 inline-flex items-center gap-2 rounded-[var(--radius-sm)] bg-primary px-4 py-2 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-all focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)]"
+              >
+                Start chatting
+              </Link>
+            }
+            className="mt-6"
+          />
+        )}
 
         {/* Category browse section */}
         <section aria-labelledby="browse-heading" className="mt-8">
