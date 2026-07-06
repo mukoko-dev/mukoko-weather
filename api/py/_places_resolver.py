@@ -420,3 +420,57 @@ def find_nearest_location(
     except Exception as exc:  # noqa: BLE001
         logger.debug("placesGeo nearest query failed: %s", exc)
         return None
+
+
+def search_locations_by_name(
+    query: str,
+    *,
+    limit: int = 10,
+    skip: int = 0,
+    tag: Optional[str] = None,
+) -> list[dict]:
+    """Case-insensitive regex search across placesGeo name/slug/mukokoSlug,
+    scoped to consumer-facing geoTypes (city/town/village).
+
+    Shared by GET /api/py/search's text-search branch and the Shamwari chat
+    tool's search_locations, so the query shape can't drift between the two.
+    Atlas Search and $text indexes lived on weather.locations, which is
+    dropped — until equivalent indexes are provisioned on places.placesGeo,
+    this regex match is the interim text-search implementation.
+    """
+    q = query.strip()[:200]
+    if not q:
+        return []
+
+    regex = {"$regex": re.escape(q), "$options": "i"}
+    query_filter: dict = {
+        "geoType": {"$in": ["city", "town", "village"]},
+        "$or": [
+            {"name": regex},
+            {"slug": regex},
+            {"sourceProvenance.mukokoSlug": regex},
+        ],
+    }
+    if tag:
+        query_filter["sourceProvenance.mukokoTags"] = tag
+
+    try:
+        docs = list(
+            places_geo_collection()
+            .find(query_filter)
+            .sort([("name", 1)])
+            .skip(skip)
+            .limit(limit)
+            .max_time_ms(3000)
+        )
+    except Exception:
+        return []
+
+    results = []
+    for doc in docs:
+        adapted = adapt_placesgeo_to_location(doc)
+        if not adapted:
+            continue
+        adapted.pop("_id", None)
+        results.append(adapted)
+    return results

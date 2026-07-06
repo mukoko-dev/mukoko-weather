@@ -189,6 +189,19 @@ class TestSearchLocations:
         result = _execute_search_locations("   ")
         assert result["total"] == 0
 
+    @patch("py._chat.search_locations_by_name")
+    def test_delegates_to_shared_search_helper(self, mock_search):
+        """Uses the same search_locations_by_name (py._places_resolver) as
+        GET /api/py/search's text-search branch, so the query shape can't
+        drift between the chat tool and the public search endpoint."""
+        mock_search.return_value = [
+            {"slug": "harare", "name": "Harare", "province": "Harare", "tags": ["city"]},
+        ]
+        result = _execute_search_locations("harare")
+        mock_search.assert_called_once_with("harare", limit=10)
+        assert result["total"] == 1
+        assert result["locations"][0]["slug"] == "harare"
+
 
 # ---------------------------------------------------------------------------
 # Tool: get_weather (slug validation)

@@ -30,6 +30,7 @@ from ._places_resolver import (
     find_locations_by_tag,
     find_locations_in_country,
     find_nearest_location,
+    search_locations_by_name,
 )
 from ._places_geo import (
     find_nearby_placesgeo,
@@ -233,34 +234,7 @@ async def search_locations(
             for r in results:
                 r.pop("_id", None)
         elif q:
-            q_clean = q.strip()[:200]
-            regex = {"$regex": re.escape(q_clean), "$options": "i"}
-            query_filter = {
-                "geoType": {"$in": ["city", "town", "village"]},
-                "$or": [
-                    {"name": regex},
-                    {"slug": regex},
-                    {"sourceProvenance.mukokoSlug": regex},
-                ],
-            }
-            if tag:
-                query_filter["sourceProvenance.mukokoTags"] = tag
-            try:
-                docs = list(
-                    places_geo_collection().find(query_filter)
-                    .sort([("name", 1)])
-                    .skip(skip)
-                    .limit(limit)
-                    .max_time_ms(3000)
-                )
-            except Exception:
-                docs = []
-            for doc in docs:
-                adapted = adapt_placesgeo_to_location(doc)
-                if not adapted:
-                    continue
-                adapted.pop("_id", None)
-                results.append(adapted)
+            results = search_locations_by_name(q, limit=limit, skip=skip, tag=tag)
 
         # If text search returned no results, fall back to Open-Meteo
         # geocoding API for address-level discovery (like Apple/Google Weather).

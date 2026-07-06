@@ -32,6 +32,7 @@ from py._locations import (
     SLUG_RE,
     DEDUP_RADIUS_KM,
 )
+from py._places_resolver import search_locations_by_name
 
 
 # ---------------------------------------------------------------------------
@@ -568,9 +569,11 @@ class TestSearchLocations:
     """Phase 0G: search queries placesGeo (regex on name/slug + mukokoSlug)."""
 
     @pytest.mark.asyncio
-    @patch("py._locations.places_geo_collection")
+    @patch("py._places_resolver.places_geo_collection")
     async def test_text_search(self, mock_coll):
-        # placesGeo doc shape — adapter converts to legacy LocationDoc shape
+        # placesGeo doc shape — adapter converts to legacy LocationDoc shape.
+        # Query now runs inside search_locations_by_name (py._places_resolver),
+        # shared with the Shamwari chat tool's search_locations.
         placesgeo_doc = {
             "_id": "uuid-harare",
             "name": "Harare",
@@ -633,6 +636,44 @@ class TestSearchLocations:
         ]
         result = await search_locations(mode="tags")
         assert "tags" in result
+
+
+class TestSearchLocationsByName:
+    """search_locations_by_name (py._places_resolver) — shared regex search
+    used by both GET /api/py/search's text-search branch and the Shamwari
+    chat tool's search_locations, so their query shape can't drift apart."""
+
+    def test_empty_query_returns_empty_without_querying_db(self):
+        assert search_locations_by_name("") == []
+        assert search_locations_by_name("   ") == []
+
+    @patch("py._places_resolver.places_geo_collection")
+    def test_scopes_to_consumer_facing_geo_types(self, mock_coll):
+        mock_cursor = MagicMock()
+        mock_cursor.sort.return_value.skip.return_value.limit.return_value.max_time_ms.return_value = []
+        mock_coll.return_value.find.return_value = mock_cursor
+
+        search_locations_by_name("harare")
+
+        query_filter = mock_coll.return_value.find.call_args[0][0]
+        assert query_filter["geoType"] == {"$in": ["city", "town", "village"]}
+        assert {"name": {"$regex": "harare", "$options": "i"}} in query_filter["$or"]
+
+    @patch("py._places_resolver.places_geo_collection")
+    def test_tag_filter_is_optional(self, mock_coll):
+        mock_cursor = MagicMock()
+        mock_cursor.sort.return_value.skip.return_value.limit.return_value.max_time_ms.return_value = []
+        mock_coll.return_value.find.return_value = mock_cursor
+
+        search_locations_by_name("harare", tag="farming")
+
+        query_filter = mock_coll.return_value.find.call_args[0][0]
+        assert query_filter["sourceProvenance.mukokoTags"] == "farming"
+
+    @patch("py._places_resolver.places_geo_collection")
+    def test_db_error_returns_empty(self, mock_coll):
+        mock_coll.return_value.find.side_effect = RuntimeError("boom")
+        assert search_locations_by_name("harare") == []
 
 
 # ---------------------------------------------------------------------------

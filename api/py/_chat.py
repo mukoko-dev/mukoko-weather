@@ -42,6 +42,7 @@ from ._places_resolver import (
     find_location,
     find_locations_by_tag,
     count_all_locations,
+    search_locations_by_name,
 )
 from ._circuit_breaker import anthropic_breaker, CircuitOpenError
 
@@ -232,24 +233,11 @@ TOOLS = [
 
 
 def _execute_search_locations(query: str) -> dict:
-    """Search placesGeo by name/slug via case-insensitive regex (Phase 0G).
-
-    Atlas Search and ``$text`` indexes lived on ``weather.locations``, which
-    is being dropped. Until equivalent indexes are provisioned on
-    ``places.placesGeo``, we fall back to a regex name match scoped to
-    cities/towns/villages.
-    """
-    q = query.strip()[:200]
-    if not q:
-        return {"locations": [], "total": 0}
-
-    from ._db import places_geo_collection
-    from ._places_resolver import adapt_placesgeo_to_location
-
-    def _format(docs: list) -> dict:
-        adapted = [
-            adapt_placesgeo_to_location(d) for d in docs
-        ]
+    """Search placesGeo by name/slug via the shared regex search helper —
+    same query shape as GET /api/py/search's text-search branch, so the
+    two can't silently drift apart."""
+    try:
+        adapted = search_locations_by_name(query, limit=10)
         return {
             "locations": [
                 {
@@ -259,29 +247,10 @@ def _execute_search_locations(query: str) -> dict:
                     "tags": r.get("tags", []),
                 }
                 for r in adapted
-                if r and r.get("slug")
+                if r.get("slug")
             ],
             "total": len(adapted),
         }
-
-    try:
-        regex = {"$regex": re.escape(q), "$options": "i"}
-        # Search name + mukokoSlug + platform slug; scope to consumer-facing
-        # geoTypes so we never return a country/province as a "location".
-        results = list(
-            places_geo_collection()
-            .find({
-                "geoType": {"$in": ["city", "town", "village"]},
-                "$or": [
-                    {"name": regex},
-                    {"slug": regex},
-                    {"sourceProvenance.mukokoSlug": regex},
-                ],
-            })
-            .limit(10)
-            .max_time_ms(3000)
-        )
-        return _format(results)
     except Exception:
         return {"locations": [], "total": 0, "error": "Search unavailable"}
 
