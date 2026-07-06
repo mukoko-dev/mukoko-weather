@@ -636,12 +636,15 @@ def _match_nearby_poi(lat: float, lon: float) -> dict | None:
     Returns ``{"name": str, "poiType": str | None}`` when a *named* POI exists
     within ``POI_MATCH_RADIUS_KM`` (≤250 m) of (lat, lon), else ``None``.
 
-    A very close named POI (a school, hospital, market, park) gives a richer,
-    more consistent location name than a raw reverse-geocode. This is
-    intentionally tight — it is NOT a coarse distance-snap to far-away places.
-    Wrapped so a POI-lookup failure never breaks location resolution: any
-    error, missing index, or empty result falls through to ``None`` and the
-    caller keeps its reverse-geocoded name.
+    Callers use only ``poiType`` (school/hospital/market/park) as
+    supplementary context for the location page + AI summary — e.g. "near a
+    school". They must NOT use ``name`` to replace the reverse-geocoded
+    road/address: this lookup runs on passive GPS/coordinate detection, not
+    a search-and-pick flow, so the user never chose this specific POI —
+    presenting it as their location name is confusing when it's merely
+    nearby. Wrapped so a POI-lookup failure never breaks location
+    resolution: any error, missing index, or empty result falls through to
+    ``None``.
     """
     try:
         poi = find_nearest_place(lat, lon, POI_MATCH_RADIUS_KM)
@@ -702,15 +705,16 @@ async def geo_lookup(
                     detail="Could not determine location name",
                 )
 
-            # ── POI refinement — prefer a very-close named POI (≤250 m) ──────
-            # If the user is essentially standing on a named POI (school,
-            # hospital, market, park), use its name/type instead of the raw
-            # reverse-geocode — richer and consistent with the platform's POI
-            # catalog. Best-effort; falls back to the reverse-geocode on miss.
+            # ── POI context — nearby named POI (≤250 m) as metadata only ─────
+            # This is GPS auto-detection, not a search-and-pick flow — the
+            # user did not choose this POI, so its name must never replace
+            # the reverse-geocoded road/address (that's what confusingly
+            # relabeled someone's street as "XYZ School" just because a
+            # school happened to be 200m away). We still surface `poiType`
+            # (school/hospital/market/park) as supplementary context for the
+            # location page + AI summary — just not as the location's name.
             poi_match = _match_nearby_poi(lat, lon)
             poi_type = poi_match.get("poiType") if poi_match else None
-            if poi_match:
-                geocoded["name"] = poi_match["name"]
 
             # ── Tight duplicate check against placesGeo (Phase 0G) ───────────
             # ONLY a 1km same-name dedup. Anything wider would snap a specific
@@ -914,12 +918,12 @@ async def add_location(request: Request):
         if not geocoded:
             raise HTTPException(status_code=422, detail="Could not determine location name")
 
-        # POI refinement — prefer a very-close named POI (≤250 m) over the raw
-        # reverse-geocode (best-effort; falls back to the reverse-geocode name).
+        # POI context — nearby named POI (≤250 m) as metadata only. These are
+        # raw coordinates, not a search-and-pick flow, so a nearby POI's name
+        # must never replace the reverse-geocoded road/address — only its
+        # `poiType` (school/hospital/market/park) is surfaced as context.
         poi_match = _match_nearby_poi(lat, lon)
         poi_type = poi_match.get("poiType") if poi_match else None
-        if poi_match:
-            geocoded["name"] = poi_match["name"]
 
         # Duplicate check (1km radius + name/country match)
         duplicate = _find_duplicate(

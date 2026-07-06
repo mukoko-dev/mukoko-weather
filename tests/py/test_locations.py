@@ -1989,11 +1989,14 @@ class TestGeoLookupPoiRefinement:
     @patch("py._locations._reverse_geocode")
     @patch("py._locations.find_nearest_location")
     @patch("py._locations.places_geo_collection")
-    async def test_poi_overrides_name_and_flows_through(
+    async def test_poi_is_context_only_and_never_overrides_name(
         self, mock_coll, mock_nearest, mock_geocode, mock_poi, mock_dedup,
         mock_elev, mock_enrich, mock_upsert,
     ):
-        """A close POI replaces the reverse-geocode name and poiType is surfaced."""
+        """A close POI surfaces as context (poiType) but the reverse-geocoded
+        road/address always wins as the location's name — this is passive GPS
+        detection, not a search-and-pick flow, so the user never chose the
+        POI and must not have their street silently relabeled as it."""
         mock_nearest.return_value = None
         mock_geocode.return_value = {
             "country": "ZW", "countryName": "Zimbabwe",
@@ -2004,12 +2007,13 @@ class TestGeoLookupPoiRefinement:
         mock_dedup.return_value = None
         mock_elev.return_value = 1490
         mock_coll.return_value.find_one.return_value = None
-        mock_upsert.return_value = {"_id": "u", "slug": "prince-edward-school-abc123"}
+        mock_upsert.return_value = {"_id": "u", "slug": "fourth-street-abc123"}
 
         result = await geo_lookup(-17.83, 31.05, autoCreate=True)
         assert result["isNew"] is True
-        # POI name won over the reverse-geocode name.
-        assert result["nearest"]["name"] == "Prince Edward School"
+        # The reverse-geocode name wins — NOT the nearby POI's name.
+        assert result["nearest"]["name"] == "Fourth Street"
+        # poiType is still surfaced as supplementary context.
         assert result["nearest"]["poiType"] == "school"
         # And the POI type was stamped into the placesGeo write.
         assert mock_upsert.call_args.kwargs["mukoko_poi_type"] == "school"
