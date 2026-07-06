@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useDebounce } from "@/lib/use-debounce";
+import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 import { getIcaoForSlug, getAirportByIcao } from "@/lib/icao-codes";
 import { SearchIcon, MapPinIcon, NavigationIcon } from "@/lib/weather-icons";
 import { getFlightCategoryClass } from "@/lib/flight-category-styles";
@@ -26,7 +26,7 @@ function cloudsStr(obs: MetarObs): string {
   return obs.clouds.map((c) => `${c.cover} ${c.base_ft}ft`).join(", ");
 }
 
-interface LocationResult { slug: string; name: string; province: string; country?: string }
+interface LocationResult { slug: string; name: string; province?: string; country?: string }
 
 function AirportSearch({
   label,
@@ -37,45 +37,17 @@ function AirportSearch({
   value: LocationResult | null;
   onChange: (loc: LocationResult | null) => void;
 }) {
-  const [query, setQuery] = useState(value?.name ?? "");
-  const [results, setResults] = useState<LocationResult[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Shared debounced /api/py/search hook — same debounce, AbortController
+  // cancellation, and error surfacing as every other quick location search
+  // (issue #103). minLength 2 preserves this picker's previous behavior.
+  const { query, setQuery, results, loading, error: searchFailed, reset } =
+    useLocationQuickSearch({ limit: 8, minLength: 2 });
   const [open, setOpen] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const debounced = useDebounce(query, 300);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const search = useCallback(async (q: string) => {
-    if (q.trim().length < 2) { setResults([]); return; }
-    setLoading(true);
-    setSearchError(null);
-    try {
-      const res = await fetch(`/api/py/search?q=${encodeURIComponent(q)}&limit=8`);
-      if (res.ok) {
-        const data = await res.json();
-        setResults((data.locations ?? []).map((l: { slug: string; name: string; province: string; country?: string }) => ({
-          slug: l.slug, name: l.name, province: l.province, country: l.country,
-        })));
-      } else {
-        setResults([]);
-        setSearchError("Airport search failed. Please try again.");
-      }
-    } catch {
-      // A network failure here previously escaped as an unhandled rejection and
-      // left the spinner stuck — surface it and clear the loading state instead.
-      setResults([]);
-      setSearchError("Airport search failed. Check your connection and try again.");
-    } finally { setLoading(false); }
-  }, []);
-
-  // Trigger search on debounced value (must be useEffect to re-fire as user types)
-  useEffect(() => {
-    if (debounced.trim().length < 2) {
-      setResults([]);
-      return;
-    }
-    if (debounced !== (value?.name ?? "")) search(debounced);
-  }, [debounced, value, search]);
+  const searchError = searchFailed
+    ? "Airport search failed. Check your connection and try again."
+    : null;
 
   const icaoForResult = (r: LocationResult) => getIcaoForSlug(r.slug);
 
@@ -83,10 +55,9 @@ function AirportSearch({
     onChange(r);
     setQuery(r.name);
     setOpen(false);
-    setResults([]);
   };
 
-  const clear = () => { onChange(null); setQuery(""); setResults([]); setSearchError(null); };
+  const clear = () => { onChange(null); reset(); };
 
   return (
     <div ref={containerRef} className="relative">

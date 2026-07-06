@@ -18,7 +18,6 @@ import { ThunderstormChart } from "@/components/weather/charts/ThunderstormChart
 import { GDDChart } from "@/components/weather/charts/GDDChart";
 import { ChartSkeleton } from "@/components/ui/skeleton";
 import { HistoryAnalysis } from "@/components/weather/HistoryAnalysis";
-import type { WeatherLocation } from "@/lib/locations";
 import { useAppStore } from "@/lib/store";
 import { weatherCodeToInfo, windDirection, uvLevel } from "@/lib/weather";
 import type { WeatherInsights } from "@/lib/weather";
@@ -31,6 +30,7 @@ import {
   uvConcernLabel,
 } from "@/components/weather/ActivityInsights";
 import { Spinner } from "@/components/ui/spinner";
+import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,6 +38,10 @@ import { Spinner } from "@/components/ui/spinner";
 
 type DayRange = 7 | 14 | 30 | 90 | 180 | 365;
 type ViewTab = "weather" | "insights";
+
+/** The slice of a location this dashboard needs — satisfied by both the
+ *  quick-search results and the full location doc from /api/py/locations. */
+type SelectedHistoryLocation = { slug: string; name: string; province?: string };
 
 interface HistoryRecord {
   date: string;
@@ -367,8 +371,12 @@ export function suitabilityColors(level: "excellent" | "good" | "fair" | "poor")
 
 export function HistoryDashboard() {
   const globalSlug = useAppStore((s) => s.selectedLocation);
-  const [query, setQuery] = useState("");
-  const [selectedLocation, setSelectedLocation] = useState<WeatherLocation | null>(null);
+  // Shared debounced /api/py/search hook — same debounce + AbortController
+  // cancellation as every other quick location search in the app. Replaces a
+  // hand-rolled setTimeout debounce with NO cancellation, where a fast retype
+  // could let a stale slower response overwrite newer results (issue #103).
+  const { query, setQuery, results: quickResults, loading: searchLoading } = useLocationQuickSearch();
+  const [selectedLocation, setSelectedLocation] = useState<SelectedHistoryLocation | null>(null);
   const [days, setDays] = useState<DayRange>(30);
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [insightsRecords, setInsightsRecords] = useState<InsightsRecord[]>([]);
@@ -380,13 +388,9 @@ export function HistoryDashboard() {
   const [activeTab, setActiveTab] = useState<ViewTab>("weather");
   const [categoryFilter, setCategoryFilter] = useState<ActivityCategory | "all">("all");
   const tableEndRef = useRef<HTMLDivElement>(null);
-  // Search-driven location results (replaces loading all locations)
-  const [searchResults, setSearchResults] = useState<WeatherLocation[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
   // Seed with static CATEGORIES for instant filter rendering, then upgrade from MongoDB.
   const [activityCategories, setActivityCategories] = useState<ActivityCategoryDoc[]>(CATEGORIES);
   const didAutoSelect = useRef(false);
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Build category filter options and styles from API data
   const categoryFilterOptions = useMemo(() => {
@@ -453,29 +457,10 @@ export function HistoryDashboard() {
       .finally(() => setLoading(false));
   }, [globalSlug]);
 
-  // Debounced search — fetch results from API instead of filtering a full list
-  useEffect(() => {
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-
-    const q = query.trim();
-    if (!q || selectedLocation?.name === query) {
-      setSearchResults([]);
-      return;
-    }
-
-    searchTimer.current = setTimeout(() => {
-      setSearchLoading(true);
-      fetch(`/api/py/search?q=${encodeURIComponent(q)}&limit=10`)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => setSearchResults(data?.locations ?? []))
-        .catch(() => setSearchResults([]))
-        .finally(() => setSearchLoading(false));
-    }, 250);
-
-    return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
-  }, [query, selectedLocation?.name]);
-
-  const results = searchResults;
+  // Hide quick matches when the input just shows the picked location's name
+  // (the hook still fetched for it, but re-opening the dropdown for the
+  // selection you just made is noise, matching the previous behavior).
+  const results = selectedLocation?.name === query ? [] : quickResults;
 
   // ── Infinite scroll for table rows (TikTok-style) ───────────────────────
   useEffect(() => {
@@ -497,7 +482,7 @@ export function HistoryDashboard() {
   }, [records.length, visibleRowCount]);
 
   const fetchHistory = useCallback(
-    async (location: WeatherLocation, dayCount: DayRange) => {
+    async (location: SelectedHistoryLocation, dayCount: DayRange) => {
       setLoading(true);
       setError(null);
       setFetched(true);
@@ -522,7 +507,7 @@ export function HistoryDashboard() {
     [],
   );
 
-  const handleSelectLocation = (loc: WeatherLocation) => {
+  const handleSelectLocation = (loc: SelectedHistoryLocation) => {
     setSelectedLocation(loc);
     setQuery(loc.name);
     setShowDropdown(false);

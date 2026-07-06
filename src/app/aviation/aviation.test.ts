@@ -61,11 +61,12 @@ describe("AviationPlanner — Harare-bug fixes", () => {
     expect(plannerSrc).not.toContain("d.weather?.daily");
   });
 
-  it("catches airport-search failures so the spinner never sticks", () => {
-    expect(plannerSrc).toContain("catch");
+  it("surfaces airport-search failures via the shared quick-search hook", () => {
+    // Fetch failures, cancellation, and the loading flag are handled inside
+    // useLocationQuickSearch (which clears loading in finally); this picker
+    // only maps the hook's error flag to its message.
+    expect(plannerSrc).toContain("useLocationQuickSearch({ limit: 8, minLength: 2 })");
     expect(plannerSrc).toContain("searchError");
-    // The search callback must clear loading in finally after catching.
-    expect(plannerSrc).toContain("finally { setLoading(false); }");
   });
 });
 

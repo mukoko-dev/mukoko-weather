@@ -15,6 +15,8 @@ export interface UseLocationQuickSearchOptions {
   debounceMs?: number;
   /** Max results requested from /api/py/search. Default 10. */
   limit?: number;
+  /** Minimum trimmed query length before a request fires. Default 1. */
+  minLength?: number;
 }
 
 export interface UseLocationQuickSearchResult {
@@ -22,6 +24,13 @@ export interface UseLocationQuickSearchResult {
   setQuery: (query: string) => void;
   results: QuickSearchLocation[];
   loading: boolean;
+  /**
+   * True when the most recent search request failed (network error or non-OK
+   * response). Cleared on the next successful search, empty query, or reset.
+   * Callers that surface search failures (e.g. the aviation airport picker)
+   * read this; others can ignore it.
+   */
+  error: boolean;
   /**
    * Synchronously clears both query and results — for "done with this
    * search" moments (a result was picked, or the user cancelled). Clearing
@@ -45,19 +54,24 @@ export interface UseLocationQuickSearchResult {
 export function useLocationQuickSearch({
   debounceMs = 300,
   limit = 10,
+  minLength = 1,
 }: UseLocationQuickSearchOptions = {}): UseLocationQuickSearchResult {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<QuickSearchLocation[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
   const debouncedQuery = useDebounce(query, debounceMs);
 
   useEffect(() => {
     const q = debouncedQuery.trim();
-    if (!q) {
+    if (!q || q.length < minLength) {
       // Deferred via rAF — calling setState synchronously in an effect body
       // trips react-hooks/set-state-in-effect (same pattern used elsewhere,
       // e.g. HomeLanding's auto-GPS effect).
-      const raf = requestAnimationFrame(() => setResults([]));
+      const raf = requestAnimationFrame(() => {
+        setResults([]);
+        setError(false);
+      });
       return () => cancelAnimationFrame(raf);
     }
 
@@ -70,12 +84,19 @@ export function useLocationQuickSearch({
       if (disposed) return;
       setLoading(true);
       fetch(`/api/py/search?q=${encodeURIComponent(q)}&limit=${limit}`, { signal: controller.signal })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (!disposed) setResults(data?.locations ?? []);
+        .then(async (res) => {
+          if (!res.ok) throw new Error(`Search failed (${res.status})`);
+          const data = await res.json();
+          if (!disposed) {
+            setResults(data?.locations ?? []);
+            setError(false);
+          }
         })
         .catch(() => {
-          if (!disposed && !controller.signal.aborted) setResults([]);
+          if (!disposed && !controller.signal.aborted) {
+            setResults([]);
+            setError(true);
+          }
         })
         .finally(() => {
           if (!disposed && !controller.signal.aborted) setLoading(false);
@@ -87,12 +108,13 @@ export function useLocationQuickSearch({
       controller.abort();
       cancelAnimationFrame(raf);
     };
-  }, [debouncedQuery, limit]);
+  }, [debouncedQuery, limit, minLength]);
 
   const reset = useCallback(() => {
     setQuery("");
     setResults([]);
+    setError(false);
   }, []);
 
-  return { query, setQuery, results, loading, reset };
+  return { query, setQuery, results, loading, error, reset };
 }

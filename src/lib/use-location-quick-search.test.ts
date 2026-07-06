@@ -55,12 +55,13 @@ describe("useLocationQuickSearch — module structure", () => {
   });
 
   it("clears results for an empty query without a network request", () => {
-    expect(source).toContain("if (!q) {");
+    expect(source).toContain("if (!q || q.length < minLength) {");
     expect(source).toContain("setResults([])");
   });
 
   it("defers the empty-query clear via requestAnimationFrame (avoids sync setState in effect)", () => {
-    expect(source).toContain("requestAnimationFrame(() => setResults([]))");
+    expect(source).toContain("const raf = requestAnimationFrame(() => {");
+    expect(source).toContain("setResults([]);");
     expect(source).toContain("cancelAnimationFrame(raf)");
   });
 
@@ -69,5 +70,31 @@ describe("useLocationQuickSearch — module structure", () => {
     // guarding a fetch — trips the same lint rule as the empty-query case.
     expect(source).toContain("const raf = requestAnimationFrame(() => {");
     expect(source).toContain("setLoading(true);");
+  });
+});
+
+describe("useLocationQuickSearch — minLength + error surfacing (issue #103)", () => {
+  it("supports a minLength option so short queries never fire a request", () => {
+    expect(source).toContain("minLength = 1");
+    expect(source).toContain("q.length < minLength");
+  });
+
+  it("exposes an error flag: set on failure, cleared on success/empty/reset", () => {
+    expect(source).toContain("error: boolean");
+    expect(source).toContain("setError(true)");
+    // Cleared in the empty-query branch, on success, and in reset().
+    expect(source.split("setError(false)").length - 1).toBeGreaterThanOrEqual(3);
+  });
+
+  it("backs HistoryDashboard and AviationPlanner (no hand-rolled search remains)", () => {
+    const history = readFileSync(resolve(__dirname, "../app/history/HistoryDashboard.tsx"), "utf-8");
+    const aviation = readFileSync(resolve(__dirname, "../app/aviation/AviationPlanner.tsx"), "utf-8");
+    for (const src of [history, aviation]) {
+      expect(src).toContain("useLocationQuickSearch");
+      expect(src).not.toContain("/api/py/search?q=");
+    }
+    // The old HistoryDashboard debounce had no AbortController — a stale slow
+    // response could overwrite newer results. The hook owns cancellation now.
+    expect(history).not.toContain("searchTimer");
   });
 });
