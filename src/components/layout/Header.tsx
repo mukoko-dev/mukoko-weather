@@ -52,6 +52,7 @@ export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
+  const bellButtonRef = useRef<HTMLButtonElement>(null);
   // AuthKit's `useAuth()` is hydrated via `<AuthKitProvider initialAuth={…}>`
   // in the root layout, so this renders with the right state on first paint.
   const { user } = useAuth();
@@ -68,7 +69,8 @@ export function Header() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Dismiss the notifications popover on outside click.
+  // Dismiss the notifications popover on outside click or Escape. Escape also
+  // returns focus to the bell button so keyboard users aren't stranded.
   useEffect(() => {
     if (!notificationsOpen) return;
     const handleClick = (e: MouseEvent) => {
@@ -76,8 +78,18 @@ export function Header() {
         setNotificationsOpen(false);
       }
     };
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setNotificationsOpen(false);
+        bellButtonRef.current?.focus();
+      }
+    };
     document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKeydown);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKeydown);
+    };
   }, [notificationsOpen]);
 
   // Determine which mobile nav item is active based on pathname
@@ -160,9 +172,10 @@ export function Header() {
 
               <div className="relative" ref={notificationsRef}>
                 <button
+                  ref={bellButtonRef}
                   onClick={() => setNotificationsOpen((v) => !v)}
                   aria-label="Notifications"
-                  aria-haspopup="true"
+                  aria-haspopup="dialog"
                   aria-expanded={notificationsOpen}
                   className="bee"
                   type="button"
@@ -171,7 +184,7 @@ export function Header() {
                 </button>
                 {notificationsOpen && (
                   <div
-                    role="menu"
+                    role="dialog"
                     aria-label="Notifications"
                     className="absolute right-0 top-full z-40 mt-2 w-64 rounded-[var(--radius-card)] border border-text-tertiary/10 bg-surface-card p-4 shadow-lg"
                   >

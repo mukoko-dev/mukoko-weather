@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Map as MapLibreGLMap, Marker } from "maplibre-gl";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { resolveColor } from "@/components/ui/chart";
 import {
   WEATHER_OVERLAY_ID,
   buildWeatherOverlaySource,
@@ -155,7 +156,9 @@ export function MapLibreMap({
 
         const restore = () => {
           markerRef.current?.remove();
-          markerRef.current = new MLMarker({ color: "#0047AB" })
+          // Resolved here (not at module scope) so each restore — including the
+          // post-theme-switch one — picks up the current theme's primary token.
+          markerRef.current = new MLMarker({ color: resolveColor("var(--color-primary)") })
             .setLngLat([lon, lat])
             .addTo(map);
           applyWeatherOverlay(map, weatherLayerRef.current);

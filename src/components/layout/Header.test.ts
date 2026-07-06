@@ -84,3 +84,22 @@ describe("Header — mobile nav preserved behaviour", () => {
     expect(source).toContain('aria-label="Mobile navigation"');
   });
 });
+
+describe("Header — notifications popover accessibility (issue #95)", () => {
+  it("announces as a dialog, not a menu (it has no menuitems)", () => {
+    expect(source).toContain('role="dialog"');
+    expect(source).not.toContain('role="menu"');
+    expect(source).toContain('aria-haspopup="dialog"');
+  });
+
+  it("closes on Escape and returns focus to the bell button", () => {
+    expect(source).toContain('e.key === "Escape"');
+    expect(source).toContain("bellButtonRef.current?.focus()");
+    expect(source).toContain("ref={bellButtonRef}");
+  });
+
+  it("cleans up both the outside-click and keydown listeners", () => {
+    expect(source).toContain('document.removeEventListener("mousedown", handleClick)');
+    expect(source).toContain('document.removeEventListener("keydown", handleKeydown)');
+  });
+});

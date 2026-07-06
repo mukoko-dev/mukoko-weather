@@ -55,7 +55,7 @@ export function WeatherLayerPanel({
             aria-label={layer.description}
             title={layer.label}
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-[var(--radius-button)] transition-colors",
+              "flex h-[var(--touch-target-min)] w-[var(--touch-target-min)] items-center justify-center rounded-[var(--radius-button)] transition-colors",
               isActive
                 ? layer.style.badge
                 : "text-text-secondary hover:bg-surface-dim hover:text-text-primary",
@@ -75,7 +75,7 @@ export function WeatherLayerPanel({
         title="No overlay"
         disabled={activeLayer === null}
         className={cn(
-          "flex h-10 w-10 items-center justify-center rounded-[var(--radius-button)] transition-colors",
+          "flex h-[var(--touch-target-min)] w-[var(--touch-target-min)] items-center justify-center rounded-[var(--radius-button)] transition-colors",
           activeLayer === null
             ? "bg-surface-dim text-text-tertiary"
             : "text-text-tertiary hover:bg-surface-dim hover:text-text-secondary",

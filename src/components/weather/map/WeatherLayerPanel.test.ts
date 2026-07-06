@@ -50,3 +50,17 @@ describe("MapDashboard — switcher placement (item 4)", () => {
     expect(dashboardSource).not.toContain("bottom-6 left-3");
   });
 });
+
+describe("WeatherLayerPanel — touch targets (issue #96)", () => {
+  it("sizes every layer button from the touch-target token, not hardcoded h-10/w-10", () => {
+    expect(panelSource).toContain("h-[var(--touch-target-min)]");
+    expect(panelSource).toContain("w-[var(--touch-target-min)]");
+    expect(panelSource).not.toContain("h-10 w-10");
+  });
+
+  it("the duplicate MapLayerSwitcher component is gone (WeatherLayerPanel is canonical)", () => {
+    expect(() =>
+      readFileSync(resolve(__dirname, "MapLayerSwitcher.tsx"), "utf-8"),
+    ).toThrow();
+  });
+});

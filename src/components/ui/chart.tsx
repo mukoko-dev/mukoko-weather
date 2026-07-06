@@ -71,6 +71,7 @@ const CSS_VAR_FALLBACKS_LIGHT: Record<string, string> = {
   "--chart-3": "#2D6A4F",    // Malachite
   "--chart-4": "#B8860B",    // Gold
   "--chart-5": "#C1440E",    // Terracotta
+  "--color-primary": "#0047AB",
   "--color-text-primary": "#141413",
   "--color-text-secondary": "#52524E",
   "--color-text-tertiary": "#8C8B87",
@@ -100,6 +101,7 @@ const CSS_VAR_FALLBACKS_DARK: Record<string, string> = {
   "--chart-3": "#64FFDA",    // Malachite light
   "--chart-4": "#FFD740",    // Gold light
   "--chart-5": "#D4A574",    // Terracotta light
+  "--color-primary": "#00B0FF",
   "--color-text-primary": "#F3F3F0",
   "--color-text-secondary": "#B5B5B0",
   "--color-text-tertiary": "#6B6B66",

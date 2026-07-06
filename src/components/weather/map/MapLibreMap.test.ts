@@ -99,3 +99,20 @@ describe("attribution placement (item 4 — clear the bottom-right for the switc
     expect(source).toContain('"bottom-left"');
   });
 });
+
+describe("marker theme color (issue #97)", () => {
+  it("resolves the marker color from the primary token, not a hardcoded hex", () => {
+    expect(source).toContain('resolveColor("var(--color-primary)")');
+    expect(source).not.toContain('"#0047AB"');
+  });
+
+  it("resolves inside restore() so theme switches recolor the marker", () => {
+    // restore() runs on load AND after each theme-driven setStyle, so the
+    // resolveColor call must live inside it — not at module/mount scope.
+    const restoreBlock = source.slice(
+      source.indexOf("const restore = () => {"),
+      source.indexOf("restoreRef.current = restore"),
+    );
+    expect(restoreBlock).toContain("resolveColor");
+  });
+});
