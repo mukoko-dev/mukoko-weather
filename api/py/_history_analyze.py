@@ -29,6 +29,7 @@ from ._db import (
     ai_prompts_collection,
     history_analysis_collection,
     locations_collection,
+    filter_known_activities,
 )
 from ._circuit_breaker import anthropic_breaker, CircuitOpenError
 
@@ -385,10 +386,12 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
     from ._ai import _get_season
     season = _get_season(country, lat=loc_lat, lon=loc_lon)
 
-    # Build user prompt with stats
+    # Build user prompt with stats — validate against known activity ids
+    # before splicing into the prompt.
+    known_activities = filter_known_activities(body.activities)
     activities_note = (
-        f"\nUser activities: {', '.join(body.activities[:5])}. Focus recommendations on these."
-        if body.activities
+        f"\nUser activities: {', '.join(known_activities[:5])}. Focus recommendations on these."
+        if known_activities
         else ""
     )
 

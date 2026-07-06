@@ -23,6 +23,7 @@ from ._db import (
     get_client_ip,
     get_api_key,
     ai_prompts_collection,
+    filter_known_activities,
 )
 from ._circuit_breaker import anthropic_breaker, CircuitOpenError
 
@@ -195,12 +196,13 @@ async def followup_chat(body: FollowupRequest, request: Request):
 
     messages.append({"role": "user", "content": message})
 
-    # Build system prompt from database
+    # Build system prompt from database — validate activities against known
+    # ids first, since they're spliced directly into the {activities} template.
     system_prompt = _build_followup_system_prompt(
         body.locationName,
         body.locationSlug,
         body.weatherSummary,
-        body.activities,
+        filter_known_activities(body.activities),
         body.season,
     )
 

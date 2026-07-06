@@ -622,6 +622,38 @@ class TestGetWeatherEndpoint:
         assert response.headers.get("x-weather-provider") == "open-meteo"
 
     @pytest.mark.asyncio
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._fetch_open_meteo")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._fetch_tomorrow")
+    @patch("py._weather.get_api_key")
+    @patch("py._weather.tomorrow_breaker")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather._find_nearest_location")
+    async def test_tomorrow_empty_current_falls_back_to_open_meteo(
+        self, mock_nearest, mock_cache, mock_tmrw_breaker, mock_key,
+        mock_fetch_tmrw, mock_om_breaker, mock_fetch_om, mock_set, mock_record,
+    ):
+        """_normalize_tomorrow always returns a non-empty dict (with
+        hourly/daily/insights keys) even when Tomorrow.io's `timelines.hourly`
+        came back empty — `current` itself is `{}` in that case. A plain
+        truthiness check on the returned dict would never fall through to
+        Open-Meteo; this must be treated as a Tomorrow.io failure instead."""
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
+        mock_cache.return_value = None
+        mock_tmrw_breaker.is_allowed = True
+        mock_key.return_value = "fake-key"
+        mock_fetch_tmrw.return_value = {"current": {}, "hourly": {}, "daily": {}, "insights": None}
+        mock_om_breaker.is_allowed = True
+        mock_fetch_om.return_value = {"current": {"temperature_2m": 24}, "hourly": {}, "daily": {}, "insights": None}
+
+        response = await get_weather(-17.83, 31.05)
+        assert response.headers.get("x-weather-provider") == "open-meteo"
+        mock_tmrw_breaker.record_failure.assert_called_once()
+        mock_tmrw_breaker.record_success.assert_not_called()
+
+    @pytest.mark.asyncio
     @patch("py._weather._create_fallback_weather")
     @patch("py._weather._fetch_open_meteo")
     @patch("py._weather.open_meteo_breaker")

@@ -31,6 +31,7 @@ from ._db import (
     get_client_ip,
     get_api_key,
     get_known_tags,
+    filter_known_activities,
     weather_cache_collection,
     activities_collection,
     suitability_rules_collection,
@@ -699,8 +700,10 @@ async def chat(body: ChatRequest, request: Request):
         for m in body.history[:MAX_HISTORY]
     ]
 
-    # Cap activities
-    user_activities = body.activities[:MAX_ACTIVITIES]
+    # Validate against known activity ids, then cap — filter_known_activities
+    # prevents an arbitrary client-supplied string from landing unvalidated
+    # in the system prompt (see _build_chat_system_prompt).
+    user_activities = filter_known_activities(body.activities)[:MAX_ACTIVITIES]
 
     # Build messages for Claude
     messages = []

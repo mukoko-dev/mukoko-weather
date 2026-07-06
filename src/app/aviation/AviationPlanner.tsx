@@ -4,18 +4,12 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useDebounce } from "@/lib/use-debounce";
 import { getIcaoForSlug, getAirportByIcao } from "@/lib/icao-codes";
 import { SearchIcon, MapPinIcon, NavigationIcon } from "@/lib/weather-icons";
+import { getFlightCategoryClass } from "@/lib/flight-category-styles";
 import type { AirportBriefing, BriefingData, MetarObs } from "./AviationBriefingPDF";
 
-// Flight category badge colours match severity tokens
 function FlightCategoryBadge({ fc }: { fc: string }) {
-  const cls =
-    fc === "VFR" ? "bg-severity-low text-white" :
-    fc === "MVFR" ? "bg-primary text-primary-foreground" :
-    fc === "IFR" ? "bg-severity-high text-white" :
-    fc === "LIFR" ? "bg-severity-severe text-white" :
-    "bg-surface-dim text-text-secondary";
   return (
-    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-bold tracking-wide ${cls}`}>
+    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-bold tracking-wide ${getFlightCategoryClass(fc)}`}>
       {fc}
     </span>
   );

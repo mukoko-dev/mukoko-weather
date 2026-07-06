@@ -8,6 +8,7 @@ from datetime import datetime, timezone, timedelta
 from unittest.mock import patch, MagicMock
 
 import pytest
+from fastapi import HTTPException
 
 from py._ai import (
     _get_ttl,
@@ -993,6 +994,15 @@ class TestGetSystemPrompt:
 
 
 class TestGenerateSummary:
+    @pytest.fixture(autouse=True)
+    def _allow_rate_limit(self):
+        # generate_summary now rate-limits like every other AI/write endpoint —
+        # stub it open by default so these tests exercise caching/AI logic,
+        # not the rate limiter. See test_generate_summary_rate_limited below
+        # for the dedicated rate-limit behavior test.
+        with patch("py._ai.check_rate_limit", return_value={"allowed": True, "remaining": 29}):
+            yield
+
     def _make_request(self, temp=25, code=0, activities=None):
         return AISummaryRequest(
             weatherData={
@@ -1010,6 +1020,19 @@ class TestGenerateSummary:
             location=LocationInfo(name="Nairobi", elevation=1795, country="KE", lat=-1.29, lon=36.82),
             activities=activities or [],
         )
+
+    @pytest.mark.asyncio
+    @patch("py._ai.check_rate_limit")
+    async def test_generate_summary_rate_limited(self, mock_rate):
+        """POST /api/py/ai is reachable directly (not just via the
+        authenticated /api/ai/* proxy), and every call writes into the same
+        ai_summaries cache real visitors read — rate-limit it like every
+        other AI/write endpoint."""
+        mock_rate.return_value = {"allowed": False, "remaining": 0}
+        with pytest.raises(HTTPException) as exc_info:
+            await generate_summary(self._make_request())
+        assert exc_info.value.status_code == 429
+        mock_rate.assert_called_once_with("unknown", "ai-summary", 30, 3600)
 
     @pytest.mark.asyncio
     @patch("py._ai._set_cached_summary")
@@ -1172,7 +1195,8 @@ class TestGenerateSummary:
     @patch("py._ai._get_client")
     @patch("py._ai._get_cached_summary")
     @patch("py._ai.get_db")
-    async def test_activities_included_in_prompt(self, mock_db, mock_cache, mock_client,
+    @patch("py._ai.filter_known_activities", side_effect=lambda activities: activities)
+    async def test_activities_included_in_prompt(self, _mock_filter, mock_db, mock_cache, mock_client,
                                                   mock_season, mock_breaker, mock_sys_prompt,
                                                   mock_prompt, mock_set):
         """User activities should appear in the prompt sent to Claude."""

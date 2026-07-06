@@ -728,10 +728,17 @@ async def get_weather(lat: float = -17.83, lon: float = 31.05, models: str | Non
                 tomorrow_key = get_api_key("tomorrow")
                 if tomorrow_key:
                     data = _fetch_tomorrow(lat, lon, tomorrow_key)
-                    if data:
+                    # _normalize_tomorrow always returns a non-empty dict with
+                    # current/hourly/daily/insights keys, even when Tomorrow.io's
+                    # `timelines.hourly` came back empty (coverage gap, partial
+                    # quota response) — `current` itself is `{}` in that case, so
+                    # a plain truthiness check on `data` never falls through to
+                    # Open-Meteo. Require a non-empty `current` block too.
+                    if data and data.get("current"):
                         source = "tomorrow"
                         tomorrow_breaker.record_success()
                     else:
+                        data = None
                         tomorrow_breaker.record_failure()
             except Exception:
                 tomorrow_breaker.record_failure()

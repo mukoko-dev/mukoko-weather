@@ -648,8 +648,9 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze.locations_collection")
     @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
+    @patch("py._history_analyze.filter_known_activities", side_effect=lambda activities: activities)
     async def test_activities_included_in_user_prompt(
-        self, _mock_ip, _mock_rate, mock_loc, mock_db,
+        self, _mock_filter, _mock_ip, _mock_rate, mock_loc, mock_db,
         mock_cache_coll, _mock_prompt_get, mock_client, mock_breaker,
     ):
         """User activities should be included in the AI prompt when provided."""

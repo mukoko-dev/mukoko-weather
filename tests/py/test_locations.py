@@ -648,6 +648,15 @@ class TestGeoLookup:
     only to placesGeo via upsert_placesgeo_city().
     """
 
+    @pytest.fixture(autouse=True)
+    def _allow_rate_limit(self):
+        # autoCreate=True now rate-limits like /api/py/locations/add's
+        # coordinates mode — stub it open by default so these tests exercise
+        # geocoding/dedup logic, not the rate limiter. Tests calling without
+        # a request rely on the "unknown" IP fallback (see geo_lookup).
+        with patch("py._locations.check_rate_limit", return_value={"allowed": True, "remaining": 4}):
+            yield
+
     @pytest.mark.asyncio
     @patch("py._locations._reverse_geocode")
     @patch("py._locations.find_nearest_location")
@@ -681,6 +690,29 @@ class TestGeoLookup:
             await geo_lookup(-17.83, 31.05)
 
         assert mock_nearest.call_args.kwargs["max_km"] <= 200
+
+    @pytest.mark.asyncio
+    @patch("py._locations.check_rate_limit")
+    async def test_autocreate_rate_limited(self, mock_rate):
+        """autoCreate=true does the same expensive reverse-geocode + DB-write
+        work as POST /api/py/locations/add's coordinates mode, so it must be
+        rate-limited the same way (429 when the bucket is exhausted)."""
+        mock_rate.return_value = {"allowed": False, "remaining": 0}
+        with pytest.raises(HTTPException) as exc_info:
+            await geo_lookup(-17.83, 31.05, autoCreate=True)
+        assert exc_info.value.status_code == 429
+        mock_rate.assert_called_once_with("unknown", "location-create", 5, 3600)
+
+    @pytest.mark.asyncio
+    @patch("py._locations.check_rate_limit")
+    @patch("py._locations.find_nearest_location")
+    async def test_find_only_path_is_not_rate_limited(self, mock_nearest, mock_rate):
+        """The cheap find-only path (autoCreate=false, e.g. IP-geo) must stay
+        unlimited — only auto-create does expensive work worth throttling."""
+        mock_nearest.return_value = {"slug": "harare", "name": "Harare", "country": "ZW"}
+        result = await geo_lookup(-17.83, 31.05, autoCreate=False)
+        assert result["nearest"]["slug"] == "harare"
+        mock_rate.assert_not_called()
 
     @pytest.mark.asyncio
     @patch("py._locations._find_duplicate")
@@ -1980,6 +2012,11 @@ class TestMatchNearbyPoi:
 
 
 class TestGeoLookupPoiRefinement:
+    @pytest.fixture(autouse=True)
+    def _allow_rate_limit(self):
+        with patch("py._locations.check_rate_limit", return_value={"allowed": True, "remaining": 4}):
+            yield
+
     @pytest.mark.asyncio
     @patch("py._locations.upsert_placesgeo_city")
     @patch("py._locations._enrich_location_with_ai")

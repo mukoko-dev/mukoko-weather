@@ -15,10 +15,10 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import anthropic
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ._db import get_db, get_api_key
+from ._db import get_db, get_api_key, get_client_ip, check_rate_limit, filter_known_activities
 from ._circuit_breaker import anthropic_breaker, CircuitOpenError
 
 logger = logging.getLogger(__name__)
@@ -458,7 +458,7 @@ class AISummaryRequest(BaseModel):
 
 
 @router.post("/api/py/ai")
-async def generate_summary(body: AISummaryRequest):
+async def generate_summary(body: AISummaryRequest, request: Request = None):
     """
     POST /api/py/ai
 
@@ -467,10 +467,22 @@ async def generate_summary(body: AISummaryRequest):
     """
     weather_data = body.weatherData
     location = body.location
-    user_activities = body.activities
+    # Validate against known activity ids before it's spliced into the
+    # system prompt below (activities_line / tip).
+    user_activities = filter_known_activities(body.activities)
 
     if not weather_data or not location:
         raise HTTPException(status_code=400, detail="Missing weather data or location")
+
+    # This route is reachable directly (not just via the authenticated
+    # /api/ai/* Next.js proxy — see vercel.json's blanket /api/py/(.*) rewrite),
+    # and every request here is an unauthenticated cache write into the same
+    # ai_summaries doc real visitors to the location page read. Rate-limit it
+    # like every other write/AI endpoint to bound abuse.
+    ip = (get_client_ip(request) if request is not None else None) or "unknown"
+    rate = check_rate_limit(ip, "ai-summary", 30, 3600)
+    if not rate["allowed"]:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
 
     current_temp = weather_data.get("current", {}).get("temperature_2m", 0) or 0
     current_code = weather_data.get("current", {}).get("weather_code", 0) or 0

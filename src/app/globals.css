@@ -212,6 +212,12 @@
   --color-severity-severe: #B3261E;
   --color-severity-extreme: #7F0000;
   --color-severity-cold: #0047AB;
+  /* Foreground for text/badges rendered ON a severity color background.
+     Light-mode severity colors are dark, so foreground is white; dark-mode
+     severity colors are bright, so foreground is near-black (see the
+     [data-theme="dark"] block below) — same per-theme pattern as the
+     --mineral-*-fg tokens. */
+  --color-severity-fg: #FFFFFF;
 }
 
 [data-theme="dark"] {
@@ -351,6 +357,9 @@
   --color-severity-severe: #FF5252;
   --color-severity-extreme: #FF1744;
   --color-severity-cold: #42A5F5;
+  /* Dark-mode severity colors are bright — near-black foreground keeps
+     badge text readable (light-mode counterpart is white, see :root). */
+  --color-severity-fg: #0A0A0A;
 
   /* Minerals Stripe — dark mode (doctrine v4.1.0 dark values) */
   --mineral-tanzanite: #B388FF;
@@ -444,6 +453,7 @@
   --color-severity-severe: var(--color-severity-severe);
   --color-severity-extreme: var(--color-severity-extreme);
   --color-severity-cold: var(--color-severity-cold);
+  --color-severity-fg: var(--color-severity-fg);
   --color-map-overlay: var(--color-map-overlay);
   --color-map-attribution: var(--color-map-attribution);
   --color-bmc: var(--color-bmc);

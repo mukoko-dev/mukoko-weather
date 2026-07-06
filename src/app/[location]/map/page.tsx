@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getLocationFromDb } from "@/lib/db";
+import { safeJsonLd } from "@/lib/json-ld";
 import { MapDashboard } from "./MapDashboard";
 
 export const dynamic = "force-dynamic";
@@ -67,7 +68,7 @@ export default async function MapPage({
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify([breadcrumbSchema]) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd([breadcrumbSchema]) }}
       />
       <MapDashboard location={location} />
     </>

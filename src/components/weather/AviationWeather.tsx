@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getAirportByIcao } from "@/lib/icao-codes";
+import { getFlightCategoryClass } from "@/lib/flight-category-styles";
 
 interface CloudLayer {
   cover: string;
@@ -48,13 +49,6 @@ interface Props {
    */
   nearby?: NearbyAirport[];
 }
-
-const FLIGHT_CATEGORY_STYLES: Record<string, string> = {
-  VFR: "bg-severity-low text-white",
-  MVFR: "bg-primary text-primary-foreground",
-  IFR: "bg-severity-high text-white",
-  LIFR: "bg-severity-severe text-white",
-};
 
 function formatWind(obs: MetarObs): string {
   if (obs.wind_variable) return `Variable ${obs.wind_speed ?? 0}kt`;
@@ -280,7 +274,7 @@ export function AviationWeather({ slug: _slug, icao, nearby }: Props) {
                   Clouds &amp; Ceiling
                 </h3>
                 <span
-                  className={`inline-flex items-center justify-center rounded-[var(--radius-input)] px-2 py-0.5 text-xs font-bold min-w-[3rem] ${FLIGHT_CATEGORY_STYLES[latest.flight_category] ?? "bg-surface-dim text-text-secondary"}`}
+                  className={`inline-flex items-center justify-center rounded-[var(--radius-input)] px-2 py-0.5 text-xs font-bold min-w-[3rem] ${getFlightCategoryClass(latest.flight_category)}`}
                   aria-label={`Flight category: ${latest.flight_category}`}
                 >
                   {latest.flight_category}
@@ -353,7 +347,7 @@ export function AviationWeather({ slug: _slug, icao, nearby }: Props) {
                       <td className="px-2 py-2 text-text-secondary whitespace-nowrap">{formatTime(obs.time)}</td>
                       <td className="px-2 py-2">
                         <span
-                          className={`inline-flex items-center justify-center rounded-[var(--radius-input)] px-2 py-0.5 text-xs font-bold min-w-[3rem] ${FLIGHT_CATEGORY_STYLES[obs.flight_category] ?? "bg-surface-dim text-text-secondary"}`}
+                          className={`inline-flex items-center justify-center rounded-[var(--radius-input)] px-2 py-0.5 text-xs font-bold min-w-[3rem] ${getFlightCategoryClass(obs.flight_category)}`}
                           aria-label={`Flight category: ${obs.flight_category}`}
                         >
                           {obs.flight_category}

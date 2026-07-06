@@ -271,3 +271,25 @@ describe("[location]/page.tsx — breadcrumb and JSON-LD schemas", () => {
     expect(pageSource).toContain("Question");
   });
 });
+
+describe("JSON-LD script tags use safeJsonLd, never raw JSON.stringify", () => {
+  // location.name is Nominatim-derived and therefore attacker-influenceable
+  // (see src/lib/json-ld.ts) — a value containing "</script>" would break out
+  // of the script element with a raw JSON.stringify. Every page that injects
+  // location-derived JSON-LD via dangerouslySetInnerHTML must use safeJsonLd.
+  const locationPages = [
+    "[location]/page.tsx",
+    "[location]/atmosphere/page.tsx",
+    "[location]/forecast/page.tsx",
+    "[location]/map/page.tsx",
+  ];
+
+  for (const file of locationPages) {
+    it(`${file} imports and uses safeJsonLd for its script tag(s)`, () => {
+      const src = readFileSync(resolve(__dirname, file), "utf-8");
+      expect(src).toContain('from "@/lib/json-ld"');
+      expect(src).toContain("safeJsonLd(");
+      expect(src).not.toMatch(/dangerouslySetInnerHTML=\{\{\s*__html:\s*JSON\.stringify/);
+    });
+  }
+});

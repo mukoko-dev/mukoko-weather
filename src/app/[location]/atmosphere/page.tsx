@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { checkFrostRisk, createFallbackWeather } from "@/lib/weather";
 import { getWeatherForLocation, getLocationFromDb, getSeasonForDate } from "@/lib/db";
+import { safeJsonLd } from "@/lib/json-ld";
 import { AtmosphereDashboard } from "./AtmosphereDashboard";
 
 export const dynamic = "force-dynamic";
@@ -90,7 +91,7 @@ export default async function AtmospherePage({
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify([breadcrumbSchema]) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd([breadcrumbSchema]) }}
       />
       <AtmosphereDashboard
         weather={weather}

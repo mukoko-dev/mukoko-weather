@@ -26,12 +26,14 @@ describe("AviationPlanner", () => {
     expect(plannerSrc).toContain("Download PDF Briefing");
     expect(plannerSrc).toContain("@react-pdf/renderer");
   });
-  it("uses flight category badges", () => {
+  it("uses flight category badges via the shared flight-category-styles module", () => {
+    // VFR/MVFR/IFR/LIFR color mapping is centralized in
+    // @/lib/flight-category-styles (shared with AviationWeather) so it can't
+    // drift between the two — see flight-category-styles.test.ts for the
+    // category list and color-mapping assertions.
     expect(plannerSrc).toContain("FlightCategoryBadge");
-    expect(plannerSrc).toContain("VFR");
-    expect(plannerSrc).toContain("MVFR");
-    expect(plannerSrc).toContain("IFR");
-    expect(plannerSrc).toContain("LIFR");
+    expect(plannerSrc).toContain("getFlightCategoryClass");
+    expect(plannerSrc).toContain("@/lib/flight-category-styles");
   });
   it("fetches METAR from API", () => {
     expect(plannerSrc).toContain("/api/py/metar");

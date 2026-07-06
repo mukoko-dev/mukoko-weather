@@ -214,6 +214,14 @@ class TestCreateDevice:
         yield
         mod._indexes_ensured = False
 
+    @pytest.fixture(autouse=True)
+    def _allow_rate_limit(self):
+        # Creating without a deviceId now rate-limits (unbounded doc creation
+        # otherwise) — stub it open so these tests exercise validation/create
+        # logic, not the rate limiter. See test_create_without_device_id_rate_limited.
+        with patch("py._devices.check_rate_limit", return_value={"allowed": True, "remaining": 19}):
+            yield
+
     @patch("py._devices.device_profiles_collection")
     @pytest.mark.asyncio
     async def test_generates_uuid_if_none_provided(self, mock_coll):
@@ -305,6 +313,31 @@ class TestCreateDevice:
         with pytest.raises(HTTPException) as exc_info:
             await create_device(body)
         assert exc_info.value.status_code == 409
+
+    @patch("py._devices.check_rate_limit")
+    @pytest.mark.asyncio
+    async def test_create_without_device_id_rate_limited(self, mock_rate):
+        """Omitting deviceId always inserts a new doc (unbounded creation) —
+        must be rate-limited like every other create endpoint."""
+        mock_rate.return_value = {"allowed": False, "remaining": 0}
+        body = CreateDeviceRequest(preferences=Preferences())
+        with pytest.raises(HTTPException) as exc_info:
+            await create_device(body)
+        assert exc_info.value.status_code == 429
+        mock_rate.assert_called_once_with("unknown", "device-create", 20, 3600)
+
+    @patch("py._devices.device_profiles_collection")
+    @patch("py._devices.check_rate_limit")
+    @pytest.mark.asyncio
+    async def test_create_with_device_id_is_not_rate_limited(self, mock_rate, mock_coll):
+        """An existing/caller-supplied deviceId is idempotent (see
+        test_uses_provided_device_id) so it must skip the rate limiter
+        entirely — it's not the unbounded-creation path."""
+        mock_coll.return_value.insert_one.return_value = None
+        mock_coll.return_value.create_index.return_value = None
+        body = CreateDeviceRequest(deviceId="my-custom-id")
+        await create_device(body)
+        mock_rate.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

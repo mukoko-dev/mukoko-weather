@@ -663,6 +663,7 @@ async def geo_lookup(
     lat: float,
     lon: float,
     autoCreate: bool = False,
+    request: Request = None,
 ):
     """
     GET /api/py/geo?lat=-17.83&lon=31.05&autoCreate=true
@@ -670,6 +671,16 @@ async def geo_lookup(
     Find nearest location or auto-create one via reverse geocoding.
     """
     try:
+        # Rate limit auto-create only — it's the expensive path (reverse
+        # geocode + elevation lookup + DB write), same cost as
+        # POST /api/py/locations/add's coordinates mode, which this mirrors.
+        # The find-only path stays unlimited since it's a cheap read.
+        if autoCreate:
+            ip = (get_client_ip(request) if request is not None else None) or "unknown"
+            rate = check_rate_limit(ip, "location-create", 5, 3600)
+            if not rate["allowed"]:
+                raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+
         # There is deliberately NO distance-based nearest-snap for GPS.
         # Explicit "use my current location" (autoCreate=true) must resolve to
         # the user's EXACT reverse-geocoded place — a road, shop, address, or
