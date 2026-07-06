@@ -11,6 +11,15 @@ import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
 
 interface Props {
   detectedLocation: WeatherLocation | null;
+  /**
+   * True when the server resolved a `lastLocation` cookie to a real
+   * location — a known returning visitor, not a first-time one. Drives
+   * which pipeline runs: first-time visitors get the full auto-GPS prompt;
+   * returning visitors see their cached location immediately, with a silent
+   * GPS recheck racing in the background (see the "silent travel recheck"
+   * effect below).
+   */
+  isReturningUser: boolean;
 }
 
 type GpsState = "idle" | "detecting" | "denied" | "error";
@@ -25,6 +34,30 @@ const REDIRECT_DELAY_MS = 2000;
  */
 const GPS_AUTOPROMPT_KEY = "mukoko-gps-autoprompted";
 
+// Silent travel recheck: a short timeout (never meaningfully delays the
+// visible countdown) paired with a generous cache window (a returning
+// visitor's device likely already has a recent-enough GPS fix), so this is
+// fast in the common case and never blocks the redirect if GPS is slow.
+const SILENT_RECHECK_TIMEOUT_MS = 3000;
+const SILENT_RECHECK_MAX_AGE_MS = 300000;
+
+/**
+ * True when client-side state — independent of the server's lastLocation
+ * cookie check — indicates this is a returning visitor: the one-time
+ * auto-GPS-prompt flag, or existing onboarding/location state. Used as a
+ * fallback signal for when cookies are blocked or were cleared but other
+ * persisted state survives.
+ */
+function isKnownReturningVisitor(): boolean {
+  try {
+    if (localStorage.getItem(GPS_AUTOPROMPT_KEY)) return true;
+  } catch {
+    return false;
+  }
+  const s = useAppStore.getState();
+  return Boolean(s.hasOnboarded || s.savedLocations.length > 0 || s.selectedLocation);
+}
+
 /**
  * Home landing — GPS-first location pipeline (mirrors Apple/Google Weather):
  *
@@ -34,18 +67,21 @@ const GPS_AUTOPROMPT_KEY = "mukoko-gps-autoprompted";
  *      • success/created → replace to the precise GPS location.
  *      • denied / unavailable / error → gracefully fall back to the IP-detected
  *        location countdown (if any), else the city chooser. Never hangs.
- * 2. IP geo detected (server-side, no prompt): weather scene + "Taking you to
- *    [City]…" countdown — used as the fallback when GPS is unavailable.
- * 3. "Use my current location" button: explicit browser GPS (manual re-try).
- * 4. "Browse all locations": search / explore.
- *
- * Returning users are never re-prompted: a returning visitor is detected via
- * the one-time GPS_AUTOPROMPT_KEY flag or existing store state (hasOnboarded /
- * saved / selected location). The middleware/`lastLocation` cookie fast path
- * already redirects most returning users before this component ever renders.
+ * 2. Returning visitor (cached lastLocation) → show that location's "Taking
+ *    you to [City]…" countdown immediately (no wait), while a SILENT,
+ *    fast-timeout GPS recheck races in the background. If it resolves to a
+ *    *different* location before the countdown fires — the traveling case —
+ *    the redirect target swaps to the new city. GPS denial/failure/timeout,
+ *    or a match with the cached location, leaves the countdown untouched.
+ * 3. IP geo detected (server-side, no prompt) with no cached location either:
+ *    same countdown UI, used as the fallback for a first-time visitor whose
+ *    GPS attempt failed.
+ * 4. "Use my current location" button: explicit browser GPS (manual re-try).
+ * 5. "Browse all locations": search / explore.
  */
-export function HomeLanding({ detectedLocation }: Props) {
+export function HomeLanding({ detectedLocation, isReturningUser }: Props) {
   const router = useRouter();
+  const [effectiveLocation, setEffectiveLocation] = useState(detectedLocation);
   const [countdown, setCountdown] = useState(Math.ceil(REDIRECT_DELAY_MS / 1000));
   const [gpsState, setGpsState] = useState<GpsState>("idle");
   // `cancelled` participates in render (the Stage 2 branch below short-circuits
@@ -60,23 +96,11 @@ export function HomeLanding({ detectedLocation }: Props) {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Returning-user guards — never nag on every load.
-    let shouldAutoDetect = true;
-    try {
-      if (localStorage.getItem(GPS_AUTOPROMPT_KEY)) shouldAutoDetect = false;
-    } catch {
-      // Storage blocked (private mode) — skip auto-prompt rather than risk nagging.
-      shouldAutoDetect = false;
-    }
-    // Best-effort store check (may still be hydrating; the flag above is the
-    // authoritative one-time gate). A user who has onboarded or already has a
-    // saved/selected location is clearly returning.
-    const s = useAppStore.getState();
-    if (s.hasOnboarded || s.savedLocations.length > 0 || s.selectedLocation) {
-      shouldAutoDetect = false;
-    }
-
-    if (!shouldAutoDetect) return;
+    // Returning-user guards — never nag on every load. isReturningUser (the
+    // server-resolved lastLocation cookie) is authoritative when present;
+    // isKnownReturningVisitor() catches the case where cookies are blocked or
+    // were cleared but other persisted state survives.
+    if (isReturningUser || isKnownReturningVisitor()) return;
 
     let disposed = false;
 
@@ -124,14 +148,53 @@ export function HomeLanding({ detectedLocation }: Props) {
       disposed = true;
       cancelAnimationFrame(raf);
     };
-  }, [router, detectedLocation]);
+  }, [router, detectedLocation, isReturningUser]);
 
-  // ── IP-geo auto-redirect countdown (fallback when GPS is unavailable) ──────
+  // ── Silent travel recheck for returning visitors ─────────────────────────
+  // Returning visitors skip the auto-GPS-prompt flow above and see their
+  // cached location's countdown immediately. This silently re-confirms via a
+  // fast, cache-friendly GPS check in the background — if the visitor has
+  // travelled somewhere new since their last visit, the redirect target
+  // swaps before the countdown fires. Compares against the original cached
+  // `detectedLocation` (not `effectiveLocation`) so this only ever runs once
+  // per mount, never re-triggering itself after it swaps the target.
   useEffect(() => {
-    if (!detectedLocation || cancelled) return;
+    if (typeof window === "undefined") return;
+    if (!isReturningUser && !isKnownReturningVisitor()) return;
+    if (!detectedLocation) return;
+
+    let disposed = false;
+    detectUserLocation({
+      autoCreate: false,
+      timeoutMs: SILENT_RECHECK_TIMEOUT_MS,
+      maximumAgeMs: SILENT_RECHECK_MAX_AGE_MS,
+    })
+      .then((result) => {
+        if (disposed) return;
+        if (
+          (result.status === "success" || result.status === "created") &&
+          result.location &&
+          result.location.slug !== detectedLocation.slug
+        ) {
+          setEffectiveLocation(result.location);
+        }
+      })
+      .catch(() => {
+        // Silent by design — GPS failure/denial/timeout leaves the cached
+        // location's countdown completely untouched.
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [isReturningUser, detectedLocation]);
+
+  // ── Location auto-redirect countdown (cached lastLocation or IP-geo) ──────
+  useEffect(() => {
+    if (!effectiveLocation || cancelled) return;
 
     const redirectTimer = setTimeout(() => {
-      router.replace(`/${detectedLocation.slug}`);
+      router.replace(`/${effectiveLocation.slug}`);
     }, REDIRECT_DELAY_MS);
 
     const countdownInterval = setInterval(() => {
@@ -142,7 +205,7 @@ export function HomeLanding({ detectedLocation }: Props) {
       clearTimeout(redirectTimer);
       clearInterval(countdownInterval);
     };
-  }, [detectedLocation, router, cancelled]);
+  }, [effectiveLocation, router, cancelled]);
 
   const handleCancel = () => { setCancelled(true); };
 
@@ -175,12 +238,12 @@ export function HomeLanding({ detectedLocation }: Props) {
     );
   }
 
-  // ── Stage 2: IP geo detected — full weather scene with countdown ──
-  if (detectedLocation && !cancelled) {
+  // ── Stage 2: location detected (cached lastLocation or IP geo) — full weather scene with countdown ──
+  if (effectiveLocation && !cancelled) {
     return (
       <WeatherLoadingScene
-        slug={detectedLocation.slug}
-        statusText={`Taking you to ${detectedLocation.name}…`}
+        slug={effectiveLocation.slug}
+        statusText={`Taking you to ${effectiveLocation.name}…`}
         action={
           <div className="flex flex-col items-center gap-3">
             <div

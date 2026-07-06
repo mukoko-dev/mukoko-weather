@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
-import { redirect } from "next/navigation";
 import { HomeLanding } from "./HomeLanding";
 import { getLocationFromDb } from "@/lib/db";
 import type { WeatherLocation } from "@/lib/locations";
@@ -33,65 +32,79 @@ export const metadata: Metadata = {
 };
 
 /**
- * Home page — server-side IP geo detection with instant returning-user redirect.
+ * Home page — resolves the visitor's starting location server-side, then
+ * hands off to HomeLanding for the GPS-first client pipeline.
  *
  * Flow:
- * 1. Middleware already handles returning users (lastLocation cookie → 307 redirect).
- *    This belt-and-suspenders check handles any deployment without the edge layer.
- * 2. Reads Vercel's x-vercel-ip-latitude / x-vercel-ip-longitude headers (injected
- *    automatically on all Vercel serverless requests).
- * 3. Looks up the nearest location via /api/py/geo.
- * 4. Passes detectedLocation to HomeLanding which shows the city + 2s countdown,
- *    or a "Where are you?" chooser when detection is unavailable.
+ * 1. lastLocation cookie present and resolves to a real location → returning
+ *    visitor. That location is passed to HomeLanding as the cached default —
+ *    shown immediately, no redirect happens here. HomeLanding silently
+ *    reconfirms via GPS in the background and swaps the redirect target if
+ *    the visitor has travelled since their last visit (see its "silent
+ *    travel recheck" effect).
+ * 2. No usable cookie (first visit, cleared cookies, stale/deleted slug) →
+ *    falls back to IP geo (Vercel's x-vercel-ip-latitude/longitude headers)
+ *    as a rough hint while HomeLanding runs its full auto-GPS-prompt flow.
  */
 export default async function Home() {
-  // Belt-and-suspenders redirect for returning users (middleware handles this too).
-  // Only redirect when the cookie slug both looks valid AND actually resolves to a
-  // real location. A stale cookie pointing at a deleted/never-existent slug would
-  // otherwise ping-pong: / → /<deadslug> → not-found → "go home" → / → … . Verifying
-  // resolution first breaks that loop and lets us fall through to fresh detection.
+  // Only trust a cookie whose slug both looks valid AND actually resolves to
+  // a real location. A stale cookie pointing at a deleted/never-existent slug
+  // would otherwise strand the visitor on a "Location Unavailable" page every
+  // time — falling through to fresh detection breaks that loop.
   const cookieStore = await cookies();
   const lastLocation = cookieStore.get("lastLocation")?.value;
+
+  let detectedLocation: WeatherLocation | null = null;
+  let isReturningUser = false;
+
   if (lastLocation && SLUG_RE.test(lastLocation)) {
     const resolved = await getLocationFromDb(lastLocation).catch(() => null);
     if (resolved) {
-      redirect(`/${lastLocation}`);
+      detectedLocation = resolved;
+      isReturningUser = true;
     }
     // Unresolvable cookie — ignore it and continue to IP-geo detection below.
   }
 
-  // Read Vercel's automatic IP geolocation headers
-  const headersList = await headers();
-  const lat = headersList.get("x-vercel-ip-latitude");
-  const lon = headersList.get("x-vercel-ip-longitude");
+  // Only fall back to IP geo when there's no usable cached location — for a
+  // returning visitor we already have a location to show, and HomeLanding's
+  // silent GPS recheck is the mechanism that catches travel, not IP geo.
+  if (!detectedLocation) {
+    const headersList = await headers();
+    const lat = headersList.get("x-vercel-ip-latitude");
+    const lon = headersList.get("x-vercel-ip-longitude");
 
-  let detectedLocation: WeatherLocation | null = null;
-
-  if (lat && lon) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), GEO_FETCH_TIMEOUT_MS);
-    try {
-      // autoCreate=false: IP geolocation is FIND-ONLY. Vercel's IP headers give a
-      // coarse ISP/datacentre-centroid position, so creating a location from them
-      // would seed inaccurate, fine-grained entries. Auto-creation only happens on
-      // explicit user GPS (HomeLanding's detectUserLocation({ autoCreate: true })).
-      // Here we just resolve the nearest existing location for the countdown card.
-      const res = await fetch(
-        `${APP_URL}/api/py/geo?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&autoCreate=false`,
-        { cache: "no-store", signal: controller.signal },
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.nearest) {
-          detectedLocation = data.nearest as WeatherLocation;
+    if (lat && lon) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), GEO_FETCH_TIMEOUT_MS);
+      try {
+        // autoCreate=false: IP geolocation is FIND-ONLY. Vercel's IP headers give a
+        // coarse ISP/datacentre-centroid position, so creating a location from them
+        // would seed inaccurate, fine-grained entries. Auto-creation only happens on
+        // explicit user GPS (HomeLanding's detectUserLocation({ autoCreate: true })).
+        // Here we just resolve the nearest existing location for the countdown card.
+        const res = await fetch(
+          `${APP_URL}/api/py/geo?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&autoCreate=false`,
+          { cache: "no-store", signal: controller.signal },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.nearest) {
+            detectedLocation = data.nearest as WeatherLocation;
+          }
         }
+      } catch {
+        // Geo lookup unavailable or timed out — HomeLanding shows the city-chooser fallback
+      } finally {
+        clearTimeout(timeout);
       }
-    } catch {
-      // Geo lookup unavailable or timed out — HomeLanding shows the city-chooser fallback
-    } finally {
-      clearTimeout(timeout);
     }
   }
 
-  return <HomeLanding detectedLocation={detectedLocation} />;
+  return (
+    <HomeLanding
+      detectedLocation={detectedLocation}
+      isReturningUser={isReturningUser}
+    />
+  );
 }

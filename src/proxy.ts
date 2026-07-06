@@ -12,17 +12,21 @@ const KNOWN_ROUTES = new Set([
 const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 
 /**
- * Edge middleware for instant location-aware routing + WorkOS AuthKit session.
+ * Edge middleware — WorkOS AuthKit session refresh + lastLocation cookie bookkeeping.
  *
- * Three responsibilities, composed in order:
+ * Two responsibilities:
  * 1. Refresh the WorkOS session via `authkit(request)` — runs every request
  *    so `withAuth()` on the server side always sees a fresh session.
- * 2. Home page (GET /): returning users with a lastLocation cookie are
- *    redirected to their last location at the edge (still carrying AuthKit
- *    headers so the redirect doesn't drop the session).
- * 3. Location pages (GET /{slug}/*): set the lastLocation cookie on the
- *    response so the next home visit redirects them back without any geo
- *    lookup.
+ * 2. Location pages (GET /{slug}/*): set the lastLocation cookie on the
+ *    response so the home page has a cached fallback location to show.
+ *
+ * NOTE: the home page (GET /) is deliberately NOT redirected here. Device GPS
+ * only exists in the browser — the edge has no way to check whether a
+ * returning visitor has travelled since their last visit. An instant
+ * edge redirect straight to the cached lastLocation would skip that check
+ * entirely and strand travelers on their old city every time they open the
+ * app. That GPS recheck happens client-side instead, in HomeLanding's
+ * "silent travel recheck" effect — see src/app/HomeLanding.tsx.
  */
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -31,17 +35,6 @@ export default async function proxy(request: NextRequest) {
   // are fresh. The returned headers must be merged onto every outbound
   // response via handleAuthkitProxy.
   const { headers } = await authkit(request);
-
-  // ── Home page: instant returning-user redirect ───────────────────────────
-  if (pathname === "/") {
-    const lastLocation = request.cookies.get("lastLocation")?.value;
-    if (lastLocation && SLUG_RE.test(lastLocation)) {
-      return handleAuthkitProxy(request, headers, {
-        redirect: new URL(`/${lastLocation}`, request.url),
-        redirectStatus: 307,
-      });
-    }
-  }
 
   // ── Default response with AuthKit session cookies attached ───────────────
   const response = handleAuthkitProxy(request, headers);
