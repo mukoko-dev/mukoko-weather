@@ -2,12 +2,14 @@
 
 import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
-import { MapPinIcon, ClockIcon, SparklesIcon, LayersIcon, BellIcon, UserIcon } from "@/lib/weather-icons";
+import { MapPinIcon, ClockIcon, SparklesIcon, LayersIcon, BellIcon, UserIcon, NavigationIcon } from "@/lib/weather-icons";
+import { Spinner } from "@/components/ui/spinner";
 import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { trackEvent } from "@/lib/analytics";
 import { initialsFor, type PublicUser } from "@/lib/user-display";
 
 // Code-split: MyWeatherModal imports LOCATIONS (154 items), ACTIVITIES (20 items),
@@ -47,9 +49,12 @@ export function Header() {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
   const myWeatherOpen = useAppStore((s) => s.myWeatherOpen);
   const selectedLocation = useAppStore((s) => s.selectedLocation);
+  const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const reportModalOpen = useAppStore((s) => s.reportModalOpen);
   const pathname = usePathname();
+  const router = useRouter();
   const [isScrolled, setIsScrolled] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
   const bellButtonRef = useRef<HTMLButtonElement>(null);
@@ -91,6 +96,39 @@ export function Header() {
       document.removeEventListener("keydown", handleKeydown);
     };
   }, [notificationsOpen]);
+
+  // Center mobile-nav action: jump straight to the weather for wherever the
+  // user is right now (same GPS → /api/py/geo flow as My Weather's "Use
+  // current location" button, autoCreate included). On denial or failure the
+  // My Weather modal opens instead — its Location tab has search plus a
+  // geolocation retry with proper error copy, so the user is never stranded.
+  const handleMyLocation = async () => {
+    if (locating) return;
+    setLocating(true);
+    try {
+      // Deferred import — keeps geolocation out of the initial header bundle
+      // (same reasoning as the lazy MyWeatherModal above).
+      const { detectUserLocation } = await import("@/lib/geolocation");
+      const result = await detectUserLocation({ autoCreate: true });
+      trackEvent("geolocation_result", {
+        status: result.status,
+        location: result.location?.slug,
+      });
+      if ((result.status === "success" || result.status === "created") && result.location) {
+        trackEvent("location_changed", {
+          from: selectedLocation,
+          to: result.location.slug,
+          method: "geolocation",
+        });
+        setSelectedLocation(result.location.slug);
+        router.push(`/${result.location.slug}`);
+      } else {
+        openMyWeather();
+      }
+    } finally {
+      setLocating(false);
+    }
+  };
 
   // Determine which mobile nav item is active based on pathname
   const isExplore = pathname === "/explore" || pathname.startsWith("/explore/");
@@ -226,7 +264,8 @@ export function Header() {
         </nav>
       </header>
 
-      {/* Mobile bottom navigation — floating glass pill, 4 items */}
+      {/* Mobile bottom navigation — floating glass pill, 5 items with the */}
+      {/* My Location GPS action in the centre slot. */}
       {/* (Shamwari paused as a standalone destination — see FLAGS.shamwari_chat) */}
       {/* Detached from the edges (floats above the safe-area) so mobile browser */}
       {/* chrome never obscures it; stays put on scroll because it's fixed. */}
@@ -276,6 +315,21 @@ export function Header() {
               {pathname === "/shamwari" && <span className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary" aria-hidden="true" />}
             </Link>
           )}
+          <button
+            onClick={handleMyLocation}
+            disabled={locating}
+            aria-busy={locating}
+            className="relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] text-text-tertiary hover:text-text-secondary active:scale-95"
+            aria-label="Use my current location"
+            type="button"
+          >
+            {locating ? (
+              <Spinner className="h-[22px] w-[22px]" />
+            ) : (
+              <NavigationIcon size={22} />
+            )}
+            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">My Location</span>
+          </button>
           <Link
             href="/history"
             prefetch={false}
