@@ -110,12 +110,13 @@ export function Header() {
         role="banner"
       >
         <nav aria-label="Primary navigation" className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 md:px-8">
-          {/* Brand mark — icon + "weather" (Netflix-style icon recognition) */}
-          <div className="flex flex-1 min-w-0 items-center sm:flex-none">
+          {/* Brand mark — left-aligned at every breakpoint (the parent nav's
+              justify-between keeps the action pill on the right) */}
+          <div className="flex min-w-0 items-center">
             <Link
               href="/"
               aria-label="mukoko weather — return to home page"
-              className="mx-auto sm:mx-0 flex items-center"
+              className="flex items-center"
             >
               <MukokoLogo />
             </Link>

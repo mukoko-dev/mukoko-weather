@@ -103,3 +103,12 @@ describe("Header — notifications popover accessibility (issue #95)", () => {
     expect(source).toContain('document.removeEventListener("keydown", handleKeydown)');
   });
 });
+
+describe("Header — wordmark alignment", () => {
+  it("keeps the brand mark left-aligned at every breakpoint (no mx-auto centering)", () => {
+    // The mobile-centered "Netflix-style" treatment regressed the original
+    // left-aligned wordmark — the logo link must not center itself.
+    expect(source).not.toContain('className="mx-auto sm:mx-0 flex items-center"');
+    expect(source).toContain('aria-label="mukoko weather — return to home page"');
+  });
+});
