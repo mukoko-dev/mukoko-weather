@@ -73,13 +73,10 @@ describe("Aviation error boundary", () => {
   it("is a client component", () => {
     expect(errorSrc).toContain('"use client"');
   });
-  it("exports a default error component with error + reset props", () => {
+  it("exports a default error component wrapping the shared RouteErrorBoundary", () => {
     expect(errorSrc).toContain("export default function AviationError");
-    expect(errorSrc).toContain("reset");
-  });
-  it("reports to analytics and offers retry", () => {
-    expect(errorSrc).toContain("reportErrorToAnalytics");
-    expect(errorSrc).toContain("Try again");
+    expect(errorSrc).toContain("RouteErrorBoundary");
+    expect(errorSrc).toContain('source="aviation"');
   });
 });
 

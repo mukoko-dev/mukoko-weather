@@ -125,24 +125,12 @@ describe("shamwari error boundary", () => {
     expect(errorSource).toContain("Chat Unavailable");
   });
 
-  it("uses retry count tracking from error-retry", () => {
-    expect(errorSource).toContain("getRetryCount");
-    expect(errorSource).toContain("setRetryCount");
-    expect(errorSource).toContain("MAX_RETRIES");
-  });
-
-  it("reports errors to analytics", () => {
-    expect(errorSource).toContain("reportErrorToAnalytics");
-    expect(errorSource).toContain("shamwari:");
-  });
-
-  it("provides issue reporting link", () => {
-    expect(errorSource).toContain("buildIssueUrl");
-    expect(errorSource).toContain("Report this issue");
-  });
-
-  it("provides home navigation link", () => {
-    expect(errorSource).toContain('href="/"');
-    expect(errorSource).toContain("Go home");
+  it("delegates retry tracking, analytics, and issue reporting to the shared RouteErrorBoundary", () => {
+    // The boundary shell (getRetryCount/setRetryCount/MAX_RETRIES,
+    // reportErrorToAnalytics, buildIssueUrl, home link) lives once in
+    // RouteErrorBoundary — this file only supplies the copy (issue #102).
+    expect(errorSource).toContain("RouteErrorBoundary");
+    expect(errorSource).toContain('source="shamwari"');
+    expect(errorSource).not.toContain("getRetryCount");
   });
 });
