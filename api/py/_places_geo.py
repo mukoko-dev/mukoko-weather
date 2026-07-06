@@ -20,12 +20,15 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 import unicodedata
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from ._db import places_collection, places_db, places_geo_collection
+from pymongo.errors import DuplicateKeyError
+
+from ._db import places_collection, places_db, places_geo_collection, weather_db
 
 logger = logging.getLogger(__name__)
 
@@ -302,12 +305,64 @@ def find_nearest_place(
 # ---------------------------------------------------------------------------
 
 
-#: Dedup radius for placesGeo upserts. Cities/towns have wide footprints — OSM
-#: may put two centroids for the same place a few km apart, so we use a
-#: generous radius. The dedup is *also* gated on parent country + name match,
-#: which keeps unrelated places with the same name in different countries
-#: separate (e.g. two "Springfield"s).
+#: Default dedup radius for placesGeo upserts. Cities/towns have wide
+#: footprints — OSM may put two centroids for the same place a few km apart,
+#: so the default is generous. Callers creating FINE-GRAINED entries (roads,
+#: POIs, suburbs from zoom-18 reverse geocoding) must pass a tighter
+#: ``dedup_radius_km`` matching their own duplicate gate — otherwise two
+#: distinct same-named places a few km apart (e.g. "Westgate" suburb vs
+#: "Westgate Mall") alias onto one document. The dedup is *also* gated on
+#: parent country + name match, which keeps unrelated places with the same
+#: name in different countries separate (e.g. two "Springfield"s).
 PLACESGEO_DEDUP_RADIUS_KM: float = 5
+
+
+# ---------------------------------------------------------------------------
+# Cross-instance creation lock (TOCTOU guard)
+# ---------------------------------------------------------------------------
+
+#: How long a creation lock may be held before another instance may steal it.
+#: Creation (dedup read + insert) takes well under a second; 30s only matters
+#: when a holder crashed mid-create.
+CREATE_LOCK_TTL_S = 30
+
+
+def _acquire_create_lock(lock_id: str) -> bool:
+    """Best-effort cross-instance lock via ``_id`` uniqueness.
+
+    ``insert_one`` on a fixed ``_id`` is atomic on the primary, so exactly one
+    concurrent caller wins — no index setup or transactions needed. Returns
+    ``True`` when the lock was acquired (or the lock infrastructure is down,
+    in which case creation proceeds unlocked — a rare duplicate beats failing
+    the user's request). Returns ``False`` when another instance holds a
+    fresh lock for the same place.
+    """
+    now = datetime.now(timezone.utc)
+    try:
+        coll = weather_db()["creation_locks"]
+        coll.insert_one({"_id": lock_id, "createdAt": now})
+        return True
+    except DuplicateKeyError:
+        # Steal locks whose holder crashed mid-create.
+        try:
+            stale_cutoff = now - timedelta(seconds=CREATE_LOCK_TTL_S)
+            removed = coll.delete_one({"_id": lock_id, "createdAt": {"$lt": stale_cutoff}})
+            if removed.deleted_count:
+                coll.insert_one({"_id": lock_id, "createdAt": now})
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+        return False
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("creation lock unavailable (%s); proceeding unlocked", exc)
+        return True
+
+
+def _release_create_lock(lock_id: str) -> None:
+    try:
+        weather_db()["creation_locks"].delete_one({"_id": lock_id})
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def upsert_placesgeo_city(
@@ -321,6 +376,7 @@ def upsert_placesgeo_city(
     geo_type: str = "town",
     data_origin: str = "mukoko_user",
     data_confidence: float = 0.6,
+    dedup_radius_km: float = PLACESGEO_DEDUP_RADIUS_KM,
     mukoko_slug: Optional[str] = None,
     mukoko_tags: Optional[list[str]] = None,
     mukoko_nominatim_address: Optional[dict] = None,
@@ -330,8 +386,13 @@ def upsert_placesgeo_city(
 
     Behaviour:
       1. **Always dedup first.** Calls :func:`find_nearby_placesgeo` with a
-         5 km radius, normalised-name match, and country-scoped
-         ``parentPlaceId`` filter.
+         ``dedup_radius_km`` radius (default 5 km — pass the caller's own
+         duplicate-gate radius so the two checks can't disagree), a
+         normalised-name match, and country-scoped ``parentPlaceId`` filter.
+         The dedup read + insert run under a short cross-instance creation
+         lock keyed by country + normalised name, so two near-simultaneous
+         requests for the same brand-new place can't both slip past the
+         dedup read and double-insert (TOCTOU).
       2. If a match is found, the existing document is returned with an
          added ``wasExisting: True`` marker. NO insert is performed and NO
          suffixed/alternate slug is generated — that would create the kind
@@ -352,11 +413,67 @@ def upsert_placesgeo_city(
     """
     parent_place_id = get_country_id(country_iso) if country_iso else None
 
+    # TOCTOU guard — serialize creation of the same place across instances so
+    # two near-simultaneous requests can't both pass the dedup read below and
+    # double-insert. The lock key is country + normalised name: over-broad
+    # (two same-named places far apart briefly serialize), never under-broad.
+    lock_id = f"placesgeo:{(country_iso or '').upper()}:{normalize_name(name)}"
+    got_lock = _acquire_create_lock(lock_id)
+    if not got_lock:
+        # Another instance is creating this place right now — give its insert
+        # a moment to land so the dedup read below finds it.
+        time.sleep(0.3)
+
+    try:
+        return _dedup_or_insert(
+            name=name,
+            lat=lat,
+            lon=lon,
+            country_iso=country_iso,
+            province=province,
+            elevation=elevation,
+            geo_type=geo_type,
+            data_origin=data_origin,
+            data_confidence=data_confidence,
+            dedup_radius_km=dedup_radius_km,
+            mukoko_slug=mukoko_slug,
+            mukoko_tags=mukoko_tags,
+            mukoko_nominatim_address=mukoko_nominatim_address,
+            mukoko_poi_type=mukoko_poi_type,
+            parent_place_id=parent_place_id,
+        )
+    finally:
+        if got_lock:
+            _release_create_lock(lock_id)
+
+
+def _dedup_or_insert(
+    *,
+    name: str,
+    lat: float,
+    lon: float,
+    country_iso: str,
+    province: Optional[str],
+    elevation: Optional[float],
+    geo_type: str,
+    data_origin: str,
+    data_confidence: float,
+    dedup_radius_km: float,
+    mukoko_slug: Optional[str],
+    mukoko_tags: Optional[list[str]],
+    mukoko_nominatim_address: Optional[dict],
+    mukoko_poi_type: Optional[str],
+    parent_place_id: Optional[str],
+) -> dict:
+    """The dedup-read + insert body of :func:`upsert_placesgeo_city`.
+
+    Runs under the creation lock acquired by the caller.
+    """
     # Dedup gate — no auto-suffixing, ever.
     existing = find_nearby_placesgeo(
         lat=lat,
         lon=lon,
-        max_distance_km=PLACESGEO_DEDUP_RADIUS_KM,
+        max_distance_km=dedup_radius_km,
         name=name,
         parent_place_id=parent_place_id,
     )

@@ -32,7 +32,7 @@ from py._locations import (
     SLUG_RE,
     DEDUP_RADIUS_KM,
 )
-from py._places_resolver import search_locations_by_name
+from py._places_resolver import find_nearest_locations, search_locations_by_name
 
 
 # ---------------------------------------------------------------------------
@@ -595,23 +595,17 @@ class TestSearchLocations:
         assert "score" not in result["locations"][0]
 
     @pytest.mark.asyncio
-    @patch("py._locations.places_geo_collection")
-    async def test_geospatial_search(self, mock_coll):
-        placesgeo_doc = {
-            "_id": "uuid-harare",
-            "name": "Harare",
-            "slug": "harare-a1b2c3",
-            "geoType": "city",
-            "geo": {"type": "Point", "coordinates": [31.05, -17.83]},
-            "sourceProvenance": {"mukokoSlug": "harare", "mukokoTags": ["city"]},
-        }
-        mock_find = MagicMock()
-        mock_find.limit.return_value = [placesgeo_doc]
-        mock_coll.return_value.find.return_value = mock_find
+    @patch("py._locations.find_nearest_locations")
+    async def test_geospatial_search(self, mock_nearest):
+        """The geo branch delegates to the canonical resolver helper (100km)."""
+        mock_nearest.return_value = [
+            {"slug": "harare", "name": "Harare", "tags": ["city"]},
+        ]
 
         result = await search_locations(lat="-17.83", lon="31.05")
         assert result["source"] == "mongodb"
         assert len(result["locations"]) == 1
+        mock_nearest.assert_called_once_with(-17.83, 31.05, limit=20, max_km=100)
 
     @pytest.mark.asyncio
     @patch("py._locations.find_locations_by_tag")
@@ -674,6 +668,36 @@ class TestSearchLocationsByName:
     def test_db_error_returns_empty(self, mock_coll):
         mock_coll.return_value.find.side_effect = RuntimeError("boom")
         assert search_locations_by_name("harare") == []
+
+
+class TestFindNearestLocations:
+    """find_nearest_locations (py._places_resolver) — the canonical
+    $nearSphere proximity query shared by find_nearest_location and
+    GET /api/py/search's geospatial branch."""
+
+    @patch("py._places_resolver.places_geo_collection")
+    def test_scopes_to_consumer_facing_geo_types_and_radius(self, mock_coll):
+        mock_coll.return_value.find.return_value.limit.return_value = []
+        find_nearest_locations(-17.83, 31.05, limit=5, max_km=100)
+
+        query = mock_coll.return_value.find.call_args[0][0]
+        assert query["geoType"] == {"$in": ["city", "town", "village"]}
+        near = query["geo"]["$nearSphere"]
+        assert near["$geometry"]["coordinates"] == [31.05, -17.83]
+        assert near["$maxDistance"] == 100000
+        mock_coll.return_value.find.return_value.limit.assert_called_once_with(5)
+
+    @patch("py._places_resolver.places_geo_collection")
+    def test_db_error_returns_empty_list(self, mock_coll):
+        mock_coll.return_value.find.side_effect = RuntimeError("no index")
+        assert find_nearest_locations(0, 0) == []
+
+    @patch("py._places_resolver.find_nearest_locations")
+    def test_singular_delegates_to_plural(self, mock_plural):
+        from py._places_resolver import find_nearest_location as singular
+        mock_plural.return_value = [{"slug": "harare"}]
+        assert singular(-17.83, 31.05, max_km=150) == {"slug": "harare"}
+        mock_plural.assert_called_once_with(-17.83, 31.05, limit=1, max_km=150)
 
 
 # ---------------------------------------------------------------------------

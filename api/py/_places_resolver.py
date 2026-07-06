@@ -393,19 +393,24 @@ def find_locations_in_country(iso: str, *, limit: int = 200) -> list[dict]:
         return []
 
 
-def find_nearest_location(
+def find_nearest_locations(
     lat: float,
     lon: float,
     *,
+    limit: int = 20,
     max_km: float = 50,
-) -> Optional[dict]:
-    """Return the nearest mukoko-discoverable placesGeo entry to (lat, lon).
+) -> list[dict]:
+    """Return the nearest mukoko-discoverable placesGeo entries to (lat, lon),
+    closest first.
 
-    Uses ``$nearSphere`` on the 2dsphere index. Returns ``None`` if
-    nothing is within ``max_km`` or the index is unavailable.
+    The canonical ``$nearSphere`` proximity query — GET /api/py/search's
+    geospatial branch and :func:`find_nearest_location` both route through
+    here so the query shape (geoType scoping, index use) can't drift between
+    callers. Returns ``[]`` if nothing is within ``max_km`` or the index is
+    unavailable.
     """
     try:
-        doc = places_geo_collection().find_one({
+        docs = places_geo_collection().find({
             "geoType": {"$in": ["city", "town", "village"]},
             "geo": {
                 "$nearSphere": {
@@ -413,13 +418,27 @@ def find_nearest_location(
                     "$maxDistance": max(0.0, max_km) * 1000,
                 }
             },
-        })
-        if not doc:
-            return None
-        return adapt_placesgeo_to_location(doc)
+        }).limit(max(1, limit))
+        results = []
+        for doc in docs:
+            adapted = adapt_placesgeo_to_location(doc)
+            if adapted:
+                results.append(adapted)
+        return results
     except Exception as exc:  # noqa: BLE001
         logger.debug("placesGeo nearest query failed: %s", exc)
-        return None
+        return []
+
+
+def find_nearest_location(
+    lat: float,
+    lon: float,
+    *,
+    max_km: float = 50,
+) -> Optional[dict]:
+    """Nearest single mukoko-discoverable placesGeo entry, or ``None``."""
+    results = find_nearest_locations(lat, lon, limit=1, max_km=max_km)
+    return results[0] if results else None
 
 
 def search_locations_by_name(

@@ -20,6 +20,17 @@ def _reset_country_cache():
     pg._COUNTRY_CACHE_LOADED = False
 
 
+@pytest.fixture(autouse=True)
+def _mock_creation_lock_db():
+    """Give the creation-lock helpers a working mock DB by default.
+
+    Individual TOCTOU tests override this to exercise contention paths.
+    """
+    with patch("py._places_geo.weather_db") as mock_db:
+        mock_db.return_value.__getitem__.return_value = MagicMock()
+        yield mock_db
+
+
 # ---------------------------------------------------------------------------
 # get_country_id
 # ---------------------------------------------------------------------------
@@ -242,6 +253,18 @@ class TestUpsertPlacesGeoCity:
         pg.upsert_placesgeo_city(name="X", lat=0, lon=0, country_iso="ZW")
         kwargs = mock_dedup.call_args.kwargs
         assert kwargs["max_distance_km"] == 5
+
+    @patch("py._places_geo.find_nearby_placesgeo", return_value=None)
+    @patch("py._places_geo.get_country_id", return_value="zw-parent")
+    @patch("py._places_geo.places_geo_collection")
+    def test_dedup_radius_overridable_by_caller(self, mock_coll, _mock_parent, mock_dedup):
+        """Fine-grained creators pass their own duplicate-gate radius (issue #93)."""
+        pg.upsert_placesgeo_city(
+            name="Westgate Mall", lat=0, lon=0, country_iso="ZW",
+            dedup_radius_km=1,
+        )
+        kwargs = mock_dedup.call_args.kwargs
+        assert kwargs["max_distance_km"] == 1
 
     @patch("py._places_geo.find_nearby_placesgeo", return_value=None)
     @patch("py._places_geo.get_country_id", return_value="zw-parent")
@@ -509,3 +532,73 @@ class TestUpsertStampsPoiType:
         assert result["wasExisting"] is True
         patch_set = mock_coll.return_value.update_one.call_args.args[1]["$set"]
         assert patch_set["sourceProvenance.mukokoPoiType"] == "school"
+
+
+# ---------------------------------------------------------------------------
+# Creation lock (TOCTOU guard — issue #94)
+# ---------------------------------------------------------------------------
+
+
+class TestCreationLock:
+    def test_acquires_lock_on_clean_insert(self, _mock_creation_lock_db):
+        coll = _mock_creation_lock_db.return_value.__getitem__.return_value
+        assert pg._acquire_create_lock("placesgeo:ZW:harare") is True
+        coll.insert_one.assert_called_once()
+        assert coll.insert_one.call_args[0][0]["_id"] == "placesgeo:ZW:harare"
+
+    def test_contended_lock_returns_false(self, _mock_creation_lock_db):
+        from pymongo.errors import DuplicateKeyError as DKE
+        coll = _mock_creation_lock_db.return_value.__getitem__.return_value
+        coll.insert_one.side_effect = DKE("duplicate")
+        coll.delete_one.return_value.deleted_count = 0  # fresh lock — not stale
+        assert pg._acquire_create_lock("placesgeo:ZW:harare") is False
+
+    def test_stale_lock_is_stolen(self, _mock_creation_lock_db):
+        from pymongo.errors import DuplicateKeyError as DKE
+        coll = _mock_creation_lock_db.return_value.__getitem__.return_value
+        # First insert collides; the stale delete removes one doc; retry succeeds.
+        coll.insert_one.side_effect = [DKE("duplicate"), None]
+        coll.delete_one.return_value.deleted_count = 1
+        assert pg._acquire_create_lock("placesgeo:ZW:harare") is True
+        assert coll.insert_one.call_count == 2
+
+    def test_lock_infra_down_proceeds_unlocked(self, _mock_creation_lock_db):
+        coll = _mock_creation_lock_db.return_value.__getitem__.return_value
+        coll.insert_one.side_effect = RuntimeError("db down")
+        assert pg._acquire_create_lock("x") is True
+
+    @patch("py._places_geo.find_nearby_placesgeo", return_value=None)
+    @patch("py._places_geo.get_country_id", return_value="zw-parent")
+    @patch("py._places_geo.places_geo_collection")
+    def test_upsert_releases_lock_after_insert(
+        self, _mock_coll, _mock_parent, _mock_dedup, _mock_creation_lock_db
+    ):
+        coll = _mock_creation_lock_db.return_value.__getitem__.return_value
+        pg.upsert_placesgeo_city(name="Bindura", lat=-17.3, lon=31.33, country_iso="ZW")
+        coll.insert_one.assert_called_once()  # lock acquired
+        coll.delete_one.assert_called_once()  # lock released
+        assert coll.delete_one.call_args[0][0]["_id"].startswith("placesgeo:ZW:")
+
+    @patch("py._places_geo.time.sleep")
+    @patch("py._places_geo.get_country_id", return_value="zw-parent")
+    @patch("py._places_geo.places_geo_collection")
+    @patch("py._places_geo.find_nearby_placesgeo")
+    def test_contended_upsert_waits_then_dedupes_to_competitor(
+        self, mock_dedup, mock_coll, _mock_parent, mock_sleep, _mock_creation_lock_db
+    ):
+        """When another instance holds the lock, wait briefly and re-check —
+        the competitor's just-inserted doc must be returned, not re-inserted."""
+        from pymongo.errors import DuplicateKeyError as DKE
+        lock_coll = _mock_creation_lock_db.return_value.__getitem__.return_value
+        lock_coll.insert_one.side_effect = DKE("held by other instance")
+        lock_coll.delete_one.return_value.deleted_count = 0
+        mock_dedup.return_value = {
+            "_id": "competitor-uuid", "slug": "harare-abc123", "name": "Harare",
+        }
+
+        result = pg.upsert_placesgeo_city(name="Harare", lat=-17.83, lon=31.05, country_iso="ZW")
+
+        mock_sleep.assert_called_once()          # gave the competitor time to land
+        assert result["wasExisting"] is True     # deduped to the competitor's doc
+        assert result["_id"] == "competitor-uuid"
+        mock_coll.return_value.insert_one.assert_not_called()

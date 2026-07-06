@@ -31,6 +31,7 @@ from ._places_resolver import (
     find_locations_by_tag,
     find_locations_in_country,
     find_nearest_location,
+    find_nearest_locations,
     search_locations_by_name,
 )
 from ._places_geo import (
@@ -191,31 +192,13 @@ async def search_locations(
             tags_agg = list(places_geo_collection().aggregate(pipeline))
             return {"tags": {t["_id"]: t["count"] for t in tags_agg}}
 
-        # Geospatial nearest (Phase 0G: placesGeo via $nearSphere).
+        # Geospatial nearest — canonical proximity query in _places_resolver.
+        # 100km radius: wider than the 50km default since search-by-coords is
+        # an explicit discovery action, not an accuracy-sensitive geo lookup.
         if lat and lon:
-            lat_f = float(lat)
-            lon_f = float(lon)
-            try:
-                docs = list(
-                    places_geo_collection().find({
-                        "geoType": {"$in": ["city", "town", "village"]},
-                        "geo": {
-                            "$nearSphere": {
-                                "$geometry": {"type": "Point", "coordinates": [lon_f, lat_f]},
-                                "$maxDistance": 100000,  # 100km
-                            }
-                        },
-                    }).limit(limit)
-                )
-            except Exception:
-                docs = []
-            results = []
-            for doc in docs:
-                adapted = adapt_placesgeo_to_location(doc)
-                if not adapted:
-                    continue
-                adapted.pop("_id", None)
-                results.append(adapted)
+            results = find_nearest_locations(float(lat), float(lon), limit=limit, max_km=100)
+            for r in results:
+                r.pop("_id", None)
             return {"locations": results, "total": len(results), "source": "mongodb"}
 
         # Text search
@@ -632,6 +615,126 @@ def _match_nearby_poi(lat: float, lon: float) -> dict | None:
     return {"name": name, "poiType": poi_type_from_place(poi)}
 
 
+def _create_location_from_coords(lat: float, lon: float, *, source: str) -> dict:
+    """Shared location-creation sequence for coordinates.
+
+    The single implementation behind both GET /api/py/geo?autoCreate=true and
+    POST /api/py/locations/add's coordinates mode: reverse-geocode (zoom 18) →
+    POI context → duplicate gate → slug/elevation/province resolution →
+    placesGeo upsert → AI season enrichment. The two route handlers only
+    differ in response shape and ``source`` tag, so any change to the create
+    flow lands in both paths by construction.
+
+    Returns one of:
+      * ``{"status": "created", "location": {...}, "placesGeoId": ...,
+        "placesGeoSlug": ...}``
+      * ``{"status": "duplicate", "existing": {...}}`` — an adapted location
+        doc (always slug-bearing) for the already-existing place.
+
+    Raises ``HTTPException(422)`` when reverse geocoding can't name the spot
+    and ``HTTPException(409)`` when a slug collision can't be resolved.
+    """
+    geocoded = _reverse_geocode(lat, lon, zoom=18)
+    if not geocoded:
+        raise HTTPException(status_code=422, detail="Could not determine location name")
+
+    # POI context — nearby named POI (≤250 m) as metadata only. These are
+    # passive coordinates, not a search-and-pick flow, so a nearby POI's name
+    # must never replace the reverse-geocoded road/address — only its
+    # `poiType` (school/hospital/market/park) is surfaced as context.
+    poi_match = _match_nearby_poi(lat, lon)
+    poi_type = poi_match.get("poiType") if poi_match else None
+
+    # Tight duplicate gate (1km + same-name, country-scoped). A match without
+    # a slug is NOT returned as a duplicate — creation proceeds and the
+    # placesGeo upsert below patches the mukoko slug onto that existing doc,
+    # which is what makes it resolvable in the first place.
+    duplicate = _find_duplicate(
+        lat, lon, DEDUP_RADIUS_KM,
+        name=geocoded["name"], country=geocoded["country"],
+    )
+    if duplicate and duplicate.get("slug"):
+        return {"status": "duplicate", "existing": duplicate}
+
+    elevation = geocoded.get("elevation", 0) or 0
+    if not elevation:
+        elevation = _get_elevation(lat, lon)
+
+    slug = _generate_slug(geocoded["name"], geocoded["country"])
+    try:
+        slug = _resolve_slug_collision(slug, geocoded)
+    except SlugCollisionError as exc:
+        # Same place — surface the existing record instead of creating a
+        # numeric-suffixed duplicate (Phase 0G: resolved via placesGeo).
+        existing = find_location(exc.existing_slug)
+        if existing:
+            return {"status": "duplicate", "existing": existing}
+        # Existing record disappeared between checks — extremely unlikely.
+        raise HTTPException(status_code=409, detail="Slug collision could not be resolved")
+
+    province = geocoded.get("admin1") or geocoded.get("countryName", "")
+    province_slug = _generate_province_slug(province, geocoded["country"])
+    tags = _infer_tags(geocoded)
+
+    # Phase 0G: write only to placesGeo — the canonical store; the resolver
+    # bridges clean URL slugs back to it. The upsert dedups with the SAME
+    # radius as the duplicate gate above (dedup_radius_km=DEDUP_RADIUS_KM) so
+    # the two checks can't disagree — a wider internal radius used to alias a
+    # new fine-grained place onto a different same-named doc a few km away.
+    places_geo_id: Optional[str] = None
+    places_geo_slug: Optional[str] = None
+    try:
+        placesgeo_doc = upsert_placesgeo_city(
+            name=geocoded["name"],
+            lat=lat,
+            lon=lon,
+            country_iso=geocoded["country"],
+            province=province,
+            elevation=elevation,
+            geo_type="city" if "city" in tags else "town",
+            dedup_radius_km=DEDUP_RADIUS_KM,
+            mukoko_slug=slug,
+            mukoko_tags=tags,
+            mukoko_nominatim_address=geocoded.get("nominatimAddress"),
+            mukoko_poi_type=poi_type,
+        )
+        places_geo_id = placesgeo_doc.get("_id")
+        places_geo_slug = placesgeo_doc.get("slug")
+        if not placesgeo_doc.get("wasExisting"):
+            # Log only the opaque UUID — the reverse-geocoded name at zoom 18
+            # can be a user's street address, which must not land in logs.
+            logger.info("Created placesGeo entry %s (%s)", places_geo_id, source)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Platform placesGeo write failed (%s): %s", source, exc)
+
+    new_loc = {
+        "slug": slug,
+        "name": geocoded["name"],
+        "province": province,
+        "lat": geocoded["lat"],
+        "lon": geocoded["lon"],
+        "elevation": round(elevation),
+        "tags": tags,
+        "country": geocoded["country"],
+        "source": source,
+        "provinceSlug": province_slug,
+        "geo": {"type": "Point", "coordinates": [geocoded["lon"], geocoded["lat"]]},
+        "nominatimAddress": geocoded.get("nominatimAddress", {}),
+    }
+    if poi_type:
+        new_loc["poiType"] = poi_type
+
+    # Enrich: resolve seasons for this country if not already known
+    _enrich_location_with_ai(geocoded["country"], lat, lon)
+
+    return {
+        "status": "created",
+        "location": new_loc,
+        "placesGeoId": places_geo_id,
+        "placesGeoSlug": places_geo_slug,
+    }
+
+
 @router.get("/api/py/geo")
 async def geo_lookup(
     lat: float,
@@ -681,119 +784,24 @@ async def geo_lookup(
                     "isNew": False,
                 }
 
-        # Auto-create if requested — only NOW do we call external APIs
+        # Auto-create if requested — only NOW do we call external APIs.
+        # The full reverse-geocode → dedupe → create sequence is shared with
+        # POST /api/py/locations/add via _create_location_from_coords; this
+        # handler only maps the result to the geo-lookup response shape.
         if autoCreate:
-            geocoded = _reverse_geocode(lat, lon, zoom=18)
-            if not geocoded:
-                raise HTTPException(
-                    status_code=422,
-                    detail="Could not determine location name",
-                )
-
-            # ── POI context — nearby named POI (≤250 m) as metadata only ─────
-            # This is GPS auto-detection, not a search-and-pick flow — the
-            # user did not choose this POI, so its name must never replace
-            # the reverse-geocoded road/address (that's what confusingly
-            # relabeled someone's street as "XYZ School" just because a
-            # school happened to be 200m away). We still surface `poiType`
-            # (school/hospital/market/park) as supplementary context for the
-            # location page + AI summary — just not as the location's name.
-            poi_match = _match_nearby_poi(lat, lon)
-            poi_type = poi_match.get("poiType") if poi_match else None
-
-            # ── Tight duplicate check against placesGeo (Phase 0G) ───────────
-            # ONLY a 1km same-name dedup. Anything wider would snap a specific
-            # road/shop/address to a same-named entry up to that distance away,
-            # re-introducing the coarse-snap bug this fix removes. Distinct
-            # nearby places each resolve to their own fine-grained entry; only
-            # the exact same spot (within 1km, same name) collapses to one.
-            duplicate = _find_duplicate(
-                lat, lon, DEDUP_RADIUS_KM,
-                name=geocoded["name"], country=geocoded["country"],
-            )
-            if duplicate and duplicate.get("slug"):
-                duplicate.pop("_id", None)
+            result = _create_location_from_coords(lat, lon, source="geolocation")
+            if result["status"] == "duplicate":
+                existing = result["existing"]
+                existing.pop("_id", None)
                 return {
-                    "nearest": duplicate,
-                    "redirectTo": f"/{duplicate['slug']}",
+                    "nearest": existing,
+                    "redirectTo": f"/{existing['slug']}",
                     "isNew": False,
                 }
-
-            elevation = geocoded.get("elevation", 0) or 0
-            if not elevation:
-                elevation = _get_elevation(lat, lon)
-
-            slug = _generate_slug(geocoded["name"], geocoded["country"])
-            province = geocoded.get("admin1") or geocoded.get("countryName", "")
-            province_slug = _generate_province_slug(province, geocoded["country"])
-
-            try:
-                slug = _resolve_slug_collision(slug, geocoded)
-            except SlugCollisionError as exc:
-                # Same place — surface the existing record instead of creating
-                # a numeric-suffixed duplicate (Phase 0G: queried via placesGeo).
-                existing = find_location(exc.existing_slug)
-                if existing:
-                    existing.pop("_id", None)
-                    return {
-                        "nearest": existing,
-                        "redirectTo": f"/{existing['slug']}",
-                        "isNew": False,
-                    }
-                # Existing record disappeared between checks — extremely unlikely.
-                raise HTTPException(
-                    status_code=409,
-                    detail="Slug collision could not be resolved",
-                )
-
-            tags = _infer_tags(geocoded)
-
-            # Phase 0G: write only to placesGeo. The legacy weather.locations
-            # collection is being dropped; placesGeo is the canonical store
-            # and the resolver bridges clean URL slugs back to it.
-            try:
-                placesgeo_doc = upsert_placesgeo_city(
-                    name=geocoded["name"],
-                    lat=lat,
-                    lon=lon,
-                    country_iso=geocoded["country"],
-                    province=province,
-                    elevation=elevation,
-                    geo_type="city" if "city" in tags else "town",
-                    mukoko_slug=slug,
-                    mukoko_tags=tags,
-                    mukoko_nominatim_address=geocoded.get("nominatimAddress"),
-                    mukoko_poi_type=poi_type,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Platform placesGeo write failed (geo autoCreate): %s", exc,
-                )
-                placesgeo_doc = None
-
-            new_loc = {
-                "slug": slug,
-                "name": geocoded["name"],
-                "province": province,
-                "lat": geocoded["lat"],
-                "lon": geocoded["lon"],
-                "elevation": round(elevation),
-                "tags": tags,
-                "country": geocoded["country"],
-                "source": "geolocation",
-                "provinceSlug": province_slug,
-                "geo": {"type": "Point", "coordinates": [geocoded["lon"], geocoded["lat"]]},
-                "nominatimAddress": geocoded.get("nominatimAddress", {}),
-            }
-            if poi_type:
-                new_loc["poiType"] = poi_type
-
-            # Enrich: resolve seasons for this country if not already known
-            _enrich_location_with_ai(geocoded["country"], lat, lon)
-
+            new_loc = result["location"]
             return {
                 "nearest": new_loc,
-                "redirectTo": f"/{slug}",
+                "redirectTo": f"/{new_loc['slug']}",
                 "isNew": True,
             }
 
@@ -831,7 +839,10 @@ def _enrich_location_with_ai(country_code: str, lat: float, lon: float) -> None:
     """
     import threading
 
-    logger.info("Starting AI location enrichment for %s (%.1f, %.1f)", country_code, lat, lon)
+    # Deliberately log no request-derived values: everything here (country,
+    # coords, name) traces back to the user's GPS position, which must not
+    # land in logs (CodeQL: clear-text logging of private data).
+    logger.info("Starting AI location enrichment")
 
     def _run() -> None:
         try:
@@ -898,148 +909,44 @@ async def add_location(request: Request):
         if not rate["allowed"]:
             raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
 
-        # Reverse geocode with POI-level zoom — user explicitly chose coords
-        geocoded = _reverse_geocode(lat, lon, zoom=18)
-        if not geocoded:
-            raise HTTPException(status_code=422, detail="Could not determine location name")
-
-        # POI context — nearby named POI (≤250 m) as metadata only. These are
-        # raw coordinates, not a search-and-pick flow, so a nearby POI's name
-        # must never replace the reverse-geocoded road/address — only its
-        # `poiType` (school/hospital/market/park) is surfaced as context.
-        poi_match = _match_nearby_poi(lat, lon)
-        poi_type = poi_match.get("poiType") if poi_match else None
-
-        # Duplicate check (1km radius + name/country match)
-        duplicate = _find_duplicate(
-            lat, lon, DEDUP_RADIUS_KM,
-            name=geocoded["name"], country=geocoded["country"],
-        )
-        if duplicate:
+        # Reverse-geocode → dedupe → create — shared with GET /api/py/geo's
+        # autoCreate path via _create_location_from_coords; this handler only
+        # maps the result to the add-location response shape.
+        result = _create_location_from_coords(lat, lon, source="community")
+        if result["status"] == "duplicate":
+            existing = result["existing"]
             return {
                 "mode": "duplicate",
                 "existing": {
-                    "slug": duplicate["slug"],
-                    "name": duplicate["name"],
-                    "province": duplicate.get("province", ""),
-                    "country": duplicate.get("country", ""),
+                    "slug": existing["slug"],
+                    "name": existing.get("name", ""),
+                    "province": existing.get("province", ""),
+                    "country": existing.get("country", ""),
                 },
-                "message": f"A location already exists nearby: {duplicate['name']}",
+                "message": (
+                    f"A location already exists nearby: "
+                    f"{existing.get('name', existing['slug'])}"
+                ),
             }
 
-        elevation = geocoded.get("elevation", 0) or 0
-        if not elevation:
-            elevation = _get_elevation(lat, lon)
-
-        slug = _generate_slug(geocoded["name"], geocoded["country"])
-
-        try:
-            slug = _resolve_slug_collision(slug, geocoded)
-        except SlugCollisionError as exc:
-            # All enrichment paths collide — same place. Return the existing
-            # record as a duplicate instead of creating a numeric-suffixed copy.
-            # Phase 0G: existing record resolved via places.placesGeo.
-            existing = find_location(exc.existing_slug)
-            if existing:
-                return {
-                    "mode": "duplicate",
-                    "existing": {
-                        "slug": existing["slug"],
-                        "name": existing.get("name", ""),
-                        "province": existing.get("province", ""),
-                        "country": existing.get("country", ""),
-                    },
-                    "message": (
-                        f"A location already exists nearby: "
-                        f"{existing.get('name', exc.existing_slug)}"
-                    ),
-                }
-            raise HTTPException(
-                status_code=409,
-                detail="Slug collision could not be resolved",
-            )
-
-        province = geocoded.get("admin1") or geocoded.get("countryName", "")
-        province_slug = _generate_province_slug(province, geocoded["country"])
-
-        tags = _infer_tags(geocoded)
-
-        # ── Platform integration — placesGeo write (Phase 0G) ────────────────
-        # Phase 0G: ``weather.locations``, ``weather.countries``, and
-        # ``weather.provinces`` are being dropped. ``places.placesGeo`` is
-        # now the canonical store — every read flows through the resolver
-        # and writes happen here exclusively. The Phase 0E helper performs
-        # its own 5 km parent-scoped dedup, returns the existing doc with
-        # ``wasExisting: True`` when it finds one, and patches mukokoSlug /
-        # mukokoTags / nominatimAddress onto pre-existing entries so the TS
-        # resolver can find them by clean URL slug.
-        #
-        # Fundi POI enrichment (``enqueue_fundi_seed``) stays disabled —
-        # see Phase 0F note above. Re-enable behind a flag like
-        # ``MUKOKO_ENRICH_POIS_VIA_FUNDI`` when the POI surface is wired up.
-        places_geo_id: Optional[str] = None
-        places_geo_slug: Optional[str] = None
-        try:
-            placesgeo_doc = upsert_placesgeo_city(
-                name=geocoded["name"],
-                lat=lat,
-                lon=lon,
-                country_iso=geocoded["country"],
-                province=province,
-                elevation=elevation,
-                geo_type="city" if "city" in tags else "town",
-                mukoko_slug=slug,
-                mukoko_tags=tags,
-                mukoko_nominatim_address=geocoded.get("nominatimAddress"),
-                mukoko_poi_type=poi_type,
-            )
-            places_geo_id = placesgeo_doc.get("_id")
-            places_geo_slug = placesgeo_doc.get("slug")
-            if not placesgeo_doc.get("wasExisting"):
-                logger.info(
-                    "Created placesGeo entry %s for %s",
-                    places_geo_id, geocoded["name"],
-                )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Platform placesGeo write failed: %s", exc,
-            )
-
-        new_loc = {
-            "slug": slug,
-            "name": geocoded["name"],
-            "province": province,
-            "lat": geocoded["lat"],
-            "lon": geocoded["lon"],
-            "elevation": round(elevation),
-            "tags": tags,
-            "country": geocoded["country"],
-            "source": "community",
-            "provinceSlug": province_slug,
-            "geo": {"type": "Point", "coordinates": [geocoded["lon"], geocoded["lat"]]},
-            "nominatimAddress": geocoded.get("nominatimAddress", {}),
-        }
-
-        # Enrich: resolve seasons for this country if not already known
-        _enrich_location_with_ai(geocoded["country"], lat, lon)
-
+        new_loc = result["location"]
         location_payload = {
             "slug": new_loc["slug"],
             "name": new_loc["name"],
             "province": new_loc["province"],
-            "country": new_loc.get("country", geocoded["country"]),
+            "country": new_loc["country"],
             "lat": new_loc["lat"],
             "lon": new_loc["lon"],
             "elevation": new_loc["elevation"],
         }
-        if poi_type:
-            location_payload["poiType"] = poi_type
+        if new_loc.get("poiType"):
+            location_payload["poiType"] = new_loc["poiType"]
 
         return {
             "mode": "created",
             "location": location_payload,
-            "placesGeoId": places_geo_id,
-            "placesGeoSlug": places_geo_slug,
+            "placesGeoId": result["placesGeoId"],
+            "placesGeoSlug": result["placesGeoSlug"],
         }
     except HTTPException:
         raise
