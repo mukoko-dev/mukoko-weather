@@ -16,6 +16,7 @@ will reject malformed writes. Use ``stamp_platform_fields()`` to add these.
 
 from __future__ import annotations
 
+import hmac
 import os
 import re
 import time as _time
@@ -379,6 +380,31 @@ def get_client_ip(request: Request) -> str | None:
     if real_ip:
         return real_ip.strip()
     return request.client.host if request.client else None
+
+
+def require_internal_caller(request: Request | None) -> None:
+    """Optional shared-secret gate for routes fronted by the Next.js proxy.
+
+    The UI only ever reaches ``/api/py/ai/*`` through the auth-gated
+    ``/api/ai/*`` Next.js proxy — but ``vercel.json``'s blanket rewrite makes
+    every ``/api/py/*`` route ALSO reachable directly, unauthenticated. When
+    ``MUKOKO_INTERNAL_SECRET`` is set (one env var, read by both the Next.js
+    and Python runtimes of the same deployment), the proxy stamps it onto the
+    forwarded request as ``X-Mukoko-Internal`` and this guard rejects any
+    direct caller without it.
+
+    When the env var is UNSET the guard is a no-op — deploys keep working
+    with no config change, protected only by rate limiting as before.
+    Raises ``HTTPException(401)`` on mismatch.
+    """
+    secret = os.environ.get("MUKOKO_INTERNAL_SECRET", "")
+    if not secret:
+        return
+    provided = ""
+    if request is not None:
+        provided = request.headers.get("x-mukoko-internal") or ""
+    if not hmac.compare_digest(provided, secret):
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 # ---------------------------------------------------------------------------

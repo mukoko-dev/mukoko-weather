@@ -11,10 +11,10 @@ from __future__ import annotations
 import time
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from ._db import ai_prompts_collection, ai_suggested_rules_collection
+from ._db import ai_prompts_collection, ai_suggested_rules_collection, require_internal_caller
 
 router = APIRouter()
 
@@ -37,11 +37,14 @@ CACHE_TTL = 300  # 5 minutes
 
 
 @router.get("/api/py/ai/prompts")
-async def get_prompts(key: str | None = None):
+async def get_prompts(key: str | None = None, request: Request = None):
     """
     GET /api/py/ai/prompts          — all active prompts
     GET /api/py/ai/prompts?key=system:summary — single prompt by key
     """
+    # Proxy-only when MUKOKO_INTERNAL_SECRET is configured (issue #92).
+    require_internal_caller(request)
+
     global _prompts_cache, _prompts_cache_at
 
     try:
@@ -90,13 +93,16 @@ async def get_prompts(key: str | None = None):
 
 
 @router.get("/api/py/ai/suggested-rules")
-async def get_suggested_rules():
+async def get_suggested_rules(request: Request = None):
     """
     GET /api/py/ai/suggested-rules — all active suggested prompt rules
 
     Returns rules sorted by category priority (weather > activity > generic)
     then by order within each category.
     """
+    # Proxy-only when MUKOKO_INTERNAL_SECRET is configured (issue #92).
+    require_internal_caller(request)
+
     global _suggested_cache, _suggested_cache_at
 
     try:

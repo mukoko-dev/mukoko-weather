@@ -76,6 +76,12 @@ async function proxy(req: NextRequest, { params }: ProxyParams): Promise<Respons
   });
   headers.set("X-Mukoko-User-Id", user.id);
   if (user.email) headers.set("X-Mukoko-User-Email", user.email);
+  // Shared-secret stamp (issue #92): when MUKOKO_INTERNAL_SECRET is set —
+  // one env var read by both the Next.js and Python runtimes of the same
+  // deployment — Python's require_internal_caller() rejects any /api/py/ai/*
+  // request that didn't come through this proxy. Unset = guard disabled.
+  const internalSecret = process.env.MUKOKO_INTERNAL_SECRET;
+  if (internalSecret) headers.set("X-Mukoko-Internal", internalSecret);
 
   // Body is only meaningful for non-GET/HEAD. NextRequest exposes a stream
   // body — pass it through verbatim. `duplex: "half"` is required by the

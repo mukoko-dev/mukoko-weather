@@ -18,7 +18,7 @@ import anthropic
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ._db import get_db, get_api_key, get_client_ip, check_rate_limit, filter_known_activities
+from ._db import get_db, get_api_key, get_client_ip, check_rate_limit, filter_known_activities, require_internal_caller
 from ._circuit_breaker import anthropic_breaker, CircuitOpenError
 
 logger = logging.getLogger(__name__)
@@ -465,6 +465,11 @@ async def generate_summary(body: AISummaryRequest, request: Request = None):
     Generate an AI weather briefing for a location.
     Cached in MongoDB with tiered TTL (30/60/120 min).
     """
+    # The UI reaches this via the auth-gated /api/ai/* proxy; when
+    # MUKOKO_INTERNAL_SECRET is configured, direct unauthenticated calls
+    # through the blanket /api/py/* rewrite are rejected (issue #92).
+    require_internal_caller(request)
+
     weather_data = body.weatherData
     location = body.location
     # Validate against known activity ids before it's spliced into the

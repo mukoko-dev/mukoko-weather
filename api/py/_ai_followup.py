@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ._db import (
+    require_internal_caller,
     check_rate_limit,
     get_client_ip,
     get_api_key,
@@ -167,6 +168,9 @@ async def followup_chat(body: FollowupRequest, request: Request):
     Lightweight follow-up chat for location pages.
     Context is pre-seeded with the AI weather summary.
     """
+    # Proxy-only when MUKOKO_INTERNAL_SECRET is configured (issue #92).
+    require_internal_caller(request)
+
     message = body.message.strip()
     if not message:
         raise HTTPException(status_code=400, detail="Message is required")

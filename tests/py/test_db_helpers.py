@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -152,3 +152,58 @@ class TestFilterKnownActivities:
         mock_coll.return_value.find.return_value = [{"id": "different"}]
         second = filter_known_activities(["soccer", "different"])
         assert first == second == ["soccer"]
+
+
+# ---------------------------------------------------------------------------
+# require_internal_caller (issue #92)
+# ---------------------------------------------------------------------------
+
+
+class TestRequireInternalCaller:
+    """Opt-in shared-secret gate for proxy-fronted AI routes."""
+
+    def _req(self, header_value=None):
+        req = MagicMock()
+        req.headers.get.return_value = header_value
+        return req
+
+    def test_noop_when_secret_unset(self, monkeypatch):
+        from py._db import require_internal_caller
+        monkeypatch.delenv("MUKOKO_INTERNAL_SECRET", raising=False)
+        # No env var → guard disabled, any caller passes (backwards compatible).
+        require_internal_caller(self._req(None))
+        require_internal_caller(None)
+
+    def test_rejects_missing_header_when_secret_set(self, monkeypatch):
+        from fastapi import HTTPException
+        from py._db import require_internal_caller
+        monkeypatch.setenv("MUKOKO_INTERNAL_SECRET", "s3cret")
+        with pytest.raises(HTTPException) as exc:
+            require_internal_caller(self._req(None))
+        assert exc.value.status_code == 401
+
+    def test_rejects_wrong_secret(self, monkeypatch):
+        from fastapi import HTTPException
+        from py._db import require_internal_caller
+        monkeypatch.setenv("MUKOKO_INTERNAL_SECRET", "s3cret")
+        with pytest.raises(HTTPException) as exc:
+            require_internal_caller(self._req("wrong"))
+        assert exc.value.status_code == 401
+
+    def test_accepts_matching_secret(self, monkeypatch):
+        from py._db import require_internal_caller
+        monkeypatch.setenv("MUKOKO_INTERNAL_SECRET", "s3cret")
+        require_internal_caller(self._req("s3cret"))  # no raise
+
+    def test_rejects_none_request_when_secret_set(self, monkeypatch):
+        from fastapi import HTTPException
+        from py._db import require_internal_caller
+        monkeypatch.setenv("MUKOKO_INTERNAL_SECRET", "s3cret")
+        with pytest.raises(HTTPException):
+            require_internal_caller(None)
+
+    def test_all_proxy_fronted_ai_routes_call_the_guard(self):
+        import inspect
+        import py._ai, py._ai_followup, py._ai_prompts
+        for mod in (py._ai, py._ai_followup, py._ai_prompts):
+            assert "require_internal_caller(request)" in inspect.getsource(mod)
