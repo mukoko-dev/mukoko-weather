@@ -42,8 +42,11 @@ describe("data fetching", () => {
 });
 
 describe("report display", () => {
-  it("shows report type icons", () => {
-    expect(source).toContain("REPORT_ICONS");
+  it("shows report type icons and labels via the shared report-types module", () => {
+    // Single source of truth shared with WeatherReportModal — see
+    // src/lib/report-types.ts — instead of a locally hand-synced map.
+    expect(source).toContain('from "@/lib/report-types"');
+    expect(source).toContain("getReportTypeInfo");
   });
 
   it("shows severity badges with severity tokens", () => {

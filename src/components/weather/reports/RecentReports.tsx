@@ -1,23 +1,10 @@
 "use client";
 
-import type React from "react";
 import { useState, useEffect, useCallback } from "react";
 import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
-import {
-  CloudDrizzleIcon,
-  CloudRainIcon,
-  CloudLightningIcon,
-  CloudHailIcon,
-  WaterIcon,
-  WindIcon,
-  SunIcon,
-  CloudFogIcon,
-  CloudIcon,
-  SnowflakeIcon,
-  CloudSunIcon,
-  MegaphoneIcon,
-} from "@/lib/weather-icons";
+import { CloudSunIcon, MegaphoneIcon } from "@/lib/weather-icons";
+import { getReportTypeInfo } from "@/lib/report-types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,39 +20,6 @@ interface Report {
   verified: boolean;
   locationName?: string;
 }
-
-/** Maps report types to SVG weather icons (instead of emoji). */
-const REPORT_ICONS: Record<string, React.ReactElement> = {
-  "light-rain": <CloudDrizzleIcon size={20} />,
-  "heavy-rain": <CloudRainIcon size={20} />,
-  thunderstorm: <CloudLightningIcon size={20} />,
-  hail: <CloudHailIcon size={20} />,
-  flooding: <WaterIcon size={20} />,
-  "strong-wind": <WindIcon size={20} />,
-  "clear-skies": <SunIcon size={20} />,
-  cloudy: <CloudIcon size={20} />,
-  fog: <CloudFogIcon size={20} />,
-  mist: <CloudFogIcon size={20} />,
-  haze: <CloudFogIcon size={20} />,
-  dust: <CloudIcon size={20} />,
-  frost: <SnowflakeIcon size={20} />,
-};
-
-const REPORT_LABELS: Record<string, string> = {
-  "light-rain": "Light Rain",
-  "heavy-rain": "Heavy Rain",
-  thunderstorm: "Thunderstorm",
-  hail: "Hail",
-  flooding: "Flooding",
-  "strong-wind": "Strong Wind",
-  "clear-skies": "Clear Skies",
-  cloudy: "Cloudy",
-  fog: "Fog",
-  mist: "Mist",
-  haze: "Haze",
-  dust: "Dust",
-  frost: "Frost",
-};
 
 const SEVERITY_CLASSES: Record<string, string> = {
   mild: "bg-severity-low/10 text-severity-low",
@@ -183,18 +137,21 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
 
       {!loading && reports.length > 0 && (
         <div className="space-y-2">
-          {reports.map((report) => (
+          {reports.map((report) => {
+            const typeInfo = getReportTypeInfo(report.reportType);
+            const TypeIcon = typeInfo?.icon ?? CloudSunIcon;
+            return (
             <div
               key={report.id}
               className="flex items-center gap-3 rounded-[var(--radius-card)] border border-mineral-copper/25 bg-surface-card p-3 shadow-sm"
             >
               <span className="shrink-0 text-text-secondary" aria-hidden="true">
-                {REPORT_ICONS[report.reportType] || <CloudSunIcon size={20} />}
+                <TypeIcon size={20} />
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-base font-medium text-text-primary">
-                    {REPORT_LABELS[report.reportType] || report.reportType}
+                    {typeInfo?.label ?? report.reportType}
                   </span>
                   <span className={`rounded-[var(--radius-badge)] px-1.5 py-0.5 text-base font-bold uppercase ${SEVERITY_CLASSES[report.severity] || ""}`}>
                     {report.severity}
@@ -222,7 +179,8 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
                 {report.upvotes > 0 && <span>{report.upvotes}</span>}
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>

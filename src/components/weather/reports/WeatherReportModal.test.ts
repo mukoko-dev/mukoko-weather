@@ -32,26 +32,12 @@ describe("WeatherReportModal structure", () => {
 });
 
 describe("report types", () => {
-  it("defines 13 report types", () => {
-    expect(source).toContain("light-rain");
-    expect(source).toContain("heavy-rain");
-    expect(source).toContain("thunderstorm");
-    expect(source).toContain("hail");
-    expect(source).toContain("flooding");
-    expect(source).toContain("strong-wind");
-    expect(source).toContain("clear-skies");
-    expect(source).toContain("cloudy");
-    expect(source).toContain("fog");
-    expect(source).toContain("mist");
-    expect(source).toContain("haze");
-    expect(source).toContain("dust");
-    expect(source).toContain("frost");
-  });
-
-  it("uses SVG weather icons (not emoji) — matches RecentReports' icon treatment", () => {
-    expect(source).toContain("CloudDrizzleIcon");
-    expect(source).toContain("CloudFogIcon");
-    expect(source).not.toMatch(/icon:\s*["'][\u{1F300}-\u{1FAFF}☀-➿]/u);
+  it("sources report types from the shared report-types module", () => {
+    // Single source of truth shared with RecentReports — see
+    // src/lib/report-types.ts — instead of a locally hand-synced list. The
+    // 13-type coverage and SVG-icon assertions live in report-types.test.ts.
+    expect(source).toContain('from "@/lib/report-types"');
+    expect(source).toContain("REPORT_TYPES");
   });
 
   it("defines 3 severity levels", () => {

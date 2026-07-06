@@ -5,40 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogSheetHandle, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
-import {
-  CloudDrizzleIcon,
-  CloudRainIcon,
-  CloudLightningIcon,
-  CloudHailIcon,
-  WaterIcon,
-  WindIcon,
-  SunIcon,
-  CloudIcon,
-  CloudFogIcon,
-  SnowflakeIcon,
-} from "@/lib/weather-icons";
-
-// ---------------------------------------------------------------------------
-// Report types
-// ---------------------------------------------------------------------------
-
-// SVG icons (not emoji) so this matches RecentReports' icon treatment for
-// the same report types — one consistent visual language for the feature.
-const REPORT_TYPES = [
-  { id: "light-rain", label: "Light Rain", icon: CloudDrizzleIcon },
-  { id: "heavy-rain", label: "Heavy Rain", icon: CloudRainIcon },
-  { id: "thunderstorm", label: "Thunderstorm", icon: CloudLightningIcon },
-  { id: "hail", label: "Hail", icon: CloudHailIcon },
-  { id: "flooding", label: "Flooding", icon: WaterIcon },
-  { id: "strong-wind", label: "Strong Wind", icon: WindIcon },
-  { id: "clear-skies", label: "Clear Skies", icon: SunIcon },
-  { id: "cloudy", label: "Cloudy", icon: CloudIcon },
-  { id: "fog", label: "Fog", icon: CloudFogIcon },
-  { id: "mist", label: "Mist", icon: CloudFogIcon },
-  { id: "haze", label: "Haze", icon: CloudFogIcon },
-  { id: "dust", label: "Dust", icon: CloudIcon },
-  { id: "frost", label: "Frost", icon: SnowflakeIcon },
-] as const;
+import { REPORT_TYPES } from "@/lib/report-types";
 
 const SEVERITIES = [
   { id: "mild", label: "Mild", description: "Noticeable but not disruptive" },
