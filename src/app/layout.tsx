@@ -94,9 +94,9 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // Hydrate AuthKitProvider with the server-resolved session so client
-  // components (UserMenu, etc.) render with the right state on first paint
-  // instead of fetching it. `accessToken` is stripped — the client never
-  // needs it; server reads via withAuth() are always fresh.
+  // components (Header's account icon, etc.) render with the right state on
+  // first paint instead of fetching it. `accessToken` is stripped — the
+  // client never needs it; server reads via withAuth() are always fresh.
   // Wrapped in try/catch: AuthKit throws when its env vars are missing,
   // and we don't want that to break the entire layout in dev.
   let initialAuth: Parameters<typeof AuthKitProvider>[0]["initialAuth"];

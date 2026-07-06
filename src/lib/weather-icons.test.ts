@@ -146,7 +146,7 @@ describe("Icon components", () => {
     "DroneIcon", "TennisIcon", "RugbyIcon", "HorseIcon", "PlaneIcon",
     "WaterIcon", "FishIcon", "StarIcon", "PicnicIcon",
     "TrashIcon", "PlusIcon", "NavigationIcon",
-    "MegaphoneIcon", "LayersIcon",
+    "MegaphoneIcon", "LayersIcon", "BellIcon", "UserIcon",
   ];
 
   it("exports all icon components", () => {
