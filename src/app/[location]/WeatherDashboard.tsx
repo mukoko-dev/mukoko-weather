@@ -23,12 +23,9 @@ import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import {
   SectionSkeleton,
   ReportsSkeleton,
-  HourlyForecastSkeleton,
   ActivityInsightsSkeleton,
-  DailyForecastSkeleton,
   AISummarySkeleton,
   AISummaryChatSkeleton,
-  SunTimesSkeleton,
   MapPreviewSkeleton,
   SupportBannerSkeleton,
   LocationInfoSkeleton,
@@ -43,6 +40,7 @@ import type { WeatherLocation } from "@/lib/locations";
 import type { AISummaryUser } from "@/components/weather/AISummary";
 import { type Activity, ACTIVITIES } from "@/lib/activities";
 import { InfoRow } from "@/components/ui/info-row";
+import { SectionHeader } from "@/components/ui/section-header";
 import { SupportBanner } from "@/components/weather/SupportBanner";
 import { DraggableSection } from "@/components/weather/DraggableSection";
 import { LiveClock } from "@/components/weather/LiveClock";
@@ -53,11 +51,8 @@ import { cacheWeatherHint } from "@/lib/weather-scenes";
 // These use React.lazy() so their JS chunks (Chart.js, ReactMarkdown, etc.)
 // are only downloaded when the LazySection IntersectionObserver fires.
 // This dramatically reduces the initial JS parse/compile on iOS PWA.
-const HourlyForecast = lazy(() => import("@/components/weather/HourlyForecast").then((m) => ({ default: m.HourlyForecast })));
-const DailyForecast = lazy(() => import("@/components/weather/DailyForecast").then((m) => ({ default: m.DailyForecast })));
 const AISummary = lazy(() => import("@/components/weather/AISummary").then((m) => ({ default: m.AISummary })));
 const ActivityInsights = lazy(() => import("@/components/weather/ActivityInsights").then((m) => ({ default: m.ActivityInsights })));
-const SunTimes = lazy(() => import("@/components/weather/SunTimes").then((m) => ({ default: m.SunTimes })));
 const MapPreview = lazy(() => import("@/components/weather/map/MapPreview").then((m) => ({ default: m.MapPreview })));
 const AviationWeather = lazy(() => import("@/components/weather/AviationWeather").then((m) => ({ default: m.AviationWeather })));
 const AISummaryChat = lazy(() => import("@/components/weather/AISummaryChat").then((m) => ({ default: m.AISummaryChat })));
@@ -309,7 +304,15 @@ export function WeatherDashboard({
                       return (
                         <DraggableSection key="hourlyScroll" id="hourlyScroll" reordering={reordering}>
                           <ChartErrorBoundary name="hourly scroll cards">
-                            <HourlyScrollCards hourly={weather.hourly} />
+                            <section aria-labelledby="hourly-scroll-heading">
+                              <SectionHeader
+                                headingId="hourly-scroll-heading"
+                                title="Hourly"
+                                action={{ label: "Full forecast →", href: `/${location.slug}/forecast` }}
+                                className="mb-2"
+                              />
+                              <HourlyScrollCards hourly={weather.hourly} />
+                            </section>
                           </ChartErrorBoundary>
                         </DraggableSection>
                       );
@@ -350,18 +353,6 @@ export function WeatherDashboard({
                           </LazySection>
                         </DraggableSection>
                       );
-                    case "hourlyForecast":
-                      return (
-                        <DraggableSection key="hourlyForecast" id="hourlyForecast" reordering={reordering}>
-                          <LazySection label="hourly-forecast" fallback={<HourlyForecastSkeleton />}>
-                            <ChartErrorBoundary name="hourly forecast">
-                              <Suspense fallback={<HourlyForecastSkeleton />}>
-                                <HourlyForecast hourly={weather.hourly} />
-                              </Suspense>
-                            </ChartErrorBoundary>
-                          </LazySection>
-                        </DraggableSection>
-                      );
                     case "activityInsights":
                       return (
                         <DraggableSection key="activityInsights" id="activityInsights" reordering={reordering}>
@@ -369,18 +360,6 @@ export function WeatherDashboard({
                             <ChartErrorBoundary name="activity insights">
                               <Suspense fallback={<ActivityInsightsSkeleton />}>
                                 <ActivityInsights insights={weather.insights} activities={allActivities} />
-                              </Suspense>
-                            </ChartErrorBoundary>
-                          </LazySection>
-                        </DraggableSection>
-                      );
-                    case "dailyForecast":
-                      return (
-                        <DraggableSection key="dailyForecast" id="dailyForecast" reordering={reordering}>
-                          <LazySection label="daily-forecast" fallback={<DailyForecastSkeleton />}>
-                            <ChartErrorBoundary name="daily forecast">
-                              <Suspense fallback={<DailyForecastSkeleton />}>
-                                <DailyForecast daily={weather.daily} />
                               </Suspense>
                             </ChartErrorBoundary>
                           </LazySection>
@@ -426,14 +405,6 @@ export function WeatherDashboard({
 
           {/* Sidebar — stacks below on mobile, col-span-1 on lg and xl */}
           <div className="min-w-0 space-y-4 lg:col-span-1 xl:col-span-1">
-            <LazySection label="sun-times" fallback={<SunTimesSkeleton />}>
-              <ChartErrorBoundary name="sun times">
-                <Suspense fallback={<SunTimesSkeleton />}>
-                  <SunTimes daily={weather.daily} />
-                </Suspense>
-              </ChartErrorBoundary>
-            </LazySection>
-
             <LazySection label="weather-map" fallback={<MapPreviewSkeleton />}>
               <ChartErrorBoundary name="weather map">
                 <Suspense fallback={<MapPreviewSkeleton />}>

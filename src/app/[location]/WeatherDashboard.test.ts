@@ -13,24 +13,31 @@ const source = readFileSync(
 );
 
 describe("WeatherDashboard — section ordering (Google Weather pattern)", () => {
-  it("renders HourlyForecast before AISummary in the left column", () => {
-    const hourlyPos = source.indexOf('label="hourly-forecast"');
-    const aiPos = source.indexOf('label="ai-summary"');
-    expect(hourlyPos).toBeGreaterThan(-1);
-    expect(aiPos).toBeGreaterThan(-1);
-    expect(hourlyPos).toBeLessThan(aiPos);
+  it("does not duplicate /forecast's full HourlyForecast/DailyForecast/SunTimes charts", () => {
+    // These sections used to render the exact same components /forecast
+    // shows, verbatim, on the main page — contradicting the documented
+    // "compact overview here, detail on sub-routes" philosophy. Full detail
+    // now lives exclusively on /forecast; the main page keeps only the
+    // always-present HourlyScrollCards preview + a link to /forecast.
+    expect(source).not.toContain('label="hourly-forecast"');
+    expect(source).not.toContain('label="daily-forecast"');
+    expect(source).not.toContain('label="sun-times"');
+    expect(source).not.toContain("<HourlyForecast");
+    expect(source).not.toContain("<DailyForecast");
+    expect(source).not.toContain("<SunTimes");
   });
 
-  it("renders ActivityInsights before DailyForecast", () => {
+  it("links the hourly scroll preview to the full /forecast sub-route", () => {
+    expect(source).toContain("Full forecast →");
+    expect(source).toContain("`/${location.slug}/forecast`");
+  });
+
+  it("renders ActivityInsights before AISummary", () => {
     const activityPos = source.indexOf('label="activity-insights"');
-    const dailyPos = source.indexOf('label="daily-forecast"');
-    expect(activityPos).toBeLessThan(dailyPos);
-  });
-
-  it("renders DailyForecast before AISummary", () => {
-    const dailyPos = source.indexOf('label="daily-forecast"');
     const aiPos = source.indexOf('label="ai-summary"');
-    expect(dailyPos).toBeLessThan(aiPos);
+    expect(activityPos).toBeGreaterThan(-1);
+    expect(aiPos).toBeGreaterThan(-1);
+    expect(activityPos).toBeLessThan(aiPos);
   });
 
   it("renders AtmosphericSummary eagerly after CurrentConditions (not lazy)", () => {
@@ -51,20 +58,19 @@ describe("WeatherDashboard — section ordering (Google Weather pattern)", () =>
     expect(currentPos).toBeLessThan(firstLazy);
   });
 
-  it("sidebar starts with SunTimes", () => {
+  it("sidebar starts with the weather map preview (SunTimes moved to /forecast only)", () => {
     const sidebarStart = source.indexOf("Sidebar");
-    const sunPos = source.indexOf('label="sun-times"');
-    expect(sidebarStart).toBeLessThan(sunPos);
+    const mapPos = source.indexOf('label="weather-map"');
+    expect(sidebarStart).toBeGreaterThan(-1);
+    expect(mapPos).toBeGreaterThan(-1);
+    expect(sidebarStart).toBeLessThan(mapPos);
   });
 });
 
 describe("WeatherDashboard — lazy loading", () => {
   const lazySections = [
-    "hourly-forecast",
     "ai-summary",
     "activity-insights",
-    "daily-forecast",
-    "sun-times",
     "weather-map",
     "location-info",
   ];
@@ -82,8 +88,8 @@ describe("WeatherDashboard — lazy loading", () => {
 
   it("uses React.lazy for code-split heavy components", () => {
     expect(source).toContain("lazy(");
-    expect(source).toContain("HourlyForecast");
     expect(source).toContain("AISummary");
+    expect(source).toContain("MapPreview");
   });
 
   it("wraps lazy components in Suspense with skeleton fallback", () => {
@@ -102,12 +108,8 @@ describe("WeatherDashboard — error isolation", () => {
     expect(source).toContain('name="current conditions"');
   });
 
-  it("wraps HourlyForecast in ChartErrorBoundary", () => {
-    expect(source).toContain('name="hourly forecast"');
-  });
-
-  it("wraps DailyForecast in ChartErrorBoundary", () => {
-    expect(source).toContain('name="daily forecast"');
+  it("wraps HourlyScrollCards in ChartErrorBoundary", () => {
+    expect(source).toContain('name="hourly scroll cards"');
   });
 
   it("wraps AISummary in ChartErrorBoundary", () => {
@@ -116,8 +118,9 @@ describe("WeatherDashboard — error isolation", () => {
 
   it("wraps all chart/data sections in ChartErrorBoundary", () => {
     const boundaryCount = (source.match(/<ChartErrorBoundary/g) || []).length;
-    // Current + Hourly + Daily + AI + Activities + Atmospheric + Sun + Map = 8
-    expect(boundaryCount).toBeGreaterThanOrEqual(8);
+    // Hourly scroll + Current + Atmospheric + Reports + Activities + AI
+    // summary + AI chat + Map + Aviation + Support + Minutely + Models = 12
+    expect(boundaryCount).toBeGreaterThanOrEqual(10);
   });
 });
 

@@ -59,9 +59,7 @@ export const DEFAULT_SECTION_ORDER = [
   "hourlyScroll",
   "atmospheric",
   "reports",
-  "hourlyForecast",
   "activityInsights",
-  "dailyForecast",
   "aiSummary",
   "aiChat",
 ] as const;
