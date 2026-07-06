@@ -245,18 +245,14 @@ export function WeatherDashboard({
       <div className="mx-auto max-w-7xl px-4 pt-1 pb-0 sm:px-6 md:px-8 flex items-center justify-between">
         <LiveClock />
         {reordering ? (
-          <button
-            type="button"
-            onClick={() => setReordering(false)}
-            className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90"
-          >
+          <button type="button" onClick={() => setReordering(false)} className="kudu-sm">
             Done
           </button>
         ) : (
           <button
             type="button"
             onClick={() => setReordering(true)}
-            className="press-scale inline-flex min-h-[var(--touch-target-min)] items-center gap-1.5 rounded-full border border-text-tertiary/20 px-3 py-1 text-sm text-text-tertiary transition-all hover:border-text-tertiary/40 hover:text-text-secondary"
+            className="impala-sm"
             aria-label="Customise section layout"
           >
             <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">

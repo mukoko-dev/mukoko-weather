@@ -62,9 +62,13 @@ describe("WelcomeBanner — accessibility", () => {
     expect(source).toContain("<section");
   });
 
-  it("buttons have minimum touch target height", () => {
-    // 56px min-height for both buttons (WCAG touch target requirement)
-    expect(source).toContain("min-h-[var(--touch-target-min)]");
+  it("buttons meet minimum touch target height via shared fauna classes", () => {
+    // Both buttons compose .kudu-sm / .impala-sm, which bake in
+    // min-h-[var(--touch-target-min)] (WCAG touch target requirement)
+    // — checked here structurally rather than string-matching a literal
+    // class the buttons no longer spell out inline.
+    expect(source).toContain("kudu-sm");
+    expect(source).toContain("impala-sm");
   });
 });
 
