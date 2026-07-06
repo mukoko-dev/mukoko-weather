@@ -28,9 +28,9 @@ from ._db import (
     get_db,
     ai_prompts_collection,
     history_analysis_collection,
-    locations_collection,
     filter_known_activities,
 )
+from ._places_resolver import find_location
 from ._circuit_breaker import anthropic_breaker, CircuitOpenError
 
 router = APIRouter()
@@ -324,11 +324,14 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
     if not rate["allowed"]:
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
 
-    # Verify location exists and get metadata
-    loc = locations_collection().find_one(
-        {"slug": location_slug},
-        {"_id": 0, "slug": 1, "name": 1, "elevation": 1, "country": 1, "lat": 1, "lon": 1},
-    )
+    # Verify location exists and get metadata — resolved via places.placesGeo
+    # (Phase 0G); weather.locations is dropped, so a direct locations_collection
+    # lookup here would 404 on every request. Matches the pattern in _history.py,
+    # _chat.py, _reports.py, and _locations.py.
+    try:
+        loc = find_location(location_slug)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Location service unavailable")
     if not loc:
         raise HTTPException(status_code=404, detail="Unknown location")
 

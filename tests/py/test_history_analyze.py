@@ -351,12 +351,12 @@ class TestAnalyzeHistoryEndpoint:
         assert "Rate limit exceeded" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    @patch("py._history_analyze.locations_collection")
+    @patch("py._history_analyze.find_location")
     @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
     async def test_unknown_location_raises_404(self, _mock_ip, _mock_rate, mock_loc):
         """Non-existent location should return 404."""
-        mock_loc.return_value.find_one.return_value = None
+        mock_loc.return_value = None
         body = AnalyzeRequest(location="nonexistent", days=30)
         request = self._make_request()
 
@@ -366,13 +366,30 @@ class TestAnalyzeHistoryEndpoint:
         assert "Unknown location" in exc_info.value.detail
 
     @pytest.mark.asyncio
+    @patch("py._history_analyze.find_location")
+    @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
+    @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
+    async def test_resolves_location_via_placesgeo_resolver(self, _mock_ip, _mock_rate, mock_loc):
+        """Regression test: weather.locations is dropped (Phase 0F/0G) — this
+        endpoint must resolve via find_location() (places.placesGeo), not a
+        direct locations_collection() lookup, which would 404 on every real
+        request since that collection no longer has data."""
+        mock_loc.return_value = None
+        body = AnalyzeRequest(location="harare", days=30)
+        request = self._make_request()
+
+        with pytest.raises(HTTPException):
+            await analyze_history(body, request)
+        mock_loc.assert_called_once_with("harare")
+
+    @pytest.mark.asyncio
     @patch("py._history_analyze.get_db")
-    @patch("py._history_analyze.locations_collection")
+    @patch("py._history_analyze.find_location")
     @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
     async def test_no_history_data_raises_404(self, _mock_ip, _mock_rate, mock_loc, mock_db):
         """When no history records exist, should raise 404."""
-        mock_loc.return_value.find_one.return_value = {"slug": "harare", "name": "Harare"}
+        mock_loc.return_value = {"slug": "harare", "name": "Harare"}
 
         mock_coll = MagicMock()
         mock_coll.find.return_value.sort.return_value = []
@@ -389,14 +406,14 @@ class TestAnalyzeHistoryEndpoint:
     @pytest.mark.asyncio
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
-    @patch("py._history_analyze.locations_collection")
+    @patch("py._history_analyze.find_location")
     @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
     async def test_cache_hit_returns_cached_analysis(
         self, _mock_ip, _mock_rate, mock_loc, mock_db, mock_cache_coll
     ):
         """Should return cached analysis when available."""
-        mock_loc.return_value.find_one.return_value = {"slug": "harare", "name": "Harare"}
+        mock_loc.return_value = {"slug": "harare", "name": "Harare"}
 
         history_records = [
             {"date": "2025-01-15", "current": {"temperature_2m": 28}, "daily": {}},
@@ -424,7 +441,7 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze._get_analysis_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
-    @patch("py._history_analyze.locations_collection")
+    @patch("py._history_analyze.find_location")
     @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
     async def test_lon_passed_to_get_season(
@@ -432,7 +449,7 @@ class TestAnalyzeHistoryEndpoint:
         mock_cache_coll, _mock_prompt_get, mock_client, mock_breaker,
     ):
         """Verify both lat and lon are extracted from location and passed to _get_season."""
-        mock_loc.return_value.find_one.return_value = {
+        mock_loc.return_value = {
             "slug": "nairobi-ke", "name": "Nairobi", "country": "KE",
             "lat": -1.29, "lon": 36.82, "elevation": 1795,
         }
@@ -471,7 +488,7 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze._build_analysis_system_prompt", return_value="system prompt")
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
-    @patch("py._history_analyze.locations_collection")
+    @patch("py._history_analyze.find_location")
     @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
     async def test_circuit_breaker_open_returns_stats_only(
@@ -480,7 +497,7 @@ class TestAnalyzeHistoryEndpoint:
         mock_client, mock_breaker,
     ):
         """When circuit breaker is open, should return stats-only response."""
-        mock_loc.return_value.find_one.return_value = {
+        mock_loc.return_value = {
             "slug": "harare", "name": "Harare", "country": "ZW",
         }
 
@@ -514,7 +531,7 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze._get_analysis_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
-    @patch("py._history_analyze.locations_collection")
+    @patch("py._history_analyze.find_location")
     @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
     async def test_successful_ai_call_returns_analysis(
@@ -522,7 +539,7 @@ class TestAnalyzeHistoryEndpoint:
         mock_cache_coll, _mock_prompt_get, mock_client, mock_breaker,
     ):
         """Successful AI call should return analysis and stats."""
-        mock_loc.return_value.find_one.return_value = {
+        mock_loc.return_value = {
             "slug": "harare", "name": "Harare", "country": "ZW",
         }
 
@@ -565,7 +582,7 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze._get_analysis_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
-    @patch("py._history_analyze.locations_collection")
+    @patch("py._history_analyze.find_location")
     @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
     async def test_ai_rate_limit_error_raises_429(
@@ -573,7 +590,7 @@ class TestAnalyzeHistoryEndpoint:
         mock_cache_coll, _mock_prompt_get, mock_client, mock_breaker,
     ):
         """Anthropic rate limit error should raise 429."""
-        mock_loc.return_value.find_one.return_value = {
+        mock_loc.return_value = {
             "slug": "harare", "name": "Harare", "country": "ZW",
         }
 
@@ -604,7 +621,7 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze._get_analysis_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
-    @patch("py._history_analyze.locations_collection")
+    @patch("py._history_analyze.find_location")
     @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
     async def test_ai_api_error_returns_graceful_fallback(
@@ -612,7 +629,7 @@ class TestAnalyzeHistoryEndpoint:
         mock_cache_coll, _mock_prompt_get, mock_client, mock_breaker,
     ):
         """Anthropic APIError should return stats-only graceful fallback, not raise."""
-        mock_loc.return_value.find_one.return_value = {
+        mock_loc.return_value = {
             "slug": "harare", "name": "Harare", "country": "ZW",
         }
 
@@ -645,7 +662,7 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze._get_analysis_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
-    @patch("py._history_analyze.locations_collection")
+    @patch("py._history_analyze.find_location")
     @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
     @patch("py._history_analyze.filter_known_activities", side_effect=lambda activities: activities)
@@ -654,7 +671,7 @@ class TestAnalyzeHistoryEndpoint:
         mock_cache_coll, _mock_prompt_get, mock_client, mock_breaker,
     ):
         """User activities should be included in the AI prompt when provided."""
-        mock_loc.return_value.find_one.return_value = {
+        mock_loc.return_value = {
             "slug": "harare", "name": "Harare", "country": "ZW",
         }
 
@@ -694,7 +711,7 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze._get_analysis_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
-    @patch("py._history_analyze.locations_collection")
+    @patch("py._history_analyze.find_location")
     @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
     async def test_no_activities_omits_activities_note(
@@ -702,7 +719,7 @@ class TestAnalyzeHistoryEndpoint:
         mock_cache_coll, _mock_prompt_get, mock_client, mock_breaker,
     ):
         """When no activities provided, the activities note should be empty."""
-        mock_loc.return_value.find_one.return_value = {
+        mock_loc.return_value = {
             "slug": "harare", "name": "Harare", "country": "ZW",
         }
 
