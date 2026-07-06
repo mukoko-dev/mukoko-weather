@@ -43,7 +43,10 @@ const REPORT_ICONS: Record<string, React.ReactElement> = {
   flooding: <WaterIcon size={20} />,
   "strong-wind": <WindIcon size={20} />,
   "clear-skies": <SunIcon size={20} />,
+  cloudy: <CloudIcon size={20} />,
   fog: <CloudFogIcon size={20} />,
+  mist: <CloudFogIcon size={20} />,
+  haze: <CloudFogIcon size={20} />,
   dust: <CloudIcon size={20} />,
   frost: <SnowflakeIcon size={20} />,
 };
@@ -56,7 +59,10 @@ const REPORT_LABELS: Record<string, string> = {
   flooding: "Flooding",
   "strong-wind": "Strong Wind",
   "clear-skies": "Clear Skies",
+  cloudy: "Cloudy",
   fog: "Fog",
+  mist: "Mist",
+  haze: "Haze",
   dust: "Dust",
   frost: "Frost",
 };

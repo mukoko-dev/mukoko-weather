@@ -5,22 +5,39 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogSheetHandle, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
+import {
+  CloudDrizzleIcon,
+  CloudRainIcon,
+  CloudLightningIcon,
+  CloudHailIcon,
+  WaterIcon,
+  WindIcon,
+  SunIcon,
+  CloudIcon,
+  CloudFogIcon,
+  SnowflakeIcon,
+} from "@/lib/weather-icons";
 
 // ---------------------------------------------------------------------------
 // Report types
 // ---------------------------------------------------------------------------
 
+// SVG icons (not emoji) so this matches RecentReports' icon treatment for
+// the same report types — one consistent visual language for the feature.
 const REPORT_TYPES = [
-  { id: "light-rain", label: "Light Rain", icon: "🌦️" },
-  { id: "heavy-rain", label: "Heavy Rain", icon: "🌧️" },
-  { id: "thunderstorm", label: "Thunderstorm", icon: "⛈️" },
-  { id: "hail", label: "Hail", icon: "🌨️" },
-  { id: "flooding", label: "Flooding", icon: "🌊" },
-  { id: "strong-wind", label: "Strong Wind", icon: "💨" },
-  { id: "clear-skies", label: "Clear Skies", icon: "☀️" },
-  { id: "fog", label: "Fog", icon: "🌫️" },
-  { id: "dust", label: "Dust", icon: "🏜️" },
-  { id: "frost", label: "Frost", icon: "❄️" },
+  { id: "light-rain", label: "Light Rain", icon: CloudDrizzleIcon },
+  { id: "heavy-rain", label: "Heavy Rain", icon: CloudRainIcon },
+  { id: "thunderstorm", label: "Thunderstorm", icon: CloudLightningIcon },
+  { id: "hail", label: "Hail", icon: CloudHailIcon },
+  { id: "flooding", label: "Flooding", icon: WaterIcon },
+  { id: "strong-wind", label: "Strong Wind", icon: WindIcon },
+  { id: "clear-skies", label: "Clear Skies", icon: SunIcon },
+  { id: "cloudy", label: "Cloudy", icon: CloudIcon },
+  { id: "fog", label: "Fog", icon: CloudFogIcon },
+  { id: "mist", label: "Mist", icon: CloudFogIcon },
+  { id: "haze", label: "Haze", icon: CloudFogIcon },
+  { id: "dust", label: "Dust", icon: CloudIcon },
+  { id: "frost", label: "Frost", icon: SnowflakeIcon },
 ] as const;
 
 const SEVERITIES = [
@@ -147,18 +164,21 @@ export function WeatherReportModal() {
         {step === "select" && (
           <div className="px-5 pb-5">
             <div className="grid grid-cols-2 gap-2" role="group" aria-label="Weather condition type">
-              {REPORT_TYPES.map((type) => (
-                <button
-                  key={type.id}
-                  type="button"
-                  onClick={() => handleTypeSelect(type.id)}
-                  disabled={loading}
-                  className="flex items-center gap-2.5 rounded-[var(--radius-button)] border border-border bg-surface-card px-3 py-3 text-left text-base transition-colors hover:bg-surface-dim hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)] disabled:opacity-50"
-                >
-                  <span className="text-lg" aria-hidden="true">{type.icon}</span>
-                  <span className="text-text-primary font-medium">{type.label}</span>
-                </button>
-              ))}
+              {REPORT_TYPES.map((type) => {
+                const Icon = type.icon;
+                return (
+                  <button
+                    key={type.id}
+                    type="button"
+                    onClick={() => handleTypeSelect(type.id)}
+                    disabled={loading}
+                    className="flex items-center gap-2.5 rounded-[var(--radius-button)] border border-border bg-surface-card px-3 py-3 text-left text-base transition-colors hover:bg-surface-dim hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)] disabled:opacity-50"
+                  >
+                    <Icon size={20} className="shrink-0 text-text-secondary" />
+                    <span className="text-text-primary font-medium">{type.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -245,9 +265,11 @@ export function WeatherReportModal() {
         {step === "confirm" && submitted && (
           <div className="space-y-4 px-5 pb-5 text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-severity-low/10">
-              <span className="text-2xl" aria-hidden="true">
-                {typeInfo?.icon || "✓"}
-              </span>
+              {typeInfo ? (
+                <typeInfo.icon size={26} className="text-severity-low" />
+              ) : (
+                <span className="text-2xl" aria-hidden="true">✓</span>
+              )}
             </div>
             <p className="text-base text-text-secondary">
               Your <strong>{typeInfo?.label}</strong> report has been submitted.

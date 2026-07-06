@@ -33,13 +33,14 @@ from py._reports import (
 
 
 class TestReportTypes:
-    def test_has_10_types(self):
-        assert len(REPORT_TYPES) == 10
+    def test_has_13_types(self):
+        assert len(REPORT_TYPES) == 13
 
     def test_expected_types_present(self):
         expected = {
             "light-rain", "heavy-rain", "thunderstorm", "hail", "flooding",
-            "strong-wind", "clear-skies", "fog", "dust", "frost",
+            "strong-wind", "clear-skies", "cloudy", "fog", "mist", "haze",
+            "dust", "frost",
         }
         assert REPORT_TYPES == expected
 
@@ -168,6 +169,27 @@ class TestCrossValidate:
     def test_fog_wrong_code(self):
         assert _cross_validate("fog", {"weatherCode": 0}) is False
 
+    def test_cloudy_partly_cloudy(self):
+        assert _cross_validate("cloudy", {"weatherCode": 2}) is True
+
+    def test_cloudy_overcast(self):
+        assert _cross_validate("cloudy", {"weatherCode": 3}) is True
+
+    def test_cloudy_wrong_code(self):
+        assert _cross_validate("cloudy", {"weatherCode": 0}) is False
+
+    def test_mist_code_45(self):
+        assert _cross_validate("mist", {"weatherCode": 45}) is True
+
+    def test_mist_wrong_code(self):
+        assert _cross_validate("mist", {"weatherCode": 0}) is False
+
+    def test_haze_code_48(self):
+        assert _cross_validate("haze", {"weatherCode": 48}) is True
+
+    def test_haze_wrong_code(self):
+        assert _cross_validate("haze", {"weatherCode": 0}) is False
+
     def test_frost_temp_3(self):
         assert _cross_validate("frost", {"temperature": 3}) is True
 
@@ -222,6 +244,18 @@ class TestFallbackQuestions:
     def test_frost_questions(self):
         questions = _fallback_questions("frost")
         assert any("frost" in q.lower() for q in questions)
+
+    def test_cloudy_questions(self):
+        questions = _fallback_questions("cloudy")
+        assert any("cloud" in q.lower() or "overcast" in q.lower() for q in questions)
+
+    def test_mist_questions(self):
+        questions = _fallback_questions("mist")
+        assert any("see" in q.lower() or "visibility" in q.lower() for q in questions)
+
+    def test_haze_questions(self):
+        questions = _fallback_questions("haze")
+        assert any("haz" in q.lower() or "dusty" in q.lower() or "smoky" in q.lower() for q in questions)
 
 
 # ---------------------------------------------------------------------------

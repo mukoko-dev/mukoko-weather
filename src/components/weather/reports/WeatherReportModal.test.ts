@@ -32,7 +32,7 @@ describe("WeatherReportModal structure", () => {
 });
 
 describe("report types", () => {
-  it("defines 10 report types", () => {
+  it("defines 13 report types", () => {
     expect(source).toContain("light-rain");
     expect(source).toContain("heavy-rain");
     expect(source).toContain("thunderstorm");
@@ -40,9 +40,18 @@ describe("report types", () => {
     expect(source).toContain("flooding");
     expect(source).toContain("strong-wind");
     expect(source).toContain("clear-skies");
+    expect(source).toContain("cloudy");
     expect(source).toContain("fog");
+    expect(source).toContain("mist");
+    expect(source).toContain("haze");
     expect(source).toContain("dust");
     expect(source).toContain("frost");
+  });
+
+  it("uses SVG weather icons (not emoji) — matches RecentReports' icon treatment", () => {
+    expect(source).toContain("CloudDrizzleIcon");
+    expect(source).toContain("CloudFogIcon");
+    expect(source).not.toMatch(/icon:\s*["'][\u{1F300}-\u{1FAFF}☀-➿]/u);
   });
 
   it("defines 3 severity levels", () => {
