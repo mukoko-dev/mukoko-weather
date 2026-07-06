@@ -66,13 +66,19 @@ function DialogContent({
 /**
  * Sheet handle — grab pill (mobile only) + minerals accent stripe.
  * Place as the first child of DialogContent for Spotify-style bottom sheets.
+ *
+ * `sticky top-0` (with a matching background) keeps the grab handle pinned
+ * to the top of the sheet as its content scrolls — DialogContent itself is
+ * the scroll container (`overflow-y-auto`), so without this the handle
+ * scrolled away with the rest of the content on any sheet tall enough to
+ * scroll, defeating its purpose as an always-reachable drag/dismiss target.
  */
 function DialogSheetHandle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-sheet-handle"
       aria-hidden="true"
-      className={cn("shrink-0", className)}
+      className={cn("sticky top-0 z-10 shrink-0 bg-surface-card", className)}
       {...props}
     >
       <div className="flex justify-center pt-3 sm:pt-0">

@@ -20,7 +20,8 @@ export interface DetectUserLocationOptions {
   /** If true, auto-creates a new location via reverse geocoding when
    *  none is found nearby. Default false — find nearest only, never create
    *  duplicates. Only pass true when the user explicitly wants to add their
-   *  position to the DB (e.g. "Save my location" in SavedLocationsModal). */
+   *  position to the DB (e.g. the "Use current location" flow in
+   *  MyWeatherModal's Location tab). */
   autoCreate?: boolean;
   /** Override the GPS timeout (ms). Defaults to 10s. A shorter value suits a
    *  background/silent recheck that must never visibly stall the UI. */

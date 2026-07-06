@@ -610,13 +610,18 @@ body {
 }
 
 /* ===== Minerals Stripe — Seven African Minerals (doctrine v4.1.0 ring order) ===== */
+/* z-index kept below Radix Dialog's overlay/content (z-50, see dialog.tsx) so
+   this page-chrome accent is covered by the backdrop like the rest of the
+   page whenever a modal opens — it's a main-layout decoration only. Modals
+   carry their own horizontal mineral accent via DialogSheetHandle's
+   .minerals-accent instead of having this vertical stripe bleed on top. */
 .minerals-stripe {
   position: fixed;
   left: 0;
   top: 0;
   bottom: 0;
   width: 4px;
-  z-index: 9999;
+  z-index: 20;
   background: linear-gradient(
     to bottom,
     var(--mineral-tanzanite)  0%,    var(--mineral-tanzanite)  14.28%,

@@ -19,7 +19,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useDebounce } from "@/lib/use-debounce";
+import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 import { cn, slugToDisplayName } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { ForecastModel, FORECAST_MODEL_LABELS } from "@/lib/weather";
@@ -179,12 +179,14 @@ function SavedTab({
   const [editValue, setEditValue] = useState("");
   const editInputRef = useRef<HTMLInputElement>(null);
 
-  // Add location search
+  // Add location search — shared debounced quick-match search, same as
+  // Explore's instant results, filtered here to exclude already-saved slugs.
   const [showAdd, setShowAdd] = useState(false);
-  const [addQuery, setAddQuery] = useState("");
-  const debouncedAddQuery = useDebounce(addQuery, 300);
-  const [addResults, setAddResults] = useState<{ slug: string; name: string; province: string; country?: string }[]>([]);
-  const [addLoading, setAddLoading] = useState(false);
+  const { query: addQuery, setQuery: setAddQuery, results: addRawResults, loading: addLoading, reset: resetAddSearch } = useLocationQuickSearch();
+  const addResults = useMemo(
+    () => addRawResults.filter((l) => !savedLocations.includes(l.slug)),
+    [addRawResults, savedLocations],
+  );
   const addInputRef = useRef<HTMLInputElement>(null);
 
   const atCap = savedLocations.length >= MAX_SAVED_LOCATIONS;
@@ -203,34 +205,6 @@ function SavedTab({
       return () => clearTimeout(t);
     }
   }, [showAdd]);
-
-  // Search for locations to add
-  useEffect(() => {
-    const q = debouncedAddQuery.trim();
-    if (!q) {
-      const t = requestAnimationFrame(() => { setAddResults([]); });
-      return () => cancelAnimationFrame(t);
-    }
-
-    const controller = new AbortController();
-    const run = async () => {
-      setAddLoading(true);
-      try {
-        const res = await fetch(`/api/py/search?q=${encodeURIComponent(q)}&limit=10`, { signal: controller.signal });
-        const data = res.ok ? await res.json() : null;
-        const locs = (data?.locations ?? []).filter(
-          (l: { slug: string }) => !savedLocations.includes(l.slug),
-        );
-        setAddResults(locs);
-      } catch {
-        if (!controller.signal.aborted) { setAddResults([]); }
-      } finally {
-        if (!controller.signal.aborted) { setAddLoading(false); }
-      }
-    };
-    run();
-    return () => controller.abort();
-  }, [debouncedAddQuery, savedLocations]);
 
   const handleGeolocate = useCallback(async () => {
     setGeoLoading(true);
@@ -388,7 +362,7 @@ function SavedTab({
             {addResults.map((loc) => (
               <li key={loc.slug}>
                 <button
-                  onClick={() => { saveLocation(loc.slug); setAddQuery(""); setAddResults([]); }}
+                  onClick={() => { saveLocation(loc.slug); resetAddSearch(); }}
                   className="flex w-full min-h-[var(--touch-target-min)] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base text-text-primary hover:bg-surface-base transition-colors"
                   type="button"
                 >
@@ -401,7 +375,7 @@ function SavedTab({
               </li>
             ))}
           </ul>
-          <Button variant="ghost" size="sm" onClick={() => { setShowAdd(false); setAddQuery(""); setAddResults([]); }}
+          <Button variant="ghost" size="sm" onClick={() => { setShowAdd(false); resetAddSearch(); }}
             className="mt-1 text-text-tertiary">
             Cancel
           </Button>

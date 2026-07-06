@@ -1,20 +1,13 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { SearchIcon, MapPinIcon, SparklesIcon } from "@/lib/weather-icons";
 import { Button } from "@/components/ui/button";
 import { weatherCodeToInfo } from "@/lib/weather";
 import { trackEvent } from "@/lib/analytics";
-import { useDebounce } from "@/lib/use-debounce";
 import { ShamwariCTA } from "@/components/weather/ShamwariCTA";
-
-interface QuickResult {
-  slug: string;
-  name: string;
-  province?: string;
-  country?: string;
-}
+import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,7 +35,6 @@ interface SearchResponse {
 // ---------------------------------------------------------------------------
 
 export function ExploreSearch() {
-  const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [summary, setSummary] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -50,34 +42,12 @@ export function ExploreSearch() {
   const [searched, setSearched] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Instant quick matches (same fast name/tag search + debounce pattern as
-  // the My Weather modal's location search) — shown live as the user types,
-  // before they commit to the slower AI-powered search below. This is the
+  // Instant quick matches — the same shared debounced search used by the My
+  // Weather modal's location picker — shown live as the user types, before
+  // they commit to the slower AI-powered search below. This is the
   // "functions like other weather searches" part: type a city name, see it
   // immediately, same as every other location search in the app.
-  const [quickResults, setQuickResults] = useState<QuickResult[]>([]);
-  const [quickLoading, setQuickLoading] = useState(false);
-  const debouncedQuery = useDebounce(query, 300);
-
-  useEffect(() => {
-    const q = debouncedQuery.trim();
-    if (!q) {
-      setQuickResults([]);
-      return;
-    }
-    const controller = new AbortController();
-    setQuickLoading(true);
-    fetch(`/api/py/search?q=${encodeURIComponent(q)}&limit=6`, { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setQuickResults(data?.locations ?? []))
-      .catch(() => {
-        if (!controller.signal.aborted) setQuickResults([]);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setQuickLoading(false);
-      });
-    return () => controller.abort();
-  }, [debouncedQuery]);
+  const { query, setQuery, results: quickResults, loading: quickLoading } = useLocationQuickSearch({ limit: 6 });
 
   const search = useCallback(
     async (searchQuery: string) => {
@@ -187,11 +157,16 @@ export function ExploreSearch() {
       {/* Instant quick matches — same fast search everywhere else in the app
           uses, shown live as you type. The AI search below is a deliberate
           extra step (submit) since it's a slower, rate-limited AI call. */}
-      {query.trim() && (quickLoading || quickResults.length > 0) && (
+      {query.trim() && (
         <ul aria-label="Quick location matches" className="space-y-1">
           {quickLoading && quickResults.length === 0 && (
             <li className="h-10 animate-pulse rounded-[var(--radius-input)] bg-surface-base" role="status" aria-label="Loading">
               <span className="sr-only">Loading</span>
+            </li>
+          )}
+          {!quickLoading && quickResults.length === 0 && (
+            <li className="py-2 text-center text-base text-text-tertiary">
+              No results for &ldquo;{query.trim()}&rdquo;
             </li>
           )}
           {quickResults.map((loc) => (

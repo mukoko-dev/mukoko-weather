@@ -12,13 +12,13 @@ const source = readFileSync(resolve(__dirname, "ExploreSearch.tsx"), "utf-8");
  */
 
 describe("ExploreSearch — instant quick matches", () => {
-  it("debounces the query and calls the same fast search endpoint used elsewhere in the app", () => {
-    // Same endpoint + debounce pattern as MyWeatherModal's location search,
-    // so typing a city name here behaves the same way it does everywhere
-    // else in the app — the AI search below is a separate, deliberate step.
-    expect(source).toContain('from "@/lib/use-debounce"');
-    expect(source).toContain("useDebounce(query, 300)");
-    expect(source).toContain("/api/py/search?q=");
+  it("uses the shared quick-location-search hook — same one MyWeatherModal uses", () => {
+    // Single shared implementation (debounce, cancellation, result shape)
+    // instead of a hand-rolled copy, so typing a city name here behaves the
+    // same way it does everywhere else in the app — the AI search below is
+    // a separate, deliberate step.
+    expect(source).toContain('from "@/lib/use-location-quick-search"');
+    expect(source).toContain("useLocationQuickSearch({ limit: 6 })");
   });
 
   it("shows quick results as plain location links, independent of the AI search results", () => {
@@ -26,9 +26,8 @@ describe("ExploreSearch — instant quick matches", () => {
     expect(source).toContain('aria-label="Quick location matches"');
   });
 
-  it("cancels in-flight quick searches on rapid typing", () => {
-    expect(source).toContain("AbortController");
-    expect(source).toContain("controller.signal");
+  it("shows a no-results message instead of nothing when a query returns no matches", () => {
+    expect(source).toContain("No results for");
   });
 });
 

@@ -184,31 +184,6 @@ describe("savedLocations", () => {
   });
 });
 
-describe("savedLocationsOpen", () => {
-  it("defaults to false", () => {
-    expect(useAppStore.getState().savedLocationsOpen).toBe(false);
-  });
-
-  it("openSavedLocations sets it to true", () => {
-    useAppStore.getState().openSavedLocations();
-    expect(useAppStore.getState().savedLocationsOpen).toBe(true);
-  });
-
-  it("closeSavedLocations sets it back to false", () => {
-    useAppStore.getState().openSavedLocations();
-    useAppStore.getState().closeSavedLocations();
-    expect(useAppStore.getState().savedLocationsOpen).toBe(false);
-  });
-
-  it("is NOT persisted to RxDB (transient state)", async () => {
-    const { updatePreferences } = await import("./rxdb/bridge");
-    vi.mocked(updatePreferences).mockClear();
-    useAppStore.getState().openSavedLocations();
-    // Transient state should NOT trigger RxDB persistence
-    expect(updatePreferences).not.toHaveBeenCalled();
-  });
-});
-
 describe("myWeatherOpen", () => {
   it("defaults to false", () => {
     expect(useAppStore.getState().myWeatherOpen).toBe(false);

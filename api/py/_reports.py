@@ -41,7 +41,7 @@ router = APIRouter()
 
 REPORT_TYPES = {
     "light-rain", "heavy-rain", "thunderstorm", "hail", "flooding",
-    "strong-wind", "clear-skies", "fog", "dust", "frost",
+    "strong-wind", "clear-skies", "cloudy", "fog", "mist", "haze", "dust", "frost",
 }
 
 SEVERITY_LEVELS = {"mild", "moderate", "severe"}
@@ -247,7 +247,9 @@ def _cross_validate(report_type: str, snapshot: dict) -> bool:
         return True
     if report_type == "clear-skies" and code in (0, 1) and precip == 0:
         return True
-    if report_type == "fog" and code in (45, 48):
+    if report_type == "cloudy" and code in (2, 3):
+        return True
+    if report_type in ("fog", "mist", "haze") and code in (45, 48):
         return True
     if report_type == "frost" and temp <= 3:
         return True
@@ -415,7 +417,10 @@ def _fallback_questions(report_type: str) -> list[str]:
         "flooding": ["How deep is the water on the road?", "Are vehicles able to pass?"],
         "strong-wind": ["Are tree branches bending or breaking?", "Is it hard to walk against the wind?"],
         "clear-skies": ["Is the sun fully visible?", "Are there any clouds at all?"],
+        "cloudy": ["Is it fully overcast or partly cloudy?", "Any sign of rain coming?"],
         "fog": ["How far can you see ahead?", "Is the fog getting thicker or thinner?"],
+        "mist": ["How far can you see ahead?", "Is it affecting your visibility while driving?"],
+        "haze": ["Does the air look dusty, smoky, or just hazy?", "How far can you see ahead?"],
         "dust": ["Can you taste the dust in the air?", "How far can you see?"],
         "frost": ["Is the frost visible on surfaces?", "Are your car windows frosted over?"],
     }

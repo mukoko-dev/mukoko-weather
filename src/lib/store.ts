@@ -155,10 +155,6 @@ interface AppState {
   myWeatherOpen: boolean;
   openMyWeather: () => void;
   closeMyWeather: () => void;
-  /** Saved locations modal visibility (transient) */
-  savedLocationsOpen: boolean;
-  openSavedLocations: () => void;
-  closeSavedLocations: () => void;
   hasOnboarded: boolean;
   completeOnboarding: () => void;
   /** Shamwari context — carries weather/location data between pages (transient, not persisted) */
@@ -270,9 +266,6 @@ export const useAppStore = create<AppState>()((set) => ({
   myWeatherOpen: false,
   openMyWeather: () => set({ myWeatherOpen: true }),
   closeMyWeather: () => set({ myWeatherOpen: false }),
-  savedLocationsOpen: false,
-  openSavedLocations: () => set({ savedLocationsOpen: true }),
-  closeSavedLocations: () => set({ savedLocationsOpen: false }),
   hasOnboarded: false,
   completeOnboarding: () => {
     set({ hasOnboarded: true });
