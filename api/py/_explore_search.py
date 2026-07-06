@@ -11,7 +11,6 @@ System prompt is fetched from the database (system:explore_search).
 from __future__ import annotations
 
 import os
-import re
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -26,6 +25,7 @@ from ._db import (
     get_api_key,
     weather_cache_collection,
     ai_prompts_collection,
+    SLUG_RE,
 )
 from ._places_resolver import find_all_locations
 from ._circuit_breaker import anthropic_breaker, CircuitOpenError
@@ -36,7 +36,6 @@ router = APIRouter()
 # Constants
 # ---------------------------------------------------------------------------
 
-SLUG_RE = re.compile(r"^[a-z0-9-]{1,80}$")
 RATE_LIMIT_MAX = 15
 RATE_LIMIT_WINDOW = 3600  # 1 hour
 MAX_QUERY_LEN = 500

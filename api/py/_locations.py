@@ -21,6 +21,7 @@ from ._db import (
     get_client_ip,
     places_geo_collection,
     check_rate_limit,
+    SLUG_RE,
 )
 from ._places_resolver import (
     adapt_placesgeo_to_location,
@@ -43,7 +44,6 @@ from ._places_geo import (
 
 router = APIRouter()
 
-SLUG_RE = re.compile(r"^[a-z0-9-]{1,80}$")
 _http_client: Optional[httpx.Client] = None
 
 # City-states where state/province fields are meaningless (postal codes or same as country).

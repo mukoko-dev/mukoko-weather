@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -11,7 +10,12 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from pymongo.errors import DuplicateKeyError
 
-from ._db import device_profiles_collection, get_client_ip, check_rate_limit
+from ._db import (
+    device_profiles_collection,
+    get_client_ip,
+    check_rate_limit,
+    SLUG_RE,
+)
 
 router = APIRouter()
 
@@ -30,7 +34,6 @@ VALID_FORECAST_MODELS = {
 }
 MAX_ACTIVITIES = 30
 MAX_SAVED_LOCATIONS = 10
-SLUG_RE = re.compile(r"^[a-z0-9-]{1,80}$")
 
 
 class Preferences(BaseModel):

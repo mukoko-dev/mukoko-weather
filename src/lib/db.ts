@@ -1046,11 +1046,6 @@ export async function findDuplicateLocation(
 // Search operations (Phase 0F — placesGeo-backed)
 // ---------------------------------------------------------------------------
 
-export interface SearchResult {
-  locations: LocationDoc[];
-  total: number;
-}
-
 /** Retained for backwards-compat with existing tests/imports. */
 const ATLAS_RETRY_AFTER_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -1066,39 +1061,6 @@ function isAtlasSearchIndexMissing(err: unknown): boolean {
     if (msg.includes("index not found")) return true;
   }
   return false;
-}
-
-/**
- * Search locations. Phase 0F: runs a name/regex search against the static
- * seed list and a normalised-name lookup against `places.placesGeo` for
- * user-created entries. Atlas Search on `weather.locations` is gone.
- */
-export async function searchLocationsFromDb(
-  query: string,
-  options: { tag?: string; limit?: number; skip?: number } = {},
-): Promise<SearchResult> {
-  const { tag, limit = 20, skip = 0 } = options;
-  const q = query.trim();
-  if (!q && !tag) return { locations: [], total: 0 };
-
-  const lowered = q.toLowerCase();
-  const seedMatches = LOCATIONS.filter((loc) => {
-    if (tag && !loc.tags.includes(tag)) return false;
-    if (!q) return true;
-    return (
-      loc.name.toLowerCase().includes(lowered) ||
-      loc.slug.includes(lowered) ||
-      loc.province.toLowerCase().includes(lowered)
-    );
-  });
-
-  const total = seedMatches.length;
-  const page = seedMatches.slice(skip, skip + limit);
-  const now = new Date();
-  return {
-    locations: page.map((loc) => ({ ...loc, updatedAt: now })) as LocationDoc[],
-    total,
-  };
 }
 
 /**

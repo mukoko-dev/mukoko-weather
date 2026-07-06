@@ -17,6 +17,7 @@ will reject malformed writes. Use ``stamp_platform_fields()`` to add these.
 from __future__ import annotations
 
 import os
+import re
 import time as _time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -27,6 +28,21 @@ from pymongo import MongoClient
 from pymongo.database import Database
 
 _client: Optional[MongoClient] = None
+
+# ---------------------------------------------------------------------------
+# Shared validation constants — single source so slug format and message/
+# history caps can't drift between endpoints.
+# ---------------------------------------------------------------------------
+
+#: Location slug format, shared by _chat.py, _devices.py, _explore_search.py,
+#: and _locations.py.
+SLUG_RE = re.compile(r"^[a-z0-9-]{1,80}$")
+
+#: Chat/follow-up message length cap, shared by _chat.py and _ai_followup.py.
+MAX_MESSAGE_LEN = 2000
+
+#: Conversation history length cap, shared by _chat.py and _ai_followup.py.
+MAX_HISTORY = 10
 
 
 # ---------------------------------------------------------------------------

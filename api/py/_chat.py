@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -36,6 +35,9 @@ from ._db import (
     activities_collection,
     suitability_rules_collection,
     ai_prompts_collection,
+    SLUG_RE,
+    MAX_HISTORY,
+    MAX_MESSAGE_LEN,
 )
 from ._places_resolver import (
     find_all_locations,
@@ -52,9 +54,6 @@ router = APIRouter()
 # Constants
 # ---------------------------------------------------------------------------
 
-SLUG_RE = re.compile(r"^[a-z0-9-]{1,80}$")
-MAX_HISTORY = 10
-MAX_MESSAGE_LEN = 2000
 MAX_ACTIVITIES = 20  # user-selected activities from client
 MAX_TOOL_ITERATIONS = 5
 TOOL_TIMEOUT_S = 15  # applied to each tool execution via asyncio.wait_for

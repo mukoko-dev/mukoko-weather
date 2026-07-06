@@ -24,6 +24,8 @@ from ._db import (
     get_api_key,
     ai_prompts_collection,
     filter_known_activities,
+    MAX_HISTORY,
+    MAX_MESSAGE_LEN,
 )
 from ._circuit_breaker import anthropic_breaker, CircuitOpenError
 
@@ -33,8 +35,6 @@ router = APIRouter()
 # Constants
 # ---------------------------------------------------------------------------
 
-MAX_HISTORY = 10
-MAX_MESSAGE_LEN = 2000
 MAX_MESSAGES_PER_CONVERSATION = 5
 RATE_LIMIT_MAX = 30
 RATE_LIMIT_WINDOW = 3600  # 1 hour
