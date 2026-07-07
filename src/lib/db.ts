@@ -32,6 +32,8 @@ import {
   shamwariDb,
   deviceDb,
   integrationsDb,
+  platformDb,
+  entityDb,
 } from "./mongo";
 import { fetchWeather, createFallbackWeather, getDefaultSeason, synthesizeOpenMeteoInsights, type WeatherData, type Season } from "./weather";
 import { logWarn, logError } from "./observability";
@@ -662,6 +664,22 @@ export function providersCollection() {
 /** Per-env/per-country provider configs — `integrations.providerConfigurations`. */
 export function providerConfigurationsCollection() {
   return integrationsDb().collection("providerConfigurations");
+}
+
+// platform domain
+/** Canonical developer API keys (strict validator) — `platform.apiKeys`. */
+export function platformApiKeysCollection() {
+  return platformDb().collection<{ _id: string; [k: string]: unknown }>(
+    "apiKeys",
+  );
+}
+
+// entity domain
+/** Person↔entity memberships (roles) — `entity.memberships`. */
+export function entityMembershipsCollection() {
+  return entityDb().collection<{ _id: string; [k: string]: unknown }>(
+    "memberships",
+  );
 }
 
 // ---------------------------------------------------------------------------

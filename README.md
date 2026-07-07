@@ -14,7 +14,7 @@ AI-powered global weather intelligence — real-time forecasts and locally-relev
 - **AI weather intelligence** — Claude-powered markdown-formatted summaries with farming, mining, and travel advice, plus inline follow-up chat (up to 5 messages before seamless handoff to Shamwari)
 - **AI-powered explore search** — natural-language location discovery ("farming areas with low frost risk") using Claude with tool use
 - **AI history analysis** — button-triggered analysis of historical weather trends, patterns, and anomalies with server-side aggregation
-- **Personalised activity insights** — 30+ activities across 6 categories (farming, mining, travel, tourism, sports, casual) with mineral-colored cards showing GDD, heat stress, thunderstorm risk, visibility, and more
+- **Personalised activity insights** — 50+ activities across 6 categories (farming, mining, travel, tourism, sports, casual) with mineral-colored cards showing a database-rule suitability rating, a 24-hour feasibility trend chart, and deterministic weather-driven tips per activity (storm safety, rain windows, spraying wind, UV, frost, heat)
 - **User-reorderable sections** — drag-and-drop reorder of weather page sections via `@dnd-kit`, persisted to local storage; "Customise layout" toggle enters reorder mode
 - **Live clock** — browser date and time in the location page header, updates every minute
 - **User accounts via WorkOS AuthKit** — sign-in / sign-up via WorkOS AuthKit (`@workos-inc/authkit-nextjs`), with sessions managed by signed cookies. On first sign-in, the user is upserted into the shared platform `identity.persons` collection (OIDC-compliant `_id`, `workosUserId`, OIDC standard claims). Dedup is airtight — never two persons docs for the same WorkOS user
@@ -24,7 +24,7 @@ AI-powered global weather intelligence — real-time forecasts and locally-relev
 - **Frost alerts** — automated frost risk detection for overnight hours with severity levels
 - **Dynamic locations** — 265 seed locations across 64 countries (98 Zimbabwe + 167 global), with community-driven expansion via geolocation and search. A tight 1km same-name dedup prevents exact-spot duplicates while letting distinct nearby roads/shops/addresses each resolve to their own fine-grained entry (GPS never snaps to a distant city). Reverse-geocoded via Nominatim (OpenStreetMap) with structured address storage for formal three-layer breadcrumbs
 - **Seasonal awareness** — country-specific seasons for 50+ countries (including Zimbabwe's Masika, Chirimo, Zhizha, Munakamwe) with local names and agricultural calendars
-- **Shamwari AI chat** — dedicated `/shamwari` page with full-viewport Claude app-style chat (search locations, check weather, get activity advice, compare cities). Contextual navigation carries weather/location data from any page
+- **Shamwari AI chat** — full-viewport Claude app-style chat (search locations, check weather, get activity advice, compare cities) with contextual navigation carrying weather/location data from any page. Currently **paused** behind the `shamwari_chat` feature flag — AI stays available as inline summaries, follow-up chat, and AI explore search
 - **Suitability scoring** — database-driven weather suitability evaluation for activities (excellent/good/fair/poor ratings with structured metrics)
 - **Country/region browse** — explore locations by country, province, and tag across 64 countries (54 AU + ASEAN)
 - **System status** — live health dashboard for all services (MongoDB, weather APIs, AI, cache)
@@ -120,7 +120,7 @@ The home page (`/`) uses smart redirect: returning users go to their saved locat
 | `/[location]/atmosphere`             | 24-hour atmospheric detail charts (humidity, wind, pressure, UV)                                    |
 | `/[location]/forecast`               | Hourly (24h) + daily (7-day) forecast charts + sunrise/sunset                                       |
 | `/[location]/map`                    | Full-viewport interactive weather map with layer switcher                                           |
-| `/shamwari`                          | Shamwari AI chat (full-viewport, Claude app style)                                                  |
+| `/shamwari`                          | Shamwari AI chat (full-viewport). Paused — 404s while `FLAGS.shamwari_chat` is `false`              |
 | `/explore`                           | Browse locations by category and country                                                            |
 | `/explore/[tag]`                     | Browse locations filtered by tag                                                                    |
 | `/explore/country`                   | Browse locations by country index                                                                   |
@@ -133,6 +133,7 @@ The home page (`/`) uses smart redirect: returning users go to their saved locat
 | `/privacy`                           | Privacy policy                                                                                      |
 | `/terms`                             | Terms of service                                                                                    |
 | `/embed`                             | Embeddable widget documentation                                                                     |
+| `/developers/keys`                   | Gated API-key management (sign-in required). Create / list / revoke developer API keys              |
 
 The main location page is a compact overview. Detail-heavy sections (charts, atmospheric trends, hourly/daily forecasts) live on dedicated sub-route pages. This reduces initial page load weight and prevents mobile OOM crashes.
 
@@ -174,11 +175,13 @@ All data, AI, and CRUD operations run in **Python FastAPI** (`api/py/`), deploye
 
 **TypeScript API (remaining):**
 
-| Endpoint                              | Method | Description                                                                                                                                                                      |
-| ------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/og?title=&subtitle=&template=`  | GET    | Dynamic OG image generation (Edge runtime, Satori). 6 templates, in-memory rate-limited, 1-day CDN cache                                                                         |
-| `/api/db-init`                        | POST   | One-time DB setup + seed data (incl. AI prompts). Protected by `DB_INIT_SECRET` in production                                                                                    |
-| `/api/embed/current?slug=\|lat=&lon=` | GET    | Public embed API (Edge, open CORS). Compact current weather + up to 7 daily entries. No params → visitor's IP location (Vercel `x-vercel-ip-*` headers). Powers the embed widget |
+| Endpoint                              | Method   | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/og?title=&subtitle=&template=`  | GET      | Dynamic OG image generation (Edge runtime, Satori). 6 templates, in-memory rate-limited, 1-day CDN cache                                                                                                                                                                                                                                                                                                                                                                   |
+| `/api/db-init`                        | POST     | One-time DB setup + seed data (incl. AI prompts). Protected by `DB_INIT_SECRET` in production                                                                                                                                                                                                                                                                                                                                                                              |
+| `/api/embed/current?slug=\|lat=&lon=` | GET      | Public embed API (Edge, open CORS). Compact current weather + up to 7 daily entries. No params → visitor's IP location (Vercel `x-vercel-ip-*` headers). Powers the embed widget                                                                                                                                                                                                                                                                                           |
+| `/api/keys`                           | GET/POST | Developer API keys in `platform.apiKeys` (`keyType: "external"`, `surfaceContext: "mukoko-weather"`, `scopes: ["weather:read"]`). Gated by `withAuth()` (401 anon). GET lists the user's keys (masked) + `entityRequired` flag. POST mints a key (full key returned ONCE), capped at 10/user; requires an eligible `entity.memberships` role (founder/admin/manager/representative) or returns **403**. Keys hashed (SHA-256 `keyHashedSecret`) at rest — never stored raw |
+| `/api/keys/[id]`                      | DELETE   | Revoke (soft-delete: `isActive: false` + `revokedAt`) one of the caller's own keys (scoped by `ownerPersonId`; 404 for foreign/unknown ids). Gated by `withAuth()`                                                                                                                                                                                                                                                                                                         |
 
 ### Resilience
 

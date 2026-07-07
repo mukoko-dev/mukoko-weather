@@ -1,0 +1,321 @@
+/**
+ * Developer API keys — generation, hashing, and owner-scoped CRUD.
+ *
+ * The public mukoko weather / embed API is FREE and needs no key (it is
+ * rate-limited per IP). This module powers the *gated* key-management surface:
+ * a signed-in developer can mint a key (for attribution + future higher
+ * limits), list their keys, and revoke them.
+ *
+ * Storage: the canonical, platform-wide **`platform.apiKeys`** collection
+ * (strict `validationAction: "error"` validator). Every doc is scoped to
+ * mukoko via `surfaceContext: "mukoko-weather"` and `keyType: "external"`, and
+ * owned by the developer's `identity.persons._id` (`ownerPersonId`).
+ *
+ * Security invariants (enforced here, tested in `api-keys.test.ts`):
+ *   - The raw key is generated once, returned once, and NEVER persisted.
+ *     Only a SHA-256 hash (`keyHashedSecret`) + a short display prefix
+ *     (`keyPrefix`) + last-4 are stored. SHA-256 is deliberate — it is the
+ *     platform's canonical O(1) deterministic lookup hash (not a password).
+ *   - Every read/write is scoped by `ownerPersonId` (+ surfaceContext +
+ *     keyType) so a user can only ever see or revoke their own keys.
+ *   - Keys are capped per user (`MAX_KEYS_PER_USER`).
+ *   - Revoke is a soft-delete (`isActive: false` + `revokedAt`), matching the
+ *     platform schema — never a hard delete.
+ */
+
+import { createHash, randomBytes, randomUUID } from "crypto";
+import {
+  platformApiKeysCollection,
+  personsCollection,
+  entityMembershipsCollection,
+} from "./db";
+import { upsertPlatformPerson, type WorkOSUser } from "./auth";
+
+/** Live key prefix. All minted keys start with this. */
+export const KEY_PREFIX = "mk_live_";
+
+/** Bytes of entropy in the random portion (→ 64 hex chars). */
+const KEY_RANDOM_BYTES = 32;
+
+/** Maximum active keys a single user may hold at once. */
+export const MAX_KEYS_PER_USER = 10;
+
+/** Maximum length of a user-supplied key label (`name`). */
+export const MAX_LABEL_LENGTH = 60;
+
+/** Platform schema constants for mukoko-owned external developer keys. */
+const SCHEMA_VERSION = "v3.1";
+const SURFACE_CONTEXT = "mukoko-weather";
+const KEY_TYPE = "external";
+const PLAN_TIER = "free";
+const DEFAULT_SCOPES = ["weather:read"] as const;
+
+/**
+ * Entity membership roles that may mint API keys on behalf of their entity.
+ * A key is owned by the developer's OWN entity (resolved via
+ * `entity.memberships`) — there is no fixed owner-entity constant.
+ */
+export const KEY_ELIGIBLE_ROLES = [
+  "founder",
+  "admin",
+  "manager",
+  "representative",
+] as const;
+
+/**
+ * Stored `platform.apiKeys` document (the fields mukoko writes/reads).
+ * The raw key is NEVER a field here — only `keyHashedSecret`.
+ */
+export interface PlatformApiKeyDoc {
+  _id: string;
+  _schemaVersion: "v3.1";
+  keyType: "external";
+  ownerEntityId: string;
+  ownerPersonId: string | null;
+  createdByPersonId: string;
+  name: string;
+  keyPrefix: string;
+  /** SHA-256 hex of the full raw key — the platform's deterministic lookup hash. */
+  keyHashedSecret: string;
+  scopes: string[];
+  surfaceContext: string;
+  planTier: "free";
+  isActive: boolean;
+  monthlyRequestCount: number;
+  monthlyRequestLimit: number | null;
+  expiresAt: Date | null;
+  lastUsedAt: Date | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  /** Non-schema helper: last-4 of the random portion for masked display. */
+  keyLast4?: string;
+}
+
+/** Masked, safe-to-return-to-client representation (never the raw value). */
+export interface DeveloperApiKeyPublic {
+  id: string;
+  label: string;
+  /** e.g. `mk_live_ab12…ef90`. */
+  maskedKey: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+/** Shared owner/surface scope applied to every list/count/revoke query. */
+function ownerScope(personId: string): Record<string, unknown> {
+  return {
+    ownerPersonId: personId,
+    surfaceContext: SURFACE_CONTEXT,
+    keyType: KEY_TYPE,
+  };
+}
+
+/**
+ * Generate a fresh raw API key: `mk_live_` + 64 hex chars of CSPRNG entropy.
+ * This value is shown to the user exactly once and never stored.
+ */
+export function generateApiKey(): string {
+  return KEY_PREFIX + randomBytes(KEY_RANDOM_BYTES).toString("hex");
+}
+
+/**
+ * SHA-256 hex digest of a raw key — persisted as `keyHashedSecret`.
+ * SHA-256 (not bcrypt/scrypt) is intentional: this is the platform's canonical
+ * deterministic lookup hash, enabling O(1) key verification. It is a random
+ * high-entropy secret, not a user password.
+ */
+export function hashApiKey(rawKey: string): string {
+  return createHash("sha256").update(rawKey).digest("hex");
+}
+
+/**
+ * Derive the non-secret display metadata from a raw key:
+ *   - `keyPrefix`: `mk_live_` + first 4 chars of the random portion
+ *   - `keyLast4`: last 4 chars of the random portion
+ */
+export function deriveKeyMeta(rawKey: string): {
+  keyPrefix: string;
+  keyLast4: string;
+} {
+  const random = rawKey.startsWith(KEY_PREFIX)
+    ? rawKey.slice(KEY_PREFIX.length)
+    : rawKey;
+  return {
+    keyPrefix: KEY_PREFIX + random.slice(0, 4),
+    keyLast4: random.slice(-4),
+  };
+}
+
+/** Build the masked display string, e.g. `mk_live_ab12…ef90`. */
+export function maskApiKey(keyPrefix: string, keyLast4: string): string {
+  return `${keyPrefix}…${keyLast4}`;
+}
+
+/**
+ * Validate + normalise a user-supplied label. Strips control characters,
+ * collapses whitespace, trims, and caps length. Returns `""` for anything
+ * that reduces to empty — callers treat that as a 400.
+ */
+export function sanitizeLabel(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  // Strip ASCII control characters (C0 range + DEL) before collapsing.
+  const stripped = raw.replace(/[\x00-\x1f\x7f]/g, " ");
+  const collapsed = stripped.replace(/\s+/g, " ").trim();
+  return collapsed.slice(0, MAX_LABEL_LENGTH);
+}
+
+/**
+ * Reconstruct the masked key for display. `keyLast4` is a mukoko-added helper
+ * field; if an older doc lacks it, fall back to the last 4 chars of the prefix.
+ */
+function maskedKeyForDoc(doc: PlatformApiKeyDoc): string {
+  const last4 = doc.keyLast4 ?? doc.keyPrefix.slice(-4);
+  return maskApiKey(doc.keyPrefix, last4);
+}
+
+/** Map a stored doc to its masked public representation. */
+export function toPublic(doc: PlatformApiKeyDoc): DeveloperApiKeyPublic {
+  return {
+    id: doc._id,
+    label: doc.name,
+    maskedKey: maskedKeyForDoc(doc),
+    createdAt:
+      doc.createdAt instanceof Date
+        ? doc.createdAt.toISOString()
+        : new Date(doc.createdAt).toISOString(),
+    lastUsedAt: doc.lastUsedAt
+      ? doc.lastUsedAt instanceof Date
+        ? doc.lastUsedAt.toISOString()
+        : new Date(doc.lastUsedAt).toISOString()
+      : null,
+  };
+}
+
+/**
+ * Resolve the `identity.persons._id` for a signed-in WorkOS user.
+ * The WorkOS session gives `user.id` (= `workosUserId`), but the platform
+ * keys must be owned by the canonical person id. Look it up; if the person
+ * record doesn't exist yet, create it via `upsertPlatformPerson`.
+ */
+export async function resolveOwnerPersonId(user: WorkOSUser): Promise<string> {
+  const existing = (await personsCollection().findOne({
+    workosUserId: user.id,
+  })) as { _id: string } | null;
+  if (existing?._id) return existing._id;
+
+  const { person } = await upsertPlatformPerson(user);
+  return person._id;
+}
+
+/**
+ * Resolve the entity a developer mints keys on behalf of. Queries
+ * `entity.memberships` for the person's ACTIVE memberships whose role is
+ * eligible (`founder`/`admin`/`manager`/`representative`).
+ *
+ * Returns `null` when the person has no eligible membership — the caller MUST
+ * treat that as a hard stop (HTTP 403), never minting a key. When the person
+ * belongs to multiple entities, the oldest membership is the primary; the full
+ * list of `entityIds` is returned so the UI could later offer a choice.
+ */
+export async function resolveOwnerEntityId(
+  personId: string,
+): Promise<{ entityId: string; entityIds: string[] } | null> {
+  const memberships = (await entityMembershipsCollection()
+    .find({
+      personId,
+      isActive: true,
+      membershipRole: { $in: [...KEY_ELIGIBLE_ROLES] },
+    })
+    .sort({ joinedAt: 1, createdAt: 1 })
+    .toArray()) as unknown as Array<{ entityId: string }>;
+
+  if (memberships.length === 0) return null;
+
+  const entityIds = memberships.map((m) => m.entityId);
+  return { entityId: entityIds[0], entityIds };
+}
+
+/** Count a user's active keys (for the per-user cap). */
+export async function countDeveloperApiKeys(personId: string): Promise<number> {
+  return platformApiKeysCollection().countDocuments({
+    ...ownerScope(personId),
+    isActive: true,
+  });
+}
+
+/** List a user's active keys, masked, newest first. Never returns hashes. */
+export async function listDeveloperApiKeys(
+  personId: string,
+): Promise<DeveloperApiKeyPublic[]> {
+  const docs = (await platformApiKeysCollection()
+    .find({ ...ownerScope(personId), isActive: true })
+    .sort({ createdAt: -1 })
+    .toArray()) as unknown as PlatformApiKeyDoc[];
+  return docs.map(toPublic);
+}
+
+/**
+ * Create a key for `personId` (an `identity.persons._id`) owned by
+ * `ownerEntityId` (resolved from the developer's entity membership). Generates
+ * the raw value, stores ONLY the hash (+ prefix/last4) in `platform.apiKeys`,
+ * and returns the full key exactly once alongside the masked public record. The
+ * caller is responsible for the per-user cap check and for resolving/validating
+ * `ownerEntityId` (never mint a key without an eligible entity membership).
+ */
+export async function createDeveloperApiKey(
+  personId: string,
+  label: string,
+  ownerEntityId: string,
+): Promise<{ fullKey: string; key: DeveloperApiKeyPublic }> {
+  const fullKey = generateApiKey();
+  const { keyPrefix, keyLast4 } = deriveKeyMeta(fullKey);
+  const now = new Date();
+
+  const doc: PlatformApiKeyDoc = {
+    _id: randomUUID(),
+    _schemaVersion: SCHEMA_VERSION,
+    keyType: KEY_TYPE,
+    ownerEntityId,
+    ownerPersonId: personId,
+    createdByPersonId: personId,
+    name: label,
+    keyPrefix,
+    keyHashedSecret: hashApiKey(fullKey),
+    scopes: [...DEFAULT_SCOPES],
+    surfaceContext: SURFACE_CONTEXT,
+    planTier: PLAN_TIER,
+    isActive: true,
+    monthlyRequestCount: 0,
+    monthlyRequestLimit: null,
+    expiresAt: null,
+    lastUsedAt: null,
+    revokedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    keyLast4,
+  };
+
+  await platformApiKeysCollection().insertOne(
+    doc as unknown as { _id: string; [k: string]: unknown },
+  );
+  return { fullKey, key: toPublic(doc) };
+}
+
+/**
+ * Revoke a key by id, scoped to its owner. Soft-delete: sets `isActive: false`
+ * + `revokedAt` (never a hard delete). Returns `true` when an active key owned
+ * by `personId` was revoked — a mismatched owner or an already-revoked key
+ * matches nothing and returns `false`, so users can never revoke keys they
+ * don't own.
+ */
+export async function revokeDeveloperApiKey(
+  personId: string,
+  id: string,
+): Promise<boolean> {
+  const res = await platformApiKeysCollection().updateOne(
+    { ...ownerScope(personId), _id: id, isActive: true },
+    { $set: { isActive: false, revokedAt: new Date(), updatedAt: new Date() } },
+  );
+  return res.modifiedCount === 1;
+}

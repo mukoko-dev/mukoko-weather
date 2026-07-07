@@ -88,3 +88,13 @@ export function deviceDb(): Db {
 export function integrationsDb(): Db {
   return getClient().db("integrations");
 }
+
+/** Platform-wide cross-app collections — `apiKeys`, entities, billing, etc. */
+export function platformDb(): Db {
+  return getClient().db("platform");
+}
+
+/** Organisations / entities — `entities`, `memberships`, etc. */
+export function entityDb(): Db {
+  return getClient().db("entity");
+}
