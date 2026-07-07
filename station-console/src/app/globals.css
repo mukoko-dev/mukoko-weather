@@ -54,12 +54,15 @@
   --radius-2xl: calc(var(--radius-unit) + 10px);
   --radius-3xl: 9999px;
   --radius-4xl: 9999px;
-  /* Five African Minerals — theme-adaptive */
+  /* Seven African Minerals — theme-adaptive (source of truth: Mzizi
+     registry `brand_minerals`, doctrine v4.1.0) */
   --color-cobalt: var(--mineral-cobalt);
   --color-tanzanite: var(--mineral-tanzanite);
   --color-malachite: var(--mineral-malachite);
   --color-gold: var(--mineral-gold);
   --color-terracotta: var(--mineral-terracotta);
+  --color-sodalite: var(--mineral-sodalite);
+  --color-copper: var(--mineral-copper);
 }
 
 /* Light mode — L1 tokens synced from nyuchi-tokens registry (April 2026).
@@ -72,12 +75,14 @@
  * muted-foreground darkened for AAA contrast. Border/input alpha tightened
  * to 0.06. primary-foreground goes pure white. */
 :root {
-  /* Five African Minerals — light */
+  /* Seven African Minerals — light (Mzizi registry values) */
   --mineral-cobalt: #0047ab;
   --mineral-tanzanite: #4b0082;
   --mineral-malachite: #004d40;
   --mineral-gold: #5d4037;
-  --mineral-terracotta: #8b4513;
+  --mineral-terracotta: #a0522d;
+  --mineral-sodalite: #283593;
+  --mineral-copper: #bf5a36;
   --background: #f3f2ee;
   --foreground: #141413;
   --card: #ffffff;
@@ -125,12 +130,14 @@
  * muted-foreground lightened for AAA contrast. Border/input alpha tightened
  * to 0.06. primary-foreground matches the new warm-near-black background. */
 .dark {
-  /* Five African Minerals — dark */
+  /* Seven African Minerals — dark (Mzizi registry values) */
   --mineral-cobalt: #00b0ff;
   --mineral-tanzanite: #b388ff;
   --mineral-malachite: #64ffda;
   --mineral-gold: #ffd740;
-  --mineral-terracotta: #d4a574;
+  --mineral-terracotta: #e1b07e;
+  --mineral-sodalite: #3d5afe;
+  --mineral-copper: #ff8a65;
   --background: #1b1a17;
   --foreground: #f5f5f4;
   --card: #100f0e;

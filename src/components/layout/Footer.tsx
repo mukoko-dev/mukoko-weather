@@ -170,6 +170,14 @@ export function Footer() {
             >
               Barstool
             </a>
+            <a
+              href="https://travel-info.co.zw"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={link}
+            >
+              Travel
+            </a>
           </div>
         </div>
 
