@@ -107,7 +107,7 @@ npx tsc --noEmit      # Type check
 python -m pytest tests/py/ -v  # Run Python backend tests (direct)
 ```
 
-The home page (`/`) uses smart redirect: returning users go to their saved location, new users get geolocation detection with a 3-second timeout, and the fallback is `/harare`.
+The home page (`/`) IS the current-location weather page (Apple Weather's MY LOCATION model, URL kept silent): the server seeds it from the last-visited location or IP geo, then client GPS swaps the content in place — no redirect. Explicit `/{slug}` URLs remain for saved and browsed locations.
 
 ## Architecture
 
@@ -216,8 +216,8 @@ Both the location page and history page use feed-style progressive loading via `
 src/
   app/
     layout.tsx              # Root layout, metadata, JSON-LD schemas
-    page.tsx                # Home — smart redirect (saved location / geolocation / harare)
-    HomeRedirect.tsx        # Client: smart redirect with Zustand rehydration guard
+    page.tsx                # Home — server-seeds the current-location dashboard (cookie / IP geo)
+    CurrentLocationHome.tsx # Client: silent-URL home — GPS swaps the dashboard in place (no redirect)
     globals.css             # Brand System v6 (WCAG 3.0 APCA compliant)
     loading.tsx             # Root loading skeleton
     error.tsx               # Global error boundary

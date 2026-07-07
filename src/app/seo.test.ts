@@ -170,7 +170,7 @@ describe("canonical URLs — every page sets its own canonical", () => {
 
   // Pages that MUST have their own canonical to avoid GSC errors
   const pagesWithCanonicals: [string, string][] = [
-    ["page.tsx", "/harare"], // home → points to /harare
+    ["page.tsx", "canonical: `${BASE_URL}/`"], // home IS the current-location page — canonical is itself
     ["[location]/page.tsx", "loc.slug"], // dynamic locations
     ["explore/page.tsx", "/explore"],
     ["shamwari/page.tsx", "/shamwari"],

@@ -79,6 +79,12 @@ interface WeatherDashboardProps {
    * place of the AI summary and follow-up chat.
    */
   user: AISummaryUser | null;
+  /**
+   * True when this dashboard is showing the visitor's GPS-confirmed current
+   * location (the silent-URL home) — renders the MY LOCATION eyebrow above
+   * the hero, Apple Weather style.
+   */
+  isCurrentLocation?: boolean;
 }
 
 export function WeatherDashboard({
@@ -89,6 +95,7 @@ export function WeatherDashboard({
   season,
   countryName,
   user,
+  isCurrentLocation = false,
 }: WeatherDashboardProps) {
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
@@ -211,6 +218,11 @@ export function WeatherDashboard({
         windSpeed={weather.current.wind_speed_10m}
         isDay={weather.current.is_day === 1}
       />
+      {/* Everything above the backdrop — an explicit positive stacking layer.
+          Negative z-index on the backdrop was invisible on iOS Safari (fixed
+          negative-z + overflow-x:hidden body paints behind the background),
+          so the layering is expressed positively: backdrop z-0, content z-10. */}
+      <div className="relative z-10">
       <Header />
 
       {/* Breadcrumb navigation — always three layers: Country / Province / Location */}
@@ -335,6 +347,7 @@ export function WeatherDashboard({
                               locationName={location.name}
                               daily={weather.daily}
                               slug={location.slug}
+                              isCurrentLocation={isCurrentLocation}
                             />
                           </ChartErrorBoundary>
                         </DraggableSection>
@@ -499,6 +512,7 @@ export function WeatherDashboard({
       </main>
 
       <Footer />
+      </div>
     </>
   );
 }

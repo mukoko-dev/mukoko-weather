@@ -108,3 +108,17 @@ describe("CurrentConditions — section accessibility", () => {
     expect(source).toContain("Current weather conditions in");
   });
 });
+
+describe("CurrentConditions — MY LOCATION eyebrow (silent-URL home)", () => {
+  const source = readFileSync(resolve(__dirname, "CurrentConditions.tsx"), "utf-8");
+
+  it("renders the eyebrow only when isCurrentLocation is set", () => {
+    expect(source).toContain("isCurrentLocation?: boolean");
+    expect(source).toContain("{isCurrentLocation && (");
+    expect(source).toContain("My Location");
+  });
+
+  it("defaults the prop off so /{slug} pages are unaffected", () => {
+    expect(source).toContain("isCurrentLocation = false");
+  });
+});

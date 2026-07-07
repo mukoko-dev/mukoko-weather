@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { WeatherIcon, ShareIcon } from "@/lib/weather-icons";
+import { WeatherIcon, ShareIcon, NavigationIcon } from "@/lib/weather-icons";
 import { weatherCodeToInfo, type CurrentWeather, type DailyWeather } from "@/lib/weather";
 
 const BASE_URL = "https://weather.mukoko.com";
@@ -11,9 +11,12 @@ interface Props {
   locationName: string;
   daily?: DailyWeather;
   slug?: string;
+  /** GPS-confirmed current location (silent-URL home) — shows the
+   *  MY LOCATION eyebrow above the location name, Apple Weather style. */
+  isCurrentLocation?: boolean;
 }
 
-export function CurrentConditions({ current, locationName, daily, slug }: Props) {
+export function CurrentConditions({ current, locationName, daily, slug, isCurrentLocation = false }: Props) {
   const info = weatherCodeToInfo(current.weather_code);
   // Guard empty daily arrays — daily.temperature_2m_max[0] would be undefined and
   // Math.round(undefined) is NaN, rendering as "High NaN°".
@@ -70,6 +73,12 @@ export function CurrentConditions({ current, locationName, daily, slug }: Props)
         {/* Main temperature display */}
         <div className="relative z-10 flex items-start justify-between gap-2">
           <div className="min-w-0">
+            {isCurrentLocation && (
+              <p className="mb-0.5 flex items-center gap-1 text-sm font-semibold uppercase tracking-widest text-text-tertiary">
+                <NavigationIcon size={11} aria-hidden="true" />
+                My Location
+              </p>
+            )}
             <p className="text-lg font-medium text-text-secondary">{locationName}</p>
             <div className="mt-1 flex items-baseline gap-1">
               <span className="font-mono text-7xl font-bold tracking-tighter text-text-primary sm:text-8xl" aria-label={`${Math.round(current.temperature_2m)} degrees Celsius`}>

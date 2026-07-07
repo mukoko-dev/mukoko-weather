@@ -141,7 +141,12 @@ export function WeatherBackdrop({ weatherCode, windSpeed, isDay = true }: Props)
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
+      // z-0 (not a negative z-index): iOS Safari paints fixed negative-z
+      // elements behind the body background when html/body use
+      // overflow-x:hidden, making the whole backdrop invisible on iPhone.
+      // Explicit stacking instead: backdrop z-0, page content wrapped in
+      // z-10 (see WeatherDashboard) — deterministic in every engine.
+      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
     >
       {/* Static mineral gradient — always painted; the reduced-motion fallback. */}
       <div className={`absolute inset-0 weaver-sky ${skyClass(sceneType, isDay)}`} />

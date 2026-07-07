@@ -25,8 +25,8 @@ const SLUG_RE = /^[a-z0-9-]{1,80}$/;
  * returning visitor has travelled since their last visit. An instant
  * edge redirect straight to the cached lastLocation would skip that check
  * entirely and strand travelers on their old city every time they open the
- * app. That GPS recheck happens client-side instead, in HomeLanding's
- * "silent travel recheck" effect — see src/app/HomeLanding.tsx.
+ * app. That GPS refresh happens client-side instead, in
+ * CurrentLocationHome's mount effect — see src/app/CurrentLocationHome.tsx.
  */
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

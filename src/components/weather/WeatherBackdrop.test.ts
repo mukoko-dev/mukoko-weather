@@ -46,7 +46,11 @@ describe("WeatherBackdrop — performance discipline", () => {
   });
 
   it("is a fixed full-viewport backdrop behind all content (no IntersectionObserver needed)", () => {
-    expect(source).toContain('"pointer-events-none fixed inset-0 -z-10 overflow-hidden"');
+    // POSITIVE z-0, never negative: iOS Safari paints fixed negative-z
+    // elements behind the body background (overflow-x:hidden body), making
+    // the backdrop invisible on iPhone. Content stacks above via z-10.
+    expect(source).toContain('"pointer-events-none fixed inset-0 z-0 overflow-hidden"');
+    expect(source).not.toContain("-z-10");
     // Always on-screen while the page is visible — tab visibility is the
     // only pause signal, so no observer is constructed (the docstring may
     // still mention the API by name when explaining why it's absent).
