@@ -81,7 +81,17 @@ export default async function Home() {
       <footer className="space-y-2 text-sm text-muted-foreground">
         <p>
           Registration is free. You get a station ID and a private ingest key —
-          shown once, stored only as a salted hash on our side.
+          shown once, stored only as a salted hash on our side. Full setup
+          instructions live in the{" "}
+          <a
+            href="https://docs.nyuchi.com/mukoko-weather/weather-stations/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-cobalt underline underline-offset-4"
+          >
+            weather stations guide
+          </a>
+          .
         </p>
         <p>
           A Mukoko Africa project by Nyuchi Africa (PVT) Ltd.{" "}

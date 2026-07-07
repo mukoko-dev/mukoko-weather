@@ -124,6 +124,14 @@ export function Footer() {
             <Link href="/help" prefetch={false} className={link}>
               Help
             </Link>
+            <a
+              href="https://docs.nyuchi.com/mukoko-weather/user-guide/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={link}
+            >
+              Docs
+            </a>
             <Link href="/privacy" prefetch={false} className={link}>
               Privacy
             </Link>

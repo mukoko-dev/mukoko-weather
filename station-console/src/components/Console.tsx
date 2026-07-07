@@ -162,6 +162,17 @@ export function Console({
                 {creds.stationId}:{"<key>"}
               </code>
             </p>
+            <p>
+              Step-by-step instructions:{" "}
+              <a
+                href="https://docs.nyuchi.com/mukoko-weather/weather-stations/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-cobalt underline underline-offset-4"
+              >
+                weather stations guide
+              </a>
+            </p>
           </CardContent>
           <CardFooter>
             <Button variant="secondary" onClick={() => setCreds(null)}>
