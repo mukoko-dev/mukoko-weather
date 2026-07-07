@@ -229,7 +229,9 @@ describe("sendAlert", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("ok"));
+    fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("ok"));
     vi.stubEnv("ALERT_WEBHOOK_URL", "");
   });
 
@@ -304,7 +306,9 @@ describe("sendAlert", () => {
     });
 
     expect(fetchSpy).toHaveBeenCalledOnce();
-    const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+    const body = JSON.parse(
+      (fetchSpy.mock.calls[0][1] as RequestInit).body as string,
+    );
     expect(body.mukoko_alert.location).toBe("harare");
   });
 
@@ -332,7 +336,7 @@ describe("sendAlert", () => {
 describe("buildIssueUrl", () => {
   it("returns a GitHub issue URL with template and title", () => {
     const url = buildIssueUrl({ title: "Test error" });
-    expect(url).toContain("github.com/nyuchitech/mukoko-weather/issues/new");
+    expect(url).toContain("github.com/nyuchi/mukoko-weather/issues/new");
     expect(url).toContain("template=bug_report.yml");
     expect(url).toContain("title=%5BBug%5D+Test+error");
   });

@@ -1,0 +1,7 @@
+{
+  // markdownlint-cli2 settings (rule config stays in .markdownlint.jsonc).
+  // The Nyuchi Design agent skills are fetched verbatim from the registry
+  // (design.nyuchi.com, versions pinned in .nyuchi-design.json) — linting
+  // them locally would force edits that drift from upstream.
+  "ignores": ["**/node_modules/**", "station-console/.claude/skills/**"],
+}

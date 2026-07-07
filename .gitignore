@@ -51,3 +51,7 @@ next-env.d.ts
 .worktrees/
 .venv/
 .env*.local
+
+# station-console sub-app (own Vercel project)
+station-console/node_modules
+station-console/.next

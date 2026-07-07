@@ -23,3 +23,7 @@ CODEOWNERS.example
 *-lock.yaml
 package-lock.json
 pnpm-lock.yaml
+
+# Nyuchi Design registry artifacts — fetched verbatim from design.nyuchi.com
+# (versions pinned in .nyuchi-design.json); reformatting would drift from upstream
+station-console/.claude/skills/

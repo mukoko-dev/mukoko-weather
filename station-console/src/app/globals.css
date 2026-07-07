@@ -1,104 +1,187 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+/* @import "shadcn/tailwind.css"; */
 
-/* Mzizi / Mukoko Brand System — token subset mirrored from
-   mukoko-weather's globals.css (Brand System v6, brand kit doctrine
-   v4.1.0). Keep values in sync with the main app. */
-:root {
-  --color-primary: #0047ab; /* cobalt */
-  --color-primary-foreground: #ffffff;
-  --mineral-malachite: #0bda51;
-  --mineral-gold: #d4a017;
-  --mineral-terracotta: #c1440e;
-  --color-surface-base: #faf8f5;
-  --color-surface-card: #ffffff;
-  --color-text-primary: #1a1a1a;
-  --color-text-secondary: #4a4a4a;
-  --color-text-tertiary: #757575;
-  --color-border: #e5e0d8;
-  --color-severity-severe: #b3261e;
-  --color-severity-low: #0b6e4f;
-  --touch-target-min: 48px;
-  --radius-card: 16px;
-  --radius-button: 9999px;
-  --radius-input: 10px;
-}
-[data-theme="dark"] {
-  --color-primary: #4d8dff;
-  --color-primary-foreground: #0a0a0a;
-  --color-surface-base: #121212;
-  --color-surface-card: #1c1c1e;
-  --color-text-primary: #f5f5f5;
-  --color-text-secondary: #c7c7c7;
-  --color-text-tertiary: #8e8e93;
-  --color-border: #2c2c2e;
-  --color-severity-severe: #ff6b60;
-  --color-severity-low: #4cd58c;
-}
+@custom-variant dark (&:is(.dark *));
+
 @theme inline {
-  --color-primary: var(--color-primary);
-  --color-primary-foreground: var(--color-primary-foreground);
-  --color-surface-base: var(--color-surface-base);
-  --color-surface-card: var(--color-surface-card);
-  --color-text-primary: var(--color-text-primary);
-  --color-text-secondary: var(--color-text-secondary);
-  --color-text-tertiary: var(--color-text-tertiary);
-  --color-border: var(--color-border);
-  --color-severity-severe: var(--color-severity-severe);
-  --color-severity-low: var(--color-severity-low);
+  --font-sans: var(--font-noto-sans), "Noto Sans", system-ui, sans-serif;
+  --font-serif: var(--font-noto-serif), "Noto Serif", Georgia, serif;
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-overlay: var(--overlay);
+  --color-overlay-foreground: var(--overlay-foreground);
+  --color-scrim: var(--scrim);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  /* Radius system — derived from --radius-unit (7px)
+   sm: 1×unit (7),  md: 1×unit + 5 (12),  lg: 2×unit (14),  xl: 1×unit + 10 (17)
+   Buttons are always pill (9999px) — brand identity decision */
+  --radius-unit: 7px;
+  --radius-sm: var(--radius-unit);
+  --radius-md: calc(var(--radius-unit) + 5px);
+  --radius-lg: calc(var(--radius-unit) * 2);
+  --radius-xl: calc(var(--radius-unit) + 10px);
+  --radius-2xl: calc(var(--radius-unit) + 10px);
+  --radius-3xl: 9999px;
+  --radius-4xl: 9999px;
+  /* Five African Minerals — theme-adaptive */
+  --color-cobalt: var(--mineral-cobalt);
+  --color-tanzanite: var(--mineral-tanzanite);
+  --color-malachite: var(--mineral-malachite);
+  --color-gold: var(--mineral-gold);
+  --color-terracotta: var(--mineral-terracotta);
 }
 
-body {
-  background: var(--color-surface-base);
-  color: var(--color-text-primary);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+/* Light mode — L1 tokens synced from nyuchi-tokens registry (April 2026).
+ * Surfaces are SWAPPED and AAA-optimised:
+ *   - background is the AMBIENT page base (warm grey, slightly tinted)
+ *   - card is the CONTENT surface (pure white)
+ *   - muted is the WARM CREAM fill (used to be the background)
+ *   - overlay is the MODAL / SHEET surface (white, same as card in light mode)
+ *   - scrim is the modal backdrop
+ * muted-foreground darkened for AAA contrast. Border/input alpha tightened
+ * to 0.06. primary-foreground goes pure white. */
+:root {
+  /* Five African Minerals — light */
+  --mineral-cobalt: #0047ab;
+  --mineral-tanzanite: #4b0082;
+  --mineral-malachite: #004d40;
+  --mineral-gold: #5d4037;
+  --mineral-terracotta: #8b4513;
+  --background: #f3f2ee;
+  --foreground: #141413;
+  --card: #ffffff;
+  --card-foreground: #141413;
+  --popover: #ffffff;
+  --popover-foreground: #141413;
+  --primary: #141413;
+  --primary-foreground: #ffffff;
+  --secondary: #faf9f5;
+  --secondary-foreground: #141413;
+  --muted: #faf9f5;
+  --muted-foreground: #494840;
+  --accent: #faf9f5;
+  --accent-foreground: #141413;
+  --destructive: #b3261e;
+  --overlay: #ffffff;
+  --overlay-foreground: #141413;
+  --scrim: rgba(0, 0, 0, 0.4);
+  --border: rgba(10, 10, 10, 0.06);
+  --input: rgba(10, 10, 10, 0.06);
+  --ring: #141413;
+  --chart-1: #4b0082;
+  --chart-2: #0047ab;
+  --chart-3: #004d40;
+  --chart-4: #5d4037;
+  --chart-5: #8b4513;
+  --radius: calc(var(--radius-unit) * 2);
+  --sidebar: #faf9f5;
+  --sidebar-foreground: #141413;
+  --sidebar-primary: #141413;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f3f2ee;
+  --sidebar-accent-foreground: #141413;
+  --sidebar-border: rgba(10, 10, 10, 0.06);
+  --sidebar-ring: #141413;
 }
 
-/* Fauna classes (Mzizi component naming) — subset used by the console */
-.kudu {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  min-height: var(--touch-target-min);
-  border-radius: var(--radius-button);
-  background: var(--color-primary);
-  color: var(--color-primary-foreground);
-  padding: 0.75rem 1.25rem;
-  font-weight: 600;
+/* Dark mode — L1 tokens synced from nyuchi-tokens registry (April 2026).
+ * Surfaces are SWAPPED and AAA-optimised:
+ *   - background is the AMBIENT page base (warm near-black, L10%)
+ *   - card is the CONTENT surface (darker, L6%)
+ *   - muted is the DEEPEST fill (L2%, maximum text contrast)
+ *   - overlay is the MODAL / SHEET surface (L14%, scrim creates pop)
+ *   - scrim is the modal backdrop
+ * muted-foreground lightened for AAA contrast. Border/input alpha tightened
+ * to 0.06. primary-foreground matches the new warm-near-black background. */
+.dark {
+  /* Five African Minerals — dark */
+  --mineral-cobalt: #00b0ff;
+  --mineral-tanzanite: #b388ff;
+  --mineral-malachite: #64ffda;
+  --mineral-gold: #ffd740;
+  --mineral-terracotta: #d4a574;
+  --background: #1b1a17;
+  --foreground: #f5f5f4;
+  --card: #100f0e;
+  --card-foreground: #f5f5f4;
+  --popover: #100f0e;
+  --popover-foreground: #f5f5f4;
+  --primary: #f5f5f4;
+  --primary-foreground: #1b1a17;
+  --secondary: #050504;
+  --secondary-foreground: #f5f5f4;
+  --muted: #050504;
+  --muted-foreground: #b2afa8;
+  --accent: #050504;
+  --accent-foreground: #f5f5f4;
+  --destructive: #f2b8b5;
+  --overlay: #252421;
+  --overlay-foreground: #f5f5f4;
+  --scrim: rgba(0, 0, 0, 0.6);
+  --border: rgba(255, 255, 255, 0.06);
+  --input: rgba(255, 255, 255, 0.06);
+  --ring: #f5f5f4;
+  --chart-1: #b388ff;
+  --chart-2: #00b0ff;
+  --chart-3: #64ffda;
+  --chart-4: #ffd740;
+  --chart-5: #d4a574;
+  --sidebar: #100f0e;
+  --sidebar-foreground: #f5f5f4;
+  --sidebar-primary: #f5f5f4;
+  --sidebar-primary-foreground: #1b1a17;
+  --sidebar-accent: #050504;
+  --sidebar-accent-foreground: #f5f5f4;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-ring: #f5f5f4;
 }
-.impala {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  min-height: var(--touch-target-min);
-  border-radius: var(--radius-button);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-primary);
-  padding: 0.75rem 1.25rem;
-  font-weight: 500;
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
 }
-.baobab {
-  border-radius: var(--radius-card);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-card);
-  padding: 1.25rem;
-}
-.giraffe {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-.dove {
-  font-size: 0.875rem;
-  color: var(--color-text-tertiary);
-}
-.field {
-  width: 100%;
-  min-height: var(--touch-target-min);
-  border-radius: var(--radius-input);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-card);
-  color: var(--color-text-primary);
-  padding: 0.5rem 0.75rem;
+
+/* `.full-bleed` — break MDX content out of the layout container to go full-width. */
+.full-bleed {
+  width: 100vw;
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
 }

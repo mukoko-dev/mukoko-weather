@@ -69,7 +69,7 @@ export function Footer() {
                 </svg>
               </a>
               <a
-                href="https://github.com/nyuchitech/mukoko-weather"
+                href="https://github.com/nyuchi/mukoko-weather"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="GitHub"
@@ -134,7 +134,7 @@ export function Footer() {
               Contact
             </a>
             <a
-              href="https://github.com/nyuchitech/mukoko-weather/issues/new/choose"
+              href="https://github.com/nyuchi/mukoko-weather/issues/new/choose"
               target="_blank"
               rel="noopener noreferrer"
               className={link}
@@ -170,14 +170,6 @@ export function Footer() {
             >
               Barstool
             </a>
-            <a
-              href="https://travel.mukoko.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={link}
-            >
-              Travel
-            </a>
           </div>
         </div>
 
@@ -187,8 +179,9 @@ export function Footer() {
             &copy; {year} Mukoko Africa — a division of{" "}
             <a
               href="https://nyuchi.com"
+              target="_blank"
+              rel="noopener noreferrer"
               className="transition-colors hover:text-text-secondary"
-              rel="noopener"
             >
               Nyuchi Africa (PVT) Ltd
             </a>
@@ -198,16 +191,18 @@ export function Footer() {
             Weather data:{" "}
             <a
               href="https://www.tomorrow.io"
-              className="hover:text-text-secondary transition-colors"
+              target="_blank"
               rel="noopener noreferrer"
+              className="hover:text-text-secondary transition-colors"
             >
               Tomorrow.io
             </a>
             {" & "}
             <a
               href="https://open-meteo.com"
-              className="hover:text-text-secondary transition-colors"
+              target="_blank"
               rel="noopener noreferrer"
+              className="hover:text-text-secondary transition-colors"
             >
               Open-Meteo
             </a>

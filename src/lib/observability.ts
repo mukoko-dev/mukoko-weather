@@ -159,9 +159,9 @@ function shouldAlert(key: string): boolean {
 }
 
 const SEVERITY_EMOJI: Record<ErrorSeverity, string> = {
-  low: "\u2139\uFE0F",      // ℹ️
-  medium: "\u26A0\uFE0F",   // ⚠️
-  high: "\uD83D\uDED1",     // 🛑
+  low: "\u2139\uFE0F", // ℹ️
+  medium: "\u26A0\uFE0F", // ⚠️
+  high: "\uD83D\uDED1", // 🛑
   critical: "\uD83D\uDD34", // 🔴
 };
 
@@ -200,7 +200,9 @@ export function sendAlert(ctx: ErrorContext): void {
         type: "context",
         elements: [
           { type: "mrkdwn", text: `*Time:* ${timestamp}` },
-          ...(ctx.meta ? [{ type: "mrkdwn", text: `*Meta:* ${JSON.stringify(ctx.meta)}` }] : []),
+          ...(ctx.meta
+            ? [{ type: "mrkdwn", text: `*Meta:* ${JSON.stringify(ctx.meta)}` }]
+            : []),
         ],
       },
     ],
@@ -258,9 +260,11 @@ export function buildIssueUrl(context: {
     "",
     "## Expected behaviour",
     "The page should load without errors.",
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   params.set("body", body);
 
-  return `https://github.com/nyuchitech/mukoko-weather/issues/new?${params.toString()}`;
+  return `https://github.com/nyuchi/mukoko-weather/issues/new?${params.toString()}`;
 }

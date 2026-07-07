@@ -11,6 +11,21 @@ import {
   type RegisteredStation,
   type StationStatus,
 } from "@/lib/api";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 interface Credentials {
   stationId: string;
@@ -96,121 +111,161 @@ export function Console({
     <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Mukoko Weather Stations</h1>
-          <p className="dove">Signed in as {userEmail}</p>
+          <h1 className="font-serif text-xl font-semibold">
+            mukoko weather stations
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Signed in as {userEmail}
+          </p>
         </div>
-        <a href="/auth/signout" className="impala">
-          Sign out
-        </a>
+        <Button variant="outline" size="sm" asChild>
+          <a href="/auth/signout">Sign out</a>
+        </Button>
       </header>
 
       {error && (
-        <p role="alert" className="baobab" style={undefined}>
-          <span className="text-[var(--color-severity-severe)]">{error}</span>
-        </p>
+        <Alert variant="destructive" role="alert">
+          <AlertTitle>Something went wrong</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {/* One-time credentials after registration */}
       {creds && (
-        <section className="baobab space-y-2" aria-label="Station credentials">
-          <h2 className="giraffe">
-            Save these credentials — the key is shown ONCE
-          </h2>
-          <p className="dove">
-            Station ID: <code>{creds.stationId}</code>
-          </p>
-          <p className="dove break-all">
-            Ingest key: <code>{creds.ingestKey}</code>
-          </p>
-          <div className="space-y-1 text-sm">
-            <p className="giraffe">Point your station console at:</p>
-            <p className="dove">
-              Wunderground protocol — server <code>weather.mukoko.com</code>,
-              path <code>/api/py/stations/ingest</code>, ID = station ID,
-              PASSWORD = ingest key
+        <Card aria-label="Station credentials">
+          <CardHeader>
+            <CardTitle>
+              Save these credentials — the key is shown ONCE
+            </CardTitle>
+            <CardDescription>
+              Station ID <code className="font-mono">{creds.stationId}</code> ·
+              ingest key{" "}
+              <code className="break-all font-mono">{creds.ingestKey}</code>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">
+              Point your station console at:
             </p>
-            <p className="dove">
-              Ecowitt protocol — server <code>weather.mukoko.com</code>, path{" "}
-              <code>/api/py/stations/ingest</code>, PASSKEY ={" "}
-              <code>
+            <p>
+              Wunderground protocol — server{" "}
+              <code className="font-mono">weather.mukoko.com</code>, path{" "}
+              <code className="font-mono">/api/py/stations/ingest</code>, ID =
+              station ID, PASSWORD = ingest key
+            </p>
+            <p>
+              Ecowitt protocol — server{" "}
+              <code className="font-mono">weather.mukoko.com</code>, path{" "}
+              <code className="font-mono">/api/py/stations/ingest</code>,
+              PASSKEY ={" "}
+              <code className="font-mono">
                 {creds.stationId}:{"<key>"}
               </code>
             </p>
-          </div>
-          <button className="impala" onClick={() => setCreds(null)}>
-            I have saved them
-          </button>
-        </section>
+          </CardContent>
+          <CardFooter>
+            <Button variant="secondary" onClick={() => setCreds(null)}>
+              I have saved them
+            </Button>
+          </CardFooter>
+        </Card>
       )}
 
       {/* Register */}
-      <section className="baobab space-y-3" aria-label="Register a station">
-        <h2 className="giraffe">Register a station</h2>
-        <form onSubmit={handleRegister} className="space-y-3">
-          <input
-            className="field"
-            required
-            minLength={2}
-            placeholder="Station name (e.g. Marondera High School)"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <div className="flex gap-2">
-            <input
-              className="field"
-              required
-              placeholder="Latitude"
-              inputMode="decimal"
-              value={lat}
-              onChange={(e) => setLat(e.target.value)}
-            />
-            <input
-              className="field"
-              required
-              placeholder="Longitude"
-              inputMode="decimal"
-              value={lon}
-              onChange={(e) => setLon(e.target.value)}
-            />
-            <button type="button" className="impala shrink-0" onClick={useGps}>
-              Use GPS
-            </button>
-          </div>
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={stationType === "digital"}
-                onChange={() => setStationType("digital")}
+      <Card aria-label="Register a station">
+        <CardHeader>
+          <CardTitle>Register a station</CardTitle>
+          <CardDescription>
+            Digital consoles push readings automatically; analog stations log
+            manual readings below.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleRegister} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="station-name">Station name</Label>
+              <Input
+                id="station-name"
+                required
+                minLength={2}
+                placeholder="e.g. Marondera High School"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
               />
-              Digital (uploads automatically)
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={stationType === "manual"}
-                onChange={() => setStationType("manual")}
+            </div>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-32 flex-1 space-y-2">
+                <Label htmlFor="station-lat">Latitude</Label>
+                <Input
+                  id="station-lat"
+                  required
+                  placeholder="-17.8"
+                  inputMode="decimal"
+                  value={lat}
+                  onChange={(e) => setLat(e.target.value)}
+                />
+              </div>
+              <div className="min-w-32 flex-1 space-y-2">
+                <Label htmlFor="station-lon">Longitude</Label>
+                <Input
+                  id="station-lon"
+                  required
+                  placeholder="31.05"
+                  inputMode="decimal"
+                  value={lon}
+                  onChange={(e) => setLon(e.target.value)}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={useGps}
+              >
+                Use GPS
+              </Button>
+            </div>
+            <RadioGroup
+              value={stationType}
+              onValueChange={(v) => setStationType(v as "digital" | "manual")}
+              className="flex flex-wrap gap-4"
+              aria-label="Station type"
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="digital" id="type-digital" />
+                <Label htmlFor="type-digital">
+                  Digital (uploads automatically)
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="manual" id="type-manual" />
+                <Label htmlFor="type-manual">Analog (manual readings)</Label>
+              </div>
+            </RadioGroup>
+            <div className="space-y-2">
+              <Label htmlFor="station-hardware">Hardware (optional)</Label>
+              <Input
+                id="station-hardware"
+                placeholder="e.g. Ecowitt WS2910"
+                value={hardware}
+                onChange={(e) => setHardware(e.target.value)}
               />
-              Analog (manual readings)
-            </label>
-          </div>
-          <input
-            className="field"
-            placeholder="Hardware (optional, e.g. Ecowitt WS2910)"
-            value={hardware}
-            onChange={(e) => setHardware(e.target.value)}
-          />
-          <button type="submit" className="kudu w-full" disabled={busy}>
-            {busy ? "Registering…" : "Register station"}
-          </button>
-        </form>
-      </section>
+            </div>
+            <Button type="submit" className="w-full" disabled={busy}>
+              {busy ? "Registering…" : "Register station"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
       {/* My stations */}
       <section className="space-y-3" aria-label="My stations">
-        <h2 className="giraffe">My stations</h2>
+        <h2 className="text-base font-semibold">My stations</h2>
         {stations.length === 0 && (
-          <p className="dove">No stations on this device yet.</p>
+          <p className="text-sm text-muted-foreground">
+            No stations on this device yet.
+          </p>
         )}
         {stations.map((s) => (
           <StationCard
@@ -226,7 +281,7 @@ export function Console({
         ))}
       </section>
 
-      <footer className="dove">
+      <footer className="text-sm text-muted-foreground">
         API: {API_BASE} · Owner: {userId}
       </footer>
     </main>
@@ -273,78 +328,86 @@ function StationCard({
     setReading((prev) => ({ ...prev, [k]: e.target.value }));
 
   return (
-    <article className="baobab space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h3 className="giraffe">{station.name}</h3>
-          <p className="dove">
-            {station.stationId} ·{" "}
-            {station.stationType === "manual" ? "Analog" : "Digital"} ·{" "}
-            {status?.lastObservationAt
-              ? `Last reading ${new Date(status.lastObservationAt).toLocaleString()}`
-              : "No readings yet"}
+    <Card>
+      <CardHeader>
+        <CardTitle>{station.name}</CardTitle>
+        <CardDescription>
+          <code className="font-mono">{station.stationId}</code> ·{" "}
+          {status?.lastObservationAt
+            ? `Last reading ${new Date(status.lastObservationAt).toLocaleString()}`
+            : "No readings yet"}
+        </CardDescription>
+        <CardAction className="flex items-center gap-2">
+          <Badge variant="secondary">
+            {station.stationType === "manual" ? "Analog" : "Digital"}
+          </Badge>
+          <Button variant="ghost" size="sm" onClick={onRemove}>
+            Remove
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {status?.latestMetrics && (
+          <p className="text-sm text-muted-foreground">
+            {Object.entries(status.latestMetrics)
+              .map(
+                ([k, v]) =>
+                  `${k.replace(/([A-Z])/g, " $1").toLowerCase()}: ${v}`,
+              )
+              .join(" · ")}
           </p>
-        </div>
-        <button className="impala" onClick={onRemove}>
-          Remove
-        </button>
-      </div>
+        )}
 
-      {status?.latestMetrics && (
-        <p className="dove">
-          {Object.entries(status.latestMetrics)
-            .map(
-              ([k, v]) => `${k.replace(/([A-Z])/g, " $1").toLowerCase()}: ${v}`,
-            )
-            .join(" · ")}
-        </p>
-      )}
-
-      <form onSubmit={submit} className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <input
-          className="field"
-          placeholder="Temp °C"
-          inputMode="decimal"
-          value={reading.temperatureC ?? ""}
-          onChange={set("temperatureC")}
-        />
-        <input
-          className="field"
-          placeholder="Rain mm"
-          inputMode="decimal"
-          value={reading.rainfallMm ?? ""}
-          onChange={set("rainfallMm")}
-        />
-        <input
-          className="field"
-          placeholder="Humidity %"
-          inputMode="decimal"
-          value={reading.humidityPercent ?? ""}
-          onChange={set("humidityPercent")}
-        />
-        <input
-          className="field"
-          placeholder="Pressure hPa"
-          inputMode="decimal"
-          value={reading.pressureHpa ?? ""}
-          onChange={set("pressureHpa")}
-        />
-        <input
-          className="field"
-          placeholder="Wind km/h"
-          inputMode="decimal"
-          value={reading.windKph ?? ""}
-          onChange={set("windKph")}
-        />
-        <button type="submit" className="kudu" disabled={busy}>
-          {busy ? "Saving…" : "Log reading"}
-        </button>
-      </form>
-      {result && (
-        <p className="dove" role="status">
-          {result}
-        </p>
-      )}
-    </article>
+        <form
+          onSubmit={submit}
+          className="grid grid-cols-2 gap-2 sm:grid-cols-3"
+          aria-label={`Log a manual reading for ${station.name}`}
+        >
+          <Input
+            placeholder="Temp °C"
+            aria-label="Temperature in Celsius"
+            inputMode="decimal"
+            value={reading.temperatureC ?? ""}
+            onChange={set("temperatureC")}
+          />
+          <Input
+            placeholder="Rain mm"
+            aria-label="Rainfall in millimetres"
+            inputMode="decimal"
+            value={reading.rainfallMm ?? ""}
+            onChange={set("rainfallMm")}
+          />
+          <Input
+            placeholder="Humidity %"
+            aria-label="Relative humidity percent"
+            inputMode="decimal"
+            value={reading.humidityPercent ?? ""}
+            onChange={set("humidityPercent")}
+          />
+          <Input
+            placeholder="Pressure hPa"
+            aria-label="Pressure in hectopascals"
+            inputMode="decimal"
+            value={reading.pressureHpa ?? ""}
+            onChange={set("pressureHpa")}
+          />
+          <Input
+            placeholder="Wind km/h"
+            aria-label="Wind speed in kilometres per hour"
+            inputMode="decimal"
+            value={reading.windKph ?? ""}
+            onChange={set("windKph")}
+          />
+          <Button type="submit" size="sm" disabled={busy}>
+            {busy ? "Saving…" : "Log reading"}
+          </Button>
+        </form>
+        {result && (
+          <p className="text-sm text-muted-foreground" role="status">
+            {result}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
