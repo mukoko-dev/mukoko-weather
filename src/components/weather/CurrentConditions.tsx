@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { WeatherIcon, ShareIcon } from "@/lib/weather-icons";
 import { weatherCodeToInfo, type CurrentWeather, type DailyWeather } from "@/lib/weather";
-import { HeroWeatherBackground } from "@/components/weather/HeroWeatherBackground";
 
 const BASE_URL = "https://weather.mukoko.com";
 
@@ -59,16 +58,12 @@ export function CurrentConditions({ current, locationName, daily, slug }: Props)
 
   return (
     <section aria-labelledby="current-conditions-heading">
-      {/* Hero card — the main current-conditions block sits at the very top of the
-          page and reads as the visual anchor: oversized temperature, extra padding.
-          It also hosts the condition-based animated background. */}
-      <div className="baobab relative isolate overflow-hidden p-5 sm:p-7">
-        {/* Condition-based animated background (decorative, self-isolating) */}
-        <HeroWeatherBackground
-          weatherCode={current.weather_code}
-          windSpeed={current.wind_speed_10m}
-          isDay={current.is_day === 1}
-        />
+      {/* Hero — the main current-conditions block sits at the very top of the
+          page as the visual anchor: oversized temperature, extra padding.
+          Deliberately NOT a card: it reads directly over the page-level
+          WeatherBackdrop sky (Apple Weather style) — the backdrop's scrim
+          keeps the text tokens readable. */}
+      <div className="relative p-5 sm:p-7">
         <h2 id="current-conditions-heading" className="sr-only">
           Current weather conditions in {locationName}
         </h2>

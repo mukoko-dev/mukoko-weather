@@ -35,12 +35,23 @@ const REDIRECT_DELAY_MS = 2000;
  */
 const GPS_AUTOPROMPT_KEY = "mukoko-gps-autoprompted";
 
-// Silent travel recheck: a short timeout (never meaningfully delays the
-// visible countdown) paired with a generous cache window (a returning
-// visitor's device likely already has a recent-enough GPS fix), so this is
-// fast in the common case and never blocks the redirect if GPS is slow.
-const SILENT_RECHECK_TIMEOUT_MS = 3000;
+// Current-location recheck for returning visitors. CURRENT LOCATION TAKES
+// PRECEDENCE over the saved/cached one (the Apple Weather rule) — the
+// redirect WAITS for this check to settle instead of racing it, so a
+// traveling user can never be redirected to their old city just because
+// GPS took a moment. A short GPS timeout + generous cache window keep the
+// common case fast (a device usually has a recent fix), and the absolute
+// settle cap below guarantees the redirect never hangs on a slow stack.
+const SILENT_RECHECK_TIMEOUT_MS = 4000;
 const SILENT_RECHECK_MAX_AGE_MS = 300000;
+// Hard ceiling on how long the redirect can wait for the recheck (GPS +
+// geo API round-trip). Past this, the cached location wins — never hang.
+const RECHECK_SETTLE_CAP_MS = 8000;
+// When the find-only recheck's nearest KNOWN location is further than this,
+// the user's actual spot isn't represented in the catalog (rural travel) —
+// escalate to a create-on-demand lookup so they land on their real place,
+// not a far-away city that happens to be the nearest database entry.
+const FAR_NEAREST_KM = 25;
 
 /**
  * True when client-side state — independent of the server's lastLocation
@@ -69,11 +80,14 @@ function isKnownReturningVisitor(): boolean {
  *      • denied / unavailable / error → gracefully fall back to the IP-detected
  *        location countdown (if any), else the city chooser. Never hangs.
  * 2. Returning visitor (cached lastLocation) → show that location's "Taking
- *    you to [City]…" countdown immediately (no wait), while a SILENT,
- *    fast-timeout GPS recheck races in the background. If it resolves to a
- *    *different* location before the countdown fires — the traveling case —
- *    the redirect target swaps to the new city. GPS denial/failure/timeout,
- *    or a match with the cached location, leaves the countdown untouched.
+ *    you to [City]…" countdown immediately, while a fast, cache-friendly GPS
+ *    recheck runs. CURRENT LOCATION TAKES PRECEDENCE (the Apple Weather
+ *    rule): the redirect is GATED on the recheck settling — it cannot fire
+ *    while GPS is still deciding, so the cached city never wins a race. GPS
+ *    resolving somewhere new swaps the redirect target (with create-on-demand
+ *    escalation when the nearest known location is >25 km from the fix);
+ *    denial/failure/timeout (or the 8s settle cap) lets the cached location
+ *    proceed.
  * 3. IP geo detected (server-side, no prompt) with no cached location either:
  *    same countdown UI, used as the fallback for a first-time visitor whose
  *    GPS attempt failed.
@@ -92,6 +106,11 @@ export function HomeLanding({ detectedLocation, isReturningUser }: Props) {
   // `autoDetecting` is true while the first-visit auto-GPS attempt is in flight,
   // so we render the "Finding your location…" scene instead of the IP countdown.
   const [autoDetecting, setAutoDetecting] = useState(false);
+  // The redirect is GATED on the current-location recheck settling (success,
+  // denial, failure, or the settle cap) — current location takes precedence
+  // over the cached one, so the cached redirect must never win a race
+  // against a GPS check that's still running.
+  const [recheckSettled, setRecheckSettled] = useState(false);
 
   // ── Auto-GPS on first visit ──────────────────────────────────────────────
   useEffect(() => {
@@ -151,48 +170,80 @@ export function HomeLanding({ detectedLocation, isReturningUser }: Props) {
     };
   }, [router, detectedLocation, isReturningUser]);
 
-  // ── Silent travel recheck for returning visitors ─────────────────────────
+  // ── Current-location recheck for returning visitors ──────────────────────
   // Returning visitors skip the auto-GPS-prompt flow above and see their
-  // cached location's countdown immediately. This silently re-confirms via a
-  // fast, cache-friendly GPS check in the background — if the visitor has
-  // travelled somewhere new since their last visit, the redirect target
-  // swaps before the countdown fires. Compares against the original cached
+  // cached location's countdown immediately — but the REDIRECT waits for
+  // this check to settle (see `recheckSettled`): current location takes
+  // precedence over the saved one, always. If GPS resolves somewhere new,
+  // the redirect target swaps; only on denial/failure/timeout does the
+  // cached location win. When the nearest KNOWN location is far from the
+  // user's actual position (rural travel), a create-on-demand lookup
+  // resolves their real place instead. Compares against the original cached
   // `detectedLocation` (not `effectiveLocation`) so this only ever runs once
   // per mount, never re-triggering itself after it swaps the target.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!isReturningUser && !isKnownReturningVisitor()) return;
-    if (!detectedLocation) return;
+    if ((!isReturningUser && !isKnownReturningVisitor()) || !detectedLocation) {
+      // No recheck applies (first-time visitor, or nothing to redirect to) —
+      // open the redirect gate immediately. Deferred via rAF: setState
+      // synchronously in an effect body trips react-hooks/set-state-in-effect.
+      const raf = requestAnimationFrame(() => setRecheckSettled(true));
+      return () => cancelAnimationFrame(raf);
+    }
 
     let disposed = false;
-    detectUserLocation({
-      autoCreate: false,
-      timeoutMs: SILENT_RECHECK_TIMEOUT_MS,
-      maximumAgeMs: SILENT_RECHECK_MAX_AGE_MS,
-    })
-      .then((result) => {
+
+    // Absolute cap — whatever happens in the GPS/geo stack, the redirect
+    // gate opens by RECHECK_SETTLE_CAP_MS.
+    const settleCap = setTimeout(() => setRecheckSettled(true), RECHECK_SETTLE_CAP_MS);
+
+    void (async () => {
+      try {
+        const result = await detectUserLocation({
+          autoCreate: false,
+          timeoutMs: SILENT_RECHECK_TIMEOUT_MS,
+          maximumAgeMs: SILENT_RECHECK_MAX_AGE_MS,
+        });
         if (disposed) return;
-        if (
-          (result.status === "success" || result.status === "created") &&
-          result.location &&
-          result.location.slug !== detectedLocation.slug
-        ) {
-          setEffectiveLocation(result.location);
+        if ((result.status === "success" || result.status === "created") && result.location) {
+          if (result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM) {
+            // Nearest catalog entry is far from the actual GPS position —
+            // create-on-demand resolves the user's real place (the browser
+            // already has a fresh fix, so this is a network hop, not a
+            // second GPS wait).
+            const precise = await detectUserLocation({ autoCreate: true });
+            if (disposed) return;
+            if ((precise.status === "success" || precise.status === "created") && precise.location) {
+              if (precise.location.slug !== detectedLocation.slug) setEffectiveLocation(precise.location);
+            } else if (result.location.slug !== detectedLocation.slug) {
+              setEffectiveLocation(result.location);
+            }
+          } else if (result.location.slug !== detectedLocation.slug) {
+            setEffectiveLocation(result.location);
+          }
         }
-      })
-      .catch(() => {
-        // Silent by design — GPS failure/denial/timeout leaves the cached
-        // location's countdown completely untouched.
-      });
+        // Denial/failure/timeout: cached location wins — nothing to swap.
+      } catch {
+        // Same: the cached location's countdown proceeds untouched.
+      } finally {
+        if (!disposed) setRecheckSettled(true);
+      }
+    })();
 
     return () => {
       disposed = true;
+      clearTimeout(settleCap);
     };
   }, [isReturningUser, detectedLocation]);
 
   // ── Location auto-redirect countdown (cached lastLocation or IP-geo) ──────
+  // For returning visitors the redirect additionally waits for the
+  // current-location recheck above (`recheckSettled`) — the countdown UI
+  // runs regardless, but navigation only fires once the recheck has had its
+  // say. First-time/IP-geo visitors have no recheck; their gate opens in
+  // the effect below.
   useEffect(() => {
-    if (!effectiveLocation || cancelled) return;
+    if (!effectiveLocation || cancelled || !recheckSettled) return;
 
     const redirectTimer = setTimeout(() => {
       router.replace(`/${effectiveLocation.slug}`);
@@ -206,7 +257,7 @@ export function HomeLanding({ detectedLocation, isReturningUser }: Props) {
       clearTimeout(redirectTimer);
       clearInterval(countdownInterval);
     };
-  }, [effectiveLocation, router, cancelled]);
+  }, [effectiveLocation, router, cancelled, recheckSettled]);
 
   const handleCancel = () => { setCancelled(true); };
 

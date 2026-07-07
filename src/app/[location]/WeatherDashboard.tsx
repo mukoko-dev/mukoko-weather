@@ -42,6 +42,7 @@ import { type Activity, ACTIVITIES } from "@/lib/activities";
 import { InfoRow } from "@/components/ui/info-row";
 import { SectionHeader } from "@/components/ui/section-header";
 import { SupportBanner } from "@/components/weather/SupportBanner";
+import { WeatherBackdrop } from "@/components/weather/WeatherBackdrop";
 import { DraggableSection } from "@/components/weather/DraggableSection";
 import { LiveClock } from "@/components/weather/LiveClock";
 import { getIcaoForSlug, getNearestIcao, getNearestIcaos, fetchNearestAirports, type AirportDistance } from "@/lib/icao-codes";
@@ -201,6 +202,15 @@ export function WeatherDashboard({
 
   return (
     <>
+      {/* Full-viewport condition-aware sky behind the whole page (Apple
+          Weather style) — strongest behind the de-carded hero at the top,
+          fading to the normal surface background further down. Fixed and
+          -z-10, so every card/section paints over it. */}
+      <WeatherBackdrop
+        weatherCode={weather.current.weather_code}
+        windSpeed={weather.current.wind_speed_10m}
+        isDay={weather.current.is_day === 1}
+      />
       <Header />
 
       {/* Breadcrumb navigation — always three layers: Country / Province / Location */}

@@ -92,3 +92,21 @@ describe("HourlyScrollCards — weather data", () => {
     expect(source).toContain("text-text-primary");
   });
 });
+
+describe("HourlyScrollCards — one-sentence outlook", () => {
+  it("renders the deterministic hourly summary above the strip", () => {
+    expect(source).toContain('from "@/lib/hourly-summary"');
+    expect(source).toContain("hourlySummary(hourly, start)");
+    expect(source).toContain("{summary}");
+  });
+
+  it("derives the summary from the same start index as the strip", () => {
+    // One `start` feeds both the sentence and the hour cards — they can
+    // never disagree about what "now" is.
+    expect(source).toMatch(/const summary = hydrated \? hourlySummary\(hourly, start\)/);
+  });
+
+  it("gates the summary on hydration (depends on the client wall clock)", () => {
+    expect(source).toContain("hydrated ? hourlySummary");
+  });
+});

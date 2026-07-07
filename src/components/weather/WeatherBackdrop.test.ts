@@ -1,24 +1,25 @@
 /**
- * Tests for HeroWeatherBackground — validates the condition-based animated
- * background layer behind the CurrentConditions hero card. Source-based
- * structural testing (Vitest runs in Node without a DOM/WebGL context).
+ * Tests for WeatherBackdrop — validates the fixed, full-viewport
+ * condition-based animated sky behind the whole location page (Apple
+ * Weather style). Source-based structural testing (Vitest runs in Node
+ * without a DOM/WebGL context).
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
 const source = readFileSync(
-  resolve(__dirname, "HeroWeatherBackground.tsx"),
+  resolve(__dirname, "WeatherBackdrop.tsx"),
   "utf-8",
 );
 
-describe("HeroWeatherBackground — component contract", () => {
+describe("WeatherBackdrop — component contract", () => {
   it("is a client component", () => {
     expect(source).toContain('"use client"');
   });
 
-  it("exports HeroWeatherBackground as a named function", () => {
-    expect(source).toContain("export function HeroWeatherBackground");
+  it("exports WeatherBackdrop as a named function", () => {
+    expect(source).toContain("export function WeatherBackdrop");
   });
 
   it("accepts weatherCode, windSpeed and isDay props", () => {
@@ -32,7 +33,7 @@ describe("HeroWeatherBackground — component contract", () => {
   });
 });
 
-describe("HeroWeatherBackground — performance discipline", () => {
+describe("WeatherBackdrop — performance discipline", () => {
   it("caps the renderer pixel ratio at 1", () => {
     expect(source).toContain("maxPixelRatio: 1");
   });
@@ -44,10 +45,17 @@ describe("HeroWeatherBackground — performance discipline", () => {
     expect(source).toContain("handle.resume()");
   });
 
-  it("pauses/resumes based on viewport intersection", () => {
-    expect(source).toContain("IntersectionObserver");
-    expect(source).toContain("isIntersecting");
-    expect(source).toContain("observer?.disconnect()");
+  it("is a fixed full-viewport backdrop behind all content (no IntersectionObserver needed)", () => {
+    expect(source).toContain('"pointer-events-none fixed inset-0 -z-10 overflow-hidden"');
+    // Always on-screen while the page is visible — tab visibility is the
+    // only pause signal, so no observer is constructed (the docstring may
+    // still mention the API by name when explaining why it's absent).
+    expect(source).not.toContain("new IntersectionObserver");
+  });
+
+  it("fades the sky into the surface background lower down the page", () => {
+    expect(source).toContain("from-transparent");
+    expect(source).toContain("to-surface-base");
   });
 
   it("disposes the scene on unmount", () => {
@@ -55,7 +63,7 @@ describe("HeroWeatherBackground — performance discipline", () => {
   });
 });
 
-describe("HeroWeatherBackground — reduced motion + resilience", () => {
+describe("WeatherBackdrop — reduced motion + resilience", () => {
   it("respects prefers-reduced-motion", () => {
     expect(source).toContain("prefers-reduced-motion: reduce");
   });
@@ -73,7 +81,7 @@ describe("HeroWeatherBackground — reduced motion + resilience", () => {
   });
 });
 
-describe("HeroWeatherBackground — accessibility + layout", () => {
+describe("WeatherBackdrop — accessibility + layout", () => {
   it("is decorative and hidden from assistive tech", () => {
     expect(source).toContain('aria-hidden="true"');
   });
@@ -93,7 +101,7 @@ describe("HeroWeatherBackground — accessibility + layout", () => {
   });
 });
 
-describe("HeroWeatherBackground — scene mapping", () => {
+describe("WeatherBackdrop — scene mapping", () => {
   const sceneClasses = [
     "weaver-sky-clear-day",
     "weaver-sky-clear-night",

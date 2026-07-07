@@ -132,10 +132,25 @@ describe("HomeLanding — silent travel recheck for returning visitors", () => {
     expect(source).toContain("setEffectiveLocation(result.location)");
   });
 
-  it("never blocks or delays the visible countdown — failures are silent", () => {
-    // The recheck's .catch() is a no-op: GPS denial/failure/timeout must
-    // leave the cached-location countdown completely untouched.
-    expect(source).toContain(".catch(() => {");
+  it("gates the redirect on the recheck settling — current location takes precedence", () => {
+    expect(source).toContain("recheckSettled");
+    expect(source).toContain("!recheckSettled) return;");
+    expect(source).toContain("RECHECK_SETTLE_CAP_MS");
+    expect(source).toContain("setRecheckSettled(true)");
+  });
+
+  it("escalates to create-on-demand when the nearest known location is far", () => {
+    expect(source).toContain("FAR_NEAREST_KM");
+    expect(source).toContain("result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM");
+    expect(source).toContain("detectUserLocation({ autoCreate: true })");
+  });
+
+  it("failures leave the cached-location countdown untouched but still open the gate", () => {
+    // GPS denial/failure/timeout must leave the cached-location countdown
+    // target untouched — and the finally block must ALWAYS open the
+    // redirect gate so the flow can never hang.
+    expect(source).toContain("} finally {");
+    expect(source).toContain("if (!disposed) setRecheckSettled(true);");
   });
 
   it("uses effectiveLocation (not the raw prop) as the redirect/render target", () => {

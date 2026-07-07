@@ -47,13 +47,18 @@ function skyClass(type: WeatherSceneType, isDay: boolean): string {
 }
 
 /**
- * Condition-aware animated background for the CurrentConditions hero card.
+ * Condition-aware animated backdrop for the WHOLE location page — a fixed,
+ * full-viewport sky behind all content (Apple Weather style), not confined
+ * to the hero card. The sky is strongest at the top (behind the de-carded
+ * CurrentConditions hero) and fades into the normal surface background
+ * further down so charts and cards keep their usual contrast.
  *
- * Performance discipline (the card stays mounted for the whole page life):
+ * Performance discipline (the backdrop stays mounted for the whole page life):
  * - Three.js renderer pixel ratio is capped at 1 (`maxPixelRatio`).
  * - The animation loop is PAUSED when the tab is hidden (`visibilitychange`)
- *   or the card scrolls off-screen (IntersectionObserver), and resumed when
- *   it returns — so the GPU idles whenever the hero is not visible.
+ *   and resumed when it returns — so the GPU idles in background tabs. (No
+ *   IntersectionObserver: a fixed, viewport-filling element is always
+ *   on-screen while the page is visible.)
  * - Everything is disposed on unmount.
  * - `prefers-reduced-motion` skips Three.js entirely and shows only the static
  *   mineral gradient.
@@ -62,7 +67,7 @@ function skyClass(type: WeatherSceneType, isDay: boolean): string {
  * the static gradient (createWeatherScene returns a no-op handle on failure),
  * and the whole card is additionally wrapped in ChartErrorBoundary upstream.
  */
-export function HeroWeatherBackground({ weatherCode, windSpeed, isDay = true }: Props) {
+export function WeatherBackdrop({ weatherCode, windSpeed, isDay = true }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Client-only media queries. Default to SSR-safe values, resolve on mount.
@@ -89,32 +94,20 @@ export function HeroWeatherBackground({ weatherCode, windSpeed, isDay = true }: 
 
     let disposed = false;
     let handle: WeatherSceneHandle | null = null;
-    let onScreen = true;
 
     const isVisible = () =>
       typeof document === "undefined" || document.visibilityState === "visible";
 
-    // Pause whenever hidden OR off-screen; resume only when both are true.
+    // A fixed, viewport-filling backdrop is always on-screen — the only
+    // pause signal that matters is tab visibility.
     const syncPlayback = () => {
       if (!handle) return;
-      if (onScreen && isVisible()) handle.resume();
+      if (isVisible()) handle.resume();
       else handle.pause();
     };
 
     const handleVisibility = () => syncPlayback();
     document.addEventListener("visibilitychange", handleVisibility);
-
-    let observer: IntersectionObserver | null = null;
-    if (typeof IntersectionObserver !== "undefined") {
-      observer = new IntersectionObserver(
-        (entries) => {
-          onScreen = entries[0]?.isIntersecting ?? true;
-          syncPlayback();
-        },
-        { threshold: 0 },
-      );
-      observer.observe(el);
-    }
 
     const config: WeatherSceneConfig = {
       type: sceneType,
@@ -141,7 +134,6 @@ export function HeroWeatherBackground({ weatherCode, windSpeed, isDay = true }: 
     return () => {
       disposed = true;
       document.removeEventListener("visibilitychange", handleVisibility);
-      observer?.disconnect();
       handle?.dispose();
     };
   }, [animate, isMobile, isDay, sceneType, windSpeed]);
@@ -149,7 +141,7 @@ export function HeroWeatherBackground({ weatherCode, windSpeed, isDay = true }: 
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 overflow-hidden rounded-[var(--radius-card)]"
+      className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
     >
       {/* Static mineral gradient — always painted; the reduced-motion fallback. */}
       <div className={`absolute inset-0 weaver-sky ${skyClass(sceneType, isDay)}`} />
@@ -157,6 +149,9 @@ export function HeroWeatherBackground({ weatherCode, windSpeed, isDay = true }: 
       {animate && <div ref={containerRef} className="absolute inset-0" />}
       {/* Readability scrim so hero text keeps contrast over the animation. */}
       <div className="absolute inset-0 weaver-scrim" />
+      {/* Fade the sky into the normal surface background further down the
+          page so cards, charts and body text keep their usual contrast. */}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent from-25% via-surface-base/70 via-65% to-surface-base" />
     </div>
   );
 }
