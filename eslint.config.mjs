@@ -15,6 +15,9 @@ const eslintConfig = defineConfig([
     // Serwist service worker build artifact
     "public/sw.js",
     "public/sw.js.map",
+    // Monorepo sub-apps with their own toolchains (own tsconfig/lint)
+    "station-console/**",
+    "worker/**",
   ]),
 ]);
 

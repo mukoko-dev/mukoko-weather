@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+/* Mzizi / Mukoko Brand System — token subset mirrored from
+   mukoko-weather's globals.css (Brand System v6, brand kit doctrine
+   v4.1.0). Keep values in sync with the main app. */
+:root {
+  --color-primary: #0047ab; /* cobalt */
+  --color-primary-foreground: #ffffff;
+  --mineral-malachite: #0bda51;
+  --mineral-gold: #d4a017;
+  --mineral-terracotta: #c1440e;
+  --color-surface-base: #faf8f5;
+  --color-surface-card: #ffffff;
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #4a4a4a;
+  --color-text-tertiary: #757575;
+  --color-border: #e5e0d8;
+  --color-severity-severe: #b3261e;
+  --color-severity-low: #0b6e4f;
+  --touch-target-min: 48px;
+  --radius-card: 16px;
+  --radius-button: 9999px;
+  --radius-input: 10px;
+}
+[data-theme="dark"] {
+  --color-primary: #4d8dff;
+  --color-primary-foreground: #0a0a0a;
+  --color-surface-base: #121212;
+  --color-surface-card: #1c1c1e;
+  --color-text-primary: #f5f5f5;
+  --color-text-secondary: #c7c7c7;
+  --color-text-tertiary: #8e8e93;
+  --color-border: #2c2c2e;
+  --color-severity-severe: #ff6b60;
+  --color-severity-low: #4cd58c;
+}
+@theme inline {
+  --color-primary: var(--color-primary);
+  --color-primary-foreground: var(--color-primary-foreground);
+  --color-surface-base: var(--color-surface-base);
+  --color-surface-card: var(--color-surface-card);
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-tertiary: var(--color-text-tertiary);
+  --color-border: var(--color-border);
+  --color-severity-severe: var(--color-severity-severe);
+  --color-severity-low: var(--color-severity-low);
+}
+
+body {
+  background: var(--color-surface-base);
+  color: var(--color-text-primary);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Fauna classes (Mzizi component naming) — subset used by the console */
+.kudu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: var(--touch-target-min);
+  border-radius: var(--radius-button);
+  background: var(--color-primary);
+  color: var(--color-primary-foreground);
+  padding: 0.75rem 1.25rem;
+  font-weight: 600;
+}
+.impala {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: var(--touch-target-min);
+  border-radius: var(--radius-button);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  padding: 0.75rem 1.25rem;
+  font-weight: 500;
+}
+.baobab {
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-card);
+  padding: 1.25rem;
+}
+.giraffe {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.dove {
+  font-size: 0.875rem;
+  color: var(--color-text-tertiary);
+}
+.field {
+  width: 100%;
+  min-height: var(--touch-target-min);
+  border-radius: var(--radius-input);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-card);
+  color: var(--color-text-primary);
+  padding: 0.5rem 0.75rem;
+}
