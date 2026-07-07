@@ -84,6 +84,26 @@ class TestBuildChatSystemPrompt:
         prompt = _build_chat_system_prompt([])
         assert "interests" not in prompt.lower()
 
+
+    @patch("py._chat._get_chat_prompt_template", return_value=None)
+    @patch("py._chat._get_activities_list")
+    @patch("py._chat._get_location_context")
+    def test_user_activity_section_includes_ai_guidance(self, mock_ctx, mock_act, _mock_tmpl):
+        """Database-driven aiInstructions are spliced in as per-activity
+        guidance so Shamwari's advice stays grounded, not generic."""
+        mock_ctx.return_value = ([], "10")
+        mock_act.return_value = [
+            {"id": "running", "label": "Running", "category": "sports",
+             "aiInstructions": "Give the best running window from the hourly forecast."},
+            {"id": "mining", "label": "Mining", "category": "mining"},  # no instructions
+        ]
+
+        prompt = _build_chat_system_prompt(["running", "mining"])
+        assert "Activity guidance" in prompt
+        assert "Running: Give the best running window" in prompt
+        # Activities without instructions don't emit empty guidance lines
+        assert "Mining: " not in prompt
+
     @patch("py._chat._get_chat_prompt_template", return_value=None)
     @patch("py._chat._get_activities_list")
     @patch("py._chat._get_location_context")

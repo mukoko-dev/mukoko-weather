@@ -5,7 +5,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const source = readFileSync(resolve(__dirname, "[...path]/route.ts"), "utf-8");
+const source = readFileSync(resolve(__dirname, "[[...path]]/route.ts"), "utf-8");
 
 describe("/api/ai proxy — auth gate", () => {
   it("validates the AuthKit session and 401s anonymous callers", () => {

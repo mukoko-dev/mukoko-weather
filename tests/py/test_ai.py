@@ -1286,3 +1286,69 @@ class TestGenerateSummary:
             result = await generate_summary(self._make_request())
             assert result["insight"] != "Old cached insight."
             assert result["cached"] is False
+
+
+class TestPromptGrounding:
+    """Country/coordinates grounding + per-activity aiInstructions in the
+    user prompt — activity advice must be anchored to the real place, not
+    generic filler."""
+
+    def _make_request(self, activities=None):
+        return AISummaryRequest(
+            weatherData={
+                "current": {"temperature_2m": 25, "relative_humidity_2m": 60, "weather_code": 0},
+                "daily": {"temperature_2m_max": [30], "temperature_2m_min": [15], "weather_code": [0]},
+            },
+            location=LocationInfo(name="Nairobi", elevation=1795, country="KE", lat=-1.29, lon=36.82),
+            activities=activities or [],
+        )
+
+    @pytest.mark.asyncio
+    @patch("py._ai.check_rate_limit", return_value={"allowed": True, "remaining": 29})
+    @patch("py._ai._set_cached_summary")
+    @patch("py._ai._get_prompt", return_value=None)
+    @patch("py._ai._get_system_prompt", return_value="System prompt.")
+    @patch("py._ai.anthropic_breaker")
+    @patch("py._ai._get_season")
+    @patch("py._ai._get_client")
+    @patch("py._ai._get_cached_summary", return_value=None)
+    @patch("py._ai.get_db")
+    @patch("py._ai.get_activities_brief")
+    @patch("py._ai.filter_known_activities", side_effect=lambda activities: activities)
+    async def test_prompt_grounds_country_coords_and_activity_guidance(
+        self, _mock_filter, mock_brief, mock_db, mock_cache, mock_client,
+        mock_season, mock_breaker, _mock_sys, _mock_prompt, _mock_set, _mock_rate,
+    ):
+        mock_db_inst = MagicMock()
+        mock_db.return_value = mock_db_inst
+        mock_db_inst.__getitem__ = MagicMock(return_value=MagicMock(
+            find_one=MagicMock(return_value=None)
+        ))
+        mock_breaker.is_allowed = True
+        mock_season.return_value = {"name": "Summer", "localName": "Summer",
+                                     "description": "Warm season"}
+        mock_brief.return_value = [
+            {"id": "running", "label": "Running", "category": "sports",
+             "aiInstructions": "Give the best running window from the hourly forecast."},
+        ]
+
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "AI summary."
+        mock_message = MagicMock()
+        mock_message.content = [text_block]
+        mock_ai_client = MagicMock()
+        mock_ai_client.messages.create.return_value = mock_message
+        mock_client.return_value = mock_ai_client
+
+        await generate_summary(self._make_request(activities=["running"]))
+
+        user_content = mock_ai_client.messages.create.call_args[1]["messages"][0]["content"]
+        # Country + coordinates grounding
+        assert "Nairobi, KE" in user_content
+        assert "lat -1.29" in user_content
+        assert "ground every recommendation in this place" in user_content.lower()
+        # Label (not raw id) + database-driven guidance
+        assert "Running" in user_content
+        assert "Activity guidance" in user_content
+        assert "best running window" in user_content

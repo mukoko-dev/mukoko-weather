@@ -122,3 +122,26 @@ class TestGetSuitability:
         }
         result = await get_suitability(key="category:farming")
         assert "s-maxage=300" in result.headers.get("cache-control", "")
+
+
+class TestUpdatedAtProjection:
+    """The sync writes `updatedAt` as a BSON Date. JSONResponse can't
+    serialize datetime, and the endpoint's bare `except` silently turned
+    ALL rules into an empty list — every activity card degraded to
+    'No specific rules available'. The projection must exclude it."""
+
+    @patch("py._suitability.suitability_rules_collection")
+    @pytest.mark.asyncio
+    async def test_all_rules_projection_excludes_updated_at(self, mock_coll):
+        mock_coll.return_value.find.return_value = []
+        await get_suitability(key=None)
+        projection = mock_coll.return_value.find.call_args[0][1]
+        assert projection == {"_id": 0, "updatedAt": 0}
+
+    @patch("py._suitability.suitability_rules_collection")
+    @pytest.mark.asyncio
+    async def test_single_rule_projection_excludes_updated_at(self, mock_coll):
+        mock_coll.return_value.find_one.return_value = {"key": "category:farming", "conditions": []}
+        await get_suitability(key="category:farming")
+        projection = mock_coll.return_value.find_one.call_args[0][1]
+        assert projection == {"_id": 0, "updatedAt": 0}

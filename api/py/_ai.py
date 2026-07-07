@@ -18,7 +18,7 @@ import anthropic
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ._db import get_db, get_api_key, get_client_ip, check_rate_limit, filter_known_activities, require_internal_caller
+from ._db import get_db, get_api_key, get_client_ip, check_rate_limit, filter_known_activities, get_activities_brief, require_internal_caller
 from ._circuit_breaker import anthropic_breaker, CircuitOpenError
 
 logger = logging.getLogger(__name__)
@@ -574,16 +574,41 @@ async def generate_summary(body: AISummaryRequest, request: Request = None):
     codes = json.dumps(weather_data.get("daily", {}).get("weather_code", []), default=str)
 
     tags_line = f"This area is relevant to: {', '.join(location_tags)}." if location_tags else ""
-    activities_line = f"The user's activities: {', '.join(user_activities[:3])}. Tailor advice to these activities." if user_activities else ""
+
+    # Resolve the user's activities to their labels + database-driven AI
+    # guidance. The guidance tells the model what weather factors matter for
+    # each activity and what regional framing to use, so activity advice is
+    # grounded instead of generic filler.
+    briefs = {a.get("id"): a for a in get_activities_brief()}
+    selected = [briefs.get(a) or {"id": a, "label": a} for a in user_activities[:3]]
+    activity_labels = [s.get("label") or s.get("id", "") for s in selected]
+    guidance_lines = [
+        f"- {s.get('label') or s.get('id')}: {s['aiInstructions']}"
+        for s in selected
+        if s.get("aiInstructions")
+    ]
+    activities_line = f"The user's activities: {', '.join(activity_labels)}. Tailor advice to these activities." if activity_labels else ""
+    guidance_block = (
+        "\nActivity guidance (follow strictly, adapted to this location's country and season):\n"
+        + "\n".join(guidance_lines)
+        if guidance_lines
+        else ""
+    )
     activities_tip = (
-        f"One specific tip for the user's activities ({', '.join(user_activities[:3])})"
-        if user_activities
+        f"One specific tip for the user's activities ({', '.join(activity_labels)})"
+        if activity_labels
         else "One industry/context-specific tip relevant to this area (e.g. farming advice for farming areas, safety for mining areas, travel conditions for border/travel areas, outdoor guidance for tourism/national parks)"
     )
 
-    user_content = f"""Generate a weather briefing for {location.name} (elevation: {location.elevation}m).
+    # Country + coordinates ground the model in the actual place — advice
+    # must reference this country's crops, seasons, transport and culture,
+    # never generic global filler.
+    country_part = f", {location.country}" if location.country else ""
+
+    user_content = f"""Generate a weather briefing for {location.name}{country_part} (lat {location.lat}, lon {location.lon}; elevation: {location.elevation}m).
+The country and specific location matter: ground every recommendation in this place — its crops, seasons, transport routes and daily life — not generic global advice.
 {tags_line}
-{activities_line}
+{activities_line}{guidance_block}
 
 Current conditions: {current_data}
 3-day forecast summary: max temps {max_temps}, min temps {min_temps}, weather codes {codes}{insights_prompt}

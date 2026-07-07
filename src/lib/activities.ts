@@ -14,6 +14,14 @@ export interface Activity {
   description: string;
   /** Icon identifier for data-driven icon lookup (e.g. "crop", "drone", "tennis") */
   icon?: string;
+  /**
+   * Per-activity guidance spliced into AI prompts (weather summary + chat)
+   * so advice stays grounded in what actually matters for the activity and
+   * in the location's country. Data-managed: written directly to the
+   * MongoDB `activities` collection, not part of the code seed —
+   * `syncActivities` $sets only seed fields, so this survives db-init.
+   */
+  aiInstructions?: string;
 }
 
 export interface ActivityCategoryInfo {

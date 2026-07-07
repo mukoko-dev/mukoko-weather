@@ -48,7 +48,8 @@ const STRIPPED_RESPONSE_HEADERS = new Set([
 ]);
 
 interface ProxyParams {
-  params: Promise<{ path: string[] }>;
+  // Optional catch-all — `path` is undefined for the bare /api/ai request.
+  params: Promise<{ path?: string[] }>;
 }
 
 async function proxy(req: NextRequest, { params }: ProxyParams): Promise<Response> {
@@ -64,7 +65,12 @@ async function proxy(req: NextRequest, { params }: ProxyParams): Promise<Respons
   const subpath = (path ?? []).join("/");
   const url = new URL(req.url);
   // Build the upstream URL — same origin, but rerouted to the Python prefix.
-  const upstream = new URL(`/api/py/ai/${subpath}`, url.origin);
+  // The route is an OPTIONAL catch-all ([[...path]]) so the bare `/api/ai`
+  // (the AI summary endpoint — AISummary POSTs here) matches too; a required
+  // catch-all silently fell through to Next's 404 page and the widget showed
+  // "Unable to load AI summary" for every signed-in user. No trailing slash
+  // when there's no subpath — FastAPI's `/api/py/ai/` would 307-redirect.
+  const upstream = new URL(subpath ? `/api/py/ai/${subpath}` : "/api/py/ai", url.origin);
   upstream.search = url.search;
 
   // Forward request headers minus hop-by-hop / cookie, plus the user identity.

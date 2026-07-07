@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { type Activity, CATEGORY_STYLES } from "@/lib/activities";
-import type { WeatherInsights } from "@/lib/weather";
+import type { WeatherData, WeatherInsights } from "@/lib/weather";
 import { fetchSuitabilityRules, fetchCategoryStyles, type CategoryStyle } from "@/lib/suitability-cache";
 import { reportErrorToAnalytics } from "@/lib/observability";
 import { SectionHeader } from "@/components/ui/section-header";
@@ -73,10 +73,13 @@ const DEFAULT_STYLE: CategoryStyle = {
 export function ActivityInsights({
   insights,
   activities,
+  weather,
 }: {
   insights?: WeatherInsights;
   /** All activities from MongoDB — passed from parent. Empty array = loading, show nothing. */
   activities: Activity[];
+  /** Full weather payload — powers each card's 24h feasibility trend + tips. */
+  weather?: WeatherData;
 }) {
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const openMyWeather = useAppStore((s) => s.openMyWeather);
@@ -130,7 +133,7 @@ export function ActivityInsights({
         />
         <div className="space-y-3">
           {selectedItems.map((activity) => (
-            <ActivityCard key={activity.id} activity={activity} insights={insights} dbRules={dbRules} categoryStyles={categoryStyles} />
+            <ActivityCard key={activity.id} activity={activity} insights={insights} dbRules={dbRules} categoryStyles={categoryStyles} weather={weather} />
           ))}
         </div>
       </section>

@@ -35,15 +35,21 @@ async def get_suitability(key: str | None = None):
             if not KEY_RE.match(key):
                 raise HTTPException(status_code=400, detail="Invalid key format")
 
+            # updatedAt is a BSON Date — JSONResponse can't serialize datetime,
+            # and the bare except below would silently turn ALL rules into an
+            # empty list (every activity card degrades to "No specific rules
+            # available"). Clients never need the sync timestamp; project it out.
             rule = suitability_rules_collection().find_one(
-                {"key": key}, {"_id": 0}
+                {"key": key}, {"_id": 0, "updatedAt": 0}
             )
             if not rule:
                 raise HTTPException(status_code=404, detail="Rule not found")
 
             return JSONResponse(content={"rule": rule}, headers=cache_headers)
 
-        rules = list(suitability_rules_collection().find({}, {"_id": 0}))
+        rules = list(
+            suitability_rules_collection().find({}, {"_id": 0, "updatedAt": 0})
+        )
         return JSONResponse(content={"rules": rules}, headers=cache_headers)
     except HTTPException:
         raise

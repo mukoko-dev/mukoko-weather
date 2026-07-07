@@ -212,3 +212,44 @@ describe("ActivityCard — evaluateSuitability integration", () => {
     expect(result.detail).toBe("High thunderstorm risk");
   });
 });
+
+// ── Card structure — feasibility trend + tips (source-reading checks) ──────
+
+import { readFileSync } from "fs";
+import { resolve } from "path";
+
+describe("ActivityCard — feasibility trend and tips", () => {
+  const source = readFileSync(resolve(__dirname, "ActivityCard.tsx"), "utf-8");
+
+  it("renders the 24h feasibility trend via the shared chart component", () => {
+    expect(source).toContain('from "./charts/FeasibilityChart"');
+    expect(source).toContain("<FeasibilityChart");
+    expect(source).toContain("feasibilitySeries");
+    expect(source).toContain(">Next 24 hours</p>");
+  });
+
+  it("hides the chart when fewer than 2 trend points exist", () => {
+    expect(source).toContain("trend.length >= 2 &&");
+  });
+
+  it("renders weather-driven tips from the shared tips lib", () => {
+    expect(source).toContain('from "@/lib/activity-tips"');
+    expect(source).toContain("getActivityTips(activity, weather)");
+    expect(source).toContain("tips.map((tip)");
+  });
+
+  it("keeps trend + tips optional — card renders without the weather prop", () => {
+    expect(source).toContain("weather?: WeatherData");
+    expect(source).toMatch(/weather \? feasibilitySeries/);
+    expect(source).toMatch(/weather \? getActivityTips/);
+  });
+
+  it("memoizes the per-card computation", () => {
+    expect(source).toContain("useMemo");
+  });
+
+  it("labels the card group for assistive tech", () => {
+    expect(source).toContain('role="group"');
+    expect(source).toContain("aria-labelledby={headingId}");
+  });
+});

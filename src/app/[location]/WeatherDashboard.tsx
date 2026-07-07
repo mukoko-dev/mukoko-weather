@@ -35,7 +35,7 @@ import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
 import { WelcomeBanner } from "@/components/weather/WelcomeBanner";
 import { useAppStore } from "@/lib/store";
 import type { WeatherData, FrostAlert, Season, MinutelyData, ModelForecast } from "@/lib/weather";
-import { fetchWeather, COMPARISON_MODELS } from "@/lib/weather";
+import { fetchWeather, COMPARISON_MODELS, synthesizeOpenMeteoInsights } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
 import type { AISummaryUser } from "@/components/weather/AISummary";
 import { type Activity, ACTIVITIES } from "@/lib/activities";
@@ -359,7 +359,10 @@ export function WeatherDashboard({
                           <LazySection label="activity-insights" fallback={<ActivityInsightsSkeleton />}>
                             <ChartErrorBoundary name="activity insights">
                               <Suspense fallback={<ActivityInsightsSkeleton />}>
-                                <ActivityInsights insights={weather.insights} activities={allActivities} />
+                                {/* Insights synthesized from the base forecast when the provider
+                                    (Open-Meteo fallback) doesn't supply them — activity cards
+                                    must never render without data. */}
+                                <ActivityInsights insights={weather.insights ?? synthesizeOpenMeteoInsights(weather)} activities={allActivities} weather={weather} />
                               </Suspense>
                             </ChartErrorBoundary>
                           </LazySection>

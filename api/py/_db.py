@@ -483,6 +483,42 @@ def filter_known_activities(activities: list[str]) -> list[str]:
     return [a for a in activities if a in _known_activities]
 
 
+_activities_brief: list[dict] = []
+_activities_brief_at: float = 0
+
+
+def get_activities_brief() -> list[dict]:
+    """
+    Cached (5 min) list of {id, label, category, aiInstructions} for every
+    activity. Shared by the Shamwari chat system prompt (activity list +
+    per-activity guidance) and the AI summary prompt (guidance for the
+    user's selected activities) so the two surfaces read the same
+    database-driven instructions and can't drift. `aiInstructions` is
+    data-managed (written straight to MongoDB, not part of the code seed) —
+    it tells the model what weather factors matter for that activity and
+    what regional framing to use, so advice stays grounded instead of
+    generic.
+    """
+    global _activities_brief, _activities_brief_at
+
+    now = _time.time()
+    if _activities_brief and (now - _activities_brief_at) < _ACTIVITIES_CACHE_TTL:
+        return _activities_brief
+
+    try:
+        docs = list(
+            activities_collection()
+            .find({}, {"id": 1, "label": 1, "category": 1, "aiInstructions": 1, "_id": 0})
+            .sort([("category", 1), ("label", 1)])
+        )
+        if docs:
+            _activities_brief = docs
+            _activities_brief_at = now
+        return docs or _activities_brief
+    except Exception:
+        return _activities_brief
+
+
 def check_rate_limit(ip: str, action: str, max_requests: int, window_seconds: int) -> dict:
     """
     MongoDB-backed rate limiter using atomic findOneAndUpdate.

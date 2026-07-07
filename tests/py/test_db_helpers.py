@@ -227,3 +227,47 @@ class TestRequireInternalCaller:
         import py._ai, py._ai_followup, py._ai_prompts
         for mod in (py._ai, py._ai_followup, py._ai_prompts):
             assert "require_internal_caller(request)" in inspect.getsource(mod)
+
+
+# ---------------------------------------------------------------------------
+# get_activities_brief — shared cached activity briefs (labels + AI guidance)
+# ---------------------------------------------------------------------------
+
+
+class TestGetActivitiesBrief:
+    def _reset_cache(self):
+        import py._db as db_mod
+        db_mod._activities_brief = []
+        db_mod._activities_brief_at = 0
+
+    @patch("py._db.activities_collection")
+    def test_fetches_and_caches_briefs(self, mock_coll):
+        from py._db import get_activities_brief
+        self._reset_cache()
+        docs = [{"id": "running", "label": "Running", "category": "sports",
+                 "aiInstructions": "Best window from hourly forecast."}]
+        mock_coll.return_value.find.return_value.sort.return_value = docs
+
+        assert get_activities_brief() == docs
+        # Second call served from cache — no second DB hit
+        assert get_activities_brief() == docs
+        assert mock_coll.return_value.find.call_count == 1
+
+    @patch("py._db.activities_collection")
+    def test_returns_stale_cache_on_db_error(self, mock_coll):
+        from py._db import get_activities_brief
+        import py._db as db_mod
+        self._reset_cache()
+        db_mod._activities_brief = [{"id": "running", "label": "Running"}]
+        mock_coll.return_value.find.side_effect = Exception("db down")
+
+        assert get_activities_brief() == [{"id": "running", "label": "Running"}]
+
+    @patch("py._db.activities_collection")
+    def test_includes_ai_instructions_in_projection(self, mock_coll):
+        from py._db import get_activities_brief
+        self._reset_cache()
+        mock_coll.return_value.find.return_value.sort.return_value = []
+        get_activities_brief()
+        projection = mock_coll.return_value.find.call_args[0][1]
+        assert projection.get("aiInstructions") == 1
