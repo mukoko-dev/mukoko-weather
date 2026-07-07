@@ -192,3 +192,52 @@
   margin-left: -50vw;
   margin-right: -50vw;
 }
+
+/* Seven-mineral brand ribbon — ALWAYS vertical (never horizontal): a fixed
+   4px strip down the left viewport edge, identical to the main weather app's
+   .minerals-stripe. Order top→bottom: tanzanite, cobalt, gold, malachite,
+   copper, sodalite, terracotta. */
+.minerals-stripe {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  z-index: 20;
+  background: linear-gradient(
+    to bottom,
+    var(--mineral-tanzanite) 0%,
+    var(--mineral-tanzanite) 14.28%,
+    var(--mineral-cobalt) 14.28%,
+    var(--mineral-cobalt) 28.57%,
+    var(--mineral-gold) 28.57%,
+    var(--mineral-gold) 42.86%,
+    var(--mineral-malachite) 42.86%,
+    var(--mineral-malachite) 57.14%,
+    var(--mineral-copper) 57.14%,
+    var(--mineral-copper) 71.43%,
+    var(--mineral-sodalite) 71.43%,
+    var(--mineral-sodalite) 85.71%,
+    var(--mineral-terracotta) 85.71%,
+    var(--mineral-terracotta) 100%
+  );
+}
+
+@media (max-width: 479px) {
+  .minerals-stripe {
+    display: none;
+  }
+}
+
+/* Registry shell entrance motion (nyuchi-footer) — gated by the harness's
+   prefers-reduced-motion check, so no additional media query needed here. */
+@keyframes nyuchi-fade-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
