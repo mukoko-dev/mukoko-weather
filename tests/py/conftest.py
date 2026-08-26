@@ -73,6 +73,30 @@ import pytest  # noqa: E402
 from fastapi import Request  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _no_overpass_network(monkeypatch):
+    """Keep Overpass off the network in every test.
+
+    `_locations._reverse_geocode` now tries Overpass before Nominatim. Tests
+    that patch `py._locations._get_http` do not cover `py._overpass._get_http`,
+    so without this the suite makes real HTTP calls — slow, flaky, and dependent
+    on a public community endpoint.
+
+    Defaulting it to unreachable means the existing Nominatim-path assertions
+    keep testing exactly what they did before. Tests that want the Overpass path
+    patch `py._overpass._get_http` themselves, which overrides this.
+    """
+    try:
+        from py import _overpass
+    except Exception:  # pragma: no cover - module always importable in practice
+        return
+
+    def _unavailable():
+        raise RuntimeError("Overpass disabled in tests")
+
+    monkeypatch.setattr(_overpass, "_get_http", _unavailable)
+
+
 @pytest.fixture
 def mock_request():
     """Create a mock FastAPI Request with configurable headers and client."""

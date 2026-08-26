@@ -11,6 +11,8 @@ import {
   normalizeName,
   inferNameFromSlug,
   adaptPlacesGeoToLocationDoc,
+  adaptSeedToLocationDoc,
+  nearestSeedLocation,
   listSeedLocations,
   poiTypeFromPlace,
   POI_MATCH_RADIUS_KM,
@@ -233,5 +235,87 @@ describe("dedup discipline (Phase 0E carry-forward)", () => {
     for (const slug of slugs) {
       expect(slug).not.toMatch(/-\d+$/);
     }
+  });
+});
+
+describe("adaptSeedToLocationDoc (static seed → renderable location)", () => {
+  const seed = LOCATIONS.find((l) => l.slug === "singapore-sg")!;
+
+  it("produces a location carrying everything a weather page needs", () => {
+    const adapted = adaptSeedToLocationDoc(seed);
+    expect(adapted.slug).toBe("singapore-sg");
+    expect(adapted.name).toBe("Singapore");
+    expect(typeof adapted.lat).toBe("number");
+    expect(typeof adapted.lon).toBe("number");
+    expect(typeof adapted.elevation).toBe("number");
+    expect(adapted.country).toBe("SG");
+    expect(adapted.province).toBeTruthy();
+    expect(adapted.tags.length).toBeGreaterThan(0);
+  });
+
+  it("synthesises an obviously non-platform _id so it is never mistaken for a placesGeo id", () => {
+    expect(adaptSeedToLocationDoc(seed)._id).toBe("seed:singapore-sg");
+  });
+
+  it("defaults source to `seed` when the entry omits it", () => {
+    const { source: _dropped, ...withoutSource } = seed;
+    expect(adaptSeedToLocationDoc(withoutSource).source).toBe("seed");
+  });
+
+  it("adapts EVERY shipped slug — advertised means renderable", () => {
+    // The sitemap, /explore, search and the 404 page's suggestions all offer
+    // the full static catalog. Every one of those slugs must be able to render
+    // a page without depending on a matching placesGeo document existing.
+    for (const loc of LOCATIONS) {
+      const adapted = adaptSeedToLocationDoc(loc);
+      expect(adapted.slug).toBe(loc.slug);
+      expect(Number.isFinite(adapted.lat)).toBe(true);
+      expect(Number.isFinite(adapted.lon)).toBe(true);
+      expect(adapted.name).toBeTruthy();
+    }
+  });
+});
+
+describe("nearestSeedLocation (coordinate fallback when placesGeo has no city)", () => {
+  it("resolves Singapore coordinates to the Singapore entry", () => {
+    // 1.3521 N, 103.8198 E — downtown Singapore. placesGeo carries Singapore
+    // only as a `country`, which both nearestPlacesGeo and the slug resolver
+    // filter out, so without this fallback the visitor resolves to nothing.
+    const nearest = nearestSeedLocation(1.3521, 103.8198);
+    expect(nearest?.slug).toBe("singapore-sg");
+  });
+
+  it("resolves Harare coordinates to the Harare entry", () => {
+    const nearest = nearestSeedLocation(-17.8292, 31.0522);
+    expect(nearest?.name).toBe("Harare");
+  });
+
+  it("returns null when nothing is within the radius", () => {
+    // Middle of the South Pacific — nowhere near any shipped location.
+    expect(nearestSeedLocation(-40, -140)).toBeNull();
+  });
+
+  it("respects a custom radius", () => {
+    expect(nearestSeedLocation(1.3521, 103.8198, 1000)?.slug).toBe(
+      "singapore-sg",
+    );
+    expect(nearestSeedLocation(1.3521, 103.8198, 0)).toBeNull();
+  });
+
+  it("returns null for non-finite coordinates rather than picking an arbitrary entry", () => {
+    expect(nearestSeedLocation(Number.NaN, 103.8198)).toBeNull();
+    expect(nearestSeedLocation(1.3521, Number.POSITIVE_INFINITY)).toBeNull();
+  });
+});
+
+describe("city-state resolution guard", () => {
+  it("ships seed entries whose name equals their country name", () => {
+    // These are the entries that can only ever match a `geoType: "country"`
+    // document in placesGeo. resolveLocationSlug accepts a country-level match
+    // ONLY for such a seed, and falls back to the seed itself otherwise —
+    // either way the slug must never 404.
+    const cityStates = LOCATIONS.filter((l) => l.slug === "singapore-sg");
+    expect(cityStates.length).toBe(1);
+    expect(cityStates[0].name).toBe("Singapore");
   });
 });

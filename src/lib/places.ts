@@ -41,6 +41,8 @@
 
 import { placesGeoCollection, placesCollection } from "./db";
 import { LOCATIONS, type WeatherLocation, type NominatimAddress } from "./locations";
+import { parseSmartSlug, type ParsedSmartSlug } from "./smart-slug";
+import type { PlaceRef, SpotRef } from "./place-ref";
 
 // ---------------------------------------------------------------------------
 // Types — platform shape vs. mukoko shape
@@ -203,6 +205,15 @@ const GEO_TYPE_RANK: Record<string, number> = {
   province: 3,
 };
 
+/**
+ * Countries where the city IS the country, so `places.placesGeo` carries the
+ * name only on a `geoType: "country"` document. Mirrors `_CITY_STATES` in
+ * `api/py/_locations.py` — keep the two in sync.
+ */
+export const CITY_STATE_COUNTRIES = new Set([
+  "SG", "MC", "VA", "GI", "SM", "AD", "LI", "MT", "BN", "DJ", "BH", "QA", "KW",
+]);
+
 function rankGeoType(geoType: string | undefined): number {
   if (!geoType) return 99;
   return GEO_TYPE_RANK[geoType] ?? 50;
@@ -255,6 +266,249 @@ export async function adaptPlacesGeoToLocationDoc(
 }
 
 // ---------------------------------------------------------------------------
+// Static-seed fallback — the app's own advertised slugs must always render
+// ---------------------------------------------------------------------------
+
+/**
+ * Adapt a static seed entry to the AdaptedLocation shape.
+ *
+ * The seed already carries everything a weather page needs to render
+ * (name, lat/lon, elevation, province, country, tags), so a seed slug never
+ * has to depend on a matching `placesGeo` document existing.
+ *
+ * `_id` is synthesised as `seed:<slug>` — stable and obviously non-platform,
+ * so nothing mistakes it for a real placesGeo `_id` and tries to patch it.
+ */
+export function adaptSeedToLocationDoc(seed: WeatherLocation): AdaptedLocation {
+  return {
+    ...seed,
+    _id: `seed:${seed.slug}`,
+    source: seed.source ?? "seed",
+    updatedAt: new Date(),
+  };
+}
+
+/** Great-circle distance in km between two WGS 84 points. */
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Nearest static seed location to (lat, lon), or null when none is within
+ * `maxKm`.
+ *
+ * This is the coordinate-lookup counterpart to the seed fallback in
+ * `resolveLocationSlug`: `nearestPlacesGeo` only sees `city`/`town`/`village`
+ * documents, so a visitor whose region has no such entry (every city-state,
+ * and any region the platform geography hasn't covered yet) would otherwise
+ * resolve to nothing at all. A 265-entry in-memory scan is far cheaper than
+ * the round-trip it backs up.
+ *
+ * The generous default radius suits IP geolocation, which is only accurate to
+ * the ISP/datacentre centroid anyway.
+ */
+export function nearestSeedLocation(
+  lat: number,
+  lon: number,
+  maxKm: number = 250,
+): AdaptedLocation | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+  let best: WeatherLocation | null = null;
+  let bestKm = Infinity;
+
+  for (const loc of LOCATIONS) {
+    const km = haversineKm(lat, lon, loc.lat, loc.lon);
+    if (km < bestKm) {
+      bestKm = km;
+      best = loc;
+    }
+  }
+
+  if (!best || bestKm > maxKm) return null;
+  return adaptSeedToLocationDoc(best);
+}
+
+// ---------------------------------------------------------------------------
+// Coordinate-first resolution — a smart slug never needs a place to exist
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a smart slug (`{name}--{geohash}`) to a renderable location.
+ *
+ * This path CANNOT fail for a syntactically valid smart slug: the coordinate
+ * comes out of the slug itself, so worst case we render the name the URL
+ * carries at the coordinate the URL encodes. The database is consulted only to
+ * improve on that:
+ *
+ *   1. An exact placesGeo document stamped with this slug → full platform
+ *      metadata (province, elevation, tags, POI type).
+ *   2. Otherwise the nearest placesGeo entry within the cell's radius → its
+ *      name and country, with the seed filling remaining gaps.
+ *   3. Otherwise the nearest static seed entry → country/province/elevation as
+ *      a regional approximation, but the slug's own name is kept, since the URL
+ *      is more specific about what the visitor asked for than a city 40 km away.
+ *   4. Otherwise the slug alone.
+ *
+ * Naming a bare coordinate that none of the above covers is deliberately NOT
+ * done here — an Overpass/Nominatim round-trip does not belong on the render
+ * path. That happens at creation time, and the resulting placesGeo document is
+ * what upgrades step 2 for the next visitor.
+ */
+export async function resolveSmartSlug(
+  slug: string,
+): Promise<AdaptedLocation | null> {
+  const parsed = parseSmartSlug(slug);
+  if (!parsed) return null;
+  return parsed.ref.kind === "place"
+    ? resolvePlaceSlug(slug, parsed, parsed.ref)
+    : resolveSpotSlug(slug, parsed, parsed.ref);
+}
+
+/**
+ * Resolve a PLACE slug — one identified by a map feature.
+ *
+ * The ref is the identity, so the lookup is an exact match on it. Our records
+ * are a CACHE of the map, not the source of truth: a hit renders immediately,
+ * and a miss means we have not stored this feature yet.
+ *
+ * A miss is the one case that still cannot render, because a place slug
+ * deliberately carries no coordinate — the map holds that. Resolving it needs
+ * an OSM lookup by ref, which belongs behind a cached endpoint rather than
+ * inline on a render path. Until that lands, a miss returns null.
+ *
+ * Note what this is NOT: the old failure mode, where a place the platform had
+ * simply never mapped could not render at all. A miss here means the ref names
+ * a feature we have never stored — and the fix is a backfill, not a redesign.
+ */
+async function resolvePlaceSlug(
+  slug: string,
+  parsed: ParsedSmartSlug,
+  ref: PlaceRef,
+): Promise<AdaptedLocation | null> {
+  let coll;
+  try {
+    coll = placesGeoCollection();
+  } catch {
+    return null;
+  }
+
+  // 1) Exact match on the map ref — the identity.
+  try {
+    const byRef = (await coll.findOne({
+      "sourceProvenance.mukokoOsmRef": ref.ref,
+    })) as unknown as PlacesGeoDoc | null;
+    if (byRef) {
+      const adapted = await adaptPlacesGeoToLocationDoc(byRef, { cleanSlug: slug });
+      // The URL's name is what the visitor chose to call it; keep it when set.
+      return parsed.name ? { ...adapted, name: parsed.name } : adapted;
+    }
+  } catch {
+    // Fall through — a stamped-slug match may still succeed.
+  }
+
+  // 2) A record stamped with this exact slug (written before refs were stored).
+  try {
+    const bySlug = (await coll.findOne({
+      "sourceProvenance.mukokoSlug": slug,
+    })) as unknown as PlacesGeoDoc | null;
+    if (bySlug) {
+      return adaptPlacesGeoToLocationDoc(bySlug, { cleanSlug: slug });
+    }
+  } catch {
+    // Nothing further to try.
+  }
+
+  return null;
+}
+
+/**
+ * Resolve a SPOT slug — a bare coordinate with no map feature.
+ *
+ * This path CANNOT fail: the coordinate comes out of the slug itself, so worst
+ * case we render the name the URL carries at the coordinate it encodes. The
+ * database only ever improves on that.
+ *
+ * Spots matter more here than they would elsewhere: a farm boundary or grazing
+ * paddock in rural Zimbabwe often has nothing mapped on it, and those users
+ * still need a saveable, shareable weather URL.
+ */
+async function resolveSpotSlug(
+  slug: string,
+  parsed: ParsedSmartSlug,
+  ref: SpotRef,
+): Promise<AdaptedLocation | null> {
+  const base: AdaptedLocation = {
+    _id: `geo:${ref.geohash}`,
+    slug,
+    name: parsed.name || "Selected location",
+    province: "",
+    lat: ref.lat,
+    lon: ref.lon,
+    elevation: 0,
+    tags: ["city"],
+    source: "geolocation",
+    updatedAt: new Date(),
+  };
+
+  // 1) Exact placesGeo match on the stamped slug.
+  try {
+    const stamped = (await placesGeoCollection().findOne({
+      "sourceProvenance.mukokoSlug": slug,
+    })) as unknown as PlacesGeoDoc | null;
+    if (stamped) {
+      const adapted = await adaptPlacesGeoToLocationDoc(stamped, { cleanSlug: slug });
+      return adapted.lat || adapted.lon ? adapted : { ...adapted, lat: ref.lat, lon: ref.lon };
+    }
+  } catch {
+    // DB unavailable — the slug still carries everything we need.
+  }
+
+  // 2) Nearest placesGeo entry, for surrounding context only. Deliberately does
+  //    NOT adopt that entry's identity: being near a place is not being it.
+  try {
+    const radiusKm = Math.max(0.25, ref.errorKm * 2);
+    const near = await nearestPlacesGeo(ref.lat, ref.lon, radiusKm);
+    if (near) {
+      const adapted = await adaptPlacesGeoToLocationDoc(near, { cleanSlug: slug });
+      return {
+        ...adapted,
+        _id: base._id,
+        lat: ref.lat,
+        lon: ref.lon,
+        name: parsed.name || adapted.name,
+      };
+    }
+  } catch {
+    // Ignore — fall through to the local approximations.
+  }
+
+  // 3) Nearest shipped seed entry, for regional context only.
+  const seedNear = nearestSeedLocation(ref.lat, ref.lon);
+  if (seedNear) {
+    return {
+      ...base,
+      province: seedNear.province,
+      country: seedNear.country,
+      elevation: seedNear.elevation,
+      tags: seedNear.tags,
+    };
+  }
+
+  // 4) The slug alone. Still a working weather page.
+  return base;
+}
+
+// ---------------------------------------------------------------------------
 // Resolver — clean URL slug → AdaptedLocation | null
 // ---------------------------------------------------------------------------
 
@@ -282,11 +536,23 @@ export async function resolveLocationSlug(
 ): Promise<AdaptedLocation | null> {
   if (!slug) return null;
 
+  // A smart slug carries its own coordinate, so it resolves without the
+  // database entirely. Checked first because it is purely local and because a
+  // slug containing `--` can never be a legacy catalog slug (slugification
+  // collapses character runs).
+  const smart = await resolveSmartSlug(slug);
+  if (smart) return smart;
+
+  // The static seed entry for this slug, if we ship one. Captured up front so
+  // every miss/failure path below can fall back to it instead of 404ing.
+  const seed = SLUG_INDEX.get(slug);
+  const seedFallback = () => (seed ? adaptSeedToLocationDoc(seed) : null);
+
   let coll;
   try {
     coll = placesGeoCollection();
   } catch {
-    return null;
+    return seedFallback();
   }
 
   // 1) Exact match on stamped mukokoSlug.
@@ -295,19 +561,15 @@ export async function resolveLocationSlug(
       "sourceProvenance.mukokoSlug": slug,
     })) as unknown as PlacesGeoDoc | null;
     if (stamped) {
-      return adaptPlacesGeoToLocationDoc(stamped, {
-        cleanSlug: slug,
-        seed: SLUG_INDEX.get(slug),
-      });
+      return adaptPlacesGeoToLocationDoc(stamped, { cleanSlug: slug, seed });
     }
   } catch {
     // Continue to fallback strategies.
   }
 
   // 2 + 3) Name lookup — prefer seed name, fall back to inferred name.
-  const seed = SLUG_INDEX.get(slug);
   const candidateName = seed?.name ?? inferNameFromSlug(slug);
-  if (!candidateName) return null;
+  if (!candidateName) return seedFallback();
 
   const normalised = normalizeName(candidateName);
 
@@ -322,16 +584,30 @@ export async function resolveLocationSlug(
       .limit(20)
       .toArray()) as unknown as PlacesGeoDoc[];
   } catch {
-    return null;
+    return seedFallback();
   }
 
   // Filter strictly by normalised name (handles diacritics) and exclude
   // country-level entries — `/harare` should never resolve to a country.
+  //
+  // City-states are the deliberate exception: for Singapore, Monaco, Gibraltar
+  // and friends the city IS the country, so the only placesGeo document that
+  // will ever carry the name is the `country` one. Excluding it unconditionally
+  // left every city-state slug unresolvable. Note the test must key off the
+  // seed's COUNTRY CODE, not a seed-name-vs-candidate-name comparison: the
+  // normalised name we match on is itself derived from the seed's name, so a
+  // name equality check here is always true and would let a country document
+  // hijack any slug.
+  const seedIsCityState =
+    !!seed?.country && CITY_STATE_COUNTRIES.has(seed.country.toUpperCase());
+
   const matches = candidates.filter(
-    (c) => c.geoType !== "country" && normalizeName(c.name) === normalised,
+    (c) =>
+      normalizeName(c.name) === normalised &&
+      (c.geoType !== "country" || seedIsCityState),
   );
 
-  if (matches.length === 0) return null;
+  if (matches.length === 0) return seedFallback();
 
   // Dedup discipline: prefer better geoType, then higher data confidence.
   matches.sort((a, b) => {

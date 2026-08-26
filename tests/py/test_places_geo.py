@@ -602,3 +602,168 @@ class TestCreationLock:
         assert result["wasExisting"] is True     # deduped to the competitor's doc
         assert result["_id"] == "competitor-uuid"
         mock_coll.return_value.insert_one.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# OSM ref — the authoritative join key
+# ---------------------------------------------------------------------------
+
+
+def _doc(_id: str, name: str, ref: str | None = None) -> dict:
+    """Build a placesGeo-shaped doc, optionally carrying an OSM ref."""
+    prov: dict = {"dataOrigin": "mukoko_user"}
+    if ref:
+        prov["mukokoOsmRef"] = ref
+    return {"_id": _id, "name": name, "sourceProvenance": prov}
+
+
+class TestFindPlacesGeoByOsmRef:
+    @patch("py._places_geo.places_geo_collection")
+    def test_queries_the_provenance_field(self, mock_coll):
+        doc = _doc("u1", "Canberra Residences", "w890123")
+        mock_coll.return_value.find_one.return_value = doc
+
+        assert pg.find_placesgeo_by_osm_ref("w890123") == doc
+        mock_coll.return_value.find_one.assert_called_once_with(
+            {"sourceProvenance.mukokoOsmRef": "w890123"}
+        )
+
+    @patch("py._places_geo.places_geo_collection")
+    def test_empty_ref_never_queries(self, mock_coll):
+        assert pg.find_placesgeo_by_osm_ref("") is None
+        mock_coll.return_value.find_one.assert_not_called()
+
+    @patch("py._places_geo.places_geo_collection")
+    def test_db_error_degrades_to_none(self, mock_coll):
+        mock_coll.return_value.find_one.side_effect = RuntimeError("no index")
+        assert pg.find_placesgeo_by_osm_ref("n1") is None
+
+
+class TestRefVeto:
+    """Proximity is never sufficient to merge two differently-identified features."""
+
+    @patch("py._places_geo.places_geo_collection")
+    def test_candidate_with_different_ref_is_skipped(self, mock_coll):
+        # Browning Drive and Strathaven Service Station sit ~3 m apart in the
+        # live data. Different OSM features, so never the same record.
+        road = _doc("road", "Browning Drive", "w111")
+        mock_coll.return_value.find.return_value.limit.return_value = iter([road])
+
+        assert pg.find_nearby_placesgeo(-17.7967, 31.0228, osm_ref="n222") is None
+
+    @patch("py._places_geo.places_geo_collection")
+    def test_candidate_with_same_ref_still_matches(self, mock_coll):
+        doc = _doc("same", "Browning Drive", "w111")
+        mock_coll.return_value.find.return_value.limit.return_value = iter([doc])
+
+        assert pg.find_nearby_placesgeo(-17.7967, 31.0228, osm_ref="w111") == doc
+
+    @patch("py._places_geo.places_geo_collection")
+    def test_refless_candidate_is_not_vetoed(self, mock_coll):
+        """Records predating ref capture must still be joinable by geometry."""
+        legacy = _doc("legacy", "Browning Drive")
+        mock_coll.return_value.find.return_value.limit.return_value = iter([legacy])
+
+        assert pg.find_nearby_placesgeo(-17.7967, 31.0228, osm_ref="w111") == legacy
+
+    @patch("py._places_geo.places_geo_collection")
+    def test_no_target_ref_leaves_behaviour_unchanged(self, mock_coll):
+        doc = _doc("x", "Harare", "n999")
+        mock_coll.return_value.find.return_value.limit.return_value = iter([doc])
+
+        assert pg.find_nearby_placesgeo(-17.83, 31.05) == doc
+
+
+class TestUpsertJoinsByRef:
+    @patch("py._places_geo.get_country_id", return_value=None)
+    @patch("py._places_geo.find_nearby_placesgeo")
+    @patch("py._places_geo.find_placesgeo_by_osm_ref")
+    @patch("py._places_geo.places_geo_collection")
+    def test_ref_hit_short_circuits_geometry(self, mock_coll, mock_by_ref, mock_nearby, _cid):
+        """A ref match is the answer — no proximity scan, no insert."""
+        mock_by_ref.return_value = _doc("hit", "Visionaire", "w890124")
+
+        result = pg.upsert_placesgeo_city(
+            name="Visionaire", lat=1.4, lon=103.8, country_iso="SG", osm_ref="w890124"
+        )
+
+        assert result["wasExisting"] is True
+        assert result["_id"] == "hit"
+        mock_nearby.assert_not_called()
+        mock_coll.return_value.insert_one.assert_not_called()
+
+    @patch("py._places_geo.get_country_id", return_value=None)
+    @patch("py._places_geo.find_nearby_placesgeo", return_value=None)
+    @patch("py._places_geo.find_placesgeo_by_osm_ref", return_value=None)
+    @patch("py._places_geo.places_geo_collection")
+    def test_new_record_stores_the_ref(self, mock_coll, _by_ref, _nearby, _cid):
+        pg.upsert_placesgeo_city(
+            name="Canberra Residences", lat=1.44, lon=103.82,
+            country_iso="SG", osm_ref="w890123",
+        )
+
+        doc = mock_coll.return_value.insert_one.call_args[0][0]
+        assert doc["sourceProvenance"]["mukokoOsmRef"] == "w890123"
+
+    @patch("py._places_geo.get_country_id", return_value=None)
+    @patch("py._places_geo.find_placesgeo_by_osm_ref", return_value=None)
+    @patch("py._places_geo.places_geo_collection")
+    def test_geometry_match_backfills_the_ref(self, mock_coll, _by_ref, _cid):
+        """A record created before refs existed adopts one when revisited."""
+        legacy = _doc("legacy", "Sembawang")
+        with patch("py._places_geo.find_nearby_placesgeo", return_value=legacy):
+            result = pg.upsert_placesgeo_city(
+                name="Sembawang", lat=1.4439, lon=103.8244,
+                country_iso="SG", osm_ref="n555",
+            )
+
+        assert result["sourceProvenance"]["mukokoOsmRef"] == "n555"
+        filt, update = mock_coll.return_value.update_one.call_args[0]
+        assert filt["_id"] == "legacy"
+        # Guarded so a concurrent writer that stamped a ref first isn't clobbered.
+        assert filt["sourceProvenance.mukokoOsmRef"] == {"$exists": False}
+        assert update["$set"]["sourceProvenance.mukokoOsmRef"] == "n555"
+
+    @patch("py._places_geo.get_country_id", return_value=None)
+    @patch("py._places_geo.places_geo_collection")
+    def test_ref_hit_is_never_rewritten(self, mock_coll, _cid):
+        """Matching by ref must not re-stamp the ref it matched on.
+
+        A ``mukoko_slug`` is passed so the slug-patch path actually fires —
+        otherwise no write happens at all and the assertion below would pass
+        without proving anything.
+        """
+        hit = _doc("hit", "Woodlands", "n777")
+        with patch("py._places_geo.find_placesgeo_by_osm_ref", return_value=hit):
+            pg.upsert_placesgeo_city(
+                name="Woodlands", lat=1.42, lon=103.77,
+                country_iso="SG", osm_ref="n777",
+                mukoko_slug="woodlands--osm-n777",
+            )
+
+        writes = mock_coll.return_value.update_one.call_args_list
+        assert writes, "expected the slug patch to write"
+        for call in writes:
+            patch_set = call[0][1]["$set"]
+            assert patch_set["sourceProvenance.mukokoSlug"] == "woodlands--osm-n777"
+            assert "sourceProvenance.mukokoOsmRef" not in patch_set
+
+    @patch("py._places_geo._acquire_create_lock", return_value=True)
+    @patch("py._places_geo.get_country_id", return_value=None)
+    @patch("py._places_geo.find_nearby_placesgeo", return_value=None)
+    @patch("py._places_geo.find_placesgeo_by_osm_ref", return_value=None)
+    @patch("py._places_geo.places_geo_collection")
+    def test_lock_is_keyed_by_ref_when_available(self, _coll, _by_ref, _nearby, _cid, mock_lock):
+        pg.upsert_placesgeo_city(
+            name="Canberra Plaza", lat=1.44, lon=103.82,
+            country_iso="SG", osm_ref="w890125",
+        )
+        assert mock_lock.call_args[0][0] == "placesgeo:osm:w890125"
+
+    @patch("py._places_geo._acquire_create_lock", return_value=True)
+    @patch("py._places_geo.get_country_id", return_value=None)
+    @patch("py._places_geo.find_nearby_placesgeo", return_value=None)
+    @patch("py._places_geo.places_geo_collection")
+    def test_lock_falls_back_to_country_and_name(self, _coll, _nearby, _cid, mock_lock):
+        pg.upsert_placesgeo_city(name="West Paddock", lat=-18.0, lon=31.0, country_iso="ZW")
+        assert mock_lock.call_args[0][0] == "placesgeo:ZW:west paddock"

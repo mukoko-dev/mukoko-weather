@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
+from ._geohash import build_place_slug, build_smart_slug, normalise_osm_ref
 from ._db import (
     get_db,
     get_client_ip,
@@ -38,6 +39,7 @@ from ._places_geo import (
     find_nearby_placesgeo,
     find_nearest_place,
     poi_type_from_place,
+    find_placesgeo_by_osm_ref,
     upsert_placesgeo_city,
     get_country_id,
     POI_MATCH_RADIUS_KM,
@@ -346,6 +348,43 @@ def _build_nominatim_address(address: dict, country_code: str, display_name: str
 
 
 def _reverse_geocode(lat: float, lon: float, *, zoom: int = 14) -> dict | None:
+    """Name a coordinate: Overpass first, Nominatim as fallback.
+
+    Overpass queries OSM directly, so it answers "what is actually at this
+    point" instead of reconstructing it from a postal address, and its
+    ``is_in`` lookup returns the enclosing admin boundaries (country, province)
+    in the same round trip. See ``api/py/_overpass.py`` for why that replaces
+    shipping our own GeoJSON boundary dataset.
+
+    Nominatim still backs it up: Overpass returns nothing for genuinely empty
+    coordinates and its public instances are routinely busy, and neither case
+    should cost the user their location. A missing ``nominatimAddress`` on the
+    Overpass path is expected — that field is Nominatim's structured-address
+    view and has no Overpass equivalent; downstream consumers already treat it
+    as optional.
+    """
+    from ._overpass import reverse_name as _overpass_reverse_name
+
+    try:
+        via_overpass = _overpass_reverse_name(lat, lon)
+    except Exception:
+        via_overpass = None
+
+    # Only accept it when it actually produced a name — admin context alone is
+    # thinner than what Nominatim would give us for the same point.
+    if via_overpass and via_overpass.get("name"):
+        result = dict(via_overpass)
+        result["admin1"] = _normalize_admin1(
+            {"state": result.get("admin1", "")},
+            result.get("country", ""),
+            result.get("countryName", ""),
+        )
+        return result
+
+    return _reverse_geocode_nominatim(lat, lon, zoom=zoom)
+
+
+def _reverse_geocode_nominatim(lat: float, lon: float, *, zoom: int = 14) -> dict | None:
     """Reverse geocode using Nominatim.
 
     Args:
@@ -551,27 +590,48 @@ def _find_duplicate(
     radius_km: float = DEDUP_RADIUS_KM,
     name: str | None = None,
     country: str | None = None,
+    osm_ref: str | None = None,
 ) -> dict | None:
-    """Check for existing locations within radius_km OR with same name+country.
+    """Check whether this place is already on record.
 
     Phase 0G: queries ``places.placesGeo`` via the same dedup primitives the
     Phase 0E ``upsert_placesgeo_city`` helper uses, then adapts the result
     to the legacy LocationDoc shape so callers keep working unchanged.
+
+    Order matters and mirrors ``upsert_placesgeo_city`` exactly, so the gate
+    here and the upsert's own dedup can never disagree about what counts as
+    the same place:
+
+      1. ``osm_ref`` exact match — the map's identity for this feature.
+      2. proximity + normalised name, with the ref veto (a nearby record
+         carrying a different ref is a different feature).
+      3. same name + country anywhere — catches same-named entries whose
+         stored coordinates sit outside ``radius_km``. Skipped once we hold
+         a ref, since a ref miss at step 1 already means the map considers
+         this a feature we have not stored, and a bare name match would
+         otherwise collapse two genuinely distinct same-named features.
     """
     try:
         parent_place_id = get_country_id(country) if country else None
+
+        if osm_ref:
+            by_ref = find_placesgeo_by_osm_ref(osm_ref)
+            if by_ref:
+                return adapt_placesgeo_to_location(by_ref)
+
         existing = find_nearby_placesgeo(
             lat=lat,
             lon=lon,
             max_distance_km=radius_km,
             name=name,
             parent_place_id=parent_place_id,
+            osm_ref=osm_ref,
         )
         if existing:
             return adapt_placesgeo_to_location(existing)
 
         # Name + country fallback — catches same-named entries farther apart.
-        if name and country:
+        if name and country and not osm_ref:
             try:
                 doc = places_geo_collection().find_one({
                     "name": {"$regex": f"^{re.escape(name)}$", "$options": "i"},
@@ -649,9 +709,11 @@ def _create_location_from_coords(lat: float, lon: float, *, source: str) -> dict
     # a slug is NOT returned as a duplicate — creation proceeds and the
     # placesGeo upsert below patches the mukoko slug onto that existing doc,
     # which is what makes it resolvable in the first place.
+    osm_ref = geocoded.get("osmRef")
     duplicate = _find_duplicate(
         lat, lon, DEDUP_RADIUS_KM,
         name=geocoded["name"], country=geocoded["country"],
+        osm_ref=osm_ref,
     )
     if duplicate and duplicate.get("slug"):
         return {"status": "duplicate", "existing": duplicate}
@@ -660,7 +722,23 @@ def _create_location_from_coords(lat: float, lon: float, *, source: str) -> dict
     if not elevation:
         elevation = _get_elevation(lat, lon)
 
-    slug = _generate_slug(geocoded["name"], geocoded["country"])
+    # Identity comes from the map when the map knows this feature.
+    #
+    #   place  `{name}--osm-w890123`  a named OSM feature. Stable across visits
+    #          and across GPS jitter, and DISTINCT from its neighbours — which
+    #          is what lets a person save Canberra Residences and Visionaire
+    #          separately even though they are metres apart.
+    #   spot   `{name}--{geohash}`    a bare coordinate, for somewhere the map
+    #          has nothing on (a paddock, a farm boundary).
+    #
+    # Coordinate-derived identity cannot do the first job: a cell coarse enough
+    # to absorb GPS jitter also merges neighbouring places, and one fine enough
+    # to separate them changes on every fix. See src/lib/place-ref.ts.
+    slug = (
+        (build_place_slug(geocoded["name"], osm_ref) if osm_ref else "")
+        or build_smart_slug(geocoded["name"], lat, lon)
+        or _generate_slug(geocoded["name"], geocoded["country"])
+    )
     try:
         slug = _resolve_slug_collision(slug, geocoded)
     except SlugCollisionError as exc:
@@ -697,6 +775,7 @@ def _create_location_from_coords(lat: float, lon: float, *, source: str) -> dict
             mukoko_tags=tags,
             mukoko_nominatim_address=geocoded.get("nominatimAddress"),
             mukoko_poi_type=poi_type,
+            osm_ref=osm_ref,
         )
         places_geo_id = placesgeo_doc.get("_id")
         places_geo_slug = placesgeo_doc.get("slug")

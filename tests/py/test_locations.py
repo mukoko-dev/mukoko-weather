@@ -1524,6 +1524,53 @@ class TestFindDuplicateNameCountry:
 
     @patch("py._locations.places_geo_collection")
     @patch("py._locations.find_nearby_placesgeo")
+    @patch("py._locations.find_placesgeo_by_osm_ref")
+    def test_ref_match_wins_before_geometry(self, mock_by_ref, mock_nearby, mock_coll):
+        """The map's own id is consulted first and answers on its own."""
+        mock_by_ref.return_value = {
+            "_id": "uuid-ref",
+            "name": "Canberra Residences",
+            "slug": "canberra-residences-abc",
+            "geo": {"type": "Point", "coordinates": [103.82, 1.44]},
+            "sourceProvenance": {
+                "mukokoSlug": "canberra-residences--osm-w890123",
+                "mukokoOsmRef": "w890123",
+            },
+        }
+        result = _find_duplicate(
+            1.44, 103.82, 1.0, name="Canberra Residences",
+            country="SG", osm_ref="w890123",
+        )
+        assert result is not None
+        assert result["slug"] == "canberra-residences--osm-w890123"
+        mock_nearby.assert_not_called()
+        mock_coll.return_value.find_one.assert_not_called()
+
+    @patch("py._locations.places_geo_collection")
+    @patch("py._locations.find_nearby_placesgeo", return_value=None)
+    @patch("py._locations.find_placesgeo_by_osm_ref", return_value=None)
+    def test_ref_is_forwarded_to_the_geometry_veto(self, _by_ref, mock_nearby, mock_coll):
+        _find_duplicate(1.44, 103.82, 1.0, name="Visionaire", country="SG", osm_ref="w890124")
+        assert mock_nearby.call_args.kwargs["osm_ref"] == "w890124"
+
+    @patch("py._locations.places_geo_collection")
+    @patch("py._locations.find_nearby_placesgeo", return_value=None)
+    @patch("py._locations.find_placesgeo_by_osm_ref", return_value=None)
+    def test_name_country_sweep_skipped_once_a_ref_is_known(self, _by_ref, _nearby, mock_coll):
+        """Two same-named features the map distinguishes must stay distinct.
+
+        Canberra Plaza and Canberra MRT would both be caught by a bare
+        name+country sweep. A ref miss already means the map does not know
+        this feature as one we hold, so the sweep must not run.
+        """
+        result = _find_duplicate(
+            1.44, 103.82, 1.0, name="Canberra Plaza", country="SG", osm_ref="w890125",
+        )
+        assert result is None
+        mock_coll.return_value.find_one.assert_not_called()
+
+    @patch("py._locations.places_geo_collection")
+    @patch("py._locations.find_nearby_placesgeo")
     def test_no_name_skips_name_check(self, mock_nearby, mock_coll):
         """When name is None, only the placesGeo nearby check runs."""
         mock_nearby.return_value = None

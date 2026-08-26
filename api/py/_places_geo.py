@@ -160,12 +160,47 @@ def _names_match(candidate: str, target_normalised: str) -> bool:
     return norm == target_normalised or norm in target_normalised or target_normalised in norm
 
 
+# ---------------------------------------------------------------------------
+# OSM ref — the authoritative join key
+# ---------------------------------------------------------------------------
+
+#: Where the map's own feature id lives on a placesGeo document.
+OSM_REF_FIELD = "sourceProvenance.mukokoOsmRef"
+
+
+def find_placesgeo_by_osm_ref(osm_ref: str) -> Optional[dict]:
+    """Return the placesGeo document carrying ``osm_ref``, or ``None``.
+
+    This is the authoritative join: OSM assigns every feature a stable id, so
+    two visits to the same place produce the same ref and land on the same
+    record no matter how far the GPS fix drifted. Name and proximity are only
+    consulted when the map has no id for the spot (see
+    :func:`find_nearby_placesgeo`).
+    """
+    if not osm_ref:
+        return None
+    try:
+        doc = places_geo_collection().find_one({OSM_REF_FIELD: osm_ref})
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("placesGeo ref lookup failed (%s)", exc)
+        return None
+    return doc if isinstance(doc, dict) else None
+
+
+def _ref_of(doc: dict) -> Optional[str]:
+    """Return the OSM ref stamped on ``doc``, or ``None`` if it carries none."""
+    prov = doc.get("sourceProvenance") or {}
+    ref = prov.get("mukokoOsmRef")
+    return ref if isinstance(ref, str) and ref else None
+
+
 def find_nearby_placesgeo(
     lat: float,
     lon: float,
     max_distance_km: float = 5,
     name: Optional[str] = None,
     parent_place_id: Optional[str] = None,
+    osm_ref: Optional[str] = None,
 ) -> Optional[dict]:
     """Return any placesGeo entry within ``max_distance_km`` of (lat, lon).
 
@@ -176,6 +211,13 @@ def find_nearby_placesgeo(
         different countries are legitimately different (e.g. two
         "Springfield"s), so the dedup query must be scoped to a single
         country when a parent id is known.
+      * ``osm_ref`` — the ref of the feature being looked for. Used here only
+        as a *veto*: a candidate already carrying a DIFFERENT ref is a
+        different feature on the map, so it is skipped no matter how close or
+        how similarly named it is. This is what keeps a road and the service
+        station fronting it — metres apart, similar names — as two records.
+        Positive ref matching belongs to
+        :func:`find_placesgeo_by_osm_ref`, which the caller tries first.
 
     Tries the 2dsphere ``$nearSphere`` index first; if that fails (no index,
     no geo field on docs, etc.) falls back to a coarse bounding-box scan so
@@ -192,6 +234,11 @@ def find_nearby_placesgeo(
         # can fall back to bbox when the geo index is missing.
         cursor = coll.find(query).limit(10)
         for doc in cursor:
+            # Ref veto — a candidate the map identifies as a DIFFERENT feature
+            # is never the same place, however close or similarly named.
+            candidate_ref = _ref_of(doc)
+            if osm_ref and candidate_ref and candidate_ref != osm_ref:
+                continue
             if name and not _names_match(doc.get("name", ""), target_norm):
                 continue
             return doc
@@ -381,18 +428,33 @@ def upsert_placesgeo_city(
     mukoko_tags: Optional[list[str]] = None,
     mukoko_nominatim_address: Optional[dict] = None,
     mukoko_poi_type: Optional[str] = None,
+    osm_ref: Optional[str] = None,
 ) -> dict:
     """Insert a new ``places.placesGeo`` document, or return the existing one.
 
     Behaviour:
-      1. **Always dedup first.** Calls :func:`find_nearby_placesgeo` with a
-         ``dedup_radius_km`` radius (default 5 km — pass the caller's own
-         duplicate-gate radius so the two checks can't disagree), a
-         normalised-name match, and country-scoped ``parentPlaceId`` filter.
+      1. **Always dedup first, ref before geometry.** When ``osm_ref`` is
+         given, :func:`find_placesgeo_by_osm_ref` is tried first — an exact
+         match on the map's own feature id, which is stable across GPS
+         jitter and distinct between neighbouring features. Only on a ref
+         miss does it fall back to :func:`find_nearby_placesgeo`
+         (``dedup_radius_km`` radius, default 5 km — pass the caller's own
+         duplicate-gate radius so the two checks can't disagree; normalised
+         name; country-scoped ``parentPlaceId``), which is what still joins
+         records created before refs were captured. That fallback carries a
+         **ref veto**: a nearby same-named candidate already stamped with a
+         DIFFERENT ref is a different feature and is never merged onto.
+
+         A ref-less record matched by the geometry fallback is
+         **backfilled** with the ref, so the next visit to that place joins
+         by identity rather than by luck. No batch migration is needed —
+         existing records adopt refs as they are visited.
+
          The dedup read + insert run under a short cross-instance creation
-         lock keyed by country + normalised name, so two near-simultaneous
-         requests for the same brand-new place can't both slip past the
-         dedup read and double-insert (TOCTOU).
+         lock (keyed by the ref when there is one, else country + normalised
+         name), so two near-simultaneous requests for the same brand-new
+         place can't both slip past the dedup read and double-insert
+         (TOCTOU).
       2. If a match is found, the existing document is returned with an
          added ``wasExisting: True`` marker. NO insert is performed and NO
          suffixed/alternate slug is generated — that would create the kind
@@ -417,7 +479,15 @@ def upsert_placesgeo_city(
     # two near-simultaneous requests can't both pass the dedup read below and
     # double-insert. The lock key is country + normalised name: over-broad
     # (two same-named places far apart briefly serialize), never under-broad.
-    lock_id = f"placesgeo:{(country_iso or '').upper()}:{normalize_name(name)}"
+    # Key the lock by ref when the map gave us one — that is the precise
+    # identity, so it neither over-serializes distinct same-named places nor
+    # under-serializes two requests for the same feature under different
+    # reverse-geocoded names. Country + name remains the fallback.
+    lock_id = (
+        f"placesgeo:osm:{osm_ref}"
+        if osm_ref
+        else f"placesgeo:{(country_iso or '').upper()}:{normalize_name(name)}"
+    )
     got_lock = _acquire_create_lock(lock_id)
     if not got_lock:
         # Another instance is creating this place right now — give its insert
@@ -440,6 +510,7 @@ def upsert_placesgeo_city(
             mukoko_tags=mukoko_tags,
             mukoko_nominatim_address=mukoko_nominatim_address,
             mukoko_poi_type=mukoko_poi_type,
+            osm_ref=osm_ref,
             parent_place_id=parent_place_id,
         )
     finally:
@@ -463,6 +534,7 @@ def _dedup_or_insert(
     mukoko_tags: Optional[list[str]],
     mukoko_nominatim_address: Optional[dict],
     mukoko_poi_type: Optional[str],
+    osm_ref: Optional[str],
     parent_place_id: Optional[str],
 ) -> dict:
     """The dedup-read + insert body of :func:`upsert_placesgeo_city`.
@@ -470,15 +542,45 @@ def _dedup_or_insert(
     Runs under the creation lock acquired by the caller.
     """
     # Dedup gate — no auto-suffixing, ever.
-    existing = find_nearby_placesgeo(
-        lat=lat,
-        lon=lon,
-        max_distance_km=dedup_radius_km,
-        name=name,
-        parent_place_id=parent_place_id,
-    )
+    #
+    # Ref first. The map's feature id is the identity, so an exact match here
+    # joins the same place across visits however far the GPS fix drifted and
+    # whatever the reverse-geocoder chose to call it this time.
+    existing = find_placesgeo_by_osm_ref(osm_ref) if osm_ref else None
+    matched_by_ref = existing is not None
+
+    # Geometry fallback. Only reached when the map gave us no id, or gave us
+    # one we have never stored — which includes every record written before
+    # refs were captured. The ref veto inside keeps a differently-identified
+    # neighbour from being merged onto.
+    if existing is None:
+        existing = find_nearby_placesgeo(
+            lat=lat,
+            lon=lon,
+            max_distance_km=dedup_radius_km,
+            name=name,
+            parent_place_id=parent_place_id,
+            osm_ref=osm_ref,
+        )
+
     if existing is not None:
         existing = dict(existing)
+        # Backfill the ref onto a record that predates ref capture, so the
+        # next visit joins by identity instead of by proximity. Never
+        # overwrite a ref already present — that would silently reassign one
+        # record to a different map feature.
+        if osm_ref and not matched_by_ref and not _ref_of(existing):
+            try:
+                places_geo_collection().update_one(
+                    {"_id": existing["_id"], OSM_REF_FIELD: {"$exists": False}},
+                    {"$set": {
+                        OSM_REF_FIELD: osm_ref,
+                        "updatedAt": datetime.now(timezone.utc),
+                    }},
+                )
+                existing.setdefault("sourceProvenance", {})["mukokoOsmRef"] = osm_ref
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to backfill mukokoOsmRef: %s", exc)
         # Phase 0F: stamp the mukoko slug onto a pre-existing platform doc
         # if it's missing. This is critical for platform-seeded city entries
         # (e.g. Phase 0C-1 mukoko_seed cities) so the clean-slug resolver
@@ -530,6 +632,8 @@ def _dedup_or_insert(
         source_provenance["mukokoNominatimAddress"] = mukoko_nominatim_address
     if mukoko_poi_type:
         source_provenance["mukokoPoiType"] = mukoko_poi_type
+    if osm_ref:
+        source_provenance["mukokoOsmRef"] = osm_ref
 
     doc: dict = {
         "_id": str(uuid.uuid4()),

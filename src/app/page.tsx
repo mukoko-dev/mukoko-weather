@@ -5,6 +5,7 @@ import { getLocationFromDb, getWeatherForLocation, getCountryByCode, getSeasonFo
 import { getCurrentUser } from "@/lib/auth";
 import { checkFrostRisk, createFallbackWeather } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
+import { nearestSeedLocation } from "@/lib/places";
 
 const BASE_URL = "https://weather.mukoko.com";
 // Stable base for the server-to-self geo lookup. The per-deployment Vercel
@@ -97,9 +98,19 @@ export default async function Home() {
           }
         }
       } catch {
-        // Geo lookup unavailable or timed out — the client chooser takes over
+        // Geo lookup unavailable or timed out — the seed fallback below, then
+        // the client chooser, take over.
       } finally {
         clearTimeout(timeout);
+      }
+
+      // The geo endpoint only knows placesGeo city/town/village entries, so it
+      // returns nothing for regions the platform geography hasn't covered yet
+      // (and for every city-state, where the only matching document is the
+      // country). Falling back to the nearest location we actually ship means
+      // those visitors still land on real weather instead of an empty chooser.
+      if (!detectedLocation) {
+        detectedLocation = nearestSeedLocation(Number(lat), Number(lon));
       }
     }
   }
