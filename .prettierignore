@@ -1,10 +1,8 @@
-# Prettier ignore for nyuchi/mukoko-weather.
+# Prettier ignore for nyuchi/.github.
 
 # Standard ignores
 node_modules/
 .git/
-.next/
-.vercel/
 
 # Files with structural meaning that Prettier would harm
 LICENSE
@@ -18,12 +16,15 @@ CODEOWNERS.example
 *.yml
 *.yaml
 
+# Governance documents are authored by the Founder as legal / formal
+# documents. Prettier's markdown formatter reflows numbered paragraphs
+# ("2.2 The company pursues...") after a list as loose list-item
+# continuations, which corrupts the document's structure. Hand-format
+# these files.
+profile/governance/
+
 # Lockfiles, generated output
 *-lock.json
 *-lock.yaml
 package-lock.json
 pnpm-lock.yaml
-
-# Nyuchi Design registry artifacts — fetched verbatim from design.nyuchi.com
-# (versions pinned in .nyuchi-design.json); reformatting would drift from upstream
-station-console/.claude/skills/

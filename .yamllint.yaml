@@ -1,4 +1,4 @@
-# yamllint config for nyuchi/mukoko-weather.
+# yamllint config for nyuchi/.github.
 #
 # Relaxed defaults that accommodate:
 #   - GitHub Actions workflows (which use `on:` — a YAML 1.1 boolean)
@@ -11,9 +11,18 @@ extends: default
 
 ignore: |
   node_modules/
-  .next/
-  .vercel/
-  .worktrees/
+  # Lockfiles are generated, not authored. .prettierignore already
+  # exempts them under "Lockfiles, generated output"; yamllint not doing
+  # the same was an oversight that only stayed hidden because this repo
+  # has no lockfile. pnpm writes registry deprecation notices verbatim
+  # into pnpm-lock.yaml, which routinely exceeds the 140-char limit and
+  # cannot be rewrapped without invalidating the lockfile.
+  pnpm-lock.yaml
+  package-lock.json
+  yarn.lock
+  **/pnpm-lock.yaml
+  **/package-lock.json
+  **/yarn.lock
 
 rules:
   # 140-char limit. Workflow files have legitimately long shell URLs

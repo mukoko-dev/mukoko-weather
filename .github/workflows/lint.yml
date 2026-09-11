@@ -1,14 +1,22 @@
-# Lint CI for nyuchi/mukoko-weather.
+# The org-wide lint gate. Drop this file in as
+# .github/workflows/lint.yml and change nothing else.
 #
-# Thin caller of the org's reusable lint workflow. The org's lint
-# policy lives in ONE place — reusable-lint.yml in nyuchi/.github —
-# and every consuming repo references it the same way.
+# The five checks it publishes are exactly the five contexts the
+# org ruleset requires:
 #
-# All five jobs (actionlint, JSON validity, prettier, markdownlint,
-# yamllint) are blocking and are the required status checks in the
-# org-wide main-branch ruleset. CI never auto-fixes; fix locally
-# (`prettier --write`, `markdownlint-cli2 --fix`, manual yamllint)
-# and push the corrected commit.
+#   lint / actionlint
+#   lint / JSON validity
+#   lint / prettier
+#   lint / markdownlint
+#   lint / yamllint
+#
+# Those strings come from the job being called `lint` and calling a
+# reusable workflow - a check publishes as "<caller job> / <called job>".
+# Do NOT convert this to a matrix: a matrix publishes
+# "lint (actionlint)" instead and will not satisfy the ruleset.
+#
+# Also copy .prettierrc, .prettierignore, .markdownlint.jsonc and
+# .yamllint.yaml from nyuchi/.github into your repo root.
 
 name: Lint
 
@@ -16,6 +24,12 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Required for repos whose ruleset uses a MERGE QUEUE: required checks
+  # must report on the gh-readonly-queue/** ref, and only merge_group
+  # produces that. Without it a queued PR stalls for the full
+  # check_response_timeout and nothing can ever land. Harmless where
+  # there is no queue, so it stays in the one identical caller.
+  merge_group:
   workflow_dispatch:
 
 concurrency:
