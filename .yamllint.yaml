@@ -24,6 +24,19 @@ ignore: |
   **/package-lock.json
   **/yarn.lock
 
+  # Rails fixtures are ERB TEMPLATES, not YAML documents. campfire's
+  # test/fixtures/users.yml opens with
+  #   <% password_digest = BCrypt::Password.create("secret123456") %>
+  # and only becomes valid YAML after Rails renders it, so yamllint
+  # reports a hard syntax error and always will. The ActionText fixtures
+  # alongside them are HTML blobs that tests assert on byte-for-byte, so
+  # rewrapping their long lines would be a test change, not a formatting
+  # change. Seven files in that repo are ERB-templated YAML; the others
+  # only parse because their ERB happens to sit inside quoted scalars,
+  # which is luck rather than correctness.
+  test/fixtures/
+  **/test/fixtures/
+
 rules:
   # 140-char limit. Workflow files have legitimately long shell URLs
   # (the actionlint download script, action references) and issue-

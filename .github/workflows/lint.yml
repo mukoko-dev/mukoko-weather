@@ -23,7 +23,17 @@ name: Lint
 on:
   pull_request:
   push:
-    branches: [main]
+    # Every default-branch name in the estate: `main` covers 68 repos,
+    # `master` covers siafudb-kuzu, `scaffold` covers shamwari-core,
+    # shamwari-gateway and shamwari-web. Drop a name and merging to that
+    # repo's default branch fires nothing, so the five contexts never
+    # land on the default-branch head - which is how `lint / prettier`
+    # stayed red in bundu-labs/.github from 2026-05-02 unnoticed.
+    #
+    # A list rather than a bare `push:`, because unfiltered push would
+    # run the gate on every feature-branch push in 74 repos and bill it
+    # twice per PR. Add a name here if a repo ever adopts a fourth.
+    branches: [main, master, scaffold]
   # Required for repos whose ruleset uses a MERGE QUEUE: required checks
   # must report on the gh-readonly-queue/** ref, and only merge_group
   # produces that. Without it a queued PR stalls for the full
