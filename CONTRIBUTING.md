@@ -184,13 +184,11 @@ The old analyzer names may have silently fallen through to Atlas defaults — th
 
 All workflows use `concurrency` groups with `cancel-in-progress: true` — rapid pushes cancel stale runs instead of creating zombie checks.
 
-| Workflow                 | Trigger                           | Purpose                                                                                                                                             |
-| ------------------------ | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci.yml`                 | Push/PR to `main`                 | Single job: lint → typecheck → TypeScript tests → Python tests. All steps appear under one check in the GitHub PR UI.                               |
-| `codeql.yml`             | Push/PR to `main`                 | CodeQL security scanning for JavaScript/TypeScript, Python, and GitHub Actions workflows. Matrix strategy runs all 3 language analyses in parallel. |
-| `claude-code-review.yml` | PR opened/updated                 | Claude AI reviews code quality, security, accessibility. Token-guarded: skips gracefully if `CLAUDE_CODE_OAUTH_TOKEN` secret is not configured.     |
-| `claude.yml`             | `@claude` mention in issues/PRs   | Claude Code responds to requests in issues and PR comments                                                                                          |
-| `db-init.yml`            | Vercel production deploy succeeds | Syncs seed data to MongoDB (locations, activities, rules, prompts)                                                                                  |
+| Workflow      | Trigger                           | Purpose                                                                                                                                             |
+| ------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`      | Push/PR to `main`                 | Single job: lint → typecheck → TypeScript tests → Python tests. All steps appear under one check in the GitHub PR UI.                               |
+| `codeql.yml`  | Push/PR to `main`                 | CodeQL security scanning for JavaScript/TypeScript, Python, and GitHub Actions workflows. Matrix strategy runs all 3 language analyses in parallel. |
+| `db-init.yml` | Vercel production deploy succeeds | Syncs seed data to MongoDB (locations, activities, rules, prompts)                                                                                  |
 
 ## Reporting Issues
 
