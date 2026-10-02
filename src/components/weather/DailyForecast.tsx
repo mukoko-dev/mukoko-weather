@@ -28,9 +28,15 @@ export function DailyForecast({ daily }: Props) {
   return (
     <section aria-labelledby="daily-forecast-heading">
       <div className="baobab">
-        <h2 id="daily-forecast-heading" className="giraffe">{daily.time.length}-Day Forecast</h2>
+        <h2 id="daily-forecast-heading" className="giraffe">
+          {daily.time.length}-Day Forecast
+        </h2>
         <DailyChart daily={daily} />
-        <div className="stagger-children mt-3 space-y-1.5" role="list" aria-label="7-day weather forecast">
+        <div
+          className="stagger-children mt-3 space-y-1.5"
+          role="list"
+          aria-label="7-day weather forecast"
+        >
           {daily.time.map((date, i) => {
             const d = new Date(date);
             const info = weatherCodeToInfo(daily.weather_code[i]);
@@ -74,7 +80,11 @@ export function DailyForecast({ daily }: Props) {
 
                   {/* Icon + rain */}
                   <div className="flex w-8 shrink-0 flex-col items-center gap-0.5">
-                    <WeatherIcon icon={info.icon} size={18} className="text-primary" />
+                    <WeatherIcon
+                      icon={info.icon}
+                      size={18}
+                      className="text-primary"
+                    />
                     {rainPct > 0 && (
                       <span className="text-base font-semibold text-rain">
                         {rainPct}%
@@ -83,12 +93,18 @@ export function DailyForecast({ daily }: Props) {
                   </div>
 
                   {/* Low temp */}
-                  <span className="w-8 shrink-0 text-right text-base text-text-tertiary" aria-label={`Low ${low} degrees`}>
+                  <span
+                    className="w-8 shrink-0 text-right text-base text-text-tertiary"
+                    aria-label={`Low ${low} degrees`}
+                  >
                     {low}°
                   </span>
 
                   {/* Temperature range bar */}
-                  <div className="relative mx-1 h-2 flex-1 overflow-hidden rounded-full bg-temp-bar-track" aria-hidden="true">
+                  <div
+                    className="relative mx-1 h-2 flex-1 overflow-hidden rounded-full bg-temp-bar-track"
+                    aria-hidden="true"
+                  >
                     <div
                       className="absolute top-0 h-full rounded-full"
                       style={{
@@ -100,14 +116,19 @@ export function DailyForecast({ daily }: Props) {
                   </div>
 
                   {/* High temp */}
-                  <span className="w-8 shrink-0 text-base font-semibold text-text-primary" aria-label={`High ${high} degrees`}>
+                  <span
+                    className="w-8 shrink-0 text-base font-semibold text-text-primary"
+                    aria-label={`High ${high} degrees`}
+                  >
                     {high}°
                   </span>
                 </div>
 
                 {/* Detail row: feels-like, precipitation, wind, UV */}
                 <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 pl-[46px] text-base text-text-tertiary sm:pl-[52px]">
-                  <span>Feels {feelsLow}°/{feelsHigh}°</span>
+                  <span>
+                    Feels {feelsLow}°/{feelsHigh}°
+                  </span>
                   {precipMm > 0 && <span>{precipMm.toFixed(1)} mm</span>}
                   <span>Wind {windMax} km/h</span>
                   {gustMax > windMax && <span>Gusts {gustMax}</span>}

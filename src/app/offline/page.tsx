@@ -4,7 +4,8 @@ import { CloudOff } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Offline — mukoko weather",
-  description: "You appear to be offline. Connect to the internet to get the latest weather data.",
+  description:
+    "You appear to be offline. Connect to the internet to get the latest weather data.",
   alternates: { canonical: "https://weather.mukoko.com/offline" },
 };
 
@@ -15,7 +16,10 @@ export default function OfflinePage() {
       className="flex min-h-[60vh] flex-col items-center justify-center px-4 text-center"
     >
       <div className="mx-auto max-w-md space-y-6">
-        <CloudOff className="mx-auto h-16 w-16 text-text-tertiary" aria-hidden="true" />
+        <CloudOff
+          className="mx-auto h-16 w-16 text-text-tertiary"
+          aria-hidden="true"
+        />
         <h1 className="text-2xl font-bold text-text-primary">
           You&apos;re offline
         </h1>

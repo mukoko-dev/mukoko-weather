@@ -29,16 +29,26 @@ export interface SuitabilityRating {
 /**
  * Compare a weather insight field against a threshold using the given operator.
  */
-function compareValue(actual: number, operator: SuitabilityCondition["operator"], threshold: number): boolean {
+function compareValue(
+  actual: number,
+  operator: SuitabilityCondition["operator"],
+  threshold: number,
+): boolean {
   switch (operator) {
-    case "gt": return actual > threshold;
-    case "gte": return actual >= threshold;
-    case "lt": return actual < threshold;
-    case "lte": return actual <= threshold;
+    case "gt":
+      return actual > threshold;
+    case "gte":
+      return actual >= threshold;
+    case "lt":
+      return actual < threshold;
+    case "lte":
+      return actual <= threshold;
     // eq uses strict equality — safe for integer-valued alert levels (e.g., uvHealthConcern).
     // Not suitable for continuous float measurements due to JSON round-trip precision.
-    case "eq": return actual === threshold;
-    default: return false;
+    case "eq":
+      return actual === threshold;
+    default:
+      return false;
   }
 }
 
@@ -60,7 +70,10 @@ function resolveMetric(
 
   // Replace {value} with the matched condition's value
   if (matchedValue != null) {
-    resolved = resolved.replace("{value}", matchedValue.toFixed(DECIMAL_FIELDS.has(matchedField ?? "") ? 1 : 0));
+    resolved = resolved.replace(
+      "{value}",
+      matchedValue.toFixed(DECIMAL_FIELDS.has(matchedField ?? "") ? 1 : 0),
+    );
   }
 
   // Replace any {fieldName} placeholders with actual insight values
@@ -69,7 +82,9 @@ function resolveMetric(
     const val = insightRecord[field];
     if (val == null) return match;
     if (typeof val === "number") {
-      return DECIMAL_FIELDS.has(field) ? val.toFixed(1) : Math.round(val).toString();
+      return DECIMAL_FIELDS.has(field)
+        ? val.toFixed(1)
+        : Math.round(val).toString();
     }
     return String(val);
   });
@@ -84,7 +99,10 @@ function resolveMetric(
  * Evaluate weather insights against a suitability rule set.
  * Conditions are checked in order — first match wins.
  */
-export function evaluateRule(rule: SuitabilityRuleDoc, insights: WeatherInsights): SuitabilityRating {
+export function evaluateRule(
+  rule: SuitabilityRuleDoc,
+  insights: WeatherInsights,
+): SuitabilityRating {
   const insightRecord = insights as Record<string, unknown>;
 
   for (const condition of rule.conditions) {
@@ -98,7 +116,12 @@ export function evaluateRule(rule: SuitabilityRuleDoc, insights: WeatherInsights
         colorClass: condition.colorClass,
         bgClass: condition.bgClass,
         detail: condition.detail,
-        metric: resolveMetric(condition.metricTemplate, insights, condition.field, fieldValue),
+        metric: resolveMetric(
+          condition.metricTemplate,
+          insights,
+          condition.field,
+          fieldValue,
+        ),
       };
     }
   }

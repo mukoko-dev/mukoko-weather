@@ -25,7 +25,11 @@ export function HourlyScrollCards({ hourly }: Props) {
   const now = new Date();
   const currentHour = now.getHours();
   const startIndex = hydrated
-    ? hourly.time.findIndex((t) => new Date(t).getHours() >= currentHour && new Date(t).getDate() === now.getDate())
+    ? hourly.time.findIndex(
+        (t) =>
+          new Date(t).getHours() >= currentHour &&
+          new Date(t).getDate() === now.getDate(),
+      )
     : -1;
   const start = startIndex >= 0 ? startIndex : 0;
   const hours = hourly.time.slice(start, start + 24);
@@ -43,14 +47,25 @@ export function HourlyScrollCards({ hourly }: Props) {
         </p>
       )}
       <ScrollArea className="w-full" type="hover">
-        <div className="flex gap-2.5 pb-2 [overscroll-behavior-x:contain]" role="list" aria-label="Hourly weather forecast">
+        <div
+          className="flex gap-2.5 pb-2 [overscroll-behavior-x:contain]"
+          role="list"
+          aria-label="Hourly weather forecast"
+        >
           {hours.map((time, i) => {
             const idx = start + i;
             const date = new Date(time);
             const info = weatherCodeToInfo(hourly.weather_code[idx]);
             const isDay = hourly.is_day[idx];
             const temp = Math.round(hourly.temperature_2m[idx]);
-            const timeLabel = hydrated && i === 0 ? "Now" : date.toLocaleTimeString("en-ZW", { hour: "2-digit", minute: "2-digit", hour12: false });
+            const timeLabel =
+              hydrated && i === 0
+                ? "Now"
+                : date.toLocaleTimeString("en-ZW", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  });
             return (
               <div
                 key={time}

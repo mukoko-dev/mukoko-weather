@@ -35,12 +35,12 @@ describe("ChartErrorBoundary — class component structure", () => {
   });
 
   it("imports reportErrorToAnalytics from observability", () => {
-    expect(source).toContain("from \"@/lib/observability\"");
+    expect(source).toContain('from "@/lib/observability"');
   });
 });
 
 describe("ChartErrorBoundary — fallback UI", () => {
-  it("fallback has role=\"alert\" for accessibility", () => {
+  it('fallback has role="alert" for accessibility', () => {
     expect(source).toContain('role="alert"');
   });
 

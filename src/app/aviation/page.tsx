@@ -8,7 +8,8 @@ const BASE_URL = "https://weather.mukoko.com";
 
 export const metadata: Metadata = {
   title: "Aviation Weather Briefing | mukoko weather",
-  description: "Pre-flight weather briefing for pilots. METAR, TAF, flight conditions, and PDF trip plan generation for African and global airports.",
+  description:
+    "Pre-flight weather briefing for pilots. METAR, TAF, flight conditions, and PDF trip plan generation for African and global airports.",
   alternates: { canonical: `${BASE_URL}/aviation` },
   openGraph: {
     title: "Aviation Weather Briefing | mukoko weather",

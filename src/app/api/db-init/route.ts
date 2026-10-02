@@ -1,5 +1,17 @@
 import { NextResponse } from "next/server";
-import { ensureIndexes, syncActivities, syncRegions, syncTags, syncSeasons, syncSuitabilityRules, syncActivityCategories, syncAIPrompts, syncAISuggestedRules, syncAirports, setApiKey } from "@/lib/db";
+import {
+  ensureIndexes,
+  syncActivities,
+  syncRegions,
+  syncTags,
+  syncSeasons,
+  syncSuitabilityRules,
+  syncActivityCategories,
+  syncAIPrompts,
+  syncAISuggestedRules,
+  syncAirports,
+  setApiKey,
+} from "@/lib/db";
 import { weatherDb } from "@/lib/mongo";
 import { ACTIVITIES } from "@/lib/activities";
 import { REGIONS } from "@/lib/seed-regions";
@@ -27,7 +39,10 @@ import { AIRPORTS } from "@/lib/icao-codes";
 export async function POST(request: Request) {
   // Simple protection: require a secret header in production
   const secret = request.headers.get("x-init-secret");
-  if (process.env.NODE_ENV === "production" && secret !== process.env.DB_INIT_SECRET) {
+  if (
+    process.env.NODE_ENV === "production" &&
+    secret !== process.env.DB_INIT_SECRET
+  ) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -115,6 +130,9 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: "DB initialization failed", details: message }, { status: 500 });
+    return NextResponse.json(
+      { error: "DB initialization failed", details: message },
+      { status: 500 },
+    );
   }
 }

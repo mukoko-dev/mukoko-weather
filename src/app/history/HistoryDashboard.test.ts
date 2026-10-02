@@ -12,7 +12,9 @@ import type { WeatherHistoryDoc } from "@/lib/db";
 // Helpers to build mock data
 // ---------------------------------------------------------------------------
 
-function makeCurrent(overrides: Partial<WeatherHistoryDoc["current"]> = {}): WeatherHistoryDoc["current"] {
+function makeCurrent(
+  overrides: Partial<WeatherHistoryDoc["current"]> = {},
+): WeatherHistoryDoc["current"] {
   return {
     temperature_2m: 28,
     relative_humidity_2m: 60,
@@ -30,10 +32,13 @@ function makeCurrent(overrides: Partial<WeatherHistoryDoc["current"]> = {}): Wea
   } as WeatherHistoryDoc["current"];
 }
 
-function makeDoc(date: string, opts: {
-  insights?: WeatherHistoryDoc["insights"];
-  current?: Partial<WeatherHistoryDoc["current"]>;
-} = {}): WeatherHistoryDoc {
+function makeDoc(
+  date: string,
+  opts: {
+    insights?: WeatherHistoryDoc["insights"];
+    current?: Partial<WeatherHistoryDoc["current"]>;
+  } = {},
+): WeatherHistoryDoc {
   return {
     locationSlug: "harare",
     date,
@@ -56,7 +61,9 @@ function makeDoc(date: string, opts: {
   };
 }
 
-function makeInsights(overrides: Partial<NonNullable<WeatherHistoryDoc["insights"]>> = {}): NonNullable<WeatherHistoryDoc["insights"]> {
+function makeInsights(
+  overrides: Partial<NonNullable<WeatherHistoryDoc["insights"]>> = {},
+): NonNullable<WeatherHistoryDoc["insights"]> {
   return {
     dewPoint: 15,
     heatStressIndex: 22,
@@ -125,7 +132,9 @@ describe("transformInsights", () => {
   });
 
   it("handles partial insights (missing fields become null)", () => {
-    const insights = { dewPoint: 10 } as NonNullable<WeatherHistoryDoc["insights"]>;
+    const insights = { dewPoint: 10 } as NonNullable<
+      WeatherHistoryDoc["insights"]
+    >;
     const docs = [makeDoc("2026-01-01", { insights })];
     const result = transformInsights(docs);
     expect(result[0].dewPoint).toBe(10);
@@ -286,7 +295,19 @@ describe("computeCategorySuitability", () => {
 
   it("computes farming suitability — excellent when GDD is high", () => {
     const records: InsightsRecord[] = [
-      { date: "2026-01-01", dewPoint: 15, heatStress: null, thunderstorm: null, visibility: null, uvConcern: null, gddMaize: 20, gddSorghum: null, gddPotato: null, evapotranspiration: null, moonPhase: null },
+      {
+        date: "2026-01-01",
+        dewPoint: 15,
+        heatStress: null,
+        thunderstorm: null,
+        visibility: null,
+        uvConcern: null,
+        gddMaize: 20,
+        gddSorghum: null,
+        gddPotato: null,
+        evapotranspiration: null,
+        moonPhase: null,
+      },
     ];
     const result = computeCategorySuitability(records);
     const farming = result.find((r) => r.category === "farming");
@@ -296,7 +317,19 @@ describe("computeCategorySuitability", () => {
 
   it("computes farming suitability — poor when dew point is low (cold dry air stress)", () => {
     const records: InsightsRecord[] = [
-      { date: "2026-01-01", dewPoint: 2, heatStress: null, thunderstorm: null, visibility: null, uvConcern: null, gddMaize: 5, gddSorghum: null, gddPotato: null, evapotranspiration: null, moonPhase: null },
+      {
+        date: "2026-01-01",
+        dewPoint: 2,
+        heatStress: null,
+        thunderstorm: null,
+        visibility: null,
+        uvConcern: null,
+        gddMaize: 5,
+        gddSorghum: null,
+        gddPotato: null,
+        evapotranspiration: null,
+        moonPhase: null,
+      },
     ];
     const result = computeCategorySuitability(records);
     const farming = result.find((r) => r.category === "farming");
@@ -306,7 +339,19 @@ describe("computeCategorySuitability", () => {
 
   it("computes farming suitability — fair when dew point is high (disease risk)", () => {
     const records: InsightsRecord[] = [
-      { date: "2026-01-01", dewPoint: 22, heatStress: null, thunderstorm: null, visibility: null, uvConcern: null, gddMaize: 10, gddSorghum: null, gddPotato: null, evapotranspiration: null, moonPhase: null },
+      {
+        date: "2026-01-01",
+        dewPoint: 22,
+        heatStress: null,
+        thunderstorm: null,
+        visibility: null,
+        uvConcern: null,
+        gddMaize: 10,
+        gddSorghum: null,
+        gddPotato: null,
+        evapotranspiration: null,
+        moonPhase: null,
+      },
     ];
     const result = computeCategorySuitability(records);
     const farming = result.find((r) => r.category === "farming");
@@ -315,7 +360,19 @@ describe("computeCategorySuitability", () => {
 
   it("computes mining suitability — poor when heat stress is severe", () => {
     const records: InsightsRecord[] = [
-      { date: "2026-01-01", dewPoint: null, heatStress: 30, thunderstorm: 10, visibility: null, uvConcern: null, gddMaize: null, gddSorghum: null, gddPotato: null, evapotranspiration: null, moonPhase: null },
+      {
+        date: "2026-01-01",
+        dewPoint: null,
+        heatStress: 30,
+        thunderstorm: 10,
+        visibility: null,
+        uvConcern: null,
+        gddMaize: null,
+        gddSorghum: null,
+        gddPotato: null,
+        evapotranspiration: null,
+        moonPhase: null,
+      },
     ];
     const result = computeCategorySuitability(records);
     const mining = result.find((r) => r.category === "mining");
@@ -325,7 +382,19 @@ describe("computeCategorySuitability", () => {
 
   it("computes mining suitability — poor when storm risk is high", () => {
     const records: InsightsRecord[] = [
-      { date: "2026-01-01", dewPoint: null, heatStress: 15, thunderstorm: 50, visibility: null, uvConcern: null, gddMaize: null, gddSorghum: null, gddPotato: null, evapotranspiration: null, moonPhase: null },
+      {
+        date: "2026-01-01",
+        dewPoint: null,
+        heatStress: 15,
+        thunderstorm: 50,
+        visibility: null,
+        uvConcern: null,
+        gddMaize: null,
+        gddSorghum: null,
+        gddPotato: null,
+        evapotranspiration: null,
+        moonPhase: null,
+      },
     ];
     const result = computeCategorySuitability(records);
     const mining = result.find((r) => r.category === "mining");
@@ -334,7 +403,19 @@ describe("computeCategorySuitability", () => {
 
   it("computes sports suitability — excellent when conditions are moderate", () => {
     const records: InsightsRecord[] = [
-      { date: "2026-01-01", dewPoint: null, heatStress: 18, thunderstorm: null, visibility: null, uvConcern: 4, gddMaize: null, gddSorghum: null, gddPotato: null, evapotranspiration: null, moonPhase: null },
+      {
+        date: "2026-01-01",
+        dewPoint: null,
+        heatStress: 18,
+        thunderstorm: null,
+        visibility: null,
+        uvConcern: 4,
+        gddMaize: null,
+        gddSorghum: null,
+        gddPotato: null,
+        evapotranspiration: null,
+        moonPhase: null,
+      },
     ];
     const result = computeCategorySuitability(records);
     const sports = result.find((r) => r.category === "sports");
@@ -344,7 +425,19 @@ describe("computeCategorySuitability", () => {
 
   it("computes sports suitability — poor when too hot", () => {
     const records: InsightsRecord[] = [
-      { date: "2026-01-01", dewPoint: null, heatStress: 30, thunderstorm: null, visibility: null, uvConcern: 4, gddMaize: null, gddSorghum: null, gddPotato: null, evapotranspiration: null, moonPhase: null },
+      {
+        date: "2026-01-01",
+        dewPoint: null,
+        heatStress: 30,
+        thunderstorm: null,
+        visibility: null,
+        uvConcern: 4,
+        gddMaize: null,
+        gddSorghum: null,
+        gddPotato: null,
+        evapotranspiration: null,
+        moonPhase: null,
+      },
     ];
     const result = computeCategorySuitability(records);
     const sports = result.find((r) => r.category === "sports");
@@ -353,7 +446,19 @@ describe("computeCategorySuitability", () => {
 
   it("computes travel suitability — poor when visibility is very low", () => {
     const records: InsightsRecord[] = [
-      { date: "2026-01-01", dewPoint: null, heatStress: null, thunderstorm: 5, visibility: 0.5, uvConcern: null, gddMaize: null, gddSorghum: null, gddPotato: null, evapotranspiration: null, moonPhase: null },
+      {
+        date: "2026-01-01",
+        dewPoint: null,
+        heatStress: null,
+        thunderstorm: 5,
+        visibility: 0.5,
+        uvConcern: null,
+        gddMaize: null,
+        gddSorghum: null,
+        gddPotato: null,
+        evapotranspiration: null,
+        moonPhase: null,
+      },
     ];
     const result = computeCategorySuitability(records);
     const travel = result.find((r) => r.category === "travel");
@@ -363,7 +468,19 @@ describe("computeCategorySuitability", () => {
 
   it("computes casual suitability — poor when thunderstorm risk is high", () => {
     const records: InsightsRecord[] = [
-      { date: "2026-01-01", dewPoint: null, heatStress: 18, thunderstorm: 50, visibility: null, uvConcern: null, gddMaize: null, gddSorghum: null, gddPotato: null, evapotranspiration: null, moonPhase: null },
+      {
+        date: "2026-01-01",
+        dewPoint: null,
+        heatStress: 18,
+        thunderstorm: 50,
+        visibility: null,
+        uvConcern: null,
+        gddMaize: null,
+        gddSorghum: null,
+        gddPotato: null,
+        evapotranspiration: null,
+        moonPhase: null,
+      },
     ];
     const result = computeCategorySuitability(records);
     const casual = result.find((r) => r.category === "casual");
@@ -374,7 +491,19 @@ describe("computeCategorySuitability", () => {
   it("only produces categories that have relevant data", () => {
     // Only dew point provided — should produce farming + nothing else
     const records: InsightsRecord[] = [
-      { date: "2026-01-01", dewPoint: 15, heatStress: null, thunderstorm: null, visibility: null, uvConcern: null, gddMaize: null, gddSorghum: null, gddPotato: null, evapotranspiration: null, moonPhase: null },
+      {
+        date: "2026-01-01",
+        dewPoint: 15,
+        heatStress: null,
+        thunderstorm: null,
+        visibility: null,
+        uvConcern: null,
+        gddMaize: null,
+        gddSorghum: null,
+        gddPotato: null,
+        evapotranspiration: null,
+        moonPhase: null,
+      },
     ];
     const result = computeCategorySuitability(records);
     const categories = result.map((r) => r.category);
@@ -387,7 +516,19 @@ describe("computeCategorySuitability", () => {
 
   it("includes proper colorClass and bgClass in results", () => {
     const records: InsightsRecord[] = [
-      { date: "2026-01-01", dewPoint: 15, heatStress: 20, thunderstorm: 10, visibility: 12, uvConcern: 4, gddMaize: 18, gddSorghum: 20, gddPotato: 22, evapotranspiration: 3.5, moonPhase: 4 },
+      {
+        date: "2026-01-01",
+        dewPoint: 15,
+        heatStress: 20,
+        thunderstorm: 10,
+        visibility: 12,
+        uvConcern: 4,
+        gddMaize: 18,
+        gddSorghum: 20,
+        gddPotato: 22,
+        evapotranspiration: 3.5,
+        moonPhase: 4,
+      },
     ];
     const result = computeCategorySuitability(records);
     for (const entry of result) {
@@ -431,7 +572,7 @@ describe("WeatherHistoryDoc insights field", () => {
     // Read the source to verify the interface definition
     const fs = await import("fs");
     const source = fs.readFileSync("src/lib/db.ts", "utf-8");
-    expect(source).toContain("insights?: WeatherData[\"insights\"]");
+    expect(source).toContain('insights?: WeatherData["insights"]');
   });
 
   it("history recording lives in the Python weather endpoint (single writer)", async () => {

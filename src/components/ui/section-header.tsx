@@ -1,23 +1,23 @@
-import * as React from "react"
-import Link from "next/link"
+import * as React from "react";
+import Link from "next/link";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 interface SectionHeaderAction {
-  label: string
-  href?: string
-  onClick?: () => void
+  label: string;
+  href?: string;
+  onClick?: () => void;
 }
 
 interface SectionHeaderProps extends React.ComponentProps<"div"> {
   /** Heading ID for aria-labelledby */
-  headingId?: string
+  headingId?: string;
   /** Section title */
-  title: string
+  title: string;
   /** Heading level — renders as h2 by default */
-  as?: "h2" | "h3" | "h4"
+  as?: "h2" | "h3" | "h4";
   /** Optional action link or button on the right */
-  action?: SectionHeaderAction
+  action?: SectionHeaderAction;
 }
 
 function SectionHeader({
@@ -37,8 +37,8 @@ function SectionHeader({
       <Tag id={headingId} className="giraffe">
         {title}
       </Tag>
-      {action && (
-        action.href ? (
+      {action &&
+        (action.href ? (
           <Link
             href={action.href}
             className="text-base font-medium text-primary transition-colors hover:text-primary/80 min-h-[var(--touch-target-min)]"
@@ -53,10 +53,9 @@ function SectionHeader({
           >
             {action.label}
           </button>
-        )
-      )}
+        ))}
     </div>
-  )
+  );
 }
 
-export { SectionHeader, type SectionHeaderProps, type SectionHeaderAction }
+export { SectionHeader, type SectionHeaderProps, type SectionHeaderAction };

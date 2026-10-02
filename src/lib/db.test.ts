@@ -195,7 +195,9 @@ describe("province readers derive from LOCATIONS (union with static PROVINCES)",
     );
     expect(sgLocations.length).toBeGreaterThan(0);
     // Precondition for the test: SG genuinely has no static province rows.
-    expect(PROVINCES.some((p) => p.countryCode.toUpperCase() === derivedOnlyCode)).toBe(false);
+    expect(
+      PROVINCES.some((p) => p.countryCode.toUpperCase() === derivedOnlyCode),
+    ).toBe(false);
 
     const provinces = await getProvincesWithLocationCounts(derivedOnlyCode);
 
@@ -218,7 +220,9 @@ describe("province readers derive from LOCATIONS (union with static PROVINCES)",
   });
 
   it("getProvinceBySlug resolves a derived (non-static) province", async () => {
-    const sgLoc = LOCATIONS.find((l) => (l.country ?? "").toUpperCase() === derivedOnlyCode);
+    const sgLoc = LOCATIONS.find(
+      (l) => (l.country ?? "").toUpperCase() === derivedOnlyCode,
+    );
     expect(sgLoc).toBeTruthy();
     const slug = slugForLoc(sgLoc!);
 
@@ -237,7 +241,9 @@ describe("province readers derive from LOCATIONS (union with static PROVINCES)",
       LOCATIONS.map((l) => (l.country ?? "").toUpperCase()).filter(Boolean),
     );
     for (const code of codes) {
-      const countryLocs = LOCATIONS.filter((l) => (l.country ?? "").toUpperCase() === code);
+      const countryLocs = LOCATIONS.filter(
+        (l) => (l.country ?? "").toUpperCase() === code,
+      );
       const provinces = await getProvincesWithLocationCounts(code);
       const bySlug = new Map(provinces.map((p) => [p.slug, p.locationCount]));
       // Each location's province slug exists in the returned catalog.
@@ -416,9 +422,13 @@ describe("SEASONS seed data shape", () => {
     }
     for (const [code, months] of byCountry) {
       const unique = [...new Set(months)].sort((a, b) => a - b);
-      const missing = [1,2,3,4,5,6,7,8,9,10,11,12].filter(m => !unique.includes(m));
+      const missing = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(
+        (m) => !unique.includes(m),
+      );
       if (missing.length > 0) {
-        throw new Error(`${code} seasons do not cover all 12 months (missing: ${missing.join(", ")})`);
+        throw new Error(
+          `${code} seasons do not cover all 12 months (missing: ${missing.join(", ")})`,
+        );
       }
       expect(unique).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     }
@@ -556,7 +566,9 @@ describe("Atlas Search time-based recovery", () => {
 
   it("checks time elapsed since disable before skipping activity Atlas Search", () => {
     const dbSource = readFileSync(resolve(__dirname, "db.ts"), "utf-8");
-    expect(dbSource).toContain("Date.now() - atlasActivitySearchDisabledAt > ATLAS_RETRY_AFTER_MS");
+    expect(dbSource).toContain(
+      "Date.now() - atlasActivitySearchDisabledAt > ATLAS_RETRY_AFTER_MS",
+    );
   });
 });
 
@@ -570,7 +582,9 @@ describe("Vector Search (Phase 0F neutralised)", () => {
   });
 
   it("storeLocationEmbedding is a no-op", async () => {
-    await expect(storeLocationEmbedding("anywhere", [0.1])).resolves.toBeUndefined();
+    await expect(
+      storeLocationEmbedding("anywhere", [0.1]),
+    ).resolves.toBeUndefined();
   });
 
   it("storeLocationEmbeddings is a no-op", async () => {
@@ -606,15 +620,21 @@ describe("getAtlasSearchIndexDefinitions", () => {
   });
 
   it("locationVector uses cosine similarity with 1024 dimensions", () => {
-    const def = defs.locationVector as { definition: { fields: { numDimensions?: number; similarity?: string }[] } };
-    const vectorField = def.definition.fields.find((f) => f.numDimensions !== undefined);
+    const def = defs.locationVector as {
+      definition: { fields: { numDimensions?: number; similarity?: string }[] };
+    };
+    const vectorField = def.definition.fields.find(
+      (f) => f.numDimensions !== undefined,
+    );
     expect(vectorField).toBeDefined();
     expect(vectorField!.numDimensions).toBe(1024);
     expect(vectorField!.similarity).toBe("cosine");
   });
 
   it("locationSearch has autocomplete mapping on name field", () => {
-    const def = defs.locationSearch as { definition: { mappings: { fields: { name: { type: string }[] } } } };
+    const def = defs.locationSearch as {
+      definition: { mappings: { fields: { name: { type: string }[] } } };
+    };
     const nameFields = def.definition.mappings.fields.name;
     expect(Array.isArray(nameFields)).toBe(true);
     expect(nameFields.some((f) => f.type === "autocomplete")).toBe(true);
@@ -626,11 +646,22 @@ describe("getAtlasSearchIndexDefinitions", () => {
 describe("VALID_CONDITION_FIELDS", () => {
   it("contains all WeatherInsights numeric fields", () => {
     const expected = [
-      "gdd10To30", "gdd10To31", "gdd08To30", "gdd03To25",
-      "evapotranspiration", "dewPoint", "precipitationType",
-      "windSpeed", "windGust",
-      "thunderstormProbability", "heatStressIndex", "uvHealthConcern",
-      "moonPhase", "cloudBase", "cloudCeiling", "visibility",
+      "gdd10To30",
+      "gdd10To31",
+      "gdd08To30",
+      "gdd03To25",
+      "evapotranspiration",
+      "dewPoint",
+      "precipitationType",
+      "windSpeed",
+      "windGust",
+      "thunderstormProbability",
+      "heatStressIndex",
+      "uvHealthConcern",
+      "moonPhase",
+      "cloudBase",
+      "cloudCeiling",
+      "visibility",
     ];
     for (const field of expected) {
       expect(VALID_CONDITION_FIELDS.has(field)).toBe(true);
@@ -683,7 +714,10 @@ describe("stampPlatformFields", () => {
   });
 
   it("includes provinceSlug when provided", () => {
-    const result = stampPlatformFields({}, { countryCode: "ZW", provinceSlug: "harare" });
+    const result = stampPlatformFields(
+      {},
+      { countryCode: "ZW", provinceSlug: "harare" },
+    );
     expect(result.bundu.provinceSlug).toBe("harare");
   });
 
@@ -717,13 +751,21 @@ describe("stampPlatformFields", () => {
 
   it("preserves existing bundu fields and only adds missing ones", () => {
     const result = stampPlatformFields(
-      { bundu: { countryCode: "TZ", verificationTier: 2, trustSignals: ["caretaker"] } },
+      {
+        bundu: {
+          countryCode: "TZ",
+          verificationTier: 2,
+          trustSignals: ["caretaker"],
+        },
+      },
       { countryCode: "ZW" },
     );
     // Existing countryCode kept, not overwritten
     expect(result.bundu.countryCode).toBe("TZ");
     expect((result.bundu as Record<string, unknown>).verificationTier).toBe(2);
-    expect((result.bundu as Record<string, unknown>).trustSignals).toEqual(["caretaker"]);
+    expect((result.bundu as Record<string, unknown>).trustSignals).toEqual([
+      "caretaker",
+    ]);
   });
 
   it("mutates the input document in place", () => {

@@ -1,12 +1,23 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, Component, type ReactNode } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  Component,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { SparklesIcon, MapPinIcon } from "@/lib/weather-icons";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useAppStore, isShamwariContextValid, type ShamwariContext } from "@/lib/store";
+import {
+  useAppStore,
+  isShamwariContextValid,
+  type ShamwariContext,
+} from "@/lib/store";
 import { getScrollBehavior } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import {
@@ -20,14 +31,23 @@ import {
 // crashing the entire chat UI. Aligns with per-section error isolation pattern.
 // ---------------------------------------------------------------------------
 
-interface MarkdownErrorBoundaryState { hasError: boolean }
+interface MarkdownErrorBoundaryState {
+  hasError: boolean;
+}
 
-class MarkdownErrorBoundary extends Component<{ children: ReactNode; fallback: string }, MarkdownErrorBoundaryState> {
+class MarkdownErrorBoundary extends Component<
+  { children: ReactNode; fallback: string },
+  MarkdownErrorBoundaryState
+> {
   state: MarkdownErrorBoundaryState = { hasError: false };
-  static getDerivedStateFromError() { return { hasError: true }; }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
   render() {
     if (this.state.hasError) {
-      return <p className="text-base text-text-secondary">{this.props.fallback}</p>;
+      return (
+        <p className="text-base text-text-secondary">{this.props.fallback}</p>
+      );
     }
     return this.props.children;
   }
@@ -70,7 +90,11 @@ function isSafeHref(href: string | undefined): boolean {
 }
 
 const markdownComponents = {
-  a: ({ href, children, ...props }: React.ComponentPropsWithoutRef<"a"> & { href?: string }) => {
+  a: ({
+    href,
+    children,
+    ...props
+  }: React.ComponentPropsWithoutRef<"a"> & { href?: string }) => {
     if (!isSafeHref(href)) {
       // Render unsafe links as plain text — no clickable element
       return <span>{children}</span>;
@@ -98,41 +122,81 @@ const MAX_RENDERED_MESSAGES = 30;
  */
 const FALLBACK_SUGGESTED_PROMPTS: SuggestedPrompt[] = [
   { label: "Drone flying today", query: "Can I fly a drone today?" },
-  { label: "Farming advice", query: "What's the best time to plant crops this season?" },
-  { label: "Safari weather", query: "What's the weather like for safari this weekend?" },
+  {
+    label: "Farming advice",
+    query: "What's the best time to plant crops this season?",
+  },
+  {
+    label: "Safari weather",
+    query: "What's the weather like for safari this weekend?",
+  },
   { label: "Compare cities", query: "Compare weather in Nairobi and Bangkok" },
   { label: "Road trip", query: "Is it safe for a road trip today?" },
-  { label: "Weekend plans", query: "What outdoor activities can I do this weekend?" },
+  {
+    label: "Weekend plans",
+    query: "What outdoor activities can I do this weekend?",
+  },
 ];
 
 /**
  * Generate contextual suggested prompts based on Shamwari context.
  * These replace the default prompts when the user arrives with context.
  */
-function getContextualPrompts(ctx: ShamwariContext): { label: string; query: string }[] {
+function getContextualPrompts(
+  ctx: ShamwariContext,
+): { label: string; query: string }[] {
   const loc = ctx.locationName || "this location";
 
   if (ctx.source === "location") {
     return [
-      { label: `More about ${loc}`, query: `Tell me more about the weather in ${loc}` },
-      { label: "Activity advice", query: `What activities are best for today's weather in ${loc}?` },
-      { label: "Compare locations", query: `Compare ${loc} weather with nearby cities` },
+      {
+        label: `More about ${loc}`,
+        query: `Tell me more about the weather in ${loc}`,
+      },
+      {
+        label: "Activity advice",
+        query: `What activities are best for today's weather in ${loc}?`,
+      },
+      {
+        label: "Compare locations",
+        query: `Compare ${loc} weather with nearby cities`,
+      },
     ];
   }
 
   if (ctx.source === "history") {
     return [
-      { label: "Explain trends", query: `What do the weather trends in ${loc} over the last ${ctx.historyDays || 30} days tell us?` },
-      { label: "Farming impact", query: `How have recent weather patterns affected farming in ${loc}?` },
-      { label: "Future outlook", query: `Based on recent history, what should I expect next in ${loc}?` },
+      {
+        label: "Explain trends",
+        query: `What do the weather trends in ${loc} over the last ${ctx.historyDays || 30} days tell us?`,
+      },
+      {
+        label: "Farming impact",
+        query: `How have recent weather patterns affected farming in ${loc}?`,
+      },
+      {
+        label: "Future outlook",
+        query: `Based on recent history, what should I expect next in ${loc}?`,
+      },
     ];
   }
 
   if (ctx.source === "explore") {
     return [
-      { label: "Refine search", query: ctx.exploreQuery ? `Show me more locations like "${ctx.exploreQuery}"` : `What other locations have similar weather?` },
-      { label: "Detailed comparison", query: `Compare the weather conditions of locations you found` },
-      { label: "Best option", query: `Which location is best for outdoor activities right now?` },
+      {
+        label: "Refine search",
+        query: ctx.exploreQuery
+          ? `Show me more locations like "${ctx.exploreQuery}"`
+          : `What other locations have similar weather?`,
+      },
+      {
+        label: "Detailed comparison",
+        query: `Compare the weather conditions of locations you found`,
+      },
+      {
+        label: "Best option",
+        query: `Which location is best for outdoor activities right now?`,
+      },
     ];
   }
 
@@ -150,7 +214,8 @@ function getContextualPrompts(ctx: ShamwariContext): { label: string; query: str
  */
 function getContextualGreeting(ctx: ShamwariContext): string | null {
   if (ctx.source === "location" && ctx.locationName) {
-    const tempInfo = ctx.temperature != null ? ` at ${Math.round(ctx.temperature)}°C` : "";
+    const tempInfo =
+      ctx.temperature != null ? ` at ${Math.round(ctx.temperature)}°C` : "";
     const summaryInfo = ctx.weatherSummary
       ? (() => {
           const s = ctx.weatherSummary;
@@ -180,16 +245,38 @@ function getContextualGreeting(ctx: ShamwariContext): string | null {
 
 function ArrowUpIcon({ size = 20 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m5 12 7-7 7 7" /><path d="M12 19V5" />
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m5 12 7-7 7 7" />
+      <path d="M12 19V5" />
     </svg>
   );
 }
 
 function ArrowDownIcon({ size = 20 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m19 12-7 7-7-7" /><path d="M12 5v14" />
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m19 12-7 7-7-7" />
+      <path d="M12 5v14" />
     </svg>
   );
 }
@@ -199,10 +286,14 @@ export function ExploreChatbot() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
-  const [contextualPrompts, setContextualPrompts] = useState<{ label: string; query: string }[] | null>(null);
+  const [contextualPrompts, setContextualPrompts] = useState<
+    { label: string; query: string }[] | null
+  >(null);
   // Database-driven default prompts (surface:"explore" rules from the AI
   // prompt library); the hardcoded set is only the unavailable-DB fallback.
-  const [defaultPrompts, setDefaultPrompts] = useState<SuggestedPrompt[]>(FALLBACK_SUGGESTED_PROMPTS);
+  const [defaultPrompts, setDefaultPrompts] = useState<SuggestedPrompt[]>(
+    FALLBACK_SUGGESTED_PROMPTS,
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -240,7 +331,9 @@ export function ExploreChatbot() {
 
   // Cancel in-flight fetch on unmount to prevent state updates on unmounted component
   useEffect(() => {
-    return () => { abortRef.current?.abort(); };
+    return () => {
+      abortRef.current?.abort();
+    };
   }, []);
 
   // Load the database-driven default prompts (5-min client cache inside
@@ -256,7 +349,9 @@ export function ExploreChatbot() {
       .catch(() => {
         // API unavailable — the hardcoded fallback stays in place.
       });
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   // Auto-scroll to bottom when new messages arrive — but only if the user is
@@ -271,7 +366,9 @@ export function ExploreChatbot() {
         ? vp.scrollHeight - vp.scrollTop - vp.clientHeight
         : 0;
       if (distanceFromBottom < 100) {
-        messagesEndRef.current?.scrollIntoView({ behavior: getScrollBehavior() });
+        messagesEndRef.current?.scrollIntoView({
+          behavior: getScrollBehavior(),
+        });
       }
     });
     return () => cancelAnimationFrame(id);
@@ -286,7 +383,8 @@ export function ExploreChatbot() {
     const vp = viewportRef.current;
     if (!vp) return;
     const handleScroll = () => {
-      const distanceFromBottom = vp.scrollHeight - vp.scrollTop - vp.clientHeight;
+      const distanceFromBottom =
+        vp.scrollHeight - vp.scrollTop - vp.clientHeight;
       setShowScrollBtn(distanceFromBottom > 100);
     };
     vp.addEventListener("scroll", handleScroll, { passive: true });
@@ -297,85 +395,102 @@ export function ExploreChatbot() {
     messagesEndRef.current?.scrollIntoView({ behavior: getScrollBehavior() });
   }, []);
 
-  const sendMessage = useCallback(async (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || loading) return;
+  const sendMessage = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || loading) return;
 
-    const userMessage: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: trimmed,
-      timestamp: new Date(),
-    };
+      const userMessage: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: trimmed,
+        timestamp: new Date(),
+      };
 
-    setMessages((prev) => [...prev, userMessage].slice(-MAX_RENDERED_MESSAGES));
-    setInput("");
-    // Reset textarea height back to single row after sending
-    if (inputRef.current) inputRef.current.style.height = "auto";
-    setLoading(true);
-    trackEvent("ai_chat_sent", { source: "shamwari" });
+      setMessages((prev) =>
+        [...prev, userMessage].slice(-MAX_RENDERED_MESSAGES),
+      );
+      setInput("");
+      // Reset textarea height back to single row after sending
+      if (inputRef.current) inputRef.current.style.height = "auto";
+      setLoading(true);
+      trackEvent("ai_chat_sent", { source: "shamwari" });
 
-    try {
-      // Build history from previous messages (text only).
-      // NOTE: `messages` here is the pre-update snapshot (before userMessage
-      // is appended via setMessages above), which is correct — the new user
-      // message is sent separately as `message` in the request body.
-      // Slice to last 10 to match server cap and reduce payload size.
-      const history = messages.slice(-10).map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+      try {
+        // Build history from previous messages (text only).
+        // NOTE: `messages` here is the pre-update snapshot (before userMessage
+        // is appended via setMessages above), which is correct — the new user
+        // message is sent separately as `message` in the request body.
+        // Slice to last 10 to match server cap and reduce payload size.
+        const history = messages.slice(-10).map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
 
-      // Cancel any previous in-flight request before starting a new one
-      abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
+        // Cancel any previous in-flight request before starting a new one
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
 
-      const res = await fetch("/api/py/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: trimmed,
-          history,
-          ...(selectedActivities.length > 0 && { activities: selectedActivities }),
-        }),
-        signal: controller.signal,
-      });
+        const res = await fetch("/api/py/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: trimmed,
+            history,
+            ...(selectedActivities.length > 0 && {
+              activities: selectedActivities,
+            }),
+          }),
+          signal: controller.signal,
+        });
 
-      if (!res.ok) {
-        // Surface actionable messages (e.g. rate-limit "Too many requests")
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.response ?? body?.error ?? `Request failed (${res.status})`);
+        if (!res.ok) {
+          // Surface actionable messages (e.g. rate-limit "Too many requests")
+          const body = await res.json().catch(() => null);
+          throw new Error(
+            body?.response ?? body?.error ?? `Request failed (${res.status})`,
+          );
+        }
+
+        const data: ExploreResponse = await res.json();
+
+        const assistantMessage: ChatMessage = {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: data.response,
+          references: data.references,
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) =>
+          [...prev, assistantMessage].slice(-MAX_RENDERED_MESSAGES),
+        );
+      } catch (err) {
+        // Silently ignore aborted requests (user navigated away or sent a new message)
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        const fallback =
+          "I'm having trouble connecting right now. Please try again in a moment.";
+        const errorMessage: ChatMessage = {
+          id: `error-${Date.now()}`,
+          role: "assistant",
+          content:
+            err instanceof Error && err.message !== "Failed to fetch"
+              ? err.message
+              : fallback,
+          timestamp: new Date(),
+        };
+        setMessages((prev) =>
+          [...prev, errorMessage].slice(-MAX_RENDERED_MESSAGES),
+        );
+      } finally {
+        setLoading(false);
+        // Refocus input after response
+        setTimeout(() => inputRef.current?.focus(), 100);
       }
-
-      const data: ExploreResponse = await res.json();
-
-      const assistantMessage: ChatMessage = {
-        id: `assistant-${Date.now()}`,
-        role: "assistant",
-        content: data.response,
-        references: data.references,
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage].slice(-MAX_RENDERED_MESSAGES));
-    } catch (err) {
-      // Silently ignore aborted requests (user navigated away or sent a new message)
-      if (err instanceof DOMException && err.name === "AbortError") return;
-      const fallback = "I'm having trouble connecting right now. Please try again in a moment.";
-      const errorMessage: ChatMessage = {
-        id: `error-${Date.now()}`,
-        role: "assistant",
-        content: err instanceof Error && err.message !== "Failed to fetch" ? err.message : fallback,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage].slice(-MAX_RENDERED_MESSAGES));
-    } finally {
-      setLoading(false);
-      // Refocus input after response
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  }, [loading, messages, selectedActivities]);
+    },
+    [loading, messages, selectedActivities],
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -395,26 +510,41 @@ export function ExploreChatbot() {
             Tested with @radix-ui/react-scroll-area@1.4.3 — verify after upgrades.
             TODO: Remove when upstream resolves this —
             https://github.com/radix-ui/primitives/issues/926 */}
-        <ScrollArea viewportRef={viewportRef} className="h-full" fixRadixTableLayout>
-          <div className="px-4 py-5 space-y-6 overflow-x-hidden" aria-live="polite" aria-relevant="additions">
+        <ScrollArea
+          viewportRef={viewportRef}
+          className="h-full"
+          fixRadixTableLayout
+        >
+          <div
+            className="px-4 py-5 space-y-6 overflow-x-hidden"
+            aria-live="polite"
+            aria-relevant="additions"
+          >
             {messages.length === 0 && (
-              <EmptyState prompts={defaultPrompts} onSuggestionClick={handleSuggestion} loading={loading} />
+              <EmptyState
+                prompts={defaultPrompts}
+                onSuggestionClick={handleSuggestion}
+                loading={loading}
+              />
             )}
-            {messages.length > 0 && contextualPrompts && contextualPrompts.length > 0 && messages.length === 1 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {contextualPrompts.map((prompt) => (
-                  <button
-                    key={prompt.query}
-                    onClick={() => handleSuggestion(prompt.query)}
-                    className="quail flex items-center text-left"
-                    type="button"
-                    disabled={loading}
-                  >
-                    {prompt.label}
-                  </button>
-                ))}
-              </div>
-            )}
+            {messages.length > 0 &&
+              contextualPrompts &&
+              contextualPrompts.length > 0 &&
+              messages.length === 1 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {contextualPrompts.map((prompt) => (
+                    <button
+                      key={prompt.query}
+                      onClick={() => handleSuggestion(prompt.query)}
+                      className="quail flex items-center text-left"
+                      type="button"
+                      disabled={loading}
+                    >
+                      {prompt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
 
             {messages.map((msg) => (
               <MessageBubble key={msg.id} message={msg} />
@@ -503,18 +633,14 @@ function EmptyState({
       <div className="hoopoe-xl">
         <SparklesIcon size={24} className="text-primary" />
       </div>
-      <h2 className="giraffe text-lg mt-4">
-        Shamwari Explorer
-      </h2>
+      <h2 className="giraffe text-lg mt-4">Shamwari Explorer</h2>
       <p className="mt-2 max-w-sm text-center text-base text-text-secondary">
         Ask me anything about weather, locations, and activities. I can help you
         plan your day, compare conditions, and get activity-specific advice.
       </p>
 
       <div className="mt-6 w-full max-w-md">
-        <p className="hornbill font-medium mb-3">
-          Try asking
-        </p>
+        <p className="hornbill font-medium mb-3">Try asking</p>
         <div className="grid grid-cols-2 gap-2">
           {prompts.map((prompt) => (
             <button
@@ -544,7 +670,9 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     return (
       <div className="flex justify-end min-w-0">
         <div className="max-w-[85%] min-w-0 rounded-[var(--radius-card)] px-4 py-3.5 bg-primary text-primary-foreground">
-          <p className="text-base break-words leading-relaxed">{message.content}</p>
+          <p className="text-base break-words leading-relaxed">
+            {message.content}
+          </p>
         </div>
       </div>
     );
@@ -560,7 +688,9 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         <div className="min-w-0 flex-1">
           <MarkdownErrorBoundary fallback={message.content}>
             <div className="prose prose-base max-w-none break-words overflow-hidden text-text-secondary prose-strong:text-text-primary prose-headings:text-text-primary prose-li:marker:text-text-tertiary prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-pre:overflow-x-auto prose-pre:max-w-full prose-code:break-words">
-              <ReactMarkdown components={markdownComponents}>{message.content}</ReactMarkdown>
+              <ReactMarkdown components={markdownComponents}>
+                {message.content}
+              </ReactMarkdown>
             </div>
           </MarkdownErrorBoundary>
 
@@ -568,7 +698,9 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           {message.references && message.references.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5 pt-2">
               {message.references
-                .filter((ref) => ref.type === "location" || ref.type === "weather")
+                .filter(
+                  (ref) => ref.type === "location" || ref.type === "weather",
+                )
                 .slice(0, 5)
                 .map((ref) => (
                   <Link

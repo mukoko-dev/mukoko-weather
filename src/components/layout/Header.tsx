@@ -5,7 +5,15 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
-import { MapPinIcon, ClockIcon, SparklesIcon, LayersIcon, BellIcon, UserIcon, NavigationIcon } from "@/lib/weather-icons";
+import {
+  MapPinIcon,
+  ClockIcon,
+  SparklesIcon,
+  LayersIcon,
+  BellIcon,
+  UserIcon,
+  NavigationIcon,
+} from "@/lib/weather-icons";
 import { Spinner } from "@/components/ui/spinner";
 import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
@@ -29,7 +37,17 @@ const WeatherReportModal = lazy(() =>
 
 function HomeIcon({ size = 22 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
       <path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
     </svg>
@@ -38,7 +56,17 @@ function HomeIcon({ size = 22 }: { size?: number }) {
 
 function CompassIcon({ size = 22 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <circle cx="12" cy="12" r="10" />
       <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
     </svg>
@@ -79,7 +107,10 @@ export function Header() {
   useEffect(() => {
     if (!notificationsOpen) return;
     const handleClick = (e: MouseEvent) => {
-      if (notificationsRef.current && !notificationsRef.current.contains(e.target as Node)) {
+      if (
+        notificationsRef.current &&
+        !notificationsRef.current.contains(e.target as Node)
+      ) {
         setNotificationsOpen(false);
       }
     };
@@ -114,7 +145,10 @@ export function Header() {
         status: result.status,
         location: result.location?.slug,
       });
-      if ((result.status === "success" || result.status === "created") && result.location) {
+      if (
+        (result.status === "success" || result.status === "created") &&
+        result.location
+      ) {
         trackEvent("location_changed", {
           from: selectedLocation,
           to: result.location.slug,
@@ -134,7 +168,17 @@ export function Header() {
   const isExplore = pathname === "/explore" || pathname.startsWith("/explore/");
   const isHistory = pathname === "/history";
   const isAviation = pathname === "/aviation";
-  const isHome = !isExplore && !isHistory && !isAviation && !pathname.startsWith("/about") && !pathname.startsWith("/help") && !pathname.startsWith("/privacy") && !pathname.startsWith("/terms") && !pathname.startsWith("/status") && !pathname.startsWith("/embed") && !pathname.startsWith("/shamwari");
+  const isHome =
+    !isExplore &&
+    !isHistory &&
+    !isAviation &&
+    !pathname.startsWith("/about") &&
+    !pathname.startsWith("/help") &&
+    !pathname.startsWith("/privacy") &&
+    !pathname.startsWith("/terms") &&
+    !pathname.startsWith("/status") &&
+    !pathname.startsWith("/embed") &&
+    !pathname.startsWith("/shamwari");
   const shamwariEnabled = isFeatureEnabled("shamwari_chat");
 
   return (
@@ -147,7 +191,10 @@ export function Header() {
         }`}
         role="banner"
       >
-        <nav aria-label="Primary navigation" className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 md:px-8">
+        <nav
+          aria-label="Primary navigation"
+          className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 md:px-8"
+        >
           {/* Brand mark — left-aligned at every breakpoint (the parent nav's
               justify-between keeps the action pill on the right) */}
           <div className="flex min-w-0 items-center">
@@ -161,11 +208,22 @@ export function Header() {
           </div>
 
           {/* Desktop nav — plain text links, underline on active/hover */}
-          <nav className="hidden sm:flex items-center gap-6" aria-label="Main navigation">
+          <nav
+            className="hidden sm:flex items-center gap-6"
+            aria-label="Main navigation"
+          >
             {[
               { href: "/explore", label: "Explore", active: isExplore },
               // Paused as a standalone destination — see FLAGS.shamwari_chat.
-              ...(shamwariEnabled ? [{ href: "/shamwari", label: "Shamwari", active: pathname === "/shamwari" }] : []),
+              ...(shamwariEnabled
+                ? [
+                    {
+                      href: "/shamwari",
+                      label: "Shamwari",
+                      active: pathname === "/shamwari",
+                    },
+                  ]
+                : []),
               { href: "/history", label: "History", active: isHistory },
               { href: "/aviation", label: "Aviation", active: isAviation },
             ].map(({ href, label, active }) => (
@@ -249,13 +307,21 @@ export function Header() {
                       referrerPolicy="no-referrer"
                     />
                   ) : (
-                    <span className="text-xs font-medium text-primary-foreground" aria-hidden="true">
+                    <span
+                      className="text-xs font-medium text-primary-foreground"
+                      aria-hidden="true"
+                    >
                       {initialsFor(authedUser)}
                     </span>
                   )}
                 </Link>
               ) : (
-                <Link href="/auth/signin" prefetch={false} aria-label="Sign in" className="bee">
+                <Link
+                  href="/auth/signin"
+                  prefetch={false}
+                  aria-label="Sign in"
+                  className="bee"
+                >
                   <UserIcon size={20} className="text-primary-foreground" />
                 </Link>
               )}
@@ -278,41 +344,68 @@ export function Header() {
           <Link
             href="/"
             className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] active:scale-95 ${
-              isHome ? "text-primary" : "text-text-tertiary hover:text-text-secondary"
+              isHome
+                ? "text-primary"
+                : "text-text-tertiary hover:text-text-secondary"
             }`}
             aria-label="Weather home"
             aria-current={isHome ? "page" : undefined}
           >
             <HomeIcon size={22} />
-            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">Weather</span>
-            {isHome && <span className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary" aria-hidden="true" />}
+            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">
+              Weather
+            </span>
+            {isHome && (
+              <span
+                className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary"
+                aria-hidden="true"
+              />
+            )}
           </Link>
           <Link
             href="/explore"
             prefetch={false}
             className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] active:scale-95 ${
-              isExplore ? "text-primary" : "text-text-tertiary hover:text-text-secondary"
+              isExplore
+                ? "text-primary"
+                : "text-text-tertiary hover:text-text-secondary"
             }`}
             aria-label="Explore locations"
             aria-current={isExplore ? "page" : undefined}
           >
             <CompassIcon size={22} />
-            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">Explore</span>
-            {isExplore && <span className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary" aria-hidden="true" />}
+            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">
+              Explore
+            </span>
+            {isExplore && (
+              <span
+                className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary"
+                aria-hidden="true"
+              />
+            )}
           </Link>
           {shamwariEnabled && (
             <Link
               href="/shamwari"
               prefetch={false}
               className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] active:scale-95 ${
-                pathname === "/shamwari" ? "text-primary" : "text-text-tertiary hover:text-text-secondary"
+                pathname === "/shamwari"
+                  ? "text-primary"
+                  : "text-text-tertiary hover:text-text-secondary"
               }`}
               aria-label="Shamwari AI assistant"
               aria-current={pathname === "/shamwari" ? "page" : undefined}
             >
               <SparklesIcon size={22} />
-              <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">Shamwari</span>
-              {pathname === "/shamwari" && <span className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary" aria-hidden="true" />}
+              <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">
+                Shamwari
+              </span>
+              {pathname === "/shamwari" && (
+                <span
+                  className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary"
+                  aria-hidden="true"
+                />
+              )}
             </Link>
           )}
           <button
@@ -328,20 +421,31 @@ export function Header() {
             ) : (
               <NavigationIcon size={22} />
             )}
-            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">My Location</span>
+            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">
+              My Location
+            </span>
           </button>
           <Link
             href="/history"
             prefetch={false}
             className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] active:scale-95 ${
-              isHistory ? "text-primary" : "text-text-tertiary hover:text-text-secondary"
+              isHistory
+                ? "text-primary"
+                : "text-text-tertiary hover:text-text-secondary"
             }`}
             aria-label="Weather history"
             aria-current={isHistory ? "page" : undefined}
           >
             <ClockIcon size={22} />
-            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">History</span>
-            {isHistory && <span className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary" aria-hidden="true" />}
+            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">
+              History
+            </span>
+            {isHistory && (
+              <span
+                className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary"
+                aria-hidden="true"
+              />
+            )}
           </Link>
           <button
             onClick={openMyWeather}
@@ -350,7 +454,9 @@ export function Header() {
             type="button"
           >
             <MapPinIcon size={22} />
-            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">My Weather</span>
+            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">
+              My Weather
+            </span>
           </button>
         </div>
       </nav>

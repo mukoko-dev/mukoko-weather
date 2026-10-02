@@ -58,7 +58,10 @@ export function AISummary({ weather, location, user, onSummaryLoaded }: Props) {
 
   // Serialize deps to stable strings so Zustand rehydration of an
   // equivalent value (e.g. [] → []) doesn't trigger a re-fetch.
-  const activitiesKey = useMemo(() => selectedActivities.slice().sort().join(","), [selectedActivities]);
+  const activitiesKey = useMemo(
+    () => selectedActivities.slice().sort().join(","),
+    [selectedActivities],
+  );
   const locationKey = `${location.slug}:${location.lat}:${location.lon}`;
   const weatherKey = `${weather.current.temperature_2m}:${weather.current.weather_code}`;
   const fetchKey = `${locationKey}:${weatherKey}:${activitiesKey}`;
@@ -90,7 +93,9 @@ export function AISummary({ weather, location, user, onSummaryLoaded }: Props) {
         let activityLabels: string[] = [];
         if (selectedActivities.length > 0) {
           try {
-            const labelsRes = await fetch(`/api/py/activities?labels=${selectedActivities.join(",")}`);
+            const labelsRes = await fetch(
+              `/api/py/activities?labels=${selectedActivities.join(",")}`,
+            );
             if (labelsRes.ok) {
               const labelsData = await labelsRes.json();
               activityLabels = labelsData.labels ?? [];
@@ -107,14 +112,26 @@ export function AISummary({ weather, location, user, onSummaryLoaded }: Props) {
             weatherData: {
               current: weather.current,
               daily: {
-                temperature_2m_max: weather.daily.temperature_2m_max.slice(0, 3),
-                temperature_2m_min: weather.daily.temperature_2m_min.slice(0, 3),
+                temperature_2m_max: weather.daily.temperature_2m_max.slice(
+                  0,
+                  3,
+                ),
+                temperature_2m_min: weather.daily.temperature_2m_min.slice(
+                  0,
+                  3,
+                ),
                 weather_code: weather.daily.weather_code.slice(0, 3),
-                precipitation_probability_max: weather.daily.precipitation_probability_max.slice(0, 3),
+                precipitation_probability_max:
+                  weather.daily.precipitation_probability_max.slice(0, 3),
               },
               insights: weather.insights,
             },
-            location: { name: location.name, lat: location.lat, lon: location.lon, elevation: location.elevation },
+            location: {
+              name: location.name,
+              lat: location.lat,
+              lon: location.lon,
+              elevation: location.elevation,
+            },
             activities: activityLabels,
           }),
         });
@@ -132,7 +149,10 @@ export function AISummary({ weather, location, user, onSummaryLoaded }: Props) {
         if (err instanceof DOMException && err.name === "AbortError") {
           return;
         }
-        if (!cancelled) setError("Unable to load AI summary. Weather data is still available above.");
+        if (!cancelled)
+          setError(
+            "Unable to load AI summary. Weather data is still available above.",
+          );
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -157,14 +177,16 @@ export function AISummary({ weather, location, user, onSummaryLoaded }: Props) {
       <div className="baobab border-mineral-sodalite/25 border-l-[6px] border-l-mineral-sodalite">
         <div className="flex items-center gap-2">
           <SparklesIcon size={16} className="text-mineral-sodalite" />
-          <h2 className="giraffe">
-            Shamwari Weather Insight
-          </h2>
+          <h2 className="giraffe">Shamwari Weather Insight</h2>
         </div>
 
         <div className="mt-3">
           {loading && (
-            <div className="space-y-2" role="status" aria-label="Loading AI summary">
+            <div
+              className="space-y-2"
+              role="status"
+              aria-label="Loading AI summary"
+            >
               <div className="h-4 w-3/4 animate-pulse rounded bg-text-tertiary/20" />
               <div className="h-4 w-full animate-pulse rounded bg-text-tertiary/20" />
               <div className="h-4 w-2/3 animate-pulse rounded bg-text-tertiary/20" />
@@ -172,9 +194,7 @@ export function AISummary({ weather, location, user, onSummaryLoaded }: Props) {
             </div>
           )}
 
-          {error && (
-            <p className="text-base text-text-secondary">{error}</p>
-          )}
+          {error && <p className="text-base text-text-secondary">{error}</p>}
 
           {insight && !loading && (
             <div className="animate-fade-in prose prose-base max-w-none text-text-secondary prose-strong:text-text-primary prose-headings:text-text-primary prose-li:marker:text-text-tertiary">
@@ -206,7 +226,12 @@ function AISummarySignInCTA({ locationName }: { locationName: string }) {
           Sign in to see Mukoko&apos;s AI insights for {locationName}.
         </p>
         <div className="mt-4">
-          <Link href={href} prefetch={false} className="kudu-sm" aria-label={`Sign in to see AI insights for ${locationName}`}>
+          <Link
+            href={href}
+            prefetch={false}
+            className="kudu-sm"
+            aria-label={`Sign in to see AI insights for ${locationName}`}
+          >
             Sign in
           </Link>
         </div>

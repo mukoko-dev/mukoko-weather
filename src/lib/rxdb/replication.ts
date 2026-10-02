@@ -7,8 +7,14 @@
  * Uses leader election — only the leader tab replicates to avoid conflicts.
  */
 
-import { replicateRxCollection, type RxReplicationState } from "rxdb/plugins/replication";
-import { preferencesCollection, suitabilityRulesCollection } from "./collections";
+import {
+  replicateRxCollection,
+  type RxReplicationState,
+} from "rxdb/plugins/replication";
+import {
+  preferencesCollection,
+  suitabilityRulesCollection,
+} from "./collections";
 import { getDeviceId } from "./bridge";
 import type { PreferencesDocType } from "./schemas";
 
@@ -20,7 +26,8 @@ const API_BASE = "/api/py";
 const RULES_PULL_INTERVAL_MS = 10 * 60_000; // 10 min
 
 /** UUID v4 format — validates deviceId before interpolating into URL paths. */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function validateDeviceId(id: string): string {
   if (!UUID_RE.test(id)) {
@@ -33,7 +40,8 @@ function validateDeviceId(id: string): string {
 // Replication state
 // ---------------------------------------------------------------------------
 
-let prefsReplication: RxReplicationState<PreferencesDocType, unknown> | null = null;
+let prefsReplication: RxReplicationState<PreferencesDocType, unknown> | null =
+  null;
 let rulesRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 // ---------------------------------------------------------------------------
@@ -104,7 +112,8 @@ async function startPrefsReplication(): Promise<void> {
             locationLabels: serverPrefs.locationLabels ?? {},
             selectedActivities: serverPrefs.selectedActivities ?? [],
             hasOnboarded: serverPrefs.hasOnboarded ?? false,
-            selectedForecastModel: serverPrefs.selectedForecastModel ?? "best_match",
+            selectedForecastModel:
+              serverPrefs.selectedForecastModel ?? "best_match",
             updatedAt: Date.now(),
             _deleted: false,
           };
@@ -175,7 +184,10 @@ export async function startReplication(): Promise<void> {
 
   // Periodic rules refresh
   if (!rulesRefreshTimer) {
-    rulesRefreshTimer = setInterval(refreshSuitabilityRules, RULES_PULL_INTERVAL_MS);
+    rulesRefreshTimer = setInterval(
+      refreshSuitabilityRules,
+      RULES_PULL_INTERVAL_MS,
+    );
   }
 }
 

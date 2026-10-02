@@ -48,7 +48,9 @@ describe("SupportBanner — accessibility", () => {
   });
 
   it("link has descriptive aria-label", () => {
-    expect(source).toContain('aria-label="Support mukoko weather — Buy Me a Coffee"');
+    expect(source).toContain(
+      'aria-label="Support mukoko weather — Buy Me a Coffee"',
+    );
   });
 
   it("decorative elements are aria-hidden", () => {
@@ -73,7 +75,7 @@ describe("SupportBanner — brand styling", () => {
 describe("SupportBanner — isolation in WeatherDashboard", () => {
   it("is wrapped in a ChartErrorBoundary so crashes stay contained", () => {
     const bmcSection = dashboardSource.match(
-      /label="support-banner"[\s\S]*?<\/LazySection>/
+      /label="support-banner"[\s\S]*?<\/LazySection>/,
     );
     expect(bmcSection).not.toBeNull();
     expect(bmcSection![0]).toContain("ChartErrorBoundary");

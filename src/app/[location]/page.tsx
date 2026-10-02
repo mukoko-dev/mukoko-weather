@@ -1,16 +1,29 @@
 import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { checkFrostRisk, createFallbackWeather, weatherCodeToInfo } from "@/lib/weather";
-import { getWeatherForLocation, getLocationFromDb, getCountryByCode, getSeasonForDate } from "@/lib/db";
+import {
+  checkFrostRisk,
+  createFallbackWeather,
+  weatherCodeToInfo,
+} from "@/lib/weather";
+import {
+  getWeatherForLocation,
+  getLocationFromDb,
+  getCountryByCode,
+  getSeasonForDate,
+} from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { safeJsonLd } from "@/lib/json-ld";
 import { WeatherDashboard } from "./WeatherDashboard";
 
 // Deduplicate DB calls between generateMetadata and the page component.
 // Both are called for the same request; cache() ensures a single DB round-trip.
-const loadLocation = cache((slug: string) => getLocationFromDb(slug).catch(() => null));
-const loadCountry = cache((code: string) => getCountryByCode(code).catch(() => null));
+const loadLocation = cache((slug: string) =>
+  getLocationFromDb(slug).catch(() => null),
+);
+const loadCountry = cache((code: string) =>
+  getCountryByCode(code).catch(() => null),
+);
 
 // Per-request deduplication only — React cache() does NOT persist across requests.
 // generateMetadata and the page component both call this for the same country code;
@@ -90,7 +103,14 @@ export async function generateMetadata({
       type: "website",
       locale: "en",
       siteName: "mukoko weather",
-      images: [{ url: ogImageUrl, width: 1200, height: 630, alt: `${loc.name} weather forecast` }],
+      images: [
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          alt: `${loc.name} weather forecast`,
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
@@ -110,7 +130,9 @@ export default async function LocationPage({
   const rawLocation = await loadLocation(slug);
   if (!rawLocation) notFound();
   // Strip MongoDB _id (ObjectId with .toJSON()) before passing to Client Components
-  const { _id: _removed, ...location } = rawLocation as typeof rawLocation & { _id?: unknown };
+  const { _id: _removed, ...location } = rawLocation as typeof rawLocation & {
+    _id?: unknown;
+  };
 
   // Fetch weather — double-caught so the page shell ALWAYS renders.
   // getWeatherForLocation already has a 4-stage fallback (cache -> Tomorrow.io
@@ -128,7 +150,11 @@ export default async function LocationPage({
     weather = result.data;
     weatherSource = result.source;
   } catch {
-    weather = createFallbackWeather(location.lat, location.lon, location.elevation);
+    weather = createFallbackWeather(
+      location.lat,
+      location.lon,
+      location.elevation,
+    );
     weatherSource = "fallback";
   }
 
@@ -139,7 +165,9 @@ export default async function LocationPage({
   // Math.min(...[]) is Infinity, which would render as garbage in the FAQ schema.
   const dailyHighs = weather.daily.temperature_2m_max;
   const dailyLows = weather.daily.temperature_2m_min;
-  const weekHigh = dailyHighs.length ? Math.round(Math.max(...dailyHighs)) : null;
+  const weekHigh = dailyHighs.length
+    ? Math.round(Math.max(...dailyHighs))
+    : null;
   const weekLow = dailyLows.length ? Math.round(Math.min(...dailyLows)) : null;
   const countryCode = (location.country ?? "").toUpperCase();
   const [countryDoc, season, currentUser] = await Promise.all([
@@ -200,16 +228,72 @@ export default async function LocationPage({
       observationDate: now,
       observationAbout: { "@id": `${BASE_URL}/${location.slug}#place` },
       measuredProperty: [
-        { "@type": "PropertyValue", name: "temperature", value: weather.current.temperature_2m, unitCode: "CEL", unitText: "\u00b0C" },
-        { "@type": "PropertyValue", name: "apparentTemperature", value: weather.current.apparent_temperature, unitCode: "CEL", unitText: "\u00b0C" },
-        { "@type": "PropertyValue", name: "relativeHumidity", value: weather.current.relative_humidity_2m, unitCode: "P1", unitText: "%" },
-        { "@type": "PropertyValue", name: "windSpeed", value: weather.current.wind_speed_10m, unitCode: "KMH", unitText: "km/h" },
-        { "@type": "PropertyValue", name: "windDirection", value: weather.current.wind_direction_10m, unitCode: "DD", unitText: "\u00b0" },
-        { "@type": "PropertyValue", name: "surfacePressure", value: weather.current.surface_pressure, unitCode: "HPA", unitText: "hPa" },
-        { "@type": "PropertyValue", name: "uvIndex", value: weather.current.uv_index },
-        { "@type": "PropertyValue", name: "cloudCover", value: weather.current.cloud_cover, unitCode: "P1", unitText: "%" },
-        { "@type": "PropertyValue", name: "precipitation", value: weather.current.precipitation, unitCode: "MMT", unitText: "mm" },
-        { "@type": "PropertyValue", name: "weatherCondition", value: conditionInfo.label },
+        {
+          "@type": "PropertyValue",
+          name: "temperature",
+          value: weather.current.temperature_2m,
+          unitCode: "CEL",
+          unitText: "\u00b0C",
+        },
+        {
+          "@type": "PropertyValue",
+          name: "apparentTemperature",
+          value: weather.current.apparent_temperature,
+          unitCode: "CEL",
+          unitText: "\u00b0C",
+        },
+        {
+          "@type": "PropertyValue",
+          name: "relativeHumidity",
+          value: weather.current.relative_humidity_2m,
+          unitCode: "P1",
+          unitText: "%",
+        },
+        {
+          "@type": "PropertyValue",
+          name: "windSpeed",
+          value: weather.current.wind_speed_10m,
+          unitCode: "KMH",
+          unitText: "km/h",
+        },
+        {
+          "@type": "PropertyValue",
+          name: "windDirection",
+          value: weather.current.wind_direction_10m,
+          unitCode: "DD",
+          unitText: "\u00b0",
+        },
+        {
+          "@type": "PropertyValue",
+          name: "surfacePressure",
+          value: weather.current.surface_pressure,
+          unitCode: "HPA",
+          unitText: "hPa",
+        },
+        {
+          "@type": "PropertyValue",
+          name: "uvIndex",
+          value: weather.current.uv_index,
+        },
+        {
+          "@type": "PropertyValue",
+          name: "cloudCover",
+          value: weather.current.cloud_cover,
+          unitCode: "P1",
+          unitText: "%",
+        },
+        {
+          "@type": "PropertyValue",
+          name: "precipitation",
+          value: weather.current.precipitation,
+          unitCode: "MMT",
+          unitText: "mm",
+        },
+        {
+          "@type": "PropertyValue",
+          name: "weatherCondition",
+          value: conditionInfo.label,
+        },
       ],
     },
   };
@@ -218,9 +302,19 @@ export default async function LocationPage({
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "mukoko weather", item: BASE_URL },
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "mukoko weather",
+        item: BASE_URL,
+      },
       { "@type": "ListItem", position: 2, name: location.province },
-      { "@type": "ListItem", position: 3, name: `${location.name} Weather`, item: `${BASE_URL}/${location.slug}` },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: `${location.name} Weather`,
+        item: `${BASE_URL}/${location.slug}`,
+      },
     ],
   };
 
@@ -263,9 +357,13 @@ export default async function LocationPage({
       {/* SEO schemas — server rendered only */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd(
-          usingFallback ? [breadcrumbSchema] : [pageSchema, breadcrumbSchema, faqSchema]
-        ) }}
+        dangerouslySetInnerHTML={{
+          __html: safeJsonLd(
+            usingFallback
+              ? [breadcrumbSchema]
+              : [pageSchema, breadcrumbSchema, faqSchema],
+          ),
+        }}
       />
 
       {/* All weather UI lives in the client component with per-section error boundaries */}

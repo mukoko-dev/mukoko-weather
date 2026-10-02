@@ -7,7 +7,10 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 
 const pageSource = readFileSync(resolve(__dirname, "page.tsx"), "utf-8");
-const clientSource = readFileSync(resolve(__dirname, "ShamwariPageClient.tsx"), "utf-8");
+const clientSource = readFileSync(
+  resolve(__dirname, "ShamwariPageClient.tsx"),
+  "utf-8",
+);
 const loadingSource = readFileSync(resolve(__dirname, "loading.tsx"), "utf-8");
 const errorSource = readFileSync(resolve(__dirname, "error.tsx"), "utf-8");
 
@@ -30,11 +33,15 @@ describe("shamwari page — structure", () => {
 });
 
 describe("shamwari page — feature flag gate", () => {
-  it("checks isFeatureEnabled(\"shamwari_chat\") before requireUser", () => {
+  it('checks isFeatureEnabled("shamwari_chat") before requireUser', () => {
     expect(pageSource).toContain('isFeatureEnabled("shamwari_chat")');
     expect(pageSource).toContain("@/lib/feature-flags");
-    const flagCheckIndex = pageSource.indexOf('isFeatureEnabled("shamwari_chat")');
-    const requireUserIndex = pageSource.indexOf('await requireUser("/shamwari")');
+    const flagCheckIndex = pageSource.indexOf(
+      'isFeatureEnabled("shamwari_chat")',
+    );
+    const requireUserIndex = pageSource.indexOf(
+      'await requireUser("/shamwari")',
+    );
     expect(flagCheckIndex).toBeGreaterThan(-1);
     expect(flagCheckIndex).toBeLessThan(requireUserIndex);
   });
@@ -96,7 +103,7 @@ describe("shamwari loading skeleton", () => {
     expect(loadingSource).toContain("Header");
   });
 
-  it("has role=\"status\" with aria-busy", () => {
+  it('has role="status" with aria-busy', () => {
     expect(loadingSource).toContain('role="status"');
     expect(loadingSource).toContain('aria-busy="true"');
   });

@@ -11,8 +11,10 @@ import { MAPTILER_STYLE_LIGHT, MAPTILER_STYLE_DARK } from "@/lib/map-layers";
  */
 export function useMapStyle(): string {
   const theme = useAppStore((s) => s.theme);
-  const [osDark, setOsDark] = useState(() =>
-    typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches,
+  const [osDark, setOsDark] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches,
   );
 
   useEffect(() => {

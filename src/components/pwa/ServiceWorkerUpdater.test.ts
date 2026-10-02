@@ -112,9 +112,7 @@ describe("ServiceWorkerUpdater — update checks", () => {
 describe("ServiceWorkerUpdater — mounted in layout", () => {
   it("is imported in the root layout", () => {
     expect(layoutSource).toContain("ServiceWorkerUpdater");
-    expect(layoutSource).toContain(
-      '@/components/pwa/ServiceWorkerUpdater',
-    );
+    expect(layoutSource).toContain("@/components/pwa/ServiceWorkerUpdater");
   });
 
   it("is rendered in the layout tree", () => {

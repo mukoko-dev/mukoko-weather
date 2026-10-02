@@ -23,9 +23,7 @@ export function prepareDailyData(daily: DailyWeather): DailyDataPoint[] {
   return daily.time.map((date, i) => {
     const d = new Date(date);
     const dayName =
-      i === 0
-        ? "Today"
-        : d.toLocaleDateString("en-ZW", { weekday: "short" });
+      i === 0 ? "Today" : d.toLocaleDateString("en-ZW", { weekday: "short" });
     const high = Math.round(daily.temperature_2m_max[i]);
     const low = Math.round(daily.temperature_2m_min[i]);
     return {
@@ -41,10 +39,37 @@ export function prepareDailyData(daily: DailyWeather): DailyDataPoint[] {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "high", label: "High", color: "var(--chart-1)", fill: true, order: 1, showDots: true },
-  { key: "low", label: "Low", color: "var(--chart-2)", fill: true, dashed: true, order: 2, showDots: true },
-  { key: "feelsHigh", label: "Feels High", color: "var(--chart-3)", dashed: true, order: 3 },
-  { key: "feelsLow", label: "Feels Low", color: "var(--chart-4)", dashed: true, order: 4 },
+  {
+    key: "high",
+    label: "High",
+    color: "var(--chart-1)",
+    fill: true,
+    order: 1,
+    showDots: true,
+  },
+  {
+    key: "low",
+    label: "Low",
+    color: "var(--chart-2)",
+    fill: true,
+    dashed: true,
+    order: 2,
+    showDots: true,
+  },
+  {
+    key: "feelsHigh",
+    label: "Feels High",
+    color: "var(--chart-3)",
+    dashed: true,
+    order: 3,
+  },
+  {
+    key: "feelsLow",
+    label: "Feels Low",
+    color: "var(--chart-4)",
+    dashed: true,
+    order: 4,
+  },
 ];
 
 export function DailyChart({ daily }: Props) {
@@ -53,7 +78,12 @@ export function DailyChart({ daily }: Props) {
   if (data.length < 2) return null;
 
   // Compute dynamic y-axis range from all temperature data
-  const allTemps = data.flatMap((d) => [d.high, d.low, d.feelsHigh, d.feelsLow]);
+  const allTemps = data.flatMap((d) => [
+    d.high,
+    d.low,
+    d.feelsHigh,
+    d.feelsLow,
+  ]);
   const minTemp = Math.min(...allTemps) - 2;
   const maxTemp = Math.max(...allTemps) + 2;
 

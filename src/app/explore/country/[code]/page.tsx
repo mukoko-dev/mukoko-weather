@@ -60,22 +60,42 @@ export default async function CountryDetailPage({ params }: Props) {
     <>
       <Header />
 
-      <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8">
+      <nav
+        aria-label="Breadcrumb"
+        className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8"
+      >
         <ol className="flex items-center gap-1 text-base text-text-tertiary">
           <li>
-            <Link href="/" className="hover:text-text-secondary transition-colors">Home</Link>
+            <Link
+              href="/"
+              className="hover:text-text-secondary transition-colors"
+            >
+              Home
+            </Link>
           </li>
           <li aria-hidden="true">/</li>
           <li>
-            <Link href="/explore" className="hover:text-text-secondary transition-colors">Explore</Link>
+            <Link
+              href="/explore"
+              className="hover:text-text-secondary transition-colors"
+            >
+              Explore
+            </Link>
           </li>
           <li aria-hidden="true">/</li>
           <li>
-            <Link href="/explore/country" className="hover:text-text-secondary transition-colors">Countries</Link>
+            <Link
+              href="/explore/country"
+              className="hover:text-text-secondary transition-colors"
+            >
+              Countries
+            </Link>
           </li>
           <li aria-hidden="true">/</li>
           <li aria-current="page">
-            <span className="font-medium text-text-primary">{country.name}</span>
+            <span className="font-medium text-text-primary">
+              {country.name}
+            </span>
           </li>
         </ol>
       </nav>
@@ -85,13 +105,16 @@ export default async function CountryDetailPage({ params }: Props) {
         className="mx-auto max-w-5xl overflow-x-hidden px-4 py-8 pb-24 sm:px-6 sm:pb-8 md:px-8"
       >
         <div className="flex items-center gap-3">
-          <span className="text-4xl" aria-hidden="true">{flag}</span>
+          <span className="text-4xl" aria-hidden="true">
+            {flag}
+          </span>
           <div>
             <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
               {country.name}
             </h1>
             <p className="text-base text-text-secondary">
-              {country.region} &bull; {country.locationCount} location{country.locationCount !== 1 ? "s" : ""}
+              {country.region} &bull; {country.locationCount} location
+              {country.locationCount !== 1 ? "s" : ""}
             </p>
           </div>
         </div>

@@ -1,7 +1,15 @@
 "use client";
 
 import { useCallback } from "react";
-import { CloudRain, Cloud, Thermometer, Wind, Droplets, Ban, type LucideIcon } from "lucide-react";
+import {
+  CloudRain,
+  Cloud,
+  Thermometer,
+  Wind,
+  Droplets,
+  Ban,
+  type LucideIcon,
+} from "lucide-react";
 import { MAP_LAYERS } from "@/lib/map-layers";
 import { cn } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
@@ -30,7 +38,11 @@ export function WeatherLayerPanel({
     (id: string) => {
       const next = activeLayer === id ? null : id;
       onLayerChange(next);
-      if (next) trackEvent("map_layer_changed", { layer: next, location: locationSlug });
+      if (next)
+        trackEvent("map_layer_changed", {
+          layer: next,
+          location: locationSlug,
+        });
     },
     [activeLayer, onLayerChange, locationSlug],
   );

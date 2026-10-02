@@ -68,7 +68,9 @@ export function buildClearScene(
         sunMat.opacity = 0.6 + Math.sin(elapsed * 1.2) * 0.1;
         glowMat.opacity = 0.24 + Math.sin(elapsed * 0.8) * 0.06;
         // Gentle float
-        const pos = dustGeo.attributes.position as InstanceType<typeof THREE.BufferAttribute>;
+        const pos = dustGeo.attributes.position as InstanceType<
+          typeof THREE.BufferAttribute
+        >;
         for (let i = 0; i < DUST_COUNT; i++) {
           pos.array[i * 3 + 1] += Math.sin(elapsed + i) * 0.002;
           pos.array[i * 3] += 0.003;

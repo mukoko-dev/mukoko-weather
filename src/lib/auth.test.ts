@@ -81,7 +81,10 @@ describe("upsertPlatformPerson", () => {
     expect(result.created).toBe(true);
     expect(mockPersons.insertOne).toHaveBeenCalledTimes(1);
 
-    const insertedDoc = mockPersons.insertOne.mock.calls[0][0] as Record<string, unknown>;
+    const insertedDoc = mockPersons.insertOne.mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
     expect(insertedDoc.workosUserId).toBe(sampleUser.id);
     expect(insertedDoc.email).toBe(sampleUser.email);
     expect(insertedDoc.emailVerified).toBe(true);
@@ -94,7 +97,9 @@ describe("upsertPlatformPerson", () => {
     expect(typeof insertedDoc._id).toBe("string");
     expect(insertedDoc.createdAt).toBeInstanceOf(Date);
     expect(insertedDoc.updatedAt).toBeInstanceOf(Date);
-    expect((insertedDoc.bundu as { countryCode: string }).countryCode).toBe("ZW");
+    expect((insertedDoc.bundu as { countryCode: string }).countryCode).toBe(
+      "ZW",
+    );
 
     // Returned person doc must include the required fields the validator demands.
     expect(result.person._id).toBe(insertedDoc._id);
@@ -169,7 +174,10 @@ describe("upsertPlatformPerson", () => {
     await upsertPlatformPerson(sampleUser);
     expect(mockActivityLog.insertOne).toHaveBeenCalledTimes(1);
 
-    const firstLog = mockActivityLog.insertOne.mock.calls[0][0] as Record<string, unknown>;
+    const firstLog = mockActivityLog.insertOne.mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
     expect(firstLog.eventType).toBe("signup"); // brand-new person → signup
     expect(firstLog.surfaceContext).toBe("mukoko-weather");
     expect(firstLog.provider).toBe("workos");
@@ -191,7 +199,10 @@ describe("upsertPlatformPerson", () => {
 
     await upsertPlatformPerson(sampleUser);
     expect(mockActivityLog.insertOne).toHaveBeenCalledTimes(1);
-    const secondLog = mockActivityLog.insertOne.mock.calls[0][0] as Record<string, unknown>;
+    const secondLog = mockActivityLog.insertOne.mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
     expect(secondLog.eventType).toBe("signin");
   });
 
@@ -232,7 +243,10 @@ describe("upsertPlatformPerson", () => {
     });
     expect(mockCredentials.insertOne).toHaveBeenCalledTimes(1);
 
-    const credDoc = mockCredentials.insertOne.mock.calls[0][0] as Record<string, unknown>;
+    const credDoc = mockCredentials.insertOne.mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
     expect(credDoc.provider).toBe("workos");
     expect(credDoc.credentialType).toBe("oauth_token");
     expect(credDoc.providerUserId).toBe(sampleUser.id);

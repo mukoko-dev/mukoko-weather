@@ -17,7 +17,11 @@ export function buildWindyScene(
   scene.fog = new THREE.FogExp2(isDay ? 0xb0b8c4 : 0x101420, 0.012);
 
   // Sun/moon — low visibility
-  const bodyGeo = new THREE.SphereGeometry(2.5, isMobile ? 8 : 16, isMobile ? 8 : 16);
+  const bodyGeo = new THREE.SphereGeometry(
+    2.5,
+    isMobile ? 8 : 16,
+    isMobile ? 8 : 16,
+  );
   const bodyMat = new THREE.MeshBasicMaterial({
     color: isDay ? 0xe0cf8c : 0x9a9ac0,
     transparent: true,
@@ -75,7 +79,9 @@ export function buildWindyScene(
   return {
     update(elapsed) {
       // Fast cloud movement
-      const cpos = cloudGeo.attributes.position as InstanceType<typeof THREE.BufferAttribute>;
+      const cpos = cloudGeo.attributes.position as InstanceType<
+        typeof THREE.BufferAttribute
+      >;
       for (let i = 0; i < CLOUD_COUNT; i++) {
         cpos.array[i * 3] += cloudSpeed;
         if (cpos.array[i * 3] > 24) cpos.array[i * 3] = -24;
@@ -83,7 +89,9 @@ export function buildWindyScene(
       cpos.needsUpdate = true;
 
       // Debris flies fast in wind direction with turbulence
-      const dpos = debrisGeo.attributes.position as InstanceType<typeof THREE.BufferAttribute>;
+      const dpos = debrisGeo.attributes.position as InstanceType<
+        typeof THREE.BufferAttribute
+      >;
       for (let i = 0; i < DEBRIS_COUNT; i++) {
         dpos.array[i * 3] += debrisSpeed[i] * (1 + windStrength);
         // Vertical turbulence

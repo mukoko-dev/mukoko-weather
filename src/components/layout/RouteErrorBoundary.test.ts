@@ -8,7 +8,10 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const source = readFileSync(resolve(__dirname, "RouteErrorBoundary.tsx"), "utf-8");
+const source = readFileSync(
+  resolve(__dirname, "RouteErrorBoundary.tsx"),
+  "utf-8",
+);
 
 const ERROR_FILES: Record<string, { source: string; retryTracked: boolean }> = {
   "../../app/error.tsx": { source: "global", retryTracked: true },
@@ -16,9 +19,18 @@ const ERROR_FILES: Record<string, { source: string; retryTracked: boolean }> = {
   "../../app/history/error.tsx": { source: "history", retryTracked: true },
   "../../app/[location]/error.tsx": { source: "location", retryTracked: true },
   "../../app/aviation/error.tsx": { source: "aviation", retryTracked: true },
-  "../../app/explore/country/error.tsx": { source: "explore-country", retryTracked: false },
-  "../../app/explore/country/[code]/error.tsx": { source: "explore-country-detail", retryTracked: false },
-  "../../app/explore/country/[code]/[province]/error.tsx": { source: "explore-province-detail", retryTracked: false },
+  "../../app/explore/country/error.tsx": {
+    source: "explore-country",
+    retryTracked: false,
+  },
+  "../../app/explore/country/[code]/error.tsx": {
+    source: "explore-country-detail",
+    retryTracked: false,
+  },
+  "../../app/explore/country/[code]/[province]/error.tsx": {
+    source: "explore-province-detail",
+    retryTracked: false,
+  },
 };
 
 describe("RouteErrorBoundary — shared boundary body", () => {
@@ -30,7 +42,9 @@ describe("RouteErrorBoundary — shared boundary body", () => {
   });
 
   it("reports to analytics with the caller's source prefix, fatal only when retry-tracked", () => {
-    expect(source).toContain("reportErrorToAnalytics(`${source}:${error.message}`, retryTracking)");
+    expect(source).toContain(
+      "reportErrorToAnalytics(`${source}:${error.message}`, retryTracking)",
+    );
   });
 
   it("renders the issue-report link only for retry-tracked boundaries", () => {

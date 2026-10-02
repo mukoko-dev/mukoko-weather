@@ -6,10 +6,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const source = readFileSync(
-  resolve(__dirname, "WelcomeBanner.tsx"),
-  "utf-8",
-);
+const source = readFileSync(resolve(__dirname, "WelcomeBanner.tsx"), "utf-8");
 
 describe("WelcomeBanner — component structure", () => {
   it("is a client component", () => {

@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
-import { CanvasChart, resolveColor, type ChartConfig } from "@/components/ui/chart";
+import {
+  CanvasChart,
+  resolveColor,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import type { ChartData, ChartOptions } from "chart.js";
 
 /**
@@ -43,7 +47,9 @@ export function hexWithAlpha(color: string, alpha: number): string {
   }
 
   // hsl(h s% l%) or hsl(h s% l% / a) — modern space syntax
-  const hslSpaceMatch = color.match(/^hsla?\(\s*([\d.]+)\s+([\d.]+)%\s+([\d.]+)%/);
+  const hslSpaceMatch = color.match(
+    /^hsla?\(\s*([\d.]+)\s+([\d.]+)%\s+([\d.]+)%/,
+  );
   if (hslSpaceMatch) {
     return `hsla(${hslSpaceMatch[1]}, ${hslSpaceMatch[2]}%, ${hslSpaceMatch[3]}%, ${a})`;
   }
@@ -79,7 +85,9 @@ export function hexWithAlpha(color: string, alpha: number): string {
     } else {
       base = hex;
     }
-    return `#${base}${Math.round(a * 255).toString(16).padStart(2, "0")}`;
+    return `#${base}${Math.round(a * 255)
+      .toString(16)
+      .padStart(2, "0")}`;
   }
 
   // Named CSS colors — Canvas 2D context supports these natively.
@@ -99,50 +107,195 @@ export function hexWithAlpha(color: string, alpha: number): string {
 
 /** CSS named colors (Level 4) for validation. */
 const CSS_NAMED_COLORS = new Set([
-  "black", "silver", "gray", "white", "maroon", "red", "purple", "fuchsia",
-  "green", "lime", "olive", "yellow", "navy", "blue", "teal", "aqua",
-  "aliceblue", "antiquewhite", "aquamarine", "azure", "beige", "bisque",
-  "blanchedalmond", "blueviolet", "brown", "burlywood", "cadetblue",
-  "chartreuse", "chocolate", "coral", "cornflowerblue", "cornsilk", "crimson",
-  "cyan", "darkblue", "darkcyan", "darkgoldenrod", "darkgray", "darkgreen",
-  "darkgrey", "darkkhaki", "darkmagenta", "darkolivegreen", "darkorange",
-  "darkorchid", "darkred", "darksalmon", "darkseagreen", "darkslateblue",
-  "darkslategray", "darkslategrey", "darkturquoise", "darkviolet", "deeppink",
-  "deepskyblue", "dimgray", "dimgrey", "dodgerblue", "firebrick",
-  "floralwhite", "forestgreen", "gainsboro", "ghostwhite", "gold", "goldenrod",
-  "greenyellow", "grey", "honeydew", "hotpink", "indianred", "indigo",
-  "ivory", "khaki", "lavender", "lavenderblush", "lawngreen", "lemonchiffon",
-  "lightblue", "lightcoral", "lightcyan", "lightgoldenrodyellow", "lightgray",
-  "lightgreen", "lightgrey", "lightpink", "lightsalmon", "lightseagreen",
-  "lightskyblue", "lightslategray", "lightslategrey", "lightsteelblue",
-  "lightyellow", "limegreen", "linen", "magenta", "mediumaquamarine",
-  "mediumblue", "mediumorchid", "mediumpurple", "mediumseagreen",
-  "mediumslateblue", "mediumspringgreen", "mediumturquoise", "mediumvioletred",
-  "midnightblue", "mintcream", "mistyrose", "moccasin", "navajowhite",
-  "oldlace", "olivedrab", "orange", "orangered", "orchid", "palegoldenrod",
-  "palegreen", "paleturquoise", "palevioletred", "papayawhip", "peachpuff",
-  "peru", "pink", "plum", "powderblue", "rosybrown", "royalblue",
-  "saddlebrown", "salmon", "sandybrown", "seagreen", "seashell", "sienna",
-  "skyblue", "slateblue", "slategray", "slategrey", "snow", "springgreen",
-  "steelblue", "tan", "thistle", "tomato", "turquoise", "violet", "wheat",
-  "whitesmoke", "yellowgreen", "rebeccapurple", "transparent",
+  "black",
+  "silver",
+  "gray",
+  "white",
+  "maroon",
+  "red",
+  "purple",
+  "fuchsia",
+  "green",
+  "lime",
+  "olive",
+  "yellow",
+  "navy",
+  "blue",
+  "teal",
+  "aqua",
+  "aliceblue",
+  "antiquewhite",
+  "aquamarine",
+  "azure",
+  "beige",
+  "bisque",
+  "blanchedalmond",
+  "blueviolet",
+  "brown",
+  "burlywood",
+  "cadetblue",
+  "chartreuse",
+  "chocolate",
+  "coral",
+  "cornflowerblue",
+  "cornsilk",
+  "crimson",
+  "cyan",
+  "darkblue",
+  "darkcyan",
+  "darkgoldenrod",
+  "darkgray",
+  "darkgreen",
+  "darkgrey",
+  "darkkhaki",
+  "darkmagenta",
+  "darkolivegreen",
+  "darkorange",
+  "darkorchid",
+  "darkred",
+  "darksalmon",
+  "darkseagreen",
+  "darkslateblue",
+  "darkslategray",
+  "darkslategrey",
+  "darkturquoise",
+  "darkviolet",
+  "deeppink",
+  "deepskyblue",
+  "dimgray",
+  "dimgrey",
+  "dodgerblue",
+  "firebrick",
+  "floralwhite",
+  "forestgreen",
+  "gainsboro",
+  "ghostwhite",
+  "gold",
+  "goldenrod",
+  "greenyellow",
+  "grey",
+  "honeydew",
+  "hotpink",
+  "indianred",
+  "indigo",
+  "ivory",
+  "khaki",
+  "lavender",
+  "lavenderblush",
+  "lawngreen",
+  "lemonchiffon",
+  "lightblue",
+  "lightcoral",
+  "lightcyan",
+  "lightgoldenrodyellow",
+  "lightgray",
+  "lightgreen",
+  "lightgrey",
+  "lightpink",
+  "lightsalmon",
+  "lightseagreen",
+  "lightskyblue",
+  "lightslategray",
+  "lightslategrey",
+  "lightsteelblue",
+  "lightyellow",
+  "limegreen",
+  "linen",
+  "magenta",
+  "mediumaquamarine",
+  "mediumblue",
+  "mediumorchid",
+  "mediumpurple",
+  "mediumseagreen",
+  "mediumslateblue",
+  "mediumspringgreen",
+  "mediumturquoise",
+  "mediumvioletred",
+  "midnightblue",
+  "mintcream",
+  "mistyrose",
+  "moccasin",
+  "navajowhite",
+  "oldlace",
+  "olivedrab",
+  "orange",
+  "orangered",
+  "orchid",
+  "palegoldenrod",
+  "palegreen",
+  "paleturquoise",
+  "palevioletred",
+  "papayawhip",
+  "peachpuff",
+  "peru",
+  "pink",
+  "plum",
+  "powderblue",
+  "rosybrown",
+  "royalblue",
+  "saddlebrown",
+  "salmon",
+  "sandybrown",
+  "seagreen",
+  "seashell",
+  "sienna",
+  "skyblue",
+  "slateblue",
+  "slategray",
+  "slategrey",
+  "snow",
+  "springgreen",
+  "steelblue",
+  "tan",
+  "thistle",
+  "tomato",
+  "turquoise",
+  "violet",
+  "wheat",
+  "whitesmoke",
+  "yellowgreen",
+  "rebeccapurple",
+  "transparent",
 ]);
 
 /** RGB values for common named colors used in charts/weather UI. */
 const NAMED_COLOR_RGB: Record<string, [number, number, number]> = {
-  black: [0, 0, 0], white: [255, 255, 255], red: [255, 0, 0],
-  green: [0, 128, 0], blue: [0, 0, 255], yellow: [255, 255, 0],
-  cyan: [0, 255, 255], magenta: [255, 0, 255], orange: [255, 165, 0],
-  purple: [128, 0, 128], coral: [255, 127, 80], crimson: [220, 20, 60],
-  gold: [255, 215, 0], indigo: [75, 0, 130], teal: [0, 128, 128],
-  navy: [0, 0, 128], maroon: [128, 0, 0], olive: [128, 128, 0],
-  silver: [192, 192, 192], gray: [128, 128, 128], grey: [128, 128, 128],
-  lime: [0, 255, 0], aqua: [0, 255, 255], fuchsia: [255, 0, 255],
-  salmon: [250, 128, 114], tomato: [255, 99, 71], chocolate: [210, 105, 30],
-  dodgerblue: [30, 144, 255], forestgreen: [34, 139, 34],
-  steelblue: [70, 130, 180], firebrick: [178, 34, 34],
-  darkblue: [0, 0, 139], darkgreen: [0, 100, 0], darkred: [139, 0, 0],
-  skyblue: [135, 206, 235], royalblue: [65, 105, 225],
+  black: [0, 0, 0],
+  white: [255, 255, 255],
+  red: [255, 0, 0],
+  green: [0, 128, 0],
+  blue: [0, 0, 255],
+  yellow: [255, 255, 0],
+  cyan: [0, 255, 255],
+  magenta: [255, 0, 255],
+  orange: [255, 165, 0],
+  purple: [128, 0, 128],
+  coral: [255, 127, 80],
+  crimson: [220, 20, 60],
+  gold: [255, 215, 0],
+  indigo: [75, 0, 130],
+  teal: [0, 128, 128],
+  navy: [0, 0, 128],
+  maroon: [128, 0, 0],
+  olive: [128, 128, 0],
+  silver: [192, 192, 192],
+  gray: [128, 128, 128],
+  grey: [128, 128, 128],
+  lime: [0, 255, 0],
+  aqua: [0, 255, 255],
+  fuchsia: [255, 0, 255],
+  salmon: [250, 128, 114],
+  tomato: [255, 99, 71],
+  chocolate: [210, 105, 30],
+  dodgerblue: [30, 144, 255],
+  forestgreen: [34, 139, 34],
+  steelblue: [70, 130, 180],
+  firebrick: [178, 34, 34],
+  darkblue: [0, 0, 139],
+  darkgreen: [0, 100, 0],
+  darkred: [139, 0, 0],
+  skyblue: [135, 206, 235],
+  royalblue: [65, 105, 225],
   transparent: [0, 0, 0],
 };
 
@@ -168,13 +321,16 @@ export interface TimeSeriesChartProps {
   /** Series definitions — each draws a line, area, or bar */
   series: SeriesConfig[];
   /** Y-axis configs (keyed by yAxisID or "y" for default) */
-  yAxes?: Record<string, {
-    min?: number;
-    max?: number;
-    position?: "left" | "right";
-    display?: boolean;
-    format?: (v: number) => string;
-  }>;
+  yAxes?: Record<
+    string,
+    {
+      min?: number;
+      max?: number;
+      position?: "left" | "right";
+      display?: boolean;
+      format?: (v: number) => string;
+    }
+  >;
   /** Custom tooltip label formatter */
   tooltipLabel?: (datasetLabel: string, value: number) => string;
   /** Custom tooltip title formatter (receives the raw label value) */
@@ -230,7 +386,9 @@ export function TimeSeriesChart({
     return cfg;
   }, [series]);
 
-  const hasMixedTypes = series.some((s) => s.type === "bar") && series.some((s) => !s.type || s.type === "line");
+  const hasMixedTypes =
+    series.some((s) => s.type === "bar") &&
+    series.some((s) => !s.type || s.type === "line");
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const chartData: ChartData<any> = useMemo(() => {
@@ -257,7 +415,9 @@ export function TimeSeriesChart({
         label: s.label,
         data: data.map((d) => d[s.key]),
         borderColor: color,
-        backgroundColor: s.fill ? hexWithAlpha(color, s.opacity ?? 0.12) : undefined,
+        backgroundColor: s.fill
+          ? hexWithAlpha(color, s.opacity ?? 0.12)
+          : undefined,
         borderWidth: s.dashed ? 1.5 : 2,
         borderDash: s.dashed ? [4, 3] : undefined,
         fill: s.fill ?? false,
@@ -283,8 +443,13 @@ export function TimeSeriesChart({
           maxRotation: 0,
           autoSkip: true,
           maxTicksLimit,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ...(xTickFormat ? { callback: (_v: any, i: number) => xTickFormat(data[i]?.[labelKey] ?? "", i) } : {}),
+          ...(xTickFormat
+            ? {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                callback: (_v: any, i: number) =>
+                  xTickFormat(data[i]?.[labelKey] ?? "", i),
+              }
+            : {}),
         },
         border: { display: false },
       },
@@ -297,13 +462,16 @@ export function TimeSeriesChart({
           display: cfg.display ?? true,
           min: cfg.min,
           max: cfg.max,
-          grid: cfg.position === "right"
-            ? { display: false }
-            : { color: hexWithAlpha(gridColor, 0.15), drawTicks: false },
+          grid:
+            cfg.position === "right"
+              ? { display: false }
+              : { color: hexWithAlpha(gridColor, 0.15), drawTicks: false },
           ticks: {
             color: gridColor,
             font: { size: 11 },
-            ...(cfg.format ? { callback: (v: string | number) => cfg.format!(Number(v)) } : {}),
+            ...(cfg.format
+              ? { callback: (v: string | number) => cfg.format!(Number(v)) }
+              : {}),
           },
           border: { display: false },
         };
@@ -321,15 +489,30 @@ export function TimeSeriesChart({
       plugins: {
         tooltip: {
           callbacks: {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            title: tooltipTitle ? (items: any[]) => tooltipTitle(data[items[0]?.dataIndex ?? 0]?.[labelKey] ?? "") : undefined,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            label: tooltipLabel ? (ctx: any) => tooltipLabel(ctx.dataset.label ?? "", ctx.parsed.y) : undefined,
+            title: tooltipTitle
+              ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (items: any[]) =>
+                  tooltipTitle(data[items[0]?.dataIndex ?? 0]?.[labelKey] ?? "")
+              : undefined,
+            label: tooltipLabel
+              ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (ctx: any) =>
+                  tooltipLabel(ctx.dataset.label ?? "", ctx.parsed.y)
+              : undefined,
           },
         },
       },
     };
-  }, [data, labelKey, gridColor, yAxes, tooltipLabel, tooltipTitle, xTickFormat, maxTicksLimit]);
+  }, [
+    data,
+    labelKey,
+    gridColor,
+    yAxes,
+    tooltipLabel,
+    tooltipTitle,
+    xTickFormat,
+    maxTicksLimit,
+  ]);
 
   const chartType = hasMixedTypes ? "bar" : (series[0]?.type ?? "line");
 

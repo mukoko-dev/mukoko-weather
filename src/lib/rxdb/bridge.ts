@@ -114,13 +114,18 @@ function readLegacyPrefs(): LegacyState | null {
  * healthy this is never called (RxDB owns persistence and clears this key
  * during migration), so the two paths never fight.
  */
-function writeLegacyPrefs(updates: Partial<Omit<PreferencesDocType, "id">>): void {
+function writeLegacyPrefs(
+  updates: Partial<Omit<PreferencesDocType, "id">>,
+): void {
   if (typeof localStorage === "undefined") return;
   try {
     const raw = localStorage.getItem(LEGACY_PREFS_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
     const state = { ...(parsed?.state ?? {}), ...updates };
-    localStorage.setItem(LEGACY_PREFS_KEY, JSON.stringify({ ...parsed, state }));
+    localStorage.setItem(
+      LEGACY_PREFS_KEY,
+      JSON.stringify({ ...parsed, state }),
+    );
   } catch {
     // localStorage unavailable/full — nothing more we can do.
   }
@@ -279,7 +284,10 @@ async function _doInitBridge(callbacks: BridgeCallbacks): Promise<void> {
   } catch (err) {
     // Any RxDB failure (DB9, schema conflict, storage error) must never crash
     // the app — fall back to localStorage-hydrated Zustand and allow retry.
-    console.warn("[RxDB] bridge init failed — using localStorage fallback:", String(err));
+    console.warn(
+      "[RxDB] bridge init failed — using localStorage fallback:",
+      String(err),
+    );
     hydrateFromLegacy(callbacks);
     _initPromise = null;
   }

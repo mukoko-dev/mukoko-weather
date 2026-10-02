@@ -86,7 +86,9 @@ export function buildPartlyCloudyScene(
       bodyMat.opacity = 0.42 + Math.sin(elapsed * 1.0) * 0.08;
 
       // Clouds drift right
-      const cpos = cloudGeo.attributes.position as InstanceType<typeof THREE.BufferAttribute>;
+      const cpos = cloudGeo.attributes.position as InstanceType<
+        typeof THREE.BufferAttribute
+      >;
       for (let i = 0; i < CLOUD_COUNT; i++) {
         cpos.array[i * 3] += 0.006;
         if (cpos.array[i * 3] > 22) cpos.array[i * 3] = -22;
@@ -94,7 +96,9 @@ export function buildPartlyCloudyScene(
       cpos.needsUpdate = true;
 
       // Breeze particles drift
-      const bpos = breezeGeo.attributes.position as InstanceType<typeof THREE.BufferAttribute>;
+      const bpos = breezeGeo.attributes.position as InstanceType<
+        typeof THREE.BufferAttribute
+      >;
       for (let i = 0; i < BREEZE_COUNT; i++) {
         bpos.array[i * 3] += 0.01;
         bpos.array[i * 3 + 1] += Math.sin(elapsed + i * 0.5) * 0.002;

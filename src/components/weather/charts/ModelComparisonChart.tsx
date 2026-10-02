@@ -2,7 +2,11 @@
 
 import { useMemo } from "react";
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
-import { FORECAST_MODEL_LABELS, ForecastModel, type ModelForecast } from "@/lib/weather";
+import {
+  FORECAST_MODEL_LABELS,
+  ForecastModel,
+  type ModelForecast,
+} from "@/lib/weather";
 
 /**
  * Windy-style multi-model comparison chart.
@@ -103,8 +107,8 @@ export function ModelComparisonChart({
         <span className="dove">Hourly temperature °C</span>
       </div>
       <p className="dove mb-3">
-        How the major forecast models ({series.map((s) => s.label).join(", ")}) agree
-        or diverge on the next 24 hours.
+        How the major forecast models ({series.map((s) => s.label).join(", ")})
+        agree or diverge on the next 24 hours.
       </p>
       <TimeSeriesChart
         data={rows}
@@ -117,9 +121,15 @@ export function ModelComparisonChart({
         aspect={aspect}
       />
       {/* Legend — mineral swatch per model */}
-      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5" aria-label="Forecast models">
+      <ul
+        className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5"
+        aria-label="Forecast models"
+      >
         {series.map((s) => (
-          <li key={s.key} className="flex items-center gap-1.5 text-sm text-text-secondary">
+          <li
+            key={s.key}
+            className="flex items-center gap-1.5 text-sm text-text-secondary"
+          >
             <span
               className={`inline-block h-2.5 w-2.5 rounded-full ${MODEL_SWATCH_CLASS[s.key] ?? FALLBACK_SWATCH}`}
               aria-hidden="true"

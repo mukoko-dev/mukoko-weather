@@ -14,8 +14,19 @@ interface HumidityCloudChartProps {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "humidity", label: "Humidity", color: "var(--chart-2)", fill: true, opacity: 0.3 },
-  { key: "cloudCover", label: "Cloud Cover", color: "var(--chart-5)", dashed: true },
+  {
+    key: "humidity",
+    label: "Humidity",
+    color: "var(--chart-2)",
+    fill: true,
+    opacity: 0.3,
+  },
+  {
+    key: "cloudCover",
+    label: "Cloud Cover",
+    color: "var(--chart-5)",
+    dashed: true,
+  },
 ];
 
 const Y_AXES = { y: { min: 0, max: 100, format: (v: number) => `${v}%` } };

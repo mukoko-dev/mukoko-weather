@@ -14,13 +14,32 @@ interface UVCloudChartProps {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "uvIndex", label: "UV Index", color: "var(--chart-3)", type: "bar", opacity: 0.5, yAxisID: "uv", order: 2 },
-  { key: "cloudCover", label: "Cloud Cover", color: "var(--chart-2)", yAxisID: "cloud", order: 1 },
+  {
+    key: "uvIndex",
+    label: "UV Index",
+    color: "var(--chart-3)",
+    type: "bar",
+    opacity: 0.5,
+    yAxisID: "uv",
+    order: 2,
+  },
+  {
+    key: "cloudCover",
+    label: "Cloud Cover",
+    color: "var(--chart-2)",
+    yAxisID: "cloud",
+    order: 1,
+  },
 ];
 
 const Y_AXES = {
   uv: { position: "left" as const, min: 0, max: 12 },
-  cloud: { position: "right" as const, min: 0, max: 100, format: (v: number) => `${v}%` },
+  cloud: {
+    position: "right" as const,
+    min: 0,
+    max: 100,
+    format: (v: number) => `${v}%`,
+  },
 };
 
 /**
@@ -42,7 +61,9 @@ export function UVCloudChart({
       series={SERIES}
       yAxes={Y_AXES}
       tooltipLabel={(label, value) =>
-        label === "UV Index" ? `UV ${value} (${uvLevel(value).label})` : `${value}%`
+        label === "UV Index"
+          ? `UV ${value} (${uvLevel(value).label})`
+          : `${value}%`
       }
       tooltipTitle={tooltipTitle}
       xTickFormat={xTickFormat}

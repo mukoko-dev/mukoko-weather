@@ -33,7 +33,11 @@ afterEach(() => {
 /** Build a minimal NextRequest-shaped object. */
 function makeRequest(
   url: string,
-  init: { method?: string; headers?: Record<string, string>; body?: BodyInit } = {},
+  init: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: BodyInit;
+  } = {},
 ): Request {
   return new Request(url, {
     method: init.method ?? "GET",
@@ -73,18 +77,26 @@ describe("auth-gated AI proxy", () => {
 
     const mod = await import("./route");
     const params = Promise.resolve({ path: ["followup"] });
-    const req = makeRequest("https://weather.mukoko.com/api/ai/followup?lang=en", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: "wos-session=secret" },
-      body: JSON.stringify({ message: "hi" }),
-    });
+    const req = makeRequest(
+      "https://weather.mukoko.com/api/ai/followup?lang=en",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "wos-session=secret",
+        },
+        body: JSON.stringify({ message: "hi" }),
+      },
+    );
 
     const res = await mod.POST(req as never, { params });
     expect(res.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     const [upstreamUrl, upstreamInit] = fetchMock.mock.calls[0];
-    expect(String(upstreamUrl)).toBe("https://weather.mukoko.com/api/py/ai/followup?lang=en");
+    expect(String(upstreamUrl)).toBe(
+      "https://weather.mukoko.com/api/py/ai/followup?lang=en",
+    );
     expect(upstreamInit.method).toBe("POST");
 
     const headers = upstreamInit.headers as Headers;
@@ -106,13 +118,18 @@ describe("auth-gated AI proxy", () => {
 
     const mod = await import("./route");
     const params = Promise.resolve({ path: ["prompts"] });
-    const req = makeRequest("https://weather.mukoko.com/api/ai/prompts?key=foo", {
-      method: "GET",
-    });
+    const req = makeRequest(
+      "https://weather.mukoko.com/api/ai/prompts?key=foo",
+      {
+        method: "GET",
+      },
+    );
 
     await mod.GET(req as never, { params });
     const [upstreamUrl, upstreamInit] = fetchMock.mock.calls[0];
-    expect(String(upstreamUrl)).toBe("https://weather.mukoko.com/api/py/ai/prompts?key=foo");
+    expect(String(upstreamUrl)).toBe(
+      "https://weather.mukoko.com/api/py/ai/prompts?key=foo",
+    );
     expect(upstreamInit.method).toBe("GET");
     expect(upstreamInit.body).toBeUndefined();
     const headers = upstreamInit.headers as Headers;
@@ -127,11 +144,15 @@ describe("auth-gated AI proxy", () => {
 
     const mod = await import("./route");
     const params = Promise.resolve({ path: ["suggested-rules"] });
-    const req = makeRequest("https://weather.mukoko.com/api/ai/suggested-rules");
+    const req = makeRequest(
+      "https://weather.mukoko.com/api/ai/suggested-rules",
+    );
     await mod.GET(req as never, { params });
 
     const [upstreamUrl] = fetchMock.mock.calls[0];
-    expect(String(upstreamUrl)).toBe("https://weather.mukoko.com/api/py/ai/suggested-rules");
+    expect(String(upstreamUrl)).toBe(
+      "https://weather.mukoko.com/api/py/ai/suggested-rules",
+    );
   });
 
   it("mirrors upstream status code to the client", async () => {

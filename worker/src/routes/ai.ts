@@ -1,7 +1,11 @@
 import { Hono } from "hono";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Env } from "../types";
-import { LOCATIONS, getLocationBySlug, getDefaultSeason } from "../data/locations";
+import {
+  LOCATIONS,
+  getLocationBySlug,
+  getDefaultSeason,
+} from "../data/locations";
 
 const TIER_1_TAGS = new Set(["city"]);
 const TIER_2_TAGS = new Set(["farming", "mining", "education", "border"]);
@@ -54,7 +58,9 @@ aiRoutes.post("/", async (c) => {
 
   const currentTemp = weatherData.current?.temperature_2m ?? 0;
   const currentCode = weatherData.current?.weather_code ?? 0;
-  const locationSlug = (location.name as string ?? "unknown").toLowerCase().replace(/\s+/g, "-");
+  const locationSlug = ((location.name as string) ?? "unknown")
+    .toLowerCase()
+    .replace(/\s+/g, "-");
 
   const knownLocation = getLocationBySlug(locationSlug);
   const locationTags = knownLocation?.tags ?? [];
@@ -69,7 +75,11 @@ aiRoutes.post("/", async (c) => {
       const tempDelta = Math.abs(cached.temperature - currentTemp);
       const codeChanged = cached.weatherCode !== currentCode;
       if (tempDelta <= 5 && !codeChanged) {
-        return c.json({ insight: cached.insight, cached: true, generatedAt: cached.generatedAt });
+        return c.json({
+          insight: cached.insight,
+          cached: true,
+          generatedAt: cached.generatedAt,
+        });
       }
     } catch {
       // Corrupted cache entry, regenerate
@@ -85,9 +95,16 @@ aiRoutes.post("/", async (c) => {
     const humidity = weatherData.current?.relative_humidity_2m;
     const insight = `Current conditions in ${location.name}: ${temp !== undefined ? Math.round(temp) + "°C" : "N/A"} with ${humidity !== undefined ? humidity + "%" : "N/A"} humidity. Current season: ${season.name}. ${season.description}. Stay informed and plan your day accordingly.`;
 
-    await c.env.AI_SUMMARIES.put(cacheKey, JSON.stringify({
-      insight, generatedAt: new Date().toISOString(), temperature: currentTemp, weatherCode: currentCode,
-    }), { expirationTtl: ttl });
+    await c.env.AI_SUMMARIES.put(
+      cacheKey,
+      JSON.stringify({
+        insight,
+        generatedAt: new Date().toISOString(),
+        temperature: currentTemp,
+        weatherCode: currentCode,
+      }),
+      { expirationTtl: ttl },
+    );
 
     return c.json({ insight, cached: false });
   }
@@ -97,9 +114,10 @@ aiRoutes.post("/", async (c) => {
     model: "claude-sonnet-4-20250514",
     max_tokens: 300,
     system: SYSTEM_PROMPT,
-    messages: [{
-      role: "user",
-      content: `Generate a weather briefing for ${location.name}${location.country ? ` (${location.country})` : ""} (elevation: ${location.elevation}m).
+    messages: [
+      {
+        role: "user",
+        content: `Generate a weather briefing for ${location.name}${location.country ? ` (${location.country})` : ""} (elevation: ${location.elevation}m).
 ${locationTags.length > 0 ? `This area is relevant to: ${locationTags.join(", ")}.` : ""}
 
 Current conditions: ${JSON.stringify(weatherData.current)}
@@ -109,15 +127,27 @@ Season: ${season.name}
 Provide:
 1. A 2-sentence general summary
 2. One industry/context-specific tip relevant to this area`,
-    }],
+      },
+    ],
   });
 
   const textBlock = message.content.find((b) => b.type === "text");
   const insight = textBlock?.text ?? "No insight available.";
 
-  await c.env.AI_SUMMARIES.put(cacheKey, JSON.stringify({
-    insight, generatedAt: new Date().toISOString(), temperature: currentTemp, weatherCode: currentCode,
-  }), { expirationTtl: ttl });
+  await c.env.AI_SUMMARIES.put(
+    cacheKey,
+    JSON.stringify({
+      insight,
+      generatedAt: new Date().toISOString(),
+      temperature: currentTemp,
+      weatherCode: currentCode,
+    }),
+    { expirationTtl: ttl },
+  );
 
-  return c.json({ insight, cached: false, generatedAt: new Date().toISOString() });
+  return c.json({
+    insight,
+    cached: false,
+    generatedAt: new Date().toISOString(),
+  });
 });

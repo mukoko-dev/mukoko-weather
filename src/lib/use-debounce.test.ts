@@ -5,10 +5,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const source = readFileSync(
-  resolve(__dirname, "use-debounce.ts"),
-  "utf-8",
-);
+const source = readFileSync(resolve(__dirname, "use-debounce.ts"), "utf-8");
 
 describe("useDebounce — module structure", () => {
   it("is a client component", () => {

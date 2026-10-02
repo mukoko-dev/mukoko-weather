@@ -83,7 +83,9 @@ export function useLocationQuickSearch({
     const raf = requestAnimationFrame(() => {
       if (disposed) return;
       setLoading(true);
-      fetch(`/api/py/search?q=${encodeURIComponent(q)}&limit=${limit}`, { signal: controller.signal })
+      fetch(`/api/py/search?q=${encodeURIComponent(q)}&limit=${limit}`, {
+        signal: controller.signal,
+      })
         .then(async (res) => {
           if (!res.ok) throw new Error(`Search failed (${res.status})`);
           const data = await res.json();

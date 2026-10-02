@@ -161,7 +161,9 @@ describe("contextual navigation (ShamwariContext)", () => {
   });
 
   it("shows contextual prompt buttons after greeting message", () => {
-    expect(source).toContain("contextualPrompts && contextualPrompts.length > 0");
+    expect(source).toMatch(
+      /contextualPrompts &&\s+contextualPrompts\.length > 0/,
+    );
   });
 });
 
@@ -374,7 +376,9 @@ describe("overflow containment", () => {
   });
 
   it("wraps textarea in a card-style container", () => {
-    expect(source).toContain("rounded-2xl border border-border bg-surface-card");
+    expect(source).toContain(
+      "rounded-2xl border border-border bg-surface-card",
+    );
   });
 });
 
@@ -397,7 +401,9 @@ describe("message layout", () => {
   });
 
   it("typing indicator matches assistant message layout with sparkles icon", () => {
-    const typingSection = source.slice(source.indexOf("function TypingIndicator"));
+    const typingSection = source.slice(
+      source.indexOf("function TypingIndicator"),
+    );
     expect(typingSection).toContain("SparklesIcon");
     // .hoopoe fauna class encapsulates the avatar circle styling
     expect(typingSection).toMatch(/hoopoe|rounded-full bg-primary\/10/);
@@ -409,9 +415,17 @@ describe("message layout", () => {
 // ---------------------------------------------------------------------------
 
 // Mirror of getContextualGreeting from ExploreChatbot.tsx
-function getContextualGreeting(ctx: { source: string; locationName?: string; temperature?: number; weatherSummary?: string; historyDays?: number; exploreQuery?: string }): string | null {
+function getContextualGreeting(ctx: {
+  source: string;
+  locationName?: string;
+  temperature?: number;
+  weatherSummary?: string;
+  historyDays?: number;
+  exploreQuery?: string;
+}): string | null {
   if (ctx.source === "location" && ctx.locationName) {
-    const tempInfo = ctx.temperature != null ? ` at ${Math.round(ctx.temperature)}°C` : "";
+    const tempInfo =
+      ctx.temperature != null ? ` at ${Math.round(ctx.temperature)}°C` : "";
     const summaryInfo = ctx.weatherSummary
       ? (() => {
           const s = ctx.weatherSummary;
@@ -433,27 +447,61 @@ function getContextualGreeting(ctx: { source: string; locationName?: string; tem
 }
 
 // Mirror of getContextualPrompts from ExploreChatbot.tsx
-function getContextualPrompts(ctx: { source: string; locationName?: string; historyDays?: number; exploreQuery?: string }): { label: string; query: string }[] {
+function getContextualPrompts(ctx: {
+  source: string;
+  locationName?: string;
+  historyDays?: number;
+  exploreQuery?: string;
+}): { label: string; query: string }[] {
   const loc = ctx.locationName || "this location";
   if (ctx.source === "location") {
     return [
-      { label: `More about ${loc}`, query: `Tell me more about the weather in ${loc}` },
-      { label: "Activity advice", query: `What activities are best for today's weather in ${loc}?` },
-      { label: "Compare locations", query: `Compare ${loc} weather with nearby cities` },
+      {
+        label: `More about ${loc}`,
+        query: `Tell me more about the weather in ${loc}`,
+      },
+      {
+        label: "Activity advice",
+        query: `What activities are best for today's weather in ${loc}?`,
+      },
+      {
+        label: "Compare locations",
+        query: `Compare ${loc} weather with nearby cities`,
+      },
     ];
   }
   if (ctx.source === "history") {
     return [
-      { label: "Explain trends", query: `What do the weather trends in ${loc} over the last ${ctx.historyDays || 30} days tell us?` },
-      { label: "Farming impact", query: `How have recent weather patterns affected farming in ${loc}?` },
-      { label: "Future outlook", query: `Based on recent history, what should I expect next in ${loc}?` },
+      {
+        label: "Explain trends",
+        query: `What do the weather trends in ${loc} over the last ${ctx.historyDays || 30} days tell us?`,
+      },
+      {
+        label: "Farming impact",
+        query: `How have recent weather patterns affected farming in ${loc}?`,
+      },
+      {
+        label: "Future outlook",
+        query: `Based on recent history, what should I expect next in ${loc}?`,
+      },
     ];
   }
   if (ctx.source === "explore") {
     return [
-      { label: "Refine search", query: ctx.exploreQuery ? `Show me more locations like "${ctx.exploreQuery}"` : `What other locations have similar weather?` },
-      { label: "Detailed comparison", query: `Compare the weather conditions of locations you found` },
-      { label: "Best option", query: `Which location is best for outdoor activities right now?` },
+      {
+        label: "Refine search",
+        query: ctx.exploreQuery
+          ? `Show me more locations like "${ctx.exploreQuery}"`
+          : `What other locations have similar weather?`,
+      },
+      {
+        label: "Detailed comparison",
+        query: `Compare the weather conditions of locations you found`,
+      },
+      {
+        label: "Best option",
+        query: `Which location is best for outdoor activities right now?`,
+      },
     ];
   }
   // Falls through to FALLBACK_SUGGESTED_PROMPTS in the real component
@@ -462,30 +510,49 @@ function getContextualPrompts(ctx: { source: string; locationName?: string; hist
 
 describe("getContextualGreeting behavioral tests", () => {
   it("returns greeting with location name for source=location", () => {
-    const result = getContextualGreeting({ source: "location", locationName: "Harare" });
+    const result = getContextualGreeting({
+      source: "location",
+      locationName: "Harare",
+    });
     expect(result).toContain("**Harare**");
     expect(result).toContain("How can I help");
   });
 
   it("includes rounded temperature when provided", () => {
-    const result = getContextualGreeting({ source: "location", locationName: "Harare", temperature: 25.7 });
+    const result = getContextualGreeting({
+      source: "location",
+      locationName: "Harare",
+      temperature: 25.7,
+    });
     expect(result).toContain("at 26°C");
   });
 
   it("omits temperature when not provided", () => {
-    const result = getContextualGreeting({ source: "location", locationName: "Harare" });
+    const result = getContextualGreeting({
+      source: "location",
+      locationName: "Harare",
+    });
     expect(result).not.toContain("°C");
   });
 
   it("includes short summaries without truncation", () => {
-    const result = getContextualGreeting({ source: "location", locationName: "Harare", weatherSummary: "Clear skies expected." });
+    const result = getContextualGreeting({
+      source: "location",
+      locationName: "Harare",
+      weatherSummary: "Clear skies expected.",
+    });
     expect(result).toContain("Clear skies expected.");
     expect(result).not.toContain("...");
   });
 
   it("truncates long summaries at a word boundary", () => {
-    const longSummary = "The weather today is expected to be warm and sunny with clear skies throughout the afternoon. Temperatures will remain above average for this time of year, making it an excellent day for outdoor activities and farming operations in the region.";
-    const result = getContextualGreeting({ source: "location", locationName: "Harare", weatherSummary: longSummary })!;
+    const longSummary =
+      "The weather today is expected to be warm and sunny with clear skies throughout the afternoon. Temperatures will remain above average for this time of year, making it an excellent day for outdoor activities and farming operations in the region.";
+    const result = getContextualGreeting({
+      source: "location",
+      locationName: "Harare",
+      weatherSummary: longSummary,
+    })!;
     expect(result).toContain("...");
     // Extract the summary portion between the period after location and "..."
     const afterLocation = result.indexOf(".");
@@ -498,30 +565,46 @@ describe("getContextualGreeting behavioral tests", () => {
     // The truncation point should correspond to a space in the original text
     // (i.e. the character after our truncated text in the original should be a space)
     const truncLen = summaryText.length;
-    expect(longSummary[truncLen] === " " || longSummary[truncLen] === undefined).toBe(true);
+    expect(
+      longSummary[truncLen] === " " || longSummary[truncLen] === undefined,
+    ).toBe(true);
   });
 
   it("handles summaries with no spaces in first 150 chars (edge case)", () => {
     const noSpaces = "a".repeat(200); // 200-char string with no spaces
-    const result = getContextualGreeting({ source: "location", locationName: "Harare", weatherSummary: noSpaces })!;
+    const result = getContextualGreeting({
+      source: "location",
+      locationName: "Harare",
+      weatherSummary: noSpaces,
+    })!;
     expect(result).toContain("...");
     // Should fall back to hard slice at 150, not slice(0, -1)
     expect(result).toContain("a".repeat(150));
   });
 
   it("returns greeting for source=history", () => {
-    const result = getContextualGreeting({ source: "history", locationName: "Bulawayo", historyDays: 14 });
+    const result = getContextualGreeting({
+      source: "history",
+      locationName: "Bulawayo",
+      historyDays: 14,
+    });
     expect(result).toContain("**Bulawayo**");
     expect(result).toContain("14-day");
   });
 
   it("defaults to 30 days for history when historyDays not provided", () => {
-    const result = getContextualGreeting({ source: "history", locationName: "Bulawayo" });
+    const result = getContextualGreeting({
+      source: "history",
+      locationName: "Bulawayo",
+    });
     expect(result).toContain("30-day");
   });
 
   it("returns greeting for source=explore", () => {
-    const result = getContextualGreeting({ source: "explore", exploreQuery: "farming areas" });
+    const result = getContextualGreeting({
+      source: "explore",
+      exploreQuery: "farming areas",
+    });
     expect(result).toContain('"farming areas"');
   });
 
@@ -543,7 +626,10 @@ describe("getContextualGreeting behavioral tests", () => {
 
 describe("getContextualPrompts behavioral tests", () => {
   it("returns 3 location-specific prompts for source=location", () => {
-    const prompts = getContextualPrompts({ source: "location", locationName: "Harare" });
+    const prompts = getContextualPrompts({
+      source: "location",
+      locationName: "Harare",
+    });
     expect(prompts).toHaveLength(3);
     expect(prompts[0].label).toContain("Harare");
     expect(prompts[0].query).toContain("Harare");
@@ -555,19 +641,29 @@ describe("getContextualPrompts behavioral tests", () => {
   });
 
   it("returns 3 history-specific prompts for source=history", () => {
-    const prompts = getContextualPrompts({ source: "history", locationName: "Mutare", historyDays: 7 });
+    const prompts = getContextualPrompts({
+      source: "history",
+      locationName: "Mutare",
+      historyDays: 7,
+    });
     expect(prompts).toHaveLength(3);
     expect(prompts[0].query).toContain("7 days");
     expect(prompts[1].query).toContain("Mutare");
   });
 
   it("defaults to 30 days in history prompts", () => {
-    const prompts = getContextualPrompts({ source: "history", locationName: "Mutare" });
+    const prompts = getContextualPrompts({
+      source: "history",
+      locationName: "Mutare",
+    });
     expect(prompts[0].query).toContain("30 days");
   });
 
   it("returns 3 explore-specific prompts for source=explore", () => {
-    const prompts = getContextualPrompts({ source: "explore", exploreQuery: "low frost" });
+    const prompts = getContextualPrompts({
+      source: "explore",
+      exploreQuery: "low frost",
+    });
     expect(prompts).toHaveLength(3);
     expect(prompts[0].query).toContain('"low frost"');
   });

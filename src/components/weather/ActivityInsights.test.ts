@@ -53,10 +53,19 @@ describe("heatStressLevel", () => {
   });
 
   it("escalates severity progressively", () => {
-    const severityOrder = ["low", "moderate", "high", "high", "severe", "extreme"];
+    const severityOrder = [
+      "low",
+      "moderate",
+      "high",
+      "high",
+      "severe",
+      "extreme",
+    ];
     const indices = [0, 22, 24, 26, 28, 30];
     for (let i = 0; i < indices.length; i++) {
-      expect(heatStressLevel(indices[i]).className).toBe(`text-severity-${severityOrder[i]}`);
+      expect(heatStressLevel(indices[i]).className).toBe(
+        `text-severity-${severityOrder[i]}`,
+      );
     }
   });
 });
@@ -135,8 +144,14 @@ describe("uvConcernLabel", () => {
 describe("moonPhaseName", () => {
   it("returns correct phase names for indices 0-7", () => {
     const expected = [
-      "New Moon", "Waxing Crescent", "First Quarter", "Waxing Gibbous",
-      "Full Moon", "Waning Gibbous", "Third Quarter", "Waning Crescent",
+      "New Moon",
+      "Waxing Crescent",
+      "First Quarter",
+      "Waxing Gibbous",
+      "Full Moon",
+      "Waning Gibbous",
+      "Third Quarter",
+      "Waning Crescent",
     ];
     for (let i = 0; i < expected.length; i++) {
       expect(moonPhaseName(i)).toBe(expected[i]);
@@ -162,23 +177,56 @@ describe("evaluateSuitability", () => {
     description: "Test",
   };
 
-  const fakeInsights = { temperatureMax: 35, humidity: 80 } as unknown as WeatherInsights;
+  const fakeInsights = {
+    temperatureMax: 35,
+    humidity: 80,
+  } as unknown as WeatherInsights;
 
   const activityRule: SuitabilityRuleDoc = {
     key: "activity:crop-farming",
     conditions: [
-      { field: "temperatureMax", operator: "gt", value: 40, level: "poor", label: "Too Hot", colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10", detail: "Extreme heat" },
+      {
+        field: "temperatureMax",
+        operator: "gt",
+        value: 40,
+        level: "poor",
+        label: "Too Hot",
+        colorClass: "text-severity-severe",
+        bgClass: "bg-severity-severe/10",
+        detail: "Extreme heat",
+      },
     ],
-    fallback: { level: "good", label: "Good", colorClass: "text-severity-low", bgClass: "bg-severity-low/10", detail: "Conditions OK" },
+    fallback: {
+      level: "good",
+      label: "Good",
+      colorClass: "text-severity-low",
+      bgClass: "bg-severity-low/10",
+      detail: "Conditions OK",
+    },
     updatedAt: new Date(),
   };
 
   const categoryRule: SuitabilityRuleDoc = {
     key: "category:farming",
     conditions: [
-      { field: "humidity", operator: "gte", value: 90, level: "poor", label: "Very Humid", colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10", detail: "Oppressive humidity" },
+      {
+        field: "humidity",
+        operator: "gte",
+        value: 90,
+        level: "poor",
+        label: "Very Humid",
+        colorClass: "text-severity-severe",
+        bgClass: "bg-severity-severe/10",
+        detail: "Oppressive humidity",
+      },
     ],
-    fallback: { level: "good", label: "OK", colorClass: "text-severity-low", bgClass: "bg-severity-low/10", detail: "Farming conditions acceptable" },
+    fallback: {
+      level: "good",
+      label: "OK",
+      colorClass: "text-severity-low",
+      bgClass: "bg-severity-low/10",
+      detail: "Farming conditions acceptable",
+    },
     updatedAt: new Date(),
   };
 

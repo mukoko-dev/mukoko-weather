@@ -14,7 +14,13 @@ interface ThunderstormChartProps {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "thunderstorm", label: "Thunderstorm Risk", color: "var(--chart-4)", type: "bar", opacity: 0.5 },
+  {
+    key: "thunderstorm",
+    label: "Thunderstorm Risk",
+    color: "var(--chart-4)",
+    type: "bar",
+    opacity: 0.5,
+  },
 ];
 
 const Y_AXES = { y: { min: 0, max: 100, format: (v: number) => `${v}%` } };

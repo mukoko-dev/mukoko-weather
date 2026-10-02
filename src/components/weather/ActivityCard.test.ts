@@ -179,11 +179,7 @@ describe("ActivityCard — evaluateSuitability integration", () => {
   it("skips conditions with missing insight fields", () => {
     const rules = new Map([["category:farming", poorRule]]);
     // No thunderstormProbability or heatStressIndex in insights
-    const result = evaluateSuitability(
-      makeActivity(),
-      makeInsights({}),
-      rules,
-    );
+    const result = evaluateSuitability(makeActivity(), makeInsights({}), rules);
     // All conditions skip → fallback
     expect(result.level).toBe("good");
   });

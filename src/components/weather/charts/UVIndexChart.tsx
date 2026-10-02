@@ -14,7 +14,13 @@ interface UVIndexChartProps {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "uvIndex", label: "UV Index", color: "var(--chart-4)", type: "bar", opacity: 0.6 },
+  {
+    key: "uvIndex",
+    label: "UV Index",
+    color: "var(--chart-4)",
+    type: "bar",
+    opacity: 0.6,
+  },
 ];
 
 /**

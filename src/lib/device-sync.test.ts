@@ -18,9 +18,15 @@ const localStorageMock = (() => {
   let store: Record<string, string> = {};
   return {
     getItem: (key: string) => store[key] ?? null,
-    setItem: (key: string, value: string) => { store[key] = value; },
-    removeItem: (key: string) => { delete store[key]; },
-    clear: () => { store = {}; },
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
   };
 })();
 
@@ -31,7 +37,10 @@ Object.defineProperty(globalThis, "localStorage", { value: localStorageMock });
 // ---------------------------------------------------------------------------
 
 const mockFetch = vi.fn();
-Object.defineProperty(globalThis, "fetch", { value: mockFetch, writable: true });
+Object.defineProperty(globalThis, "fetch", {
+  value: mockFetch,
+  writable: true,
+});
 
 beforeEach(() => {
   localStorageMock.clear();
@@ -110,7 +119,10 @@ describe("readLocalStoragePrefs", () => {
   });
 
   it("returns null for JSON without state key", () => {
-    localStorageMock.setItem("mukoko-weather-prefs", JSON.stringify({ version: 1 }));
+    localStorageMock.setItem(
+      "mukoko-weather-prefs",
+      JSON.stringify({ version: 1 }),
+    );
     expect(readLocalStoragePrefs()).toBeNull();
   });
 });
@@ -123,7 +135,13 @@ describe("createDeviceProfile", () => {
   it("sends POST request with correct body", async () => {
     const profile = {
       deviceId: "abc-123",
-      preferences: { theme: "dark", selectedLocation: "harare", savedLocations: [], selectedActivities: [], hasOnboarded: false },
+      preferences: {
+        theme: "dark",
+        selectedLocation: "harare",
+        savedLocations: [],
+        selectedActivities: [],
+        hasOnboarded: false,
+      },
       createdAt: "2026-02-22T00:00:00Z",
       updatedAt: "2026-02-22T00:00:00Z",
     };
@@ -145,7 +163,9 @@ describe("createDeviceProfile", () => {
       "/api/py/devices",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+        }),
       }),
     );
     expect(result.deviceId).toBe("abc-123");
@@ -175,7 +195,13 @@ describe("fetchDeviceProfile", () => {
   it("returns profile on success", async () => {
     const profile = {
       deviceId: "abc-123",
-      preferences: { theme: "system", selectedLocation: "harare", savedLocations: [], selectedActivities: [], hasOnboarded: false },
+      preferences: {
+        theme: "system",
+        selectedLocation: "harare",
+        savedLocations: [],
+        selectedActivities: [],
+        hasOnboarded: false,
+      },
       createdAt: "2026-02-22T00:00:00Z",
       updatedAt: "2026-02-22T00:00:00Z",
     };
@@ -206,7 +232,9 @@ describe("fetchDeviceProfile", () => {
       json: () => Promise.resolve({ detail: "Server error" }),
     });
 
-    await expect(fetchDeviceProfile("abc-123")).rejects.toThrow(DeviceSyncError);
+    await expect(fetchDeviceProfile("abc-123")).rejects.toThrow(
+      DeviceSyncError,
+    );
   });
 });
 
@@ -214,7 +242,13 @@ describe("syncPreferences", () => {
   it("sends PATCH with partial updates", async () => {
     const updated = {
       deviceId: "abc-123",
-      preferences: { theme: "dark", selectedLocation: "harare", savedLocations: [], selectedActivities: [], hasOnboarded: false },
+      preferences: {
+        theme: "dark",
+        selectedLocation: "harare",
+        savedLocations: [],
+        selectedActivities: [],
+        hasOnboarded: false,
+      },
       createdAt: "2026-02-22T00:00:00Z",
       updatedAt: "2026-02-22T01:00:00Z",
     };
@@ -263,7 +297,13 @@ describe("queueSync", () => {
 
     mockFetch.mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ deviceId: "test-123", preferences: {}, createdAt: "", updatedAt: "" }),
+      json: () =>
+        Promise.resolve({
+          deviceId: "test-123",
+          preferences: {},
+          createdAt: "",
+          updatedAt: "",
+        }),
     });
 
     queueSync({ theme: "dark" });

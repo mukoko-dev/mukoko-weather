@@ -61,34 +61,40 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
       .finally(() => setLoading(false));
   }, [locationSlug]);
 
-  const handleUpvote = useCallback(async (reportId: string) => {
-    try {
-      const res = await fetch("/api/py/reports/upvote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reportId }),
-      });
+  const handleUpvote = useCallback(
+    async (reportId: string) => {
+      try {
+        const res = await fetch("/api/py/reports/upvote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reportId }),
+        });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.upvoted) {
-          setReports((prev) =>
-            prev.map((r) =>
-              r.id === reportId ? { ...r, upvotes: r.upvotes + 1 } : r
-            )
-          );
-          trackEvent("report_upvoted", { reportId, location: locationSlug });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.upvoted) {
+            setReports((prev) =>
+              prev.map((r) =>
+                r.id === reportId ? { ...r, upvotes: r.upvotes + 1 } : r,
+              ),
+            );
+            trackEvent("report_upvoted", { reportId, location: locationSlug });
+          }
         }
+      } catch {
+        // Silently fail — upvoting is non-critical
       }
-    } catch {
-      // Silently fail — upvoting is non-critical
-    }
-  }, [locationSlug]);
+    },
+    [locationSlug],
+  );
 
   // Don't render section if no reports and not loading
   if (!loading && reports.length === 0) {
     return (
-      <section aria-labelledby="community-reports-heading" className="space-y-3">
+      <section
+        aria-labelledby="community-reports-heading"
+        className="space-y-3"
+      >
         <h2 id="community-reports-heading" className="giraffe">
           Community Reports
         </h2>
@@ -97,10 +103,14 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
           onClick={openReportModal}
           className="flex w-full items-center gap-3 rounded-[var(--radius-card)] bg-mineral-copper p-4 text-left text-mineral-copper-fg shadow-sm transition-shadow hover:shadow-md min-h-[var(--touch-target-min)]"
         >
-          <span aria-hidden="true"><MegaphoneIcon size={20} /></span>
+          <span aria-hidden="true">
+            <MegaphoneIcon size={20} />
+          </span>
           <div>
             <p className="text-base font-bold">Report Weather</p>
-            <p className="text-base opacity-80">No reports in the last 24 hours. Be the first!</p>
+            <p className="text-base opacity-80">
+              No reports in the last 24 hours. Be the first!
+            </p>
           </div>
         </button>
       </section>
@@ -123,7 +133,9 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
           onClick={openReportModal}
           className="inline-flex items-center gap-2 rounded-[var(--radius-button)] bg-mineral-copper px-4 py-2 text-base font-bold text-mineral-copper-fg transition-shadow hover:shadow-md min-h-[var(--touch-target-min)]"
         >
-          <span aria-hidden="true"><MegaphoneIcon size={18} /></span>
+          <span aria-hidden="true">
+            <MegaphoneIcon size={18} />
+          </span>
           Report Weather
         </button>
       </div>
@@ -131,7 +143,9 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
       {loading && (
         <div className="flex items-center gap-2 py-4" role="status">
           <Spinner className="border-mineral-copper" />
-          <span className="text-base text-text-secondary">Loading reports...</span>
+          <span className="text-base text-text-secondary">
+            Loading reports...
+          </span>
           <span className="sr-only">Loading community weather reports</span>
         </div>
       )}
@@ -142,44 +156,67 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
             const typeInfo = getReportTypeInfo(report.reportType);
             const TypeIcon = typeInfo?.icon ?? CloudSunIcon;
             return (
-            <div
-              key={report.id}
-              className="flex items-center gap-3 rounded-[var(--radius-card)] border border-mineral-copper/25 bg-surface-card p-3 shadow-sm"
-            >
-              <span className="shrink-0 text-text-secondary" aria-hidden="true">
-                <TypeIcon size={20} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-base font-medium text-text-primary">
-                    {typeInfo?.label ?? report.reportType}
-                  </span>
-                  <span className={`rounded-[var(--radius-badge)] px-1.5 py-0.5 text-base font-bold uppercase ${SEVERITY_CLASSES[report.severity] || ""}`}>
-                    {report.severity}
-                  </span>
-                  {report.verified && (
-                    <span className="rounded-[var(--radius-badge)] bg-severity-low/10 px-1.5 py-0.5 text-base font-bold text-severity-low" title="Verified against API data">
-                      Verified
-                    </span>
-                  )}
-                </div>
-                {report.description && (
-                  <p className="mt-0.5 text-base text-text-secondary line-clamp-1">{report.description}</p>
-                )}
-                <p className="mt-0.5 text-base text-text-tertiary">{timeAgo(report.reportedAt)}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleUpvote(report.id)}
-                className="flex items-center gap-1 rounded-[var(--radius-input)] px-2 py-1 text-base text-text-tertiary transition-colors hover:text-mineral-copper hover:bg-mineral-copper/10 min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] justify-center"
-                aria-label={`Upvote report (${report.upvotes} votes)`}
+              <div
+                key={report.id}
+                className="flex items-center gap-3 rounded-[var(--radius-card)] border border-mineral-copper/25 bg-surface-card p-3 shadow-sm"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="m5 12 7-7 7 7" /><path d="M12 19V5" />
-                </svg>
-                {report.upvotes > 0 && <span>{report.upvotes}</span>}
-              </button>
-            </div>
+                <span
+                  className="shrink-0 text-text-secondary"
+                  aria-hidden="true"
+                >
+                  <TypeIcon size={20} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-medium text-text-primary">
+                      {typeInfo?.label ?? report.reportType}
+                    </span>
+                    <span
+                      className={`rounded-[var(--radius-badge)] px-1.5 py-0.5 text-base font-bold uppercase ${SEVERITY_CLASSES[report.severity] || ""}`}
+                    >
+                      {report.severity}
+                    </span>
+                    {report.verified && (
+                      <span
+                        className="rounded-[var(--radius-badge)] bg-severity-low/10 px-1.5 py-0.5 text-base font-bold text-severity-low"
+                        title="Verified against API data"
+                      >
+                        Verified
+                      </span>
+                    )}
+                  </div>
+                  {report.description && (
+                    <p className="mt-0.5 text-base text-text-secondary line-clamp-1">
+                      {report.description}
+                    </p>
+                  )}
+                  <p className="mt-0.5 text-base text-text-tertiary">
+                    {timeAgo(report.reportedAt)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleUpvote(report.id)}
+                  className="flex items-center gap-1 rounded-[var(--radius-input)] px-2 py-1 text-base text-text-tertiary transition-colors hover:text-mineral-copper hover:bg-mineral-copper/10 min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] justify-center"
+                  aria-label={`Upvote report (${report.upvotes} votes)`}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m5 12 7-7 7 7" />
+                    <path d="M12 19V5" />
+                  </svg>
+                  {report.upvotes > 0 && <span>{report.upvotes}</span>}
+                </button>
+              </div>
             );
           })}
         </div>

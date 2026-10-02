@@ -62,7 +62,8 @@ export function AtmosphereDashboard({
           {location.name} Atmosphere
         </h1>
         <p className="mt-1 text-base text-text-secondary">
-          {location.province} &middot; {location.elevation}m &middot; {season.localName} ({season.name})
+          {location.province} &middot; {location.elevation}m &middot;{" "}
+          {season.localName} ({season.name})
         </p>
 
         <div className="mt-4 mb-4">
@@ -75,7 +76,11 @@ export function AtmosphereDashboard({
         {/* Current conditions summary cards */}
         <div className="mt-6">
           <ChartErrorBoundary name="atmospheric conditions">
-            <AtmosphericSummary current={weather.current} lat={location.lat} lon={location.lon} />
+            <AtmosphericSummary
+              current={weather.current}
+              lat={location.lat}
+              lon={location.lon}
+            />
           </ChartErrorBoundary>
         </div>
 

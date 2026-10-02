@@ -2,8 +2,14 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const plannerSrc = readFileSync(resolve(__dirname, "AviationPlanner.tsx"), "utf-8");
-const pdfSrc = readFileSync(resolve(__dirname, "AviationBriefingPDF.tsx"), "utf-8");
+const plannerSrc = readFileSync(
+  resolve(__dirname, "AviationPlanner.tsx"),
+  "utf-8",
+);
+const pdfSrc = readFileSync(
+  resolve(__dirname, "AviationBriefingPDF.tsx"),
+  "utf-8",
+);
 const pageSrc = readFileSync(resolve(__dirname, "page.tsx"), "utf-8");
 const errorSrc = readFileSync(resolve(__dirname, "error.tsx"), "utf-8");
 const loadingSrc = readFileSync(resolve(__dirname, "loading.tsx"), "utf-8");
@@ -65,7 +71,9 @@ describe("AviationPlanner — Harare-bug fixes", () => {
     // Fetch failures, cancellation, and the loading flag are handled inside
     // useLocationQuickSearch (which clears loading in finally); this picker
     // only maps the hook's error flag to its message.
-    expect(plannerSrc).toContain("useLocationQuickSearch({ limit: 8, minLength: 2 })");
+    expect(plannerSrc).toContain(
+      "useLocationQuickSearch({ limit: 8, minLength: 2 })",
+    );
     expect(plannerSrc).toContain("searchError");
   });
 });

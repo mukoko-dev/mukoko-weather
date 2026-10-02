@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  LOCATIONS,
-  SEED_LOCATIONS_ZW,
-} from "./locations";
+import { LOCATIONS, SEED_LOCATIONS_ZW } from "./locations";
 import { GLOBAL_LOCATIONS } from "./locations-global";
 import { ZIMBABWE_BOUNDS } from "./seed-regions";
 import type { WeatherLocation } from "./locations";
@@ -13,8 +10,12 @@ describe("LOCATIONS database", () => {
   });
 
   it("contains both Zimbabwe and non-Zimbabwe locations", () => {
-    const zwCount = LOCATIONS.filter((l) => !l.country || l.country === "ZW").length;
-    const nonZwCount = LOCATIONS.filter((l) => l.country && l.country !== "ZW").length;
+    const zwCount = LOCATIONS.filter(
+      (l) => !l.country || l.country === "ZW",
+    ).length;
+    const nonZwCount = LOCATIONS.filter(
+      (l) => l.country && l.country !== "ZW",
+    ).length;
     expect(zwCount).toBeGreaterThanOrEqual(90);
     expect(nonZwCount).toBeGreaterThan(0);
   });
@@ -60,7 +61,14 @@ describe("LOCATIONS database", () => {
   });
 
   it("contains key cities", () => {
-    const cities = ["harare", "bulawayo", "mutare", "gweru", "masvingo", "victoria-falls"];
+    const cities = [
+      "harare",
+      "bulawayo",
+      "mutare",
+      "gweru",
+      "masvingo",
+      "victoria-falls",
+    ];
     for (const slug of cities) {
       expect(LOCATIONS.find((l) => l.slug === slug)).toBeTruthy();
     }

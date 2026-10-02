@@ -15,9 +15,26 @@ interface TemperatureTrendChartProps {
 
 const SERIES: SeriesConfig[] = [
   { key: "tempHigh", label: "High", color: "var(--chart-1)", fill: true },
-  { key: "tempLow", label: "Low", color: "var(--chart-2)", fill: true, dashed: true, opacity: 0.15 },
-  { key: "feelsLikeHigh", label: "Feels High", color: "var(--chart-3)", dashed: true },
-  { key: "feelsLikeLow", label: "Feels Low", color: "var(--chart-4)", dashed: true },
+  {
+    key: "tempLow",
+    label: "Low",
+    color: "var(--chart-2)",
+    fill: true,
+    dashed: true,
+    opacity: 0.15,
+  },
+  {
+    key: "feelsLikeHigh",
+    label: "Feels High",
+    color: "var(--chart-3)",
+    dashed: true,
+  },
+  {
+    key: "feelsLikeLow",
+    label: "Feels Low",
+    color: "var(--chart-4)",
+    dashed: true,
+  },
 ];
 
 const Y_AXES = { y: { format: (v: number) => `${v}°` } };

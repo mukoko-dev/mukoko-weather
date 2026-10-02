@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { resolveColor } from "@/components/ui/chart"
+import * as React from "react";
+import { resolveColor } from "@/components/ui/chart";
 
 // ---------------------------------------------------------------------------
 // ArcGauge — radial arc gauge (270° sweep, open at bottom)
@@ -14,27 +14,27 @@ import { resolveColor } from "@/components/ui/chart"
 
 // Geometry — a bigger gauge so the arc is the visual anchor of each card and
 // the value text has generous room in the open centre.
-export const ARC_VIEWBOX = 80
-const ARC_CENTER = ARC_VIEWBOX / 2 // 40
-export const ARC_RADIUS = 32
-export const ARC_STROKE_WIDTH = 7
-const ARC_CIRCUMFERENCE = 2 * Math.PI * ARC_RADIUS // ~201.06
-const ARC_SWEEP = 0.75 // 270° / 360°
-const ARC_LENGTH = ARC_CIRCUMFERENCE * ARC_SWEEP // ~150.80
-const ARC_ROTATION = 135 // arc opening centred at the bottom
+export const ARC_VIEWBOX = 80;
+const ARC_CENTER = ARC_VIEWBOX / 2; // 40
+export const ARC_RADIUS = 32;
+export const ARC_STROKE_WIDTH = 7;
+const ARC_CIRCUMFERENCE = 2 * Math.PI * ARC_RADIUS; // ~201.06
+const ARC_SWEEP = 0.75; // 270° / 360°
+const ARC_LENGTH = ARC_CIRCUMFERENCE * ARC_SWEEP; // ~150.80
+const ARC_ROTATION = 135; // arc opening centred at the bottom
 
 export interface GaugeConfig {
   /** Value as percentage of the gauge (0-100) */
-  percent: number
+  percent: number;
   /** CSS class for the stroke color of the filled arc (severity semantics + fallback) */
-  strokeClass: string
+  strokeClass: string;
   /**
    * Optional ordered list of CSS custom-property references (e.g.
    * `"var(--color-severity-low)"`) forming the multi-colour arc gradient.
    * When omitted, a gradient is derived from `strokeClass` so every gauge
    * still sweeps colour.
    */
-  gradient?: string[]
+  gradient?: string[];
 }
 
 // Map a severity stroke class to its CSS custom-property token. Used to derive
@@ -46,7 +46,7 @@ const STROKE_TO_TOKEN: Record<string, string> = {
   "stroke-severity-severe": "var(--color-severity-severe)",
   "stroke-severity-extreme": "var(--color-severity-extreme)",
   "stroke-severity-cold": "var(--color-severity-cold)",
-}
+};
 
 // Ordered severity ramp — the natural malachite→gold→terracotta→red sweep.
 const SEVERITY_RAMP = [
@@ -55,7 +55,7 @@ const SEVERITY_RAMP = [
   "var(--color-severity-high)",
   "var(--color-severity-severe)",
   "var(--color-severity-extreme)",
-]
+];
 
 /**
  * Derive a multi-colour gradient ramp from a single severity stroke class.
@@ -63,15 +63,15 @@ const SEVERITY_RAMP = [
  * class's own severity, so a "severe" gauge sweeps low→moderate→high→severe.
  */
 export function gradientFromStrokeClass(strokeClass: string): string[] {
-  const token = STROKE_TO_TOKEN[strokeClass]
-  if (!token) return SEVERITY_RAMP.slice(0, 2)
+  const token = STROKE_TO_TOKEN[strokeClass];
+  if (!token) return SEVERITY_RAMP.slice(0, 2);
   // severity-cold isn't part of the linear ramp — pair it with low for a sweep.
   if (token === "var(--color-severity-cold)") {
-    return ["var(--color-severity-low)", token]
+    return ["var(--color-severity-low)", token];
   }
-  const idx = SEVERITY_RAMP.indexOf(token)
-  if (idx <= 0) return SEVERITY_RAMP.slice(0, 2)
-  return SEVERITY_RAMP.slice(0, idx + 1)
+  const idx = SEVERITY_RAMP.indexOf(token);
+  if (idx <= 0) return SEVERITY_RAMP.slice(0, 2);
+  return SEVERITY_RAMP.slice(0, idx + 1);
 }
 
 /**
@@ -81,22 +81,24 @@ export function gradientFromStrokeClass(strokeClass: string): string[] {
  * concrete colour values, not `var(--…)` references).
  */
 function useResolvedColors(tokens: string[]): string[] {
-  const key = tokens.join(",")
-  const [colors, setColors] = React.useState<string[]>(() => tokens.map(resolveColor))
+  const key = tokens.join(",");
+  const [colors, setColors] = React.useState<string[]>(() =>
+    tokens.map(resolveColor),
+  );
 
   React.useEffect(() => {
-    const resolve = () => setColors(key.split(",").map(resolveColor))
-    resolve()
-    if (typeof MutationObserver === "undefined") return
-    const observer = new MutationObserver(resolve)
+    const resolve = () => setColors(key.split(",").map(resolveColor));
+    resolve();
+    if (typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(resolve);
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["data-theme"],
-    })
-    return () => observer.disconnect()
-  }, [key])
+    });
+    return () => observer.disconnect();
+  }, [key]);
 
-  return colors
+  return colors;
 }
 
 /**
@@ -105,27 +107,32 @@ function useResolvedColors(tokens: string[]): string[] {
  * with the arc stroke.
  */
 export function valueTextSizeClass(value: string): string {
-  const len = value.length
-  if (len <= 3) return "text-2xl"
-  if (len <= 4) return "text-xl"
-  if (len <= 6) return "text-lg"
-  return "text-sm"
+  const len = value.length;
+  if (len <= 3) return "text-2xl";
+  if (len <= 4) return "text-xl";
+  if (len <= 6) return "text-lg";
+  return "text-sm";
 }
 
-export function ArcGauge({ percent, strokeClass, gradient, value }: GaugeConfig & { value: string }) {
-  const clampedPercent = Math.max(0, Math.min(percent, 100))
-  const filledLength = (clampedPercent / 100) * ARC_LENGTH
+export function ArcGauge({
+  percent,
+  strokeClass,
+  gradient,
+  value,
+}: GaugeConfig & { value: string }) {
+  const clampedPercent = Math.max(0, Math.min(percent, 100));
+  const filledLength = (clampedPercent / 100) * ARC_LENGTH;
 
   // A stable, unique gradient id so multiple gauges on the page don't collide.
-  const rawId = React.useId()
-  const gradientId = `arc-gauge-${rawId.replace(/:/g, "")}`
+  const rawId = React.useId();
+  const gradientId = `arc-gauge-${rawId.replace(/:/g, "")}`;
 
   const tokens = React.useMemo(
     () => gradient ?? gradientFromStrokeClass(strokeClass),
     [gradient, strokeClass],
-  )
-  const resolved = useResolvedColors(tokens)
-  const stops = resolved.length > 0 ? resolved : tokens
+  );
+  const resolved = useResolvedColors(tokens);
+  const stops = resolved.length > 0 ? resolved : tokens;
 
   return (
     <div
@@ -194,7 +201,7 @@ export function ArcGauge({ percent, strokeClass, gradient, value }: GaugeConfig 
         {value}
       </span>
     </div>
-  )
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -202,12 +209,12 @@ export function ArcGauge({ percent, strokeClass, gradient, value }: GaugeConfig 
 // ---------------------------------------------------------------------------
 
 export interface MetricCardProps {
-  icon: React.ReactNode
-  label: string
-  value: string
-  context: string
-  contextColor?: string
-  gauge: GaugeConfig
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  context: string;
+  contextColor?: string;
+  gauge: GaugeConfig;
 }
 
 export function MetricCard({
@@ -233,5 +240,5 @@ export function MetricCard({
         <p className={`mt-1 text-base ${contextColor}`}>{context}</p>
       </div>
     </div>
-  )
+  );
 }

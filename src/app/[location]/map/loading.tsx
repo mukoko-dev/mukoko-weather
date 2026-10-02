@@ -11,13 +11,20 @@ export default function MapLoading() {
       {/* Layer switcher skeleton */}
       <div className="flex shrink-0 gap-2 px-4 py-2">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-[44px] w-20 animate-pulse rounded-[var(--radius-badge)] bg-text-tertiary/10" />
+          <div
+            key={i}
+            className="h-[44px] w-20 animate-pulse rounded-[var(--radius-badge)] bg-text-tertiary/10"
+          />
         ))}
       </div>
 
       {/* Map skeleton fills remaining space */}
       <div className="relative min-h-0 flex-1">
-        <div className="absolute inset-0 animate-pulse bg-surface-card" role="status" aria-label="Loading map">
+        <div
+          className="absolute inset-0 animate-pulse bg-surface-card"
+          role="status"
+          aria-label="Loading map"
+        >
           <div className="absolute inset-0 grid grid-cols-4 grid-rows-3 gap-px opacity-[0.04]">
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className="bg-text-primary" />

@@ -71,7 +71,8 @@ export interface AISuggestedPromptRule {
 export const AI_PROMPTS: Omit<AIPromptDoc, "updatedAt">[] = [
   {
     promptKey: "system:summary",
-    description: "System prompt for weather summary generation on location pages",
+    description:
+      "System prompt for weather summary generation on location pages",
     template: `You are Shamwari Weather, the AI assistant for mukoko weather — an AI-powered weather intelligence platform. You provide actionable, contextual weather advice grounded in local geography, agriculture, industry, and culture.
 
 Your personality:
@@ -215,7 +216,8 @@ Rules:
   },
   {
     promptKey: "system:explore_search",
-    description: "System prompt for AI-powered natural language location search",
+    description:
+      "System prompt for AI-powered natural language location search",
     template: `You are Shamwari Weather, helping users find locations based on weather conditions.
 
 The user is searching for: "{query}"
@@ -239,7 +241,8 @@ Rules:
   // client-side greeting logic migrates to a server-driven approach.
   {
     promptKey: "greeting:location_context",
-    description: "Greeting when Shamwari has location context from the weather page",
+    description:
+      "Greeting when Shamwari has location context from the weather page",
     template: `You're looking at weather in **{locationName}**. The current conditions show {weatherSummary}. How can I help you plan around this weather?`,
     active: true,
     order: 10,
@@ -281,7 +284,10 @@ Provide:
 // Suggested Prompt Rules
 // ---------------------------------------------------------------------------
 
-export const AI_SUGGESTED_PROMPT_RULES: Omit<AISuggestedPromptRule, "updatedAt">[] = [
+export const AI_SUGGESTED_PROMPT_RULES: Omit<
+  AISuggestedPromptRule,
+  "updatedAt"
+>[] = [
   // --- Weather-condition-based prompts (highest priority) ---
 
   {
@@ -315,7 +321,8 @@ export const AI_SUGGESTED_PROMPT_RULES: Omit<AISuggestedPromptRule, "updatedAt">
   {
     ruleId: "weather:heat",
     label: "Heat safety",
-    queryTemplate: "Is it safe to work outdoors in {location} at {temperature}°C?",
+    queryTemplate:
+      "Is it safe to work outdoors in {location} at {temperature}°C?",
     category: "weather",
     condition: {
       field: "temperature_2m",
@@ -329,7 +336,8 @@ export const AI_SUGGESTED_PROMPT_RULES: Omit<AISuggestedPromptRule, "updatedAt">
   {
     ruleId: "weather:uv",
     label: "UV protection",
-    queryTemplate: "What sun protection do I need with a UV index of {uvIndex}?",
+    queryTemplate:
+      "What sun protection do I need with a UV index of {uvIndex}?",
     category: "weather",
     condition: {
       field: "uv_index",
@@ -371,7 +379,8 @@ export const AI_SUGGESTED_PROMPT_RULES: Omit<AISuggestedPromptRule, "updatedAt">
   {
     ruleId: "weather:humidity",
     label: "Crop spraying",
-    queryTemplate: "Is it safe to spray crops in {location} with {humidity}% humidity?",
+    queryTemplate:
+      "Is it safe to spray crops in {location} with {humidity}% humidity?",
     category: "weather",
     condition: {
       field: "relative_humidity_2m",
@@ -408,7 +417,17 @@ export const AI_SUGGESTED_PROMPT_RULES: Omit<AISuggestedPromptRule, "updatedAt">
     condition: {
       field: "activities",
       operator: "in",
-      value: ["crop-farming", "livestock", "tobacco-farming", "cotton-farming", "horticulture", "irrigation", "planting", "harvest", "aquaculture"],
+      value: [
+        "crop-farming",
+        "livestock",
+        "tobacco-farming",
+        "cotton-farming",
+        "horticulture",
+        "irrigation",
+        "planting",
+        "harvest",
+        "aquaculture",
+      ],
       source: "activities",
     },
     active: true,
@@ -417,7 +436,8 @@ export const AI_SUGGESTED_PROMPT_RULES: Omit<AISuggestedPromptRule, "updatedAt">
   {
     ruleId: "activity:conservation",
     label: "Conservation conditions",
-    queryTemplate: "How do weather conditions affect conservation work in {location} today?",
+    queryTemplate:
+      "How do weather conditions affect conservation work in {location} today?",
     category: "activity",
     condition: {
       field: "activities",
@@ -445,7 +465,8 @@ export const AI_SUGGESTED_PROMPT_RULES: Omit<AISuggestedPromptRule, "updatedAt">
   {
     ruleId: "activity:exercise",
     label: "Best time to exercise",
-    queryTemplate: "What's the best time to exercise outdoors in {location} today?",
+    queryTemplate:
+      "What's the best time to exercise outdoors in {location} today?",
     category: "activity",
     condition: {
       field: "activities",
@@ -459,7 +480,8 @@ export const AI_SUGGESTED_PROMPT_RULES: Omit<AISuggestedPromptRule, "updatedAt">
   {
     ruleId: "activity:events",
     label: "Event weather",
-    queryTemplate: "Will the weather be good for an outdoor event in {location} today?",
+    queryTemplate:
+      "Will the weather be good for an outdoor event in {location} today?",
     category: "activity",
     condition: {
       field: "activities",
@@ -473,7 +495,8 @@ export const AI_SUGGESTED_PROMPT_RULES: Omit<AISuggestedPromptRule, "updatedAt">
   {
     ruleId: "activity:transport",
     label: "Transport conditions",
-    queryTemplate: "How do weather conditions affect transport and logistics in {location}?",
+    queryTemplate:
+      "How do weather conditions affect transport and logistics in {location}?",
     category: "activity",
     condition: {
       field: "activities",

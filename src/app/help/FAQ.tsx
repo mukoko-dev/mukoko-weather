@@ -14,8 +14,8 @@ const FAQ_ITEMS = [
     question: "Is mukoko weather free?",
     answer: (
       <p>
-        Yes, completely free. No account, registration, or payment needed. We believe weather
-        information is a public good.
+        Yes, completely free. No account, registration, or payment needed. We
+        believe weather information is a public good.
       </p>
     ),
   },
@@ -24,10 +24,11 @@ const FAQ_ITEMS = [
     question: "How accurate is the weather data?",
     answer: (
       <p>
-        Weather data comes from Tomorrow.io and Open-Meteo, which aggregate global weather models.
-        Short-range forecasts (1-3 days) are generally very reliable. Longer-range forecasts (4-7
-        days) should be used as general guidance. For life-critical decisions, always consult your
-        local meteorological service.
+        Weather data comes from Tomorrow.io and Open-Meteo, which aggregate
+        global weather models. Short-range forecasts (1-3 days) are generally
+        very reliable. Longer-range forecasts (4-7 days) should be used as
+        general guidance. For life-critical decisions, always consult your local
+        meteorological service.
       </p>
     ),
   },
@@ -36,10 +37,14 @@ const FAQ_ITEMS = [
     question: "Do you collect my personal data?",
     answer: (
       <p>
-        We use Google Analytics for anonymised usage statistics (page views, visitor counts). We
-        don&apos;t use advertising pixels or fingerprinting. If you use the location feature, your
-        coordinates are only used to find the nearest weather location. See our{" "}
-        <Link href="/privacy" className="text-primary underline">Privacy Policy</Link> for full details.
+        We use Google Analytics for anonymised usage statistics (page views,
+        visitor counts). We don&apos;t use advertising pixels or fingerprinting.
+        If you use the location feature, your coordinates are only used to find
+        the nearest weather location. See our{" "}
+        <Link href="/privacy" className="text-primary underline">
+          Privacy Policy
+        </Link>{" "}
+        for full details.
       </p>
     ),
   },
@@ -48,11 +53,12 @@ const FAQ_ITEMS = [
     question: "Why can't I find my location?",
     answer: (
       <p>
-        We cover 265+ locations across Africa, Asia, the Middle East, South &amp; Central America,
-        and Eastern Europe — with more being added by the community. If your area isn&apos;t listed, try using the
-        &quot;Use my location&quot; feature — if you&apos;re in a supported region, a new
-        location will be created automatically. You can also search for a location by name in the
-        My Weather modal.
+        We cover 265+ locations across Africa, Asia, the Middle East, South
+        &amp; Central America, and Eastern Europe — with more being added by the
+        community. If your area isn&apos;t listed, try using the &quot;Use my
+        location&quot; feature — if you&apos;re in a supported region, a new
+        location will be created automatically. You can also search for a
+        location by name in the My Weather modal.
       </p>
     ),
   },
@@ -61,10 +67,11 @@ const FAQ_ITEMS = [
     question: "What does the AI summary do?",
     answer: (
       <p>
-        Our AI assistant (Shamwari Weather) generates a brief, contextual weather summary
-        with practical advice. For farming areas, you&apos;ll get crop-related tips. For tourism
-        spots, outdoor activity guidance. For mining areas, safety considerations. Summaries are
-        refreshed periodically and cached for performance.
+        Our AI assistant (Shamwari Weather) generates a brief, contextual
+        weather summary with practical advice. For farming areas, you&apos;ll
+        get crop-related tips. For tourism spots, outdoor activity guidance. For
+        mining areas, safety considerations. Summaries are refreshed
+        periodically and cached for performance.
       </p>
     ),
   },
@@ -73,9 +80,10 @@ const FAQ_ITEMS = [
     question: "Does it work offline?",
     answer: (
       <p>
-        mukoko weather is a PWA (Progressive Web App) and can be installed on your device. However,
-        weather data requires an internet connection to fetch the latest conditions. Previously loaded
-        pages may be available from your browser cache.
+        mukoko weather is a PWA (Progressive Web App) and can be installed on
+        your device. However, weather data requires an internet connection to
+        fetch the latest conditions. Previously loaded pages may be available
+        from your browser cache.
       </p>
     ),
   },
@@ -84,9 +92,13 @@ const FAQ_ITEMS = [
     question: "Who built mukoko weather?",
     answer: (
       <p>
-        mukoko weather is a product of Mukoko Africa, a division of Nyuchi Africa (PVT) Ltd. It is
-        developed and maintained by Nyuchi Web Services. Learn more on our{" "}
-        <Link href="/about" className="text-primary underline">About page</Link>.
+        mukoko weather is a product of Mukoko Africa, a division of Nyuchi
+        Africa (PVT) Ltd. It is developed and maintained by Nyuchi Web Services.
+        Learn more on our{" "}
+        <Link href="/about" className="text-primary underline">
+          About page
+        </Link>
+        .
       </p>
     ),
   },

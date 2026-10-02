@@ -29,7 +29,9 @@ describe("AI_PROMPTS uniqueness and structure", () => {
     expect(chatPrompt!.template).toContain("LOCATION DISCOVERY");
     expect(chatPrompt!.template).toContain("{locationCount}");
     expect(chatPrompt!.template).toContain("search_locations");
-    expect(chatPrompt!.template).toContain("NEVER assume a location does not exist");
+    expect(chatPrompt!.template).toContain(
+      "NEVER assume a location does not exist",
+    );
   });
 
   it("system:chat template includes DATA GUARDRAILS", () => {
@@ -76,7 +78,9 @@ describe("AI_SUGGESTED_PROMPT_RULES uniqueness and structure", () => {
   });
 
   it("generic rules have null condition", () => {
-    const generic = AI_SUGGESTED_PROMPT_RULES.filter((r) => r.category === "generic");
+    const generic = AI_SUGGESTED_PROMPT_RULES.filter(
+      (r) => r.category === "generic",
+    );
     expect(generic.length).toBeGreaterThan(0);
     for (const rule of generic) {
       expect(rule.condition).toBeNull();
@@ -85,7 +89,7 @@ describe("AI_SUGGESTED_PROMPT_RULES uniqueness and structure", () => {
 
   it("weather and activity rules have non-null conditions", () => {
     const nonGeneric = AI_SUGGESTED_PROMPT_RULES.filter(
-      (r) => r.category === "weather" || r.category === "activity"
+      (r) => r.category === "weather" || r.category === "activity",
     );
     for (const rule of nonGeneric) {
       expect(rule.condition).not.toBeNull();
@@ -111,7 +115,7 @@ describe("AI_SUGGESTED_PROMPT_RULES uniqueness and structure", () => {
   it("activity rule IDs reference actual activities from ACTIVITIES array", () => {
     const activityIds = new Set(ACTIVITIES.map((a) => a.id));
     const activityRules = AI_SUGGESTED_PROMPT_RULES.filter(
-      (r) => r.category === "activity" && r.condition?.source === "activities"
+      (r) => r.category === "activity" && r.condition?.source === "activities",
     );
     for (const rule of activityRules) {
       const ruleActivityIds = rule.condition!.value as string[];

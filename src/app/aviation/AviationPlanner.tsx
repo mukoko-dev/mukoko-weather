@@ -5,11 +5,17 @@ import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 import { getIcaoForSlug, getAirportByIcao } from "@/lib/icao-codes";
 import { SearchIcon, MapPinIcon, NavigationIcon } from "@/lib/weather-icons";
 import { getFlightCategoryClass } from "@/lib/flight-category-styles";
-import type { AirportBriefing, BriefingData, MetarObs } from "./AviationBriefingPDF";
+import type {
+  AirportBriefing,
+  BriefingData,
+  MetarObs,
+} from "./AviationBriefingPDF";
 
 function FlightCategoryBadge({ fc }: { fc: string }) {
   return (
-    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-bold tracking-wide ${getFlightCategoryClass(fc)}`}>
+    <span
+      className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-bold tracking-wide ${getFlightCategoryClass(fc)}`}
+    >
       {fc}
     </span>
   );
@@ -26,7 +32,12 @@ function cloudsStr(obs: MetarObs): string {
   return obs.clouds.map((c) => `${c.cover} ${c.base_ft}ft`).join(", ");
 }
 
-interface LocationResult { slug: string; name: string; province?: string; country?: string }
+interface LocationResult {
+  slug: string;
+  name: string;
+  province?: string;
+  country?: string;
+}
 
 function AirportSearch({
   label,
@@ -40,8 +51,14 @@ function AirportSearch({
   // Shared debounced /api/py/search hook — same debounce, AbortController
   // cancellation, and error surfacing as every other quick location search
   // (issue #103). minLength 2 preserves this picker's previous behavior.
-  const { query, setQuery, results, loading, error: searchFailed, reset } =
-    useLocationQuickSearch({ limit: 8, minLength: 2 });
+  const {
+    query,
+    setQuery,
+    results,
+    loading,
+    error: searchFailed,
+    reset,
+  } = useLocationQuickSearch({ limit: 8, minLength: 2 });
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -57,17 +74,30 @@ function AirportSearch({
     setOpen(false);
   };
 
-  const clear = () => { onChange(null); reset(); };
+  const clear = () => {
+    onChange(null);
+    reset();
+  };
 
   return (
     <div ref={containerRef} className="relative">
-      <label className="block text-sm font-medium text-text-secondary mb-1">{label}</label>
+      <label className="block text-sm font-medium text-text-secondary mb-1">
+        {label}
+      </label>
       <div className="relative">
-        <SearchIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" aria-hidden="true" />
+        <SearchIcon
+          size={16}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none"
+          aria-hidden="true"
+        />
         <input
           type="text"
           value={query}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true); if (!e.target.value) clear(); }}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+            if (!e.target.value) clear();
+          }}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder="Search city or airport name…"
@@ -77,28 +107,53 @@ function AirportSearch({
           aria-autocomplete="list"
         />
         {loading && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-xs">…</span>
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-xs">
+            …
+          </span>
         )}
       </div>
 
       {searchError && !value && (
-        <p className="mt-1.5 text-xs text-severity-moderate" role="alert">{searchError}</p>
+        <p className="mt-1.5 text-xs text-severity-moderate" role="alert">
+          {searchError}
+        </p>
       )}
 
       {value && (
         <div className="mt-1.5 flamingo">
-          <MapPinIcon size={14} className="text-primary shrink-0" aria-hidden="true" />
-          <span className="text-sm font-medium text-text-primary flex-1 truncate">{value.name}</span>
-          {icaoForResult(value)
-            ? <span className="text-xs font-mono text-primary font-bold">{icaoForResult(value)}</span>
-            : <span className="text-xs text-severity-moderate">No METAR station</span>
-          }
-          <button type="button" onClick={clear} className="ml-1 text-text-tertiary hover:text-text-primary text-xs" aria-label="Clear selection">✕</button>
+          <MapPinIcon
+            size={14}
+            className="text-primary shrink-0"
+            aria-hidden="true"
+          />
+          <span className="text-sm font-medium text-text-primary flex-1 truncate">
+            {value.name}
+          </span>
+          {icaoForResult(value) ? (
+            <span className="text-xs font-mono text-primary font-bold">
+              {icaoForResult(value)}
+            </span>
+          ) : (
+            <span className="text-xs text-severity-moderate">
+              No METAR station
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={clear}
+            className="ml-1 text-text-tertiary hover:text-text-primary text-xs"
+            aria-label="Clear selection"
+          >
+            ✕
+          </button>
         </div>
       )}
 
       {open && results.length > 0 && !value && (
-        <ul className="absolute z-50 mt-1 w-full rounded-[var(--radius-card)] border border-text-tertiary/15 bg-surface-card shadow-lg overflow-hidden" role="listbox">
+        <ul
+          className="absolute z-50 mt-1 w-full rounded-[var(--radius-card)] border border-text-tertiary/15 bg-surface-card shadow-lg overflow-hidden"
+          role="listbox"
+        >
           {results.map((r) => {
             const icao = icaoForResult(r);
             return (
@@ -108,15 +163,24 @@ function AirportSearch({
                   className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-surface-dim transition-colors"
                   onMouseDown={() => select(r)}
                 >
-                  <MapPinIcon size={14} className="text-text-tertiary shrink-0" aria-hidden="true" />
+                  <MapPinIcon
+                    size={14}
+                    className="text-text-tertiary shrink-0"
+                    aria-hidden="true"
+                  />
                   <div className="flex-1 min-w-0">
                     <span className="text-sm text-text-primary">{r.name}</span>
-                    <span className="ml-1.5 text-xs text-text-tertiary">{r.province}</span>
+                    <span className="ml-1.5 text-xs text-text-tertiary">
+                      {r.province}
+                    </span>
                   </div>
-                  {icao
-                    ? <span className="text-xs font-mono font-bold text-primary">{icao}</span>
-                    : <span className="text-xs text-text-tertiary">No METAR</span>
-                  }
+                  {icao ? (
+                    <span className="text-xs font-mono font-bold text-primary">
+                      {icao}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-text-tertiary">No METAR</span>
+                  )}
                 </button>
               </li>
             );
@@ -133,13 +197,20 @@ function MetarCard({ obs }: { obs: MetarObs }) {
       <div className="flex items-center justify-between mb-3">
         <FlightCategoryBadge fc={obs.flight_category} />
         <span className="text-xs text-text-tertiary">
-          {new Date(obs.time).toLocaleTimeString("en-ZW", { hour: "2-digit", minute: "2-digit", hour12: false })} UTC
+          {new Date(obs.time).toLocaleTimeString("en-ZW", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          })}{" "}
+          UTC
         </span>
       </div>
       <div className="grid grid-cols-2 gap-2 text-sm mb-3 sm:grid-cols-4">
         <div>
           <p className="text-xs text-text-tertiary">Temp / Dew</p>
-          <p className="font-medium text-text-primary">{obs.temp}° / {obs.dewp}°C</p>
+          <p className="font-medium text-text-primary">
+            {obs.temp}° / {obs.dewp}°C
+          </p>
         </div>
         <div>
           <p className="text-xs text-text-tertiary">Wind</p>
@@ -147,47 +218,73 @@ function MetarCard({ obs }: { obs: MetarObs }) {
         </div>
         <div>
           <p className="text-xs text-text-tertiary">Visibility</p>
-          <p className="font-medium text-text-primary">{obs.visibility === "9999" ? ">10km" : `${obs.visibility}m`}</p>
+          <p className="font-medium text-text-primary">
+            {obs.visibility === "9999" ? ">10km" : `${obs.visibility}m`}
+          </p>
         </div>
         <div>
           <p className="text-xs text-text-tertiary">QNH</p>
-          <p className="font-medium text-text-primary">{obs.pressure_hpa ? `${obs.pressure_hpa} hPa` : "—"}</p>
+          <p className="font-medium text-text-primary">
+            {obs.pressure_hpa ? `${obs.pressure_hpa} hPa` : "—"}
+          </p>
         </div>
       </div>
       <div className="text-sm mb-3">
         <p className="text-xs text-text-tertiary mb-0.5">Clouds</p>
         <p className="text-text-primary">{cloudsStr(obs)}</p>
       </div>
-      <pre className="text-xs font-mono bg-surface-dim rounded p-2 whitespace-pre-wrap break-all text-text-secondary">{obs.raw}</pre>
+      <pre className="text-xs font-mono bg-surface-dim rounded p-2 whitespace-pre-wrap break-all text-text-secondary">
+        {obs.raw}
+      </pre>
     </div>
   );
 }
 
-function AirportBriefingCard({ briefing, title }: { briefing: AirportBriefing; title: string }) {
+function AirportBriefingCard({
+  briefing,
+  title,
+}: {
+  briefing: AirportBriefing;
+  title: string;
+}) {
   const latest = briefing.metar[0];
   return (
     <section aria-labelledby={`${briefing.icao}-heading`} className="space-y-3">
       <div className="flex items-center gap-3">
         <h2 id={`${briefing.icao}-heading`} className="giraffe">
-          {title}: <span className="font-mono text-primary">{briefing.icao}</span> — {briefing.name}
+          {title}:{" "}
+          <span className="font-mono text-primary">{briefing.icao}</span> —{" "}
+          {briefing.name}
         </h2>
         {latest && <FlightCategoryBadge fc={latest.flight_category} />}
       </div>
-      {latest ? <MetarCard obs={latest} /> : (
-        <p className="text-sm text-text-secondary">No METAR observations available.</p>
+      {latest ? (
+        <MetarCard obs={latest} />
+      ) : (
+        <p className="text-sm text-text-secondary">
+          No METAR observations available.
+        </p>
       )}
       {briefing.taf ? (
         <div>
           <p className="text-xs font-medium text-text-tertiary mb-1">TAF</p>
-          <pre className="text-xs font-mono bg-surface-dim rounded-[var(--radius-input)] p-3 whitespace-pre-wrap break-all text-text-secondary overflow-x-auto">{briefing.taf}</pre>
+          <pre className="text-xs font-mono bg-surface-dim rounded-[var(--radius-input)] p-3 whitespace-pre-wrap break-all text-text-secondary overflow-x-auto">
+            {briefing.taf}
+          </pre>
         </div>
       ) : (
-        <p className="text-xs text-text-tertiary">No TAF available for this station.</p>
+        <p className="text-xs text-text-tertiary">
+          No TAF available for this station.
+        </p>
       )}
       {(briefing.sunrise || briefing.sunset) && (
         <div className="flex gap-6 text-sm">
-          {briefing.sunrise && <span className="text-text-secondary">🌅 {briefing.sunrise}</span>}
-          {briefing.sunset && <span className="text-text-secondary">🌇 {briefing.sunset}</span>}
+          {briefing.sunrise && (
+            <span className="text-text-secondary">🌅 {briefing.sunrise}</span>
+          )}
+          {briefing.sunset && (
+            <span className="text-text-secondary">🌇 {briefing.sunset}</span>
+          )}
         </div>
       )}
     </section>
@@ -209,7 +306,10 @@ export function AviationPlanner() {
   const altIcao = alt ? getIcaoForSlug(alt.slug) : null;
   const canBrief = !!depIcao && !!destIcao;
 
-  const fetchAirport = async (name: string, icao: string): Promise<AirportBriefing> => {
+  const fetchAirport = async (
+    name: string,
+    icao: string,
+  ): Promise<AirportBriefing> => {
     // `/api/py/weather` takes lat/lon ONLY — it ignores any `location`/`slug`
     // param and defaults to Harare. Resolve the airport's own coordinates from
     // the ICAO record so each airport gets its real weather (sunrise/sunset).
@@ -236,8 +336,16 @@ export function AviationPlanner() {
       // `/api/py/weather` returns `daily` at the TOP LEVEL (not under `weather`).
       const daily = d.daily;
       if (daily?.sunrise?.[0]) {
-        sunrise = new Date(daily.sunrise[0]).toLocaleTimeString("en-ZW", { hour: "2-digit", minute: "2-digit", hour12: false });
-        sunset = new Date(daily.sunset[0]).toLocaleTimeString("en-ZW", { hour: "2-digit", minute: "2-digit", hour12: false });
+        sunrise = new Date(daily.sunrise[0]).toLocaleTimeString("en-ZW", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+        sunset = new Date(daily.sunset[0]).toLocaleTimeString("en-ZW", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
       }
     }
 
@@ -253,15 +361,21 @@ export function AviationPlanner() {
       const [departure, destination, alternate] = await Promise.all([
         fetchAirport(dep.name, depIcao),
         fetchAirport(dest.name, destIcao),
-        alt && altIcao ? fetchAirport(alt.name, altIcao) : Promise.resolve(undefined),
+        alt && altIcao
+          ? fetchAirport(alt.name, altIcao)
+          : Promise.resolve(undefined),
       ]);
       setBriefingData({
         departure,
         destination,
         alternate,
         generatedAt: new Date().toLocaleString("en-ZW", {
-          day: "2-digit", month: "short", year: "numeric",
-          hour: "2-digit", minute: "2-digit", timeZoneName: "short",
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZoneName: "short",
         }),
       });
     } catch {
@@ -277,7 +391,9 @@ export function AviationPlanner() {
     try {
       const { pdf } = await import("@react-pdf/renderer");
       const { AviationBriefingPDF } = await import("./AviationBriefingPDF");
-      const blob = await pdf(<AviationBriefingPDF data={briefingData} />).toBlob();
+      const blob = await pdf(
+        <AviationBriefingPDF data={briefingData} />,
+      ).toBlob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       const dateStr = new Date().toISOString().slice(0, 10);
@@ -295,19 +411,43 @@ export function AviationPlanner() {
   };
 
   return (
-    <main id="main-content" className="mx-auto max-w-3xl px-4 py-6 pb-24 sm:px-6 sm:pb-8 md:px-8">
-      <h1 className="text-2xl font-semibold text-text-primary font-heading mb-1">Aviation Weather Briefing</h1>
-      <p className="text-sm text-text-secondary mb-6">Pre-flight weather for pilots. Select your departure and destination to get METAR, TAF, and generate a PDF briefing.</p>
+    <main
+      id="main-content"
+      className="mx-auto max-w-3xl px-4 py-6 pb-24 sm:px-6 sm:pb-8 md:px-8"
+    >
+      <h1 className="text-2xl font-semibold text-text-primary font-heading mb-1">
+        Aviation Weather Briefing
+      </h1>
+      <p className="text-sm text-text-secondary mb-6">
+        Pre-flight weather for pilots. Select your departure and destination to
+        get METAR, TAF, and generate a PDF briefing.
+      </p>
 
       {/* Route selection */}
       <div className="baobab p-5 mb-6 space-y-4">
-        <AirportSearch label="Departure Airport" value={dep} onChange={setDep} />
-        <AirportSearch label="Destination Airport" value={dest} onChange={setDest} />
+        <AirportSearch
+          label="Departure Airport"
+          value={dep}
+          onChange={setDep}
+        />
+        <AirportSearch
+          label="Destination Airport"
+          value={dest}
+          onChange={setDest}
+        />
 
         {showAlt ? (
-          <AirportSearch label="Alternate Airport (optional)" value={alt} onChange={setAlt} />
+          <AirportSearch
+            label="Alternate Airport (optional)"
+            value={alt}
+            onChange={setAlt}
+          />
         ) : (
-          <button type="button" onClick={() => setShowAlt(true)} className="text-sm text-primary hover:underline">
+          <button
+            type="button"
+            onClick={() => setShowAlt(true)}
+            className="text-sm text-primary hover:underline"
+          >
             + Add alternate airport
           </button>
         )}
@@ -323,10 +463,14 @@ export function AviationPlanner() {
             {loading ? "Loading…" : "Get Briefing"}
           </button>
           {!canBrief && dep && !depIcao && (
-            <p className="text-xs text-severity-moderate">Departure has no METAR station</p>
+            <p className="text-xs text-severity-moderate">
+              Departure has no METAR station
+            </p>
           )}
           {!canBrief && dest && !destIcao && (
-            <p className="text-xs text-severity-moderate">Destination has no METAR station</p>
+            <p className="text-xs text-severity-moderate">
+              Destination has no METAR station
+            </p>
           )}
         </div>
       </div>
@@ -344,11 +488,17 @@ export function AviationPlanner() {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h2 className="text-lg font-semibold text-text-primary font-heading">
-                <span className="font-mono text-primary">{briefingData.departure.icao}</span>
+                <span className="font-mono text-primary">
+                  {briefingData.departure.icao}
+                </span>
                 <span className="mx-2 text-text-tertiary">→</span>
-                <span className="font-mono text-primary">{briefingData.destination.icao}</span>
+                <span className="font-mono text-primary">
+                  {briefingData.destination.icao}
+                </span>
               </h2>
-              <p className="text-xs text-text-tertiary mt-0.5">Briefing generated {briefingData.generatedAt}</p>
+              <p className="text-xs text-text-tertiary mt-0.5">
+                Briefing generated {briefingData.generatedAt}
+              </p>
             </div>
             <button
               type="button"
@@ -362,42 +512,70 @@ export function AviationPlanner() {
 
           {/* Flight conditions summary */}
           <div className="baobab">
-            <h3 className="text-sm font-medium text-text-secondary mb-3">Flight Conditions at Briefing Time</h3>
+            <h3 className="text-sm font-medium text-text-secondary mb-3">
+              Flight Conditions at Briefing Time
+            </h3>
             <div className="flex gap-6">
               <div className="text-center">
                 <p className="text-xs text-text-tertiary mb-1">Departure</p>
-                <p className="text-sm font-mono font-bold text-text-primary mb-1">{briefingData.departure.icao}</p>
-                <FlightCategoryBadge fc={briefingData.departure.metar[0]?.flight_category ?? "N/A"} />
+                <p className="text-sm font-mono font-bold text-text-primary mb-1">
+                  {briefingData.departure.icao}
+                </p>
+                <FlightCategoryBadge
+                  fc={briefingData.departure.metar[0]?.flight_category ?? "N/A"}
+                />
               </div>
               {briefingData.alternate && (
                 <div className="text-center">
                   <p className="text-xs text-text-tertiary mb-1">Alternate</p>
-                  <p className="text-sm font-mono font-bold text-text-primary mb-1">{briefingData.alternate.icao}</p>
-                  <FlightCategoryBadge fc={briefingData.alternate.metar[0]?.flight_category ?? "N/A"} />
+                  <p className="text-sm font-mono font-bold text-text-primary mb-1">
+                    {briefingData.alternate.icao}
+                  </p>
+                  <FlightCategoryBadge
+                    fc={
+                      briefingData.alternate.metar[0]?.flight_category ?? "N/A"
+                    }
+                  />
                 </div>
               )}
               <div className="text-center">
                 <p className="text-xs text-text-tertiary mb-1">Destination</p>
-                <p className="text-sm font-mono font-bold text-text-primary mb-1">{briefingData.destination.icao}</p>
-                <FlightCategoryBadge fc={briefingData.destination.metar[0]?.flight_category ?? "N/A"} />
+                <p className="text-sm font-mono font-bold text-text-primary mb-1">
+                  {briefingData.destination.icao}
+                </p>
+                <FlightCategoryBadge
+                  fc={
+                    briefingData.destination.metar[0]?.flight_category ?? "N/A"
+                  }
+                />
               </div>
             </div>
           </div>
 
           {/* Airport briefings */}
-          <AirportBriefingCard briefing={briefingData.departure} title="Departure" />
+          <AirportBriefingCard
+            briefing={briefingData.departure}
+            title="Departure"
+          />
           <div className="border-t border-text-tertiary/10" />
-          <AirportBriefingCard briefing={briefingData.destination} title="Destination" />
+          <AirportBriefingCard
+            briefing={briefingData.destination}
+            title="Destination"
+          />
           {briefingData.alternate && (
             <>
               <div className="border-t border-text-tertiary/10" />
-              <AirportBriefingCard briefing={briefingData.alternate} title="Alternate" />
+              <AirportBriefingCard
+                briefing={briefingData.alternate}
+                title="Alternate"
+              />
             </>
           )}
 
           {/* Data source note */}
           <p className="text-xs text-text-tertiary text-center pb-4">
-            METAR/TAF data from Aviation Weather Center (NOAA) · For planning purposes only
+            METAR/TAF data from Aviation Weather Center (NOAA) · For planning
+            purposes only
           </p>
         </div>
       )}

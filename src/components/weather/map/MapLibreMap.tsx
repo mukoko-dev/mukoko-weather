@@ -158,7 +158,9 @@ export function MapLibreMap({
           markerRef.current?.remove();
           // Resolved here (not at module scope) so each restore — including the
           // post-theme-switch one — picks up the current theme's primary token.
-          markerRef.current = new MLMarker({ color: resolveColor("var(--color-primary)") })
+          markerRef.current = new MLMarker({
+            color: resolveColor("var(--color-primary)"),
+          })
             .setLngLat([lon, lat])
             .addTo(map);
           applyWeatherOverlay(map, weatherLayerRef.current);

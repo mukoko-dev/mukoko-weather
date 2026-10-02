@@ -9,9 +9,15 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const source = readFileSync(resolve(__dirname, "CurrentLocationHome.tsx"), "utf-8");
+const source = readFileSync(
+  resolve(__dirname, "CurrentLocationHome.tsx"),
+  "utf-8",
+);
 const pageSource = readFileSync(resolve(__dirname, "page.tsx"), "utf-8");
-const middlewareSource = readFileSync(resolve(__dirname, "../proxy.ts"), "utf-8");
+const middlewareSource = readFileSync(
+  resolve(__dirname, "../proxy.ts"),
+  "utf-8",
+);
 
 describe("CurrentLocationHome — silent-URL model", () => {
   it("is a client component that renders the dashboard inline", () => {
@@ -40,17 +46,23 @@ describe("CurrentLocationHome — silent-URL model", () => {
 
   it("escalates to create-on-demand when the nearest known location is far", () => {
     expect(source).toContain("FAR_NEAREST_KM");
-    expect(source).toContain("result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM");
+    expect(source).toContain(
+      "result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM",
+    );
     expect(source).toContain("detectUserLocation({ autoCreate: true })");
   });
 
   it("refreshes the lastLocation cookie so the next server render seeds the new spot", () => {
-    expect(source).toContain("document.cookie = `lastLocation=${location.slug}");
+    expect(source).toContain(
+      "document.cookie = `lastLocation=${location.slug}",
+    );
     expect(source).toContain("max-age=2592000");
   });
 
   it("silently refreshes when permission is already granted; auto-prompts only once", () => {
-    expect(source).toContain('navigator.permissions?.query({ name: "geolocation" })');
+    expect(source).toMatch(
+      /navigator\.permissions\?\.query\(\{\s*name: "geolocation",?\s*\}\)/,
+    );
     expect(source).toContain("GPS_AUTOPROMPT_KEY");
     expect(source).toContain("if (!granted && promptedBefore) return;");
   });

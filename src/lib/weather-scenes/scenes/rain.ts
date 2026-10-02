@@ -62,7 +62,9 @@ export function buildRainScene(
   return {
     update(elapsed) {
       // Rain falls and drifts
-      const pos = rainGeo.attributes.position as InstanceType<typeof THREE.BufferAttribute>;
+      const pos = rainGeo.attributes.position as InstanceType<
+        typeof THREE.BufferAttribute
+      >;
       for (let i = 0; i < RAIN_COUNT; i++) {
         pos.array[i * 3 + 1] -= rainVel[i];
         pos.array[i * 3] += windDrift; // slight wind drift
@@ -74,7 +76,9 @@ export function buildRainScene(
       pos.needsUpdate = true;
 
       // Clouds drift
-      const cpos = cloudGeo.attributes.position as InstanceType<typeof THREE.BufferAttribute>;
+      const cpos = cloudGeo.attributes.position as InstanceType<
+        typeof THREE.BufferAttribute
+      >;
       for (let i = 0; i < CLOUD_COUNT; i++) {
         cpos.array[i * 3] += 0.005;
         if (cpos.array[i * 3] > 22) cpos.array[i * 3] = -22;

@@ -39,7 +39,10 @@ export function LiveClock() {
   if (!hydrated) return null;
 
   return (
-    <p className="text-sm text-text-tertiary" aria-label={`Current time: ${label}`}>
+    <p
+      className="text-sm text-text-tertiary"
+      aria-label={`Current time: ${label}`}
+    >
       {label}
     </p>
   );

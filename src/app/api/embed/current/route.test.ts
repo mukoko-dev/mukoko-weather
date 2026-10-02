@@ -30,7 +30,16 @@ const WEATHER = {
     is_day: 1,
   },
   daily: {
-    time: ["2026-06-30", "2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04", "2026-07-05", "2026-07-06", "2026-07-07"],
+    time: [
+      "2026-06-30",
+      "2026-07-01",
+      "2026-07-02",
+      "2026-07-03",
+      "2026-07-04",
+      "2026-07-05",
+      "2026-07-06",
+      "2026-07-07",
+    ],
     weather_code: [2, 3, 61, 0, 2, 2, 3, 1],
     temperature_2m_max: [27.6, 25, 22, 28, 27, 26, 24, 25],
     temperature_2m_min: [14.2, 13, 12, 15, 14, 13, 12, 13],
@@ -87,7 +96,12 @@ describe("shapeEmbedResponse", () => {
   });
 
   it("builds an attribution URL from the slug", () => {
-    const out = shapeEmbedResponse(WEATHER, LOCATION, "slug", "https://example.com");
+    const out = shapeEmbedResponse(
+      WEATHER,
+      LOCATION,
+      "slug",
+      "https://example.com",
+    );
     expect(out.attribution.url).toBe("https://example.com/harare");
     expect(out.attribution.name).toBe("mukoko weather");
   });
@@ -100,7 +114,12 @@ describe("shapeEmbedResponse", () => {
   });
 
   it("falls back to the site root when the location has no slug", () => {
-    const out = shapeEmbedResponse(WEATHER, { ...LOCATION, slug: "" }, "ip", "https://example.com");
+    const out = shapeEmbedResponse(
+      WEATHER,
+      { ...LOCATION, slug: "" },
+      "ip",
+      "https://example.com",
+    );
     expect(out.attribution.url).toBe("https://example.com");
   });
 });

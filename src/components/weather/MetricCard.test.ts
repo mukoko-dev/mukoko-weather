@@ -159,7 +159,10 @@ describe("gradientFromStrokeClass", () => {
 
   it("pairs the cold token with low (cold isn't part of the linear ramp)", () => {
     const ramp = gradientFromStrokeClass("stroke-severity-cold");
-    expect(ramp).toEqual(["var(--color-severity-low)", "var(--color-severity-cold)"]);
+    expect(ramp).toEqual([
+      "var(--color-severity-low)",
+      "var(--color-severity-cold)",
+    ]);
   });
 
   it("falls back to a two-stop ramp for unknown classes", () => {

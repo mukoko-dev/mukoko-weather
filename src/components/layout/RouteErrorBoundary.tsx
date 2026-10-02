@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { reportErrorToAnalytics, buildIssueUrl } from "@/lib/observability";
-import { getRetryCount, setRetryCount, clearRetryCount, MAX_RETRIES } from "@/lib/error-retry";
+import {
+  getRetryCount,
+  setRetryCount,
+  clearRetryCount,
+  MAX_RETRIES,
+} from "@/lib/error-retry";
 
 /** The props Next.js passes to every route-level error.tsx. */
 export interface RouteErrorProps {
@@ -87,7 +92,9 @@ export function RouteErrorBoundary({
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
-      <h1 className="font-heading text-4xl font-bold text-text-primary">{title}</h1>
+      <h1 className="font-heading text-4xl font-bold text-text-primary">
+        {title}
+      </h1>
       <p className="mt-4 max-w-md text-center text-text-secondary">
         {exhausted && exhaustedMessage ? exhaustedMessage : message}
       </p>
@@ -115,7 +122,10 @@ export function RouteErrorBoundary({
               title: label,
               source,
               message: error.message,
-              page: typeof window !== "undefined" ? window.location.pathname : undefined,
+              page:
+                typeof window !== "undefined"
+                  ? window.location.pathname
+                  : undefined,
               digest: error.digest,
             })}
             target="_blank"

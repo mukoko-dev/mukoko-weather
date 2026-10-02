@@ -3,10 +3,21 @@ import { authkit, handleAuthkitProxy } from "@workos-inc/authkit-nextjs";
 
 /** Routes that are NOT location slugs — must match WeatherLoadingScene KNOWN_ROUTES */
 const KNOWN_ROUTES = new Set([
-  "explore", "shamwari", "history", "aviation", "about", "help",
-  "privacy", "terms", "status", "embed", "offline", "api",
+  "explore",
+  "shamwari",
+  "history",
+  "aviation",
+  "about",
+  "help",
+  "privacy",
+  "terms",
+  "status",
+  "embed",
+  "offline",
+  "api",
   // WorkOS AuthKit routes — never confuse with location slugs
-  "auth", "callback",
+  "auth",
+  "callback",
 ]);
 
 const SLUG_RE = /^[a-z0-9-]{1,80}$/;

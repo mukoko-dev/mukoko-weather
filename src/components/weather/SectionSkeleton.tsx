@@ -6,7 +6,11 @@ import { Skeleton, MetricCardSkeleton } from "@/components/ui/skeleton";
 
 export function SectionSkeleton({ className }: { className?: string } = {}) {
   return (
-    <div className={`chameleon ${className ?? "h-32"}`} role="status" aria-label="Loading section" />
+    <div
+      className={`chameleon ${className ?? "h-32"}`}
+      role="status"
+      aria-label="Loading section"
+    />
   );
 }
 
@@ -24,7 +28,10 @@ export function HourlyScrollCardsSkeleton() {
     >
       <div className="flex gap-4 sm:gap-5">
         {Array.from({ length: 7 }).map((_, i) => (
-          <div key={i} className="flex min-w-[72px] shrink-0 flex-col items-center gap-2.5 rounded-[var(--radius-input)] bg-surface-base px-3.5 py-3.5">
+          <div
+            key={i}
+            className="flex min-w-[72px] shrink-0 flex-col items-center gap-2.5 rounded-[var(--radius-input)] bg-surface-base px-3.5 py-3.5"
+          >
             <Skeleton className="h-4 w-10" />
             <Skeleton className="h-6 w-6 rounded-full" />
             <Skeleton className="h-4 w-8" />
@@ -42,7 +49,11 @@ export function HourlyScrollCardsSkeleton() {
 
 export function ReportsSkeleton() {
   return (
-    <div className="space-y-3" role="status" aria-label="Loading community reports">
+    <div
+      className="space-y-3"
+      role="status"
+      aria-label="Loading community reports"
+    >
       {/* Header row: heading + button */}
       <div className="flex items-center justify-between">
         <Skeleton className="h-5 w-40" />
@@ -73,7 +84,10 @@ export function HourlyForecastSkeleton() {
       {/* Horizontal scroll items */}
       <div className="mt-5 flex gap-4 overflow-hidden sm:gap-5">
         {Array.from({ length: 7 }).map((_, i) => (
-          <div key={i} className="flex min-w-[72px] shrink-0 flex-col items-center gap-2.5 rounded-[var(--radius-input)] bg-surface-base px-3.5 py-3.5">
+          <div
+            key={i}
+            className="flex min-w-[72px] shrink-0 flex-col items-center gap-2.5 rounded-[var(--radius-input)] bg-surface-base px-3.5 py-3.5"
+          >
             <Skeleton className="h-4 w-10" />
             <Skeleton className="h-6 w-6 rounded-full" />
             <Skeleton className="h-4 w-8" />
@@ -140,7 +154,10 @@ export function DailyForecastSkeleton() {
       {/* 7 daily rows */}
       <div className="mt-5 space-y-3">
         {Array.from({ length: 7 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 rounded-[var(--radius-input)] bg-surface-base px-3.5 py-3.5 min-h-[var(--touch-target-min)] sm:gap-4">
+          <div
+            key={i}
+            className="flex items-center gap-3 rounded-[var(--radius-input)] bg-surface-base px-3.5 py-3.5 min-h-[var(--touch-target-min)] sm:gap-4"
+          >
             {/* Day + date */}
             <div className="flex w-12 shrink-0 flex-col items-center gap-1 sm:w-14">
               <Skeleton className="h-3.5 w-8" />

@@ -41,13 +41,19 @@ export async function fetchSuitabilityRules(): Promise<SuitabilityRuleDoc[]> {
     const localRules = await getCachedRules();
     let localFetchedAt = 0;
     if (localRules.length > 0) {
-      const parsed = localRules.map((r) => {
-        try {
-          return { key: r.key, conditions: JSON.parse(r.conditions), fallback: JSON.parse(r.fallback) };
-        } catch {
-          return null;
-        }
-      }).filter(Boolean) as SuitabilityRuleDoc[];
+      const parsed = localRules
+        .map((r) => {
+          try {
+            return {
+              key: r.key,
+              conditions: JSON.parse(r.conditions),
+              fallback: JSON.parse(r.fallback),
+            };
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean) as SuitabilityRuleDoc[];
 
       if (parsed.length > 0) {
         cachedRules = parsed;
@@ -64,7 +70,10 @@ export async function fetchSuitabilityRules(): Promise<SuitabilityRuleDoc[]> {
     // Only fetch from network if the cache is stale or empty.
     // Without this guard, every call would issue a network request even
     // when RxDB just returned fresh data — defeating the TTL purpose.
-    const cacheIsWarm = cachedRules && cachedRules.length > 0 && Date.now() - localFetchedAt < RULES_CACHE_TTL;
+    const cacheIsWarm =
+      cachedRules &&
+      cachedRules.length > 0 &&
+      Date.now() - localFetchedAt < RULES_CACHE_TTL;
     if (!cacheIsWarm) {
       try {
         const res = await fetch("/api/py/suitability");
@@ -106,14 +115,25 @@ export async function fetchSuitabilityRules(): Promise<SuitabilityRuleDoc[]> {
 
 // Seed with static CATEGORY_STYLES for instant mineral color rendering on mount.
 // The API fetch upgrades this with any MongoDB-only categories.
-let cachedCategoryStyles: Record<string, { bg: string; border: string; text: string; badge: string }> = { ...CATEGORY_STYLES };
+let cachedCategoryStyles: Record<
+  string,
+  { bg: string; border: string; text: string; badge: string }
+> = { ...CATEGORY_STYLES };
 let cachedStylesAt = 0;
 
-export type CategoryStyle = { bg: string; border: string; borderAccent?: string; text: string; badge: string };
+export type CategoryStyle = {
+  bg: string;
+  border: string;
+  borderAccent?: string;
+  text: string;
+  badge: string;
+};
 
 let inFlightStyles: Promise<Record<string, CategoryStyle>> | null = null;
 
-export async function fetchCategoryStyles(): Promise<Record<string, CategoryStyle>> {
+export async function fetchCategoryStyles(): Promise<
+  Record<string, CategoryStyle>
+> {
   if (cachedStylesAt > 0 && Date.now() - cachedStylesAt < RULES_CACHE_TTL) {
     return cachedCategoryStyles;
   }
@@ -132,7 +152,9 @@ export async function fetchCategoryStyles(): Promise<Record<string, CategoryStyl
       return cachedCategoryStyles;
     })
     .catch(() => cachedCategoryStyles)
-    .finally(() => { inFlightStyles = null; });
+    .finally(() => {
+      inFlightStyles = null;
+    });
   return inFlightStyles;
 }
 

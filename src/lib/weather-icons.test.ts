@@ -7,29 +7,64 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const source = readFileSync(
-  resolve(__dirname, "weather-icons.tsx"),
-  "utf-8",
-);
+const source = readFileSync(resolve(__dirname, "weather-icons.tsx"), "utf-8");
 
 describe("ICON_REGISTRY", () => {
   // Original icons + expanded icons for broadened activity categories
   const expectedIcons = [
     // Agriculture & Forestry
-    "crop", "livestock", "shovel", "water", "tree", "bee", "leaf",
+    "crop",
+    "livestock",
+    "shovel",
+    "water",
+    "tree",
+    "bee",
+    "leaf",
     // Industry & Construction
-    "pickaxe", "hardhat", "factory", "bolt", "box",
+    "pickaxe",
+    "hardhat",
+    "factory",
+    "bolt",
+    "box",
     // Transport & Logistics
-    "car", "bus", "plane", "truck", "ship",
+    "car",
+    "bus",
+    "plane",
+    "truck",
+    "ship",
     // Outdoors & Conservation
-    "binoculars", "camera", "bird", "tent", "star", "fish", "anchor",
-    "shield", "pawprint", "mountain",
+    "binoculars",
+    "camera",
+    "bird",
+    "tent",
+    "star",
+    "fish",
+    "anchor",
+    "shield",
+    "pawprint",
+    "mountain",
     // Sports & Fitness
-    "running", "bicycle", "football", "swimming", "golf", "cricket",
-    "tennis", "rugby", "horse", "trophy", "whistle",
+    "running",
+    "bicycle",
+    "football",
+    "swimming",
+    "golf",
+    "cricket",
+    "tennis",
+    "rugby",
+    "horse",
+    "trophy",
+    "whistle",
     // Lifestyle & Events
-    "footprints", "grill", "drone", "picnic", "sparkles", "calendar",
-    "music", "heartpulse", "graduationcap",
+    "footprints",
+    "grill",
+    "drone",
+    "picnic",
+    "sparkles",
+    "calendar",
+    "music",
+    "heartpulse",
+    "graduationcap",
     // Default
     "sun",
   ];
@@ -82,7 +117,9 @@ describe("ActivityIcon component", () => {
   });
 
   it("imports lucide-react icons for scalable icon resolution", () => {
-    expect(source).toContain('import { icons as lucideIcons } from "lucide-react"');
+    expect(source).toContain(
+      'import { icons as lucideIcons } from "lucide-react"',
+    );
   });
 });
 
@@ -107,9 +144,7 @@ describe("WeatherIcon mapping", () => {
   });
 
   it("has a default fallback to CloudIcon", () => {
-    const weatherIconMatch = source.match(
-      /function WeatherIcon[\s\S]*$/m,
-    );
+    const weatherIconMatch = source.match(/function WeatherIcon[\s\S]*$/m);
     expect(weatherIconMatch).toBeTruthy();
     expect(weatherIconMatch![0]).toContain("default:");
     expect(weatherIconMatch![0]).toContain("CloudIcon");
@@ -127,26 +162,85 @@ describe("WeatherIcon mapping", () => {
 describe("Icon components", () => {
   const allExportedIcons = [
     // Weather icons
-    "SunIcon", "MoonIcon", "CloudIcon", "CloudSunIcon", "CloudRainIcon",
-    "CloudDrizzleIcon", "CloudLightningIcon", "CloudFogIcon", "CloudSunRainIcon",
-    "CloudHailIcon", "SnowflakeIcon", "WindIcon", "DropletIcon", "ThermometerIcon",
-    "SunriseIcon", "SunsetIcon", "EyeIcon", "GaugeIcon", "ClockIcon",
-    "SearchIcon", "MapPinIcon", "SparklesIcon", "ShareIcon",
+    "SunIcon",
+    "MoonIcon",
+    "CloudIcon",
+    "CloudSunIcon",
+    "CloudRainIcon",
+    "CloudDrizzleIcon",
+    "CloudLightningIcon",
+    "CloudFogIcon",
+    "CloudSunRainIcon",
+    "CloudHailIcon",
+    "SnowflakeIcon",
+    "WindIcon",
+    "DropletIcon",
+    "ThermometerIcon",
+    "SunriseIcon",
+    "SunsetIcon",
+    "EyeIcon",
+    "GaugeIcon",
+    "ClockIcon",
+    "SearchIcon",
+    "MapPinIcon",
+    "SparklesIcon",
+    "ShareIcon",
     // Original activity icons
-    "CropIcon", "LivestockIcon", "ShovelIcon", "PickaxeIcon", "HardHatIcon",
-    "CarIcon", "BusIcon", "BinocularsIcon", "BirdIcon", "RunningIcon",
-    "BicycleIcon", "MountainIcon", "FootballIcon", "SwimmingIcon", "GolfIcon",
-    "CricketIcon", "FootprintsIcon", "GrillIcon", "TentIcon", "CameraIcon",
+    "CropIcon",
+    "LivestockIcon",
+    "ShovelIcon",
+    "PickaxeIcon",
+    "HardHatIcon",
+    "CarIcon",
+    "BusIcon",
+    "BinocularsIcon",
+    "BirdIcon",
+    "RunningIcon",
+    "BicycleIcon",
+    "MountainIcon",
+    "FootballIcon",
+    "SwimmingIcon",
+    "GolfIcon",
+    "CricketIcon",
+    "FootprintsIcon",
+    "GrillIcon",
+    "TentIcon",
+    "CameraIcon",
     // Expanded activity icons
-    "TreeIcon", "BeeIcon", "LeafIcon", "AnchorIcon", "FactoryIcon",
-    "BoltIcon", "TruckIcon", "ShipIcon", "ShieldIcon", "PawPrintIcon",
-    "TrophyIcon", "WhistleIcon", "CalendarIcon", "MusicIcon",
-    "HeartPulseIcon", "GraduationCapIcon", "BoxIcon",
+    "TreeIcon",
+    "BeeIcon",
+    "LeafIcon",
+    "AnchorIcon",
+    "FactoryIcon",
+    "BoltIcon",
+    "TruckIcon",
+    "ShipIcon",
+    "ShieldIcon",
+    "PawPrintIcon",
+    "TrophyIcon",
+    "WhistleIcon",
+    "CalendarIcon",
+    "MusicIcon",
+    "HeartPulseIcon",
+    "GraduationCapIcon",
+    "BoxIcon",
     // Utility / UI icons
-    "DroneIcon", "TennisIcon", "RugbyIcon", "HorseIcon", "PlaneIcon",
-    "WaterIcon", "FishIcon", "StarIcon", "PicnicIcon",
-    "TrashIcon", "PlusIcon", "NavigationIcon",
-    "MegaphoneIcon", "LayersIcon", "BellIcon", "UserIcon",
+    "DroneIcon",
+    "TennisIcon",
+    "RugbyIcon",
+    "HorseIcon",
+    "PlaneIcon",
+    "WaterIcon",
+    "FishIcon",
+    "StarIcon",
+    "PicnicIcon",
+    "TrashIcon",
+    "PlusIcon",
+    "NavigationIcon",
+    "MegaphoneIcon",
+    "LayersIcon",
+    "BellIcon",
+    "UserIcon",
   ];
 
   it("exports all icon components", () => {

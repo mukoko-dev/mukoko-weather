@@ -34,9 +34,7 @@ describe("t() translation lookup", () => {
   });
 
   it("replaces numeric param values via String()", () => {
-    expect(t("location.count", { count: 90 })).toBe(
-      "90 locations worldwide",
-    );
+    expect(t("location.count", { count: 90 })).toBe("90 locations worldwide");
   });
 
   it("falls back to English when locale has no messages", () => {

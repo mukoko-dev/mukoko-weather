@@ -35,11 +35,24 @@ import {
   platformDb,
   entityDb,
 } from "./mongo";
-import { fetchWeather, createFallbackWeather, getDefaultSeason, synthesizeOpenMeteoInsights, type WeatherData, type Season } from "./weather";
+import {
+  fetchWeather,
+  createFallbackWeather,
+  getDefaultSeason,
+  synthesizeOpenMeteoInsights,
+  type WeatherData,
+  type Season,
+} from "./weather";
 import { logWarn, logError } from "./observability";
 import type { WeatherLocation } from "./locations";
 import type { Activity, ActivityCategory } from "./activities";
-import { generateProvinceSlug, COUNTRIES, PROVINCES, type Country, type Province } from "./countries";
+import {
+  generateProvinceSlug,
+  COUNTRIES,
+  PROVINCES,
+  type Country,
+  type Province,
+} from "./countries";
 import type { RegionDoc } from "./seed-regions";
 import type { TagDoc } from "./seed-tags";
 import type { SeasonDoc } from "./seed-seasons";
@@ -143,7 +156,14 @@ export interface ProvinceDoc extends Province {
 }
 
 // Re-export seed types so callers only need to import from db.ts
-export type { RegionDoc, TagDoc, SeasonDoc, ActivityCategoryDoc, AIPromptDoc, AISuggestedPromptRule };
+export type {
+  RegionDoc,
+  TagDoc,
+  SeasonDoc,
+  ActivityCategoryDoc,
+  AIPromptDoc,
+  AISuggestedPromptRule,
+};
 
 // ---------------------------------------------------------------------------
 // Collection accessors — legacy mukoko collections (now in `weather` DB)
@@ -175,7 +195,11 @@ function activitiesCollection() {
 }
 
 export function rateLimitsCollection() {
-  return weatherDb().collection<{ key: string; count: number; expiresAt: Date }>("rate_limits");
+  return weatherDb().collection<{
+    key: string;
+    count: number;
+    expiresAt: Date;
+  }>("rate_limits");
 }
 
 function regionsCollection() {
@@ -199,11 +223,15 @@ function suitabilityRulesCollection() {
 }
 
 function aiPromptsCollection() {
-  return weatherDb().collection<AIPromptDoc & { updatedAt: Date }>("ai_prompts");
+  return weatherDb().collection<AIPromptDoc & { updatedAt: Date }>(
+    "ai_prompts",
+  );
 }
 
 function aiSuggestedRulesCollection() {
-  return weatherDb().collection<AISuggestedPromptRule & { updatedAt: Date }>("ai_suggested_rules");
+  return weatherDb().collection<AISuggestedPromptRule & { updatedAt: Date }>(
+    "ai_suggested_rules",
+  );
 }
 
 /**
@@ -329,7 +357,10 @@ async function safeCreateIndex<T extends Document>(
         logWarn({
           source: "mongodb",
           message: `ensureIndexes: could not reconcile unique index ${namespace}.${indexName}`,
-          error: recreateErr instanceof Error ? recreateErr : new Error(String(recreateErr)),
+          error:
+            recreateErr instanceof Error
+              ? recreateErr
+              : new Error(String(recreateErr)),
           meta: { keys },
         });
         return;
@@ -352,15 +383,35 @@ export async function ensureIndexes(): Promise<void> {
   // we use `allSettled` as a belt-and-braces guard.
   await Promise.allSettled([
     // Weather cache: one doc per location, auto-expire
-    safeCreateIndex(weatherCacheCollection(), { locationSlug: 1 }, { unique: true }),
-    safeCreateIndex(weatherCacheCollection(), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    safeCreateIndex(
+      weatherCacheCollection(),
+      { locationSlug: 1 },
+      { unique: true },
+    ),
+    safeCreateIndex(
+      weatherCacheCollection(),
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    ),
 
     // AI summaries: one doc per location, auto-expire
-    safeCreateIndex(aiSummariesCollection(), { locationSlug: 1 }, { unique: true }),
-    safeCreateIndex(aiSummariesCollection(), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    safeCreateIndex(
+      aiSummariesCollection(),
+      { locationSlug: 1 },
+      { unique: true },
+    ),
+    safeCreateIndex(
+      aiSummariesCollection(),
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    ),
 
     // Weather history: one doc per location per day, query by date range
-    safeCreateIndex(weatherHistoryCollection(), { locationSlug: 1, date: -1 }, { unique: true }),
+    safeCreateIndex(
+      weatherHistoryCollection(),
+      { locationSlug: 1, date: -1 },
+      { unique: true },
+    ),
     safeCreateIndex(weatherHistoryCollection(), { recordedAt: 1 }),
 
     // Locations indexes — Phase 0F: weather.locations is dropped. Geo /
@@ -372,7 +423,10 @@ export async function ensureIndexes(): Promise<void> {
     safeCreateIndex(
       activitiesCollection(),
       { label: "text", description: "text", category: "text" },
-      { weights: { label: 10, description: 5, category: 3 }, name: "activity_text_search" },
+      {
+        weights: { label: 10, description: 5, category: 3 },
+        name: "activity_text_search",
+      },
     ),
 
     // API keys: one key per provider
@@ -380,7 +434,11 @@ export async function ensureIndexes(): Promise<void> {
 
     // Rate limits: auto-expire counters for abuse prevention
     safeCreateIndex(rateLimitsCollection(), { key: 1 }, { unique: true }),
-    safeCreateIndex(rateLimitsCollection(), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    safeCreateIndex(
+      rateLimitsCollection(),
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    ),
 
     // Phase 0G: `weather.countries` / `weather.provinces` are dropped. The
     // canonical geographic hierarchy lives in `places.placesGeo` (Fundi-seeded);
@@ -397,10 +455,18 @@ export async function ensureIndexes(): Promise<void> {
 
     // Seasons: by countryCode for date lookups, TTL for AI-generated entries
     safeCreateIndex(seasonsCollection(), { countryCode: 1 }),
-    safeCreateIndex(seasonsCollection(), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    safeCreateIndex(
+      seasonsCollection(),
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    ),
 
     // Activity categories: by id (unique), by order for display
-    safeCreateIndex(activityCategoriesCollection(), { id: 1 }, { unique: true }),
+    safeCreateIndex(
+      activityCategoriesCollection(),
+      { id: 1 },
+      { unique: true },
+    ),
     safeCreateIndex(activityCategoriesCollection(), { order: 1 }),
 
     // Suitability rules: by key (unique) for lookups
@@ -411,21 +477,45 @@ export async function ensureIndexes(): Promise<void> {
     safeCreateIndex(aiPromptsCollection(), { active: 1, order: 1 }),
 
     // AI suggested rules: by ruleId (unique), by active + category + order
-    safeCreateIndex(aiSuggestedRulesCollection(), { ruleId: 1 }, { unique: true }),
-    safeCreateIndex(aiSuggestedRulesCollection(), { active: 1, category: 1, order: 1 }),
+    safeCreateIndex(
+      aiSuggestedRulesCollection(),
+      { ruleId: 1 },
+      { unique: true },
+    ),
+    safeCreateIndex(aiSuggestedRulesCollection(), {
+      active: 1,
+      category: 1,
+      order: 1,
+    }),
 
     // METAR cache: one doc per ICAO station, auto-expire after 30 minutes
-    safeCreateIndex(weatherDb().collection("metar_cache"), { icao: 1 }, { unique: true }),
-    safeCreateIndex(weatherDb().collection("metar_cache"), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    safeCreateIndex(
+      weatherDb().collection("metar_cache"),
+      { icao: 1 },
+      { unique: true },
+    ),
+    safeCreateIndex(
+      weatherDb().collection("metar_cache"),
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    ),
 
     // Air quality cache: 1-hour TTL — _id is deterministic ({lat:.4f}_{lon:.4f}),
     // so the unique-by-_id index MongoDB provides for free is the only key index needed.
-    safeCreateIndex(weatherDb().collection("air_quality_cache"), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    safeCreateIndex(
+      weatherDb().collection("air_quality_cache"),
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    ),
 
     // Map tile cache: ~90-min TTL — _id is deterministic ({layer}/{z}/{x}/{y}/{hourBucket}),
     // so the unique-by-_id index MongoDB provides for free is the only key index needed.
     // Drastically cuts Tomorrow.io overlay-tile calls (free tier is ~25 req/hour).
-    safeCreateIndex(weatherDb().collection("map_tile_cache"), { expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    safeCreateIndex(
+      weatherDb().collection("map_tile_cache"),
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    ),
 
     // Airports: ICAO reference data for METAR/TAF. `_id` is the ICAO code
     // (unique for free); the 2dsphere index powers the $nearSphere
@@ -485,13 +575,15 @@ export function stampPlatformFields<T extends Record<string, unknown>>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d = doc as Record<string, any>;
   if (d._id === undefined || d._id === null) d._id = randomUuid();
-  if (d._schemaVersion === undefined) d._schemaVersion = PLATFORM_SCHEMA_VERSION;
+  if (d._schemaVersion === undefined)
+    d._schemaVersion = PLATFORM_SCHEMA_VERSION;
   if (d.createdAt === undefined) d.createdAt = now;
   d.updatedAt = now;
 
   const bundu = (d.bundu ??= {} as Record<string, unknown>);
   if (bundu.countryCode === undefined) bundu.countryCode = countryCode;
-  if (provinceSlug && bundu.provinceSlug === undefined) bundu.provinceSlug = provinceSlug;
+  if (provinceSlug && bundu.provinceSlug === undefined)
+    bundu.provinceSlug = provinceSlug;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return d as any;
@@ -753,7 +845,10 @@ export async function getWeatherForLocation(
     );
     if (res.ok) {
       const data = (await res.json()) as WeatherData;
-      return { data, source: res.headers.get("x-weather-provider") ?? "open-meteo" };
+      return {
+        data,
+        source: res.headers.get("x-weather-provider") ?? "open-meteo",
+      };
     }
     logWarn({
       source: "weather-api",
@@ -764,7 +859,8 @@ export async function getWeatherForLocation(
     logWarn({
       source: "weather-api",
       location: slug,
-      message: "Internal weather endpoint unreachable, falling back to direct Open-Meteo",
+      message:
+        "Internal weather endpoint unreachable, falling back to direct Open-Meteo",
       error: err,
     });
   }
@@ -789,7 +885,10 @@ export async function getWeatherForLocation(
   }
 
   // 4. Seasonal fallback — guarantees the page always renders
-  return { data: createFallbackWeather(lat, lon, elevation), source: "fallback" };
+  return {
+    data: createFallbackWeather(lat, lon, elevation),
+    source: "fallback",
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -802,16 +901,18 @@ const TIER_1_TAGS = new Set(["city"]);
 // Tier 2: Active areas — 60 min TTL
 const TIER_2_TAGS = new Set(["farming", "mining", "education", "border"]);
 
-const TTL_TIER_1 = 1800;  // 30 minutes
-const TTL_TIER_2 = 3600;  // 60 minutes
-const TTL_TIER_3 = 7200;  // 120 minutes
+const TTL_TIER_1 = 1800; // 30 minutes
+const TTL_TIER_2 = 3600; // 60 minutes
+const TTL_TIER_3 = 7200; // 120 minutes
 
 export function getTtlForLocation(
   _locationSlug: string,
   tags: string[] = [],
 ): { seconds: number; tier: 1 | 2 | 3 } {
-  if (tags.some((t) => TIER_1_TAGS.has(t))) return { seconds: TTL_TIER_1, tier: 1 };
-  if (tags.some((t) => TIER_2_TAGS.has(t))) return { seconds: TTL_TIER_2, tier: 2 };
+  if (tags.some((t) => TIER_1_TAGS.has(t)))
+    return { seconds: TTL_TIER_1, tier: 1 };
+  if (tags.some((t) => TIER_2_TAGS.has(t)))
+    return { seconds: TTL_TIER_2, tier: 2 };
   return { seconds: TTL_TIER_3, tier: 3 };
 }
 
@@ -985,7 +1086,9 @@ export async function getAllLocationsFromDb(): Promise<LocationDoc[]> {
 }
 
 /** Limited list for AI prompt context. */
-export async function getLocationsForContext(limit: number): Promise<LocationDoc[]> {
+export async function getLocationsForContext(
+  limit: number,
+): Promise<LocationDoc[]> {
   const all = await getAllLocationsFromDb();
   return all
     .slice()
@@ -1025,7 +1128,11 @@ const ATLAS_RETRY_AFTER_MS = 5 * 60 * 1000; // 5 minutes
  */
 function isAtlasSearchIndexMissing(err: unknown): boolean {
   if (err && typeof err === "object") {
-    const mongoErr = err as { code?: number; codeName?: string; message?: string };
+    const mongoErr = err as {
+      code?: number;
+      codeName?: string;
+      message?: string;
+    };
     if (mongoErr.code === 40324) return true;
     const msg = mongoErr.message ?? "";
     if (msg.includes("index not found")) return true;
@@ -1055,7 +1162,9 @@ export async function findNearestLocationsFromDb(
 }
 
 /** Tag counts derived from the static seed catalog. */
-export async function getTagCounts(): Promise<{ tag: string; count: number }[]> {
+export async function getTagCounts(): Promise<
+  { tag: string; count: number }[]
+> {
   const counts = new Map<string, number>();
   for (const loc of LOCATIONS) {
     for (const tag of loc.tags) {
@@ -1068,7 +1177,10 @@ export async function getTagCounts(): Promise<{ tag: string; count: number }[]> 
 }
 
 /** Location + province counts derived from the static seed catalog. */
-export async function getLocationStats(): Promise<{ locations: number; provinces: number }> {
+export async function getLocationStats(): Promise<{
+  locations: number;
+  provinces: number;
+}> {
   const provinces = new Set(LOCATIONS.map((l) => l.province));
   return { locations: LOCATIONS.length, provinces: provinces.size };
 }
@@ -1077,9 +1189,7 @@ export async function getLocationStats(): Promise<{ locations: number; provinces
 // Activity operations (sync seed data to MongoDB, query from MongoDB)
 // ---------------------------------------------------------------------------
 
-export async function syncActivities(
-  activities: Activity[],
-): Promise<void> {
+export async function syncActivities(activities: Activity[]): Promise<void> {
   const now = new Date();
   const bulkOps = activities.map((act) => ({
     updateOne: {
@@ -1099,7 +1209,10 @@ export async function syncActivities(
 }
 
 export async function getAllActivitiesFromDb(): Promise<ActivityDoc[]> {
-  return activitiesCollection().find({}).sort({ category: 1, label: 1 }).toArray();
+  return activitiesCollection()
+    .find({})
+    .sort({ category: 1, label: 1 })
+    .toArray();
 }
 
 export async function getActivitiesByCategoryFromDb(
@@ -1117,7 +1230,9 @@ export async function getActivityByIdFromDb(
 export async function getActivityLabelsFromDb(
   ids: string[],
 ): Promise<string[]> {
-  const docs = await activitiesCollection().find({ id: { $in: ids } }).toArray();
+  const docs = await activitiesCollection()
+    .find({ id: { $in: ids } })
+    .toArray();
   return docs.map((d) => d.label);
 }
 
@@ -1136,7 +1251,9 @@ export async function searchActivitiesFromDb(
   if (!q) return getAllActivitiesFromDb();
 
   // Try Atlas Search first (auto-recovers after ATLAS_RETRY_AFTER_MS)
-  const activitySearchAvailable = !atlasActivitySearchDisabledAt || Date.now() - atlasActivitySearchDisabledAt > ATLAS_RETRY_AFTER_MS;
+  const activitySearchAvailable =
+    !atlasActivitySearchDisabledAt ||
+    Date.now() - atlasActivitySearchDisabledAt > ATLAS_RETRY_AFTER_MS;
   if (activitySearchAvailable) {
     try {
       const col = activitiesCollection();
@@ -1169,8 +1286,12 @@ export async function searchActivitiesFromDb(
     .toArray() as Promise<ActivityDoc[]>;
 }
 
-export async function getActivityCategoriesFromDb(): Promise<ActivityCategory[]> {
-  return activitiesCollection().distinct("category") as Promise<ActivityCategory[]>;
+export async function getActivityCategoriesFromDb(): Promise<
+  ActivityCategory[]
+> {
+  return activitiesCollection().distinct("category") as Promise<
+    ActivityCategory[]
+  >;
 }
 
 // ---------------------------------------------------------------------------
@@ -1182,22 +1303,35 @@ export async function getActivityCategoriesFromDb(): Promise<ActivityCategory[]>
  * Checked at seed/sync time to catch typos before they reach the database.
  */
 export const VALID_CONDITION_FIELDS = new Set([
-  "gdd10To30", "gdd10To31", "gdd08To30", "gdd03To25",
-  "evapotranspiration", "dewPoint", "precipitationType",
-  "windSpeed", "windGust",
-  "thunderstormProbability", "heatStressIndex", "uvHealthConcern",
-  "moonPhase", "cloudBase", "cloudCeiling", "visibility",
+  "gdd10To30",
+  "gdd10To31",
+  "gdd08To30",
+  "gdd03To25",
+  "evapotranspiration",
+  "dewPoint",
+  "precipitationType",
+  "windSpeed",
+  "windGust",
+  "thunderstormProbability",
+  "heatStressIndex",
+  "uvHealthConcern",
+  "moonPhase",
+  "cloudBase",
+  "cloudCeiling",
+  "visibility",
   // Future: precipitationIntensity, snowIntensity
 ]);
 
-export async function syncSuitabilityRules(rules: Omit<SuitabilityRuleDoc, "updatedAt">[]): Promise<void> {
+export async function syncSuitabilityRules(
+  rules: Omit<SuitabilityRuleDoc, "updatedAt">[],
+): Promise<void> {
   // Validate condition field names at sync time to catch typos early.
   for (const rule of rules) {
     for (const cond of rule.conditions) {
       if (!VALID_CONDITION_FIELDS.has(cond.field)) {
         throw new Error(
           `Invalid condition field "${cond.field}" in rule "${rule.key}". ` +
-          `Valid fields: ${[...VALID_CONDITION_FIELDS].join(", ")}`,
+            `Valid fields: ${[...VALID_CONDITION_FIELDS].join(", ")}`,
         );
       }
     }
@@ -1220,7 +1354,9 @@ export async function getAllSuitabilityRules(): Promise<SuitabilityRuleDoc[]> {
   return suitabilityRulesCollection().find({}).toArray();
 }
 
-export async function getSuitabilityRuleByKey(key: string): Promise<SuitabilityRuleDoc | null> {
+export async function getSuitabilityRuleByKey(
+  key: string,
+): Promise<SuitabilityRuleDoc | null> {
   return suitabilityRulesCollection().findOne({ key });
 }
 
@@ -1228,7 +1364,9 @@ export async function getSuitabilityRuleByKey(key: string): Promise<SuitabilityR
 // Activity category operations (database-driven category styles)
 // ---------------------------------------------------------------------------
 
-export async function syncActivityCategories(categories: ActivityCategoryDoc[]): Promise<void> {
+export async function syncActivityCategories(
+  categories: ActivityCategoryDoc[],
+): Promise<void> {
   const now = new Date();
   const bulkOps = categories.map((cat) => ({
     updateOne: {
@@ -1242,11 +1380,15 @@ export async function syncActivityCategories(categories: ActivityCategoryDoc[]):
   }
 }
 
-export async function getAllActivityCategories(): Promise<ActivityCategoryDoc[]> {
+export async function getAllActivityCategories(): Promise<
+  ActivityCategoryDoc[]
+> {
   return activityCategoriesCollection().find({}).sort({ order: 1 }).toArray();
 }
 
-export async function getActivityCategoryById(id: string): Promise<ActivityCategoryDoc | null> {
+export async function getActivityCategoryById(
+  id: string,
+): Promise<ActivityCategoryDoc | null> {
   return activityCategoriesCollection().findOne({ id });
 }
 
@@ -1272,11 +1414,16 @@ export async function getAllCountries(): Promise<CountryDoc[]> {
   );
   const now = new Date();
   return COUNTRIES.filter((c) => seededCountries.has(c.code.toUpperCase()))
-    .sort((a, b) => a.region.localeCompare(b.region) || a.name.localeCompare(b.name))
+    .sort(
+      (a, b) =>
+        a.region.localeCompare(b.region) || a.name.localeCompare(b.name),
+    )
     .map((c) => ({ ...c, updatedAt: now }));
 }
 
-export async function getCountryByCode(code: string): Promise<CountryDoc | null> {
+export async function getCountryByCode(
+  code: string,
+): Promise<CountryDoc | null> {
   const upper = code.toUpperCase();
   const country = COUNTRIES.find((c) => c.code.toUpperCase() === upper);
   return country ? { ...country, updatedAt: new Date() } : null;
@@ -1304,7 +1451,9 @@ export async function getCountryWithStats(
 // their async signatures + ProvinceDoc return shape for caller compatibility.
 // ---------------------------------------------------------------------------
 
-export async function getLocationsByCountry(countryCode: string): Promise<LocationDoc[]> {
+export async function getLocationsByCountry(
+  countryCode: string,
+): Promise<LocationDoc[]> {
   const now = new Date();
   const upper = countryCode.toUpperCase();
   return LOCATIONS.filter((l) => (l.country ?? "").toUpperCase() === upper)
@@ -1312,10 +1461,13 @@ export async function getLocationsByCountry(countryCode: string): Promise<Locati
     .map((loc) => ({ ...loc, updatedAt: now })) as LocationDoc[];
 }
 
-export async function getLocationsByProvince(provinceSlug: string): Promise<LocationDoc[]> {
+export async function getLocationsByProvince(
+  provinceSlug: string,
+): Promise<LocationDoc[]> {
   const now = new Date();
   return LOCATIONS.filter((l) => {
-    const slug = l.provinceSlug ?? generateProvinceSlug(l.province, l.country ?? "");
+    const slug =
+      l.provinceSlug ?? generateProvinceSlug(l.province, l.country ?? "");
     return slug === provinceSlug;
   })
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -1327,7 +1479,9 @@ export async function getLocationsByProvince(provinceSlug: string): Promise<Loca
  * `provinceSlug`, otherwise derive it from the province name + country code.
  */
 function provinceSlugForLocation(loc: WeatherLocation): string {
-  return loc.provinceSlug ?? generateProvinceSlug(loc.province, loc.country ?? "");
+  return (
+    loc.provinceSlug ?? generateProvinceSlug(loc.province, loc.country ?? "")
+  );
 }
 
 /**
@@ -1336,7 +1490,9 @@ function provinceSlugForLocation(loc: WeatherLocation): string {
  * LOCATIONS — so provinces that have seed locations but no static row (e.g.
  * Singapore's "Central Region") still resolve instead of dead-ending in a 404.
  */
-export async function getProvinceBySlug(slug: string): Promise<ProvinceDoc | null> {
+export async function getProvinceBySlug(
+  slug: string,
+): Promise<ProvinceDoc | null> {
   const now = new Date();
   const province = PROVINCES.find((p) => p.slug === slug);
   if (province) return { ...province, updatedAt: now };
@@ -1369,12 +1525,19 @@ export async function getAllProvinces(): Promise<ProvinceDoc[]> {
     if (!countryCode) continue;
     const slug = provinceSlugForLocation(loc);
     if (!bySlug.has(slug)) {
-      bySlug.set(slug, { slug, name: loc.province, countryCode, updatedAt: now });
+      bySlug.set(slug, {
+        slug,
+        name: loc.province,
+        countryCode,
+        updatedAt: now,
+      });
     }
   }
 
   return [...bySlug.values()].sort(
-    (a, b) => a.countryCode.localeCompare(b.countryCode) || a.name.localeCompare(b.name),
+    (a, b) =>
+      a.countryCode.localeCompare(b.countryCode) ||
+      a.name.localeCompare(b.name),
   );
 }
 
@@ -1392,7 +1555,9 @@ export async function getAllCountryCodes(): Promise<string[]> {
 }
 
 /** All seed location slugs + tags for sitemap generation. */
-export async function getAllLocationSlugsForSitemap(): Promise<{ slug: string; tags: string[] }[]> {
+export async function getAllLocationSlugsForSitemap(): Promise<
+  { slug: string; tags: string[] }[]
+> {
   return LOCATIONS.map((loc) => ({ slug: loc.slug, tags: loc.tags }));
 }
 
@@ -1534,7 +1699,10 @@ export async function syncAirports(
             name: a.name,
             lat: a.lat,
             lon: a.lon,
-            location: { type: "Point" as const, coordinates: [a.lon, a.lat] as [number, number] },
+            location: {
+              type: "Point" as const,
+              coordinates: [a.lon, a.lat] as [number, number],
+            },
             updatedAt: now,
           },
         },
@@ -1608,8 +1776,9 @@ export async function getSeasonForDate(
       const doc = await getSeasonFromDb(date, countryCode);
       if (doc) {
         // Guard: old pre-migration docs may have "shona" instead of "localName"
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const localName = doc.localName || (doc as any).shona as string || doc.name;
+        const localName =
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          doc.localName || ((doc as any).shona as string) || doc.name;
         return { name: doc.name, localName, description: doc.description };
       }
     }
@@ -1727,7 +1896,13 @@ export function getAtlasSearchIndexDefinitions(): {
           fields: {
             name: [
               { type: "string", analyzer: "lucene.standard" },
-              { type: "autocomplete", analyzer: "lucene.standard", tokenization: "edgeGram", minGrams: 2, maxGrams: 15 },
+              {
+                type: "autocomplete",
+                analyzer: "lucene.standard",
+                tokenization: "edgeGram",
+                minGrams: 2,
+                maxGrams: 15,
+              },
             ],
             province: { type: "string", analyzer: "lucene.standard" },
             slug: { type: "string", analyzer: "lucene.keyword" },
@@ -1748,7 +1923,13 @@ export function getAtlasSearchIndexDefinitions(): {
           fields: {
             label: [
               { type: "string", analyzer: "lucene.standard" },
-              { type: "autocomplete", analyzer: "lucene.standard", tokenization: "edgeGram", minGrams: 2, maxGrams: 15 },
+              {
+                type: "autocomplete",
+                analyzer: "lucene.standard",
+                tokenization: "edgeGram",
+                minGrams: 2,
+                maxGrams: 15,
+              },
             ],
             description: { type: "string", analyzer: "lucene.standard" },
             category: { type: "token" },
@@ -1787,7 +1968,9 @@ export function getAtlasSearchIndexDefinitions(): {
 // AI Prompts — database-driven AI configuration
 // ---------------------------------------------------------------------------
 
-export async function syncAIPrompts(prompts: Omit<AIPromptDoc, "updatedAt">[]): Promise<void> {
+export async function syncAIPrompts(
+  prompts: Omit<AIPromptDoc, "updatedAt">[],
+): Promise<void> {
   const now = new Date();
   const bulkOps = prompts.map((p) => ({
     updateOne: {
@@ -1801,7 +1984,9 @@ export async function syncAIPrompts(prompts: Omit<AIPromptDoc, "updatedAt">[]): 
   }
 }
 
-export async function syncAISuggestedRules(rules: Omit<AISuggestedPromptRule, "updatedAt">[]): Promise<void> {
+export async function syncAISuggestedRules(
+  rules: Omit<AISuggestedPromptRule, "updatedAt">[],
+): Promise<void> {
   const now = new Date();
   const bulkOps = rules.map((r) => ({
     updateOne: {

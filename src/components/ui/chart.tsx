@@ -66,11 +66,11 @@ export type ChartConfig = {
 // with the CSS custom properties in src/app/globals.css. A CI test in
 // src/components/ui/chart-fallbacks.test.ts verifies key parity.
 const CSS_VAR_FALLBACKS_LIGHT: Record<string, string> = {
-  "--chart-1": "#4B0082",    // Tanzanite
-  "--chart-2": "#0047AB",    // Cobalt
-  "--chart-3": "#2D6A4F",    // Malachite
-  "--chart-4": "#B8860B",    // Gold
-  "--chart-5": "#C1440E",    // Terracotta
+  "--chart-1": "#4B0082", // Tanzanite
+  "--chart-2": "#0047AB", // Cobalt
+  "--chart-3": "#2D6A4F", // Malachite
+  "--chart-4": "#B8860B", // Gold
+  "--chart-5": "#C1440E", // Terracotta
   "--color-primary": "#0047AB",
   "--color-text-primary": "#141413",
   "--color-text-secondary": "#52524E",
@@ -96,11 +96,11 @@ const CSS_VAR_FALLBACKS_LIGHT: Record<string, string> = {
 };
 
 const CSS_VAR_FALLBACKS_DARK: Record<string, string> = {
-  "--chart-1": "#B388FF",    // Tanzanite light
-  "--chart-2": "#00B0FF",    // Cobalt light
-  "--chart-3": "#64FFDA",    // Malachite light
-  "--chart-4": "#FFD740",    // Gold light
-  "--chart-5": "#D4A574",    // Terracotta light
+  "--chart-1": "#B388FF", // Tanzanite light
+  "--chart-2": "#00B0FF", // Cobalt light
+  "--chart-3": "#64FFDA", // Malachite light
+  "--chart-4": "#FFD740", // Gold light
+  "--chart-5": "#D4A574", // Terracotta light
   "--color-primary": "#00B0FF",
   "--color-text-primary": "#F3F3F0",
   "--color-text-secondary": "#B5B5B0",
@@ -139,15 +139,23 @@ function resolveColor(color: string): string {
   if (typeof window === "undefined") {
     // SSR: return fallback if available, otherwise the raw var string
     if (color.startsWith("var(")) {
-      const prop = color.replace(/^var\(/, "").replace(/\)$/, "").trim();
+      const prop = color
+        .replace(/^var\(/, "")
+        .replace(/\)$/, "")
+        .trim();
       return CSS_VAR_FALLBACKS_LIGHT[prop] ?? color;
     }
     return color;
   }
   if (!color.startsWith("var(")) return color;
-  const prop = color.replace(/^var\(/, "").replace(/\)$/, "").trim();
+  const prop = color
+    .replace(/^var\(/, "")
+    .replace(/\)$/, "")
+    .trim();
   try {
-    const resolved = getComputedStyle(document.documentElement).getPropertyValue(prop).trim();
+    const resolved = getComputedStyle(document.documentElement)
+      .getPropertyValue(prop)
+      .trim();
     // Return the resolved value if non-empty, otherwise use theme-aware fallback
     return resolved || getFallback(prop) || color;
   } catch {
@@ -216,8 +224,7 @@ export function CanvasChart<T extends ChartType = ChartType>({
   const colorHash = Object.values(resolvedColors).join(",");
 
   // Mobile performance: disable animations and reduce DPR
-  const isMobile =
-    typeof window !== "undefined" && window.innerWidth < 768;
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
   // Destroy the Chart.js instance on unmount to prevent canvas memory leaks.
   // Without this, LazySection's bidirectional unmount leaves orphaned Chart
@@ -261,7 +268,10 @@ export function CanvasChart<T extends ChartType = ChartType>({
     };
 
     // Deep merge user options over base
-    return deepMerge(base, (options ?? {}) as Record<string, unknown>) as ChartOptions<T>;
+    return deepMerge(
+      base,
+      (options ?? {}) as Record<string, unknown>,
+    ) as ChartOptions<T>;
   }, [options, isMobile, colorHash]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -307,4 +317,7 @@ function deepMerge(
 export { resolveColor, resolveConfigColors };
 
 // Exported for test-only verification that light/dark fallback tables have identical keys.
-export { CSS_VAR_FALLBACKS_LIGHT as _CSS_VAR_FALLBACKS_LIGHT, CSS_VAR_FALLBACKS_DARK as _CSS_VAR_FALLBACKS_DARK };
+export {
+  CSS_VAR_FALLBACKS_LIGHT as _CSS_VAR_FALLBACKS_LIGHT,
+  CSS_VAR_FALLBACKS_DARK as _CSS_VAR_FALLBACKS_DARK,
+};

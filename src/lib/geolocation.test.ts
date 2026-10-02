@@ -9,10 +9,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const source = readFileSync(
-  resolve(__dirname, "geolocation.ts"),
-  "utf-8",
-);
+const source = readFileSync(resolve(__dirname, "geolocation.ts"), "utf-8");
 
 describe("geolocation source structure", () => {
   it("exports GeoResult interface with all status types", () => {
@@ -89,8 +86,10 @@ describe("geolocation source structure", () => {
 describe("Haversine distance formula verification", () => {
   // Reproduce the Haversine formula from the source code
   function haversineDistance(
-    lat1: number, lon1: number,
-    lat2: number, lon2: number,
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
   ): number {
     const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;

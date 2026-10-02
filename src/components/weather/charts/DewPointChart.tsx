@@ -14,7 +14,13 @@ interface DewPointChartProps {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "dewPoint", label: "Dew Point", color: "var(--chart-2)", fill: true, opacity: 0.15 },
+  {
+    key: "dewPoint",
+    label: "Dew Point",
+    color: "var(--chart-2)",
+    fill: true,
+    opacity: 0.15,
+  },
 ];
 
 /**

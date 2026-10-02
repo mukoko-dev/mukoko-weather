@@ -14,40 +14,122 @@ const IFR_ORANGE = "#ea580c";
 const LIFR_RED = "#dc2626";
 
 const styles = StyleSheet.create({
-  page: { fontFamily: "Helvetica", fontSize: 9, color: DARK_GRAY, backgroundColor: WHITE, padding: 32 },
-  header: { backgroundColor: NAVY, padding: 16, marginBottom: 16, borderRadius: 4 },
-  headerTitle: { fontSize: 18, fontFamily: "Helvetica-Bold", color: WHITE, marginBottom: 2 },
+  page: {
+    fontFamily: "Helvetica",
+    fontSize: 9,
+    color: DARK_GRAY,
+    backgroundColor: WHITE,
+    padding: 32,
+  },
+  header: {
+    backgroundColor: NAVY,
+    padding: 16,
+    marginBottom: 16,
+    borderRadius: 4,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontFamily: "Helvetica-Bold",
+    color: WHITE,
+    marginBottom: 2,
+  },
   headerSub: { fontSize: 10, color: "#94c4f7" },
-  headerRoute: { fontSize: 13, fontFamily: "Helvetica-Bold", color: WHITE, marginTop: 8 },
+  headerRoute: {
+    fontSize: 13,
+    fontFamily: "Helvetica-Bold",
+    color: WHITE,
+    marginTop: 8,
+  },
   headerMeta: { fontSize: 8, color: MID_GRAY, marginTop: 3 },
-  section: { marginBottom: 14, padding: 10, backgroundColor: LIGHT_GRAY, borderRadius: 4, borderLeft: `3px solid ${NAVY}` },
-  sectionTitle: { fontSize: 11, fontFamily: "Helvetica-Bold", color: NAVY, marginBottom: 6 },
+  section: {
+    marginBottom: 14,
+    padding: 10,
+    backgroundColor: LIGHT_GRAY,
+    borderRadius: 4,
+    borderLeft: `3px solid ${NAVY}`,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontFamily: "Helvetica-Bold",
+    color: NAVY,
+    marginBottom: 6,
+  },
   sectionSubtitle: { fontSize: 8, color: MID_GRAY, marginBottom: 8 },
   row: { flexDirection: "row", gap: 8, marginBottom: 6 },
   col: { flex: 1 },
-  label: { fontSize: 7, color: MID_GRAY, marginBottom: 1, textTransform: "uppercase" },
+  label: {
+    fontSize: 7,
+    color: MID_GRAY,
+    marginBottom: 1,
+    textTransform: "uppercase",
+  },
   value: { fontSize: 9, color: DARK_GRAY },
   valueBold: { fontSize: 9, fontFamily: "Helvetica-Bold", color: NAVY },
-  raw: { fontFamily: "Courier", fontSize: 8, color: DARK_GRAY, backgroundColor: "#e2e8f0", padding: 6, borderRadius: 2, marginTop: 4 },
-  badge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3, fontSize: 8, fontFamily: "Helvetica-Bold", color: WHITE },
-  badgeRow: { flexDirection: "row", gap: 8, marginBottom: 8, alignItems: "center" },
+  raw: {
+    fontFamily: "Courier",
+    fontSize: 8,
+    color: DARK_GRAY,
+    backgroundColor: "#e2e8f0",
+    padding: 6,
+    borderRadius: 2,
+    marginTop: 4,
+  },
+  badge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 3,
+    fontSize: 8,
+    fontFamily: "Helvetica-Bold",
+    color: WHITE,
+  },
+  badgeRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 8,
+    alignItems: "center",
+  },
   divider: { borderBottom: `1px solid #cbd5e1`, marginVertical: 8 },
   footer: { position: "absolute", bottom: 20, left: 32, right: 32 },
   footerText: { fontSize: 7, color: MID_GRAY, textAlign: "center" },
-  disclaimer: { fontSize: 6.5, color: "#ef4444", textAlign: "center", marginTop: 3 },
-  tafBlock: { fontFamily: "Courier", fontSize: 7.5, color: DARK_GRAY, backgroundColor: "#e2e8f0", padding: 6, borderRadius: 2, lineHeight: 1.5 },
-  condSummary: { flexDirection: "row", gap: 16, marginBottom: 12, padding: 8, backgroundColor: WHITE, borderRadius: 4 },
+  disclaimer: {
+    fontSize: 6.5,
+    color: "#ef4444",
+    textAlign: "center",
+    marginTop: 3,
+  },
+  tafBlock: {
+    fontFamily: "Courier",
+    fontSize: 7.5,
+    color: DARK_GRAY,
+    backgroundColor: "#e2e8f0",
+    padding: 6,
+    borderRadius: 2,
+    lineHeight: 1.5,
+  },
+  condSummary: {
+    flexDirection: "row",
+    gap: 16,
+    marginBottom: 12,
+    padding: 8,
+    backgroundColor: WHITE,
+    borderRadius: 4,
+  },
   condItem: { alignItems: "center", flex: 1 },
   condLabel: { fontSize: 7, color: MID_GRAY, marginBottom: 3 },
 });
 
 function fcBadgeColor(fc: string): string {
   switch (fc) {
-    case "VFR": return VFR_GREEN;
-    case "MVFR": return MVFR_BLUE;
-    case "IFR": return IFR_ORANGE;
-    case "LIFR": return LIFR_RED;
-    default: return MID_GRAY;
+    case "VFR":
+      return VFR_GREEN;
+    case "MVFR":
+      return MVFR_BLUE;
+    case "IFR":
+      return IFR_ORANGE;
+    case "LIFR":
+      return LIFR_RED;
+    default:
+      return MID_GRAY;
   }
 }
 
@@ -94,14 +176,29 @@ export interface BriefingData {
   generatedAt: string;
 }
 
-function AirportSection({ airport, compact = false }: { airport: AirportBriefing; compact?: boolean }) {
+function AirportSection({
+  airport,
+  compact = false,
+}: {
+  airport: AirportBriefing;
+  compact?: boolean;
+}) {
   const latest = airport.metar[0];
   const fc = latest?.flight_category ?? "N/A";
 
   return (
     <View style={styles.section}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-        <Text style={styles.sectionTitle}>{airport.icao} — {airport.name}</Text>
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 6,
+        }}
+      >
+        <Text style={styles.sectionTitle}>
+          {airport.icao} — {airport.name}
+        </Text>
         {latest && (
           <View style={[styles.badge, { backgroundColor: fcBadgeColor(fc) }]}>
             <Text>{fc}</Text>
@@ -115,7 +212,9 @@ function AirportSection({ airport, compact = false }: { airport: AirportBriefing
           <View style={styles.row}>
             <View style={styles.col}>
               <Text style={styles.label}>Temperature / Dew Point</Text>
-              <Text style={styles.value}>{latest.temp}°C / {latest.dewp}°C</Text>
+              <Text style={styles.value}>
+                {latest.temp}°C / {latest.dewp}°C
+              </Text>
             </View>
             <View style={styles.col}>
               <Text style={styles.label}>Wind</Text>
@@ -123,7 +222,11 @@ function AirportSection({ airport, compact = false }: { airport: AirportBriefing
             </View>
             <View style={styles.col}>
               <Text style={styles.label}>Visibility</Text>
-              <Text style={styles.value}>{latest.visibility === "9999" ? ">10km" : `${latest.visibility}m`}</Text>
+              <Text style={styles.value}>
+                {latest.visibility === "9999"
+                  ? ">10km"
+                  : `${latest.visibility}m`}
+              </Text>
             </View>
             {latest.pressure_hpa && (
               <View style={styles.col}>
@@ -166,7 +269,9 @@ function AirportSection({ airport, compact = false }: { airport: AirportBriefing
         </View>
       )}
       {!compact && !airport.taf && (
-        <Text style={[styles.sectionSubtitle, { marginTop: 6 }]}>No TAF available for this station.</Text>
+        <Text style={[styles.sectionSubtitle, { marginTop: 6 }]}>
+          No TAF available for this station.
+        </Text>
       )}
     </View>
   );
@@ -177,13 +282,18 @@ export function AviationBriefingPDF({ data }: { data: BriefingData }) {
   const destFc = data.destination.metar[0]?.flight_category ?? "N/A";
 
   return (
-    <Document title={`Weather Briefing ${data.departure.icao}–${data.destination.icao}`} author="mukoko weather">
+    <Document
+      title={`Weather Briefing ${data.departure.icao}–${data.destination.icao}`}
+      author="mukoko weather"
+    >
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>mukoko weather</Text>
           <Text style={styles.headerSub}>Pre-Flight Weather Briefing</Text>
-          <Text style={styles.headerRoute}>{data.departure.icao} → {data.destination.icao}</Text>
+          <Text style={styles.headerRoute}>
+            {data.departure.icao} → {data.destination.icao}
+          </Text>
           <Text style={styles.headerMeta}>Generated: {data.generatedAt}</Text>
         </View>
 
@@ -192,20 +302,42 @@ export function AviationBriefingPDF({ data }: { data: BriefingData }) {
           <View style={styles.condItem}>
             <Text style={styles.condLabel}>Departure</Text>
             <Text style={styles.valueBold}>{data.departure.icao}</Text>
-            <View style={[styles.badge, { backgroundColor: fcBadgeColor(depFc), marginTop: 3 }]}>
+            <View
+              style={[
+                styles.badge,
+                { backgroundColor: fcBadgeColor(depFc), marginTop: 3 },
+              ]}
+            >
               <Text>{depFc}</Text>
             </View>
           </View>
-          <View style={[styles.condItem, { borderLeft: `1px solid #cbd5e1`, borderRight: `1px solid #cbd5e1` }]}>
-            <Text style={[styles.label, { textAlign: "center" }]}>Conditions at Briefing</Text>
+          <View
+            style={[
+              styles.condItem,
+              {
+                borderLeft: `1px solid #cbd5e1`,
+                borderRight: `1px solid #cbd5e1`,
+              },
+            ]}
+          >
+            <Text style={[styles.label, { textAlign: "center" }]}>
+              Conditions at Briefing
+            </Text>
             <Text style={[styles.value, { textAlign: "center", marginTop: 4 }]}>
-              {depFc === "VFR" && destFc === "VFR" ? "✓ VFR throughout" : "Check individual stations"}
+              {depFc === "VFR" && destFc === "VFR"
+                ? "✓ VFR throughout"
+                : "Check individual stations"}
             </Text>
           </View>
           <View style={styles.condItem}>
             <Text style={styles.condLabel}>Destination</Text>
             <Text style={styles.valueBold}>{data.destination.icao}</Text>
-            <View style={[styles.badge, { backgroundColor: fcBadgeColor(destFc), marginTop: 3 }]}>
+            <View
+              style={[
+                styles.badge,
+                { backgroundColor: fcBadgeColor(destFc), marginTop: 3 },
+              ]}
+            >
               <Text>{destFc}</Text>
             </View>
           </View>
@@ -220,10 +352,12 @@ export function AviationBriefingPDF({ data }: { data: BriefingData }) {
         <View style={styles.footer}>
           <View style={styles.divider} />
           <Text style={styles.footerText}>
-            Generated by mukoko weather · weather.mukoko.com · {data.generatedAt}
+            Generated by mukoko weather · weather.mukoko.com ·{" "}
+            {data.generatedAt}
           </Text>
           <Text style={styles.disclaimer}>
-            This briefing is for planning purposes only. Always obtain an official pre-flight briefing from your national aviation authority.
+            This briefing is for planning purposes only. Always obtain an
+            official pre-flight briefing from your national aviation authority.
           </Text>
         </View>
       </Page>

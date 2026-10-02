@@ -48,9 +48,29 @@ export function prepareHourlyData(hourly: HourlyWeather): HourlyDataPoint[] {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "temp", label: "Temperature", color: "var(--chart-1)", fill: true, order: 1 },
-  { key: "feelsLike", label: "Feels Like", color: "var(--chart-3)", dashed: true, order: 2 },
-  { key: "rain", label: "Rain %", color: "var(--chart-2)", type: "bar", opacity: 0.35, yAxisID: "rain", order: 3 },
+  {
+    key: "temp",
+    label: "Temperature",
+    color: "var(--chart-1)",
+    fill: true,
+    order: 1,
+  },
+  {
+    key: "feelsLike",
+    label: "Feels Like",
+    color: "var(--chart-3)",
+    dashed: true,
+    order: 2,
+  },
+  {
+    key: "rain",
+    label: "Rain %",
+    color: "var(--chart-2)",
+    type: "bar",
+    opacity: 0.35,
+    yAxisID: "rain",
+    order: 3,
+  },
 ];
 
 const Y_AXES = {

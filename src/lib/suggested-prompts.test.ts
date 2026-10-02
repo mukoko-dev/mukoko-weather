@@ -72,7 +72,12 @@ const sampleRules: SuggestedPromptRule[] = [
     label: "Storm safety",
     queryTemplate: "Is it safe to be outdoors in {location} during this storm?",
     category: "weather",
-    condition: { field: "weather_code", operator: "gte", value: 95, source: "weather" },
+    condition: {
+      field: "weather_code",
+      operator: "gte",
+      value: 95,
+      source: "weather",
+    },
     active: true,
     order: 1,
   },
@@ -81,25 +86,42 @@ const sampleRules: SuggestedPromptRule[] = [
     label: "Frost precautions",
     queryTemplate: "What frost precautions should I take in {location}?",
     category: "weather",
-    condition: { field: "temperature_2m", operator: "lte", value: 3, source: "weather" },
+    condition: {
+      field: "temperature_2m",
+      operator: "lte",
+      value: 3,
+      source: "weather",
+    },
     active: true,
     order: 2,
   },
   {
     ruleId: "weather:heat",
     label: "Heat safety",
-    queryTemplate: "Is it safe to work outdoors in {location} at {temperature}°C?",
+    queryTemplate:
+      "Is it safe to work outdoors in {location} at {temperature}°C?",
     category: "weather",
-    condition: { field: "temperature_2m", operator: "gte", value: 35, source: "weather" },
+    condition: {
+      field: "temperature_2m",
+      operator: "gte",
+      value: 35,
+      source: "weather",
+    },
     active: true,
     order: 3,
   },
   {
     ruleId: "weather:uv",
     label: "UV protection",
-    queryTemplate: "What sun protection do I need with a UV index of {uvIndex}?",
+    queryTemplate:
+      "What sun protection do I need with a UV index of {uvIndex}?",
     category: "weather",
-    condition: { field: "uv_index", operator: "gte", value: 8, source: "weather" },
+    condition: {
+      field: "uv_index",
+      operator: "gte",
+      value: 8,
+      source: "weather",
+    },
     active: true,
     order: 4,
   },
@@ -108,7 +130,12 @@ const sampleRules: SuggestedPromptRule[] = [
     label: "Rain impact",
     queryTemplate: "Will the rain affect my plans in {location} today?",
     category: "weather",
-    condition: { field: "precipitation", operator: "gt", value: 0, source: "weather" },
+    condition: {
+      field: "precipitation",
+      operator: "gt",
+      value: 0,
+      source: "weather",
+    },
     active: true,
     order: 5,
   },
@@ -117,16 +144,27 @@ const sampleRules: SuggestedPromptRule[] = [
     label: "Rain impact",
     queryTemplate: "Will the rain affect my plans in {location} today?",
     category: "weather",
-    condition: { field: "precipitation_probability", operator: "gt", value: 50, source: "hourly" },
+    condition: {
+      field: "precipitation_probability",
+      operator: "gt",
+      value: 50,
+      source: "hourly",
+    },
     active: true,
     order: 6,
   },
   {
     ruleId: "weather:humidity",
     label: "Crop spraying",
-    queryTemplate: "Is it safe to spray crops in {location} with {humidity}% humidity?",
+    queryTemplate:
+      "Is it safe to spray crops in {location} with {humidity}% humidity?",
     category: "weather",
-    condition: { field: "relative_humidity_2m", operator: "gt", value: 75, source: "weather" },
+    condition: {
+      field: "relative_humidity_2m",
+      operator: "gt",
+      value: 75,
+      source: "weather",
+    },
     active: true,
     order: 7,
   },
@@ -135,7 +173,12 @@ const sampleRules: SuggestedPromptRule[] = [
     label: "Wind impact",
     queryTemplate: "How will {windSpeed} km/h wind affect outdoor activities?",
     category: "weather",
-    condition: { field: "wind_speed_10m", operator: "gt", value: 30, source: "weather" },
+    condition: {
+      field: "wind_speed_10m",
+      operator: "gt",
+      value: 30,
+      source: "weather",
+    },
     active: true,
     order: 8,
   },
@@ -144,7 +187,12 @@ const sampleRules: SuggestedPromptRule[] = [
     label: "Farming advice",
     queryTemplate: "How does today's weather affect farming in {location}?",
     category: "activity",
-    condition: { field: "activities", operator: "in", value: ["maize-farming", "tobacco-farming", "horticulture"], source: "activities" },
+    condition: {
+      field: "activities",
+      operator: "in",
+      value: ["maize-farming", "tobacco-farming", "horticulture"],
+      source: "activities",
+    },
     active: true,
     order: 10,
   },
@@ -153,16 +201,27 @@ const sampleRules: SuggestedPromptRule[] = [
     label: "Drone conditions",
     queryTemplate: "Can I fly my drone safely in {location} today?",
     category: "activity",
-    condition: { field: "activities", operator: "in", value: ["drone-flying"], source: "activities" },
+    condition: {
+      field: "activities",
+      operator: "in",
+      value: ["drone-flying"],
+      source: "activities",
+    },
     active: true,
     order: 11,
   },
   {
     ruleId: "activity:exercise",
     label: "Best time to exercise",
-    queryTemplate: "What's the best time to exercise outdoors in {location} today?",
+    queryTemplate:
+      "What's the best time to exercise outdoors in {location} today?",
     category: "activity",
-    condition: { field: "activities", operator: "in", value: ["running", "cycling", "hiking"], source: "activities" },
+    condition: {
+      field: "activities",
+      operator: "in",
+      value: ["running", "cycling", "hiking"],
+      source: "activities",
+    },
     active: true,
     order: 12,
   },
@@ -194,7 +253,12 @@ describe("generateSuggestedPrompts", () => {
       uv_index: 10,
       weather_code: 95,
     });
-    const result = generateSuggestedPrompts(weather, loc, ["running", "drone-flying", "maize-farming"], sampleRules);
+    const result = generateSuggestedPrompts(
+      weather,
+      loc,
+      ["running", "drone-flying", "maize-farming"],
+      sampleRules,
+    );
     expect(result.length).toBeLessThanOrEqual(3);
   });
 
@@ -249,25 +313,49 @@ describe("generateSuggestedPrompts", () => {
 
   it("includes farming prompt when farming activities selected", () => {
     const weather = makeWeather();
-    const result = generateSuggestedPrompts(weather, loc, ["maize-farming"], sampleRules);
+    const result = generateSuggestedPrompts(
+      weather,
+      loc,
+      ["maize-farming"],
+      sampleRules,
+    );
     expect(result.some((p) => p.label === "Farming advice")).toBe(true);
   });
 
   it("includes drone prompt when drone activity selected", () => {
     const weather = makeWeather();
-    const result = generateSuggestedPrompts(weather, loc, ["drone-flying"], sampleRules);
+    const result = generateSuggestedPrompts(
+      weather,
+      loc,
+      ["drone-flying"],
+      sampleRules,
+    );
     expect(result.some((p) => p.label === "Drone conditions")).toBe(true);
   });
 
   it("includes exercise prompt when sports activities selected", () => {
     const weather = makeWeather();
-    const result = generateSuggestedPrompts(weather, loc, ["running"], sampleRules);
+    const result = generateSuggestedPrompts(
+      weather,
+      loc,
+      ["running"],
+      sampleRules,
+    );
     expect(result.some((p) => p.label === "Best time to exercise")).toBe(true);
   });
 
   it("prioritizes weather-condition prompts over activity prompts", () => {
-    const weather = makeWeather({ weather_code: 95, temperature_2m: 38, uv_index: 10 });
-    const result = generateSuggestedPrompts(weather, loc, ["running", "maize-farming"], sampleRules);
+    const weather = makeWeather({
+      weather_code: 95,
+      temperature_2m: 38,
+      uv_index: 10,
+    });
+    const result = generateSuggestedPrompts(
+      weather,
+      loc,
+      ["running", "maize-farming"],
+      sampleRules,
+    );
     expect(result[0].label).toBe("Storm safety");
     expect(result[1].label).toBe("Heat safety");
     expect(result[2].label).toBe("UV protection");
@@ -356,13 +444,31 @@ describe("getExplorePrompts (explore-surface rules)", () => {
 
   it("returns only active explore-surface rules, sorted by order", async () => {
     const { getExplorePrompts } = await import("./suggested-prompts");
-    const second: SuggestedPromptRule = { ...exploreRule, ruleId: "explore:b", label: "B", order: 201 };
-    const inactive: SuggestedPromptRule = { ...exploreRule, ruleId: "explore:c", label: "C", active: false };
-    const locationRule: SuggestedPromptRule = {
-      ...exploreRule, ruleId: "generic:plan", label: "Plan my day",
-      queryTemplate: "What should I plan for today in {location}?", surface: undefined,
+    const second: SuggestedPromptRule = {
+      ...exploreRule,
+      ruleId: "explore:b",
+      label: "B",
+      order: 201,
     };
-    const prompts = getExplorePrompts([second, inactive, locationRule, exploreRule]);
+    const inactive: SuggestedPromptRule = {
+      ...exploreRule,
+      ruleId: "explore:c",
+      label: "C",
+      active: false,
+    };
+    const locationRule: SuggestedPromptRule = {
+      ...exploreRule,
+      ruleId: "generic:plan",
+      label: "Plan my day",
+      queryTemplate: "What should I plan for today in {location}?",
+      surface: undefined,
+    };
+    const prompts = getExplorePrompts([
+      second,
+      inactive,
+      locationRule,
+      exploreRule,
+    ]);
     expect(prompts).toEqual([
       { label: "Drone flying today", query: "Can I fly a drone today?" },
       { label: "B", query: "Can I fly a drone today?" },
@@ -371,7 +477,10 @@ describe("getExplorePrompts (explore-surface rules)", () => {
 
   it("skips explore rules whose template still has placeholders (would render literally)", async () => {
     const { getExplorePrompts } = await import("./suggested-prompts");
-    const bad: SuggestedPromptRule = { ...exploreRule, queryTemplate: "Plan my day in {location}" };
+    const bad: SuggestedPromptRule = {
+      ...exploreRule,
+      queryTemplate: "Plan my day in {location}",
+    };
     expect(getExplorePrompts([bad])).toEqual([]);
   });
 
@@ -382,6 +491,8 @@ describe("getExplorePrompts (explore-surface rules)", () => {
       [],
       [exploreRule],
     );
-    expect(prompts.find((p) => p.label === "Drone flying today")).toBeUndefined();
+    expect(
+      prompts.find((p) => p.label === "Drone flying today"),
+    ).toBeUndefined();
   });
 });

@@ -144,7 +144,10 @@ describe("weatherCodeToInfo", () => {
   });
 
   it("handles all documented WMO codes", () => {
-    const knownCodes = [0, 1, 2, 3, 45, 48, 51, 53, 55, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99];
+    const knownCodes = [
+      0, 1, 2, 3, 45, 48, 51, 53, 55, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80,
+      81, 82, 85, 86, 95, 96, 99,
+    ];
     for (const code of knownCodes) {
       const info = weatherCodeToInfo(code);
       expect(info.label).not.toBe("Unknown");
@@ -168,21 +171,30 @@ describe("getDefaultSeason", () => {
 
   it("returns Autumn for March-May in southern hemisphere", () => {
     for (const month of [3, 4, 5]) {
-      const season = getDefaultSeason(new Date(`2025-${month.toString().padStart(2, "0")}-15`), -20);
+      const season = getDefaultSeason(
+        new Date(`2025-${month.toString().padStart(2, "0")}-15`),
+        -20,
+      );
       expect(season.name).toBe("Autumn");
     }
   });
 
   it("returns Winter for June-August in southern hemisphere", () => {
     for (const month of [6, 7, 8]) {
-      const season = getDefaultSeason(new Date(`2025-${month.toString().padStart(2, "0")}-15`), -17);
+      const season = getDefaultSeason(
+        new Date(`2025-${month.toString().padStart(2, "0")}-15`),
+        -17,
+      );
       expect(season.name).toBe("Winter");
     }
   });
 
   it("returns Spring for September-November in southern hemisphere", () => {
     for (const month of [9, 10, 11]) {
-      const season = getDefaultSeason(new Date(`2025-${month.toString().padStart(2, "0")}-15`), -17);
+      const season = getDefaultSeason(
+        new Date(`2025-${month.toString().padStart(2, "0")}-15`),
+        -17,
+      );
       expect(season.name).toBe("Spring");
     }
   });
@@ -190,21 +202,30 @@ describe("getDefaultSeason", () => {
   // Northern hemisphere (positive latitude)
   it("returns Spring for March-May in northern hemisphere", () => {
     for (const month of [3, 4, 5]) {
-      const season = getDefaultSeason(new Date(`2025-${month.toString().padStart(2, "0")}-15`), 40);
+      const season = getDefaultSeason(
+        new Date(`2025-${month.toString().padStart(2, "0")}-15`),
+        40,
+      );
       expect(season.name).toBe("Spring");
     }
   });
 
   it("returns Summer for June-August in northern hemisphere", () => {
     for (const month of [6, 7, 8]) {
-      const season = getDefaultSeason(new Date(`2025-${month.toString().padStart(2, "0")}-15`), 40);
+      const season = getDefaultSeason(
+        new Date(`2025-${month.toString().padStart(2, "0")}-15`),
+        40,
+      );
       expect(season.name).toBe("Summer");
     }
   });
 
   it("returns Autumn for September-November in northern hemisphere", () => {
     for (const month of [9, 10, 11]) {
-      const season = getDefaultSeason(new Date(`2025-${month.toString().padStart(2, "0")}-15`), 40);
+      const season = getDefaultSeason(
+        new Date(`2025-${month.toString().padStart(2, "0")}-15`),
+        40,
+      );
       expect(season.name).toBe("Autumn");
     }
   });
@@ -216,7 +237,10 @@ describe("getDefaultSeason", () => {
 
   it("all seasons have localName and description", () => {
     for (let m = 1; m <= 12; m++) {
-      const season = getDefaultSeason(new Date(`2025-${m.toString().padStart(2, "0")}-15`), -17);
+      const season = getDefaultSeason(
+        new Date(`2025-${m.toString().padStart(2, "0")}-15`),
+        -17,
+      );
       expect(season.localName).toBeTruthy();
       expect(season.description).toBeTruthy();
     }
@@ -313,7 +337,11 @@ describe("createFallbackWeather", () => {
   const harare = { lat: -17.83, lon: 31.05, elevation: 1483 };
 
   it("returns valid WeatherData with all required fields", () => {
-    const data = createFallbackWeather(harare.lat, harare.lon, harare.elevation);
+    const data = createFallbackWeather(
+      harare.lat,
+      harare.lon,
+      harare.elevation,
+    );
 
     expect(data.current).toBeDefined();
     expect(data.hourly).toBeDefined();
@@ -331,7 +359,11 @@ describe("createFallbackWeather", () => {
   });
 
   it("generates 48 hours of hourly data", () => {
-    const data = createFallbackWeather(harare.lat, harare.lon, harare.elevation);
+    const data = createFallbackWeather(
+      harare.lat,
+      harare.lon,
+      harare.elevation,
+    );
 
     expect(data.hourly.time).toHaveLength(48);
     expect(data.hourly.temperature_2m).toHaveLength(48);
@@ -345,7 +377,11 @@ describe("createFallbackWeather", () => {
   });
 
   it("generates 7 days of daily data", () => {
-    const data = createFallbackWeather(harare.lat, harare.lon, harare.elevation);
+    const data = createFallbackWeather(
+      harare.lat,
+      harare.lon,
+      harare.elevation,
+    );
 
     expect(data.daily.time).toHaveLength(7);
     expect(data.daily.temperature_2m_max).toHaveLength(7);
@@ -362,26 +398,42 @@ describe("createFallbackWeather", () => {
     const highElevation = createFallbackWeather(-17.83, 31.05, 1800);
 
     // Higher elevation should produce lower temperatures
-    expect(highElevation.daily.temperature_2m_max[0]).toBeLessThan(lowElevation.daily.temperature_2m_max[0]);
+    expect(highElevation.daily.temperature_2m_max[0]).toBeLessThan(
+      lowElevation.daily.temperature_2m_max[0],
+    );
   });
 
   it("daily highs are always greater than lows", () => {
-    const data = createFallbackWeather(harare.lat, harare.lon, harare.elevation);
+    const data = createFallbackWeather(
+      harare.lat,
+      harare.lon,
+      harare.elevation,
+    );
 
     for (let i = 0; i < 7; i++) {
-      expect(data.daily.temperature_2m_max[i]).toBeGreaterThan(data.daily.temperature_2m_min[i]);
+      expect(data.daily.temperature_2m_max[i]).toBeGreaterThan(
+        data.daily.temperature_2m_min[i],
+      );
     }
   });
 
   it("produces data that checkFrostRisk can process without crashing", () => {
-    const data = createFallbackWeather(harare.lat, harare.lon, harare.elevation);
+    const data = createFallbackWeather(
+      harare.lat,
+      harare.lon,
+      harare.elevation,
+    );
     // Should not throw
     const result = checkFrostRisk(data.hourly);
     expect(result === null || typeof result === "object").toBe(true);
   });
 
   it("produces data that weatherCodeToInfo can process", () => {
-    const data = createFallbackWeather(harare.lat, harare.lon, harare.elevation);
+    const data = createFallbackWeather(
+      harare.lat,
+      harare.lon,
+      harare.elevation,
+    );
     const info = weatherCodeToInfo(data.current.weather_code);
     expect(info.label).toBeTruthy();
     expect(info.icon).toBeTruthy();
@@ -422,9 +474,13 @@ describe("synthesizeOpenMeteoInsights", () => {
     // Snow showers (WMO 85-86)
     const snowShowerData = createFallbackWeather(-17.83, 31.05, 1483);
     snowShowerData.current.weather_code = 85;
-    expect(synthesizeOpenMeteoInsights(snowShowerData).precipitationType).toBe(2);
+    expect(synthesizeOpenMeteoInsights(snowShowerData).precipitationType).toBe(
+      2,
+    );
     snowShowerData.current.weather_code = 86;
-    expect(synthesizeOpenMeteoInsights(snowShowerData).precipitationType).toBe(2);
+    expect(synthesizeOpenMeteoInsights(snowShowerData).precipitationType).toBe(
+      2,
+    );
 
     // Freezing rain code (WMO 66)
     const freezingData = createFallbackWeather(-17.83, 31.05, 1483);
@@ -434,9 +490,13 @@ describe("synthesizeOpenMeteoInsights", () => {
     // Freezing drizzle (WMO 56-57)
     const freezingDrizzleData = createFallbackWeather(-17.83, 31.05, 1483);
     freezingDrizzleData.current.weather_code = 56;
-    expect(synthesizeOpenMeteoInsights(freezingDrizzleData).precipitationType).toBe(3);
+    expect(
+      synthesizeOpenMeteoInsights(freezingDrizzleData).precipitationType,
+    ).toBe(3);
     freezingDrizzleData.current.weather_code = 57;
-    expect(synthesizeOpenMeteoInsights(freezingDrizzleData).precipitationType).toBe(3);
+    expect(
+      synthesizeOpenMeteoInsights(freezingDrizzleData).precipitationType,
+    ).toBe(3);
   });
 
   it("maps uvHealthConcern from current uv_index", () => {
@@ -454,17 +514,23 @@ describe("synthesizeOpenMeteoInsights", () => {
     // WMO 95 — moderate thunderstorm → 70%
     const moderateStorm = createFallbackWeather(-17.83, 31.05, 1483);
     moderateStorm.current.weather_code = 95;
-    expect(synthesizeOpenMeteoInsights(moderateStorm).thunderstormProbability).toBe(70);
+    expect(
+      synthesizeOpenMeteoInsights(moderateStorm).thunderstormProbability,
+    ).toBe(70);
 
     // WMO 96 — thunderstorm with hail → 85%
     const hailStorm = createFallbackWeather(-17.83, 31.05, 1483);
     hailStorm.current.weather_code = 96;
-    expect(synthesizeOpenMeteoInsights(hailStorm).thunderstormProbability).toBe(85);
+    expect(synthesizeOpenMeteoInsights(hailStorm).thunderstormProbability).toBe(
+      85,
+    );
 
     // WMO 99 — heavy thunderstorm with hail → 95%
     const heavyStorm = createFallbackWeather(-17.83, 31.05, 1483);
     heavyStorm.current.weather_code = 99;
-    expect(synthesizeOpenMeteoInsights(heavyStorm).thunderstormProbability).toBe(95);
+    expect(
+      synthesizeOpenMeteoInsights(heavyStorm).thunderstormProbability,
+    ).toBe(95);
   });
 });
 
@@ -526,13 +592,20 @@ describe("multi-model + minutely (Windy-style)", () => {
     });
 
     it("falls back to the unsuffixed best_match key", () => {
-      const raw = { hourly: { time: ["t0"], temperature_2m: [18], precipitation: [0] } };
+      const raw = {
+        hourly: { time: ["t0"], temperature_2m: [18], precipitation: [0] },
+      };
       const out = parseModelSeries(raw, ["gfs_seamless"]);
       expect(out.models[0].temperature_2m).toEqual([18]);
     });
 
     it("excludes models whose temps are all null", () => {
-      const raw = { hourly: { time: ["t0", "t1"], temperature_2m_icon_seamless: [null, null] } };
+      const raw = {
+        hourly: {
+          time: ["t0", "t1"],
+          temperature_2m_icon_seamless: [null, null],
+        },
+      };
       const out = parseModelSeries(raw, ["icon_seamless"]);
       expect(out.models_available).toEqual([]);
     });
@@ -541,7 +614,10 @@ describe("multi-model + minutely (Windy-style)", () => {
   describe("normalizeMultiModel", () => {
     it("attaches minutely without models when none requested", () => {
       const raw = {
-        current: {}, hourly: {}, daily: {}, current_units: {},
+        current: {},
+        hourly: {},
+        daily: {},
+        current_units: {},
         minutely_15: { time: ["m0"], precipitation: [0.3] },
       };
       const data = normalizeMultiModel(raw, []);
@@ -551,7 +627,10 @@ describe("multi-model + minutely (Windy-style)", () => {
 
     it("attaches per-model series when models requested", () => {
       const raw = {
-        current: {}, hourly: { time: ["t0"], temperature_2m_gfs_seamless: [20] }, daily: {}, current_units: {},
+        current: {},
+        hourly: { time: ["t0"], temperature_2m_gfs_seamless: [20] },
+        daily: {},
+        current_units: {},
       };
       const data = normalizeMultiModel(raw, ["gfs_seamless"]);
       expect(data.models_available).toEqual(["gfs_seamless"]);

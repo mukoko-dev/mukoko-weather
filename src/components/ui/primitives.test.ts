@@ -15,7 +15,14 @@ describe("Alert", () => {
 
   it("alertVariants has 6 severity variants", async () => {
     const { alertVariants } = await import("./alert");
-    const variants = ["default", "info", "warning", "severe", "frost", "success"] as const;
+    const variants = [
+      "default",
+      "info",
+      "warning",
+      "severe",
+      "frost",
+      "success",
+    ] as const;
     for (const v of variants) {
       const classes = alertVariants({ variant: v });
       expect(classes).toBeTruthy();
@@ -24,35 +31,56 @@ describe("Alert", () => {
 
   it("default/info variants use brand primary", async () => {
     const { alertVariants } = await import("./alert");
-    expect(alertVariants({ variant: "default" })).toContain("border-primary/50");
+    expect(alertVariants({ variant: "default" })).toContain(
+      "border-primary/50",
+    );
     expect(alertVariants({ variant: "info" })).toContain("bg-primary/5");
   });
 
   it("warning variant uses severity-moderate tokens", async () => {
     const { alertVariants } = await import("./alert");
-    expect(alertVariants({ variant: "warning" })).toContain("border-severity-moderate");
-    expect(alertVariants({ variant: "warning" })).toContain("bg-severity-moderate/10");
+    expect(alertVariants({ variant: "warning" })).toContain(
+      "border-severity-moderate",
+    );
+    expect(alertVariants({ variant: "warning" })).toContain(
+      "bg-severity-moderate/10",
+    );
   });
 
   it("severe variant uses severity-severe tokens", async () => {
     const { alertVariants } = await import("./alert");
-    expect(alertVariants({ variant: "severe" })).toContain("border-severity-severe");
+    expect(alertVariants({ variant: "severe" })).toContain(
+      "border-severity-severe",
+    );
   });
 
   it("frost variant uses severity-cold tokens", async () => {
     const { alertVariants } = await import("./alert");
-    expect(alertVariants({ variant: "frost" })).toContain("border-severity-cold");
-    expect(alertVariants({ variant: "frost" })).toContain("bg-severity-cold/10");
+    expect(alertVariants({ variant: "frost" })).toContain(
+      "border-severity-cold",
+    );
+    expect(alertVariants({ variant: "frost" })).toContain(
+      "bg-severity-cold/10",
+    );
   });
 
   it("success variant uses severity-low tokens", async () => {
     const { alertVariants } = await import("./alert");
-    expect(alertVariants({ variant: "success" })).toContain("border-severity-low");
+    expect(alertVariants({ variant: "success" })).toContain(
+      "border-severity-low",
+    );
   });
 
   it("no variant uses hardcoded hex colors or rgba", async () => {
     const { alertVariants } = await import("./alert");
-    for (const v of ["default", "info", "warning", "severe", "frost", "success"] as const) {
+    for (const v of [
+      "default",
+      "info",
+      "warning",
+      "severe",
+      "frost",
+      "success",
+    ] as const) {
       const classes = alertVariants({ variant: v });
       expect(classes).not.toMatch(/#[0-9a-fA-F]{3,8}/);
       expect(classes).not.toMatch(/rgba?\(/);
@@ -244,7 +272,9 @@ describe("CTACard variants", () => {
   it("all variants use brand radius token", async () => {
     const { ctaCardVariants } = await import("./cta-card");
     for (const v of ["default", "accent"] as const) {
-      expect(ctaCardVariants({ variant: v })).toContain("rounded-[var(--radius-card)]");
+      expect(ctaCardVariants({ variant: v })).toContain(
+        "rounded-[var(--radius-card)]",
+      );
     }
   });
 });
@@ -302,7 +332,9 @@ describe("ToggleGroup variants", () => {
   it("default and outline variants enforce 56px min touch target", async () => {
     const { toggleGroupItemVariants } = await import("./toggle-group");
     for (const variant of ["default", "outline"] as const) {
-      expect(toggleGroupItemVariants({ variant })).toContain("min-h-[var(--touch-target-min)]");
+      expect(toggleGroupItemVariants({ variant })).toContain(
+        "min-h-[var(--touch-target-min)]",
+      );
     }
   });
 });

@@ -1,5 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { resolveTheme, useAppStore, isShamwariContextValid, MAX_SAVED_LOCATIONS, DEFAULT_SECTION_ORDER, mergeSectionOrder, type ThemePreference, type ShamwariContext } from "./store";
+import {
+  resolveTheme,
+  useAppStore,
+  isShamwariContextValid,
+  MAX_SAVED_LOCATIONS,
+  DEFAULT_SECTION_ORDER,
+  mergeSectionOrder,
+  type ThemePreference,
+  type ShamwariContext,
+} from "./store";
 
 // Mock RxDB bridge to prevent IndexedDB access in tests
 vi.mock("./rxdb/bridge", () => ({
@@ -148,10 +157,15 @@ describe("savedLocations", () => {
   });
 
   it("saveLocation is a no-op at MAX_SAVED_LOCATIONS cap", () => {
-    const full = Array.from({ length: MAX_SAVED_LOCATIONS }, (_, i) => `loc-${i}`);
+    const full = Array.from(
+      { length: MAX_SAVED_LOCATIONS },
+      (_, i) => `loc-${i}`,
+    );
     useAppStore.setState({ savedLocations: full });
     useAppStore.getState().saveLocation("one-more");
-    expect(useAppStore.getState().savedLocations).toHaveLength(MAX_SAVED_LOCATIONS);
+    expect(useAppStore.getState().savedLocations).toHaveLength(
+      MAX_SAVED_LOCATIONS,
+    );
     expect(useAppStore.getState().savedLocations).not.toContain("one-more");
   });
 
@@ -171,7 +185,11 @@ describe("savedLocations", () => {
     useAppStore.getState().saveLocation("harare");
     useAppStore.getState().saveLocation("bulawayo");
     useAppStore.getState().saveLocation("mutare");
-    expect(useAppStore.getState().savedLocations).toEqual(["harare", "bulawayo", "mutare"]);
+    expect(useAppStore.getState().savedLocations).toEqual([
+      "harare",
+      "bulawayo",
+      "mutare",
+    ]);
   });
 
   it("saveLocation triggers RxDB persistence", async () => {
@@ -179,7 +197,9 @@ describe("savedLocations", () => {
     vi.mocked(updatePreferences).mockClear();
     useAppStore.getState().saveLocation("gweru");
     expect(updatePreferences).toHaveBeenCalledWith(
-      expect.objectContaining({ savedLocations: expect.arrayContaining(["gweru"]) }),
+      expect.objectContaining({
+        savedLocations: expect.arrayContaining(["gweru"]),
+      }),
     );
   });
 });
@@ -313,7 +333,9 @@ describe("locationLabels", () => {
 
   it("setLocationLabel trims whitespace", () => {
     useAppStore.getState().setLocationLabel("harare", "  My Home  ");
-    expect(useAppStore.getState().locationLabels).toEqual({ harare: "My Home" });
+    expect(useAppStore.getState().locationLabels).toEqual({
+      harare: "My Home",
+    });
   });
 
   it("removeLocation also cleans up the label", () => {
@@ -484,7 +506,9 @@ describe("mergeSectionOrder (Bug 2 — union stored order with defaults)", () =>
       "aiChat",
     ];
     const merged = mergeSectionOrder(stored);
-    expect(merged.indexOf("atmospheric")).toBeLessThan(merged.indexOf("current"));
+    expect(merged.indexOf("atmospheric")).toBeLessThan(
+      merged.indexOf("current"),
+    );
     expect(merged).toHaveLength(DEFAULT_SECTION_ORDER.length);
   });
 

@@ -253,8 +253,8 @@ curl "${SITE}/api/embed/current?lat=-17.83&lon=31.05"`}</CodeBlock>
               not yet available — coming soon
             </strong>
             . Until it ships, use the copy-paste{" "}
-            <code className="font-mono">&lt;iframe&gt;</code> above (works in React
-            and every other framework) or call the JSON API directly.
+            <code className="font-mono">&lt;iframe&gt;</code> above (works in
+            React and every other framework) or call the JSON API directly.
           </p>
         </section>
       </main>

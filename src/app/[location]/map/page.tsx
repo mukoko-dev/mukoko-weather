@@ -58,9 +58,24 @@ export default async function MapPage({
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "mukoko weather", item: BASE_URL },
-      { "@type": "ListItem", position: 2, name: `${location.name} Weather`, item: `${BASE_URL}/${location.slug}` },
-      { "@type": "ListItem", position: 3, name: "Map", item: `${BASE_URL}/${location.slug}/map` },
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "mukoko weather",
+        item: BASE_URL,
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: `${location.name} Weather`,
+        item: `${BASE_URL}/${location.slug}`,
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: "Map",
+        item: `${BASE_URL}/${location.slug}/map`,
+      },
     ],
   };
 

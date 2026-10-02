@@ -35,7 +35,10 @@ export function scoreLabel(score: number): string {
  * Dew point (°C) from temperature and relative humidity via the
  * Magnus-Tetens approximation — accurate to ~0.35°C in the -45..60°C range.
  */
-export function dewPointFromTempHumidity(tempC: number, rhPercent: number): number {
+export function dewPointFromTempHumidity(
+  tempC: number,
+  rhPercent: number,
+): number {
   const rh = Math.min(100, Math.max(1, rhPercent));
   const a = 17.62;
   const b = 243.12;
@@ -52,7 +55,10 @@ export function dewPointFromTempHumidity(tempC: number, rhPercent: number): numb
  * derived from hourly data are set — rule conditions on absent fields simply
  * don't match, which is how the rules engine already treats missing data.
  */
-export function hourInsights(hourly: HourlyWeather, i: number): WeatherInsights {
+export function hourInsights(
+  hourly: HourlyWeather,
+  i: number,
+): WeatherInsights {
   const weatherCode = hourly.weather_code?.[i] ?? 0;
 
   // WMO 95–99 = thunderstorm activity (same graduation as synthesizeOpenMeteoInsights)
@@ -63,8 +69,18 @@ export function hourInsights(hourly: HourlyWeather, i: number): WeatherInsights 
 
   // WMO code → precipitationType: 0=none, 1=rain, 2=snow, 3=freezing rain
   let precipitationType = 0;
-  if ((weatherCode >= 71 && weatherCode <= 77) || (weatherCode >= 85 && weatherCode <= 86)) precipitationType = 2;
-  else if (weatherCode === 66 || weatherCode === 67 || weatherCode === 56 || weatherCode === 57) precipitationType = 3;
+  if (
+    (weatherCode >= 71 && weatherCode <= 77) ||
+    (weatherCode >= 85 && weatherCode <= 86)
+  )
+    precipitationType = 2;
+  else if (
+    weatherCode === 66 ||
+    weatherCode === 67 ||
+    weatherCode === 56 ||
+    weatherCode === 57
+  )
+    precipitationType = 3;
   else if (weatherCode >= 51) precipitationType = 1;
 
   const temp = hourly.temperature_2m?.[i];
@@ -78,7 +94,9 @@ export function hourInsights(hourly: HourlyWeather, i: number): WeatherInsights 
     thunderstormProbability,
     precipitationType,
     dewPoint:
-      temp != null && rh != null ? dewPointFromTempHumidity(temp, rh) : undefined,
+      temp != null && rh != null
+        ? dewPointFromTempHumidity(temp, rh)
+        : undefined,
   };
 }
 
@@ -87,7 +105,10 @@ export function resolveRule(
   activity: Pick<Activity, "id" | "category">,
   dbRules: Map<string, SuitabilityRuleDoc>,
 ): SuitabilityRuleDoc | undefined {
-  return dbRules.get(`activity:${activity.id}`) ?? dbRules.get(`category:${activity.category}`);
+  return (
+    dbRules.get(`activity:${activity.id}`) ??
+    dbRules.get(`category:${activity.category}`)
+  );
 }
 
 export interface FeasibilityPoint {

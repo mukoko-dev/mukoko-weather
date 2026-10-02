@@ -93,7 +93,10 @@ export function ServiceWorkerUpdater() {
     return () => {
       try {
         sw.removeEventListener("controllerchange", handleControllerChange);
-        document.removeEventListener("visibilitychange", handleVisibilityChange);
+        document.removeEventListener(
+          "visibilitychange",
+          handleVisibilityChange,
+        );
         window.removeEventListener("focus", checkForUpdate);
       } catch {
         // no-op

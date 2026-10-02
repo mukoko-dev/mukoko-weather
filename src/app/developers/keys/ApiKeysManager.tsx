@@ -132,7 +132,9 @@ export function ApiKeysManager() {
       // No eligible entity membership — surface the guidance state.
       if (res.status === 403 || data.error === "entity_required") {
         setEntityRequired(true);
-        throw new Error(data.message ?? "An entity is required to create a key.");
+        throw new Error(
+          data.message ?? "An entity is required to create a key.",
+        );
       }
       if (!res.ok || !data.key || !data.fullKey) {
         throw new Error(data.message ?? "Could not create the key.");
@@ -141,7 +143,9 @@ export function ApiKeysManager() {
       setKeys((prev) => [data.key as ApiKey, ...prev]);
       setLabel("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create the key.");
+      setError(
+        err instanceof Error ? err.message : "Could not create the key.",
+      );
     } finally {
       setCreating(false);
     }
@@ -174,21 +178,14 @@ export function ApiKeysManager() {
   }
 
   return (
-    <section
-      className="mt-8 space-y-6"
-      aria-labelledby="api-keys-heading"
-    >
+    <section className="mt-8 space-y-6" aria-labelledby="api-keys-heading">
       <h2 id="api-keys-heading" className="sr-only">
         Your API keys
       </h2>
 
       {/* One-time full-key reveal */}
       {newKey && (
-        <div
-          className="baobab space-y-3"
-          role="status"
-          aria-live="polite"
-        >
+        <div className="baobab space-y-3" role="status" aria-live="polite">
           <p className="giraffe">Your new API key</p>
           <p className="dove">
             Copy it now — for your security, you won&apos;t be able to see this
@@ -231,10 +228,7 @@ export function ApiKeysManager() {
 
       {/* Create form */}
       <form onSubmit={handleCreate} className="acacia space-y-3">
-        <label
-          htmlFor="key-label"
-          className="giraffe block"
-        >
+        <label htmlFor="key-label" className="giraffe block">
           Create a new key
         </label>
         <p className="dove">

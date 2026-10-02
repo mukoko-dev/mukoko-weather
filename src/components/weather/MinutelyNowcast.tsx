@@ -18,7 +18,13 @@ const RAIN_THRESHOLD_MM = 0.1;
 const STEP_LABELS = ["Now", "+15", "+30", "+45"];
 
 const SERIES: SeriesConfig[] = [
-  { key: "precip", label: "Rain", color: "var(--color-rain)", type: "bar", opacity: 0.75 },
+  {
+    key: "precip",
+    label: "Rain",
+    color: "var(--color-rain)",
+    type: "bar",
+    opacity: 0.75,
+  },
 ];
 
 /**
@@ -91,7 +97,10 @@ export function MinutelyNowcast({ minutely }: MinutelyNowcastProps) {
         >
           {rows.map((r) => (
             <div key={r.t} className="flex flex-1 flex-col items-center gap-1">
-              <div className="h-8 w-full rounded-sm bg-surface-base" aria-hidden="true" />
+              <div
+                className="h-8 w-full rounded-sm bg-surface-base"
+                aria-hidden="true"
+              />
               <span className="text-sm text-text-tertiary">{r.t}</span>
             </div>
           ))}

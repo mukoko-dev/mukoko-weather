@@ -15,9 +15,19 @@ describe("REPORT_TYPES", () => {
     const ids = REPORT_TYPES.map((t) => t.id).sort();
     expect(ids).toEqual(
       [
-        "light-rain", "heavy-rain", "thunderstorm", "hail", "flooding",
-        "strong-wind", "clear-skies", "cloudy", "fog", "mist", "haze",
-        "dust", "frost",
+        "light-rain",
+        "heavy-rain",
+        "thunderstorm",
+        "hail",
+        "flooding",
+        "strong-wind",
+        "clear-skies",
+        "cloudy",
+        "fog",
+        "mist",
+        "haze",
+        "dust",
+        "frost",
       ].sort(),
     );
   });

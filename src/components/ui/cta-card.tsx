@@ -1,7 +1,7 @@
-import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
+import * as React from "react";
+import { cva, type VariantProps } from "class-variance-authority";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // CTACard — call-to-action card with title, description, and action slot
@@ -20,19 +20,18 @@ const ctaCardVariants = cva(
       variant: "default",
     },
   },
-)
+);
 
 interface CTACardProps
-  extends React.ComponentProps<"div">,
-    VariantProps<typeof ctaCardVariants> {
+  extends React.ComponentProps<"div">, VariantProps<typeof ctaCardVariants> {
   /** Card title */
-  title: string
+  title: string;
   /** Card description */
-  description: string
+  description: string;
   /** Heading level — defaults to h3 */
-  as?: "h2" | "h3" | "h4"
+  as?: "h2" | "h3" | "h4";
   /** Action slot rendered on the right side */
-  action: React.ReactNode
+  action: React.ReactNode;
 }
 
 function CTACard({
@@ -52,15 +51,15 @@ function CTACard({
     >
       <div className="flex items-center justify-between gap-4">
         <div>
-          <Heading className="giraffe">
-            {title}
-          </Heading>
-          <p className="mt-1.5 text-base text-text-secondary leading-relaxed">{description}</p>
+          <Heading className="giraffe">{title}</Heading>
+          <p className="mt-1.5 text-base text-text-secondary leading-relaxed">
+            {description}
+          </p>
         </div>
         {action}
       </div>
     </div>
-  )
+  );
 }
 
-export { CTACard, ctaCardVariants, type CTACardProps }
+export { CTACard, ctaCardVariants, type CTACardProps };

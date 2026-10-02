@@ -21,8 +21,14 @@ interface Props {
  * charts, or recreates the Three.js hero.
  */
 export function DraggableSection({ id, reordering, children }: Props) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
 
   const style = reordering
     ? ({
@@ -33,7 +39,11 @@ export function DraggableSection({ id, reordering, children }: Props) {
     : undefined;
 
   return (
-    <div ref={setNodeRef} style={style} className={reordering ? "relative" : undefined}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={reordering ? "relative" : undefined}
+    >
       {/* Drag handle — only mounted in reorder mode. It previously tried to reveal
           itself on hover of the card, but the hovered element was a SIBLING of this
           button (not an ancestor), so the hover selector never matched and the handle
@@ -45,7 +55,13 @@ export function DraggableSection({ id, reordering, children }: Props) {
           aria-label="Drag to reorder section"
           className="absolute left-1 top-2 z-10 flex h-8 min-h-0 w-8 cursor-grab touch-none items-center justify-center rounded-full border border-primary/25 bg-surface-card text-text-secondary shadow-sm transition-colors hover:border-primary/40 hover:text-text-primary focus-visible:outline-2 focus-visible:outline-primary active:cursor-grabbing"
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            aria-hidden="true"
+          >
             <path d="M5 3a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 7a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 11a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2z" />
           </svg>
         </button>

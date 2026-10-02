@@ -2,16 +2,20 @@
   "name": "mukoko-weather",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@11.12.1",
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "vp lint",
+    "lint:eslint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:python": "python -m pytest tests/py/ -v",
-    "test:all": "vitest run && python -m pytest tests/py/ -v"
+    "test:all": "vitest run && python -m pytest tests/py/ -v",
+    "check": "vp check",
+    "fmt": "vp fmt"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",

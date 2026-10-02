@@ -19,10 +19,7 @@ export function MapPreview({ location }: MapPreviewProps) {
     <section aria-labelledby="map-preview-heading">
       <div className="baobab p-0 overflow-hidden">
         <div className="flex items-center justify-between p-4 pb-2 sm:px-5">
-          <h2
-            id="map-preview-heading"
-            className="giraffe"
-          >
+          <h2 id="map-preview-heading" className="giraffe">
             Weather Map
           </h2>
           <Link

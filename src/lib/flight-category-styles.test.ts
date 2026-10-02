@@ -1,10 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { FLIGHT_CATEGORY_STYLES, getFlightCategoryClass } from "./flight-category-styles";
+import {
+  FLIGHT_CATEGORY_STYLES,
+  getFlightCategoryClass,
+} from "./flight-category-styles";
 
 describe("FLIGHT_CATEGORY_STYLES", () => {
   it("defines all four flight categories", () => {
     expect(Object.keys(FLIGHT_CATEGORY_STYLES).sort()).toEqual(
-      ["IFR", "LIFR", "MVFR", "VFR"].sort()
+      ["IFR", "LIFR", "MVFR", "VFR"].sort(),
     );
   });
 
@@ -28,6 +31,8 @@ describe("getFlightCategoryClass", () => {
   });
 
   it("falls back to a neutral class for unknown categories", () => {
-    expect(getFlightCategoryClass("UNKNOWN")).toBe("bg-surface-dim text-text-secondary");
+    expect(getFlightCategoryClass("UNKNOWN")).toBe(
+      "bg-surface-dim text-text-secondary",
+    );
   });
 });

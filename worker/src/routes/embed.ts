@@ -70,15 +70,19 @@ embedRoutes.get("/data/:location", async (c) => {
 
   // Check weather cache
   const cacheKey = `weather:${location.lat.toFixed(2)}:${location.lon.toFixed(2)}`;
-  let weather = await c.env.WEATHER_CACHE.get(cacheKey, { type: "json" }) as Record<string, unknown> | null;
+  let weather = (await c.env.WEATHER_CACHE.get(cacheKey, {
+    type: "json",
+  })) as Record<string, unknown> | null;
 
   if (!weather) {
     // Fetch from Open-Meteo
     const params = new URLSearchParams({
       latitude: location.lat.toString(),
       longitude: location.lon.toString(),
-      current: "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,uv_index,is_day",
-      daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+      current:
+        "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,uv_index,is_day",
+      daily:
+        "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
       timezone: "auto",
       forecast_days: "7",
     });
@@ -87,27 +91,33 @@ embedRoutes.get("/data/:location", async (c) => {
     if (!res.ok) {
       return c.json({ error: "Weather data unavailable" }, 502);
     }
-    weather = await res.json() as Record<string, unknown>;
-    await c.env.WEATHER_CACHE.put(cacheKey, JSON.stringify(weather), { expirationTtl: 900 });
+    weather = (await res.json()) as Record<string, unknown>;
+    await c.env.WEATHER_CACHE.put(cacheKey, JSON.stringify(weather), {
+      expirationTtl: 900,
+    });
   }
 
-  return c.json({
-    location: {
-      name: location.name,
-      slug: location.slug,
-      province: location.province,
-      elevation: location.elevation,
-      tags: location.tags,
+  return c.json(
+    {
+      location: {
+        name: location.name,
+        slug: location.slug,
+        province: location.province,
+        elevation: location.elevation,
+        tags: location.tags,
+      },
+      weather,
+      _meta: {
+        source: "mukoko weather by Nyuchi Africa",
+        url: `https://weather.mukoko.com/${slug}`,
+      },
     },
-    weather,
-    _meta: {
-      source: "mukoko weather by Nyuchi Africa",
-      url: `https://weather.mukoko.com/${slug}`,
+    200,
+    {
+      "Cache-Control": "public, max-age=900",
+      "Access-Control-Allow-Origin": "*",
     },
-  }, 200, {
-    "Cache-Control": "public, max-age=900",
-    "Access-Control-Allow-Origin": "*",
-  });
+  );
 });
 
 // ───── Iframe embed endpoint ─────

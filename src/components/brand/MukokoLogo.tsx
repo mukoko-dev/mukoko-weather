@@ -20,7 +20,10 @@ export function MukokoLogo({ className = "" }: { className?: string }) {
     update();
 
     const observer = new MutationObserver(update);
-    observer.observe(html, { attributes: true, attributeFilter: ["data-theme"] });
+    observer.observe(html, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
     return () => observer.disconnect();
   }, []);
 

@@ -1,10 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { prepareModelComparisonData, MODEL_COLORS, MODEL_SWATCH_CLASS } from "./ModelComparisonChart";
+import {
+  prepareModelComparisonData,
+  MODEL_COLORS,
+  MODEL_SWATCH_CLASS,
+} from "./ModelComparisonChart";
 import { ForecastModel, type ModelForecast } from "@/lib/weather";
 
 const MODELS: ModelForecast[] = [
-  { model: ForecastModel.GFS, temperature_2m: [20, 21, 22], precipitation: [0, 0, 0.1] },
-  { model: ForecastModel.ECMWF, temperature_2m: [19, 20, 21], precipitation: [0, 0.1, 0] },
+  {
+    model: ForecastModel.GFS,
+    temperature_2m: [20, 21, 22],
+    precipitation: [0, 0, 0.1],
+  },
+  {
+    model: ForecastModel.ECMWF,
+    temperature_2m: [19, 20, 21],
+    precipitation: [0, 0.1, 0],
+  },
 ];
 const TIME = ["2025-01-01T00:00", "2025-01-01T01:00", "2025-01-01T02:00"];
 
@@ -30,7 +42,11 @@ describe("prepareModelComparisonData", () => {
   it("caps rows at 24 steps", () => {
     const longTime = Array.from({ length: 48 }, (_, i) => `t${i}`);
     const longModels: ModelForecast[] = [
-      { model: ForecastModel.GFS, temperature_2m: longTime.map((_, i) => i), precipitation: longTime.map(() => 0) },
+      {
+        model: ForecastModel.GFS,
+        temperature_2m: longTime.map((_, i) => i),
+        precipitation: longTime.map(() => 0),
+      },
     ];
     const { rows } = prepareModelComparisonData(longModels, longTime);
     expect(rows).toHaveLength(24);

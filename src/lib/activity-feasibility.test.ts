@@ -15,7 +15,9 @@ import type { SuitabilityRuleDoc } from "./db";
 // ---------------------------------------------------------------------------
 
 /** 48 hours of hourly data starting at midnight today (local). */
-function makeHourly(overrides: Partial<Record<keyof HourlyWeather, number[]>> = {}): HourlyWeather {
+function makeHourly(
+  overrides: Partial<Record<keyof HourlyWeather, number[]>> = {},
+): HourlyWeather {
   const n = 48;
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -103,7 +105,9 @@ describe("dewPointFromTempHumidity", () => {
   });
 
   it("is lower for drier air", () => {
-    expect(dewPointFromTempHumidity(30, 30)).toBeLessThan(dewPointFromTempHumidity(30, 80));
+    expect(dewPointFromTempHumidity(30, 30)).toBeLessThan(
+      dewPointFromTempHumidity(30, 80),
+    );
   });
 
   it("clamps nonsense humidity instead of returning NaN", () => {
@@ -118,7 +122,10 @@ describe("dewPointFromTempHumidity", () => {
 
 describe("hourInsights", () => {
   it("maps wind, visibility, uv and dew point from the hour's values", () => {
-    const hourly = makeHourly({ wind_speed_10m: Array(48).fill(22), wind_gusts_10m: Array(48).fill(33) });
+    const hourly = makeHourly({
+      wind_speed_10m: Array(48).fill(22),
+      wind_gusts_10m: Array(48).fill(33),
+    });
     const ins = hourInsights(hourly, 5);
     expect(ins.windSpeed).toBe(22);
     expect(ins.windGust).toBe(33);
@@ -175,7 +182,13 @@ describe("resolveRule", () => {
 describe("feasibilitySeries", () => {
   it("returns [] when no rule matches or hourly data is missing", () => {
     expect(feasibilitySeries(activity, makeHourly(), new Map())).toEqual([]);
-    expect(feasibilitySeries(activity, undefined, new Map([["category:farming", windRule]]))).toEqual([]);
+    expect(
+      feasibilitySeries(
+        activity,
+        undefined,
+        new Map([["category:farming", windRule]]),
+      ),
+    ).toEqual([]);
   });
 
   it("scores each of the next 24 hours against the rule", () => {
@@ -183,15 +196,23 @@ describe("feasibilitySeries", () => {
     const points = feasibilitySeries(activity, makeHourly(), rules);
     expect(points).toHaveLength(24);
     // Calm wind everywhere → fallback level "good" at every point
-    expect(points.every((p) => p.level === "good" && p.score === LEVEL_SCORES.good)).toBe(true);
+    expect(
+      points.every((p) => p.level === "good" && p.score === LEVEL_SCORES.good),
+    ).toBe(true);
   });
 
   it("drops the score where the rule's poor condition matches", () => {
     const wind = Array(48).fill(10);
     wind.fill(40, 0, 48); // all hours over the 30 km/h threshold
     const rules = new Map([["category:farming", windRule]]);
-    const points = feasibilitySeries(activity, makeHourly({ wind_speed_10m: wind }), rules);
-    expect(points.every((p) => p.level === "poor" && p.score === LEVEL_SCORES.poor)).toBe(true);
+    const points = feasibilitySeries(
+      activity,
+      makeHourly({ wind_speed_10m: wind }),
+      rules,
+    );
+    expect(
+      points.every((p) => p.level === "poor" && p.score === LEVEL_SCORES.poor),
+    ).toBe(true);
   });
 
   it("starts at the current hour, not midnight", () => {

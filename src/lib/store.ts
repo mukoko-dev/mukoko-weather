@@ -31,7 +31,9 @@ export interface ShamwariContext {
 }
 
 /** Check if a Shamwari context is still valid (< 10 min old) */
-export function isShamwariContextValid(ctx: ShamwariContext | null): ctx is ShamwariContext {
+export function isShamwariContextValid(
+  ctx: ShamwariContext | null,
+): ctx is ShamwariContext {
   if (!ctx) return false;
   return Date.now() - ctx.timestamp < SHAMWARI_CONTEXT_TTL_MS;
 }
@@ -40,7 +42,9 @@ export function isShamwariContextValid(ctx: ShamwariContext | null): ctx is Sham
 export function resolveTheme(pref: ThemePreference): "light" | "dark" {
   if (pref !== "system") return pref;
   if (typeof window === "undefined") return "light";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
 }
 
 /** Apply the resolved theme to the DOM */
@@ -102,7 +106,8 @@ export function mergeSectionOrder(stored: string[]): string[] {
     if (seen.has(id)) continue;
     const defaultIdx = DEFAULT_SECTION_INDEX.get(id)!;
     let insertPos = result.findIndex(
-      (existing) => (DEFAULT_SECTION_INDEX.get(existing) ?? Infinity) > defaultIdx,
+      (existing) =>
+        (DEFAULT_SECTION_INDEX.get(existing) ?? Infinity) > defaultIdx,
     );
     if (insertPos === -1) insertPos = result.length;
     result.splice(insertPos, 0, id);
@@ -122,13 +127,19 @@ function readStoredSectionOrder(): string[] | null {
         return parsed as string[];
       }
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return null;
 }
 
 function saveSectionOrder(order: string[]): void {
   if (typeof window === "undefined") return;
-  try { localStorage.setItem(SECTION_ORDER_KEY, JSON.stringify(order)); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(SECTION_ORDER_KEY, JSON.stringify(order));
+  } catch {
+    /* ignore */
+  }
 }
 
 interface AppState {
@@ -160,7 +171,9 @@ interface AppState {
   /** Shamwari context — carries weather/location data between pages (transient, not persisted) */
   shamwariContext: ShamwariContext | null;
   /** Accepts context with optional timestamp — auto-sets timestamp to Date.now() */
-  setShamwariContext: (ctx: Omit<ShamwariContext, "timestamp"> & { timestamp?: number }) => void;
+  setShamwariContext: (
+    ctx: Omit<ShamwariContext, "timestamp"> & { timestamp?: number },
+  ) => void;
   clearShamwariContext: () => void;
   /** Weather report modal visibility (transient) */
   reportModalOpen: boolean;
@@ -221,7 +234,10 @@ export const useAppStore = create<AppState>()((set) => ({
   savedLocations: [],
   saveLocation: (slug) =>
     set((state) => {
-      if (state.savedLocations.includes(slug) || state.savedLocations.length >= MAX_SAVED_LOCATIONS) {
+      if (
+        state.savedLocations.includes(slug) ||
+        state.savedLocations.length >= MAX_SAVED_LOCATIONS
+      ) {
         return {};
       }
       const next = [...state.savedLocations, slug];
@@ -232,7 +248,11 @@ export const useAppStore = create<AppState>()((set) => ({
     set((state) => {
       const next = state.savedLocations.filter((s) => s !== slug);
       const { [slug]: _, ...remainingLabels } = state.locationLabels;
-      if (!_suppressRxDBWrites) updatePreferences({ savedLocations: next, locationLabels: remainingLabels });
+      if (!_suppressRxDBWrites)
+        updatePreferences({
+          savedLocations: next,
+          locationLabels: remainingLabels,
+        });
       return { savedLocations: next, locationLabels: remainingLabels };
     }),
   locationLabels: {},
@@ -246,7 +266,8 @@ export const useAppStore = create<AppState>()((set) => ({
         const { [slug]: _, ...rest } = state.locationLabels;
         nextLabels = rest;
       }
-      if (!_suppressRxDBWrites) updatePreferences({ locationLabels: nextLabels });
+      if (!_suppressRxDBWrites)
+        updatePreferences({ locationLabels: nextLabels });
       return { locationLabels: nextLabels };
     }),
   selectedActivities: [],
@@ -261,7 +282,8 @@ export const useAppStore = create<AppState>()((set) => ({
   selectedForecastModel: "best_match",
   setSelectedForecastModel: (model) => {
     set({ selectedForecastModel: model });
-    if (!_suppressRxDBWrites) updatePreferences({ selectedForecastModel: model });
+    if (!_suppressRxDBWrites)
+      updatePreferences({ selectedForecastModel: model });
   },
   myWeatherOpen: false,
   openMyWeather: () => set({ myWeatherOpen: true }),
@@ -272,7 +294,8 @@ export const useAppStore = create<AppState>()((set) => ({
     if (!_suppressRxDBWrites) updatePreferences({ hasOnboarded: true });
   },
   shamwariContext: null,
-  setShamwariContext: (ctx) => set({ shamwariContext: { ...ctx, timestamp: Date.now() } }),
+  setShamwariContext: (ctx) =>
+    set({ shamwariContext: { ...ctx, timestamp: Date.now() } }),
   clearShamwariContext: () => set({ shamwariContext: null }),
   reportModalOpen: false,
   openReportModal: () => set({ reportModalOpen: true }),
@@ -292,7 +315,10 @@ export const useAppStore = create<AppState>()((set) => ({
     set({ sectionOrder: merged });
     // Normalise storage so future loads (and the drag handler) start from the
     // reconciled order. Only rewrite when the merge actually changed something.
-    if (merged.length !== stored.length || merged.some((id, i) => id !== stored[i])) {
+    if (
+      merged.length !== stored.length ||
+      merged.some((id, i) => id !== stored[i])
+    ) {
       saveSectionOrder(merged);
     }
   },
@@ -330,13 +356,17 @@ export function initializeDeviceSync(): void {
           useAppStore.setState({ locationLabels: prefs.locationLabels });
         }
         if (prefs.selectedActivities !== undefined) {
-          useAppStore.setState({ selectedActivities: prefs.selectedActivities });
+          useAppStore.setState({
+            selectedActivities: prefs.selectedActivities,
+          });
         }
         if (prefs.hasOnboarded !== undefined) {
           useAppStore.setState({ hasOnboarded: prefs.hasOnboarded });
         }
         if (prefs.selectedForecastModel !== undefined) {
-          useAppStore.setState({ selectedForecastModel: prefs.selectedForecastModel });
+          useAppStore.setState({
+            selectedForecastModel: prefs.selectedForecastModel,
+          });
         }
       } finally {
         _suppressRxDBWrites = false;

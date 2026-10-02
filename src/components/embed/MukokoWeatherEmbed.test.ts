@@ -34,17 +34,15 @@ describe("MukokoWeatherEmbed CSS module", () => {
   });
 
   it("uses CSS custom properties for colors, not hardcoded values", () => {
-    const propertyDeclarations = cssContent
-      .split("\n")
-      .filter((line) => {
-        const trimmed = line.trim();
-        return (
-          trimmed.includes(":") &&
-          !trimmed.startsWith("--") &&
-          !trimmed.startsWith("/*") &&
-          !trimmed.startsWith("*")
-        );
-      });
+    const propertyDeclarations = cssContent.split("\n").filter((line) => {
+      const trimmed = line.trim();
+      return (
+        trimmed.includes(":") &&
+        !trimmed.startsWith("--") &&
+        !trimmed.startsWith("/*") &&
+        !trimmed.startsWith("*")
+      );
+    });
 
     const colorProps = propertyDeclarations.filter(
       (line) =>
@@ -101,11 +99,14 @@ describe("MukokoWeatherEmbed component", () => {
   });
 
   it("is re-exported from the embed barrel for external consumers", () => {
-    const indexContent = readFileSync(resolve(__dirname, "./index.ts"), "utf-8");
+    const indexContent = readFileSync(
+      resolve(__dirname, "./index.ts"),
+      "utf-8",
+    );
     expect(indexContent).toContain(
       'export { MukokoWeatherEmbed } from "./MukokoWeatherEmbed"',
     );
-    expect(indexContent).toContain('export type { EmbedType }');
+    expect(indexContent).toContain("export type { EmbedType }");
   });
 });
 

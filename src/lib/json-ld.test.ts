@@ -3,7 +3,11 @@ import { safeJsonLd } from "./json-ld";
 
 describe("safeJsonLd", () => {
   it("produces JSON that parses back to the original value", () => {
-    const data = { name: "Harare", province: "Harare Metropolitan", tags: ["city"] };
+    const data = {
+      name: "Harare",
+      province: "Harare Metropolitan",
+      tags: ["city"],
+    };
     expect(JSON.parse(safeJsonLd(data))).toEqual(data);
   });
 

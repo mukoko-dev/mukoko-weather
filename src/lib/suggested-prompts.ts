@@ -52,7 +52,7 @@ const RULES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
  */
 export async function fetchSuggestedRules(): Promise<SuggestedPromptRule[]> {
   const now = Date.now();
-  if (_rulesCache && (now - _rulesCacheAt) < RULES_CACHE_TTL) {
+  if (_rulesCache && now - _rulesCacheAt < RULES_CACHE_TTL) {
     return _rulesCache;
   }
 
@@ -127,12 +127,18 @@ function compareValues(
   threshold: number,
 ): boolean {
   switch (operator) {
-    case "gt": return actual > threshold;
-    case "gte": return actual >= threshold;
-    case "lt": return actual < threshold;
-    case "lte": return actual <= threshold;
-    case "eq": return actual === threshold;
-    default: return false;
+    case "gt":
+      return actual > threshold;
+    case "gte":
+      return actual >= threshold;
+    case "lt":
+      return actual < threshold;
+    case "lte":
+      return actual <= threshold;
+    case "eq":
+      return actual === threshold;
+    default:
+      return false;
   }
 }
 
@@ -185,7 +191,8 @@ export function generateSuggestedPrompts(
   // Category sort: weather (evaluated first) → activity → generic
   const sorted = [...activeRules].sort((a, b) => {
     const categoryOrder = { weather: 0, activity: 1, generic: 2 };
-    const catDiff = (categoryOrder[a.category] ?? 2) - (categoryOrder[b.category] ?? 2);
+    const catDiff =
+      (categoryOrder[a.category] ?? 2) - (categoryOrder[b.category] ?? 2);
     if (catDiff !== 0) return catDiff;
     return a.order - b.order;
   });
@@ -224,7 +231,9 @@ export function generateSuggestedPrompts(
  * else would render raw template variables. Returns [] when the database has
  * no explore rules, so the caller falls back to its hardcoded set.
  */
-export function getExplorePrompts(rules: SuggestedPromptRule[]): SuggestedPrompt[] {
+export function getExplorePrompts(
+  rules: SuggestedPromptRule[],
+): SuggestedPrompt[] {
   return rules
     .filter(
       (r) =>
@@ -263,36 +272,80 @@ function _fallbackPrompts(
   const c = weather.current;
 
   if (c.weather_code >= 95) {
-    prompts.push({ label: "Storm safety", query: `Is it safe to be outdoors in ${location.name} during this storm?` });
+    prompts.push({
+      label: "Storm safety",
+      query: `Is it safe to be outdoors in ${location.name} during this storm?`,
+    });
   }
   if (c.temperature_2m <= 3) {
-    prompts.push({ label: "Frost precautions", query: `What frost precautions should I take in ${location.name}?` });
+    prompts.push({
+      label: "Frost precautions",
+      query: `What frost precautions should I take in ${location.name}?`,
+    });
   }
   if (c.temperature_2m >= 35) {
-    prompts.push({ label: "Heat safety", query: `Is it safe to work outdoors in ${location.name} at ${Math.round(c.temperature_2m)}°C?` });
+    prompts.push({
+      label: "Heat safety",
+      query: `Is it safe to work outdoors in ${location.name} at ${Math.round(c.temperature_2m)}°C?`,
+    });
   }
   if (c.uv_index >= 8) {
-    prompts.push({ label: "UV protection", query: `What sun protection do I need with a UV index of ${Math.round(c.uv_index)}?` });
+    prompts.push({
+      label: "UV protection",
+      query: `What sun protection do I need with a UV index of ${Math.round(c.uv_index)}?`,
+    });
   }
-  if (c.precipitation > 0 || (weather.hourly?.precipitation_probability?.[0] ?? 0) > 50) {
-    prompts.push({ label: "Rain impact", query: `Will the rain affect my plans in ${location.name} today?` });
+  if (
+    c.precipitation > 0 ||
+    (weather.hourly?.precipitation_probability?.[0] ?? 0) > 50
+  ) {
+    prompts.push({
+      label: "Rain impact",
+      query: `Will the rain affect my plans in ${location.name} today?`,
+    });
   }
   if (c.relative_humidity_2m > 75) {
-    prompts.push({ label: "Crop spraying", query: `Is it safe to spray crops in ${location.name} with ${c.relative_humidity_2m}% humidity?` });
+    prompts.push({
+      label: "Crop spraying",
+      query: `Is it safe to spray crops in ${location.name} with ${c.relative_humidity_2m}% humidity?`,
+    });
   }
   if (c.wind_speed_10m > 30) {
-    prompts.push({ label: "Wind impact", query: `How will ${Math.round(c.wind_speed_10m)} km/h wind affect outdoor activities?` });
+    prompts.push({
+      label: "Wind impact",
+      query: `How will ${Math.round(c.wind_speed_10m)} km/h wind affect outdoor activities?`,
+    });
   }
-  if (activities.includes("maize-farming") || activities.includes("tobacco-farming") || activities.includes("horticulture")) {
-    prompts.push({ label: "Farming advice", query: `How does today's weather affect farming in ${location.name}?` });
+  if (
+    activities.includes("maize-farming") ||
+    activities.includes("tobacco-farming") ||
+    activities.includes("horticulture")
+  ) {
+    prompts.push({
+      label: "Farming advice",
+      query: `How does today's weather affect farming in ${location.name}?`,
+    });
   }
   if (activities.includes("drone-flying")) {
-    prompts.push({ label: "Drone conditions", query: `Can I fly my drone safely in ${location.name} today?` });
+    prompts.push({
+      label: "Drone conditions",
+      query: `Can I fly my drone safely in ${location.name} today?`,
+    });
   }
-  if (activities.includes("running") || activities.includes("cycling") || activities.includes("hiking")) {
-    prompts.push({ label: "Best time to exercise", query: `What's the best time to exercise outdoors in ${location.name} today?` });
+  if (
+    activities.includes("running") ||
+    activities.includes("cycling") ||
+    activities.includes("hiking")
+  ) {
+    prompts.push({
+      label: "Best time to exercise",
+      query: `What's the best time to exercise outdoors in ${location.name} today?`,
+    });
   }
-  prompts.push({ label: "Plan my day", query: `What should I plan for today in ${location.name}?` });
+  prompts.push({
+    label: "Plan my day",
+    query: `What should I plan for today in ${location.name}?`,
+  });
 
   const seen = new Set<string>();
   const unique: SuggestedPrompt[] = [];

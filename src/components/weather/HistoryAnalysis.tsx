@@ -81,7 +81,7 @@ export function HistoryAnalysis({
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         throw new Error(
-          body?.detail || body?.error || `Request failed (${res.status})`
+          body?.detail || body?.error || `Request failed (${res.status})`,
         );
       }
 
@@ -92,7 +92,7 @@ export function HistoryAnalysis({
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to generate analysis. Please try again."
+          : "Failed to generate analysis. Please try again.",
       );
     } finally {
       setLoading(false);
@@ -117,10 +117,7 @@ export function HistoryAnalysis({
         <div className="hoopoe">
           <SparklesIcon size={14} className="text-primary" />
         </div>
-        <h2
-          id="history-analysis-heading"
-          className="giraffe"
-        >
+        <h2 id="history-analysis-heading" className="giraffe">
           AI Analysis
         </h2>
       </div>
@@ -150,9 +147,7 @@ export function HistoryAnalysis({
           <span className="text-base text-text-secondary">
             Analyzing {days}-day history...
           </span>
-          <span className="sr-only">
-            Shamwari is analyzing weather history
-          </span>
+          <span className="sr-only">Shamwari is analyzing weather history</span>
         </div>
       )}
 

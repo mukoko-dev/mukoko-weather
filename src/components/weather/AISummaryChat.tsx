@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, Component, type ReactNode } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  Component,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ReactMarkdown from "react-markdown";
@@ -24,14 +31,23 @@ import type { AISummaryUser } from "./AISummary";
 // Inline error boundary for ReactMarkdown
 // ---------------------------------------------------------------------------
 
-interface MarkdownErrorBoundaryState { hasError: boolean }
+interface MarkdownErrorBoundaryState {
+  hasError: boolean;
+}
 
-class MarkdownErrorBoundary extends Component<{ children: ReactNode; fallback: string }, MarkdownErrorBoundaryState> {
+class MarkdownErrorBoundary extends Component<
+  { children: ReactNode; fallback: string },
+  MarkdownErrorBoundaryState
+> {
   state: MarkdownErrorBoundaryState = { hasError: false };
-  static getDerivedStateFromError() { return { hasError: true }; }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
   render() {
     if (this.state.hasError) {
-      return <p className="text-base text-text-secondary">{this.props.fallback}</p>;
+      return (
+        <p className="text-base text-text-secondary">{this.props.fallback}</p>
+      );
     }
     return this.props.children;
   }
@@ -70,15 +86,36 @@ const MAX_FOLLOWUP_MESSAGES = 5;
 
 function ArrowUpIcon({ size = 20 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m5 12 7-7 7 7" /><path d="M12 19V5" />
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m5 12 7-7 7 7" />
+      <path d="M12 19V5" />
     </svg>
   );
 }
 
 function ChevronDownIcon({ size = 20 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="m6 9 6 6 6-6" />
     </svg>
   );
@@ -86,7 +123,17 @@ function ChevronDownIcon({ size = 20 }: { size?: number }) {
 
 function ChevronUpIcon({ size = 20 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="m18 15-6-6-6 6" />
     </svg>
   );
@@ -109,7 +156,11 @@ function isSafeHref(href: string | undefined): boolean {
 }
 
 const markdownComponents = {
-  a: ({ href, children, ...props }: React.ComponentPropsWithoutRef<"a"> & { href?: string }) => {
+  a: ({
+    href,
+    children,
+    ...props
+  }: React.ComponentPropsWithoutRef<"a"> & { href?: string }) => {
     if (!isSafeHref(href)) {
       return <span>{children}</span>;
     }
@@ -125,12 +176,20 @@ const markdownComponents = {
 // Component
 // ---------------------------------------------------------------------------
 
-export function AISummaryChat({ weather, location, initialSummary, season, user }: Props) {
+export function AISummaryChat({
+  weather,
+  location,
+  initialSummary,
+  season,
+  user,
+}: Props) {
   const [expanded, setExpanded] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [suggestedPrompts, setSuggestedPrompts] = useState<SuggestedPrompt[]>([]);
+  const [suggestedPrompts, setSuggestedPrompts] = useState<SuggestedPrompt[]>(
+    [],
+  );
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const shamwariEnabled = isFeatureEnabled("shamwari_chat");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -144,11 +203,15 @@ export function AISummaryChat({ weather, location, initialSummary, season, user 
   // Fetch suggested prompts from database on mount
   useEffect(() => {
     fetchSuggestedRules().then((rules) => {
-      const prompts = generateSuggestedPrompts(weather, location, selectedActivities, rules);
+      const prompts = generateSuggestedPrompts(
+        weather,
+        location,
+        selectedActivities,
+        rules,
+      );
       setSuggestedPrompts(prompts);
     });
   }, [weather, location, selectedActivities]);
-
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -159,83 +222,97 @@ export function AISummaryChat({ weather, location, initialSummary, season, user 
 
   // Cleanup on unmount
   useEffect(() => {
-    return () => { abortRef.current?.abort(); };
+    return () => {
+      abortRef.current?.abort();
+    };
   }, []);
 
-  const sendMessage = useCallback(async (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || loading || atMessageLimit) return;
+  const sendMessage = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || loading || atMessageLimit) return;
 
-    const userMessage: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: trimmed,
-      timestamp: new Date(),
-    };
+      const userMessage: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: trimmed,
+        timestamp: new Date(),
+      };
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setLoading(true);
-    trackEvent("ai_chat_sent", { source: "inline", location: location.slug });
+      setMessages((prev) => [...prev, userMessage]);
+      setInput("");
+      setLoading(true);
+      trackEvent("ai_chat_sent", { source: "inline", location: location.slug });
 
-    // Reset textarea height
-    if (inputRef.current) {
-      inputRef.current.style.height = "auto";
-    }
-
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      // Build history (text-only, capped)
-      const history = messages.slice(-MAX_FOLLOWUP_MESSAGES * 2).map((m) => ({
-        role: m.role,
-        content: m.content.slice(0, 2000),
-      }));
-
-      const res = await fetch("/api/ai/followup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          message: trimmed,
-          locationName: location.name,
-          locationSlug: location.slug,
-          weatherSummary: initialSummary || "",
-          activities: selectedActivities.length > 0 ? selectedActivities : [],
-          season: season || "",
-          history,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+      // Reset textarea height
+      if (inputRef.current) {
+        inputRef.current.style.height = "auto";
       }
 
-      const data = await res.json();
-      const assistantMessage: ChatMessage = {
-        id: `assistant-${Date.now()}`,
-        role: "assistant",
-        content: data.response || "I wasn't able to generate a response.",
-        timestamp: new Date(),
-      };
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") return;
-      const errorMessage: ChatMessage = {
-        id: `error-${Date.now()}`,
-        role: "assistant",
-        content: "Sorry, I couldn't process that. The weather data above is still available.",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setLoading(false);
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  }, [loading, atMessageLimit, messages, location, initialSummary, selectedActivities, season]);
+      try {
+        // Build history (text-only, capped)
+        const history = messages.slice(-MAX_FOLLOWUP_MESSAGES * 2).map((m) => ({
+          role: m.role,
+          content: m.content.slice(0, 2000),
+        }));
+
+        const res = await fetch("/api/ai/followup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            message: trimmed,
+            locationName: location.name,
+            locationSlug: location.slug,
+            weatherSummary: initialSummary || "",
+            activities: selectedActivities.length > 0 ? selectedActivities : [],
+            season: season || "",
+            history,
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        const assistantMessage: ChatMessage = {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: data.response || "I wasn't able to generate a response.",
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, assistantMessage]);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        const errorMessage: ChatMessage = {
+          id: `error-${Date.now()}`,
+          role: "assistant",
+          content:
+            "Sorry, I couldn't process that. The weather data above is still available.",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      } finally {
+        setLoading(false);
+        setTimeout(() => inputRef.current?.focus(), 100);
+      }
+    },
+    [
+      loading,
+      atMessageLimit,
+      messages,
+      location,
+      initialSummary,
+      selectedActivities,
+      season,
+    ],
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -272,7 +349,11 @@ export function AISummaryChat({ weather, location, initialSummary, season, user 
               Ask a follow-up question
             </span>
           </div>
-          {expanded ? <ChevronUpIcon size={16} /> : <ChevronDownIcon size={16} />}
+          {expanded ? (
+            <ChevronUpIcon size={16} />
+          ) : (
+            <ChevronDownIcon size={16} />
+          )}
         </button>
 
         {expanded && (
@@ -280,9 +361,7 @@ export function AISummaryChat({ weather, location, initialSummary, season, user 
             {/* Suggested prompts (shown when no messages yet) */}
             {messages.length === 0 && suggestedPrompts.length > 0 && (
               <div className="pb-3 pt-4">
-                <p className="hornbill font-medium mb-2">
-                  Suggested questions
-                </p>
+                <p className="hornbill font-medium mb-2">Suggested questions</p>
                 <div className="flex flex-wrap gap-2">
                   {suggestedPrompts.map((prompt) => (
                     <button
@@ -327,7 +406,10 @@ export function AISummaryChat({ weather, location, initialSummary, season, user 
 
                 {/* Loading indicator */}
                 {loading && (
-                  <div className="mr-8 rounded-lg bg-surface-base px-3 py-2" role="status">
+                  <div
+                    className="mr-8 rounded-lg bg-surface-base px-3 py-2"
+                    role="status"
+                  >
                     <div className="flex items-center gap-1">
                       <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-tertiary [animation-delay:-0.3s]" />
                       <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-tertiary [animation-delay:-0.15s]" />
@@ -360,7 +442,8 @@ export function AISummaryChat({ weather, location, initialSummary, season, user 
                   </>
                 ) : (
                   <p className="gazelle">
-                    You&apos;ve reached the follow-up limit for this conversation.
+                    You&apos;ve reached the follow-up limit for this
+                    conversation.
                   </p>
                 )}
               </div>
@@ -443,7 +526,12 @@ function AISummaryChatSignInCTA({ locationName }: { locationName: string }) {
           Sign in to chat with Mukoko&apos;s AI about {locationName}.
         </p>
         <div className="mt-4">
-          <Link href={href} prefetch={false} className="kudu-sm" aria-label={`Sign in to chat about ${locationName}`}>
+          <Link
+            href={href}
+            prefetch={false}
+            className="kudu-sm"
+            aria-label={`Sign in to chat about ${locationName}`}
+          >
             Sign in
           </Link>
         </div>

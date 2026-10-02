@@ -115,7 +115,10 @@ describe("getActivityLabels", () => {
 
 describe("getRelevantActivities", () => {
   it("returns activities whose relevantTags overlap with location tags", () => {
-    const result = getRelevantActivities(["farming"], ["crop-farming", "running", "livestock"]);
+    const result = getRelevantActivities(
+      ["farming"],
+      ["crop-farming", "running", "livestock"],
+    );
     const ids = result.map((a) => a.id);
     expect(ids).toContain("crop-farming");
     expect(ids).toContain("livestock");
@@ -180,7 +183,16 @@ describe("expanded activities — Agriculture & Forestry", () => {
   });
 
   it("all agriculture activities are in farming category", () => {
-    for (const id of ["crop-farming", "livestock", "horticulture", "gardening", "irrigation", "forestry", "beekeeping", "aquaculture"]) {
+    for (const id of [
+      "crop-farming",
+      "livestock",
+      "horticulture",
+      "gardening",
+      "irrigation",
+      "forestry",
+      "beekeeping",
+      "aquaculture",
+    ]) {
       expect(getActivityById(id)!.category).toBe("farming");
     }
   });
@@ -194,7 +206,13 @@ describe("expanded activities — Industry & Construction", () => {
   });
 
   it("all industry activities are in mining category", () => {
-    for (const id of ["mining", "construction", "manufacturing", "energy", "logistics"]) {
+    for (const id of [
+      "mining",
+      "construction",
+      "manufacturing",
+      "energy",
+      "logistics",
+    ]) {
       expect(getActivityById(id)!.category).toBe("mining");
     }
   });
@@ -207,7 +225,13 @@ describe("expanded activities — Transport & Logistics", () => {
   });
 
   it("all transport activities are in travel category", () => {
-    for (const id of ["driving", "commuting", "flying", "trucking", "shipping"]) {
+    for (const id of [
+      "driving",
+      "commuting",
+      "flying",
+      "trucking",
+      "shipping",
+    ]) {
       expect(getActivityById(id)!.category).toBe("travel");
     }
   });
@@ -225,8 +249,12 @@ describe("expanded activities — Outdoors & Conservation", () => {
   });
 
   it("conservation activities reference national-park tag", () => {
-    expect(getActivityById("conservation")!.relevantTags).toContain("national-park");
-    expect(getActivityById("wildlife-research")!.relevantTags).toContain("national-park");
+    expect(getActivityById("conservation")!.relevantTags).toContain(
+      "national-park",
+    );
+    expect(getActivityById("wildlife-research")!.relevantTags).toContain(
+      "national-park",
+    );
   });
 });
 
@@ -251,7 +279,17 @@ describe("expanded activities — Lifestyle & Events", () => {
   });
 
   it("all lifestyle activities are in casual category", () => {
-    for (const id of ["walking", "barbecue", "outdoor-events", "festivals", "weddings", "drone-flying", "picnic", "health-wellness", "education"]) {
+    for (const id of [
+      "walking",
+      "barbecue",
+      "outdoor-events",
+      "festivals",
+      "weddings",
+      "drone-flying",
+      "picnic",
+      "health-wellness",
+      "education",
+    ]) {
       expect(getActivityById(id)!.category).toBe("casual");
     }
   });
@@ -261,14 +299,21 @@ describe("getDefaultActivitiesForLocation", () => {
   it("returns farming activities for a farming location", () => {
     const defaults = getDefaultActivitiesForLocation(["farming"]);
     // Most results should be from the farming category
-    const farmingCount = defaults.filter((a) => a.category === "farming").length;
+    const farmingCount = defaults.filter(
+      (a) => a.category === "farming",
+    ).length;
     expect(farmingCount).toBeGreaterThanOrEqual(4);
   });
 
   it("returns tourism/outdoors activities for a national-park location", () => {
-    const defaults = getDefaultActivitiesForLocation(["national-park", "tourism"]);
+    const defaults = getDefaultActivitiesForLocation([
+      "national-park",
+      "tourism",
+    ]);
     // Most results should be from the tourism (outdoors) category
-    const tourismCount = defaults.filter((a) => a.category === "tourism").length;
+    const tourismCount = defaults.filter(
+      (a) => a.category === "tourism",
+    ).length;
     expect(tourismCount).toBeGreaterThanOrEqual(4);
   });
 
@@ -305,7 +350,12 @@ describe("African / Southern-African localization", () => {
   });
 
   it("adds authentically African farming activities with stable new ids", () => {
-    for (const id of ["tobacco-farming", "cotton-farming", "planting", "harvest"]) {
+    for (const id of [
+      "tobacco-farming",
+      "cotton-farming",
+      "planting",
+      "harvest",
+    ]) {
       const activity = getActivityById(id);
       expect(activity).toBeDefined();
       expect(activity!.category).toBe("farming");
@@ -331,14 +381,32 @@ describe("African / Southern-African localization", () => {
     expect(getActivityById("harvest")!.label).toContain("Kukohwa");
     expect(getActivityById("fishing")!.label).toContain("Kariba");
     expect(getActivityById("festivals")!.label).toContain("Mbira");
-    expect(getActivityById("crop-farming")!.description.toLowerCase()).toContain("mielie");
+    expect(
+      getActivityById("crop-farming")!.description.toLowerCase(),
+    ).toContain("mielie");
   });
 
   it("every new activity resolves through an existing category suitability rule", () => {
     // New activities inherit the category:<category> rule, so they evaluate
     // correctly without a per-activity override. Confirm they use known categories.
-    const ruledCategories = new Set(["farming", "mining", "travel", "tourism", "sports", "casual"]);
-    for (const id of ["tobacco-farming", "cotton-farming", "planting", "harvest", "netball", "potjie", "market-day", "church-gathering"]) {
+    const ruledCategories = new Set([
+      "farming",
+      "mining",
+      "travel",
+      "tourism",
+      "sports",
+      "casual",
+    ]);
+    for (const id of [
+      "tobacco-farming",
+      "cotton-farming",
+      "planting",
+      "harvest",
+      "netball",
+      "potjie",
+      "market-day",
+      "church-gathering",
+    ]) {
       expect(ruledCategories.has(getActivityById(id)!.category)).toBe(true);
     }
   });

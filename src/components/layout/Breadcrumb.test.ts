@@ -51,7 +51,7 @@ describe("Breadcrumb usage sites", () => {
   it("MapDashboard no longer renders a floating back-to-weather pill", () => {
     const mapSource = readFileSync(
       resolve(__dirname, "../../app/[location]/map/MapDashboard.tsx"),
-      "utf-8"
+      "utf-8",
     );
     expect(mapSource).not.toContain("Back to weather");
   });
@@ -63,7 +63,8 @@ describe("BreadcrumbSkeleton (issue #104)", () => {
   it("exports a skeleton matching the real trail's container classes", () => {
     expect(source).toContain("export function BreadcrumbSkeleton");
     // Same outer classes as the real Breadcrumb nav — no layout shift on hydrate.
-    const occurrences = source.split("mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8").length - 1;
+    const occurrences =
+      source.split("mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8").length - 1;
     expect(occurrences).toBe(2); // skeleton + real component
   });
 
@@ -80,7 +81,9 @@ describe("BreadcrumbSkeleton (issue #104)", () => {
     ]) {
       const loadingSource = readFileSync(resolve(__dirname, file), "utf-8");
       expect(loadingSource).toContain("<BreadcrumbSkeleton");
-      expect(loadingSource).not.toContain('<span className="text-text-tertiary/30">/</span>');
+      expect(loadingSource).not.toContain(
+        '<span className="text-text-tertiary/30">/</span>',
+      );
     }
   });
 });

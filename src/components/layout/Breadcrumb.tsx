@@ -34,9 +34,13 @@ export function BreadcrumbSkeleton({ className }: { className?: string }) {
     >
       <div className="flex items-center gap-1">
         <div className="h-3 w-10 animate-pulse rounded bg-text-tertiary/15" />
-        <span aria-hidden="true" className="text-text-tertiary/30">/</span>
+        <span aria-hidden="true" className="text-text-tertiary/30">
+          /
+        </span>
         <div className="h-3 w-14 animate-pulse rounded bg-text-tertiary/15" />
-        <span aria-hidden="true" className="text-text-tertiary/30">/</span>
+        <span aria-hidden="true" className="text-text-tertiary/30">
+          /
+        </span>
         <div className="h-3 w-16 animate-pulse rounded bg-text-tertiary/15" />
       </div>
     </div>
@@ -64,7 +68,9 @@ export function Breadcrumb({ items, className }: BreadcrumbProps) {
                   {item.label}
                 </Link>
               ) : (
-                <span className="font-medium text-text-primary">{item.label}</span>
+                <span className="font-medium text-text-primary">
+                  {item.label}
+                </span>
               )}
             </li>
           </Fragment>

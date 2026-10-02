@@ -41,7 +41,11 @@ type ViewTab = "weather" | "insights";
 
 /** The slice of a location this dashboard needs — satisfied by both the
  *  quick-search results and the full location doc from /api/py/locations. */
-type SelectedHistoryLocation = { slug: string; name: string; province?: string };
+type SelectedHistoryLocation = {
+  slug: string;
+  name: string;
+  province?: string;
+};
 
 interface HistoryRecord {
   date: string;
@@ -102,53 +106,61 @@ function formatSunTime(iso: string): string {
 }
 
 export function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
-  return docs
-    // A persisted doc missing `current` would throw on the unguarded
-    // `current.*` reads below and blank the whole dashboard. Skip such docs.
-    .filter((doc) => doc.current != null)
-    .map((doc) => {
-      const daily = doc.daily;
-      const current = doc.current;
+  return (
+    docs
+      // A persisted doc missing `current` would throw on the unguarded
+      // `current.*` reads below and blank the whole dashboard. Skip such docs.
+      .filter((doc) => doc.current != null)
+      .map((doc) => {
+        const daily = doc.daily;
+        const current = doc.current;
 
-      const sunriseRaw = daily?.sunrise?.[0] ?? "";
-      const sunsetRaw = daily?.sunset?.[0] ?? "";
+        const sunriseRaw = daily?.sunrise?.[0] ?? "";
+        const sunsetRaw = daily?.sunset?.[0] ?? "";
 
-      return {
-        date: doc.date,
-        tempHigh: daily?.temperature_2m_max?.[0] != null
-          ? Math.round(daily.temperature_2m_max[0])
-          : Math.round(current.temperature_2m),
-        tempLow: daily?.temperature_2m_min?.[0] != null
-          ? Math.round(daily.temperature_2m_min[0])
-          : Math.round(current.temperature_2m - 5),
-        feelsLikeHigh: daily?.apparent_temperature_max?.[0] != null
-          ? Math.round(daily.apparent_temperature_max[0])
-          : Math.round(current.apparent_temperature),
-        feelsLikeLow: daily?.apparent_temperature_min?.[0] != null
-          ? Math.round(daily.apparent_temperature_min[0])
-          : Math.round(current.apparent_temperature - 5),
-        precipitation: daily?.precipitation_sum?.[0] ?? current.precipitation,
-        rainProbability: daily?.precipitation_probability_max?.[0] ?? 0,
-        humidity: current.relative_humidity_2m,
-        cloudCover: current.cloud_cover,
-        pressure: Math.round(current.surface_pressure),
-        uvIndex: daily?.uv_index_max?.[0] ?? current.uv_index,
-        windSpeed: Math.round(current.wind_speed_10m),
-        windGusts: daily?.wind_gusts_10m_max?.[0] != null
-          ? Math.round(daily.wind_gusts_10m_max[0])
-          : Math.round(current.wind_gusts_10m),
-        windDirection: current.wind_direction_10m,
-        windDirectionLabel: windDirection(current.wind_direction_10m),
-        sunrise: sunriseRaw ? formatSunTime(sunriseRaw) : "--:--",
-        sunset: sunsetRaw ? formatSunTime(sunsetRaw) : "--:--",
-        daylightHours: sunriseRaw && sunsetRaw
-          ? daylightFromSunTimes(sunriseRaw, sunsetRaw)
-          : 0,
-        weatherCode: current.weather_code,
-        condition: weatherCodeToInfo(current.weather_code).label,
-      };
-    })
-    .sort((a, b) => a.date.localeCompare(b.date));
+        return {
+          date: doc.date,
+          tempHigh:
+            daily?.temperature_2m_max?.[0] != null
+              ? Math.round(daily.temperature_2m_max[0])
+              : Math.round(current.temperature_2m),
+          tempLow:
+            daily?.temperature_2m_min?.[0] != null
+              ? Math.round(daily.temperature_2m_min[0])
+              : Math.round(current.temperature_2m - 5),
+          feelsLikeHigh:
+            daily?.apparent_temperature_max?.[0] != null
+              ? Math.round(daily.apparent_temperature_max[0])
+              : Math.round(current.apparent_temperature),
+          feelsLikeLow:
+            daily?.apparent_temperature_min?.[0] != null
+              ? Math.round(daily.apparent_temperature_min[0])
+              : Math.round(current.apparent_temperature - 5),
+          precipitation: daily?.precipitation_sum?.[0] ?? current.precipitation,
+          rainProbability: daily?.precipitation_probability_max?.[0] ?? 0,
+          humidity: current.relative_humidity_2m,
+          cloudCover: current.cloud_cover,
+          pressure: Math.round(current.surface_pressure),
+          uvIndex: daily?.uv_index_max?.[0] ?? current.uv_index,
+          windSpeed: Math.round(current.wind_speed_10m),
+          windGusts:
+            daily?.wind_gusts_10m_max?.[0] != null
+              ? Math.round(daily.wind_gusts_10m_max[0])
+              : Math.round(current.wind_gusts_10m),
+          windDirection: current.wind_direction_10m,
+          windDirectionLabel: windDirection(current.wind_direction_10m),
+          sunrise: sunriseRaw ? formatSunTime(sunriseRaw) : "--:--",
+          sunset: sunsetRaw ? formatSunTime(sunsetRaw) : "--:--",
+          daylightHours:
+            sunriseRaw && sunsetRaw
+              ? daylightFromSunTimes(sunriseRaw, sunsetRaw)
+              : 0,
+          weatherCode: current.weather_code,
+          condition: weatherCodeToInfo(current.weather_code).label,
+        };
+      })
+      .sort((a, b) => a.date.localeCompare(b.date))
+  );
 }
 
 export function transformInsights(docs: WeatherHistoryDoc[]): InsightsRecord[] {
@@ -191,11 +203,15 @@ interface CategoryStyleShape {
 }
 
 function avg(arr: number[]): number {
-  return arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : 0;
+  return arr.length
+    ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length)
+    : 0;
 }
 
 function avgFloat(arr: number[]): number {
-  return arr.length ? Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 10) / 10 : 0;
+  return arr.length
+    ? Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 10) / 10
+    : 0;
 }
 
 function sum(arr: number[]): number {
@@ -227,19 +243,40 @@ function SuitabilityGauge({
   detail: string;
   icon: string;
 }) {
-  const pct = level === "excellent" ? 100 : level === "good" ? 75 : level === "fair" ? 50 : 25;
+  const pct =
+    level === "excellent"
+      ? 100
+      : level === "good"
+        ? 75
+        : level === "fair"
+          ? 50
+          : 25;
   return (
     <div className="pangolin" role="group" aria-label={label}>
       <div className="flex items-center gap-2">
-        <span className="text-lg" aria-hidden="true">{icon}</span>
+        <span className="text-lg" aria-hidden="true">
+          {icon}
+        </span>
         <p className="text-base font-semibold text-text-primary">{label}</p>
-        <span className={`ml-auto rounded-[var(--radius-badge)] px-2 py-0.5 text-base font-bold ${bgClass} ${colorClass}`}>
+        <span
+          className={`ml-auto rounded-[var(--radius-badge)] px-2 py-0.5 text-base font-bold ${bgClass} ${colorClass}`}
+        >
           {levelLabel}
         </span>
       </div>
       {/* Gauge bar */}
-      <div className="mt-3 h-2 w-full rounded-full bg-surface-dim" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${label}: ${levelLabel}`}>
-        <div className={`h-full rounded-full transition-all ${bgClass.replace("/10", "")}`} style={{ width: `${pct}%` }} />
+      <div
+        className="mt-3 h-2 w-full rounded-full bg-surface-dim"
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`${label}: ${levelLabel}`}
+      >
+        <div
+          className={`h-full rounded-full transition-all ${bgClass.replace("/10", "")}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
       <p className="mt-2 text-base text-text-secondary">{detail}</p>
     </div>
@@ -268,7 +305,9 @@ export function computeCategorySuitability(
 
   const dewPoints = insightsRecords.map((r) => r.dewPoint).filter(defined);
   const heatStresses = insightsRecords.map((r) => r.heatStress).filter(defined);
-  const thunderstorms = insightsRecords.map((r) => r.thunderstorm).filter(defined);
+  const thunderstorms = insightsRecords
+    .map((r) => r.thunderstorm)
+    .filter(defined);
   const visibilities = insightsRecords.map((r) => r.visibility).filter(defined);
   const uvConcerns = insightsRecords.map((r) => r.uvConcern).filter(defined);
   const gddMaize = insightsRecords.map((r) => r.gddMaize).filter(defined);
@@ -282,11 +321,27 @@ export function computeCategorySuitability(
     let level: CategorySuitability["level"] = "good";
     let detail = `Avg dew point: ${avgDew}°C`;
     if (avgGdd > 0) detail += ` | Avg GDD: ${avgGdd}`;
-    if (avgDew > 20) { level = "fair"; detail = "High avg dew point — crop disease risk elevated"; }
-    else if (avgDew < 5) { level = "poor"; detail = "Low avg dew point — cold, dry air stress for crops"; }
-    else if (avgGdd > 15) { level = "excellent"; detail = `Strong growth period (avg GDD: ${avgGdd})`; }
+    if (avgDew > 20) {
+      level = "fair";
+      detail = "High avg dew point — crop disease risk elevated";
+    } else if (avgDew < 5) {
+      level = "poor";
+      detail = "Low avg dew point — cold, dry air stress for crops";
+    } else if (avgGdd > 15) {
+      level = "excellent";
+      detail = `Strong growth period (avg GDD: ${avgGdd})`;
+    }
     const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
-    results.push({ label: "Farming", level, levelLabel: lvl, colorClass, bgClass, detail, icon: "🌱", category: "farming" });
+    results.push({
+      label: "Farming",
+      level,
+      levelLabel: lvl,
+      colorClass,
+      bgClass,
+      detail,
+      icon: "🌱",
+      category: "farming",
+    });
   }
 
   // Mining
@@ -295,12 +350,30 @@ export function computeCategorySuitability(
     const avgStorm = thunderstorms.length > 0 ? avgFloat(thunderstorms) : 0;
     let level: CategorySuitability["level"] = "good";
     let detail = "Safe conditions overall";
-    if (avgHeat >= 28) { level = "poor"; detail = `Severe heat stress (avg: ${avgHeat})`; }
-    else if (avgStorm > 40) { level = "poor"; detail = `High storm risk (avg: ${Math.round(avgStorm)}%)`; }
-    else if (avgHeat >= 24 || avgStorm > 20) { level = "fair"; detail = `Moderate risk — heat: ${avgHeat}, storm: ${Math.round(avgStorm)}%`; }
-    else { level = "good"; detail = `Low risk — heat: ${avgHeat}, storm: ${Math.round(avgStorm)}%`; }
+    if (avgHeat >= 28) {
+      level = "poor";
+      detail = `Severe heat stress (avg: ${avgHeat})`;
+    } else if (avgStorm > 40) {
+      level = "poor";
+      detail = `High storm risk (avg: ${Math.round(avgStorm)}%)`;
+    } else if (avgHeat >= 24 || avgStorm > 20) {
+      level = "fair";
+      detail = `Moderate risk — heat: ${avgHeat}, storm: ${Math.round(avgStorm)}%`;
+    } else {
+      level = "good";
+      detail = `Low risk — heat: ${avgHeat}, storm: ${Math.round(avgStorm)}%`;
+    }
     const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
-    results.push({ label: "Mining", level, levelLabel: lvl, colorClass, bgClass, detail, icon: "⛏️", category: "mining" });
+    results.push({
+      label: "Mining",
+      level,
+      levelLabel: lvl,
+      colorClass,
+      bgClass,
+      detail,
+      icon: "⛏️",
+      category: "mining",
+    });
   }
 
   // Sports
@@ -309,11 +382,27 @@ export function computeCategorySuitability(
     const avgUv = uvConcerns.length > 0 ? avgFloat(uvConcerns) : 3;
     let level: CategorySuitability["level"] = "excellent";
     let detail = "Great conditions for outdoor exercise";
-    if (avgHeat >= 28) { level = "poor"; detail = "Too hot for outdoor sports"; }
-    else if (avgUv > 7) { level = "fair"; detail = `High UV exposure (avg: ${avgUv}) — sun protection needed`; }
-    else if (avgHeat >= 24) { level = "fair"; detail = "Warm — hydration breaks recommended"; }
+    if (avgHeat >= 28) {
+      level = "poor";
+      detail = "Too hot for outdoor sports";
+    } else if (avgUv > 7) {
+      level = "fair";
+      detail = `High UV exposure (avg: ${avgUv}) — sun protection needed`;
+    } else if (avgHeat >= 24) {
+      level = "fair";
+      detail = "Warm — hydration breaks recommended";
+    }
     const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
-    results.push({ label: "Sports", level, levelLabel: lvl, colorClass, bgClass, detail, icon: "🏃", category: "sports" });
+    results.push({
+      label: "Sports",
+      level,
+      levelLabel: lvl,
+      colorClass,
+      bgClass,
+      detail,
+      icon: "🏃",
+      category: "sports",
+    });
   }
 
   // Travel
@@ -322,11 +411,27 @@ export function computeCategorySuitability(
     const avgStorm = thunderstorms.length > 0 ? avgFloat(thunderstorms) : 0;
     let level: CategorySuitability["level"] = "good";
     let detail = `Clear conditions — avg visibility: ${avgVis} km`;
-    if (avgVis < 1) { level = "poor"; detail = "Very poor visibility — travel not recommended"; }
-    else if (avgStorm > 40) { level = "poor"; detail = `High storm risk for travel (avg: ${Math.round(avgStorm)}%)`; }
-    else if (avgVis < 5 || avgStorm > 20) { level = "fair"; detail = `Moderate risk — vis: ${avgVis} km, storm: ${Math.round(avgStorm)}%`; }
+    if (avgVis < 1) {
+      level = "poor";
+      detail = "Very poor visibility — travel not recommended";
+    } else if (avgStorm > 40) {
+      level = "poor";
+      detail = `High storm risk for travel (avg: ${Math.round(avgStorm)}%)`;
+    } else if (avgVis < 5 || avgStorm > 20) {
+      level = "fair";
+      detail = `Moderate risk — vis: ${avgVis} km, storm: ${Math.round(avgStorm)}%`;
+    }
     const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
-    results.push({ label: "Travel", level, levelLabel: lvl, colorClass, bgClass, detail, icon: "🚗", category: "travel" });
+    results.push({
+      label: "Travel",
+      level,
+      levelLabel: lvl,
+      colorClass,
+      bgClass,
+      detail,
+      icon: "🚗",
+      category: "travel",
+    });
   }
 
   // Tourism
@@ -335,11 +440,27 @@ export function computeCategorySuitability(
     const avgVis = visibilities.length > 0 ? avgFloat(visibilities) : 10;
     let level: CategorySuitability["level"] = "good";
     let detail = "Good conditions for outdoor activities";
-    if (avgUv > 7) { level = "fair"; detail = "Very high UV — seek shade during midday"; }
-    else if (avgVis < 5) { level = "fair"; detail = "Limited visibility may affect game viewing"; }
-    else { level = "good"; detail = `Good visibility (${avgVis} km) and moderate UV`; }
+    if (avgUv > 7) {
+      level = "fair";
+      detail = "Very high UV — seek shade during midday";
+    } else if (avgVis < 5) {
+      level = "fair";
+      detail = "Limited visibility may affect game viewing";
+    } else {
+      level = "good";
+      detail = `Good visibility (${avgVis} km) and moderate UV`;
+    }
     const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
-    results.push({ label: "Tourism", level, levelLabel: lvl, colorClass, bgClass, detail, icon: "🦁", category: "tourism" });
+    results.push({
+      label: "Tourism",
+      level,
+      levelLabel: lvl,
+      colorClass,
+      bgClass,
+      detail,
+      icon: "🦁",
+      category: "tourism",
+    });
   }
 
   // Casual
@@ -348,22 +469,60 @@ export function computeCategorySuitability(
     const avgHeat = heatStresses.length > 0 ? avgFloat(heatStresses) : 20;
     let level: CategorySuitability["level"] = "excellent";
     let detail = "Perfect for outdoor plans";
-    if (avgStorm > 40) { level = "poor"; detail = "Thunderstorm risk — indoor activities recommended"; }
-    else if (avgHeat >= 28) { level = "fair"; detail = "Very warm — limit time outdoors"; }
-    else if (avgStorm > 20 || avgHeat >= 24) { level = "fair"; detail = "Moderate conditions — check forecast"; }
+    if (avgStorm > 40) {
+      level = "poor";
+      detail = "Thunderstorm risk — indoor activities recommended";
+    } else if (avgHeat >= 28) {
+      level = "fair";
+      detail = "Very warm — limit time outdoors";
+    } else if (avgStorm > 20 || avgHeat >= 24) {
+      level = "fair";
+      detail = "Moderate conditions — check forecast";
+    }
     const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
-    results.push({ label: "Casual", level, levelLabel: lvl, colorClass, bgClass, detail, icon: "☀️", category: "casual" });
+    results.push({
+      label: "Casual",
+      level,
+      levelLabel: lvl,
+      colorClass,
+      bgClass,
+      detail,
+      icon: "☀️",
+      category: "casual",
+    });
   }
 
   return results;
 }
 
-export function suitabilityColors(level: "excellent" | "good" | "fair" | "poor") {
+export function suitabilityColors(
+  level: "excellent" | "good" | "fair" | "poor",
+) {
   switch (level) {
-    case "excellent": return { colorClass: "text-severity-low", bgClass: "bg-severity-low/10", label: "Excellent" };
-    case "good": return { colorClass: "text-severity-low", bgClass: "bg-severity-low/10", label: "Good" };
-    case "fair": return { colorClass: "text-severity-moderate", bgClass: "bg-severity-moderate/10", label: "Fair" };
-    case "poor": return { colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10", label: "Poor" };
+    case "excellent":
+      return {
+        colorClass: "text-severity-low",
+        bgClass: "bg-severity-low/10",
+        label: "Excellent",
+      };
+    case "good":
+      return {
+        colorClass: "text-severity-low",
+        bgClass: "bg-severity-low/10",
+        label: "Good",
+      };
+    case "fair":
+      return {
+        colorClass: "text-severity-moderate",
+        bgClass: "bg-severity-moderate/10",
+        label: "Fair",
+      };
+    case "poor":
+      return {
+        colorClass: "text-severity-severe",
+        bgClass: "bg-severity-severe/10",
+        label: "Poor",
+      };
   }
 }
 
@@ -375,8 +534,14 @@ export function HistoryDashboard() {
   // cancellation as every other quick location search in the app. Replaces a
   // hand-rolled setTimeout debounce with NO cancellation, where a fast retype
   // could let a stale slower response overwrite newer results (issue #103).
-  const { query, setQuery, results: quickResults, loading: searchLoading } = useLocationQuickSearch();
-  const [selectedLocation, setSelectedLocation] = useState<SelectedHistoryLocation | null>(null);
+  const {
+    query,
+    setQuery,
+    results: quickResults,
+    loading: searchLoading,
+  } = useLocationQuickSearch();
+  const [selectedLocation, setSelectedLocation] =
+    useState<SelectedHistoryLocation | null>(null);
   const [days, setDays] = useState<DayRange>(30);
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [insightsRecords, setInsightsRecords] = useState<InsightsRecord[]>([]);
@@ -386,10 +551,13 @@ export function HistoryDashboard() {
   const [fetched, setFetched] = useState(false);
   const [visibleRowCount, setVisibleRowCount] = useState(50);
   const [activeTab, setActiveTab] = useState<ViewTab>("weather");
-  const [categoryFilter, setCategoryFilter] = useState<ActivityCategory | "all">("all");
+  const [categoryFilter, setCategoryFilter] = useState<
+    ActivityCategory | "all"
+  >("all");
   const tableEndRef = useRef<HTMLDivElement>(null);
   // Seed with static CATEGORIES for instant filter rendering, then upgrade from MongoDB.
-  const [activityCategories, setActivityCategories] = useState<ActivityCategoryDoc[]>(CATEGORIES);
+  const [activityCategories, setActivityCategories] =
+    useState<ActivityCategoryDoc[]>(CATEGORIES);
   const didAutoSelect = useRef(false);
 
   // Build category filter options and styles from API data
@@ -415,7 +583,9 @@ export function HistoryDashboard() {
   useEffect(() => {
     fetch("/api/py/activities?mode=categories")
       .then((res) => (res.ok ? res.json() : { categories: [] }))
-      .then((data) => { if (data?.categories?.length) setActivityCategories(data.categories); })
+      .then((data) => {
+        if (data?.categories?.length) setActivityCategories(data.categories);
+      })
       .catch(() => {});
   }, []);
 
@@ -438,7 +608,13 @@ export function HistoryDashboard() {
       })
       .then((res) => {
         if (!res || !res.ok) {
-          if (res) return res.json().catch(() => ({ error: "Request failed" })).then((b: { error?: string }) => { throw new Error(b.error || `HTTP ${res.status}`); });
+          if (res)
+            return res
+              .json()
+              .catch(() => ({ error: "Request failed" }))
+              .then((b: { error?: string }) => {
+                throw new Error(b.error || `HTTP ${res.status}`);
+              });
           return;
         }
         return res.json();
@@ -450,7 +626,9 @@ export function HistoryDashboard() {
         setVisibleRowCount(50);
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : "Failed to fetch history");
+        setError(
+          err instanceof Error ? err.message : "Failed to fetch history",
+        );
         setRecords([]);
         setInsightsRecords([]);
       })
@@ -487,9 +665,13 @@ export function HistoryDashboard() {
       setError(null);
       setFetched(true);
       try {
-        const res = await fetch(`/api/py/history?location=${location.slug}&days=${dayCount}`);
+        const res = await fetch(
+          `/api/py/history?location=${location.slug}&days=${dayCount}`,
+        );
         if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: "Request failed" }));
+          const body = await res
+            .json()
+            .catch(() => ({ error: "Request failed" }));
           throw new Error(body.error || `HTTP ${res.status}`);
         }
         const json = await res.json();
@@ -497,7 +679,9 @@ export function HistoryDashboard() {
         setInsightsRecords(transformInsights(json.data));
         setVisibleRowCount(50);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to fetch history");
+        setError(
+          err instanceof Error ? err.message : "Failed to fetch history",
+        );
         setRecords([]);
         setInsightsRecords([]);
       } finally {
@@ -523,41 +707,69 @@ export function HistoryDashboard() {
 
   const hasInsights = insightsRecords.length > 0;
 
-  const stats = records.length > 0
-    ? {
-        avgHigh: avg(records.map((r) => r.tempHigh)),
-        avgLow: avg(records.map((r) => r.tempLow)),
-        maxTemp: records.reduce((m, r) => Math.max(m, r.tempHigh), -Infinity),
-        minTemp: records.reduce((m, r) => Math.min(m, r.tempLow), Infinity),
-        avgFeelsHigh: avg(records.map((r) => r.feelsLikeHigh)),
-        avgFeelsLow: avg(records.map((r) => r.feelsLikeLow)),
-        totalRain: sum(records.map((r) => r.precipitation)),
-        rainyDays: records.filter((r) => r.precipitation > 0.1).length,
-        avgRainProb: avg(records.map((r) => r.rainProbability)),
-        avgHumidity: avg(records.map((r) => r.humidity)),
-        avgCloudCover: avg(records.map((r) => r.cloudCover)),
-        avgPressure: avg(records.map((r) => r.pressure)),
-        avgUv: avg(records.map((r) => Math.round(r.uvIndex))),
-        maxUv: Math.round(records.reduce((m, r) => Math.max(m, r.uvIndex), 0) * 10) / 10,
-        avgWind: avg(records.map((r) => r.windSpeed)),
-        maxGusts: records.reduce((m, r) => Math.max(m, r.windGusts), 0),
-        avgDaylight: records[0]?.daylightHours
-          ? (Math.round(avg(records.map((r) => Math.round(r.daylightHours * 10))) / 10 * 10) / 10)
-          : null,
-      }
-    : null;
+  const stats =
+    records.length > 0
+      ? {
+          avgHigh: avg(records.map((r) => r.tempHigh)),
+          avgLow: avg(records.map((r) => r.tempLow)),
+          maxTemp: records.reduce((m, r) => Math.max(m, r.tempHigh), -Infinity),
+          minTemp: records.reduce((m, r) => Math.min(m, r.tempLow), Infinity),
+          avgFeelsHigh: avg(records.map((r) => r.feelsLikeHigh)),
+          avgFeelsLow: avg(records.map((r) => r.feelsLikeLow)),
+          totalRain: sum(records.map((r) => r.precipitation)),
+          rainyDays: records.filter((r) => r.precipitation > 0.1).length,
+          avgRainProb: avg(records.map((r) => r.rainProbability)),
+          avgHumidity: avg(records.map((r) => r.humidity)),
+          avgCloudCover: avg(records.map((r) => r.cloudCover)),
+          avgPressure: avg(records.map((r) => r.pressure)),
+          avgUv: avg(records.map((r) => Math.round(r.uvIndex))),
+          maxUv:
+            Math.round(
+              records.reduce((m, r) => Math.max(m, r.uvIndex), 0) * 10,
+            ) / 10,
+          avgWind: avg(records.map((r) => r.windSpeed)),
+          maxGusts: records.reduce((m, r) => Math.max(m, r.windGusts), 0),
+          avgDaylight: records[0]?.daylightHours
+            ? Math.round(
+                (avg(records.map((r) => Math.round(r.daylightHours * 10))) /
+                  10) *
+                  10,
+              ) / 10
+            : null,
+        }
+      : null;
 
   const insightsStats = hasInsights
     ? {
-        avgDewPoint: avgFloat(insightsRecords.map((r) => r.dewPoint).filter(defined)),
-        avgHeatStress: avgFloat(insightsRecords.map((r) => r.heatStress).filter(defined)),
-        maxHeatStress: insightsRecords.map((r) => r.heatStress).filter(defined).reduce((m, v) => Math.max(m, v), 0),
-        avgThunderstorm: avgFloat(insightsRecords.map((r) => r.thunderstorm).filter(defined)),
-        maxThunderstorm: insightsRecords.map((r) => r.thunderstorm).filter(defined).reduce((m, v) => Math.max(m, v), 0),
-        avgVisibility: avgFloat(insightsRecords.map((r) => r.visibility).filter(defined)),
-        avgUvConcern: avgFloat(insightsRecords.map((r) => r.uvConcern).filter(defined)),
-        avgGddMaize: avgFloat(insightsRecords.map((r) => r.gddMaize).filter(defined)),
-        totalET: sum(insightsRecords.map((r) => r.evapotranspiration).filter(defined)),
+        avgDewPoint: avgFloat(
+          insightsRecords.map((r) => r.dewPoint).filter(defined),
+        ),
+        avgHeatStress: avgFloat(
+          insightsRecords.map((r) => r.heatStress).filter(defined),
+        ),
+        maxHeatStress: insightsRecords
+          .map((r) => r.heatStress)
+          .filter(defined)
+          .reduce((m, v) => Math.max(m, v), 0),
+        avgThunderstorm: avgFloat(
+          insightsRecords.map((r) => r.thunderstorm).filter(defined),
+        ),
+        maxThunderstorm: insightsRecords
+          .map((r) => r.thunderstorm)
+          .filter(defined)
+          .reduce((m, v) => Math.max(m, v), 0),
+        avgVisibility: avgFloat(
+          insightsRecords.map((r) => r.visibility).filter(defined),
+        ),
+        avgUvConcern: avgFloat(
+          insightsRecords.map((r) => r.uvConcern).filter(defined),
+        ),
+        avgGddMaize: avgFloat(
+          insightsRecords.map((r) => r.gddMaize).filter(defined),
+        ),
+        totalET: sum(
+          insightsRecords.map((r) => r.evapotranspiration).filter(defined),
+        ),
         insightDays: insightsRecords.length,
       }
     : null;
@@ -568,9 +780,10 @@ export function HistoryDashboard() {
   );
 
   const filteredSuitability = useMemo(
-    () => categoryFilter === "all"
-      ? categorySuitability
-      : categorySuitability.filter((s) => s.category === categoryFilter),
+    () =>
+      categoryFilter === "all"
+        ? categorySuitability
+        : categorySuitability.filter((s) => s.category === categoryFilter),
     [categorySuitability, categoryFilter],
   );
 
@@ -578,7 +791,9 @@ export function HistoryDashboard() {
     if (records.length <= 60) return records;
     if (typeof window !== "undefined" && window.innerWidth < 768) {
       const step = Math.ceil(records.length / 60);
-      return records.filter((_, i) => i === 0 || i === records.length - 1 || i % step === 0);
+      return records.filter(
+        (_, i) => i === 0 || i === records.length - 1 || i % step === 0,
+      );
     }
     return records;
   }, [records]);
@@ -587,22 +802,35 @@ export function HistoryDashboard() {
     if (insightsRecords.length <= 60) return insightsRecords;
     if (typeof window !== "undefined" && window.innerWidth < 768) {
       const step = Math.ceil(insightsRecords.length / 60);
-      return insightsRecords.filter((_, i) => i === 0 || i === insightsRecords.length - 1 || i % step === 0);
+      return insightsRecords.filter(
+        (_, i) => i === 0 || i === insightsRecords.length - 1 || i % step === 0,
+      );
     }
     return insightsRecords;
   }, [insightsRecords]);
 
-  const formatDate = useCallback((dateStr: string) => {
-    const d = new Date(dateStr);
-    if (days <= 90) {
-      return d.toLocaleDateString("en-ZW", { day: "numeric", month: "short" });
-    }
-    return d.toLocaleDateString("en-ZW", { month: "short", year: "2-digit" });
-  }, [days]);
+  const formatDate = useCallback(
+    (dateStr: string) => {
+      const d = new Date(dateStr);
+      if (days <= 90) {
+        return d.toLocaleDateString("en-ZW", {
+          day: "numeric",
+          month: "short",
+        });
+      }
+      return d.toLocaleDateString("en-ZW", { month: "short", year: "2-digit" });
+    },
+    [days],
+  );
 
   const formatDateFull = useCallback((dateStr: string) => {
     const d = new Date(dateStr);
-    return d.toLocaleDateString("en-ZW", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+    return d.toLocaleDateString("en-ZW", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
   }, []);
 
   const showDots = chartData.length <= 31;
@@ -612,12 +840,20 @@ export function HistoryDashboard() {
       {/* Search and filters */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
         <div className="relative flex-1">
-          <label htmlFor="history-search" className="mb-1 block text-base font-medium text-text-secondary">Location</label>
+          <label
+            htmlFor="history-search"
+            className="mb-1 block text-base font-medium text-text-secondary"
+          >
+            Location
+          </label>
           <input
             id="history-search"
             type="text"
             value={query}
-            onChange={(e) => { setQuery(e.target.value); setShowDropdown(true); }}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setShowDropdown(true);
+            }}
             onFocus={() => setShowDropdown(true)}
             placeholder="Search locations..."
             className="crane"
@@ -626,13 +862,21 @@ export function HistoryDashboard() {
           {showDropdown && (results.length > 0 || searchLoading) && (
             <ul className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-[var(--radius-input)] border border-input bg-surface-card shadow-md">
               {searchLoading && results.length === 0 && (
-                <li className="px-3 py-2 text-base text-text-tertiary">Searching...</li>
+                <li className="px-3 py-2 text-base text-text-tertiary">
+                  Searching...
+                </li>
               )}
               {results.map((loc) => (
                 <li key={loc.slug}>
-                  <button type="button" className="w-full px-3 py-2 text-left text-base text-text-primary hover:bg-surface-dim transition-colors" onClick={() => handleSelectLocation(loc)}>
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-base text-text-primary hover:bg-surface-dim transition-colors"
+                    onClick={() => handleSelectLocation(loc)}
+                  >
                     <span className="font-medium">{loc.name}</span>
-                    <span className="ml-2 text-text-tertiary">{loc.province}</span>
+                    <span className="ml-2 text-text-tertiary">
+                      {loc.province}
+                    </span>
                   </button>
                 </li>
               ))}
@@ -640,19 +884,40 @@ export function HistoryDashboard() {
           )}
         </div>
         <div>
-          <label htmlFor="history-days" className="mb-1 block text-base font-medium text-text-secondary">Time period</label>
-          <select id="history-days" value={days} onChange={(e) => handleDaysChange(Number(e.target.value) as DayRange)} className="ibis">
-            {DAY_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+          <label
+            htmlFor="history-days"
+            className="mb-1 block text-base font-medium text-text-secondary"
+          >
+            Time period
+          </label>
+          <select
+            id="history-days"
+            value={days}
+            onChange={(e) =>
+              handleDaysChange(Number(e.target.value) as DayRange)
+            }
+            className="ibis"
+          >
+            {DAY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
           </select>
         </div>
       </div>
 
       {/* Category filter pills */}
       {fetched && !loading && records.length > 0 && (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by activity category">
+        <div
+          className="flex flex-wrap gap-2"
+          role="group"
+          aria-label="Filter by activity category"
+        >
           {categoryFilterOptions.map((opt) => {
             const active = categoryFilter === opt.id;
-            const style = opt.id !== "all" ? (categoryStyles[opt.id] ?? null) : null;
+            const style =
+              opt.id !== "all" ? (categoryStyles[opt.id] ?? null) : null;
             return (
               <button
                 key={opt.id}
@@ -660,7 +925,9 @@ export function HistoryDashboard() {
                 aria-pressed={active}
                 className={`min-h-[var(--touch-target-min)] rounded-[var(--radius-badge)] px-4 py-2 text-base font-medium transition-colors ${
                   active
-                    ? style ? style.badge : "bg-primary text-primary-foreground"
+                    ? style
+                      ? style.badge
+                      : "bg-primary text-primary-foreground"
                     : "bg-surface-base text-text-secondary hover:text-text-primary"
                 }`}
               >
@@ -673,12 +940,18 @@ export function HistoryDashboard() {
 
       {/* View tabs: Weather / Insights */}
       {fetched && !loading && records.length > 0 && (
-        <div className="springbok-group" role="tablist" aria-label="Dashboard view">
+        <div
+          className="springbok-group"
+          role="tablist"
+          aria-label="Dashboard view"
+        >
           <button
             role="tab"
             aria-selected={activeTab === "weather"}
             onClick={() => setActiveTab("weather")}
-            className={activeTab === "weather" ? "springbok-active" : "springbok"}
+            className={
+              activeTab === "weather" ? "springbok-active" : "springbok"
+            }
           >
             Weather Data
           </button>
@@ -686,7 +959,9 @@ export function HistoryDashboard() {
             role="tab"
             aria-selected={activeTab === "insights"}
             onClick={() => setActiveTab("insights")}
-            className={activeTab === "insights" ? "springbok-active" : "springbok"}
+            className={
+              activeTab === "insights" ? "springbok-active" : "springbok"
+            }
           >
             Insights{hasInsights ? ` (${insightsRecords.length}d)` : ""}
           </button>
@@ -696,25 +971,44 @@ export function HistoryDashboard() {
       {loading && (
         <div className="flex items-center justify-center py-12">
           <Spinner className="h-8 w-8" />
-          <span className="ml-3 text-base text-text-secondary">Loading history...</span>
+          <span className="ml-3 text-base text-text-secondary">
+            Loading history...
+          </span>
         </div>
       )}
 
       {error && (
-        <div className="rounded-[var(--radius-card)] border border-destructive/30 bg-frost-severe-bg p-4 text-base text-destructive">{error}</div>
-      )}
-
-      {fetched && !loading && !error && records.length === 0 && selectedLocation && (
-        <div className="pangolin p-8 text-center">
-          <p className="text-text-secondary">No historical data recorded for {selectedLocation.name} in the last {days} days.</p>
-          <p className="mt-2 text-base text-text-tertiary">Historical data is recorded each time weather is fetched. Data builds up over time as the service is used.</p>
+        <div className="rounded-[var(--radius-card)] border border-destructive/30 bg-frost-severe-bg p-4 text-base text-destructive">
+          {error}
         </div>
       )}
 
+      {fetched &&
+        !loading &&
+        !error &&
+        records.length === 0 &&
+        selectedLocation && (
+          <div className="pangolin p-8 text-center">
+            <p className="text-text-secondary">
+              No historical data recorded for {selectedLocation.name} in the
+              last {days} days.
+            </p>
+            <p className="mt-2 text-base text-text-tertiary">
+              Historical data is recorded each time weather is fetched. Data
+              builds up over time as the service is used.
+            </p>
+          </div>
+        )}
+
       {!fetched && !loading && (
         <div className="pangolin p-8 text-center">
-          <p className="text-text-secondary">Select a location above to view its historical weather data.</p>
-          <p className="mt-2 text-base text-text-tertiary">Browse temperature trends, precipitation totals, UV exposure, wind patterns, and activity insights over time.</p>
+          <p className="text-text-secondary">
+            Select a location above to view its historical weather data.
+          </p>
+          <p className="mt-2 text-base text-text-tertiary">
+            Browse temperature trends, precipitation totals, UV exposure, wind
+            patterns, and activity insights over time.
+          </p>
         </div>
       )}
 
@@ -724,42 +1018,71 @@ export function HistoryDashboard() {
       {!loading && records.length > 0 && stats && activeTab === "weather" && (
         <>
           <section aria-labelledby="history-summary">
-            <h2 id="history-summary" className="giraffe text-lg">{selectedLocation?.name} — {DAY_OPTIONS.find((o) => o.value === days)?.label} summary</h2>
+            <h2 id="history-summary" className="giraffe text-lg">
+              {selectedLocation?.name} —{" "}
+              {DAY_OPTIONS.find((o) => o.value === days)?.label} summary
+            </h2>
             <h3 className="hornbill mt-4">Temperature</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Avg High" value={`${stats.avgHigh}°C`} />
               <StatCard label="Avg Low" value={`${stats.avgLow}°C`} />
               <StatCard label="Record High" value={`${stats.maxTemp}°C`} />
               <StatCard label="Record Low" value={`${stats.minTemp}°C`} />
-              <StatCard label="Feels-Like High" value={`${stats.avgFeelsHigh}°C`} />
-              <StatCard label="Feels-Like Low" value={`${stats.avgFeelsLow}°C`} />
+              <StatCard
+                label="Feels-Like High"
+                value={`${stats.avgFeelsHigh}°C`}
+              />
+              <StatCard
+                label="Feels-Like Low"
+                value={`${stats.avgFeelsLow}°C`}
+              />
             </div>
             <h3 className="hornbill mt-4">Precipitation</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Total Rain" value={`${stats.totalRain} mm`} />
               <StatCard label="Rainy Days" value={`${stats.rainyDays}`} />
-              <StatCard label="Avg Rain Chance" value={`${stats.avgRainProb}%`} />
+              <StatCard
+                label="Avg Rain Chance"
+                value={`${stats.avgRainProb}%`}
+              />
             </div>
             <h3 className="hornbill mt-4">Atmosphere</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Avg Humidity" value={`${stats.avgHumidity}%`} />
-              <StatCard label="Avg Cloud Cover" value={`${stats.avgCloudCover}%`} />
-              <StatCard label="Avg Pressure" value={`${stats.avgPressure} hPa`} />
-              <StatCard label="Avg UV" value={`${stats.avgUv} (${uvLevel(stats.avgUv).label})`} />
+              <StatCard
+                label="Avg Cloud Cover"
+                value={`${stats.avgCloudCover}%`}
+              />
+              <StatCard
+                label="Avg Pressure"
+                value={`${stats.avgPressure} hPa`}
+              />
+              <StatCard
+                label="Avg UV"
+                value={`${stats.avgUv} (${uvLevel(stats.avgUv).label})`}
+              />
               <StatCard label="Peak UV" value={`${stats.maxUv}`} />
             </div>
             <h3 className="hornbill mt-4">Wind & Daylight</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Avg Wind" value={`${stats.avgWind} km/h`} />
               <StatCard label="Max Gusts" value={`${stats.maxGusts} km/h`} />
-              {stats.avgDaylight != null && <StatCard label="Avg Daylight" value={`${stats.avgDaylight} hrs`} />}
+              {stats.avgDaylight != null && (
+                <StatCard
+                  label="Avg Daylight"
+                  value={`${stats.avgDaylight} hrs`}
+                />
+              )}
               <StatCard label="Data Points" value={`${records.length}`} />
             </div>
           </section>
 
           {/* ── AI Analysis ──────────────────────────────────────────── */}
           {selectedLocation && (
-            <LazySection label="history-ai" fallback={<ChartSkeleton aspect="aspect-[16/4]" />}>
+            <LazySection
+              label="history-ai"
+              fallback={<ChartSkeleton aspect="aspect-[16/4]" />}
+            >
               <ChartErrorBoundary name="AI analysis">
                 <HistoryAnalysis
                   locationSlug={selectedLocation.slug}
@@ -773,164 +1096,349 @@ export function HistoryDashboard() {
 
           {/* Charts — 2-column grid on desktop, single column on mobile */}
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-          {/* ── Temperature trend ──────────────────────────────────────── */}
-          <LazySection label="history-temp" fallback={<ChartSkeleton aspect="aspect-[16/6]" />}>
-            <ChartErrorBoundary name="temperature trend">
-              <section aria-labelledby="history-temp-chart">
-                <h2 id="history-temp-chart" className="giraffe text-lg">Temperature trend</h2>
-                <p className="mt-1 text-base text-text-tertiary">Actual high/low and feels-like (apparent) temperatures</p>
-                <div className="pangolin mt-3">
-                  <TemperatureTrendChart data={chartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                  <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-base text-text-tertiary">
-                    <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded-sm bg-chart-1" /> High</span>
-                    <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded-sm bg-chart-2" /> Low</span>
-                    <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-3" /> Feels High</span>
-                    <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-4" /> Feels Low</span>
-                  </div>
-                </div>
-              </section>
-            </ChartErrorBoundary>
-          </LazySection>
-
-          {/* ── Precipitation ──────────────────────────────────────────── */}
-          <LazySection label="history-precip" fallback={<ChartSkeleton />}>
-            <ChartErrorBoundary name="precipitation">
-              <section aria-labelledby="history-rain-chart">
-                <h2 id="history-rain-chart" className="giraffe text-lg">Precipitation & rain probability</h2>
-                <div className="pangolin mt-3">
-                  <PrecipitationChart data={chartData} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                  <div className="mt-2 flex items-center justify-center gap-4 text-base text-text-tertiary">
-                    <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-rain opacity-60" /> Rainfall</span>
-                    <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-5" /> Probability</span>
-                  </div>
-                </div>
-              </section>
-            </ChartErrorBoundary>
-          </LazySection>
-
-          {/* ── UV & Cloud Cover ───────────────────────────────────────── */}
-          <LazySection label="history-uv-cloud" fallback={<ChartSkeleton />}>
-            <ChartErrorBoundary name="UV and cloud cover">
-              <section aria-labelledby="history-uv-cloud-chart">
-                <h2 id="history-uv-cloud-chart" className="giraffe text-lg">UV index & cloud cover</h2>
-                <div className="pangolin mt-3">
-                  <UVCloudChart data={chartData} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                  <div className="mt-2 flex items-center justify-center gap-4 text-base text-text-tertiary">
-                    <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-chart-3 opacity-50" /> UV Index</span>
-                    <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 bg-chart-2" /> Cloud Cover</span>
-                  </div>
-                </div>
-              </section>
-            </ChartErrorBoundary>
-          </LazySection>
-
-          {/* ── Wind ───────────────────────────────────────────────────── */}
-          <LazySection label="history-wind" fallback={<ChartSkeleton />}>
-            <ChartErrorBoundary name="wind">
-              <section aria-labelledby="history-wind-chart">
-                <h2 id="history-wind-chart" className="giraffe text-lg">Wind speed & gusts</h2>
-                <div className="pangolin mt-3">
-                  <WindSpeedChart data={chartData} labelKey="date" showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                  <div className="mt-2 flex items-center justify-center gap-4 text-base text-text-tertiary">
-                    <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded-sm bg-chart-1" /> Speed</span>
-                    <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-4" /> Gusts</span>
-                  </div>
-                </div>
-              </section>
-            </ChartErrorBoundary>
-          </LazySection>
-
-          {/* ── Pressure ───────────────────────────────────────────────── */}
-          <LazySection label="history-pressure" fallback={<ChartSkeleton aspect="aspect-[16/4]" />}>
-            <ChartErrorBoundary name="pressure">
-              <section aria-labelledby="history-pressure-chart">
-                <h2 id="history-pressure-chart" className="giraffe text-lg">Barometric pressure</h2>
-                <div className="pangolin mt-3">
-                  <PressureChart data={chartData} labelKey="date" aspect="aspect-[16/4]" showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                </div>
-              </section>
-            </ChartErrorBoundary>
-          </LazySection>
-
-          {/* ── Humidity ───────────────────────────────────────────────── */}
-          <LazySection label="history-humidity" fallback={<ChartSkeleton aspect="aspect-[16/4]" />}>
-            <ChartErrorBoundary name="humidity">
-              <section aria-labelledby="history-humidity-chart">
-                <h2 id="history-humidity-chart" className="giraffe text-lg">Humidity</h2>
-                <div className="pangolin mt-3">
-                  <HumidityChart data={chartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                </div>
-              </section>
-            </ChartErrorBoundary>
-          </LazySection>
-
-          {/* ── Daylight ───────────────────────────────────────────────── */}
-          {records.some((r) => r.daylightHours > 0) && (
-            <LazySection label="history-daylight" fallback={<ChartSkeleton aspect="aspect-[16/4]" />}>
-              <ChartErrorBoundary name="daylight hours">
-                <section aria-labelledby="history-daylight-chart">
-                  <h2 id="history-daylight-chart" className="giraffe text-lg">Daylight hours</h2>
-                  <p className="mt-1 text-base text-text-tertiary">Sunrise to sunset duration — useful for farming and outdoor planning</p>
+            {/* ── Temperature trend ──────────────────────────────────────── */}
+            <LazySection
+              label="history-temp"
+              fallback={<ChartSkeleton aspect="aspect-[16/6]" />}
+            >
+              <ChartErrorBoundary name="temperature trend">
+                <section aria-labelledby="history-temp-chart">
+                  <h2 id="history-temp-chart" className="giraffe text-lg">
+                    Temperature trend
+                  </h2>
+                  <p className="mt-1 text-base text-text-tertiary">
+                    Actual high/low and feels-like (apparent) temperatures
+                  </p>
                   <div className="pangolin mt-3">
-                    <DaylightChart data={chartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
+                    <TemperatureTrendChart
+                      data={chartData}
+                      showDots={showDots}
+                      tooltipTitle={formatDateFull}
+                      xTickFormat={formatDate}
+                    />
+                    <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-base text-text-tertiary">
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block h-2 w-4 rounded-sm bg-chart-1" />{" "}
+                        High
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block h-2 w-4 rounded-sm bg-chart-2" />{" "}
+                        Low
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-3" />{" "}
+                        Feels High
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-4" />{" "}
+                        Feels Low
+                      </span>
+                    </div>
                   </div>
                 </section>
               </ChartErrorBoundary>
             </LazySection>
-          )}
+
+            {/* ── Precipitation ──────────────────────────────────────────── */}
+            <LazySection label="history-precip" fallback={<ChartSkeleton />}>
+              <ChartErrorBoundary name="precipitation">
+                <section aria-labelledby="history-rain-chart">
+                  <h2 id="history-rain-chart" className="giraffe text-lg">
+                    Precipitation & rain probability
+                  </h2>
+                  <div className="pangolin mt-3">
+                    <PrecipitationChart
+                      data={chartData}
+                      tooltipTitle={formatDateFull}
+                      xTickFormat={formatDate}
+                    />
+                    <div className="mt-2 flex items-center justify-center gap-4 text-base text-text-tertiary">
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block h-3 w-3 rounded-sm bg-rain opacity-60" />{" "}
+                        Rainfall
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-5" />{" "}
+                        Probability
+                      </span>
+                    </div>
+                  </div>
+                </section>
+              </ChartErrorBoundary>
+            </LazySection>
+
+            {/* ── UV & Cloud Cover ───────────────────────────────────────── */}
+            <LazySection label="history-uv-cloud" fallback={<ChartSkeleton />}>
+              <ChartErrorBoundary name="UV and cloud cover">
+                <section aria-labelledby="history-uv-cloud-chart">
+                  <h2 id="history-uv-cloud-chart" className="giraffe text-lg">
+                    UV index & cloud cover
+                  </h2>
+                  <div className="pangolin mt-3">
+                    <UVCloudChart
+                      data={chartData}
+                      tooltipTitle={formatDateFull}
+                      xTickFormat={formatDate}
+                    />
+                    <div className="mt-2 flex items-center justify-center gap-4 text-base text-text-tertiary">
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block h-3 w-3 rounded-sm bg-chart-3 opacity-50" />{" "}
+                        UV Index
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block h-0.5 w-4 bg-chart-2" />{" "}
+                        Cloud Cover
+                      </span>
+                    </div>
+                  </div>
+                </section>
+              </ChartErrorBoundary>
+            </LazySection>
+
+            {/* ── Wind ───────────────────────────────────────────────────── */}
+            <LazySection label="history-wind" fallback={<ChartSkeleton />}>
+              <ChartErrorBoundary name="wind">
+                <section aria-labelledby="history-wind-chart">
+                  <h2 id="history-wind-chart" className="giraffe text-lg">
+                    Wind speed & gusts
+                  </h2>
+                  <div className="pangolin mt-3">
+                    <WindSpeedChart
+                      data={chartData}
+                      labelKey="date"
+                      showDots={showDots}
+                      tooltipTitle={formatDateFull}
+                      xTickFormat={formatDate}
+                    />
+                    <div className="mt-2 flex items-center justify-center gap-4 text-base text-text-tertiary">
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block h-2 w-4 rounded-sm bg-chart-1" />{" "}
+                        Speed
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-4" />{" "}
+                        Gusts
+                      </span>
+                    </div>
+                  </div>
+                </section>
+              </ChartErrorBoundary>
+            </LazySection>
+
+            {/* ── Pressure ───────────────────────────────────────────────── */}
+            <LazySection
+              label="history-pressure"
+              fallback={<ChartSkeleton aspect="aspect-[16/4]" />}
+            >
+              <ChartErrorBoundary name="pressure">
+                <section aria-labelledby="history-pressure-chart">
+                  <h2 id="history-pressure-chart" className="giraffe text-lg">
+                    Barometric pressure
+                  </h2>
+                  <div className="pangolin mt-3">
+                    <PressureChart
+                      data={chartData}
+                      labelKey="date"
+                      aspect="aspect-[16/4]"
+                      showDots={showDots}
+                      tooltipTitle={formatDateFull}
+                      xTickFormat={formatDate}
+                    />
+                  </div>
+                </section>
+              </ChartErrorBoundary>
+            </LazySection>
+
+            {/* ── Humidity ───────────────────────────────────────────────── */}
+            <LazySection
+              label="history-humidity"
+              fallback={<ChartSkeleton aspect="aspect-[16/4]" />}
+            >
+              <ChartErrorBoundary name="humidity">
+                <section aria-labelledby="history-humidity-chart">
+                  <h2 id="history-humidity-chart" className="giraffe text-lg">
+                    Humidity
+                  </h2>
+                  <div className="pangolin mt-3">
+                    <HumidityChart
+                      data={chartData}
+                      showDots={showDots}
+                      tooltipTitle={formatDateFull}
+                      xTickFormat={formatDate}
+                    />
+                  </div>
+                </section>
+              </ChartErrorBoundary>
+            </LazySection>
+
+            {/* ── Daylight ───────────────────────────────────────────────── */}
+            {records.some((r) => r.daylightHours > 0) && (
+              <LazySection
+                label="history-daylight"
+                fallback={<ChartSkeleton aspect="aspect-[16/4]" />}
+              >
+                <ChartErrorBoundary name="daylight hours">
+                  <section aria-labelledby="history-daylight-chart">
+                    <h2 id="history-daylight-chart" className="giraffe text-lg">
+                      Daylight hours
+                    </h2>
+                    <p className="mt-1 text-base text-text-tertiary">
+                      Sunrise to sunset duration — useful for farming and
+                      outdoor planning
+                    </p>
+                    <div className="pangolin mt-3">
+                      <DaylightChart
+                        data={chartData}
+                        showDots={showDots}
+                        tooltipTitle={formatDateFull}
+                        xTickFormat={formatDate}
+                      />
+                    </div>
+                  </section>
+                </ChartErrorBoundary>
+              </LazySection>
+            )}
           </div>
 
           {/* ── Daily Records Table ────────────────────────────────────── */}
-          <LazySection label="history-table" fallback={<ChartSkeleton aspect="aspect-[16/8]" />}>
+          <LazySection
+            label="history-table"
+            fallback={<ChartSkeleton aspect="aspect-[16/8]" />}
+          >
             <section aria-labelledby="history-table-heading">
-              <h2 id="history-table-heading" className="giraffe text-lg">Daily records</h2>
+              <h2 id="history-table-heading" className="giraffe text-lg">
+                Daily records
+              </h2>
               <div className="mt-3 overflow-x-auto rounded-[var(--radius-card)] bg-surface-card shadow-sm [overscroll-behavior-x:contain]">
                 <table className="w-full text-left text-base">
                   <thead>
                     <tr className="border-b border-text-tertiary/10">
-                      <th className="px-3 py-3 font-medium text-text-secondary">Date</th>
-                      <th className="px-3 py-3 font-medium text-text-secondary">Condition</th>
-                      <th className="px-3 py-3 font-medium text-text-secondary text-right">High</th>
-                      <th className="px-3 py-3 font-medium text-text-secondary text-right">Low</th>
-                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right sm:table-cell">Feels</th>
-                      <th className="px-3 py-3 font-medium text-text-secondary text-right">Rain</th>
-                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right md:table-cell">Prob</th>
-                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right sm:table-cell">Humidity</th>
-                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right md:table-cell">Cloud</th>
-                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right sm:table-cell">Wind</th>
-                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right md:table-cell">Gusts</th>
-                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right lg:table-cell">Dir</th>
-                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right md:table-cell">UV</th>
-                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right lg:table-cell">Pres.</th>
-                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right lg:table-cell">Rise</th>
-                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right lg:table-cell">Set</th>
+                      <th className="px-3 py-3 font-medium text-text-secondary">
+                        Date
+                      </th>
+                      <th className="px-3 py-3 font-medium text-text-secondary">
+                        Condition
+                      </th>
+                      <th className="px-3 py-3 font-medium text-text-secondary text-right">
+                        High
+                      </th>
+                      <th className="px-3 py-3 font-medium text-text-secondary text-right">
+                        Low
+                      </th>
+                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right sm:table-cell">
+                        Feels
+                      </th>
+                      <th className="px-3 py-3 font-medium text-text-secondary text-right">
+                        Rain
+                      </th>
+                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right md:table-cell">
+                        Prob
+                      </th>
+                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right sm:table-cell">
+                        Humidity
+                      </th>
+                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right md:table-cell">
+                        Cloud
+                      </th>
+                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right sm:table-cell">
+                        Wind
+                      </th>
+                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right md:table-cell">
+                        Gusts
+                      </th>
+                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right lg:table-cell">
+                        Dir
+                      </th>
+                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right md:table-cell">
+                        UV
+                      </th>
+                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right lg:table-cell">
+                        Pres.
+                      </th>
+                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right lg:table-cell">
+                        Rise
+                      </th>
+                      <th className="hidden px-3 py-3 font-medium text-text-secondary text-right lg:table-cell">
+                        Set
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {records.slice().reverse().slice(0, visibleRowCount).map((r) => (
-                      <tr key={r.date} className="border-b border-text-tertiary/5 hover:bg-surface-dim/50 transition-colors">
-                        <td className="px-3 py-2 text-text-primary font-mono text-base whitespace-nowrap">{new Date(r.date).toLocaleDateString("en-ZW", { day: "numeric", month: "short", year: "numeric" })}</td>
-                        <td className="px-3 py-2 text-text-secondary text-base truncate max-w-[120px]" title={r.condition}>{r.condition}</td>
-                        <td className="px-3 py-2 text-right text-text-primary">{r.tempHigh}°</td>
-                        <td className="px-3 py-2 text-right text-text-secondary">{r.tempLow}°</td>
-                        <td className="hidden px-3 py-2 text-right text-text-tertiary text-base sm:table-cell">{r.feelsLikeHigh}°/{r.feelsLikeLow}°</td>
-                        <td className="px-3 py-2 text-right text-text-secondary">{r.precipitation} mm</td>
-                        <td className="hidden px-3 py-2 text-right text-text-tertiary md:table-cell">{r.rainProbability}%</td>
-                        <td className="hidden px-3 py-2 text-right text-text-secondary sm:table-cell">{r.humidity}%</td>
-                        <td className="hidden px-3 py-2 text-right text-text-tertiary md:table-cell">{r.cloudCover}%</td>
-                        <td className="hidden px-3 py-2 text-right text-text-secondary sm:table-cell">{r.windSpeed}</td>
-                        <td className="hidden px-3 py-2 text-right text-text-tertiary md:table-cell">{r.windGusts}</td>
-                        <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">{r.windDirectionLabel}</td>
-                        <td className="hidden px-3 py-2 text-right text-text-secondary md:table-cell">{Math.round(r.uvIndex)}</td>
-                        <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">{r.pressure}</td>
-                        <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">{r.sunrise}</td>
-                        <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">{r.sunset}</td>
-                      </tr>
-                    ))}
+                    {records
+                      .slice()
+                      .reverse()
+                      .slice(0, visibleRowCount)
+                      .map((r) => (
+                        <tr
+                          key={r.date}
+                          className="border-b border-text-tertiary/5 hover:bg-surface-dim/50 transition-colors"
+                        >
+                          <td className="px-3 py-2 text-text-primary font-mono text-base whitespace-nowrap">
+                            {new Date(r.date).toLocaleDateString("en-ZW", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </td>
+                          <td
+                            className="px-3 py-2 text-text-secondary text-base truncate max-w-[120px]"
+                            title={r.condition}
+                          >
+                            {r.condition}
+                          </td>
+                          <td className="px-3 py-2 text-right text-text-primary">
+                            {r.tempHigh}°
+                          </td>
+                          <td className="px-3 py-2 text-right text-text-secondary">
+                            {r.tempLow}°
+                          </td>
+                          <td className="hidden px-3 py-2 text-right text-text-tertiary text-base sm:table-cell">
+                            {r.feelsLikeHigh}°/{r.feelsLikeLow}°
+                          </td>
+                          <td className="px-3 py-2 text-right text-text-secondary">
+                            {r.precipitation} mm
+                          </td>
+                          <td className="hidden px-3 py-2 text-right text-text-tertiary md:table-cell">
+                            {r.rainProbability}%
+                          </td>
+                          <td className="hidden px-3 py-2 text-right text-text-secondary sm:table-cell">
+                            {r.humidity}%
+                          </td>
+                          <td className="hidden px-3 py-2 text-right text-text-tertiary md:table-cell">
+                            {r.cloudCover}%
+                          </td>
+                          <td className="hidden px-3 py-2 text-right text-text-secondary sm:table-cell">
+                            {r.windSpeed}
+                          </td>
+                          <td className="hidden px-3 py-2 text-right text-text-tertiary md:table-cell">
+                            {r.windGusts}
+                          </td>
+                          <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">
+                            {r.windDirectionLabel}
+                          </td>
+                          <td className="hidden px-3 py-2 text-right text-text-secondary md:table-cell">
+                            {Math.round(r.uvIndex)}
+                          </td>
+                          <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">
+                            {r.pressure}
+                          </td>
+                          <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">
+                            {r.sunrise}
+                          </td>
+                          <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">
+                            {r.sunset}
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
                 {records.length > visibleRowCount && (
-                  <div ref={tableEndRef} className="py-4 text-center text-base text-text-tertiary">Loading more rows...</div>
+                  <div
+                    ref={tableEndRef}
+                    className="py-4 text-center text-base text-text-tertiary"
+                  >
+                    Loading more rows...
+                  </div>
                 )}
               </div>
             </section>
@@ -945,10 +1453,13 @@ export function HistoryDashboard() {
         <>
           {!hasInsights && (
             <div className="pangolin p-8 text-center">
-              <p className="text-text-secondary">No insights data available for this period.</p>
+              <p className="text-text-secondary">
+                No insights data available for this period.
+              </p>
               <p className="mt-2 text-base text-text-tertiary">
-                Insights (dew point, heat stress, thunderstorm risk, visibility, GDD) are recorded when
-                Tomorrow.io is the weather provider. Data will appear here as it accumulates.
+                Insights (dew point, heat stress, thunderstorm risk, visibility,
+                GDD) are recorded when Tomorrow.io is the weather provider. Data
+                will appear here as it accumulates.
               </p>
             </div>
           )}
@@ -958,10 +1469,12 @@ export function HistoryDashboard() {
               {/* ── Activity suitability gauges ─────────────────────────── */}
               <section aria-labelledby="history-suitability">
                 <h2 id="history-suitability" className="giraffe text-lg">
-                  Activity Suitability — {DAY_OPTIONS.find((o) => o.value === days)?.label} overview
+                  Activity Suitability —{" "}
+                  {DAY_OPTIONS.find((o) => o.value === days)?.label} overview
                 </h2>
                 <p className="mt-1 text-base text-text-tertiary">
-                  Based on {insightsStats.insightDays} days of Tomorrow.io insights data
+                  Based on {insightsStats.insightDays} days of Tomorrow.io
+                  insights data
                 </p>
                 {filteredSuitability.length > 0 ? (
                   <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -979,112 +1492,229 @@ export function HistoryDashboard() {
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-3 text-base text-text-tertiary">No suitability data for this category.</p>
+                  <p className="mt-3 text-base text-text-tertiary">
+                    No suitability data for this category.
+                  </p>
                 )}
               </section>
 
               {/* ── Insights summary stats ──────────────────────────────── */}
               <section aria-labelledby="history-insights-stats">
-                <h2 id="history-insights-stats" className="giraffe text-lg">Insights summary</h2>
+                <h2 id="history-insights-stats" className="giraffe text-lg">
+                  Insights summary
+                </h2>
                 <h3 className="hornbill mt-4">Safety & Comfort</h3>
                 <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <StatCard label="Avg Heat Stress" value={`${insightsStats.avgHeatStress} (${heatStressLevel(insightsStats.avgHeatStress).label})`} />
-                  <StatCard label="Peak Heat Stress" value={`${insightsStats.maxHeatStress} (${heatStressLevel(insightsStats.maxHeatStress).label})`} />
-                  <StatCard label="Avg Storm Risk" value={`${Math.round(insightsStats.avgThunderstorm)}%`} />
-                  <StatCard label="Peak Storm Risk" value={`${Math.round(insightsStats.maxThunderstorm)}%`} />
-                  <StatCard label="Avg UV Concern" value={`${insightsStats.avgUvConcern} (${uvConcernLabel(insightsStats.avgUvConcern).label})`} />
-                  <StatCard label="Avg Visibility" value={`${insightsStats.avgVisibility} km`} />
+                  <StatCard
+                    label="Avg Heat Stress"
+                    value={`${insightsStats.avgHeatStress} (${heatStressLevel(insightsStats.avgHeatStress).label})`}
+                  />
+                  <StatCard
+                    label="Peak Heat Stress"
+                    value={`${insightsStats.maxHeatStress} (${heatStressLevel(insightsStats.maxHeatStress).label})`}
+                  />
+                  <StatCard
+                    label="Avg Storm Risk"
+                    value={`${Math.round(insightsStats.avgThunderstorm)}%`}
+                  />
+                  <StatCard
+                    label="Peak Storm Risk"
+                    value={`${Math.round(insightsStats.maxThunderstorm)}%`}
+                  />
+                  <StatCard
+                    label="Avg UV Concern"
+                    value={`${insightsStats.avgUvConcern} (${uvConcernLabel(insightsStats.avgUvConcern).label})`}
+                  />
+                  <StatCard
+                    label="Avg Visibility"
+                    value={`${insightsStats.avgVisibility} km`}
+                  />
                 </div>
                 <h3 className="hornbill mt-4">Farming & Agriculture</h3>
                 <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <StatCard label="Avg Dew Point" value={`${insightsStats.avgDewPoint}°C`} />
-                  <StatCard label="Avg GDD (Maize)" value={`${insightsStats.avgGddMaize}`} />
-                  <StatCard label="Total ET" value={`${insightsStats.totalET} mm`} />
-                  <StatCard label="Insight Days" value={`${insightsStats.insightDays}`} />
+                  <StatCard
+                    label="Avg Dew Point"
+                    value={`${insightsStats.avgDewPoint}°C`}
+                  />
+                  <StatCard
+                    label="Avg GDD (Maize)"
+                    value={`${insightsStats.avgGddMaize}`}
+                  />
+                  <StatCard
+                    label="Total ET"
+                    value={`${insightsStats.totalET} mm`}
+                  />
+                  <StatCard
+                    label="Insight Days"
+                    value={`${insightsStats.insightDays}`}
+                  />
                 </div>
               </section>
 
               {/* Insight charts — 2-column grid on desktop, single column on mobile */}
               <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-              {/* ── Heat Stress chart ───────────────────────────────────── */}
-              {insightsRecords.some((r) => r.heatStress != null) && (
-                <LazySection label="history-heat-stress" fallback={<ChartSkeleton />}>
-                  <ChartErrorBoundary name="heat stress">
-                    <section aria-labelledby="history-heat-stress-chart">
-                      <h2 id="history-heat-stress-chart" className="giraffe text-lg">Heat stress index</h2>
-                      <p className="mt-1 text-base text-text-tertiary">EZ Heat Stress Index — above 24 is moderate, above 28 is severe</p>
-                      <div className="pangolin mt-3">
-                        <HeatStressChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                      </div>
-                    </section>
-                  </ChartErrorBoundary>
-                </LazySection>
-              )}
-
-              {/* ── Thunderstorm probability chart ─────────────────────── */}
-              {insightsRecords.some((r) => r.thunderstorm != null) && (
-                <LazySection label="history-thunderstorm" fallback={<ChartSkeleton />}>
-                  <ChartErrorBoundary name="thunderstorm probability">
-                    <section aria-labelledby="history-thunderstorm-chart">
-                      <h2 id="history-thunderstorm-chart" className="giraffe text-lg">Thunderstorm probability</h2>
-                      <p className="mt-1 text-base text-text-tertiary">Lightning and storm risk — above 40% unsafe for sports, above 50% unsafe for mining</p>
-                      <div className="pangolin mt-3">
-                        <ThunderstormChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                      </div>
-                    </section>
-                  </ChartErrorBoundary>
-                </LazySection>
-              )}
-
-              {/* ── Dew Point chart ────────────────────────────────────── */}
-              {insightsRecords.some((r) => r.dewPoint != null) && (
-                <LazySection label="history-dew-point" fallback={<ChartSkeleton />}>
-                  <ChartErrorBoundary name="dew point">
-                    <section aria-labelledby="history-dewpoint-chart">
-                      <h2 id="history-dewpoint-chart" className="giraffe text-lg">Dew point</h2>
-                      <p className="mt-1 text-base text-text-tertiary">Below 5°C indicates cold, dry air stress; above 20°C indicates crop disease risk</p>
-                      <div className="pangolin mt-3">
-                        <DewPointChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                      </div>
-                    </section>
-                  </ChartErrorBoundary>
-                </LazySection>
-              )}
-
-              {/* ── Visibility chart ───────────────────────────────────── */}
-              {insightsRecords.some((r) => r.visibility != null) && (
-                <LazySection label="history-visibility" fallback={<ChartSkeleton />}>
-                  <ChartErrorBoundary name="visibility">
-                    <section aria-labelledby="history-visibility-chart">
-                      <h2 id="history-visibility-chart" className="giraffe text-lg">Visibility</h2>
-                      <p className="mt-1 text-base text-text-tertiary">Below 5 km is reduced, below 1 km is very poor — affects travel and photography</p>
-                      <div className="pangolin mt-3">
-                        <VisibilityChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                      </div>
-                    </section>
-                  </ChartErrorBoundary>
-                </LazySection>
-              )}
-
-              {/* ── GDD chart (farming) ────────────────────────────────── */}
-              {insightsRecords.some((r) => r.gddMaize != null) && (
-                <LazySection label="history-gdd" fallback={<ChartSkeleton />}>
-                  <ChartErrorBoundary name="growing degree days">
-                    <section aria-labelledby="history-gdd-chart">
-                      <h2 id="history-gdd-chart" className="giraffe text-lg">Growing degree days (GDD)</h2>
-                      <p className="mt-1 text-base text-text-tertiary">Crop growth potential — higher values mean more growth for that day</p>
-                      <div className="pangolin mt-3">
-                        <GDDChart data={insightsChartData} showDots={showDots} tooltipTitle={formatDateFull} xTickFormat={formatDate} />
-                        <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-base text-text-tertiary">
-                          <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded-sm bg-mineral-malachite" /> Maize/Soybean</span>
-                          <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-3" /> Sorghum</span>
-                          <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-4" /> Potatoes</span>
+                {/* ── Heat Stress chart ───────────────────────────────────── */}
+                {insightsRecords.some((r) => r.heatStress != null) && (
+                  <LazySection
+                    label="history-heat-stress"
+                    fallback={<ChartSkeleton />}
+                  >
+                    <ChartErrorBoundary name="heat stress">
+                      <section aria-labelledby="history-heat-stress-chart">
+                        <h2
+                          id="history-heat-stress-chart"
+                          className="giraffe text-lg"
+                        >
+                          Heat stress index
+                        </h2>
+                        <p className="mt-1 text-base text-text-tertiary">
+                          EZ Heat Stress Index — above 24 is moderate, above 28
+                          is severe
+                        </p>
+                        <div className="pangolin mt-3">
+                          <HeatStressChart
+                            data={insightsChartData}
+                            showDots={showDots}
+                            tooltipTitle={formatDateFull}
+                            xTickFormat={formatDate}
+                          />
                         </div>
-                      </div>
-                    </section>
-                  </ChartErrorBoundary>
-                </LazySection>
-              )}
+                      </section>
+                    </ChartErrorBoundary>
+                  </LazySection>
+                )}
+
+                {/* ── Thunderstorm probability chart ─────────────────────── */}
+                {insightsRecords.some((r) => r.thunderstorm != null) && (
+                  <LazySection
+                    label="history-thunderstorm"
+                    fallback={<ChartSkeleton />}
+                  >
+                    <ChartErrorBoundary name="thunderstorm probability">
+                      <section aria-labelledby="history-thunderstorm-chart">
+                        <h2
+                          id="history-thunderstorm-chart"
+                          className="giraffe text-lg"
+                        >
+                          Thunderstorm probability
+                        </h2>
+                        <p className="mt-1 text-base text-text-tertiary">
+                          Lightning and storm risk — above 40% unsafe for
+                          sports, above 50% unsafe for mining
+                        </p>
+                        <div className="pangolin mt-3">
+                          <ThunderstormChart
+                            data={insightsChartData}
+                            showDots={showDots}
+                            tooltipTitle={formatDateFull}
+                            xTickFormat={formatDate}
+                          />
+                        </div>
+                      </section>
+                    </ChartErrorBoundary>
+                  </LazySection>
+                )}
+
+                {/* ── Dew Point chart ────────────────────────────────────── */}
+                {insightsRecords.some((r) => r.dewPoint != null) && (
+                  <LazySection
+                    label="history-dew-point"
+                    fallback={<ChartSkeleton />}
+                  >
+                    <ChartErrorBoundary name="dew point">
+                      <section aria-labelledby="history-dewpoint-chart">
+                        <h2
+                          id="history-dewpoint-chart"
+                          className="giraffe text-lg"
+                        >
+                          Dew point
+                        </h2>
+                        <p className="mt-1 text-base text-text-tertiary">
+                          Below 5°C indicates cold, dry air stress; above 20°C
+                          indicates crop disease risk
+                        </p>
+                        <div className="pangolin mt-3">
+                          <DewPointChart
+                            data={insightsChartData}
+                            showDots={showDots}
+                            tooltipTitle={formatDateFull}
+                            xTickFormat={formatDate}
+                          />
+                        </div>
+                      </section>
+                    </ChartErrorBoundary>
+                  </LazySection>
+                )}
+
+                {/* ── Visibility chart ───────────────────────────────────── */}
+                {insightsRecords.some((r) => r.visibility != null) && (
+                  <LazySection
+                    label="history-visibility"
+                    fallback={<ChartSkeleton />}
+                  >
+                    <ChartErrorBoundary name="visibility">
+                      <section aria-labelledby="history-visibility-chart">
+                        <h2
+                          id="history-visibility-chart"
+                          className="giraffe text-lg"
+                        >
+                          Visibility
+                        </h2>
+                        <p className="mt-1 text-base text-text-tertiary">
+                          Below 5 km is reduced, below 1 km is very poor —
+                          affects travel and photography
+                        </p>
+                        <div className="pangolin mt-3">
+                          <VisibilityChart
+                            data={insightsChartData}
+                            showDots={showDots}
+                            tooltipTitle={formatDateFull}
+                            xTickFormat={formatDate}
+                          />
+                        </div>
+                      </section>
+                    </ChartErrorBoundary>
+                  </LazySection>
+                )}
+
+                {/* ── GDD chart (farming) ────────────────────────────────── */}
+                {insightsRecords.some((r) => r.gddMaize != null) && (
+                  <LazySection label="history-gdd" fallback={<ChartSkeleton />}>
+                    <ChartErrorBoundary name="growing degree days">
+                      <section aria-labelledby="history-gdd-chart">
+                        <h2 id="history-gdd-chart" className="giraffe text-lg">
+                          Growing degree days (GDD)
+                        </h2>
+                        <p className="mt-1 text-base text-text-tertiary">
+                          Crop growth potential — higher values mean more growth
+                          for that day
+                        </p>
+                        <div className="pangolin mt-3">
+                          <GDDChart
+                            data={insightsChartData}
+                            showDots={showDots}
+                            tooltipTitle={formatDateFull}
+                            xTickFormat={formatDate}
+                          />
+                          <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-base text-text-tertiary">
+                            <span className="flex items-center gap-1">
+                              <span className="inline-block h-2 w-4 rounded-sm bg-mineral-malachite" />{" "}
+                              Maize/Soybean
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-3" />{" "}
+                              Sorghum
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-chart-4" />{" "}
+                              Potatoes
+                            </span>
+                          </div>
+                        </div>
+                      </section>
+                    </ChartErrorBoundary>
+                  </LazySection>
+                )}
               </div>
             </>
           )}
