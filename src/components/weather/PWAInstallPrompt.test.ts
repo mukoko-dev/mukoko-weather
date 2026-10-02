@@ -2,10 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 
-const src = readFileSync(
-  join(__dirname, "PWAInstallPrompt.tsx"),
-  "utf-8",
-);
+const src = readFileSync(join(__dirname, "PWAInstallPrompt.tsx"), "utf-8");
 
 describe("PWAInstallPrompt — component structure", () => {
   it("is a client component", () => {
@@ -41,7 +38,9 @@ describe("PWAInstallPrompt — component structure", () => {
     // handleDismiss must early-return when deferredPrompt.current is null
     // (which happens after handleInstall nulls the ref before closing the dialog).
     // Without this guard, onOpenChange(false) would record a dismissal even on accept.
-    expect(src).toMatch(/const handleDismiss[\s\S]*?if\s*\(\s*!deferredPrompt\.current\s*\)\s*return/);
+    expect(src).toMatch(
+      /const handleDismiss[\s\S]*?if\s*\(\s*!deferredPrompt\.current\s*\)\s*return/,
+    );
   });
 
   it("handleInstall nulls deferredPrompt before calling setOpen(false)", () => {

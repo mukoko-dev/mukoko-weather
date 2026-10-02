@@ -13,7 +13,9 @@ import { getSignInUrl } from "@workos-inc/authkit-nextjs";
 import { sanitizeReturnPath } from "./sanitize";
 
 export const GET = async (request: NextRequest) => {
-  const returnTo = sanitizeReturnPath(request.nextUrl.searchParams.get("returnTo"));
+  const returnTo = sanitizeReturnPath(
+    request.nextUrl.searchParams.get("returnTo"),
+  );
   const signInUrl = await getSignInUrl(returnTo ? { returnTo } : undefined);
   return redirect(signInUrl);
 };

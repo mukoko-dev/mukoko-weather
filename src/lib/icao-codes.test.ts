@@ -205,7 +205,10 @@ describe("fetchNearestAirports (DB-backed with static fallback)", () => {
   });
 
   it("falls back to the static haversine scan when the request fails", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("network down")),
+    );
     const result = await fetchNearestAirports(-17.85, 31.05, 3);
     // Static fallback still finds Harare closest.
     expect(result.length).toBeGreaterThan(0);
@@ -215,14 +218,19 @@ describe("fetchNearestAirports (DB-backed with static fallback)", () => {
   it("falls back to static when the DB returns an empty list", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ airports: [] }) }),
+      vi
+        .fn()
+        .mockResolvedValue({ ok: true, json: async () => ({ airports: [] }) }),
     );
     const result = await fetchNearestAirports(-17.85, 31.05, 3);
     expect(result[0].icao).toBe("FVHA");
   });
 
   it("falls back to static on a non-OK HTTP response", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 500 }),
+    );
     const result = await fetchNearestAirports(-17.85, 31.05, 3);
     expect(result[0].icao).toBe("FVHA");
   });

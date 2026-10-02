@@ -1,12 +1,21 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { getRetryCount, setRetryCount, clearRetryCount, MAX_RETRIES } from "./error-retry";
+import {
+  getRetryCount,
+  setRetryCount,
+  clearRetryCount,
+  MAX_RETRIES,
+} from "./error-retry";
 
 // Mock sessionStorage and window.location for Node test environment
 const mockStorage: Record<string, string> = {};
 const mockSessionStorage = {
   getItem: vi.fn((key: string) => mockStorage[key] ?? null),
-  setItem: vi.fn((key: string, value: string) => { mockStorage[key] = value; }),
-  removeItem: vi.fn((key: string) => { delete mockStorage[key]; }),
+  setItem: vi.fn((key: string, value: string) => {
+    mockStorage[key] = value;
+  }),
+  removeItem: vi.fn((key: string) => {
+    delete mockStorage[key];
+  }),
 };
 
 describe("error-retry", () => {

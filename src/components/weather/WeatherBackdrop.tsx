@@ -67,7 +67,11 @@ function skyClass(type: WeatherSceneType, isDay: boolean): string {
  * the static gradient (createWeatherScene returns a no-op handle on failure),
  * and the whole card is additionally wrapped in ChartErrorBoundary upstream.
  */
-export function WeatherBackdrop({ weatherCode, windSpeed, isDay = true }: Props) {
+export function WeatherBackdrop({
+  weatherCode,
+  windSpeed,
+  isDay = true,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Client-only media queries. Default to SSR-safe values, resolve on mount.
@@ -76,8 +80,12 @@ export function WeatherBackdrop({ weatherCode, windSpeed, isDay = true }: Props)
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       try {
-        setAnimate(!window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-        setIsMobile(window.matchMedia("(hover: none), (pointer: coarse)").matches);
+        setAnimate(
+          !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+        );
+        setIsMobile(
+          window.matchMedia("(hover: none), (pointer: coarse)").matches,
+        );
       } catch {
         // matchMedia unavailable — keep the static gradient only.
       }
@@ -149,7 +157,9 @@ export function WeatherBackdrop({ weatherCode, windSpeed, isDay = true }: Props)
       className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
     >
       {/* Static mineral gradient — always painted; the reduced-motion fallback. */}
-      <div className={`absolute inset-0 weaver-sky ${skyClass(sceneType, isDay)}`} />
+      <div
+        className={`absolute inset-0 weaver-sky ${skyClass(sceneType, isDay)}`}
+      />
       {/* Three.js particle layer (transparent) — only when motion is allowed. */}
       {animate && <div ref={containerRef} className="absolute inset-0" />}
       {/* Readability scrim so hero text keeps contrast over the animation. */}

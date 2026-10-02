@@ -15,14 +15,23 @@ const createLocalStorageMock = () => {
   let store: Record<string, string> = {};
   return {
     getItem: (key: string) => store[key] ?? null,
-    setItem: (key: string, value: string) => { store[key] = value; },
-    removeItem: (key: string) => { delete store[key]; },
-    clear: () => { store = {}; },
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
   };
 };
 
 const localStorageMock = createLocalStorageMock();
-Object.defineProperty(globalThis, "localStorage", { value: localStorageMock, writable: true });
+Object.defineProperty(globalThis, "localStorage", {
+  value: localStorageMock,
+  writable: true,
+});
 
 describe("feature-flags", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -129,20 +138,28 @@ describe("feature-flags", () => {
     it("handles localStorage errors gracefully", () => {
       // Temporarily replace localStorage with a throwing mock
       const throwingStorage = {
-        getItem: () => { throw new Error("QuotaExceededError"); },
+        getItem: () => {
+          throw new Error("QuotaExceededError");
+        },
         setItem: () => {},
         removeItem: () => {},
         clear: () => {},
       };
       const savedLS = globalThis.localStorage;
-      Object.defineProperty(globalThis, "localStorage", { value: throwingStorage, writable: true });
+      Object.defineProperty(globalThis, "localStorage", {
+        value: throwingStorage,
+        writable: true,
+      });
 
       // Should fall back to default, not throw
       expect(isFeatureEnabledWithOverride("premium_maps")).toBe(false);
       expect(isFeatureEnabledWithOverride("weather_reports")).toBe(true);
 
       // Restore normal localStorage
-      Object.defineProperty(globalThis, "localStorage", { value: savedLS, writable: true });
+      Object.defineProperty(globalThis, "localStorage", {
+        value: savedLS,
+        writable: true,
+      });
     });
 
     it("falls back to default on server (window undefined)", () => {
@@ -175,8 +192,12 @@ describe("feature-flags", () => {
 
     it("is equivalent to isFeatureEnabledWithOverride for a given flag", () => {
       // Test a representative flag (not in a loop to satisfy react-hooks/rules-of-hooks)
-      expect(getFeatureFlag("weather_reports")).toBe(isFeatureEnabledWithOverride("weather_reports"));
-      expect(getFeatureFlag("premium_maps")).toBe(isFeatureEnabledWithOverride("premium_maps"));
+      expect(getFeatureFlag("weather_reports")).toBe(
+        isFeatureEnabledWithOverride("weather_reports"),
+      );
+      expect(getFeatureFlag("premium_maps")).toBe(
+        isFeatureEnabledWithOverride("premium_maps"),
+      );
     });
   });
 });

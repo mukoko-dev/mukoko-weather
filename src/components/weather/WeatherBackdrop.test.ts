@@ -8,10 +8,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const source = readFileSync(
-  resolve(__dirname, "WeatherBackdrop.tsx"),
-  "utf-8",
-);
+const source = readFileSync(resolve(__dirname, "WeatherBackdrop.tsx"), "utf-8");
 
 describe("WeatherBackdrop — component contract", () => {
   it("is a client component", () => {
@@ -49,7 +46,9 @@ describe("WeatherBackdrop — performance discipline", () => {
     // POSITIVE z-0, never negative: iOS Safari paints fixed negative-z
     // elements behind the body background (overflow-x:hidden body), making
     // the backdrop invisible on iPhone. Content stacks above via z-10.
-    expect(source).toContain('"pointer-events-none fixed inset-0 z-0 overflow-hidden"');
+    expect(source).toContain(
+      '"pointer-events-none fixed inset-0 z-0 overflow-hidden"',
+    );
     expect(source).not.toContain("-z-10");
     // Always on-screen while the page is visible — tab visibility is the
     // only pause signal, so no observer is constructed (the docstring may

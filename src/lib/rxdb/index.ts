@@ -6,7 +6,12 @@
  */
 
 // Database
-export { getDatabase, destroyDatabase, type MukokoDatabase, type MukokoCollections } from "./database";
+export {
+  getDatabase,
+  destroyDatabase,
+  type MukokoDatabase,
+  type MukokoCollections,
+} from "./database";
 
 // Schemas
 export type {

@@ -4,24 +4,45 @@ import type { Env } from "../types";
 const OPEN_METEO_BASE = "https://api.open-meteo.com/v1/forecast";
 
 const CURRENT_PARAMS = [
-  "temperature_2m", "relative_humidity_2m", "apparent_temperature",
-  "precipitation", "weather_code", "cloud_cover",
-  "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m",
-  "uv_index", "surface_pressure", "is_day",
+  "temperature_2m",
+  "relative_humidity_2m",
+  "apparent_temperature",
+  "precipitation",
+  "weather_code",
+  "cloud_cover",
+  "wind_speed_10m",
+  "wind_direction_10m",
+  "wind_gusts_10m",
+  "uv_index",
+  "surface_pressure",
+  "is_day",
 ].join(",");
 
 const HOURLY_PARAMS = [
-  "temperature_2m", "relative_humidity_2m", "precipitation_probability",
-  "precipitation", "weather_code", "visibility",
-  "wind_speed_10m", "uv_index", "is_day",
+  "temperature_2m",
+  "relative_humidity_2m",
+  "precipitation_probability",
+  "precipitation",
+  "weather_code",
+  "visibility",
+  "wind_speed_10m",
+  "uv_index",
+  "is_day",
 ].join(",");
 
 const DAILY_PARAMS = [
-  "weather_code", "temperature_2m_max", "temperature_2m_min",
-  "apparent_temperature_max", "apparent_temperature_min",
-  "sunrise", "sunset", "uv_index_max",
-  "precipitation_sum", "precipitation_probability_max",
-  "wind_speed_10m_max", "wind_gusts_10m_max",
+  "weather_code",
+  "temperature_2m_max",
+  "temperature_2m_min",
+  "apparent_temperature_max",
+  "apparent_temperature_min",
+  "sunrise",
+  "sunset",
+  "uv_index_max",
+  "precipitation_sum",
+  "precipitation_probability_max",
+  "wind_speed_10m_max",
+  "wind_gusts_10m_max",
 ].join(",");
 
 const WEATHER_CACHE_TTL = 900; // 15 minutes

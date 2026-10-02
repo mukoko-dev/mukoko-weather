@@ -11,7 +11,9 @@ function makeHourly(codes: number[], gusts?: number[]): HourlyWeather {
   const start = new Date();
   start.setHours(8, 0, 0, 0); // deterministic hour labels
   return {
-    time: codes.map((_, i) => new Date(start.getTime() + i * 3600_000).toISOString()),
+    time: codes.map((_, i) =>
+      new Date(start.getTime() + i * 3600_000).toISOString(),
+    ),
     weather_code: codes,
     wind_gusts_10m: gusts ?? codes.map(() => 10),
   } as unknown as HourlyWeather;
@@ -42,7 +44,9 @@ describe("hourlySummary", () => {
   it("reports continuation when nothing changes in the window", () => {
     const codes = Array(14).fill(3);
     const summary = hourlySummary(makeHourly(codes), 0);
-    expect(summary).toContain(`Cloudy conditions will continue for the next ${SUMMARY_LOOKAHEAD_HOURS} hours.`);
+    expect(summary).toContain(
+      `Cloudy conditions will continue for the next ${SUMMARY_LOOKAHEAD_HOURS} hours.`,
+    );
   });
 
   it("ignores fine-grained changes within the same group", () => {
@@ -69,7 +73,9 @@ describe("hourlySummary", () => {
 
   it("respects the start index (same slicing as the strip)", () => {
     // change is at absolute index 6; starting at 5 it's 1 hour ahead (13:00 for 08:00 base)
-    const codes = [0, 0, 0, 0, 0, 0, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95];
+    const codes = [
+      0, 0, 0, 0, 0, 0, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95,
+    ];
     const summary = hourlySummary(makeHourly(codes), 5);
     expect(summary).toContain("Thunderstorms expected around 14:00.");
   });

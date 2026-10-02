@@ -52,7 +52,10 @@ interface ProxyParams {
   params: Promise<{ path?: string[] }>;
 }
 
-async function proxy(req: NextRequest, { params }: ProxyParams): Promise<Response> {
+async function proxy(
+  req: NextRequest,
+  { params }: ProxyParams,
+): Promise<Response> {
   const { user } = await withAuth();
   if (!user) {
     return NextResponse.json(
@@ -70,7 +73,10 @@ async function proxy(req: NextRequest, { params }: ProxyParams): Promise<Respons
   // catch-all silently fell through to Next's 404 page and the widget showed
   // "Unable to load AI summary" for every signed-in user. No trailing slash
   // when there's no subpath — FastAPI's `/api/py/ai/` would 307-redirect.
-  const upstream = new URL(subpath ? `/api/py/ai/${subpath}` : "/api/py/ai", url.origin);
+  const upstream = new URL(
+    subpath ? `/api/py/ai/${subpath}` : "/api/py/ai",
+    url.origin,
+  );
   upstream.search = url.search;
 
   // Forward request headers minus hop-by-hop / cookie, plus the user identity.

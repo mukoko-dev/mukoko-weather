@@ -14,7 +14,9 @@ describe("nowcastSummary", () => {
   });
 
   it("reports rain starting soon when a later step is wet", () => {
-    expect(nowcastSummary(minutely([0, 0, 0.5, 0.2]))).toBe("Rain starting in ~30 min.");
+    expect(nowcastSummary(minutely([0, 0, 0.5, 0.2]))).toBe(
+      "Rain starting in ~30 min.",
+    );
   });
 
   it("reports rain now when the first step is wet but easing", () => {

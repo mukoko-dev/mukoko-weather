@@ -148,8 +148,16 @@ describe("schema type compatibility", () => {
   it("SuitabilityRuleDocType satisfies the schema shape", () => {
     const doc: SuitabilityRuleDocType = {
       key: "category:farming",
-      conditions: JSON.stringify([{ field: "gdd10To30", operator: "gte", value: 10 }]),
-      fallback: JSON.stringify({ level: "fair", label: "Fair", colorClass: "", bgClass: "", detail: "" }),
+      conditions: JSON.stringify([
+        { field: "gdd10To30", operator: "gte", value: 10 },
+      ]),
+      fallback: JSON.stringify({
+        level: "fair",
+        label: "Fair",
+        colorClass: "",
+        bgClass: "",
+        detail: "",
+      }),
       updatedAt: Date.now(),
     };
     expect(JSON.parse(doc.conditions)).toHaveLength(1);

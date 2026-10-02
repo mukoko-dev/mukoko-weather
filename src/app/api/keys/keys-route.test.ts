@@ -62,7 +62,13 @@ describe("GET /api/keys", () => {
   it("lists only the signed-in user's keys", async () => {
     withAuthMock.mockResolvedValueOnce({ user: { id: "user_1" } });
     listMock.mockResolvedValueOnce([
-      { id: "k1", label: "site", maskedKey: "mk_live_ab12…ef90", createdAt: "x", lastUsedAt: null },
+      {
+        id: "k1",
+        label: "site",
+        maskedKey: "mk_live_ab12…ef90",
+        createdAt: "x",
+        lastUsedAt: null,
+      },
     ]);
     const mod = await import("./route");
     const res = await mod.GET();
@@ -132,7 +138,13 @@ describe("POST /api/keys", () => {
     countMock.mockResolvedValueOnce(2);
     createMock.mockResolvedValueOnce({
       fullKey: "mk_live_deadbeef",
-      key: { id: "k9", label: "site", maskedKey: "mk_live_dead…beef", createdAt: "x", lastUsedAt: null },
+      key: {
+        id: "k9",
+        label: "site",
+        maskedKey: "mk_live_dead…beef",
+        createdAt: "x",
+        lastUsedAt: null,
+      },
     });
     const mod = await import("./route");
     const res = await mod.POST(jsonRequest({ label: "  My Site  " }) as never);

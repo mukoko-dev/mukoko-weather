@@ -10,7 +10,12 @@ export default function AviationLoading() {
         aria-label="Loading aviation briefing"
         className="mx-auto max-w-3xl px-4 py-6 pb-24 sm:px-6 sm:pb-8 md:px-8"
       >
-        <div role="status" aria-label="Loading" aria-busy="true" className="space-y-6">
+        <div
+          role="status"
+          aria-label="Loading"
+          aria-busy="true"
+          className="space-y-6"
+        >
           <span className="sr-only">Loading aviation weather briefing...</span>
           <div className="space-y-2">
             <Skeleton className="h-7 w-72 max-w-full" />

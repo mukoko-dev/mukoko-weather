@@ -14,9 +14,25 @@ interface GDDChartProps {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "gddMaize", label: "Maize/Soybean (10–30°C)", color: "var(--color-mineral-malachite)", fill: true, opacity: 0.15 },
-  { key: "gddSorghum", label: "Sorghum (8–30°C)", color: "var(--chart-3)", dashed: true },
-  { key: "gddPotato", label: "Potatoes (3–25°C)", color: "var(--chart-4)", dashed: true },
+  {
+    key: "gddMaize",
+    label: "Maize/Soybean (10–30°C)",
+    color: "var(--color-mineral-malachite)",
+    fill: true,
+    opacity: 0.15,
+  },
+  {
+    key: "gddSorghum",
+    label: "Sorghum (8–30°C)",
+    color: "var(--chart-3)",
+    dashed: true,
+  },
+  {
+    key: "gddPotato",
+    label: "Potatoes (3–25°C)",
+    color: "var(--chart-4)",
+    dashed: true,
+  },
 ];
 
 const Y_AXES = { y: { min: 0, format: (v: number) => `${v}` } };

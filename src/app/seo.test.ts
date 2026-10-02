@@ -289,7 +289,9 @@ describe("JSON-LD script tags use safeJsonLd, never raw JSON.stringify", () => {
       const src = readFileSync(resolve(__dirname, file), "utf-8");
       expect(src).toContain('from "@/lib/json-ld"');
       expect(src).toContain("safeJsonLd(");
-      expect(src).not.toMatch(/dangerouslySetInnerHTML=\{\{\s*__html:\s*JSON\.stringify/);
+      expect(src).not.toMatch(
+        /dangerouslySetInnerHTML=\{\{\s*__html:\s*JSON\.stringify/,
+      );
     });
   }
 });

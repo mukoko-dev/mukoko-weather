@@ -1,6 +1,9 @@
 "use client";
 
-import { RouteErrorBoundary, type RouteErrorProps } from "@/components/layout/RouteErrorBoundary";
+import {
+  RouteErrorBoundary,
+  type RouteErrorProps,
+} from "@/components/layout/RouteErrorBoundary";
 
 export default function ProvinceDetailError(props: RouteErrorProps) {
   return (

@@ -43,7 +43,12 @@ export function detectUserLocation({
 }: DetectUserLocationOptions = {}): Promise<GeoResult> {
   return new Promise((resolve) => {
     if (!("geolocation" in navigator)) {
-      resolve({ status: "unavailable", location: null, coords: null, distanceKm: null });
+      resolve({
+        status: "unavailable",
+        location: null,
+        coords: null,
+        distanceKm: null,
+      });
       return;
     }
 
@@ -52,9 +57,16 @@ export function detectUserLocation({
         const { latitude, longitude } = position.coords;
 
         try {
-          const res = await fetch(`/api/py/geo?lat=${latitude}&lon=${longitude}${autoCreate ? "&autoCreate=true" : ""}`);
+          const res = await fetch(
+            `/api/py/geo?lat=${latitude}&lon=${longitude}${autoCreate ? "&autoCreate=true" : ""}`,
+          );
           if (!res.ok) {
-            resolve({ status: "error", location: null, coords: { lat: latitude, lon: longitude }, distanceKm: null });
+            resolve({
+              status: "error",
+              location: null,
+              coords: { lat: latitude, lon: longitude },
+              distanceKm: null,
+            });
             return;
           }
 
@@ -82,14 +94,29 @@ export function detectUserLocation({
             isNew,
           });
         } catch {
-          resolve({ status: "error", location: null, coords: { lat: latitude, lon: longitude }, distanceKm: null });
+          resolve({
+            status: "error",
+            location: null,
+            coords: { lat: latitude, lon: longitude },
+            distanceKm: null,
+          });
         }
       },
       (error) => {
         if (error.code === error.PERMISSION_DENIED) {
-          resolve({ status: "denied", location: null, coords: null, distanceKm: null });
+          resolve({
+            status: "denied",
+            location: null,
+            coords: null,
+            distanceKm: null,
+          });
         } else {
-          resolve({ status: "error", location: null, coords: null, distanceKm: null });
+          resolve({
+            status: "error",
+            location: null,
+            coords: null,
+            distanceKm: null,
+          });
         }
       },
       {

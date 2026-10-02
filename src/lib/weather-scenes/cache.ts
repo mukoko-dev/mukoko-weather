@@ -48,7 +48,11 @@ export function getCachedWeatherHint(slug: string): CachedWeatherHint | null {
     if (!raw) return null;
 
     const hint = JSON.parse(raw);
-    if (typeof hint !== "object" || hint === null || typeof hint.timestamp !== "number") {
+    if (
+      typeof hint !== "object" ||
+      hint === null ||
+      typeof hint.timestamp !== "number"
+    ) {
       localStorage.removeItem(KEY_PREFIX + slug);
       return null;
     }
@@ -67,7 +71,9 @@ export function getCachedWeatherHint(slug: string): CachedWeatherHint | null {
  * Async version — reads from RxDB (IndexedDB).
  * Use when async access is acceptable (e.g., in useEffect).
  */
-export async function getCachedWeatherHintAsync(slug: string): Promise<CachedWeatherHint | null> {
+export async function getCachedWeatherHintAsync(
+  slug: string,
+): Promise<CachedWeatherHint | null> {
   // Try RxDB first
   const rxdbHint = await getCachedHint(slug);
   if (rxdbHint) {

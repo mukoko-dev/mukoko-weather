@@ -32,7 +32,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
       const handler = () => {
         try {
-          document.documentElement.setAttribute("data-theme", mq.matches ? "dark" : "light");
+          document.documentElement.setAttribute(
+            "data-theme",
+            mq.matches ? "dark" : "light",
+          );
         } catch {
           // Silently fail
         }

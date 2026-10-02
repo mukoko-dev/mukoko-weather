@@ -83,12 +83,20 @@ describe("useLocationQuickSearch — minLength + error surfacing (issue #103)", 
     expect(source).toContain("error: boolean");
     expect(source).toContain("setError(true)");
     // Cleared in the empty-query branch, on success, and in reset().
-    expect(source.split("setError(false)").length - 1).toBeGreaterThanOrEqual(3);
+    expect(source.split("setError(false)").length - 1).toBeGreaterThanOrEqual(
+      3,
+    );
   });
 
   it("backs HistoryDashboard and AviationPlanner (no hand-rolled search remains)", () => {
-    const history = readFileSync(resolve(__dirname, "../app/history/HistoryDashboard.tsx"), "utf-8");
-    const aviation = readFileSync(resolve(__dirname, "../app/aviation/AviationPlanner.tsx"), "utf-8");
+    const history = readFileSync(
+      resolve(__dirname, "../app/history/HistoryDashboard.tsx"),
+      "utf-8",
+    );
+    const aviation = readFileSync(
+      resolve(__dirname, "../app/aviation/AviationPlanner.tsx"),
+      "utf-8",
+    );
     for (const src of [history, aviation]) {
       expect(src).toContain("useLocationQuickSearch");
       expect(src).not.toContain("/api/py/search?q=");

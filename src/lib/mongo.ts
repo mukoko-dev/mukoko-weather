@@ -20,11 +20,13 @@ function getClient(): MongoClient {
 
     // In Vercel Functions, attach the pool for proper cleanup on suspension.
     try {
-      import("@vercel/functions").then(({ attachDatabasePool }) => {
-        if (client) attachDatabasePool(client);
-      }).catch(() => {
-        // Not running on Vercel — no-op
-      });
+      import("@vercel/functions")
+        .then(({ attachDatabasePool }) => {
+          if (client) attachDatabasePool(client);
+        })
+        .catch(() => {
+          // Not running on Vercel — no-op
+        });
     } catch {
       // Static import resolution failed — no-op
     }

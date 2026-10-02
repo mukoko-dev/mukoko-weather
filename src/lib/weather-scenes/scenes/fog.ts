@@ -60,7 +60,9 @@ export function buildFogScene(
   return {
     update(elapsed) {
       // Fog drifts slowly in random directions
-      const pos = fogGeo.attributes.position as InstanceType<typeof THREE.BufferAttribute>;
+      const pos = fogGeo.attributes.position as InstanceType<
+        typeof THREE.BufferAttribute
+      >;
       for (let i = 0; i < FOG_COUNT; i++) {
         pos.array[i * 3] += fogDrift[i];
         pos.array[i * 3 + 1] += Math.sin(elapsed * 0.3 + i) * 0.001;
@@ -69,7 +71,9 @@ export function buildFogScene(
       pos.needsUpdate = true;
 
       // Mist has gentle vertical float
-      const mpos = mistGeo.attributes.position as InstanceType<typeof THREE.BufferAttribute>;
+      const mpos = mistGeo.attributes.position as InstanceType<
+        typeof THREE.BufferAttribute
+      >;
       for (let i = 0; i < MIST_COUNT; i++) {
         mpos.array[i * 3] += 0.003;
         mpos.array[i * 3 + 1] += Math.sin(elapsed * 0.5 + i * 0.3) * 0.002;

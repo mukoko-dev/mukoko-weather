@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { fetchSuitabilityRules, fetchCategoryStyles, resetCaches } from "./suitability-cache";
+import {
+  fetchSuitabilityRules,
+  fetchCategoryStyles,
+  resetCaches,
+} from "./suitability-cache";
 import { CATEGORY_STYLES } from "./activities";
 
 // Mock fetch globally
@@ -43,7 +47,17 @@ describe("resetCaches", () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        categories: [{ id: "test", style: { bg: "bg-test", border: "border-test", text: "text-test", badge: "badge-test" } }],
+        categories: [
+          {
+            id: "test",
+            style: {
+              bg: "bg-test",
+              border: "border-test",
+              text: "text-test",
+              badge: "badge-test",
+            },
+          },
+        ],
       }),
     });
     const styles1 = await fetchCategoryStyles();
@@ -158,7 +172,17 @@ describe("in-flight deduplication", () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({
-        categories: [{ id: "farming", style: { bg: "bg-m", border: "border-m", text: "text-m", badge: "badge-m" } }],
+        categories: [
+          {
+            id: "farming",
+            style: {
+              bg: "bg-m",
+              border: "border-m",
+              text: "text-m",
+              badge: "badge-m",
+            },
+          },
+        ],
       }),
     });
     const [s1, s2, s3] = await Promise.all([
@@ -178,7 +202,9 @@ describe("fetchCategoryStyles", () => {
     const styles = await fetchCategoryStyles();
     // Should fall back to CATEGORY_STYLES
     for (const key of Object.keys(CATEGORY_STYLES)) {
-      expect(styles[key]).toEqual(CATEGORY_STYLES[key as keyof typeof CATEGORY_STYLES]);
+      expect(styles[key]).toEqual(
+        CATEGORY_STYLES[key as keyof typeof CATEGORY_STYLES],
+      );
     }
   });
 
@@ -187,13 +213,24 @@ describe("fetchCategoryStyles", () => {
       ok: true,
       json: async () => ({
         categories: [
-          { id: "farming", style: { bg: "bg-custom", border: "border-custom", text: "text-custom", badge: "badge-custom" } },
+          {
+            id: "farming",
+            style: {
+              bg: "bg-custom",
+              border: "border-custom",
+              text: "text-custom",
+              badge: "badge-custom",
+            },
+          },
         ],
       }),
     });
     const styles = await fetchCategoryStyles();
     expect(styles.farming).toEqual({
-      bg: "bg-custom", border: "border-custom", text: "text-custom", badge: "badge-custom",
+      bg: "bg-custom",
+      border: "border-custom",
+      text: "text-custom",
+      badge: "badge-custom",
     });
   });
 });

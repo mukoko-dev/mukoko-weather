@@ -5,7 +5,9 @@ import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { ChatSkeleton } from "@/components/ui/skeleton";
 
 const ExploreChatbot = lazy(() =>
-  import("@/components/explore/ExploreChatbot").then((m) => ({ default: m.ExploreChatbot }))
+  import("@/components/explore/ExploreChatbot").then((m) => ({
+    default: m.ExploreChatbot,
+  })),
 );
 
 /**

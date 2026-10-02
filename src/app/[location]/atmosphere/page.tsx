@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { checkFrostRisk, createFallbackWeather } from "@/lib/weather";
-import { getWeatherForLocation, getLocationFromDb, getSeasonForDate } from "@/lib/db";
+import {
+  getWeatherForLocation,
+  getLocationFromDb,
+  getSeasonForDate,
+} from "@/lib/db";
 import { safeJsonLd } from "@/lib/json-ld";
 import { AtmosphereDashboard } from "./AtmosphereDashboard";
 
@@ -69,21 +73,44 @@ export default async function AtmospherePage({
     weather = result.data;
     weatherSource = result.source;
   } catch {
-    weather = createFallbackWeather(location.lat, location.lon, location.elevation);
+    weather = createFallbackWeather(
+      location.lat,
+      location.lon,
+      location.elevation,
+    );
     weatherSource = "fallback";
   }
 
   const usingFallback = weatherSource === "fallback";
   const frostAlert = usingFallback ? null : checkFrostRisk(weather.hourly);
-  const season = await getSeasonForDate(new Date(), location.country ?? "", location.lat ?? 0);
+  const season = await getSeasonForDate(
+    new Date(),
+    location.country ?? "",
+    location.lat ?? 0,
+  );
 
   const breadcrumbSchema = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "mukoko weather", item: BASE_URL },
-      { "@type": "ListItem", position: 2, name: `${location.name} Weather`, item: `${BASE_URL}/${location.slug}` },
-      { "@type": "ListItem", position: 3, name: "Atmosphere", item: `${BASE_URL}/${location.slug}/atmosphere` },
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "mukoko weather",
+        item: BASE_URL,
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: `${location.name} Weather`,
+        item: `${BASE_URL}/${location.slug}`,
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: "Atmosphere",
+        item: `${BASE_URL}/${location.slug}/atmosphere`,
+      },
     ],
   };
 

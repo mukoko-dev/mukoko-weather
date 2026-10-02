@@ -7,7 +7,10 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const source = readFileSync(resolve(__dirname, "DraggableSection.tsx"), "utf-8");
+const source = readFileSync(
+  resolve(__dirname, "DraggableSection.tsx"),
+  "utf-8",
+);
 
 describe("DraggableSection — client component", () => {
   it("is a client component with 'use client' directive", () => {
@@ -36,7 +39,7 @@ describe("DraggableSection — client component", () => {
     // The handle button is conditionally mounted, and styling is gated on the
     // flag, but the wrapper <div> and inner children wrapper are unconditional.
     expect(source).toContain("{reordering && (");
-    expect(source).toContain("className={reordering ? \"relative\" : undefined}");
+    expect(source).toContain('className={reordering ? "relative" : undefined}');
   });
 });
 

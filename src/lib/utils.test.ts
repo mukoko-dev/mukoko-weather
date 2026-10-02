@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { cn, formatCoords, getScrollBehavior, slugToDisplayName } from "./utils";
+import {
+  cn,
+  formatCoords,
+  getScrollBehavior,
+  slugToDisplayName,
+} from "./utils";
 
 describe("cn", () => {
   it("merges multiple class strings", () => {
@@ -95,7 +100,9 @@ describe("slugToDisplayName", () => {
 describe("getScrollBehavior", () => {
   it("returns 'instant' when prefers-reduced-motion matches", () => {
     vi.stubGlobal("window", {
-      matchMedia: (q: string) => ({ matches: q.includes("prefers-reduced-motion") }),
+      matchMedia: (q: string) => ({
+        matches: q.includes("prefers-reduced-motion"),
+      }),
     });
     expect(getScrollBehavior()).toBe("instant");
     vi.unstubAllGlobals();

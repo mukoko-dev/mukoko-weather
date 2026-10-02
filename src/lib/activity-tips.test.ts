@@ -41,7 +41,11 @@ function makeWeather(
   } as unknown as WeatherData;
 }
 
-const farming = { id: "crop-farming", category: "farming" as const, label: "Maize & Crop Farming" };
+const farming = {
+  id: "crop-farming",
+  category: "farming" as const,
+  label: "Maize & Crop Farming",
+};
 const sports = { id: "running", category: "sports" as const, label: "Running" };
 const casual = { id: "barbecue", category: "casual" as const, label: "Braai" };
 
@@ -60,7 +64,9 @@ describe("getActivityTips", () => {
       uv_index: Array(24).fill(10),
       temperature_2m: Array(24).fill(36),
     });
-    expect(getActivityTips(farming, chaos).length).toBeLessThanOrEqual(MAX_TIPS);
+    expect(getActivityTips(farming, chaos).length).toBeLessThanOrEqual(
+      MAX_TIPS,
+    );
   });
 
   it("returns a calm-conditions tip mentioning the activity when nothing triggers", () => {
@@ -79,7 +85,10 @@ describe("getActivityTips", () => {
   it("names the rain hour and gives category-specific advice", () => {
     const prob = Array(24).fill(10);
     prob[3] = 80; // rain 3 hours from now
-    const tips = getActivityTips(farming, makeWeather({ precipitation_probability: prob }));
+    const tips = getActivityTips(
+      farming,
+      makeWeather({ precipitation_probability: prob }),
+    );
     const rainTip = tips.find((t) => t.includes("Rain likely around"));
     expect(rainTip).toBeDefined();
     expect(rainTip).toContain("spraying");
@@ -88,34 +97,52 @@ describe("getActivityTips", () => {
   });
 
   it("warns farmers off spraying in strong wind", () => {
-    const tips = getActivityTips(farming, makeWeather({ wind_speed_10m: Array(24).fill(35) }));
+    const tips = getActivityTips(
+      farming,
+      makeWeather({ wind_speed_10m: Array(24).fill(35) }),
+    );
     expect(tips.some((t) => t.includes("hold off on spraying"))).toBe(true);
   });
 
   it("flags very high UV with category-appropriate wording", () => {
-    const tips = getActivityTips(sports, makeWeather({ uv_index: Array(24).fill(9) }));
+    const tips = getActivityTips(
+      sports,
+      makeWeather({ uv_index: Array(24).fill(9) }),
+    );
     expect(tips.some((t) => t.includes("UV will be very high"))).toBe(true);
   });
 
   it("flags frost risk for farming when temps drop to 3°C or below", () => {
     const temps = Array(24).fill(15);
     temps[20] = 1;
-    const tips = getActivityTips(farming, makeWeather({ temperature_2m: temps }));
+    const tips = getActivityTips(
+      farming,
+      makeWeather({ temperature_2m: temps }),
+    );
     expect(tips.some((t) => t.toLowerCase().includes("frost"))).toBe(true);
   });
 
   it("flags heat above 32°C", () => {
-    const tips = getActivityTips(casual, makeWeather({ temperature_2m: Array(24).fill(34) }));
+    const tips = getActivityTips(
+      casual,
+      makeWeather({ temperature_2m: Array(24).fill(34) }),
+    );
     expect(tips.some((t) => t.includes("heat"))).toBe(true);
   });
 
   it("adds fungal-pressure guidance for farming in high humidity", () => {
-    const tips = getActivityTips(farming, makeWeather({}, { relative_humidity_2m: 88 }));
+    const tips = getActivityTips(
+      farming,
+      makeWeather({}, { relative_humidity_2m: 88 }),
+    );
     expect(tips.some((t) => t.includes("fungal disease"))).toBe(true);
   });
 
   it("does not give farming-specific tips to non-farming activities", () => {
-    const tips = getActivityTips(sports, makeWeather({}, { relative_humidity_2m: 88 }));
+    const tips = getActivityTips(
+      sports,
+      makeWeather({}, { relative_humidity_2m: 88 }),
+    );
     expect(tips.some((t) => t.includes("fungal disease"))).toBe(false);
   });
 });

@@ -15,7 +15,8 @@ export default function CountryNotFound() {
           Country not found
         </h1>
         <p className="mt-4 max-w-md text-text-secondary">
-          We don&apos;t have weather data for this country yet. Try browsing all supported countries.
+          We don&apos;t have weather data for this country yet. Try browsing all
+          supported countries.
         </p>
         <div className="mt-8 flex flex-col items-center gap-3">
           <Button asChild size="lg">

@@ -56,7 +56,9 @@ export function ShamwariCTA({
     <Link
       href="/shamwari"
       onClick={() => setShamwariContext(context)}
-      className={[VARIANT_CLASSES[variant], className].filter(Boolean).join(" ")}
+      className={[VARIANT_CLASSES[variant], className]
+        .filter(Boolean)
+        .join(" ")}
     >
       <Icon size={VARIANT_ICON_SIZE[variant]} />
       {label}

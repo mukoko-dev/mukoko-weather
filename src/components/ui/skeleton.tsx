@@ -1,6 +1,6 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 /**
  * Generic skeleton placeholder for loading states.
@@ -17,22 +17,25 @@ function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="skeleton"
-      className={cn(
-        "animate-pulse rounded-md bg-text-tertiary/10",
-        className
-      )}
+      className={cn("animate-pulse rounded-md bg-text-tertiary/10", className)}
       {...props}
     />
-  )
+  );
 }
 
 /** Card-shaped skeleton with header and content lines */
-function CardSkeleton({ className, lines = 3 }: { className?: string; lines?: number }) {
+function CardSkeleton({
+  className,
+  lines = 3,
+}: {
+  className?: string;
+  lines?: number;
+}) {
   return (
     <div
       className={cn(
         "rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6",
-        className
+        className,
       )}
       role="status"
       aria-label="Loading"
@@ -52,22 +55,27 @@ function CardSkeleton({ className, lines = 3 }: { className?: string; lines?: nu
         ))}
       </div>
     </div>
-  )
+  );
 }
 
 /** Chart-shaped skeleton with matching aspect ratio */
-function ChartSkeleton({ aspect = "aspect-[16/5]", className }: { aspect?: string; className?: string }) {
+function ChartSkeleton({
+  aspect = "aspect-[16/5]",
+  className,
+}: {
+  aspect?: string;
+  className?: string;
+}) {
   return (
     <div
       className={cn(
         `${aspect} w-full animate-pulse rounded-[var(--radius-card)] bg-text-tertiary/10`,
-        className
+        className,
       )}
       role="status"
       aria-label="Loading chart"
-    >
-    </div>
-  )
+    ></div>
+  );
 }
 
 /** Badge-shaped skeleton */
@@ -76,7 +84,7 @@ function BadgeSkeleton({ className }: { className?: string }) {
     <Skeleton
       className={cn("h-5 w-16 rounded-[var(--radius-badge)]", className)}
     />
-  )
+  );
 }
 
 /** Metric card skeleton (matches AtmosphericSummary MetricCard shape with arc gauge) */
@@ -85,7 +93,7 @@ function MetricCardSkeleton({ className }: { className?: string }) {
     <div
       className={cn(
         "flex flex-col items-center gap-2 rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm",
-        className
+        className,
       )}
       role="status"
       aria-label="Loading metric"
@@ -97,17 +105,14 @@ function MetricCardSkeleton({ className }: { className?: string }) {
         <Skeleton className="h-3 w-24" />
       </div>
     </div>
-  )
+  );
 }
 
 /** Chat interface skeleton (matches ExploreChatbot container shape) */
 function ChatSkeleton({ className }: { className?: string }) {
   return (
     <div
-      className={cn(
-        "flex flex-col h-full",
-        className
-      )}
+      className={cn("flex flex-col h-full", className)}
       role="status"
       aria-label="Loading chat"
     >
@@ -131,7 +136,7 @@ function ChatSkeleton({ className }: { className?: string }) {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 export {
@@ -141,4 +146,4 @@ export {
   BadgeSkeleton,
   MetricCardSkeleton,
   ChatSkeleton,
-}
+};

@@ -2,7 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { WeatherIcon, ShareIcon, NavigationIcon } from "@/lib/weather-icons";
-import { weatherCodeToInfo, type CurrentWeather, type DailyWeather } from "@/lib/weather";
+import {
+  weatherCodeToInfo,
+  type CurrentWeather,
+  type DailyWeather,
+} from "@/lib/weather";
 
 const BASE_URL = "https://weather.mukoko.com";
 
@@ -16,7 +20,13 @@ interface Props {
   isCurrentLocation?: boolean;
 }
 
-export function CurrentConditions({ current, locationName, daily, slug, isCurrentLocation = false }: Props) {
+export function CurrentConditions({
+  current,
+  locationName,
+  daily,
+  slug,
+  isCurrentLocation = false,
+}: Props) {
   const info = weatherCodeToInfo(current.weather_code);
   // Guard empty daily arrays — daily.temperature_2m_max[0] would be undefined and
   // Math.round(undefined) is NaN, rendering as "High NaN°".
@@ -51,11 +61,14 @@ export function CurrentConditions({ current, locationName, daily, slug, isCurren
     if (typeof navigator !== "undefined" && navigator.share) {
       navigator.share(shareData).catch(() => undefined);
     } else {
-      navigator.clipboard.writeText(url).then(() => {
-        setCopied(true);
-      }).catch(() => {
-        setCopyFailed(true);
-      });
+      navigator.clipboard
+        .writeText(url)
+        .then(() => {
+          setCopied(true);
+        })
+        .catch(() => {
+          setCopyFailed(true);
+        });
     }
   }
 
@@ -79,14 +92,26 @@ export function CurrentConditions({ current, locationName, daily, slug, isCurren
                 My Location
               </p>
             )}
-            <p className="text-lg font-medium text-text-secondary">{locationName}</p>
+            <p className="text-lg font-medium text-text-secondary">
+              {locationName}
+            </p>
             <div className="mt-1 flex items-baseline gap-1">
-              <span className="font-mono text-7xl font-bold tracking-tighter text-text-primary sm:text-8xl" aria-label={`${Math.round(current.temperature_2m)} degrees Celsius`}>
+              <span
+                className="font-mono text-7xl font-bold tracking-tighter text-text-primary sm:text-8xl"
+                aria-label={`${Math.round(current.temperature_2m)} degrees Celsius`}
+              >
                 {Math.round(current.temperature_2m)}
               </span>
-              <span className="font-sans text-4xl font-light text-text-tertiary sm:text-5xl" aria-hidden="true">°</span>
+              <span
+                className="font-sans text-4xl font-light text-text-tertiary sm:text-5xl"
+                aria-hidden="true"
+              >
+                °
+              </span>
             </div>
-            <p className="mt-2 text-xl font-semibold text-text-primary sm:text-2xl">{info.label}</p>
+            <p className="mt-2 text-xl font-semibold text-text-primary sm:text-2xl">
+              {info.label}
+            </p>
             <p className="mt-1.5 text-lg text-text-secondary">
               Feels like {Math.round(current.apparent_temperature)}°C
               {todayHigh !== null && todayLow !== null && (
@@ -115,7 +140,6 @@ export function CurrentConditions({ current, locationName, daily, slug, isCurren
             </button>
           </div>
         </div>
-
       </div>
     </section>
   );

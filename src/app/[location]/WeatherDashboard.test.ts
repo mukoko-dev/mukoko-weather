@@ -146,7 +146,7 @@ describe("WeatherDashboard — accessibility", () => {
     expect(source).toContain('aria-hidden="true"');
   });
 
-  it("aria-current=\"page\" on the current location breadcrumb", () => {
+  it('aria-current="page" on the current location breadcrumb', () => {
     expect(source).toContain('aria-current="page"');
   });
 

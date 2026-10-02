@@ -6,10 +6,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const source = readFileSync(
-  resolve(__dirname, "route.ts"),
-  "utf-8",
-);
+const source = readFileSync(resolve(__dirname, "route.ts"), "utf-8");
 
 describe("/api/db-init route structure", () => {
   it("exports a POST handler", () => {
@@ -106,6 +103,8 @@ describe("/api/db-init route structure", () => {
     expect(source).not.toContain("getAtlasSearchIndexDefinitions");
     expect(source).not.toContain("atlasSearchIndexes:");
     // Definitions remain in codebase but are not disclosed via API
-    expect(source).toContain("Atlas Search index definitions are in the codebase");
+    expect(source).toContain(
+      "Atlas Search index definitions are in the codebase",
+    );
   });
 });

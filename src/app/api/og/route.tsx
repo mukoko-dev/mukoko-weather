@@ -8,8 +8,8 @@ export const runtime = "edge";
 // NOTE: In-memory — per-isolate. Multiple concurrent edge instances may each
 // track the same IP independently. Sufficient for abuse deterrence, not for
 // exact quota enforcement.
-const OG_RATE_LIMIT = 30;          // max requests per window
-const OG_RATE_WINDOW_MS = 60_000;  // 1-minute window
+const OG_RATE_LIMIT = 30; // max requests per window
+const OG_RATE_WINDOW_MS = 60_000; // 1-minute window
 const OG_MAX_TRACKED_IPS = 10_000; // cap to prevent unbounded growth under scraping
 const ipHits = new Map<string, number[]>();
 
@@ -42,13 +42,13 @@ function isRateLimited(ip: string): boolean {
 // values are required here. Keep in sync with globals.css mineral tokens
 // (doctrine v4.1.0 — nyuchi_design_db → styling-minerals).
 const brand = {
-  tanzanite: "#4B0082",   // --mineral-tanzanite (core / brand)
-  cobalt:    "#0047AB",   // --mineral-cobalt    (CTAs, primary)
-  malachite: "#004D40",   // --mineral-malachite (success, growth)
-  gold:      "#5D4037",   // --mineral-gold      (warmth, rewards)
-  terracotta: "#A0522D",  // --mineral-terracotta (community)
-  sodalite:  "#283593",   // --mineral-sodalite  (AI/Shamwari)
-  copper:    "#BF5A36",   // --mineral-copper    (community features)
+  tanzanite: "#4B0082", // --mineral-tanzanite (core / brand)
+  cobalt: "#0047AB", // --mineral-cobalt    (CTAs, primary)
+  malachite: "#004D40", // --mineral-malachite (success, growth)
+  gold: "#5D4037", // --mineral-gold      (warmth, rewards)
+  terracotta: "#A0522D", // --mineral-terracotta (community)
+  sodalite: "#283593", // --mineral-sodalite  (AI/Shamwari)
+  copper: "#BF5A36", // --mineral-copper    (community features)
 };
 
 // ─── Templates ────────────────────────────────────────────────────────────────
@@ -271,7 +271,13 @@ function OGImage({
               for readability on all dark template backgrounds — brand.malachite
               (#004D40) is a surface color, unreadable as text on dark gradients. */}
           {season && (
-            <div style={{ display: "flex", flexDirection: "row", marginBottom: 20 }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "row",
+                marginBottom: 20,
+              }}
+            >
               <div
                 style={{
                   display: "flex",
@@ -420,7 +426,9 @@ function OGImage({
           >
             {/* Unicode curly quotes — Satori renders to canvas, not DOM,
                 so HTML entities (e.g. ampersand-ldquo) would appear as literal text */}
-            {"\u201CMvura yemvura inobatanidza vanhu\u201D \u00B7 Rain unites people"}
+            {
+              "\u201CMvura yemvura inobatanidza vanhu\u201D \u00B7 Rain unites people"
+            }
           </div>
         </div>
       </div>
@@ -450,19 +458,26 @@ export async function GET(req: NextRequest) {
   // In-memory rate limit — prevents unique-URL cache-bypass abuse.
   // Skip limiting when IP is unidentifiable to avoid a shared "unknown" bucket
   // that a single bad actor could exhaust for all unidentified requests.
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-    ?? req.headers.get("x-real-ip")?.trim();
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    req.headers.get("x-real-ip")?.trim();
   if (ip && isRateLimited(ip)) {
     return NextResponse.json(
       { error: "Too many requests" },
-      { status: 429, headers: { "Retry-After": "60", "Cache-Control": "no-store" } },
+      {
+        status: 429,
+        headers: { "Retry-After": "60", "Cache-Control": "no-store" },
+      },
     );
   }
 
   const { searchParams } = new URL(req.url);
 
   // Truncate inputs to prevent visual overflow on the fixed-size canvas
-  const title = (searchParams.get("title") ?? "AI Weather Intelligence").slice(0, 80);
+  const title = (searchParams.get("title") ?? "AI Weather Intelligence").slice(
+    0,
+    80,
+  );
   const subtitle = (searchParams.get("subtitle") ?? "").slice(0, 120);
   const location = (searchParams.get("location") ?? "").slice(0, 60);
   const province = (searchParams.get("province") ?? "").slice(0, 60);
@@ -472,9 +487,8 @@ export async function GET(req: NextRequest) {
   const season = (searchParams.get("season") ?? "").slice(0, 40);
   const templateParam = searchParams.get("template") ?? "home";
 
-  const template: TemplateKey = templateParam in TEMPLATES
-    ? (templateParam as TemplateKey)
-    : "home";
+  const template: TemplateKey =
+    templateParam in TEMPLATES ? (templateParam as TemplateKey) : "home";
 
   const element = (
     <OGImage

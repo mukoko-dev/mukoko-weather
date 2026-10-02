@@ -21,8 +21,16 @@ interface Props {
 /** Known app routes that are NOT location slugs — prevents misinterpreting
  *  /explore, /shamwari, etc. as weather locations when extracting from pathname. */
 const KNOWN_ROUTES = new Set([
-  "explore", "shamwari", "history", "aviation", "about", "help",
-  "privacy", "terms", "status", "embed",
+  "explore",
+  "shamwari",
+  "history",
+  "aviation",
+  "about",
+  "help",
+  "privacy",
+  "terms",
+  "status",
+  "embed",
 ]);
 
 /**
@@ -51,8 +59,12 @@ export function WeatherLoadingScene({ slug, statusText, action }: Props) {
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       try {
-        setUse3D(!window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-        setIsMobile(window.matchMedia("(hover: none), (pointer: coarse)").matches);
+        setUse3D(
+          !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+        );
+        setIsMobile(
+          window.matchMedia("(hover: none), (pointer: coarse)").matches,
+        );
       } catch {
         // matchMedia not available — keep defaults (false)
       }
@@ -64,12 +76,21 @@ export function WeatherLoadingScene({ slug, statusText, action }: Props) {
   // Guard against known app routes — only use pathname-derived slug when it
   // looks like a location slug (not a known non-location route like /explore).
   const pathname = usePathname();
-  const pathnameSlug = pathname ? pathname.split("/").filter(Boolean)[0] : undefined;
-  const resolvedSlug = slug ?? (pathnameSlug && !KNOWN_ROUTES.has(pathnameSlug) ? pathnameSlug : undefined);
+  const pathnameSlug = pathname
+    ? pathname.split("/").filter(Boolean)[0]
+    : undefined;
+  const resolvedSlug =
+    slug ??
+    (pathnameSlug && !KNOWN_ROUTES.has(pathnameSlug)
+      ? pathnameSlug
+      : undefined);
 
   // Format slug for display: "bulawayo" → "Bulawayo"
   const locationDisplay = resolvedSlug
-    ? resolvedSlug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+    ? resolvedSlug
+        .split("-")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ")
     : null;
 
   useEffect(() => {

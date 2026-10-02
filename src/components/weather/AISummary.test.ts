@@ -20,7 +20,9 @@ describe("AISummary — Phase 1D auth gating", () => {
   });
 
   it("destructures `user` from props in the component signature", () => {
-    expect(source).toContain("export function AISummary({ weather, location, user");
+    expect(source).toContain(
+      "export function AISummary({ weather, location, user",
+    );
   });
 
   it("renders the sign-in CTA branch when user is null", () => {

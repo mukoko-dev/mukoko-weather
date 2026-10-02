@@ -1,6 +1,12 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback, type ReactNode } from "react";
+import {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  type ReactNode,
+} from "react";
 
 interface LazySectionProps {
   children: ReactNode;
@@ -15,7 +21,11 @@ interface LazySectionProps {
 }
 
 const DEFAULT_FALLBACK = (
-  <div className="h-48 animate-pulse rounded-[var(--radius-card)] bg-surface-card" role="status" aria-label="Loading section">
+  <div
+    className="h-48 animate-pulse rounded-[var(--radius-card)] bg-surface-card"
+    role="status"
+    aria-label="Loading section"
+  >
     <span className="sr-only">Loading section</span>
   </div>
 );
@@ -127,7 +137,9 @@ export function LazySection({
 
   // Start invisible unless IntersectionObserver is unavailable
   const [visible, setVisible] = useState(
-    () => typeof window !== "undefined" && typeof IntersectionObserver === "undefined",
+    () =>
+      typeof window !== "undefined" &&
+      typeof IntersectionObserver === "undefined",
   );
 
   // Track if the section has ever been mounted (for unload observer)
@@ -188,11 +200,7 @@ export function LazySection({
 
   // Maintain a persistent ref div that the observer can track even after unmount
   return (
-    <div
-      ref={sentinelRef}
-      data-lazy-section={label}
-      className={className}
-    >
+    <div ref={sentinelRef} data-lazy-section={label} className={className}>
       {visible ? (
         <div className={animate ? "animate-fade-in-up" : undefined}>
           {children}

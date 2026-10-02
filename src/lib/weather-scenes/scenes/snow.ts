@@ -67,7 +67,9 @@ export function buildSnowScene(
 
   return {
     update(elapsed) {
-      const pos = snowGeo.attributes.position as InstanceType<typeof THREE.BufferAttribute>;
+      const pos = snowGeo.attributes.position as InstanceType<
+        typeof THREE.BufferAttribute
+      >;
       for (let i = 0; i < SNOW_COUNT; i++) {
         pos.array[i * 3 + 1] -= snowVel[i];
         // Horizontal sway

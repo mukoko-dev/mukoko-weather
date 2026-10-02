@@ -115,45 +115,76 @@ describe("evaluateRule", () => {
 });
 
 describe("evaluateRule with operators", () => {
-  const makeRule = (operator: "gt" | "gte" | "lt" | "lte" | "eq", value: number): SuitabilityRuleDoc => ({
+  const makeRule = (
+    operator: "gt" | "gte" | "lt" | "lte" | "eq",
+    value: number,
+  ): SuitabilityRuleDoc => ({
     key: "test",
-    conditions: [{
-      field: "thunderstormProbability",
-      operator,
-      value,
-      level: "poor",
-      label: "Match",
-      colorClass: "text-severity-severe",
-      bgClass: "bg-severity-severe/10",
-      detail: "Matched",
-    }],
-    fallback: { level: "good", label: "No Match", colorClass: "text-severity-low", bgClass: "bg-severity-low/10", detail: "No match" },
+    conditions: [
+      {
+        field: "thunderstormProbability",
+        operator,
+        value,
+        level: "poor",
+        label: "Match",
+        colorClass: "text-severity-severe",
+        bgClass: "bg-severity-severe/10",
+        detail: "Matched",
+      },
+    ],
+    fallback: {
+      level: "good",
+      label: "No Match",
+      colorClass: "text-severity-low",
+      bgClass: "bg-severity-low/10",
+      detail: "No match",
+    },
     updatedAt: new Date(),
   });
 
   it("gt: matches when value is greater", () => {
-    expect(evaluateRule(makeRule("gt", 50), { thunderstormProbability: 51 }).label).toBe("Match");
-    expect(evaluateRule(makeRule("gt", 50), { thunderstormProbability: 50 }).label).toBe("No Match");
+    expect(
+      evaluateRule(makeRule("gt", 50), { thunderstormProbability: 51 }).label,
+    ).toBe("Match");
+    expect(
+      evaluateRule(makeRule("gt", 50), { thunderstormProbability: 50 }).label,
+    ).toBe("No Match");
   });
 
   it("gte: matches when value is greater or equal", () => {
-    expect(evaluateRule(makeRule("gte", 50), { thunderstormProbability: 50 }).label).toBe("Match");
-    expect(evaluateRule(makeRule("gte", 50), { thunderstormProbability: 49 }).label).toBe("No Match");
+    expect(
+      evaluateRule(makeRule("gte", 50), { thunderstormProbability: 50 }).label,
+    ).toBe("Match");
+    expect(
+      evaluateRule(makeRule("gte", 50), { thunderstormProbability: 49 }).label,
+    ).toBe("No Match");
   });
 
   it("lt: matches when value is less", () => {
-    expect(evaluateRule(makeRule("lt", 50), { thunderstormProbability: 49 }).label).toBe("Match");
-    expect(evaluateRule(makeRule("lt", 50), { thunderstormProbability: 50 }).label).toBe("No Match");
+    expect(
+      evaluateRule(makeRule("lt", 50), { thunderstormProbability: 49 }).label,
+    ).toBe("Match");
+    expect(
+      evaluateRule(makeRule("lt", 50), { thunderstormProbability: 50 }).label,
+    ).toBe("No Match");
   });
 
   it("lte: matches when value is less or equal", () => {
-    expect(evaluateRule(makeRule("lte", 50), { thunderstormProbability: 50 }).label).toBe("Match");
-    expect(evaluateRule(makeRule("lte", 50), { thunderstormProbability: 51 }).label).toBe("No Match");
+    expect(
+      evaluateRule(makeRule("lte", 50), { thunderstormProbability: 50 }).label,
+    ).toBe("Match");
+    expect(
+      evaluateRule(makeRule("lte", 50), { thunderstormProbability: 51 }).label,
+    ).toBe("No Match");
   });
 
   it("eq: matches exact value", () => {
-    expect(evaluateRule(makeRule("eq", 50), { thunderstormProbability: 50 }).label).toBe("Match");
-    expect(evaluateRule(makeRule("eq", 50), { thunderstormProbability: 51 }).label).toBe("No Match");
+    expect(
+      evaluateRule(makeRule("eq", 50), { thunderstormProbability: 50 }).label,
+    ).toBe("Match");
+    expect(
+      evaluateRule(makeRule("eq", 50), { thunderstormProbability: 51 }).label,
+    ).toBe("No Match");
   });
 });
 
@@ -162,27 +193,44 @@ describe("evaluateRule with wind speed conditions", () => {
     key: "activity:drone-flying",
     conditions: [
       {
-        field: "windGust", operator: "gt", value: 40,
-        level: "poor", label: "Grounded",
-        colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10",
-        detail: "Dangerous gusts", metricTemplate: "Gust: {value} km/h",
+        field: "windGust",
+        operator: "gt",
+        value: 40,
+        level: "poor",
+        label: "Grounded",
+        colorClass: "text-severity-severe",
+        bgClass: "bg-severity-severe/10",
+        detail: "Dangerous gusts",
+        metricTemplate: "Gust: {value} km/h",
       },
       {
-        field: "windSpeed", operator: "gt", value: 35,
-        level: "poor", label: "Grounded",
-        colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10",
-        detail: "Wind too strong", metricTemplate: "Wind: {value} km/h",
+        field: "windSpeed",
+        operator: "gt",
+        value: 35,
+        level: "poor",
+        label: "Grounded",
+        colorClass: "text-severity-severe",
+        bgClass: "bg-severity-severe/10",
+        detail: "Wind too strong",
+        metricTemplate: "Wind: {value} km/h",
       },
       {
-        field: "windSpeed", operator: "gt", value: 20,
-        level: "fair", label: "Caution",
-        colorClass: "text-severity-moderate", bgClass: "bg-severity-moderate/10",
-        detail: "Moderate wind", metricTemplate: "Wind: {value} km/h",
+        field: "windSpeed",
+        operator: "gt",
+        value: 20,
+        level: "fair",
+        label: "Caution",
+        colorClass: "text-severity-moderate",
+        bgClass: "bg-severity-moderate/10",
+        detail: "Moderate wind",
+        metricTemplate: "Wind: {value} km/h",
       },
     ],
     fallback: {
-      level: "excellent", label: "Flyable",
-      colorClass: "text-severity-low", bgClass: "bg-severity-low/10",
+      level: "excellent",
+      label: "Flyable",
+      colorClass: "text-severity-low",
+      bgClass: "bg-severity-low/10",
       detail: "Calm winds",
     },
     updatedAt: new Date(),
@@ -223,20 +271,35 @@ describe("code quality", () => {
   });
 
   it("uses DECIMAL_FIELDS set instead of inline field-name checks", () => {
-    expect(source).toContain('const DECIMAL_FIELDS = new Set(["visibility", "evapotranspiration"])');
+    expect(source).toContain(
+      'const DECIMAL_FIELDS = new Set(["visibility", "evapotranspiration"])',
+    );
     expect(source).toContain("DECIMAL_FIELDS.has(");
   });
 
   it("resolves visibility with one decimal place via DECIMAL_FIELDS", () => {
     const visRule: SuitabilityRuleDoc = {
       key: "test-vis",
-      conditions: [{
-        field: "visibility", operator: "lt", value: 5,
-        level: "fair", label: "Low Vis",
-        colorClass: "text-severity-moderate", bgClass: "bg-severity-moderate/10",
-        detail: "Low visibility", metricTemplate: "Vis: {value} km",
-      }],
-      fallback: { level: "good", label: "OK", colorClass: "c", bgClass: "b", detail: "Good" },
+      conditions: [
+        {
+          field: "visibility",
+          operator: "lt",
+          value: 5,
+          level: "fair",
+          label: "Low Vis",
+          colorClass: "text-severity-moderate",
+          bgClass: "bg-severity-moderate/10",
+          detail: "Low visibility",
+          metricTemplate: "Vis: {value} km",
+        },
+      ],
+      fallback: {
+        level: "good",
+        label: "OK",
+        colorClass: "c",
+        bgClass: "b",
+        detail: "Good",
+      },
       updatedAt: new Date(),
     };
     const result = evaluateRule(visRule, { visibility: 2.7 });
@@ -246,13 +309,26 @@ describe("code quality", () => {
   it("resolves evapotranspiration with one decimal place via DECIMAL_FIELDS", () => {
     const etRule: SuitabilityRuleDoc = {
       key: "test-et",
-      conditions: [{
-        field: "evapotranspiration", operator: "gt", value: 3,
-        level: "fair", label: "High ET",
-        colorClass: "text-severity-moderate", bgClass: "bg-severity-moderate/10",
-        detail: "High ET", metricTemplate: "ET: {evapotranspiration} mm",
-      }],
-      fallback: { level: "good", label: "OK", colorClass: "c", bgClass: "b", detail: "Normal" },
+      conditions: [
+        {
+          field: "evapotranspiration",
+          operator: "gt",
+          value: 3,
+          level: "fair",
+          label: "High ET",
+          colorClass: "text-severity-moderate",
+          bgClass: "bg-severity-moderate/10",
+          detail: "High ET",
+          metricTemplate: "ET: {evapotranspiration} mm",
+        },
+      ],
+      fallback: {
+        level: "good",
+        label: "OK",
+        colorClass: "c",
+        bgClass: "b",
+        detail: "Normal",
+      },
       updatedAt: new Date(),
     };
     const result = evaluateRule(etRule, { evapotranspiration: 4.56 });
@@ -274,25 +350,49 @@ describe("evaluateSuitability", () => {
 
   const activityRule: SuitabilityRuleDoc = {
     key: "activity:crop-farming",
-    conditions: [{
-      field: "dewPoint", operator: "gt", value: 20,
-      level: "fair", label: "Humid",
-      colorClass: "text-severity-moderate", bgClass: "bg-severity-moderate/10",
-      detail: "High dew point",
-    }],
-    fallback: { level: "good", label: "Good", colorClass: "text-severity-low", bgClass: "bg-severity-low/10", detail: "OK" },
+    conditions: [
+      {
+        field: "dewPoint",
+        operator: "gt",
+        value: 20,
+        level: "fair",
+        label: "Humid",
+        colorClass: "text-severity-moderate",
+        bgClass: "bg-severity-moderate/10",
+        detail: "High dew point",
+      },
+    ],
+    fallback: {
+      level: "good",
+      label: "Good",
+      colorClass: "text-severity-low",
+      bgClass: "bg-severity-low/10",
+      detail: "OK",
+    },
     updatedAt: new Date(),
   };
 
   const categoryRule: SuitabilityRuleDoc = {
     key: "category:farming",
-    conditions: [{
-      field: "thunderstormProbability", operator: "gt", value: 50,
-      level: "poor", label: "Stormy",
-      colorClass: "text-severity-severe", bgClass: "bg-severity-severe/10",
-      detail: "Storm risk",
-    }],
-    fallback: { level: "good", label: "OK", colorClass: "text-severity-low", bgClass: "bg-severity-low/10", detail: "Fine" },
+    conditions: [
+      {
+        field: "thunderstormProbability",
+        operator: "gt",
+        value: 50,
+        level: "poor",
+        label: "Stormy",
+        colorClass: "text-severity-severe",
+        bgClass: "bg-severity-severe/10",
+        detail: "Storm risk",
+      },
+    ],
+    fallback: {
+      level: "good",
+      label: "OK",
+      colorClass: "text-severity-low",
+      bgClass: "bg-severity-low/10",
+      detail: "Fine",
+    },
     updatedAt: new Date(),
   };
 
@@ -301,7 +401,11 @@ describe("evaluateSuitability", () => {
       ["activity:crop-farming", activityRule],
       ["category:farming", categoryRule],
     ]);
-    const result = evaluateSuitability(fakeActivity, { dewPoint: 25 } as WeatherInsights, rules);
+    const result = evaluateSuitability(
+      fakeActivity,
+      { dewPoint: 25 } as WeatherInsights,
+      rules,
+    );
     expect(result.label).toBe("Humid");
   });
 
@@ -309,12 +413,20 @@ describe("evaluateSuitability", () => {
     const rules = new Map<string, SuitabilityRuleDoc>([
       ["category:farming", categoryRule],
     ]);
-    const result = evaluateSuitability(fakeActivity, { thunderstormProbability: 60 } as WeatherInsights, rules);
+    const result = evaluateSuitability(
+      fakeActivity,
+      { thunderstormProbability: 60 } as WeatherInsights,
+      rules,
+    );
     expect(result.label).toBe("Stormy");
   });
 
   it("returns generic fallback when no rules exist", () => {
-    const result = evaluateSuitability(fakeActivity, {} as WeatherInsights, new Map());
+    const result = evaluateSuitability(
+      fakeActivity,
+      {} as WeatherInsights,
+      new Map(),
+    );
     expect(result.level).toBe("fair");
     expect(result.detail).toBe("No specific rules available for this activity");
   });

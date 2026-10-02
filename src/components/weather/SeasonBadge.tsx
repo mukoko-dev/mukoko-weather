@@ -13,7 +13,9 @@ export function SeasonBadge({ season }: SeasonBadgeProps) {
         {showLocalName ? season.localName : season.name}
       </span>
       <span className="truncate text-base font-normal text-text-secondary">
-        {showLocalName ? `${season.name} — ${season.description}` : season.description}
+        {showLocalName
+          ? `${season.name} — ${season.description}`
+          : season.description}
       </span>
     </Badge>
   );

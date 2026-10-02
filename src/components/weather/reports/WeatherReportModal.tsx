@@ -2,15 +2,31 @@
 
 import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogSheetHandle, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogSheetHandle,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
 import { REPORT_TYPES } from "@/lib/report-types";
 
 const SEVERITIES = [
   { id: "mild", label: "Mild", description: "Noticeable but not disruptive" },
-  { id: "moderate", label: "Moderate", description: "Affecting plans or travel" },
-  { id: "severe", label: "Severe", description: "Dangerous or highly disruptive" },
+  {
+    id: "moderate",
+    label: "Moderate",
+    description: "Affecting plans or travel",
+  },
+  {
+    id: "severe",
+    label: "Severe",
+    description: "Dangerous or highly disruptive",
+  },
 ] as const;
 
 type Step = "select" | "clarify" | "confirm";
@@ -100,7 +116,11 @@ export function WeatherReportModal() {
 
       setSubmitted(true);
       setStep("confirm");
-      trackEvent("report_submitted", { type: reportType, severity, location: selectedLocation });
+      trackEvent("report_submitted", {
+        type: reportType,
+        severity,
+        location: selectedLocation,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit report");
     } finally {
@@ -111,7 +131,13 @@ export function WeatherReportModal() {
   const typeInfo = REPORT_TYPES.find((t) => t.id === reportType);
 
   return (
-    <Dialog open={reportModalOpen} onOpenChange={(open) => { if (open) trackEvent("modal_opened", { modal: "weather-report" }); else handleClose(); }}>
+    <Dialog
+      open={reportModalOpen}
+      onOpenChange={(open) => {
+        if (open) trackEvent("modal_opened", { modal: "weather-report" });
+        else handleClose();
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogSheetHandle />
 
@@ -122,7 +148,9 @@ export function WeatherReportModal() {
           </DialogTitle>
           <DialogDescription className="mt-0.5 text-base text-text-secondary">
             {step === "select" && "What are you experiencing right now?"}
-            {step === "clarify" && typeInfo && `Tell us more about the ${typeInfo.label.toLowerCase()}`}
+            {step === "clarify" &&
+              typeInfo &&
+              `Tell us more about the ${typeInfo.label.toLowerCase()}`}
             {step === "confirm" && "Thank you for helping your community!"}
           </DialogDescription>
         </DialogHeader>
@@ -130,7 +158,11 @@ export function WeatherReportModal() {
         {/* Step 1: Select type */}
         {step === "select" && (
           <div className="px-5 pb-5">
-            <div className="grid grid-cols-2 gap-2" role="group" aria-label="Weather condition type">
+            <div
+              className="grid grid-cols-2 gap-2"
+              role="group"
+              aria-label="Weather condition type"
+            >
               {REPORT_TYPES.map((type) => {
                 const Icon = type.icon;
                 return (
@@ -142,7 +174,9 @@ export function WeatherReportModal() {
                     className="flex items-center gap-2.5 rounded-[var(--radius-button)] border border-border bg-surface-card px-3 py-3 text-left text-base transition-colors hover:bg-surface-dim hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)] disabled:opacity-50"
                   >
                     <Icon size={20} className="shrink-0 text-text-secondary" />
-                    <span className="text-text-primary font-medium">{type.label}</span>
+                    <span className="text-text-primary font-medium">
+                      {type.label}
+                    </span>
                   </button>
                 );
               })}
@@ -167,8 +201,14 @@ export function WeatherReportModal() {
 
             {/* Severity selection */}
             <div>
-              <p className="text-base font-medium text-text-primary mb-2">Severity</p>
-              <div className="flex gap-2" role="radiogroup" aria-label="Report severity">
+              <p className="text-base font-medium text-text-primary mb-2">
+                Severity
+              </p>
+              <div
+                className="flex gap-2"
+                role="radiogroup"
+                aria-label="Report severity"
+              >
                 {SEVERITIES.map((s) => (
                   <button
                     key={s.id}
@@ -190,8 +230,12 @@ export function WeatherReportModal() {
 
             {/* Description */}
             <div>
-              <label htmlFor="report-description" className="text-base font-medium text-text-primary">
-                Description <span className="text-text-tertiary">(optional)</span>
+              <label
+                htmlFor="report-description"
+                className="text-base font-medium text-text-primary"
+              >
+                Description{" "}
+                <span className="text-text-tertiary">(optional)</span>
               </label>
               <textarea
                 id="report-description"
@@ -202,17 +246,20 @@ export function WeatherReportModal() {
                 maxLength={300}
                 className="crane mt-1 resize-none rounded-[var(--radius-button)]"
               />
-              <p className="mt-1 text-base text-text-tertiary">{description.length}/300</p>
+              <p className="mt-1 text-base text-text-tertiary">
+                {description.length}/300
+              </p>
             </div>
 
-            {error && (
-              <p className="text-base text-destructive">{error}</p>
-            )}
+            {error && <p className="text-base text-destructive">{error}</p>}
 
             <div className="flex gap-2 pt-1">
               <Button
                 variant="outline"
-                onClick={() => { setStep("select"); setReportType(null); }}
+                onClick={() => {
+                  setStep("select");
+                  setReportType(null);
+                }}
                 className="min-h-[var(--touch-target-min)]"
               >
                 Back
@@ -235,7 +282,9 @@ export function WeatherReportModal() {
               {typeInfo ? (
                 <typeInfo.icon size={26} className="text-severity-low" />
               ) : (
-                <span className="text-2xl" aria-hidden="true">✓</span>
+                <span className="text-2xl" aria-hidden="true">
+                  ✓
+                </span>
               )}
             </div>
             <p className="text-base text-text-secondary">
@@ -243,7 +292,12 @@ export function WeatherReportModal() {
               Other users in the area will see it.
             </p>
             <DialogClose asChild>
-              <Button onClick={handleClose} className="min-h-[var(--touch-target-min)]">Done</Button>
+              <Button
+                onClick={handleClose}
+                className="min-h-[var(--touch-target-min)]"
+              >
+                Done
+              </Button>
             </DialogClose>
           </div>
         )}

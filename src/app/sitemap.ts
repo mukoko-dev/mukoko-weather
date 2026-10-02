@@ -85,12 +85,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Shamwari is omitted while paused (FLAGS.shamwari_chat) — the route
     // 404s, so it shouldn't be indexed.
     ...(isFeatureEnabled("shamwari_chat")
-      ? [{
-          url: `${baseUrl}/shamwari`,
-          lastModified: now,
-          changeFrequency: "daily" as const,
-          priority: 0.8,
-        }]
+      ? [
+          {
+            url: `${baseUrl}/shamwari`,
+            lastModified: now,
+            changeFrequency: "daily" as const,
+            priority: 0.8,
+          },
+        ]
       : []),
     {
       url: `${baseUrl}/embed`,
