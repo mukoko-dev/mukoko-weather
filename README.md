@@ -3,7 +3,6 @@
 > AI-powered weather intelligence for the developing world — real-time forecasts and locally-relevant insights for farming, mining, travel, and daily life. Built in Zimbabwe, scaling globally.
 
 [![CI](https://github.com/nyuchi/mukoko-weather/actions/workflows/ci.yml/badge.svg)](https://github.com/nyuchi/mukoko-weather/actions/workflows/ci.yml)
-[![Lint](https://github.com/nyuchi/mukoko-weather/actions/workflows/lint.yml/badge.svg)](https://github.com/nyuchi/mukoko-weather/actions/workflows/lint.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=nextdotjs&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -141,7 +140,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the search and caching internals, and
 
 CI runs lint → typecheck → TypeScript tests → Python tests
 ([`ci.yml`](.github/workflows/ci.yml)), with a separate markdown/YAML lint gate
-([`lint.yml`](.github/workflows/lint.yml)), Claude review on PRs, and a
+that the org ruleset runs on every PR, Claude review on PRs, and a
 post-deploy DB seed sync ([`db-init.yml`](.github/workflows/db-init.yml)).
 
 ## Design
