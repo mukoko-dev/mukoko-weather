@@ -197,7 +197,7 @@ Use the [GitHub Issues](https://github.com/nyuchitech/mukoko-weather/issues) pag
 - **Bug reports** — include the affected location/page, device info, and steps to reproduce
 - **Feature requests** — describe the problem, proposed solution, and which category it relates to
 
-For security vulnerabilities, email **<legal@nyuchi.com>** — do not open a public issue.
+For security vulnerabilities, email **<security@nyuchi.com>** — do not open a public issue.
 
 ## Code of Conduct
 
