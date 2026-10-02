@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security Vulnerability
-    url: mailto:legal@nyuchi.com
+    url: mailto:security@nyuchi.com
     about: Report security vulnerabilities via email — do not open a public issue.
   - name: General Support
     url: mailto:support@mukoko.com
