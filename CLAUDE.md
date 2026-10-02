@@ -415,8 +415,6 @@ mukoko-weather/
 │   ├── ISSUE_TEMPLATE/            # Bug report and feature request templates
 │   └── workflows/
 │       ├── ci.yml                 # Single job: lint → typecheck → TypeScript tests → Python tests (concurrency-grouped)
-│       ├── claude-code-review.yml # Claude AI code review on PRs (token-guarded, concurrency-grouped)
-│       ├── claude.yml             # Claude Code for @claude mentions in issues/PRs
 │       ├── codeql.yml             # CodeQL security scanning (JS/TS, Python, Actions; concurrency-grouped)
 │       └── db-init.yml            # Post-deploy DB seed data sync (Vercel deployment webhook)
 ├── tests/
