@@ -65,14 +65,27 @@ export default async function ExploreCountryPage() {
     <>
       <Header />
 
-      <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8">
+      <nav
+        aria-label="Breadcrumb"
+        className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8"
+      >
         <ol className="flex items-center gap-1 text-base text-text-tertiary">
           <li>
-            <Link href="/" className="hover:text-text-secondary transition-colors">Home</Link>
+            <Link
+              href="/"
+              className="hover:text-text-secondary transition-colors"
+            >
+              Home
+            </Link>
           </li>
           <li aria-hidden="true">/</li>
           <li>
-            <Link href="/explore" className="hover:text-text-secondary transition-colors">Explore</Link>
+            <Link
+              href="/explore"
+              className="hover:text-text-secondary transition-colors"
+            >
+              Explore
+            </Link>
           </li>
           <li aria-hidden="true">/</li>
           <li aria-current="page">
@@ -97,7 +110,11 @@ export default async function ExploreCountryPage() {
         </p>
 
         {sortedRegions.map((region) => (
-          <section key={region} aria-labelledby={`region-${region.replace(/\s+/g, "-").toLowerCase()}`} className="mt-10">
+          <section
+            key={region}
+            aria-labelledby={`region-${region.replace(/\s+/g, "-").toLowerCase()}`}
+            className="mt-10"
+          >
             <h2
               id={`region-${region.replace(/\s+/g, "-").toLowerCase()}`}
               className="text-lg font-semibold text-text-primary font-heading mb-4 border-b border-border-subtle pb-2"

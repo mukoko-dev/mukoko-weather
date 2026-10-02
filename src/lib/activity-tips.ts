@@ -56,7 +56,9 @@ function nextHours(weather: WeatherData, count: number): HourSlice[] {
   return slices;
 }
 
-type TipsByCategory = Partial<Record<ActivityCategory, string>> & { default: string };
+type TipsByCategory = Partial<Record<ActivityCategory, string>> & {
+  default: string;
+};
 
 function pick(byCategory: TipsByCategory, category: ActivityCategory): string {
   return byCategory[category] ?? byCategory.default;
@@ -82,12 +84,18 @@ export function getActivityTips(
     tips.push(
       pick(
         {
-          farming: "Thunderstorms expected — keep workers and livestock away from open fields and tall trees.",
-          mining: "Thunderstorms expected — pause exposed surface operations and crane work until it passes.",
-          travel: "Thunderstorms expected — allow extra travel time and avoid low-lying crossings.",
-          tourism: "Thunderstorms expected — plan indoor alternatives and avoid exposed viewpoints.",
-          sports: "Thunderstorms expected — move training indoors; open pitches are unsafe in lightning.",
-          default: "Thunderstorms expected — stay indoors while storms pass and unplug sensitive electronics.",
+          farming:
+            "Thunderstorms expected — keep workers and livestock away from open fields and tall trees.",
+          mining:
+            "Thunderstorms expected — pause exposed surface operations and crane work until it passes.",
+          travel:
+            "Thunderstorms expected — allow extra travel time and avoid low-lying crossings.",
+          tourism:
+            "Thunderstorms expected — plan indoor alternatives and avoid exposed viewpoints.",
+          sports:
+            "Thunderstorms expected — move training indoors; open pitches are unsafe in lightning.",
+          default:
+            "Thunderstorms expected — stay indoors while storms pass and unplug sensitive electronics.",
         },
         category,
       ),
@@ -118,11 +126,15 @@ export function getActivityTips(
     tips.push(
       pick(
         {
-          farming: "Strong winds ahead — hold off on spraying; drift will waste chemicals and harm neighbouring crops.",
-          mining: "Strong winds ahead — expect dust; check suppression and secure loose materials.",
-          travel: "Strong winds ahead — grip the wheel firmly on open stretches and give trucks extra room.",
+          farming:
+            "Strong winds ahead — hold off on spraying; drift will waste chemicals and harm neighbouring crops.",
+          mining:
+            "Strong winds ahead — expect dust; check suppression and secure loose materials.",
+          travel:
+            "Strong winds ahead — grip the wheel firmly on open stretches and give trucks extra room.",
           tourism: "Strong winds ahead — secure tents and loose gear at camp.",
-          sports: "Strong winds ahead — expect it to affect ball flight and cycling; plan sheltered routes.",
+          sports:
+            "Strong winds ahead — expect it to affect ball flight and cycling; plan sheltered routes.",
           default: "Strong winds ahead — secure loose items outdoors.",
         },
         category,
@@ -136,11 +148,16 @@ export function getActivityTips(
     tips.push(
       pick(
         {
-          farming: "UV will be very high — schedule field work before 10:00 and after 15:00; hats and water for workers.",
-          mining: "UV will be very high — rotate exposed crews and enforce sun protection.",
-          sports: "UV will be very high — train early morning or late afternoon; sunscreen for midday events.",
-          tourism: "UV will be very high — pack sunscreen and plan shade breaks between 10:00 and 15:00.",
-          default: "UV will be very high today — limit direct sun between 10:00 and 15:00.",
+          farming:
+            "UV will be very high — schedule field work before 10:00 and after 15:00; hats and water for workers.",
+          mining:
+            "UV will be very high — rotate exposed crews and enforce sun protection.",
+          sports:
+            "UV will be very high — train early morning or late afternoon; sunscreen for midday events.",
+          tourism:
+            "UV will be very high — pack sunscreen and plan shade breaks between 10:00 and 15:00.",
+          default:
+            "UV will be very high today — limit direct sun between 10:00 and 15:00.",
         },
         category,
       ),
@@ -150,14 +167,20 @@ export function getActivityTips(
   // 5. Frost risk — overnight lows sit beyond the 12h planning window, so
   // scan a full 24 hours for the daily minimum.
   const dayHours = nextHours(weather, 24);
-  const minTemp = Math.min(...dayHours.map((h) => h.temp), current?.temperature_2m ?? Infinity);
+  const minTemp = Math.min(
+    ...dayHours.map((h) => h.temp),
+    current?.temperature_2m ?? Infinity,
+  );
   if (minTemp <= 3) {
     tips.push(
       pick(
         {
-          farming: "Frost risk — cover seedlings, move potted plants, and give livestock windbreaks overnight.",
-          travel: "Near-freezing temperatures — watch for icy patches on early-morning roads.",
-          default: "Near-freezing temperatures expected — dress warmly for early mornings.",
+          farming:
+            "Frost risk — cover seedlings, move potted plants, and give livestock windbreaks overnight.",
+          travel:
+            "Near-freezing temperatures — watch for icy patches on early-morning roads.",
+          default:
+            "Near-freezing temperatures expected — dress warmly for early mornings.",
         },
         category,
       ),
@@ -165,15 +188,22 @@ export function getActivityTips(
   }
 
   // 6. Heat
-  const maxTemp = Math.max(...hours.map((h) => h.temp), current?.temperature_2m ?? -Infinity);
+  const maxTemp = Math.max(
+    ...hours.map((h) => h.temp),
+    current?.temperature_2m ?? -Infinity,
+  );
   if (maxTemp >= 32) {
     tips.push(
       pick(
         {
-          farming: "High heat — irrigate early morning or evening to cut evaporation losses; shade and water for livestock.",
-          mining: "High heat — enforce hydration breaks and watch crews for heat stress.",
-          sports: "High heat — hydrate before and during sessions; avoid hard efforts at midday.",
-          default: "High heat today — drink water regularly and take breaks in the shade.",
+          farming:
+            "High heat — irrigate early morning or evening to cut evaporation losses; shade and water for livestock.",
+          mining:
+            "High heat — enforce hydration breaks and watch crews for heat stress.",
+          sports:
+            "High heat — hydrate before and during sessions; avoid hard efforts at midday.",
+          default:
+            "High heat today — drink water regularly and take breaks in the shade.",
         },
         category,
       ),
@@ -189,7 +219,9 @@ export function getActivityTips(
 
   // Calm-conditions fallback so the card always says something useful
   if (tips.length === 0) {
-    tips.push(`Conditions look stable — a good stretch for ${activity.label.toLowerCase()}.`);
+    tips.push(
+      `Conditions look stable — a good stretch for ${activity.label.toLowerCase()}.`,
+    );
   }
 
   return tips.slice(0, MAX_TIPS);

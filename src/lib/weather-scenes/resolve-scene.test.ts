@@ -61,9 +61,12 @@ describe("resolveScene", () => {
   });
 
   describe("thunderstorm codes", () => {
-    it.each([95, 96, 99])("maps thunderstorm code %d to thunderstorm", (code) => {
-      expect(resolveScene(code)).toBe("thunderstorm");
-    });
+    it.each([95, 96, 99])(
+      "maps thunderstorm code %d to thunderstorm",
+      (code) => {
+        expect(resolveScene(code)).toBe("thunderstorm");
+      },
+    );
   });
 
   describe("unknown codes", () => {

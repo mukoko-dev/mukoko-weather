@@ -111,28 +111,28 @@ export interface ModelForecast {
 /** Extended weather data from Tomorrow.io for activity-aware insight cards */
 export interface WeatherInsights {
   // Farming — Growing Degree Days (today)
-  gdd10To30?: number;  // Maize & soybean
-  gdd10To31?: number;  // Sunflower
-  gdd08To30?: number;  // Sorghum & green gram
-  gdd03To25?: number;  // Potatoes
-  evapotranspiration?: number;  // mm (today)
-  dewPoint?: number;            // °C (current)
-  precipitationType?: number;   // 0=none, 1=rain, 2=snow, 3=freezing rain, 4=sleet
+  gdd10To30?: number; // Maize & soybean
+  gdd10To31?: number; // Sunflower
+  gdd08To30?: number; // Sorghum & green gram
+  gdd03To25?: number; // Potatoes
+  evapotranspiration?: number; // mm (today)
+  dewPoint?: number; // °C (current)
+  precipitationType?: number; // 0=none, 1=rain, 2=snow, 3=freezing rain, 4=sleet
 
   // Wind — drone flying, outdoor safety
-  windSpeed?: number;                 // km/h (current)
-  windGust?: number;                  // km/h (current)
+  windSpeed?: number; // km/h (current)
+  windGust?: number; // km/h (current)
 
   // Safety — outdoor activities
-  thunderstormProbability?: number;  // % (current)
-  heatStressIndex?: number;          // 0–30+ (current)
-  uvHealthConcern?: number;          // 0–11+ (current)
+  thunderstormProbability?: number; // % (current)
+  heatStressIndex?: number; // 0–30+ (current)
+  uvHealthConcern?: number; // 0–11+ (current)
 
   // Tourism / photography
-  moonPhase?: number;        // 0–7
+  moonPhase?: number; // 0–7
   cloudBase?: number | null; // km (current)
   cloudCeiling?: number | null; // km (current)
-  visibility?: number;       // km (current)
+  visibility?: number; // km (current)
 }
 
 /**
@@ -142,7 +142,9 @@ export interface WeatherInsights {
  * Tomorrow.io is unavailable). Without these mappings, all conditions fall
  * through to the "Good" default — e.g. farming shows "Good" during a storm.
  */
-export function synthesizeOpenMeteoInsights(data: WeatherData): WeatherInsights {
+export function synthesizeOpenMeteoInsights(
+  data: WeatherData,
+): WeatherInsights {
   const currentUv = data.current.uv_index;
   const weatherCode = data.current.weather_code;
 
@@ -156,8 +158,18 @@ export function synthesizeOpenMeteoInsights(data: WeatherData): WeatherInsights 
   // Derive precipitationType from WMO weather codes:
   //   0=none, 1=rain, 2=snow, 3=freezing rain, 4=ice pellets
   let precipitationType = 0;
-  if ((weatherCode >= 71 && weatherCode <= 77) || (weatherCode >= 85 && weatherCode <= 86)) precipitationType = 2;       // Snow + snow showers
-  else if (weatherCode === 66 || weatherCode === 67 || weatherCode === 56 || weatherCode === 57) precipitationType = 3; // Freezing rain + freezing drizzle
+  if (
+    (weatherCode >= 71 && weatherCode <= 77) ||
+    (weatherCode >= 85 && weatherCode <= 86)
+  )
+    precipitationType = 2; // Snow + snow showers
+  else if (
+    weatherCode === 66 ||
+    weatherCode === 67 ||
+    weatherCode === 56 ||
+    weatherCode === 57
+  )
+    precipitationType = 3; // Freezing rain + freezing drizzle
   else if (weatherCode >= 51) precipitationType = 1; // Rain/drizzle/thunderstorm
 
   return {
@@ -291,7 +303,11 @@ export function parseMinutely(raw: {
 export function parseModelSeries(
   raw: { hourly?: Record<string, unknown> },
   models: string[],
-): { models: ModelForecast[]; models_available: string[]; models_time: string[] } {
+): {
+  models: ModelForecast[];
+  models_available: string[];
+  models_time: string[];
+} {
   const hourly = raw.hourly ?? {};
   const baseTemp = (hourly["temperature_2m"] as (number | null)[]) ?? [];
   const basePrecip = (hourly["precipitation"] as (number | null)[]) ?? [];
@@ -300,8 +316,10 @@ export function parseModelSeries(
   const series: ModelForecast[] = [];
   const available: string[] = [];
   for (const model of models) {
-    const temp = (hourly[`temperature_2m_${model}`] as (number | null)[]) ?? baseTemp;
-    const precip = (hourly[`precipitation_${model}`] as (number | null)[]) ?? basePrecip;
+    const temp =
+      (hourly[`temperature_2m_${model}`] as (number | null)[]) ?? baseTemp;
+    const precip =
+      (hourly[`precipitation_${model}`] as (number | null)[]) ?? basePrecip;
     if (temp.some((v) => v !== null && v !== undefined)) {
       series.push({
         model,
@@ -360,7 +378,10 @@ export function checkFrostRisk(hourly: HourlyWeather): FrostAlert | null {
 }
 
 /** WMO Weather interpretation codes → label & icon */
-export function weatherCodeToInfo(code: number): { label: string; icon: string } {
+export function weatherCodeToInfo(code: number): {
+  label: string;
+  icon: string;
+} {
   const map: Record<number, { label: string; icon: string }> = {
     0: { label: "Clear sky", icon: "sun" },
     1: { label: "Mainly clear", icon: "sun" },
@@ -403,27 +424,62 @@ export interface Season {
 export type ZimbabweSeason = Season;
 
 /** Default hemisphere-aware season fallback (used when DB has no season data for the location's country) */
-export function getDefaultSeason(date: Date = new Date(), lat: number = 0): Season {
+export function getDefaultSeason(
+  date: Date = new Date(),
+  lat: number = 0,
+): Season {
   const month = date.getMonth() + 1; // 1-12
   const southern = lat < 0;
 
   if (southern) {
     if (month === 12 || month <= 2)
-      return { name: "Summer", localName: "Summer", description: "Warm season with possible thunderstorms" };
+      return {
+        name: "Summer",
+        localName: "Summer",
+        description: "Warm season with possible thunderstorms",
+      };
     if (month >= 3 && month <= 5)
-      return { name: "Autumn", localName: "Autumn", description: "Cooling temperatures, harvest period" };
+      return {
+        name: "Autumn",
+        localName: "Autumn",
+        description: "Cooling temperatures, harvest period",
+      };
     if (month >= 6 && month <= 8)
-      return { name: "Winter", localName: "Winter", description: "Cool and dry with possible frost" };
-    return { name: "Spring", localName: "Spring", description: "Warming temperatures, early rains possible" };
+      return {
+        name: "Winter",
+        localName: "Winter",
+        description: "Cool and dry with possible frost",
+      };
+    return {
+      name: "Spring",
+      localName: "Spring",
+      description: "Warming temperatures, early rains possible",
+    };
   }
 
   if (month >= 3 && month <= 5)
-    return { name: "Spring", localName: "Spring", description: "Warming temperatures, new growth" };
+    return {
+      name: "Spring",
+      localName: "Spring",
+      description: "Warming temperatures, new growth",
+    };
   if (month >= 6 && month <= 8)
-    return { name: "Summer", localName: "Summer", description: "Warmest season with longer days" };
+    return {
+      name: "Summer",
+      localName: "Summer",
+      description: "Warmest season with longer days",
+    };
   if (month >= 9 && month <= 11)
-    return { name: "Autumn", localName: "Autumn", description: "Cooling temperatures, shorter days" };
-  return { name: "Winter", localName: "Winter", description: "Coldest season with shorter days" };
+    return {
+      name: "Autumn",
+      localName: "Autumn",
+      description: "Cooling temperatures, shorter days",
+    };
+  return {
+    name: "Winter",
+    localName: "Winter",
+    description: "Coldest season with shorter days",
+  };
 }
 
 /**
@@ -435,9 +491,25 @@ export function getZimbabweSeason(date: Date = new Date()): Season {
   return getDefaultSeason(date, -17);
 }
 
-
 export function windDirection(degrees: number): string {
-  const dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+  const dirs = [
+    "N",
+    "NNE",
+    "NE",
+    "ENE",
+    "E",
+    "ESE",
+    "SE",
+    "SSE",
+    "S",
+    "SSW",
+    "SW",
+    "WSW",
+    "W",
+    "WNW",
+    "NW",
+    "NNW",
+  ];
   const index = Math.round(degrees / 22.5) % 16;
   return dirs[index];
 }
@@ -455,18 +527,25 @@ export function uvLevel(index: number): { label: string; color: string } {
  * Used when all weather providers are unavailable so the page still renders.
  * Temperatures are adjusted for elevation (~6.5°C per 1000m lapse rate).
  */
-export function createFallbackWeather(lat: number, lon: number, elevation: number): WeatherData {
+export function createFallbackWeather(
+  lat: number,
+  lon: number,
+  elevation: number,
+): WeatherData {
   const now = new Date();
   const season = getDefaultSeason(now, lat);
   const hour = now.getHours();
   const isDay = hour >= 6 && hour < 18 ? 1 : 0;
 
   // Seasonal base temperatures (°C) at ~1200m reference elevation
-  const seasonalBase: Record<string, { high: number; low: number; humidity: number; code: number }> = {
-    "Summer": { high: 30, low: 18, humidity: 65, code: 2 },
-    "Autumn": { high: 24, low: 12, humidity: 55, code: 2 },
-    "Winter": { high: 18, low: 5, humidity: 40, code: 0 },
-    "Spring": { high: 24, low: 12, humidity: 50, code: 2 },
+  const seasonalBase: Record<
+    string,
+    { high: number; low: number; humidity: number; code: number }
+  > = {
+    Summer: { high: 30, low: 18, humidity: 65, code: 2 },
+    Autumn: { high: 24, low: 12, humidity: 55, code: 2 },
+    Winter: { high: 18, low: 5, humidity: 40, code: 0 },
+    Spring: { high: 24, low: 12, humidity: 50, code: 2 },
   };
   const base = seasonalBase[season.name] ?? seasonalBase["Summer"];
 

@@ -57,7 +57,9 @@ export function buildCloudyScene(
   return {
     update(elapsed) {
       // Upper layer drifts slowly right
-      const upos = upperGeo.attributes.position as InstanceType<typeof THREE.BufferAttribute>;
+      const upos = upperGeo.attributes.position as InstanceType<
+        typeof THREE.BufferAttribute
+      >;
       for (let i = 0; i < UPPER_COUNT; i++) {
         upos.array[i * 3] += 0.004;
         if (upos.array[i * 3] > 24) upos.array[i * 3] = -24;
@@ -65,7 +67,9 @@ export function buildCloudyScene(
       upos.needsUpdate = true;
 
       // Mid layer drifts slightly faster
-      const mpos = midGeo.attributes.position as InstanceType<typeof THREE.BufferAttribute>;
+      const mpos = midGeo.attributes.position as InstanceType<
+        typeof THREE.BufferAttribute
+      >;
       for (let i = 0; i < MID_COUNT; i++) {
         mpos.array[i * 3] += 0.006;
         if (mpos.array[i * 3] > 22) mpos.array[i * 3] = -22;

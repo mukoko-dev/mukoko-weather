@@ -6,7 +6,12 @@ export function WeatherUnavailableBanner() {
   // role="status" overrides Alert's default role="alert" — this banner is
   // informational (not urgent), so polite live region is correct.
   return (
-    <Alert variant="warning" role="status" aria-live="polite" className="mb-6 border-warmth bg-warmth/10">
+    <Alert
+      variant="warning"
+      role="status"
+      aria-live="polite"
+      className="mb-6 border-warmth bg-warmth/10"
+    >
       <AlertTitle className="text-warmth">
         Live weather data temporarily unavailable
       </AlertTitle>

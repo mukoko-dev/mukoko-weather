@@ -21,7 +21,10 @@ export default function AtmosphereLoading() {
         {/* Metric cards skeleton */}
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm">
+            <div
+              key={i}
+              className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm"
+            >
               <div className="h-4 w-16 animate-pulse rounded bg-text-tertiary/15" />
               <div className="mt-2 h-6 w-20 animate-pulse rounded bg-text-tertiary/15" />
               <div className="mt-1 h-3 w-24 animate-pulse rounded bg-text-tertiary/10" />

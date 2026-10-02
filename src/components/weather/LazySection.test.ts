@@ -7,10 +7,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const source = readFileSync(
-  resolve(__dirname, "LazySection.tsx"),
-  "utf-8",
-);
+const source = readFileSync(resolve(__dirname, "LazySection.tsx"), "utf-8");
 
 describe("LazySection — sequential mount queue", () => {
   it("defines a global mountQueue as a QueueEntry array", () => {
@@ -69,7 +66,8 @@ describe("LazySection — bidirectional visibility", () => {
 
   it("uses a separate unload observer after initial mount", () => {
     // Should have two IntersectionObserver usages: load and unload
-    const observerCount = (source.match(/new IntersectionObserver/g) || []).length;
+    const observerCount = (source.match(/new IntersectionObserver/g) || [])
+      .length;
     expect(observerCount).toBeGreaterThanOrEqual(2);
   });
 
@@ -94,7 +92,7 @@ describe("LazySection — bidirectional visibility", () => {
 });
 
 describe("LazySection — default fallback accessibility", () => {
-  it("default fallback has role=\"status\"", () => {
+  it('default fallback has role="status"', () => {
     expect(source).toContain('role="status"');
   });
 

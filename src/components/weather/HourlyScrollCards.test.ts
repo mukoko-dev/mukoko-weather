@@ -61,7 +61,7 @@ describe("HourlyScrollCards — deterministic render (no #418)", () => {
   });
 
   it('only shows the "Now" label after hydration', () => {
-    expect(source).toContain('hydrated && i === 0 ? "Now"');
+    expect(source).toMatch(/hydrated && i === 0\s*\?\s*"Now"/);
   });
 
   it("is a client component (uses the browser clock)", () => {
@@ -103,7 +103,9 @@ describe("HourlyScrollCards — one-sentence outlook", () => {
   it("derives the summary from the same start index as the strip", () => {
     // One `start` feeds both the sentence and the hour cards — they can
     // never disagree about what "now" is.
-    expect(source).toMatch(/const summary = hydrated \? hourlySummary\(hourly, start\)/);
+    expect(source).toMatch(
+      /const summary = hydrated \? hourlySummary\(hourly, start\)/,
+    );
   });
 
   it("gates the summary on hydration (depends on the client wall clock)", () => {

@@ -10,8 +10,10 @@ vi.mock("@/lib/store", () => ({
 
 // Mock map-layers to avoid env var dependency in tests
 vi.mock("@/lib/map-layers", () => ({
-  MAPTILER_STYLE_LIGHT: "https://api.maptiler.com/maps/streets-v2/style.json?key=test",
-  MAPTILER_STYLE_DARK: "https://api.maptiler.com/maps/streets-v2-dark/style.json?key=test",
+  MAPTILER_STYLE_LIGHT:
+    "https://api.maptiler.com/maps/streets-v2/style.json?key=test",
+  MAPTILER_STYLE_DARK:
+    "https://api.maptiler.com/maps/streets-v2-dark/style.json?key=test",
   MAP_LAYERS: [],
   DEFAULT_LAYER: "precipitationIntensity",
   getMapLayerById: vi.fn(),
@@ -23,9 +25,16 @@ let stateValue = false;
 vi.mock("react", () => ({
   useState: (init: (() => boolean) | boolean) => {
     stateValue = typeof init === "function" ? init() : init;
-    return [stateValue, (v: boolean) => { stateValue = v; }];
+    return [
+      stateValue,
+      (v: boolean) => {
+        stateValue = v;
+      },
+    ];
   },
-  useEffect: (fn: () => void) => { capturedEffect = fn; },
+  useEffect: (fn: () => void) => {
+    capturedEffect = fn;
+  },
 }));
 
 describe("useMapStyle", () => {
@@ -34,7 +43,11 @@ describe("useMapStyle", () => {
     capturedEffect = null;
     stateValue = false;
     vi.stubGlobal("window", {
-      matchMedia: () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+      matchMedia: () => ({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }),
     });
   });
 
@@ -58,7 +71,11 @@ describe("useMapStyle", () => {
   it("returns light style when theme is system and OS prefers light", () => {
     mockTheme.mockReturnValue("system");
     vi.stubGlobal("window", {
-      matchMedia: () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+      matchMedia: () => ({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }),
     });
     const result = useMapStyle();
     expect(result).toContain("streets-v2/style.json");
@@ -68,7 +85,11 @@ describe("useMapStyle", () => {
   it("returns dark style when theme is system and OS prefers dark", () => {
     mockTheme.mockReturnValue("system");
     vi.stubGlobal("window", {
-      matchMedia: () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+      matchMedia: () => ({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }),
     });
     const result = useMapStyle();
     expect(result).toContain("streets-v2-dark/style.json");
@@ -94,15 +115,25 @@ describe("useMapStyle", () => {
     const addEventListener = vi.fn();
     const removeEventListener = vi.fn();
     vi.stubGlobal("window", {
-      matchMedia: () => ({ matches: false, addEventListener, removeEventListener }),
+      matchMedia: () => ({
+        matches: false,
+        addEventListener,
+        removeEventListener,
+      }),
     });
     useMapStyle();
     expect(capturedEffect).toBeDefined();
     const cleanup = capturedEffect!();
-    expect(addEventListener).toHaveBeenCalledWith("change", expect.any(Function));
+    expect(addEventListener).toHaveBeenCalledWith(
+      "change",
+      expect.any(Function),
+    );
     if (typeof cleanup === "function") {
       cleanup();
-      expect(removeEventListener).toHaveBeenCalledWith("change", expect.any(Function));
+      expect(removeEventListener).toHaveBeenCalledWith(
+        "change",
+        expect.any(Function),
+      );
     }
   });
 
@@ -110,7 +141,11 @@ describe("useMapStyle", () => {
     mockTheme.mockReturnValue("dark");
     const addEventListener = vi.fn();
     vi.stubGlobal("window", {
-      matchMedia: () => ({ matches: false, addEventListener, removeEventListener: vi.fn() }),
+      matchMedia: () => ({
+        matches: false,
+        addEventListener,
+        removeEventListener: vi.fn(),
+      }),
     });
     useMapStyle();
     if (capturedEffect) capturedEffect();

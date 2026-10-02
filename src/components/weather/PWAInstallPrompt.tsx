@@ -18,7 +18,10 @@ import { trackEvent } from "@/lib/analytics";
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
-  readonly userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+  readonly userChoice: Promise<{
+    outcome: "accepted" | "dismissed";
+    platform: string;
+  }>;
   prompt(): Promise<void>;
 }
 
@@ -53,7 +56,10 @@ export function PWAInstallPrompt() {
 
   useEffect(() => {
     // Already installed as PWA — don't show
-    if (typeof window !== "undefined" && window.matchMedia("(display-mode: standalone)").matches) {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(display-mode: standalone)").matches
+    ) {
       return;
     }
 
@@ -62,7 +68,10 @@ export function PWAInstallPrompt() {
       const dismissed = localStorage.getItem(DISMISSED_KEY);
       if (dismissed) {
         const dismissedAt = parseInt(dismissed, 10);
-        if (!isNaN(dismissedAt) && Date.now() - dismissedAt < DISMISS_COOLDOWN_MS) {
+        if (
+          !isNaN(dismissedAt) &&
+          Date.now() - dismissedAt < DISMISS_COOLDOWN_MS
+        ) {
           return;
         }
       }
@@ -128,7 +137,12 @@ export function PWAInstallPrompt() {
   }, []);
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) handleDismiss(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) handleDismiss();
+      }}
+    >
       <DialogContent className="max-w-sm rounded-2xl p-6 sm:p-6">
         <DialogHeader className="items-center text-center gap-4">
           {/* App icon — full-color brand mark */}
@@ -147,22 +161,38 @@ export function PWAInstallPrompt() {
           </DialogTitle>
 
           <DialogDescription className="text-sm text-text-secondary leading-relaxed">
-            Get instant access from your home screen with offline weather data for your saved locations.
+            Get instant access from your home screen with offline weather data
+            for your saved locations.
           </DialogDescription>
         </DialogHeader>
 
         {/* Feature highlights */}
         <ul className="space-y-3 py-2 text-sm text-text-secondary">
           <li className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs" aria-hidden="true">1</span>
+            <span
+              className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
+              aria-hidden="true"
+            >
+              1
+            </span>
             <span>Works offline with cached weather data</span>
           </li>
           <li className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs" aria-hidden="true">2</span>
+            <span
+              className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
+              aria-hidden="true"
+            >
+              2
+            </span>
             <span>Faster loads — no browser overhead</span>
           </li>
           <li className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs" aria-hidden="true">3</span>
+            <span
+              className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
+              aria-hidden="true"
+            >
+              3
+            </span>
             <span>Full-screen experience on your device</span>
           </li>
         </ul>

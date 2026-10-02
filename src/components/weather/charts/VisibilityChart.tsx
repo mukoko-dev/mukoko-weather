@@ -14,7 +14,13 @@ interface VisibilityChartProps {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "visibility", label: "Visibility", color: "var(--chart-1)", fill: true, opacity: 0.12 },
+  {
+    key: "visibility",
+    label: "Visibility",
+    color: "var(--chart-1)",
+    fill: true,
+    opacity: 0.12,
+  },
 ];
 
 const Y_AXES = { y: { min: 0, format: (v: number) => `${v} km` } };

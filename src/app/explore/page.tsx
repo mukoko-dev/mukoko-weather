@@ -60,10 +60,16 @@ export default async function ExplorePage() {
     <>
       <Header />
 
-      <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8">
+      <nav
+        aria-label="Breadcrumb"
+        className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8"
+      >
         <ol className="flex items-center gap-1 text-base text-text-tertiary">
           <li>
-            <Link href="/" className="hover:text-text-secondary transition-colors">
+            <Link
+              href="/"
+              className="hover:text-text-secondary transition-colors"
+            >
               Home
             </Link>
           </li>
@@ -74,7 +80,10 @@ export default async function ExplorePage() {
         </ol>
       </nav>
 
-      <main id="main-content" className="animate-fade-in mx-auto max-w-5xl overflow-x-hidden px-4 py-8 pb-24 sm:px-6 sm:pb-8 md:px-8">
+      <main
+        id="main-content"
+        className="animate-fade-in mx-auto max-w-5xl overflow-x-hidden px-4 py-8 pb-24 sm:px-6 sm:pb-8 md:px-8"
+      >
         <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
           Explore
         </h1>
@@ -110,7 +119,10 @@ export default async function ExplorePage() {
 
         {/* Category browse section */}
         <section aria-labelledby="browse-heading" className="mt-8">
-          <h2 id="browse-heading" className="text-xl font-bold text-text-primary font-heading">
+          <h2
+            id="browse-heading"
+            className="text-xl font-bold text-text-primary font-heading"
+          >
             Browse by Category
           </h2>
           <p className="mt-1 text-base text-text-secondary">

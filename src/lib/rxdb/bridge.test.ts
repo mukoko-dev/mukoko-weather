@@ -9,10 +9,18 @@ const localStorageMock = (() => {
   let store: Record<string, string> = {};
   return {
     getItem: (key: string) => store[key] ?? null,
-    setItem: (key: string, value: string) => { store[key] = value; },
-    removeItem: (key: string) => { delete store[key]; },
-    clear: () => { store = {}; },
-    get length() { return Object.keys(store).length; },
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
+    get length() {
+      return Object.keys(store).length;
+    },
     key: (i: number) => Object.keys(store)[i] ?? null,
   };
 })();
@@ -21,7 +29,10 @@ Object.defineProperty(globalThis, "localStorage", { value: localStorageMock });
 
 // initRxDBBridge guards on `typeof window !== "undefined"` — provide a stub
 if (typeof globalThis.window === "undefined") {
-  Object.defineProperty(globalThis, "window", { value: globalThis, configurable: true });
+  Object.defineProperty(globalThis, "window", {
+    value: globalThis,
+    configurable: true,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -164,8 +175,14 @@ describe("bridge — migrateLocalStorageToRxDB", () => {
 
   it("cleans up legacy weather hint keys", async () => {
     setLegacyPrefs({ theme: "system" });
-    localStorageMock.setItem("mukoko-weather-hint:harare", '{"sceneType":"rain"}');
-    localStorageMock.setItem("mukoko-weather-hint:bulawayo", '{"sceneType":"clear"}');
+    localStorageMock.setItem(
+      "mukoko-weather-hint:harare",
+      '{"sceneType":"rain"}',
+    );
+    localStorageMock.setItem(
+      "mukoko-weather-hint:bulawayo",
+      '{"sceneType":"clear"}',
+    );
     localStorageMock.setItem("unrelated-key", "keep");
 
     const { migrateLocalStorageToRxDB } = await import("./bridge");
@@ -327,7 +344,14 @@ describe("bridge — initRxDBBridge retry on null collection", () => {
 
     // Now collection becomes available
     _mockCollectionReturnNull = false;
-    mockFindOneExec.mockResolvedValue({ theme: "dark", selectedLocation: "harare", savedLocations: [], locationLabels: {}, selectedActivities: [], hasOnboarded: true });
+    mockFindOneExec.mockResolvedValue({
+      theme: "dark",
+      selectedLocation: "harare",
+      savedLocations: [],
+      locationLabels: {},
+      selectedActivities: [],
+      hasOnboarded: true,
+    });
 
     // Second call should succeed
     await initRxDBBridge(callbacks);

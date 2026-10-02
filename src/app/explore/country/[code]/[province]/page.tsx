@@ -4,7 +4,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-import { getCountryByCode, getLocationsByProvince, getProvinceBySlug } from "@/lib/db";
+import {
+  getCountryByCode,
+  getLocationsByProvince,
+  getProvinceBySlug,
+} from "@/lib/db";
 import { getFlagEmoji, PROVINCES } from "@/lib/countries";
 
 export const revalidate = 3600;
@@ -74,28 +78,51 @@ export default async function ProvinceDetailPage({ params }: Props) {
     <>
       <Header />
 
-      <nav aria-label="Breadcrumb" className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8">
+      <nav
+        aria-label="Breadcrumb"
+        className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8"
+      >
         <ol className="flex flex-wrap items-center gap-1 text-base text-text-tertiary">
           <li>
-            <Link href="/" className="hover:text-text-secondary transition-colors">Home</Link>
+            <Link
+              href="/"
+              className="hover:text-text-secondary transition-colors"
+            >
+              Home
+            </Link>
           </li>
           <li aria-hidden="true">/</li>
           <li>
-            <Link href="/explore" className="hover:text-text-secondary transition-colors">Explore</Link>
+            <Link
+              href="/explore"
+              className="hover:text-text-secondary transition-colors"
+            >
+              Explore
+            </Link>
           </li>
           <li aria-hidden="true">/</li>
           <li>
-            <Link href="/explore/country" className="hover:text-text-secondary transition-colors">Countries</Link>
+            <Link
+              href="/explore/country"
+              className="hover:text-text-secondary transition-colors"
+            >
+              Countries
+            </Link>
           </li>
           <li aria-hidden="true">/</li>
           <li>
-            <Link href={`/explore/country/${code.toLowerCase()}`} className="hover:text-text-secondary transition-colors">
+            <Link
+              href={`/explore/country/${code.toLowerCase()}`}
+              className="hover:text-text-secondary transition-colors"
+            >
               {countryName}
             </Link>
           </li>
           <li aria-hidden="true">/</li>
           <li aria-current="page">
-            <span className="font-medium text-text-primary">{provinceName}</span>
+            <span className="font-medium text-text-primary">
+              {provinceName}
+            </span>
           </li>
         </ol>
       </nav>
@@ -105,13 +132,16 @@ export default async function ProvinceDetailPage({ params }: Props) {
         className="mx-auto max-w-5xl overflow-x-hidden px-4 py-8 pb-24 sm:px-6 sm:pb-8 md:px-8"
       >
         <div className="flex items-center gap-3 mb-1">
-          <span className="text-3xl" aria-hidden="true">{flag}</span>
+          <span className="text-3xl" aria-hidden="true">
+            {flag}
+          </span>
           <div>
             <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
               {provinceName}
             </h1>
             <p className="text-base text-text-secondary">
-              {countryName} &bull; {locations.length} location{locations.length !== 1 ? "s" : ""}
+              {countryName} &bull; {locations.length} location
+              {locations.length !== 1 ? "s" : ""}
             </p>
           </div>
         </div>

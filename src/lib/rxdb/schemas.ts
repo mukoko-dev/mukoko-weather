@@ -33,16 +33,38 @@ export const preferencesSchema: RxJsonSchema<PreferencesDocType> = {
   type: "object",
   properties: {
     id: { type: "string", maxLength: 64 },
-    theme: { type: "string", enum: ["light", "dark", "system"], default: "system" },
+    theme: {
+      type: "string",
+      enum: ["light", "dark", "system"],
+      default: "system",
+    },
     selectedLocation: { type: "string", default: "" },
     savedLocations: { type: "array", items: { type: "string" }, default: [] },
-    locationLabels: { type: "object", additionalProperties: { type: "string" }, default: {} },
-    selectedActivities: { type: "array", items: { type: "string" }, default: [] },
+    locationLabels: {
+      type: "object",
+      additionalProperties: { type: "string" },
+      default: {},
+    },
+    selectedActivities: {
+      type: "array",
+      items: { type: "string" },
+      default: [],
+    },
     hasOnboarded: { type: "boolean", default: false },
     selectedForecastModel: { type: "string", default: "best_match" },
     updatedAt: { type: "number" },
   },
-  required: ["id", "theme", "selectedLocation", "savedLocations", "locationLabels", "selectedActivities", "hasOnboarded", "selectedForecastModel", "updatedAt"],
+  required: [
+    "id",
+    "theme",
+    "selectedLocation",
+    "savedLocations",
+    "locationLabels",
+    "selectedActivities",
+    "hasOnboarded",
+    "selectedForecastModel",
+    "updatedAt",
+  ],
 };
 
 // ---------------------------------------------------------------------------

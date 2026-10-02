@@ -24,12 +24,20 @@ function readComponent(relativePath: string) {
   return readFileSync(resolve(__dirname, relativePath), "utf-8");
 }
 
-const currentConditions = readComponent("../components/weather/CurrentConditions.tsx");
-const chartErrorBoundary = readComponent("../components/weather/ChartErrorBoundary.tsx");
+const currentConditions = readComponent(
+  "../components/weather/CurrentConditions.tsx",
+);
+const chartErrorBoundary = readComponent(
+  "../components/weather/ChartErrorBoundary.tsx",
+);
 const lazySection = readComponent("../components/weather/LazySection.tsx");
-const weatherDashboard = readComponent("../app/[location]/WeatherDashboard.tsx");
+const weatherDashboard = readComponent(
+  "../app/[location]/WeatherDashboard.tsx",
+);
 const header = readComponent("../components/layout/Header.tsx");
-const frostAlertBanner = readComponent("../app/[location]/FrostAlertBanner.tsx");
+const frostAlertBanner = readComponent(
+  "../app/[location]/FrostAlertBanner.tsx",
+);
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
@@ -77,8 +85,8 @@ describe("Decorative icons — aria-hidden", () => {
   });
 });
 
-describe("Loading states — role=\"status\"", () => {
-  it("LazySection default fallback has role=\"status\"", () => {
+describe('Loading states — role="status"', () => {
+  it('LazySection default fallback has role="status"', () => {
     expect(lazySection).toContain('role="status"');
   });
 
@@ -87,8 +95,8 @@ describe("Loading states — role=\"status\"", () => {
   });
 });
 
-describe("Error states — role=\"alert\"", () => {
-  it("ChartErrorBoundary fallback has role=\"alert\"", () => {
+describe('Error states — role="alert"', () => {
+  it('ChartErrorBoundary fallback has role="alert"', () => {
     expect(chartErrorBoundary).toContain('role="alert"');
   });
 });
@@ -130,7 +138,7 @@ describe("Semantic structure — lists", () => {
     expect(weatherDashboard).toContain("<ol");
   });
 
-  it("WeatherDashboard breadcrumb uses aria-current=\"page\" on active item", () => {
+  it('WeatherDashboard breadcrumb uses aria-current="page" on active item', () => {
     expect(weatherDashboard).toContain('aria-current="page"');
   });
 });
@@ -144,7 +152,8 @@ describe("Skip navigation", () => {
 describe("FrostAlertBanner — accessibility", () => {
   it("FrostAlertBanner uses a semantic role or aria attribute", () => {
     // Should use role="alert" or aria-live for urgent frost warnings
-    const hasAlertRole = frostAlertBanner.includes('role="alert"') ||
+    const hasAlertRole =
+      frostAlertBanner.includes('role="alert"') ||
       frostAlertBanner.includes("aria-live") ||
       frostAlertBanner.includes("aria-label");
     expect(hasAlertRole).toBe(true);

@@ -73,10 +73,14 @@ function hourLabel(iso: string): string {
  *
  * Returns null when there isn't enough data to say anything meaningful.
  */
-export function hourlySummary(hourly: HourlyWeather, start: number): string | null {
+export function hourlySummary(
+  hourly: HourlyWeather,
+  start: number,
+): string | null {
   const codes = hourly.weather_code;
   const times = hourly.time;
-  if (!codes?.length || !times?.length || start < 0 || start >= codes.length) return null;
+  if (!codes?.length || !times?.length || start < 0 || start >= codes.length)
+    return null;
 
   const end = Math.min(start + SUMMARY_LOOKAHEAD_HOURS, codes.length);
   if (end - start < 2) return null;

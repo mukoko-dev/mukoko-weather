@@ -4,7 +4,11 @@ import { useMemo, useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { type Activity, CATEGORY_STYLES } from "@/lib/activities";
 import type { WeatherData, WeatherInsights } from "@/lib/weather";
-import { fetchSuitabilityRules, fetchCategoryStyles, type CategoryStyle } from "@/lib/suitability-cache";
+import {
+  fetchSuitabilityRules,
+  fetchCategoryStyles,
+  type CategoryStyle,
+} from "@/lib/suitability-cache";
 import { reportErrorToAnalytics } from "@/lib/observability";
 import { SectionHeader } from "@/components/ui/section-header";
 import { ActivityCard } from "./ActivityCard";
@@ -18,15 +22,24 @@ export { evaluateSuitability } from "@/lib/suitability";
 // ---------------------------------------------------------------------------
 
 const MOON_PHASES = [
-  "New Moon", "Waxing Crescent", "First Quarter", "Waxing Gibbous",
-  "Full Moon", "Waning Gibbous", "Third Quarter", "Waning Crescent",
+  "New Moon",
+  "Waxing Crescent",
+  "First Quarter",
+  "Waxing Gibbous",
+  "Full Moon",
+  "Waning Gibbous",
+  "Third Quarter",
+  "Waning Crescent",
 ] as const;
 
 export function moonPhaseName(phase: number): string {
   return MOON_PHASES[phase] ?? "Unknown";
 }
 
-export function heatStressLevel(index: number): { label: string; className: string } {
+export function heatStressLevel(index: number): {
+  label: string;
+  className: string;
+} {
   if (index < 22) return { label: "None", className: "text-severity-low" };
   if (index < 24) return { label: "Mild", className: "text-severity-moderate" };
   if (index < 26) return { label: "Moderate", className: "text-severity-high" };
@@ -37,20 +50,31 @@ export function heatStressLevel(index: number): { label: string; className: stri
 
 export function precipTypeName(type: number): string {
   switch (type) {
-    case 0: return "None";
-    case 1: return "Rain";
-    case 2: return "Snow";
-    case 3: return "Freezing Rain";
-    case 4: return "Ice Pellets";
-    default: return "Unknown";
+    case 0:
+      return "None";
+    case 1:
+      return "Rain";
+    case 2:
+      return "Snow";
+    case 3:
+      return "Freezing Rain";
+    case 4:
+      return "Ice Pellets";
+    default:
+      return "Unknown";
   }
 }
 
-export function uvConcernLabel(concern: number): { label: string; className: string } {
+export function uvConcernLabel(concern: number): {
+  label: string;
+  className: string;
+} {
   if (concern <= 2) return { label: "Low", className: "text-severity-low" };
-  if (concern <= 5) return { label: "Moderate", className: "text-severity-moderate" };
+  if (concern <= 5)
+    return { label: "Moderate", className: "text-severity-moderate" };
   if (concern <= 7) return { label: "High", className: "text-severity-high" };
-  if (concern <= 10) return { label: "Very High", className: "text-severity-severe" };
+  if (concern <= 10)
+    return { label: "Very High", className: "text-severity-severe" };
   return { label: "Extreme", className: "text-severity-extreme" };
 }
 
@@ -85,10 +109,13 @@ export function ActivityInsights({
   const openMyWeather = useAppStore((s) => s.openMyWeather);
 
   // Fetch suitability rules from database (module-level cache, 10min TTL)
-  const [dbRules, setDbRules] = useState<Map<string, SuitabilityRuleDoc>>(new Map());
+  const [dbRules, setDbRules] = useState<Map<string, SuitabilityRuleDoc>>(
+    new Map(),
+  );
   // Seed with static CATEGORY_STYLES for instant mineral color rendering;
   // upgraded with DB-only categories after fetch resolves.
-  const [categoryStyles, setCategoryStyles] = useState<Record<string, CategoryStyle>>(CATEGORY_STYLES);
+  const [categoryStyles, setCategoryStyles] =
+    useState<Record<string, CategoryStyle>>(CATEGORY_STYLES);
 
   useEffect(() => {
     Promise.all([
@@ -101,14 +128,20 @@ export function ActivityInsights({
           }
         })
         .catch((err) => {
-          reportErrorToAnalytics(`Suitability rules fetch failed: ${err instanceof Error ? err.message : "unknown"}`, false);
+          reportErrorToAnalytics(
+            `Suitability rules fetch failed: ${err instanceof Error ? err.message : "unknown"}`,
+            false,
+          );
         }),
       fetchCategoryStyles()
         .then((styles) => {
           if (Object.keys(styles).length) setCategoryStyles(styles);
         })
         .catch((err) => {
-          reportErrorToAnalytics(`Category styles fetch failed: ${err instanceof Error ? err.message : "unknown"}`, false);
+          reportErrorToAnalytics(
+            `Category styles fetch failed: ${err instanceof Error ? err.message : "unknown"}`,
+            false,
+          );
         }),
     ]);
   }, []);
@@ -133,7 +166,14 @@ export function ActivityInsights({
         />
         <div className="space-y-3">
           {selectedItems.map((activity) => (
-            <ActivityCard key={activity.id} activity={activity} insights={insights} dbRules={dbRules} categoryStyles={categoryStyles} weather={weather} />
+            <ActivityCard
+              key={activity.id}
+              activity={activity}
+              insights={insights}
+              dbRules={dbRules}
+              categoryStyles={categoryStyles}
+              weather={weather}
+            />
           ))}
         </div>
       </section>
@@ -165,7 +205,8 @@ export function ActivityInsights({
           })}
         </div>
         <p className="mt-3 text-base text-text-tertiary">
-          Detailed activity insights appear when extended weather data is available.
+          Detailed activity insights appear when extended weather data is
+          available.
         </p>
       </div>
     </section>

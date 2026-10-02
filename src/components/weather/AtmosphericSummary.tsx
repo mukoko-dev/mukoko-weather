@@ -4,7 +4,13 @@ import { usePathname } from "next/navigation";
 import type { CurrentWeather } from "@/lib/weather";
 import { SectionHeader } from "@/components/ui/section-header";
 import { windDirection, uvLevel } from "@/lib/weather";
-import { humidityLabel, pressureLabel, cloudLabel, feelsLikeContext, precipitationLabel } from "@/lib/weather-labels";
+import {
+  humidityLabel,
+  pressureLabel,
+  cloudLabel,
+  feelsLikeContext,
+  precipitationLabel,
+} from "@/lib/weather-labels";
 import {
   DropletIcon,
   CloudIcon,
@@ -40,7 +46,10 @@ const SEVERITY_GRADIENT = [
   "var(--color-severity-high)",
   "var(--color-severity-severe)",
 ];
-const SEVERITY_GRADIENT_EXTREME = [...SEVERITY_GRADIENT, "var(--color-severity-extreme)"];
+const SEVERITY_GRADIENT_EXTREME = [
+  ...SEVERITY_GRADIENT,
+  "var(--color-severity-extreme)",
+];
 // Dry (warm) → comfortable (green) → humid (cool/blue).
 const HUMIDITY_GRADIENT = [
   "var(--color-severity-moderate)",
@@ -65,9 +74,12 @@ export function uvGauge(uv: number): GaugeConfig {
   const percent = Math.min((uv / 11) * 100, 100);
   const gradient = SEVERITY_GRADIENT_EXTREME;
   if (uv <= 2) return { percent, strokeClass: "stroke-severity-low", gradient };
-  if (uv <= 5) return { percent, strokeClass: "stroke-severity-moderate", gradient };
-  if (uv <= 7) return { percent, strokeClass: "stroke-severity-high", gradient };
-  if (uv <= 10) return { percent, strokeClass: "stroke-severity-severe", gradient };
+  if (uv <= 5)
+    return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  if (uv <= 7)
+    return { percent, strokeClass: "stroke-severity-high", gradient };
+  if (uv <= 10)
+    return { percent, strokeClass: "stroke-severity-severe", gradient };
   return { percent, strokeClass: "stroke-severity-extreme", gradient };
 }
 
@@ -75,9 +87,11 @@ export function uvGauge(uv: number): GaugeConfig {
 export function humidityGauge(h: number): GaugeConfig {
   const percent = Math.min(h, 100);
   const gradient = HUMIDITY_GRADIENT;
-  if (h < 30) return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  if (h < 30)
+    return { percent, strokeClass: "stroke-severity-moderate", gradient };
   if (h <= 60) return { percent, strokeClass: "stroke-severity-low", gradient };
-  if (h <= 80) return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  if (h <= 80)
+    return { percent, strokeClass: "stroke-severity-moderate", gradient };
   return { percent, strokeClass: "stroke-severity-high", gradient };
 }
 
@@ -86,7 +100,8 @@ export function cloudGauge(c: number): GaugeConfig {
   const percent = Math.min(c, 100);
   const gradient = CLOUD_GRADIENT;
   if (c <= 50) return { percent, strokeClass: "stroke-severity-low", gradient };
-  if (c <= 75) return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  if (c <= 75)
+    return { percent, strokeClass: "stroke-severity-moderate", gradient };
   return { percent, strokeClass: "stroke-severity-high", gradient };
 }
 
@@ -94,9 +109,12 @@ export function cloudGauge(c: number): GaugeConfig {
 export function windGauge(speed: number): GaugeConfig {
   const percent = Math.min((speed / 80) * 100, 100);
   const gradient = SEVERITY_GRADIENT;
-  if (speed <= 19) return { percent, strokeClass: "stroke-severity-low", gradient };
-  if (speed <= 38) return { percent, strokeClass: "stroke-severity-moderate", gradient };
-  if (speed <= 61) return { percent, strokeClass: "stroke-severity-high", gradient };
+  if (speed <= 19)
+    return { percent, strokeClass: "stroke-severity-low", gradient };
+  if (speed <= 38)
+    return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  if (speed <= 61)
+    return { percent, strokeClass: "stroke-severity-high", gradient };
   return { percent, strokeClass: "stroke-severity-severe", gradient };
 }
 
@@ -107,8 +125,10 @@ export function pressureGauge(p: number): GaugeConfig {
   const clamped = Math.max(min, Math.min(p, max));
   const percent = ((clamped - min) / (max - min)) * 100;
   const gradient = PRESSURE_GRADIENT;
-  if (p < 1000) return { percent, strokeClass: "stroke-severity-moderate", gradient };
-  if (p <= 1020) return { percent, strokeClass: "stroke-severity-low", gradient };
+  if (p < 1000)
+    return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  if (p <= 1020)
+    return { percent, strokeClass: "stroke-severity-low", gradient };
   return { percent, strokeClass: "stroke-severity-moderate", gradient };
 }
 
@@ -116,8 +136,10 @@ export function pressureGauge(p: number): GaugeConfig {
 export function precipitationGauge(p: number): GaugeConfig {
   const percent = Math.min((p / 20) * 100, 100);
   const gradient = SEVERITY_GRADIENT;
-  if (p === 0) return { percent: 0, strokeClass: "stroke-severity-low", gradient };
-  if (p < 2) return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  if (p === 0)
+    return { percent: 0, strokeClass: "stroke-severity-low", gradient };
+  if (p < 2)
+    return { percent, strokeClass: "stroke-severity-moderate", gradient };
   if (p < 10) return { percent, strokeClass: "stroke-severity-high", gradient };
   return { percent, strokeClass: "stroke-severity-severe", gradient };
 }
@@ -127,9 +149,16 @@ export function feelsLikeGauge(feelsLike: number, actual: number): GaugeConfig {
   const diff = Math.abs(feelsLike - actual);
   const percent = Math.min((diff / 15) * 100, 100);
   const gradient = SEVERITY_GRADIENT;
-  if (diff <= 2) return { percent: Math.max(percent, 8), strokeClass: "stroke-severity-low", gradient };
-  if (diff <= 5) return { percent, strokeClass: "stroke-severity-moderate", gradient };
-  if (diff <= 10) return { percent, strokeClass: "stroke-severity-high", gradient };
+  if (diff <= 2)
+    return {
+      percent: Math.max(percent, 8),
+      strokeClass: "stroke-severity-low",
+      gradient,
+    };
+  if (diff <= 5)
+    return { percent, strokeClass: "stroke-severity-moderate", gradient };
+  if (diff <= 10)
+    return { percent, strokeClass: "stroke-severity-high", gradient };
   return { percent, strokeClass: "stroke-severity-severe", gradient };
 }
 
@@ -192,8 +221,14 @@ export function AtmosphericSummary({ current, lat, lon }: Props) {
           icon={<EyeIcon size={16} />}
           label="Feels Like"
           value={`${Math.round(current.apparent_temperature)}°`}
-          context={feelsLikeContext(current.apparent_temperature, current.temperature_2m)}
-          gauge={feelsLikeGauge(current.apparent_temperature, current.temperature_2m)}
+          context={feelsLikeContext(
+            current.apparent_temperature,
+            current.temperature_2m,
+          )}
+          gauge={feelsLikeGauge(
+            current.apparent_temperature,
+            current.temperature_2m,
+          )}
         />
         <MetricCard
           icon={<CloudRainIcon size={16} />}

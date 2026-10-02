@@ -80,7 +80,11 @@ export function AirQualityDetails({ lat, lon }: Props) {
         setState({ status: "ready", data: json });
       })
       .catch((err: unknown) => {
-        if (cancelled || (err as { name?: string } | null)?.name === "AbortError") return;
+        if (
+          cancelled ||
+          (err as { name?: string } | null)?.name === "AbortError"
+        )
+          return;
         setState({ status: "error" });
       });
 
@@ -113,7 +117,8 @@ export function AirQualityDetails({ lat, lon }: Props) {
   }
 
   const data = state.data;
-  const subIndexes: Partial<Record<PollutantKey, number>> = data.subIndexes ?? {};
+  const subIndexes: Partial<Record<PollutantKey, number>> =
+    data.subIndexes ?? {};
   const who: Partial<Record<PollutantKey, number>> = data.whoGuidelines ?? {};
 
   return (
@@ -138,8 +143,8 @@ export function AirQualityDetails({ lat, lon }: Props) {
                 ? `At or below WHO target (${formatPollutant(whoTarget)})`
                 : `Above WHO target (${formatPollutant(whoTarget)})`
               : whoTarget === 0
-              ? "No WHO guideline"
-              : "";
+                ? "No WHO guideline"
+                : "";
 
           return (
             <article
@@ -149,9 +154,7 @@ export function AirQualityDetails({ lat, lon }: Props) {
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="hornbill">{POLLUTANT_LABELS[key]}</span>
-                {sub !== undefined && (
-                  <span className="dove">AQI {sub}</span>
-                )}
+                {sub !== undefined && <span className="dove">AQI {sub}</span>}
               </div>
 
               <p className="mt-2 text-2xl font-bold text-text-primary font-heading">

@@ -42,7 +42,7 @@ export const metadata: Metadata = {
   publisher: "Nyuchi Africa (PVT) Ltd",
   alternates: {
     languages: {
-      "en": BASE_URL,
+      en: BASE_URL,
       "x-default": BASE_URL,
     },
   },
@@ -225,20 +225,25 @@ export default async function RootLayout({
       url: `${BASE_URL}/explore`,
     },
     ...(isFeatureEnabled("shamwari_chat")
-      ? [{
-          name: "Shamwari AI",
-          description: "AI-powered weather assistant for contextual advice and insights",
-          url: `${BASE_URL}/shamwari`,
-        }]
+      ? [
+          {
+            name: "Shamwari AI",
+            description:
+              "AI-powered weather assistant for contextual advice and insights",
+            url: `${BASE_URL}/shamwari`,
+          },
+        ]
       : []),
     {
       name: "Historical Weather Data",
-      description: "Explore recorded weather trends and historical data worldwide",
+      description:
+        "Explore recorded weather trends and historical data worldwide",
       url: `${BASE_URL}/history`,
     },
     {
       name: "Help & FAQ",
-      description: "How to use mukoko weather, frequently asked questions, and support",
+      description:
+        "How to use mukoko weather, frequently asked questions, and support",
       url: `${BASE_URL}/help`,
     },
     {
@@ -296,8 +301,16 @@ export default async function RootLayout({
           }}
         />
         <meta name="color-scheme" content="light dark" />
-        <meta name="theme-color" content="#0047AB" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#0A0A0A" media="(prefers-color-scheme: dark)" />
+        <meta
+          name="theme-color"
+          content="#0047AB"
+          media="(prefers-color-scheme: light)"
+        />
+        <meta
+          name="theme-color"
+          content="#0A0A0A"
+          media="(prefers-color-scheme: dark)"
+        />
         {/* Mobile-first: optimised for Android & Huawei devices */}
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -305,22 +318,59 @@ export default async function RootLayout({
         <meta name="format-detection" content="telephone=no" />
         <link rel="manifest" href="/manifest.json" />
         {/* Favicons — full-colour 7-mineral Seed of Life mark (matches the header logo) */}
-        <link rel="icon" type="image/svg+xml" href="/favicon.svg" media="(prefers-color-scheme: light)" />
-        <link rel="icon" type="image/svg+xml" href="/favicon-dark.svg" media="(prefers-color-scheme: dark)" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-        <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
+        <link
+          rel="icon"
+          type="image/svg+xml"
+          href="/favicon.svg"
+          media="(prefers-color-scheme: light)"
+        />
+        <link
+          rel="icon"
+          type="image/svg+xml"
+          href="/favicon-dark.svg"
+          media="(prefers-color-scheme: dark)"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="16x16"
+          href="/favicon-16.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="32x32"
+          href="/favicon-32.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="48x48"
+          href="/favicon-48.png"
+        />
         <link rel="apple-touch-icon" sizes="180x180" href="/favicon-180.png" />
         {/* Brand typography — Noto Serif (display/headings) · Noto Sans (UI/body) · JetBrains Mono (data/code) */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
         <link
           href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,600;0,700;1,400&family=Noto+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
           rel="stylesheet"
         />
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify([webAppSchema, orgSchema, webSiteSchema, siteNavSchema, breadcrumbSchema]) }}
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify([
+              webAppSchema,
+              orgSchema,
+              webSiteSchema,
+              siteNavSchema,
+              breadcrumbSchema,
+            ]),
+          }}
         />
       </head>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">

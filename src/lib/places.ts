@@ -40,7 +40,11 @@
  */
 
 import { placesGeoCollection, placesCollection } from "./db";
-import { LOCATIONS, type WeatherLocation, type NominatimAddress } from "./locations";
+import {
+  LOCATIONS,
+  type WeatherLocation,
+  type NominatimAddress,
+} from "./locations";
 import { parseSmartSlug, type ParsedSmartSlug } from "./smart-slug";
 import type { PlaceRef, SpotRef } from "./place-ref";
 
@@ -167,7 +171,10 @@ const COUNTRY_CACHE_TTL_MS = 60 * 60 * 1000; // 1h
 
 async function ensureCountryCache(): Promise<void> {
   const now = Date.now();
-  if (COUNTRY_ISO_BY_ID.size > 0 && now - countryCacheLoadedAt < COUNTRY_CACHE_TTL_MS) {
+  if (
+    COUNTRY_ISO_BY_ID.size > 0 &&
+    now - countryCacheLoadedAt < COUNTRY_CACHE_TTL_MS
+  ) {
     return;
   }
   try {
@@ -187,7 +194,9 @@ async function ensureCountryCache(): Promise<void> {
   }
 }
 
-async function isoCodeForParent(parentPlaceId: string | undefined): Promise<string | undefined> {
+async function isoCodeForParent(
+  parentPlaceId: string | undefined,
+): Promise<string | undefined> {
   if (!parentPlaceId) return undefined;
   await ensureCountryCache();
   return COUNTRY_ISO_BY_ID.get(parentPlaceId);
@@ -211,7 +220,19 @@ const GEO_TYPE_RANK: Record<string, number> = {
  * `api/py/_locations.py` — keep the two in sync.
  */
 export const CITY_STATE_COUNTRIES = new Set([
-  "SG", "MC", "VA", "GI", "SM", "AD", "LI", "MT", "BN", "DJ", "BH", "QA", "KW",
+  "SG",
+  "MC",
+  "VA",
+  "GI",
+  "SM",
+  "AD",
+  "LI",
+  "MT",
+  "BN",
+  "DJ",
+  "BH",
+  "QA",
+  "KW",
 ]);
 
 function rankGeoType(geoType: string | undefined): number {
@@ -232,17 +253,19 @@ export async function adaptPlacesGeoToLocationDoc(
   const provenance = doc.sourceProvenance ?? {};
 
   const isoFromParent = await isoCodeForParent(doc.parentPlaceId);
-  const country = (doc.isoCode ?? isoFromParent ?? hint.seed?.country ?? "").toUpperCase();
+  const country = (
+    doc.isoCode ??
+    isoFromParent ??
+    hint.seed?.country ??
+    ""
+  ).toUpperCase();
 
-  const province =
-    provenance.mukokoProvince ??
-    hint.seed?.province ??
-    "";
+  const province = provenance.mukokoProvince ?? hint.seed?.province ?? "";
 
   const elevation =
     typeof provenance.mukokoElevation === "number"
       ? provenance.mukokoElevation
-      : hint.seed?.elevation ?? 0;
+      : (hint.seed?.elevation ?? 0);
 
   const tags = provenance.mukokoTags ?? hint.seed?.tags ?? ["city"];
 
@@ -259,7 +282,8 @@ export async function adaptPlacesGeoToLocationDoc(
     country: country || undefined,
     poiType: provenance.mukokoPoiType,
     provinceSlug: hint.seed?.provinceSlug,
-    nominatimAddress: provenance.mukokoNominatimAddress ?? hint.seed?.nominatimAddress,
+    nominatimAddress:
+      provenance.mukokoNominatimAddress ?? hint.seed?.nominatimAddress,
     source: hint.seed?.source ?? "community",
     updatedAt: new Date(),
   };
@@ -289,7 +313,12 @@ export function adaptSeedToLocationDoc(seed: WeatherLocation): AdaptedLocation {
 }
 
 /** Great-circle distance in km between two WGS 84 points. */
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+function haversineKm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
@@ -408,7 +437,9 @@ async function resolvePlaceSlug(
       "sourceProvenance.mukokoOsmRef": ref.ref,
     })) as unknown as PlacesGeoDoc | null;
     if (byRef) {
-      const adapted = await adaptPlacesGeoToLocationDoc(byRef, { cleanSlug: slug });
+      const adapted = await adaptPlacesGeoToLocationDoc(byRef, {
+        cleanSlug: slug,
+      });
       // The URL's name is what the visitor chose to call it; keep it when set.
       return parsed.name ? { ...adapted, name: parsed.name } : adapted;
     }
@@ -466,8 +497,12 @@ async function resolveSpotSlug(
       "sourceProvenance.mukokoSlug": slug,
     })) as unknown as PlacesGeoDoc | null;
     if (stamped) {
-      const adapted = await adaptPlacesGeoToLocationDoc(stamped, { cleanSlug: slug });
-      return adapted.lat || adapted.lon ? adapted : { ...adapted, lat: ref.lat, lon: ref.lon };
+      const adapted = await adaptPlacesGeoToLocationDoc(stamped, {
+        cleanSlug: slug,
+      });
+      return adapted.lat || adapted.lon
+        ? adapted
+        : { ...adapted, lat: ref.lat, lon: ref.lon };
     }
   } catch {
     // DB unavailable — the slug still carries everything we need.
@@ -479,7 +514,9 @@ async function resolveSpotSlug(
     const radiusKm = Math.max(0.25, ref.errorKm * 2);
     const near = await nearestPlacesGeo(ref.lat, ref.lon, radiusKm);
     if (near) {
-      const adapted = await adaptPlacesGeoToLocationDoc(near, { cleanSlug: slug });
+      const adapted = await adaptPlacesGeoToLocationDoc(near, {
+        cleanSlug: slug,
+      });
       return {
         ...adapted,
         _id: base._id,
@@ -667,11 +704,15 @@ export const POI_MATCH_RADIUS_KM = 0.25;
  * Prefers the first `placeType`, then the first `additionalCategories` entry.
  * Returns `undefined` when neither carries a usable string.
  */
-export function poiTypeFromPlace(doc: PlaceDoc | null | undefined): string | undefined {
+export function poiTypeFromPlace(
+  doc: PlaceDoc | null | undefined,
+): string | undefined {
   if (!doc) return undefined;
   const primary = doc.placeType?.find((t) => typeof t === "string" && t.trim());
   if (primary) return primary.trim();
-  const extra = doc.additionalCategories?.find((t) => typeof t === "string" && t.trim());
+  const extra = doc.additionalCategories?.find(
+    (t) => typeof t === "string" && t.trim(),
+  );
   return extra ? extra.trim() : undefined;
 }
 

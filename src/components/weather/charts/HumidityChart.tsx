@@ -14,7 +14,13 @@ interface HumidityChartProps {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "humidity", label: "Humidity", color: "var(--chart-2)", fill: true, opacity: 0.2 },
+  {
+    key: "humidity",
+    label: "Humidity",
+    color: "var(--chart-2)",
+    fill: true,
+    opacity: 0.2,
+  },
 ];
 
 const Y_AXES = { y: { min: 0, max: 100, format: (v: number) => `${v}%` } };

@@ -37,7 +37,9 @@ export async function weatherCacheCollection() {
 /**
  * Get cached weather data for a location (returns null if expired or missing).
  */
-export async function getCachedWeather(slug: string): Promise<{ data: string; provider: string } | null> {
+export async function getCachedWeather(
+  slug: string,
+): Promise<{ data: string; provider: string } | null> {
   try {
     const col = await weatherCacheCollection();
     if (!col) return null;
@@ -112,7 +114,12 @@ export async function getCachedHint(slug: string) {
       return null;
     }
 
-    return { sceneType: doc.sceneType, weatherCode: doc.weatherCode, isDay: doc.isDay, timestamp: doc.timestamp };
+    return {
+      sceneType: doc.sceneType,
+      weatherCode: doc.weatherCode,
+      isDay: doc.isDay,
+      timestamp: doc.timestamp,
+    };
   } catch {
     return null;
   }
@@ -161,13 +168,25 @@ export async function suitabilityRulesCollection() {
 /**
  * Get all cached suitability rules. Returns empty array if none cached.
  */
-export async function getCachedRules(): Promise<Array<{ key: string; conditions: string; fallback: string; updatedAt: number }>> {
+export async function getCachedRules(): Promise<
+  Array<{
+    key: string;
+    conditions: string;
+    fallback: string;
+    updatedAt: number;
+  }>
+> {
   try {
     const col = await suitabilityRulesCollection();
     if (!col) return [];
 
     const docs = await col.find().exec();
-    return docs.map((d) => ({ key: d.key, conditions: d.conditions, fallback: d.fallback, updatedAt: d.updatedAt }));
+    return docs.map((d) => ({
+      key: d.key,
+      conditions: d.conditions,
+      fallback: d.fallback,
+      updatedAt: d.updatedAt,
+    }));
   } catch {
     return [];
   }

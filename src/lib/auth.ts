@@ -18,11 +18,7 @@
  */
 
 import { redirect } from "next/navigation";
-import {
-  withAuth,
-  getSignInUrl,
-  signOut,
-} from "@workos-inc/authkit-nextjs";
+import { withAuth, getSignInUrl, signOut } from "@workos-inc/authkit-nextjs";
 import {
   personsCollection,
   credentialsCollection,
@@ -209,10 +205,9 @@ export async function upsertPlatformPerson(
 
   if (existing) {
     // ── Update path ─────────────────────────────────────────────────────
-    await persons.updateOne(
-      { _id: existing._id } as Record<string, unknown>,
-      { $set: mutableFields },
-    );
+    await persons.updateOne({ _id: existing._id } as Record<string, unknown>, {
+      $set: mutableFields,
+    });
     person = { ...existing, ...mutableFields } as PlatformPersonDoc;
     created = false;
   } else {

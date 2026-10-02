@@ -38,7 +38,10 @@ export class ChartErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      console.warn("[ChartErrorBoundary] showing fallback for:", this.props.name);
+      console.warn(
+        "[ChartErrorBoundary] showing fallback for:",
+        this.props.name,
+      );
       return (
         <div
           role="alert"

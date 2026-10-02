@@ -94,7 +94,9 @@ export function MukokoWeatherEmbed({
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-color-scheme: dark)").matches);
 
-  const themeClass = isDark ? `${styles.widget} ${styles.widgetDark}` : styles.widget;
+  const themeClass = isDark
+    ? `${styles.widget} ${styles.widgetDark}`
+    : styles.widget;
 
   useEffect(() => {
     const qs = new URLSearchParams();
@@ -149,15 +151,37 @@ export function MukokoWeatherEmbed({
   }
 
   if (type === "today") {
-    return <TodayCard data={data} themeClass={themeClass} className={className} />;
+    return (
+      <TodayCard data={data} themeClass={themeClass} className={className} />
+    );
   }
   if (type === "5day") {
-    return <ForecastCard data={data} days={5} themeClass={themeClass} className={className} />;
+    return (
+      <ForecastCard
+        data={data}
+        days={5}
+        themeClass={themeClass}
+        className={className}
+      />
+    );
   }
   if (type === "7day") {
-    return <ForecastCard data={data} days={7} themeClass={themeClass} className={className} />;
+    return (
+      <ForecastCard
+        data={data}
+        days={7}
+        themeClass={themeClass}
+        className={className}
+      />
+    );
   }
-  return <CurrentCondition data={data} themeClass={themeClass} className={className} />;
+  return (
+    <CurrentCondition
+      data={data}
+      themeClass={themeClass}
+      className={className}
+    />
+  );
 }
 
 function Attribution({ data }: { data: EmbedData }) {
@@ -194,7 +218,9 @@ function CurrentCondition({
           <span className={styles.currentTemp}>{temp(c.temp)}</span>
           <span className={styles.currentMeta}>
             <span className={styles.currentCondition}>{c.condition}</span>
-            <span className={styles.currentLocationName}>{data.location.name}</span>
+            <span className={styles.currentLocationName}>
+              {data.location.name}
+            </span>
           </span>
         </div>
       </div>
@@ -219,7 +245,9 @@ function TodayCard({
         <div className={styles.todayHeader}>
           <span className={styles.todayLocationName}>{data.location.name}</span>
           {data.location.province && (
-            <span className={styles.todayProvince}>{data.location.province}</span>
+            <span className={styles.todayProvince}>
+              {data.location.province}
+            </span>
           )}
         </div>
         <div className={styles.todayBody}>
@@ -259,11 +287,15 @@ function ForecastCard({
   return (
     <div className={`${themeClass} ${className}`}>
       <div className={styles.forecastCard}>
-        <div className={styles.forecastTitle}>{data.location.name} · {days}-day forecast</div>
+        <div className={styles.forecastTitle}>
+          {data.location.name} · {days}-day forecast
+        </div>
         {data.daily.slice(0, n).map((d, i) => (
           <div
             key={d.date}
-            className={i < n - 1 ? styles.forecastRowBorder : styles.forecastRow}
+            className={
+              i < n - 1 ? styles.forecastRowBorder : styles.forecastRow
+            }
           >
             <span className={styles.forecastDay}>{d.day}</span>
             <span className={styles.forecastIcon} aria-hidden="true">

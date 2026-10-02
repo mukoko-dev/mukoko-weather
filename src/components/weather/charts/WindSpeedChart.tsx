@@ -15,8 +15,18 @@ interface WindSpeedChartProps {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "windSpeed", label: "Wind Speed", color: "var(--chart-1)", fill: true },
-  { key: "windGusts", label: "Wind Gusts", color: "var(--chart-4)", dashed: true },
+  {
+    key: "windSpeed",
+    label: "Wind Speed",
+    color: "var(--chart-1)",
+    fill: true,
+  },
+  {
+    key: "windGusts",
+    label: "Wind Gusts",
+    color: "var(--chart-4)",
+    dashed: true,
+  },
 ];
 
 /**
@@ -33,7 +43,10 @@ export function WindSpeedChart({
   maxTicksLimit,
 }: WindSpeedChartProps) {
   const yAxes = useMemo(() => {
-    const allWind = data.flatMap((d) => [Number(d.windSpeed) || 0, Number(d.windGusts) || 0]);
+    const allWind = data.flatMap((d) => [
+      Number(d.windSpeed) || 0,
+      Number(d.windGusts) || 0,
+    ]);
     const maxWind = (allWind.length > 0 ? Math.max(...allWind) : 20) + 5;
     return { y: { min: 0, max: maxWind } };
   }, [data]);

@@ -49,7 +49,13 @@ export type AnalyticsEvents = {
   /** User changed the weather map layer */
   map_layer_changed: { layer: string; location: string };
   /** User completed the onboarding welcome banner */
-  onboarding_completed: { method: "personalize" | "continue" | "pwa_install_accepted" | "pwa_install_dismissed" };
+  onboarding_completed: {
+    method:
+      | "personalize"
+      | "continue"
+      | "pwa_install_accepted"
+      | "pwa_install_dismissed";
+  };
   /** User opened a modal */
   modal_opened: {
     modal: "my-weather" | "saved-locations" | "weather-report" | "pwa_install";
@@ -74,10 +80,7 @@ export function trackEvent<K extends keyof AnalyticsEvents>(
 
   // Vercel Analytics — track() is safe to call even if the script hasn't loaded
   try {
-    track(
-      name,
-      properties as Record<string, string | number | boolean | null>,
-    );
+    track(name, properties as Record<string, string | number | boolean | null>);
   } catch {
     // Silent — tracking should never break the app
   }

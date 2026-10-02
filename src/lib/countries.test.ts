@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { getFlagEmoji, generateProvinceSlug, COUNTRIES, PROVINCES } from "./countries";
+import {
+  getFlagEmoji,
+  generateProvinceSlug,
+  COUNTRIES,
+  PROVINCES,
+} from "./countries";
 
 describe("getFlagEmoji", () => {
   it("returns correct flag emoji for Zimbabwe", () => {
@@ -27,23 +32,33 @@ describe("getFlagEmoji", () => {
 
 describe("generateProvinceSlug", () => {
   it("lowercases and dasherises province name", () => {
-    expect(generateProvinceSlug("Mashonaland West", "ZW")).toBe("mashonaland-west-zw");
+    expect(generateProvinceSlug("Mashonaland West", "ZW")).toBe(
+      "mashonaland-west-zw",
+    );
   });
 
   it("lowercases the country code suffix", () => {
-    expect(generateProvinceSlug("Nairobi County", "KE")).toBe("nairobi-county-ke");
+    expect(generateProvinceSlug("Nairobi County", "KE")).toBe(
+      "nairobi-county-ke",
+    );
   });
 
   it("strips diacritics", () => {
-    expect(generateProvinceSlug("Zambézia Province", "MZ")).toBe("zambezia-province-mz");
+    expect(generateProvinceSlug("Zambézia Province", "MZ")).toBe(
+      "zambezia-province-mz",
+    );
   });
 
   it("strips apostrophes and special chars", () => {
-    expect(generateProvinceSlug("KwaZulu-Natal", "ZA")).toBe("kwazulu-natal-za");
+    expect(generateProvinceSlug("KwaZulu-Natal", "ZA")).toBe(
+      "kwazulu-natal-za",
+    );
   });
 
   it("collapses multiple dashes", () => {
-    expect(generateProvinceSlug("North--East Region", "BW")).toBe("north--east-region-bw".replace("--", "-"));
+    expect(generateProvinceSlug("North--East Region", "BW")).toBe(
+      "north--east-region-bw".replace("--", "-"),
+    );
   });
 });
 
@@ -60,7 +75,19 @@ describe("COUNTRIES seed data", () => {
   });
 
   it("includes all 11 ASEAN/Pacific nations (including Timor-Leste)", () => {
-    const asean = ["BN", "ID", "KH", "LA", "MM", "MY", "PH", "SG", "TH", "TL", "VN"];
+    const asean = [
+      "BN",
+      "ID",
+      "KH",
+      "LA",
+      "MM",
+      "MY",
+      "PH",
+      "SG",
+      "TH",
+      "TL",
+      "VN",
+    ];
     for (const code of asean) {
       const found = COUNTRIES.find((c) => c.code === code);
       expect(found, `Missing ASEAN country ${code}`).toBeDefined();

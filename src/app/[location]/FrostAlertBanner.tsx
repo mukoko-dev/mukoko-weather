@@ -32,7 +32,8 @@ export function FrostAlertBanner({ alert }: { alert: FrostAlert }) {
       className={`mb-7 animate-fade-in-down ${borderColor} ${bgColor}`}
     >
       <AlertTitle className={textColor}>
-        Frost {alert.risk === "severe" ? "Warning" : "Advisory"} — {alert.risk.toUpperCase()}
+        Frost {alert.risk === "severe" ? "Warning" : "Advisory"} —{" "}
+        {alert.risk.toUpperCase()}
       </AlertTitle>
       <AlertDescription className={textColor}>{alert.message}</AlertDescription>
     </Alert>

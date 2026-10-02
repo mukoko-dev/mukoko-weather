@@ -13,9 +13,21 @@ import { WeatherUnavailableBanner } from "../WeatherUnavailableBanner";
 import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
 
-const HourlyForecast = lazy(() => import("@/components/weather/HourlyForecast").then((m) => ({ default: m.HourlyForecast })));
-const DailyForecast = lazy(() => import("@/components/weather/DailyForecast").then((m) => ({ default: m.DailyForecast })));
-const SunTimes = lazy(() => import("@/components/weather/SunTimes").then((m) => ({ default: m.SunTimes })));
+const HourlyForecast = lazy(() =>
+  import("@/components/weather/HourlyForecast").then((m) => ({
+    default: m.HourlyForecast,
+  })),
+);
+const DailyForecast = lazy(() =>
+  import("@/components/weather/DailyForecast").then((m) => ({
+    default: m.DailyForecast,
+  })),
+);
+const SunTimes = lazy(() =>
+  import("@/components/weather/SunTimes").then((m) => ({
+    default: m.SunTimes,
+  })),
+);
 
 interface Props {
   weather: WeatherData;
@@ -53,7 +65,8 @@ export function ForecastDashboard({
           {location.name} Forecast
         </h1>
         <p className="mt-1 text-base text-text-secondary">
-          {location.province} &middot; {location.elevation}m &middot; {season.localName} ({season.name})
+          {location.province} &middot; {location.elevation}m &middot;{" "}
+          {season.localName} ({season.name})
         </p>
 
         <div className="mt-4 mb-4">

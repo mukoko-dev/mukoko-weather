@@ -33,10 +33,10 @@ describe("OG route structure", () => {
   });
 
   it("truncates input parameters to prevent visual overflow", () => {
-    expect(source).toContain(".slice(0, 80)");  // title
+    expect(source).toMatch(/\.slice\(\s*0,\s*80,?\s*\)/); // title
     expect(source).toContain(".slice(0, 120)"); // subtitle
-    expect(source).toContain(".slice(0, 60)");  // location, province
-    expect(source).toContain(".slice(0, 40)");  // condition, season
+    expect(source).toContain(".slice(0, 60)"); // location, province
+    expect(source).toContain(".slice(0, 40)"); // condition, season
   });
 });
 
@@ -132,7 +132,9 @@ describe("templates", () => {
   it("shamwari and explore templates have distinct gradients", () => {
     // Extract gradient strings — each template's gradient line
     const exploreMatch = source.match(/explore:[\s\S]*?gradient:\s*`([^`]+)`/);
-    const shamwariMatch = source.match(/shamwari:[\s\S]*?gradient:\s*`([^`]+)`/);
+    const shamwariMatch = source.match(
+      /shamwari:[\s\S]*?gradient:\s*`([^`]+)`/,
+    );
     expect(exploreMatch).not.toBeNull();
     expect(shamwariMatch).not.toBeNull();
     expect(exploreMatch![1]).not.toBe(shamwariMatch![1]);
@@ -290,9 +292,7 @@ describe("OG image component", () => {
   it("season pill uses light text for readability on dark backgrounds", () => {
     // brand.malachite (#004D40) is a dark surface color — unreadable as text
     // on dark OG gradients. Season pill text must use white/light color.
-    const seasonPillSection = source.match(
-      /Season pill[\s\S]*?{season}/,
-    );
+    const seasonPillSection = source.match(/Season pill[\s\S]*?{season}/);
     expect(seasonPillSection).not.toBeNull();
     // Must NOT use brand.malachite as text color
     expect(seasonPillSection![0]).not.toContain("color: brand.malachite");
@@ -396,7 +396,7 @@ describe("OG image wiring in metadata", () => {
   });
 
   it("[location]/page.tsx passes OG image to openGraph.images", () => {
-    expect(locationPageSource).toContain("images: [{ url: ogImageUrl");
+    expect(locationPageSource).toMatch(/images: \[\s*\{\s*url: ogImageUrl/);
   });
 
   it("[location]/page.tsx passes OG image to twitter.images", () => {

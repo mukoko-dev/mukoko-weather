@@ -1,7 +1,15 @@
 import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
-import { CurrentLocationHome, type HomeWeatherPayload } from "./CurrentLocationHome";
-import { getLocationFromDb, getWeatherForLocation, getCountryByCode, getSeasonForDate } from "@/lib/db";
+import {
+  CurrentLocationHome,
+  type HomeWeatherPayload,
+} from "./CurrentLocationHome";
+import {
+  getLocationFromDb,
+  getWeatherForLocation,
+  getCountryByCode,
+  getSeasonForDate,
+} from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { checkFrostRisk, createFallbackWeather } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
@@ -81,7 +89,10 @@ export default async function Home() {
 
     if (lat && lon) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), GEO_FETCH_TIMEOUT_MS);
+      const timeout = setTimeout(
+        () => controller.abort(),
+        GEO_FETCH_TIMEOUT_MS,
+      );
       try {
         // autoCreate=false: IP geolocation is FIND-ONLY. Vercel's IP headers give a
         // coarse ISP/datacentre-centroid position, so creating a location from them
@@ -116,7 +127,9 @@ export default async function Home() {
   }
 
   const currentUser = await getCurrentUser().catch(() => null);
-  const aiUser = currentUser ? { id: currentUser.id, email: currentUser.email ?? null } : null;
+  const aiUser = currentUser
+    ? { id: currentUser.id, email: currentUser.email ?? null }
+    : null;
 
   // No server-side location at all — the client GPS/city-chooser takes over.
   if (!detectedLocation) {
@@ -124,25 +137,38 @@ export default async function Home() {
   }
 
   // Strip MongoDB _id (ObjectId with .toJSON()) before crossing to the client.
-  const { _id: _removed, ...location } = detectedLocation as WeatherLocation & { _id?: unknown };
+  const { _id: _removed, ...location } = detectedLocation as WeatherLocation & {
+    _id?: unknown;
+  };
 
   // Same double-caught weather fetch as the /{slug} page — the home shell
   // ALWAYS renders, worst case with seasonal estimates.
   let weather;
   let weatherSource: string;
   try {
-    const result = await getWeatherForLocation(location.slug, location.lat, location.lon, location.elevation);
+    const result = await getWeatherForLocation(
+      location.slug,
+      location.lat,
+      location.lon,
+      location.elevation,
+    );
     weather = result.data;
     weatherSource = result.source;
   } catch {
-    weather = createFallbackWeather(location.lat, location.lon, location.elevation);
+    weather = createFallbackWeather(
+      location.lat,
+      location.lon,
+      location.elevation,
+    );
     weatherSource = "fallback";
   }
   const usingFallback = weatherSource === "fallback";
 
   const countryCode = (location.country ?? "").toUpperCase();
   const [countryDoc, season] = await Promise.all([
-    countryCode ? getCountryByCode(countryCode).catch(() => null) : Promise.resolve(null),
+    countryCode
+      ? getCountryByCode(countryCode).catch(() => null)
+      : Promise.resolve(null),
     getSeasonForDate(new Date(), location.country ?? "", location.lat ?? 0),
   ]);
 

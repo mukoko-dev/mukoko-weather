@@ -14,7 +14,13 @@ interface DaylightChartProps {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "daylightHours", label: "Daylight", color: "var(--chart-3)", fill: true, opacity: 0.12 },
+  {
+    key: "daylightHours",
+    label: "Daylight",
+    color: "var(--chart-3)",
+    fill: true,
+    opacity: 0.12,
+  },
 ];
 
 const Y_AXES = { y: { format: (v: number) => `${v}h` } };

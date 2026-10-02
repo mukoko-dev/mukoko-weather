@@ -7,9 +7,15 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 
 const exploreSource = readFileSync(resolve(__dirname, "page.tsx"), "utf-8");
-const exploreTagSource = readFileSync(resolve(__dirname, "[tag]/page.tsx"), "utf-8");
+const exploreTagSource = readFileSync(
+  resolve(__dirname, "[tag]/page.tsx"),
+  "utf-8",
+);
 const exploreLoading = readFileSync(resolve(__dirname, "loading.tsx"), "utf-8");
-const exploreTagLoading = readFileSync(resolve(__dirname, "[tag]/loading.tsx"), "utf-8");
+const exploreTagLoading = readFileSync(
+  resolve(__dirname, "[tag]/loading.tsx"),
+  "utf-8",
+);
 
 describe("explore page — ISR caching", () => {
   it("explore/page.tsx exports revalidate = 3600 for 1-hour ISR", () => {
@@ -22,7 +28,7 @@ describe("explore page — ISR caching", () => {
 });
 
 describe("explore page — loading skeletons", () => {
-  it("explore/loading.tsx exists and has role=\"status\"", () => {
+  it('explore/loading.tsx exists and has role="status"', () => {
     expect(exploreLoading).toContain('role="status"');
   });
 
@@ -35,7 +41,7 @@ describe("explore page — loading skeletons", () => {
     expect(exploreLoading).toContain("Skeleton");
   });
 
-  it("explore/[tag]/loading.tsx exists and has role=\"status\"", () => {
+  it('explore/[tag]/loading.tsx exists and has role="status"', () => {
     expect(exploreTagLoading).toContain('role="status"');
   });
 
@@ -86,7 +92,8 @@ describe("explore page — layout and navigation", () => {
 describe("explore page — data and accessibility", () => {
   it("explore page fetches locations from MongoDB", () => {
     // Should use getAllLocations or db fetch, not just static LOCATIONS
-    const usesDb = exploreSource.includes("getAllLocations") ||
+    const usesDb =
+      exploreSource.includes("getAllLocations") ||
       exploreSource.includes("getLocations") ||
       exploreSource.includes("LOCATIONS");
     expect(usesDb).toBe(true);

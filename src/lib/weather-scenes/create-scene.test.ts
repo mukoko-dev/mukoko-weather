@@ -9,10 +9,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const source = readFileSync(
-  resolve(__dirname, "create-scene.ts"),
-  "utf-8",
-);
+const source = readFileSync(resolve(__dirname, "create-scene.ts"), "utf-8");
 
 describe("createWeatherScene — exports and signature", () => {
   it("exports createWeatherScene as an async function", () => {
@@ -40,7 +37,9 @@ describe("createWeatherScene — pause / resume", () => {
   });
 
   it("exposes pause() that cancels the frame", () => {
-    expect(source).toMatch(/pause\(\)\s*\{[\s\S]*?cancelAnimationFrame\(frameId\)/);
+    expect(source).toMatch(
+      /pause\(\)\s*\{[\s\S]*?cancelAnimationFrame\(frameId\)/,
+    );
   });
 
   it("exposes resume() that restarts the loop", () => {
@@ -145,7 +144,9 @@ describe("createWeatherScene — dispose cleanup", () => {
 
   it("guards resize handler against disposed state", () => {
     // handleResize should check disposed before resizing
-    expect(source).toMatch(/function handleResize[\s\S]*?if \(disposed\) return/);
+    expect(source).toMatch(
+      /function handleResize[\s\S]*?if \(disposed\) return/,
+    );
   });
 });
 

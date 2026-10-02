@@ -6,14 +6,25 @@ const localStorageMock = (() => {
   let store: Record<string, string> = {};
   return {
     getItem: (key: string) => store[key] ?? null,
-    setItem: (key: string, value: string) => { store[key] = value; },
-    removeItem: (key: string) => { delete store[key]; },
-    clear: () => { store = {}; },
-    get length() { return Object.keys(store).length; },
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
+    get length() {
+      return Object.keys(store).length;
+    },
     key: (i: number) => Object.keys(store)[i] ?? null,
   };
 })();
-Object.defineProperty(globalThis, "localStorage", { value: localStorageMock, writable: true });
+Object.defineProperty(globalThis, "localStorage", {
+  value: localStorageMock,
+  writable: true,
+});
 
 // Import after localStorage is mocked
 const { cacheWeatherHint, getCachedWeatherHint } = await import("./cache");
@@ -71,14 +82,18 @@ describe("weather hint cache", () => {
 
   it("handles localStorage getItem throwing", () => {
     const original = localStorageMock.getItem;
-    localStorageMock.getItem = () => { throw new Error("quota exceeded"); };
+    localStorageMock.getItem = () => {
+      throw new Error("quota exceeded");
+    };
     expect(getCachedWeatherHint("harare")).toBeNull();
     localStorageMock.getItem = original;
   });
 
   it("handles localStorage setItem throwing", () => {
     const original = localStorageMock.setItem;
-    localStorageMock.setItem = () => { throw new Error("quota exceeded"); };
+    localStorageMock.setItem = () => {
+      throw new Error("quota exceeded");
+    };
     expect(() => cacheWeatherHint("harare", hint)).not.toThrow();
     localStorageMock.setItem = original;
   });
@@ -89,7 +104,10 @@ describe("weather hint cache", () => {
   });
 
   it("returns null and removes entry with wrong shape (missing timestamp)", () => {
-    localStorageMock.setItem("mukoko-weather-hint:harare", JSON.stringify({ weatherCode: 1 }));
+    localStorageMock.setItem(
+      "mukoko-weather-hint:harare",
+      JSON.stringify({ weatherCode: 1 }),
+    );
     expect(getCachedWeatherHint("harare")).toBeNull();
     expect(localStorageMock.getItem("mukoko-weather-hint:harare")).toBeNull();
   });
@@ -111,9 +129,13 @@ describe("weather hint cache", () => {
     }
 
     // The oldest entry (location-0) should have been evicted
-    expect(localStorageMock.getItem("mukoko-weather-hint:location-0")).toBeNull();
+    expect(
+      localStorageMock.getItem("mukoko-weather-hint:location-0"),
+    ).toBeNull();
     // Recent entries should still exist
-    expect(localStorageMock.getItem("mukoko-weather-hint:location-50")).not.toBeNull();
+    expect(
+      localStorageMock.getItem("mukoko-weather-hint:location-50"),
+    ).not.toBeNull();
   });
 
   it("does not evict when under 50 entries", () => {
@@ -122,14 +144,19 @@ describe("weather hint cache", () => {
     }
     // All 10 should still exist
     for (let i = 0; i < 10; i++) {
-      expect(localStorageMock.getItem(`mukoko-weather-hint:location-${i}`)).not.toBeNull();
+      expect(
+        localStorageMock.getItem(`mukoko-weather-hint:location-${i}`),
+      ).not.toBeNull();
     }
   });
 
   it("ignores non-hint localStorage keys during eviction", () => {
     localStorageMock.setItem("unrelated-key", "some-data");
     for (let i = 0; i < 51; i++) {
-      cacheWeatherHint(`loc-${i}`, { ...hint, timestamp: Date.now() - (51 - i) * 1000 });
+      cacheWeatherHint(`loc-${i}`, {
+        ...hint,
+        timestamp: Date.now() - (51 - i) * 1000,
+      });
     }
     // Unrelated key should not be touched
     expect(localStorageMock.getItem("unrelated-key")).toBe("some-data");

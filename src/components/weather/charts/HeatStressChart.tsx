@@ -14,7 +14,13 @@ interface HeatStressChartProps {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "heatStress", label: "Heat Stress Index", color: "var(--chart-3)", type: "bar", opacity: 0.6 },
+  {
+    key: "heatStress",
+    label: "Heat Stress Index",
+    color: "var(--chart-3)",
+    type: "bar",
+    opacity: 0.6,
+  },
 ];
 
 const Y_AXES = { y: { min: 0, format: (v: number) => `${v}` } };

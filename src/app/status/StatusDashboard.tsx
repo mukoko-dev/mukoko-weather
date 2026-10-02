@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { StatusDot, StatusBadge, type ServiceStatus } from "@/components/ui/status-indicator";
+import {
+  StatusDot,
+  StatusBadge,
+  type ServiceStatus,
+} from "@/components/ui/status-indicator";
 
 interface CheckResult {
   name: string;
@@ -17,7 +21,13 @@ interface StatusResponse {
   checks: CheckResult[];
 }
 
-function OverallBanner({ status, timestamp }: { status: string; timestamp: string }) {
+function OverallBanner({
+  status,
+  timestamp,
+}: {
+  status: string;
+  timestamp: string;
+}) {
   const isOperational = status === "operational";
 
   return (
@@ -35,8 +45,12 @@ function OverallBanner({ status, timestamp }: { status: string; timestamp: strin
         aria-hidden="true"
       />
       <div>
-        <p className={`font-semibold ${isOperational ? "text-severity-low" : "text-severity-moderate"}`}>
-          {isOperational ? "All systems operational" : "Some systems are experiencing issues"}
+        <p
+          className={`font-semibold ${isOperational ? "text-severity-low" : "text-severity-moderate"}`}
+        >
+          {isOperational
+            ? "All systems operational"
+            : "Some systems are experiencing issues"}
         </p>
         <p className="text-base text-text-tertiary">
           Last checked: {new Date(timestamp).toLocaleString()}
@@ -82,10 +96,7 @@ export function StatusDashboard() {
     return (
       <div className="mt-8 space-y-4">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div
-            key={i}
-            className="chameleon h-20"
-          />
+          <div key={i} className="chameleon h-20" />
         ))}
       </div>
     );
@@ -116,19 +127,20 @@ export function StatusDashboard() {
 
       <div className="mt-8 space-y-3">
         {data.checks.map((check) => (
-          <div
-            key={check.name}
-            className="pangolin flex items-start gap-3"
-          >
+          <div key={check.name} className="pangolin flex items-start gap-3">
             <div className="mt-1.5">
               <StatusDot status={check.status} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-text-primary">{check.name}</h3>
+                <h3 className="font-semibold text-text-primary">
+                  {check.name}
+                </h3>
                 <StatusBadge status={check.status} />
               </div>
-              <p className="mt-0.5 text-base text-text-secondary">{check.message}</p>
+              <p className="mt-0.5 text-base text-text-secondary">
+                {check.message}
+              </p>
             </div>
             <div className="flex-shrink-0 text-right">
               <p className="text-base font-medium text-text-tertiary">
@@ -154,26 +166,33 @@ export function StatusDashboard() {
         <h3 className="font-semibold text-text-primary">About these checks</h3>
         <ul className="mt-2 space-y-1.5">
           <li>
-            <strong className="text-text-primary">MongoDB Atlas</strong> — Database connectivity (weather cache, AI summaries, historical data)
+            <strong className="text-text-primary">MongoDB Atlas</strong> —
+            Database connectivity (weather cache, AI summaries, historical data)
           </li>
           <li>
-            <strong className="text-text-primary">Tomorrow.io API</strong> — Primary weather data provider (realtime + forecast)
+            <strong className="text-text-primary">Tomorrow.io API</strong> —
+            Primary weather data provider (realtime + forecast)
           </li>
           <li>
-            <strong className="text-text-primary">Open-Meteo API</strong> — Fallback weather data provider (free, no auth)
+            <strong className="text-text-primary">Open-Meteo API</strong> —
+            Fallback weather data provider (free, no auth)
           </li>
           <li>
-            <strong className="text-text-primary">Anthropic AI</strong> — Shamwari AI weather summaries (Claude)
+            <strong className="text-text-primary">Anthropic AI</strong> —
+            Shamwari AI weather summaries (Claude)
           </li>
           <li>
-            <strong className="text-text-primary">Weather Cache</strong> — Active cached weather data (15-min TTL)
+            <strong className="text-text-primary">Weather Cache</strong> —
+            Active cached weather data (15-min TTL)
           </li>
           <li>
-            <strong className="text-text-primary">AI Summary Cache</strong> — Active cached AI summaries (30-120 min tiered TTL)
+            <strong className="text-text-primary">AI Summary Cache</strong> —
+            Active cached AI summaries (30-120 min tiered TTL)
           </li>
         </ul>
         <p className="mt-3 text-text-tertiary">
-          Status auto-refreshes every 5 minutes and is cached server-side for ~60 seconds. All checks run in parallel for minimum latency.
+          Status auto-refreshes every 5 minutes and is cached server-side for
+          ~60 seconds. All checks run in parallel for minimum latency.
         </p>
       </div>
     </div>

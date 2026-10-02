@@ -41,7 +41,7 @@ describe("CurrentConditions — share button", () => {
   });
 
   it("falls back to clipboard copy when Web Share API is unavailable", () => {
-    expect(source).toContain("navigator.clipboard.writeText");
+    expect(source).toMatch(/navigator\.clipboard\s*\.writeText/);
   });
 
   it("shows 'Copied!' feedback state after clipboard copy", () => {
@@ -110,7 +110,10 @@ describe("CurrentConditions — section accessibility", () => {
 });
 
 describe("CurrentConditions — MY LOCATION eyebrow (silent-URL home)", () => {
-  const source = readFileSync(resolve(__dirname, "CurrentConditions.tsx"), "utf-8");
+  const source = readFileSync(
+    resolve(__dirname, "CurrentConditions.tsx"),
+    "utf-8",
+  );
 
   it("renders the eyebrow only when isCurrentLocation is set", () => {
     expect(source).toContain("isCurrentLocation?: boolean");

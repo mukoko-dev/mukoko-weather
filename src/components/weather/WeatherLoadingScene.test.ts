@@ -41,7 +41,9 @@ describe("WeatherLoadingScene — KNOWN_ROUTES guard", () => {
   it("defines KNOWN_ROUTES at module level (not per-render)", () => {
     // KNOWN_ROUTES should appear before the component function
     const knownRoutesIndex = source.indexOf("KNOWN_ROUTES");
-    const exportFunctionIndex = source.indexOf("export function WeatherLoadingScene");
+    const exportFunctionIndex = source.indexOf(
+      "export function WeatherLoadingScene",
+    );
     expect(knownRoutesIndex).toBeLessThan(exportFunctionIndex);
   });
 

@@ -23,7 +23,9 @@ describe("deriveCeilingFt", () => {
   });
 
   it("returns the lowest BKN/OVC base as the ceiling", () => {
-    expect(deriveCeilingFt(layers(["SCT", 2000], ["BKN", 3500], ["OVC", 8000]))).toBe(3500);
+    expect(
+      deriveCeilingFt(layers(["SCT", 2000], ["BKN", 3500], ["OVC", 8000])),
+    ).toBe(3500);
   });
 
   it("treats OVC as a ceiling", () => {
@@ -55,8 +57,12 @@ describe("summarizeCloudCover", () => {
   });
 
   it("reports the densest layer's label", () => {
-    expect(summarizeCloudCover(layers(["FEW", 2000], ["OVC", 5000]))).toBe("Overcast");
-    expect(summarizeCloudCover(layers(["FEW", 2000], ["SCT", 4000]))).toBe("Scattered");
+    expect(summarizeCloudCover(layers(["FEW", 2000], ["OVC", 5000]))).toBe(
+      "Overcast",
+    );
+    expect(summarizeCloudCover(layers(["FEW", 2000], ["SCT", 4000]))).toBe(
+      "Scattered",
+    );
     expect(summarizeCloudCover(layers(["BKN", 3000]))).toBe("Broken");
   });
 

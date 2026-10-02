@@ -19,7 +19,10 @@ export default function ExploreLoading() {
           <Skeleton className="h-4 w-80 mb-8" />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="rounded-[var(--radius-card)] bg-surface-card p-5 shadow-sm">
+              <div
+                key={i}
+                className="rounded-[var(--radius-card)] bg-surface-card p-5 shadow-sm"
+              >
                 <div className="flex items-start justify-between mb-2">
                   <Skeleton className="h-5 w-32" />
                   <Skeleton className="h-5 w-8 rounded-full" />

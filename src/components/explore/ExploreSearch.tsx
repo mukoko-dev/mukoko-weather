@@ -48,7 +48,12 @@ export function ExploreSearch() {
   // they commit to the slower AI-powered search below. This is the
   // "functions like other weather searches" part: type a city name, see it
   // immediately, same as every other location search in the app.
-  const { query, setQuery, results: quickResults, loading: quickLoading } = useLocationQuickSearch({ limit: 6 });
+  const {
+    query,
+    setQuery,
+    results: quickResults,
+    loading: quickLoading,
+  } = useLocationQuickSearch({ limit: 6 });
 
   const search = useCallback(
     async (searchQuery: string) => {
@@ -69,7 +74,7 @@ export function ExploreSearch() {
         if (!res.ok) {
           const body = await res.json().catch(() => null);
           throw new Error(
-            body?.detail || body?.error || `Request failed (${res.status})`
+            body?.detail || body?.error || `Request failed (${res.status})`,
           );
         }
 
@@ -77,12 +82,15 @@ export function ExploreSearch() {
         setResults(data.locations || []);
         setSummary(data.summary || null);
         // Note: query text is tracked (truncated to 100 chars) — disclosed in /privacy under custom event tracking
-        trackEvent("explore_search", { query: trimmed.slice(0, 100), resultCount: (data.locations || []).length });
+        trackEvent("explore_search", {
+          query: trimmed.slice(0, 100),
+          resultCount: (data.locations || []).length,
+        });
       } catch (err) {
         setError(
           err instanceof Error
             ? err.message
-            : "Search failed. Please try again."
+            : "Search failed. Please try again.",
         );
         setResults([]);
         setSummary(null);
@@ -90,7 +98,7 @@ export function ExploreSearch() {
         setLoading(false);
       }
     },
-    [loading]
+    [loading],
   );
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -108,10 +116,7 @@ export function ExploreSearch() {
     <section aria-labelledby="explore-search-heading" className="space-y-4">
       <div className="flex items-center gap-2">
         <SparklesIcon size={18} className="text-primary" />
-        <h2
-          id="explore-search-heading"
-          className="giraffe text-lg"
-        >
+        <h2 id="explore-search-heading" className="giraffe text-lg">
           Search
         </h2>
       </div>
@@ -161,7 +166,11 @@ export function ExploreSearch() {
       {query.trim() && (
         <ul aria-label="Quick location matches" className="space-y-1">
           {quickLoading && quickResults.length === 0 && (
-            <li className="h-10 animate-pulse rounded-[var(--radius-input)] bg-surface-base" role="status" aria-label="Loading">
+            <li
+              className="h-10 animate-pulse rounded-[var(--radius-input)] bg-surface-base"
+              role="status"
+              aria-label="Loading"
+            >
               <span className="sr-only">Loading</span>
             </li>
           )}
@@ -180,7 +189,9 @@ export function ExploreSearch() {
                 <div className="min-w-0 flex-1">
                   <span className="block truncate">{loc.name}</span>
                   {loc.province && (
-                    <span className="block text-base text-text-tertiary truncate">{loc.province}</span>
+                    <span className="block text-base text-text-tertiary truncate">
+                      {loc.province}
+                    </span>
                   )}
                 </div>
               </Link>
@@ -197,10 +208,7 @@ export function ExploreSearch() {
 
       {summary && (
         <div className="flex items-start gap-2 rounded-[var(--radius-card)] bg-primary/5 p-3">
-          <SparklesIcon
-            size={14}
-            className="mt-0.5 shrink-0 text-primary"
-          />
+          <SparklesIcon size={14} className="mt-0.5 shrink-0 text-primary" />
           <p className="text-base text-text-secondary">{summary}</p>
         </div>
       )}
@@ -221,7 +229,9 @@ export function ExploreSearch() {
                   {loc.name}
                 </p>
                 {loc.province && (
-                  <p className="mt-0.5 text-base text-text-tertiary">{loc.province}</p>
+                  <p className="mt-0.5 text-base text-text-tertiary">
+                    {loc.province}
+                  </p>
                 )}
                 {loc.temperature != null && (
                   <div className="mt-1.5 flex items-center gap-2 text-base text-text-secondary">
@@ -229,9 +239,7 @@ export function ExploreSearch() {
                       {Math.round(loc.temperature)}°C
                     </span>
                     {loc.weatherCode != null && (
-                      <span>
-                        {weatherCodeToInfo(loc.weatherCode).label}
-                      </span>
+                      <span>{weatherCodeToInfo(loc.weatherCode).label}</span>
                     )}
                   </div>
                 )}

@@ -4,7 +4,10 @@ import { resolve } from "path";
 import { prepareFeasibilityData, categoryChartColor } from "./FeasibilityChart";
 import type { FeasibilityPoint } from "@/lib/activity-feasibility";
 
-const source = readFileSync(resolve(__dirname, "FeasibilityChart.tsx"), "utf-8");
+const source = readFileSync(
+  resolve(__dirname, "FeasibilityChart.tsx"),
+  "utf-8",
+);
 
 describe("prepareFeasibilityData", () => {
   it("maps points to HH:00 labels + scores", () => {

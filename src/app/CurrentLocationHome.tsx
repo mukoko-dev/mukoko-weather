@@ -110,7 +110,11 @@ export function CurrentLocationHome({ initial, user }: Props) {
       /* non-browser environment */
     }
     if (previousSlug && previousSlug !== location.slug) {
-      trackEvent("location_changed", { from: previousSlug, to: location.slug, method: "geolocation" });
+      trackEvent("location_changed", {
+        from: previousSlug,
+        to: location.slug,
+        method: "geolocation",
+      });
     }
   }
 
@@ -127,7 +131,9 @@ export function CurrentLocationHome({ initial, user }: Props) {
       //  - previously prompted but not granted → leave the seeded content.
       let granted = false;
       try {
-        const status = await navigator.permissions?.query({ name: "geolocation" });
+        const status = await navigator.permissions?.query({
+          name: "geolocation",
+        });
         granted = status?.state === "granted";
         if (status?.state === "denied") return;
       } catch {
@@ -153,9 +159,15 @@ export function CurrentLocationHome({ initial, user }: Props) {
           maximumAgeMs: GPS_MAX_AGE_MS,
         });
         if (disposed) return;
-        trackEvent("geolocation_result", { status: result.status, location: result.location?.slug });
+        trackEvent("geolocation_result", {
+          status: result.status,
+          location: result.location?.slug,
+        });
 
-        if ((result.status === "success" || result.status === "created") && result.location) {
+        if (
+          (result.status === "success" || result.status === "created") &&
+          result.location
+        ) {
           let resolved = result.location;
           if (result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM) {
             // Nearest catalog entry is far from the fix — create-on-demand
@@ -163,7 +175,10 @@ export function CurrentLocationHome({ initial, user }: Props) {
             // fresh fix, so this is a network hop, not a second GPS wait).
             const precise = await detectUserLocation({ autoCreate: true });
             if (disposed) return;
-            if ((precise.status === "success" || precise.status === "created") && precise.location) {
+            if (
+              (precise.status === "success" || precise.status === "created") &&
+              precise.location
+            ) {
               resolved = precise.location;
             }
           }
@@ -196,8 +211,14 @@ export function CurrentLocationHome({ initial, user }: Props) {
     setGpsState("detecting");
     try {
       const result = await detectUserLocation({ autoCreate: true });
-      trackEvent("geolocation_result", { status: result.status, location: result.location?.slug });
-      if ((result.status === "success" || result.status === "created") && result.location) {
+      trackEvent("geolocation_result", {
+        status: result.status,
+        location: result.location?.slug,
+      });
+      if (
+        (result.status === "success" || result.status === "created") &&
+        result.location
+      ) {
         await swapTo(result.location, view?.location.slug);
         setGpsState("idle");
       } else {
@@ -238,14 +259,25 @@ export function CurrentLocationHome({ initial, user }: Props) {
       aria-label="Location selection"
     >
       <div className="w-full max-w-sm space-y-8 text-center">
-        <section aria-label="Find your location" className="animate-fade-in space-y-6">
+        <section
+          aria-label="Find your location"
+          className="animate-fade-in space-y-6"
+        >
           <div>
-            <h1 className="text-2xl font-semibold text-text-primary">Find your weather</h1>
-            <p className="mt-2 text-sm text-text-secondary">Use your device location or search for any city worldwide.</p>
+            <h1 className="text-2xl font-semibold text-text-primary">
+              Find your weather
+            </h1>
+            <p className="mt-2 text-sm text-text-secondary">
+              Use your device location or search for any city worldwide.
+            </p>
           </div>
 
           <div className="flex flex-col gap-3">
-            <button type="button" onClick={handleGps} className="kudu press-scale">
+            <button
+              type="button"
+              onClick={handleGps}
+              className="kudu press-scale"
+            >
               <NavigationIcon size={15} aria-hidden="true" />
               Use my current location
             </button>

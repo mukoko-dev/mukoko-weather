@@ -13,13 +13,33 @@ interface PrecipitationChartProps {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "precipitation", label: "Rainfall (mm)", color: "var(--color-rain)", type: "bar", opacity: 0.6, yAxisID: "mm", order: 2 },
-  { key: "rainProbability", label: "Probability (%)", color: "var(--chart-5)", dashed: true, yAxisID: "pct", order: 1 },
+  {
+    key: "precipitation",
+    label: "Rainfall (mm)",
+    color: "var(--color-rain)",
+    type: "bar",
+    opacity: 0.6,
+    yAxisID: "mm",
+    order: 2,
+  },
+  {
+    key: "rainProbability",
+    label: "Probability (%)",
+    color: "var(--chart-5)",
+    dashed: true,
+    yAxisID: "pct",
+    order: 1,
+  },
 ];
 
 const Y_AXES = {
   mm: { position: "left" as const, format: (v: number) => `${v} mm` },
-  pct: { position: "right" as const, min: 0, max: 100, format: (v: number) => `${v}%` },
+  pct: {
+    position: "right" as const,
+    min: 0,
+    max: 100,
+    format: (v: number) => `${v}%`,
+  },
 };
 
 /**
@@ -42,7 +62,9 @@ export function PrecipitationChart({
       series={SERIES}
       yAxes={Y_AXES}
       tooltipLabel={(label, value) =>
-        label.includes("mm") || label.includes("Rainfall") ? `${value} mm` : `${value}%`
+        label.includes("mm") || label.includes("Rainfall")
+          ? `${value} mm`
+          : `${value}%`
       }
       tooltipTitle={tooltipTitle}
       xTickFormat={xTickFormat}

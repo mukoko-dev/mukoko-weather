@@ -126,7 +126,11 @@ export function AirQualityCard({ lat, lon }: Props) {
         setState({ status: "ready", data: json });
       })
       .catch((err: unknown) => {
-        if (cancelled || (err as { name?: string } | null)?.name === "AbortError") return;
+        if (
+          cancelled ||
+          (err as { name?: string } | null)?.name === "AbortError"
+        )
+          return;
         setState({ status: "error" });
       });
 
@@ -165,7 +169,9 @@ export function AirQualityCard({ lat, lon }: Props) {
     ? POLLUTANT_LABELS[data.dominantPollutant]
     : null;
   const levelLabel = AQI_LEVEL_LABELS[data.level] ?? data.level;
-  const context = dominantLabel ? `${levelLabel} · ${dominantLabel}` : levelLabel;
+  const context = dominantLabel
+    ? `${levelLabel} · ${dominantLabel}`
+    : levelLabel;
 
   return (
     <MetricCard

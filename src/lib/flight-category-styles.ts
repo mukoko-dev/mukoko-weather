@@ -12,5 +12,8 @@ export const FLIGHT_CATEGORY_STYLES: Record<string, string> = {
 };
 
 export function getFlightCategoryClass(flightCategory: string): string {
-  return FLIGHT_CATEGORY_STYLES[flightCategory] ?? "bg-surface-dim text-text-secondary";
+  return (
+    FLIGHT_CATEGORY_STYLES[flightCategory] ??
+    "bg-surface-dim text-text-secondary"
+  );
 }

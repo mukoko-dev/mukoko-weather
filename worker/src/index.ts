@@ -39,7 +39,10 @@ app.use("/api/*", async (c, next) => {
 
 app.use("/embed/*", async (c, next) => {
   // Embeds need to be loadable from any origin
-  return cors({ origin: "*", allowMethods: ["GET", "OPTIONS"], maxAge: 86400 })(c, next);
+  return cors({ origin: "*", allowMethods: ["GET", "OPTIONS"], maxAge: 86400 })(
+    c,
+    next,
+  );
 });
 
 // ───── Health check ─────
@@ -70,7 +73,10 @@ app.all("*", async (c) => {
   const res = await fetch(proxyUrl, {
     method: c.req.method,
     headers: c.req.raw.headers,
-    body: c.req.method !== "GET" && c.req.method !== "HEAD" ? c.req.raw.body : undefined,
+    body:
+      c.req.method !== "GET" && c.req.method !== "HEAD"
+        ? c.req.raw.body
+        : undefined,
   });
 
   return new Response(res.body, {
