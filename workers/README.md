@@ -11,16 +11,18 @@ workers/
   crates/weather-edge/   Worker helpers: JSON errors, bearer auth, timeouts
   forecast/              mukoko-weather-forecast   provider aggregation (service binding only)
   internal-api/          mukoko-weather-internal   GET /internal/forecast for the Nyuchi API
+  public-api/            mukoko-weather-api        /v1/weather and /v1/forecast for the app, developers, mukoko-api
   d1/migrations/         schema of the D1 database `mukoko-weather`
   scripts/               gen-seed-locations.mjs (seed places, from src/lib/locations.ts)
 ```
 
-| Worker                    | Job                                                                                                                                                                                                                                         | Reached at                                      | Bindings                                                                                                 |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `mukoko-weather-forecast` | Gets forecasts: KV cache (15 min), then Tomorrow.io, then Open-Meteo, each behind a circuit breaker. A validated StationKit observation (50 km, 60 min) overlays `current`. Answers `503` when every provider fails, and never invents data | Service binding only (no route, no workers.dev) | KV `FORECAST_CACHE`, D1 `WEATHER_DB`, secrets `TOMORROW_API_KEY`, `NYUCHI_API_KEY`, var `NYUCHI_API_URL` |
-| `mukoko-weather-internal` | Checks the service key and the query, then asks `forecast`                                                                                                                                                                                  | `https://weather-internal.mukoko.com`           | service `FORECAST`, secret `WEATHER_SERVICE_API_KEY`                                                     |
+| Worker                    | Job                                                                                                                                                                                                                                                                                                                               | Reached at                                      | Bindings                                                                                                 |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `mukoko-weather-forecast` | Gets forecasts: KV cache (15 min), then Tomorrow.io, then Open-Meteo, each behind a circuit breaker. A validated StationKit observation (50 km, 60 min) overlays `current`. Answers `503` when every provider fails, and never invents data                                                                                       | Service binding only (no route, no workers.dev) | KV `FORECAST_CACHE`, D1 `WEATHER_DB`, secrets `TOMORROW_API_KEY`, `NYUCHI_API_KEY`, var `NYUCHI_API_URL` |
+| `mukoko-weather-internal` | Checks the service key and the query, then asks `forecast`                                                                                                                                                                                                                                                                        | `https://weather-internal.mukoko.com`           | service `FORECAST`, secret `WEATHER_SERVICE_API_KEY`                                                     |
+| `mukoko-weather-api`      | The public API. `GET /v1/weather` returns the app's full `WeatherData`, the same shape as `/api/py/weather`; if no provider answers, it serves the seasonal estimate labelled `fallback`. `GET /v1/forecast` returns the daily contract. CORS allowlist, and a rate limit of 120 requests a minute per IP. mukoko-api binds to it | `https://weather-api.mukoko.com`                | service `FORECAST`, rate limit `RATE_LIMITER`, vars `ENVIRONMENT`, `CORS_ORIGINS`                        |
 
-The public API, station ingest, scheduled jobs and the AI Worker follow in their own PRs (see #148).
+Station ingest, scheduled jobs and the AI Worker follow in their own PRs (see #148).
 
 ## The internal forecast contract
 
@@ -98,10 +100,11 @@ Creating Cloudflare resources and deploying are owner actions. Run these from `w
    ```bash
    (cd forecast && npx wrangler deploy)
    (cd internal-api && npx wrangler deploy)    # also attaches weather-internal.mukoko.com
+   (cd public-api && npx wrangler deploy)      # also attaches weather-api.mukoko.com
    ```
 
    Or use Workers Builds (Git integration), with one project per Worker. In each:
-   - set the root directory to `workers/forecast` or `workers/internal-api`;
+   - set the root directory to `workers/forecast`, `workers/internal-api` or `workers/public-api`;
    - set the build command to `cargo install worker-build@^0.8 && worker-build --release`;
    - set the deploy command to `npx wrangler deploy`.
 

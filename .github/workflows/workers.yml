@@ -78,7 +78,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        worker: [forecast, internal-api]
+        worker: [forecast, internal-api, public-api]
     steps:
       - uses: actions/checkout@v4
 
