@@ -26,7 +26,7 @@ export function getMapTilerStyle(isDark: boolean): string {
  * testing.
  */
 export function classifyMapError(
-  e: { error?: Error; sourceId?: string },
+  e: { error?: unknown; sourceId?: string },
   overlayId: string,
 ): "overlay" | "base" {
   return e?.sourceId === overlayId ? "overlay" : "base";
@@ -174,7 +174,7 @@ export function MapLibreMap({
         // Overlay errors show the transient overlay notice; base-map/style errors
         // show the "Base map unavailable" notice so a blank base map is never
         // silent.
-        map.on("error", (e: { error?: Error; sourceId?: string }) => {
+        map.on("error", (e: { error?: unknown; sourceId?: string }) => {
           if (classifyMapError(e, WEATHER_OVERLAY_ID) === "overlay") {
             // Overlay tile failures (e.g. a single raster tile that can't be
             // decoded) are non-fatal — MapLibre keeps the rest of the layer, so we
