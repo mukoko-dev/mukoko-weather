@@ -1,0 +1,27 @@
+// mukoko-weather-internal: the weather API for first-party services
+// (mukoko-dev/mukoko-weather#148). The Nyuchi API sets
+//   WEATHER_SERVICE_URL     = https://weather-internal.mukoko.com
+//   WEATHER_SERVICE_API_KEY = the same value as this Worker's secret below
+// and proxies GET /v1/weather/forecast to /internal/forecast here.
+//
+// Names only, never values:
+//   secrets: WEATHER_SERVICE_API_KEY
+{
+  "name": "mukoko-weather-internal",
+  "main": "build/index.js",
+  "compatibility_date": "2026-09-15",
+  "build": { "command": "worker-build --release" },
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true },
+  },
+  "routes": [
+    { "pattern": "weather-internal.mukoko.com", "custom_domain": true },
+  ],
+  "services": [{ "binding": "FORECAST", "service": "mukoko-weather-forecast" }],
+}

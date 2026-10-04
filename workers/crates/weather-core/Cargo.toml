@@ -1,0 +1,18 @@
+[package]
+name = "weather-core"
+description = "Pure weather logic shared by every Mukoko Weather Worker: provider normalisation, the forecast contract, places, station QC and ingest keys"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+sha2.workspace = true
+pbkdf2.workspace = true
+subtle.workspace = true
+hex.workspace = true
