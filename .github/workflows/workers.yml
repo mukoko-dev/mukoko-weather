@@ -4,14 +4,14 @@ name: Workers
 # format, lint (native and wasm32), test, and build every Worker bundle.
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
     paths:
       - "workers/**"
       - "src/lib/locations.ts"
       - "src/lib/locations-global.ts"
       - ".github/workflows/workers.yml"
   pull_request:
-    branches: [main]
+    branches: [main, staging]
     paths:
       - "workers/**"
       - "src/lib/locations.ts"
