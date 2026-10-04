@@ -1,0 +1,18 @@
+[package]
+name = "weather-edge"
+description = "Worker-side helpers shared by the Mukoko Weather Workers: JSON and error responses, bearer auth, CORS, timeouts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+worker.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+futures.workspace = true
+js-sys.workspace = true
+subtle.workspace = true
+chrono.workspace = true

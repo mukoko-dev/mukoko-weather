@@ -1,0 +1,122 @@
+# Mukoko Weather backend (Rust Workers)
+
+The weather backend, moving out of the Next.js app into Cloudflare Workers written in Rust ([workers-rs](https://github.com/cloudflare/workers-rs)). The plan, the inventory and the migration order are in [#148](https://github.com/mukoko-dev/mukoko-weather/issues/148).
+
+There is **one backend for everything weather**: the Mukoko Weather app, the public weather API, the weather stations, and other apps (through the Nyuchi API for internal callers, and mukoko-api for consumers). It is split into **several Workers, one job each**, connected by service bindings, with the shared logic in one Cargo workspace.
+
+```text
+workers/
+  crates/weather-core/   pure Rust, tested natively: provider normalisation, the forecast
+                         contract, places, station QC and ingest keys, circuit breaker
+  crates/weather-edge/   Worker helpers: JSON errors, bearer auth, timeouts
+  forecast/              mukoko-weather-forecast   provider aggregation (service binding only)
+  internal-api/          mukoko-weather-internal   GET /internal/forecast for the Nyuchi API
+  d1/migrations/         schema of the D1 database `mukoko-weather`
+  scripts/               gen-seed-locations.mjs (seed places, from src/lib/locations.ts)
+```
+
+| Worker                    | Job                                                                                                                                                                                                                                         | Reached at                                      | Bindings                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `mukoko-weather-forecast` | Gets forecasts: KV cache (15 min), then Tomorrow.io, then Open-Meteo, each behind a circuit breaker. A validated StationKit observation (50 km, 60 min) overlays `current`. Answers `503` when every provider fails, and never invents data | Service binding only (no route, no workers.dev) | KV `FORECAST_CACHE`, D1 `WEATHER_DB`, secrets `TOMORROW_API_KEY`, `NYUCHI_API_KEY`, var `NYUCHI_API_URL` |
+| `mukoko-weather-internal` | Checks the service key and the query, then asks `forecast`                                                                                                                                                                                  | `https://weather-internal.mukoko.com`           | service `FORECAST`, secret `WEATHER_SERVICE_API_KEY`                                                     |
+
+The public API, station ingest, scheduled jobs and the AI Worker follow in their own PRs (see #148).
+
+## The internal forecast contract
+
+This is the upstream for the Nyuchi API's `GET /v1/weather/forecast` (nyuchi/api-gateway#154). The Nyuchi API needs two settings:
+
+- `WEATHER_SERVICE_URL=https://weather-internal.mukoko.com`;
+- `WEATHER_SERVICE_API_KEY`, set to the same value as this Worker's secret.
+
+```text
+GET /internal/forecast?location=<slug|name>        (or lat=&lon=)   [&days=1..7, default 7]
+Authorization: Bearer <WEATHER_SERVICE_API_KEY>
+
+200 {"location": {"slug", "name", "lat", "lon"},
+     "data": [{"date": "YYYY-MM-DD", "description", "weather_code", "high", "low",
+               "precipitation_probability"}],
+     "source": "tomorrow" | "open-meteo",
+     "fetched_at": "RFC 3339",
+     "attribution": "provider credit line"}
+401 missing or wrong key       404 unknown location     422 bad query
+503 no key configured here, or no provider answered (fails closed)
+```
+
+**How a place is resolved.** Locations resolve in this order:
+
+1. the app's seed locations (compiled in), matched by slug, by name, or by the name's slug;
+2. the Nyuchi API (`GET /v1/places/{slug}`, cached), because canonical place records belong to the API;
+3. otherwise `404`.
+
+**Requests by point.** A `lat`/`lon` request borrows the slug and name of a seed location within 10 km. Otherwise the slug is the rounded point and the name is `null`.
+
+## Develop
+
+```bash
+cd workers
+cargo test -p weather-core                                   # all the logic, native
+cargo clippy --workspace --target wasm32-unknown-unknown -- -D warnings
+cargo install worker-build@^0.8                              # once
+cd forecast && worker-build --release                        # or internal-api
+# Run both Workers locally, bound to each other:
+cd ../internal-api && npx wrangler dev -c wrangler.jsonc -c ../forecast/wrangler.jsonc
+```
+
+For local secrets, put them in `.dev.vars` next to each `wrangler.jsonc`. That file is ignored by git.
+
+After changing `src/lib/locations.ts`, regenerate the seed places from the repo root:
+
+```bash
+node --experimental-strip-types workers/scripts/gen-seed-locations.mjs
+```
+
+CI (`.github/workflows/workers.yml`) fails if the seed places are stale.
+
+## Owner steps
+
+Creating Cloudflare resources and deploying are owner actions. Run these from `workers/`, signed in to the **Nyuchi Web Services** account.
+
+1. Create the stores, then put their ids where the configs say `OWNER`:
+
+   ```bash
+   npx wrangler kv namespace create mukoko-weather-forecast-cache    # → forecast/wrangler.jsonc FORECAST_CACHE id
+   npx wrangler d1 create mukoko-weather                             # → forecast/wrangler.jsonc WEATHER_DB database_id
+   npx wrangler d1 migrations apply mukoko-weather --remote -c forecast/wrangler.jsonc
+   ```
+
+2. Set the secrets. These are names only; the values are in 1Password:
+
+   ```bash
+   (cd forecast && npx wrangler secret put TOMORROW_API_KEY)       # today in Mongo weather.api_keys "tomorrow"
+   (cd forecast && npx wrangler secret put NYUCHI_API_KEY)         # internal key, places read
+   (cd internal-api && npx wrangler secret put WEATHER_SERVICE_API_KEY)  # new random value, e.g. openssl rand -hex 32
+   ```
+
+3. Deploy. `forecast` goes first, because `internal-api` binds to it:
+
+   ```bash
+   (cd forecast && npx wrangler deploy)
+   (cd internal-api && npx wrangler deploy)    # also attaches weather-internal.mukoko.com
+   ```
+
+   Or use Workers Builds (Git integration), with one project per Worker. In each:
+   - set the root directory to `workers/forecast` or `workers/internal-api`;
+   - set the build command to `cargo install worker-build@^0.8 && worker-build --release`;
+   - set the deploy command to `npx wrangler deploy`.
+
+4. On nyuchi-api (Fly), set `WEATHER_SERVICE_URL=https://weather-internal.mukoko.com` and `WEATHER_SERVICE_API_KEY`, using the same value as in step 2.
+5. Check the result:
+
+   ```bash
+   curl -s https://weather-internal.mukoko.com/health
+   curl -s -H "Authorization: Bearer $WEATHER_SERVICE_API_KEY" \
+     "https://weather-internal.mukoko.com/internal/forecast?location=harare&days=3"
+   ```
+
+## Rules
+
+- **Cloudflare only.** Work that does not fit a Worker goes to Queues, Cron Triggers, Durable Objects, Workflows or Containers, never another host.
+- **No database outside the API.** The Workers keep weather data in their own D1, KV and R2. Canonical records (persons, places) go through the Nyuchi API. Nothing here connects to MongoDB (#150).
+- **Keep each Worker small.** Budget its CPU, memory, bundle size and subrequests. Split a Worker, or fan out over a Queue, rather than grow one.
+- **Observability.** Traces and invocation logs are on, with query strings redacted. The code never logs payloads, coordinates or keys.
