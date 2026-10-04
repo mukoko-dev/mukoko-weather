@@ -6,6 +6,7 @@ Live system health dashboard checks.
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from datetime import datetime, timezone
@@ -16,6 +17,20 @@ from fastapi import APIRouter
 from ._db import get_db, get_api_key
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
+
+# The status payload is public, so raw exception text (connection strings,
+# hostnames, driver internals) must never reach it. The detail is logged
+# server-side and the client sees a fixed message.
+_CHECK_FAILED_MESSAGE = "Check failed — details are in the server logs"
+
+
+def _failure_message(check: str, exc: Exception) -> str:
+    """Log a failed check's exception and return the public-safe message."""
+    logger.warning("Status check %s failed: %r", check, exc)
+    return _CHECK_FAILED_MESSAGE
+
 
 # Model the app actually runs (Haiku). Kept in sync with api/py/_ai.py.
 ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
@@ -49,7 +64,7 @@ def _check_mongodb() -> dict:
             "name": "MongoDB Atlas",
             "status": "down",
             "latencyMs": round((time.time() - start) * 1000),
-            "message": str(e)[:200],
+            "message": _failure_message("MongoDB Atlas", e),
         }
 
 
@@ -59,11 +74,12 @@ def _check_tomorrow_io() -> dict:
         try:
             api_key = get_api_key("tomorrow")
         except Exception as e:
+            _failure_message("Tomorrow.io API key lookup", e)
             return {
                 "name": "Tomorrow.io API",
                 "status": "degraded",
                 "latencyMs": round((time.time() - start) * 1000),
-                "message": f"Cannot retrieve API key — MongoDB unavailable ({str(e)[:100]})",
+                "message": "Cannot retrieve API key — MongoDB unavailable",
             }
 
         if not api_key:
@@ -107,7 +123,7 @@ def _check_tomorrow_io() -> dict:
             "name": "Tomorrow.io API",
             "status": "down",
             "latencyMs": round((time.time() - start) * 1000),
-            "message": str(e)[:200],
+            "message": _failure_message("Tomorrow.io API", e),
         }
 
 
@@ -148,7 +164,7 @@ def _check_open_meteo() -> dict:
             "name": "Open-Meteo API",
             "status": "down",
             "latencyMs": round((time.time() - start) * 1000),
-            "message": str(e)[:200],
+            "message": _failure_message("Open-Meteo API", e),
         }
 
 
@@ -207,7 +223,7 @@ def _check_weather_cache() -> dict:
             "name": "Weather Cache",
             "status": "down",
             "latencyMs": round((time.time() - start) * 1000),
-            "message": str(e)[:200],
+            "message": _failure_message("Weather Cache", e),
         }
 
 
@@ -233,7 +249,7 @@ def _check_ai_cache() -> dict:
             "name": "AI Summary Cache",
             "status": "down",
             "latencyMs": round((time.time() - start) * 1000),
-            "message": str(e)[:200],
+            "message": _failure_message("AI Summary Cache", e),
         }
 
 
