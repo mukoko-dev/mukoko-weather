@@ -229,3 +229,234 @@ mod tests {
         assert_eq!(c["uv_index"], Value::Null);
     }
 }
+
+/// Upload fields that carry credentials. They are never archived.
+const CREDENTIAL_FIELDS: [&str; 4] = ["ID", "PASSWORD", "PASSKEY", "key"];
+
+/// The raw upload as archived: credentials removed, at most 60 fields, each
+/// value cut to 120 characters (the Python backend's limits).
+///
+/// The Python backend archived the raw query including `PASSWORD`; this does
+/// not.
+pub fn scrub_raw<'a, I>(pairs: I) -> Map<String, Value>
+where
+    I: IntoIterator<Item = (&'a str, &'a str)>,
+{
+    pairs
+        .into_iter()
+        .filter(|(k, _)| !CREDENTIAL_FIELDS.iter().any(|c| c.eq_ignore_ascii_case(k)))
+        .take(60)
+        .map(|(k, v)| (k.to_owned(), Value::String(v.chars().take(120).collect())))
+        .collect()
+}
+
+/// A manual reading from an analog station, as posted by the station
+/// console (`POST /api/py/stations/manual`).
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManualReading {
+    pub station_id: String,
+    pub key: String,
+    #[serde(rename = "temperatureC")]
+    pub temperature_c: Option<f64>,
+    pub humidity_percent: Option<f64>,
+    pub pressure_hpa: Option<f64>,
+    pub wind_kph: Option<f64>,
+    pub wind_direction_degrees: Option<f64>,
+    pub rainfall_mm: Option<f64>,
+    pub notes: Option<String>,
+}
+
+impl ManualReading {
+    /// The metrics, or why the reading is refused (a value out of range, a
+    /// key or note too long, or no measurement at all).
+    pub fn metrics(&self) -> Result<Metrics, String> {
+        if self.key.chars().count() > 64 {
+            return Err("`key` is at most 64 characters.".into());
+        }
+        if self
+            .notes
+            .as_deref()
+            .is_some_and(|n| n.chars().count() > 280)
+        {
+            return Err("`notes` is at most 280 characters.".into());
+        }
+        let m = Metrics::from([
+            ("airTemperatureCelsius", self.temperature_c),
+            ("relativeHumidityPercent", self.humidity_percent),
+            ("atmosphericPressureMillibar", self.pressure_hpa),
+            ("windSpeedKph", self.wind_kph),
+            ("windDirectionDegrees", self.wind_direction_degrees),
+            ("precipitationMillimeters", self.rainfall_mm),
+        ]);
+        for (field, value) in &m {
+            if let Some(v) = value {
+                let (_, lo, hi) = QC_RANGES
+                    .iter()
+                    .find(|(f, _, _)| f == field)
+                    .copied()
+                    .unwrap_or((field, f64::MIN, f64::MAX));
+                if !v.is_finite() || *v < lo || *v > hi {
+                    return Err(format!("`{field}` must be between {lo} and {hi}."));
+                }
+            }
+        }
+        if m.values().all(Option::is_none) {
+            return Err("At least one measurement is required.".into());
+        }
+        Ok(m)
+    }
+}
+
+/// A station registration request (`POST /api/py/stations/register`).
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Registration {
+    pub name: String,
+    pub lat: f64,
+    pub lon: f64,
+    pub elevation: Option<f64>,
+    #[serde(default = "digital")]
+    pub station_type: String,
+    pub hardware: Option<String>,
+    pub country: Option<String>,
+}
+
+fn digital() -> String {
+    "digital".into()
+}
+
+impl Registration {
+    /// Check the fields the way the Python model did.
+    pub fn validate(&self) -> Result<(), String> {
+        let name = self.name.trim().chars().count();
+        if !(2..=80).contains(&name) {
+            return Err("`name` is 2 to 80 characters.".into());
+        }
+        if !crate::geo::valid_coordinates(self.lat, self.lon) {
+            return Err("Invalid coordinates.".into());
+        }
+        if self
+            .elevation
+            .is_some_and(|e| !(-430.0..=9000.0).contains(&e))
+        {
+            return Err("`elevation` must be between -430 and 9000.".into());
+        }
+        if self.station_type != "digital" && self.station_type != "manual" {
+            return Err("`stationType` is `digital` or `manual`.".into());
+        }
+        if self
+            .hardware
+            .as_deref()
+            .is_some_and(|h| h.chars().count() > 80)
+        {
+            return Err("`hardware` is at most 80 characters.".into());
+        }
+        if self
+            .country
+            .as_deref()
+            .is_some_and(|c| c.len() != 2 || !c.bytes().all(|b| b.is_ascii_alphabetic()))
+        {
+            return Err("`country` is an ISO 3166-1 alpha-2 code.".into());
+        }
+        Ok(())
+    }
+
+    pub fn country_code(&self) -> String {
+        self.country.as_deref().unwrap_or("ZW").to_ascii_uppercase()
+    }
+}
+
+/// One accepted upload, queued for the batch writer.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct IngestMessage {
+    pub station_id: String,
+    pub lat: f64,
+    pub lon: f64,
+    pub country_code: String,
+    /// Epoch ms.
+    pub received_at: i64,
+    /// `wunderground` | `ecowitt` | `manual`.
+    pub source: String,
+    /// QC-passed metrics; empty when nothing passed (archived raw only).
+    pub validated: BTreeMap<String, f64>,
+    /// The scrubbed raw upload.
+    pub raw: Map<String, Value>,
+}
+
+#[cfg(test)]
+mod ingest_tests {
+    use super::*;
+
+    #[test]
+    fn credentials_are_never_archived() {
+        let raw = scrub_raw([
+            ("ID", "mws-0a1b2c3d"),
+            ("PASSWORD", "secret"),
+            ("passkey", "x:y"),
+            ("tempf", "70"),
+        ]);
+        assert_eq!(raw.len(), 1);
+        assert_eq!(raw["tempf"], "70");
+        let long = "x".repeat(500);
+        assert_eq!(
+            scrub_raw([("a", long.as_str())])["a"]
+                .as_str()
+                .unwrap()
+                .len(),
+            120
+        );
+    }
+
+    fn manual(json: serde_json::Value) -> ManualReading {
+        serde_json::from_value(json).unwrap()
+    }
+
+    #[test]
+    fn manual_readings_are_range_checked() {
+        let ok = manual(
+            serde_json::json!({"stationId": "mws-0a1b2c3d", "key": "k", "temperatureC": 21.5, "rainfallMm": 3}),
+        );
+        let m = ok.metrics().unwrap();
+        assert_eq!(m["airTemperatureCelsius"], Some(21.5));
+        let hot = manual(serde_json::json!({"stationId": "s", "key": "k", "temperatureC": 70}));
+        assert!(hot.metrics().is_err());
+        let empty = manual(serde_json::json!({"stationId": "s", "key": "k", "notes": "dry"}));
+        assert!(empty.metrics().is_err());
+    }
+
+    #[test]
+    fn registrations_are_validated() {
+        let r: Registration = serde_json::from_value(serde_json::json!(
+            {"name": "Chinhoyi School", "lat": -17.36, "lon": 30.2, "country": "zw"}))
+        .unwrap();
+        assert!(r.validate().is_ok());
+        assert_eq!(r.station_type, "digital");
+        assert_eq!(r.country_code(), "ZW");
+        let bad: Registration = serde_json::from_value(serde_json::json!(
+            {"name": "X", "lat": 0, "lon": 0}))
+        .unwrap();
+        assert!(bad.validate().is_err());
+        let bad: Registration = serde_json::from_value(serde_json::json!(
+            {"name": "Farm", "lat": 0, "lon": 0, "stationType": "robot"}))
+        .unwrap();
+        assert!(bad.validate().is_err());
+    }
+
+    #[test]
+    fn ingest_messages_round_trip() {
+        let m = IngestMessage {
+            station_id: "mws-0a1b2c3d".into(),
+            lat: -17.8,
+            lon: 31.0,
+            country_code: "ZW".into(),
+            received_at: 1,
+            source: "ecowitt".into(),
+            validated: BTreeMap::from([("uvIndex".to_owned(), 3.0)]),
+            raw: Map::new(),
+        };
+        let back: IngestMessage =
+            serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
+        assert_eq!(back, m);
+    }
+}

@@ -9,6 +9,7 @@ members = [
   "forecast",
   "internal-api",
   "public-api",
+  "stations",
 ]
 
 [workspace.package]

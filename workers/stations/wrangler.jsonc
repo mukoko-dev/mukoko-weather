@@ -1,0 +1,61 @@
+// mukoko-weather-stations: weather-station registration and ingest
+// (mukoko-dev/mukoko-weather#148). Same paths and protocols as
+// /api/py/stations/*, so consoles only change their upload host.
+//
+// No secrets. Vars: ENVIRONMENT, CORS_ORIGINS, INGEST_HOST.
+// OWNER: replace the placeholder D1 id (the same database as
+// forecast/wrangler.jsonc), and create the queues and the bucket
+// (workers/README.md, "Owner steps").
+//
+// Cutover (not yet): when the existing stations are copied into D1, add the
+// route "weather.mukoko.com/api/py/stations/*" (zone weather.mukoko.com)
+// so consoles already configured with weather.mukoko.com land here.
+{
+  "name": "mukoko-weather-stations",
+  "main": "build/index.js",
+  "compatibility_date": "2026-09-15",
+  "build": { "command": "worker-build --release" },
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  // Query strings carry station keys (Wunderground PASSWORD): always redacted.
+  // The code logs no payloads and no keys.
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true },
+  },
+  "routes": [{ "pattern": "weather-ingest.nyuchi.com", "custom_domain": true }],
+  "vars": {
+    "ENVIRONMENT": "production",
+    "CORS_ORIGINS": "https://weatherstations.nyuchi.com,https://weather.mukoko.com",
+    "INGEST_HOST": "weather-ingest.nyuchi.com",
+  },
+  "d1_databases": [
+    {
+      "binding": "WEATHER_DB",
+      "database_name": "mukoko-weather",
+      "database_id": "00000000-0000-0000-0000-000000000000", // OWNER
+      "migrations_dir": "../d1/migrations",
+    },
+  ],
+  "r2_buckets": [
+    // Raw uploads (credentials removed), NDJSON per queue batch.
+    { "binding": "RAW_OBSERVATIONS", "bucket_name": "mukoko-weather-raw" },
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "OBSERVATIONS", "queue": "weather-observations" },
+    ],
+    "consumers": [
+      {
+        "queue": "weather-observations",
+        "max_batch_size": 100,
+        "max_batch_timeout": 10,
+        "max_retries": 10,
+        "dead_letter_queue": "weather-observations-dlq",
+      },
+    ],
+  },
+}
