@@ -1,0 +1,2378 @@
+[
+  {
+    "slug": "harare",
+    "name": "Harare",
+    "province": "Harare",
+    "country": "ZW",
+    "lat": -17.83,
+    "lon": 31.05,
+    "elevation": 1490
+  },
+  {
+    "slug": "bulawayo",
+    "name": "Bulawayo",
+    "province": "Bulawayo",
+    "country": "ZW",
+    "lat": -20.15,
+    "lon": 28.58,
+    "elevation": 1348
+  },
+  {
+    "slug": "mutare",
+    "name": "Mutare",
+    "province": "Manicaland",
+    "country": "ZW",
+    "lat": -18.97,
+    "lon": 32.67,
+    "elevation": 1073
+  },
+  {
+    "slug": "gweru",
+    "name": "Gweru",
+    "province": "Midlands",
+    "country": "ZW",
+    "lat": -19.45,
+    "lon": 29.82,
+    "elevation": 1422
+  },
+  {
+    "slug": "masvingo",
+    "name": "Masvingo",
+    "province": "Masvingo",
+    "country": "ZW",
+    "lat": -20.07,
+    "lon": 30.83,
+    "elevation": 1095
+  },
+  {
+    "slug": "kwekwe",
+    "name": "Kwekwe",
+    "province": "Midlands",
+    "country": "ZW",
+    "lat": -18.93,
+    "lon": 29.82,
+    "elevation": 1214
+  },
+  {
+    "slug": "kadoma",
+    "name": "Kadoma",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -18.35,
+    "lon": 29.92,
+    "elevation": 1152
+  },
+  {
+    "slug": "marondera",
+    "name": "Marondera",
+    "province": "Mashonaland East",
+    "country": "ZW",
+    "lat": -18.19,
+    "lon": 31.55,
+    "elevation": 1634
+  },
+  {
+    "slug": "chinhoyi",
+    "name": "Chinhoyi",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -17.37,
+    "lon": 30.2,
+    "elevation": 1143
+  },
+  {
+    "slug": "victoria-falls",
+    "name": "Victoria Falls",
+    "province": "Matabeleland North",
+    "country": "ZW",
+    "lat": -17.93,
+    "lon": 25.85,
+    "elevation": 915
+  },
+  {
+    "slug": "chitungwiza",
+    "name": "Chitungwiza",
+    "province": "Harare",
+    "country": "ZW",
+    "lat": -17.99,
+    "lon": 31.08,
+    "elevation": 1463
+  },
+  {
+    "slug": "bindura",
+    "name": "Bindura",
+    "province": "Mashonaland Central",
+    "country": "ZW",
+    "lat": -17.3,
+    "lon": 31.33,
+    "elevation": 1112
+  },
+  {
+    "slug": "zvishavane",
+    "name": "Zvishavane",
+    "province": "Midlands",
+    "country": "ZW",
+    "lat": -20.33,
+    "lon": 30.07,
+    "elevation": 914
+  },
+  {
+    "slug": "kariba",
+    "name": "Kariba",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -16.52,
+    "lon": 28.8,
+    "elevation": 519
+  },
+  {
+    "slug": "hwange",
+    "name": "Hwange",
+    "province": "Matabeleland North",
+    "country": "ZW",
+    "lat": -18.37,
+    "lon": 26.5,
+    "elevation": 900
+  },
+  {
+    "slug": "chiredzi",
+    "name": "Chiredzi",
+    "province": "Masvingo",
+    "country": "ZW",
+    "lat": -21.05,
+    "lon": 31.67,
+    "elevation": 430
+  },
+  {
+    "slug": "chipinge",
+    "name": "Chipinge",
+    "province": "Manicaland",
+    "country": "ZW",
+    "lat": -20.19,
+    "lon": 32.63,
+    "elevation": 1132
+  },
+  {
+    "slug": "rusape",
+    "name": "Rusape",
+    "province": "Manicaland",
+    "country": "ZW",
+    "lat": -18.53,
+    "lon": 32.13,
+    "elevation": 1430
+  },
+  {
+    "slug": "beitbridge",
+    "name": "Beitbridge",
+    "province": "Matabeleland South",
+    "country": "ZW",
+    "lat": -22.22,
+    "lon": 30,
+    "elevation": 457
+  },
+  {
+    "slug": "plumtree",
+    "name": "Plumtree",
+    "province": "Matabeleland South",
+    "country": "ZW",
+    "lat": -20.48,
+    "lon": 27.82,
+    "elevation": 1362
+  },
+  {
+    "slug": "norton",
+    "name": "Norton",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -17.88,
+    "lon": 30.7,
+    "elevation": 1364
+  },
+  {
+    "slug": "ruwa",
+    "name": "Ruwa",
+    "province": "Mashonaland East",
+    "country": "ZW",
+    "lat": -17.89,
+    "lon": 31.25,
+    "elevation": 1473
+  },
+  {
+    "slug": "epworth",
+    "name": "Epworth",
+    "province": "Harare",
+    "country": "ZW",
+    "lat": -17.89,
+    "lon": 31.15,
+    "elevation": 1490
+  },
+  {
+    "slug": "redcliff",
+    "name": "Redcliff",
+    "province": "Midlands",
+    "country": "ZW",
+    "lat": -19.03,
+    "lon": 29.78,
+    "elevation": 1220
+  },
+  {
+    "slug": "shurugwi",
+    "name": "Shurugwi",
+    "province": "Midlands",
+    "country": "ZW",
+    "lat": -19.67,
+    "lon": 29.99,
+    "elevation": 1300
+  },
+  {
+    "slug": "chegutu",
+    "name": "Chegutu",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -18.13,
+    "lon": 30.15,
+    "elevation": 1140
+  },
+  {
+    "slug": "mazowe",
+    "name": "Mazowe",
+    "province": "Mashonaland Central",
+    "country": "ZW",
+    "lat": -17.52,
+    "lon": 30.97,
+    "elevation": 1219
+  },
+  {
+    "slug": "shamva",
+    "name": "Shamva",
+    "province": "Mashonaland Central",
+    "country": "ZW",
+    "lat": -17.31,
+    "lon": 31.57,
+    "elevation": 1060
+  },
+  {
+    "slug": "concession",
+    "name": "Concession",
+    "province": "Mashonaland Central",
+    "country": "ZW",
+    "lat": -17.38,
+    "lon": 30.95,
+    "elevation": 1280
+  },
+  {
+    "slug": "headlands",
+    "name": "Headlands",
+    "province": "Manicaland",
+    "country": "ZW",
+    "lat": -18.28,
+    "lon": 32.05,
+    "elevation": 1470
+  },
+  {
+    "slug": "odzi",
+    "name": "Odzi",
+    "province": "Manicaland",
+    "country": "ZW",
+    "lat": -18.97,
+    "lon": 32.37,
+    "elevation": 960
+  },
+  {
+    "slug": "penhalonga",
+    "name": "Penhalonga",
+    "province": "Manicaland",
+    "country": "ZW",
+    "lat": -18.9,
+    "lon": 32.7,
+    "elevation": 1010
+  },
+  {
+    "slug": "nyanga",
+    "name": "Nyanga",
+    "province": "Manicaland",
+    "country": "ZW",
+    "lat": -18.22,
+    "lon": 32.75,
+    "elevation": 1850
+  },
+  {
+    "slug": "chimanimani",
+    "name": "Chimanimani",
+    "province": "Manicaland",
+    "country": "ZW",
+    "lat": -19.8,
+    "lon": 32.87,
+    "elevation": 1650
+  },
+  {
+    "slug": "triangle",
+    "name": "Triangle",
+    "province": "Masvingo",
+    "country": "ZW",
+    "lat": -21.02,
+    "lon": 31.51,
+    "elevation": 450
+  },
+  {
+    "slug": "hippo-valley",
+    "name": "Hippo Valley",
+    "province": "Masvingo",
+    "country": "ZW",
+    "lat": -21.08,
+    "lon": 31.6,
+    "elevation": 420
+  },
+  {
+    "slug": "selous",
+    "name": "Selous",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -18,
+    "lon": 30.42,
+    "elevation": 1100
+  },
+  {
+    "slug": "mvurwi",
+    "name": "Mvurwi",
+    "province": "Mashonaland Central",
+    "country": "ZW",
+    "lat": -17.04,
+    "lon": 30.85,
+    "elevation": 1230
+  },
+  {
+    "slug": "glendale",
+    "name": "Glendale",
+    "province": "Mashonaland Central",
+    "country": "ZW",
+    "lat": -17.36,
+    "lon": 31.08,
+    "elevation": 1250
+  },
+  {
+    "slug": "centenary",
+    "name": "Centenary",
+    "province": "Mashonaland Central",
+    "country": "ZW",
+    "lat": -16.73,
+    "lon": 31.12,
+    "elevation": 910
+  },
+  {
+    "slug": "banket",
+    "name": "Banket",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -17.38,
+    "lon": 30.4,
+    "elevation": 1100
+  },
+  {
+    "slug": "karoi",
+    "name": "Karoi",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -16.81,
+    "lon": 29.69,
+    "elevation": 1300
+  },
+  {
+    "slug": "guruve",
+    "name": "Guruve",
+    "province": "Mashonaland Central",
+    "country": "ZW",
+    "lat": -16.67,
+    "lon": 30.7,
+    "elevation": 1050
+  },
+  {
+    "slug": "muzarabani",
+    "name": "Muzarabani",
+    "province": "Mashonaland Central",
+    "country": "ZW",
+    "lat": -16.33,
+    "lon": 31.1,
+    "elevation": 340
+  },
+  {
+    "slug": "mount-darwin",
+    "name": "Mount Darwin",
+    "province": "Mashonaland Central",
+    "country": "ZW",
+    "lat": -16.77,
+    "lon": 31.58,
+    "elevation": 900
+  },
+  {
+    "slug": "lupane",
+    "name": "Lupane",
+    "province": "Matabeleland North",
+    "country": "ZW",
+    "lat": -18.93,
+    "lon": 27.8,
+    "elevation": 1050
+  },
+  {
+    "slug": "gokwe",
+    "name": "Gokwe",
+    "province": "Midlands",
+    "country": "ZW",
+    "lat": -18.22,
+    "lon": 28.93,
+    "elevation": 1280
+  },
+  {
+    "slug": "nkayi",
+    "name": "Nkayi",
+    "province": "Matabeleland North",
+    "country": "ZW",
+    "lat": -19,
+    "lon": 28.9,
+    "elevation": 1050
+  },
+  {
+    "slug": "gutu",
+    "name": "Gutu",
+    "province": "Masvingo",
+    "country": "ZW",
+    "lat": -19.93,
+    "lon": 31,
+    "elevation": 1200
+  },
+  {
+    "slug": "zaka",
+    "name": "Zaka",
+    "province": "Masvingo",
+    "country": "ZW",
+    "lat": -20.33,
+    "lon": 31.47,
+    "elevation": 900
+  },
+  {
+    "slug": "bikita",
+    "name": "Bikita",
+    "province": "Masvingo",
+    "country": "ZW",
+    "lat": -20.1,
+    "lon": 31.6,
+    "elevation": 1000
+  },
+  {
+    "slug": "mberengwa",
+    "name": "Mberengwa",
+    "province": "Midlands",
+    "country": "ZW",
+    "lat": -20.42,
+    "lon": 29.98,
+    "elevation": 1200
+  },
+  {
+    "slug": "hwange-colliery",
+    "name": "Hwange Colliery",
+    "province": "Matabeleland North",
+    "country": "ZW",
+    "lat": -18.36,
+    "lon": 26.48,
+    "elevation": 880
+  },
+  {
+    "slug": "renco-mine",
+    "name": "Renco Mine",
+    "province": "Masvingo",
+    "country": "ZW",
+    "lat": -20.49,
+    "lon": 31.53,
+    "elevation": 630
+  },
+  {
+    "slug": "bikita-minerals",
+    "name": "Bikita Minerals",
+    "province": "Masvingo",
+    "country": "ZW",
+    "lat": -20.08,
+    "lon": 31.57,
+    "elevation": 1050
+  },
+  {
+    "slug": "kamativi",
+    "name": "Kamativi",
+    "province": "Matabeleland North",
+    "country": "ZW",
+    "lat": -18.32,
+    "lon": 26.87,
+    "elevation": 970
+  },
+  {
+    "slug": "mutorashanga",
+    "name": "Mutorashanga",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -17.3,
+    "lon": 30.38,
+    "elevation": 1400
+  },
+  {
+    "slug": "mashava",
+    "name": "Mashava",
+    "province": "Masvingo",
+    "country": "ZW",
+    "lat": -20.05,
+    "lon": 30.47,
+    "elevation": 1200
+  },
+  {
+    "slug": "trojan-mine",
+    "name": "Trojan Mine",
+    "province": "Mashonaland Central",
+    "country": "ZW",
+    "lat": -17.33,
+    "lon": 31.35,
+    "elevation": 1100
+  },
+  {
+    "slug": "mimosa-mine",
+    "name": "Mimosa Mine",
+    "province": "Midlands",
+    "country": "ZW",
+    "lat": -20.35,
+    "lon": 30.1,
+    "elevation": 950
+  },
+  {
+    "slug": "unki-mine",
+    "name": "Unki Mine",
+    "province": "Midlands",
+    "country": "ZW",
+    "lat": -19.68,
+    "lon": 30.05,
+    "elevation": 1300
+  },
+  {
+    "slug": "zimplats",
+    "name": "Zimplats (Ngezi)",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -18,
+    "lon": 29.97,
+    "elevation": 1230
+  },
+  {
+    "slug": "murowa-diamond",
+    "name": "Murowa Diamond",
+    "province": "Midlands",
+    "country": "ZW",
+    "lat": -20.02,
+    "lon": 30.1,
+    "elevation": 1100
+  },
+  {
+    "slug": "marange",
+    "name": "Marange",
+    "province": "Manicaland",
+    "country": "ZW",
+    "lat": -19.4,
+    "lon": 32.55,
+    "elevation": 800
+  },
+  {
+    "slug": "matopos",
+    "name": "Matopos",
+    "province": "Matabeleland South",
+    "country": "ZW",
+    "lat": -20.5,
+    "lon": 28.5,
+    "elevation": 1300
+  },
+  {
+    "slug": "great-zimbabwe",
+    "name": "Great Zimbabwe",
+    "province": "Masvingo",
+    "country": "ZW",
+    "lat": -20.27,
+    "lon": 30.93,
+    "elevation": 1100
+  },
+  {
+    "slug": "hwange-national-park",
+    "name": "Hwange National Park",
+    "province": "Matabeleland North",
+    "country": "ZW",
+    "lat": -18.75,
+    "lon": 26.5,
+    "elevation": 1050
+  },
+  {
+    "slug": "mana-pools",
+    "name": "Mana Pools",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -15.75,
+    "lon": 29.4,
+    "elevation": 350
+  },
+  {
+    "slug": "gonarezhou",
+    "name": "Gonarezhou",
+    "province": "Masvingo",
+    "country": "ZW",
+    "lat": -21.75,
+    "lon": 31.75,
+    "elevation": 300
+  },
+  {
+    "slug": "lake-kariba",
+    "name": "Lake Kariba",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -16.75,
+    "lon": 28.5,
+    "elevation": 485
+  },
+  {
+    "slug": "nyanga-national-park",
+    "name": "Nyanga National Park",
+    "province": "Manicaland",
+    "country": "ZW",
+    "lat": -18.3,
+    "lon": 32.75,
+    "elevation": 2000
+  },
+  {
+    "slug": "chimanimani-national-park",
+    "name": "Chimanimani National Park",
+    "province": "Manicaland",
+    "country": "ZW",
+    "lat": -19.78,
+    "lon": 32.9,
+    "elevation": 1750
+  },
+  {
+    "slug": "matusadona",
+    "name": "Matusadona",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -16.73,
+    "lon": 28.7,
+    "elevation": 490
+  },
+  {
+    "slug": "chizarira",
+    "name": "Chizarira",
+    "province": "Matabeleland North",
+    "country": "ZW",
+    "lat": -17.77,
+    "lon": 27.9,
+    "elevation": 1300
+  },
+  {
+    "slug": "zambezi-national-park",
+    "name": "Zambezi National Park",
+    "province": "Matabeleland North",
+    "country": "ZW",
+    "lat": -17.87,
+    "lon": 25.65,
+    "elevation": 910
+  },
+  {
+    "slug": "zvimba",
+    "name": "Zvimba",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -17.57,
+    "lon": 30.22,
+    "elevation": 1200
+  },
+  {
+    "slug": "lower-gweru",
+    "name": "Lower Gweru",
+    "province": "Midlands",
+    "country": "ZW",
+    "lat": -19.7,
+    "lon": 29.6,
+    "elevation": 1350
+  },
+  {
+    "slug": "gokomere",
+    "name": "Gokomere",
+    "province": "Masvingo",
+    "country": "ZW",
+    "lat": -20.18,
+    "lon": 30.68,
+    "elevation": 1050
+  },
+  {
+    "slug": "kutama",
+    "name": "Kutama",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -17.57,
+    "lon": 30.15,
+    "elevation": 1200
+  },
+  {
+    "slug": "driefontein",
+    "name": "Driefontein",
+    "province": "Masvingo",
+    "country": "ZW",
+    "lat": -19.8,
+    "lon": 30.8,
+    "elevation": 1100
+  },
+  {
+    "slug": "dadaya",
+    "name": "Dadaya",
+    "province": "Midlands",
+    "country": "ZW",
+    "lat": -20.22,
+    "lon": 29.75,
+    "elevation": 1200
+  },
+  {
+    "slug": "chirundu",
+    "name": "Chirundu",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -15.6,
+    "lon": 28.85,
+    "elevation": 370
+  },
+  {
+    "slug": "forbes-border",
+    "name": "Forbes (Mutare)",
+    "province": "Manicaland",
+    "country": "ZW",
+    "lat": -18.97,
+    "lon": 32.87,
+    "elevation": 900
+  },
+  {
+    "slug": "nyamapanda",
+    "name": "Nyamapanda",
+    "province": "Mashonaland Central",
+    "country": "ZW",
+    "lat": -16.28,
+    "lon": 32.3,
+    "elevation": 620
+  },
+  {
+    "slug": "kazungula",
+    "name": "Kazungula",
+    "province": "Matabeleland North",
+    "country": "ZW",
+    "lat": -17.78,
+    "lon": 25.27,
+    "elevation": 930
+  },
+  {
+    "slug": "kanyemba",
+    "name": "Kanyemba",
+    "province": "Mashonaland Central",
+    "country": "ZW",
+    "lat": -15.63,
+    "lon": 30.42,
+    "elevation": 340
+  },
+  {
+    "slug": "chivhu",
+    "name": "Chivhu",
+    "province": "Mashonaland East",
+    "country": "ZW",
+    "lat": -19.02,
+    "lon": 30.9,
+    "elevation": 1430
+  },
+  {
+    "slug": "mvuma",
+    "name": "Mvuma",
+    "province": "Midlands",
+    "country": "ZW",
+    "lat": -19.28,
+    "lon": 30.53,
+    "elevation": 1350
+  },
+  {
+    "slug": "ngundu",
+    "name": "Ngundu",
+    "province": "Masvingo",
+    "country": "ZW",
+    "lat": -21.03,
+    "lon": 30.97,
+    "elevation": 520
+  },
+  {
+    "slug": "west-nicholson",
+    "name": "West Nicholson",
+    "province": "Matabeleland South",
+    "country": "ZW",
+    "lat": -21.05,
+    "lon": 29.37,
+    "elevation": 900
+  },
+  {
+    "slug": "gwanda",
+    "name": "Gwanda",
+    "province": "Matabeleland South",
+    "country": "ZW",
+    "lat": -20.93,
+    "lon": 29.02,
+    "elevation": 940
+  },
+  {
+    "slug": "filabusi",
+    "name": "Filabusi",
+    "province": "Matabeleland South",
+    "country": "ZW",
+    "lat": -20.53,
+    "lon": 29.3,
+    "elevation": 1100
+  },
+  {
+    "slug": "mashingo-junction",
+    "name": "Skyline Junction",
+    "province": "Manicaland",
+    "country": "ZW",
+    "lat": -18.8,
+    "lon": 32.45,
+    "elevation": 1500
+  },
+  {
+    "slug": "christmas-pass",
+    "name": "Christmas Pass",
+    "province": "Manicaland",
+    "country": "ZW",
+    "lat": -18.95,
+    "lon": 32.6,
+    "elevation": 1200
+  },
+  {
+    "slug": "chinotimba",
+    "name": "Chinotimba",
+    "province": "Matabeleland North",
+    "country": "ZW",
+    "lat": -17.95,
+    "lon": 25.83,
+    "elevation": 920
+  },
+  {
+    "slug": "makuti",
+    "name": "Makuti",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -16.3,
+    "lon": 29.22,
+    "elevation": 600
+  },
+  {
+    "slug": "lion-den",
+    "name": "Lion's Den",
+    "province": "Mashonaland West",
+    "country": "ZW",
+    "lat": -16.93,
+    "lon": 29.65,
+    "elevation": 1100
+  },
+  {
+    "slug": "nairobi-ke",
+    "name": "Nairobi",
+    "province": "Nairobi County",
+    "country": "KE",
+    "lat": -1.29,
+    "lon": 36.82,
+    "elevation": 1795
+  },
+  {
+    "slug": "mombasa-ke",
+    "name": "Mombasa",
+    "province": "Mombasa County",
+    "country": "KE",
+    "lat": -4.05,
+    "lon": 39.67,
+    "elevation": 17
+  },
+  {
+    "slug": "kisumu-ke",
+    "name": "Kisumu",
+    "province": "Kisumu County",
+    "country": "KE",
+    "lat": -0.1,
+    "lon": 34.75,
+    "elevation": 1131
+  },
+  {
+    "slug": "nakuru-ke",
+    "name": "Nakuru",
+    "province": "Nakuru County",
+    "country": "KE",
+    "lat": -0.28,
+    "lon": 36.07,
+    "elevation": 1850
+  },
+  {
+    "slug": "eldoret-ke",
+    "name": "Eldoret",
+    "province": "Uasin Gishu County",
+    "country": "KE",
+    "lat": 0.52,
+    "lon": 35.27,
+    "elevation": 2100
+  },
+  {
+    "slug": "dar-es-salaam-tz",
+    "name": "Dar es Salaam",
+    "province": "Dar es Salaam Region",
+    "country": "TZ",
+    "lat": -6.79,
+    "lon": 39.21,
+    "elevation": 55
+  },
+  {
+    "slug": "dodoma-tz",
+    "name": "Dodoma",
+    "province": "Dodoma Region",
+    "country": "TZ",
+    "lat": -6.17,
+    "lon": 35.74,
+    "elevation": 1120
+  },
+  {
+    "slug": "mwanza-tz",
+    "name": "Mwanza",
+    "province": "Mwanza Region",
+    "country": "TZ",
+    "lat": -2.52,
+    "lon": 32.9,
+    "elevation": 1140
+  },
+  {
+    "slug": "arusha-tz",
+    "name": "Arusha",
+    "province": "Arusha Region",
+    "country": "TZ",
+    "lat": -3.37,
+    "lon": 36.68,
+    "elevation": 1387
+  },
+  {
+    "slug": "zanzibar-tz",
+    "name": "Zanzibar City",
+    "province": "Zanzibar",
+    "country": "TZ",
+    "lat": -6.16,
+    "lon": 39.19,
+    "elevation": 10
+  },
+  {
+    "slug": "kampala-ug",
+    "name": "Kampala",
+    "province": "Central Region",
+    "country": "UG",
+    "lat": 0.32,
+    "lon": 32.58,
+    "elevation": 1189
+  },
+  {
+    "slug": "entebbe-ug",
+    "name": "Entebbe",
+    "province": "Central Region",
+    "country": "UG",
+    "lat": 0.05,
+    "lon": 32.46,
+    "elevation": 1155
+  },
+  {
+    "slug": "gulu-ug",
+    "name": "Gulu",
+    "province": "Northern Region",
+    "country": "UG",
+    "lat": 2.77,
+    "lon": 32.31,
+    "elevation": 1047
+  },
+  {
+    "slug": "jinja-ug",
+    "name": "Jinja",
+    "province": "Eastern Region",
+    "country": "UG",
+    "lat": 0.45,
+    "lon": 33.2,
+    "elevation": 1133
+  },
+  {
+    "slug": "addis-ababa-et",
+    "name": "Addis Ababa",
+    "province": "Addis Ababa",
+    "country": "ET",
+    "lat": 9.03,
+    "lon": 38.74,
+    "elevation": 2355
+  },
+  {
+    "slug": "dire-dawa-et",
+    "name": "Dire Dawa",
+    "province": "Oromia Region",
+    "country": "ET",
+    "lat": 9.59,
+    "lon": 41.87,
+    "elevation": 1176
+  },
+  {
+    "slug": "mekelle-et",
+    "name": "Mekelle",
+    "province": "Tigray Region",
+    "country": "ET",
+    "lat": 13.5,
+    "lon": 39.47,
+    "elevation": 2084
+  },
+  {
+    "slug": "hawassa-et",
+    "name": "Hawassa",
+    "province": "Oromia Region",
+    "country": "ET",
+    "lat": 7.06,
+    "lon": 38.48,
+    "elevation": 1708
+  },
+  {
+    "slug": "kigali-rw",
+    "name": "Kigali",
+    "province": "Kigali Province",
+    "country": "RW",
+    "lat": -1.94,
+    "lon": 30.06,
+    "elevation": 1567
+  },
+  {
+    "slug": "butare-rw",
+    "name": "Huye (Butare)",
+    "province": "Southern Province",
+    "country": "RW",
+    "lat": -2.6,
+    "lon": 29.74,
+    "elevation": 1768
+  },
+  {
+    "slug": "gisenyi-rw",
+    "name": "Rubavu (Gisenyi)",
+    "province": "Western Province",
+    "country": "RW",
+    "lat": -1.7,
+    "lon": 29.26,
+    "elevation": 1546
+  },
+  {
+    "slug": "lusaka-zm",
+    "name": "Lusaka",
+    "province": "Lusaka Province",
+    "country": "ZM",
+    "lat": -15.42,
+    "lon": 28.28,
+    "elevation": 1279
+  },
+  {
+    "slug": "ndola-zm",
+    "name": "Ndola",
+    "province": "Copperbelt Province",
+    "country": "ZM",
+    "lat": -12.97,
+    "lon": 28.64,
+    "elevation": 1270
+  },
+  {
+    "slug": "kitwe-zm",
+    "name": "Kitwe",
+    "province": "Copperbelt Province",
+    "country": "ZM",
+    "lat": -12.82,
+    "lon": 28.21,
+    "elevation": 1290
+  },
+  {
+    "slug": "livingstone-zm",
+    "name": "Livingstone",
+    "province": "Southern Province",
+    "country": "ZM",
+    "lat": -17.85,
+    "lon": 25.86,
+    "elevation": 989
+  },
+  {
+    "slug": "chipata-zm",
+    "name": "Chipata",
+    "province": "Eastern Province",
+    "country": "ZM",
+    "lat": -13.65,
+    "lon": 32.65,
+    "elevation": 1049
+  },
+  {
+    "slug": "maputo-mz",
+    "name": "Maputo",
+    "province": "Maputo Province",
+    "country": "MZ",
+    "lat": -25.97,
+    "lon": 32.59,
+    "elevation": 47
+  },
+  {
+    "slug": "beira-mz",
+    "name": "Beira",
+    "province": "Sofala Province",
+    "country": "MZ",
+    "lat": -19.84,
+    "lon": 34.84,
+    "elevation": 10
+  },
+  {
+    "slug": "nampula-mz",
+    "name": "Nampula",
+    "province": "Nampula Province",
+    "country": "MZ",
+    "lat": -15.12,
+    "lon": 39.27,
+    "elevation": 440
+  },
+  {
+    "slug": "quelimane-mz",
+    "name": "Quelimane",
+    "province": "Zambezia Province",
+    "country": "MZ",
+    "lat": -17.88,
+    "lon": 36.89,
+    "elevation": 15
+  },
+  {
+    "slug": "johannesburg-za",
+    "name": "Johannesburg",
+    "province": "Gauteng",
+    "country": "ZA",
+    "lat": -26.2,
+    "lon": 28.04,
+    "elevation": 1750
+  },
+  {
+    "slug": "cape-town-za",
+    "name": "Cape Town",
+    "province": "Western Cape",
+    "country": "ZA",
+    "lat": -33.93,
+    "lon": 18.42,
+    "elevation": 50
+  },
+  {
+    "slug": "durban-za",
+    "name": "Durban",
+    "province": "KwaZulu-Natal",
+    "country": "ZA",
+    "lat": -29.86,
+    "lon": 31.02,
+    "elevation": 8
+  },
+  {
+    "slug": "pretoria-za",
+    "name": "Pretoria (Tshwane)",
+    "province": "Gauteng",
+    "country": "ZA",
+    "lat": -25.75,
+    "lon": 28.19,
+    "elevation": 1339
+  },
+  {
+    "slug": "port-elizabeth-za",
+    "name": "Gqeberha (Port Elizabeth)",
+    "province": "Eastern Cape",
+    "country": "ZA",
+    "lat": -33.96,
+    "lon": 25.62,
+    "elevation": 65
+  },
+  {
+    "slug": "polokwane-za",
+    "name": "Polokwane",
+    "province": "Limpopo",
+    "country": "ZA",
+    "lat": -23.9,
+    "lon": 29.45,
+    "elevation": 1228
+  },
+  {
+    "slug": "gaborone-bw",
+    "name": "Gaborone",
+    "province": "South-East District",
+    "country": "BW",
+    "lat": -24.65,
+    "lon": 25.91,
+    "elevation": 994
+  },
+  {
+    "slug": "francistown-bw",
+    "name": "Francistown",
+    "province": "North-East District",
+    "country": "BW",
+    "lat": -21.17,
+    "lon": 27.51,
+    "elevation": 1000
+  },
+  {
+    "slug": "maun-bw",
+    "name": "Maun",
+    "province": "North-West District",
+    "country": "BW",
+    "lat": -19.98,
+    "lon": 23.42,
+    "elevation": 946
+  },
+  {
+    "slug": "windhoek-na",
+    "name": "Windhoek",
+    "province": "Khomas Region",
+    "country": "NA",
+    "lat": -22.56,
+    "lon": 17.08,
+    "elevation": 1655
+  },
+  {
+    "slug": "walvis-bay-na",
+    "name": "Walvis Bay",
+    "province": "Erongo Region",
+    "country": "NA",
+    "lat": -22.96,
+    "lon": 14.51,
+    "elevation": 5
+  },
+  {
+    "slug": "oshakati-na",
+    "name": "Oshakati",
+    "province": "Oshana Region",
+    "country": "NA",
+    "lat": -17.79,
+    "lon": 15.69,
+    "elevation": 1097
+  },
+  {
+    "slug": "luanda-ao",
+    "name": "Luanda",
+    "province": "Luanda Province",
+    "country": "AO",
+    "lat": -8.84,
+    "lon": 13.23,
+    "elevation": 6
+  },
+  {
+    "slug": "huambo-ao",
+    "name": "Huambo",
+    "province": "Huila Province",
+    "country": "AO",
+    "lat": -12.77,
+    "lon": 15.74,
+    "elevation": 1700
+  },
+  {
+    "slug": "benguela-ao",
+    "name": "Benguela",
+    "province": "Benguela Province",
+    "country": "AO",
+    "lat": -12.58,
+    "lon": 13.41,
+    "elevation": 33
+  },
+  {
+    "slug": "lilongwe-mw",
+    "name": "Lilongwe",
+    "province": "Central Region",
+    "country": "MW",
+    "lat": -13.97,
+    "lon": 33.79,
+    "elevation": 1050
+  },
+  {
+    "slug": "blantyre-mw",
+    "name": "Blantyre",
+    "province": "Southern Region",
+    "country": "MW",
+    "lat": -15.79,
+    "lon": 35,
+    "elevation": 1042
+  },
+  {
+    "slug": "mzuzu-mw",
+    "name": "Mzuzu",
+    "province": "Northern Region",
+    "country": "MW",
+    "lat": -11.47,
+    "lon": 34.02,
+    "elevation": 1248
+  },
+  {
+    "slug": "mbabane-sz",
+    "name": "Mbabane",
+    "province": "Hhohho District",
+    "country": "SZ",
+    "lat": -26.32,
+    "lon": 31.14,
+    "elevation": 1243
+  },
+  {
+    "slug": "manzini-sz",
+    "name": "Manzini",
+    "province": "Manzini District",
+    "country": "SZ",
+    "lat": -26.5,
+    "lon": 31.37,
+    "elevation": 645
+  },
+  {
+    "slug": "maseru-ls",
+    "name": "Maseru",
+    "province": "Maseru District",
+    "country": "LS",
+    "lat": -29.31,
+    "lon": 27.48,
+    "elevation": 1528
+  },
+  {
+    "slug": "accra-gh",
+    "name": "Accra",
+    "province": "Greater Accra Region",
+    "country": "GH",
+    "lat": 5.56,
+    "lon": -0.2,
+    "elevation": 61
+  },
+  {
+    "slug": "kumasi-gh",
+    "name": "Kumasi",
+    "province": "Ashanti Region",
+    "country": "GH",
+    "lat": 6.69,
+    "lon": -1.62,
+    "elevation": 270
+  },
+  {
+    "slug": "tamale-gh",
+    "name": "Tamale",
+    "province": "Northern Region",
+    "country": "GH",
+    "lat": 9.4,
+    "lon": -0.84,
+    "elevation": 183
+  },
+  {
+    "slug": "takoradi-gh",
+    "name": "Takoradi",
+    "province": "Western Region",
+    "country": "GH",
+    "lat": 4.9,
+    "lon": -1.75,
+    "elevation": 4
+  },
+  {
+    "slug": "lagos-ng",
+    "name": "Lagos",
+    "province": "Lagos State",
+    "country": "NG",
+    "lat": 6.45,
+    "lon": 3.4,
+    "elevation": 41
+  },
+  {
+    "slug": "abuja-ng",
+    "name": "Abuja",
+    "province": "Abuja FCT",
+    "country": "NG",
+    "lat": 9.07,
+    "lon": 7.4,
+    "elevation": 840
+  },
+  {
+    "slug": "kano-ng",
+    "name": "Kano",
+    "province": "Kano State",
+    "country": "NG",
+    "lat": 12,
+    "lon": 8.52,
+    "elevation": 475
+  },
+  {
+    "slug": "port-harcourt-ng",
+    "name": "Port Harcourt",
+    "province": "Rivers State",
+    "country": "NG",
+    "lat": 4.77,
+    "lon": 7.01,
+    "elevation": 10
+  },
+  {
+    "slug": "ibadan-ng",
+    "name": "Ibadan",
+    "province": "Oyo State",
+    "country": "NG",
+    "lat": 7.39,
+    "lon": 3.92,
+    "elevation": 234
+  },
+  {
+    "slug": "dakar-sn",
+    "name": "Dakar",
+    "province": "Dakar Region",
+    "country": "SN",
+    "lat": 14.69,
+    "lon": -17.45,
+    "elevation": 22
+  },
+  {
+    "slug": "thies-sn",
+    "name": "Thies",
+    "province": "Thies Region",
+    "country": "SN",
+    "lat": 14.8,
+    "lon": -16.94,
+    "elevation": 73
+  },
+  {
+    "slug": "saint-louis-sn",
+    "name": "Saint-Louis",
+    "province": "Saint-Louis Region",
+    "country": "SN",
+    "lat": 16.02,
+    "lon": -16.49,
+    "elevation": 4
+  },
+  {
+    "slug": "abidjan-ci",
+    "name": "Abidjan",
+    "province": "Abidjan District",
+    "country": "CI",
+    "lat": 5.34,
+    "lon": -4.03,
+    "elevation": 23
+  },
+  {
+    "slug": "yamoussoukro-ci",
+    "name": "Yamoussoukro",
+    "province": "Lagunes District",
+    "country": "CI",
+    "lat": 6.82,
+    "lon": -5.27,
+    "elevation": 220
+  },
+  {
+    "slug": "bouake-ci",
+    "name": "Bouake",
+    "province": "Gbeke Region",
+    "country": "CI",
+    "lat": 7.69,
+    "lon": -5.03,
+    "elevation": 378
+  },
+  {
+    "slug": "yaounde-cm",
+    "name": "Yaounde",
+    "province": "Centre Region",
+    "country": "CM",
+    "lat": 3.87,
+    "lon": 11.52,
+    "elevation": 726
+  },
+  {
+    "slug": "douala-cm",
+    "name": "Douala",
+    "province": "Littoral Region",
+    "country": "CM",
+    "lat": 4.05,
+    "lon": 9.7,
+    "elevation": 9
+  },
+  {
+    "slug": "garoua-cm",
+    "name": "Garoua",
+    "province": "North Region",
+    "country": "CM",
+    "lat": 9.3,
+    "lon": 13.4,
+    "elevation": 252
+  },
+  {
+    "slug": "kinshasa-cd",
+    "name": "Kinshasa",
+    "province": "Kinshasa Province",
+    "country": "CD",
+    "lat": -4.32,
+    "lon": 15.32,
+    "elevation": 316
+  },
+  {
+    "slug": "lubumbashi-cd",
+    "name": "Lubumbashi",
+    "province": "Haut-Katanga Province",
+    "country": "CD",
+    "lat": -11.67,
+    "lon": 27.47,
+    "elevation": 1278
+  },
+  {
+    "slug": "goma-cd",
+    "name": "Goma",
+    "province": "Nord-Kivu Province",
+    "country": "CD",
+    "lat": -1.68,
+    "lon": 29.22,
+    "elevation": 1490
+  },
+  {
+    "slug": "mbuji-mayi-cd",
+    "name": "Mbuji-Mayi",
+    "province": "Kasai-Oriental Province",
+    "country": "CD",
+    "lat": -6.15,
+    "lon": 23.6,
+    "elevation": 619
+  },
+  {
+    "slug": "cairo-eg",
+    "name": "Cairo",
+    "province": "Cairo Governorate",
+    "country": "EG",
+    "lat": 30.06,
+    "lon": 31.25,
+    "elevation": 23
+  },
+  {
+    "slug": "alexandria-eg",
+    "name": "Alexandria",
+    "province": "Alexandria Governorate",
+    "country": "EG",
+    "lat": 31.2,
+    "lon": 29.92,
+    "elevation": 5
+  },
+  {
+    "slug": "giza-eg",
+    "name": "Giza",
+    "province": "Giza Governorate",
+    "country": "EG",
+    "lat": 30.01,
+    "lon": 31.21,
+    "elevation": 19
+  },
+  {
+    "slug": "luxor-eg",
+    "name": "Luxor",
+    "province": "Luxor Governorate",
+    "country": "EG",
+    "lat": 25.69,
+    "lon": 32.65,
+    "elevation": 76
+  },
+  {
+    "slug": "aswan-eg",
+    "name": "Aswan",
+    "province": "Aswan Governorate",
+    "country": "EG",
+    "lat": 24.09,
+    "lon": 32.9,
+    "elevation": 85
+  },
+  {
+    "slug": "casablanca-ma",
+    "name": "Casablanca",
+    "province": "Casablanca-Settat",
+    "country": "MA",
+    "lat": 33.59,
+    "lon": -7.62,
+    "elevation": 56
+  },
+  {
+    "slug": "rabat-ma",
+    "name": "Rabat",
+    "province": "Rabat-Sale-Kenitra",
+    "country": "MA",
+    "lat": 33.99,
+    "lon": -6.85,
+    "elevation": 75
+  },
+  {
+    "slug": "marrakech-ma",
+    "name": "Marrakech",
+    "province": "Marrakech-Safi",
+    "country": "MA",
+    "lat": 31.63,
+    "lon": -8,
+    "elevation": 466
+  },
+  {
+    "slug": "fes-ma",
+    "name": "Fes",
+    "province": "Fes-Meknes",
+    "country": "MA",
+    "lat": 34.03,
+    "lon": -5,
+    "elevation": 414
+  },
+  {
+    "slug": "tangier-ma",
+    "name": "Tangier",
+    "province": "Tanger-Tetouan-Al Hoceima",
+    "country": "MA",
+    "lat": 35.77,
+    "lon": -5.8,
+    "elevation": 50
+  },
+  {
+    "slug": "tunis-tn",
+    "name": "Tunis",
+    "province": "Tunis Governorate",
+    "country": "TN",
+    "lat": 36.82,
+    "lon": 10.17,
+    "elevation": 4
+  },
+  {
+    "slug": "sfax-tn",
+    "name": "Sfax",
+    "province": "Sfax Governorate",
+    "country": "TN",
+    "lat": 34.74,
+    "lon": 10.76,
+    "elevation": 24
+  },
+  {
+    "slug": "sousse-tn",
+    "name": "Sousse",
+    "province": "Sousse Governorate",
+    "country": "TN",
+    "lat": 35.83,
+    "lon": 10.64,
+    "elevation": 6
+  },
+  {
+    "slug": "algiers-dz",
+    "name": "Algiers",
+    "province": "Algiers Province",
+    "country": "DZ",
+    "lat": 36.74,
+    "lon": 3.06,
+    "elevation": 24
+  },
+  {
+    "slug": "oran-dz",
+    "name": "Oran",
+    "province": "Oran Province",
+    "country": "DZ",
+    "lat": 35.69,
+    "lon": -0.63,
+    "elevation": 5
+  },
+  {
+    "slug": "constantine-dz",
+    "name": "Constantine",
+    "province": "Constantine Province",
+    "country": "DZ",
+    "lat": 36.37,
+    "lon": 6.61,
+    "elevation": 662
+  },
+  {
+    "slug": "khartoum-sd",
+    "name": "Khartoum",
+    "province": "Khartoum State",
+    "country": "SD",
+    "lat": 15.55,
+    "lon": 32.53,
+    "elevation": 381
+  },
+  {
+    "slug": "omdurman-sd",
+    "name": "Omdurman",
+    "province": "Khartoum State",
+    "country": "SD",
+    "lat": 15.61,
+    "lon": 32.48,
+    "elevation": 380
+  },
+  {
+    "slug": "port-sudan-sd",
+    "name": "Port Sudan",
+    "province": "Red Sea State",
+    "country": "SD",
+    "lat": 19.62,
+    "lon": 37.22,
+    "elevation": 5
+  },
+  {
+    "slug": "juba-ss",
+    "name": "Juba",
+    "province": "Central Equatoria",
+    "country": "SS",
+    "lat": 4.86,
+    "lon": 31.57,
+    "elevation": 457
+  },
+  {
+    "slug": "mogadishu-so",
+    "name": "Mogadishu",
+    "province": "Banaadir Region",
+    "country": "SO",
+    "lat": 2.05,
+    "lon": 45.34,
+    "elevation": 9
+  },
+  {
+    "slug": "hargeisa-so",
+    "name": "Hargeisa",
+    "province": "Woqooyi Galbeed",
+    "country": "SO",
+    "lat": 9.56,
+    "lon": 44.07,
+    "elevation": 1334
+  },
+  {
+    "slug": "djibouti-city-dj",
+    "name": "Djibouti City",
+    "province": "Djibouti Region",
+    "country": "DJ",
+    "lat": 11.59,
+    "lon": 43.15,
+    "elevation": 19
+  },
+  {
+    "slug": "asmara-er",
+    "name": "Asmara",
+    "province": "Maekel Region",
+    "country": "ER",
+    "lat": 15.34,
+    "lon": 38.93,
+    "elevation": 2325
+  },
+  {
+    "slug": "bujumbura-bi",
+    "name": "Bujumbura",
+    "province": "Bujumbura Mairie",
+    "country": "BI",
+    "lat": -3.38,
+    "lon": 29.36,
+    "elevation": 782
+  },
+  {
+    "slug": "gitega-bi",
+    "name": "Gitega",
+    "province": "Gitega Province",
+    "country": "BI",
+    "lat": -3.43,
+    "lon": 29.92,
+    "elevation": 1616
+  },
+  {
+    "slug": "moroni-km",
+    "name": "Moroni",
+    "province": "Grande Comore",
+    "country": "KM",
+    "lat": -11.7,
+    "lon": 43.26,
+    "elevation": 29
+  },
+  {
+    "slug": "antananarivo-mg",
+    "name": "Antananarivo",
+    "province": "Analamanga Region",
+    "country": "MG",
+    "lat": -18.91,
+    "lon": 47.54,
+    "elevation": 1279
+  },
+  {
+    "slug": "toamasina-mg",
+    "name": "Toamasina",
+    "province": "Atsinanana Region",
+    "country": "MG",
+    "lat": -18.16,
+    "lon": 49.4,
+    "elevation": 5
+  },
+  {
+    "slug": "port-louis-mu",
+    "name": "Port Louis",
+    "province": "Port Louis District",
+    "country": "MU",
+    "lat": -20.16,
+    "lon": 57.5,
+    "elevation": 5
+  },
+  {
+    "slug": "victoria-sc",
+    "name": "Victoria",
+    "province": "Mahe Island",
+    "country": "SC",
+    "lat": -4.62,
+    "lon": 55.45,
+    "elevation": 3
+  },
+  {
+    "slug": "ouagadougou-bf",
+    "name": "Ouagadougou",
+    "province": "Centre Region",
+    "country": "BF",
+    "lat": 12.36,
+    "lon": -1.53,
+    "elevation": 306
+  },
+  {
+    "slug": "bobo-dioulasso-bf",
+    "name": "Bobo-Dioulasso",
+    "province": "Hauts-Bassins Region",
+    "country": "BF",
+    "lat": 11.18,
+    "lon": -4.3,
+    "elevation": 454
+  },
+  {
+    "slug": "bamako-ml",
+    "name": "Bamako",
+    "province": "Bamako Capital District",
+    "country": "ML",
+    "lat": 12.65,
+    "lon": -8,
+    "elevation": 380
+  },
+  {
+    "slug": "timbuktu-ml",
+    "name": "Timbuktu",
+    "province": "Tombouctou Region",
+    "country": "ML",
+    "lat": 16.77,
+    "lon": -3.01,
+    "elevation": 261
+  },
+  {
+    "slug": "niamey-ne",
+    "name": "Niamey",
+    "province": "Niamey Region",
+    "country": "NE",
+    "lat": 13.51,
+    "lon": 2.12,
+    "elevation": 218
+  },
+  {
+    "slug": "zinder-ne",
+    "name": "Zinder",
+    "province": "Zinder Region",
+    "country": "NE",
+    "lat": 13.81,
+    "lon": 8.99,
+    "elevation": 447
+  },
+  {
+    "slug": "cotonou-bj",
+    "name": "Cotonou",
+    "province": "Littoral Department",
+    "country": "BJ",
+    "lat": 6.37,
+    "lon": 2.42,
+    "elevation": 9
+  },
+  {
+    "slug": "porto-novo-bj",
+    "name": "Porto-Novo",
+    "province": "Oueme Department",
+    "country": "BJ",
+    "lat": 6.37,
+    "lon": 2.61,
+    "elevation": 25
+  },
+  {
+    "slug": "lome-tg",
+    "name": "Lome",
+    "province": "Maritime Region",
+    "country": "TG",
+    "lat": 6.14,
+    "lon": 1.22,
+    "elevation": 25
+  },
+  {
+    "slug": "sokode-tg",
+    "name": "Sokode",
+    "province": "Centrale Region",
+    "country": "TG",
+    "lat": 8.98,
+    "lon": 1.13,
+    "elevation": 411
+  },
+  {
+    "slug": "monrovia-lr",
+    "name": "Monrovia",
+    "province": "Montserrado County",
+    "country": "LR",
+    "lat": 6.29,
+    "lon": -10.77,
+    "elevation": 8
+  },
+  {
+    "slug": "freetown-sl",
+    "name": "Freetown",
+    "province": "Western Area",
+    "country": "SL",
+    "lat": 8.49,
+    "lon": -13.23,
+    "elevation": 30
+  },
+  {
+    "slug": "conakry-gn",
+    "name": "Conakry",
+    "province": "Conakry Region",
+    "country": "GN",
+    "lat": 9.54,
+    "lon": -13.68,
+    "elevation": 26
+  },
+  {
+    "slug": "bissau-gw",
+    "name": "Bissau",
+    "province": "Bissau Region",
+    "country": "GW",
+    "lat": 11.86,
+    "lon": -15.6,
+    "elevation": 14
+  },
+  {
+    "slug": "banjul-gm",
+    "name": "Banjul",
+    "province": "Banjul Division",
+    "country": "GM",
+    "lat": 13.45,
+    "lon": -16.58,
+    "elevation": 5
+  },
+  {
+    "slug": "nouakchott-mr",
+    "name": "Nouakchott",
+    "province": "Nouakchott Region",
+    "country": "MR",
+    "lat": 18.08,
+    "lon": -15.97,
+    "elevation": 5
+  },
+  {
+    "slug": "nouadhibou-mr",
+    "name": "Nouadhibou",
+    "province": "Dakhlet Nouadhibou",
+    "country": "MR",
+    "lat": 20.93,
+    "lon": -17.04,
+    "elevation": 4
+  },
+  {
+    "slug": "praia-cv",
+    "name": "Praia",
+    "province": "Santiago Island",
+    "country": "CV",
+    "lat": 14.93,
+    "lon": -23.52,
+    "elevation": 27
+  },
+  {
+    "slug": "libreville-ga",
+    "name": "Libreville",
+    "province": "Estuaire Province",
+    "country": "GA",
+    "lat": 0.39,
+    "lon": 9.45,
+    "elevation": 9
+  },
+  {
+    "slug": "port-gentil-ga",
+    "name": "Port-Gentil",
+    "province": "Ogooue-Maritime Province",
+    "country": "GA",
+    "lat": -0.72,
+    "lon": 8.78,
+    "elevation": 5
+  },
+  {
+    "slug": "brazzaville-cg",
+    "name": "Brazzaville",
+    "province": "Brazzaville Department",
+    "country": "CG",
+    "lat": -4.27,
+    "lon": 15.27,
+    "elevation": 316
+  },
+  {
+    "slug": "pointe-noire-cg",
+    "name": "Pointe-Noire",
+    "province": "Kouilou Department",
+    "country": "CG",
+    "lat": -4.78,
+    "lon": 11.86,
+    "elevation": 17
+  },
+  {
+    "slug": "bangui-cf",
+    "name": "Bangui",
+    "province": "Ombella-Mpoko Prefecture",
+    "country": "CF",
+    "lat": 4.36,
+    "lon": 18.56,
+    "elevation": 369
+  },
+  {
+    "slug": "ndjamena-td",
+    "name": "N'Djamena",
+    "province": "Chari-Baguirmi",
+    "country": "TD",
+    "lat": 12.11,
+    "lon": 15.05,
+    "elevation": 295
+  },
+  {
+    "slug": "moundou-td",
+    "name": "Moundou",
+    "province": "Logone Occidental",
+    "country": "TD",
+    "lat": 8.57,
+    "lon": 16.08,
+    "elevation": 418
+  },
+  {
+    "slug": "malabo-gq",
+    "name": "Malabo",
+    "province": "Bioko Norte Province",
+    "country": "GQ",
+    "lat": 3.75,
+    "lon": 8.78,
+    "elevation": 30
+  },
+  {
+    "slug": "sao-tome-st",
+    "name": "Sao Tome",
+    "province": "Sao Tome Island",
+    "country": "ST",
+    "lat": 0.34,
+    "lon": 6.73,
+    "elevation": 9
+  },
+  {
+    "slug": "tripoli-ly",
+    "name": "Tripoli",
+    "province": "Tripoli District",
+    "country": "LY",
+    "lat": 32.9,
+    "lon": 13.18,
+    "elevation": 81
+  },
+  {
+    "slug": "benghazi-ly",
+    "name": "Benghazi",
+    "province": "Benghazi District",
+    "country": "LY",
+    "lat": 32.12,
+    "lon": 20.07,
+    "elevation": 32
+  },
+  {
+    "slug": "saint-denis-re",
+    "name": "Saint-Denis",
+    "province": "Reunion Island",
+    "country": "RE",
+    "lat": -20.88,
+    "lon": 55.45,
+    "elevation": 77
+  },
+  {
+    "slug": "mamoudzou-yt",
+    "name": "Mamoudzou",
+    "province": "Mayotte Island",
+    "country": "YT",
+    "lat": -12.78,
+    "lon": 45.23,
+    "elevation": 26
+  },
+  {
+    "slug": "bangkok-th",
+    "name": "Bangkok",
+    "province": "Bangkok",
+    "country": "TH",
+    "lat": 13.75,
+    "lon": 100.52,
+    "elevation": 5
+  },
+  {
+    "slug": "chiang-mai-th",
+    "name": "Chiang Mai",
+    "province": "Chiang Mai Province",
+    "country": "TH",
+    "lat": 18.79,
+    "lon": 98.98,
+    "elevation": 310
+  },
+  {
+    "slug": "phuket-th",
+    "name": "Phuket",
+    "province": "Phuket Province",
+    "country": "TH",
+    "lat": 7.88,
+    "lon": 98.4,
+    "elevation": 2
+  },
+  {
+    "slug": "pattaya-th",
+    "name": "Pattaya",
+    "province": "Chonburi Province",
+    "country": "TH",
+    "lat": 12.93,
+    "lon": 100.88,
+    "elevation": 5
+  },
+  {
+    "slug": "hat-yai-th",
+    "name": "Hat Yai",
+    "province": "Songkhla Province",
+    "country": "TH",
+    "lat": 7.01,
+    "lon": 100.48,
+    "elevation": 18
+  },
+  {
+    "slug": "kuala-lumpur-my",
+    "name": "Kuala Lumpur",
+    "province": "Kuala Lumpur",
+    "country": "MY",
+    "lat": 3.14,
+    "lon": 101.69,
+    "elevation": 66
+  },
+  {
+    "slug": "george-town-my",
+    "name": "George Town (Penang)",
+    "province": "Penang",
+    "country": "MY",
+    "lat": 5.41,
+    "lon": 100.34,
+    "elevation": 5
+  },
+  {
+    "slug": "johor-bahru-my",
+    "name": "Johor Bahru",
+    "province": "Johor",
+    "country": "MY",
+    "lat": 1.46,
+    "lon": 103.76,
+    "elevation": 14
+  },
+  {
+    "slug": "kota-kinabalu-my",
+    "name": "Kota Kinabalu",
+    "province": "Sabah",
+    "country": "MY",
+    "lat": 5.98,
+    "lon": 116.07,
+    "elevation": 3
+  },
+  {
+    "slug": "jakarta-id",
+    "name": "Jakarta",
+    "province": "DKI Jakarta",
+    "country": "ID",
+    "lat": -6.21,
+    "lon": 106.85,
+    "elevation": 8
+  },
+  {
+    "slug": "surabaya-id",
+    "name": "Surabaya",
+    "province": "East Java",
+    "country": "ID",
+    "lat": -7.25,
+    "lon": 112.75,
+    "elevation": 5
+  },
+  {
+    "slug": "bandung-id",
+    "name": "Bandung",
+    "province": "West Java",
+    "country": "ID",
+    "lat": -6.92,
+    "lon": 107.61,
+    "elevation": 768
+  },
+  {
+    "slug": "bali-denpasar-id",
+    "name": "Denpasar (Bali)",
+    "province": "Bali",
+    "country": "ID",
+    "lat": -8.65,
+    "lon": 115.22,
+    "elevation": 28
+  },
+  {
+    "slug": "medan-id",
+    "name": "Medan",
+    "province": "North Sumatra",
+    "country": "ID",
+    "lat": 3.59,
+    "lon": 98.67,
+    "elevation": 25
+  },
+  {
+    "slug": "manila-ph",
+    "name": "Manila",
+    "province": "Metro Manila",
+    "country": "PH",
+    "lat": 14.6,
+    "lon": 120.98,
+    "elevation": 16
+  },
+  {
+    "slug": "cebu-city-ph",
+    "name": "Cebu City",
+    "province": "Cebu Province",
+    "country": "PH",
+    "lat": 10.32,
+    "lon": 123.9,
+    "elevation": 14
+  },
+  {
+    "slug": "davao-city-ph",
+    "name": "Davao City",
+    "province": "Davao del Sur",
+    "country": "PH",
+    "lat": 7.07,
+    "lon": 125.61,
+    "elevation": 20
+  },
+  {
+    "slug": "quezon-city-ph",
+    "name": "Quezon City",
+    "province": "Metro Manila",
+    "country": "PH",
+    "lat": 14.68,
+    "lon": 121.04,
+    "elevation": 61
+  },
+  {
+    "slug": "hanoi-vn",
+    "name": "Hanoi",
+    "province": "Hanoi",
+    "country": "VN",
+    "lat": 21.03,
+    "lon": 105.85,
+    "elevation": 5
+  },
+  {
+    "slug": "ho-chi-minh-city-vn",
+    "name": "Ho Chi Minh City",
+    "province": "Ho Chi Minh City",
+    "country": "VN",
+    "lat": 10.82,
+    "lon": 106.63,
+    "elevation": 19
+  },
+  {
+    "slug": "da-nang-vn",
+    "name": "Da Nang",
+    "province": "Da Nang",
+    "country": "VN",
+    "lat": 16.05,
+    "lon": 108.22,
+    "elevation": 5
+  },
+  {
+    "slug": "hoi-an-vn",
+    "name": "Hoi An",
+    "province": "Quang Nam Province",
+    "country": "VN",
+    "lat": 15.88,
+    "lon": 108.33,
+    "elevation": 5
+  },
+  {
+    "slug": "singapore-sg",
+    "name": "Singapore",
+    "province": "Central Region",
+    "country": "SG",
+    "lat": 1.35,
+    "lon": 103.82,
+    "elevation": 15
+  },
+  {
+    "slug": "yangon-mm",
+    "name": "Yangon",
+    "province": "Yangon Region",
+    "country": "MM",
+    "lat": 16.87,
+    "lon": 96.2,
+    "elevation": 11
+  },
+  {
+    "slug": "mandalay-mm",
+    "name": "Mandalay",
+    "province": "Mandalay Region",
+    "country": "MM",
+    "lat": 21.97,
+    "lon": 96.08,
+    "elevation": 73
+  },
+  {
+    "slug": "naypyidaw-mm",
+    "name": "Naypyidaw",
+    "province": "Naypyidaw Union Territory",
+    "country": "MM",
+    "lat": 19.74,
+    "lon": 96.13,
+    "elevation": 110
+  },
+  {
+    "slug": "phnom-penh-kh",
+    "name": "Phnom Penh",
+    "province": "Phnom Penh",
+    "country": "KH",
+    "lat": 11.56,
+    "lon": 104.92,
+    "elevation": 12
+  },
+  {
+    "slug": "siem-reap-kh",
+    "name": "Siem Reap",
+    "province": "Siem Reap Province",
+    "country": "KH",
+    "lat": 13.36,
+    "lon": 103.86,
+    "elevation": 12
+  },
+  {
+    "slug": "vientiane-la",
+    "name": "Vientiane",
+    "province": "Vientiane Prefecture",
+    "country": "LA",
+    "lat": 17.97,
+    "lon": 102.6,
+    "elevation": 174
+  },
+  {
+    "slug": "luang-prabang-la",
+    "name": "Luang Prabang",
+    "province": "Luang Prabang Province",
+    "country": "LA",
+    "lat": 19.89,
+    "lon": 102.13,
+    "elevation": 289
+  },
+  {
+    "slug": "bandar-seri-begawan-bn",
+    "name": "Bandar Seri Begawan",
+    "province": "Brunei-Muara District",
+    "country": "BN",
+    "lat": 4.94,
+    "lon": 114.95,
+    "elevation": 8
+  },
+  {
+    "slug": "dili-tl",
+    "name": "Dili",
+    "province": "Dili Municipality",
+    "country": "TL",
+    "lat": -8.56,
+    "lon": 125.58,
+    "elevation": 9
+  }
+]

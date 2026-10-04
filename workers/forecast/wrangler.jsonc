@@ -1,0 +1,41 @@
+// mukoko-weather-forecast: provider aggregation (mukoko-dev/mukoko-weather#148).
+// No route and no workers.dev address: reached only through service bindings
+// from mukoko-weather-internal and mukoko-weather-api.
+//
+// Names only, never values:
+//   secrets: TOMORROW_API_KEY, NYUCHI_API_KEY (internal key; places read)
+//   vars:    NYUCHI_API_URL
+// OWNER: replace the placeholder ids below with the created resources'
+// ids (workers/README.md, "Owner steps").
+{
+  "name": "mukoko-weather-forecast",
+  "main": "build/index.js",
+  "compatibility_date": "2026-09-15",
+  "build": { "command": "worker-build --release" },
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  // Traces and invocation metadata, with query strings (coordinates) redacted.
+  // The code logs no payloads and no keys.
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true },
+  },
+  "vars": { "NYUCHI_API_URL": "https://api.nyuchi.com" },
+  "kv_namespaces": [
+    // Forecasts (15 min) and place lookups (1 day / 1 hour for misses).
+    { "binding": "FORECAST_CACHE", "id": "00000000000000000000000000000000" }, // OWNER
+  ],
+  "d1_databases": [
+    {
+      // Validated StationKit observations, read for the `current` overlay.
+      // Written by mukoko-weather-stations; schema in ../d1/migrations.
+      "binding": "WEATHER_DB",
+      "database_name": "mukoko-weather",
+      "database_id": "00000000-0000-0000-0000-000000000000", // OWNER
+      "migrations_dir": "../d1/migrations",
+    },
+  ],
+}
