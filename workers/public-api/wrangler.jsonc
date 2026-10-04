@@ -1,0 +1,36 @@
+// mukoko-weather-api: the public weather API (mukoko-dev/mukoko-weather#148).
+// Callers: the Mukoko Weather app (CORS), developers, and mukoko-api, which
+// adds a service binding to this Worker for consumer reuse:
+//   "services": [{ "binding": "WEATHER", "service": "mukoko-weather-api" }]
+//
+// No secrets. Vars: ENVIRONMENT, CORS_ORIGINS.
+{
+  "name": "mukoko-weather-api",
+  "main": "build/index.js",
+  "compatibility_date": "2026-09-15",
+  "build": { "command": "worker-build --release" },
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true },
+  },
+  "routes": [{ "pattern": "weather-api.mukoko.com", "custom_domain": true }],
+  "vars": {
+    "ENVIRONMENT": "production",
+    "CORS_ORIGINS": "https://weather.mukoko.com,https://weatherstations.nyuchi.com",
+  },
+  "services": [{ "binding": "FORECAST", "service": "mukoko-weather-forecast" }],
+  // Per client IP. Service-binding callers share one key, so mukoko-api
+  // must apply its own per-consumer limits.
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1481",
+      "simple": { "limit": 120, "period": 60 },
+    },
+  ],
+}

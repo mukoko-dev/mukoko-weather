@@ -11,6 +11,7 @@
 //! ingest-key hashing.
 
 pub mod breaker;
+pub mod cors;
 pub mod forecast;
 pub mod geo;
 pub mod normalize;
