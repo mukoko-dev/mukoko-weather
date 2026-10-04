@@ -47,7 +47,8 @@ class TestCheckMongodb:
         mock_db.return_value.command.side_effect = Exception("Connection refused")
         result = _check_mongodb()
         assert result["status"] == "down"
-        assert "Connection refused" in result["message"]
+        assert "Connection refused" not in result["message"]
+        assert "server logs" in result["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +113,8 @@ class TestCheckTomorrowIo:
         with patch("py._status.httpx.Client", side_effect=Exception("Network error")):
             result = _check_tomorrow_io()
         assert result["status"] == "down"
-        assert "Network error" in result["message"]
+        assert "Network error" not in result["message"]
+        assert "server logs" in result["message"]
 
     @patch("py._status.get_api_key")
     def test_degraded_on_db_unavailable_for_key(self, mock_key):
@@ -171,7 +173,8 @@ class TestCheckOpenMeteo:
         with patch("py._status.httpx.Client", side_effect=Exception("Connection timeout")):
             result = _check_open_meteo()
         assert result["status"] == "down"
-        assert "Connection timeout" in result["message"]
+        assert "Connection timeout" not in result["message"]
+        assert "server logs" in result["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +255,8 @@ class TestCheckWeatherCache:
         )
         result = _check_weather_cache()
         assert result["status"] == "down"
-        assert "DB error" in result["message"]
+        assert "DB error" not in result["message"]
+        assert "server logs" in result["message"]
 
     @patch("py._status.get_db")
     def test_singular_cache_message(self, mock_db):
