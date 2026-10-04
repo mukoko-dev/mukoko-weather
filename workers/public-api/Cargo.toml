@@ -1,0 +1,20 @@
+[package]
+name = "mukoko-weather-api"
+description = "mukoko-weather-api: the public weather API (the app, developers, and mukoko-api over a service binding)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+weather-core.workspace = true
+weather-edge.workspace = true
+worker.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+futures.workspace = true

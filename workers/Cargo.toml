@@ -8,6 +8,7 @@ members = [
   "crates/weather-edge",
   "forecast",
   "internal-api",
+  "public-api",
 ]
 
 [workspace.package]
