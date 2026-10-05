@@ -14,6 +14,7 @@
 //! GET /v1/airports/nearest?lat=&lon=[&count=][&maxDistanceKm=]
 //!                                                    the shape of /api/py/airports/nearest
 //! GET /v1/locations, /v1/search, /v1/geo, /v1/history   places (mukoko-weather-places)
+//! POST /v1/ai, /v1/ai/{summary,followup,chat,history/analyze}   Shamwari Weather
 //! GET /health
 //! ```
 //!
@@ -25,7 +26,9 @@
 //! Forecasts and air quality come from `mukoko-weather-forecast` over the
 //! `FORECAST` service binding; aviation weather from `mukoko-weather-aviation`
 //! over `AVIATION`; locations, search and history from `mukoko-weather-places`
-//! over `PLACES`. Anonymous requests are rate limited per client IP
+//! over `PLACES`; `/v1/ai/*` is forwarded to `mukoko-weather-ai` over
+//! `AI_SERVICE` with the client's IP (that Worker has its own, tighter limit).
+//! Anonymous requests are rate limited per client IP
 //! (`RATE_LIMITER`). A developer may send a Nyuchi API key, checked by the
 //! Nyuchi API (`keys`), and is then limited per key (`KEY_RATE_LIMITER`).
 
@@ -36,10 +39,14 @@ use weather_core::cors::origin_allowed;
 use weather_core::query::ForecastQuery;
 use weather_core::{geo, normalize, places};
 use weather_edge::{config, error, json, now, query_pairs};
-use worker::{event, Context, Env, Headers, Method, Request, Response, Result};
+use worker::wasm_bindgen::JsValue;
+use worker::{event, Context, Env, Headers, Method, Request, RequestInit, Response, Result};
 
 const FORECAST_BINDING: &str = "FORECAST";
 const AVIATION_BINDING: &str = "AVIATION";
+const AI_BINDING: &str = "AI_SERVICE";
+/// AI request bodies larger than this are refused here.
+const MAX_AI_BODY_BYTES: usize = 64 * 1024;
 const RATE_LIMITER: &str = "RATE_LIMITER";
 const KEY_RATE_LIMITER: &str = "KEY_RATE_LIMITER";
 const PLACES_BINDING: &str = "PLACES";
@@ -49,12 +56,21 @@ const DEFAULT_POINT: (f64, f64) = (-17.83, 31.05);
 const DEFAULT_ELEVATION_M: f64 = 1200.0;
 
 #[event(fetch)]
-pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let origin = req.headers().get("Origin")?.unwrap_or_default();
     let cors_origin = cors_origin(&env, &origin);
+    let is_ai = is_ai_path(&req.path());
 
     let resp = if req.method() == Method::Options {
         preflight(cors_origin.is_some())
+    } else if is_ai {
+        if req.method() != Method::Post {
+            error(405, "method_not_allowed", "Only POST is served.")
+        } else if let Some(limited) = rate_limited(&req, &env, &keys::Caller::Anonymous).await {
+            limited
+        } else {
+            forward_ai(&mut req, &env).await
+        }
     } else if req.method() != Method::Get {
         error(405, "method_not_allowed", "Only GET is served.")
     } else {
@@ -113,7 +129,7 @@ fn preflight(allowed: bool) -> Result<Response> {
     let resp = Response::empty()?.with_status(if allowed { 204 } else { 403 });
     if allowed {
         let h = resp.headers();
-        h.set("Access-Control-Allow-Methods", "GET, OPTIONS")?;
+        h.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")?;
         h.set(
             "Access-Control-Allow-Headers",
             "Content-Type, Authorization, X-Mukoko-Client, X-API-Key, X-Client-Id, X-Client-Secret",
@@ -163,6 +179,41 @@ async fn rate_limited(req: &Request, env: &Env, caller: &keys::Caller) -> Option
             Some(resp)
         }
         _ => None,
+    }
+}
+
+fn is_ai_path(path: &str) -> bool {
+    path == "/v1/ai" || path.starts_with("/v1/ai/")
+}
+
+/// Pass a Shamwari request to `mukoko-weather-ai` with the client's IP, and
+/// its answer back unchanged.
+async fn forward_ai(req: &mut Request, env: &Env) -> Result<Response> {
+    let body = req.text().await.unwrap_or_default();
+    if body.len() > MAX_AI_BODY_BYTES {
+        return error(413, "payload_too_large", "The request body is too large.");
+    }
+    let headers = Headers::new();
+    headers.set("Content-Type", "application/json")?;
+    if let Some(ip) = req.headers().get("CF-Connecting-IP")? {
+        headers.set("CF-Connecting-IP", &ip)?;
+    }
+    let mut init = RequestInit::new();
+    init.with_method(Method::Post)
+        .with_headers(headers)
+        .with_body(Some(JsValue::from_str(&body)));
+    let inner = Request::new_with_init(&format!("https://ai{}", req.path()), &init)?;
+    let Ok(mut upstream) = env.service(AI_BINDING)?.fetch_request(inner).await else {
+        return error(502, "upstream_unreachable", "Shamwari did not answer.");
+    };
+    let status = upstream.status_code();
+    match upstream.json::<Value>().await {
+        Ok(body) => {
+            let resp = json(status, &body)?;
+            copy_header(upstream.headers(), resp.headers(), "Retry-After")?;
+            Ok(resp)
+        }
+        Err(_) => error(502, "upstream_malformed", "Shamwari sent a bad answer."),
     }
 }
 

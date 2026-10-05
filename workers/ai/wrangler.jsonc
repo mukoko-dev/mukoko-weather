@@ -1,0 +1,56 @@
+// mukoko-weather-ai: Shamwari Weather (mukoko-dev/mukoko-weather#148).
+// No route and no workers.dev address: mukoko-weather-api forwards
+// /v1/ai/* here over a service binding (AI_SERVICE).
+//
+// Every model call goes through the `shamwari` AI Gateway (Guardrails on,
+// logging off) to an open-weights Workers AI model. The guardrails block
+// comes from the Nyuchi API; without one the Worker refuses (fails closed).
+//
+// Names only, never values:
+//   secrets: NYUCHI_API_KEY (internal key, `ai` scope)
+//   vars:    NYUCHI_API_URL, AI_MODEL (a @cf/ model)
+// OWNER: replace the placeholder ids below with the created resources'
+// ids (workers/README.md, "Owner steps").
+{
+  "name": "mukoko-weather-ai",
+  "main": "build/index.js",
+  "compatibility_date": "2026-09-15",
+  "build": { "command": "worker-build --release" },
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  // Invocation metadata only. The code logs no prompts, answers or keys.
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true },
+  },
+  "vars": {
+    "NYUCHI_API_URL": "https://api.nyuchi.com",
+    "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  },
+  "ai": { "binding": "AI" },
+  "services": [{ "binding": "FORECAST", "service": "mukoko-weather-forecast" }],
+  "kv_namespaces": [
+    // Summaries (30 min, 1 min for fallback text) and history analyses (1 h).
+    { "binding": "AI_CACHE", "id": "00000000000000000000000000000000" }, // OWNER
+  ],
+  "d1_databases": [
+    {
+      // place_daily, written by mukoko-weather-jobs; read for history.
+      "binding": "WEATHER_DB",
+      "database_name": "mukoko-weather",
+      "database_id": "00000000-0000-0000-0000-000000000000", // OWNER
+      "migrations_dir": "../d1/migrations",
+    },
+  ],
+  // Per client IP (CF-Connecting-IP, passed on by mukoko-weather-api).
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1482",
+      "simple": { "limit": 10, "period": 60 },
+    },
+  ],
+}
