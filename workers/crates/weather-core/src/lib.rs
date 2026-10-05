@@ -24,6 +24,7 @@ pub mod normalize;
 pub mod places;
 pub mod query;
 pub mod station;
+pub mod tiles;
 pub mod wmo;
 
 pub use forecast::{ForecastDay, ForecastLocation, ForecastResponse, Source};

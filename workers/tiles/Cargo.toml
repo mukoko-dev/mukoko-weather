@@ -1,0 +1,19 @@
+[package]
+name = "mukoko-weather-tiles"
+description = "mukoko-weather-tiles: the weather map overlay tile proxy (Tomorrow.io), cached at the edge and in KV"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+weather-core.workspace = true
+weather-edge.workspace = true
+worker.workspace = true
+serde.workspace = true
+serde_json.workspace = true

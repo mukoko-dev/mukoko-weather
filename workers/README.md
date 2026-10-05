@@ -18,6 +18,7 @@ workers/
   aviation/              mukoko-weather-aviation   METAR/TAF and nearest airports (service binding only)
   jobs/                  mukoko-weather-jobs       Cron Triggers: cache warming, retention, daily history
   ai/                    mukoko-weather-ai         Shamwari Weather: summaries, chat, follow-ups, history analysis
+  tiles/                 mukoko-weather-tiles      weather map overlay tiles (Tomorrow.io proxy, edge + KV cache)
   d1/migrations/         schema of the D1 database `mukoko-weather`
   scripts/               gen-seed-locations.mjs (seed places and airports, from src/lib/locations.ts
                          and src/lib/icao-codes.ts)
@@ -32,6 +33,7 @@ workers/
 | `mukoko-weather-aviation` | METARs of the last 12 h and the TAF from the Aviation Weather Center, with CheckWX as the fallback when `CHECKWX_API_KEY` is set (30 min KV cache, empty answers included). The nearest airports come from the app's ICAO catalogue, compiled in                                                                                                                                                                                                                                                                                                                                                                               | Service binding only (no route, no workers.dev)                                              | KV `CACHE` (the forecast cache namespace, `avn:` keys), optional secret `CHECKWX_API_KEY`                                                                          |
 | `mukoko-weather-jobs`     | Cron Triggers that only plan, and a queue consumer that does the work. Every 15 min it refreshes the forecast cache for the popular places (`WARM_PLACES`; places x 96 provider calls a day, 576 for the default six). At 21:30 UTC (23:30 in Harare) it records one `place_daily` row per seed place (up to 264 forecast calls, mostly provider calls). At 02:15 UTC it rolls yesterday's validated observations up into `station_daily`, moves D1 observations older than `RETENTION_DAYS` (90) to R2 `archive/observations/`, deletes raw uploads older than `RAW_RETENTION_DAYS` (365) and drops day-old rate-limit events | No route, no workers.dev                                                                     | service `FORECAST`, D1 `WEATHER_DB`, R2 `RAW_OBSERVATIONS`, Queue `JOBS` (`weather-jobs`), vars `WARM_PLACES`, `RETENTION_DAYS`, `RAW_RETENTION_DAYS`              |
 | `mukoko-weather-ai`       | Shamwari Weather: the summary, the follow-up chat, Shamwari chat and the history analysis. Every call goes to an open-weights Workers AI model (`AI_MODEL`, `@cf/` only) through the `shamwari` AI Gateway, with the Nyuchi API's compiled guardrails first in the system prompt. With no guardrails block it answers `503` and never calls the model. Messages with email addresses, phone or card numbers are refused (`422`). Rate limit: 10 requests a minute per IP                                                                                                                                                       | Service binding only: `mukoko-weather-api` forwards `POST /v1/ai/*`                          | AI `AI`, service `FORECAST`, KV `AI_CACHE`, D1 `WEATHER_DB` (`place_daily`), rate limit `RATE_LIMITER`, secret `NYUCHI_API_KEY`, vars `NYUCHI_API_URL`, `AI_MODEL` |
+| `mukoko-weather-tiles`    | Weather map overlay tiles, ported from `/api/py/map-tiles` on the same path and query. It checks the layer, zoom, tile and timestamp, then serves from the Cache API, then KV (fresh 90 min, kept a day as a stale fallback), then Tomorrow.io behind a circuit breaker. When Tomorrow.io fails or rate limits it serves a stale tile, or else a transparent 1x1 PNG. Its own host because one map view loads dozens of tiles; 600 requests a minute per IP                                                                                                                                                                    | `https://weather-tiles.mukoko.com`                                                           | KV `TILE_CACHE` (the forecast cache namespace, keys `tile:v1:`), secret `TOMORROW_API_KEY`, rate limit `RATE_LIMITER`, vars `ENVIRONMENT`, `CORS_ORIGINS`          |
 
 **`mukoko-weather-places`** (service binding only, from `mukoko-weather-api` as `PLACES`) serves `/v1/locations`, `/v1/search`, `/v1/geo` and `/v1/history` with the parameters and shapes of `/api/py/locations|search|geo|history`. It reads no database for places: the seed locations (with their tags) are compiled in; a `{name}--{geohash}` slug carries its own point (the app's smart slugs, which `mukoko-weather-forecast` now resolves too); canonical places come from the Nyuchi API (`/v1/places`, `/v1/places/nearby`, `/v1/places/{slug}`); geocoding comes from Open-Meteo (forward) and Nominatim (reverse, rate limited per client), all cached in KV. `geo?autoCreate=true` names the point and answers its `{name}--{geohash}` slug, but writes no canonical place. History is read from D1 `place_daily`, which `mukoko-weather-jobs` writes. Bindings: KV `CACHE` (the forecast namespace), D1 `WEATHER_DB` (read), rate limit `GEOCODE_LIMITER`, secret `NYUCHI_API_KEY`, var `NYUCHI_API_URL`.
 
@@ -116,6 +118,7 @@ Creating Cloudflare resources and deploying are owner actions. Run these from `w
    ```bash
    npx wrangler kv namespace create mukoko-weather-forecast-cache    # → forecast/wrangler.jsonc FORECAST_CACHE id
                                                                      #   and aviation/wrangler.jsonc CACHE id (same namespace)
+                                                                     #   and tiles/wrangler.jsonc TILE_CACHE id
    npx wrangler kv namespace create mukoko-weather-ai-cache          # → ai/wrangler.jsonc AI_CACHE id
    npx wrangler d1 create mukoko-weather                             # → forecast/wrangler.jsonc WEATHER_DB database_id
    npx wrangler d1 migrations apply mukoko-weather --remote -c forecast/wrangler.jsonc
@@ -134,6 +137,7 @@ Creating Cloudflare resources and deploying are owner actions. Run these from `w
    (cd forecast && npx wrangler secret put TOMORROW_API_KEY)       # today in Mongo weather.api_keys "tomorrow"
    (cd forecast && npx wrangler secret put NYUCHI_API_KEY)         # internal key, places read
    (cd places && npx wrangler secret put NYUCHI_API_KEY)           # the same key
+   (cd tiles && npx wrangler secret put TOMORROW_API_KEY)          # same value as on forecast
    (cd internal-api && npx wrangler secret put WEATHER_SERVICE_API_KEY)  # new random value, e.g. openssl rand -hex 32
    (cd aviation && npx wrangler secret put CHECKWX_API_KEY)        # optional; today in Mongo weather.api_keys "checkwx"
    (cd ai && npx wrangler secret put NYUCHI_API_KEY)               # internal key with the `ai` scope (guardrails read)
@@ -152,10 +156,11 @@ Creating Cloudflare resources and deploying are owner actions. Run these from `w
    (cd stations && npx wrangler deploy)        # also attaches weather-ingest.nyuchi.com
    (cd jobs && npx wrangler deploy)            # after forecast; no route, Cron Triggers only
    (cd places && npx wrangler deploy)          # before public-api's next deploy, which binds to it
+   (cd tiles && npx wrangler deploy)           # also attaches weather-tiles.mukoko.com
    ```
 
    Or use Workers Builds (Git integration), with one project per Worker. In each:
-   - set the root directory to `workers/forecast`, `workers/aviation`, `workers/internal-api`, `workers/places`, `workers/ai`, `workers/public-api`, `workers/stations` or `workers/jobs`;
+   - set the root directory to `workers/forecast`, `workers/aviation`, `workers/internal-api`, `workers/places`, `workers/ai`, `workers/public-api`, `workers/stations`, `workers/jobs` or `workers/tiles`;
    - set the build command to `cargo install worker-build@^0.8 && worker-build --release`;
    - set the deploy command to `npx wrangler deploy`.
 

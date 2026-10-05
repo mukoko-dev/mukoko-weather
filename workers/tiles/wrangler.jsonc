@@ -1,0 +1,42 @@
+// mukoko-weather-tiles: weather map overlay tiles (mukoko-dev/mukoko-weather#148).
+// Its own host, because one map view loads dozens of tiles: they must not
+// share the public API's 120-a-minute limit.
+//
+// Secret (name only): TOMORROW_API_KEY (the same value as on
+// mukoko-weather-forecast). Vars: ENVIRONMENT, CORS_ORIGINS.
+// The KV namespace is the forecast cache (keys prefixed `tile:v1:`), so
+// there is no new store to create. OWNER: put its id below.
+{
+  "name": "mukoko-weather-tiles",
+  "main": "build/index.js",
+  "compatibility_date": "2026-09-15",
+  "build": { "command": "worker-build --release" },
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  // The upstream URL carries the key and is never logged.
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true },
+  },
+  "routes": [{ "pattern": "weather-tiles.mukoko.com", "custom_domain": true }],
+  "vars": {
+    "ENVIRONMENT": "production",
+    "CORS_ORIGINS": "https://weather.mukoko.com,https://weatherstations.nyuchi.com",
+  },
+  "kv_namespaces": [
+    // Tiles for 24 hours: fresh for 90 minutes, then served only as a stale
+    // fallback while Tomorrow.io is failing or rate limiting.
+    { "binding": "TILE_CACHE", "id": "00000000000000000000000000000000" }, // OWNER: mukoko-weather-forecast-cache
+  ],
+  // Per client IP. A map view is ~16 tiles and every pan loads more.
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1489",
+      "simple": { "limit": 600, "period": 60 },
+    },
+  ],
+}
