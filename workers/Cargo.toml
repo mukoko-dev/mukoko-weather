@@ -6,6 +6,7 @@ resolver = "2"
 members = [
   "crates/weather-core",
   "crates/weather-edge",
+  "ai",
   "forecast",
   "internal-api",
   "jobs",
