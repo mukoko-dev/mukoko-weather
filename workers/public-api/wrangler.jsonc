@@ -30,6 +30,8 @@
     { "binding": "FORECAST", "service": "mukoko-weather-forecast" },
     { "binding": "AVIATION", "service": "mukoko-weather-aviation" },
     { "binding": "PLACES", "service": "mukoko-weather-places" },
+    // Shamwari Weather: /v1/ai/* is forwarded here.
+    { "binding": "AI_SERVICE", "service": "mukoko-weather-ai" },
   ],
   // Per client IP. Service-binding callers share one key, so mukoko-api
   // must apply its own per-consumer limits.
