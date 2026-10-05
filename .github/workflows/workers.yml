@@ -9,6 +9,7 @@ on:
       - "workers/**"
       - "src/lib/locations.ts"
       - "src/lib/locations-global.ts"
+      - "src/lib/icao-codes.ts"
       - ".github/workflows/workers.yml"
   pull_request:
     branches: [main, staging]
@@ -16,6 +17,7 @@ on:
       - "workers/**"
       - "src/lib/locations.ts"
       - "src/lib/locations-global.ts"
+      - "src/lib/icao-codes.ts"
       - ".github/workflows/workers.yml"
 
 concurrency:
@@ -78,7 +80,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        worker: [forecast, internal-api, public-api, stations]
+        worker: [forecast, internal-api, public-api, stations, aviation]
     steps:
       - uses: actions/checkout@v4
 

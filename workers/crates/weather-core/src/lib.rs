@@ -10,6 +10,8 @@
 //! request, the StationKit blending rule, the QC ranges and the station
 //! ingest-key hashing.
 
+pub mod air_quality;
+pub mod aviation;
 pub mod breaker;
 pub mod cors;
 pub mod forecast;

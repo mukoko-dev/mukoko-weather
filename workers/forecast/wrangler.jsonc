@@ -25,7 +25,8 @@
   },
   "vars": { "NYUCHI_API_URL": "https://api.nyuchi.com" },
   "kv_namespaces": [
-    // Forecasts (15 min) and place lookups (1 day / 1 hour for misses).
+    // Forecasts (15 min), air quality (1 h) and place lookups (1 day / 1 hour
+    // for misses).
     { "binding": "FORECAST_CACHE", "id": "00000000000000000000000000000000" }, // OWNER
   ],
   "d1_databases": [

@@ -23,7 +23,10 @@
     "ENVIRONMENT": "production",
     "CORS_ORIGINS": "https://weather.mukoko.com,https://weatherstations.nyuchi.com",
   },
-  "services": [{ "binding": "FORECAST", "service": "mukoko-weather-forecast" }],
+  "services": [
+    { "binding": "FORECAST", "service": "mukoko-weather-forecast" },
+    { "binding": "AVIATION", "service": "mukoko-weather-aviation" },
+  ],
   // Per client IP. Service-binding callers share one key, so mukoko-api
   // must apply its own per-consumer limits.
   "ratelimits": [

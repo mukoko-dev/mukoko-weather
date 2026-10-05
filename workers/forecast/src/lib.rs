@@ -6,6 +6,7 @@
 //! ```text
 //! GET /weather?lat=&lon=[&models=a,b][&extras=1]   full WeatherData (the app's shape)
 //! GET /daily?location=|lat=&lon=[&days=1..7]       the daily forecast contract
+//! GET /air-quality?lat=&lon=                       the EPA AQI (Open-Meteo air quality)
 //! GET /health                                      which bindings are configured
 //! ```
 //!
@@ -15,6 +16,7 @@
 //! every provider fails this Worker answers `503`; it never invents data.
 //! Callers that want the seasonal estimate (the app) add it themselves.
 
+mod air;
 mod chain;
 mod places;
 mod stations;
@@ -33,6 +35,7 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
     match req.path().as_str() {
         "/weather" => weather(&req, &env, &ctx).await,
         "/daily" => daily(&req, &env, &ctx).await,
+        "/air-quality" => air::air_quality(&req, &env, &ctx).await,
         "/health" => health(&env),
         _ => error(404, "not_found", "No such route."),
     }

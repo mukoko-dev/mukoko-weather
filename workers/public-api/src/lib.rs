@@ -9,6 +9,10 @@
 //! ```text
 //! GET /v1/weather?lat=&lon=[&models=a,b]   full WeatherData, the shape of /api/py/weather
 //! GET /v1/forecast?location=|lat=&lon=[&days=1..7]   the daily forecast contract
+//! GET /v1/air-quality?lat=&lon=                     the EPA AQI, the shape of /api/py/airquality
+//! GET /v1/metar?icao=                                METARs and TAF, the shape of /api/py/metar
+//! GET /v1/airports/nearest?lat=&lon=[&count=][&maxDistanceKm=]
+//!                                                    the shape of /api/py/airports/nearest
 //! GET /health
 //! ```
 //!
@@ -17,8 +21,9 @@
 //! always renders. `/v1/forecast` (data for other apps) fails with `503`
 //! instead of estimating.
 //!
-//! Forecasts come from `mukoko-weather-forecast` over the `FORECAST` service
-//! binding. Requests are rate limited per client IP (`RATE_LIMITER`).
+//! Forecasts and air quality come from `mukoko-weather-forecast` over the
+//! `FORECAST` service binding; aviation weather from `mukoko-weather-aviation`
+//! over `AVIATION`. Requests are rate limited per client IP (`RATE_LIMITER`).
 
 use serde_json::Value;
 use weather_core::cors::origin_allowed;
@@ -28,6 +33,7 @@ use weather_edge::{config, error, json, now, query_pairs};
 use worker::{event, Context, Env, Headers, Method, Request, Response, Result};
 
 const FORECAST_BINDING: &str = "FORECAST";
+const AVIATION_BINDING: &str = "AVIATION";
 const RATE_LIMITER: &str = "RATE_LIMITER";
 /// The Python backend's default point (Harare) when none is given.
 const DEFAULT_POINT: (f64, f64) = (-17.83, 31.05);
@@ -59,6 +65,27 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
         ),
         "/v1/weather" => weather(req, env).await,
         "/v1/forecast" => forecast(req, env).await,
+        "/v1/air-quality" => {
+            relay(
+                req,
+                env,
+                FORECAST_BINDING,
+                "/air-quality",
+                "public, max-age=1800",
+            )
+            .await
+        }
+        "/v1/metar" => relay(req, env, AVIATION_BINDING, "/metar", "public, max-age=600").await,
+        "/v1/airports/nearest" => {
+            relay(
+                req,
+                env,
+                AVIATION_BINDING,
+                "/airports/nearest",
+                "public, max-age=86400",
+            )
+            .await
+        }
         _ => error(404, "not_found", "No such route."),
     }
 }
@@ -90,7 +117,7 @@ fn with_cors(resp: Response, origin: Option<&str>) -> Result<Response> {
         h.set("Access-Control-Allow-Origin", o)?;
         h.set(
             "Access-Control-Expose-Headers",
-            "X-Cache, X-Weather-Provider, X-Current-Source, X-Fetched-At",
+            "X-Cache, X-Weather-Provider, X-Current-Source, X-Fetched-At, X-AQ-Source",
         )?;
     }
     Ok(resp)
@@ -230,4 +257,39 @@ async fn forecast(req: &Request, env: &Env) -> Result<Response> {
         },
         _ => error(502, "upstream_error", "The forecast service failed."),
     }
+}
+
+/// Pass a request through to a service-bound Worker, keeping its JSON body
+/// and its client-error statuses. The query string is passed as is; the
+/// Worker behind validates it.
+async fn relay(
+    req: &Request,
+    env: &Env,
+    binding: &str,
+    path: &str,
+    cache_control: &str,
+) -> Result<Response> {
+    let query = req.url()?.query().unwrap_or("").to_owned();
+    let fetcher = env.service(binding)?;
+    let Ok(mut upstream) = fetcher
+        .fetch(format!("https://upstream{path}?{query}"), None)
+        .await
+    else {
+        return error(502, "upstream_unreachable", "The service did not answer.");
+    };
+    let status = upstream.status_code();
+    if !matches!(status, 200 | 400 | 404 | 422 | 502 | 503) {
+        return error(502, "upstream_error", "The service failed.");
+    }
+    let Ok(body) = upstream.json::<Value>().await else {
+        return error(502, "upstream_malformed", "The service sent a bad answer.");
+    };
+    let resp = json(status, &body)?;
+    for h in ["X-Cache", "X-AQ-Source"] {
+        copy_header(upstream.headers(), resp.headers(), h)?;
+    }
+    if status == 200 {
+        resp.headers().set("Cache-Control", cache_control)?;
+    }
+    Ok(resp)
 }

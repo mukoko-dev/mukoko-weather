@@ -1,11 +1,13 @@
 // Regenerates crates/weather-core/data/seed-locations.json from the app's
 // seed list (src/lib/locations.ts + locations-global.ts), so the Workers
-// resolve the same slugs the app does. Run from the repo root:
+// resolve the same slugs the app does, and data/airports.json from the
+// ICAO catalogue (src/lib/icao-codes.ts) for the aviation Worker. Run from
+// the repo root:
 //   node --experimental-strip-types workers/scripts/gen-seed-locations.mjs
 // CI runs it with --check and fails if the JSON is stale.
 import { writeFileSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import { registerHooks } from "node:module";
 
 // The app imports siblings without an extension ("./locations-global").
@@ -36,18 +38,46 @@ const rows = LOCATIONS.map((l) => ({
   lon: l.lon,
   elevation: l.elevation,
 }));
-const json = JSON.stringify(rows, null, 2) + "\n";
+const { AIRPORTS } = await import(
+  pathToFileURL(resolve(root, "src/lib/icao-codes.ts")).href
+);
+const airportsOut = resolve(
+  root,
+  "workers/crates/weather-core/data/airports.json",
+);
+const airports = AIRPORTS.map((a) => ({
+  icao: a.icao,
+  name: a.name,
+  lat: a.lat,
+  lon: a.lon,
+}));
+
+const outputs = [
+  [out, JSON.stringify(rows, null, 2) + "\n", `${rows.length} locations`],
+  [
+    airportsOut,
+    JSON.stringify(airports, null, 2) + "\n",
+    `${airports.length} airports`,
+  ],
+];
 
 if (process.argv.includes("--check")) {
-  const current = readFileSync(out, "utf8");
-  if (current !== json) {
-    console.error(
-      "seed-locations.json is stale: run node --experimental-strip-types workers/scripts/gen-seed-locations.mjs",
-    );
-    process.exit(1);
+  let stale = false;
+  for (const [file, json, what] of outputs) {
+    const current = readFileSync(file, "utf8");
+    if (current !== json) {
+      console.error(
+        `${relative(root, file)} is stale: run node --experimental-strip-types workers/scripts/gen-seed-locations.mjs`,
+      );
+      stale = true;
+    } else {
+      console.log(`${relative(root, file)} is current (${what})`);
+    }
   }
-  console.log(`seed-locations.json is current (${rows.length} locations)`);
+  if (stale) process.exit(1);
 } else {
-  writeFileSync(out, json);
-  console.log(`wrote ${rows.length} locations`);
+  for (const [file, json, what] of outputs) {
+    writeFileSync(file, json);
+    console.log(`wrote ${what}`);
+  }
 }

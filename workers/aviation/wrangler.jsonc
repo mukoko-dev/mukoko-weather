@@ -1,0 +1,29 @@
+// mukoko-weather-aviation: METAR/TAF and nearest airports
+// (mukoko-dev/mukoko-weather#148). No route and no workers.dev address:
+// reached only through the AVIATION service binding on mukoko-weather-api.
+//
+// Names only, never values:
+//   secrets: CHECKWX_API_KEY (optional; the fallback when the Aviation
+//            Weather Center fails. Today in Mongo weather.api_keys "checkwx")
+// OWNER: the KV id is the same namespace as forecast/wrangler.jsonc
+// FORECAST_CACHE (mukoko-weather-forecast-cache); entries use the `avn:`
+// prefix, so no new namespace is needed.
+{
+  "name": "mukoko-weather-aviation",
+  "main": "build/index.js",
+  "compatibility_date": "2026-09-15",
+  "build": { "command": "worker-build --release" },
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true },
+  },
+  "kv_namespaces": [
+    // METAR answers, 30 min.
+    { "binding": "CACHE", "id": "00000000000000000000000000000000" }, // OWNER
+  ],
+}
