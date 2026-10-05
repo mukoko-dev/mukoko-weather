@@ -37,6 +37,7 @@ const rows = LOCATIONS.map((l) => ({
   lat: l.lat,
   lon: l.lon,
   elevation: l.elevation,
+  tags: l.tags ?? [],
 }));
 const { AIRPORTS } = await import(
   pathToFileURL(resolve(root, "src/lib/icao-codes.ts")).href

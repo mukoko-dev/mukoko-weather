@@ -12,7 +12,9 @@ workers/
   forecast/              mukoko-weather-forecast   provider aggregation (service binding only)
   internal-api/          mukoko-weather-internal   GET /internal/forecast for the Nyuchi API
   stations/              mukoko-weather-stations   station registration and ingest (Wunderground, Ecowitt, manual)
-  public-api/            mukoko-weather-api        /v1/weather, /v1/forecast, /v1/air-quality, /v1/metar, /v1/airports/nearest
+  places/                mukoko-weather-places     locations, search, nearest place, history (service binding only)
+  public-api/            mukoko-weather-api        /v1/weather, /v1/forecast, /v1/air-quality, /v1/metar, /v1/airports/nearest,
+                                                   /v1/locations, /v1/search, /v1/geo, /v1/history
   aviation/              mukoko-weather-aviation   METAR/TAF and nearest airports (service binding only)
   jobs/                  mukoko-weather-jobs       Cron Triggers: cache warming, retention, daily history
   d1/migrations/         schema of the D1 database `mukoko-weather`
@@ -28,6 +30,10 @@ workers/
 | `mukoko-weather-stations` | Station registration and ingest on the same paths and protocols as `/api/py/stations/*`. It checks the key (PBKDF2, matching the existing hashes) and runs QC, then queues the upload. The queue consumer writes validated observations to D1 and the raw uploads, with credentials removed, to R2                                                                                                                                                                                                                                                                                                                             | `https://weather-ingest.nyuchi.com`; at cutover, also `weather.mukoko.com/api/py/stations/*` | D1 `WEATHER_DB`, Queue `OBSERVATIONS` (`weather-observations`), R2 `RAW_OBSERVATIONS`                                                                 |
 | `mukoko-weather-aviation` | METARs of the last 12 h and the TAF from the Aviation Weather Center, with CheckWX as the fallback when `CHECKWX_API_KEY` is set (30 min KV cache, empty answers included). The nearest airports come from the app's ICAO catalogue, compiled in                                                                                                                                                                                                                                                                                                                                                                               | Service binding only (no route, no workers.dev)                                              | KV `CACHE` (the forecast cache namespace, `avn:` keys), optional secret `CHECKWX_API_KEY`                                                             |
 | `mukoko-weather-jobs`     | Cron Triggers that only plan, and a queue consumer that does the work. Every 15 min it refreshes the forecast cache for the popular places (`WARM_PLACES`; places x 96 provider calls a day, 576 for the default six). At 21:30 UTC (23:30 in Harare) it records one `place_daily` row per seed place (up to 264 forecast calls, mostly provider calls). At 02:15 UTC it rolls yesterday's validated observations up into `station_daily`, moves D1 observations older than `RETENTION_DAYS` (90) to R2 `archive/observations/`, deletes raw uploads older than `RAW_RETENTION_DAYS` (365) and drops day-old rate-limit events | No route, no workers.dev                                                                     | service `FORECAST`, D1 `WEATHER_DB`, R2 `RAW_OBSERVATIONS`, Queue `JOBS` (`weather-jobs`), vars `WARM_PLACES`, `RETENTION_DAYS`, `RAW_RETENTION_DAYS` |
+
+**`mukoko-weather-places`** (service binding only, from `mukoko-weather-api` as `PLACES`) serves `/v1/locations`, `/v1/search`, `/v1/geo` and `/v1/history` with the parameters and shapes of `/api/py/locations|search|geo|history`. It reads no database for places: the seed locations (with their tags) are compiled in; a `{name}--{geohash}` slug carries its own point (the app's smart slugs, which `mukoko-weather-forecast` now resolves too); canonical places come from the Nyuchi API (`/v1/places`, `/v1/places/nearby`, `/v1/places/{slug}`); geocoding comes from Open-Meteo (forward) and Nominatim (reverse, rate limited per client), all cached in KV. `geo?autoCreate=true` names the point and answers its `{name}--{geohash}` slug, but writes no canonical place. History is read from D1 `place_daily`, which `mukoko-weather-jobs` writes. Bindings: KV `CACHE` (the forecast namespace), D1 `WEATHER_DB` (read), rate limit `GEOCODE_LIMITER`, secret `NYUCHI_API_KEY`, var `NYUCHI_API_URL`.
+
+**Developer keys.** `mukoko-weather-api` stays open to anonymous callers (120 a minute per IP). A developer may send a Nyuchi API key (`X-API-Key: nyk_….nys_…`, or `X-Client-Id` and `X-Client-Secret`) scoped for `weather`. The Worker keeps no key store: it forwards the key to the Nyuchi API's `GET /v1/weather/key`, which validates it, enforces the monthly quota and counts the call, and keeps a good answer in memory for 60 seconds (under a SHA-256 of the key), so usage is counted per check, not per request. A keyed caller is limited per key (`KEY_RATE_LIMITER`, 600 a minute). A bad key is `401`, a key without `weather` is `403`, and if the Nyuchi API cannot answer the call is refused with `503` (fail closed). Keys are created in the Nyuchi API (`POST /v1/api-keys`).
 
 The AI Worker follows in its own PR (see #148).
 
@@ -93,7 +99,8 @@ Creating Cloudflare resources and deploying are owner actions. Run these from `w
                                                                      #   and aviation/wrangler.jsonc CACHE id (same namespace)
    npx wrangler d1 create mukoko-weather                             # → forecast/wrangler.jsonc WEATHER_DB database_id
    npx wrangler d1 migrations apply mukoko-weather --remote -c forecast/wrangler.jsonc
-                                                                     # same database_id in stations/ and jobs/wrangler.jsonc
+                                                                     # same database_id in stations/, jobs/ and places/wrangler.jsonc
+                                                                     # same KV id in places/wrangler.jsonc CACHE
    npx wrangler r2 bucket create mukoko-weather-raw
    npx wrangler queues create weather-observations
    npx wrangler queues create weather-observations-dlq
@@ -106,6 +113,7 @@ Creating Cloudflare resources and deploying are owner actions. Run these from `w
    ```bash
    (cd forecast && npx wrangler secret put TOMORROW_API_KEY)       # today in Mongo weather.api_keys "tomorrow"
    (cd forecast && npx wrangler secret put NYUCHI_API_KEY)         # internal key, places read
+   (cd places && npx wrangler secret put NYUCHI_API_KEY)           # the same key
    (cd internal-api && npx wrangler secret put WEATHER_SERVICE_API_KEY)  # new random value, e.g. openssl rand -hex 32
    (cd aviation && npx wrangler secret put CHECKWX_API_KEY)        # optional; today in Mongo weather.api_keys "checkwx"
    ```
@@ -119,10 +127,11 @@ Creating Cloudflare resources and deploying are owner actions. Run these from `w
    (cd public-api && npx wrangler deploy)      # also attaches weather-api.mukoko.com
    (cd stations && npx wrangler deploy)        # also attaches weather-ingest.nyuchi.com
    (cd jobs && npx wrangler deploy)            # after forecast; no route, Cron Triggers only
+   (cd places && npx wrangler deploy)          # before public-api's next deploy, which binds to it
    ```
 
    Or use Workers Builds (Git integration), with one project per Worker. In each:
-   - set the root directory to `workers/forecast`, `workers/aviation`, `workers/internal-api`, `workers/public-api`, `workers/stations` or `workers/jobs`;
+   - set the root directory to `workers/forecast`, `workers/aviation`, `workers/internal-api`, `workers/places`, `workers/public-api`, `workers/stations` or `workers/jobs`;
    - set the build command to `cargo install worker-build@^0.8 && worker-build --release`;
    - set the deploy command to `npx wrangler deploy`.
 
