@@ -116,7 +116,13 @@ async fn open_meteo(lat: f64, lon: f64) -> Option<Value> {
     data
 }
 
-fn record_open_meteo(ok: bool) {
+/// Whether the Open-Meteo breaker lets a call through now. Air quality
+/// shares it: one Open-Meteo, one breaker, as in Python.
+pub fn open_meteo_allowed() -> bool {
+    OPEN_METEO.with(|b| b.borrow_mut().allow(now_ms()))
+}
+
+pub fn record_open_meteo(ok: bool) {
     OPEN_METEO.with(|b| {
         let mut b = b.borrow_mut();
         if ok {
