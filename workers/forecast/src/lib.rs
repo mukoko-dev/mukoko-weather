@@ -4,7 +4,7 @@
 //! workers.dev address: the API Workers reach it through service bindings.
 //!
 //! ```text
-//! GET /weather?lat=&lon=[&models=a,b][&extras=1]   full WeatherData (the app's shape)
+//! GET /weather?lat=&lon=[&models=a,b][&extras=1][&refresh=1]   full WeatherData (the app's shape)
 //! GET /daily?location=|lat=&lon=[&days=1..7]       the daily forecast contract
 //! GET /air-quality?lat=&lon=                       the EPA AQI (Open-Meteo air quality)
 //! GET /health                                      which bindings are configured
@@ -15,6 +15,10 @@
 //! StationKit observation within 50 km and 60 min overlays `current`. When
 //! every provider fails this Worker answers `503`; it never invents data.
 //! Callers that want the seasonal estimate (the app) add it themselves.
+//!
+//! `refresh=1` skips the cache read and stores the fresh answer. Only the
+//! jobs Worker sends it (cache warming); the API Workers build their own
+//! query strings, so outside callers cannot force provider calls.
 
 mod air;
 mod chain;
@@ -68,7 +72,8 @@ async fn weather(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
         return error(422, "invalid_request", "Invalid coordinates.");
     }
 
-    let Some(mut got) = chain::forecast(env, ctx, lat, lon).await else {
+    let refresh = get("refresh") == Some("1");
+    let Some(mut got) = chain::forecast(env, ctx, lat, lon, refresh).await else {
         return error(
             503,
             "providers_unavailable",
@@ -125,7 +130,7 @@ async fn daily(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
             }
         },
     };
-    let Some(got) = chain::forecast(env, ctx, place.lat, place.lon).await else {
+    let Some(got) = chain::forecast(env, ctx, place.lat, place.lon, false).await else {
         return error(
             503,
             "providers_unavailable",
