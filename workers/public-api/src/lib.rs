@@ -13,6 +13,7 @@
 //! GET /v1/metar?icao=                                METARs and TAF, the shape of /api/py/metar
 //! GET /v1/airports/nearest?lat=&lon=[&count=][&maxDistanceKm=]
 //!                                                    the shape of /api/py/airports/nearest
+//! GET /v1/locations, /v1/search, /v1/geo, /v1/history   places (mukoko-weather-places)
 //! GET /health
 //! ```
 //!
@@ -23,7 +24,12 @@
 //!
 //! Forecasts and air quality come from `mukoko-weather-forecast` over the
 //! `FORECAST` service binding; aviation weather from `mukoko-weather-aviation`
-//! over `AVIATION`. Requests are rate limited per client IP (`RATE_LIMITER`).
+//! over `AVIATION`; locations, search and history from `mukoko-weather-places`
+//! over `PLACES`. Anonymous requests are rate limited per client IP
+//! (`RATE_LIMITER`). A developer may send a Nyuchi API key, checked by the
+//! Nyuchi API (`keys`), and is then limited per key (`KEY_RATE_LIMITER`).
+
+mod keys;
 
 use serde_json::Value;
 use weather_core::cors::origin_allowed;
@@ -35,6 +41,8 @@ use worker::{event, Context, Env, Headers, Method, Request, Response, Result};
 const FORECAST_BINDING: &str = "FORECAST";
 const AVIATION_BINDING: &str = "AVIATION";
 const RATE_LIMITER: &str = "RATE_LIMITER";
+const KEY_RATE_LIMITER: &str = "KEY_RATE_LIMITER";
+const PLACES_BINDING: &str = "PLACES";
 /// The Python backend's default point (Harare) when none is given.
 const DEFAULT_POINT: (f64, f64) = (-17.83, 31.05);
 /// The Python backend's default elevation for the seasonal estimate.
@@ -49,10 +57,14 @@ pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         preflight(cors_origin.is_some())
     } else if req.method() != Method::Get {
         error(405, "method_not_allowed", "Only GET is served.")
-    } else if let Some(limited) = rate_limited(&req, &env).await {
-        limited
     } else {
-        route(&req, &env).await
+        match keys::caller(&req, &env).await? {
+            Err(refused) => Ok(refused),
+            Ok(caller) => match rate_limited(&req, &env, &caller).await {
+                Some(limited) => limited,
+                None => route(&req, &env).await,
+            },
+        }
     }?;
     with_cors(resp, cors_origin.as_deref())
 }
@@ -86,6 +98,7 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
             )
             .await
         }
+        "/v1/locations" | "/v1/search" | "/v1/geo" | "/v1/history" => places(req, env).await,
         _ => error(404, "not_found", "No such route."),
     }
 }
@@ -103,7 +116,7 @@ fn preflight(allowed: bool) -> Result<Response> {
         h.set("Access-Control-Allow-Methods", "GET, OPTIONS")?;
         h.set(
             "Access-Control-Allow-Headers",
-            "Content-Type, Authorization, X-Mukoko-Client",
+            "Content-Type, Authorization, X-Mukoko-Client, X-API-Key, X-Client-Id, X-Client-Secret",
         )?;
         h.set("Access-Control-Max-Age", "86400")?;
     }
@@ -123,16 +136,24 @@ fn with_cors(resp: Response, origin: Option<&str>) -> Result<Response> {
     Ok(resp)
 }
 
-/// `Some(429)` when the client is over its limit. A missing limiter binding
-/// (local dev) does not block.
-async fn rate_limited(req: &Request, env: &Env) -> Option<Result<Response>> {
-    let limiter = env.rate_limiter(RATE_LIMITER).ok()?;
-    let key = req
-        .headers()
+fn client_ip(req: &Request) -> String {
+    req.headers()
         .get("CF-Connecting-IP")
         .ok()
         .flatten()
-        .unwrap_or_else(|| "service-binding".to_owned());
+        .unwrap_or_else(|| "service-binding".to_owned())
+}
+
+/// `Some(429)` when the caller is over its limit: per IP when anonymous, per
+/// key id with a key. A missing limiter binding (local dev) does not block.
+async fn rate_limited(req: &Request, env: &Env, caller: &keys::Caller) -> Option<Result<Response>> {
+    let (limiter, key) = match caller {
+        keys::Caller::Anonymous => (env.rate_limiter(RATE_LIMITER).ok()?, client_ip(req)),
+        keys::Caller::Key(ctx) => (
+            env.rate_limiter(KEY_RATE_LIMITER).ok()?,
+            format!("key:{}", ctx.key_id),
+        ),
+    };
     match limiter.limit(key).await {
         Ok(outcome) if !outcome.success => {
             let resp = error(429, "rate_limited", "Too many requests; slow down.");
@@ -290,6 +311,41 @@ async fn relay(
     }
     if status == 200 {
         resp.headers().set("Cache-Control", cache_control)?;
+    }
+    Ok(resp)
+}
+
+/// Locations, search, nearest place and history, from `mukoko-weather-places`.
+/// The path loses its `/v1`; status, body and `Cache-Control` pass through.
+async fn places(req: &Request, env: &Env) -> Result<Response> {
+    let url = req.url()?;
+    let path = url.path().trim_start_matches("/v1");
+    let target = match url.query() {
+        Some(q) => format!("https://places{path}?{q}"),
+        None => format!("https://places{path}"),
+    };
+    let headers = Headers::new();
+    headers.set("X-Mukoko-Client-IP", &client_ip(req))?;
+    let mut init = worker::RequestInit::new();
+    init.with_headers(headers);
+    let Ok(mut upstream) = env.service(PLACES_BINDING)?.fetch(target, Some(init)).await else {
+        return error(
+            502,
+            "upstream_unreachable",
+            "The places service did not answer.",
+        );
+    };
+    let status = upstream.status_code();
+    let Ok(body) = upstream.json::<Value>().await else {
+        return error(
+            502,
+            "upstream_malformed",
+            "The places service sent a bad answer.",
+        );
+    };
+    let resp = json(status, &body)?;
+    if let Some(cc) = upstream.headers().get("Cache-Control")? {
+        resp.headers().set("Cache-Control", &cc)?;
     }
     Ok(resp)
 }

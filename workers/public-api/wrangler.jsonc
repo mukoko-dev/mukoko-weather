@@ -3,7 +3,9 @@
 // adds a service binding to this Worker for consumer reuse:
 //   "services": [{ "binding": "WEATHER", "service": "mukoko-weather-api" }]
 //
-// No secrets. Vars: ENVIRONMENT, CORS_ORIGINS.
+// No secrets: a developer's own Nyuchi API key is forwarded to the Nyuchi
+// API (GET /v1/weather/key), which checks it. Vars: ENVIRONMENT,
+// CORS_ORIGINS, NYUCHI_API_URL.
 {
   "name": "mukoko-weather-api",
   "main": "build/index.js",
@@ -22,10 +24,12 @@
   "vars": {
     "ENVIRONMENT": "production",
     "CORS_ORIGINS": "https://weather.mukoko.com,https://weatherstations.nyuchi.com",
+    "NYUCHI_API_URL": "https://api.nyuchi.com",
   },
   "services": [
     { "binding": "FORECAST", "service": "mukoko-weather-forecast" },
     { "binding": "AVIATION", "service": "mukoko-weather-aviation" },
+    { "binding": "PLACES", "service": "mukoko-weather-places" },
   ],
   // Per client IP. Service-binding callers share one key, so mukoko-api
   // must apply its own per-consumer limits.
@@ -34,6 +38,13 @@
       "name": "RATE_LIMITER",
       "namespace_id": "1481",
       "simple": { "limit": 120, "period": 60 },
+    },
+    // Per developer key (key id), for callers with a Nyuchi API key scoped
+    // for `weather`. Monthly quotas are the Nyuchi API's.
+    {
+      "name": "KEY_RATE_LIMITER",
+      "namespace_id": "1484",
+      "simple": { "limit": 600, "period": 60 },
     },
   ],
 }

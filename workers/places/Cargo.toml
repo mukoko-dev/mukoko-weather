@@ -1,0 +1,20 @@
+[package]
+name = "mukoko-weather-places"
+description = "mukoko-weather-places: location search, nearest-place lookup, location docs and weather history, reached only through service bindings"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+weather-core.workspace = true
+weather-edge.workspace = true
+worker.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+futures.workspace = true
