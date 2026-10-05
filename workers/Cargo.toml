@@ -8,6 +8,7 @@ members = [
   "crates/weather-edge",
   "forecast",
   "internal-api",
+  "jobs",
   "public-api",
   "stations",
   "aviation",

@@ -16,6 +16,7 @@ pub mod breaker;
 pub mod cors;
 pub mod forecast;
 pub mod geo;
+pub mod jobs;
 pub mod normalize;
 pub mod places;
 pub mod query;
