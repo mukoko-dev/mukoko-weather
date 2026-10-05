@@ -1,0 +1,52 @@
+// mukoko-weather-places: location search, the nearest place for a point,
+// location docs and weather history (mukoko-dev/mukoko-weather#148).
+// No route and no workers.dev address: mukoko-weather-api reaches it through
+// the PLACES service binding.
+//
+// Names only, never values:
+//   secrets: NYUCHI_API_KEY (internal key; places read), the same key as
+//            mukoko-weather-forecast
+//   vars:    NYUCHI_API_URL
+// OWNER: replace the placeholder ids below with the created resources' ids
+// (workers/README.md, "Owner steps"). Both are the stores forecast uses.
+{
+  "name": "mukoko-weather-places",
+  "main": "build/index.js",
+  "compatibility_date": "2026-09-15",
+  "build": { "command": "worker-build --release" },
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  // Traces and invocation metadata, with query strings (search text and
+  // coordinates) redacted. The code logs no queries, points or keys.
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true },
+  },
+  "vars": { "NYUCHI_API_URL": "https://api.nyuchi.com" },
+  "kv_namespaces": [
+    // Geocoding (1 day), reverse geocoding (30 days), place lookups (1 day).
+    // The same namespace as mukoko-weather-forecast, under its own prefixes.
+    { "binding": "CACHE", "id": "00000000000000000000000000000000" }, // OWNER
+  ],
+  "d1_databases": [
+    {
+      // Read only: place_daily (weather history), written by mukoko-weather-jobs.
+      "binding": "WEATHER_DB",
+      "database_name": "mukoko-weather",
+      "database_id": "00000000-0000-0000-0000-000000000000", // OWNER
+      "migrations_dir": "../d1/migrations",
+    },
+  ],
+  // Reverse geocoding (Nominatim allows about one request a second), per
+  // client IP as passed on by mukoko-weather-api.
+  "ratelimits": [
+    {
+      "name": "GEOCODE_LIMITER",
+      "namespace_id": "1483",
+      "simple": { "limit": 10, "period": 60 },
+    },
+  ],
+}

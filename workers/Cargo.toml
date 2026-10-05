@@ -9,6 +9,7 @@ members = [
   "forecast",
   "internal-api",
   "jobs",
+  "places",
   "public-api",
   "stations",
   "aviation",

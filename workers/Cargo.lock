@@ -460,6 +460,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "mukoko-weather-places"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "serde",
+ "serde_json",
+ "weather-core",
+ "weather-edge",
+ "worker",
+]
+
+[[package]]
 name = "mukoko-weather-stations"
 version = "0.1.0"
 dependencies = [
