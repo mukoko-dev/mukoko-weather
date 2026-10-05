@@ -80,7 +80,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        worker: [forecast, internal-api, public-api, stations, aviation]
+        worker: [forecast, internal-api, public-api, stations, aviation, jobs]
     steps:
       - uses: actions/checkout@v4
 

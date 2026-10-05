@@ -1,0 +1,20 @@
+[package]
+name = "mukoko-weather-jobs"
+description = "mukoko-weather-jobs: Cron Triggers for cache warming, observation retention and daily history rollups, fanned out over a Queue"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+weather-core.workspace = true
+weather-edge.workspace = true
+worker = { workspace = true, features = ["queue"] }
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
