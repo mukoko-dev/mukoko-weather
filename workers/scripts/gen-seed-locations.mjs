@@ -39,6 +39,18 @@ const rows = LOCATIONS.map((l) => ({
   elevation: l.elevation,
   tags: l.tags ?? [],
 }));
+// Laid out as the org formatter (vite-plus / oxfmt, printWidth 80) leaves
+// it: a tag list on one line when it fits, one tag per line when not.
+const json =
+  JSON.stringify(rows, null, 2).replace(
+    /^( *)"tags": \[\n([^\]]*?)\n *\]/gm,
+    (whole, indent, body) => {
+      const tags = body.split(",\n").map((t) => t.trim());
+      const line = `${indent}"tags": [${tags.join(", ")}]`;
+      return line.length <= 80 ? line : whole;
+    },
+  ) + "\n";
+
 const { AIRPORTS } = await import(
   pathToFileURL(resolve(root, "src/lib/icao-codes.ts")).href
 );
@@ -54,7 +66,7 @@ const airports = AIRPORTS.map((a) => ({
 }));
 
 const outputs = [
-  [out, JSON.stringify(rows, null, 2) + "\n", `${rows.length} locations`],
+  [out, json, `${rows.length} locations`],
   [
     airportsOut,
     JSON.stringify(airports, null, 2) + "\n",

@@ -7,10 +7,7 @@
     "lat": -17.83,
     "lon": 31.05,
     "elevation": 1490,
-    "tags": [
-      "city",
-      "education"
-    ]
+    "tags": ["city", "education"]
   },
   {
     "slug": "bulawayo",
@@ -20,10 +17,7 @@
     "lat": -20.15,
     "lon": 28.58,
     "elevation": 1348,
-    "tags": [
-      "city",
-      "education"
-    ]
+    "tags": ["city", "education"]
   },
   {
     "slug": "mutare",
@@ -33,10 +27,7 @@
     "lat": -18.97,
     "lon": 32.67,
     "elevation": 1073,
-    "tags": [
-      "city",
-      "education"
-    ]
+    "tags": ["city", "education"]
   },
   {
     "slug": "gweru",
@@ -46,10 +37,7 @@
     "lat": -19.45,
     "lon": 29.82,
     "elevation": 1422,
-    "tags": [
-      "city",
-      "education"
-    ]
+    "tags": ["city", "education"]
   },
   {
     "slug": "masvingo",
@@ -59,11 +47,7 @@
     "lat": -20.07,
     "lon": 30.83,
     "elevation": 1095,
-    "tags": [
-      "city",
-      "education",
-      "tourism"
-    ]
+    "tags": ["city", "education", "tourism"]
   },
   {
     "slug": "kwekwe",
@@ -73,10 +57,7 @@
     "lat": -18.93,
     "lon": 29.82,
     "elevation": 1214,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "kadoma",
@@ -86,10 +67,7 @@
     "lat": -18.35,
     "lon": 29.92,
     "elevation": 1152,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "marondera",
@@ -99,11 +77,7 @@
     "lat": -18.19,
     "lon": 31.55,
     "elevation": 1634,
-    "tags": [
-      "city",
-      "farming",
-      "education"
-    ]
+    "tags": ["city", "farming", "education"]
   },
   {
     "slug": "chinhoyi",
@@ -113,10 +87,7 @@
     "lat": -17.37,
     "lon": 30.2,
     "elevation": 1143,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "victoria-falls",
@@ -126,12 +97,7 @@
     "lat": -17.93,
     "lon": 25.85,
     "elevation": 915,
-    "tags": [
-      "city",
-      "tourism",
-      "travel",
-      "border"
-    ]
+    "tags": ["city", "tourism", "travel", "border"]
   },
   {
     "slug": "chitungwiza",
@@ -141,9 +107,7 @@
     "lat": -17.99,
     "lon": 31.08,
     "elevation": 1463,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "bindura",
@@ -153,11 +117,7 @@
     "lat": -17.3,
     "lon": 31.33,
     "elevation": 1112,
-    "tags": [
-      "city",
-      "mining",
-      "education"
-    ]
+    "tags": ["city", "mining", "education"]
   },
   {
     "slug": "zvishavane",
@@ -167,10 +127,7 @@
     "lat": -20.33,
     "lon": 30.07,
     "elevation": 914,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "kariba",
@@ -180,10 +137,7 @@
     "lat": -16.52,
     "lon": 28.8,
     "elevation": 519,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "hwange",
@@ -193,11 +147,7 @@
     "lat": -18.37,
     "lon": 26.5,
     "elevation": 900,
-    "tags": [
-      "city",
-      "mining",
-      "tourism"
-    ]
+    "tags": ["city", "mining", "tourism"]
   },
   {
     "slug": "chiredzi",
@@ -207,10 +157,7 @@
     "lat": -21.05,
     "lon": 31.67,
     "elevation": 430,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "chipinge",
@@ -220,10 +167,7 @@
     "lat": -20.19,
     "lon": 32.63,
     "elevation": 1132,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "rusape",
@@ -233,10 +177,7 @@
     "lat": -18.53,
     "lon": 32.13,
     "elevation": 1430,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "beitbridge",
@@ -246,11 +187,7 @@
     "lat": -22.22,
     "lon": 30,
     "elevation": 457,
-    "tags": [
-      "city",
-      "border",
-      "travel"
-    ]
+    "tags": ["city", "border", "travel"]
   },
   {
     "slug": "plumtree",
@@ -260,10 +197,7 @@
     "lat": -20.48,
     "lon": 27.82,
     "elevation": 1362,
-    "tags": [
-      "city",
-      "border"
-    ]
+    "tags": ["city", "border"]
   },
   {
     "slug": "norton",
@@ -273,9 +207,7 @@
     "lat": -17.88,
     "lon": 30.7,
     "elevation": 1364,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "ruwa",
@@ -285,9 +217,7 @@
     "lat": -17.89,
     "lon": 31.25,
     "elevation": 1473,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "epworth",
@@ -297,9 +227,7 @@
     "lat": -17.89,
     "lon": 31.15,
     "elevation": 1490,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "redcliff",
@@ -309,10 +237,7 @@
     "lat": -19.03,
     "lon": 29.78,
     "elevation": 1220,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "shurugwi",
@@ -322,10 +247,7 @@
     "lat": -19.67,
     "lon": 29.99,
     "elevation": 1300,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "chegutu",
@@ -335,10 +257,7 @@
     "lat": -18.13,
     "lon": 30.15,
     "elevation": 1140,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "mazowe",
@@ -348,9 +267,7 @@
     "lat": -17.52,
     "lon": 30.97,
     "elevation": 1219,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "shamva",
@@ -360,10 +277,7 @@
     "lat": -17.31,
     "lon": 31.57,
     "elevation": 1060,
-    "tags": [
-      "farming",
-      "mining"
-    ]
+    "tags": ["farming", "mining"]
   },
   {
     "slug": "concession",
@@ -373,9 +287,7 @@
     "lat": -17.38,
     "lon": 30.95,
     "elevation": 1280,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "headlands",
@@ -385,9 +297,7 @@
     "lat": -18.28,
     "lon": 32.05,
     "elevation": 1470,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "odzi",
@@ -397,9 +307,7 @@
     "lat": -18.97,
     "lon": 32.37,
     "elevation": 960,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "penhalonga",
@@ -409,10 +317,7 @@
     "lat": -18.9,
     "lon": 32.7,
     "elevation": 1010,
-    "tags": [
-      "farming",
-      "mining"
-    ]
+    "tags": ["farming", "mining"]
   },
   {
     "slug": "nyanga",
@@ -422,10 +327,7 @@
     "lat": -18.22,
     "lon": 32.75,
     "elevation": 1850,
-    "tags": [
-      "farming",
-      "tourism"
-    ]
+    "tags": ["farming", "tourism"]
   },
   {
     "slug": "chimanimani",
@@ -435,11 +337,7 @@
     "lat": -19.8,
     "lon": 32.87,
     "elevation": 1650,
-    "tags": [
-      "farming",
-      "tourism",
-      "national-park"
-    ]
+    "tags": ["farming", "tourism", "national-park"]
   },
   {
     "slug": "triangle",
@@ -449,9 +347,7 @@
     "lat": -21.02,
     "lon": 31.51,
     "elevation": 450,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "hippo-valley",
@@ -461,9 +357,7 @@
     "lat": -21.08,
     "lon": 31.6,
     "elevation": 420,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "selous",
@@ -473,9 +367,7 @@
     "lat": -18,
     "lon": 30.42,
     "elevation": 1100,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "mvurwi",
@@ -485,9 +377,7 @@
     "lat": -17.04,
     "lon": 30.85,
     "elevation": 1230,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "glendale",
@@ -497,9 +387,7 @@
     "lat": -17.36,
     "lon": 31.08,
     "elevation": 1250,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "centenary",
@@ -509,9 +397,7 @@
     "lat": -16.73,
     "lon": 31.12,
     "elevation": 910,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "banket",
@@ -521,9 +407,7 @@
     "lat": -17.38,
     "lon": 30.4,
     "elevation": 1100,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "karoi",
@@ -533,10 +417,7 @@
     "lat": -16.81,
     "lon": 29.69,
     "elevation": 1300,
-    "tags": [
-      "farming",
-      "travel"
-    ]
+    "tags": ["farming", "travel"]
   },
   {
     "slug": "guruve",
@@ -546,9 +427,7 @@
     "lat": -16.67,
     "lon": 30.7,
     "elevation": 1050,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "muzarabani",
@@ -558,9 +437,7 @@
     "lat": -16.33,
     "lon": 31.1,
     "elevation": 340,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "mount-darwin",
@@ -570,9 +447,7 @@
     "lat": -16.77,
     "lon": 31.58,
     "elevation": 900,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "lupane",
@@ -582,9 +457,7 @@
     "lat": -18.93,
     "lon": 27.8,
     "elevation": 1050,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "gokwe",
@@ -594,9 +467,7 @@
     "lat": -18.22,
     "lon": 28.93,
     "elevation": 1280,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "nkayi",
@@ -606,9 +477,7 @@
     "lat": -19,
     "lon": 28.9,
     "elevation": 1050,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "gutu",
@@ -618,9 +487,7 @@
     "lat": -19.93,
     "lon": 31,
     "elevation": 1200,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "zaka",
@@ -630,9 +497,7 @@
     "lat": -20.33,
     "lon": 31.47,
     "elevation": 900,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "bikita",
@@ -642,10 +507,7 @@
     "lat": -20.1,
     "lon": 31.6,
     "elevation": 1000,
-    "tags": [
-      "farming",
-      "mining"
-    ]
+    "tags": ["farming", "mining"]
   },
   {
     "slug": "mberengwa",
@@ -655,9 +517,7 @@
     "lat": -20.42,
     "lon": 29.98,
     "elevation": 1200,
-    "tags": [
-      "farming"
-    ]
+    "tags": ["farming"]
   },
   {
     "slug": "hwange-colliery",
@@ -667,9 +527,7 @@
     "lat": -18.36,
     "lon": 26.48,
     "elevation": 880,
-    "tags": [
-      "mining"
-    ]
+    "tags": ["mining"]
   },
   {
     "slug": "renco-mine",
@@ -679,9 +537,7 @@
     "lat": -20.49,
     "lon": 31.53,
     "elevation": 630,
-    "tags": [
-      "mining"
-    ]
+    "tags": ["mining"]
   },
   {
     "slug": "bikita-minerals",
@@ -691,9 +547,7 @@
     "lat": -20.08,
     "lon": 31.57,
     "elevation": 1050,
-    "tags": [
-      "mining"
-    ]
+    "tags": ["mining"]
   },
   {
     "slug": "kamativi",
@@ -703,9 +557,7 @@
     "lat": -18.32,
     "lon": 26.87,
     "elevation": 970,
-    "tags": [
-      "mining"
-    ]
+    "tags": ["mining"]
   },
   {
     "slug": "mutorashanga",
@@ -715,9 +567,7 @@
     "lat": -17.3,
     "lon": 30.38,
     "elevation": 1400,
-    "tags": [
-      "mining"
-    ]
+    "tags": ["mining"]
   },
   {
     "slug": "mashava",
@@ -727,9 +577,7 @@
     "lat": -20.05,
     "lon": 30.47,
     "elevation": 1200,
-    "tags": [
-      "mining"
-    ]
+    "tags": ["mining"]
   },
   {
     "slug": "trojan-mine",
@@ -739,9 +587,7 @@
     "lat": -17.33,
     "lon": 31.35,
     "elevation": 1100,
-    "tags": [
-      "mining"
-    ]
+    "tags": ["mining"]
   },
   {
     "slug": "mimosa-mine",
@@ -751,9 +597,7 @@
     "lat": -20.35,
     "lon": 30.1,
     "elevation": 950,
-    "tags": [
-      "mining"
-    ]
+    "tags": ["mining"]
   },
   {
     "slug": "unki-mine",
@@ -763,9 +607,7 @@
     "lat": -19.68,
     "lon": 30.05,
     "elevation": 1300,
-    "tags": [
-      "mining"
-    ]
+    "tags": ["mining"]
   },
   {
     "slug": "zimplats",
@@ -775,9 +617,7 @@
     "lat": -18,
     "lon": 29.97,
     "elevation": 1230,
-    "tags": [
-      "mining"
-    ]
+    "tags": ["mining"]
   },
   {
     "slug": "murowa-diamond",
@@ -787,9 +627,7 @@
     "lat": -20.02,
     "lon": 30.1,
     "elevation": 1100,
-    "tags": [
-      "mining"
-    ]
+    "tags": ["mining"]
   },
   {
     "slug": "marange",
@@ -799,9 +637,7 @@
     "lat": -19.4,
     "lon": 32.55,
     "elevation": 800,
-    "tags": [
-      "mining"
-    ]
+    "tags": ["mining"]
   },
   {
     "slug": "matopos",
@@ -811,10 +647,7 @@
     "lat": -20.5,
     "lon": 28.5,
     "elevation": 1300,
-    "tags": [
-      "tourism",
-      "national-park"
-    ]
+    "tags": ["tourism", "national-park"]
   },
   {
     "slug": "great-zimbabwe",
@@ -824,9 +657,7 @@
     "lat": -20.27,
     "lon": 30.93,
     "elevation": 1100,
-    "tags": [
-      "tourism"
-    ]
+    "tags": ["tourism"]
   },
   {
     "slug": "hwange-national-park",
@@ -836,10 +667,7 @@
     "lat": -18.75,
     "lon": 26.5,
     "elevation": 1050,
-    "tags": [
-      "tourism",
-      "national-park"
-    ]
+    "tags": ["tourism", "national-park"]
   },
   {
     "slug": "mana-pools",
@@ -849,10 +677,7 @@
     "lat": -15.75,
     "lon": 29.4,
     "elevation": 350,
-    "tags": [
-      "tourism",
-      "national-park"
-    ]
+    "tags": ["tourism", "national-park"]
   },
   {
     "slug": "gonarezhou",
@@ -862,10 +687,7 @@
     "lat": -21.75,
     "lon": 31.75,
     "elevation": 300,
-    "tags": [
-      "tourism",
-      "national-park"
-    ]
+    "tags": ["tourism", "national-park"]
   },
   {
     "slug": "lake-kariba",
@@ -875,9 +697,7 @@
     "lat": -16.75,
     "lon": 28.5,
     "elevation": 485,
-    "tags": [
-      "tourism"
-    ]
+    "tags": ["tourism"]
   },
   {
     "slug": "nyanga-national-park",
@@ -887,10 +707,7 @@
     "lat": -18.3,
     "lon": 32.75,
     "elevation": 2000,
-    "tags": [
-      "tourism",
-      "national-park"
-    ]
+    "tags": ["tourism", "national-park"]
   },
   {
     "slug": "chimanimani-national-park",
@@ -900,10 +717,7 @@
     "lat": -19.78,
     "lon": 32.9,
     "elevation": 1750,
-    "tags": [
-      "tourism",
-      "national-park"
-    ]
+    "tags": ["tourism", "national-park"]
   },
   {
     "slug": "matusadona",
@@ -913,10 +727,7 @@
     "lat": -16.73,
     "lon": 28.7,
     "elevation": 490,
-    "tags": [
-      "tourism",
-      "national-park"
-    ]
+    "tags": ["tourism", "national-park"]
   },
   {
     "slug": "chizarira",
@@ -926,10 +737,7 @@
     "lat": -17.77,
     "lon": 27.9,
     "elevation": 1300,
-    "tags": [
-      "tourism",
-      "national-park"
-    ]
+    "tags": ["tourism", "national-park"]
   },
   {
     "slug": "zambezi-national-park",
@@ -939,10 +747,7 @@
     "lat": -17.87,
     "lon": 25.65,
     "elevation": 910,
-    "tags": [
-      "tourism",
-      "national-park"
-    ]
+    "tags": ["tourism", "national-park"]
   },
   {
     "slug": "zvimba",
@@ -952,10 +757,7 @@
     "lat": -17.57,
     "lon": 30.22,
     "elevation": 1200,
-    "tags": [
-      "education",
-      "farming"
-    ]
+    "tags": ["education", "farming"]
   },
   {
     "slug": "lower-gweru",
@@ -965,9 +767,7 @@
     "lat": -19.7,
     "lon": 29.6,
     "elevation": 1350,
-    "tags": [
-      "education"
-    ]
+    "tags": ["education"]
   },
   {
     "slug": "gokomere",
@@ -977,9 +777,7 @@
     "lat": -20.18,
     "lon": 30.68,
     "elevation": 1050,
-    "tags": [
-      "education"
-    ]
+    "tags": ["education"]
   },
   {
     "slug": "kutama",
@@ -989,9 +787,7 @@
     "lat": -17.57,
     "lon": 30.15,
     "elevation": 1200,
-    "tags": [
-      "education"
-    ]
+    "tags": ["education"]
   },
   {
     "slug": "driefontein",
@@ -1001,9 +797,7 @@
     "lat": -19.8,
     "lon": 30.8,
     "elevation": 1100,
-    "tags": [
-      "education"
-    ]
+    "tags": ["education"]
   },
   {
     "slug": "dadaya",
@@ -1013,9 +807,7 @@
     "lat": -20.22,
     "lon": 29.75,
     "elevation": 1200,
-    "tags": [
-      "education"
-    ]
+    "tags": ["education"]
   },
   {
     "slug": "chirundu",
@@ -1025,10 +817,7 @@
     "lat": -15.6,
     "lon": 28.85,
     "elevation": 370,
-    "tags": [
-      "border",
-      "travel"
-    ]
+    "tags": ["border", "travel"]
   },
   {
     "slug": "forbes-border",
@@ -1038,10 +827,7 @@
     "lat": -18.97,
     "lon": 32.87,
     "elevation": 900,
-    "tags": [
-      "border",
-      "travel"
-    ]
+    "tags": ["border", "travel"]
   },
   {
     "slug": "nyamapanda",
@@ -1051,10 +837,7 @@
     "lat": -16.28,
     "lon": 32.3,
     "elevation": 620,
-    "tags": [
-      "border",
-      "travel"
-    ]
+    "tags": ["border", "travel"]
   },
   {
     "slug": "kazungula",
@@ -1064,10 +847,7 @@
     "lat": -17.78,
     "lon": 25.27,
     "elevation": 930,
-    "tags": [
-      "border",
-      "travel"
-    ]
+    "tags": ["border", "travel"]
   },
   {
     "slug": "kanyemba",
@@ -1077,9 +857,7 @@
     "lat": -15.63,
     "lon": 30.42,
     "elevation": 340,
-    "tags": [
-      "border"
-    ]
+    "tags": ["border"]
   },
   {
     "slug": "chivhu",
@@ -1089,10 +867,7 @@
     "lat": -19.02,
     "lon": 30.9,
     "elevation": 1430,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "mvuma",
@@ -1102,9 +877,7 @@
     "lat": -19.28,
     "lon": 30.53,
     "elevation": 1350,
-    "tags": [
-      "travel"
-    ]
+    "tags": ["travel"]
   },
   {
     "slug": "ngundu",
@@ -1114,9 +887,7 @@
     "lat": -21.03,
     "lon": 30.97,
     "elevation": 520,
-    "tags": [
-      "travel"
-    ]
+    "tags": ["travel"]
   },
   {
     "slug": "west-nicholson",
@@ -1126,9 +897,7 @@
     "lat": -21.05,
     "lon": 29.37,
     "elevation": 900,
-    "tags": [
-      "travel"
-    ]
+    "tags": ["travel"]
   },
   {
     "slug": "gwanda",
@@ -1138,11 +907,7 @@
     "lat": -20.93,
     "lon": 29.02,
     "elevation": 940,
-    "tags": [
-      "city",
-      "travel",
-      "mining"
-    ]
+    "tags": ["city", "travel", "mining"]
   },
   {
     "slug": "filabusi",
@@ -1152,10 +917,7 @@
     "lat": -20.53,
     "lon": 29.3,
     "elevation": 1100,
-    "tags": [
-      "travel",
-      "mining"
-    ]
+    "tags": ["travel", "mining"]
   },
   {
     "slug": "mashingo-junction",
@@ -1165,9 +927,7 @@
     "lat": -18.8,
     "lon": 32.45,
     "elevation": 1500,
-    "tags": [
-      "travel"
-    ]
+    "tags": ["travel"]
   },
   {
     "slug": "christmas-pass",
@@ -1177,9 +937,7 @@
     "lat": -18.95,
     "lon": 32.6,
     "elevation": 1200,
-    "tags": [
-      "travel"
-    ]
+    "tags": ["travel"]
   },
   {
     "slug": "chinotimba",
@@ -1189,9 +947,7 @@
     "lat": -17.95,
     "lon": 25.83,
     "elevation": 920,
-    "tags": [
-      "travel"
-    ]
+    "tags": ["travel"]
   },
   {
     "slug": "makuti",
@@ -1201,9 +957,7 @@
     "lat": -16.3,
     "lon": 29.22,
     "elevation": 600,
-    "tags": [
-      "travel"
-    ]
+    "tags": ["travel"]
   },
   {
     "slug": "lion-den",
@@ -1213,9 +967,7 @@
     "lat": -16.93,
     "lon": 29.65,
     "elevation": 1100,
-    "tags": [
-      "travel"
-    ]
+    "tags": ["travel"]
   },
   {
     "slug": "nairobi-ke",
@@ -1225,10 +977,7 @@
     "lat": -1.29,
     "lon": 36.82,
     "elevation": 1795,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "mombasa-ke",
@@ -1238,11 +987,7 @@
     "lat": -4.05,
     "lon": 39.67,
     "elevation": 17,
-    "tags": [
-      "city",
-      "tourism",
-      "travel"
-    ]
+    "tags": ["city", "tourism", "travel"]
   },
   {
     "slug": "kisumu-ke",
@@ -1252,9 +997,7 @@
     "lat": -0.1,
     "lon": 34.75,
     "elevation": 1131,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "nakuru-ke",
@@ -1264,10 +1007,7 @@
     "lat": -0.28,
     "lon": 36.07,
     "elevation": 1850,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "eldoret-ke",
@@ -1277,10 +1017,7 @@
     "lat": 0.52,
     "lon": 35.27,
     "elevation": 2100,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "dar-es-salaam-tz",
@@ -1290,10 +1027,7 @@
     "lat": -6.79,
     "lon": 39.21,
     "elevation": 55,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "dodoma-tz",
@@ -1303,9 +1037,7 @@
     "lat": -6.17,
     "lon": 35.74,
     "elevation": 1120,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "mwanza-tz",
@@ -1315,9 +1047,7 @@
     "lat": -2.52,
     "lon": 32.9,
     "elevation": 1140,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "arusha-tz",
@@ -1327,10 +1057,7 @@
     "lat": -3.37,
     "lon": 36.68,
     "elevation": 1387,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "zanzibar-tz",
@@ -1340,10 +1067,7 @@
     "lat": -6.16,
     "lon": 39.19,
     "elevation": 10,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "kampala-ug",
@@ -1353,10 +1077,7 @@
     "lat": 0.32,
     "lon": 32.58,
     "elevation": 1189,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "entebbe-ug",
@@ -1366,10 +1087,7 @@
     "lat": 0.05,
     "lon": 32.46,
     "elevation": 1155,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "gulu-ug",
@@ -1379,9 +1097,7 @@
     "lat": 2.77,
     "lon": 32.31,
     "elevation": 1047,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "jinja-ug",
@@ -1391,10 +1107,7 @@
     "lat": 0.45,
     "lon": 33.2,
     "elevation": 1133,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "addis-ababa-et",
@@ -1404,10 +1117,7 @@
     "lat": 9.03,
     "lon": 38.74,
     "elevation": 2355,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "dire-dawa-et",
@@ -1417,9 +1127,7 @@
     "lat": 9.59,
     "lon": 41.87,
     "elevation": 1176,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "mekelle-et",
@@ -1429,9 +1137,7 @@
     "lat": 13.5,
     "lon": 39.47,
     "elevation": 2084,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "hawassa-et",
@@ -1441,10 +1147,7 @@
     "lat": 7.06,
     "lon": 38.48,
     "elevation": 1708,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "kigali-rw",
@@ -1454,10 +1157,7 @@
     "lat": -1.94,
     "lon": 30.06,
     "elevation": 1567,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "butare-rw",
@@ -1467,10 +1167,7 @@
     "lat": -2.6,
     "lon": 29.74,
     "elevation": 1768,
-    "tags": [
-      "city",
-      "education"
-    ]
+    "tags": ["city", "education"]
   },
   {
     "slug": "gisenyi-rw",
@@ -1480,10 +1177,7 @@
     "lat": -1.7,
     "lon": 29.26,
     "elevation": 1546,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "lusaka-zm",
@@ -1493,10 +1187,7 @@
     "lat": -15.42,
     "lon": 28.28,
     "elevation": 1279,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "ndola-zm",
@@ -1506,10 +1197,7 @@
     "lat": -12.97,
     "lon": 28.64,
     "elevation": 1270,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "kitwe-zm",
@@ -1519,10 +1207,7 @@
     "lat": -12.82,
     "lon": 28.21,
     "elevation": 1290,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "livingstone-zm",
@@ -1532,11 +1217,7 @@
     "lat": -17.85,
     "lon": 25.86,
     "elevation": 989,
-    "tags": [
-      "city",
-      "tourism",
-      "travel"
-    ]
+    "tags": ["city", "tourism", "travel"]
   },
   {
     "slug": "chipata-zm",
@@ -1546,10 +1227,7 @@
     "lat": -13.65,
     "lon": 32.65,
     "elevation": 1049,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "maputo-mz",
@@ -1559,10 +1237,7 @@
     "lat": -25.97,
     "lon": 32.59,
     "elevation": 47,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "beira-mz",
@@ -1572,10 +1247,7 @@
     "lat": -19.84,
     "lon": 34.84,
     "elevation": 10,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "nampula-mz",
@@ -1585,10 +1257,7 @@
     "lat": -15.12,
     "lon": 39.27,
     "elevation": 440,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "quelimane-mz",
@@ -1598,9 +1267,7 @@
     "lat": -17.88,
     "lon": 36.89,
     "elevation": 15,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "johannesburg-za",
@@ -1610,11 +1277,7 @@
     "lat": -26.2,
     "lon": 28.04,
     "elevation": 1750,
-    "tags": [
-      "city",
-      "travel",
-      "mining"
-    ]
+    "tags": ["city", "travel", "mining"]
   },
   {
     "slug": "cape-town-za",
@@ -1624,11 +1287,7 @@
     "lat": -33.93,
     "lon": 18.42,
     "elevation": 50,
-    "tags": [
-      "city",
-      "tourism",
-      "travel"
-    ]
+    "tags": ["city", "tourism", "travel"]
   },
   {
     "slug": "durban-za",
@@ -1638,11 +1297,7 @@
     "lat": -29.86,
     "lon": 31.02,
     "elevation": 8,
-    "tags": [
-      "city",
-      "travel",
-      "tourism"
-    ]
+    "tags": ["city", "travel", "tourism"]
   },
   {
     "slug": "pretoria-za",
@@ -1652,9 +1307,7 @@
     "lat": -25.75,
     "lon": 28.19,
     "elevation": 1339,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "port-elizabeth-za",
@@ -1664,10 +1317,7 @@
     "lat": -33.96,
     "lon": 25.62,
     "elevation": 65,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "polokwane-za",
@@ -1677,10 +1327,7 @@
     "lat": -23.9,
     "lon": 29.45,
     "elevation": 1228,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "gaborone-bw",
@@ -1690,10 +1337,7 @@
     "lat": -24.65,
     "lon": 25.91,
     "elevation": 994,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "francistown-bw",
@@ -1703,10 +1347,7 @@
     "lat": -21.17,
     "lon": 27.51,
     "elevation": 1000,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "maun-bw",
@@ -1716,10 +1357,7 @@
     "lat": -19.98,
     "lon": 23.42,
     "elevation": 946,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "windhoek-na",
@@ -1729,10 +1367,7 @@
     "lat": -22.56,
     "lon": 17.08,
     "elevation": 1655,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "walvis-bay-na",
@@ -1742,9 +1377,7 @@
     "lat": -22.96,
     "lon": 14.51,
     "elevation": 5,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "oshakati-na",
@@ -1754,10 +1387,7 @@
     "lat": -17.79,
     "lon": 15.69,
     "elevation": 1097,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "luanda-ao",
@@ -1767,10 +1397,7 @@
     "lat": -8.84,
     "lon": 13.23,
     "elevation": 6,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "huambo-ao",
@@ -1780,10 +1407,7 @@
     "lat": -12.77,
     "lon": 15.74,
     "elevation": 1700,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "benguela-ao",
@@ -1793,9 +1417,7 @@
     "lat": -12.58,
     "lon": 13.41,
     "elevation": 33,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "lilongwe-mw",
@@ -1805,10 +1427,7 @@
     "lat": -13.97,
     "lon": 33.79,
     "elevation": 1050,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "blantyre-mw",
@@ -1818,10 +1437,7 @@
     "lat": -15.79,
     "lon": 35,
     "elevation": 1042,
-    "tags": [
-      "city",
-      "education"
-    ]
+    "tags": ["city", "education"]
   },
   {
     "slug": "mzuzu-mw",
@@ -1831,10 +1447,7 @@
     "lat": -11.47,
     "lon": 34.02,
     "elevation": 1248,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "mbabane-sz",
@@ -1844,9 +1457,7 @@
     "lat": -26.32,
     "lon": 31.14,
     "elevation": 1243,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "manzini-sz",
@@ -1856,10 +1467,7 @@
     "lat": -26.5,
     "lon": 31.37,
     "elevation": 645,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "maseru-ls",
@@ -1869,9 +1477,7 @@
     "lat": -29.31,
     "lon": 27.48,
     "elevation": 1528,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "accra-gh",
@@ -1881,10 +1487,7 @@
     "lat": 5.56,
     "lon": -0.2,
     "elevation": 61,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "kumasi-gh",
@@ -1894,10 +1497,7 @@
     "lat": 6.69,
     "lon": -1.62,
     "elevation": 270,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "tamale-gh",
@@ -1907,10 +1507,7 @@
     "lat": 9.4,
     "lon": -0.84,
     "elevation": 183,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "takoradi-gh",
@@ -1920,10 +1517,7 @@
     "lat": 4.9,
     "lon": -1.75,
     "elevation": 4,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "lagos-ng",
@@ -1933,10 +1527,7 @@
     "lat": 6.45,
     "lon": 3.4,
     "elevation": 41,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "abuja-ng",
@@ -1946,9 +1537,7 @@
     "lat": 9.07,
     "lon": 7.4,
     "elevation": 840,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "kano-ng",
@@ -1958,10 +1547,7 @@
     "lat": 12,
     "lon": 8.52,
     "elevation": 475,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "port-harcourt-ng",
@@ -1971,10 +1557,7 @@
     "lat": 4.77,
     "lon": 7.01,
     "elevation": 10,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "ibadan-ng",
@@ -1984,10 +1567,7 @@
     "lat": 7.39,
     "lon": 3.92,
     "elevation": 234,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "dakar-sn",
@@ -1997,10 +1577,7 @@
     "lat": 14.69,
     "lon": -17.45,
     "elevation": 22,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "thies-sn",
@@ -2010,10 +1587,7 @@
     "lat": 14.8,
     "lon": -16.94,
     "elevation": 73,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "saint-louis-sn",
@@ -2023,10 +1597,7 @@
     "lat": 16.02,
     "lon": -16.49,
     "elevation": 4,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "abidjan-ci",
@@ -2036,10 +1607,7 @@
     "lat": 5.34,
     "lon": -4.03,
     "elevation": 23,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "yamoussoukro-ci",
@@ -2049,9 +1617,7 @@
     "lat": 6.82,
     "lon": -5.27,
     "elevation": 220,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "bouake-ci",
@@ -2061,10 +1627,7 @@
     "lat": 7.69,
     "lon": -5.03,
     "elevation": 378,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "yaounde-cm",
@@ -2074,10 +1637,7 @@
     "lat": 3.87,
     "lon": 11.52,
     "elevation": 726,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "douala-cm",
@@ -2087,10 +1647,7 @@
     "lat": 4.05,
     "lon": 9.7,
     "elevation": 9,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "garoua-cm",
@@ -2100,10 +1657,7 @@
     "lat": 9.3,
     "lon": 13.4,
     "elevation": 252,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "kinshasa-cd",
@@ -2113,10 +1667,7 @@
     "lat": -4.32,
     "lon": 15.32,
     "elevation": 316,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "lubumbashi-cd",
@@ -2126,10 +1677,7 @@
     "lat": -11.67,
     "lon": 27.47,
     "elevation": 1278,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "goma-cd",
@@ -2139,9 +1687,7 @@
     "lat": -1.68,
     "lon": 29.22,
     "elevation": 1490,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "mbuji-mayi-cd",
@@ -2151,10 +1697,7 @@
     "lat": -6.15,
     "lon": 23.6,
     "elevation": 619,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "cairo-eg",
@@ -2164,11 +1707,7 @@
     "lat": 30.06,
     "lon": 31.25,
     "elevation": 23,
-    "tags": [
-      "city",
-      "tourism",
-      "travel"
-    ]
+    "tags": ["city", "tourism", "travel"]
   },
   {
     "slug": "alexandria-eg",
@@ -2178,11 +1717,7 @@
     "lat": 31.2,
     "lon": 29.92,
     "elevation": 5,
-    "tags": [
-      "city",
-      "travel",
-      "tourism"
-    ]
+    "tags": ["city", "travel", "tourism"]
   },
   {
     "slug": "giza-eg",
@@ -2192,10 +1727,7 @@
     "lat": 30.01,
     "lon": 31.21,
     "elevation": 19,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "luxor-eg",
@@ -2205,10 +1737,7 @@
     "lat": 25.69,
     "lon": 32.65,
     "elevation": 76,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "aswan-eg",
@@ -2218,10 +1747,7 @@
     "lat": 24.09,
     "lon": 32.9,
     "elevation": 85,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "casablanca-ma",
@@ -2231,10 +1757,7 @@
     "lat": 33.59,
     "lon": -7.62,
     "elevation": 56,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "rabat-ma",
@@ -2244,9 +1767,7 @@
     "lat": 33.99,
     "lon": -6.85,
     "elevation": 75,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "marrakech-ma",
@@ -2256,10 +1777,7 @@
     "lat": 31.63,
     "lon": -8,
     "elevation": 466,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "fes-ma",
@@ -2269,10 +1787,7 @@
     "lat": 34.03,
     "lon": -5,
     "elevation": 414,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "tangier-ma",
@@ -2282,10 +1797,7 @@
     "lat": 35.77,
     "lon": -5.8,
     "elevation": 50,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "tunis-tn",
@@ -2295,11 +1807,7 @@
     "lat": 36.82,
     "lon": 10.17,
     "elevation": 4,
-    "tags": [
-      "city",
-      "tourism",
-      "travel"
-    ]
+    "tags": ["city", "tourism", "travel"]
   },
   {
     "slug": "sfax-tn",
@@ -2309,10 +1817,7 @@
     "lat": 34.74,
     "lon": 10.76,
     "elevation": 24,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "sousse-tn",
@@ -2322,10 +1827,7 @@
     "lat": 35.83,
     "lon": 10.64,
     "elevation": 6,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "algiers-dz",
@@ -2335,10 +1837,7 @@
     "lat": 36.74,
     "lon": 3.06,
     "elevation": 24,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "oran-dz",
@@ -2348,9 +1847,7 @@
     "lat": 35.69,
     "lon": -0.63,
     "elevation": 5,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "constantine-dz",
@@ -2360,10 +1857,7 @@
     "lat": 36.37,
     "lon": 6.61,
     "elevation": 662,
-    "tags": [
-      "city",
-      "education"
-    ]
+    "tags": ["city", "education"]
   },
   {
     "slug": "khartoum-sd",
@@ -2373,9 +1867,7 @@
     "lat": 15.55,
     "lon": 32.53,
     "elevation": 381,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "omdurman-sd",
@@ -2385,9 +1877,7 @@
     "lat": 15.61,
     "lon": 32.48,
     "elevation": 380,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "port-sudan-sd",
@@ -2397,10 +1887,7 @@
     "lat": 19.62,
     "lon": 37.22,
     "elevation": 5,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "juba-ss",
@@ -2410,9 +1897,7 @@
     "lat": 4.86,
     "lon": 31.57,
     "elevation": 457,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "mogadishu-so",
@@ -2422,9 +1907,7 @@
     "lat": 2.05,
     "lon": 45.34,
     "elevation": 9,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "hargeisa-so",
@@ -2434,9 +1917,7 @@
     "lat": 9.56,
     "lon": 44.07,
     "elevation": 1334,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "djibouti-city-dj",
@@ -2446,10 +1927,7 @@
     "lat": 11.59,
     "lon": 43.15,
     "elevation": 19,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "asmara-er",
@@ -2459,9 +1937,7 @@
     "lat": 15.34,
     "lon": 38.93,
     "elevation": 2325,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "bujumbura-bi",
@@ -2471,9 +1947,7 @@
     "lat": -3.38,
     "lon": 29.36,
     "elevation": 782,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "gitega-bi",
@@ -2483,9 +1957,7 @@
     "lat": -3.43,
     "lon": 29.92,
     "elevation": 1616,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "moroni-km",
@@ -2495,9 +1967,7 @@
     "lat": -11.7,
     "lon": 43.26,
     "elevation": 29,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "antananarivo-mg",
@@ -2507,10 +1977,7 @@
     "lat": -18.91,
     "lon": 47.54,
     "elevation": 1279,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "toamasina-mg",
@@ -2520,9 +1987,7 @@
     "lat": -18.16,
     "lon": 49.4,
     "elevation": 5,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "port-louis-mu",
@@ -2532,10 +1997,7 @@
     "lat": -20.16,
     "lon": 57.5,
     "elevation": 5,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "victoria-sc",
@@ -2545,10 +2007,7 @@
     "lat": -4.62,
     "lon": 55.45,
     "elevation": 3,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "ouagadougou-bf",
@@ -2558,9 +2017,7 @@
     "lat": 12.36,
     "lon": -1.53,
     "elevation": 306,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "bobo-dioulasso-bf",
@@ -2570,10 +2027,7 @@
     "lat": 11.18,
     "lon": -4.3,
     "elevation": 454,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "bamako-ml",
@@ -2583,9 +2037,7 @@
     "lat": 12.65,
     "lon": -8,
     "elevation": 380,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "timbuktu-ml",
@@ -2595,10 +2047,7 @@
     "lat": 16.77,
     "lon": -3.01,
     "elevation": 261,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "niamey-ne",
@@ -2608,9 +2057,7 @@
     "lat": 13.51,
     "lon": 2.12,
     "elevation": 218,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "zinder-ne",
@@ -2620,10 +2067,7 @@
     "lat": 13.81,
     "lon": 8.99,
     "elevation": 447,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "cotonou-bj",
@@ -2633,10 +2077,7 @@
     "lat": 6.37,
     "lon": 2.42,
     "elevation": 9,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "porto-novo-bj",
@@ -2646,9 +2087,7 @@
     "lat": 6.37,
     "lon": 2.61,
     "elevation": 25,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "lome-tg",
@@ -2658,10 +2097,7 @@
     "lat": 6.14,
     "lon": 1.22,
     "elevation": 25,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "sokode-tg",
@@ -2671,9 +2107,7 @@
     "lat": 8.98,
     "lon": 1.13,
     "elevation": 411,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "monrovia-lr",
@@ -2683,10 +2117,7 @@
     "lat": 6.29,
     "lon": -10.77,
     "elevation": 8,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "freetown-sl",
@@ -2696,10 +2127,7 @@
     "lat": 8.49,
     "lon": -13.23,
     "elevation": 30,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "conakry-gn",
@@ -2709,10 +2137,7 @@
     "lat": 9.54,
     "lon": -13.68,
     "elevation": 26,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "bissau-gw",
@@ -2722,9 +2147,7 @@
     "lat": 11.86,
     "lon": -15.6,
     "elevation": 14,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "banjul-gm",
@@ -2734,9 +2157,7 @@
     "lat": 13.45,
     "lon": -16.58,
     "elevation": 5,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "nouakchott-mr",
@@ -2746,9 +2167,7 @@
     "lat": 18.08,
     "lon": -15.97,
     "elevation": 5,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "nouadhibou-mr",
@@ -2758,10 +2177,7 @@
     "lat": 20.93,
     "lon": -17.04,
     "elevation": 4,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "praia-cv",
@@ -2771,9 +2187,7 @@
     "lat": 14.93,
     "lon": -23.52,
     "elevation": 27,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "libreville-ga",
@@ -2783,10 +2197,7 @@
     "lat": 0.39,
     "lon": 9.45,
     "elevation": 9,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "port-gentil-ga",
@@ -2796,10 +2207,7 @@
     "lat": -0.72,
     "lon": 8.78,
     "elevation": 5,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "brazzaville-cg",
@@ -2809,9 +2217,7 @@
     "lat": -4.27,
     "lon": 15.27,
     "elevation": 316,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "pointe-noire-cg",
@@ -2821,10 +2227,7 @@
     "lat": -4.78,
     "lon": 11.86,
     "elevation": 17,
-    "tags": [
-      "city",
-      "mining"
-    ]
+    "tags": ["city", "mining"]
   },
   {
     "slug": "bangui-cf",
@@ -2834,9 +2237,7 @@
     "lat": 4.36,
     "lon": 18.56,
     "elevation": 369,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "ndjamena-td",
@@ -2846,9 +2247,7 @@
     "lat": 12.11,
     "lon": 15.05,
     "elevation": 295,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "moundou-td",
@@ -2858,10 +2257,7 @@
     "lat": 8.57,
     "lon": 16.08,
     "elevation": 418,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "malabo-gq",
@@ -2871,9 +2267,7 @@
     "lat": 3.75,
     "lon": 8.78,
     "elevation": 30,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "sao-tome-st",
@@ -2883,9 +2277,7 @@
     "lat": 0.34,
     "lon": 6.73,
     "elevation": 9,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "tripoli-ly",
@@ -2895,9 +2287,7 @@
     "lat": 32.9,
     "lon": 13.18,
     "elevation": 81,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "benghazi-ly",
@@ -2907,9 +2297,7 @@
     "lat": 32.12,
     "lon": 20.07,
     "elevation": 32,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "saint-denis-re",
@@ -2919,10 +2307,7 @@
     "lat": -20.88,
     "lon": 55.45,
     "elevation": 77,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "mamoudzou-yt",
@@ -2932,9 +2317,7 @@
     "lat": -12.78,
     "lon": 45.23,
     "elevation": 26,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "bangkok-th",
@@ -2944,11 +2327,7 @@
     "lat": 13.75,
     "lon": 100.52,
     "elevation": 5,
-    "tags": [
-      "city",
-      "travel",
-      "tourism"
-    ]
+    "tags": ["city", "travel", "tourism"]
   },
   {
     "slug": "chiang-mai-th",
@@ -2958,11 +2337,7 @@
     "lat": 18.79,
     "lon": 98.98,
     "elevation": 310,
-    "tags": [
-      "city",
-      "tourism",
-      "travel"
-    ]
+    "tags": ["city", "tourism", "travel"]
   },
   {
     "slug": "phuket-th",
@@ -2972,10 +2347,7 @@
     "lat": 7.88,
     "lon": 98.4,
     "elevation": 2,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "pattaya-th",
@@ -2985,10 +2357,7 @@
     "lat": 12.93,
     "lon": 100.88,
     "elevation": 5,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "hat-yai-th",
@@ -2998,10 +2367,7 @@
     "lat": 7.01,
     "lon": 100.48,
     "elevation": 18,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "kuala-lumpur-my",
@@ -3011,10 +2377,7 @@
     "lat": 3.14,
     "lon": 101.69,
     "elevation": 66,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "george-town-my",
@@ -3024,10 +2387,7 @@
     "lat": 5.41,
     "lon": 100.34,
     "elevation": 5,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "johor-bahru-my",
@@ -3037,10 +2397,7 @@
     "lat": 1.46,
     "lon": 103.76,
     "elevation": 14,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "kota-kinabalu-my",
@@ -3050,10 +2407,7 @@
     "lat": 5.98,
     "lon": 116.07,
     "elevation": 3,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "jakarta-id",
@@ -3063,10 +2417,7 @@
     "lat": -6.21,
     "lon": 106.85,
     "elevation": 8,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "surabaya-id",
@@ -3076,9 +2427,7 @@
     "lat": -7.25,
     "lon": 112.75,
     "elevation": 5,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "bandung-id",
@@ -3088,9 +2437,7 @@
     "lat": -6.92,
     "lon": 107.61,
     "elevation": 768,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "bali-denpasar-id",
@@ -3100,10 +2447,7 @@
     "lat": -8.65,
     "lon": 115.22,
     "elevation": 28,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "medan-id",
@@ -3113,10 +2457,7 @@
     "lat": 3.59,
     "lon": 98.67,
     "elevation": 25,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "manila-ph",
@@ -3126,10 +2467,7 @@
     "lat": 14.6,
     "lon": 120.98,
     "elevation": 16,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "cebu-city-ph",
@@ -3139,10 +2477,7 @@
     "lat": 10.32,
     "lon": 123.9,
     "elevation": 14,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "davao-city-ph",
@@ -3152,10 +2487,7 @@
     "lat": 7.07,
     "lon": 125.61,
     "elevation": 20,
-    "tags": [
-      "city",
-      "farming"
-    ]
+    "tags": ["city", "farming"]
   },
   {
     "slug": "quezon-city-ph",
@@ -3165,9 +2497,7 @@
     "lat": 14.68,
     "lon": 121.04,
     "elevation": 61,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "hanoi-vn",
@@ -3177,10 +2507,7 @@
     "lat": 21.03,
     "lon": 105.85,
     "elevation": 5,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "ho-chi-minh-city-vn",
@@ -3190,10 +2517,7 @@
     "lat": 10.82,
     "lon": 106.63,
     "elevation": 19,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "da-nang-vn",
@@ -3203,10 +2527,7 @@
     "lat": 16.05,
     "lon": 108.22,
     "elevation": 5,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "hoi-an-vn",
@@ -3216,10 +2537,7 @@
     "lat": 15.88,
     "lon": 108.33,
     "elevation": 5,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "singapore-sg",
@@ -3229,10 +2547,7 @@
     "lat": 1.35,
     "lon": 103.82,
     "elevation": 15,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "yangon-mm",
@@ -3242,10 +2557,7 @@
     "lat": 16.87,
     "lon": 96.2,
     "elevation": 11,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "mandalay-mm",
@@ -3255,10 +2567,7 @@
     "lat": 21.97,
     "lon": 96.08,
     "elevation": 73,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "naypyidaw-mm",
@@ -3268,9 +2577,7 @@
     "lat": 19.74,
     "lon": 96.13,
     "elevation": 110,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "phnom-penh-kh",
@@ -3280,10 +2587,7 @@
     "lat": 11.56,
     "lon": 104.92,
     "elevation": 12,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "siem-reap-kh",
@@ -3293,10 +2597,7 @@
     "lat": 13.36,
     "lon": 103.86,
     "elevation": 12,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "vientiane-la",
@@ -3306,10 +2607,7 @@
     "lat": 17.97,
     "lon": 102.6,
     "elevation": 174,
-    "tags": [
-      "city",
-      "travel"
-    ]
+    "tags": ["city", "travel"]
   },
   {
     "slug": "luang-prabang-la",
@@ -3319,10 +2617,7 @@
     "lat": 19.89,
     "lon": 102.13,
     "elevation": 289,
-    "tags": [
-      "city",
-      "tourism"
-    ]
+    "tags": ["city", "tourism"]
   },
   {
     "slug": "bandar-seri-begawan-bn",
@@ -3332,9 +2627,7 @@
     "lat": 4.94,
     "lon": 114.95,
     "elevation": 8,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   },
   {
     "slug": "dili-tl",
@@ -3344,8 +2637,6 @@
     "lat": -8.56,
     "lon": 125.58,
     "elevation": 9,
-    "tags": [
-      "city"
-    ]
+    "tags": ["city"]
   }
 ]
