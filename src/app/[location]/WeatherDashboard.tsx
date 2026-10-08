@@ -61,14 +61,6 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { SupportBanner } from "@/components/weather/SupportBanner";
 import { WeatherBackdrop } from "@/components/weather/WeatherBackdrop";
 import { DraggableSection } from "@/components/weather/DraggableSection";
-import {
-  getIcaoForSlug,
-  getNearestIcao,
-  getNearestIcaos,
-  fetchNearestAirports,
-  type AirportDistance,
-} from "@/lib/icao-codes";
-import { LiveClock } from "@/components/weather/LiveClock";
 import { cacheWeatherHint } from "@/lib/weather-scenes";
 
 // ── Code-split heavy components ─────────────────────────────────────────────
