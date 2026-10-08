@@ -17,7 +17,6 @@ reports *what* went wrong.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 from typing import Any, Literal, Optional
@@ -37,7 +36,6 @@ ErrorKind = Literal["no_client", "circuit_open", "rate_limited", "api_error"]
 # ---------------------------------------------------------------------------
 
 _client: Optional[anthropic.Anthropic] = None
-_client_key_hash: Optional[str] = None
 
 
 def get_anthropic_client(required: bool = False) -> Optional[anthropic.Anthropic]:
@@ -47,7 +45,7 @@ def get_anthropic_client(required: bool = False) -> Optional[anthropic.Anthropic
     collection. With ``required=True`` a missing key raises HTTPException(503)
     instead of returning None.
     """
-    global _client, _client_key_hash
+    global _client
 
     key = os.environ.get("ANTHROPIC_API_KEY") or get_api_key("anthropic")
     if not key:
@@ -55,10 +53,10 @@ def get_anthropic_client(required: bool = False) -> Optional[anthropic.Anthropic
             raise HTTPException(status_code=503, detail="AI service unavailable")
         return None
 
-    key_hash = hashlib.sha256(key.encode()).hexdigest()
-    if _client is None or _client_key_hash != key_hash:
+    # Compare against the key the live client was built with. The client
+    # already holds the raw key, so no digest of it is kept at module level.
+    if _client is None or _client.api_key != key:
         _client = anthropic.Anthropic(api_key=key)
-        _client_key_hash = key_hash
 
     return _client
 
