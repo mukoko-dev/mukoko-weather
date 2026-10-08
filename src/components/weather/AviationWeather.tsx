@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getAirportByIcao } from "@/lib/icao-codes";
 import { getFlightCategoryClass } from "@/lib/flight-category-styles";
 
 interface CloudLayer {
@@ -26,28 +25,56 @@ interface MetarObs {
   raw: string;
 }
 
-interface MetarData {
+/** One airport the nearest-report search considered. */
+export interface NearestCandidate {
+  icao: string;
+  name: string;
+  distanceKm: number;
+  /** Has a METAR within the search's max age. */
+  reported: boolean;
+  observedAt: string | null;
+  ageMinutes: number | null;
+}
+
+/** Response of GET /api/py/aviation/nearest-metar. */
+interface NearestResponse {
+  status: "ok" | "no_recent_report" | "no_airports" | "unavailable";
+  message: string | null;
+  searchRadiusKm: number;
+  maxAgeMinutes: number;
+  icao: string | null;
+  name: string | null;
+  distanceKm: number | null;
+  observedAt: string | null;
+  ageMinutes: number | null;
+  metar: MetarObs[];
+  taf: string | null;
+  source: string;
+  candidates: NearestCandidate[];
+}
+
+/** Response of GET /api/py/metar?icao=. */
+interface StationResponse {
   icao: string;
   metar: MetarObs[];
   taf: string | null;
   source: string;
 }
 
-/** A selectable aviation station shown in the airport picker. */
-export interface NearbyAirport {
+/** The station the card is currently showing. */
+interface ReportView {
   icao: string;
-  name: string;
-  distanceKm?: number;
+  name: string | null;
+  distanceKm: number | null;
+  ageMinutes: number | null;
+  metar: MetarObs[];
+  taf: string | null;
 }
 
 interface Props {
   slug: string;
-  icao: string;
-  /**
-   * Additional nearby ICAO stations the user can switch between. The primary
-   * `icao` is always shown first; any entries here are merged in (deduped).
-   */
-  nearby?: NearbyAirport[];
+  lat: number;
+  lon: number;
 }
 
 function formatWind(obs: MetarObs): string {
@@ -151,122 +178,212 @@ function formatTime(iso: string): string {
   }
 }
 
-export function AviationWeather({ slug: _slug, icao, nearby }: Props) {
-  // Build the list of selectable stations: the primary icao first, then any
-  // nearby stations (deduped). Names are resolved from the airport registry.
-  const stations = useMemo<NearbyAirport[]>(() => {
-    const seen = new Set<string>();
-    const list: NearbyAirport[] = [];
-    const push = (a: NearbyAirport) => {
-      const code = a.icao.toUpperCase();
-      if (seen.has(code)) return;
-      seen.add(code);
-      list.push({ ...a, icao: code });
-    };
-    push({ icao, name: getAirportByIcao(icao)?.name ?? icao });
-    for (const a of nearby ?? []) push(a);
-    return list;
-  }, [icao, nearby]);
+/** Human age of a report: "just now", "35 min ago", "2 h ago". */
+export function formatAge(minutes: number | null): string {
+  if (minutes === null) return "time unknown";
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  return `${Math.floor(minutes / 60)} h ago`;
+}
 
-  // Currently-selected station, derived so it auto-resets to the primary icao
-  // whenever that prop changes (e.g. navigating between locations) without
-  // calling setState inside an effect. `selection` remembers which primary icao
-  // the user's choice was made against; if the primary changes, we fall back.
-  const [selection, setSelection] = useState<{
-    base: string;
-    icao: string;
-  } | null>(null);
-  const selectedIcao = selection?.base === icao ? selection.icao : icao;
-  const setSelectedIcao = (next: string) =>
-    setSelection({ base: icao, icao: next });
+/** Whole minutes between an ISO timestamp and `nowMs`, or null if unparseable. */
+export function minutesSince(iso: string | null, nowMs: number): number | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  return Math.max(0, Math.floor((nowMs - t) / 60_000));
+}
 
-  // Store the full response keyed by the icao it was fetched for. Loading,
-  // error, and data are *derived* from whether the latest response matches the
-  // currently-selected icao — this avoids setState-in-effect when icao changes
-  // (the previous pattern called setLoading(true) / setError(false) synchronously
-  // at the top of the effect, which trips react-hooks/set-state-in-effect).
-  const [response, setResponse] = useState<{
-    icao: string;
-    data: MetarData | null;
-    error: boolean;
-  } | null>(null);
+/**
+ * The one-line station summary, e.g.
+ * "FVRG Harare (Robert Gabriel Mugabe Intl) · 12 km · 35 min ago".
+ */
+export function formatReportLine(view: ReportView): string {
+  const parts = [view.icao];
+  if (view.name) parts.push(view.name);
+  let line = parts.join(" ");
+  if (view.distanceKm !== null) line += ` · ${Math.round(view.distanceKm)} km`;
+  line += ` · ${formatAge(view.ageMinutes)}`;
+  return line;
+}
 
-  const isCurrentResponse = response?.icao === selectedIcao;
-  const loading = !isCurrentResponse;
-  const error = isCurrentResponse && response.error;
-  const data = isCurrentResponse ? response.data : null;
+/** A loaded response, tagged with the request key it answers. */
+interface Loaded<T> {
+  key: string;
+  ok: boolean;
+  data?: T;
+}
+
+/** A station the user picked from the chip row. */
+interface Pick {
+  key: string;
+  icao: string;
+  name: string | null;
+  distanceKm: number | null;
+}
+
+export function AviationWeather({ slug, lat, lon }: Props) {
+  const coordKey = `${lat},${lon}`;
+
+  // The user may pick one of the nearby stations. The pick is keyed by the
+  // coordinates it was made for, so moving to another location resets it to
+  // the nearest reporting station without a setState-in-effect.
+  const [pick, setPick] = useState<Pick | null>(null);
+  const picked = pick?.key === coordKey ? pick : null;
+  const pickedIcao = picked?.icao ?? null;
+
+  // Two slots: the nearest search (kept while a chip is picked, so the chip
+  // row stays populated) and the picked station's report.
+  const [nearest, setNearest] = useState<Loaded<NearestResponse> | null>(null);
+  const [station, setStation] = useState<
+    (Loaded<StationResponse> & { ageMinutes: number | null }) | null
+  >(null);
+
+  const requestKey = pickedIcao
+    ? `${coordKey}|${pickedIcao}`
+    : `${coordKey}|nearest`;
 
   useEffect(() => {
     let cancelled = false;
+    const url = pickedIcao
+      ? `/api/py/metar?icao=${encodeURIComponent(pickedIcao)}`
+      : `/api/py/aviation/nearest-metar?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`;
 
-    fetch(`/api/py/metar?icao=${encodeURIComponent(selectedIcao)}`)
+    fetch(url)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
-      .then((d: MetarData) => {
-        if (!cancelled)
-          setResponse({ icao: selectedIcao, data: d, error: false });
+      .then((d: NearestResponse | StationResponse) => {
+        if (cancelled) return;
+        if (pickedIcao) {
+          const data = d as StationResponse;
+          setStation({
+            key: requestKey,
+            ok: true,
+            data,
+            ageMinutes: minutesSince(data.metar[0]?.time ?? null, Date.now()),
+          });
+        } else {
+          setNearest({ key: requestKey, ok: true, data: d as NearestResponse });
+        }
       })
       .catch(() => {
-        if (!cancelled)
-          setResponse({ icao: selectedIcao, data: null, error: true });
+        if (cancelled) return;
+        if (pickedIcao)
+          setStation({ key: requestKey, ok: false, ageMinutes: null });
+        else setNearest({ key: requestKey, ok: false });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [selectedIcao]);
+  }, [requestKey, pickedIcao, lat, lon]);
 
-  const headingId = `aviation-heading-${icao}`;
+  const nearestCurrent =
+    nearest?.key === `${coordKey}|nearest` ? nearest : null;
+  const stationCurrent = picked && station?.key === requestKey ? station : null;
+  const loading = picked ? stationCurrent === null : nearestCurrent === null;
 
-  // Airport picker — only rendered when there is more than one station to choose
-  // between. Lets the user switch which nearby station's METAR/TAF they view.
+  const headingId = `aviation-heading-${slug}`;
+
+  // Resolve the displayed view, the message, and the candidate list.
+  let view: ReportView | null = null;
+  let message: string | null = null;
+  let failed = false;
+  const candidates: NearestCandidate[] = nearestCurrent?.data?.candidates ?? [];
+
+  if (picked) {
+    if (stationCurrent && !stationCurrent.ok) failed = true;
+    else if (stationCurrent?.data) {
+      view = {
+        icao: stationCurrent.data.icao,
+        name: picked.name,
+        distanceKm: picked.distanceKm,
+        ageMinutes: stationCurrent.ageMinutes,
+        metar: stationCurrent.data.metar,
+        taf: stationCurrent.data.taf,
+      };
+    }
+  } else if (nearestCurrent) {
+    const n = nearestCurrent.data;
+    if (!nearestCurrent.ok || !n) failed = true;
+    else if (n.status === "ok" && n.icao) {
+      view = {
+        icao: n.icao,
+        name: n.name,
+        distanceKm: n.distanceKm,
+        ageMinutes: n.ageMinutes,
+        metar: n.metar,
+        taf: n.taf,
+      };
+    } else {
+      message = n.message;
+    }
+  }
+
+  // Airport picker — shown when the search found more than one airport. Chips
+  // for airports with no recent report are disabled rather than hidden, so the
+  // user can see why a station is unavailable.
   const picker =
-    stations.length > 1 ? (
+    candidates.length > 1 ? (
+      // Reserved-height, single-line row: its height is fixed at the touch
+      // target minimum whatever the chip count, so the DB-backed station list
+      // replacing the static seed (or a different count) can't reflow the card
+      // (CLS). Chips never wrap — the row scrolls sideways instead.
       <div
-        className="mt-4 flex flex-wrap gap-2"
+        className="mt-4 flex min-h-[var(--touch-target-min)] items-center gap-2 overflow-x-auto"
         role="group"
         aria-label="Nearby aviation stations"
       >
-        {stations.map((s) => {
-          const active = s.icao === selectedIcao;
+        {candidates.map((s) => {
+          const active = view?.icao === s.icao;
           const base =
             "inline-flex items-center gap-1 rounded-[var(--radius-input)] px-3 py-1.5 text-sm font-medium transition-colors";
           const cls = active
             ? "bg-primary/10 text-text-primary ring-1 ring-primary/40"
             : "border border-border bg-transparent text-text-secondary hover:text-text-primary hover:border-text-tertiary/40";
+          const title = s.reported
+            ? `${s.name} · ${formatAge(s.ageMinutes)}`
+            : `${s.name} · no METAR in the last 3 hours`;
           return (
             <button
               key={s.icao}
               type="button"
-              onClick={() => setSelectedIcao(s.icao)}
+              onClick={() =>
+                setPick({
+                  key: coordKey,
+                  icao: s.icao,
+                  name: s.name,
+                  distanceKm: s.distanceKm,
+                })
+              }
+              disabled={!s.reported}
               aria-pressed={active}
-              className={`${base} ${cls}`}
-              title={s.name}
+              className={`${base} ${cls} shrink-0 disabled:cursor-not-allowed disabled:opacity-50`}
+              title={title}
             >
               <span className="font-mono text-xs font-bold">{s.icao}</span>
-              {s.distanceKm !== undefined && (
-                <span className="text-xs opacity-70">
-                  {Math.round(s.distanceKm)}km
-                </span>
-              )}
+              <span className="text-xs opacity-70">
+                {Math.round(s.distanceKm)}km
+              </span>
             </button>
           );
         })}
       </div>
     ) : null;
 
-  const selectedName = stations.find((s) => s.icao === selectedIcao)?.name;
-
   return (
     <section aria-labelledby={headingId}>
       <div className="baobab">
         <h2 id={headingId} className="giraffe">
-          Aviation Weather · {selectedIcao}
+          {view ? `Aviation Weather · ${view.icao}` : "Aviation Weather"}
         </h2>
-        {selectedName && selectedName !== selectedIcao && (
-          <p className="mt-0.5 text-sm text-text-tertiary">{selectedName}</p>
+
+        {view && (
+          <p className="mt-0.5 text-sm text-text-tertiary">
+            {picked ? "Station" : "Nearest report"}: {formatReportLine(view)}
+          </p>
         )}
 
         {picker}
@@ -279,31 +396,35 @@ export function AviationWeather({ slug: _slug, icao, nearby }: Props) {
           </div>
         )}
 
-        {!loading && (error || !data) && (
+        {!loading && failed && (
           <p className="mt-4 text-sm text-text-tertiary">
             Aviation data temporarily unavailable.
           </p>
         )}
 
-        {!loading && !error && data && (
+        {!loading && !failed && !view && message && (
+          <p className="mt-4 text-sm text-text-tertiary">{message}</p>
+        )}
+
+        {!loading && !failed && view && (
           <>
             {/* Clouds & Ceiling — prominent aviation summary for the latest METAR.
             Cloud ceiling (lowest BKN/OVC layer) is the driver of the VFR/MVFR/
             IFR/LIFR flight category (computed server-side in _metar.py). */}
-            {data.metar.length > 0 &&
+            {view.metar.length > 0 &&
               (() => {
-                const latest = data.metar[0];
+                const latest = view.metar[0];
                 const ceiling = deriveCeilingFt(latest.clouds);
                 const base = deriveCloudBaseFt(latest.clouds);
                 const cover = summarizeCloudCover(latest.clouds);
                 return (
                   <div
                     className="mt-4 acacia"
-                    aria-labelledby={`clouds-heading-${icao}`}
+                    aria-labelledby={`clouds-heading-${view.icao}`}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <h3
-                        id={`clouds-heading-${icao}`}
+                        id={`clouds-heading-${view.icao}`}
                         className="text-sm font-semibold text-text-secondary uppercase tracking-wide"
                       >
                         Clouds &amp; Ceiling
@@ -352,9 +473,9 @@ export function AviationWeather({ slug: _slug, icao, nearby }: Props) {
               <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wide mb-2">
                 TAF
               </h3>
-              {data.taf ? (
+              {view.taf ? (
                 <pre className="font-mono text-xs text-text-primary bg-surface-base rounded-[var(--radius-input)] p-3 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
-                  {data.taf}
+                  {view.taf}
                 </pre>
               ) : (
                 <p className="text-sm text-text-tertiary">
@@ -368,7 +489,7 @@ export function AviationWeather({ slug: _slug, icao, nearby }: Props) {
               <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wide mb-2">
                 METAR
               </h3>
-              {data.metar.length === 0 ? (
+              {view.metar.length === 0 ? (
                 <p className="text-sm text-text-tertiary">
                   No recent METAR observations.
                 </p>
@@ -376,7 +497,7 @@ export function AviationWeather({ slug: _slug, icao, nearby }: Props) {
                 <div className="overflow-x-auto -mx-1">
                   <table
                     className="w-full text-xs border-collapse min-w-[700px]"
-                    aria-label={`METAR observations for ${data.icao}`}
+                    aria-label={`METAR observations for ${view.icao}`}
                   >
                     <thead>
                       <tr className="bg-surface-base text-text-secondary text-left">
@@ -393,7 +514,7 @@ export function AviationWeather({ slug: _slug, icao, nearby }: Props) {
                       </tr>
                     </thead>
                     <tbody>
-                      {data.metar.map((obs, i) => (
+                      {view.metar.map((obs, i) => (
                         <tr
                           key={i}
                           className="border-t border-surface-dim hover:bg-surface-base/50 transition-colors"
@@ -458,7 +579,7 @@ export function AviationWeather({ slug: _slug, icao, nearby }: Props) {
                 Aviation Weather Center (NOAA)
               </span>
               {" · "}
-              {data.icao}
+              {view.icao}
             </p>
           </>
         )}
