@@ -24,7 +24,10 @@ import type { WeatherInsights } from "@/lib/weather";
 import type { WeatherHistoryDoc } from "@/lib/db";
 import type { ActivityCategory } from "@/lib/activities";
 import type { ActivityCategoryDoc } from "@/lib/db";
+import type { WeatherLocation } from "@/lib/locations";
 import { CATEGORIES } from "@/lib/seed-categories";
+import { fetchJson } from "@/lib/fetch-json";
+import { fetchActivityCategories } from "@/lib/activities-client";
 import {
   heatStressLevel,
   uvConcernLabel,
@@ -581,12 +584,9 @@ export function HistoryDashboard() {
 
   // Fetch categories on mount (NOT all locations)
   useEffect(() => {
-    fetch("/api/py/activities?mode=categories")
-      .then((res) => (res.ok ? res.json() : { categories: [] }))
-      .then((data) => {
-        if (data?.categories?.length) setActivityCategories(data.categories);
-      })
-      .catch(() => {});
+    fetchActivityCategories().then((categories) => {
+      if (categories.length) setActivityCategories(categories);
+    });
   }, []);
 
   // Auto-select the global location (from My Weather / last visited location page)
@@ -595,8 +595,9 @@ export function HistoryDashboard() {
     if (didAutoSelect.current || !globalSlug) return;
     didAutoSelect.current = true;
 
-    fetch(`/api/py/locations?slug=${encodeURIComponent(globalSlug)}`)
-      .then((res) => (res.ok ? res.json() : null))
+    fetchJson<{ location?: WeatherLocation }>(
+      `/api/py/locations?slug=${encodeURIComponent(globalSlug)}`,
+    )
       .then((data) => {
         const loc = data?.location;
         if (!loc) return;

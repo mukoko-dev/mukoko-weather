@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import styles from "./MukokoWeatherEmbed.module.css";
+import { fetchJson } from "@/lib/fetch-json";
 import { conditionGroup } from "@/lib/hourly-summary";
 import { resolveTheme } from "@/lib/theme";
 
@@ -120,17 +121,13 @@ export function MukokoWeatherEmbed({
     }
     const query = qs.toString();
     let cancelled = false;
-    fetch(`${apiUrl}/api/embed/current${query ? `?${query}` : ""}`)
-      .then((r) => {
-        if (!r.ok) throw new Error(String(r.status));
-        return r.json();
-      })
-      .then((d) => {
-        if (!cancelled) setData(d as EmbedData);
-      })
-      .catch(() => {
-        if (!cancelled) setError(true);
-      });
+    fetchJson<EmbedData>(
+      `${apiUrl}/api/embed/current${query ? `?${query}` : ""}`,
+    ).then((d) => {
+      if (cancelled) return;
+      if (d) setData(d);
+      else setError(true);
+    });
     return () => {
       cancelled = true;
     };
