@@ -109,6 +109,8 @@ proxied by a `vercel.json` rewrite (`/api/py/*` → `api/py/index.py`). Only fou
 routes remain in TypeScript: OG image generation, DB init, the public embed API,
 and developer API-key management.
 
+Climate normals (1991–2020, ERA5 via Open-Meteo) are served at `GET /api/py/normals`, with one cached table per 0.25° grid cell in `weather.climate_normals`.
+
 **Four-stage weather fallback** — MongoDB cache (15-min TTL) → Tomorrow.io →
 Open-Meteo → `createFallbackWeather` seasonal estimates. The last stage always
 succeeds, so a request never returns nothing.

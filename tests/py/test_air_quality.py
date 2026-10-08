@@ -386,3 +386,210 @@ class TestConstants:
         assert pm25[2] == (35.5, 55.4, 101, 150)        # Unhealthy for Sensitive
         assert pm25[3] == (55.5, 150.4, 151, 200)       # Unhealthy
         assert pm25[5] == (250.5, 500.4, 301, 500)      # Hazardous
+
+
+# ---------------------------------------------------------------------------
+# Yesterday-vs-today AQI comparison (hourly us_aqi with past_days=1)
+# ---------------------------------------------------------------------------
+
+
+def _aq_payload(now_iso: str, hours_back: int = 48, today_val=60, yesterday_val=80):
+    """Build an Open-Meteo-shaped payload with an hourly us_aqi series.
+
+    The series covers ``past_days=1`` (yesterday 00:00 onwards). The value at
+    ``now`` is ``today_val``, and the value 24 h earlier is ``yesterday_val``.
+    Every other hour is 50.
+    """
+    now = datetime.fromisoformat(now_iso)
+    start = now.replace(hour=0, minute=0) - timedelta(days=1)
+    times, values = [], []
+    for i in range(24 + now.hour + 24):
+        t = start + timedelta(hours=i)
+        times.append(t.strftime("%Y-%m-%dT%H:00"))
+        if t == now:
+            values.append(today_val)
+        elif t == now - timedelta(days=1):
+            values.append(yesterday_val)
+        else:
+            values.append(50)
+    return {
+        "current": {"time": now.strftime("%Y-%m-%dT%H:%M"), "pm2_5": 5.0},
+        "hourly": {"time": times, "us_aqi": values},
+    }
+
+
+class TestSameHourPair:
+    def test_extracts_today_and_yesterday_at_same_local_hour(self):
+        from py._air_quality import _us_aqi_same_hour_pair
+        data = _aq_payload("2026-10-08T14:00", today_val=72, yesterday_val=95)
+        assert _us_aqi_same_hour_pair(data) == {"todayUsAqi": 72, "yesterdayAqi": 95}
+
+    def test_hour_zero_uses_previous_day_midnight(self):
+        from py._air_quality import _us_aqi_same_hour_pair
+        data = _aq_payload("2026-10-08T00:00", today_val=40, yesterday_val=33)
+        assert _us_aqi_same_hour_pair(data) == {"todayUsAqi": 40, "yesterdayAqi": 33}
+
+    def test_month_boundary_resolves_yesterday(self):
+        from py._air_quality import _us_aqi_same_hour_pair
+        data = _aq_payload("2026-03-01T09:00", today_val=21, yesterday_val=44)
+        assert _us_aqi_same_hour_pair(data) == {"todayUsAqi": 21, "yesterdayAqi": 44}
+
+    def test_missing_series_returns_none_pair(self):
+        from py._air_quality import _us_aqi_same_hour_pair
+        data = {"current": {"time": "2026-10-08T14:00", "pm2_5": 5.0}}
+        assert _us_aqi_same_hour_pair(data) == {"todayUsAqi": None, "yesterdayAqi": None}
+
+    def test_mismatched_series_lengths_return_none_pair(self):
+        from py._air_quality import _us_aqi_same_hour_pair
+        data = {
+            "current": {"time": "2026-10-08T14:00"},
+            "hourly": {"time": ["2026-10-08T14:00"], "us_aqi": [1, 2]},
+        }
+        assert _us_aqi_same_hour_pair(data) == {"todayUsAqi": None, "yesterdayAqi": None}
+
+    def test_unparseable_current_time_returns_none_pair(self):
+        from py._air_quality import _us_aqi_same_hour_pair
+        data = _aq_payload("2026-10-08T14:00")
+        data["current"]["time"] = "not-a-time"
+        assert _us_aqi_same_hour_pair(data)["yesterdayAqi"] is None
+
+    def test_yesterday_hour_absent_gives_none_yesterday_only(self):
+        from py._air_quality import _us_aqi_same_hour_pair
+        data = _aq_payload("2026-10-08T14:00", today_val=70, yesterday_val=90)
+        # Drop yesterday's 14:00 from the series.
+        keep = [i for i, t in enumerate(data["hourly"]["time"]) if t != "2026-10-07T14:00"]
+        data["hourly"]["time"] = [data["hourly"]["time"][i] for i in keep]
+        data["hourly"]["us_aqi"] = [data["hourly"]["us_aqi"][i] for i in keep]
+        assert _us_aqi_same_hour_pair(data) == {"todayUsAqi": 70, "yesterdayAqi": None}
+
+
+class TestAqiTrend:
+    def test_better_when_more_than_band_lower(self):
+        from py._air_quality import compute_aqi_trend
+        assert compute_aqi_trend(today=60, yesterday=80) == "better"
+
+    def test_worse_when_more_than_band_higher(self):
+        from py._air_quality import compute_aqi_trend
+        assert compute_aqi_trend(today=95, yesterday=80) == "worse"
+
+    def test_similar_within_band(self):
+        from py._air_quality import compute_aqi_trend
+        assert compute_aqi_trend(today=85, yesterday=80) == "similar"
+        assert compute_aqi_trend(today=75, yesterday=80) == "similar"
+
+    def test_exactly_band_edge_is_similar(self):
+        from py._air_quality import compute_aqi_trend
+        assert compute_aqi_trend(today=90, yesterday=80) == "similar"
+        assert compute_aqi_trend(today=70, yesterday=80) == "similar"
+
+    def test_none_when_either_side_missing(self):
+        from py._air_quality import compute_aqi_trend
+        assert compute_aqi_trend(today=None, yesterday=80) is None
+        assert compute_aqi_trend(today=80, yesterday=None) is None
+
+
+@pytest.mark.asyncio
+class TestYesterdayFieldsEndpoint:
+    async def test_cache_miss_returns_yesterday_and_trend(self):
+        mock_collection = MagicMock()
+        mock_collection.find_one.return_value = None
+
+        def fake_fetch(lat, lon, side=None):
+            side.update({"todayUsAqi": 60, "yesterdayAqi": 85})
+            return {"pm2_5": 5.0}
+
+        with patch("py._air_quality._air_quality_cache_collection", return_value=mock_collection):
+            with patch("py._air_quality._fetch_open_meteo_air_quality", side_effect=fake_fetch):
+                response = await get_air_quality(lat=-17.8252, lon=31.0335)
+
+        import json
+        body = json.loads(response.body.decode("utf-8"))
+        assert body["todayUsAqi"] == 60
+        assert body["yesterdayAqi"] == 85
+        assert body["trend"] == "better"
+        # Existing fields are untouched.
+        assert body["aqi"] == compute_aqi({"pm2_5": 5.0})["aqi"]
+        # The trend is persisted with the cache row.
+        stored = mock_collection.update_one.call_args.args[1]["$set"]
+        assert stored["todayUsAqi"] == 60
+        assert stored["yesterdayAqi"] == 85
+        assert stored["trend"] == "better"
+
+    async def test_missing_hourly_series_yields_null_fields_not_error(self):
+        mock_collection = MagicMock()
+        mock_collection.find_one.return_value = None
+        with patch("py._air_quality._air_quality_cache_collection", return_value=mock_collection):
+            with patch("py._air_quality._fetch_open_meteo_air_quality", return_value={"pm2_5": 5.0}):
+                response = await get_air_quality(lat=-17.8252, lon=31.0335)
+        import json
+        body = json.loads(response.body.decode("utf-8"))
+        assert body["yesterdayAqi"] is None
+        assert body["trend"] is None
+        assert response.status_code == 200
+
+    async def test_cache_hit_returns_stored_trend(self):
+        cached_doc = {
+            "_id": "-17.8252_31.0335",
+            "aqi": 73,
+            "level": "moderate",
+            "pollutants": {"pm2_5": 24.1},
+            "subIndexes": {"pm2_5": 73},
+            "yesterdayAqi": 64,
+            "trend": "worse",
+            "fetchedAt": datetime.now(timezone.utc),
+        }
+        mock_collection = MagicMock()
+        mock_collection.find_one.return_value = cached_doc
+        with patch("py._air_quality._air_quality_cache_collection", return_value=mock_collection):
+            response = await get_air_quality(lat=-17.8252, lon=31.0335)
+        import json
+        body = json.loads(response.body.decode("utf-8"))
+        assert body["yesterdayAqi"] == 64
+        assert body["trend"] == "worse"
+
+    async def test_legacy_cache_row_without_fields_still_serves(self):
+        cached_doc = {
+            "_id": "-17.8252_31.0335",
+            "aqi": 73,
+            "level": "moderate",
+            "pollutants": {},
+            "subIndexes": {},
+            "fetchedAt": datetime.now(timezone.utc),
+        }
+        mock_collection = MagicMock()
+        mock_collection.find_one.return_value = cached_doc
+        with patch("py._air_quality._air_quality_cache_collection", return_value=mock_collection):
+            response = await get_air_quality(lat=-17.8252, lon=31.0335)
+        import json
+        body = json.loads(response.body.decode("utf-8"))
+        assert body["yesterdayAqi"] is None
+        assert body["trend"] is None
+
+
+class TestFetchRequestShape:
+    def test_request_asks_for_hourly_us_aqi_with_one_past_day(self):
+        from py._air_quality import _fetch_open_meteo_air_quality
+        resp = MagicMock()
+        resp.json.return_value = _aq_payload("2026-10-08T14:00", today_val=60, yesterday_val=80)
+        client = MagicMock()
+        client.get.return_value = resp
+        side: dict = {}
+        with patch("py._air_quality._get_http", return_value=client):
+            pollutants = _fetch_open_meteo_air_quality(-17.8252, 31.0335, side)
+
+        params = client.get.call_args.kwargs["params"]
+        assert params["hourly"] == "us_aqi"
+        assert params["past_days"] == 1
+        assert "current" in params  # same single request still carries current
+        assert side == {"todayUsAqi": 60, "yesterdayAqi": 80}
+        assert "pm2_5" in pollutants
+
+    def test_side_argument_is_optional(self):
+        from py._air_quality import _fetch_open_meteo_air_quality
+        resp = MagicMock()
+        resp.json.return_value = {"current": {"pm2_5": 5.0}}
+        client = MagicMock()
+        client.get.return_value = resp
+        with patch("py._air_quality._get_http", return_value=client):
+            pollutants = _fetch_open_meteo_air_quality(0.0, 0.0)
+        assert pollutants["pm2_5"] == 5.0
