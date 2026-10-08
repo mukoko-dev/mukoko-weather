@@ -360,3 +360,29 @@ export function LocationInfoSkeleton() {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// ENSO outlook skeleton
+// Matches: card > heading + phase/strength badges, ONI line, impact lines
+// ---------------------------------------------------------------------------
+
+export function EnsoOutlookSkeleton() {
+  return (
+    <div className="baobab p-5 sm:p-6" role="status" aria-label="Loading">
+      {/* Heading */}
+      <Skeleton className="h-6 w-56" />
+      {/* Phase + strength badges */}
+      <div className="mt-3 flex gap-2">
+        <Skeleton className="h-6 w-20 rounded-[var(--radius-badge)]" />
+        <Skeleton className="h-6 w-24 rounded-[var(--radius-badge)]" />
+      </div>
+      {/* ONI line */}
+      <Skeleton className="mt-3 h-4 w-48" />
+      {/* Impact lines */}
+      <div className="mt-4 space-y-2.5">
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-5/6" />
+      </div>
+    </div>
+  );
+}
