@@ -22,7 +22,10 @@ const FORBIDDEN: { label: string; pattern: RegExp }[] = [
   { label: "AI gateway token env", pattern: /\bAI_GATEWAY_TOKEN\b/ },
   { label: "Workers AI token env", pattern: /\bCF_WORKERS_AI_TOKEN\b/ },
   { label: "AI gateway URL env", pattern: /\bAI_GATEWAY_URL\b/ },
-  { label: "public AI env", pattern: /NEXT_PUBLIC_[A-Z_]*(AI_GATEWAY|WORKERS_AI)/ },
+  {
+    label: "public AI env",
+    pattern: /NEXT_PUBLIC_[A-Z_]*(AI_GATEWAY|WORKERS_AI)/,
+  },
   { label: "Anthropic SDK", pattern: /@anthropic-ai\/sdk/ },
   { label: "OpenAI SDK", pattern: /from\s+["']openai["']/ },
 ];
@@ -40,7 +43,10 @@ function walk(dir: string, ext: RegExp, out: string[] = []): string[] {
   return out;
 }
 
-function violations(files: string[], skip: (f: string) => boolean = () => false) {
+function violations(
+  files: string[],
+  skip: (f: string) => boolean = () => false,
+) {
   const found: string[] = [];
   for (const file of files) {
     if (skip(file)) continue;
