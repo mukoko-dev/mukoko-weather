@@ -87,3 +87,9 @@ describe("BreadcrumbSkeleton (issue #104)", () => {
     }
   });
 });
+
+describe("Breadcrumb touch targets", () => {
+  it("links carry the .dik-dik class so they reach 48px on coarse pointers", () => {
+    expect(source).toMatch(/<Link[\s\S]*?className="dik-dik /);
+  });
+});
