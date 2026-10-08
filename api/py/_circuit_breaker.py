@@ -59,6 +59,7 @@ PROVIDER_CONFIGS: dict[str, CircuitBreakerConfig] = {
     ),
     "aviationweather-gov": CircuitBreakerConfig(
         failure_threshold=3, cooldown_s=120, window_s=300, timeout_s=8,
+    ),
     "noaa-cpc": CircuitBreakerConfig(
         failure_threshold=3, cooldown_s=600, window_s=600, timeout_s=8,
     ),

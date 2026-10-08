@@ -21,6 +21,7 @@ from py._weather import (
     _parse_minutely,
     _parse_models,
     _fetch_open_meteo_extras,
+    _fetch_open_meteo,
     DEFAULT_FORECAST_MODELS,
     KNOWN_FORECAST_MODELS,
     STATION_MAX_AGE_MINUTES,
@@ -1505,3 +1506,127 @@ class TestCanonicalWeatherShape:
         import py._weather as w
         src = inspect.getsource(w)
         assert '{**(data.get("current") or {}), **station_current}' in src
+
+
+# ---------------------------------------------------------------------------
+# utc_offset_seconds — the location's UTC offset, for local-time rendering
+# ---------------------------------------------------------------------------
+
+
+def _om_payload(**extra):
+    """Minimal Open-Meteo forecast payload (timezone=auto)."""
+    payload = {
+        "current": {"temperature_2m": 24},
+        "hourly": {},
+        "daily": {},
+        "minutely_15": {},
+    }
+    payload.update(extra)
+    return payload
+
+
+class TestUtcOffsetSeconds:
+    @patch("py._weather._get_http_client")
+    def test_open_meteo_forecast_carries_offset(self, mock_client):
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = _om_payload(utc_offset_seconds=7200)
+        mock_client.return_value.get.return_value = resp
+        result = _fetch_open_meteo(-17.83, 31.05)
+        assert result["utc_offset_seconds"] == 7200
+
+    @patch("py._weather._get_http_client")
+    def test_open_meteo_forecast_omits_offset_when_absent(self, mock_client):
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = _om_payload()
+        mock_client.return_value.get.return_value = resp
+        result = _fetch_open_meteo(-17.83, 31.05)
+        assert "utc_offset_seconds" not in result
+
+    @patch("py._weather._get_http_client")
+    def test_extras_carry_offset_for_negative_zone(self, mock_client):
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {"hourly": {}, "utc_offset_seconds": -18000}
+        mock_client.return_value.get.return_value = resp
+        result = _fetch_open_meteo_extras(40.71, -74.0)
+        assert result["utc_offset_seconds"] == -18000
+
+    @pytest.mark.asyncio
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._fetch_open_meteo_extras")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._fetch_open_meteo")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather._find_nearest_location")
+    async def test_response_exposes_offset_from_open_meteo(
+        self, mock_nearest, mock_cache, mock_fetch, mock_breaker, mock_extras, mock_set, mock_record,
+    ):
+        import json
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
+        mock_cache.return_value = None
+        mock_breaker.is_allowed = True
+        mock_fetch.return_value = {"current": {"temperature_2m": 24}, "hourly": {}, "daily": {},
+                                   "utc_offset_seconds": 7200}
+        mock_extras.return_value = None
+
+        response = await get_weather(-17.83, 31.05)
+        assert json.loads(response.body)["utc_offset_seconds"] == 7200
+
+    @pytest.mark.asyncio
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._fetch_open_meteo_extras")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._fetch_tomorrow")
+    @patch("py._weather.get_api_key")
+    @patch("py._weather.tomorrow_breaker")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather._find_nearest_location")
+    async def test_tomorrow_response_borrows_offset_from_extras(
+        self, mock_nearest, mock_cache, mock_tmrw_breaker, mock_key, mock_fetch_tmrw,
+        mock_breaker, mock_extras, mock_set, mock_record,
+    ):
+        """Tomorrow.io has no offset; the keyless Open-Meteo extras resolve it."""
+        import json
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
+        mock_cache.return_value = None
+        mock_tmrw_breaker.is_allowed = True
+        mock_key.return_value = "fake-key"
+        mock_fetch_tmrw.return_value = {"current": {"temperature_2m": 26}, "hourly": {}, "daily": {},
+                                        "insights": None}
+        mock_breaker.is_allowed = True
+        mock_extras.return_value = {"minutely": None, "models": [], "models_available": [],
+                                    "models_time": [], "utc_offset_seconds": 7200}
+
+        response = await get_weather(-17.83, 31.05)
+        body = json.loads(response.body)
+        assert response.headers.get("x-weather-provider") == "tomorrow"
+        assert body["utc_offset_seconds"] == 7200
+        assert "utc_offset_seconds" not in mock_fetch_tmrw.return_value
+
+    @pytest.mark.asyncio
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._fetch_open_meteo_extras")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._fetch_tomorrow")
+    @patch("py._weather.get_api_key")
+    @patch("py._weather.tomorrow_breaker")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather._find_nearest_location")
+    async def test_offset_omitted_when_no_provider_knows_it(
+        self, mock_nearest, mock_cache, mock_tmrw_breaker, mock_key, mock_fetch_tmrw,
+        mock_breaker, mock_extras, mock_set, mock_record,
+    ):
+        import json
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
+        mock_cache.return_value = None
+        mock_tmrw_breaker.is_allowed = True
+        mock_key.return_value = "fake-key"
+        mock_fetch_tmrw.return_value = {"current": {"temperature_2m": 26}, "hourly": {}, "daily": {},
+                                        "insights": None}
+        mock_breaker.is_allowed = True
+        mock_extras.return_value = None
+
+        response = await get_weather(-17.83, 31.05)
+        assert "utc_offset_seconds" not in json.loads(response.body)

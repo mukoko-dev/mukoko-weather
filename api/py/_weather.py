@@ -329,6 +329,18 @@ def _sanitize_models(models: list[str] | None) -> list[str]:
     return cleaned or list(DEFAULT_FORECAST_MODELS)
 
 
+def _utc_offset(data: dict) -> int | None:
+    """Location's UTC offset in whole seconds, as Open-Meteo reports it.
+
+    Open-Meteo returns ``utc_offset_seconds`` for ``timezone=auto`` requests.
+    Returns ``None`` when absent or not numeric so the caller can omit it.
+    """
+    value = data.get("utc_offset_seconds")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
 def _parse_minutely(data: dict) -> dict | None:
     """Extract the next-hour precipitation nowcast from an Open-Meteo payload.
 
@@ -409,12 +421,15 @@ def _fetch_open_meteo_extras(lat: float, lon: float, models: list[str] | None = 
     series, available = _parse_models(data, resolved_models)
     hourly = data.get("hourly") or {}
 
-    return {
+    result = {
         "minutely": minutely,
         "models": series,
         "models_available": available,
         "models_time": list((hourly.get("time") or [])[:24]),
     }
+    if (offset := _utc_offset(data)) is not None:
+        result["utc_offset_seconds"] = offset
+    return result
 
 
 def _fetch_open_meteo(lat: float, lon: float) -> dict | None:
@@ -458,6 +473,8 @@ def _fetch_open_meteo(lat: float, lon: float) -> dict | None:
         "insights": insights if insights else None,
         "minutely": _parse_minutely(data),
     }
+    if (offset := _utc_offset(data)) is not None:
+        result["utc_offset_seconds"] = offset
     return result
 
 
@@ -884,6 +901,10 @@ async def get_weather(lat: float = -17.83, lon: float = 31.05, models: str | Non
                 data["models"] = extras.get("models", [])
                 data["models_available"] = extras.get("models_available", [])
                 data["models_time"] = extras.get("models_time", [])
+                # Tomorrow.io (and seasonal fallback) carry no UTC offset; the
+                # keyless Open-Meteo extras call resolves it for the same point.
+                if data.get("utc_offset_seconds") is None and extras.get("utc_offset_seconds") is not None:
+                    data["utc_offset_seconds"] = extras["utc_offset_seconds"]
         except Exception:
             # Multi-model/minutely is a non-critical enhancement — never fail
             # the whole response because the extras call errored.
