@@ -5,6 +5,9 @@ import type { PreferencesDocType } from "./rxdb/schemas";
 
 export type ThemePreference = "light" | "dark" | "system";
 
+/** Tabs of the My Weather modal (ids match MyWeatherModal's TabsTrigger values). */
+export type MyWeatherTab = "location" | "activities" | "settings";
+
 // ---------------------------------------------------------------------------
 // Shamwari context — carries weather/location/summary data between pages
 // ---------------------------------------------------------------------------
@@ -158,13 +161,18 @@ interface AppState {
   locationLabels: Record<string, string>;
   /** Set a custom label for a saved location */
   setLocationLabel: (slug: string, label: string) => void;
+  /** Display names seen this session from search/GPS results (not persisted) */
+  locationNames: Record<string, string>;
+  rememberLocationName: (slug: string, name: string) => void;
   selectedActivities: string[]; // activity IDs from src/lib/activities.ts
   toggleActivity: (id: string) => void;
   /** Windy-style forecast model preference (Open-Meteo model id or "best_match") */
   selectedForecastModel: string;
   setSelectedForecastModel: (model: string) => void;
   myWeatherOpen: boolean;
-  openMyWeather: () => void;
+  /** Tab the My Weather modal opens on (not persisted). */
+  myWeatherTab: MyWeatherTab;
+  openMyWeather: (tab?: MyWeatherTab) => void;
   closeMyWeather: () => void;
   hasOnboarded: boolean;
   completeOnboarding: () => void;
@@ -274,6 +282,16 @@ export const useAppStore = create<AppState>()((set) => ({
         });
       return { savedLocations: next, locationLabels: remainingLabels };
     }),
+  locationNames: {},
+  rememberLocationName: (slug, name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    set((state) =>
+      state.locationNames[slug] === trimmed
+        ? state
+        : { locationNames: { ...state.locationNames, [slug]: trimmed } },
+    );
+  },
   locationLabels: {},
   setLocationLabel: (slug, label) =>
     set((state) => {
@@ -305,8 +323,10 @@ export const useAppStore = create<AppState>()((set) => ({
       updatePreferences({ selectedForecastModel: model });
   },
   myWeatherOpen: false,
-  openMyWeather: () => set({ myWeatherOpen: true }),
-  closeMyWeather: () => set({ myWeatherOpen: false }),
+  myWeatherTab: "location",
+  openMyWeather: (tab) =>
+    set({ myWeatherOpen: true, myWeatherTab: tab ?? "location" }),
+  closeMyWeather: () => set({ myWeatherOpen: false, myWeatherTab: "location" }),
   hasOnboarded: false,
   completeOnboarding: () => {
     set({ hasOnboarded: true });

@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   resolveTheme,
@@ -218,6 +220,42 @@ describe("myWeatherOpen", () => {
     useAppStore.getState().openMyWeather();
     useAppStore.getState().closeMyWeather();
     expect(useAppStore.getState().myWeatherOpen).toBe(false);
+  });
+});
+
+describe("myWeatherTab", () => {
+  it("defaults to location", () => {
+    expect(useAppStore.getState().myWeatherTab).toBe("location");
+  });
+
+  it("openMyWeather() with no argument opens on location (existing callers)", () => {
+    useAppStore.getState().openMyWeather();
+    expect(useAppStore.getState().myWeatherTab).toBe("location");
+  });
+
+  it("openMyWeather(tab) opens on the requested tab", () => {
+    useAppStore.getState().openMyWeather("activities");
+    expect(useAppStore.getState().myWeatherOpen).toBe(true);
+    expect(useAppStore.getState().myWeatherTab).toBe("activities");
+    useAppStore.getState().closeMyWeather();
+    useAppStore.getState().openMyWeather("settings");
+    expect(useAppStore.getState().myWeatherTab).toBe("settings");
+  });
+
+  it("closeMyWeather resets the tab to location", () => {
+    useAppStore.getState().openMyWeather("settings");
+    useAppStore.getState().closeMyWeather();
+    expect(useAppStore.getState().myWeatherTab).toBe("location");
+  });
+
+  it("is not persisted (never written on any persistence path)", () => {
+    const source = readFileSync(resolve(__dirname, "store.ts"), "utf-8");
+    const persistenceLines = source
+      .split("\n")
+      .filter((line) => /updatePreferences|localStorage|partialize/.test(line));
+    for (const line of persistenceLines) {
+      expect(line).not.toContain("myWeatherTab");
+    }
   });
 });
 
