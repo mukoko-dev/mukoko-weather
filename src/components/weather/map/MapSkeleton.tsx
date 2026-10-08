@@ -1,5 +1,7 @@
 "use client";
 
+import { cn } from "@/lib/utils";
+
 /**
  * Map loading placeholder. Defaults to a 16:9 card (matches the compact
  * MapPreview). Pass `fill` for full-height contexts (the full-viewport map
@@ -15,7 +17,11 @@ export function MapSkeleton({
 }) {
   return (
     <div
-      className={`relative ${fill ? "h-full w-full" : "aspect-[16/9] w-full"} animate-pulse rounded-[var(--radius-card)] bg-surface-card overflow-hidden ${className ?? ""}`}
+      className={cn(
+        "relative animate-pulse rounded-[var(--radius-card)] bg-surface-card overflow-hidden",
+        fill ? "h-full w-full" : "aspect-[16/9] w-full",
+        className,
+      )}
       role="status"
       aria-label="Loading map"
     >
