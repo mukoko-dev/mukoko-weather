@@ -8,11 +8,12 @@ normalized WeatherData.
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from ._db import (
@@ -21,7 +22,7 @@ from ._db import (
     weather_cache_collection,
 )
 from ._places_resolver import find_nearest_location
-from ._circuit_breaker import tomorrow_breaker, open_meteo_breaker
+from ._circuit_breaker import tomorrow_breaker, open_meteo_breaker, CircuitOpenError
 
 router = APIRouter()
 

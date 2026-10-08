@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock, PropertyMock
 
 import anthropic
@@ -11,6 +12,7 @@ from fastapi import HTTPException
 from py._history_analyze import (
     _aggregate_stats,
     _build_analysis_system_prompt,
+    _FALLBACK_SYSTEM_PROMPT,
     analyze_history,
     AnalyzeRequest,
     RATE_LIMIT_MAX,

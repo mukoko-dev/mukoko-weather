@@ -15,6 +15,10 @@ from py._chat import (
     _execute_get_activity_advice,
     _execute_tool,
     SLUG_RE,
+    MAX_MESSAGE_LEN,
+    MAX_HISTORY,
+    MAX_ACTIVITIES,
+    _FALLBACK_CHAT_PROMPT,
 )
 from py._db import get_known_tags
 

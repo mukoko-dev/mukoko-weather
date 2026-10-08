@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -15,6 +16,7 @@ from py._ai import (
     _resolve_seasons_with_ai,
     _trigger_background_season_resolution,
     _resolution_in_progress,
+    _resolution_lock,
     _COUNTRY_CODE_RE,
     _hemisphere_fallback,
     _is_stale,

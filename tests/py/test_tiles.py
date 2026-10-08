@@ -17,6 +17,7 @@ from py._tiles import (
     VALID_LAYERS,
     TIMESTAMP_RE,
     TILE_CACHE_CONTROL,
+    MAP_TILE_CACHE_TTL_SECONDS,
     _TRANSPARENT_PNG,
     _cache_id,
     _timestamp_bucket,

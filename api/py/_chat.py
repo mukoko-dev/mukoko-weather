@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from ._db import (
     enforce_rate_limit,
+    get_api_key,
     get_known_tags,
     filter_known_activities,
     get_activities_brief,

@@ -12,16 +12,17 @@ from typing import Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-from ._geohash import build_place_slug, build_smart_slug
+from ._geohash import build_place_slug, build_smart_slug, normalise_osm_ref
 from ._db import (
     get_db,
     enforce_rate_limit,
     places_geo_collection,
     is_valid_coords,
+    SLUG_RE,
 )
 from ._places_resolver import (
     adapt_placesgeo_to_location,

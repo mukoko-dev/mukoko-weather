@@ -43,6 +43,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+import unicodedata
 from typing import Optional
 
 from ._db import places_geo_collection

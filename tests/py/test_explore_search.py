@@ -15,6 +15,7 @@ from py._explore_search import (
     _exec_tool,
     _text_search_fallback,
     _build_search_system_prompt,
+    _FALLBACK_SYSTEM_PROMPT,
     explore_search,
     ExploreSearchRequest,
 )

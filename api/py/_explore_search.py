@@ -11,6 +11,7 @@ System prompt is fetched from the database (system:explore_search).
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from ._db import (
     enforce_rate_limit,
+    get_api_key,
     weather_cache_collection,
     SLUG_RE,
 )

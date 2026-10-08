@@ -10,6 +10,7 @@ from fastapi import HTTPException
 
 from py._ai_followup import (
     _build_followup_system_prompt,
+    _FALLBACK_SYSTEM_PROMPT,
     followup_chat,
     FollowupRequest,
     FollowupMessage,

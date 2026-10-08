@@ -17,7 +17,7 @@ from typing import Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ._db import (
     enforce_rate_limit,

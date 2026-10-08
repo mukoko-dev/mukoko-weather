@@ -28,6 +28,7 @@ from py._locations import (
     geo_lookup,
     add_location,
     MAX_LOCATIONS_LIMIT,
+    DEFAULT_LOCATIONS_LIMIT,
     SLUG_RE,
     DEDUP_RADIUS_KM,
 )
