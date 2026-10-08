@@ -184,7 +184,7 @@ mukoko-weather/
 │   │   │   ├── chart.tsx             # CanvasChart, resolveColor (wraps Chart.js Canvas)
 │   │   │   ├── dialog.tsx            # Dialog (Radix, portal, overlay, animations)
 │   │   │   ├── input.tsx             # Input (styled with CSS custom properties)
-│   │   │   ├── skeleton.tsx         # Skeleton, CardSkeleton, ChartSkeleton, BadgeSkeleton, MetricCardSkeleton, ChatSkeleton
+│   │   │   ├── skeleton.tsx         # Skeleton, CardSkeleton, ChartSkeleton, MetricCardSkeleton, ChatSkeleton
 │   │   │   ├── spinner.tsx          # Spinner (shared loading ring — size/ring colors compose via className)
 │   │   │   ├── alert.tsx             # Alert, AlertTitle, AlertDescription (6 severity variants)
 │   │   │   ├── accordion.tsx        # Accordion (Radix, animated open/close)
@@ -962,14 +962,13 @@ Reusable skeleton components in `src/components/ui/skeleton.tsx`:
 - `Skeleton` — generic pulsing block (base building block)
 - `CardSkeleton` — card-shaped with title + content lines
 - `ChartSkeleton` — aspect-ratio-matched chart placeholder
-- `BadgeSkeleton` — pill-shaped badge placeholder
 - `MetricCardSkeleton` — matches AtmosphericSummary MetricCard shape
 - `ChatSkeleton` — matches ExploreChatbot container shape (used as Suspense fallback)
 
 Aspect-matched section skeletons in `src/components/weather/SectionSkeleton.tsx`:
 
 - `SectionSkeleton` — generic fallback (h-32 pulsing card)
-- `ReportsSkeleton`, `HourlyForecastSkeleton`, `ActivityInsightsSkeleton`, `DailyForecastSkeleton`, `AISummarySkeleton`, `AISummaryChatSkeleton`, `AtmosphericSummarySkeleton`, `SunTimesSkeleton`, `MapPreviewSkeleton`, `SupportBannerSkeleton`, `LocationInfoSkeleton` — each mirrors the shape of its corresponding component to prevent layout shift
+- `ReportsSkeleton`, `HourlyForecastSkeleton`, `ActivityInsightsSkeleton`, `DailyForecastSkeleton`, `AISummarySkeleton`, `AISummaryChatSkeleton`, `MapPreviewSkeleton`, `SupportBannerSkeleton`, `LocationInfoSkeleton` — each mirrors the shape of its corresponding component to prevent layout shift
 
 All skeletons include `role="status"` and `aria-label="Loading"` for screen readers. The `sr-only` span is optional when `aria-label` is present — both achieve the same result for assistive technology, so `aria-label` alone is sufficient.
 
