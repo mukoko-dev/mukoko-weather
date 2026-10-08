@@ -200,11 +200,11 @@ To open a release PR, never open `staging → main` by hand. Run the **Release P
 1. Creates `release/<date>` from `origin/staging`. It fails if that branch already exists.
 2. Asserts that main's content is already in staging. Each file on `main` must either match staging's blob at the same path or appear somewhere in staging's history. If neither holds, the workflow fails loudly and names each file, which usually means a hotfix landed on `main` without being merged back. Merge `main` into `staging` and rerun.
 3. Runs `git merge -s ours origin/main -m "chore: record main in release history"`. This records `main` as a parent while the tree stays exactly staging's, and the workflow verifies that.
-4. Pushes the branch and opens the PR to `main` with `GITHUB_TOKEN`.
+4. Pushes the branch and opens the PR to `main` with `RELEASE_BUMP_TOKEN`, so CI runs on it.
 
 Squash-merge that PR. Because `main` is already in the branch's history, the squash is always clean.
 
-A PR opened with `GITHUB_TOKEN` does not trigger other workflows, so CI does not start on it by itself. Staging's CI already covered the same tree. If you want a run on the release PR itself, close and reopen it, or push an empty commit to the branch as yourself.
+The release PR is opened with `RELEASE_BUMP_TOKEN` (an org secret), so CI runs on it like any other PR. The workflow fails before it touches git if that secret is missing. A PR opened with `GITHUB_TOKEN` does not start CI.
 
 ## Reporting Issues
 
