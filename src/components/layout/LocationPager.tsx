@@ -16,6 +16,7 @@ import {
   pagerSequence,
 } from "@/lib/location-pager";
 import { useSwipe } from "@/lib/use-swipe";
+import { visiblePresetSlugs } from "@/lib/location-presets";
 
 /**
  * Page indicator for the mobile bottom bar, and the swipe gesture that walks
@@ -43,9 +44,20 @@ export function LocationPager({
   selectedLocation,
 }: LocationPagerProps) {
   const from = currentLocationSlug(pathname, selectedLocation) ?? "";
+  const hiddenPresetSlugs = useAppStore((s) => s.hiddenPresetSlugs);
+  const presetAnchor = useAppStore((s) => s.presetAnchor);
   const sequence = useMemo(
-    () => pagerSequence(savedLocations),
-    [savedLocations],
+    () =>
+      pagerSequence(
+        savedLocations,
+        visiblePresetSlugs({
+          anchor: presetAnchor,
+          hidden: hiddenPresetSlugs,
+          saved: savedLocations,
+          current: selectedLocation,
+        }),
+      ),
+    [savedLocations, hiddenPresetSlugs, presetAnchor, selectedLocation],
   );
   const activeIndex = pagerIndex(pathname, sequence);
   const dots = pagerDots(sequence);
@@ -139,9 +151,19 @@ export function useLocationSwipe({
   const router = useRouter();
   const savedLocations = useAppStore((s) => s.savedLocations);
   const selectedLocation = useAppStore((s) => s.selectedLocation);
+  const hiddenPresetSlugs = useAppStore((s) => s.hiddenPresetSlugs);
+  const presetAnchor = useAppStore((s) => s.presetAnchor);
 
   const step = (dir: 1 | -1) => {
-    const sequence = pagerSequence(savedLocations);
+    const sequence = pagerSequence(
+      savedLocations,
+      visiblePresetSlugs({
+        anchor: presetAnchor,
+        hidden: hiddenPresetSlugs,
+        saved: savedLocations,
+        current: selectedLocation,
+      }),
+    );
     const target = neighbour(sequence, pagerIndex(pathname, sequence), dir);
     if (!target) return;
     trackPageChange(

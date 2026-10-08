@@ -8,7 +8,9 @@
 import { createRxDatabase, type RxDatabase } from "rxdb";
 import { getRxStorageDexie } from "rxdb/plugins/storage-dexie";
 import {
+  migratePreferencesV2ToV3,
   preferencesSchema,
+  type PreferencesDocV2,
   weatherCacheSchema,
   weatherHintSchema,
   suitabilityRuleSchema,
@@ -135,6 +137,8 @@ async function _initDb(): Promise<MukokoDatabase> {
           ...oldDoc,
           homeLocation: oldDoc.homeLocation ?? null,
         }),
+        // v2 → v3: suggested places (hidden list + anchor), see schemas.ts.
+        3: (oldDoc: PreferencesDocV2) => migratePreferencesV2ToV3(oldDoc),
       },
     },
     weather_cache: { schema: weatherCacheSchema },

@@ -323,3 +323,183 @@ export function buildLocationList(
 export function cardHref(entry: LocationListEntry): string {
   return entry.isCurrent ? "/" : `/${entry.slug}`;
 }
+
+// ---------------------------------------------------------------------------
+// Mineral plates — the tint behind each card (not condition-only colour)
+// ---------------------------------------------------------------------------
+
+/** Condition families a card plate can take. */
+export type PlateCondition =
+  | "clear"
+  | "cloudy"
+  | "rain"
+  | "storm"
+  | "fog"
+  | "snow";
+
+/** Mineral that tints a plate. Each one is an existing mineral token. */
+export type PlateMineral =
+  | "cobalt"
+  | "sodalite"
+  | "tanzanite"
+  | "malachite"
+  | "terracotta"
+  | "gold";
+
+/**
+ * The plate name a card paints with, `plate-<condition>-<day|night>`. These
+ * names follow the design brief's plate tokens. Until those tokens exist, the
+ * mapping below resolves each name to a mineral token, which the card applies
+ * through literal Tailwind classes (see `PLATE_CLASSES`).
+ */
+export function plateName(
+  condition: PlateCondition,
+  isDay: boolean,
+): `plate-${PlateCondition}-${"day" | "night"}` {
+  return `plate-${condition}-${isDay ? "day" : "night"}`;
+}
+
+/** Plate name → mineral. Hue follows the condition family, not the sky colour alone. */
+export const PLATE_MINERAL: Readonly<Record<string, PlateMineral>> = {
+  "plate-clear-day": "cobalt",
+  "plate-clear-night": "sodalite",
+  "plate-cloudy-day": "tanzanite",
+  "plate-cloudy-night": "tanzanite",
+  "plate-rain-day": "malachite",
+  "plate-rain-night": "malachite",
+  "plate-storm-day": "terracotta",
+  "plate-storm-night": "terracotta",
+  "plate-fog-day": "gold",
+  "plate-fog-night": "gold",
+  "plate-snow-day": "cobalt",
+  "plate-snow-night": "cobalt",
+};
+
+/** Condition family of a sky class (the card's existing WMO mapping). */
+export function plateConditionFor(sky: OryxSky): PlateCondition {
+  switch (sky) {
+    case "oryx-clear-day":
+    case "oryx-clear-night":
+      return "clear";
+    case "oryx-rain":
+      return "rain";
+    case "oryx-storm":
+      return "storm";
+    case "oryx-fog":
+      return "fog";
+    case "oryx-snow":
+      return "snow";
+    default:
+      return "cloudy";
+  }
+}
+
+/**
+ * Literal Tailwind classes for each mineral: a plate tint mixed into the card
+ * surface, and the 4px leading edge. Kept as literals so Tailwind generates them.
+ */
+export const PLATE_CLASSES: Readonly<
+  Record<PlateMineral, { plate: string; edge: string }>
+> = {
+  cobalt: {
+    plate:
+      "bg-[color-mix(in_oklab,var(--mineral-cobalt)_22%,var(--color-surface-card))]",
+    edge: "border-l-[var(--mineral-cobalt)]",
+  },
+  sodalite: {
+    plate:
+      "bg-[color-mix(in_oklab,var(--mineral-sodalite)_24%,var(--color-surface-card))]",
+    edge: "border-l-[var(--mineral-sodalite)]",
+  },
+  tanzanite: {
+    plate:
+      "bg-[color-mix(in_oklab,var(--mineral-tanzanite)_20%,var(--color-surface-card))]",
+    edge: "border-l-[var(--mineral-tanzanite)]",
+  },
+  malachite: {
+    plate:
+      "bg-[color-mix(in_oklab,var(--mineral-malachite)_20%,var(--color-surface-card))]",
+    edge: "border-l-[var(--mineral-malachite)]",
+  },
+  terracotta: {
+    plate:
+      "bg-[color-mix(in_oklab,var(--mineral-terracotta)_22%,var(--color-surface-card))]",
+    edge: "border-l-[var(--mineral-terracotta)]",
+  },
+  gold: {
+    plate:
+      "bg-[color-mix(in_oklab,var(--mineral-gold)_20%,var(--color-surface-card))]",
+    edge: "border-l-[var(--mineral-gold)]",
+  },
+};
+
+/** Plate classes for a card summary (sky class + day/night). */
+export function plateClassesFor(sky: OryxSky, isDay: boolean) {
+  const name = plateName(plateConditionFor(sky), isDay);
+  return PLATE_CLASSES[PLATE_MINERAL[name] ?? "tanzanite"];
+}
+
+// ---------------------------------------------------------------------------
+// Batch loading and the per-slug weather cache
+// ---------------------------------------------------------------------------
+
+/** How long a card's weather is reused in memory before refetching. */
+export const CARD_WEATHER_TTL_MS = 10 * 60 * 1000;
+
+/** Parallel weather requests for the Locations list. */
+export const CARD_FETCH_CONCURRENCY = 3;
+
+/** Small TTL map. Entries expire lazily on read. */
+export class TtlCache<T> {
+  private readonly entries = new Map<string, { value: T; expiresAt: number }>();
+
+  constructor(
+    private readonly ttlMs: number,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  get(key: string): T | undefined {
+    const entry = this.entries.get(key);
+    if (!entry) return undefined;
+    if (this.now() >= entry.expiresAt) {
+      this.entries.delete(key);
+      return undefined;
+    }
+    return entry.value;
+  }
+
+  set(key: string, value: T): void {
+    this.entries.set(key, { value, expiresAt: this.now() + this.ttlMs });
+  }
+
+  delete(key: string): void {
+    this.entries.delete(key);
+  }
+
+  clear(): void {
+    this.entries.clear();
+  }
+}
+
+/**
+ * Run `worker` over `items` with at most `limit` in flight. Results keep the
+ * input order. The first worker error rejects the whole batch.
+ */
+export async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const lanes = Math.max(1, Math.min(Math.floor(limit), items.length));
+  const runLane = async (): Promise<void> => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await worker(items[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: lanes }, () => runLane()));
+  return results;
+}

@@ -137,10 +137,51 @@ describe("pagerDots", () => {
   });
 
   it("caps the visible dots at MAX_PAGER_DOTS", () => {
-    const slugs = Array.from({ length: 14 }, (_, i) => `place-${i}`);
+    const slugs = Array.from({ length: 30 }, (_, i) => `place-${i}`);
     const dots = pagerDots(pagerSequence(slugs));
-    expect(MAX_PAGER_DOTS).toBe(10);
+    expect(MAX_PAGER_DOTS).toBe(24);
     expect(dots).toHaveLength(MAX_PAGER_DOTS);
     expect(dots[0]).toBe("/place-0");
+  });
+});
+
+describe("pagerSequence with suggested places", () => {
+  it("lists My Location, then saved places, then visible suggested places", () => {
+    expect(pagerSequence(["harare"], ["bulawayo", "nairobi-ke"])).toEqual([
+      "/",
+      "/harare",
+      "/bulawayo",
+      "/nairobi-ke",
+    ]);
+  });
+
+  it("shows suggested places when nothing is saved", () => {
+    expect(pagerSequence([], ["harare", "bulawayo"])).toEqual([
+      "/",
+      "/harare",
+      "/bulawayo",
+    ]);
+  });
+
+  it("keeps the first occurrence when a saved place is also suggested", () => {
+    expect(pagerSequence(["harare"], ["harare", "bulawayo"])).toEqual([
+      "/",
+      "/harare",
+      "/bulawayo",
+    ]);
+  });
+
+  it("drops route names and bad slugs from the suggestions too", () => {
+    expect(pagerSequence([], ["explore", "Bad Slug", "bulawayo"])).toEqual([
+      "/",
+      "/bulawayo",
+    ]);
+  });
+
+  it("fits every saved place (10) plus every suggestion within the dot cap", () => {
+    const saved = Array.from({ length: 10 }, (_, i) => `saved-${i}`);
+    const presets = ["harare", "bulawayo", "a-1", "a-2", "a-3", "a-4"];
+    const dots = pagerDots(pagerSequence(saved, presets));
+    expect(dots).toHaveLength(saved.length + presets.length);
   });
 });

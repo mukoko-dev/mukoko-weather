@@ -79,11 +79,13 @@ describe("useLocationSwipe — swipe between locations", () => {
     expect(source).toContain("router.push(target);");
   });
 
-  it("derives the sequence from the saved locations, the same as the dots", () => {
+  it("derives the sequence from the saved locations and visible suggested places, the same as the dots", () => {
     expect(source).toContain(
       "const savedLocations = useAppStore((s) => s.savedLocations);",
     );
-    expect(source).toContain("pagerSequence(savedLocations)");
+    expect(source).toContain("hiddenPresetSlugs");
+    expect(source).toContain("visiblePresetSlugs({");
+    expect(source).toContain("pagerSequence(\n      savedLocations,");
   });
 
   it("can be switched off, e.g. while reordering sections", () => {

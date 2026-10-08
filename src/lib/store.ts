@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { updatePreferences, initRxDBBridge } from "./rxdb/bridge";
 import { startReplication } from "./rxdb/replication";
 import type { PreferencesDocType } from "./rxdb/schemas";
+import { isLocationSlug } from "./current-slug";
+import { isPresetAnchor, type PresetAnchor } from "./location-presets";
 
 export type ThemePreference = "light" | "dark" | "system";
 
@@ -165,6 +167,16 @@ interface AppState {
   homeLocation: string | null;
   /** Set (or clear with null) the Home location */
   setHomeLocation: (slug: string | null) => void;
+  /** Suggested places the visitor hid on the Locations list (device-local). */
+  hiddenPresetSlugs: string[];
+  /** Hide one suggested place (no-op if already hidden). */
+  hidePresetLocation: (slug: string) => void;
+  /** Bring back every hidden suggested place ("Restore suggested places"). */
+  restorePresetLocations: () => void;
+  /** Rough position the suggested places are chosen around, or null before first visit. */
+  presetAnchor: PresetAnchor | null;
+  /** Set the suggestion anchor; ignored when the value is not a valid position. */
+  setPresetAnchor: (anchor: PresetAnchor) => void;
   /** Custom labels for saved locations (e.g., "Home", "Work") — keyed by slug */
   locationLabels: Record<string, string>;
   /** Set a custom label for a saved location */
@@ -271,6 +283,30 @@ export const useAppStore = create<AppState>()((set) => ({
     const next = slug && slug.length > 0 ? slug : null;
     set({ homeLocation: next });
     if (!_suppressRxDBWrites) updatePreferences({ homeLocation: next });
+  },
+  hiddenPresetSlugs: [],
+  hidePresetLocation: (slug) =>
+    set((state) => {
+      if (!isLocationSlug(slug) || state.hiddenPresetSlugs.includes(slug)) {
+        return {};
+      }
+      const next = [...state.hiddenPresetSlugs, slug];
+      if (!_suppressRxDBWrites)
+        updatePreferences({ hiddenPresetSlugs: next });
+      return { hiddenPresetSlugs: next };
+    }),
+  restorePresetLocations: () =>
+    set((state) => {
+      if (state.hiddenPresetSlugs.length === 0) return {};
+      if (!_suppressRxDBWrites) updatePreferences({ hiddenPresetSlugs: [] });
+      return { hiddenPresetSlugs: [] };
+    }),
+  presetAnchor: null,
+  setPresetAnchor: (anchor) => {
+    if (!isPresetAnchor(anchor)) return;
+    const next = { lat: anchor.lat, lon: anchor.lon };
+    set({ presetAnchor: next });
+    if (!_suppressRxDBWrites) updatePreferences({ presetAnchor: next });
   },
   savedLocations: [],
   saveLocation: (slug) =>
@@ -424,6 +460,18 @@ export function initializeDeviceSync(): void {
         if (prefs.homeLocation !== undefined) {
           useAppStore.setState({ homeLocation: prefs.homeLocation });
         }
+        if (prefs.hiddenPresetSlugs !== undefined) {
+          useAppStore.setState({
+            hiddenPresetSlugs: prefs.hiddenPresetSlugs,
+          });
+        }
+        if (prefs.presetAnchor !== undefined) {
+          useAppStore.setState({
+            presetAnchor: isPresetAnchor(prefs.presetAnchor)
+              ? prefs.presetAnchor
+              : null,
+          });
+        }
       } finally {
         _suppressRxDBWrites = false;
       }
@@ -440,6 +488,8 @@ export function initializeDeviceSync(): void {
         hasOnboarded: s.hasOnboarded,
         selectedForecastModel: s.selectedForecastModel,
         homeLocation: s.homeLocation,
+        hiddenPresetSlugs: s.hiddenPresetSlugs,
+        presetAnchor: s.presetAnchor,
       };
     },
   })
