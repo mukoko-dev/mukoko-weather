@@ -184,11 +184,29 @@ The old analyzer names may have silently fallen through to Atlas defaults — th
 
 All workflows use `concurrency` groups with `cancel-in-progress: true` — rapid pushes cancel stale runs instead of creating zombie checks.
 
-| Workflow      | Trigger                           | Purpose                                                                                                                                             |
-| ------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci.yml`      | Push/PR to `main`                 | Single job: lint → typecheck → TypeScript tests → Python tests. All steps appear under one check in the GitHub PR UI.                               |
-| `codeql.yml`  | Push/PR to `main`                 | CodeQL security scanning for JavaScript/TypeScript, Python, and GitHub Actions workflows. Matrix strategy runs all 3 language analyses in parallel. |
-| `db-init.yml` | Vercel production deploy succeeds | Syncs seed data to MongoDB (locations, activities, rules, prompts)                                                                                  |
+| Workflow         | Trigger                           | Purpose                                                                                                                                                   |
+| ---------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`         | Push/PR to `main`                 | Single job: lint → typecheck → TypeScript tests → Python tests. All steps appear under one check in the GitHub PR UI.                                     |
+| `codeql.yml`     | Push/PR to `main`                 | CodeQL security scanning for JavaScript/TypeScript, Python, and GitHub Actions workflows. Matrix strategy runs all 3 language analyses in parallel.       |
+| `db-init.yml`    | Vercel production deploy succeeds | Syncs seed data to MongoDB (locations, activities, rules, prompts)                                                                                        |
+| `release-pr.yml` | Manual (`workflow_dispatch`)      | Cuts `release/<date>` from `staging`, asserts main's content is already in staging, records main with `git merge -s ours`, opens the release PR to `main` |
+
+## Releases
+
+`staging` is released to `main` with a **squash** merge. A squash commit has no parent on `staging`, so after one release the next `staging → main` PR sees main's squash commit as unknown history. GitHub then marks the PR as conflicting ("dirty"), even when the content is identical.
+
+To open a release PR, never open `staging → main` by hand. Run the **Release PR** workflow instead (`.github/workflows/release-pr.yml`, Actions → Release PR → Run workflow). The optional `date` input defaults to today in UTC. The workflow:
+
+1. Creates `release/<date>` from `origin/staging`. It fails if that branch already exists.
+2. Asserts that main's content is already in staging. Each file on `main` must either match staging's blob at the same path or appear somewhere in staging's history. If neither holds, the workflow fails loudly and names each file, which usually means a hotfix landed on `main` without being merged back. Merge `main` into `staging` and rerun.
+3. Runs `git merge -s ours origin/main -m "chore: record main in release history"`. This records `main` as a parent while the tree stays exactly staging's, and the workflow verifies that.
+4. Pushes the branch and opens the PR to `main` with `RELEASE_BUMP_TOKEN`, so CI runs on it.
+
+Squash-merge that PR. Because `main` is already in the branch's history, the squash is always clean.
+
+Once the release is on `main`, tag it with the `tag-release` workflow (Actions → tag-release → Run workflow). It tags the tip of `main` as the next version (`bump`, default patch, or an explicit `vX.Y.Z`) and publishes the GitHub release, using `RELEASE_BUMP_TOKEN`.
+
+The release PR is opened with `RELEASE_BUMP_TOKEN` (an org secret), so CI runs on it like any other PR. The workflow fails before it touches git if that secret is missing. A PR opened with `GITHUB_TOKEN` does not start CI.
 
 ## Reporting Issues
 

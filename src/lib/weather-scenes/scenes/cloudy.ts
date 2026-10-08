@@ -1,8 +1,10 @@
 import type { WeatherSceneConfig, SceneElements } from "../types";
+import { getScenePalette } from "../palette";
+import { scatter, softPointsMaterial, softSprite } from "./shared";
 
 /**
- * Overcast scene.
- * Dense layered cloud particles, no visible sun, grey tones, muted palette.
+ * Overcast scene. Colours: palette.ts (`cloudy`) — flat greys, no sun.
+ * Two layered cloud decks drifting at slightly different speeds.
  */
 export function buildCloudyScene(
   THREE: typeof import("three"),
@@ -10,74 +12,70 @@ export function buildCloudyScene(
   config: WeatherSceneConfig,
 ): SceneElements {
   const { isDay, isMobile } = config;
+  const p = getScenePalette("cloudy", isDay, config.phase);
+  const sprite = softSprite(THREE);
   const disposables: { dispose(): void }[] = [];
+  if (sprite) disposables.push(sprite);
 
-  scene.fog = new THREE.FogExp2(isDay ? 0x9aa8b8 : 0x181c24, 0.018);
+  scene.fog = new THREE.FogExp2(p.fog, 0.018);
 
-  // Dense upper cloud layer
-  const UPPER_COUNT = isMobile ? 20 : 40;
-  const upperPos = new Float32Array(UPPER_COUNT * 3);
-  for (let i = 0; i < UPPER_COUNT; i++) {
-    upperPos[i * 3] = (Math.random() - 0.5) * 45;
-    upperPos[i * 3 + 1] = 6 + Math.random() * 6;
-    upperPos[i * 3 + 2] = -5 + (Math.random() - 0.5) * 20;
-  }
+  // Upper deck (lit)
+  const UPPER_COUNT = isMobile ? 22 : 44;
   const upperGeo = new THREE.BufferGeometry();
-  upperGeo.setAttribute("position", new THREE.BufferAttribute(upperPos, 3));
-  const upperMat = new THREE.PointsMaterial({
-    color: isDay ? 0xd4d4d4 : 0x666678,
-    size: 2.0,
-    transparent: true,
-    opacity: 0.42,
+  upperGeo.setAttribute(
+    "position",
+    new THREE.BufferAttribute(
+      scatter(UPPER_COUNT, [-22.5, 22.5], [6, 12], [-15, 5]),
+      3,
+    ),
+  );
+  const upperMat = softPointsMaterial(THREE, sprite, {
+    color: p.cloud,
+    size: 6,
+    opacity: 0.6,
   });
-  const upper = new THREE.Points(upperGeo, upperMat);
-  scene.add(upper);
+  scene.add(new THREE.Points(upperGeo, upperMat));
   disposables.push(upperGeo, upperMat);
 
-  // Mid cloud layer
-  const MID_COUNT = isMobile ? 15 : 30;
-  const midPos = new Float32Array(MID_COUNT * 3);
-  for (let i = 0; i < MID_COUNT; i++) {
-    midPos[i * 3] = (Math.random() - 0.5) * 40;
-    midPos[i * 3 + 1] = 2 + Math.random() * 5;
-    midPos[i * 3 + 2] = -3 + (Math.random() - 0.5) * 15;
-  }
+  // Lower deck (shaded)
+  const MID_COUNT = isMobile ? 16 : 32;
   const midGeo = new THREE.BufferGeometry();
-  midGeo.setAttribute("position", new THREE.BufferAttribute(midPos, 3));
-  const midMat = new THREE.PointsMaterial({
-    color: isDay ? 0xc4c4c4 : 0x555568,
-    size: 1.6,
-    transparent: true,
-    opacity: 0.34,
+  midGeo.setAttribute(
+    "position",
+    new THREE.BufferAttribute(
+      scatter(MID_COUNT, [-20, 20], [1, 7], [-10, 4]),
+      3,
+    ),
+  );
+  const midMat = softPointsMaterial(THREE, sprite, {
+    color: p.cloudShade,
+    size: 5,
+    opacity: 0.55,
   });
-  const mid = new THREE.Points(midGeo, midMat);
-  scene.add(mid);
+  scene.add(new THREE.Points(midGeo, midMat));
   disposables.push(midGeo, midMat);
+
+  const drift = (
+    geo: InstanceType<typeof THREE.BufferGeometry>,
+    n: number,
+    dx: number,
+    wrap: number,
+  ) => {
+    const pos = geo.attributes.position as InstanceType<
+      typeof THREE.BufferAttribute
+    >;
+    for (let i = 0; i < n; i++) {
+      pos.array[i * 3] += dx;
+      if (pos.array[i * 3] > wrap) pos.array[i * 3] = -wrap;
+    }
+    pos.needsUpdate = true;
+  };
 
   return {
     update(elapsed) {
-      // Upper layer drifts slowly right
-      const upos = upperGeo.attributes.position as InstanceType<
-        typeof THREE.BufferAttribute
-      >;
-      for (let i = 0; i < UPPER_COUNT; i++) {
-        upos.array[i * 3] += 0.004;
-        if (upos.array[i * 3] > 24) upos.array[i * 3] = -24;
-      }
-      upos.needsUpdate = true;
-
-      // Mid layer drifts slightly faster
-      const mpos = midGeo.attributes.position as InstanceType<
-        typeof THREE.BufferAttribute
-      >;
-      for (let i = 0; i < MID_COUNT; i++) {
-        mpos.array[i * 3] += 0.006;
-        if (mpos.array[i * 3] > 22) mpos.array[i * 3] = -22;
-      }
-      mpos.needsUpdate = true;
-
-      // Subtle opacity pulse
-      upperMat.opacity = 0.42 + Math.sin(elapsed * 0.5) * 0.05;
+      drift(upperGeo, UPPER_COUNT, 0.004, 24);
+      drift(midGeo, MID_COUNT, 0.006, 22);
+      upperMat.opacity = 0.6 + Math.sin(elapsed * 0.5) * 0.05;
     },
     dispose() {
       for (const d of disposables) d.dispose();

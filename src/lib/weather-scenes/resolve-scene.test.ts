@@ -27,6 +27,16 @@ describe("resolveScene", () => {
       expect(resolveScene(45)).toBe("fog");
     });
 
+    it("maps WMO 04–09 / 30–35 (smoke, haze, dust, sand) to haze", () => {
+      for (const code of [4, 5, 6, 7, 8, 9, 30, 31, 32, 33, 34, 35]) {
+        expect(resolveScene(code)).toBe("haze");
+      }
+    });
+
+    it("does not override haze to windy", () => {
+      expect(resolveScene(5, 60)).toBe("haze");
+    });
+
     it("maps WMO 48 (Depositing rime fog) to fog", () => {
       expect(resolveScene(48)).toBe("fog");
     });

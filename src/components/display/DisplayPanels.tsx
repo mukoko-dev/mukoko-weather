@@ -12,6 +12,7 @@ import {
   type WeatherData,
 } from "@/lib/weather";
 import { formatDayName, formatTemp, formatTime } from "@/lib/i18n";
+import { locationClockLabel, weatherOffsetSeconds } from "@/lib/location-time";
 import { useHydrated } from "@/lib/use-hydrated";
 import {
   AQI_ADVICE,
@@ -336,8 +337,11 @@ export function DisplayRadar({
 export function DisplayHours({ weather }: { weather: WeatherData }) {
   const hydrated = useHydrated();
   const h = weather.hourly;
+  const offset = weatherOffsetSeconds(weather);
   // Every 2 hours for the next 16 — eight readable cells across a TV.
-  const idxs = hydrated ? nextHourIndexes(h.time, new Date(), 8, 2) : [];
+  const idxs = hydrated
+    ? nextHourIndexes(h.time, new Date(), 8, 2, weather.utc_offset_seconds)
+    : [];
 
   return (
     <section aria-labelledby="display-hours-heading" className="acacia p-4">
@@ -350,7 +354,7 @@ export function DisplayHours({ weather }: { weather: WeatherData }) {
           return (
             <li key={h.time[i]} className="flex flex-col items-center gap-1">
               <span className="text-sm text-text-secondary">
-                {n === 0 ? "Now" : formatTime(new Date(h.time[i]))}
+                {n === 0 ? "Now" : locationClockLabel(h.time[i], offset)}
               </span>
               <span aria-hidden="true" className="shrink-0">
                 <WeatherIcon icon={info.icon} size={32} />
@@ -415,7 +419,12 @@ export function DisplayOutlook({ weather }: { weather: WeatherData }) {
   const summary = hydrated
     ? hourlySummary(
         weather.hourly,
-        currentHourIndex(weather.hourly.time, new Date()),
+        currentHourIndex(
+          weather.hourly.time,
+          new Date(),
+          weather.utc_offset_seconds,
+        ),
+        weather.utc_offset_seconds,
       )
     : null;
   const sunrise = weather.daily.sunrise?.[0];
@@ -443,7 +452,7 @@ export function DisplayOutlook({ weather }: { weather: WeatherData }) {
               </span>
               <dt className="sr-only">Sunrise</dt>
               <dd className="font-semibold tabular-nums text-text-primary">
-                {formatTime(new Date(sunrise))}
+                {locationClockLabel(sunrise, weatherOffsetSeconds(weather))}
               </dd>
             </div>
           )}
@@ -454,7 +463,7 @@ export function DisplayOutlook({ weather }: { weather: WeatherData }) {
               </span>
               <dt className="sr-only">Sunset</dt>
               <dd className="font-semibold tabular-nums text-text-primary">
-                {formatTime(new Date(sunset))}
+                {locationClockLabel(sunset, weatherOffsetSeconds(weather))}
               </dd>
             </div>
           )}

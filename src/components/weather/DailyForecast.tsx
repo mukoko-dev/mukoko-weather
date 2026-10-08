@@ -38,13 +38,19 @@ export function DailyForecast({ daily }: Props) {
           aria-label="7-day weather forecast"
         >
           {daily.time.map((date, i) => {
-            const d = new Date(date);
+            // Daily dates are the LOCATION's calendar days ("YYYY-MM-DD").
+            // Read them as a UTC calendar date so a viewer west of UTC never
+            // sees "2026-10-08" as Wednesday the 7th.
+            const d = new Date(`${date.slice(0, 10)}T12:00:00Z`);
             const info = weatherCodeToInfo(daily.weather_code[i]);
             const isToday = i === 0;
             const dayName = isToday
               ? "Today"
-              : d.toLocaleDateString("en-ZW", { weekday: "short" });
-            const dateNum = d.getDate();
+              : d.toLocaleDateString("en-ZW", {
+                  weekday: "short",
+                  timeZone: "UTC",
+                });
+            const dateNum = d.getUTCDate();
             const high = Math.round(daily.temperature_2m_max[i]);
             const low = Math.round(daily.temperature_2m_min[i]);
             const feelsHigh = Math.round(daily.apparent_temperature_max[i]);

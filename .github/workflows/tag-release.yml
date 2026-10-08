@@ -1,0 +1,177 @@
+# Tag a main release and publish its GitHub release in one click.
+#
+# Tag pushes from agent sessions are blocked, so tagging happens here, with
+# RELEASE_BUMP_TOKEN (an org secret). It tags the tip of origin/main, or an
+# explicit commit that must be an ancestor of origin/main, as the next
+# semver after the latest v* tag: bump patch/minor/major, or pass an exact
+# vX.Y.Z that is greater than the latest. It refuses to reuse a tag or to
+# tag a commit that already carries a v* tag.
+#
+# Run it from the Actions tab after the release PR is squash-merged into
+# main. Patch tags on staging come from staging-version.yml, not from here.
+
+name: tag-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the latest v* tag to bump.
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      version:
+        description: Exact version to tag (vX.Y.Z). Overrides bump.
+        required: false
+        type: string
+      ref:
+        description: Commit SHA to tag. Defaults to the tip of origin/main; must be an ancestor of origin/main.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tag-release
+  cancel-in-progress: false
+
+jobs:
+  tag-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Require RELEASE_BUMP_TOKEN
+        env:
+          RELEASE_BUMP_TOKEN: ${{ secrets.RELEASE_BUMP_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_BUMP_TOKEN" ]; then
+            echo "::error::RELEASE_BUMP_TOKEN is empty. The org secret may not be shared with this repo; grant it access, then re-run."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_BUMP_TOKEN }}
+
+      - name: Fetch main and tags
+        run: |
+          set -euo pipefail
+          git fetch --quiet --force --tags origin main
+
+      - name: Resolve the commit to tag
+        id: target
+        env:
+          INPUT_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          if [ -z "$INPUT_REF" ]; then
+            SHA=$(git rev-parse --verify 'origin/main^{commit}')
+          else
+            if ! [[ "$INPUT_REF" =~ ^[0-9a-f]{7,40}$ ]]; then
+              echo "::error::ref must be a commit SHA (7-40 lowercase hex), got '$INPUT_REF'."
+              exit 1
+            fi
+            if ! SHA=$(git rev-parse --verify --quiet "$INPUT_REF^{commit}"); then
+              echo "::error::ref $INPUT_REF is not a commit in this repo."
+              exit 1
+            fi
+          fi
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::error::$SHA is not an ancestor of origin/main. Only commits on main are tagged here."
+            exit 1
+          fi
+          EXISTING=$(git tag --points-at "$SHA" --list 'v*')
+          if [ -n "$EXISTING" ]; then
+            echo "::error::$SHA is already tagged: $(echo "$EXISTING" | tr '\n' ' ')"
+            exit 1
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Compute the next version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          SEMVER='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          # Latest stable v* tag; prereleases (v1.2.3-rc.1) are ignored.
+          PREV=$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -E "$SEMVER" | head -n 1 || true)
+          BASE="${PREV:-v0.0.0}"
+          IFS=. read -r MAJOR MINOR PATCH <<< "${BASE#v}"
+          if [ -n "$INPUT_VERSION" ]; then
+            if ! [[ "$INPUT_VERSION" =~ $SEMVER ]]; then
+              echo "::error::version must match vX.Y.Z, got '$INPUT_VERSION'."
+              exit 1
+            fi
+            TAG="$INPUT_VERSION"
+            HIGHEST=$(printf '%s\n%s\n' "$BASE" "$TAG" | sort -V | tail -n 1)
+            if [ "$TAG" = "$BASE" ] || [ "$HIGHEST" != "$TAG" ]; then
+              echo "::error::$TAG must be greater than the latest tag $BASE."
+              exit 1
+            fi
+          else
+            case "$BUMP" in
+              major) TAG="v$((MAJOR + 1)).0.0" ;;
+              minor) TAG="v$MAJOR.$((MINOR + 1)).0" ;;
+              patch) TAG="v$MAJOR.$MINOR.$((PATCH + 1))" ;;
+              *)
+                echo "::error::bump must be patch, minor or major, got '$BUMP'."
+                exit 1
+                ;;
+            esac
+          fi
+          if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null \
+            || git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "::error::Tag $TAG already exists."
+            exit 1
+          fi
+          echo "Latest tag: ${PREV:-none}. Next: $TAG."
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "prev=$PREV" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push the tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            tag -a "$TAG" "$SHA" -m "Release $TAG"
+          git push origin "refs/tags/$TAG"
+
+      - name: Publish the GitHub release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_BUMP_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.version.outputs.tag }}
+          PREV: ${{ steps.version.outputs.prev }}
+        run: |
+          set -euo pipefail
+          ARGS=(--verify-tag --generate-notes --title "$TAG")
+          if [ -n "$PREV" ]; then
+            ARGS+=(--notes-start-tag "$PREV")
+          fi
+          URL=$(gh release create "$TAG" "${ARGS[@]}")
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Write the summary
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          SHA: ${{ steps.target.outputs.sha }}
+          URL: ${{ steps.release.outputs.url }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Tagged $TAG"
+            echo
+            echo "- Tag: \`$TAG\`"
+            echo "- Commit: \`$SHA\`"
+            echo "- Release: $URL"
+          } >> "$GITHUB_STEP_SUMMARY"

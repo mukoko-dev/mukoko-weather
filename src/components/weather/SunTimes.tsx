@@ -1,30 +1,28 @@
 import { SunriseIcon, SunsetIcon, SunIcon } from "@/lib/weather-icons";
 import type { DailyWeather } from "@/lib/weather";
+import {
+  resolveOffsetSeconds,
+  wallClockMs,
+  wallClockLabel,
+} from "@/lib/location-time";
 
 interface Props {
   daily: DailyWeather;
+  /** The location's UTC offset (payload `utc_offset_seconds`) — sunrise and
+   *  sunset show the PLACE's local time, wherever the viewer is. */
+  utcOffsetSeconds?: number;
 }
 
-export function SunTimes({ daily }: Props) {
-  const sunriseRaw = daily.sunrise?.[0];
-  const sunsetRaw = daily.sunset?.[0];
-  const sunrise = sunriseRaw != null ? new Date(sunriseRaw) : null;
-  const sunset = sunsetRaw != null ? new Date(sunsetRaw) : null;
+export function SunTimes({ daily, utcOffsetSeconds }: Props) {
+  const offset = resolveOffsetSeconds(utcOffsetSeconds);
+  const sunrise = wallClockMs(daily.sunrise?.[0], offset);
+  const sunset = wallClockMs(daily.sunset?.[0], offset);
 
-  const isValid = (d: Date | null): d is Date =>
-    d != null && !Number.isNaN(d.getTime());
+  const fmt = (wall: number | null) =>
+    wall === null ? "--:--" : wallClockLabel(wall);
 
-  const fmt = (d: Date | null) =>
-    isValid(d)
-      ? d.toLocaleTimeString("en-ZW", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        })
-      : "--:--";
-
-  const hasDaylight = isValid(sunrise) && isValid(sunset);
-  const daylightMs = hasDaylight ? sunset.getTime() - sunrise.getTime() : 0;
+  const hasDaylight = sunrise !== null && sunset !== null;
+  const daylightMs = hasDaylight ? sunset - sunrise : 0;
   const daylightHours = hasDaylight
     ? Math.floor(daylightMs / (1000 * 60 * 60))
     : 0;

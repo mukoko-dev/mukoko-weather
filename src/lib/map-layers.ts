@@ -95,13 +95,11 @@ export const MAP_LAYERS: MapLayer[] = [
 ];
 
 /**
- * Cloud cover is the default overlay — it renders reliably (a non-time-indexed
- * Tomorrow.io field, like temperature) whereas the precipitation radar tile can
- * 400 without a valid recent timestamp. Defaulting to a known-good layer means
- * the map opens with a working overlay instead of an error banner. Cloud is also
- * the most flight-relevant layer (see aviation ceilings work).
+ * Rain is the default map layer (design brief: the map opens on precipitation).
+ * The proxy accepts the `now` timestamp for every tile layer, so the default
+ * opens without a timestamp error. Matches DISPLAY_DEFAULT_LAYER.
  */
-export const DEFAULT_LAYER = "cloudCover";
+export const DEFAULT_LAYER = "precipitationIntensity";
 
 export function getMapLayerById(id: string): MapLayer | undefined {
   return MAP_LAYERS.find((l) => l.id === id);
@@ -139,8 +137,13 @@ export const WEATHER_OVERLAY_ID = "weather-overlay";
  * MapLibre substitutes {z}/{x}/{y} at request time. Tiles are proxied through
  * the Python backend (`/api/py/map-tiles`) so the Tomorrow.io key stays server-side.
  */
-export function weatherOverlayTileUrl(layerId: string): string {
-  return `/api/py/map-tiles?z={z}&x={x}&y={y}&layer=${encodeURIComponent(layerId)}`;
+export function weatherOverlayTileUrl(
+  layerId: string,
+  timestamp?: string,
+): string {
+  const base = `/api/py/map-tiles?z={z}&x={x}&y={y}&layer=${encodeURIComponent(layerId)}`;
+  if (!timestamp || timestamp === "now") return base;
+  return `${base}&timestamp=${encodeURIComponent(timestamp)}`;
 }
 
 /**
@@ -148,12 +151,197 @@ export function weatherOverlayTileUrl(layerId: string): string {
  * to the Tomorrow.io tile availability range so the overlay keeps rendering
  * (via overzoom) at high map zooms instead of silently disappearing.
  */
-export function buildWeatherOverlaySource(layerId: string) {
+export function buildWeatherOverlaySource(layerId: string, timestamp?: string) {
   return {
     type: "raster" as const,
-    tiles: [weatherOverlayTileUrl(layerId)],
+    tiles: [weatherOverlayTileUrl(layerId, timestamp)],
     tileSize: 256,
     minzoom: WEATHER_OVERLAY_MIN_ZOOM,
     maxzoom: WEATHER_OVERLAY_MAX_ZOOM,
   };
+}
+
+/**
+ * Source/layer id for the AQI grid overlay (Air Quality Map card). Kept
+ * separate from WEATHER_OVERLAY_ID so the two can be shown together without
+ * one clearing the other.
+ */
+export const AQI_OVERLAY_ID = "aqi-overlay";
+
+/* ------------------------------------------------------------------------ *
+ * Full-screen map: chips, legends, timeline
+ * ------------------------------------------------------------------------ */
+
+/** Chip id for the air-quality view. It is NOT a Tomorrow.io tile layer. */
+export const AIR_QUALITY_LAYER_ID = "airQuality";
+
+/** One colour step on a legend scale. `className` is a static Tailwind class. */
+export interface LegendSegment {
+  className: string;
+  /** Value where this segment starts (the first label reads "0" or "Now"-style text). */
+  label: string;
+}
+
+export interface LayerLegend {
+  /** Unit shown next to the scale title, e.g. "mm/h". */
+  unit: string;
+  segments: LegendSegment[];
+}
+
+/** A labelled chip in the bottom sheet. */
+export interface MapChip {
+  id: string;
+  label: string;
+  legend: LayerLegend;
+}
+
+/**
+ * Tile layers whose Tomorrow.io tiles accept forecast timestamps, so the
+ * timeline scrubber is offered for them. Other layers hide the scrubber and
+ * always show the current ("now") tile. Only rain is listed: the other layers
+ * are not verified against forecast timestamps. Verify against the live tile
+ * API before widening this set.
+ */
+export const TIMELINE_LAYER_IDS: readonly string[] = ["precipitationIntensity"];
+
+/** Hours between timeline stops. */
+export const TIMELINE_STEP_HOURS = 3;
+/** Stops from Now (0) through +72h inclusive: 0, 3, …, 72. */
+export const TIMELINE_STEPS = 25;
+
+export function layerSupportsTimeline(layerId: string): boolean {
+  return TIMELINE_LAYER_IDS.includes(layerId);
+}
+
+/**
+ * Tomorrow.io tile timestamp for a timeline stop. Step 0 is `now`. Later steps
+ * are whole UTC hours in the form the proxy validates
+ * (`YYYY-MM-DDTHH:00:00Z`).
+ */
+export function timelineTimestamp(step: number, now: Date): string {
+  if (step <= 0) return "now";
+  const base = new Date(now.getTime());
+  base.setUTCMinutes(0, 0, 0);
+  base.setTime(base.getTime() + step * TIMELINE_STEP_HOURS * 3_600_000);
+  return `${base.toISOString().slice(0, 19)}Z`;
+}
+
+/** Short label for a timeline stop: "Now", "+3h", "+1d". */
+export function timelineLabel(step: number): string {
+  if (step <= 0) return "Now";
+  const hours = step * TIMELINE_STEP_HOURS;
+  if (hours % 24 === 0) return `+${hours / 24}d`;
+  return `+${hours}h`;
+}
+
+/** Legend for US AQI, using the severity tokens shared with the grid fill. */
+export const AQI_LEGEND: LayerLegend = {
+  unit: "US AQI",
+  segments: [
+    { className: "bg-severity-low", label: "0" },
+    { className: "bg-severity-moderate", label: "51" },
+    { className: "bg-severity-high", label: "101" },
+    { className: "bg-severity-severe", label: "151" },
+    { className: "bg-severity-extreme", label: "201+" },
+  ],
+};
+
+/** Chips in display order. Air quality first, then the four tile layers. */
+export const MAP_CHIPS: readonly MapChip[] = [
+  {
+    id: AIR_QUALITY_LAYER_ID,
+    label: "Air quality",
+    legend: AQI_LEGEND,
+  },
+  {
+    id: "precipitationIntensity",
+    label: "Rain",
+    legend: {
+      unit: "mm/h",
+      segments: [
+        { className: "bg-severity-low", label: "0" },
+        { className: "bg-severity-moderate", label: "0.5" },
+        { className: "bg-severity-high", label: "2.5" },
+        { className: "bg-severity-severe", label: "10" },
+        { className: "bg-severity-extreme", label: "50+" },
+      ],
+    },
+  },
+  {
+    id: "temperature",
+    label: "Temperature",
+    legend: {
+      unit: "°C",
+      segments: [
+        { className: "bg-mineral-cobalt", label: "<10" },
+        { className: "bg-mineral-malachite", label: "15" },
+        { className: "bg-mineral-gold", label: "22" },
+        { className: "bg-mineral-terracotta/70", label: "30" },
+        { className: "bg-mineral-terracotta", label: "38+" },
+      ],
+    },
+  },
+  {
+    id: "windSpeed",
+    label: "Wind",
+    legend: {
+      unit: "km/h",
+      segments: [
+        { className: "bg-mineral-malachite/25", label: "0" },
+        { className: "bg-mineral-malachite/50", label: "10" },
+        { className: "bg-mineral-malachite/75", label: "25" },
+        { className: "bg-mineral-malachite", label: "40" },
+        { className: "bg-mineral-gold", label: "60+" },
+      ],
+    },
+  },
+  {
+    id: "cloudCover",
+    label: "Cloud",
+    legend: {
+      unit: "%",
+      segments: [
+        { className: "bg-text-tertiary/15", label: "0" },
+        { className: "bg-text-tertiary/35", label: "25" },
+        { className: "bg-text-tertiary/60", label: "50" },
+        { className: "bg-text-tertiary/85", label: "75" },
+        { className: "bg-text-tertiary", label: "100" },
+      ],
+    },
+  },
+];
+
+export function getMapChip(id: string): MapChip | undefined {
+  return MAP_CHIPS.find((c) => c.id === id);
+}
+
+/** localStorage key for the last chosen layer. */
+export const MAP_LAYER_STORAGE_KEY = "mukoko-map-layer";
+
+/**
+ * Reads the remembered layer. Returns null for a missing, unknown or
+ * unreadable value (private windows and blocked storage throw). Callers fall
+ * back to DEFAULT_LAYER.
+ */
+export function readStoredMapLayer(
+  storage: Pick<Storage, "getItem"> | null | undefined,
+): string | null {
+  try {
+    const value = storage?.getItem(MAP_LAYER_STORAGE_KEY);
+    return value && getMapChip(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Writes the layer choice. Storage failures are swallowed: the choice just isn't remembered. */
+export function writeStoredMapLayer(
+  storage: Pick<Storage, "setItem"> | null | undefined,
+  layerId: string,
+): void {
+  try {
+    storage?.setItem(MAP_LAYER_STORAGE_KEY, layerId);
+  } catch {
+    // Quota or blocked storage: the layer still changes, it just isn't remembered.
+  }
 }

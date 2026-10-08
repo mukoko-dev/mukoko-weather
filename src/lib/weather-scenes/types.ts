@@ -1,4 +1,5 @@
 import type * as THREE from "three";
+import type { SkyPhase } from "./palette";
 
 /** Weather scene types matching visual conditions */
 export type WeatherSceneType =
@@ -8,6 +9,7 @@ export type WeatherSceneType =
   | "rain"
   | "thunderstorm"
   | "fog"
+  | "haze"
   | "snow"
   | "windy";
 
@@ -15,6 +17,12 @@ export type WeatherSceneType =
 export interface WeatherSceneConfig {
   type: WeatherSceneType;
   isDay: boolean;
+  /**
+   * Optional twilight phase (see `skyPhase()` in palette.ts). "dawn"/"dusk"
+   * warm the horizon and sun for scenes where the horizon is visible; absent,
+   * the scene follows `isDay`.
+   */
+  phase?: SkyPhase;
   isMobile: boolean;
   temperature?: number;
   windSpeed?: number;

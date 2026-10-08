@@ -3,9 +3,16 @@
 import { useMemo } from "react";
 import { TimeSeriesChart, type SeriesConfig } from "./charts/TimeSeriesChart";
 import type { HourlyWeather } from "@/lib/weather";
+import {
+  currentHourIndex,
+  locationClockLabel,
+  resolveOffsetSeconds,
+} from "@/lib/location-time";
 
 interface Props {
   hourly: HourlyWeather;
+  /** The location's UTC offset (payload `utc_offset_seconds`). */
+  utcOffsetSeconds?: number;
 }
 
 export interface HourlyDataPoint {
@@ -16,29 +23,20 @@ export interface HourlyDataPoint {
 }
 
 /** Prepare 24-hour data slice starting from the current hour */
-export function prepareHourlyData(hourly: HourlyWeather): HourlyDataPoint[] {
-  const now = new Date();
-  const currentHour = now.getHours();
-  const startIndex = hourly.time.findIndex(
-    (t) =>
-      new Date(t).getHours() >= currentHour &&
-      new Date(t).getDate() === now.getDate(),
-  );
-  const start = startIndex >= 0 ? startIndex : 0;
+export function prepareHourlyData(
+  hourly: HourlyWeather,
+  offsetSeconds?: number | null,
+  now: Date = new Date(),
+): HourlyDataPoint[] {
+  // The LOCATION's current hour and labels — never the viewer's clock.
+  const offset = resolveOffsetSeconds(offsetSeconds, now);
+  const start = currentHourIndex(hourly.time, offset, now);
 
   const points: HourlyDataPoint[] = [];
   for (let i = 0; i < 24 && start + i < hourly.time.length; i++) {
     const idx = start + i;
-    const date = new Date(hourly.time[idx]);
     points.push({
-      label:
-        i === 0
-          ? "Now"
-          : date.toLocaleTimeString("en-ZW", {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false,
-            }),
+      label: i === 0 ? "Now" : locationClockLabel(hourly.time[idx], offset),
       temp: Math.round(hourly.temperature_2m[idx]),
       feelsLike: Math.round(hourly.apparent_temperature[idx]),
       rain: hourly.precipitation_probability[idx],
@@ -78,8 +76,11 @@ const Y_AXES = {
   rain: { position: "right" as const, min: 0, max: 100, display: false },
 };
 
-export function HourlyChart({ hourly }: Props) {
-  const data = useMemo(() => prepareHourlyData(hourly), [hourly]);
+export function HourlyChart({ hourly, utcOffsetSeconds }: Props) {
+  const data = useMemo(
+    () => prepareHourlyData(hourly, utcOffsetSeconds),
+    [hourly, utcOffsetSeconds],
+  );
 
   if (data.length < 2) return null;
 

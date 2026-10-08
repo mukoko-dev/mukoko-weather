@@ -33,7 +33,7 @@ export function MapPreview({ location }: MapPreviewProps) {
         {/* Non-interactive preview — z-0 prevents MapLibre controls bleeding over modals */}
         <Link
           href={`/${location.slug}/map`}
-          className="relative z-0 block w-full aspect-[16/9] focus-visible:outline-2 focus-visible:outline-primary"
+          className="relative z-0 block w-full aspect-square focus-visible:outline-2 focus-visible:outline-primary"
           aria-label={`Open weather map for ${location.name}`}
           tabIndex={0}
         >

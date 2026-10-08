@@ -64,11 +64,19 @@ describe("sub-route loading boundaries compose shared skeletons", () => {
     expect(mapLoading).not.toContain("grid-cols-4");
   });
 
-  it("every loading boundary keeps the header and breadcrumb skeletons", () => {
-    for (const src of [forecastLoading, atmosphereLoading, mapLoading]) {
+  it("forecast and atmosphere loading boundaries keep the header and breadcrumb skeletons", () => {
+    for (const src of [forecastLoading, atmosphereLoading]) {
       expect(src).toContain("<HeaderSkeleton />");
       expect(src).toContain("<BreadcrumbSkeleton");
     }
+  });
+
+  it("the full-screen map loading state is the map skeleton alone (no header or breadcrumb)", () => {
+    // The redesigned /{slug}/map is full-viewport with floating controls, so
+    // its loading boundary mirrors that instead of a header + breadcrumb page.
+    expect(mapLoading).toContain("h-[100dvh]");
+    expect(mapLoading).not.toContain("<HeaderSkeleton />");
+    expect(mapLoading).not.toContain("<BreadcrumbSkeleton");
   });
 });
 

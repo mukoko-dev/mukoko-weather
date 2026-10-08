@@ -80,7 +80,9 @@ export default async function ForecastPage({
   }
 
   const usingFallback = weatherSource === "fallback";
-  const frostAlert = usingFallback ? null : checkFrostRisk(weather.hourly);
+  const frostAlert = usingFallback
+    ? null
+    : checkFrostRisk(weather.hourly, weather.utc_offset_seconds);
   const season = await getSeasonForDate(
     new Date(),
     location.country ?? "",
