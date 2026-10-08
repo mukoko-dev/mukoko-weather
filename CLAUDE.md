@@ -205,7 +205,8 @@ mukoko-weather/
 │   │   │   ├── ExploreSearch.tsx     # AI-powered natural-language location search
 │   │   │   └── ExploreSearch.test.ts
 │   │   ├── layout/
-│   │   │   ├── Header.tsx            # Sticky header + mobile bottom nav (Weather/Explore/History/My Weather; Shamwari paused, see FLAGS.shamwari_chat)
+│   │   │   ├── Header.tsx            # Sticky header + mobile bottom bar (Map / page pager / List) + mobile ⋯ menu (Explore/History/Aviation/My Weather/Use my location)
+│   │   │   ├── LocationPager.tsx     # Bottom-bar page indicator (My Location glyph + saved-location dots) and useLocationSwipe (left = next location, right = previous)
 │   │   │   ├── HeaderSkeleton.tsx    # Header loading skeleton
 │   │   │   ├── Breadcrumb.tsx        # Shared Home / Location / Current-page trail (atmosphere, forecast, map sub-routes)
 │   │   │   ├── Breadcrumb.test.ts
@@ -1121,7 +1122,7 @@ All AI system prompts, suggested prompt rules, and model configurations are stor
 
 **Header** (`src/components/layout/Header.tsx`): Sticky header with the Mukoko logo on the left, desktop nav links in the center, and a pill-shaped icon group on the right.
 
-**Desktop nav links** (hidden on mobile, `sm:flex`): Explore | Shamwari | History | Aviation — text links with active state highlighting, plus a **My Weather** button (opens the My Weather modal — a button rather than a `Link` since it's not a route). My Weather intentionally lives in the text-nav row rather than the icon pill so anonymous desktop users keep a way to reach it (mobile has its own separate bottom-nav entry, unaffected by this). Shamwari is gated behind `FLAGS.shamwari_chat` (currently paused, see Feature Flags) and omitted from the array while off.
+**Desktop nav links** (hidden on mobile, `sm:flex`): Explore | Shamwari | History | Aviation — text links with active state highlighting, plus a **My Weather** button (opens the My Weather modal — a button rather than a `Link` since it's not a route). My Weather intentionally lives in the text-nav row rather than the icon pill so anonymous desktop users keep a way to reach it (mobile reaches these from the bottom bar and the header's ⋯ menu, see Mobile Bottom Bar below). Shamwari is gated behind `FLAGS.shamwari_chat` (currently paused, see Feature Flags) and omitted from the array while off.
 
 **Action pill** (`bg-primary`, 44px circular icon buttons — map, notifications, account only):
 
@@ -1135,14 +1136,17 @@ The header also renders `WeatherReportModal` (lazy-loaded, only mounts when `rep
 
 The header takes no props — location context comes from the URL path.
 
-**Mobile Bottom Navigation** (visible `sm:hidden`): Fixed floating-pill bottom nav with 5 always-on items, plus a 6th (Shamwari) gated behind `FLAGS.shamwari_chat` (currently paused, see Feature Flags):
+**Mobile Bottom Bar** (visible `sm:hidden`): an iOS Weather-style translucent, full-width bar pinned to the bottom edge and safe-area aware (`fixed inset-x-0 bottom-0`, `pb-[calc(env(safe-area-inset-bottom,0px)+0.625rem)]`). Three parts, all 48px touch targets (`--touch-target-min`):
 
-1. **Weather** (home icon) → `/`
-2. **Explore** (compass icon) → `/explore`
-3. **Shamwari** (sparkles icon) → `/shamwari` — hidden entirely while paused
-4. **My Location** (navigation-arrow button, centre slot) — GPS action, not a route: runs the shared `detectUserLocation({ autoCreate: true })` flow (via deferred `import("@/lib/geolocation")` so the header bundle stays lean), syncs `selectedLocation`, writes the `lastLocation` cookie (`writeLastLocationCookie`, `src/lib/current-slug.ts`) and goes to `/` — the home page IS the current-location page. Already on `/`, it dispatches `CURRENT_LOCATION_EVENT` instead and `CurrentLocationHome` swaps the dashboard in place. Shows a `Spinner` while locating (double-tap guarded, `aria-busy`). On denial/unavailability/error it opens the My Weather modal instead — its Location tab has search plus a geolocation retry with proper error copy. Fires `geolocation_result` and, on success, `location_changed` (`method: "geolocation"`) analytics events
-5. **History** (clock icon) → `/history`
-6. **My Weather** (map-pin button) → opens modal
+1. **Map** (left round button, Lucide `Map`) → `/${slug}/map` for the location on screen (`currentLocationSlug`); with no location yet it goes to `/explore`.
+2. **Page indicator** (centre pill, `LocationPager` in `src/components/layout/LocationPager.tsx`) — a location-arrow glyph for **My Location** (`/`, always index 0) followed by one dot per saved location (`savedLocations`, capped at 10 via `pagerDots`). The current page's dot is highlighted (`aria-current="page"`); tapping a dot navigates. The pill scrolls sideways and keeps the active item centred (`scrollbar-hide`, reduced-motion aware).
+3. **List** (right round button, Lucide `List`) → `/locations` (`aria-current` when active).
+
+Paging helpers are pure and tested in `src/lib/location-pager.ts` (`pagerSequence`, `pagerIndex`, `neighbour`, `pagerDots`). **Swipe** (`useLocationSwipe`, touch handlers from `src/lib/use-swipe.ts`) is wired on the `<main>` of `WeatherDashboard`: a left swipe goes to the next page in the pager sequence, a right swipe to the previous one, via `router.push`, and it stops at either end. A swipe needs ≥60px of travel with |dx| > 1.5·|dy| (`classifySwipe`); gestures that start inside `[data-no-swipe]` or an element that scrolls sideways (the hourly strip) are ignored. Swipe is off while sections are being reordered.
+
+**Mobile ⋯ menu** (header icon pill, `sm:hidden`): Explore, Shamwari (only while `FLAGS.shamwari_chat` is on), History, Aviation, My Weather (opens the modal) and Use my location (the GPS flow below). Disclosure pattern: `aria-expanded` / `aria-controls="mobile-more-menu"`, closes on activation, outside click or Escape (focus returns to the trigger). The header's map button is hidden on phones (`hidden sm:flex`) because the bottom bar's Map button replaces it.
+
+**My Location (GPS) action** — runs the shared `detectUserLocation({ autoCreate: true })` flow (via deferred `import("@/lib/geolocation")` so the header bundle stays lean), syncs `selectedLocation`, writes the `lastLocation` cookie (`writeLastLocationCookie`, `src/lib/current-slug.ts`) and goes to `/` — the home page IS the current-location page. Already on `/`, it dispatches `CURRENT_LOCATION_EVENT` instead and `CurrentLocationHome` swaps the dashboard in place. Shows a `Spinner` while locating (double-tap guarded, `aria-busy`). On denial/unavailability/error it opens the My Weather modal instead — its Location tab has search plus a geolocation retry with proper error copy. Fires `geolocation_result` and, on success, `location_changed` (`method: "geolocation"`) analytics events. Saved-location dot taps and swipes fire `location_changed` with `method: "saved"`.
 
 **My Weather Modal** (`src/components/weather/MyWeatherModal.tsx`): A centralized preferences modal (shadcn Dialog + Tabs) with three tabs:
 
