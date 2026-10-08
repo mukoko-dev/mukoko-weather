@@ -15,6 +15,8 @@ import re
 import unicodedata
 from typing import Optional
 
+from ._db import is_valid_coords
+
 # Base-32 alphabet, excluding a/i/l/o to avoid look-alike confusion.
 _BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz"
 
@@ -44,9 +46,7 @@ def encode_geohash(lat: float, lon: float, precision: int = DEFAULT_PRECISION) -
     except (TypeError, ValueError):
         return ""
 
-    if lat != lat or lon != lon:  # NaN
-        return ""
-    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+    if not is_valid_coords(lat, lon):
         return ""
 
     length = max(1, min(12, int(precision)))
