@@ -50,3 +50,11 @@ describe("ShamwariCTA variants", () => {
     expect(source).not.toContain("style={{");
   });
 });
+
+describe("ShamwariCTA — class composition", () => {
+  it("composes variant and caller classes with cn() instead of join", () => {
+    expect(source).toContain('import { cn } from "@/lib/utils"');
+    expect(source).toContain("cn(VARIANT_CLASSES[variant], className)");
+    expect(source).not.toContain(".filter(Boolean)");
+  });
+});

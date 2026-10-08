@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync, existsSync } from "fs";
+import { resolve } from "path";
 
 // ---------------------------------------------------------------------------
 // Alert — variant and export tests
@@ -439,5 +441,71 @@ describe("Spinner", () => {
       expect(source).toContain("<Spinner");
       expect(source).not.toContain("animate-spin rounded-full border-2");
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Shared primitive styling — touch target, rating badge, overlay token, fauna
+// ---------------------------------------------------------------------------
+
+describe("Button touch targets", () => {
+  it("default, sm and lg sizes carry the 48px touch-target minimum", async () => {
+    const { buttonVariants } = await import("./button");
+    for (const size of ["default", "sm", "lg"] as const) {
+      expect(buttonVariants({ size })).toContain(
+        "min-h-[var(--touch-target-min)]",
+      );
+    }
+  });
+
+  it("icon sizes keep their explicit square dimensions and skip the minimum", async () => {
+    const { buttonVariants } = await import("./button");
+    for (const size of ["icon", "icon-lg"] as const) {
+      expect(buttonVariants({ size })).not.toContain(
+        "min-h-[var(--touch-target-min)]",
+      );
+    }
+  });
+});
+
+describe("Badge rating variant", () => {
+  it("renders bold text on the badge radius with badge padding", async () => {
+    const { badgeVariants } = await import("./badge");
+    const classes = badgeVariants({ variant: "rating" });
+    expect(classes).toContain("font-bold");
+    expect(classes).toContain("rounded-[var(--radius-badge)]");
+    expect(classes).toContain("px-2.5");
+    expect(classes).toContain("py-0.5");
+  });
+});
+
+describe("Shared tokens and fauna (globals.css)", () => {
+  const css = readFileSync(
+    resolve(__dirname, "../../app/globals.css"),
+    "utf-8",
+  );
+
+  it("defines --color-overlay in light, dark and @theme registration", () => {
+    const declarations = css.match(/--color-overlay:/g) ?? [];
+    // :root + [data-theme="dark"] definitions, plus the @theme inline alias
+    expect(declarations.length).toBe(3);
+    expect(css).toContain("--color-overlay: var(--color-overlay);");
+  });
+
+  it("Dialog overlay uses the overlay token instead of bg-black/50", async () => {
+    const dialogSource = readFileSync(
+      resolve(__dirname, "dialog.tsx"),
+      "utf-8",
+    );
+    expect(dialogSource).toContain("bg-overlay");
+    expect(dialogSource).not.toContain("bg-black");
+  });
+
+  it("defines the .dikdik inline text-action class", () => {
+    expect(css).toMatch(/\.dikdik\s*\{/);
+  });
+
+  it("removed the Card primitive file", () => {
+    expect(existsSync(resolve(__dirname, "card.tsx"))).toBe(false);
   });
 });
