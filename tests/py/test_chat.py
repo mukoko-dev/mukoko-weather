@@ -15,10 +15,6 @@ from py._chat import (
     _execute_get_activity_advice,
     _execute_tool,
     SLUG_RE,
-    MAX_MESSAGE_LEN,
-    MAX_HISTORY,
-    MAX_ACTIVITIES,
-    _FALLBACK_CHAT_PROMPT,
 )
 from py._db import get_known_tags
 
@@ -412,8 +408,8 @@ class TestChatEndpointClaudeErrors:
         body = ChatRequest(message="Will it rain in Harare?")
         request = MagicMock()
         patches = [
-            patch("py._chat.check_rate_limit", return_value={"allowed": True}),
-            patch("py._chat.get_client_ip", return_value="203.0.113.7"),
+            patch("py._db.check_rate_limit", return_value={"allowed": True}),
+            patch("py._db.get_client_ip", return_value="203.0.113.7"),
             patch("py._chat.filter_known_activities", return_value=[]),
             patch("py._chat._build_chat_system_prompt", return_value="system"),
             patch("py._chat.get_ai_prompt", return_value=None),

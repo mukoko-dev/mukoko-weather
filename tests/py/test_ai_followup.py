@@ -10,7 +10,6 @@ from fastapi import HTTPException
 
 from py._ai_followup import (
     _build_followup_system_prompt,
-    _FALLBACK_SYSTEM_PROMPT,
     followup_chat,
     FollowupRequest,
     FollowupMessage,
@@ -189,7 +188,7 @@ class TestFollowupChatValidation:
         assert "Message too long" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    @patch("py._ai_followup.get_client_ip", return_value=None)
+    @patch("py._db.get_client_ip", return_value=None)
     async def test_no_ip_raises_400(self, _mock_ip):
         """When IP cannot be determined, should raise 400."""
         body = FollowupRequest(
@@ -205,8 +204,8 @@ class TestFollowupChatValidation:
         assert "Could not determine IP" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    @patch("py._ai_followup.check_rate_limit")
-    @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit")
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_rate_limit_exceeded_raises_429(self, _mock_ip, mock_rate):
         """Should raise 429 when rate limit is exceeded."""
         mock_rate.return_value = {"allowed": False, "remaining": 0}
@@ -243,8 +242,8 @@ class TestFollowupChatAI:
     @patch("py._anthropic.anthropic_breaker")
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
-    @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
-    @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_circuit_breaker_open_returns_error_response(
         self, _mock_ip, _mock_rate, _mock_prompt, mock_client, mock_breaker,
     ):
@@ -266,8 +265,8 @@ class TestFollowupChatAI:
     @patch("py._anthropic.anthropic_breaker")
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
-    @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
-    @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_successful_ai_call_returns_response(
         self, _mock_ip, _mock_rate, _mock_prompt, mock_client, mock_breaker,
     ):
@@ -297,8 +296,8 @@ class TestFollowupChatAI:
     @patch("py._anthropic.anthropic_breaker")
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
-    @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
-    @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_weather_summary_pre_seeded_as_first_assistant_message(
         self, _mock_ip, _mock_rate, _mock_prompt, mock_client, mock_breaker,
     ):
@@ -335,8 +334,8 @@ class TestFollowupChatAI:
     @patch("py._anthropic.anthropic_breaker")
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
-    @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
-    @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_no_summary_omits_assistant_preseed(
         self, _mock_ip, _mock_rate, _mock_prompt, mock_client, mock_breaker,
     ):
@@ -370,8 +369,8 @@ class TestFollowupChatAI:
     @patch("py._anthropic.anthropic_breaker")
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
-    @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
-    @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_history_truncated_to_max_history(
         self, _mock_ip, _mock_rate, _mock_prompt, mock_client, mock_breaker,
     ):
@@ -411,8 +410,8 @@ class TestFollowupChatAI:
     @patch("py._anthropic.anthropic_breaker")
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
-    @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
-    @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_message_content_truncated_to_max_len(
         self, _mock_ip, _mock_rate, _mock_prompt, mock_client, mock_breaker,
     ):
@@ -451,8 +450,8 @@ class TestFollowupChatAI:
     @patch("py._anthropic.anthropic_breaker")
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
-    @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
-    @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_ai_rate_limit_error_raises_429(
         self, _mock_ip, _mock_rate, _mock_prompt, mock_client, mock_breaker,
     ):
@@ -477,8 +476,8 @@ class TestFollowupChatAI:
     @patch("py._anthropic.anthropic_breaker")
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
-    @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
-    @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_ai_api_error_returns_graceful_fallback(
         self, _mock_ip, _mock_rate, _mock_prompt, mock_client, mock_breaker,
     ):
@@ -502,8 +501,8 @@ class TestFollowupChatAI:
     @patch("py._anthropic.anthropic_breaker")
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
-    @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
-    @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_message_at_exact_max_len_is_accepted(
         self, _mock_ip, _mock_rate, _mock_prompt, mock_client, mock_breaker,
     ):
@@ -531,8 +530,8 @@ class TestFollowupChatAI:
     @patch("py._anthropic.anthropic_breaker")
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
-    @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
-    @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_history_messages_preserved_in_order(
         self, _mock_ip, _mock_rate, _mock_prompt, mock_client, mock_breaker,
     ):

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import patch, MagicMock
 
-import pytest
 
 from py._airports import (
     nearest_airports,

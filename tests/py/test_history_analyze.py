@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock, PropertyMock
 
 import anthropic
@@ -12,7 +11,6 @@ from fastapi import HTTPException
 from py._history_analyze import (
     _aggregate_stats,
     _build_analysis_system_prompt,
-    _FALLBACK_SYSTEM_PROMPT,
     analyze_history,
     AnalyzeRequest,
     RATE_LIMIT_MAX,
@@ -325,7 +323,7 @@ class TestAnalyzeHistoryEndpoint:
         assert exc_info.value.status_code == 400
 
     @pytest.mark.asyncio
-    @patch("py._history_analyze.get_client_ip", return_value=None)
+    @patch("py._db.get_client_ip", return_value=None)
     async def test_no_ip_raises_400(self, _mock_ip):
         """When IP cannot be determined, should raise 400."""
         body = AnalyzeRequest(location="harare", days=30)
@@ -337,8 +335,8 @@ class TestAnalyzeHistoryEndpoint:
         assert "Could not determine IP" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    @patch("py._history_analyze.check_rate_limit")
-    @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit")
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_rate_limit_exceeded_raises_429(self, _mock_ip, mock_rate):
         """Should raise 429 when rate limit is exceeded."""
         mock_rate.return_value = {"allowed": False, "remaining": 0}
@@ -352,8 +350,8 @@ class TestAnalyzeHistoryEndpoint:
 
     @pytest.mark.asyncio
     @patch("py._history_analyze.find_location")
-    @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
-    @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_unknown_location_raises_404(self, _mock_ip, _mock_rate, mock_loc):
         """Non-existent location should return 404."""
         mock_loc.return_value = None
@@ -367,8 +365,8 @@ class TestAnalyzeHistoryEndpoint:
 
     @pytest.mark.asyncio
     @patch("py._history_analyze.find_location")
-    @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
-    @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_resolves_location_via_placesgeo_resolver(self, _mock_ip, _mock_rate, mock_loc):
         """Regression test: weather.locations is dropped (Phase 0F/0G) — this
         endpoint must resolve via find_location() (places.placesGeo), not a
@@ -385,8 +383,8 @@ class TestAnalyzeHistoryEndpoint:
     @pytest.mark.asyncio
     @patch("py._history_analyze.get_db")
     @patch("py._history_analyze.find_location")
-    @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
-    @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_no_history_data_raises_404(self, _mock_ip, _mock_rate, mock_loc, mock_db):
         """When no history records exist, should raise 404."""
         mock_loc.return_value = {"slug": "harare", "name": "Harare"}
@@ -407,8 +405,8 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
     @patch("py._history_analyze.find_location")
-    @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
-    @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_cache_hit_returns_cached_analysis(
         self, _mock_ip, _mock_rate, mock_loc, mock_db, mock_cache_coll
     ):
@@ -442,8 +440,8 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
     @patch("py._history_analyze.find_location")
-    @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
-    @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_lon_passed_to_get_season(
         self, _mock_ip, _mock_rate, mock_loc, mock_db,
         mock_cache_coll, _mock_prompt_get, mock_client, mock_breaker,
@@ -489,8 +487,8 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
     @patch("py._history_analyze.find_location")
-    @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
-    @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_circuit_breaker_open_returns_stats_only(
         self, _mock_ip, _mock_rate, mock_loc, mock_db,
         mock_cache_coll, _mock_prompt_build, _mock_prompt_get,
@@ -532,8 +530,8 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
     @patch("py._history_analyze.find_location")
-    @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
-    @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_successful_ai_call_returns_analysis(
         self, _mock_ip, _mock_rate, mock_loc, mock_db,
         mock_cache_coll, _mock_prompt_get, mock_client, mock_breaker,
@@ -583,8 +581,8 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
     @patch("py._history_analyze.find_location")
-    @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
-    @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_ai_rate_limit_error_raises_429(
         self, _mock_ip, _mock_rate, mock_loc, mock_db,
         mock_cache_coll, _mock_prompt_get, mock_client, mock_breaker,
@@ -622,8 +620,8 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
     @patch("py._history_analyze.find_location")
-    @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
-    @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_ai_api_error_returns_graceful_fallback(
         self, _mock_ip, _mock_rate, mock_loc, mock_db,
         mock_cache_coll, _mock_prompt_get, mock_client, mock_breaker,
@@ -663,8 +661,8 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
     @patch("py._history_analyze.find_location")
-    @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
-    @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     @patch("py._history_analyze.filter_known_activities", side_effect=lambda activities: activities)
     async def test_activities_included_in_user_prompt(
         self, _mock_filter, _mock_ip, _mock_rate, mock_loc, mock_db,
@@ -712,8 +710,8 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
     @patch("py._history_analyze.find_location")
-    @patch("py._history_analyze.check_rate_limit", return_value={"allowed": True, "remaining": 9})
-    @patch("py._history_analyze.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_no_activities_omits_activities_note(
         self, _mock_ip, _mock_rate, mock_loc, mock_db,
         mock_cache_coll, _mock_prompt_get, mock_client, mock_breaker,

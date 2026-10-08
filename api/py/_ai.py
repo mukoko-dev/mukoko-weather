@@ -15,7 +15,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ._db import get_db, get_client_ip, check_rate_limit, filter_known_activities, get_activities_brief, require_internal_caller
+from ._db import get_db, enforce_rate_limit, filter_known_activities, get_activities_brief, require_internal_caller
 from ._anthropic import call_claude, first_text
 from ._ai_prompts import get_ai_prompt
 
@@ -436,10 +436,7 @@ async def generate_summary(body: AISummaryRequest, request: Request = None):
     # and every request here is an unauthenticated cache write into the same
     # ai_summaries doc real visitors to the location page read. Rate-limit it
     # like every other write/AI endpoint to bound abuse.
-    ip = (get_client_ip(request) if request is not None else None) or "unknown"
-    rate = check_rate_limit(ip, "ai-summary", 30, 3600)
-    if not rate["allowed"]:
-        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+    enforce_rate_limit(request, "ai-summary", 30, 3600, require_ip=False)
 
     current_temp = weather_data.get("current", {}).get("temperature_2m", 0) or 0
     current_code = weather_data.get("current", {}).get("weather_code", 0) or 0

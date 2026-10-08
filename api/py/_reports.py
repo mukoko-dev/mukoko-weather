@@ -17,10 +17,10 @@ from typing import Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from ._db import (
-    check_rate_limit,
+    enforce_rate_limit,
     get_client_ip,
     weather_reports_collection,
     weather_cache_collection,
@@ -100,14 +100,8 @@ class UpvoteRequest(BaseModel):
 @router.post("/api/py/reports")
 async def submit_report(body: SubmitReportRequest, request: Request):
     """Submit a community weather report."""
-    ip = get_client_ip(request)
-    if not ip:
-        raise HTTPException(status_code=400, detail="Could not determine IP")
-
     # Rate limiting
-    rate = check_rate_limit(ip, "weather_report", SUBMIT_RATE_LIMIT, SUBMIT_RATE_WINDOW)
-    if not rate["allowed"]:
-        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+    ip = enforce_rate_limit(request, "weather_report", SUBMIT_RATE_LIMIT, SUBMIT_RATE_WINDOW)
 
     # Validate description length server-side (client maxLength=300 can be bypassed)
     if body.description and len(body.description) > 300:
@@ -288,17 +282,11 @@ async def upvote_report(body: UpvoteRequest, request: Request):
 @router.post("/api/py/reports/clarify")
 async def clarify_report(body: ClarifyRequest, request: Request):
     """Get AI-generated follow-up questions for a weather report."""
-    ip = get_client_ip(request)
-    if not ip:
-        raise HTTPException(status_code=400, detail="Could not determine IP")
-
     if body.reportType not in REPORT_TYPES:
         raise HTTPException(status_code=400, detail="Invalid report type")
 
     # Rate limit
-    rate = check_rate_limit(ip, "report_clarify", 10, 3600)
-    if not rate["allowed"]:
-        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+    enforce_rate_limit(request, "report_clarify", 10, 3600, detail="Rate limit exceeded")
 
     # Get location name (Phase 0G: places.placesGeo via canonical resolver)
     loc = find_location(body.locationSlug)

@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-import os
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -284,7 +283,7 @@ class TestSubmitReport:
         assert exc_info.value.status_code == 400
 
     @pytest.mark.asyncio
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_rate_limit_exceeded(self, mock_ip, mock_rate):
         mock_ip.return_value = "1.2.3.4"
@@ -295,7 +294,7 @@ class TestSubmitReport:
         assert exc_info.value.status_code == 429
 
     @pytest.mark.asyncio
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_description_too_long(self, mock_ip, mock_rate):
         mock_ip.return_value = "1.2.3.4"
@@ -311,7 +310,7 @@ class TestSubmitReport:
         assert "Description too long" in str(exc_info.value.detail)
 
     @pytest.mark.asyncio
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_invalid_report_type(self, mock_ip, mock_rate):
         mock_ip.return_value = "1.2.3.4"
@@ -326,7 +325,7 @@ class TestSubmitReport:
         assert "Invalid report type" in str(exc_info.value.detail)
 
     @pytest.mark.asyncio
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     @patch("py._reports.find_location")
     async def test_invalid_severity_defaults_to_moderate(self, mock_loc, mock_ip, mock_rate):
@@ -354,7 +353,7 @@ class TestSubmitReport:
             assert result["expiresIn"] == SEVERITY_TTL["moderate"]
 
     @pytest.mark.asyncio
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     @patch("py._reports.find_location")
     async def test_location_not_found(self, mock_loc, mock_ip, mock_rate):
@@ -372,7 +371,7 @@ class TestSubmitReport:
     @patch("py._reports.weather_cache_collection")
     @patch("py._reports.weather_reports_collection")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_successful_submission(self, mock_ip, mock_rate, mock_loc,
                                           mock_reports, mock_cache, mock_validate):
@@ -407,7 +406,7 @@ class TestSubmitReport:
     @patch("py._reports.weather_cache_collection")
     @patch("py._reports.weather_reports_collection")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_weather_snapshot_captured(self, mock_ip, mock_rate, mock_loc,
                                               mock_reports, mock_cache):
@@ -614,7 +613,7 @@ class TestClarifyReport:
         assert "Invalid report type" in str(exc_info.value.detail)
 
     @pytest.mark.asyncio
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_rate_limit_exceeded(self, mock_ip, mock_rate):
         mock_ip.return_value = "1.2.3.4"
@@ -627,7 +626,7 @@ class TestClarifyReport:
     @pytest.mark.asyncio
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_ai_unavailable_returns_fallback(self, mock_ip, mock_rate, mock_loc, mock_client):
         mock_ip.return_value = "1.2.3.4"
@@ -646,7 +645,7 @@ class TestClarifyReport:
     @patch("py._anthropic.anthropic_breaker")
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_circuit_open_returns_fallback(self, mock_ip, mock_rate, mock_loc,
                                                   mock_client, mock_breaker):
@@ -666,7 +665,7 @@ class TestClarifyReport:
     @patch("py._anthropic.anthropic_breaker")
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_ai_available_returns_parsed_questions(self, mock_ip, mock_rate, mock_loc,
                                                           mock_client, mock_breaker, mock_prompt):
@@ -697,7 +696,7 @@ class TestClarifyReport:
     @patch("py._anthropic.anthropic_breaker")
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_ai_error_falls_back(self, mock_ip, mock_rate, mock_loc,
                                         mock_client, mock_breaker, mock_prompt):
@@ -723,7 +722,7 @@ class TestClarifyReport:
     @patch("py._anthropic.anthropic_breaker")
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_ai_returns_no_numbered_lines_falls_back(self, mock_ip, mock_rate, mock_loc,
                                                             mock_client, mock_breaker, mock_prompt):
@@ -754,7 +753,7 @@ class TestClarifyReport:
     @patch("py._anthropic.anthropic_breaker")
     @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_ai_returns_more_than_2_questions_capped(self, mock_ip, mock_rate, mock_loc,
                                                             mock_client, mock_breaker, mock_prompt):

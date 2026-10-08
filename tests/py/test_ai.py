@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -16,7 +15,6 @@ from py._ai import (
     _resolve_seasons_with_ai,
     _trigger_background_season_resolution,
     _resolution_in_progress,
-    _resolution_lock,
     _COUNTRY_CODE_RE,
     _hemisphere_fallback,
     _is_stale,
@@ -940,7 +938,7 @@ class TestGenerateSummary:
         # stub it open by default so these tests exercise caching/AI logic,
         # not the rate limiter. See test_generate_summary_rate_limited below
         # for the dedicated rate-limit behavior test.
-        with patch("py._ai.check_rate_limit", return_value={"allowed": True, "remaining": 29}):
+        with patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29}):
             yield
 
     def _make_request(self, temp=25, code=0, activities=None):
@@ -962,7 +960,7 @@ class TestGenerateSummary:
         )
 
     @pytest.mark.asyncio
-    @patch("py._ai.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     async def test_generate_summary_rate_limited(self, mock_rate):
         """POST /api/py/ai is reachable directly (not just via the
         authenticated /api/ai/* proxy), and every call writes into the same
@@ -1244,7 +1242,7 @@ class TestPromptGrounding:
         )
 
     @pytest.mark.asyncio
-    @patch("py._ai.check_rate_limit", return_value={"allowed": True, "remaining": 29})
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._ai._set_cached_summary")
     @patch("py._ai.get_ai_prompt", return_value=None)
     @patch("py._ai._get_system_prompt", return_value="System prompt.")
