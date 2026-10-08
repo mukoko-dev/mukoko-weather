@@ -1,18 +1,28 @@
 "use client";
 
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import { ShareIcon, NavigationIcon } from "@/lib/weather-icons";
 import {
   weatherCodeToInfo,
   type CurrentWeather,
   type DailyWeather,
+  type HourlyWeather,
 } from "@/lib/weather";
 import { useAppStore } from "@/lib/store";
+import { getActivityById } from "@/lib/activities";
+import { feasibilitySeries } from "@/lib/activity-feasibility";
+import { fetchSuitabilityRules } from "@/lib/suitability-cache";
+import type { SuitabilityRuleDoc } from "@/lib/db";
 import {
+  PLATE_CLASS,
+  activityDotClass,
   formatHighLow,
+  heroActivityClause,
   heroBadgeLabel,
   heroEyebrowBadges,
+  heroOutlook,
   isHomeLocation,
+  plateFamily,
   type HeroBadge,
 } from "@/lib/hero";
 
@@ -22,11 +32,13 @@ interface Props {
   current: CurrentWeather;
   locationName: string;
   daily?: DailyWeather;
+  /** Hourly forecast — powers the one-sentence outlook and the activity clause. */
+  hourly?: HourlyWeather;
   slug?: string;
   /** GPS-confirmed current location (silent-URL home) — shows the
-   *  MY LOCATION eyebrow above the location name, Apple Weather style. */
+   *  MY LOCATION eyebrow above the location name. */
   isCurrentLocation?: boolean;
-  /** Quiet content rendered below the hero (the season line on the
+  /** Quiet content rendered below the sky plate (the season line on the
    *  location page). Kept as a slot so the hero stays a single block. */
   footer?: ReactNode;
 }
@@ -69,14 +81,16 @@ export function CurrentConditions({
   current,
   locationName,
   daily,
+  hourly,
   slug,
   isCurrentLocation = false,
   footer,
 }: Props) {
   const info = weatherCodeToInfo(current.weather_code);
+  const isDay = current.is_day === 1;
+  const family = plateFamily(current.weather_code, isDay);
   const temperature = Math.round(current.temperature_2m);
-  // Guard empty daily arrays — daily.temperature_2m_max[0] would be undefined
-  // and the formatter returns null instead of "H:NaN°".
+  // Guard empty daily arrays — the formatter returns null instead of "H:NaN°".
   const highLow = formatHighLow(
     daily?.temperature_2m_max?.[0],
     daily?.temperature_2m_min?.[0],
@@ -86,10 +100,67 @@ export function CurrentConditions({
   const homeLocation = useAppStore(
     (s) => (s as { homeLocation?: string | null }).homeLocation ?? null,
   );
+  const selectedActivities = useAppStore((s) => s.selectedActivities);
+  const openMyWeather = useAppStore((s) => s.openMyWeather);
   const badges = heroEyebrowBadges(
     isCurrentLocation,
     isHomeLocation(slug, homeLocation),
   );
+  const hasSelection = selectedActivities.length > 0;
+
+  // Client-only clock. The server runs in UTC, so the "current hour" used by
+  // the outlook and the activity clause is read after mount — no hydration drift.
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setNow(new Date()));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  // Suitability rules (module-level cache, 10-min TTL) — only needed when the
+  // visitor has picked activities.
+  const [dbRules, setDbRules] = useState<Map<string, SuitabilityRuleDoc>>(
+    () => new Map(),
+  );
+  useEffect(() => {
+    if (!hasSelection) return;
+    let cancelled = false;
+    fetchSuitabilityRules()
+      .then((rules) => {
+        if (cancelled || !rules.length) return;
+        const map = new Map<string, SuitabilityRuleDoc>();
+        for (const rule of rules) map.set(rule.key, rule);
+        setDbRules(map);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [hasSelection]);
+
+  const outlook = useMemo(
+    () => (now ? heroOutlook(hourly, now) : null),
+    [hourly, now],
+  );
+
+  // "For your activities": the first selected activity with a readable series.
+  const activityLine = useMemo(() => {
+    if (!now || !hourly || !hasSelection) return null;
+    for (const id of selectedActivities) {
+      const activity = getActivityById(id);
+      if (!activity) continue;
+      const clause = heroActivityClause(
+        feasibilitySeries(activity, hourly, dbRules),
+      );
+      if (clause) {
+        return {
+          label: activity.label,
+          dot: activityDotClass(activity.category),
+          clause,
+        };
+      }
+    }
+    return null;
+  }, [now, hourly, hasSelection, selectedActivities, dbRules]);
 
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
@@ -130,15 +201,17 @@ export function CurrentConditions({
   return (
     <section
       aria-labelledby="current-conditions-heading"
-      className="relative px-5 pt-6 pb-4 text-center sm:px-7 sm:pt-10"
+      className="relative px-3 sm:px-6"
     >
-      {/* Hero — iOS Weather style: one centred column, nothing competing.
-          Deliberately NOT a card: it reads directly over the page-level
-          WeatherBackdrop sky, and the backdrop's scrim keeps the text
-          tokens readable. */}
-      <div className="relative z-10 flex flex-col items-center">
+      {/* Sky plate — one solid mineral surface (no translucent material, no animation) that
+          holds the whole hero. Tint = condition family × day/night, see
+          src/lib/hero.ts. Rounded bottom corners only. */}
+      <div
+        data-plate={family}
+        className={`kori ${PLATE_CLASS[family]} relative z-10 flex flex-col items-center px-5 pt-7 pb-7 text-center sm:px-8 sm:pt-9`}
+      >
         {badges.length > 0 && (
-          <p className="mb-1 flex flex-wrap items-center justify-center gap-x-3 text-sm font-semibold uppercase tracking-widest text-text-tertiary">
+          <p className="mb-1 flex flex-wrap items-center justify-center gap-x-3 text-sm font-semibold uppercase tracking-widest opacity-90">
             {badges.map((badge) => (
               <EyebrowBadge key={badge} badge={badge} />
             ))}
@@ -146,48 +219,70 @@ export function CurrentConditions({
         )}
         <h2
           id="current-conditions-heading"
-          className="text-xl font-medium text-text-secondary sm:text-2xl"
+          className="font-heading text-2xl font-semibold sm:text-3xl"
         >
           {locationName}
         </h2>
-        <p className="mt-1 flex items-start justify-center leading-none tracking-tighter text-text-primary">
+        <p className="mt-1 flex items-start justify-center leading-none tracking-tight">
           <span className="sr-only">{temperature} degrees Celsius</span>
           <span
-            className="font-sans text-8xl font-normal sm:text-9xl"
+            className="font-heading text-8xl font-semibold tabular-nums sm:text-9xl"
             aria-hidden="true"
           >
             {temperature}
           </span>
           <span
-            className="font-sans text-5xl font-normal text-text-secondary sm:text-6xl"
+            className="font-heading text-5xl font-semibold sm:text-6xl"
             aria-hidden="true"
           >
             °
           </span>
         </p>
-        <p className="mt-2 text-xl font-semibold text-text-primary sm:text-2xl">
-          {info.label}
-        </p>
+        <p className="mt-2 text-xl font-semibold sm:text-2xl">{info.label}</p>
         {highLow && (
-          <p className="mt-1 whitespace-pre text-lg text-text-secondary">
+          <p className="mt-1 whitespace-pre text-lg font-medium tabular-nums">
             {highLow}
           </p>
+        )}
+        {outlook && (
+          <p className="mt-4 max-w-md text-base leading-relaxed">{outlook}</p>
+        )}
+        {activityLine ? (
+          <p className="mt-4 flex items-center justify-center gap-2 text-base font-semibold">
+            <span
+              aria-hidden="true"
+              className={`size-2.5 shrink-0 rounded-full ring-2 ring-current ${activityLine.dot}`}
+            />
+            <span>
+              {activityLine.label}: {activityLine.clause}
+            </span>
+          </p>
+        ) : (
+          !hasSelection && (
+            <button
+              type="button"
+              onClick={() => openMyWeather("activities")}
+              className="press-scale mt-4 inline-flex min-h-[var(--touch-target-min)] items-center rounded-button border border-current px-5 text-base font-medium hover:opacity-80"
+            >
+              Pick activities for tailored advice
+            </button>
+          )
         )}
         <button
           type="button"
           onClick={handleShare}
           aria-label={`Share weather for ${locationName}`}
-          className="press-scale mt-4 flex min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] items-center justify-center gap-1.5 rounded-[var(--radius-input)] px-3 text-base text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
+          className="press-scale mt-3 flex min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] items-center justify-center gap-1.5 rounded-[var(--radius-input)] px-3 text-base transition-opacity hover:opacity-80"
         >
           <ShareIcon size={16} aria-hidden="true" />
           <span className="sr-only sm:not-sr-only">
             {copied ? "Copied!" : copyFailed ? "Copy failed" : "Share"}
           </span>
         </button>
-        {footer && (
-          <div className="relative z-10 mt-6 flex justify-center">{footer}</div>
-        )}
       </div>
+      {footer && (
+        <div className="relative z-10 mt-4 flex justify-center">{footer}</div>
+      )}
     </section>
   );
 }

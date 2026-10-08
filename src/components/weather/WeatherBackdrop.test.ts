@@ -72,7 +72,8 @@ describe("WeatherBackdrop — reduced motion + resilience", () => {
   });
 
   it("only mounts the Three.js container when motion is allowed", () => {
-    expect(source).toContain("{animate && <div ref={containerRef}");
+    expect(source).toContain("{animate && (");
+    expect(source).toContain("<div ref={containerRef} className=");
   });
 
   it("always paints a static mineral gradient as the fallback", () => {
@@ -120,5 +121,18 @@ describe("WeatherBackdrop — scene mapping", () => {
     for (const cls of sceneClasses) {
       expect(source).toContain(cls);
     }
+  });
+});
+
+describe("WeatherBackdrop — subdued behind the sky plate", () => {
+  it("lowers the sky and particle layers so the hero plate reads as the hero", () => {
+    expect(source).toContain("absolute inset-0 opacity-60 weaver-sky");
+    expect(source).toContain(
+      'ref={containerRef} className="absolute inset-0 opacity-60"',
+    );
+  });
+
+  it("does not paint the hero plate itself", () => {
+    expect(source).not.toMatch(/className=\{?[`"][^`"]*\bkori\b/);
   });
 });
