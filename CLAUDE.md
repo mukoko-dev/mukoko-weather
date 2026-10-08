@@ -93,7 +93,7 @@ mukoko-weather/
 │   │   │   │   └── loading.tsx          # Branded skeleton
 │   │   │   └── map/                     # Full-viewport weather map sub-route
 │   │   │       ├── page.tsx             # Server wrapper (SEO, no weather fetch)
-│   │   │       ├── MapDashboard.tsx     # Client: full-viewport Leaflet map + layer switcher
+│   │   │       ├── MapDashboard.tsx     # Client: full-viewport MapLibre map, close button, legend, bottom-sheet layer chips + timeline
 │   │   │       └── loading.tsx          # Full-viewport skeleton
 │   │   ├── explore/                  # Browse-only location/tag/country exploration
 │   │   ├── locations/                # iOS-style Locations list: My Location + saved place weather cards, Home location (noindex)
@@ -291,7 +291,7 @@ mukoko-weather/
 │   │   │       ├── MapPreview.tsx         # Compact map card on location page (links to /[location]/map)
 │   │   │       ├── MapLibreMap.tsx        # MapLibre GL map (theme-aware MapTiler style, marker, weather overlay)
 │   │   │       ├── MapLibreMap.test.ts
-│   │   │       ├── WeatherLayerPanel.tsx  # Compact overlay layer switcher (icon rail, touch-target-min buttons)
+│   │   │       ├── WeatherLayerPanel.tsx  # Bottom-sheet layer chips (labelled, single-select, touch-target-min)
 │   │   │       ├── WeatherLayerPanel.test.ts
 │   │   │       ├── use-map-style.ts       # Theme-aware MapTiler style hook
 │   │   │       ├── use-map-style.test.ts
@@ -582,13 +582,13 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 
 **Philosophy:** The main location page (`/[location]`) is a compact overview — current conditions, AI summary, activity insights, and metric cards. Detail-heavy sections (charts, atmospheric trends, hourly/daily forecasts) live on dedicated sub-route pages. This reduces initial page load weight and prevents mobile OOM crashes from mounting all components simultaneously.
 
-**Sub-route back-navigation:** `/[location]/atmosphere`, `/[location]/forecast`, and `/[location]/map` all render the shared `Breadcrumb` component (`src/components/layout/Breadcrumb.tsx` — `Home / {location.name} / {current page}`) instead of each hand-rolling its own trail. `/[location]/map` previously used a floating "← Back to weather" pill overlay on the map; it now uses the same breadcrumb bar as the other two sub-routes for a consistent back-navigation pattern across all three.
+**Sub-route back-navigation:** `/[location]/atmosphere` and `/[location]/forecast` render the shared `Breadcrumb` component (`src/components/layout/Breadcrumb.tsx` — `Home / {location.name} / {current page}`) instead of each hand-rolling its own trail. `/[location]/map` is the full-screen exception: it renders no site header and no breadcrumb bar, because the map takes the whole viewport. Its back-navigation is a round close button in the top-left corner that links to `/{slug}`, with the legend for the active layer beneath it. Its top-right corner holds a stacked control (layers panel toggle, centre on my location) and a list button to `/locations`.
 
 - `/` — the CURRENT-LOCATION weather page itself (silent URL — see "CurrentLocationHome (Silent-URL Home)" below): server-seeded from the lastLocation cookie / IP geo, client GPS swaps the dashboard in place. No redirect exists, so current location precedes saved by construction; `/{slug}` URLs remain for saved/browsed locations
 - `/[location]` — dynamic weather pages — overview: current conditions, AI summary, activity insights, atmospheric metric cards
 - `/[location]/atmosphere` — 24-hour atmospheric detail charts (humidity, wind, pressure, UV) for a location
 - `/[location]/forecast` — hourly (24h) + daily (7-day) forecast charts + sunrise/sunset for a location
-- `/[location]/map` — full-viewport interactive weather map with layer switcher (precipitation, cloud, temperature, wind)
+- `/[location]/map` — full-screen interactive weather map (no header or breadcrumb): close button to `/{slug}`, legend, labelled chips for Air quality, Rain, Temperature, Wind and Cloud (default Rain, last choice remembered in localStorage), AQI bubbles for air quality, and a 3-hourly Now to +3 days timeline for rain
 - `/shamwari` — Shamwari AI chat (full-viewport, Claude app style, input above mobile nav). **Paused** — `notFound()`s while `FLAGS.shamwari_chat` is `false` (see Feature Flags section)
 - `/explore` — browse locations by category and country (ISR 1h)
 - `/locations` — iOS Weather-style Locations list (noindex): current location first ("My Location"), then saved places as live weather cards (sky by condition, local time, H/L). The ⋯ menu sets Home or removes a place; the search bar opens My Weather's Location tab
@@ -1465,7 +1465,7 @@ _Page/component tests:_
 - `src/components/explore/ExploreChatbot.test.ts` — chatbot component tests, MarkdownErrorBoundary, contextual navigation
 - `src/components/explore/ExploreSearch.test.ts` — AI search structure, search flow, results rendering, Shamwari context
 - `src/components/embed/MukokoWeatherEmbed.test.ts` — widget rendering, data fetching
-- `src/components/layout/Breadcrumb.test.ts` — shared sub-route breadcrumb trail, aria-current, usage across atmosphere/forecast/map dashboards
+- `src/components/layout/Breadcrumb.test.ts` — shared sub-route breadcrumb trail, aria-current, usage across atmosphere/forecast dashboards (the map is the full-screen exception)
 - `src/components/ui/chart-fallbacks.test.ts` — CSS fallback table key parity (light/dark sync)
 - `src/components/ui/primitives.test.ts` — UI primitive variants (StatusIndicator, CTACard, ToggleGroup, InfoRow, SectionHeader)
 - `src/components/weather/charts.test.ts` — chart data preparation (hourly + daily + atmospheric), hexWithAlpha

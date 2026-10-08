@@ -6,6 +6,9 @@ import {
   AQI_BANDS,
   AQI_BAND_LABELS,
   AQI_BAND_SEVERITY_TOKEN,
+  AQI_BAND_BG_CLASS,
+  aqBubbles,
+  type AqGridResponse,
 } from "./aq-grid";
 
 /** Great-circle distance in km (spherical Earth, R = 6371) — matches backend metric. */
@@ -221,5 +224,63 @@ describe("fetchAirQualityGrid", () => {
     const controller = new AbortController();
     await fetchAirQualityGrid({ lat: 0, lon: 0, signal: controller.signal });
     expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal);
+  });
+});
+
+describe("AQI bubbles (full-screen map)", () => {
+  function grid(overrides: Partial<AqGridResponse> = {}): AqGridResponse {
+    return {
+      available: true,
+      center: { lat: -17.8, lon: 31.05, aqi: 142 },
+      cellKm: 12,
+      points: [
+        { lat: -17.8, lon: 31.05, aqi: 142, pm2_5: 40 },
+        { lat: -17.7, lon: 31.05, aqi: 42, pm2_5: 8 },
+        { lat: -17.9, lon: 31.05, aqi: null, pm2_5: null },
+        { lat: -17.8, lon: 31.2, aqi: 310, pm2_5: 150 },
+      ],
+      fetchedAt: null,
+      source: "test",
+      ...overrides,
+    };
+  }
+
+  it("returns [] when the grid is unavailable", () => {
+    expect(aqBubbles(grid({ available: false, center: null }))).toEqual([]);
+  });
+
+  it("skips grid points with no reading", () => {
+    const bubbles = aqBubbles(grid());
+    expect(bubbles.some((b) => b.lat === -17.9)).toBe(false);
+  });
+
+  it("draws the centre once, as the larger 'my location' bubble", () => {
+    const bubbles = aqBubbles(grid());
+    const centres = bubbles.filter((b) => b.isCenter);
+    expect(centres).toHaveLength(1);
+    expect(centres[0]).toMatchObject({ aqi: 142, band: "usg" });
+    // The centre's grid point is not drawn a second time.
+    expect(
+      bubbles.filter((b) => b.lat === -17.8 && b.lon === 31.05),
+    ).toHaveLength(1);
+  });
+
+  it("classifies and rounds each bubble", () => {
+    const bubbles = aqBubbles(grid());
+    expect(bubbles.find((b) => b.aqi === 42)).toMatchObject({
+      band: "good",
+      isCenter: false,
+    });
+    expect(bubbles.find((b) => b.aqi === 310)).toMatchObject({
+      band: "hazardous",
+    });
+  });
+
+  it("gives every band a static background class from the severity tokens", () => {
+    for (const band of AQI_BANDS) {
+      expect(AQI_BAND_BG_CLASS[band]).toMatch(/^bg-severity-/);
+    }
+    expect(AQI_BAND_BG_CLASS.good).toBe("bg-severity-low");
+    expect(AQI_BAND_BG_CLASS.hazardous).toBe("bg-severity-extreme");
   });
 });
