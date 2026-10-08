@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import styles from "./MukokoWeatherEmbed.module.css";
 import { fetchJson } from "@/lib/fetch-json";
+import { conditionGroup } from "@/lib/hourly-summary";
+import { resolveTheme } from "@/lib/theme";
 
 /** The four supported embed variants. */
 export type EmbedType = "current" | "today" | "5day" | "7day";
@@ -58,19 +60,33 @@ interface EmbedData {
   attribution: { name: string; url: string };
 }
 
-/** WMO 4677 weather-code → emoji glyph (self-contained icon, no assets). */
+/**
+ * WMO 4677 weather-code → emoji glyph (self-contained icon, no assets). Built
+ * on the shared condition buckets from hourly-summary so the widget and the
+ * hourly strip agree on what a code means.
+ */
 function weatherEmoji(code: number, isDay = true): string {
-  if (code === 0 || code === 1) return isDay ? "☀️" : "🌙";
-  if (code === 2) return isDay ? "⛅" : "☁️";
-  if (code === 3) return "☁️";
-  if (code === 45 || code === 48) return "🌫️";
-  if (code >= 51 && code <= 57) return "🌦️";
-  if (code >= 61 && code <= 67) return "🌧️";
-  if (code >= 71 && code <= 77) return "❄️";
-  if (code >= 80 && code <= 82) return "🌧️";
-  if (code >= 85 && code <= 86) return "🌨️";
-  if (code >= 95) return "⛈️";
-  return "🌡️";
+  // Mainly clear (1) reads as clear for the glyph; conditionGroup buckets it
+  // with partly cloudy because that grouping suits the hourly transition copy.
+  const group = code === 1 ? "clear" : conditionGroup(code);
+  switch (group) {
+    case "clear":
+      return isDay ? "☀️" : "🌙";
+    case "partly cloudy":
+      return isDay ? "⛅" : "☁️";
+    case "cloudy":
+      return "☁️";
+    case "foggy":
+      return "🌫️";
+    case "drizzly":
+      return "🌦️";
+    case "rainy":
+      return "🌧️";
+    case "snowy":
+      return "❄️";
+    case "stormy":
+      return "⛈️";
+  }
 }
 
 function temp(n: number | null): string {
@@ -89,11 +105,7 @@ export function MukokoWeatherEmbed({
   const [data, setData] = useState<EmbedData | null>(null);
   const [error, setError] = useState(false);
 
-  const isDark =
-    theme === "dark" ||
-    (theme === "auto" &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const isDark = resolveTheme(theme === "auto" ? "system" : theme) === "dark";
 
   const themeClass = isDark
     ? `${styles.widget} ${styles.widgetDark}`

@@ -17,6 +17,7 @@
  */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { SITE_URL } from "@/lib/site";
 import {
   DEFAULT_SITE,
   shapeEmbedResponse,
@@ -39,9 +40,7 @@ const DEFAULT_LON = 31.05;
 // host that isn't reliably reachable here). Falls back to localhost in dev.
 const INTERNAL_BASE =
   process.env.NEXT_PUBLIC_APP_URL ??
-  (process.env.NODE_ENV === "production"
-    ? "https://weather.mukoko.com"
-    : "http://localhost:3000");
+  (process.env.NODE_ENV === "production" ? SITE_URL : "http://localhost:3000");
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
