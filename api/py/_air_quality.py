@@ -29,7 +29,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from ._db import stamp_platform_fields, weather_db
+from ._db import is_valid_coords, stamp_platform_fields, weather_db
 from ._circuit_breaker import open_meteo_breaker, CircuitOpenError
 
 router = APIRouter()
@@ -372,7 +372,7 @@ async def get_air_quality(lat: float, lon: float):
           "fetchedAt": "2026-06-29T12:00:00Z"
         }
     """
-    if lat < -90 or lat > 90 or lon < -180 or lon > 180:
+    if not is_valid_coords(lat, lon):
         raise HTTPException(status_code=400, detail="Invalid coordinates")
 
     # 1. Cache lookup

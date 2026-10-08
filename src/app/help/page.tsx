@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { FAQ } from "./FAQ";
+import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Help & FAQ",
@@ -12,9 +13,6 @@ export const metadata: Metadata = {
     canonical: "https://weather.mukoko.com/help",
   },
 };
-
-const BASE_URL = "https://weather.mukoko.com";
-
 export default function HelpPage() {
   const faqSchema = {
     "@context": "https://schema.org",
@@ -90,7 +88,7 @@ export default function HelpPage() {
             <p>
               mukoko weather gives you accurate weather data for 265+ locations
               worldwide. No account needed — just visit{" "}
-              <a href={BASE_URL} className="text-primary underline">
+              <a href={SITE_URL} className="text-primary underline">
                 weather.mukoko.com
               </a>{" "}
               and you&apos;re ready to go.

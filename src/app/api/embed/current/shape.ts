@@ -5,7 +5,9 @@
  * export route handlers + config — arbitrary named exports are rejected at build.
  */
 
-export const DEFAULT_SITE = "https://weather.mukoko.com";
+import { SITE_URL } from "@/lib/site";
+
+export const DEFAULT_SITE = SITE_URL;
 
 // WMO 4677 weather-code → human label (mirrors the embed widget map).
 export function weatherLabel(code: number): string {

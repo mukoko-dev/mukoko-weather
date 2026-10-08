@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { WeatherIcon, ShareIcon, NavigationIcon } from "@/lib/weather-icons";
+import {
+  WeatherIcon,
+  ShareIcon,
+  NavigationIcon,
+  nightIcon,
+} from "@/lib/weather-icons";
 import {
   weatherCodeToInfo,
   type CurrentWeather,
@@ -123,7 +128,7 @@ export function CurrentConditions({
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2">
             <WeatherIcon
-              icon={current.is_day ? info.icon : "moon"}
+              icon={current.is_day ? info.icon : nightIcon(info.icon)}
               size={88}
               className="text-primary"
             />
