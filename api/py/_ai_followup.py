@@ -20,8 +20,7 @@ from pydantic import BaseModel, Field
 
 from ._db import (
     require_internal_caller,
-    check_rate_limit,
-    get_client_ip,
+    enforce_rate_limit,
     get_api_key,
     ai_prompts_collection,
     filter_known_activities,
@@ -178,13 +177,7 @@ async def followup_chat(body: FollowupRequest, request: Request):
         raise HTTPException(status_code=400, detail=f"Message too long (max {MAX_MESSAGE_LEN} characters)")
 
     # Rate limiting — extract real IP behind Vercel's reverse proxy
-    ip = get_client_ip(request)
-    if not ip:
-        raise HTTPException(status_code=400, detail="Could not determine IP")
-
-    rate = check_rate_limit(ip, "followup", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW)
-    if not rate["allowed"]:
-        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+    enforce_rate_limit(request, "followup", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW)
 
     # Build messages
     history = body.history[:MAX_HISTORY]

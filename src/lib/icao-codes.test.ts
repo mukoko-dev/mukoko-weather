@@ -12,19 +12,20 @@ import {
 
 describe("getIcaoForSlug", () => {
   it("returns correct ICAO for Zimbabwe locations", () => {
-    expect(getIcaoForSlug("harare")).toBe("FVHA");
+    expect(getIcaoForSlug("harare")).toBe("FVRG");
     expect(getIcaoForSlug("bulawayo")).toBe("FVBU");
     expect(getIcaoForSlug("victoria-falls")).toBe("FVFA");
     expect(getIcaoForSlug("masvingo")).toBe("FVMV");
-    expect(getIcaoForSlug("gweru")).toBe("FVGW");
-    expect(getIcaoForSlug("mutare")).toBe("FVMU");
+    // Gweru and Mutare airports are not in the AWC station table — no METAR.
+    expect(getIcaoForSlug("gweru")).toBeNull();
+    expect(getIcaoForSlug("mutare")).toBeNull();
   });
 
   it("returns correct ICAO for global locations", () => {
     expect(getIcaoForSlug("nairobi-ke")).toBe("HKJK");
     expect(getIcaoForSlug("lagos-ng")).toBe("DNMM");
     expect(getIcaoForSlug("cairo-eg")).toBe("HECA");
-    expect(getIcaoForSlug("johannesburg-za")).toBe("FAJS");
+    expect(getIcaoForSlug("johannesburg-za")).toBe("FAOR");
     expect(getIcaoForSlug("singapore-sg")).toBe("WSSS");
     expect(getIcaoForSlug("bangkok-th")).toBe("VTBS");
   });
@@ -43,13 +44,15 @@ describe("getIcaoForSlug", () => {
 
 describe("getSlugForIcao", () => {
   it("returns slug for known ICAO codes", () => {
-    expect(getSlugForIcao("FVHA")).toBe("harare");
+    expect(getSlugForIcao("FVRG")).toBe("harare");
+    // FVHA is the retired code for Harare — no longer mapped.
+    expect(getSlugForIcao("FVHA")).toBeNull();
     expect(getSlugForIcao("HKJK")).toBe("nairobi-ke");
   });
 
   it("is case-insensitive", () => {
-    expect(getSlugForIcao("fvha")).toBe("harare");
-    expect(getSlugForIcao("FvHa")).toBe("harare");
+    expect(getSlugForIcao("fvrg")).toBe("harare");
+    expect(getSlugForIcao("FvRg")).toBe("harare");
   });
 
   it("returns null for unknown codes", () => {
@@ -75,10 +78,9 @@ describe("ICAO_MAP", () => {
     expect(getIcaoForSlug("durban-za")).toBe("FALE");
   });
 
-  it("corrects Chinhoyi/Chipinge ICAO mix-up", () => {
-    // FVCH is actually Chipinge; Chinhoyi's real ICAO is FVCI.
-    expect(getIcaoForSlug("chinhoyi")).toBe("FVCI");
+  it("maps Chipinge to FVCH (Chinhoyi has no AWC station, so is unmapped)", () => {
     expect(getIcaoForSlug("chipinge")).toBe("FVCH");
+    expect(getIcaoForSlug("chinhoyi")).toBeNull();
   });
 
   it("uses live METAR-reporting stations for Lusaka and Dakar", () => {
@@ -90,14 +92,14 @@ describe("ICAO_MAP", () => {
 
 describe("getAirportByIcao", () => {
   it("returns airport metadata for known codes", () => {
-    const harare = getAirportByIcao("FVHA");
+    const harare = getAirportByIcao("FVRG");
     expect(harare?.name).toContain("Harare");
-    expect(harare?.lat).toBeCloseTo(-17.932, 2);
-    expect(harare?.lon).toBeCloseTo(31.093, 2);
+    expect(harare?.lat).toBeCloseTo(-17.921, 3);
+    expect(harare?.lon).toBeCloseTo(31.1, 3);
   });
 
   it("is case-insensitive", () => {
-    expect(getAirportByIcao("fvha")?.icao).toBe("FVHA");
+    expect(getAirportByIcao("fvrg")?.icao).toBe("FVRG");
   });
 
   it("returns null for unknown codes", () => {
@@ -111,22 +113,49 @@ describe("corrected airport coordinates", () => {
     expect(bb?.lon).toBeGreaterThan(29.9);
     expect(bb?.lon).toBeCloseTo(30.013, 1);
   });
+});
 
-  it("fixes Bindura latitude (was ~-17.17, should be ~-17.30)", () => {
-    const bd = getAirportByIcao("FVBD");
-    expect(bd?.lat).toBeCloseTo(-17.304, 1);
+describe("stale ICAO regression (AWC station table, 2026-10-08)", () => {
+  it("FVRG (current Harare code) is present and FVHA (retired) is absent", () => {
+    const codes = AIRPORTS.map((a) => a.icao);
+    expect(codes).toContain("FVRG");
+    expect(codes).not.toContain("FVHA");
   });
 
-  it("fixes Kwekwe longitude", () => {
-    const kk = getAirportByIcao("FVKK");
-    expect(kk?.lon).toBeCloseTo(29.841, 1);
+  it("FAOR (current Johannesburg O.R. Tambo code) is present and FAJS (retired) is absent", () => {
+    const codes = AIRPORTS.map((a) => a.icao);
+    expect(codes).toContain("FAOR");
+    expect(codes).not.toContain("FAJS");
+  });
+
+  it("drops stations AWC does not list (no METAR can be served for them)", () => {
+    const codes = new Set(AIRPORTS.map((a) => a.icao));
+    for (const dead of [
+      "FVGW",
+      "FVMU",
+      "FVGR",
+      "FVKK",
+      "FVBD",
+      "FVCI",
+      "FVBR",
+      "FVCP",
+    ]) {
+      expect(codes.has(dead)).toBe(false);
+    }
+  });
+
+  it("every ICAO slug mapping points at a catalogued airport", () => {
+    const codes = new Set(AIRPORTS.map((a) => a.icao));
+    for (const [slug, icao] of Object.entries(ICAO_MAP)) {
+      expect(codes.has(icao), `${slug} → ${icao}`).toBe(true);
+    }
   });
 });
 
 describe("getNearestIcao", () => {
   it("returns the closest airport for a point near Harare", () => {
     // A point a few km from Robert Gabriel Mugabe Intl.
-    expect(getNearestIcao(-17.85, 31.05)).toBe("FVHA");
+    expect(getNearestIcao(-17.85, 31.05)).toBe("FVRG");
   });
 
   it("returns null when nothing is within range", () => {
@@ -140,7 +169,7 @@ describe("getNearestIcaos", () => {
     const near = getNearestIcaos(-17.85, 31.05, 3);
     expect(near.length).toBeGreaterThan(0);
     expect(near.length).toBeLessThanOrEqual(3);
-    expect(near[0].icao).toBe("FVHA");
+    expect(near[0].icao).toBe("FVRG");
     // distances must be non-decreasing
     for (let i = 1; i < near.length; i++) {
       expect(near[i].distanceKm).toBeGreaterThanOrEqual(near[i - 1].distanceKm);
@@ -160,9 +189,16 @@ describe("getNearestIcaos", () => {
 });
 
 describe("AIRPORTS (DB seed source)", () => {
-  it("exports the airport catalog with the corrected 72+ airports", () => {
+  it("exports the airport catalog (AWC-listed stations only)", () => {
     expect(Array.isArray(AIRPORTS)).toBe(true);
-    expect(AIRPORTS.length).toBeGreaterThanOrEqual(72);
+    expect(AIRPORTS.length).toBeGreaterThanOrEqual(60);
+  });
+
+  it("uses AWC-verified coordinates for FVRG (within 1 km of the station)", () => {
+    // AWC station info: FVRG -17.921, 31.1
+    const a = getAirportByIcao("FVRG");
+    expect(a?.lat).toBeCloseTo(-17.921, 3);
+    expect(a?.lon).toBeCloseTo(31.1, 3);
   });
 
   it("every airport has a 4-letter ICAO, name, and valid WGS 84 coords", () => {
@@ -212,7 +248,7 @@ describe("fetchNearestAirports (DB-backed with static fallback)", () => {
     const result = await fetchNearestAirports(-17.85, 31.05, 3);
     // Static fallback still finds Harare closest.
     expect(result.length).toBeGreaterThan(0);
-    expect(result[0].icao).toBe("FVHA");
+    expect(result[0].icao).toBe("FVRG");
   });
 
   it("falls back to static when the DB returns an empty list", async () => {
@@ -223,7 +259,7 @@ describe("fetchNearestAirports (DB-backed with static fallback)", () => {
         .mockResolvedValue({ ok: true, json: async () => ({ airports: [] }) }),
     );
     const result = await fetchNearestAirports(-17.85, 31.05, 3);
-    expect(result[0].icao).toBe("FVHA");
+    expect(result[0].icao).toBe("FVRG");
   });
 
   it("falls back to static on a non-OK HTTP response", async () => {
@@ -232,6 +268,6 @@ describe("fetchNearestAirports (DB-backed with static fallback)", () => {
       vi.fn().mockResolvedValue({ ok: false, status: 500 }),
     );
     const result = await fetchNearestAirports(-17.85, 31.05, 3);
-    expect(result[0].icao).toBe("FVHA");
+    expect(result[0].icao).toBe("FVRG");
   });
 });

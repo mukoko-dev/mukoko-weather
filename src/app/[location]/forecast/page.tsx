@@ -8,11 +8,9 @@ import {
 } from "@/lib/db";
 import { safeJsonLd } from "@/lib/json-ld";
 import { ForecastDashboard } from "./ForecastDashboard";
+import { SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
-
-const BASE_URL = "https://weather.mukoko.com";
-
 export async function generateMetadata({
   params,
 }: {
@@ -39,12 +37,12 @@ export async function generateMetadata({
       "mukoko weather",
     ],
     alternates: {
-      canonical: `${BASE_URL}/${loc.slug}/forecast`,
+      canonical: `${SITE_URL}/${loc.slug}/forecast`,
     },
     openGraph: {
       title: `${loc.name} Forecast | mukoko weather`,
       description: `7-day weather forecast for ${loc.name}, ${loc.province} — hourly & daily predictions with charts.`,
-      url: `${BASE_URL}/${loc.slug}/forecast`,
+      url: `${SITE_URL}/${loc.slug}/forecast`,
       type: "website",
       locale: "en",
       siteName: "mukoko weather",
@@ -97,19 +95,19 @@ export default async function ForecastPage({
         "@type": "ListItem",
         position: 1,
         name: "mukoko weather",
-        item: BASE_URL,
+        item: SITE_URL,
       },
       {
         "@type": "ListItem",
         position: 2,
         name: `${location.name} Weather`,
-        item: `${BASE_URL}/${location.slug}`,
+        item: `${SITE_URL}/${location.slug}`,
       },
       {
         "@type": "ListItem",
         position: 3,
         name: "Forecast",
-        item: `${BASE_URL}/${location.slug}/forecast`,
+        item: `${SITE_URL}/${location.slug}/forecast`,
       },
     ],
   };
