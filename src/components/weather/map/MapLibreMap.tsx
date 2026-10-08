@@ -6,6 +6,7 @@ import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { resolveColor } from "@/components/ui/chart";
 import {
+  MAPLIBRE_WORKER_URL,
   WEATHER_OVERLAY_ID,
   buildWeatherOverlaySource,
 } from "@/lib/map-layers";
@@ -115,8 +116,17 @@ export function MapLibreMap({
     let cancelled = false;
 
     import("maplibre-gl").then(
-      ({ Map, Marker: MLMarker, NavigationControl, AttributionControl }) => {
+      ({
+        Map,
+        Marker: MLMarker,
+        NavigationControl,
+        AttributionControl,
+        setWorkerUrl,
+      }) => {
         if (cancelled || !containerRef.current) return;
+        // Must run before the first Map is created: the default worker URL
+        // points at a file webpack never emits (see MAPLIBRE_WORKER_URL).
+        setWorkerUrl(new URL(MAPLIBRE_WORKER_URL, window.location.href).href);
         import("maplibre-gl/dist/maplibre-gl.css");
 
         const map: MapLibreGLMap = new Map({
@@ -236,7 +246,16 @@ export function MapLibreMap({
 
   return (
     <div className={cn("relative", className)}>
-      <div ref={containerRef} className="absolute inset-0" aria-hidden="true" />
+      {/*
+        MapLibre adds .maplibregl-map (position: relative) to the container.
+        Its stylesheet is unlayered, so it beats Tailwind 4's layered
+        utilities: an `absolute inset-0` on the container itself is overridden
+        and the empty div collapses to 0px tall (a blank map). The wrapper
+        carries the absolute fill; the container just takes the wrapper's size.
+      */}
+      <div className="absolute inset-0" aria-hidden="true">
+        <div ref={containerRef} className="h-full w-full" />
+      </div>
       {baseMapMissingKey && (
         <div
           role="status"
