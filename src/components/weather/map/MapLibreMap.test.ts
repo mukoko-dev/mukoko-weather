@@ -185,3 +185,70 @@ describe("map container sizing", () => {
     );
   });
 });
+
+describe("AQI grid overlay (Air Quality Map card)", () => {
+  it("accepts an optional aqiOverlay prop that defaults to no overlay", () => {
+    expect(source).toContain("aqiOverlay?: FeatureCollection | null;");
+    expect(source).toContain("aqiOverlay = null,");
+  });
+
+  it("renders the overlay as a semi-transparent fill layer", () => {
+    expect(source).toContain('type: "fill"');
+    expect(source).toContain('"fill-opacity": 0.55');
+    expect(source).toContain('type: "geojson", data');
+    expect(source).toContain("AQI_OVERLAY_ID");
+  });
+
+  it("colours cells with a match expression over the band property", () => {
+    expect(source).toContain('"match",');
+    expect(source).toContain('["get", "band"]');
+    expect(source).toContain("for (const band of AQI_BANDS)");
+    expect(source).toContain("AQI_BAND_SEVERITY_TOKEN[band]");
+  });
+
+  it("resolves band colours from severity tokens, not hardcoded hex", () => {
+    expect(source).toContain(
+      "resolveColor(`var(${AQI_BAND_SEVERITY_TOKEN[band]})`)",
+    );
+    expect(source).not.toMatch(/["'`]#[0-9a-fA-F]{3,8}["'`]/);
+  });
+
+  it("inserts the overlay beneath the first symbol (label) layer", () => {
+    expect(source).toContain('layer.type === "symbol"');
+    expect(source).toMatch(/addLayer\(\s*\{[\s\S]*?\},\s*beforeId,?\s*\)/);
+  });
+
+  it("restores the overlay after a style switch and reacts to prop changes", () => {
+    expect(source).toContain("applyAqiOverlay(map, aqiOverlayRef.current);");
+    expect(source).toContain("}, [aqiOverlay]);");
+  });
+});
+
+describe("weather timeline + AQI bubbles (full-screen map)", () => {
+  it("takes a forecast timestamp and passes it to the overlay source", () => {
+    expect(source).toContain("weatherTimestamp?: string;");
+    expect(source).toContain("buildWeatherOverlaySource(layer, timestamp)");
+  });
+
+  it("updates the existing overlay's tiles in place rather than rebuilding it", () => {
+    expect(source).toContain("existing.setTiles(spec.tiles)");
+  });
+
+  it("renders AQI bubbles as HTML markers coloured from the severity classes", () => {
+    expect(source).toContain("aqiBubbles?: readonly AqBubble[] | null;");
+    expect(source).toContain("new MarkerCtor({ element: el })");
+    expect(source).toContain("AQI_BAND_BG_CLASS[b.band]");
+    expect(source).toContain('"size-12 text-sm"');
+  });
+
+  it("removes stale bubble markers before drawing a new set", () => {
+    expect(source).toContain(
+      "bubbleMarkersRef.current.forEach((m) => m.remove())",
+    );
+  });
+
+  it("makes the zoom control optional so the full-screen map can keep its top-right corner", () => {
+    expect(source).toContain("navigationControl = true,");
+    expect(source).toContain("if (interactive && navigationControl)");
+  });
+});

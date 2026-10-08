@@ -1,9 +1,9 @@
 /**
- * Tests for Header — validates the mobile bottom navigation is a floating
- * glass pill (detached, rounded, stays visible on scroll) while preserving
- * its nav items, accessibility, and touch-target sizing. Shamwari is a 5th
- * item gated behind the shamwari_chat feature flag (paused by default).
- * Reads source file directly (no DOM renderer needed for structural checks).
+ * Tests for Header — the mobile bottom bar (iOS Weather style: a translucent,
+ * full-width, safe-area-aware bar with map / page indicator / list) and the
+ * mobile "⋯" menu that holds the destinations the bar no longer shows. Desktop
+ * header stays as it was. Reads source directly (no DOM renderer needed for
+ * structural checks).
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
@@ -11,95 +11,148 @@ import { resolve } from "path";
 
 const source = readFileSync(resolve(__dirname, "Header.tsx"), "utf-8");
 
-describe("Header — mobile nav floating pill", () => {
-  it("is a centered, detached floating pill (not an edge-pinned full-width bar)", () => {
-    // Floats above the safe-area, horizontally centered
-    expect(source).toContain(
-      "bottom-[calc(env(safe-area-inset-bottom,0px)+0.75rem)]",
+describe("Header — mobile bottom bar geometry", () => {
+  it("is a full-width bar pinned to the bottom edge (not a floating pill)", () => {
+    expect(source).toContain("fixed inset-x-0 bottom-0 z-40");
+    expect(source).not.toContain("left-1/2");
+    expect(source).not.toContain("-translate-x-1/2");
+    expect(source).not.toContain(
+      "rounded-full border border-text-tertiary/10 bg-surface-base/90",
     );
-    expect(source).toContain("left-1/2");
-    expect(source).toContain("-translate-x-1/2");
-    // No longer full-width, edge-pinned
-    expect(source).not.toContain("bottom-0 left-0 right-0");
   });
 
-  it("uses pill styling: rounded-full, glass, subtle border, shadow", () => {
-    expect(source).toContain("rounded-full");
-    expect(source).toContain("bg-surface-base/90");
+  it("is translucent with a top hairline, like the iOS Weather bar", () => {
+    expect(source).toContain("border-t border-text-tertiary/10");
+    expect(source).toContain("bg-surface-base/80");
     expect(source).toContain("backdrop-blur-xl");
-    expect(source).toContain("border border-text-tertiary/10");
-    expect(source).toContain("shadow-lg");
   });
 
-  it("drops the top border used by the old edge bar", () => {
-    expect(source).not.toContain("border-t border-text-tertiary/10");
+  it("is safe-area aware at the bottom edge", () => {
+    expect(source).toContain(
+      "pb-[calc(env(safe-area-inset-bottom,0px)+0.625rem)]",
+    );
   });
 
-  it("stays fixed (visible on scroll) and above content via z-40", () => {
-    expect(source).toContain("fixed");
-    expect(source).toContain("z-40");
-  });
-
-  it("inner container is a compact horizontal row, not a full-height bar", () => {
-    expect(source).toContain("flex items-center gap-1 px-2 py-1.5");
-    expect(source).not.toContain("min-h-[5rem]");
-  });
-
-  it("keeps it visible only on mobile (sm:hidden)", () => {
+  it("is visible only on phones (sm:hidden) and keeps its landmark label", () => {
+    expect(source).toContain('aria-label="Mobile navigation"');
     expect(source).toContain("sm:hidden");
   });
-});
 
-describe("Header — mobile nav preserved behaviour", () => {
-  it("keeps the 5 always-on nav items and their labels", () => {
-    for (const label of [
-      "Weather",
-      "Explore",
-      "My Location",
-      "History",
-      "My Weather",
-    ]) {
-      expect(source).toMatch(new RegExp(`>\\s*${label}\\s*</span>`));
-    }
-  });
-
-  it("gates the Shamwari nav item behind the shamwari_chat feature flag (paused by default)", () => {
-    expect(source).toContain("shamwariEnabled");
-    expect(source).toContain('isFeatureEnabled("shamwari_chat")');
-    expect(source).toContain("{shamwariEnabled &&");
-    // Still present in source (so re-enabling the flag brings it back), just gated.
-    expect(source).toMatch(/>\s*Shamwari\s*<\/span>/);
-  });
-
-  it("preserves the active indicator dot and active text colour", () => {
-    expect(source).toContain("rounded-full bg-primary");
-    expect(source).toContain("text-primary");
-  });
-
-  it("preserves press feedback and aria-current on active items", () => {
+  it("round side buttons use the 48px touch-target token", () => {
+    expect(source).toContain(
+      "h-[var(--touch-target-min)] w-[var(--touch-target-min)]",
+    );
     expect(source).toContain("active:scale-95");
-    expect(source).toContain("aria-current");
-  });
-
-  it("preserves accessible touch targets via the design token", () => {
-    expect(source).toContain("min-w-[var(--touch-target-min)]");
-    expect(source).toContain("min-h-[var(--touch-target-min)]");
-  });
-
-  it("keeps the Mobile navigation aria-label landmark", () => {
-    expect(source).toContain('aria-label="Mobile navigation"');
   });
 });
 
-describe("Header — My Location centre action", () => {
-  it("renders a My Location button with the navigation arrow icon", () => {
-    expect(source).toMatch(/>\s*My Location\s*<\/span>/);
-    expect(source).toContain('aria-label="Use my current location"');
-    expect(source).toContain("<NavigationIcon size={22} />");
+describe("Header — mobile bottom bar parts", () => {
+  it("left: a Map button linking to the map of the location on screen", () => {
+    expect(source).toMatch(
+      /import \{[^}]*Map as MapIcon[^}]*\} from "lucide-react"/,
+    );
+    expect(source).toContain("<MapIcon size={22}");
+    expect(source).toContain("href={mapHref}");
+    expect(source).toContain('? "Weather map"');
   });
 
+  it("centre: the LocationPager, fed the saved locations and the current pathname", () => {
+    expect(source).toContain(
+      'import { LocationPager } from "@/components/layout/LocationPager"',
+    );
+    expect(source).toContain("<LocationPager");
+    expect(source).toContain("savedLocations={savedLocations}");
+    expect(source).toContain("pathname={pathname}");
+    expect(source).toContain(
+      "const savedLocations = useAppStore((s) => s.savedLocations);",
+    );
+  });
+
+  it("right: a List button linking to /locations with aria-current when active", () => {
+    expect(source).toMatch(
+      /import \{[^}]*List as ListIcon[^}]*\} from "lucide-react"/,
+    );
+    expect(source).toContain("<ListIcon size={22}");
+    expect(source).toContain('href="/locations"');
+    expect(source).toContain('aria-label="All locations"');
+    expect(source).toContain(
+      'aria-current={isLocationList ? "page" : undefined}',
+    );
+    expect(source).toContain(
+      'const isLocationList = pathname === "/locations";',
+    );
+  });
+
+  it("no longer renders the old five-item nav row", () => {
+    expect(source).not.toContain('aria-label="Weather home"');
+    expect(source).not.toContain('aria-label="Explore locations"');
+    expect(source).not.toContain('aria-label="Weather history"');
+    expect(source).not.toContain('aria-label="My Weather settings"');
+  });
+});
+
+describe("Header — mobile ⋯ menu holds the moved destinations", () => {
+  it("has a labelled disclosure button that controls the menu", () => {
+    expect(source).toContain('aria-label="More options"');
+    expect(source).toContain('aria-controls="mobile-more-menu"');
+    expect(source).toContain("aria-expanded={menuOpen}");
+    expect(source).toContain('id="mobile-more-menu"');
+    expect(source).toContain("import { Ellipsis");
+  });
+
+  it("is mobile-only, sitting inside the existing icon pill", () => {
+    expect(source).toContain(
+      '<div className="relative sm:hidden" ref={menuRef}>',
+    );
+  });
+
+  it("contains Explore, History, Aviation, My Weather and Use my location", () => {
+    expect(source).toMatch(/href="\/explore"[\s\S]*?\n\s*Explore\s*<\/Link>/);
+    expect(source).toMatch(/href="\/history"[\s\S]*?\n\s*History\s*<\/Link>/);
+    expect(source).toMatch(/href="\/aviation"[\s\S]*?\n\s*Aviation\s*<\/Link>/);
+    expect(source).toMatch(
+      /openMyWeather\(\);[\s\S]*?\n\s*My Weather\s*<\/button>/,
+    );
+    expect(source).toMatch(/void handleMyLocation\(\);[\s\S]*?Use my location/);
+  });
+
+  it("keeps Shamwari in the menu behind the shamwari_chat flag", () => {
+    expect(source).toContain("{shamwariEnabled && (");
+    expect(source).toContain('href="/shamwari"');
+  });
+
+  it("closes on item activation, outside click and Escape (returning focus)", () => {
+    expect(source).toContain("onClick={() => setMenuOpen(false)}");
+    expect(source).toContain(
+      "setMenuOpen(false);\n                            openMyWeather();",
+    );
+    expect(source).toContain('e.key === "Escape"');
+    expect(source).toContain("menuButtonRef.current?.focus()");
+    expect(source).toContain(
+      'document.removeEventListener("mousedown", handleClick)',
+    );
+  });
+
+  it("the Use my location item keeps the busy state and double-tap guard", () => {
+    expect(source).toContain("disabled={locating}");
+    expect(source).toContain("aria-busy={locating}");
+    expect(source).toContain("if (locating) return;");
+  });
+});
+
+describe("Header — header pill on phones", () => {
+  it("hides the duplicate map button on phones (the bottom bar has it)", () => {
+    expect(source).toContain('className="bee hidden sm:flex"');
+  });
+
+  it("keeps the desktop text nav unchanged", () => {
+    expect(source).toContain('aria-label="Main navigation"');
+    expect(source).toContain('className="hidden sm:flex items-center gap-6"');
+  });
+});
+
+describe("Header — My Location (GPS) action", () => {
   it("uses the shared geolocation flow with auto-create (same as My Weather modal)", () => {
-    // Deferred import keeps geolocation out of the initial header bundle
     expect(source).toContain('await import("@/lib/geolocation")');
     expect(source).toContain("detectUserLocation({ autoCreate: true })");
   });
@@ -115,16 +168,7 @@ describe("Header — My Location centre action", () => {
   });
 
   it("falls back to the My Weather modal on denial or failure", () => {
-    // The modal's Location tab has search + a geolocation retry with error
-    // copy — the user is never stranded on a silent failure.
     expect(source).toMatch(/} else \{\s*openMyWeather\(\);/);
-  });
-
-  it("shows a spinner and guards against double-taps while locating", () => {
-    expect(source).toContain("if (locating) return;");
-    expect(source).toContain("aria-busy={locating}");
-    expect(source).toContain("disabled={locating}");
-    expect(source).toContain("<Spinner");
   });
 
   it("tracks geolocation_result and location_changed analytics events", () => {

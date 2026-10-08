@@ -19,7 +19,7 @@ Social: Twitter @mukokoafrica, Instagram @mukoko.africa
 ## Tech Stack
 
 - **Framework:** Next.js 16.1.6 (App Router, TypeScript 5.9.3)
-- **UI components:** shadcn/ui (new-york style, Lucide icons)
+- **UI components:** shadcn/ui (new-york style, Lucide icons). The shadcn CLI is NOT a devDependency (its fast-glob → micromatch → braces tree carries an advisory with no patched release) — run it on demand with `npx shadcn@latest add …`; its `tailwind.css` is vendored at `src/app/shadcn-tailwind.css`
 - **Charts:** Chart.js 4 + react-chartjs-2 (Canvas 2D rendering via `src/components/ui/chart.tsx`)
 - **Maps:** MapLibre GL JS + MapTiler Cloud (vector tiles direct from CDN via `NEXT_PUBLIC_MAPTILER_API_KEY` — no server proxy; GPU-rendered; theme-aware streets-v2 / streets-v2-dark styles); Tomorrow.io raster weather overlays still proxied via `/api/py/map-tiles`. **MapLibre v6 worker:** v6 ships its web worker as a separate ES module (`maplibre-gl-worker.mjs` → imports `maplibre-gl-shared.mjs`) and by default loads it from beside the bundled chunk, where webpack never emits it, so the worker fails and every map renders blank. `scripts/copy-maplibre-worker.mjs` (run by the `prebuild`/`predev` npm scripts) copies both files (and their source maps) to `public/vendor/maplibre-gl/<version>/` (gitignored), and `MapLibreMap` calls `setWorkerUrl(maplibreWorkerUrl(getVersion()))` before creating a map — the version in the path keeps a tab on an old bundle paired with its own worker after a deploy. **Container sizing:** MapLibre's unlayered `.maplibregl-map { position: relative }` beats Tailwind 4's layered utilities, so never put `absolute inset-0` on the map container itself — wrap it in an absolutely-positioned div and give the container `h-full w-full`
 - **Aviation:** NOAA Aviation Weather Center for METAR/TAF data; `@react-pdf/renderer` for pre-flight briefing PDFs; 66 ICAO airports mapped (`src/lib/icao-codes.ts`, name + WGS 84 coords checked against AWC station info; only stations AWC serves are listed — a retired or unlisted code is removed, and `syncAirports` deletes stale `weather.airports` docs), seeded into the DB-backed `weather.airports` collection (2dsphere-indexed) via `POST /api/db-init` → `syncAirports`. Nearest-station lookup uses MongoDB `$geoNear` through `GET /api/py/airports/nearest`; the location page's aviation card calls `GET /api/py/aviation/nearest-metar?lat&lon` — the nearest airport within 150 km that has a METAR in the last 3 h (candidates from the DB, one batched AWC request, cache-first) — and shows the server's explanation when none reports. AWC JSON gotchas: `visib` is a string (`"6+"`), `obsTime` is epoch seconds, `altim` is hPa. `fetchNearestAirports` / `getNearestIcao` remain as the static haversine fallback for the planner and offline use. Flight-category (VFR/MVFR/IFR/LIFR) badge colors are centralized in `src/lib/flight-category-styles.ts` (`FLIGHT_CATEGORY_STYLES`, `getFlightCategoryClass()`), shared by `AviationWeather.tsx` (location page) and `AviationPlanner.tsx` (`/aviation`) so the safety-relevant color coding can't drift between the two
@@ -93,9 +93,10 @@ mukoko-weather/
 │   │   │   │   └── loading.tsx          # Branded skeleton
 │   │   │   └── map/                     # Full-viewport weather map sub-route
 │   │   │       ├── page.tsx             # Server wrapper (SEO, no weather fetch)
-│   │   │       ├── MapDashboard.tsx     # Client: full-viewport Leaflet map + layer switcher
+│   │   │       ├── MapDashboard.tsx     # Client: full-viewport MapLibre map, close button, legend, bottom-sheet layer chips + timeline
 │   │   │       └── loading.tsx          # Full-viewport skeleton
 │   │   ├── explore/                  # Browse-only location/tag/country exploration
+│   │   ├── locations/                # iOS-style Locations list: My Location + saved place weather cards, Home location (noindex)
 │   │   │   ├── page.tsx              # Explore page (ISR 1h, category + country browse)
 │   │   │   ├── loading.tsx           # Explore loading skeleton
 │   │   │   ├── explore.test.ts       # Explore page tests
@@ -211,18 +212,22 @@ mukoko-weather/
 │   │   │   ├── ExploreSearch.tsx     # AI-powered natural-language location search
 │   │   │   └── ExploreSearch.test.ts
 │   │   ├── layout/
-│   │   │   ├── Header.tsx            # Sticky header + mobile bottom nav (Weather/Explore/History/My Weather; Shamwari paused, see FLAGS.shamwari_chat)
+│   │   │   ├── Header.tsx            # Sticky header + mobile bottom bar (Map / page pager / List) + mobile ⋯ menu (Explore/History/Aviation/My Weather/Use my location)
+│   │   │   ├── LocationPager.tsx     # Bottom-bar page indicator (My Location glyph + saved-location dots) and useLocationSwipe (left = next location, right = previous)
 │   │   │   ├── HeaderSkeleton.tsx    # Header loading skeleton
 │   │   │   ├── Breadcrumb.tsx        # Shared Home / Location / Current-page trail (atmosphere, forecast, map sub-routes)
 │   │   │   ├── Breadcrumb.test.ts
 │   │   │   ├── Footer.tsx            # Footer with site stats, copyright, links, Ubuntu philosophy
 │   │   │   └── PageShell.tsx         # Header + main-content column (3xl/5xl) + Footer for static pages
 │   │   ├── weather/
-│   │   │   ├── CurrentConditions.tsx  # De-carded hero: large temp display, feels-like, daily high/low — reads directly over WeatherBackdrop
+│   │   │   ├── CurrentConditions.tsx  # Mineral sky-plate hero (`.kori` + `--plate-*` tokens, family from src/lib/hero.ts): eyebrow, place, Noto Serif temp, condition, H/L, one-sentence outlook, activities line, share, season footer slot
 │   │   │   ├── WeatherBackdrop.tsx    # Fixed full-viewport condition-aware Three.js sky behind the whole location page (Apple Weather style)
 │   │   │   ├── WeatherBackdrop.test.ts
-│   │   │   ├── HourlyScrollCards.tsx  # Horizontal hour-by-hour strip + deterministic one-sentence outlook (hourly-summary.ts)
+│   │   │   ├── HourlyScrollCards.tsx  # Horizontal hour-by-hour strip (hours only — the one-sentence outlook lives in the hero)
 │   │   │   ├── HourlyScrollCards.test.ts
+│   │   │   ├── CommunityLane.tsx      # 24h suitability lane per selected activity with community reports pinned at their hour (logic in src/lib/community-lane.ts)
+│   │   │   ├── CommunityLaneSkeleton.tsx
+│   │   │   ├── CommunityLane.test.ts
 │   │   │   ├── HourlyForecast.tsx     # 24-hour hourly forecast
 │   │   │   ├── HourlyChart.tsx        # Canvas chart: temperature + rain over 24h
 │   │   │   ├── DailyForecast.tsx      # 7-day forecast cards
@@ -288,7 +293,7 @@ mukoko-weather/
 │   │   │       ├── MapPreview.tsx         # Compact map card on location page (links to /[location]/map)
 │   │   │       ├── MapLibreMap.tsx        # MapLibre GL map (theme-aware MapTiler style, marker, weather overlay)
 │   │   │       ├── MapLibreMap.test.ts
-│   │   │       ├── WeatherLayerPanel.tsx  # Compact overlay layer switcher (icon rail, touch-target-min buttons)
+│   │   │       ├── WeatherLayerPanel.tsx  # Bottom-sheet layer chips (labelled, single-select, touch-target-min)
 │   │   │       ├── WeatherLayerPanel.test.ts
 │   │   │       ├── use-map-style.ts       # Theme-aware MapTiler style hook
 │   │   │       ├── use-map-style.test.ts
@@ -318,8 +323,12 @@ mukoko-weather/
 │   │   ├── suitability-cache.test.ts # Suitability cache tests
 │   │   ├── weather.ts             # Open-Meteo client, frost detection, weather utils, synthesizeOpenMeteoInsights
 │   │   ├── weather.test.ts
-│   │   ├── hourly-summary.ts      # Deterministic one-sentence hourly outlook (Apple-style, no AI): first condition-group change + peak gusts
+│   │   ├── hero.ts                # Pure hero helpers: eyebrow badge selection (MY LOCATION / HOME), H/L formatting
+│   ├── hero.test.ts
+│   ├── hourly-summary.ts      # Deterministic one-sentence hourly outlook (Apple-style, no AI): first condition-group change + peak gusts
 │   │   ├── hourly-summary.test.ts
+│   ├── location-time.ts       # Location time zone: current-hour index + "HH:00" labels in the PLACE's offset (utc_offset_seconds), never the viewer's clock
+│   ├── location-time.test.ts  # Viewer UTC+8 → Harare, viewer UTC-5 → Singapore (process TZ really set)
 │   │   ├── weather-labels.ts      # Contextual label helpers (humidityLabel, pressureLabel, cloudLabel, feelsLikeContext)
 │   │   ├── weather-labels.test.ts
 │   │   ├── api-keys.ts            # Developer API keys — mk_live_ generation (CSPRNG), SHA-256 hashing, masking, owner-scoped CRUD in platform.apiKeys
@@ -577,15 +586,16 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 
 **Philosophy:** The main location page (`/[location]`) is a compact overview — current conditions, AI summary, activity insights, and metric cards. Detail-heavy sections (charts, atmospheric trends, hourly/daily forecasts) live on dedicated sub-route pages. This reduces initial page load weight and prevents mobile OOM crashes from mounting all components simultaneously.
 
-**Sub-route back-navigation:** `/[location]/atmosphere`, `/[location]/forecast`, and `/[location]/map` all render the shared `Breadcrumb` component (`src/components/layout/Breadcrumb.tsx` — `Home / {location.name} / {current page}`) instead of each hand-rolling its own trail. `/[location]/map` previously used a floating "← Back to weather" pill overlay on the map; it now uses the same breadcrumb bar as the other two sub-routes for a consistent back-navigation pattern across all three.
+**Sub-route back-navigation:** `/[location]/atmosphere` and `/[location]/forecast` render the shared `Breadcrumb` component (`src/components/layout/Breadcrumb.tsx` — `Home / {location.name} / {current page}`) instead of each hand-rolling its own trail. `/[location]/map` takes the whole viewport, so it renders no site header and no page-width breadcrumb bar. Its back-navigation is a round close button in the top-left corner that links to `/{slug}`, with the SAME shared `Breadcrumb` beside it as a compact overlay pill (`variant="overlay"` — `Home / {location.name} / Map`, solid `bg-surface-card` so it reads over tiles in light and dark, `--touch-target-min` tall links, the location name truncates rather than wrapping, `aria-current="page"` on Map). The close + trail row sits in a column that stops 7rem short of the right edge, so it never runs under the control stack; the legend for the active layer sits beneath it. Its top-right corner holds a stacked control (layers panel toggle, centre on my location) and a list button to `/locations`.
 
 - `/` — the CURRENT-LOCATION weather page itself (silent URL — see "CurrentLocationHome (Silent-URL Home)" below): server-seeded from the lastLocation cookie / IP geo, client GPS swaps the dashboard in place. No redirect exists, so current location precedes saved by construction; `/{slug}` URLs remain for saved/browsed locations
 - `/[location]` — dynamic weather pages — overview: current conditions, AI summary, activity insights, atmospheric metric cards
 - `/[location]/atmosphere` — 24-hour atmospheric detail charts (humidity, wind, pressure, UV) for a location
 - `/[location]/forecast` — hourly (24h) + daily (7-day) forecast charts + sunrise/sunset for a location
-- `/[location]/map` — full-viewport interactive weather map with layer switcher (precipitation, cloud, temperature, wind)
+- `/[location]/map` — full-screen interactive weather map (no header): close button to `/{slug}` plus the shared breadcrumb as a compact overlay (`Home / {location} / Map`), legend, labelled chips for Air quality, Rain, Temperature, Wind and Cloud (default Rain, last choice remembered in localStorage), AQI bubbles for air quality, and a 3-hourly Now to +3 days timeline for rain
 - `/shamwari` — Shamwari AI chat (full-viewport, Claude app style, input above mobile nav). **Paused** — `notFound()`s while `FLAGS.shamwari_chat` is `false` (see Feature Flags section)
 - `/explore` — browse locations by category and country (ISR 1h)
+- `/locations` — iOS Weather-style Locations list (noindex): current location first ("My Location"), then saved places as live weather cards (sky by condition, local time, H/L). The ⋯ menu sets Home or removes a place; the search bar opens My Weather's Location tab
 - `/explore/[tag]` — browse locations filtered by tag (city, farming, mining, tourism, etc.)
 - `/explore/country` — browse locations by country index
 - `/explore/country/[code]` — browse locations in a specific country (ISO alpha-2 code)
@@ -632,7 +642,10 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/reports/clarify` — POST, AI-generated follow-up questions for weather report clarification. Rate-limited 10 req/hour/IP
 - `/api/py/devices` — POST (create) / GET (fetch) / PATCH (update), device profile sync for cross-device preferences
 - `/api/py/embeddings/status` — GET, vector search infrastructure status (stub)
-- `/api/py/airquality` — GET, EPA-standard Air Quality Index (0-500) + 7-pollutant breakdown (PM2.5, PM10, O3, NO2, SO2, CO, NH3) for `lat`/`lon`. Sourced from Open-Meteo Air Quality (free, no key) via `open_meteo_breaker`. Cached 1 h in `weather.air_quality_cache` with deterministic `_id` (`{lat:.4f}_{lon:.4f}`) so duplicate requests upsert one row, never two
+- `/api/py/airquality` — GET, EPA-standard Air Quality Index (0-500) + 7-pollutant breakdown (PM2.5, PM10, O3, NO2, SO2, CO, NH3) for `lat`/`lon`. Sourced from Open-Meteo Air Quality (free, no key) via `open_meteo_breaker`. Cached 1 h in `weather.air_quality_cache` with deterministic `_id` (`{lat:.4f}_{lon:.4f}`) so duplicate requests upsert one row, never two. Also returns `todayUsAqi`, `yesterdayAqi` (US AQI at the same local hour, from the same request via `hourly=us_aqi&past_days=1`) and `trend` (`better` | `worse` | `similar`, ±10 points; `null` when unavailable)
+- `/api/py/normals` — GET, climate normals: average daily high/low (°C) for `lat`/`lon` on `date` (YYYY-MM-DD, default today UTC), 1991–2020 from ERA5 via Open-Meteo Historical Weather API (free, no key) via `open_meteo_breaker`. Built once per 0.25° cell as two 366-entry day-of-year tables (±7-day window, wrap-around, leap-year slots) and cached without TTL in `weather.climate_normals` under `_id` `{lat:.2f}_{lon:.2f}`. Returns 200 with `available: false` + `reason` (`circuit_open`, `upstream_error`, `timeout`, `no_data`) instead of failing
+- `/api/py/airquality/grid` — GET, US AQI on an n×n grid (`n` odd 5–9, default 7; `radiusKm` default 40, capped 5–100) centred on `lat`/`lon`, from ONE batched Open-Meteo request via `open_meteo_breaker`. Cached 30 min in `weather.air_quality_grid_cache` (`_id` `{lat:.2f}_{lon:.2f}_{n}_{radius}`). Upstream/breaker failure returns 200 with `available: false` (the AQ map card renders nothing); only successes are cached. Client: `src/lib/aq-grid.ts` (`gridToGeoJSON`, `aqiBand`) + `AirQualityMapCard`
+- `/api/py/haze` — GET `lat`/`lon`, location-aware haze panel (smoke, dust, urban smog, mist vs haze, regional haze seasons in `HAZE_SEASONS`, official Singapore NEA PSI via `OFFICIAL_SOURCES`). Open-Meteo Air Quality + Forecast via `open_meteo_breaker`, cached 30 min in `weather.haze_cache`; failures return `available: false`, never 500. Frontend: `HazePanel.tsx` + `src/lib/haze.ts`
 - `/api/py/airports/nearest` — GET, N nearest ICAO airports to `lat`/`lon` (query: `lat`, `lon`, optional `count` default 5 / max 20, optional `maxDistanceKm` default 500) via MongoDB `$geoNear` on the seeded `weather.airports` collection. Each result carries `icao` + `name` + `distanceKm`, sorted closest-first. Returns an empty list on any DB error so the TS client falls back to the static haversine scan
 - `/api/py/metar?icao=` — GET, METAR (last 12 h) + TAF for one ICAO station from AWC (cached 30 min; empty answers cached 2 min; failures never cached). Source `awc` | `checkwx` | `unavailable`
 - `/api/py/aviation/nearest-metar?lat&lon` — GET, nearest airport within `radiusKm` (default 150) with a METAR no older than `maxAgeMinutes` (default 180), with its METAR + TAF. `status`: `ok` | `no_recent_report` | `no_airports` | `unavailable`; `candidates` lists every airport considered
@@ -809,6 +822,8 @@ Database seed data files are read by `/api/db-init` for one-time bootstrap:
 - `uvLevel(index)` — UV severity level
 - `synthesizeOpenMeteoInsights(data)` — constructs a `WeatherInsights` object from Open-Meteo data (wind speed, gusts, visibility) for suitability evaluation
 
+**Location time (worldwide viewers):** anyone, anywhere can open any place, so every "current hour" and every hour label is read in the LOCATION's time zone — never the viewer's clock, never the server's UTC. `/api/py/weather` ALWAYS returns `utc_offset_seconds` (Open-Meteo's value, else the Open-Meteo extras call's, else a longitude estimate via `_ensure_utc_offset` stamped `utc_offset_estimated: true` — covers Tomorrow.io, cached rows, StationKit overlays and the seasonal fallback). `src/lib/location-time.ts` (`currentHourIndex`, `locationHourLabel`, `locationClockLabel`, `instantMs`, `locationDateString`) handles both naive Open-Meteo wall-clock strings and zoned Tomorrow.io/fallback instants. Consumers (hero outlook + activity clause, `feasibilitySeries`, activity tips, `CommunityLane`, `HourlyScrollCards`, hourly/atmospheric charts, `AtmosphericSummary` + `metric-insights`, `SunTimes`, `DailyForecast`, `checkFrostRisk`, the wall display) take the payload's offset. Never call `getHours()` / `toLocaleTimeString()` on a forecast time.
+
 **Weather labels:** `src/lib/weather-labels.ts` — extracted contextual label helpers for weather metrics:
 
 - `humidityLabel(h)` — Dry / Comfortable / Humid / Very humid
@@ -861,6 +876,8 @@ weather.stationObservations → QC pipeline → weather.observations
 - `toggleActivity(id)` — adds/removes an activity selection, queues device sync
 - `selectedForecastModel: string` — Windy-style forecast model preference (Open-Meteo model id or `"best_match"`, default `"best_match"`), persisted (RxDB) + replicated to `/api/py/devices`. Set via the "Forecast model" radio group in the My Weather modal Settings tab; passed by `fetchWeather()` and highlighted in `ModelComparisonChart`
 - `setSelectedForecastModel(model)` — updates the model preference, persists to RxDB
+- `homeLocation: string | null` — the Home location slug (`/locations` ⌂), persisted in the RxDB `preferences` doc (schema v2). Device-local for now: the Python device-profile sync does not carry it yet, and the pull handler keeps the local value
+- `setHomeLocation(slug | null)` — set or clear the Home location (empty string clears), persists to RxDB
 - `savedLocations: string[]` — saved location slugs (up to `MAX_SAVED_LOCATIONS = 10`), persisted to localStorage, synced to server
 - `saveLocation(slug)` — adds a location to saved list (no-op if already saved or at cap), queues device sync
 - `removeLocation(slug)` — removes a location from saved list, queues device sync
@@ -915,6 +932,8 @@ Each activity category has a dedicated mineral color, defined as CSS custom prop
 - **Casual** → Primary (Storm, Mzizi experimental family)
 
 Category styles are centralized in `CATEGORY_STYLES` (`src/lib/activities.ts`) with static Tailwind classes for `bg`, `border`, `text`, and `badge` per category. Each mineral color has a corresponding `--mineral-*-fg` foreground token for badge text contrast.
+
+**Condition sky (Locations list):** the `.oryx` card surface and its `.oryx-clear-day`, `.oryx-clear-night`, `.oryx-cloudy`, `.oryx-rain`, `.oryx-storm`, `.oryx-fog` and `.oryx-snow` modifiers paint each card's sky from `--oryx-*-top` / `--oryx-*-bottom` tokens in `globals.css` (light and `[data-theme="dark"]`). Text on the sky is always `--color-oryx-fg` (white). Every stop must stay at 4.5:1 or better against it; `locations.test.ts` enforces this. `cardTheme()` in `src/lib/location-card.ts` picks the class from the WMO code and day/night.
 
 **Severity / Status Color System:**
 For weather alerts, status indicators, and severity levels, use the semantic severity tokens defined in `globals.css`:
@@ -1130,7 +1149,7 @@ All AI system prompts, suggested prompt rules, and model configurations are stor
 
 **Header** (`src/components/layout/Header.tsx`): Sticky header with the Mukoko logo on the left, desktop nav links in the center, and a pill-shaped icon group on the right.
 
-**Desktop nav links** (hidden on mobile, `sm:flex`): Explore | Shamwari | History | Aviation — text links with active state highlighting, plus a **My Weather** button (opens the My Weather modal — a button rather than a `Link` since it's not a route). My Weather intentionally lives in the text-nav row rather than the icon pill so anonymous desktop users keep a way to reach it (mobile has its own separate bottom-nav entry, unaffected by this). Shamwari is gated behind `FLAGS.shamwari_chat` (currently paused, see Feature Flags) and omitted from the array while off.
+**Desktop nav links** (hidden on mobile, `sm:flex`): Explore | Shamwari | History | Aviation — text links with active state highlighting, plus a **My Weather** button (opens the My Weather modal — a button rather than a `Link` since it's not a route). My Weather intentionally lives in the text-nav row rather than the icon pill so anonymous desktop users keep a way to reach it (mobile reaches these from the bottom bar and the header's ⋯ menu, see Mobile Bottom Bar below). Shamwari is gated behind `FLAGS.shamwari_chat` (currently paused, see Feature Flags) and omitted from the array while off.
 
 **Action pill** (`bg-primary`, 44px circular icon buttons — map, notifications, account only):
 
@@ -1144,14 +1163,17 @@ The header also renders `WeatherReportModal` (lazy-loaded, only mounts when `rep
 
 The header takes no props — location context comes from the URL path.
 
-**Mobile Bottom Navigation** (visible `sm:hidden`): Fixed floating-pill bottom nav with 5 always-on items, plus a 6th (Shamwari) gated behind `FLAGS.shamwari_chat` (currently paused, see Feature Flags):
+**Mobile Bottom Bar** (visible `sm:hidden`): an iOS Weather-style translucent, full-width bar pinned to the bottom edge and safe-area aware (`fixed inset-x-0 bottom-0`, `pb-[calc(env(safe-area-inset-bottom,0px)+0.625rem)]`). Three parts, all 48px touch targets (`--touch-target-min`):
 
-1. **Weather** (home icon) → `/`
-2. **Explore** (compass icon) → `/explore`
-3. **Shamwari** (sparkles icon) → `/shamwari` — hidden entirely while paused
-4. **My Location** (navigation-arrow button, centre slot) — GPS action, not a route: runs the shared `detectUserLocation({ autoCreate: true })` flow (via deferred `import("@/lib/geolocation")` so the header bundle stays lean), syncs `selectedLocation`, writes the `lastLocation` cookie (`writeLastLocationCookie`, `src/lib/current-slug.ts`) and goes to `/` — the home page IS the current-location page. Already on `/`, it dispatches `CURRENT_LOCATION_EVENT` instead and `CurrentLocationHome` swaps the dashboard in place. Shows a `Spinner` while locating (double-tap guarded, `aria-busy`). On denial/unavailability/error it opens the My Weather modal instead — its Location tab has search plus a geolocation retry with proper error copy. Fires `geolocation_result` and, on success, `location_changed` (`method: "geolocation"`) analytics events
-5. **History** (clock icon) → `/history`
-6. **My Weather** (map-pin button) → opens modal
+1. **Map** (left round button, Lucide `Map`) → `/${slug}/map` for the location on screen (`currentLocationSlug`); with no location yet it goes to `/explore`.
+2. **Page indicator** (centre pill, `LocationPager` in `src/components/layout/LocationPager.tsx`) — a location-arrow glyph for **My Location** (`/`, always index 0) followed by one dot per saved location (`savedLocations`, capped at 10 via `pagerDots`). The current page's dot is highlighted (`aria-current="page"`); tapping a dot navigates. The pill scrolls sideways and keeps the active item centred (`scrollbar-hide`, reduced-motion aware).
+3. **List** (right round button, Lucide `List`) → `/locations` (`aria-current` when active).
+
+Paging helpers are pure and tested in `src/lib/location-pager.ts` (`pagerSequence`, `pagerIndex`, `neighbour`, `pagerDots`). **Swipe** (`useLocationSwipe`, touch handlers from `src/lib/use-swipe.ts`) is wired on the `<main>` of `WeatherDashboard`: a left swipe goes to the next page in the pager sequence, a right swipe to the previous one, via `router.push`, and it stops at either end. A swipe needs ≥60px of travel with |dx| > 1.5·|dy| (`classifySwipe`); gestures that start inside `[data-no-swipe]` or an element that scrolls sideways (the hourly strip) are ignored. Swipe is off while sections are being reordered.
+
+**Mobile ⋯ menu** (header icon pill, `sm:hidden`): Explore, Shamwari (only while `FLAGS.shamwari_chat` is on), History, Aviation, My Weather (opens the modal) and Use my location (the GPS flow below). Disclosure pattern: `aria-expanded` / `aria-controls="mobile-more-menu"`, closes on activation, outside click or Escape (focus returns to the trigger). The header's map button is hidden on phones (`hidden sm:flex`) because the bottom bar's Map button replaces it.
+
+**My Location (GPS) action** — runs the shared `detectUserLocation({ autoCreate: true })` flow (via deferred `import("@/lib/geolocation")` so the header bundle stays lean), syncs `selectedLocation`, writes the `lastLocation` cookie (`writeLastLocationCookie`, `src/lib/current-slug.ts`) and goes to `/` — the home page IS the current-location page. Already on `/`, it dispatches `CURRENT_LOCATION_EVENT` instead and `CurrentLocationHome` swaps the dashboard in place. Shows a `Spinner` while locating (double-tap guarded, `aria-busy`). On denial/unavailability/error it opens the My Weather modal instead — its Location tab has search plus a geolocation retry with proper error copy. Fires `geolocation_result` and, on success, `location_changed` (`method: "geolocation"`) analytics events. Saved-location dot taps and swipes fire `location_changed` with `method: "saved"`.
 
 **My Weather Modal** (`src/components/weather/MyWeatherModal.tsx`): A centralized preferences modal (shadcn Dialog + Tabs) with three tabs:
 
@@ -1221,6 +1243,7 @@ All pages use a **TikTok-style sequential mounting** pattern — only ONE sectio
 **Location page — `CurrentConditions` and `AtmosphericSummary` load eagerly.** All other sections are lazy:
 
 - `HourlyScrollCards` → `ChartErrorBoundary` (eager)
+- `CommunityLane` → `LazySection` (`CommunityLaneSkeleton`) + `ChartErrorBoundary` — its own draggable section (`communityLane`), right after the hourly strip in `DEFAULT_SECTION_ORDER`
 - `CurrentConditions` → `ChartErrorBoundary` (eager — big temp, feels-like, daily high/low)
 - `AtmosphericSummary` → `ChartErrorBoundary` (eager — 7 gauge cards: humidity, cloud, wind, pressure, UV, feels-like, precipitation)
 - `RecentReports` → `LazySection` + `ChartErrorBoundary` + `Suspense`
@@ -1365,6 +1388,7 @@ Users can submit real-time ground-truth weather observations, similar to Waze fo
 _Library tests:_
 
 - `src/lib/weather.test.ts` — frost detection, season logic, wind direction, UV levels, fallback weather, synthesizeOpenMeteoInsights
+- `src/lib/location-time.test.ts` — location time zone: viewer UTC+8 → Harare (UTC+2) and viewer UTC-5 → Singapore (UTC+8) with the process TZ really set; start hour + labels across hero, feasibility, lane, charts, tips, frost, sun
 - `src/lib/weather-labels.test.ts` — humidity/pressure/cloud/precipitation/feels-like label helpers
 - `src/lib/locations.test.ts` — location searching, tag filtering, nearest location
 - `src/lib/activities.test.ts` — activity definitions, categories, search, filtering, category styles
@@ -1445,7 +1469,7 @@ _Page/component tests:_
 - `src/components/explore/ExploreChatbot.test.ts` — chatbot component tests, MarkdownErrorBoundary, contextual navigation
 - `src/components/explore/ExploreSearch.test.ts` — AI search structure, search flow, results rendering, Shamwari context
 - `src/components/embed/MukokoWeatherEmbed.test.ts` — widget rendering, data fetching
-- `src/components/layout/Breadcrumb.test.ts` — shared sub-route breadcrumb trail, aria-current, usage across atmosphere/forecast/map dashboards
+- `src/components/layout/Breadcrumb.test.ts` — shared sub-route breadcrumb trail, aria-current, usage across atmosphere/forecast dashboards and the map's compact overlay variant
 - `src/components/ui/chart-fallbacks.test.ts` — CSS fallback table key parity (light/dark sync)
 - `src/components/ui/primitives.test.ts` — UI primitive variants (StatusIndicator, CTACard, ToggleGroup, InfoRow, SectionHeader)
 - `src/components/weather/charts.test.ts` — chart data preparation (hourly + daily + atmospheric), hexWithAlpha

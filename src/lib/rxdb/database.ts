@@ -8,7 +8,9 @@
 import { createRxDatabase, type RxDatabase } from "rxdb";
 import { getRxStorageDexie } from "rxdb/plugins/storage-dexie";
 import {
+  migratePreferencesV2ToV3,
   preferencesSchema,
+  type PreferencesDocV2,
   weatherCacheSchema,
   weatherHintSchema,
   suitabilityRuleSchema,
@@ -124,11 +126,19 @@ async function _initDb(): Promise<MukokoDatabase> {
     preferences: {
       schema: preferencesSchema,
       // v0 → v1: added `selectedForecastModel` (Windy-style model preference).
+      // v1 → v2: added `homeLocation`.
       migrationStrategies: {
         1: (oldDoc: PreferencesDocType) => ({
           ...oldDoc,
           selectedForecastModel: oldDoc.selectedForecastModel ?? "best_match",
         }),
+        // v1 → v2: added `homeLocation` (null = no home location set).
+        2: (oldDoc: PreferencesDocType) => ({
+          ...oldDoc,
+          homeLocation: oldDoc.homeLocation ?? null,
+        }),
+        // v2 → v3: suggested places (hidden list + anchor), see schemas.ts.
+        3: (oldDoc: PreferencesDocV2) => migratePreferencesV2ToV3(oldDoc),
       },
     },
     weather_cache: { schema: weatherCacheSchema },

@@ -15,6 +15,7 @@ import { slugToDisplayName } from "@/lib/utils";
  */
 export const NON_LOCATION_ROUTES: ReadonlySet<string> = new Set([
   "explore",
+  "locations",
   "shamwari",
   "history",
   "aviation",

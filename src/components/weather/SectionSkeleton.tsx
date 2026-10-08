@@ -220,9 +220,59 @@ export function MapPreviewSkeleton() {
         <Skeleton className="h-6 w-28" />
         <Skeleton className="h-5 w-24" />
       </div>
-      {/* Map area */}
-      <Skeleton className="aspect-[16/9] w-full rounded-none" />
+      {/* Map area — square, matches MapPreview */}
+      <Skeleton className="aspect-square w-full rounded-none" />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Air quality (wide) skeleton
+// Matches: AQI card under the hero — header, big number, scale bar, sentence
+// ---------------------------------------------------------------------------
+
+export function AirQualityWideSkeleton() {
+  return (
+    <div
+      className="chameleon mb-2.5 flex min-w-0 flex-col gap-3 p-4 sm:mb-3"
+      role="status"
+      aria-label="Loading air quality"
+    >
+      <Skeleton className="h-4 w-28" />
+      <Skeleton className="h-10 w-20" />
+      <Skeleton className="h-2 w-full rounded-full" />
+      <Skeleton className="h-4 w-3/4" />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Air quality map skeleton
+// Matches: large square AirQualityMapCard (aspect-square, max 28rem)
+// ---------------------------------------------------------------------------
+
+export function AirQualityMapSkeleton() {
+  return (
+    <div
+      className="chameleon aspect-square max-h-[28rem] w-full"
+      role="status"
+      aria-label="Loading air quality map"
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Haze panel skeleton
+// Matches: a slim wide strip; HazePanel renders nothing when there is no haze
+// ---------------------------------------------------------------------------
+
+export function HazeSkeleton() {
+  return (
+    <div
+      className="chameleon mb-2.5 h-20 w-full sm:mb-3"
+      role="status"
+      aria-label="Loading haze outlook"
+    />
   );
 }
 

@@ -3,45 +3,43 @@
 import { useEffect, useRef } from "react";
 import { WeatherIcon, nightIcon } from "@/lib/weather-icons";
 import { weatherCodeToInfo, type HourlyWeather } from "@/lib/weather";
-import { hourlySummary } from "@/lib/hourly-summary";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { useHydrated } from "@/lib/use-hydrated";
+import {
+  currentHourIndex,
+  locationClockLabel,
+  resolveOffsetSeconds,
+} from "@/lib/location-time";
 
 /** Accessible name for the focusable horizontal scroll region. */
 export const HOURLY_SCROLL_LABEL = "Hourly forecast, scroll horizontally";
 
 interface Props {
   hourly: HourlyWeather;
+  /** The location's UTC offset (payload `utc_offset_seconds`). "Now" and
+   *  every hour label are read in the PLACE's time, not the viewer's. */
+  utcOffsetSeconds?: number;
 }
 
 /**
  * Horizontal scrollable hour-by-hour weather cards.
  * Renders eagerly above CurrentConditions on the location page.
  */
-export function HourlyScrollCards({ hourly }: Props) {
-  // The start of the strip is chosen from the client's wall clock
-  // (`new Date()`), which the server can't match at SSR time — computing it
+export function HourlyScrollCards({ hourly, utcOffsetSeconds }: Props) {
+  // The start of the strip is chosen from the current instant (`new Date()`)
+  // read in the LOCATION's offset, which the server can't match at SSR time
+  // (it renders minutes earlier, possibly a different hour) — computing it
   // during hydration would slice a different set of hours and mismatch the
   // server HTML (React error 418). Gate on `useHydrated()`: the server and the
   // first client render both start at index 0 (identical HTML), then after
   // hydration we advance to the current hour and label the first card "Now".
   const hydrated = useHydrated();
-  const now = new Date();
-  const currentHour = now.getHours();
-  const startIndex = hydrated
-    ? hourly.time.findIndex(
-        (t) =>
-          new Date(t).getHours() >= currentHour &&
-          new Date(t).getDate() === now.getDate(),
-      )
-    : -1;
-  const start = startIndex >= 0 ? startIndex : 0;
+  const offset = resolveOffsetSeconds(utcOffsetSeconds);
+  const start = hydrated ? currentHourIndex(hourly.time, offset) : 0;
   const hours = hourly.time.slice(start, start + 24);
 
-  // Deterministic one-sentence outlook (Apple Weather pattern) — derived from
-  // the same start index as the strip, no AI call. Hydration-gated like the
-  // strip itself: the sentence depends on the client's wall clock.
-  const summary = hydrated ? hourlySummary(hourly, start) : null;
+  // The one-sentence outlook lives in the hero (CurrentConditions) — it is
+  // deliberately NOT repeated here, so the strip is hours only.
 
   // The horizontal scroller is Radix's Viewport, which ScrollArea doesn't let
   // us attribute directly. Keyboard users need it focusable (axe:
@@ -59,11 +57,6 @@ export function HourlyScrollCards({ hourly }: Props) {
 
   return (
     <div className="baobab overflow-hidden p-3">
-      {summary && (
-        <p className="border-b border-text-tertiary/10 px-1.5 pb-2.5 mb-1 text-base text-text-secondary leading-snug">
-          {summary}
-        </p>
-      )}
       <ScrollArea className="w-full" type="hover" viewportRef={scrollRef}>
         <div
           className="flex gap-2.5 pb-2 [overscroll-behavior-x:contain]"
@@ -72,18 +65,11 @@ export function HourlyScrollCards({ hourly }: Props) {
         >
           {hours.map((time, i) => {
             const idx = start + i;
-            const date = new Date(time);
             const info = weatherCodeToInfo(hourly.weather_code[idx]);
             const isDay = hourly.is_day[idx];
             const temp = Math.round(hourly.temperature_2m[idx]);
             const timeLabel =
-              hydrated && i === 0
-                ? "Now"
-                : date.toLocaleTimeString("en-ZW", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    hour12: false,
-                  });
+              hydrated && i === 0 ? "Now" : locationClockLabel(time, offset);
             return (
               <div
                 key={time}

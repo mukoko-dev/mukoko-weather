@@ -1,6 +1,7 @@
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { updatePreferences } from "./rxdb/bridge";
 import {
   resolveTheme,
   useAppStore,
@@ -135,6 +136,46 @@ describe("selectedActivities", () => {
     useAppStore.getState().toggleActivity("running");
     useAppStore.getState().toggleActivity("running");
     expect(useAppStore.getState().selectedActivities).toEqual([]);
+  });
+});
+
+describe("homeLocation", () => {
+  beforeEach(() => {
+    useAppStore.setState({ homeLocation: null });
+    vi.mocked(updatePreferences).mockClear();
+  });
+
+  it("defaults to null (no home location)", () => {
+    expect(useAppStore.getState().homeLocation).toBeNull();
+  });
+
+  it("setHomeLocation sets the slug and persists it to RxDB", () => {
+    useAppStore.getState().setHomeLocation("harare");
+    expect(useAppStore.getState().homeLocation).toBe("harare");
+    expect(updatePreferences).toHaveBeenCalledWith({ homeLocation: "harare" });
+  });
+
+  it("setHomeLocation(null) clears the home and persists null", () => {
+    useAppStore.setState({ homeLocation: "harare" });
+    useAppStore.getState().setHomeLocation(null);
+    expect(useAppStore.getState().homeLocation).toBeNull();
+    expect(updatePreferences).toHaveBeenCalledWith({ homeLocation: null });
+  });
+
+  it("treats an empty slug as no home location", () => {
+    useAppStore.getState().setHomeLocation("");
+    expect(useAppStore.getState().homeLocation).toBeNull();
+  });
+
+  it("is included in the RxDB bridge's current-prefs snapshot", () => {
+    useAppStore.setState({ homeLocation: "bulawayo" });
+    const src = readFileSync(resolve(__dirname, "store.ts"), "utf-8");
+    expect(src).toMatch(/homeLocation: s\.homeLocation/);
+  });
+
+  it("is hydrated from RxDB preferences (applyToStore)", () => {
+    const src = readFileSync(resolve(__dirname, "store.ts"), "utf-8");
+    expect(src).toMatch(/if \(prefs\.homeLocation !== undefined\)/);
   });
 });
 
@@ -468,6 +509,7 @@ describe("sectionOrder", () => {
     expect([...DEFAULT_SECTION_ORDER]).toEqual([
       "current",
       "hourlyScroll",
+      "communityLane",
       "atmospheric",
       "reports",
       "activityInsights",
@@ -496,6 +538,7 @@ describe("mergeSectionOrder (Bug 2 — union stored order with defaults)", () =>
     expect(merged).toEqual([
       "current",
       "hourlyScroll",
+      "communityLane",
       "atmospheric",
       "reports",
       "activityInsights",
@@ -572,5 +615,14 @@ describe("selectedForecastModel", () => {
     expect(useAppStore.getState().selectedForecastModel).toBe("ecmwf_ifs04");
     // reset for other tests
     useAppStore.getState().setSelectedForecastModel("best_match");
+  });
+});
+
+describe("sectionOrder — Community Lane placement", () => {
+  it("places the community lane right after the hourly strip, before activity insights", () => {
+    const order = [...DEFAULT_SECTION_ORDER] as string[];
+    const lane = order.indexOf("communityLane");
+    expect(lane).toBe(order.indexOf("hourlyScroll") + 1);
+    expect(lane).toBeLessThan(order.indexOf("activityInsights"));
   });
 });

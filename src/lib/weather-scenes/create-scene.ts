@@ -42,6 +42,12 @@ async function loadSceneBuilder(
       const m = await import("./scenes/fog");
       return m.buildFogScene;
     }
+    case "haze": {
+      // Haze/dust shares the fog builder — the palette (keyed by type) makes
+      // it warm ochre instead of pale grey.
+      const m = await import("./scenes/fog");
+      return m.buildFogScene;
+    }
     case "snow": {
       const m = await import("./scenes/snow");
       return m.buildSnowScene;

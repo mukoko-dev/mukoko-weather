@@ -1,8 +1,10 @@
 import type { WeatherSceneConfig, SceneElements } from "../types";
+import { getScenePalette } from "../palette";
+import { rainStreaks, scatter, softPointsMaterial, softSprite } from "./shared";
 
 /**
- * Rain scene.
- * Rain streak particles falling at an angle, cloud layer above, blue-grey fog.
+ * Rain scene. Colours: palette.ts (`rain`) — blue-grey sky, darker clouds,
+ * grey-blue streaks for the drops, falling on a slight wind slant.
  */
 export function buildRainScene(
   THREE: typeof import("three"),
@@ -10,72 +12,50 @@ export function buildRainScene(
   config: WeatherSceneConfig,
 ): SceneElements {
   const { isDay, isMobile } = config;
+  const p = getScenePalette("rain", isDay, config.phase);
+  const sprite = softSprite(THREE);
   const disposables: { dispose(): void }[] = [];
+  if (sprite) disposables.push(sprite);
 
-  scene.fog = new THREE.FogExp2(isDay ? 0x6688aa : 0x0c1018, 0.02);
+  scene.fog = new THREE.FogExp2(p.fog, 0.02);
 
-  // Cloud layer
-  const CLOUD_COUNT = isMobile ? 22 : 40;
-  const cloudPos = new Float32Array(CLOUD_COUNT * 3);
-  for (let i = 0; i < CLOUD_COUNT; i++) {
-    cloudPos[i * 3] = (Math.random() - 0.5) * 40;
-    cloudPos[i * 3 + 1] = 6 + Math.random() * 6;
-    cloudPos[i * 3 + 2] = -5 + (Math.random() - 0.5) * 15;
-  }
+  // Rain cloud deck
+  const CLOUD_COUNT = isMobile ? 24 : 44;
   const cloudGeo = new THREE.BufferGeometry();
-  cloudGeo.setAttribute("position", new THREE.BufferAttribute(cloudPos, 3));
-  const cloudMat = new THREE.PointsMaterial({
-    color: isDay ? 0xbfc6d0 : 0x556070,
-    size: 1.7,
-    transparent: true,
-    opacity: 0.34,
+  cloudGeo.setAttribute(
+    "position",
+    new THREE.BufferAttribute(
+      scatter(CLOUD_COUNT, [-20, 20], [6, 12], [-12.5, 2.5]),
+      3,
+    ),
+  );
+  const cloudMat = softPointsMaterial(THREE, sprite, {
+    color: p.cloud,
+    size: 6,
+    opacity: 0.65,
   });
-  const clouds = new THREE.Points(cloudGeo, cloudMat);
-  scene.add(clouds);
+  scene.add(new THREE.Points(cloudGeo, cloudMat));
   disposables.push(cloudGeo, cloudMat);
 
-  // Rain particles
-  const RAIN_COUNT = isMobile ? 190 : 440;
-  const rainPos = new Float32Array(RAIN_COUNT * 3);
-  const rainVel = new Float32Array(RAIN_COUNT);
-  for (let i = 0; i < RAIN_COUNT; i++) {
-    rainPos[i * 3] = (Math.random() - 0.5) * 40;
-    rainPos[i * 3 + 1] = Math.random() * 30 - 5;
-    rainPos[i * 3 + 2] = (Math.random() - 0.5) * 30;
-    rainVel[i] = 0.12 + Math.random() * 0.18;
-  }
-  const rainGeo = new THREE.BufferGeometry();
-  rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
-  const rainMat = new THREE.PointsMaterial({
-    color: isDay ? 0x5b8fd6 : 0x6fa0d8,
-    size: 0.17,
-    transparent: true,
-    opacity: 0.85,
-  });
-  const rain = new THREE.Points(rainGeo, rainMat);
-  scene.add(rain);
-  disposables.push(rainGeo, rainMat);
-
-  // Wind angle for rain drift
+  // Rain streaks
   const windDrift = (config.windSpeed ?? 10) * 0.0005;
+  const rain = rainStreaks(THREE, {
+    count: isMobile ? 160 : 380,
+    spreadX: 40,
+    spreadZ: 30,
+    length: 0.9,
+    slant: 0.08,
+    minSpeed: 0.18,
+    maxSpeed: 0.34,
+    color: p.particle,
+    opacity: 0.6,
+  });
+  scene.add(rain.object);
+  disposables.push(rain.geometry, rain.material);
 
   return {
     update(elapsed) {
-      // Rain falls and drifts
-      const pos = rainGeo.attributes.position as InstanceType<
-        typeof THREE.BufferAttribute
-      >;
-      for (let i = 0; i < RAIN_COUNT; i++) {
-        pos.array[i * 3 + 1] -= rainVel[i];
-        pos.array[i * 3] += windDrift; // slight wind drift
-        if (pos.array[i * 3 + 1] < -10) {
-          pos.array[i * 3 + 1] = 20;
-          pos.array[i * 3] = (Math.random() - 0.5) * 40;
-        }
-      }
-      pos.needsUpdate = true;
-
-      // Clouds drift
+      rain.step(windDrift);
       const cpos = cloudGeo.attributes.position as InstanceType<
         typeof THREE.BufferAttribute
       >;
@@ -84,9 +64,7 @@ export function buildRainScene(
         if (cpos.array[i * 3] > 22) cpos.array[i * 3] = -22;
       }
       cpos.needsUpdate = true;
-
-      // Pulsing cloud opacity
-      cloudMat.opacity = 0.34 + Math.sin(elapsed * 0.6) * 0.05;
+      cloudMat.opacity = 0.65 + Math.sin(elapsed * 0.6) * 0.05;
     },
     dispose() {
       for (const d of disposables) d.dispose();
