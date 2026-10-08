@@ -232,14 +232,20 @@ describe("WeatherDashboard — layout control placement (bottom of page)", () =>
     expect(source).toMatch(/mt-8 flex justify-center/);
   });
 
-  it("keeps only the clock in the header row (no layout button there)", () => {
-    const clockIdx = source.indexOf("<LiveClock />");
+  it("has no LiveClock in the hero area (the iOS status bar shows the time)", () => {
+    expect(source).not.toContain("LiveClock");
+  });
+
+  it("the only layout trigger lives below the grid, never in the hero", () => {
     const firstOpen = source.indexOf("setReordering(true)");
-    expect(clockIdx).toBeGreaterThan(-1);
-    // The only setReordering(true) trigger lives below the grid, never beside the clock.
     expect(firstOpen).toBeGreaterThan(source.indexOf("</DndContext>"));
-    const clockBlock = source.slice(clockIdx - 200, clockIdx + 40);
-    expect(clockBlock).not.toContain("Customise");
+  });
+
+  it("renders the season pill as the hero footer, not as a block above the grid", () => {
+    const currentIdx = source.indexOf("<CurrentConditions");
+    const footerIdx = source.indexOf("footer={<SeasonBadge");
+    expect(footerIdx).toBeGreaterThan(currentIdx);
+    expect(source).not.toMatch(/<div className="mb-3">\s*<SeasonBadge/);
   });
 
   it("hides the bottom trigger while reordering so the floating Done takes over", () => {

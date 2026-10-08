@@ -1,7 +1,7 @@
 /**
- * Tests for CurrentConditions — validates the share button implementation,
- * accessibility attributes, and component structure by reading the source
- * file (Vitest runs in Node without a DOM/React renderer).
+ * Tests for CurrentConditions — validates the iOS-style centred hero, the
+ * share button, and accessibility attributes by reading the source file
+ * (Vitest runs in Node without a DOM/React renderer).
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
@@ -19,6 +19,61 @@ describe("CurrentConditions — client component", () => {
 
   it("exports CurrentConditions as a named function", () => {
     expect(source).toContain("export function CurrentConditions");
+  });
+});
+
+describe("CurrentConditions — centred hero structure", () => {
+  it("renders the place name as the section heading (no duplicate h1)", () => {
+    expect(source).toContain('<h2\n          id="current-conditions-heading"');
+    expect(source).not.toContain("<h1");
+  });
+
+  it("labels the section by the visible place-name heading", () => {
+    expect(source).toContain('aria-labelledby="current-conditions-heading"');
+  });
+
+  it("uses the lightest loaded Noto Sans weight for the large temperature", () => {
+    // layout.tsx loads Noto Sans at 400/500/600 only — font-normal is the lightest.
+    expect(source).toContain("font-sans text-8xl font-normal");
+    expect(source).not.toMatch(/font-(thin|extralight|light)\b/);
+  });
+
+  it("renders the temperature with an accessible degrees-Celsius label", () => {
+    expect(source).toContain("degrees Celsius");
+    expect(source).toContain('className="sr-only"');
+  });
+
+  it("renders the condition label and the high/low line", () => {
+    expect(source).toContain("{info.label}");
+    expect(source).toContain("formatHighLow(");
+  });
+
+  it("does not render the big condition icon in the hero", () => {
+    expect(source).not.toContain("WeatherIcon");
+    expect(source).not.toContain("nightIcon");
+    expect(source).not.toContain("is_day");
+  });
+
+  it("does not render the feels-like line (moved to the metric cards)", () => {
+    expect(source).not.toContain("Feels like");
+    expect(source).not.toContain("apparent_temperature");
+  });
+
+  it("does not render inline stat boxes (consolidated into AtmosphericSummary)", () => {
+    expect(source).not.toContain("QuickStat");
+    expect(source).not.toContain('role="list"');
+    expect(source).not.toContain('role="listitem"');
+  });
+
+  it("uses no hardcoded colours or inline styles", () => {
+    expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(source).not.toContain("style={{");
+    expect(source).not.toMatch(/rgba?\(/);
+  });
+
+  it("renders a footer slot below the hero (season line)", () => {
+    expect(source).toContain("footer?: ReactNode");
+    expect(source).toContain("{footer && (");
   });
 });
 
@@ -62,6 +117,13 @@ describe("CurrentConditions — share button", () => {
   it("falls back to window.location.href when slug is not provided", () => {
     expect(source).toContain("window.location.href");
   });
+
+  it("sits below the high/low line, centred", () => {
+    const shareIdx = source.indexOf("handleShare}");
+    const hlIdx = source.indexOf("{highLow && (");
+    expect(hlIdx).toBeGreaterThan(-1);
+    expect(shareIdx).toBeGreaterThan(hlIdx);
+  });
 });
 
 describe("CurrentConditions — share button accessibility", () => {
@@ -85,15 +147,9 @@ describe("CurrentConditions — share button accessibility", () => {
 });
 
 describe("CurrentConditions — temperature accessibility", () => {
-  it("temperature display has aria-label with unit", () => {
+  it("temperature display has aria-hidden visual number and sr-only unit label", () => {
     expect(source).toContain("degrees Celsius");
-    expect(source).toContain("aria-label");
-  });
-
-  it("does not render inline stat boxes (consolidated into AtmosphericSummary)", () => {
-    expect(source).not.toContain("QuickStat");
-    expect(source).not.toContain('role="list"');
-    expect(source).not.toContain('role="listitem"');
+    expect(source).toContain('aria-hidden="true"');
   });
 });
 
@@ -102,26 +158,31 @@ describe("CurrentConditions — section accessibility", () => {
     expect(source).toContain("aria-labelledby");
     expect(source).toContain("current-conditions-heading");
   });
-
-  it("heading is visually hidden (sr-only) to keep visual layout clean", () => {
-    expect(source).toContain("sr-only");
-    expect(source).toContain("Current weather conditions in");
-  });
 });
 
-describe("CurrentConditions — MY LOCATION eyebrow (silent-URL home)", () => {
-  const source = readFileSync(
-    resolve(__dirname, "CurrentConditions.tsx"),
-    "utf-8",
-  );
-
-  it("renders the eyebrow only when isCurrentLocation is set", () => {
-    expect(source).toContain("isCurrentLocation?: boolean");
-    expect(source).toContain("{isCurrentLocation && (");
-    expect(source).toContain("My Location");
+describe("CurrentConditions — eyebrow (MY LOCATION / HOME)", () => {
+  it("renders the eyebrow only when at least one badge applies", () => {
+    expect(source).toContain("badges.length > 0");
   });
 
-  it("defaults the prop off so /{slug} pages are unaffected", () => {
+  it("selects badges through the hero helpers, not inline logic", () => {
+    expect(source).toContain("heroEyebrowBadges(");
+    expect(source).toContain("isHomeLocation(slug, homeLocation)");
+  });
+
+  it("keeps the isCurrentLocation prop, defaulting off so /{slug} pages are unaffected", () => {
+    expect(source).toContain("isCurrentLocation?: boolean");
     expect(source).toContain("isCurrentLocation = false");
+  });
+
+  it("reads homeLocation from the store defensively (field added by another agent)", () => {
+    expect(source).toContain("useAppStore");
+    expect(source).toContain(
+      "(s as { homeLocation?: string | null }).homeLocation ?? null",
+    );
+  });
+
+  it("uses the shared heroBadgeLabel for the label text", () => {
+    expect(source).toContain("heroBadgeLabel(badge)");
   });
 });
