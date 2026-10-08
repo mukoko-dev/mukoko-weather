@@ -13,6 +13,7 @@ const KNOWN_ROUTES = new Set([
   "terms",
   "status",
   "embed",
+  "display",
   "offline",
   "api",
   // WorkOS AuthKit routes — never confuse with location slugs

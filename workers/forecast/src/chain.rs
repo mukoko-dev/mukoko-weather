@@ -36,12 +36,13 @@ fn cache_key(lat: f64, lon: f64) -> String {
 }
 
 /// The forecast for a point, or `None` when the cache is cold and every
-/// provider failed.
-pub async fn forecast(env: &Env, ctx: &Context, lat: f64, lon: f64) -> Option<Got> {
+/// provider failed. `refresh` skips the cache read (the answer is still
+/// cached): the jobs Worker uses it to keep popular places warm.
+pub async fn forecast(env: &Env, ctx: &Context, lat: f64, lon: f64, refresh: bool) -> Option<Got> {
     let kv = env.kv(CACHE_BINDING).ok();
     let key = cache_key(lat, lon);
 
-    if let Some(kv) = &kv {
+    if let Some(kv) = kv.as_ref().filter(|_| !refresh) {
         if let Ok(Some(mut hit)) = kv.get(&key).json::<Got>().await {
             hit.cache_hit = true;
             return Some(hit);
@@ -116,7 +117,13 @@ async fn open_meteo(lat: f64, lon: f64) -> Option<Value> {
     data
 }
 
-fn record_open_meteo(ok: bool) {
+/// Whether the Open-Meteo breaker lets a call through now. Air quality
+/// shares it: one Open-Meteo, one breaker, as in Python.
+pub fn open_meteo_allowed() -> bool {
+    OPEN_METEO.with(|b| b.borrow_mut().allow(now_ms()))
+}
+
+pub fn record_open_meteo(ok: bool) {
     OPEN_METEO.with(|b| {
         let mut b = b.borrow_mut();
         if ok {

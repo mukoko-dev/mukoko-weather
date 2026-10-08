@@ -21,7 +21,7 @@ Social: Twitter @mukokoafrica, Instagram @mukoko.africa
 - **Framework:** Next.js 16.1.6 (App Router, TypeScript 5.9.3)
 - **UI components:** shadcn/ui (new-york style, Lucide icons)
 - **Charts:** Chart.js 4 + react-chartjs-2 (Canvas 2D rendering via `src/components/ui/chart.tsx`)
-- **Maps:** MapLibre GL JS + MapTiler Cloud (vector tiles direct from CDN via `NEXT_PUBLIC_MAPTILER_API_KEY` — no server proxy; GPU-rendered; theme-aware streets-v2 / streets-v2-dark styles); Tomorrow.io raster weather overlays still proxied via `/api/py/map-tiles`
+- **Maps:** MapLibre GL JS + MapTiler Cloud (vector tiles direct from CDN via `NEXT_PUBLIC_MAPTILER_API_KEY` — no server proxy; GPU-rendered; theme-aware streets-v2 / streets-v2-dark styles); Tomorrow.io raster weather overlays still proxied via `/api/py/map-tiles`. **MapLibre v6 worker:** v6 ships its web worker as a separate ES module (`maplibre-gl-worker.mjs` → imports `maplibre-gl-shared.mjs`) and by default loads it from beside the bundled chunk, where webpack never emits it, so the worker fails and every map renders blank. `scripts/copy-maplibre-worker.mjs` (run by the `prebuild`/`predev` npm scripts) copies both files (and their source maps) to `public/vendor/maplibre-gl/<version>/` (gitignored), and `MapLibreMap` calls `setWorkerUrl(maplibreWorkerUrl(getVersion()))` before creating a map — the version in the path keeps a tab on an old bundle paired with its own worker after a deploy. **Container sizing:** MapLibre's unlayered `.maplibregl-map { position: relative }` beats Tailwind 4's layered utilities, so never put `absolute inset-0` on the map container itself — wrap it in an absolutely-positioned div and give the container `h-full w-full`
 - **Aviation:** NOAA Aviation Weather Center for METAR/TAF data; `@react-pdf/renderer` for pre-flight briefing PDFs; 70+ ICAO airports mapped (`src/lib/icao-codes.ts`, name + verified WGS 84 coords), seeded into the DB-backed `weather.airports` collection (2dsphere-indexed) via `POST /api/db-init` → `syncAirports`. Nearest-station lookup uses MongoDB `$geoNear` through `GET /api/py/airports/nearest`; the TS client `fetchNearestAirports(lat, lon, count)` prefers the DB result and falls back to the static `getNearestIcaos(lat, lon, count)` haversine scan when the DB/API is unavailable, so the location aviation station picker keeps working offline. `getNearestIcao(lat, lon)` remains the primary-station haversine fallback. Flight-category (VFR/MVFR/IFR/LIFR) badge colors are centralized in `src/lib/flight-category-styles.ts` (`FLIGHT_CATEGORY_STYLES`, `getFlightCategoryClass()`), shared by `AviationWeather.tsx` (location page) and `AviationPlanner.tsx` (`/aviation`) so the safety-relevant color coding can't drift between the two
 - **Drag-and-drop:** `@dnd-kit/core` + `@dnd-kit/sortable` for user-reorderable sections on the location page
 - **Branding:** Mukoko brand kit doctrine v4.1.0 — 7 minerals (cobalt, tanzanite, malachite, gold, terracotta, sodalite, copper); Noto Serif (display/wordmark), Noto Sans (UI), JetBrains Mono (code/labels)
@@ -136,6 +136,11 @@ mukoko-weather/
 │   │   ├── privacy/page.tsx          # Privacy policy
 │   │   ├── terms/page.tsx            # Terms of service
 │   │   ├── embed/page.tsx            # Widget embedding docs
+│   │   ├── display/                  # Full-screen weather display (TV/tablet/monitor kiosk)
+│   │   │   ├── page.tsx              # Server: resolves location from URL/cookie/IP, seeds the forecast
+│   │   │   ├── DisplayDashboard.tsx  # Client: landscape/portrait layout, polling, wake lock, reload
+│   │   │   ├── loading.tsx
+│   │   │   └── error.tsx
 │   │   ├── aviation/                 # Aviation planner (auth-gated): METAR/TAF station picker + PDF pre-flight briefing
 │   │   │   ├── page.tsx              # Server wrapper (requireUser, metadata)
 │   │   │   ├── AviationPlanner.tsx   # Client: station search, METAR/TAF decode, flight-category badges
@@ -199,6 +204,8 @@ mukoko-weather/
 │   │   │   └── ThemeToggle.tsx       # Light/dark/system mode toggle (3-state cycle)
 │   │   ├── analytics/
 │   │   │   └── GoogleAnalytics.tsx   # Google Analytics 4 (gtag.js) via next/script
+│   │   ├── display/
+│   │   │   └── DisplayPanels.tsx     # Display panels: clock, now, AQI + haze advice, radar, outlook, hours, days
 │   │   ├── explore/                  # Shamwari chatbot + AI explore search
 │   │   │   ├── ExploreChatbot.tsx    # AI chatbot UI (message bubbles, typing indicator, contextual suggested prompts)
 │   │   │   ├── ExploreChatbot.test.ts
@@ -337,6 +344,9 @@ mukoko-weather/
 │   │   ├── flight-category-styles.test.ts
 │   │   ├── report-types.ts        # Shared id/label/icon map for community reports (WeatherReportModal + RecentReports)
 │   │   ├── report-types.test.ts
+│   │   ├── display.ts             # /display helpers: URL params, AQI haze advice, refresh cadence, hour slicing, response guards
+│   │   ├── display.test.ts
+│   │   ├── use-display-runtime.ts # useWakeLock, usePeriodicReload, usePolledJson (keeps last good data)
 │   │   ├── i18n.ts                # Lightweight i18n (en complete, sn/nd ready)
 │   │   ├── i18n.test.ts
 │   │   ├── map-layers.ts          # Map layer config (Tomorrow.io tile layers, mineral color styles)
@@ -421,6 +431,8 @@ mukoko-weather/
 │   └── py/                        # Python backend tests (pytest, 19 files, 587 tests)
 │       ├── conftest.py            # Shared fixtures, sys.path/module mocking
 │       └── test_*.py              # 19 test files covering all Python endpoints + circuit breaker
+├── scripts/
+│   └── copy-maplibre-worker.mjs   # prebuild/predev: copies MapLibre v6 worker into public/vendor/maplibre-gl/<version>/
 ├── vercel.json                    # Rewrites /api/py/* to Python serverless functions
 ├── requirements.txt               # Python dependencies (FastAPI, pymongo, anthropic, httpx, pytest)
 ├── pytest.ini                     # pytest configuration (testpaths=tests/py, asyncio mode)
@@ -591,6 +603,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/developers` — public developer/API documentation page
 - `/developers/keys` — auth-gated developer API-key management (create — full key shown once / list masked / revoke)
 - `/embed` — widget embedding docs
+- `/display` — full-screen weather display for TVs, tablets and monitors (kiosk). No header/footer, no sign-in, `robots: noindex`. URL-configured via `parseDisplayParams()` (`src/lib/display.ts`): `?location=<slug>` or `?lat=&lon=`, `?layer=<MAP_LAYERS id>` (default `precipitationIntensity`), `?theme=light|dark`. Falls back to the lastLocation cookie, then IP geo snapped to the nearest seed, then Harare. Panels (`src/components/display/DisplayPanels.tsx`): clock, current conditions, air quality with `AQI_ADVICE` haze guidance, radar (`MapLibreMap`, non-interactive), today's outlook (tall screens only), next hours, 5 days — each in its own `ChartErrorBoundary`. The official NEA PSI panel (`DisplaySgPsi`, `src/lib/sg-air.ts`) sits inside the air-quality card and only polls `/api/py/sg-air` when the location's country is `SG`. Runtime hooks (`src/lib/use-display-runtime.ts`): Screen Wake Lock, `usePolledJson` (weather 10 min, AQ 30 min, NEA 15 min, keeps the last good value on a failed refresh), 6-hour page reload. `display` is in the `KNOWN_ROUTES` sets of `src/proxy.ts` and `WeatherLoadingScene.tsx` so it never becomes the lastLocation cookie
 - `/api/og` — GET, dynamic OG image generation (Edge runtime, Satori, TypeScript). Query: `title`, `subtitle`, optional `location`, `province`, `season`, `temp`, `condition`, `template` (home/location/explore/history/season/shamwari). In-memory rate-limited (30 req/min/IP), 1-day CDN cache
 - `/api/db-init` — POST, one-time DB setup + seed data (TypeScript). Requires `x-init-secret` header in production
 - `/api/keys` — GET (list caller's keys, masked) / POST (mint a developer API key in `platform.apiKeys`; full key returned ONCE, SHA-256 hashed at rest, 10/user cap, eligible entity-membership role required). Auth-gated via `withAuth()`
@@ -623,6 +636,8 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/embeddings/status` — GET, vector search infrastructure status (stub)
 - `/api/py/airquality` — GET, EPA-standard Air Quality Index (0-500) + 7-pollutant breakdown (PM2.5, PM10, O3, NO2, SO2, CO, NH3) for `lat`/`lon`. Sourced from Open-Meteo Air Quality (free, no key) via `open_meteo_breaker`. Cached 1 h in `weather.air_quality_cache` with deterministic `_id` (`{lat:.4f}_{lon:.4f}`) so duplicate requests upsert one row, never two
 - `/api/py/airports/nearest` — GET, N nearest ICAO airports to `lat`/`lon` (query: `lat`, `lon`, optional `count` default 5 / max 20, optional `maxDistanceKm` default 500) via MongoDB `$geoNear` on the seeded `weather.airports` collection. Each result carries `icao` + `name` + `distanceKm`, sorted closest-first. Returns an empty list on any DB error so the TS client falls back to the static haversine scan
+- `/api/py/sg-air` — GET, official Singapore NEA air quality via data.gov.sg (no key): 24h PSI with band, per-region PSI and 1h PM2.5, nearest region for `lat`/`lon`. Cached 10 min in memory, read through `nea_breaker`; always HTTP 200 with `available: false` on failure. Shown on `/display` beside the modelled AQI for Singapore only
+- `/api/py/enso` — GET, latest El Niño / La Niña phase from NOAA CPC's Oceanic Niño Index (`oni.ascii.txt`): ONI, season, phase, strength, last 6 seasons. In-memory cache 12 h, guarded by `noaa_breaker`; returns 200 with `available: false` when the upstream fails. Feeds the location-page `EnsoOutlook` card
 - `/api/py/stations/register` — POST, register a community weather station (digital or manual/analog). Rate-limited 3/hour/IP. Returns `stationId` + `ingestKey` ONCE (SHA-256 hash at rest) with custom-server setup instructions
 - `/api/py/stations/ingest` — GET (Wunderground protocol, `ID`/`PASSWORD` query params) and POST (Ecowitt protocol, form fields with `PASSKEY=<stationId>:<ingestKey>`) — consumer station consoles push readings directly here via their "customized upload" setting. Imperial→metric conversion, inline QC range checks; raw payloads archived in `weather.stationObservations`, passing readings become validated `weather.observations` docs that `/api/py/weather` blends into current conditions (StationKit flow). Responds with the literal body `success` (WU protocol requirement)
 - `/api/py/stations/manual` — POST, manual reading from an analog station (farmers/schools: rain gauge + thermometer, no digital infrastructure). Requires `stationId` + `key`; Pydantic range validation + same QC/observation flow. Rate-limited 12/hour/IP
@@ -2014,3 +2029,12 @@ Any substantial build, migration, investigation or multi-step task gets a GitHub
 - Post progress, decisions and a hand-off note (what's done, what's left, branch names) as issue comments — at each merge and before a session or agent finishes.
 - Work spanning repos gets a tracking issue that links the per-repo issues.
 - Never put secrets, credential status or exploitable detail in issues on public repos.
+
+## Dev skills, progress reports and the merge gate
+
+Load the Mzizi **dev skills** before starting work: `mzizi_get_skills category=dev` on the Mzizi MCP (`mcp.mzizi.dev`), or `@nyuchi/mzizi-skills` from npm. They are `digital-hygiene` and `progress-report`.
+
+- **Digital hygiene.** Check free disk before starting, clone only under `$TMPDIR`, share build caches, and audit, then delete, your clones once the work merges (`digital-hygiene` skill).
+- **Clone isolation.** Clone only into a directory unique to you; never touch another agent's.
+- **Progress reports.** All dev work runs on a 10-minute progress-report loop (`progress-report` skill): measured bars, what changed, and a final "Needs you:" line. Report ticks never publish, release, merge or deploy without the owner's approval.
+- **Merge gate.** Merge only when the work is complete, CI is green, it's verified at runtime, and `/code-review` has run with findings resolved.

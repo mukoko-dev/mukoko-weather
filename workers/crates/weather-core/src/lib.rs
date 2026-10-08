@@ -10,14 +10,21 @@
 //! request, the StationKit blending rule, the QC ranges and the station
 //! ingest-key hashing.
 
+pub mod ai;
+pub mod air_quality;
+pub mod aviation;
 pub mod breaker;
 pub mod cors;
+pub mod devkey;
 pub mod forecast;
 pub mod geo;
+pub mod jobs;
+pub mod locations;
 pub mod normalize;
 pub mod places;
 pub mod query;
 pub mod station;
+pub mod tiles;
 pub mod wmo;
 
 pub use forecast::{ForecastDay, ForecastLocation, ForecastResponse, Source};

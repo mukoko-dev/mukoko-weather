@@ -66,6 +66,7 @@ export const DEFAULT_SECTION_ORDER = [
   "activityInsights",
   "aiSummary",
   "aiChat",
+  "enso",
 ] as const;
 
 const SECTION_ORDER_KEY = "mukoko-section-order";
@@ -201,9 +202,28 @@ const THEME_CYCLE: ThemePreference[] = ["light", "dark", "system"];
  */
 let _hasHydrated = false;
 
+const _hydrationListeners = new Set<() => void>();
+
+function markStoreHydrated(): void {
+  if (_hasHydrated) return;
+  _hasHydrated = true;
+  for (const listener of _hydrationListeners) listener();
+}
+
 /** Check if the Zustand store has finished hydrating from RxDB. */
 export function hasStoreHydrated(): boolean {
   return _hasHydrated;
+}
+
+/**
+ * Subscribe to the moment the store finishes hydrating. Backs
+ * `useStoreHydrated()`, which needs a re-render when RxDB resolves AFTER React
+ * has hydrated (slow IndexedDB): a plain `hasStoreHydrated()` read would stay
+ * stale until some unrelated re-render.
+ */
+export function subscribeStoreHydrated(listener: () => void): () => void {
+  _hydrationListeners.add(listener);
+  return () => _hydrationListeners.delete(listener);
 }
 
 // ---------------------------------------------------------------------------
@@ -387,12 +407,12 @@ export function initializeDeviceSync(): void {
     },
   })
     .then(() => {
-      _hasHydrated = true;
+      markStoreHydrated();
       return startReplication();
     })
     .catch(() => {
       // RxDB init failed — store still works with defaults.
       // This handles cases like private browsing where IndexedDB may be unavailable.
-      _hasHydrated = true;
+      markStoreHydrated();
     });
 }

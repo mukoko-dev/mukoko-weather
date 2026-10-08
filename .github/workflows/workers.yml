@@ -4,18 +4,20 @@ name: Workers
 # format, lint (native and wasm32), test, and build every Worker bundle.
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
     paths:
       - "workers/**"
       - "src/lib/locations.ts"
       - "src/lib/locations-global.ts"
+      - "src/lib/icao-codes.ts"
       - ".github/workflows/workers.yml"
   pull_request:
-    branches: [main]
+    branches: [main, staging]
     paths:
       - "workers/**"
       - "src/lib/locations.ts"
       - "src/lib/locations-global.ts"
+      - "src/lib/icao-codes.ts"
       - ".github/workflows/workers.yml"
 
 concurrency:
@@ -78,7 +80,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        worker: [forecast, internal-api, public-api, stations]
+        worker: [ai, forecast, internal-api, places, public-api, stations, aviation, jobs, tiles]
     steps:
       - uses: actions/checkout@v4
 

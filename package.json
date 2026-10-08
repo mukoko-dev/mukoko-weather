@@ -4,7 +4,9 @@
   "private": true,
   "packageManager": "npm@11.12.1",
   "scripts": {
+    "predev": "node scripts/copy-maplibre-worker.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/copy-maplibre-worker.mjs",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "vp lint",

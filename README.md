@@ -41,6 +41,14 @@ Waze-style community weather reports cross-validated against API data, an EPA
 air-quality index with a full pollutant breakdown, a historical dashboard with
 Claude-authored trend analysis, and an embeddable widget. It installs as a PWA.
 
+**Weather display** — `/display` is a full-screen page for a TV, tablet or
+monitor on a wall: clock, current conditions, air quality with plain-language
+haze advice, a radar map of the area, the next hours and five days. It keeps the
+screen awake, refreshes itself (weather every 10 min, air quality every 30 min)
+and needs no sign-in. Configure it by URL, for example
+`/display?location=singapore-sg&theme=dark` or `/display?lat=-17.83&lon=31.05`;
+`layer` picks the map overlay (default `precipitationIntensity`).
+
 Some AI surfaces are behind flags. **Shamwari full-viewport chat is paused**
 (`FLAGS.shamwari_chat` is `false`; `/shamwari` 404s); inline AI summaries,
 follow-up chat, and AI explore search remain live.
@@ -53,6 +61,7 @@ This repo holds three deployables, not one:
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/` + `api/py/` | **The app.** Next.js 16 App Router front end; Python FastAPI backend as Vercel serverless functions under `/api/py/*`. This is what ships to `weather.mukoko.com`.                                                                              |
 | `station-console/` | **Mukoko Station Console** — a second, separate Next.js app (dev port 3001) for community weather-station operators to register stations and review ingest. Added in #120; not yet on its own public domain.                                    |
+| `scripts/`         | Build helpers. `copy-maplibre-worker.mjs` runs before every `build`/`dev` (npm `prebuild`/`predev`) and copies MapLibre v6's web worker into `public/vendor/maplibre-gl/<version>/`; without it every map renders blank.                        |
 | `worker/`          | **Legacy.** A Cloudflare Worker (`nyuchi-weather-api`) from an earlier architecture. Its `wrangler.toml` still carries `REPLACE_WITH_KV_NAMESPACE_ID` placeholders and it has not been touched since March 2026. Nothing deploys from it today. |
 
 ## Stack
@@ -108,6 +117,8 @@ proxied by a `vercel.json` rewrite (`/api/py/*` → `api/py/index.py`). Only fou
 routes remain in TypeScript: OG image generation, DB init, the public embed API,
 and developer API-key management.
 
+`GET /api/py/enso` returns the latest El Niño / La Niña phase from NOAA CPC's Oceanic Niño Index (12 h in-memory cache; `available: false` when NOAA is unreachable).
+
 **Four-stage weather fallback** — MongoDB cache (15-min TTL) → Tomorrow.io →
 Open-Meteo → `createFallbackWeather` seasonal estimates. The last stage always
 succeeds, so a request never returns nothing.
@@ -121,6 +132,8 @@ Drains; client errors report as GA4 exception events.
 Both the location and history pages load progressively through `LazySection`, an
 IntersectionObserver wrapper — only the first section is eager, which is what
 keeps low-end mobile from running out of memory.
+
+**Official Singapore air quality** — `/api/py/sg-air` serves the National Environment Agency's PSI and PM2.5 readings from data.gov.sg. It is cached for 10 minutes, guarded by a circuit breaker, and returns `available: false` instead of failing. The `/display` page shows it beside the modelled AQI for Singapore.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the search and caching internals, and
 [CLAUDE.md](CLAUDE.md) for the full route, component, and styling map.
