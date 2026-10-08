@@ -69,6 +69,7 @@ export const DEFAULT_SECTION_ORDER = [
   "activityInsights",
   "aiSummary",
   "aiChat",
+  "enso",
 ] as const;
 
 const SECTION_ORDER_KEY = "mukoko-section-order";
@@ -204,7 +205,7 @@ const THEME_CYCLE: ThemePreference[] = ["light", "dark", "system"];
 /**
  * Module-level hydration flag — set once RxDB bridge finishes loading
  * preferences into the store. Components that depend on persisted state
- * (e.g. WelcomeBanner checking hasOnboarded) should wait for this to
+ * (e.g. a component checking hasOnboarded) should wait for this to
  * avoid a flash of incorrect content.
  */
 let _hasHydrated = false;

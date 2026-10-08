@@ -473,6 +473,7 @@ describe("sectionOrder", () => {
       "activityInsights",
       "aiSummary",
       "aiChat",
+      "enso",
     ]);
   });
 
@@ -500,6 +501,7 @@ describe("mergeSectionOrder (Bug 2 — union stored order with defaults)", () =>
       "activityInsights",
       "aiSummary",
       "aiChat",
+      "enso",
     ]);
   });
 

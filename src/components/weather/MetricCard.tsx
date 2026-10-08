@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { resolveColor } from "@/components/ui/chart";
+import { resolveColor, resolveFallbackColor } from "@/components/ui/chart";
 
 // ---------------------------------------------------------------------------
 // ArcGauge — radial arc gauge (270° sweep, open at bottom)
@@ -76,14 +76,16 @@ export function gradientFromStrokeClass(strokeClass: string): string[] {
 
 /**
  * Resolve a list of CSS custom-property tokens to concrete colours, keeping
- * them in sync with the active theme. Resolves on mount and again whenever
+ * them in sync with the active theme. The first render uses the same
+ * light-fallback values the server rendered, so hydration matches in both
+ * themes; the computed theme colours are applied on mount and again whenever
  * the document's `data-theme` attribute changes (SVG paint servers need
  * concrete colour values, not `var(--…)` references).
  */
 function useResolvedColors(tokens: string[]): string[] {
   const key = tokens.join(",");
   const [colors, setColors] = React.useState<string[]>(() =>
-    tokens.map(resolveColor),
+    tokens.map(resolveFallbackColor),
   );
 
   React.useEffect(() => {
