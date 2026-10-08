@@ -87,6 +87,8 @@ describe("WelcomeBanner — hydration safety", () => {
     // during hydration (fast storage, slow device), which rendered the banner
     // where the server rendered nothing and threw React error 418 on iOS Safari.
     expect(source).toContain('from "@/lib/use-hydrated"');
-    expect(source).toMatch(/if \(!hydrated \|\| !hasStoreHydrated\(\)\) return null/);
+    expect(source).toMatch(
+      /if \(!hydrated \|\| !hasStoreHydrated\(\)\) return null/,
+    );
   });
 });
