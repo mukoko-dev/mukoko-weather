@@ -191,6 +191,7 @@ mukoko-weather/
 │   │   │   ├── section-header.tsx   # SectionHeader (title + optional action link/button)
 │   │   │   ├── info-row.tsx         # InfoRow (label + value pair for data lists)
 │   │   │   ├── toggle-group.tsx     # ToggleGroup (Radix, single/multiple, 3 variants incl. unstyled)
+│   │   ├── code-block.tsx       # CodeBlock (tortoise surface, scrollable code sample; docs pages)
 │   │   │   ├── scroll-area.tsx      # ScrollArea (Radix, custom scrollbar, horizontal/vertical)
 │   │   │   ├── status-indicator.tsx # StatusDot + StatusBadge (severity-colored status indicators)
 │   │   │   ├── cta-card.tsx         # CTACard (call-to-action card with title, description, action)
@@ -216,7 +217,8 @@ mukoko-weather/
 │   │   │   ├── HeaderSkeleton.tsx    # Header loading skeleton
 │   │   │   ├── Breadcrumb.tsx        # Shared Home / Location / Current-page trail (atmosphere, forecast, map sub-routes)
 │   │   │   ├── Breadcrumb.test.ts
-│   │   │   └── Footer.tsx            # Footer with site stats, copyright, links, Ubuntu philosophy
+│   │   │   ├── Footer.tsx            # Footer with site stats, copyright, links, Ubuntu philosophy
+│   │   │   └── PageShell.tsx         # Header + main-content column (3xl/5xl) + Footer for static pages
 │   │   ├── weather/
 │   │   │   ├── CurrentConditions.tsx  # De-carded hero: large temp display, feels-like, daily high/low — reads directly over WeatherBackdrop
 │   │   │   ├── WeatherBackdrop.tsx    # Fixed full-viewport condition-aware Three.js sky behind the whole location page (Apple Weather style)
@@ -301,6 +303,7 @@ mukoko-weather/
 │   │       └── index.ts
 │   ├── lib/
 │   │   ├── store.ts               # Zustand app state (theme, location, activities, hasOnboarded, ShamwariContext, reportModal, device sync)
+│   │   ├── theme.ts               # Dependency-free resolveTheme (re-exported from store.ts; used by the embed widget + MapLibreMap)
 │   │   ├── store.test.ts          # Theme resolution, ShamwariContext TTL tests, device sync init
 │   │   ├── device-sync.ts         # Device sync — bridges Zustand localStorage with Python device profile API
 │   │   ├── device-sync.test.ts
@@ -385,6 +388,7 @@ mukoko-weather/
 │       ├── index.py               # FastAPI app, router mounting, CORS, error handlers
 │       ├── _db.py                 # MongoDB connection, collection accessors, rate limiting
 │       ├── _weather.py            # Weather data endpoints (Tomorrow.io/Open-Meteo proxy)
+│       ├── _wmo.py                # WMO_LABELS — weather-code labels (mirror of weatherCodeToInfo in src/lib/weather.ts)
 │       ├── _ai.py                 # AI summary endpoint (Claude, tiered TTL cache)
 │       ├── _ai_followup.py        # Inline follow-up chat endpoint (pre-seeded history)
 │       ├── _ai_prompts.py         # AI prompt library CRUD (GET/PUT prompts + suggested rules)
@@ -1529,23 +1533,28 @@ Repeated Tailwind chains (3+ uses) are extracted into named component classes in
 
 **Current palette:**
 
-| Class            | Purpose                                    | Replaces                                                                                                                         |
-| ---------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| `.kudu`          | Primary pill button (filled, brand colour) | `rounded-button bg-primary px-5 py-3 ...`                                                                                        |
-| `.kudu-sm`       | Smaller primary pill (compact toolbars)    | `rounded-button bg-primary px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                                  |
-| `.impala`        | Secondary/outline pill button              | `border border-border bg-transparent px-5 py-3 ...`                                                                              |
-| `.impala-sm`     | Smaller outline pill (compact toolbars)    | `border border-border bg-transparent px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                        |
-| `.bee`           | Round icon button (mukoko = beehive)       | `w-[var(--touch-target-min)] h-[var(--touch-target-min)] rounded-full bg-background/10 ...`                                      |
-| `.hoopoe`        | Round avatar (initials or profile picture) | `flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10` (also `.hoopoe-lg` h-9, `.hoopoe-xl` h-12)        |
-| `.baobab`        | Primary card surface                       | `rounded-card border border-primary/25 bg-surface-card p-4 shadow-sm`                                                            |
-| `.acacia`        | Quieter card surface                       | `rounded-card border border-border bg-surface-card p-4`                                                                          |
-| `.giraffe`       | Section heading (tall, stands above)       | `text-base font-semibold text-text-primary font-heading`                                                                         |
-| `.gazelle`       | Body paragraph copy                        | `text-base text-text-secondary leading-relaxed`                                                                                  |
-| `.dove`          | Muted secondary text                       | `text-sm text-text-tertiary`                                                                                                     |
-| `.weaver`        | Primary nav link                           | `inline-flex items-center text-base font-medium text-text-secondary hover:...`                                                   |
-| `.weaver-active` | Active nav link (cobalt + underline)       | active variant of `.weaver`                                                                                                      |
-| `.chameleon`     | Skeleton placeholder                       | `animate-pulse rounded-card border border-surface-dim bg-surface-card shadow-sm`                                                 |
-| `.dik-dik`       | Small inline link with a full touch target | on `pointer: coarse` only: `inline-flex` + `min-w`/`min-h` `var(--touch-target-min)` (breadcrumb Home, footer icons/attribution) |
+| Class            | Purpose                                        | Replaces                                                                                                                         |
+| ---------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `.kudu`          | Primary pill button (filled, brand colour)     | `rounded-button bg-primary px-5 py-3 ...`                                                                                        |
+| `.kudu-sm`       | Smaller primary pill (compact toolbars)        | `rounded-button bg-primary px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                                  |
+| `.impala`        | Secondary/outline pill button                  | `border border-border bg-transparent px-5 py-3 ...`                                                                              |
+| `.impala-sm`     | Smaller outline pill (compact toolbars)        | `border border-border bg-transparent px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                        |
+| `.bee`           | Round icon button (mukoko = beehive)           | `w-[var(--touch-target-min)] h-[var(--touch-target-min)] rounded-full bg-background/10 ...`                                      |
+| `.hoopoe`        | Round avatar (initials or profile picture)     | `flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10` (also `.hoopoe-lg` h-9, `.hoopoe-xl` h-12)        |
+| `.baobab`        | Primary card surface                           | `rounded-card border border-primary/25 bg-surface-card p-4 shadow-sm`                                                            |
+| `.acacia`        | Quieter card surface                           | `rounded-card border border-border bg-surface-card p-4`                                                                          |
+| `.giraffe`       | Section heading (tall, stands above)           | `text-base font-semibold text-text-primary font-heading`                                                                         |
+| `.gazelle`       | Body paragraph copy                            | `text-base text-text-secondary leading-relaxed`                                                                                  |
+| `.dove`          | Muted secondary text                           | `text-sm text-text-tertiary`                                                                                                     |
+| `.weaver`        | Primary nav link                               | `inline-flex items-center text-base font-medium text-text-secondary hover:...`                                                   |
+| `.weaver-active` | Active nav link (cobalt + underline)           | active variant of `.weaver`                                                                                                      |
+| `.chameleon`     | Skeleton placeholder                           | `animate-pulse rounded-card border border-surface-dim bg-surface-card shadow-sm`                                                 |
+| `.termite`       | Inline code chip (mono text in a surface nest) | `rounded-badge bg-surface-base px-1.5 py-0.5 font-mono text-base` (was `rounded bg-surface-base ...`)                            |
+| `.sunbird`       | Prose link (perches on the text, underlined)   | `text-primary underline underline-offset-2 transition-colors hover:text-primary/80`                                              |
+| `.elephant`      | Page title h1 on static pages                  | `font-display text-3xl font-bold text-text-primary sm:text-4xl`                                                                  |
+| `.eland`         | Section heading h2 on static pages             | `font-heading text-2xl font-bold text-text-primary`                                                                              |
+| `.springbok`     | Bulleted list inside prose                     | `mt-2 list-disc space-y-1 pl-6`                                                                                                  |
+| `.dik-dik`       | Small inline link with a full touch target     | on `pointer: coarse` only: `inline-flex` + `min-w`/`min-h` `var(--touch-target-min)` (breadcrumb Home, footer icons/attribution) |
 
 **Rules:**
 
