@@ -36,8 +36,10 @@ export interface EnsoOutlookResponse {
 }
 
 interface Props {
-  /** Location latitude (degrees, WGS 84) — used for the latitude region rule. */
+  /** Location latitude (degrees, WGS 84) — used for the region rule. */
   lat: number;
+  /** Location longitude (degrees, WGS 84) — used for the region rule. */
+  lon: number;
   /** ISO 3166-1 alpha-2 country code, when known. */
   countryCode?: string;
 }
@@ -79,7 +81,7 @@ type EnsoState =
   | { status: "ready"; data: ReadyOutlook }
   | { status: "unavailable" };
 
-export function EnsoOutlook({ lat, countryCode }: Props) {
+export function EnsoOutlook({ lat, lon, countryCode }: Props) {
   const headingId = useId();
   const [state, setState] = useState<EnsoState>({ status: "loading" });
 
@@ -134,7 +136,7 @@ export function EnsoOutlook({ lat, countryCode }: Props) {
   if (state.status === "unavailable") return null;
 
   const { data } = state;
-  const impact = ensoImpact(data.phase, countryCode, lat);
+  const impact = ensoImpact(data.phase, countryCode, lat, lon);
 
   return (
     <section aria-labelledby={headingId} className="baobab p-5 sm:p-6">

@@ -594,6 +594,7 @@ export function WeatherDashboard({
                                 <Suspense fallback={<EnsoOutlookSkeleton />}>
                                   <EnsoOutlook
                                     lat={location.lat}
+                                    lon={location.lon}
                                     countryCode={location.country}
                                   />
                                 </Suspense>

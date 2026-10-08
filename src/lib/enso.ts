@@ -9,11 +9,12 @@
  * Region rules, checked in order:
  *   1. Southeast Asia (by country code)
  *   2. East Africa (by country code)
- *   3. Southern Africa (by country code), or any location south of 8°S that is
- *      not in the lists above. The latitude rule is deliberately broad, so
- *      non-African southern locations (e.g. Australia, Peru) also get the
- *      southern-Africa lines. That is a known limitation, not a feature.
- *   4. Everything else gets a generic line.
+ *   3. Southern Africa (by country code, from an explicit list)
+ *   4. Only when the country code is missing: a point south of 8°S inside
+ *      Africa's rough longitude bounds (-20 to 55) is treated as southern
+ *      Africa. Latitude is never used as a fallback for a known country, so
+ *      Australia, Peru and Papua New Guinea get the generic line.
+ *   5. Everything else gets a generic line.
  */
 
 export type EnsoPhase = "El Niño" | "La Niña" | "Neutral";
@@ -28,6 +29,8 @@ const SOUTHERN_AFRICA = new Set([
   "NA",
   "LS",
   "SZ",
+  "AO",
+  "MG",
 ]);
 
 const EAST_AFRICA = new Set(["KE", "TZ", "UG", "ET", "RW", "BI", "SO"]);
@@ -45,20 +48,32 @@ const SOUTHEAST_ASIA = new Set([
   "MM",
 ]);
 
-/** Latitude south of which the southern-Africa guidance applies (degrees). */
+/** Latitude south of which the southern-Africa tiebreak applies (degrees). */
 export const SOUTHERN_TROPICS_LAT = -8;
+
+/** Rough longitude bounds of the African continent (degrees, WGS 84). */
+export const AFRICA_LON_MIN = -20;
+export const AFRICA_LON_MAX = 55;
 
 type Region = "southern-africa" | "east-africa" | "southeast-asia" | "other";
 
 export function ensoRegion(
   countryCode: string | undefined,
   lat: number,
+  lon: number,
 ): Region {
   const cc = countryCode?.toUpperCase();
-  if (cc && SOUTHEAST_ASIA.has(cc)) return "southeast-asia";
-  if (cc && EAST_AFRICA.has(cc)) return "east-africa";
-  if (cc && SOUTHERN_AFRICA.has(cc)) return "southern-africa";
-  if (Number.isFinite(lat) && lat < SOUTHERN_TROPICS_LAT) {
+  if (cc) {
+    if (SOUTHEAST_ASIA.has(cc)) return "southeast-asia";
+    if (EAST_AFRICA.has(cc)) return "east-africa";
+    if (SOUTHERN_AFRICA.has(cc)) return "southern-africa";
+    // A known country that is not in a list is generic, whatever its latitude.
+    return "other";
+  }
+  // No country code: use the position as a tiebreak, but only inside Africa.
+  const inAfricaBounds =
+    Number.isFinite(lon) && lon >= AFRICA_LON_MIN && lon <= AFRICA_LON_MAX;
+  if (inAfricaBounds && Number.isFinite(lat) && lat < SOUTHERN_TROPICS_LAT) {
     return "southern-africa";
   }
   return "other";
@@ -125,7 +140,8 @@ export function ensoImpact(
   phase: EnsoPhase,
   countryCode: string | undefined,
   lat: number,
+  lon: number,
 ): string[] {
-  const region = ensoRegion(countryCode, lat);
+  const region = ensoRegion(countryCode, lat, lon);
   return [...IMPACTS[phase][region]];
 }

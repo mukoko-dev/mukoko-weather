@@ -98,7 +98,7 @@ describe("EnsoOutlook — content and attribution", () => {
     expect(source).toContain(
       'import { ensoImpact, type EnsoPhase } from "@/lib/enso"',
     );
-    expect(source).toContain("ensoImpact(data.phase, countryCode, lat)");
+    expect(source).toContain("ensoImpact(data.phase, countryCode, lat, lon)");
   });
 
   it("shows the ONI value together with its season", () => {
@@ -185,6 +185,7 @@ describe("WeatherDashboard — EnsoOutlook wiring", () => {
     expect(block).toContain('<ChartErrorBoundary name="ENSO outlook">');
     expect(block).toContain("<Suspense");
     expect(block).toContain("<EnsoOutlook");
+    expect(block).toContain("lon={location.lon}");
     expect(block).toContain("countryCode={location.country}");
   });
 
