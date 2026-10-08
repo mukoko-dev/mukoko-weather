@@ -3,8 +3,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { requireUser } from "@/lib/auth";
 import { HistoryDashboard } from "./HistoryDashboard";
-
-const BASE_URL = "https://weather.mukoko.com";
+import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Historical Weather Data",
@@ -19,13 +18,13 @@ export const metadata: Metadata = {
     "mukoko weather history",
   ],
   alternates: {
-    canonical: `${BASE_URL}/history`,
+    canonical: `${SITE_URL}/history`,
   },
   openGraph: {
     title: "Historical Weather Data | mukoko weather",
     description:
       "Explore historical weather data for 265+ locations worldwide. Temperature trends, precipitation records, and climate patterns.",
-    url: `${BASE_URL}/history`,
+    url: `${SITE_URL}/history`,
     type: "website",
     locale: "en",
     siteName: "mukoko weather",

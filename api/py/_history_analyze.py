@@ -22,8 +22,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ._db import (
-    check_rate_limit,
-    get_client_ip,
+    enforce_rate_limit,
     get_api_key,
     get_db,
     ai_prompts_collection,
@@ -308,13 +307,7 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
         raise HTTPException(status_code=400, detail="Missing location")
 
     # Rate limiting — extract real IP behind Vercel's reverse proxy
-    ip = get_client_ip(request)
-    if not ip:
-        raise HTTPException(status_code=400, detail="Could not determine IP")
-
-    rate = check_rate_limit(ip, "history_analyze", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW)
-    if not rate["allowed"]:
-        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+    enforce_rate_limit(request, "history_analyze", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW)
 
     # Verify location exists and get metadata — resolved via places.placesGeo
     # (Phase 0G); weather.locations is dropped, so a direct locations_collection

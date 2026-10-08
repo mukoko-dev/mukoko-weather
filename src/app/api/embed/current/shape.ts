@@ -6,8 +6,9 @@
  */
 
 import { weatherCodeToInfo, windDirection } from "@/lib/weather";
+import { SITE_URL } from "@/lib/site";
 
-export const DEFAULT_SITE = "https://weather.mukoko.com";
+export const DEFAULT_SITE = SITE_URL;
 
 // Weather shapes we consume from /api/py/weather (only the fields we use).
 export interface WeatherCurrent {

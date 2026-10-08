@@ -125,9 +125,9 @@ def _make_request():
 
 class TestRegister:
     @pytest.mark.asyncio
-    @patch("py._stations.check_rate_limit", return_value={"allowed": True, "remaining": 2})
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 2})
     @patch("py._stations.stations_collection")
-    @patch("py._stations.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_registers_and_returns_key_once(self, _ip, mock_coll, _rate):
         req = _make_request()
         result = await register_station(
@@ -147,8 +147,8 @@ class TestRegister:
         assert inserted["bundu"]["countryCode"] == "ZW"
 
     @pytest.mark.asyncio
-    @patch("py._stations.check_rate_limit", return_value={"allowed": False, "remaining": 0})
-    @patch("py._stations.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.check_rate_limit", return_value={"allowed": False, "remaining": 0})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_rate_limited(self, _ip, _rate):
         with pytest.raises(HTTPException) as exc:
             await register_station(
@@ -174,11 +174,11 @@ def _station_doc():
 
 class TestManualReading:
     @pytest.mark.asyncio
-    @patch("py._stations.check_rate_limit", return_value={"allowed": True, "remaining": 11})
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 11})
     @patch("py._stations.observations_collection")
     @patch("py._stations.station_observations_collection")
     @patch("py._stations.stations_collection")
-    @patch("py._stations.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_valid_reading_becomes_validated_observation(
         self, _ip, mock_stations, _mock_raw, mock_obs, _rate
     ):
@@ -199,9 +199,9 @@ class TestManualReading:
         assert obs["location"]["type"] == "Point"
 
     @pytest.mark.asyncio
-    @patch("py._stations.check_rate_limit", return_value={"allowed": True, "remaining": 11})
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 11})
     @patch("py._stations.stations_collection")
-    @patch("py._stations.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_wrong_key_is_401(self, _ip, mock_stations, _rate):
         mock_stations.return_value.find_one.return_value = _station_doc()
         with pytest.raises(HTTPException) as exc:
@@ -212,9 +212,9 @@ class TestManualReading:
         assert exc.value.status_code == 401
 
     @pytest.mark.asyncio
-    @patch("py._stations.check_rate_limit", return_value={"allowed": True, "remaining": 11})
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 11})
     @patch("py._stations.stations_collection")
-    @patch("py._stations.get_client_ip", return_value="1.2.3.4")
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_empty_reading_is_400(self, _ip, mock_stations, _rate):
         mock_stations.return_value.find_one.return_value = _station_doc()
         with pytest.raises(HTTPException) as exc:

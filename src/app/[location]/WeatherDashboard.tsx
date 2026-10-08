@@ -40,7 +40,6 @@ import {
 } from "@/components/weather/SectionSkeleton";
 import { FrostAlertBanner } from "./FrostAlertBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
-import { WelcomeBanner } from "@/components/weather/WelcomeBanner";
 import { useAppStore } from "@/lib/store";
 import type {
   WeatherData,
@@ -64,13 +63,6 @@ import { WeatherBackdrop } from "@/components/weather/WeatherBackdrop";
 import { EnsoOutlook } from "@/components/weather/EnsoOutlook";
 import { DraggableSection } from "@/components/weather/DraggableSection";
 import { LiveClock } from "@/components/weather/LiveClock";
-import {
-  getIcaoForSlug,
-  getNearestIcao,
-  getNearestIcaos,
-  fetchNearestAirports,
-  type AirportDistance,
-} from "@/lib/icao-codes";
 import { cacheWeatherHint } from "@/lib/weather-scenes";
 
 // ── Code-split heavy components ─────────────────────────────────────────────
@@ -157,7 +149,6 @@ export function WeatherDashboard({
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const selectedForecastModel = useAppStore((s) => s.selectedForecastModel);
-  const openMyWeather = useAppStore((s) => s.openMyWeather);
   const sectionOrder = useAppStore((s) => s.sectionOrder);
   const setSectionOrder = useAppStore((s) => s.setSectionOrder);
   const hydrateSectionOrder = useAppStore((s) => s.hydrateSectionOrder);
@@ -169,27 +160,6 @@ export function WeatherDashboard({
   const [minutely, setMinutely] = useState<MinutelyData | null>(null);
   const [modelSeries, setModelSeries] = useState<ModelForecast[]>([]);
   const [modelsTime, setModelsTime] = useState<string[]>([]);
-  const icao =
-    getIcaoForSlug(location.slug) ?? getNearestIcao(location.lat, location.lon);
-  // Nearby stations the user can switch between in the aviation section.
-  // Seeded with the static haversine scan (instant, works offline), then
-  // upgraded to the DB-backed $nearSphere result once it resolves. If the DB
-  // call fails, `fetchNearestAirports` already returns the static fallback.
-  const [nearbyIcaos, setNearbyIcaos] = useState<AirportDistance[]>(() =>
-    getNearestIcaos(location.lat, location.lon, 5),
-  );
-  useEffect(() => {
-    let cancelled = false;
-    // `fetchNearestAirports` prefers the DB $nearSphere result and already
-    // falls back to the static haversine scan on failure, so whatever it
-    // resolves is the best available list for the current coordinates.
-    fetchNearestAirports(location.lat, location.lon, 5).then((airports) => {
-      if (!cancelled && airports.length > 0) setNearbyIcaos(airports);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [location.lat, location.lon]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -304,7 +274,7 @@ export function WeatherDashboard({
             <li>
               <a
                 href={BASE_URL}
-                className="hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded"
+                className="dik-dik hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded"
               >
                 Home
               </a>
@@ -338,43 +308,16 @@ export function WeatherDashboard({
           </ol>
         </nav>
 
-        {/* Clock + customise layout — same row, no extra vertical space */}
-        <div className="mx-auto max-w-7xl px-4 pt-1 pb-0 sm:px-6 md:px-8 flex items-center justify-between">
+        {/* Clock only — the layout control lives at the bottom of the page */}
+        <div className="mx-auto max-w-7xl px-4 pt-1 pb-0 sm:px-6 md:px-8">
           <LiveClock />
-          {reordering ? (
-            <button
-              type="button"
-              onClick={() => setReordering(false)}
-              className="kudu-sm"
-            >
-              Done
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setReordering(true)}
-              className="impala-sm"
-              aria-label="Customise section layout"
-            >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 16 16"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path d="M5 3a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 7a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 11a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2z" />
-              </svg>
-              Customise layout
-            </button>
-          )}
         </div>
 
-        {/* pb-24 reserves space on mobile for a future sticky bottom nav bar;
-          sm:pb-6 restores normal padding on larger screens where there is no nav bar. */}
+        {/* Mobile bottom padding clears the floating nav (token includes the
+          safe-area inset); sm:pb-6 restores normal padding where the nav is hidden. */}
         <main
           id="main-content"
-          className="animate-fade-in mx-auto max-w-7xl overflow-x-hidden px-4 py-3 pb-20 sm:px-6 sm:pb-6 md:px-8"
+          className="animate-fade-in mx-auto max-w-7xl overflow-x-hidden px-4 py-3 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-6 md:px-8"
           aria-label={`Weather dashboard for ${location.name}`}
         >
           {/* H1 for SEO — visually integrated but semantically correct */}
@@ -392,12 +335,6 @@ export function WeatherDashboard({
           <div className="mb-3">
             <SeasonBadge season={season} />
           </div>
-
-          {/* Welcome banner — first-time visitors only, dismissed via its own buttons */}
-          <WelcomeBanner
-            locationName={location.name}
-            onChangeLocation={openMyWeather}
-          />
 
           {/* Weather unavailable banner — shown when all providers failed */}
           {usingFallback && <WeatherUnavailableBanner />}
@@ -623,22 +560,20 @@ export function WeatherDashboard({
                 </ChartErrorBoundary>
               </LazySection>
 
-              {icao && (
-                <LazySection
-                  label="aviation-weather"
-                  fallback={<SectionSkeleton />}
-                >
-                  <ChartErrorBoundary name="aviation weather">
-                    <Suspense fallback={<SectionSkeleton />}>
-                      <AviationWeather
-                        slug={location.slug}
-                        icao={icao}
-                        nearby={nearbyIcaos}
-                      />
-                    </Suspense>
-                  </ChartErrorBoundary>
-                </LazySection>
-              )}
+              <LazySection
+                label="aviation-weather"
+                fallback={<SectionSkeleton />}
+              >
+                <ChartErrorBoundary name="aviation weather">
+                  <Suspense fallback={<SectionSkeleton />}>
+                    <AviationWeather
+                      slug={location.slug}
+                      lat={location.lat}
+                      lon={location.lon}
+                    />
+                  </Suspense>
+                </ChartErrorBoundary>
+              </LazySection>
 
               <LazySection
                 label="support-banner"
@@ -724,6 +659,51 @@ export function WeatherDashboard({
                   </Suspense>
                 </ChartErrorBoundary>
               </LazySection>
+            </div>
+          )}
+
+          {/* Layout control — bottom of the page, out of the way of the header.
+            While reordering, the floating Done pill below takes over. */}
+          {!reordering && (
+            <div className="mt-8 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setReordering(true)}
+                className="impala-sm"
+                aria-label="Customise section layout"
+              >
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path d="M5 3a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 7a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 11a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2z" />
+                </svg>
+                Customise layout
+              </button>
+            </div>
+          )}
+
+          {/* Announces reorder mode to screen readers (always mounted so the change is spoken). */}
+          <div role="status" aria-live="polite" className="sr-only">
+            {reordering
+              ? "Reorder mode on: drag sections, then press Done"
+              : ""}
+          </div>
+
+          {/* Floating Done — reachable from anywhere in the list without scrolling.
+            Sits above the mobile nav; on sm+ the nav is hidden so it drops to bottom-6. */}
+          {reordering && (
+            <div className="pointer-events-none fixed inset-x-0 bottom-[var(--mobile-nav-clearance)] z-30 flex justify-center sm:bottom-6">
+              <button
+                type="button"
+                onClick={() => setReordering(false)}
+                className="kudu-sm pointer-events-auto shadow-lg"
+              >
+                Done
+              </button>
             </div>
           )}
         </main>
