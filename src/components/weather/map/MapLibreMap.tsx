@@ -1,15 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Map as MapLibreGLMap, Marker } from "maplibre-gl";
+import type {
+  Map as MapLibreGLMap,
+  Marker,
+  ExpressionSpecification,
+} from "maplibre-gl";
+import type { FeatureCollection } from "geojson";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { resolveColor } from "@/components/ui/chart";
 import {
   maplibreWorkerUrl,
   WEATHER_OVERLAY_ID,
+  AQI_OVERLAY_ID,
   buildWeatherOverlaySource,
 } from "@/lib/map-layers";
+import { AQI_BANDS, AQI_BAND_SEVERITY_TOKEN } from "@/lib/aq-grid";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
 
@@ -54,12 +61,71 @@ function applyWeatherOverlay(map: MapLibreGLMap, layer: string | null) {
   });
 }
 
+/**
+ * Fill colour per AQI band, as a MapLibre `match` expression. Colours come from
+ * the resolved severity tokens (paint values cannot read var()), so they follow
+ * the light/dark theme. Unknown bands fall back to the tertiary text token.
+ */
+function aqiFillColorExpression(): ExpressionSpecification {
+  // Flat [band, colour, band, colour, …] pairs after the lookup, then fallback.
+  const pairs: string[] = [];
+  for (const band of AQI_BANDS) {
+    pairs.push(band, resolveColor(`var(${AQI_BAND_SEVERITY_TOKEN[band]})`));
+  }
+  const expression: unknown[] = [
+    "match",
+    ["get", "band"],
+    ...pairs,
+    resolveColor("var(--color-text-tertiary)"),
+  ];
+  return expression as ExpressionSpecification;
+}
+
+/**
+ * Adds (or replaces) the AQI grid overlay: one semi-transparent fill per grid
+ * cell, coloured by its `band` property. The layer is inserted beneath the
+ * first symbol layer so road and place labels stay readable over the colour.
+ * Idempotent; a null/undefined collection just clears the overlay.
+ */
+function applyAqiOverlay(
+  map: MapLibreGLMap,
+  data: FeatureCollection | null | undefined,
+) {
+  if (map.getLayer(AQI_OVERLAY_ID)) map.removeLayer(AQI_OVERLAY_ID);
+  if (map.getSource(AQI_OVERLAY_ID)) map.removeSource(AQI_OVERLAY_ID);
+
+  if (!data) return;
+
+  const beforeId = map
+    .getStyle()
+    ?.layers?.find((layer) => layer.type === "symbol")?.id;
+
+  map.addSource(AQI_OVERLAY_ID, { type: "geojson", data });
+  map.addLayer(
+    {
+      id: AQI_OVERLAY_ID,
+      type: "fill",
+      source: AQI_OVERLAY_ID,
+      paint: {
+        "fill-color": aqiFillColorExpression(),
+        "fill-opacity": 0.55,
+      },
+    },
+    beforeId,
+  );
+}
+
 interface MapLibreMapProps {
   lat: number;
   lon: number;
   zoom?: number;
   interactive?: boolean;
   weatherLayer?: string | null;
+  /**
+   * Optional AQI grid (cells with `band` properties, see `gridToGeoJSON`).
+   * Rendered as a fill layer beneath map labels. Omit for no overlay.
+   */
+  aqiOverlay?: FeatureCollection | null;
   className?: string;
 }
 
@@ -69,6 +135,7 @@ export function MapLibreMap({
   zoom = 8,
   interactive = true,
   weatherLayer = null,
+  aqiOverlay = null,
   className = "h-full w-full",
 }: MapLibreMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -81,6 +148,9 @@ export function MapLibreMap({
   // restore) always apply the current selection.
   const weatherLayerRef = useRef<string | null>(weatherLayer);
   weatherLayerRef.current = weatherLayer;
+  // Same pattern for the AQI overlay: restore() reads the latest collection.
+  const aqiOverlayRef = useRef<FeatureCollection | null>(aqiOverlay);
+  aqiOverlayRef.current = aqiOverlay;
   const [overlayError, setOverlayError] = useState(false);
   // Dedupes overlay tile-load logging. A single map view fires one `error` event
   // per failed raster tile (≈10 per pan/zoom), so without this guard a transient
@@ -177,6 +247,7 @@ export function MapLibreMap({
             .setLngLat([lon, lat])
             .addTo(map);
           applyWeatherOverlay(map, weatherLayerRef.current);
+          applyAqiOverlay(map, aqiOverlayRef.current);
         };
         restoreRef.current = restore;
 
@@ -246,6 +317,21 @@ export function MapLibreMap({
     }
     applyWeatherOverlay(map, weatherLayer);
   }, [weatherLayer]);
+
+  // Switch the AQI overlay when the grid changes. Mirrors the weather-layer
+  // effect: defer to the next idle if the style is still loading.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!map.isStyleLoaded()) {
+      const apply = () => applyAqiOverlay(map, aqiOverlay);
+      map.once("idle", apply);
+      return () => {
+        map.off("idle", apply);
+      };
+    }
+    applyAqiOverlay(map, aqiOverlay);
+  }, [aqiOverlay]);
 
   return (
     <div className={cn("relative", className)}>
