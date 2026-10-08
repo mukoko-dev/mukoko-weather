@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
+import { formatTime } from "@/lib/i18n";
 import {
   FORECAST_MODEL_LABELS,
   ForecastModel,
@@ -73,10 +74,9 @@ export function prepareModelComparisonData(
   return { rows, series };
 }
 
+/** Hour label, 24h en-ZW like the other hourly charts ("14:30"). */
 function formatHour(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return formatTime(new Date(iso));
 }
 
 interface ModelComparisonChartProps {

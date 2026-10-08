@@ -5,7 +5,7 @@
 //! `AVIATION` service binding.
 //!
 //! ```text
-//! GET /metar?icao=FVHA       METARs of the last 12 h and the TAF:
+//! GET /metar?icao=FVRG       METARs of the last 12 h and the TAF:
 //!                            {icao, metar: [...], taf, source: "awc" | "checkwx"}
 //! GET /airports/nearest?lat=&lon=[&count=1..20, default 5][&maxDistanceKm=, default 500]
 //!                            {airports: [{icao, name, distanceKm}], source: "catalog" | "empty"}

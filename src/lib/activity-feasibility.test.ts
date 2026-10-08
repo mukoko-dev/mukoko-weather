@@ -222,3 +222,21 @@ describe("feasibilitySeries", () => {
     expect(firstHour).toBe(new Date().getHours());
   });
 });
+
+describe("hourInsights hazard fields", () => {
+  it("derives thunderstorm and precipitation type via wmoToInsightHazards", () => {
+    const hourly = {
+      time: ["2026-01-15T12:00"],
+      weather_code: [96],
+      temperature_2m: [25],
+      relative_humidity_2m: [60],
+      wind_speed_10m: [10],
+      wind_gusts_10m: [20],
+      visibility: [9000],
+      uv_index: [6],
+    } as unknown as HourlyWeather;
+    const insights = hourInsights(hourly, 0);
+    expect(insights.thunderstormProbability).toBe(85);
+    expect(insights.precipitationType).toBe(1);
+  });
+});

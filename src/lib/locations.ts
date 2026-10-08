@@ -961,6 +961,3 @@ export const LOCATIONS: WeatherLocation[] = [
 
 /** @deprecated Use WeatherLocation instead */
 export type ZimbabweLocation = WeatherLocation;
-
-/** @deprecated Use SEED_LOCATIONS_ZW instead */
-export const ZW_LOCATIONS = SEED_LOCATIONS_ZW;

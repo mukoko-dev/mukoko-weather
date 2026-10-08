@@ -8,11 +8,9 @@ import {
 } from "@/lib/db";
 import { safeJsonLd } from "@/lib/json-ld";
 import { AtmosphereDashboard } from "./AtmosphereDashboard";
+import { SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
-
-const BASE_URL = "https://weather.mukoko.com";
-
 export async function generateMetadata({
   params,
 }: {
@@ -39,12 +37,12 @@ export async function generateMetadata({
       "mukoko weather",
     ],
     alternates: {
-      canonical: `${BASE_URL}/${loc.slug}/atmosphere`,
+      canonical: `${SITE_URL}/${loc.slug}/atmosphere`,
     },
     openGraph: {
       title: `${loc.name} Atmosphere | mukoko weather`,
       description: `24-hour atmospheric trends for ${loc.name}, ${loc.province} — humidity, wind, pressure, UV index.`,
-      url: `${BASE_URL}/${loc.slug}/atmosphere`,
+      url: `${SITE_URL}/${loc.slug}/atmosphere`,
       type: "website",
       locale: "en",
       siteName: "mukoko weather",
@@ -97,19 +95,19 @@ export default async function AtmospherePage({
         "@type": "ListItem",
         position: 1,
         name: "mukoko weather",
-        item: BASE_URL,
+        item: SITE_URL,
       },
       {
         "@type": "ListItem",
         position: 2,
         name: `${location.name} Weather`,
-        item: `${BASE_URL}/${location.slug}`,
+        item: `${SITE_URL}/${location.slug}`,
       },
       {
         "@type": "ListItem",
         position: 3,
         name: "Atmosphere",
-        item: `${BASE_URL}/${location.slug}/atmosphere`,
+        item: `${SITE_URL}/${location.slug}/atmosphere`,
       },
     ],
   };

@@ -22,20 +22,14 @@ describe("ExploreChatbot component structure", () => {
     expect(source).toContain("selectedActivities");
   });
 
-  it("uses ReactMarkdown for assistant messages", () => {
-    expect(source).toContain("import ReactMarkdown");
-    expect(source).toContain("<ReactMarkdown");
+  it("renders assistant messages through the shared SafeMarkdown component", () => {
+    expect(source).toContain('from "@/components/ui/safe-markdown"');
+    expect(source).toContain("<SafeMarkdown");
+    expect(source).not.toContain("<ReactMarkdown");
   });
 
-  it("wraps ReactMarkdown in error boundary for crash isolation", () => {
-    expect(source).toContain("MarkdownErrorBoundary");
-    expect(source).toContain("<MarkdownErrorBoundary");
-    expect(source).toContain("getDerivedStateFromError");
-  });
-
-  it("falls back to raw text content when markdown rendering fails", () => {
-    // The error boundary receives message.content as fallback prop
-    expect(source).toContain("fallback={message.content}");
+  it("passes message.content to SafeMarkdown (its error boundary falls back to raw text)", () => {
+    expect(source).toContain("content={message.content}");
   });
 });
 
@@ -177,19 +171,19 @@ describe("accessibility", () => {
   });
 
   it("input has aria-label", () => {
-    expect(source).toContain('aria-label="Ask Shamwari Explorer"');
+    expect(source).toContain('ariaLabel="Ask Shamwari Explorer"');
   });
 
-  it("send button has aria-label", () => {
-    expect(source).toContain('aria-label="Send message"');
+  it("send button uses the shared ChatComposer default label", () => {
+    const composer = readFileSync(
+      resolve(__dirname, "../ui/chat-composer.tsx"),
+      "utf-8",
+    );
+    expect(composer).toContain('sendLabel = "Send message"');
   });
 
-  it("typing indicator has role=status", () => {
-    expect(source).toContain('role="status"');
-  });
-
-  it("typing indicator has sr-only text", () => {
-    expect(source).toContain("sr-only");
+  it("typing indicator uses the shared TypingDots (role=status, labelled)", () => {
+    expect(source).toContain("<TypingDots");
     expect(source).toContain("Shamwari Explorer is thinking");
   });
 
@@ -231,89 +225,6 @@ describe("memory management", () => {
   });
 });
 
-describe("markdown link sanitisation", () => {
-  it("defines isSafeHref function for href validation", () => {
-    expect(source).toContain("function isSafeHref");
-  });
-
-  it("allows relative paths starting with /", () => {
-    expect(source).toContain('href.startsWith("/")');
-  });
-
-  it("allows anchor links starting with #", () => {
-    expect(source).toContain('href.startsWith("#")');
-  });
-
-  it("allows only https protocol via URL constructor", () => {
-    expect(source).toContain('url.protocol === "https:"');
-    // http: is intentionally not allowed — prevents link injection to plaintext targets
-    expect(source).not.toContain('url.protocol === "http:"');
-  });
-
-  it("renders unsafe links as plain <span> text", () => {
-    expect(source).toContain("<span>{children}</span>");
-  });
-
-  it("passes custom components to ReactMarkdown", () => {
-    expect(source).toContain("components={markdownComponents}");
-  });
-
-  it("adds rel=noopener noreferrer and target=_blank to safe links", () => {
-    expect(source).toContain('rel="noopener noreferrer"');
-    expect(source).toContain('target="_blank"');
-  });
-});
-
-describe("isSafeHref behavioral tests", () => {
-  // Mirror of the isSafeHref helper in ExploreChatbot.tsx
-  function isSafeHref(href: string | undefined): boolean {
-    if (!href) return false;
-    if (href.startsWith("/") || href.startsWith("#")) return true;
-    try {
-      const url = new URL(href);
-      return url.protocol === "https:";
-    } catch {
-      return false;
-    }
-  }
-
-  it("blocks javascript: URIs", () => {
-    expect(isSafeHref("javascript:alert(1)")).toBe(false);
-  });
-
-  it("blocks data: URIs", () => {
-    expect(isSafeHref("data:text/html,<script>alert(1)</script>")).toBe(false);
-  });
-
-  it("blocks vbscript: URIs", () => {
-    expect(isSafeHref("vbscript:MsgBox('XSS')")).toBe(false);
-  });
-
-  it("allows https URLs", () => {
-    expect(isSafeHref("https://weather.mukoko.com/harare")).toBe(true);
-  });
-
-  it("blocks http URLs (only https allowed)", () => {
-    expect(isSafeHref("http://example.com")).toBe(false);
-  });
-
-  it("allows relative paths", () => {
-    expect(isSafeHref("/harare")).toBe(true);
-  });
-
-  it("allows anchor links", () => {
-    expect(isSafeHref("#section")).toBe(true);
-  });
-
-  it("returns false for undefined", () => {
-    expect(isSafeHref(undefined)).toBe(false);
-  });
-
-  it("returns false for empty string", () => {
-    expect(isSafeHref("")).toBe(false);
-  });
-});
-
 describe("rate limit error surfacing", () => {
   it("reads response body before throwing on non-ok responses", () => {
     expect(source).toContain("res.json().catch(() => null)");
@@ -333,13 +244,22 @@ describe("UI patterns", () => {
     expect(source).toContain("disabled={loading}");
   });
 
-  it("disables send button when empty or loading", () => {
-    expect(source).toContain("disabled={loading || !input.trim()}");
+  it("composer disables send when empty or loading (shared ChatComposer)", () => {
+    const composer = readFileSync(
+      resolve(__dirname, "../ui/chat-composer.tsx"),
+      "utf-8",
+    );
+    expect(composer).toContain("disabled={disabled || !value.trim()}");
   });
 
-  it("uses form submission pattern", () => {
-    expect(source).toContain("onSubmit={handleSubmit}");
-    expect(source).toContain("e.preventDefault()");
+  it("uses form submission via the shared ChatComposer", () => {
+    const composer = readFileSync(
+      resolve(__dirname, "../ui/chat-composer.tsx"),
+      "utf-8",
+    );
+    expect(source).toContain("<ChatComposer");
+    expect(composer).toContain("onSubmit={handleSubmit}");
+    expect(composer).toContain("e.preventDefault()");
   });
 
   it("auto-scrolls to bottom on new messages", () => {
@@ -375,9 +295,14 @@ describe("overflow containment", () => {
     expect(source).not.toContain("prose-code:break-all");
   });
 
-  it("wraps textarea in a card-style container", () => {
-    expect(source).toContain(
-      "rounded-2xl border border-border bg-surface-card",
+  it("wraps textarea in a card-style composer (surface=card)", () => {
+    expect(source).toContain('surface="card"');
+    const composer = readFileSync(
+      resolve(__dirname, "../ui/chat-composer.tsx"),
+      "utf-8",
+    );
+    expect(composer).toContain(
+      "rounded-[var(--radius-card)] border border-border",
     );
   });
 });
@@ -711,8 +636,9 @@ describe("scroll-to-bottom button", () => {
     expect(source).toContain("scrollIntoView");
   });
 
-  it("uses ArrowDownIcon", () => {
-    expect(source).toContain("ArrowDownIcon");
+  it("uses lucide ArrowDown for the scroll button", () => {
+    expect(source).toContain('import { ArrowDown } from "lucide-react"');
+    expect(source).toContain('<ArrowDown size={16} aria-hidden="true" />');
   });
 
   it("meets 56px minimum touch target", () => {

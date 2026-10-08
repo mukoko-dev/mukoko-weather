@@ -3,14 +3,13 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { requireUser } from "@/lib/auth";
 import { ProfileClient } from "./ProfileClient";
-
-const BASE_URL = "https://weather.mukoko.com";
+import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Profile",
   description: "Manage your mukoko weather account and preferences.",
   alternates: {
-    canonical: `${BASE_URL}/profile`,
+    canonical: `${SITE_URL}/profile`,
   },
   robots: {
     index: false,

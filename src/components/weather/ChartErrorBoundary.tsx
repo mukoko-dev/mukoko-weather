@@ -50,7 +50,7 @@ export class ChartErrorBoundary extends Component<Props, State> {
           <p>Unable to display {this.props.name}.</p>
           <button
             onClick={() => this.setState({ hasError: false })}
-            className="mt-2 text-base font-medium text-primary transition-colors hover:text-primary/80"
+            className="dikdik mt-2"
           >
             Try again
           </button>

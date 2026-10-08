@@ -4,6 +4,7 @@ import Link from "next/link";
 import { SparklesIcon, MapPinIcon } from "@/lib/weather-icons";
 import { useAppStore, type ShamwariContext } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { cn } from "@/lib/utils";
 
 export type ShamwariCTAVariant = "tanzanite" | "primary" | "subtle" | "text";
 
@@ -56,9 +57,7 @@ export function ShamwariCTA({
     <Link
       href="/shamwari"
       onClick={() => setShamwariContext(context)}
-      className={[VARIANT_CLASSES[variant], className]
-        .filter(Boolean)
-        .join(" ")}
+      className={cn(VARIANT_CLASSES[variant], className)}
     >
       <Icon size={VARIANT_ICON_SIZE[variant]} />
       {label}

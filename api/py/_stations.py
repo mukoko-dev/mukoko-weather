@@ -35,8 +35,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from ._db import (
-    check_rate_limit,
-    get_client_ip,
+    enforce_rate_limit,
     stamp_platform_fields,
     stations_collection,
     observations_collection,
@@ -199,12 +198,10 @@ class StationRegisterRequest(BaseModel):
 
 @router.post("/api/py/stations/register")
 async def register_station(body: StationRegisterRequest, request: Request = None):
-    ip = get_client_ip(request) if request is not None else None
-    if not ip:
-        raise HTTPException(status_code=400, detail="Could not determine client IP")
-    rate = check_rate_limit(ip, "station-register", 3, 3600)
-    if not rate["allowed"]:
-        raise HTTPException(status_code=429, detail="Too many station registrations — try again later")
+    enforce_rate_limit(
+        request, "station-register", 3, 3600,
+        detail="Too many station registrations — try again later",
+    )
 
     station_id = f"mws-{secrets.token_hex(4)}"
     ingest_key = secrets.token_urlsafe(24)
@@ -323,12 +320,10 @@ class ManualReadingRequest(BaseModel):
 
 @router.post("/api/py/stations/manual")
 async def manual_reading(body: ManualReadingRequest, request: Request = None):
-    ip = get_client_ip(request) if request is not None else None
-    if not ip:
-        raise HTTPException(status_code=400, detail="Could not determine client IP")
-    rate = check_rate_limit(ip, "station-manual", 12, 3600)
-    if not rate["allowed"]:
-        raise HTTPException(status_code=429, detail="Too many readings — try again later")
+    enforce_rate_limit(
+        request, "station-manual", 12, 3600,
+        detail="Too many readings — try again later",
+    )
 
     station = _find_station(body.stationId, body.key)
     if not station:

@@ -20,9 +20,10 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-10 rounded-[var(--radius-button)] px-4 py-2",
-        sm: "h-8 rounded-[var(--radius-button)] px-3 text-base",
-        lg: "h-12 rounded-[var(--radius-button)] px-6 py-3",
+        default:
+          "h-10 min-h-[var(--touch-target-min)] rounded-[var(--radius-button)] px-4 py-2",
+        sm: "h-8 min-h-[var(--touch-target-min)] rounded-[var(--radius-button)] px-3 text-base",
+        lg: "h-12 min-h-[var(--touch-target-min)] rounded-[var(--radius-button)] px-6 py-3",
         icon: "h-10 w-10 rounded-full",
         "icon-lg": "h-11 w-11 rounded-full",
       },

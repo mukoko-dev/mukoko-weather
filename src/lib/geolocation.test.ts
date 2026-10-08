@@ -53,8 +53,9 @@ describe("geolocation source structure", () => {
     expect(source).toContain("isNew");
   });
 
-  it("uses Earth radius of 6371 km for Haversine distance", () => {
-    expect(source).toContain("6371");
+  it("measures the distance with the shared haversineKm", () => {
+    expect(source).toContain('import { haversineKm } from "./geo"');
+    expect(source).toContain("haversineKm(");
   });
 
   it("rounds distance to nearest km", () => {
@@ -80,42 +81,5 @@ describe("geolocation source structure", () => {
     // travel detection) without changing the defaults for existing callers.
     expect(source).toContain("timeoutMs?: number");
     expect(source).toContain("maximumAgeMs?: number");
-  });
-});
-
-describe("Haversine distance formula verification", () => {
-  // Reproduce the Haversine formula from the source code
-  function haversineDistance(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number,
-  ): number {
-    const R = 6371;
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLon = ((lon2 - lon1) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  }
-
-  it("computes ~0 km for identical coordinates", () => {
-    expect(Math.round(haversineDistance(-17.83, 31.05, -17.83, 31.05))).toBe(0);
-  });
-
-  it("computes reasonable distance between Harare and Bulawayo (~440 km)", () => {
-    const dist = haversineDistance(-17.83, 31.05, -20.15, 28.58);
-    expect(dist).toBeGreaterThan(350);
-    expect(dist).toBeLessThan(500);
-  });
-
-  it("computes reasonable distance between Harare and Mutare (~260 km)", () => {
-    const dist = haversineDistance(-17.83, 31.05, -18.97, 32.67);
-    expect(dist).toBeGreaterThan(180);
-    expect(dist).toBeLessThan(300);
   });
 });

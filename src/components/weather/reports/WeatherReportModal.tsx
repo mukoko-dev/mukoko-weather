@@ -260,14 +260,13 @@ export function WeatherReportModal() {
                   setStep("select");
                   setReportType(null);
                 }}
-                className="min-h-[var(--touch-target-min)]"
               >
                 Back
               </Button>
               <Button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="flex-1 min-h-[var(--touch-target-min)]"
+                className="flex-1"
               >
                 {loading ? "Submitting..." : "Submit Report"}
               </Button>
@@ -292,12 +291,7 @@ export function WeatherReportModal() {
               Other users in the area will see it.
             </p>
             <DialogClose asChild>
-              <Button
-                onClick={handleClose}
-                className="min-h-[var(--touch-target-min)]"
-              >
-                Done
-              </Button>
+              <Button onClick={handleClose}>Done</Button>
             </DialogClose>
           </div>
         )}

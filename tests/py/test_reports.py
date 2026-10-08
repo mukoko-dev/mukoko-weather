@@ -284,7 +284,7 @@ class TestSubmitReport:
         assert exc_info.value.status_code == 400
 
     @pytest.mark.asyncio
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_rate_limit_exceeded(self, mock_ip, mock_rate):
         mock_ip.return_value = "1.2.3.4"
@@ -295,7 +295,7 @@ class TestSubmitReport:
         assert exc_info.value.status_code == 429
 
     @pytest.mark.asyncio
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_description_too_long(self, mock_ip, mock_rate):
         mock_ip.return_value = "1.2.3.4"
@@ -311,7 +311,7 @@ class TestSubmitReport:
         assert "Description too long" in str(exc_info.value.detail)
 
     @pytest.mark.asyncio
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_invalid_report_type(self, mock_ip, mock_rate):
         mock_ip.return_value = "1.2.3.4"
@@ -326,7 +326,7 @@ class TestSubmitReport:
         assert "Invalid report type" in str(exc_info.value.detail)
 
     @pytest.mark.asyncio
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     @patch("py._reports.find_location")
     async def test_invalid_severity_defaults_to_moderate(self, mock_loc, mock_ip, mock_rate):
@@ -354,7 +354,7 @@ class TestSubmitReport:
             assert result["expiresIn"] == SEVERITY_TTL["moderate"]
 
     @pytest.mark.asyncio
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     @patch("py._reports.find_location")
     async def test_location_not_found(self, mock_loc, mock_ip, mock_rate):
@@ -372,7 +372,7 @@ class TestSubmitReport:
     @patch("py._reports.weather_cache_collection")
     @patch("py._reports.weather_reports_collection")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_successful_submission(self, mock_ip, mock_rate, mock_loc,
                                           mock_reports, mock_cache, mock_validate):
@@ -407,7 +407,7 @@ class TestSubmitReport:
     @patch("py._reports.weather_cache_collection")
     @patch("py._reports.weather_reports_collection")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_weather_snapshot_captured(self, mock_ip, mock_rate, mock_loc,
                                               mock_reports, mock_cache):
@@ -614,7 +614,7 @@ class TestClarifyReport:
         assert "Invalid report type" in str(exc_info.value.detail)
 
     @pytest.mark.asyncio
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_rate_limit_exceeded(self, mock_ip, mock_rate):
         mock_ip.return_value = "1.2.3.4"
@@ -625,9 +625,9 @@ class TestClarifyReport:
         assert exc_info.value.status_code == 429
 
     @pytest.mark.asyncio
-    @patch("py._reports._get_client")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_ai_unavailable_returns_fallback(self, mock_ip, mock_rate, mock_loc, mock_client):
         mock_ip.return_value = "1.2.3.4"
@@ -643,10 +643,10 @@ class TestClarifyReport:
         assert any("lightning" in q.lower() or "hail" in q.lower() for q in result["questions"])
 
     @pytest.mark.asyncio
-    @patch("py._reports.anthropic_breaker")
-    @patch("py._reports._get_client")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_circuit_open_returns_fallback(self, mock_ip, mock_rate, mock_loc,
                                                   mock_client, mock_breaker):
@@ -662,11 +662,11 @@ class TestClarifyReport:
         assert len(result["questions"]) == 2
 
     @pytest.mark.asyncio
-    @patch("py._reports._get_clarification_prompt")
-    @patch("py._reports.anthropic_breaker")
-    @patch("py._reports._get_client")
+    @patch("py._reports.get_ai_prompt")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_ai_available_returns_parsed_questions(self, mock_ip, mock_rate, mock_loc,
                                                           mock_client, mock_breaker, mock_prompt):
@@ -693,11 +693,11 @@ class TestClarifyReport:
         mock_breaker.record_success.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._reports._get_clarification_prompt")
-    @patch("py._reports.anthropic_breaker")
-    @patch("py._reports._get_client")
+    @patch("py._reports.get_ai_prompt")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_ai_error_falls_back(self, mock_ip, mock_rate, mock_loc,
                                         mock_client, mock_breaker, mock_prompt):
@@ -719,11 +719,11 @@ class TestClarifyReport:
         mock_breaker.record_failure.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._reports._get_clarification_prompt")
-    @patch("py._reports.anthropic_breaker")
-    @patch("py._reports._get_client")
+    @patch("py._reports.get_ai_prompt")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_ai_returns_no_numbered_lines_falls_back(self, mock_ip, mock_rate, mock_loc,
                                                             mock_client, mock_breaker, mock_prompt):
@@ -750,11 +750,11 @@ class TestClarifyReport:
         assert any("dust" in q.lower() or "far" in q.lower() for q in result["questions"])
 
     @pytest.mark.asyncio
-    @patch("py._reports._get_clarification_prompt")
-    @patch("py._reports.anthropic_breaker")
-    @patch("py._reports._get_client")
+    @patch("py._reports.get_ai_prompt")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
-    @patch("py._reports.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
     async def test_ai_returns_more_than_2_questions_capped(self, mock_ip, mock_rate, mock_loc,
                                                             mock_client, mock_breaker, mock_prompt):

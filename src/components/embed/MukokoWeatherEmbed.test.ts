@@ -134,3 +134,19 @@ describe("MukokoWeatherEmbed consumers", () => {
     );
   });
 });
+
+describe("MukokoWeatherEmbed shared helpers", () => {
+  it("builds the weather glyph on hourly-summary condition buckets", () => {
+    expect(componentContent).toContain(
+      'import { conditionGroup } from "@/lib/hourly-summary"',
+    );
+    expect(componentContent).toContain("conditionGroup(code)");
+  });
+
+  it("resolves the theme through the dependency-free lib/theme", () => {
+    expect(componentContent).toContain(
+      'import { resolveTheme } from "@/lib/theme"',
+    );
+    expect(componentContent).not.toContain("matchMedia");
+  });
+});

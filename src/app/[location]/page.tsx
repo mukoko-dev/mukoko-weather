@@ -15,6 +15,7 @@ import {
 import { getCurrentUser } from "@/lib/auth";
 import { safeJsonLd } from "@/lib/json-ld";
 import { WeatherDashboard } from "./WeatherDashboard";
+import { SITE_URL } from "@/lib/site";
 
 // Deduplicate DB calls between generateMetadata and the page component.
 // Both are called for the same request; cache() ensures a single DB round-trip.
@@ -36,9 +37,6 @@ const getCachedSeason = cache((countryCode: string, lat: number = 0) =>
 );
 
 export const dynamic = "force-dynamic";
-
-const BASE_URL = "https://weather.mukoko.com";
-
 export async function generateMetadata({
   params,
 }: {
@@ -76,7 +74,7 @@ export async function generateMetadata({
     ...(seasonName && { season: seasonName }),
     template: "location",
   });
-  const ogImageUrl = `${BASE_URL}/api/og?${ogParams.toString()}`;
+  const ogImageUrl = `${SITE_URL}/api/og?${ogParams.toString()}`;
 
   return {
     title,
@@ -94,12 +92,12 @@ export async function generateMetadata({
       "mukoko weather",
     ],
     alternates: {
-      canonical: `${BASE_URL}/${loc.slug}`,
+      canonical: `${SITE_URL}/${loc.slug}`,
     },
     openGraph: {
       title: `${loc.name} Weather | mukoko weather`,
       description: `Live weather forecast for ${loc.name}, ${loc.province}, ${countryName}. Current conditions, 7-day outlook, and AI-powered insights.`,
-      url: `${BASE_URL}/${loc.slug}`,
+      url: `${SITE_URL}/${loc.slug}`,
       type: "website",
       locale: "en",
       siteName: "mukoko weather",
@@ -187,18 +185,18 @@ export default async function LocationPage({
   const pageSchema = {
     "@context": "https://schema.org",
     "@type": "WebPage",
-    "@id": `${BASE_URL}/${location.slug}`,
+    "@id": `${SITE_URL}/${location.slug}`,
     name: `${location.name} Weather Forecast`,
     description: `Current weather and 7-day forecast for ${location.name}, ${location.province}, ${countryName}`,
-    url: `${BASE_URL}/${location.slug}`,
+    url: `${SITE_URL}/${location.slug}`,
     datePublished: now,
     dateModified: now,
     inLanguage: "en",
-    isPartOf: { "@id": `${BASE_URL}/#website` },
-    publisher: { "@id": `${BASE_URL}/#org` },
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    publisher: { "@id": `${SITE_URL}/#org` },
     mainEntity: {
       "@type": "Place",
-      "@id": `${BASE_URL}/${location.slug}#place`,
+      "@id": `${SITE_URL}/${location.slug}#place`,
       name: location.name,
       geo: {
         "@type": "GeoCoordinates",
@@ -226,7 +224,7 @@ export default async function LocationPage({
       "@type": "Observation",
       measurementMethod: "Open-Meteo weather API",
       observationDate: now,
-      observationAbout: { "@id": `${BASE_URL}/${location.slug}#place` },
+      observationAbout: { "@id": `${SITE_URL}/${location.slug}#place` },
       measuredProperty: [
         {
           "@type": "PropertyValue",
@@ -306,14 +304,14 @@ export default async function LocationPage({
         "@type": "ListItem",
         position: 1,
         name: "mukoko weather",
-        item: BASE_URL,
+        item: SITE_URL,
       },
       { "@type": "ListItem", position: 2, name: location.province },
       {
         "@type": "ListItem",
         position: 3,
         name: `${location.name} Weather`,
-        item: `${BASE_URL}/${location.slug}`,
+        item: `${SITE_URL}/${location.slug}`,
       },
     ],
   };

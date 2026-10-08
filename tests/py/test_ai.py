@@ -12,7 +12,6 @@ from fastapi import HTTPException
 
 from py._ai import (
     _get_ttl,
-    _get_client,
     _get_season,
     _resolve_seasons_with_ai,
     _trigger_background_season_resolution,
@@ -73,75 +72,6 @@ class TestGetTtl:
     def test_tier_2_tags_set(self):
         """Verify the set of tags that qualify for tier 2."""
         assert TIER_2_TAGS == {"farming", "mining", "education", "border"}
-
-
-# ---------------------------------------------------------------------------
-# _get_client — Anthropic client singleton
-# ---------------------------------------------------------------------------
-
-
-class TestGetClient:
-    def _reset_client(self):
-        """Reset module-level client state."""
-        import py._ai as ai_mod
-        ai_mod._client = None
-        ai_mod._client_key_last = None
-
-    @patch("py._ai.get_api_key")
-    @patch.dict(os.environ, {}, clear=True)
-    def test_returns_none_when_no_key(self, mock_key):
-        self._reset_client()
-        mock_key.return_value = None
-        result = _get_client()
-        assert result is None
-
-    @patch("py._ai.anthropic.Anthropic")
-    @patch("py._ai.get_api_key")
-    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}, clear=True)
-    def test_creates_new_client(self, mock_key, mock_anthropic):
-        self._reset_client()
-        mock_anthropic.return_value = MagicMock()
-        result = _get_client()
-        assert result is not None
-        mock_anthropic.assert_called_once_with(api_key="test-key")
-
-    @patch("py._ai.anthropic.Anthropic")
-    @patch("py._ai.get_api_key")
-    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}, clear=True)
-    def test_reuses_client_on_same_key(self, mock_key, mock_anthropic):
-        self._reset_client()
-        mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
-
-        first = _get_client()
-        second = _get_client()
-        assert first is second
-        assert mock_anthropic.call_count == 1
-
-    @patch("py._ai.anthropic.Anthropic")
-    @patch("py._ai.get_api_key")
-    def test_recreates_on_key_change(self, mock_key, mock_anthropic):
-        self._reset_client()
-        mock_key.return_value = None
-
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "key-1"}, clear=True):
-            _get_client()
-
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "key-2"}, clear=True):
-            _get_client()
-
-        assert mock_anthropic.call_count == 2
-
-    @patch("py._ai.get_api_key")
-    @patch.dict(os.environ, {}, clear=True)
-    def test_falls_back_to_db_key(self, mock_key):
-        self._reset_client()
-        mock_key.return_value = "db-api-key"
-
-        with patch("py._ai.anthropic.Anthropic") as mock_anthropic:
-            mock_anthropic.return_value = MagicMock()
-            _get_client()
-            mock_anthropic.assert_called_once_with(api_key="db-api-key")
 
 
 # ---------------------------------------------------------------------------
@@ -472,8 +402,8 @@ class TestCountryCodeValidation:
 
 class TestResolveSeasonsWithAi:
     @patch("py._ai.get_db")
-    @patch("py._ai.anthropic_breaker")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     def test_returns_none_when_no_client(self, mock_client, mock_breaker, mock_db):
         mock_client.return_value = None
         mock_breaker.is_allowed = True
@@ -482,8 +412,8 @@ class TestResolveSeasonsWithAi:
         assert result is None
 
     @patch("py._ai.get_db")
-    @patch("py._ai.anthropic_breaker")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     def test_returns_none_when_circuit_open(self, mock_client, mock_breaker, mock_db):
         mock_client.return_value = MagicMock()
         mock_breaker.is_allowed = False
@@ -492,8 +422,8 @@ class TestResolveSeasonsWithAi:
         assert result is None
 
     @patch("py._ai.get_db")
-    @patch("py._ai.anthropic_breaker")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     def test_successful_ai_response_parsed_and_cached(self, mock_client, mock_breaker, mock_db):
         mock_breaker.is_allowed = True
 
@@ -504,6 +434,7 @@ class TestResolveSeasonsWithAi:
             {"name": "Cool dry season", "localName": "Saison sèche", "months": [10, 11, 12, 1, 2], "description": "Mild and dry"}
         ]"""
         text_block = MagicMock()
+        text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
         mock_message.content = [text_block]
@@ -535,8 +466,8 @@ class TestResolveSeasonsWithAi:
         mock_breaker.record_success.assert_called_once()
 
     @patch("py._ai.get_db")
-    @patch("py._ai.anthropic_breaker")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     def test_incomplete_month_coverage_returns_none(self, mock_client, mock_breaker, mock_db):
         """If AI doesn't cover all 12 months, reject the response."""
         mock_breaker.is_allowed = True
@@ -547,6 +478,7 @@ class TestResolveSeasonsWithAi:
             {"name": "Season B", "localName": "B", "months": [4, 5, 6], "description": "..."}
         ]"""
         text_block = MagicMock()
+        text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
         mock_message.content = [text_block]
@@ -559,8 +491,8 @@ class TestResolveSeasonsWithAi:
         assert result is None
 
     @patch("py._ai.get_db")
-    @patch("py._ai.anthropic_breaker")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     def test_overlapping_months_rejected(self, mock_client, mock_breaker, mock_db):
         """If months overlap between seasons (same month in two), reject."""
         mock_breaker.is_allowed = True
@@ -571,6 +503,7 @@ class TestResolveSeasonsWithAi:
             {"name": "B", "localName": "B", "months": [6, 7, 8, 9, 10, 11, 12], "description": "..."}
         ]"""
         text_block = MagicMock()
+        text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
         mock_message.content = [text_block]
@@ -583,8 +516,8 @@ class TestResolveSeasonsWithAi:
         assert result is None
 
     @patch("py._ai.get_db")
-    @patch("py._ai.anthropic_breaker")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     def test_json_wrapped_in_markdown_extracted(self, mock_client, mock_breaker, mock_db):
         """AI sometimes wraps JSON in markdown code blocks."""
         mock_breaker.is_allowed = True
@@ -599,6 +532,7 @@ class TestResolveSeasonsWithAi:
 ]
 ```"""
         text_block = MagicMock()
+        text_block.type = "text"
         text_block.text = ai_response
         mock_message = MagicMock()
         mock_message.content = [text_block]
@@ -615,8 +549,8 @@ class TestResolveSeasonsWithAi:
         assert len(result) == 4
         assert result[0]["name"] == "Summer"
 
-    @patch("py._ai.anthropic_breaker")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     def test_ai_api_error_records_failure(self, mock_client, mock_breaker):
         mock_breaker.is_allowed = True
 
@@ -628,13 +562,14 @@ class TestResolveSeasonsWithAi:
         assert result is None
         mock_breaker.record_failure.assert_called_once()
 
-    @patch("py._ai.anthropic_breaker")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     def test_json_parse_error_does_not_trip_breaker(self, mock_client, mock_breaker):
         """JSON parse errors in the response should NOT trip the circuit breaker."""
         mock_breaker.is_allowed = True
 
         text_block = MagicMock()
+        text_block.type = "text"
         text_block.text = "not valid json at all"
         mock_message = MagicMock()
         mock_message.content = [text_block]
@@ -650,8 +585,8 @@ class TestResolveSeasonsWithAi:
         mock_breaker.record_failure.assert_not_called()
 
     @patch("py._ai.get_db")
-    @patch("py._ai.anthropic_breaker")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     def test_southern_hemisphere_detected(self, mock_client, mock_breaker, mock_db):
         """Negative latitude should produce hemisphere='south'."""
         mock_breaker.is_allowed = True
@@ -663,6 +598,7 @@ class TestResolveSeasonsWithAi:
             {"name": "Spring", "localName": "Spring", "months": [9, 10, 11], "description": "Warm"}
         ]"""
         text_block = MagicMock()
+        text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
         mock_message.content = [text_block]
@@ -679,8 +615,8 @@ class TestResolveSeasonsWithAi:
         assert all(s["hemisphere"] == "south" for s in result)
 
     @patch("py._ai.get_db")
-    @patch("py._ai.anthropic_breaker")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     def test_equatorial_hemisphere_detected(self, mock_client, mock_breaker, mock_db):
         """Lat within ±10° should produce hemisphere='equatorial'."""
         mock_breaker.is_allowed = True
@@ -690,6 +626,7 @@ class TestResolveSeasonsWithAi:
             {"name": "Dry season", "localName": "Dry", "months": [12, 1, 2], "description": "Dry"}
         ]"""
         text_block = MagicMock()
+        text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
         mock_message.content = [text_block]
@@ -706,8 +643,8 @@ class TestResolveSeasonsWithAi:
         assert all(s["hemisphere"] == "equatorial" for s in result)
 
     @patch("py._ai.get_db")
-    @patch("py._ai.anthropic_breaker")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     def test_invalid_months_filtered(self, mock_client, mock_breaker, mock_db):
         """Months outside 1-12 should be filtered out."""
         mock_breaker.is_allowed = True
@@ -719,6 +656,7 @@ class TestResolveSeasonsWithAi:
             {"name": "Season D", "localName": "D", "months": [10, 11, 12], "description": "..."}
         ]"""
         text_block = MagicMock()
+        text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
         mock_message.content = [text_block]
@@ -737,8 +675,8 @@ class TestResolveSeasonsWithAi:
         assert season_a["months"] == [1, 2, 3]
 
     @patch("py._ai.get_db")
-    @patch("py._ai.anthropic_breaker")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     def test_db_cache_failure_non_fatal(self, mock_client, mock_breaker, mock_db):
         """If MongoDB caching fails, seasons should still be returned."""
         mock_breaker.is_allowed = True
@@ -748,6 +686,7 @@ class TestResolveSeasonsWithAi:
             {"name": "Cool", "localName": "Cool", "months": [11, 12, 1, 2], "description": "Cool"}
         ]"""
         text_block = MagicMock()
+        text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
         mock_message.content = [text_block]
@@ -766,8 +705,8 @@ class TestResolveSeasonsWithAi:
         assert len(result) == 2
 
     @patch("py._ai.get_db")
-    @patch("py._ai.anthropic_breaker")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     def test_missing_local_name_defaults_to_name(self, mock_client, mock_breaker, mock_db):
         """If localName is missing, it should default to name."""
         mock_breaker.is_allowed = True
@@ -779,6 +718,7 @@ class TestResolveSeasonsWithAi:
             {"name": "Spring", "months": [3, 4, 5], "description": "Mild"}
         ]"""
         text_block = MagicMock()
+        text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
         mock_message.content = [text_block]
@@ -964,24 +904,24 @@ class TestSetCachedSummary:
 
 class TestGetSystemPrompt:
     def _reset_prompt_cache(self):
-        import py._ai as ai_mod
-        ai_mod._prompt_cache = {}
-        ai_mod._prompt_cache_at = 0
+        import py._ai_prompts as prompts_mod
+        prompts_mod._prompt_doc_cache = {}
+        prompts_mod._prompt_doc_cache_at = 0
 
-    @patch("py._ai._get_prompt")
+    @patch("py._ai.get_ai_prompt")
     def test_returns_db_template(self, mock_get):
         mock_get.return_value = {"template": "Custom system prompt from DB."}
         result = _get_system_prompt()
         assert result == "Custom system prompt from DB."
 
-    @patch("py._ai._get_prompt")
+    @patch("py._ai.get_ai_prompt")
     def test_returns_fallback_when_db_unavailable(self, mock_get):
         mock_get.return_value = None
         result = _get_system_prompt()
         assert result == _FALLBACK_SYSTEM_PROMPT
         assert "Shamwari Weather" in result
 
-    @patch("py._ai._get_prompt")
+    @patch("py._ai.get_ai_prompt")
     def test_returns_fallback_on_empty_template(self, mock_get):
         mock_get.return_value = {"template": ""}
         result = _get_system_prompt()
@@ -1000,7 +940,7 @@ class TestGenerateSummary:
         # stub it open by default so these tests exercise caching/AI logic,
         # not the rate limiter. See test_generate_summary_rate_limited below
         # for the dedicated rate-limit behavior test.
-        with patch("py._ai.check_rate_limit", return_value={"allowed": True, "remaining": 29}):
+        with patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29}):
             yield
 
     def _make_request(self, temp=25, code=0, activities=None):
@@ -1022,7 +962,7 @@ class TestGenerateSummary:
         )
 
     @pytest.mark.asyncio
-    @patch("py._ai.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     async def test_generate_summary_rate_limited(self, mock_rate):
         """POST /api/py/ai is reachable directly (not just via the
         authenticated /api/ai/* proxy), and every call writes into the same
@@ -1061,7 +1001,7 @@ class TestGenerateSummary:
     @pytest.mark.asyncio
     @patch("py._ai._set_cached_summary")
     @patch("py._ai._get_season")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai._get_cached_summary")
     @patch("py._ai.get_db")
     async def test_no_client_returns_fallback(self, mock_db, mock_cache, mock_client,
@@ -1086,7 +1026,7 @@ class TestGenerateSummary:
     @pytest.mark.asyncio
     @patch("py._ai._set_cached_summary")
     @patch("py._ai._get_season")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai._get_cached_summary")
     @patch("py._ai.get_db")
     async def test_cache_write_failure_still_returns_insight(self, mock_db, mock_cache,
@@ -1112,9 +1052,9 @@ class TestGenerateSummary:
 
     @pytest.mark.asyncio
     @patch("py._ai._set_cached_summary")
-    @patch("py._ai.anthropic_breaker")
+    @patch("py._anthropic.anthropic_breaker")
     @patch("py._ai._get_season")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai._get_cached_summary")
     @patch("py._ai.get_db")
     async def test_circuit_breaker_open_returns_fallback(self, mock_db, mock_cache,
@@ -1141,11 +1081,11 @@ class TestGenerateSummary:
 
     @pytest.mark.asyncio
     @patch("py._ai._set_cached_summary")
-    @patch("py._ai._get_prompt")
+    @patch("py._ai.get_ai_prompt")
     @patch("py._ai._get_system_prompt")
-    @patch("py._ai.anthropic_breaker")
+    @patch("py._anthropic.anthropic_breaker")
     @patch("py._ai._get_season")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai._get_cached_summary")
     @patch("py._ai.get_db")
     async def test_successful_ai_call(self, mock_db, mock_cache, mock_client, mock_season,
@@ -1181,11 +1121,11 @@ class TestGenerateSummary:
 
     @pytest.mark.asyncio
     @patch("py._ai._set_cached_summary")
-    @patch("py._ai._get_prompt")
+    @patch("py._ai.get_ai_prompt")
     @patch("py._ai._get_system_prompt")
-    @patch("py._ai.anthropic_breaker")
+    @patch("py._anthropic.anthropic_breaker")
     @patch("py._ai._get_season")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai._get_cached_summary")
     @patch("py._ai.get_db")
     async def test_ai_error_returns_fallback(self, mock_db, mock_cache, mock_client, mock_season,
@@ -1215,11 +1155,11 @@ class TestGenerateSummary:
 
     @pytest.mark.asyncio
     @patch("py._ai._set_cached_summary")
-    @patch("py._ai._get_prompt")
+    @patch("py._ai.get_ai_prompt")
     @patch("py._ai._get_system_prompt")
-    @patch("py._ai.anthropic_breaker")
+    @patch("py._anthropic.anthropic_breaker")
     @patch("py._ai._get_season")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai._get_cached_summary")
     @patch("py._ai.get_db")
     @patch("py._ai.filter_known_activities", side_effect=lambda activities: activities)
@@ -1278,7 +1218,7 @@ class TestGenerateSummary:
         mock_stale.return_value = True
 
         with patch("py._ai._get_season") as mock_season, \
-             patch("py._ai._get_client") as mock_client:
+             patch("py._anthropic.get_anthropic_client") as mock_client:
             mock_season.return_value = {"name": "Summer", "localName": "Summer",
                                          "description": "Warm"}
             mock_client.return_value = None  # No AI client -> fallback
@@ -1304,13 +1244,13 @@ class TestPromptGrounding:
         )
 
     @pytest.mark.asyncio
-    @patch("py._ai.check_rate_limit", return_value={"allowed": True, "remaining": 29})
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._ai._set_cached_summary")
-    @patch("py._ai._get_prompt", return_value=None)
+    @patch("py._ai.get_ai_prompt", return_value=None)
     @patch("py._ai._get_system_prompt", return_value="System prompt.")
-    @patch("py._ai.anthropic_breaker")
+    @patch("py._anthropic.anthropic_breaker")
     @patch("py._ai._get_season")
-    @patch("py._ai._get_client")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._ai._get_cached_summary", return_value=None)
     @patch("py._ai.get_db")
     @patch("py._ai.get_activities_brief")

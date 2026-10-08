@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { SearchIcon, MapPinIcon, SparklesIcon } from "@/lib/weather-icons";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { weatherCodeToInfo } from "@/lib/weather";
 import { trackEvent } from "@/lib/analytics";
 import { ShamwariCTA } from "@/components/weather/ShamwariCTA";
@@ -149,7 +150,7 @@ export function ExploreSearch() {
           type="submit"
           size="sm"
           disabled={loading || !query.trim()}
-          className="min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] shrink-0"
+          className="min-w-[var(--touch-target-min)] shrink-0"
           aria-label="Search"
         >
           {loading ? (
@@ -201,9 +202,9 @@ export function ExploreSearch() {
       )}
 
       {error && (
-        <div className="rounded-[var(--radius-card)] border border-destructive/30 bg-frost-severe-bg p-3 text-base text-destructive">
-          {error}
-        </div>
+        <Alert variant="severe">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {summary && (
