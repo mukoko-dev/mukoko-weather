@@ -157,3 +157,10 @@ export function buildWeatherOverlaySource(layerId: string) {
     maxzoom: WEATHER_OVERLAY_MAX_ZOOM,
   };
 }
+
+/**
+ * Source/layer id for the AQI grid overlay (Air Quality Map card). Kept
+ * separate from WEATHER_OVERLAY_ID so the two can be shown together without
+ * one clearing the other.
+ */
+export const AQI_OVERLAY_ID = "aqi-overlay";

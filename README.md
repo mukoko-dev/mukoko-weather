@@ -109,6 +109,8 @@ proxied by a `vercel.json` rewrite (`/api/py/*` → `api/py/index.py`). Only fou
 routes remain in TypeScript: OG image generation, DB init, the public embed API,
 and developer API-key management.
 
+**Air quality map** — `GET /api/py/airquality/grid` returns current US AQI on a 7×7 grid (±40 km) from one batched Open-Meteo request, cached 30 min; the `AirQualityMapCard` paints it over a non-interactive MapLibre map.
+
 **Four-stage weather fallback** — MongoDB cache (15-min TTL) → Tomorrow.io →
 Open-Meteo → `createFallbackWeather` seasonal estimates. The last stage always
 succeeds, so a request never returns nothing.

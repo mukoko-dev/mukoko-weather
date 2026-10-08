@@ -185,3 +185,41 @@ describe("map container sizing", () => {
     );
   });
 });
+
+describe("AQI grid overlay (Air Quality Map card)", () => {
+  it("accepts an optional aqiOverlay prop that defaults to no overlay", () => {
+    expect(source).toContain("aqiOverlay?: FeatureCollection | null;");
+    expect(source).toContain("aqiOverlay = null,");
+  });
+
+  it("renders the overlay as a semi-transparent fill layer", () => {
+    expect(source).toContain('type: "fill"');
+    expect(source).toContain('"fill-opacity": 0.55');
+    expect(source).toContain('type: "geojson", data');
+    expect(source).toContain("AQI_OVERLAY_ID");
+  });
+
+  it("colours cells with a match expression over the band property", () => {
+    expect(source).toContain('"match",');
+    expect(source).toContain('["get", "band"]');
+    expect(source).toContain("for (const band of AQI_BANDS)");
+    expect(source).toContain("AQI_BAND_SEVERITY_TOKEN[band]");
+  });
+
+  it("resolves band colours from severity tokens, not hardcoded hex", () => {
+    expect(source).toContain(
+      "resolveColor(`var(${AQI_BAND_SEVERITY_TOKEN[band]})`)",
+    );
+    expect(source).not.toMatch(/["'`]#[0-9a-fA-F]{3,8}["'`]/);
+  });
+
+  it("inserts the overlay beneath the first symbol (label) layer", () => {
+    expect(source).toContain('layer.type === "symbol"');
+    expect(source).toMatch(/addLayer\(\s*\{[\s\S]*?\},\s*beforeId,?\s*\)/);
+  });
+
+  it("restores the overlay after a style switch and reacts to prop changes", () => {
+    expect(source).toContain("applyAqiOverlay(map, aqiOverlayRef.current);");
+    expect(source).toContain("}, [aqiOverlay]);");
+  });
+});
