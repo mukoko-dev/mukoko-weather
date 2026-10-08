@@ -402,8 +402,8 @@ class TestCountryCodeValidation:
 
 class TestResolveSeasonsWithAi:
     @patch("py._ai.get_db")
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     def test_returns_none_when_no_client(self, mock_client, mock_breaker, mock_db):
         mock_client.return_value = None
         mock_breaker.is_allowed = True
@@ -412,8 +412,8 @@ class TestResolveSeasonsWithAi:
         assert result is None
 
     @patch("py._ai.get_db")
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     def test_returns_none_when_circuit_open(self, mock_client, mock_breaker, mock_db):
         mock_client.return_value = MagicMock()
         mock_breaker.is_allowed = False
@@ -422,12 +422,12 @@ class TestResolveSeasonsWithAi:
         assert result is None
 
     @patch("py._ai.get_db")
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     def test_successful_ai_response_parsed_and_cached(self, mock_client, mock_breaker, mock_db):
         mock_breaker.is_allowed = True
 
-        # Mock Claude response with valid JSON
+        # Mock model response with valid JSON
         ai_response_json = """[
             {"name": "Hot season", "localName": "Saison chaude", "months": [3, 4, 5], "description": "Very hot and dry"},
             {"name": "Wet season", "localName": "Saison des pluies", "months": [6, 7, 8, 9], "description": "Heavy rains"},
@@ -437,10 +437,10 @@ class TestResolveSeasonsWithAi:
         text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
 
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         mock_coll = MagicMock()
@@ -466,8 +466,8 @@ class TestResolveSeasonsWithAi:
         mock_breaker.record_success.assert_called_once()
 
     @patch("py._ai.get_db")
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     def test_incomplete_month_coverage_returns_none(self, mock_client, mock_breaker, mock_db):
         """If AI doesn't cover all 12 months, reject the response."""
         mock_breaker.is_allowed = True
@@ -481,18 +481,18 @@ class TestResolveSeasonsWithAi:
         text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
 
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         result = _resolve_seasons_with_ai("XX", 10.0, 20.0)
         assert result is None
 
     @patch("py._ai.get_db")
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     def test_overlapping_months_rejected(self, mock_client, mock_breaker, mock_db):
         """If months overlap between seasons (same month in two), reject."""
         mock_breaker.is_allowed = True
@@ -506,18 +506,18 @@ class TestResolveSeasonsWithAi:
         text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
 
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         result = _resolve_seasons_with_ai("XX", 10.0, 20.0)
         assert result is None
 
     @patch("py._ai.get_db")
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     def test_json_wrapped_in_markdown_extracted(self, mock_client, mock_breaker, mock_db):
         """AI sometimes wraps JSON in markdown code blocks."""
         mock_breaker.is_allowed = True
@@ -535,10 +535,10 @@ class TestResolveSeasonsWithAi:
         text_block.type = "text"
         text_block.text = ai_response
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
 
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         mock_coll = MagicMock()
@@ -549,21 +549,21 @@ class TestResolveSeasonsWithAi:
         assert len(result) == 4
         assert result[0]["name"] == "Summer"
 
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     def test_ai_api_error_records_failure(self, mock_client, mock_breaker):
         mock_breaker.is_allowed = True
 
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.side_effect = Exception("API error")
+        mock_ai_client.create.side_effect = Exception("API error")
         mock_client.return_value = mock_ai_client
 
         result = _resolve_seasons_with_ai("XX", 0.0, 0.0)
         assert result is None
         mock_breaker.record_failure.assert_called_once()
 
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     def test_json_parse_error_does_not_trip_breaker(self, mock_client, mock_breaker):
         """JSON parse errors in the response should NOT trip the circuit breaker."""
         mock_breaker.is_allowed = True
@@ -572,10 +572,10 @@ class TestResolveSeasonsWithAi:
         text_block.type = "text"
         text_block.text = "not valid json at all"
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
 
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         result = _resolve_seasons_with_ai("XX", 0.0, 0.0)
@@ -585,8 +585,8 @@ class TestResolveSeasonsWithAi:
         mock_breaker.record_failure.assert_not_called()
 
     @patch("py._ai.get_db")
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     def test_southern_hemisphere_detected(self, mock_client, mock_breaker, mock_db):
         """Negative latitude should produce hemisphere='south'."""
         mock_breaker.is_allowed = True
@@ -601,10 +601,10 @@ class TestResolveSeasonsWithAi:
         text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
 
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         mock_coll = MagicMock()
@@ -615,8 +615,8 @@ class TestResolveSeasonsWithAi:
         assert all(s["hemisphere"] == "south" for s in result)
 
     @patch("py._ai.get_db")
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     def test_equatorial_hemisphere_detected(self, mock_client, mock_breaker, mock_db):
         """Lat within ±10° should produce hemisphere='equatorial'."""
         mock_breaker.is_allowed = True
@@ -629,10 +629,10 @@ class TestResolveSeasonsWithAi:
         text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
 
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         mock_coll = MagicMock()
@@ -643,8 +643,8 @@ class TestResolveSeasonsWithAi:
         assert all(s["hemisphere"] == "equatorial" for s in result)
 
     @patch("py._ai.get_db")
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     def test_invalid_months_filtered(self, mock_client, mock_breaker, mock_db):
         """Months outside 1-12 should be filtered out."""
         mock_breaker.is_allowed = True
@@ -659,10 +659,10 @@ class TestResolveSeasonsWithAi:
         text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
 
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         mock_coll = MagicMock()
@@ -675,8 +675,8 @@ class TestResolveSeasonsWithAi:
         assert season_a["months"] == [1, 2, 3]
 
     @patch("py._ai.get_db")
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     def test_db_cache_failure_non_fatal(self, mock_client, mock_breaker, mock_db):
         """If MongoDB caching fails, seasons should still be returned."""
         mock_breaker.is_allowed = True
@@ -689,10 +689,10 @@ class TestResolveSeasonsWithAi:
         text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
 
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         # Make DB caching fail
@@ -705,8 +705,8 @@ class TestResolveSeasonsWithAi:
         assert len(result) == 2
 
     @patch("py._ai.get_db")
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     def test_missing_local_name_defaults_to_name(self, mock_client, mock_breaker, mock_db):
         """If localName is missing, it should default to name."""
         mock_breaker.is_allowed = True
@@ -721,10 +721,10 @@ class TestResolveSeasonsWithAi:
         text_block.type = "text"
         text_block.text = ai_response_json
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
 
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         mock_coll = MagicMock()
@@ -884,7 +884,7 @@ class TestSetCachedSummary:
     def test_fallback_source_gets_short_ttl_regardless_of_tier(self, mock_db):
         """A fallback summary must never be cached with the same long TTL as a
         real AI summary — that's what causes 'AI stuck for hours' after a
-        single transient Anthropic failure."""
+        single transient AI gateway failure."""
         mock_coll = MagicMock()
         mock_db.return_value.__getitem__ = MagicMock(return_value=mock_coll)
 
@@ -1001,7 +1001,7 @@ class TestGenerateSummary:
     @pytest.mark.asyncio
     @patch("py._ai._set_cached_summary")
     @patch("py._ai._get_season")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai._get_cached_summary")
     @patch("py._ai.get_db")
     async def test_no_client_returns_fallback(self, mock_db, mock_cache, mock_client,
@@ -1026,7 +1026,7 @@ class TestGenerateSummary:
     @pytest.mark.asyncio
     @patch("py._ai._set_cached_summary")
     @patch("py._ai._get_season")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai._get_cached_summary")
     @patch("py._ai.get_db")
     async def test_cache_write_failure_still_returns_insight(self, mock_db, mock_cache,
@@ -1052,9 +1052,9 @@ class TestGenerateSummary:
 
     @pytest.mark.asyncio
     @patch("py._ai._set_cached_summary")
-    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._ai_gateway.ai_breaker")
     @patch("py._ai._get_season")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai._get_cached_summary")
     @patch("py._ai.get_db")
     async def test_circuit_breaker_open_returns_fallback(self, mock_db, mock_cache,
@@ -1083,9 +1083,9 @@ class TestGenerateSummary:
     @patch("py._ai._set_cached_summary")
     @patch("py._ai.get_ai_prompt")
     @patch("py._ai._get_system_prompt")
-    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._ai_gateway.ai_breaker")
     @patch("py._ai._get_season")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai._get_cached_summary")
     @patch("py._ai.get_db")
     async def test_successful_ai_call(self, mock_db, mock_cache, mock_client, mock_season,
@@ -1100,16 +1100,16 @@ class TestGenerateSummary:
         mock_season.return_value = {"name": "Spring", "localName": "Spring",
                                      "description": "Warming temperatures"}
         mock_sys_prompt.return_value = "You are Shamwari."
-        mock_prompt.return_value = {"model": "claude-haiku-4-5-20251001", "maxTokens": 400}
+        mock_prompt.return_value = {"model": "workers-ai/@cf/zai-org/glm-5.3", "maxTokens": 400}
 
-        # Mock Claude response
+        # Mock model response
         text_block = MagicMock()
         text_block.type = "text"
         text_block.text = "AI-generated summary for Nairobi."
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         result = await generate_summary(self._make_request())
@@ -1123,9 +1123,9 @@ class TestGenerateSummary:
     @patch("py._ai._set_cached_summary")
     @patch("py._ai.get_ai_prompt")
     @patch("py._ai._get_system_prompt")
-    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._ai_gateway.ai_breaker")
     @patch("py._ai._get_season")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai._get_cached_summary")
     @patch("py._ai.get_db")
     async def test_ai_error_returns_fallback(self, mock_db, mock_cache, mock_client, mock_season,
@@ -1143,7 +1143,7 @@ class TestGenerateSummary:
         mock_prompt.return_value = None
 
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.side_effect = Exception("API Error")
+        mock_ai_client.create.side_effect = Exception("API Error")
         mock_client.return_value = mock_ai_client
 
         result = await generate_summary(self._make_request())
@@ -1157,16 +1157,16 @@ class TestGenerateSummary:
     @patch("py._ai._set_cached_summary")
     @patch("py._ai.get_ai_prompt")
     @patch("py._ai._get_system_prompt")
-    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._ai_gateway.ai_breaker")
     @patch("py._ai._get_season")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai._get_cached_summary")
     @patch("py._ai.get_db")
     @patch("py._ai.filter_known_activities", side_effect=lambda activities: activities)
     async def test_activities_included_in_prompt(self, _mock_filter, mock_db, mock_cache, mock_client,
                                                   mock_season, mock_breaker, mock_sys_prompt,
                                                   mock_prompt, mock_set):
-        """User activities should appear in the prompt sent to Claude."""
+        """User activities should appear in the prompt sent to the model."""
         mock_db_inst = MagicMock()
         mock_db.return_value = mock_db_inst
         mock_db_inst.__getitem__ = MagicMock(return_value=MagicMock(
@@ -1183,15 +1183,15 @@ class TestGenerateSummary:
         text_block.type = "text"
         text_block.text = "AI summary."
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         await generate_summary(self._make_request(activities=["running", "farming"]))
 
         # Verify that activities appear in the user content
-        call_args = mock_ai_client.messages.create.call_args
+        call_args = mock_ai_client.create.call_args
         messages = call_args[1]["messages"]
         user_content = messages[0]["content"]
         assert "running" in user_content
@@ -1218,7 +1218,7 @@ class TestGenerateSummary:
         mock_stale.return_value = True
 
         with patch("py._ai._get_season") as mock_season, \
-             patch("py._anthropic.get_anthropic_client") as mock_client:
+             patch("py._ai_gateway.get_gateway_client") as mock_client:
             mock_season.return_value = {"name": "Summer", "localName": "Summer",
                                          "description": "Warm"}
             mock_client.return_value = None  # No AI client -> fallback
@@ -1248,9 +1248,9 @@ class TestPromptGrounding:
     @patch("py._ai._set_cached_summary")
     @patch("py._ai.get_ai_prompt", return_value=None)
     @patch("py._ai._get_system_prompt", return_value="System prompt.")
-    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._ai_gateway.ai_breaker")
     @patch("py._ai._get_season")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai._get_cached_summary", return_value=None)
     @patch("py._ai.get_db")
     @patch("py._ai.get_activities_brief")
@@ -1276,14 +1276,14 @@ class TestPromptGrounding:
         text_block.type = "text"
         text_block.text = "AI summary."
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         await generate_summary(self._make_request(activities=["running"]))
 
-        user_content = mock_ai_client.messages.create.call_args[1]["messages"][0]["content"]
+        user_content = mock_ai_client.create.call_args[1]["messages"][0]["content"]
         # Country + coordinates grounding
         assert "Nairobi, KE" in user_content
         assert "lat -1.29" in user_content

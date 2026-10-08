@@ -10,6 +10,6 @@ export interface Env {
   CORS_ORIGINS: string;
   NEXT_APP_URL: string;
 
-  // Secrets
-  ANTHROPIC_API_KEY?: string;
+  // Secrets — AI is served by the Python backend only; the worker holds no AI token.
+  MUKOKO_INTERNAL_SECRET?: string;
 }

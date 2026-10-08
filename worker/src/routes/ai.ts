@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import Anthropic from "@anthropic-ai/sdk";
 import type { Env } from "../types";
 import {
   LOCATIONS,
@@ -26,25 +25,36 @@ interface CachedSummary {
   weatherCode: number;
 }
 
-const SYSTEM_PROMPT = `You are Shamwari Weather, the AI assistant for mukoko weather — a global weather intelligence platform. You provide actionable, contextual weather advice grounded in local geography, agriculture, industry, and culture.
-
-Your personality:
-- Warm, practical, community-minded (Ubuntu philosophy)
-- You adapt your advice to the local climate and geography of each location
-- You use local knowledge: seasons, place names, farming practices, road conditions
-- You prioritize safety and actionable advice
-
-When providing advice:
-1. Lead with the most critical/urgent information
-2. Be specific about timing ("before 6pm", "after 8am")
-3. Reference specific locations and routes by name
-4. Connect weather to real-world impact (crops, roads, health)
-5. Include a recommended action the person can take RIGHT NOW
-
-Format guidelines:
-- Keep responses concise (3-4 sentences for the summary)
-- Always include at least one actionable recommendation
-- Do not use emoji`;
+/**
+ * AI is served by the Python backend only (owner rule): this edge worker never
+ * calls Cloudflare AI / the AI Gateway itself and holds no AI token. It asks
+ * the backend's /api/py/ai (which routes through the `shamwari` gateway) and
+ * caches the answer in KV, falling back to a deterministic summary.
+ */
+async function fetchBackendInsight(
+  env: Env,
+  weatherData: unknown,
+  location: Record<string, unknown>,
+): Promise<string | null> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (env.MUKOKO_INTERNAL_SECRET) {
+      headers["X-Mukoko-Internal"] = env.MUKOKO_INTERNAL_SECRET;
+    }
+    const res = await fetch(`${env.NEXT_APP_URL}/api/py/ai`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ weatherData, location }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { insight?: string };
+    return data.insight ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export const aiRoutes = new Hono<{ Bindings: Env }>();
 
@@ -88,51 +98,20 @@ aiRoutes.post("/", async (c) => {
 
   const lat = location.lat ?? 0;
   const season = getDefaultSeason(new Date(), lat);
-  const apiKey = c.env.ANTHROPIC_API_KEY;
 
-  if (!apiKey) {
-    const temp = weatherData.current?.temperature_2m;
-    const humidity = weatherData.current?.relative_humidity_2m;
-    const insight = `Current conditions in ${location.name}: ${temp !== undefined ? Math.round(temp) + "°C" : "N/A"} with ${humidity !== undefined ? humidity + "%" : "N/A"} humidity. Current season: ${season.name}. ${season.description}. Stay informed and plan your day accordingly.`;
-
-    await c.env.AI_SUMMARIES.put(
-      cacheKey,
-      JSON.stringify({
-        insight,
-        generatedAt: new Date().toISOString(),
-        temperature: currentTemp,
-        weatherCode: currentCode,
-      }),
-      { expirationTtl: ttl },
-    );
-
-    return c.json({ insight, cached: false });
-  }
-
-  const anthropic = new Anthropic({ apiKey });
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 300,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Generate a weather briefing for ${location.name}${location.country ? ` (${location.country})` : ""} (elevation: ${location.elevation}m).
-${locationTags.length > 0 ? `This area is relevant to: ${locationTags.join(", ")}.` : ""}
-
-Current conditions: ${JSON.stringify(weatherData.current)}
-3-day forecast summary: max temps ${JSON.stringify(weatherData.daily?.temperature_2m_max)}, min temps ${JSON.stringify(weatherData.daily?.temperature_2m_min)}, weather codes ${JSON.stringify(weatherData.daily?.weather_code)}
-Season: ${season.name}
-
-Provide:
-1. A 2-sentence general summary
-2. One industry/context-specific tip relevant to this area`,
-      },
-    ],
+  const backendInsight = await fetchBackendInsight(c.env, weatherData, {
+    name: location.name,
+    elevation: location.elevation,
+    lat: location.lat,
+    lon: location.lon,
+    country: location.country,
   });
 
-  const textBlock = message.content.find((b) => b.type === "text");
-  const insight = textBlock?.text ?? "No insight available.";
+  const temp = weatherData.current?.temperature_2m;
+  const humidity = weatherData.current?.relative_humidity_2m;
+  const insight =
+    backendInsight ??
+    `Current conditions in ${location.name}: ${temp !== undefined ? Math.round(temp) + "°C" : "N/A"} with ${humidity !== undefined ? humidity + "%" : "N/A"} humidity. Current season: ${season.name}. ${season.description}. Stay informed and plan your day accordingly.`;
 
   await c.env.AI_SUMMARIES.put(
     cacheKey,

@@ -34,7 +34,8 @@ CORS_ORIGINS = "https://nyuchi.com,https://mukoko.com,https://weather.mukoko.com
 NEXT_APP_URL = "https://weather.mukoko.com"
 
 # ───── Secrets (set via `wrangler secret put`) ─────
-# ANTHROPIC_API_KEY — Claude API key for AI summaries
+# MUKOKO_INTERNAL_SECRET — optional; matches the backend's, lets the worker call /api/py/ai
+# (AI is served by the Python backend only — the worker never calls Cloudflare AI directly)
 
 # ───── Dev environment ─────
 [env.dev]

@@ -128,11 +128,10 @@ app.include_router(enso_router)
 
 @app.get("/api/py/health")
 async def health():
-    """Health check — verifies MongoDB + Anthropic availability."""
-    import os
+    """Health check — verifies MongoDB + AI gateway availability."""
+    from ._ai_gateway import ai_configured
 
     mongo_ok = False
-    anthropic_ok = False
 
     try:
         get_db().command("ping")
@@ -140,21 +139,15 @@ async def health():
     except Exception:
         pass
 
-    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not anthropic_key:
-        # Try MongoDB-stored key
-        from ._db import get_api_key
-        anthropic_key = get_api_key("anthropic") if mongo_ok else None
+    ai_ok = ai_configured()
 
-    anthropic_ok = bool(anthropic_key)
-
-    status = "ok" if mongo_ok and anthropic_ok else "degraded"
+    status = "ok" if mongo_ok and ai_ok else "degraded"
     return {
         "status": status,
         "service": "mukoko-weather-py",
         "version": "3.0.0",
         "database": "connected" if mongo_ok else "unavailable",
-        "anthropic": "available" if anthropic_ok else "unavailable",
+        "ai": "available" if ai_ok else "unavailable",
     }
 
 

@@ -192,7 +192,7 @@ export function ExploreChatbot() {
   const viewportRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // Send user's selected activities so Claude can personalise advice
+  // Send user's selected activities so the AI can personalise advice
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const shamwariContext = useAppStore((s) => s.shamwariContext);
   const clearShamwariContext = useAppStore((s) => s.clearShamwariContext);

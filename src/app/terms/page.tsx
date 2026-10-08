@@ -60,7 +60,7 @@ export default function TermsPage() {
             <p className="mt-3">
               Weather information provided by the Service is sourced from
               third-party data providers (Tomorrow.io, Open-Meteo) and AI models
-              (Anthropic Claude). While we strive for accuracy:
+              (GLM, hosted on Cloudflare Workers AI). While we strive for accuracy:
             </p>
             <ul className="springbok">
               <li>

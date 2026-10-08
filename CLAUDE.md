@@ -28,7 +28,7 @@ Social: Twitter @mukokoafrica, Instagram @mukoko.africa
 - **Styling:** Tailwind CSS 4 with CSS custom properties (Brand System v6) on the Mzizi design tokens (`src/app/mzizi-tokens.css`, imported first by `globals.css`)
 - **Markdown:** react-markdown 10 (AI summary rendering)
 - **State:** Zustand 5.0.11 (with `persist` middleware — theme, location, activities, hasOnboarded saved to localStorage; device sync to Python backend)
-- **AI:** Anthropic Claude SDK 0.76.0 (server-side via Python FastAPI, Haiku 3.5 model `claude-haiku-4-5-20251001`)
+- **AI:** GLM on Cloudflare Workers AI (`workers-ai/@cf/zai-org/glm-5.3`, function calling), reached ONLY from the Python backend through the Cloudflare AI Gateway named `shamwari` (OpenAI-compatible `/compat/chat/completions`, plain `httpx` — no AI SDK) via `api/py/_ai_gateway.py`
 - **Backend API:** Python FastAPI (Vercel serverless functions under `api/py/`; all data, AI, and CRUD operations migrated from TypeScript)
 - **Weather data:** Tomorrow.io API (primary, free tier) + Open-Meteo API (fallback)
 - **Database:** MongoDB Atlas 7.1.0 (weather cache, AI summaries, historical data, locations; Atlas Search for fuzzy queries, Vector Search infrastructure for semantic search)
@@ -387,7 +387,7 @@ mukoko-weather/
 │       ├── _db.py                 # MongoDB connection, collection accessors, rate limiting
 │       ├── _http.py               # Shared pooled httpx clients keyed by timeout (get_http_client)
 │       ├── _weather.py            # Weather data endpoints (Tomorrow.io/Open-Meteo proxy)
-│       ├── _anthropic.py          # Shared Claude plumbing: client singleton, breaker-guarded call_claude(), first_text()
+│       ├── _ai_gateway.py         # Shared AI plumbing: shamwari AI Gateway URL/headers, GatewayClient singleton, breaker-guarded call_ai(), resolve_model(), first_text()
 │       ├── _wmo.py                # WMO_LABELS — weather-code labels (mirror of weatherCodeToInfo in src/lib/weather.ts)
 │       ├── _ai.py                 # AI summary endpoint (Claude, tiered TTL cache)
 │       ├── _ai_followup.py        # Inline follow-up chat endpoint (pre-seeded history)
@@ -420,7 +420,7 @@ mukoko-weather/
 │   │   └── types.ts
 │   ├── wrangler.toml              # KV bindings, env vars, environments
 │   ├── tsconfig.json
-│   └── package.json               # Hono 4, Anthropic SDK, Wrangler 4
+│   └── package.json               # Hono 4, Wrangler 4 (no AI SDK — AI goes through the Python backend)
 ├── public/
 │   ├── manifest.json              # PWA manifest (installable, shortcuts)
 │   └── icons/                     # PWA icons (192px, 512px)
@@ -437,7 +437,7 @@ mukoko-weather/
 ├── scripts/
 │   └── copy-maplibre-worker.mjs   # prebuild/predev: copies MapLibre v6 worker into public/vendor/maplibre-gl/<version>/
 ├── vercel.json                    # Rewrites /api/py/* to Python serverless functions
-├── requirements.txt               # Python dependencies (FastAPI, pymongo, anthropic, httpx, pytest)
+├── requirements.txt               # Python dependencies (FastAPI, pymongo, httpx, pytest)
 ├── pytest.ini                     # pytest configuration (testpaths=tests/py, asyncio mode)
 ├── next.config.ts                 # CORS headers for /api/* and /embed/*
 ├── tsconfig.json                  # Strict, path alias @/* → ./src/*
@@ -544,7 +544,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/stations/register` — 3 req/hour
 - `/api/py/stations/manual` — 12 req/hour (ingest endpoints authenticate by station key instead)
 
-**Resilience:** Module-level Anthropic client singletons with key-rotation detection (hash-based invalidation). Graceful degradation — AI endpoints return basic summaries when Anthropic is unavailable. Weather endpoints fall back through Tomorrow.io → Open-Meteo → seasonal estimates.
+**Resilience:** Module-level AI gateway client singleton (`get_gateway_client()`). Graceful degradation — AI endpoints return basic summaries when the gateway is unconfigured or unavailable. Weather endpoints fall back through Tomorrow.io → Open-Meteo → seasonal estimates.
 
 **Input validation:** All endpoints validate slugs via `SLUG_RE` (`^[a-z0-9-]{1,80}$`), cap message lengths at 2000 chars (returns HTTP 400 on oversized), and limit history/activity arrays. Tags validated against `KNOWN_TAGS` allowlist. The client-supplied `activities` list (user's selected activities, feeds personalized AI advice — e.g. "you selected soccer, here's how the forecast affects that") is validated via `filter_known_activities()` in `_db.py` (same 5-min-cached DB-lookup-with-fallback pattern as `get_known_tags()`, filtering built into the one function since nothing needs the raw id set on its own) before being spliced into any system/user prompt in `_chat.py`, `_ai.py`, `_ai_followup.py`, and `_history_analyze.py` — unknown entries are silently dropped rather than rejected, since legitimate callers only ever send ids from `src/lib/activities.ts`'s activity picker.
 
@@ -558,7 +558,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 
 - `tomorrow_breaker` — Tomorrow.io API (3 failures / 2min cooldown / 5min window / 5s timeout)
 - `open_meteo_breaker` — Open-Meteo API (5 failures / 5min cooldown / 5min window / 8s timeout)
-- `anthropic_breaker` — Anthropic Claude API (3 failures / 5min cooldown / 10min window / 15s timeout)
+- `ai_breaker` — Cloudflare AI Gateway / Workers AI GLM (provider key `ai-gateway`; 3 failures / 5min cooldown / 10min window / 15s timeout)
 
 **Key classes:**
 
@@ -571,7 +571,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 **Integration pattern:** All Python endpoints that call external APIs use the circuit breaker:
 
 - `_weather.py` — `tomorrow_breaker` + `open_meteo_breaker` (record-based: `is_allowed` / `record_success()` / `record_failure()`)
-- Claude callers (`_chat.py`, `_ai.py`, `_ai_followup.py`, `_explore_search.py`, `_history_analyze.py`, `_reports.py`) never touch `anthropic_breaker` directly. They call `call_claude()` in `api/py/_anthropic.py`, which checks the breaker, records success/failure, and returns `(response, error_kind)` with kinds `no_client` / `circuit_open` / `rate_limited` / `api_error`. Each caller maps those kinds to its own fallback or HTTP status (e.g. `_chat.py` returns an error reply, `_ai_followup.py` raises 429 on `rate_limited`). The client singleton is `get_anthropic_client()`, rebuilt when the key hash changes.
+- AI callers (`_chat.py`, `_ai.py`, `_ai_followup.py`, `_explore_search.py`, `_history_analyze.py`, `_reports.py`) call `call_ai()` in `api/py/_ai_gateway.py`, which checks the breaker, records success/failure, and returns `(AIResponse, error_kind)` with kinds `no_client` (gateway env incomplete) / `circuit_open` / `rate_limited` (HTTP 429) / `api_error`. Each caller maps those kinds to its own fallback or HTTP status (e.g. `_chat.py` returns an error reply, `_ai_followup.py` raises 429 on `rate_limited`). `AIResponse` carries `text`, OpenAI-style `tool_calls` (parsed `ToolCall(id, name, arguments)`) and the raw assistant `message` for re-appending in tool loops; `function_tools()` / `tool_result_message()` build OpenAI tool definitions and `role: "tool"` results. `_chat.py` / `_explore_search.py` only touch `ai_breaker` directly for non-gateway failures (call timeout, tool/parse errors).
 
 ### Routing
 
@@ -590,7 +590,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/explore/country` — browse locations by country index
 - `/explore/country/[code]` — browse locations in a specific country (ISO alpha-2 code)
 - `/explore/country/[code]/[province]` — browse locations in a specific province
-- `/status` — system health dashboard (live checks: MongoDB, Tomorrow.io, Open-Meteo, Anthropic, cache)
+- `/status` — system health dashboard (live checks: MongoDB, Tomorrow.io, Open-Meteo, Shamwari AI gateway, cache)
 - `/about` — about page (company info, contact details)
 - `/privacy` — privacy policy
 - `/terms` — terms of service
@@ -621,7 +621,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/suitability` — GET, suitability rules from MongoDB (all rules or by key; key validated against `^(activity|category):[a-z0-9-]+$`)
 - `/api/py/tags` — GET, tag metadata (all or featured only)
 - `/api/py/regions` — GET, region reference data (bounding boxes, no restrictions enforced)
-- `/api/py/status` — GET, system health checks (MongoDB ping, Tomorrow.io, Open-Meteo, Anthropic, cache)
+- `/api/py/status` — GET, system health checks (MongoDB ping, Tomorrow.io, Open-Meteo, AI gateway config + breaker — no token spend, cache)
 - `/api/py/history` — GET, historical weather data (query: `location`, `days`)
 - `/api/py/history/analyze` — POST, AI-powered historical weather analysis. Server-side aggregation (~800 tokens) + Claude analysis. Cached 1h in `history_analysis` collection. Rate-limited 10 req/hour/IP
 - `/api/py/explore/search` — POST, AI-powered location search using Claude with `search_locations` + `get_weather` tools. Falls back to text search if AI unavailable. Rate-limited 15 req/hour/IP
@@ -642,7 +642,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/stations/ingest` — GET (Wunderground protocol, `ID`/`PASSWORD` query params) and POST (Ecowitt protocol, form fields with `PASSKEY=<stationId>:<ingestKey>`) — consumer station consoles push readings directly here via their "customized upload" setting. Imperial→metric conversion, inline QC range checks; raw payloads archived in `weather.stationObservations`, passing readings become validated `weather.observations` docs that `/api/py/weather` blends into current conditions (StationKit flow). Responds with the literal body `success` (WU protocol requirement)
 - `/api/py/stations/manual` — POST, manual reading from an analog station (farmers/schools: rain gauge + thermometer, no digital infrastructure). Requires `stationId` + `key`; Pydantic range validation + same QC/observation flow. Rate-limited 12/hour/IP
 - `/api/py/stations/status` — GET (`id`, `key`), last-seen + latest metrics for the owner's console
-- `/api/py/health` — GET, basic health check (MongoDB + Anthropic availability)
+- `/api/py/health` — GET, basic health check (MongoDB + AI gateway configuration; response key `ai`)
 
 ### Error Handling
 
@@ -674,7 +674,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `logError(ctx)` — JSON-structured error to stdout (parseable by Vercel Log Drains, Datadog, etc.)
 - `logWarn(ctx)` — structured warning with same format
 - Context fields: `source` (ErrorSource), `severity` (ErrorSeverity), `location`, `message`, `error`, `meta`
-- Error sources: `weather-api`, `ai-api`, `history-api`, `mongodb`, `tomorrow-io`, `open-meteo`, `anthropic`, `client-render`, `client-fetch`, `unhandled`
+- Error sources: `weather-api`, `ai-api`, `history-api`, `mongodb`, `tomorrow-io`, `open-meteo`, `ai-gateway`, `client-render`, `client-fetch`, `unhandled`
 - Severity levels: `low`, `medium`, `high`, `critical`
 
 **Client-side (GA4 error reporting):**
@@ -982,14 +982,18 @@ All skeletons include `role="status"` and `aria-label="Loading"` for screen read
 
 ### AI Summaries
 
-- Generated by Claude Haiku 3.5 (`claude-haiku-4-5-20251001`) via `POST /api/py/ai`, rendered in `src/components/weather/AISummary.tsx`
+- Generated by GLM on Cloudflare Workers AI (`workers-ai/@cf/zai-org/glm-5.3`) via `POST /api/py/ai`, rendered in `src/components/weather/AISummary.tsx`
+- **Shamwari AI Gateway:** every model call goes through `api/py/_ai_gateway.py` → `https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{AI_GATEWAY_ID=shamwari}/compat/chat/completions` (or the `AI_GATEWAY_URL` override). The gateway has authentication ON, so requests carry `cf-aig-authorization: Bearer $AI_GATEWAY_TOKEN`; Workers AI provider auth is `Authorization: Bearer $CF_WORKERS_AI_TOKEN`. Gateway logging (on), rate limiting (100 req/60s fixed) and caching (off) apply. If any of these env vars is missing, a warning is logged once and every AI endpoint degrades to its existing fallback — nothing breaks
+- **Backend-only AI (owner rule):** only the Python backend (`api/py`) may call the gateway or Workers AI, or hold their tokens. Browser code, Next.js server/client components, `NEXT_PUBLIC_*` vars, the edge `worker/` and the embed never call Cloudflare AI directly — UI surfaces call our backend routes (`/api/ai/*` → `/api/py/ai/*`, `/api/py/chat`, `/api/py/explore/search`), and `worker/` asks `/api/py/ai`. `src/lib/ai-backend-only.test.ts` fails if `src/`, `worker/` or a built client bundle references the gateway host, a Workers AI call, an AI SDK or the AI token env names
+- **Model ids:** `ai_prompts.model` in the DB is honoured; legacy `claude-*` ids are migrated to the default at call time by `resolve_model()` (and `seed-ai-prompts.ts` now seeds the GLM id, so the next `POST /api/db-init` rewrites them). `AI_MODEL` env overrides the default; bare `@cf/...` ids get the `workers-ai/` prefix
+- **Tool use** (`_chat.py`, `_explore_search.py`) is OpenAI-style: `tools=[{type: "function", function: {...}}]`, the model returns `tool_calls`, results go back as `role: "tool"` messages keyed by `tool_call_id`
 - AI persona: "Shamwari Weather" (Ubuntu philosophy, region-aware context)
 - **Grounding:** the user prompt includes the location name, ISO country code, lat/lon and elevation, plus an explicit instruction to ground every recommendation in that place — never generic global advice
 - **Per-activity AI guidance:** each doc in the `activities` collection can carry an `aiInstructions` string (data-managed — written directly to MongoDB, NOT part of the code seed; `syncActivities` only $sets seed fields so db-init never clobbers it). `get_activities_brief()` in `_db.py` (5-min cache, shared by `_ai.py` and `_chat.py`) supplies `{id, label, category, aiInstructions}`; the summary prompt splices the user's selected activities' guidance in as an "Activity guidance" block, and the Shamwari chat system prompt does the same for the user's interests
 - Summaries are **markdown-formatted** — the system prompt requests bold, bullet points, and no headings
 - Rendered with `react-markdown` inside Tailwind `prose` classes
 - Cached in MongoDB with tiered TTL (30/60/120 min by location tier)
-- If `ANTHROPIC_API_KEY` is unset, a basic weather summary fallback is generated
+- If the gateway env (`CLOUDFLARE_ACCOUNT_ID`, `AI_GATEWAY_TOKEN`, `CF_WORKERS_AI_TOKEN`) is incomplete, a basic weather summary fallback is generated
 - **Inline follow-up chat:** `AISummary` fires `onSummaryLoaded(text)` callback; `WeatherDashboard` passes the summary to `AISummaryChat` which allows up to 5 follow-up messages before rendering the shared `ShamwariCTA` (`source: "location"`) to redirect to Shamwari
 - **Shared Shamwari handoff:** `src/components/weather/ShamwariCTA.tsx` centralizes the `FLAGS.shamwari_chat` gate + `setShamwariContext` call + styled `/shamwari` link that `AISummaryChat`, `HistoryAnalysis`, and `ExploreSearch` all render — previously each hand-rolled its own copy of this logic. Renders `null` while the flag is off. Exposes 4 visual variants (`tanzanite`, `primary`, `subtle`, `text`) matching each call site's prior styling
 - **Ask Shamwari link:** AISummary includes a "Ask Shamwari about this" link that sets `ShamwariContext` with the current location/weather/summary before navigating to `/shamwari`
@@ -1014,7 +1018,7 @@ All AI system prompts, suggested prompt rules, and model configurations are stor
 **Server-side (MongoDB):**
 
 - Weather cache: 15-min TTL (auto-expires via TTL index)
-- AI summaries: tiered TTL — 30 min (major cities), 60 min (mid-tier), 120 min (small locations) for real Claude-generated insights. Fallback text (no `ANTHROPIC_API_KEY`, open circuit breaker, or an Anthropic API error) is tagged `source: "fallback"` and cached for only 60s (`TTL_FALLBACK` in `api/py/_ai.py`) regardless of location tier — otherwise a single transient failure would serve the generic fallback summary for up to 2 hours per location
+- AI summaries: tiered TTL — 30 min (major cities), 60 min (mid-tier), 120 min (small locations) for real model-generated insights. Fallback text (gateway unconfigured, open circuit breaker, or a gateway/model error) is tagged `source: "fallback"` and cached for only 60s (`TTL_FALLBACK` in `api/py/_ai.py`) regardless of location tier — otherwise a single transient failure would serve the generic fallback summary for up to 2 hours per location
 - Weather history: unlimited retention (recorded on every fresh API fetch)
 - History analysis: 1h TTL in `history_analysis` collection (keyed by location + days + data hash)
 - Weather reports: TTL by severity — 24h (mild), 48h (moderate), 72h (severe) in `weather_reports` collection
@@ -1285,7 +1289,7 @@ All pages use a **TikTok-style sequential mounting** pattern — only ONE sectio
 - **Tools:** `search_locations`, `get_weather`, `get_activity_advice`, `list_locations_by_tag`
 - **Input validation:** message required (string, max 2000 chars), history capped at 10 messages (both user and assistant truncated via `truncateHistoryContent` to 2000 chars), activities array (user's selected activities from Zustand store) capped at 20 items and injected into system prompt for personalised advice, location slugs validated via `SLUG_RE` (`/^[a-z0-9-]{1,80}$/`), tags validated against database-driven `get_known_tags()` allowlist
 - **Security:** IP required (rejects unknown), structured messages API (boundary markers have no special meaning — no regex needed), system prompt DATA GUARDRAILS, history length caps
-- **Resilience:** module-level singleton Anthropic client with key-rotation invalidation (`getAnthropicClient` — recreates client when API key changes), 15s per-tool timeout (`withToolTimeout`), in-request weather cache (`Map<string, WeatherResult>`), in-request suitability rules cache (`rulesCache`), reference deduplication preferring "location" type (`deduplicateReferences`), `list_locations_by_tag` capped to 20 results with note to Claude
+- **Resilience:** shared module-level AI gateway client (`get_gateway_client()` in `_ai_gateway.py`), 30s per-model-call timeout, 15s per-tool timeout (`withToolTimeout`), in-request weather cache (`Map<string, WeatherResult>`), in-request suitability rules cache (`rulesCache`), reference deduplication preferring "location" type (`deduplicateReferences`), `list_locations_by_tag` capped to 20 results with note to the model
 - **Server-side caches:** location context (5-min TTL, bounded to 20 locations), activities (5-min TTL, used for dynamic system prompt activity list)
 - **Response shape:** `{ response, references, error? }` — references include location slugs/names for quick-link rendering
 
@@ -1339,7 +1343,7 @@ Users can submit real-time ground-truth weather observations, similar to Waze fo
 
 - `src/app/status/page.tsx` — server wrapper (metadata)
 - `src/app/status/StatusDashboard.tsx` — client component, calls `GET /api/py/status`
-- Checks: MongoDB connectivity, Tomorrow.io API key, Open-Meteo availability, Anthropic API key, weather cache health
+- Checks: MongoDB connectivity, Tomorrow.io API key, Open-Meteo availability, AI gateway configuration + circuit state (no token spend), weather cache health
 - Each service shows operational/degraded/down status with latency
 
 ## Testing
@@ -1356,8 +1360,8 @@ Users can submit real-time ground-truth weather observations, similar to Waze fo
 **Python (pytest 8.3)** — configured in `pytest.ini`
 
 - Test directory: `tests/py/`
-- Shared fixtures in `tests/py/conftest.py` (mock_request, pymongo/anthropic mocking)
-- `conftest.py` evicts the system `py` module and mocks `pymongo`/`anthropic` so tests run without MongoDB or Anthropic connectivity
+- Shared fixtures in `tests/py/conftest.py` (mock_request, pymongo mocking)
+- `conftest.py` evicts the system `py` module and mocks `pymongo` so tests run without MongoDB; AI tests mock `py._ai_gateway` (no gateway connectivity)
 - Async support via `pytest-asyncio` (auto mode)
 
 **Test files:**
@@ -1430,7 +1434,7 @@ _Python backend tests (pytest):_
 - `tests/py/test_index.py` — FastAPI app: CORS origins, health endpoint, ConnectionFailure handler, all 16 routers mounted
 - `tests/py/test_tiles.py` — Map tiles: Tomorrow.io weather overlay proxy (layer validation, zoom range, timestamp validation, SSRF protection, proxy behavior, cache headers) + Mapbox base tile proxy (style validation, zoom range, URL construction, dark mode)
 - `tests/py/test_stations.py` — Station ingest: unit conversions (°F/mph/inHg/inches), QC range filter, hashed-key auth, registration (key never stored raw, GeoJSON location), manual readings (validated observation writes, 401/400 paths)
-- `tests/py/test_status.py` — System health: MongoDB/Tomorrow.io/Open-Meteo/Anthropic/cache checks, overall status aggregation
+- `tests/py/test_status.py` — System health: MongoDB/Tomorrow.io/Open-Meteo/AI-gateway/cache checks, overall status aggregation
 - `tests/py/test_embeddings.py` — Embeddings stub: status endpoint shape
 
 _Page/component tests:_
@@ -1693,7 +1697,13 @@ The Python FastAPI backend auto-generates an **OpenAPI 3.1** specification from 
 - `WORKOS_CLIENT_ID` — required, WorkOS Client ID (client\_...) from the WorkOS dashboard
 - `WORKOS_COOKIE_PASSWORD` — required, 32+ character secret used to encrypt/sign the session cookie. Rotating this value invalidates every existing session
 - `NEXT_PUBLIC_WORKOS_REDIRECT_URI` — required, the OAuth callback URL. Local: `http://localhost:3000/callback`. Production: `https://weather.mukoko.com/callback`. Must match the Redirect URI registered in the WorkOS dashboard
-- `ANTHROPIC_API_KEY` — optional, server-side only. Without it, a basic weather summary fallback is generated.
+- `CLOUDFLARE_ACCOUNT_ID` — Cloudflare account that owns the `shamwari` AI Gateway (not a secret). Required for AI
+- `AI_GATEWAY_ID` — optional, AI Gateway id (default `shamwari`)
+- `AI_GATEWAY_URL` — optional, full gateway base override (up to `/compat`); replaces the account/gateway-built URL
+- `AI_GATEWAY_TOKEN` — server-only secret, Cloudflare API token with **AI Gateway: Run**; sent as `cf-aig-authorization` (the gateway has authentication on). Required for AI
+- `CF_WORKERS_AI_TOKEN` — server-only secret, Cloudflare API token with **Workers AI: Read**; sent as the provider `Authorization`. Required for AI
+- `AI_MODEL` — optional, default model override (default `workers-ai/@cf/zai-org/glm-5.3`)
+- Without the AI vars a basic weather summary fallback is generated. None of them may ever be `NEXT_PUBLIC_*` or read outside `api/py` (see "Backend-only AI")
 - `DB_INIT_SECRET` — optional, protects the `/api/db-init` endpoint in production (via `x-init-secret` header)
 - `INTERNAL_API_BASE_URL` — optional, base URL for server-to-server calls into our own `/api/py/*` functions during SSR (defaults to `https://$VERCEL_URL` on Vercel, `http://localhost:3000` otherwise)
 - `ALERT_WEBHOOK_URL` — optional, enables webhook alerting for high/critical severity errors (Slack incoming webhook, Discord webhook, PagerDuty, or compatible services). Used by `src/lib/observability.ts`

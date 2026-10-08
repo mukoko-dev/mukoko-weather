@@ -184,17 +184,17 @@ class TestSingletonBreakers:
         from py._circuit_breaker import (
             tomorrow_breaker,
             open_meteo_breaker,
-            anthropic_breaker,
+            ai_breaker,
         )
 
         assert tomorrow_breaker.provider == "tomorrow-io"
         assert open_meteo_breaker.provider == "open-meteo"
-        assert anthropic_breaker.provider == "anthropic"
+        assert ai_breaker.provider == "ai-gateway"
 
     def test_provider_configs(self):
-        from py._circuit_breaker import tomorrow_breaker, anthropic_breaker
+        from py._circuit_breaker import tomorrow_breaker, ai_breaker
 
         assert tomorrow_breaker.config.failure_threshold == 3
         assert tomorrow_breaker.config.timeout_s == 5
-        assert anthropic_breaker.config.failure_threshold == 3
-        assert anthropic_breaker.config.timeout_s == 15
+        assert ai_breaker.config.failure_threshold == 3
+        assert ai_breaker.config.timeout_s == 15

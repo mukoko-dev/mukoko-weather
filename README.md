@@ -66,19 +66,19 @@ This repo holds three deployables, not one:
 
 ## Stack
 
-| Layer          | Technology                                                                                                                                         |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Framework      | [Next.js 16](https://nextjs.org) (App Router), TypeScript 5, React 19                                                                              |
-| Backend API    | [Python FastAPI](https://fastapi.tiangolo.com) — Vercel serverless functions under `api/py/`                                                       |
-| Authentication | [WorkOS AuthKit](https://workos.com/docs/authkit) — hosted sign-in, signed-cookie sessions, users mirrored into `identity.persons`                 |
-| Database       | [MongoDB Atlas](https://mongodb.com/atlas) — cache, AI summaries, history, locations, airports; Atlas Search for fuzzy queries                     |
-| AI             | [Anthropic Claude](https://docs.anthropic.com/en/docs) (server-side, via the Python API)                                                           |
-| Weather data   | [Tomorrow.io](https://tomorrow.io) primary, [Open-Meteo](https://open-meteo.com) fallback, [NOAA AWC](https://aviationweather.gov) for METAR/TAF   |
-| UI             | [shadcn/ui](https://ui.shadcn.com) (Radix + CVA), [Tailwind CSS 4](https://tailwindcss.com)                                                        |
-| Charts & maps  | [Chart.js 4](https://www.chartjs.org), [MapLibre GL](https://maplibre.org) + [MapTiler](https://www.maptiler.com), [Three.js](https://threejs.org) |
-| State          | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist`                                                                                           |
-| Testing        | [Vitest](https://vitest.dev) (TS, v8 coverage) + [pytest](https://pytest.org) (Python)                                                             |
-| Deployment     | [Vercel](https://vercel.com)                                                                                                                       |
+| Layer          | Technology                                                                                                                                                                         |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework      | [Next.js 16](https://nextjs.org) (App Router), TypeScript 5, React 19                                                                                                              |
+| Backend API    | [Python FastAPI](https://fastapi.tiangolo.com) — Vercel serverless functions under `api/py/`                                                                                       |
+| Authentication | [WorkOS AuthKit](https://workos.com/docs/authkit) — hosted sign-in, signed-cookie sessions, users mirrored into `identity.persons`                                                 |
+| Database       | [MongoDB Atlas](https://mongodb.com/atlas) — cache, AI summaries, history, locations, airports; Atlas Search for fuzzy queries                                                     |
+| AI             | GLM on [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) via the `shamwari` [AI Gateway](https://developers.cloudflare.com/ai-gateway/) (Python backend only) |
+| Weather data   | [Tomorrow.io](https://tomorrow.io) primary, [Open-Meteo](https://open-meteo.com) fallback, [NOAA AWC](https://aviationweather.gov) for METAR/TAF                                   |
+| UI             | [shadcn/ui](https://ui.shadcn.com) (Radix + CVA), [Tailwind CSS 4](https://tailwindcss.com)                                                                                        |
+| Charts & maps  | [Chart.js 4](https://www.chartjs.org), [MapLibre GL](https://maplibre.org) + [MapTiler](https://www.maptiler.com), [Three.js](https://threejs.org)                                 |
+| State          | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist`                                                                                                                           |
+| Testing        | [Vitest](https://vitest.dev) (TS, v8 coverage) + [pytest](https://pytest.org) (Python)                                                                                             |
+| Deployment     | [Vercel](https://vercel.com)                                                                                                                                                       |
 
 ## Getting started
 
@@ -99,16 +99,21 @@ locations.
 
 ### Environment variables
 
-| Variable                          | Required | Description                                                                                               |
-| --------------------------------- | :------: | --------------------------------------------------------------------------------------------------------- |
-| `MONGODB_URI`                     |   Yes    | MongoDB Atlas connection string                                                                           |
-| `WORKOS_API_KEY`                  |   Yes    | Server-side WorkOS API key (`sk_…`) — AuthKit middleware, callback exchange, `identity.persons` upsert    |
-| `WORKOS_CLIENT_ID`                |   Yes    | WorkOS Client ID (`client_…`)                                                                             |
-| `WORKOS_COOKIE_PASSWORD`          |   Yes    | 32+ character session-cookie secret. Rotating it invalidates every session                                |
-| `NEXT_PUBLIC_WORKOS_REDIRECT_URI` |   Yes    | OAuth callback URL; must match the WorkOS dashboard (`https://weather.mukoko.com/callback` in production) |
-| `ANTHROPIC_API_KEY`               |    No    | Without it, AI summaries fall back to a basic generated summary                                           |
-| `DB_INIT_SECRET`                  |    No    | Protects `/api/db-init` in production (`x-init-secret` header)                                            |
-| `INTERNAL_API_BASE_URL`           |    No    | Base URL for server-to-server SSR calls into `/api/py/*`                                                  |
+| Variable                          | Required | Description                                                                                                     |
+| --------------------------------- | :------: | --------------------------------------------------------------------------------------------------------------- |
+| `MONGODB_URI`                     |   Yes    | MongoDB Atlas connection string                                                                                 |
+| `WORKOS_API_KEY`                  |   Yes    | Server-side WorkOS API key (`sk_…`) — AuthKit middleware, callback exchange, `identity.persons` upsert          |
+| `WORKOS_CLIENT_ID`                |   Yes    | WorkOS Client ID (`client_…`)                                                                                   |
+| `WORKOS_COOKIE_PASSWORD`          |   Yes    | 32+ character session-cookie secret. Rotating it invalidates every session                                      |
+| `NEXT_PUBLIC_WORKOS_REDIRECT_URI` |   Yes    | OAuth callback URL; must match the WorkOS dashboard (`https://weather.mukoko.com/callback` in production)       |
+| `CLOUDFLARE_ACCOUNT_ID`           |    No    | Account owning the `shamwari` AI Gateway. Without the AI vars, summaries fall back to a basic generated summary |
+| `AI_GATEWAY_ID`                   |    No    | AI Gateway id (default `shamwari`)                                                                              |
+| `AI_GATEWAY_URL`                  |    No    | Full gateway base override (up to `/compat`)                                                                    |
+| `AI_GATEWAY_TOKEN`                |    No    | Server-only. Cloudflare token with AI Gateway: Run (`cf-aig-authorization`)                                     |
+| `CF_WORKERS_AI_TOKEN`             |    No    | Server-only. Cloudflare token with Workers AI: Read (provider `Authorization`)                                  |
+| `AI_MODEL`                        |    No    | Model override (default `workers-ai/@cf/zai-org/glm-5.3`)                                                       |
+| `DB_INIT_SECRET`                  |    No    | Protects `/api/db-init` in production (`x-init-secret` header)                                                  |
+| `INTERNAL_API_BASE_URL`           |    No    | Base URL for server-to-server SSR calls into `/api/py/*`                                                        |
 
 ## Architecture
 
