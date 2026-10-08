@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { trackEvent } from "@/lib/analytics";
+import { readStorage, removeStorage, writeStorage } from "@/lib/safe-storage";
 
 // ---------------------------------------------------------------------------
 // Types for the beforeinstallprompt event (not in lib.dom.d.ts)
@@ -29,7 +30,7 @@ interface BeforeInstallPromptEvent extends Event {
 // Constants
 // ---------------------------------------------------------------------------
 
-/** localStorage key to track dismissal — respects user choice */
+/** Storage key to track dismissal — respects user choice */
 const DISMISSED_KEY = "mukoko-pwa-install-dismissed";
 
 /** Don't re-prompt for 30 days after dismissal */
@@ -64,16 +65,14 @@ export function PWAInstallPrompt() {
     }
 
     // Check dismissal cooldown
-    if (typeof localStorage !== "undefined") {
-      const dismissed = localStorage.getItem(DISMISSED_KEY);
-      if (dismissed) {
-        const dismissedAt = parseInt(dismissed, 10);
-        if (
-          !isNaN(dismissedAt) &&
-          Date.now() - dismissedAt < DISMISS_COOLDOWN_MS
-        ) {
-          return;
-        }
+    const dismissed = readStorage(DISMISSED_KEY);
+    if (dismissed) {
+      const dismissedAt = parseInt(dismissed, 10);
+      if (
+        !isNaN(dismissedAt) &&
+        Date.now() - dismissedAt < DISMISS_COOLDOWN_MS
+      ) {
+        return;
       }
     }
 
@@ -107,9 +106,7 @@ export function PWAInstallPrompt() {
 
       if (outcome === "accepted") {
         // User accepted — mark as installed
-        if (typeof localStorage !== "undefined") {
-          localStorage.removeItem(DISMISSED_KEY);
-        }
+        removeStorage(DISMISSED_KEY);
       }
     } catch {
       // prompt() can throw if already called or dismissed
@@ -129,9 +126,7 @@ export function PWAInstallPrompt() {
     deferredPrompt.current = null;
 
     // Record dismissal with timestamp for cooldown
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(DISMISSED_KEY, String(Date.now()));
-    }
+    writeStorage(DISMISSED_KEY, String(Date.now()));
 
     trackEvent("onboarding_completed", { method: "pwa_install_dismissed" });
   }, []);
@@ -168,33 +163,21 @@ export function PWAInstallPrompt() {
 
         {/* Feature highlights */}
         <ul className="space-y-3 py-2 text-sm text-text-secondary">
-          <li className="flex items-start gap-3">
-            <span
-              className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
-              aria-hidden="true"
-            >
-              1
-            </span>
-            <span>Works offline with cached weather data</span>
-          </li>
-          <li className="flex items-start gap-3">
-            <span
-              className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
-              aria-hidden="true"
-            >
-              2
-            </span>
-            <span>Faster loads — no browser overhead</span>
-          </li>
-          <li className="flex items-start gap-3">
-            <span
-              className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
-              aria-hidden="true"
-            >
-              3
-            </span>
-            <span>Full-screen experience on your device</span>
-          </li>
+          {[
+            "Works offline with cached weather data",
+            "Faster loads — no browser overhead",
+            "Full-screen experience on your device",
+          ].map((highlight, index) => (
+            <li key={highlight} className="flex items-start gap-3">
+              <span
+                className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
+                aria-hidden="true"
+              >
+                {index + 1}
+              </span>
+              <span>{highlight}</span>
+            </li>
+          ))}
         </ul>
 
         {/* Actions */}

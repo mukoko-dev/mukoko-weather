@@ -3,7 +3,6 @@
 import { useEffect, useRef } from "react";
 import { WeatherIcon, nightIcon } from "@/lib/weather-icons";
 import { weatherCodeToInfo, type HourlyWeather } from "@/lib/weather";
-import { hourlySummary } from "@/lib/hourly-summary";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { useHydrated } from "@/lib/use-hydrated";
 
@@ -38,10 +37,8 @@ export function HourlyScrollCards({ hourly }: Props) {
   const start = startIndex >= 0 ? startIndex : 0;
   const hours = hourly.time.slice(start, start + 24);
 
-  // Deterministic one-sentence outlook (Apple Weather pattern) — derived from
-  // the same start index as the strip, no AI call. Hydration-gated like the
-  // strip itself: the sentence depends on the client's wall clock.
-  const summary = hydrated ? hourlySummary(hourly, start) : null;
+  // The one-sentence outlook lives in the hero (CurrentConditions) — it is
+  // deliberately NOT repeated here, so the strip is hours only.
 
   // The horizontal scroller is Radix's Viewport, which ScrollArea doesn't let
   // us attribute directly. Keyboard users need it focusable (axe:
@@ -59,11 +56,6 @@ export function HourlyScrollCards({ hourly }: Props) {
 
   return (
     <div className="baobab overflow-hidden p-3">
-      {summary && (
-        <p className="border-b border-text-tertiary/10 px-1.5 pb-2.5 mb-1 text-base text-text-secondary leading-snug">
-          {summary}
-        </p>
-      )}
       <ScrollArea className="w-full" type="hover" viewportRef={scrollRef}>
         <div
           className="flex gap-2.5 pb-2 [overscroll-behavior-x:contain]"

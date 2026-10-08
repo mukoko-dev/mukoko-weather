@@ -25,7 +25,7 @@ Social: Twitter @mukokoafrica, Instagram @mukoko.africa
 - **Aviation:** NOAA Aviation Weather Center for METAR/TAF data; `@react-pdf/renderer` for pre-flight briefing PDFs; 66 ICAO airports mapped (`src/lib/icao-codes.ts`, name + WGS 84 coords checked against AWC station info; only stations AWC serves are listed — a retired or unlisted code is removed, and `syncAirports` deletes stale `weather.airports` docs), seeded into the DB-backed `weather.airports` collection (2dsphere-indexed) via `POST /api/db-init` → `syncAirports`. Nearest-station lookup uses MongoDB `$geoNear` through `GET /api/py/airports/nearest`; the location page's aviation card calls `GET /api/py/aviation/nearest-metar?lat&lon` — the nearest airport within 150 km that has a METAR in the last 3 h (candidates from the DB, one batched AWC request, cache-first) — and shows the server's explanation when none reports. AWC JSON gotchas: `visib` is a string (`"6+"`), `obsTime` is epoch seconds, `altim` is hPa. `fetchNearestAirports` / `getNearestIcao` remain as the static haversine fallback for the planner and offline use. Flight-category (VFR/MVFR/IFR/LIFR) badge colors are centralized in `src/lib/flight-category-styles.ts` (`FLIGHT_CATEGORY_STYLES`, `getFlightCategoryClass()`), shared by `AviationWeather.tsx` (location page) and `AviationPlanner.tsx` (`/aviation`) so the safety-relevant color coding can't drift between the two
 - **Drag-and-drop:** `@dnd-kit/core` + `@dnd-kit/sortable` for user-reorderable sections on the location page
 - **Branding:** Mukoko brand kit doctrine v4.1.0 — 7 minerals (cobalt, tanzanite, malachite, gold, terracotta, sodalite, copper); Noto Serif (display/wordmark), Noto Sans (UI), JetBrains Mono (code/labels)
-- **Styling:** Tailwind CSS 4 with CSS custom properties (Brand System v6)
+- **Styling:** Tailwind CSS 4 with CSS custom properties (Brand System v6) on the Mzizi design tokens (`src/app/mzizi-tokens.css`, imported first by `globals.css`)
 - **Markdown:** react-markdown 10 (AI summary rendering)
 - **State:** Zustand 5.0.11 (with `persist` middleware — theme, location, activities, hasOnboarded saved to localStorage; device sync to Python backend)
 - **AI:** Anthropic Claude SDK 0.76.0 (server-side via Python FastAPI, Haiku 3.5 model `claude-haiku-4-5-20251001`)
@@ -180,18 +180,18 @@ mukoko-weather/
 │   ├── components/
 │   │   ├── ui/                       # shadcn/ui primitives (Radix UI + CVA)
 │   │   │   ├── button.tsx            # Button (6 variants, 5 sizes, asChild support)
-│   │   │   ├── badge.tsx             # Badge (4 variants)
-│   │   │   ├── card.tsx              # Card, CardHeader, CardContent, etc.
+│   │   │   ├── badge.tsx             # Badge (5 variants, incl. rating)
 │   │   │   ├── chart.tsx             # CanvasChart, resolveColor (wraps Chart.js Canvas)
 │   │   │   ├── dialog.tsx            # Dialog (Radix, portal, overlay, animations)
 │   │   │   ├── input.tsx             # Input (styled with CSS custom properties)
-│   │   │   ├── skeleton.tsx         # Skeleton, CardSkeleton, ChartSkeleton, BadgeSkeleton, MetricCardSkeleton, ChatSkeleton
+│   │   │   ├── skeleton.tsx         # Skeleton, CardSkeleton, ChartSkeleton, MetricCardSkeleton, ChatSkeleton
 │   │   │   ├── spinner.tsx          # Spinner (shared loading ring — size/ring colors compose via className)
 │   │   │   ├── alert.tsx             # Alert, AlertTitle, AlertDescription (6 severity variants)
 │   │   │   ├── accordion.tsx        # Accordion (Radix, animated open/close)
 │   │   │   ├── section-header.tsx   # SectionHeader (title + optional action link/button)
 │   │   │   ├── info-row.tsx         # InfoRow (label + value pair for data lists)
 │   │   │   ├── toggle-group.tsx     # ToggleGroup (Radix, single/multiple, 3 variants incl. unstyled)
+│   │   ├── code-block.tsx       # CodeBlock (tortoise surface, scrollable code sample; docs pages)
 │   │   │   ├── scroll-area.tsx      # ScrollArea (Radix, custom scrollbar, horizontal/vertical)
 │   │   │   ├── status-indicator.tsx # StatusDot + StatusBadge (severity-colored status indicators)
 │   │   │   ├── cta-card.tsx         # CTACard (call-to-action card with title, description, action)
@@ -201,8 +201,7 @@ mukoko-weather/
 │   │   ├── brand/                    # Branding components
 │   │   │   ├── MukokoLogo.tsx        # Logo with text fallback
 │   │   │   ├── MineralsStripe.tsx    # 7-mineral decorative stripe (main layout only — covered by modal overlays, z-20)
-│   │   │   ├── ThemeProvider.tsx     # Syncs Zustand theme to document, listens for OS changes
-│   │   │   └── ThemeToggle.tsx       # Light/dark/system mode toggle (3-state cycle)
+│   │   │   └── ThemeProvider.tsx     # Syncs Zustand theme to document, listens for OS changes
 │   │   ├── analytics/
 │   │   │   └── GoogleAnalytics.tsx   # Google Analytics 4 (gtag.js) via next/script
 │   │   ├── display/
@@ -218,20 +217,23 @@ mukoko-weather/
 │   │   │   ├── HeaderSkeleton.tsx    # Header loading skeleton
 │   │   │   ├── Breadcrumb.tsx        # Shared Home / Location / Current-page trail (atmosphere, forecast, map sub-routes)
 │   │   │   ├── Breadcrumb.test.ts
-│   │   │   └── Footer.tsx            # Footer with site stats, copyright, links, Ubuntu philosophy
+│   │   │   ├── Footer.tsx            # Footer with site stats, copyright, links, Ubuntu philosophy
+│   │   │   └── PageShell.tsx         # Header + main-content column (3xl/5xl) + Footer for static pages
 │   │   ├── weather/
-│   │   │   ├── CurrentConditions.tsx  # iOS-style centred hero: MY LOCATION/HOME eyebrow, place, thin temp, condition, H/L, share, season footer slot — reads directly over WeatherBackdrop
+│   │   │   ├── CurrentConditions.tsx  # Mineral sky-plate hero (`.kori` + `--plate-*` tokens, family from src/lib/hero.ts): eyebrow, place, Noto Serif temp, condition, H/L, one-sentence outlook, activities line, share, season footer slot
 │   │   │   ├── WeatherBackdrop.tsx    # Fixed full-viewport condition-aware Three.js sky behind the whole location page (Apple Weather style)
 │   │   │   ├── WeatherBackdrop.test.ts
-│   │   │   ├── HourlyScrollCards.tsx  # Horizontal hour-by-hour strip + deterministic one-sentence outlook (hourly-summary.ts)
+│   │   │   ├── HourlyScrollCards.tsx  # Horizontal hour-by-hour strip (hours only — the one-sentence outlook lives in the hero)
 │   │   │   ├── HourlyScrollCards.test.ts
+│   │   │   ├── CommunityLane.tsx      # 24h suitability lane per selected activity with community reports pinned at their hour (logic in src/lib/community-lane.ts)
+│   │   │   ├── CommunityLaneSkeleton.tsx
+│   │   │   ├── CommunityLane.test.ts
 │   │   │   ├── HourlyForecast.tsx     # 24-hour hourly forecast
 │   │   │   ├── HourlyChart.tsx        # Canvas chart: temperature + rain over 24h
 │   │   │   ├── DailyForecast.tsx      # 7-day forecast cards
 │   │   │   ├── DailyChart.tsx         # Canvas chart: high/low temps over 7 days
 │   │   │   ├── AtmosphericSummary.tsx  # Compact metric cards with gauges (humidity, wind, pressure, UV, cloud, feels-like, precipitation)
 │   │   │   ├── AtmosphericDetails.tsx # Imports chart components for 24h atmospheric views
-│   │   │   ├── LazyAtmosphericDetails.tsx # Lazy-load wrapper (React.lazy + Suspense)
 │   │   │   ├── MetricCard.tsx           # MetricCard + ArcGauge (radial gauge with value display)
 │   │   │   ├── ActivityCard.tsx        # ActivityCard (per-activity rating badge + 24h feasibility trend + weather tips)
 │   │   │   ├── StatCard.tsx            # Reusable stat card (label + value)
@@ -302,10 +304,10 @@ mukoko-weather/
 │   │       ├── MukokoWeatherEmbed.test.ts
 │   │       └── index.ts
 │   ├── lib/
-│   │   ├── store.ts               # Zustand app state (theme, location, activities, hasOnboarded, ShamwariContext, reportModal, device sync)
-│   │   ├── store.test.ts          # Theme resolution, ShamwariContext TTL tests, device sync init
-│   │   ├── device-sync.ts         # Device sync — bridges Zustand localStorage with Python device profile API
-│   │   ├── device-sync.test.ts
+│   │   ├── store.ts               # Zustand app state (theme, location, activities, hasOnboarded, ShamwariContext, reportModal, RxDB init via initializeDeviceSync)
+│   │   ├── theme.ts               # Dependency-free resolveTheme (re-exported from store.ts; used by the embed widget + MapLibreMap)
+│   │   ├── store.test.ts          # Theme resolution, ShamwariContext TTL tests, RxDB init
+│   │   ├── rxdb/                  # RxDB local-first store: bridge.ts (Zustand ↔ IndexedDB preferences), replication.ts (sync to /api/py/devices), database/collections/schemas
 │   │   ├── suggested-prompts.ts   # Database-driven suggested prompt generation (fetches from /api/py/ai/prompts)
 │   │   ├── suggested-prompts.test.ts
 │   │   ├── locations.ts           # WeatherLocation type, 98 ZW seed locations, search, filtering
@@ -355,6 +357,8 @@ mukoko-weather/
 │   │   ├── map-layers.ts          # Map layer config (Tomorrow.io tile layers, mineral color styles)
 │   │   ├── map-layers.test.ts
 │   │   ├── error-retry.ts         # Error retry logic with sessionStorage tracking (max 3 retries)
+│   │   ├── safe-storage.ts        # SSR-safe, never-throwing localStorage/sessionStorage wrappers — use instead of raw Storage access
+│   │   ├── safe-storage.test.ts
 │   │   ├── error-retry.test.ts
 │   │   ├── activity-feasibility.ts # 24h feasibility series — evaluates suitability rules per forecast hour (LEVEL_SCORES, hourInsights, feasibilitySeries)
 │   │   ├── activity-feasibility.test.ts
@@ -388,10 +392,13 @@ mukoko-weather/
 │   └── py/                        # Python FastAPI backend (Vercel serverless functions)
 │       ├── index.py               # FastAPI app, router mounting, CORS, error handlers
 │       ├── _db.py                 # MongoDB connection, collection accessors, rate limiting
+│       ├── _http.py               # Shared pooled httpx clients keyed by timeout (get_http_client)
 │       ├── _weather.py            # Weather data endpoints (Tomorrow.io/Open-Meteo proxy)
+│       ├── _anthropic.py          # Shared Claude plumbing: client singleton, breaker-guarded call_claude(), first_text()
+│       ├── _wmo.py                # WMO_LABELS — weather-code labels (mirror of weatherCodeToInfo in src/lib/weather.ts)
 │       ├── _ai.py                 # AI summary endpoint (Claude, tiered TTL cache)
 │       ├── _ai_followup.py        # Inline follow-up chat endpoint (pre-seeded history)
-│       ├── _ai_prompts.py         # AI prompt library CRUD (GET/PUT prompts + suggested rules)
+│       ├── _ai_prompts.py         # AI prompt library CRUD (GET/PUT prompts + suggested rules) + cached get_ai_prompt() loader
 │       ├── _chat.py               # Shamwari Explorer chatbot (Claude + tool use)
 │       ├── _locations.py          # Location CRUD, search, geo lookup
 │       ├── _history.py            # Historical weather data endpoint
@@ -408,8 +415,8 @@ mukoko-weather/
 │       └── _tiles.py              # Map tile proxy for Tomorrow.io
 ├── station-console/               # Station console app (MONOREPO sub-app — separate Vercel project at weatherstations.nyuchi.com)
 │   ├── package.json               # Own Next.js app: web-only, NO PWA/offline; WorkOS AuthKit with the SAME credentials as the main app (register the /callback redirect URI in WorkOS)
-│   ├── components.json            # Nyuchi Design registry config — bootstrapped via `npx @nyuchi/design-cli init`, components installed from the registry (design.nyuchi.com → mzizi.dev) via the shadcn CLI
-│   ├── .claude/skills/            # Nyuchi Design agent skills (`npx @nyuchi/design-cli skills install`; versions pinned in .nyuchi-design.json)
+│   ├── components.json            # Mzizi design registry config — bootstrapped via `npx @nyuchi/design-cli init`, components installed from the registry (design.nyuchi.com → mzizi.dev) via the shadcn CLI
+│   ├── .claude/skills/            # Mzizi design agent skills (`npx @nyuchi/design-cli skills install`; versions pinned in .nyuchi-design.json)
 │   └── src/                       # Public landing page at / (anonymous visitors get a sign-in CTA; signed-in users get the console — middleware lists "/" in unauthenticatedPaths); console: register stations, one-time credentials + WU/Ecowitt setup instructions, manual readings, status. Calls the /api/py/stations/* endpoints (CORS-allowed origin); station keys live in the owner's browser localStorage.
 │                                  # Styling per Mzizi doctrine: canonical Nyuchi L1 tokens in src/app/globals.css + registry L2 primitives in src/components/ui/ (Button, Input, Label, Card, Badge, Alert, RadioGroup) + vendored L7 shell (src/components/shell/nyuchi-header.tsx, nyuchi-footer.tsx from the Mzizi registry, wired app-wide in layout.tsx with a local @/lib/harness shim until the real harness package ships; icons via @/lib/icons, never lucide direct) — pages are pure composition, no hand-rolled CSS classes; theme via next-themes (class-based dark mode); fonts Noto Sans/Serif + JetBrains Mono via next/font. The seven-mineral brand ribbon is ALWAYS VERTICAL: fixed 4px .minerals-stripe down the left viewport edge (same as the main app), never a horizontal strip
 ├── worker/                        # Cloudflare Workers edge API (optional)
@@ -525,7 +532,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - Collection accessors (existing): `weather_cache_collection()`, `ai_summaries_collection()`, `locations_collection()`, etc. — all routed through the appropriate platform DB. `device_profiles_collection()` now lives in the platform `device` DB.
 - Platform collection accessors (new, camelCase, schema-validated): `stations_collection()`, `observations_collection()`, `alerts_collection()`, `community_reports_collection()`, `places_collection()`, `places_geo_collection()`, `persons_collection()`, `credentials_collection()`, `activity_log_collection()`, `conversations_collection()`, `messages_collection()`, `guardrails_collection()`, `devices_collection()`, `provider_configurations_collection()`, etc.
 - **Auto-stamped writes:** `stamp_platform_fields(doc, country_code="ZW", province_slug=None)` adds the required `_id` (UUID), `_schemaVersion: "v3.1"`, `bundu` sub-doc, `createdAt`, and `updatedAt`. Strict validators (`validationAction: "error"`) reject writes that lack these fields, so call this on every insert into a platform collection.
-- TypeScript mirror: `src/lib/mongo.ts` exports `weatherDb()`, `placesDb()`, `identityDb()`, `shamwariDb()`, `deviceDb()`, `integrationsDb()`. `src/lib/db.ts` exports `stampPlatformFields()` plus the matching collection accessors (`stationsCollection`, `placesCollection`, `personsCollection`, etc.).
+- TypeScript mirror: `src/lib/mongo.ts` exports `weatherDb()`, `placesDb()`, `identityDb()`, `shamwariDb()`, `deviceDb()`, `integrationsDb()`. `src/lib/db.ts` exports `stampPlatformFields()` plus the matching collection accessors (`placesCollection`, `personsCollection`, etc.).
 
 **CORS:** Restricted to `https://weather.mukoko.com` and `http://localhost:3000` (not wildcard).
 
@@ -571,12 +578,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 **Integration pattern:** All Python endpoints that call external APIs use the circuit breaker:
 
 - `_weather.py` — `tomorrow_breaker` + `open_meteo_breaker` (record-based: `is_allowed` / `record_success()` / `record_failure()`)
-- `_chat.py` — `anthropic_breaker` (guard before tool-use loop, falls back to error response)
-- `_ai.py` — `anthropic_breaker` (guard before Claude call, falls back to basic weather summary)
-- `_ai_followup.py` — `anthropic_breaker` (guard before Claude call, returns error with weather data note)
-- `_explore_search.py` — `anthropic_breaker` (guard before AI search, falls back to text search)
-- `_history_analyze.py` — `anthropic_breaker` (guard before analysis, returns stats-only response)
-- `_reports.py` — `anthropic_breaker` (guard before clarify call, falls back to hardcoded questions)
+- Claude callers (`_chat.py`, `_ai.py`, `_ai_followup.py`, `_explore_search.py`, `_history_analyze.py`, `_reports.py`) never touch `anthropic_breaker` directly. They call `call_claude()` in `api/py/_anthropic.py`, which checks the breaker, records success/failure, and returns `(response, error_kind)` with kinds `no_client` / `circuit_open` / `rate_limited` / `api_error`. Each caller maps those kinds to its own fallback or HTTP status (e.g. `_chat.py` returns an error reply, `_ai_followup.py` raises 429 on `rate_limited`). The client singleton is `get_anthropic_client()`, rebuilt when the key hash changes.
 
 ### Routing
 
@@ -607,7 +609,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/developers` — public developer/API documentation page
 - `/developers/keys` — auth-gated developer API-key management (create — full key shown once / list masked / revoke)
 - `/embed` — widget embedding docs
-- `/display` — full-screen weather display for TVs, tablets and monitors (kiosk). No header/footer, no sign-in, `robots: noindex`. URL-configured via `parseDisplayParams()` (`src/lib/display.ts`): `?location=<slug>` or `?lat=&lon=`, `?layer=<MAP_LAYERS id>` (default `precipitationIntensity`), `?theme=light|dark`. Falls back to the lastLocation cookie, then IP geo snapped to the nearest seed, then Harare. Panels (`src/components/display/DisplayPanels.tsx`): clock, current conditions, air quality with `AQI_ADVICE` haze guidance, radar (`MapLibreMap`, non-interactive), today's outlook (tall screens only), next hours, 5 days — each in its own `ChartErrorBoundary`. Runtime hooks (`src/lib/use-display-runtime.ts`): Screen Wake Lock, `usePolledJson` (weather 10 min, AQ 30 min, keeps the last good value on a failed refresh), 6-hour page reload. `display` is in the `KNOWN_ROUTES` sets of `src/proxy.ts` and `WeatherLoadingScene.tsx` so it never becomes the lastLocation cookie
+- `/display` — full-screen weather display for TVs, tablets and monitors (kiosk). No header/footer, no sign-in, `robots: noindex`. URL-configured via `parseDisplayParams()` (`src/lib/display.ts`): `?location=<slug>` or `?lat=&lon=`, `?layer=<MAP_LAYERS id>` (default `precipitationIntensity`), `?theme=light|dark`. Falls back to the lastLocation cookie, then IP geo snapped to the nearest seed, then Harare. Panels (`src/components/display/DisplayPanels.tsx`): clock, current conditions, air quality with `AQI_ADVICE` haze guidance, radar (`MapLibreMap`, non-interactive), today's outlook (tall screens only), next hours, 5 days — each in its own `ChartErrorBoundary`. The official NEA PSI panel (`DisplaySgPsi`, `src/lib/sg-air.ts`) sits inside the air-quality card and only polls `/api/py/sg-air` when the location's country is `SG`. Runtime hooks (`src/lib/use-display-runtime.ts`): Screen Wake Lock, `usePolledJson` (weather 10 min, AQ 30 min, NEA 15 min, keeps the last good value on a failed refresh), 6-hour page reload. `display` is in the `KNOWN_ROUTES` sets of `src/proxy.ts` and `WeatherLoadingScene.tsx` so it never becomes the lastLocation cookie
 - `/api/og` — GET, dynamic OG image generation (Edge runtime, Satori, TypeScript). Query: `title`, `subtitle`, optional `location`, `province`, `season`, `temp`, `condition`, `template` (home/location/explore/history/season/shamwari). In-memory rate-limited (30 req/min/IP), 1-day CDN cache
 - `/api/db-init` — POST, one-time DB setup + seed data (TypeScript). Requires `x-init-secret` header in production
 - `/api/keys` — GET (list caller's keys, masked) / POST (mint a developer API key in `platform.apiKeys`; full key returned ONCE, SHA-256 hashed at rest, 10/user cap, eligible entity-membership role required). Auth-gated via `withAuth()`
@@ -645,6 +647,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/airports/nearest` — GET, N nearest ICAO airports to `lat`/`lon` (query: `lat`, `lon`, optional `count` default 5 / max 20, optional `maxDistanceKm` default 500) via MongoDB `$geoNear` on the seeded `weather.airports` collection. Each result carries `icao` + `name` + `distanceKm`, sorted closest-first. Returns an empty list on any DB error so the TS client falls back to the static haversine scan
 - `/api/py/metar?icao=` — GET, METAR (last 12 h) + TAF for one ICAO station from AWC (cached 30 min; empty answers cached 2 min; failures never cached). Source `awc` | `checkwx` | `unavailable`
 - `/api/py/aviation/nearest-metar?lat&lon` — GET, nearest airport within `radiusKm` (default 150) with a METAR no older than `maxAgeMinutes` (default 180), with its METAR + TAF. `status`: `ok` | `no_recent_report` | `no_airports` | `unavailable`; `candidates` lists every airport considered
+- `/api/py/sg-air` — GET, official Singapore NEA air quality via data.gov.sg (no key): 24h PSI with band, per-region PSI and 1h PM2.5, nearest region for `lat`/`lon`. Cached 10 min in memory, read through `nea_breaker`; always HTTP 200 with `available: false` on failure. Shown on `/display` beside the modelled AQI for Singapore only
 - `/api/py/enso` — GET, latest El Niño / La Niña phase from NOAA CPC's Oceanic Niño Index (`oni.ascii.txt`): ONI, season, phase, strength, last 6 seasons. In-memory cache 12 h, guarded by `noaa_breaker`; returns 200 with `available: false` when the upstream fails. Feeds the location-page `EnsoOutlook` card
 - `/api/py/stations/register` — POST, register a community weather station (digital or manual/analog). Rate-limited 3/hour/IP. Returns `stationId` + `ingestKey` ONCE (SHA-256 hash at rest) with custom-server setup instructions
 - `/api/py/stations/ingest` — GET (Wunderground protocol, `ID`/`PASSWORD` query params) and POST (Ecowitt protocol, form fields with `PASSKEY=<stationId>:<ingestKey>`) — consumer station consoles push readings directly here via their "customized upload" setting. Imperial→metric conversion, inline QC range checks; raw payloads archived in `weather.stationObservations`, passing readings become validated `weather.observations` docs that `/api/py/weather` blends into current conditions (StationKit flow). Responds with the literal body `success` (WU protocol requirement)
@@ -735,7 +738,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 
 **Countries & Provinces:** `src/lib/countries.ts` — `Country` type (code, name, region, supported), `Province` type (slug, name, countryCode), 64 seed countries (54 AU + ASEAN), 80+ province definitions, `getFlagEmoji(code)`, `generateProvinceSlug(name, code)`.
 
-Key functions: `getLocationBySlug(slug)`, `searchLocationsFromDb(query, options)` (Atlas Search with fuzzy matching + $text fallback), `getLocationsByTag(tag)`, `findNearestLocation(lat, lon)`, `createLocation(location)`, `findDuplicateLocation(lat, lon, radiusKm)`, `getLocationsForContext(limit)` (bounded DB query for AI context, seed locations prioritized), `vectorSearchLocations(embedding, options)` (foundation for semantic search — requires embedding pipeline), `getTagCountsAndStats()` ($facet aggregation for tag counts + location stats in one query).
+Key functions: `getLocationBySlug(slug)`, `searchLocationsFromDb(query, options)` (Atlas Search with fuzzy matching + $text fallback), `getLocationsByTag(tag)`, `findNearestLocation(lat, lon)`, `createLocation(location)`, `getLocationsForContext(limit)` (bounded DB query for AI context, seed locations prioritized), `vectorSearchLocations(embedding, options)` (foundation for semantic search — requires embedding pipeline), `getTagCountsAndStats()` ($facet aggregation for tag counts + location stats in one query).
 
 ### Activities
 
@@ -867,7 +870,7 @@ weather.stationObservations → QC pipeline → weather.observations
 - `setSelectedLocation(slug)` — updates location, queues device sync
 - `selectedActivities: string[]` — activity IDs (from `src/lib/activities.ts`), persisted to localStorage, synced to server
 - `toggleActivity(id)` — adds/removes an activity selection, queues device sync
-- `selectedForecastModel: string` — Windy-style forecast model preference (Open-Meteo model id or `"best_match"`, default `"best_match"`), persisted (RxDB) + device-synced. Set via the "Forecast model" radio group in the My Weather modal Settings tab; passed by `fetchWeather()` and highlighted in `ModelComparisonChart`
+- `selectedForecastModel: string` — Windy-style forecast model preference (Open-Meteo model id or `"best_match"`, default `"best_match"`), persisted (RxDB) + replicated to `/api/py/devices`. Set via the "Forecast model" radio group in the My Weather modal Settings tab; passed by `fetchWeather()` and highlighted in `ModelComparisonChart`
 - `setSelectedForecastModel(model)` — updates the model preference, persists to RxDB
 - `homeLocation: string | null` — the Home location slug (`/locations` ⌂), persisted in the RxDB `preferences` doc (schema v2). Device-local for now: the Python device-profile sync does not carry it yet, and the pull handler keeps the local value
 - `setHomeLocation(slug | null)` — set or clear the Home location (empty string clears), persists to RxDB
@@ -896,16 +899,12 @@ weather.stationObservations → QC pipeline → weather.observations
 - `myWeatherOpen`, `shamwariContext`, and `reportModalOpen` are transient (reset on page load)
 - `onRehydrateStorage` callback applies the persisted theme to the DOM on load
 
-**Device Sync:**
+**Local-first sync (RxDB):**
 
-- `src/lib/device-sync.ts` bridges Zustand localStorage with the Python device profile API (`/api/py/devices`)
-- **Hybrid approach:** localStorage is the primary read source (instant), MongoDB is the persistence layer (recoverable)
-- Changes are synced to server on mutation (debounced 1.5s via `queueSync`)
-- On first visit: generates a device UUID, reads any existing localStorage prefs, creates a server profile
-- On returning visit: fetches server profile; if local state looks like defaults but server has real data, restores from server (e.g., user cleared localStorage or new browser)
-- `flushSync()` fires via `beforeunload` listener (with duplicate registration guard) to persist pending changes before page unload using `navigator.sendBeacon`
+- `src/lib/rxdb/bridge.ts` owns persisted preferences. `initRxDBBridge()` hydrates the Zustand store from the RxDB `preferences` document (keyed by a device UUID kept in localStorage under `mukoko-device-id`), `updatePreferences()` writes to RxDB, and RxDB change subscriptions push multi-tab changes back into Zustand. `migrateLocalStorageToRxDB()` runs once to move the legacy `mukoko-weather-prefs` localStorage blob into IndexedDB
+- `src/lib/rxdb/replication.ts` replicates preferences bidirectionally with `/api/py/devices` (PATCH to push, GET to pull). Only the leader tab replicates. Suitability rules are pull-only from `/api/py/suitability` every 10 minutes
+- `initializeDeviceSync()` in `src/lib/store.ts` is the single entry point: it runs the bridge, then `startReplication()`
 - **Merge strategy:** Last-write-wins (not CRDT). If a user has multiple devices, whichever syncs last determines the server value for array fields like `selectedActivities` and `savedLocations`. A per-field timestamp merge is a future enhancement
-- `initializeDeviceSync()` is called once on client-side app load after Zustand rehydrates
 
 **Theme system:**
 
@@ -916,7 +915,7 @@ weather.stationObservations → QC pipeline → weather.observations
 
 ### Styling / Brand System
 
-CSS custom properties are defined in `src/app/globals.css` (Brand System v6). Colors are WCAG 3.0 APCA/AAA compliant. The theme supports light/dark mode with system preference detection, `prefers-contrast: more`, `prefers-reduced-motion: reduce`, and `forced-colors: active`.
+The canonical Mzizi tokens (all 21 colour families, the radius scale, the surface and semantic values) are vendored in `src/app/mzizi-tokens.css`, generated upstream in `@nyuchi/mzizi-skills` (`skills/mzizi-design/tokens-update.css`). `src/app/globals.css` aliases the app's tokens to those Mzizi variables (for example `--mineral-cobalt: var(--color-cobalt)`), so there are no mineral hex literals in `globals.css`. Brand-only extensions (frost, severity, BMC, chart and scene tokens) stay in `globals.css`. Colors are WCAG 3.0 APCA/AAA compliant. The theme supports light/dark mode with system preference detection, `prefers-contrast: more`, `prefers-reduced-motion: reduce`, and `forced-colors: active`.
 
 **Mineral Color System:**
 Each activity category has a dedicated mineral color, defined as CSS custom properties with light and dark variants:
@@ -926,7 +925,7 @@ Each activity category has a dedicated mineral color, defined as CSS custom prop
 - **Travel** → Cobalt (`--mineral-cobalt`)
 - **Tourism** → Tanzanite (`--mineral-tanzanite`)
 - **Sports** → Gold (`--mineral-gold`)
-- **Casual** → Primary (Cobalt brand color)
+- **Casual** → Primary (Storm, Mzizi experimental family)
 
 Category styles are centralized in `CATEGORY_STYLES` (`src/lib/activities.ts`) with static Tailwind classes for `bg`, `border`, `text`, and `badge` per category. Each mineral color has a corresponding `--mineral-*-fg` foreground token for badge text contrast.
 
@@ -974,14 +973,13 @@ Reusable skeleton components in `src/components/ui/skeleton.tsx`:
 - `Skeleton` — generic pulsing block (base building block)
 - `CardSkeleton` — card-shaped with title + content lines
 - `ChartSkeleton` — aspect-ratio-matched chart placeholder
-- `BadgeSkeleton` — pill-shaped badge placeholder
 - `MetricCardSkeleton` — matches AtmosphericSummary MetricCard shape
 - `ChatSkeleton` — matches ExploreChatbot container shape (used as Suspense fallback)
 
 Aspect-matched section skeletons in `src/components/weather/SectionSkeleton.tsx`:
 
 - `SectionSkeleton` — generic fallback (h-32 pulsing card)
-- `ReportsSkeleton`, `HourlyForecastSkeleton`, `ActivityInsightsSkeleton`, `DailyForecastSkeleton`, `AISummarySkeleton`, `AISummaryChatSkeleton`, `AtmosphericSummarySkeleton`, `SunTimesSkeleton`, `MapPreviewSkeleton`, `SupportBannerSkeleton`, `LocationInfoSkeleton` — each mirrors the shape of its corresponding component to prevent layout shift
+- `ReportsSkeleton`, `HourlyForecastSkeleton`, `ActivityInsightsSkeleton`, `DailyForecastSkeleton`, `AISummarySkeleton`, `AISummaryChatSkeleton`, `MapPreviewSkeleton`, `SupportBannerSkeleton`, `LocationInfoSkeleton` — each mirrors the shape of its corresponding component to prevent layout shift
 
 All skeletons include `role="status"` and `aria-label="Loading"` for screen readers. The `sr-only` span is optional when `aria-label` is present — both achieve the same result for assistive technology, so `aria-label` alone is sufficient.
 
@@ -1241,6 +1239,7 @@ All pages use a **TikTok-style sequential mounting** pattern — only ONE sectio
 **Location page — `CurrentConditions` and `AtmosphericSummary` load eagerly.** All other sections are lazy:
 
 - `HourlyScrollCards` → `ChartErrorBoundary` (eager)
+- `CommunityLane` → `LazySection` (`CommunityLaneSkeleton`) + `ChartErrorBoundary` — its own draggable section (`communityLane`), right after the hourly strip in `DEFAULT_SECTION_ORDER`
 - `CurrentConditions` → `ChartErrorBoundary` (eager — big temp, feels-like, daily high/low)
 - `AtmosphericSummary` → `ChartErrorBoundary` (eager — 7 gauge cards: humidity, cloud, wind, pressure, UV, feels-like, precipitation)
 - `RecentReports` → `LazySection` + `ChartErrorBoundary` + `Suspense`
@@ -1275,7 +1274,7 @@ All pages use a **TikTok-style sequential mounting** pattern — only ONE sectio
 
 ### Atmospheric Details (Atmosphere Sub-Route & History Page)
 
-`src/components/weather/AtmosphericDetails.tsx` — orchestrates four chart components for 24-hour hourly atmospheric views. Used by the `/${slug}/atmosphere` sub-route page and the history page (via `LazyAtmosphericDetails`). Not rendered on the main location page.
+`src/components/weather/AtmosphericDetails.tsx` — orchestrates four chart components for 24-hour hourly atmospheric views. Lazy-imported by `AtmosphereDashboard.tsx` on the `/${slug}/atmosphere` sub-route. Not rendered on the main location page.
 
 **Imports chart components from `src/components/weather/charts/`:**
 
@@ -1392,7 +1391,7 @@ _Library tests:_
 - `src/lib/countries.test.ts` — country/province data, flag emoji, province slug generation
 - `src/lib/store.test.ts` — theme resolution (light/dark/system), SSR fallback, ShamwariContext set/clear/expiry, savedLocations CRUD/cap/persistence
 - `src/lib/suggested-prompts.test.ts` — suggested prompt generation, weather condition matching, max 3 cap
-- `src/lib/device-sync.test.ts` — device sync CRUD, debounced sync, migration, beforeunload
+- `src/lib/rxdb/bridge.test.ts` — RxDB bridge: device ID, legacy localStorage migration, preference hydration, writes, retry, reset
 - `src/lib/map-layers.test.ts` — map layer config, default layer, getMapLayerById
 - `src/lib/utils.test.ts` — Tailwind class merging (cn utility), getScrollBehavior reduced-motion detection
 - `src/lib/i18n.test.ts` — translations, formatting, interpolation
@@ -1400,7 +1399,7 @@ _Library tests:_
 - `src/lib/smart-slug.test.ts` — build/parse round-trip, `--` delimiter safety against every shipped seed slug (the `/gweru` → Arctic hazard), legacy-slug complement
 - `src/lib/places.test.ts` — resolver pure logic (normalizeName, inferNameFromSlug, adapters, `adaptSeedToLocationDoc`, `nearestSeedLocation`, seed-slug uniqueness)
 - `src/lib/places-resolver.test.ts` — `resolveLocationSlug` with a mocked placesGeo collection: seed fallback on no-match / DB throw, genuine unknown slugs still 404, real placesGeo docs still win, city-state country-doc acceptance, `CITY_STATE_COUNTRIES` parity with `api/py/_locations.py`
-- `src/lib/db.test.ts` — database operations (CRUD, TTL, API keys, activities, suitability rules, Atlas Search time-based recovery, Vector Search embedding guard, $facet aggregation)
+- `src/lib/db.test.ts` — database operations (CRUD, TTL, suitability rules, Vector Search embedding guard, $facet aggregation)
 - `src/lib/suitability-cache.test.ts` — suitability cache TTL, reset, category styles
 - `src/lib/geolocation.test.ts` — browser geolocation API wrapper, auto-creation statuses
 - `src/lib/observability.test.ts` — structured logging, error reporting
@@ -1532,7 +1531,8 @@ Before every commit, you MUST complete ALL of these steps. Do not skip any.
 
 ### Styling
 
-- **Global styles only** — all colors and tokens defined in `globals.css` as CSS custom properties
+- **Global styles only** — all colors and tokens defined in `globals.css` as CSS custom properties, aliasing Mzizi variables from `mzizi-tokens.css` for minerals, surfaces and borders
+- **Mzizi is the canon** — to change a mineral, surface or radius value, change it upstream and re-vendor `mzizi-tokens.css`; never retype a hex into `globals.css`. Primary is the Mzizi experimental storm family (an owner decision: the super app owns tanzanite, and sub-apps take a Heritage or Experimental family with a weather connection); cobalt remains the travel mineral
 - **Never hardcode** — no hex colors, rgba(), inline `style={{}}`, or dynamic Tailwind class construction
 - **Tailwind classes** — always use Tailwind utility classes backed by CSS custom properties
 - **Canvas chart colors** — resolved at render time via `resolveColor()` from `src/components/ui/chart.tsx`
@@ -1544,23 +1544,28 @@ Repeated Tailwind chains (3+ uses) are extracted into named component classes in
 
 **Current palette:**
 
-| Class            | Purpose                                    | Replaces                                                                                                                         |
-| ---------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| `.kudu`          | Primary pill button (filled, brand colour) | `rounded-button bg-primary px-5 py-3 ...`                                                                                        |
-| `.kudu-sm`       | Smaller primary pill (compact toolbars)    | `rounded-button bg-primary px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                                  |
-| `.impala`        | Secondary/outline pill button              | `border border-border bg-transparent px-5 py-3 ...`                                                                              |
-| `.impala-sm`     | Smaller outline pill (compact toolbars)    | `border border-border bg-transparent px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                        |
-| `.bee`           | Round icon button (mukoko = beehive)       | `w-[var(--touch-target-min)] h-[var(--touch-target-min)] rounded-full bg-background/10 ...`                                      |
-| `.hoopoe`        | Round avatar (initials or profile picture) | `flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10` (also `.hoopoe-lg` h-9, `.hoopoe-xl` h-12)        |
-| `.baobab`        | Primary card surface                       | `rounded-card border border-primary/25 bg-surface-card p-4 shadow-sm`                                                            |
-| `.acacia`        | Quieter card surface                       | `rounded-card border border-border bg-surface-card p-4`                                                                          |
-| `.giraffe`       | Section heading (tall, stands above)       | `text-base font-semibold text-text-primary font-heading`                                                                         |
-| `.gazelle`       | Body paragraph copy                        | `text-base text-text-secondary leading-relaxed`                                                                                  |
-| `.dove`          | Muted secondary text                       | `text-sm text-text-tertiary`                                                                                                     |
-| `.weaver`        | Primary nav link                           | `inline-flex items-center text-base font-medium text-text-secondary hover:...`                                                   |
-| `.weaver-active` | Active nav link (cobalt + underline)       | active variant of `.weaver`                                                                                                      |
-| `.chameleon`     | Skeleton placeholder                       | `animate-pulse rounded-card border border-surface-dim bg-surface-card shadow-sm`                                                 |
-| `.dik-dik`       | Small inline link with a full touch target | on `pointer: coarse` only: `inline-flex` + `min-w`/`min-h` `var(--touch-target-min)` (breadcrumb Home, footer icons/attribution) |
+| Class            | Purpose                                        | Replaces                                                                                                                         |
+| ---------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `.kudu`          | Primary pill button (filled, brand colour)     | `rounded-button bg-primary px-5 py-3 ...`                                                                                        |
+| `.kudu-sm`       | Smaller primary pill (compact toolbars)        | `rounded-button bg-primary px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                                  |
+| `.impala`        | Secondary/outline pill button                  | `border border-border bg-transparent px-5 py-3 ...`                                                                              |
+| `.impala-sm`     | Smaller outline pill (compact toolbars)        | `border border-border bg-transparent px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                        |
+| `.bee`           | Round icon button (mukoko = beehive)           | `w-[var(--touch-target-min)] h-[var(--touch-target-min)] rounded-full bg-background/10 ...`                                      |
+| `.hoopoe`        | Round avatar (initials or profile picture)     | `flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10` (also `.hoopoe-lg` h-9, `.hoopoe-xl` h-12)        |
+| `.baobab`        | Primary card surface                           | `rounded-card border border-primary/25 bg-surface-card p-4 shadow-sm`                                                            |
+| `.acacia`        | Quieter card surface                           | `rounded-card border border-border bg-surface-card p-4`                                                                          |
+| `.giraffe`       | Section heading (tall, stands above)           | `text-base font-semibold text-text-primary font-heading`                                                                         |
+| `.gazelle`       | Body paragraph copy                            | `text-base text-text-secondary leading-relaxed`                                                                                  |
+| `.dove`          | Muted secondary text                           | `text-sm text-text-tertiary`                                                                                                     |
+| `.weaver`        | Primary nav link                               | `inline-flex items-center text-base font-medium text-text-secondary hover:...`                                                   |
+| `.weaver-active` | Active nav link (cobalt + underline)           | active variant of `.weaver`                                                                                                      |
+| `.chameleon`     | Skeleton placeholder                           | `animate-pulse rounded-card border border-surface-dim bg-surface-card shadow-sm`                                                 |
+| `.termite`       | Inline code chip (mono text in a surface nest) | `rounded-badge bg-surface-base px-1.5 py-0.5 font-mono text-base` (was `rounded bg-surface-base ...`)                            |
+| `.sunbird`       | Prose link (perches on the text, underlined)   | `text-primary underline underline-offset-2 transition-colors hover:text-primary/80`                                              |
+| `.elephant`      | Page title h1 on static pages                  | `font-display text-3xl font-bold text-text-primary sm:text-4xl`                                                                  |
+| `.eland`         | Section heading h2 on static pages             | `font-heading text-2xl font-bold text-text-primary`                                                                              |
+| `.springbok`     | Bulleted list inside prose                     | `mt-2 list-disc space-y-1 pl-6`                                                                                                  |
+| `.dik-dik`       | Small inline link with a full touch target     | on `pointer: coarse` only: `inline-flex` + `min-w`/`min-h` `var(--touch-target-min)` (breadcrumb Home, footer icons/attribution) |
 
 **Rules:**
 
@@ -1698,7 +1703,7 @@ The Python FastAPI backend auto-generates an **OpenAPI 3.1** specification from 
 - Leaflet/react-leaflet must be loaded as a `"use client"` component with `next/dynamic` and `ssr: false` (Leaflet requires the DOM)
 - Premium map layers are gated server-side — tile proxy routes check Stytch session before forwarding to Tomorrow.io
 
-**API key storage:** Third-party API keys (Tomorrow.io, Stytch) are stored in MongoDB (`api_keys` collection via `getApiKey`/`setApiKey` in `src/lib/db.ts`), not as server environment variables. This allows key rotation and management without redeployment. Keys are seeded via `POST /api/db-init` with body `{ "apiKeys": { "tomorrow": "..." } }`.
+**API key storage:** Third-party API keys (Tomorrow.io, Stytch) are stored in MongoDB (`api_keys` collection, written by `setApiKey` in `src/lib/db.ts` during db-init and read by the Python backend), not as server environment variables. This allows key rotation and management without redeployment. Keys are seeded via `POST /api/db-init` with body `{ "apiKeys": { "tomorrow": "..." } }`.
 
 ## Environment Variables
 
@@ -1719,17 +1724,16 @@ mukoko-weather uses **WorkOS AuthKit** (`@workos-inc/authkit-nextjs`) for user a
 
 ### Pieces
 
-| File                                                        | Role                                                                                                                                                                                                                                                                                                                                                                    |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/proxy.ts`                                              | Edge middleware. Calls `authkit(request)` on every request to refresh the WorkOS session, then layers our existing `lastLocation` cookie / home-page redirect logic via `handleAuthkitProxy` (so AuthKit headers survive the redirect)                                                                                                                                  |
-| `src/app/callback/route.ts`                                 | OAuth callback handler. Wraps `handleAuth({ onSuccess })` — on a successful WorkOS exchange, calls `upsertPlatformPerson(user)` to mirror the user into `identity.persons`                                                                                                                                                                                              |
-| `src/app/auth/signin/route.ts`                              | Server redirect to the WorkOS-hosted sign-in URL (`getSignInUrl()`)                                                                                                                                                                                                                                                                                                     |
-| `src/app/auth/signout/route.ts`                             | Server route that invokes `signOut({ returnTo: "/" })` — clears the session cookie and redirects through WorkOS logout                                                                                                                                                                                                                                                  |
-| `src/lib/auth.ts`                                           | Server helpers: `getCurrentUser()` (returns user or null), `requireUser()` (enforces sign-in), `upsertPlatformPerson()` (the dedup-disciplined identity.persons writer). Re-exports `getSignInUrl`, `signOut`                                                                                                                                                           |
-| `src/components/auth/SignInButton.tsx`, `SignOutButton.tsx` | Reusable buttons that link to `/auth/signin` and `/auth/signout` respectively                                                                                                                                                                                                                                                                                           |
-| `src/app/layout.tsx`                                        | Wraps the entire tree in `<AuthKitProvider initialAuth={…}>`. `initialAuth` is hydrated server-side via `withAuth()` (minus `accessToken`) so the client renders the right state on first paint with no fetch waterfall                                                                                                                                                 |
-| `src/lib/user-display.ts`                                   | Shared client-safe helpers (`initialsFor`, `displayNameFor`) for rendering a WorkOS user — used by the header's account icon and `/profile`. Replaces the standalone `UserMenu` component (removed): the account icon now lives inside the header's icon pill and routes straight to `/auth/signin` or `/profile` instead of rendering an inline avatar + Sign out link |
-| `src/app/profile/page.tsx` + `ProfileClient.tsx`            | `/profile` — `await requireUser()` gated. Server page fetches the WorkOS user; `ProfileClient` renders account details + a button that opens the existing My Weather modal (`openMyWeather()`) rather than duplicating its Location/Activities/Settings tabs                                                                                                            |
+| File                                             | Role                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/proxy.ts`                                   | Edge middleware. Calls `authkit(request)` on every request to refresh the WorkOS session, then layers our existing `lastLocation` cookie / home-page redirect logic via `handleAuthkitProxy` (so AuthKit headers survive the redirect)                                                                                                                                  |
+| `src/app/callback/route.ts`                      | OAuth callback handler. Wraps `handleAuth({ onSuccess })` — on a successful WorkOS exchange, calls `upsertPlatformPerson(user)` to mirror the user into `identity.persons`                                                                                                                                                                                              |
+| `src/app/auth/signin/route.ts`                   | Server redirect to the WorkOS-hosted sign-in URL (`getSignInUrl()`)                                                                                                                                                                                                                                                                                                     |
+| `src/app/auth/signout/route.ts`                  | Server route that invokes `signOut({ returnTo: "/" })` — clears the session cookie and redirects through WorkOS logout                                                                                                                                                                                                                                                  |
+| `src/lib/auth.ts`                                | Server helpers: `getCurrentUser()` (returns user or null), `requireUser()` (enforces sign-in), `upsertPlatformPerson()` (the dedup-disciplined identity.persons writer). Re-exports `getSignInUrl`, `signOut`                                                                                                                                                           |
+| `src/app/layout.tsx`                             | Wraps the entire tree in `<AuthKitProvider initialAuth={…}>`. `initialAuth` is hydrated server-side via `withAuth()` (minus `accessToken`) so the client renders the right state on first paint with no fetch waterfall                                                                                                                                                 |
+| `src/lib/user-display.ts`                        | Shared client-safe helpers (`initialsFor`, `displayNameFor`) for rendering a WorkOS user — used by the header's account icon and `/profile`. Replaces the standalone `UserMenu` component (removed): the account icon now lives inside the header's icon pill and routes straight to `/auth/signin` or `/profile` instead of rendering an inline avatar + Sign out link |
+| `src/app/profile/page.tsx` + `ProfileClient.tsx` | `/profile` — `await requireUser()` gated. Server page fetches the WorkOS user; `ProfileClient` renders account details + a button that opens the existing My Weather modal (`openMyWeather()`) rather than duplicating its Location/Activities/Settings tabs                                                                                                            |
 
 ### Sign-in flow
 
@@ -1849,14 +1853,12 @@ Mukoko-weather sits on the shared **Nyuchi Platform cluster** (27 databases). Mu
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `resolveLocationSlug(slug)`              | Clean URL slug → adapted `LocationDoc` via placesGeo                                                                      |
 | `nearestPlacesGeo(lat, lon, maxKm?)`     | $nearSphere on placesGeo for IP-geo / GPS reverse lookup                                                                  |
-| `nearestPlace(lat, lon, maxKm?)`         | $nearSphere on `places.places` POIs — tight ≤250 m match                                                                  |
 | `poiTypeFromPlace(doc)`                  | Extract a single POI type (school/hospital/market/park)                                                                   |
-| `searchPlaces(query, bbox?)`             | Searches `places.places` POIs for the explore/search flows                                                                |
 | `adaptPlacesGeoToLocationDoc(doc, hint)` | Adapter — placesGeo doc → legacy `LocationDoc` shape                                                                      |
 | `adaptSeedToLocationDoc(seed)`           | Adapter — static seed entry → `AdaptedLocation` (`_id: "seed:<slug>"`)                                                    |
 | `nearestSeedLocation(lat, lon, maxKm?)`  | Haversine scan over the static seed — coordinate fallback when placesGeo has no city/town/village nearby (default 250 km) |
 
-**POI-nearest refinement (create-on-demand):** After a GPS/coords reverse-geocode, `geo_lookup` / `add_location` (`api/py/_locations.py` `_match_nearby_poi` → `_places_geo.find_nearest_place`) query `places.places` for the nearest POI within **≤250 m** (`POI_MATCH_RADIUS_KM`). If a named POI is that close, its name replaces the raw reverse-geocode name (richer + consistent with the platform POI catalog) and its type is stamped onto `sourceProvenance.mukokoPoiType` and surfaced as `poiType` on the location payload (so the location page + AI summary can mention "school", "hospital", "market", "park"). This is deliberately tight — NOT a coarse distance-snap to far-away places. The whole lookup is wrapped in try/except and falls back to the reverse-geocode on any miss, empty result, or missing 2dsphere index. TS mirror: `nearestPlace` / `poiTypeFromPlace` in `src/lib/places.ts`; the adapter surfaces `poiType` from `sourceProvenance.mukokoPoiType`.
+**POI-nearest refinement (create-on-demand):** After a GPS/coords reverse-geocode, `geo_lookup` / `add_location` (`api/py/_locations.py` `_match_nearby_poi` → `_places_geo.find_nearest_place`) query `places.places` for the nearest POI within **≤250 m** (`POI_MATCH_RADIUS_KM`). If a named POI is that close, its name replaces the raw reverse-geocode name (richer + consistent with the platform POI catalog) and its type is stamped onto `sourceProvenance.mukokoPoiType` and surfaced as `poiType` on the location payload (so the location page + AI summary can mention "school", "hospital", "market", "park"). This is deliberately tight — NOT a coarse distance-snap to far-away places. The whole lookup is wrapped in try/except and falls back to the reverse-geocode on any miss, empty result, or missing 2dsphere index. TS mirror: `poiTypeFromPlace` in `src/lib/places.ts` (the TS POI lookup `nearestPlace` was removed as dead code); the adapter surfaces `poiType` from `sourceProvenance.mukokoPoiType`.
 
 Resolution chain for `/harare`:
 
@@ -1973,7 +1975,7 @@ The creation lock is keyed by the ref when there is one (`placesgeo:osm:w890123`
 
 **Static `LOCATIONS` array still ships in code** (`src/lib/locations.ts`) — but **not as a database seed source**. It's the canonical clean-slug → display-name/tags/province/elevation map for the 265 places the app ships with. New community-created entries get those fields via `sourceProvenance.mukoko*` on the placesGeo doc itself.
 
-**Backward compat:** `getDb()` / `get_db()` is aliased to `weatherDb()` / `weather_db()` so existing call sites keep working. Legacy collection accessors (`weather_cache_collection`, `locations_collection`, etc.) now route to the appropriate platform DB internally — no call-site changes required.
+**Backward compat:** Python `get_db()` is aliased to `weather_db()` so existing call sites keep working (the TS `getDb()` alias was removed). Legacy collection accessors (`weather_cache_collection`, `locations_collection`, etc.) now route to the appropriate platform DB internally — no call-site changes required.
 
 **Other notes:**
 
@@ -1983,10 +1985,8 @@ The creation lock is keyed by the ref when there is one (`placesgeo:osm:w890123`
 
 **Atlas Search (fuzzy text search):**
 
-- `searchActivitiesFromDb(query)` — Atlas Search → `$text` fallback for activities
 - Phase 0F: `searchLocationsFromDb` now scans the static `LOCATIONS` seed catalog directly (no Atlas Search). Location text search will be reimplemented against `places.placesGeo` or `places.places` in a follow-up.
-- Requires an Atlas Search index named `activity_search` (definitions in `src/lib/db.ts` via `getAtlasSearchIndexDefinitions()`)
-- **Time-based recovery:** When a missing-index error is detected (MongoDB code 40324), search is disabled for `ATLAS_RETRY_AFTER_MS` (5 minutes), then automatically retries.
+- The `activity_search` Atlas Search index is still defined in `src/lib/db.ts` (`getAtlasSearchIndexDefinitions()`) and created by db-init, but no TS reader queries it: `searchActivitiesFromDb` and its time-based recovery were removed as dead code
 
 **Vector Search (semantic search — Phase 0F neutralised):**
 

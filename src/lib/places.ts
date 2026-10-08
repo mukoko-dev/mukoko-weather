@@ -39,13 +39,18 @@
  * `add_location` endpoint, so step (1) above resolves them directly.
  */
 
-import { placesGeoCollection, placesCollection } from "./db";
+import { placesGeoCollection } from "./db";
 import {
   LOCATIONS,
   type WeatherLocation,
   type NominatimAddress,
 } from "./locations";
-import { parseSmartSlug, type ParsedSmartSlug } from "./smart-slug";
+import {
+  nameFromSlugSegment,
+  parseSmartSlug,
+  type ParsedSmartSlug,
+} from "./smart-slug";
+import { nearestWithin } from "./geo";
 import type { PlaceRef, SpotRef } from "./place-ref";
 
 // ---------------------------------------------------------------------------
@@ -149,14 +154,8 @@ export function normalizeName(name: string): string {
  * - "victoria-falls" → "Victoria Falls"
  */
 export function inferNameFromSlug(slug: string): string {
-  if (!slug) return "";
   // Strip a trailing 2-letter country code (matches our `{city}-{country}` slug format).
-  const withoutCountry = slug.replace(/-[a-z]{2}$/i, "");
-  return withoutCountry
-    .split("-")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+  return nameFromSlugSegment(slug.replace(/-[a-z]{2}$/i, ""));
 }
 
 // ---------------------------------------------------------------------------
@@ -312,25 +311,6 @@ export function adaptSeedToLocationDoc(seed: WeatherLocation): AdaptedLocation {
   };
 }
 
-/** Great-circle distance in km between two WGS 84 points. */
-function haversineKm(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 /**
  * Nearest static seed location to (lat, lon), or null when none is within
  * `maxKm`.
@@ -352,19 +332,8 @@ export function nearestSeedLocation(
 ): AdaptedLocation | null {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
 
-  let best: WeatherLocation | null = null;
-  let bestKm = Infinity;
-
-  for (const loc of LOCATIONS) {
-    const km = haversineKm(lat, lon, loc.lat, loc.lon);
-    if (km < bestKm) {
-      bestKm = km;
-      best = loc;
-    }
-  }
-
-  if (!best || bestKm > maxKm) return null;
-  return adaptSeedToLocationDoc(best);
+  const [nearest] = nearestWithin(LOCATIONS, (loc) => loc, lat, lon, maxKm, 1);
+  return nearest ? adaptSeedToLocationDoc(nearest.item) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -735,77 +704,6 @@ export function poiTypeFromPlace(
     (t) => typeof t === "string" && t.trim(),
   );
   return extra ? extra.trim() : undefined;
-}
-
-/**
- * Find the nearest `places.places` POI to (lat, lon) within `maxKm`.
- * Uses `$nearSphere` on the 2dsphere index against `places.places.geo`.
- *
- * Returns `null` on any error, a missing index, or when nothing is in range —
- * POI matching must NEVER break location resolution, so every failure path
- * falls back to `null` and the caller keeps its reverse-geocode result.
- */
-export async function nearestPlace(
-  lat: number,
-  lon: number,
-  maxKm: number = POI_MATCH_RADIUS_KM,
-): Promise<PlaceDoc | null> {
-  try {
-    const doc = (await placesCollection().findOne({
-      geo: {
-        $nearSphere: {
-          $geometry: { type: "Point", coordinates: [lon, lat] },
-          $maxDistance: Math.max(0, maxKm) * 1000,
-        },
-      },
-    })) as unknown as PlaceDoc | null;
-    return doc;
-  } catch {
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Search places (POIs) — used by explore/search flows
-// ---------------------------------------------------------------------------
-
-/**
- * Search `places.places` by name + optional bounding box for the
- * explore/search flows. Falls back to a `$text` search if a bbox isn't
- * provided. Returns up to 20 results.
- */
-export async function searchPlaces(
-  query: string,
-  bbox?: BBox,
-): Promise<PlaceDoc[]> {
-  const q = (query ?? "").trim();
-  if (!q) return [];
-
-  try {
-    const coll = placesCollection();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const filter: Record<string, any> = {
-      $text: { $search: q },
-    };
-    if (bbox) {
-      const [minLon, minLat, maxLon, maxLat] = bbox.bounds;
-      filter.geo = {
-        $geoWithin: {
-          $box: [
-            [minLon, minLat],
-            [maxLon, maxLat],
-          ],
-        },
-      };
-    }
-    return (await coll
-      .find(filter, { projection: { score: { $meta: "textScore" } } })
-      .sort({ score: { $meta: "textScore" } })
-      .limit(20)
-      .toArray()) as unknown as PlaceDoc[];
-  } catch {
-    return [];
-  }
 }
 
 // ---------------------------------------------------------------------------

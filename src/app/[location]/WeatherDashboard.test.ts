@@ -334,3 +334,28 @@ describe("globals.css — touch-target and nav-clearance tokens", () => {
     expect(rule).toContain("min-height: var(--touch-target-min)");
   });
 });
+
+describe("WeatherDashboard — redesign wiring", () => {
+  it("passes the hourly series to the hero so it can render the outlook", () => {
+    expect(source).toMatch(
+      /<CurrentConditions[\s\S]*?hourly=\{weather\.hourly\}[\s\S]*?\/>/,
+    );
+  });
+
+  it("mounts the Community Lane in LazySection + ChartErrorBoundary with its skeleton", () => {
+    expect(source).toContain('case "communityLane"');
+    expect(source).toContain('label="community-lane"');
+    expect(source).toContain("fallback={<CommunityLaneSkeleton />}");
+    expect(source).toContain('<ChartErrorBoundary name="community lane">');
+    const lane = source.slice(source.indexOf("<CommunityLane\n"));
+    for (const prop of [
+      "slug={location.slug}",
+      "lat={location.lat}",
+      "lon={location.lon}",
+      "weather={weather}",
+      "selectedActivities={selectedActivities}",
+    ]) {
+      expect(lane.slice(0, 400)).toContain(prop);
+    }
+  });
+});

@@ -9,11 +9,12 @@ import { describe, it, expect } from "vitest";
 
 describe("AISummaryChat", () => {
   // Structure tests
+  // The lucide-react barrel makes the first import slow in Node; allow headroom.
   it("exports AISummaryChat as a named export", async () => {
     const mod = await import("./AISummaryChat");
     expect(mod.AISummaryChat).toBeDefined();
     expect(typeof mod.AISummaryChat).toBe("function");
-  });
+  }, 20000);
 
   // Max message cap
   it("defines MAX_FOLLOWUP_MESSAGES as 5", async () => {
@@ -22,7 +23,7 @@ describe("AISummaryChat", () => {
     // We verify the component renders — the cap is enforced via UI state.
     const mod = await import("./AISummaryChat");
     expect(mod.AISummaryChat).toBeDefined();
-  });
+  }, 20000);
 
   // Suggested prompts integration
   it("uses database-driven suggested prompts via fetchSuggestedRules", async () => {
@@ -106,27 +107,32 @@ describe("AISummaryChat — Phase 1D auth gating", () => {
       "src/components/weather/AISummaryChat.tsx",
       "utf-8",
     );
-    expect(source).toContain("AISummaryChatSignInCTA");
-    expect(source).toContain("if (!user) return <AISummaryChatSignInCTA");
+    expect(source).toContain("<ShamwariSignInCTA");
+    expect(source).toContain("if (!user)");
   });
 
-  it("CTA uses the .baobab fauna surface and .kudu-sm button", async () => {
+  it("uses the shared ChatComposer for the follow-up input", async () => {
     const fs = await import("fs");
     const source = fs.readFileSync(
       "src/components/weather/AISummaryChat.tsx",
       "utf-8",
     );
-    expect(source).toContain('className="baobab');
-    expect(source).toContain('className="kudu-sm"');
+    expect(source).toContain("<ChatComposer");
+    expect(source).toContain('ariaLabel="Follow-up question"');
+    expect(source).not.toContain("rounded-2xl");
+    expect(source).not.toContain("rounded-lg");
   });
 
-  it("CTA links to /auth/signin with returnTo encoded from the current path", async () => {
+  it("uses lucide chevrons (aria-hidden) and no local SVG icon copies", async () => {
     const fs = await import("fs");
     const source = fs.readFileSync(
       "src/components/weather/AISummaryChat.tsx",
       "utf-8",
     );
-    expect(source).toContain("/auth/signin?returnTo=");
-    expect(source).toContain("encodeURIComponent(pathname)");
+    expect(source).toContain('from "lucide-react"');
+    expect(source).toContain('<ChevronUp size={16} aria-hidden="true" />');
+    expect(source).toContain('<ChevronDown size={16} aria-hidden="true" />');
+    expect(source).not.toContain("function ChevronDownIcon");
+    expect(source).not.toContain("function ArrowUpIcon");
   });
 });

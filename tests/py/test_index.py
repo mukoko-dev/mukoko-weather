@@ -249,6 +249,10 @@ class TestRouterMounting:
         paths = self._get_route_paths()
         assert "/api/py/haze" in paths
 
+    def test_sg_air_router_mounted(self):
+        paths = self._get_route_paths()
+        assert "/api/py/sg-air" in paths
+
     def test_enso_router_mounted(self):
         paths = self._get_route_paths()
         assert "/api/py/enso" in paths

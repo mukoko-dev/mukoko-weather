@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from py._db import (
+    enforce_rate_limit,
     get_client_ip,
     check_rate_limit,
     filter_known_activities,
+    ttl_filter,
+    ttl_find_one,
+    ttl_upsert,
+    is_valid_coords,
 )
 
 
@@ -271,3 +278,179 @@ class TestGetActivitiesBrief:
         get_activities_brief()
         projection = mock_coll.return_value.find.call_args[0][1]
         assert projection.get("aiInstructions") == 1
+
+
+# ---------------------------------------------------------------------------
+# TTL cache helpers — ttl_filter / ttl_find_one / ttl_upsert
+# ---------------------------------------------------------------------------
+
+
+
+class TestTtlFilter:
+    def test_unexpired_by_default(self):
+        before = datetime.now(timezone.utc)
+        f = ttl_filter({"_id": "k"})
+        assert f["_id"] == "k"
+        assert f["expiresAt"]["$gt"] >= before
+
+    def test_allow_stale_drops_expiry_clause(self):
+        assert ttl_filter({"_id": "k"}, allow_stale=True) == {"_id": "k"}
+
+    def test_does_not_mutate_input(self):
+        original = {"_id": "k"}
+        ttl_filter(original)
+        assert original == {"_id": "k"}
+
+
+class TestTtlFindOne:
+    def test_scopes_to_unexpired_docs(self):
+        coll = MagicMock()
+        coll.find_one.return_value = {"_id": "k"}
+        assert ttl_find_one(coll, {"_id": "k"}) == {"_id": "k"}
+        query, projection = coll.find_one.call_args.args
+        assert query["_id"] == "k"
+        assert "$gt" in query["expiresAt"]
+        assert projection is None
+
+    def test_allow_stale_has_no_expiry_clause(self):
+        coll = MagicMock()
+        ttl_find_one(coll, {"_id": "k"}, allow_stale=True)
+        query, _ = coll.find_one.call_args.args
+        assert query == {"_id": "k"}
+
+    def test_passes_projection_through(self):
+        coll = MagicMock()
+        ttl_find_one(coll, {"_id": "k"}, projection={"tile": 1})
+        assert coll.find_one.call_args.args[1] == {"tile": 1}
+
+    def test_errors_propagate_to_caller(self):
+        """Callers decide whether a cache failure is a miss (some must 503 on accessor errors)."""
+        coll = MagicMock()
+        coll.find_one.side_effect = RuntimeError("db down")
+        with pytest.raises(RuntimeError):
+            ttl_find_one(coll, {"_id": "k"})
+
+
+class TestTtlUpsert:
+    def test_upserts_by_filter_with_ttl_window(self):
+        coll = MagicMock()
+        ttl_upsert(coll, {"_id": "k"}, {"_id": "k", "v": 1}, ttl_seconds=3600)
+        filt = coll.update_one.call_args.args[0]
+        update = coll.update_one.call_args.args[1]
+        assert coll.update_one.call_args.kwargs == {"upsert": True}
+        assert filt == {"_id": "k"}
+        doc = update["$set"]
+        assert doc["_id"] == "k" and doc["v"] == 1
+        assert (doc["expiresAt"] - doc["fetchedAt"]).total_seconds() == 3600
+
+    def test_no_stamp_leaves_platform_fields_off(self):
+        coll = MagicMock()
+        ttl_upsert(coll, {"_id": "k"}, {"_id": "k"}, ttl_seconds=60)
+        doc = coll.update_one.call_args.args[1]["$set"]
+        assert "_schemaVersion" not in doc
+        assert "bundu" not in doc
+
+    def test_stamp_adds_platform_fields_with_country(self):
+        coll = MagicMock()
+        ttl_upsert(coll, {"_id": "k"}, {"_id": "k"}, ttl_seconds=60, stamp=True, country_code="KE")
+        doc = coll.update_one.call_args.args[1]["$set"]
+        assert doc["_id"] == "k"  # preserved, not replaced by a UUID
+        assert doc["_schemaVersion"] == "v3.1"
+        assert doc["bundu"]["countryCode"] == "KE"
+        assert "createdAt" in doc and "updatedAt" in doc
+
+    def test_stamp_defaults_to_zimbabwe(self):
+        coll = MagicMock()
+        ttl_upsert(coll, {"_id": "k"}, {"_id": "k"}, ttl_seconds=60, stamp=True)
+        assert coll.update_one.call_args.args[1]["$set"]["bundu"]["countryCode"] == "ZW"
+
+    def test_errors_propagate_to_caller(self):
+        coll = MagicMock()
+        coll.update_one.side_effect = RuntimeError("write failed")
+        with pytest.raises(RuntimeError):
+            ttl_upsert(coll, {"_id": "k"}, {"_id": "k"}, ttl_seconds=60)
+
+# enforce_rate_limit — shared IP resolve + limiter + 429 for every endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestEnforceRateLimit:
+    def test_allowed_returns_resolved_ip(self, mock_request):
+        req = mock_request(ip="10.0.0.1", forwarded_for="203.0.113.42")
+        with patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 4}) as limiter:
+            ip = enforce_rate_limit(req, "chat", 5, 3600)
+        assert ip == "203.0.113.42"
+        limiter.assert_called_once_with("203.0.113.42", "chat", 5, 3600)
+
+    def test_over_limit_raises_429_with_default_detail(self, mock_request):
+        req = mock_request(ip="203.0.113.42")
+        with patch("py._db.check_rate_limit", return_value={"allowed": False, "remaining": 0}):
+            with pytest.raises(HTTPException) as exc_info:
+                enforce_rate_limit(req, "chat", 5, 3600)
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.detail == "Rate limit exceeded. Try again later."
+
+    def test_over_limit_uses_custom_detail(self, mock_request):
+        req = mock_request(ip="203.0.113.42")
+        with patch("py._db.check_rate_limit", return_value={"allowed": False, "remaining": 0}):
+            with pytest.raises(HTTPException) as exc_info:
+                enforce_rate_limit(req, "report_clarify", 10, 3600, detail="Rate limit exceeded")
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.detail == "Rate limit exceeded"
+
+    def test_missing_ip_require_ip_raises_400(self, mock_request):
+        req = mock_request(ip=None)
+        with patch("py._db.check_rate_limit") as limiter:
+            with pytest.raises(HTTPException) as exc_info:
+                enforce_rate_limit(req, "chat", 5, 3600)
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "Could not determine IP"
+        limiter.assert_not_called()
+
+    def test_missing_ip_request_none_require_ip_raises_400(self):
+        with patch("py._db.check_rate_limit") as limiter:
+            with pytest.raises(HTTPException) as exc_info:
+                enforce_rate_limit(None, "chat", 5, 3600)
+        assert exc_info.value.status_code == 400
+        limiter.assert_not_called()
+
+    def test_missing_ip_optional_uses_unknown_bucket(self, mock_request):
+        req = mock_request(ip=None)
+        with patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 1}) as limiter:
+            ip = enforce_rate_limit(req, "device-create", 20, 3600, require_ip=False)
+        assert ip == "unknown"
+        limiter.assert_called_once_with("unknown", "device-create", 20, 3600)
+
+    def test_missing_ip_optional_request_none_uses_unknown_bucket(self):
+        with patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 1}) as limiter:
+            ip = enforce_rate_limit(None, "ai-summary", 30, 3600, require_ip=False)
+        assert ip == "unknown"
+        limiter.assert_called_once_with("unknown", "ai-summary", 30, 3600)
+
+    def test_optional_ip_over_limit_still_429(self, mock_request):
+        req = mock_request(ip=None)
+        with patch("py._db.check_rate_limit", return_value={"allowed": False, "remaining": 0}):
+            with pytest.raises(HTTPException) as exc_info:
+                enforce_rate_limit(req, "location-create", 5, 3600, require_ip=False)
+        assert exc_info.value.status_code == 429
+
+
+# ---------------------------------------------------------------------------
+# is_valid_coords — WGS 84 bounds, NaN rejected
+# ---------------------------------------------------------------------------
+
+
+class TestIsValidCoords:
+    @pytest.mark.parametrize(
+        "lat, lon",
+        [(0, 0), (90, 180), (-90, -180), (-17.83, 31.05), (51.51, -0.13)],
+    )
+    def test_valid(self, lat, lon):
+        assert is_valid_coords(lat, lon) is True
+
+    @pytest.mark.parametrize(
+        "lat, lon",
+        [(90.1, 0), (-90.1, 0), (0, 180.1), (0, -180.1), (float("nan"), 0), (0, float("nan"))],
+    )
+    def test_invalid(self, lat, lon):
+        assert is_valid_coords(lat, lon) is False

@@ -1,39 +1,13 @@
 "use client";
 
-import { useState, useCallback, Component, type ReactNode } from "react";
-import ReactMarkdown from "react-markdown";
+import { useState, useCallback } from "react";
 import { SparklesIcon } from "@/lib/weather-icons";
 import { Button } from "@/components/ui/button";
+import { SafeMarkdown } from "@/components/ui/safe-markdown";
 import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
 import { ShamwariCTA } from "./ShamwariCTA";
 import { Spinner } from "@/components/ui/spinner";
-
-// ---------------------------------------------------------------------------
-// Markdown error boundary
-// ---------------------------------------------------------------------------
-
-interface MarkdownErrorBoundaryState {
-  hasError: boolean;
-}
-
-class MarkdownErrorBoundary extends Component<
-  { children: ReactNode; fallback: string },
-  MarkdownErrorBoundaryState
-> {
-  state: MarkdownErrorBoundaryState = { hasError: false };
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <p className="text-base text-text-secondary">{this.props.fallback}</p>
-      );
-    }
-    return this.props.children;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -167,11 +141,7 @@ export function HistoryAnalysis({
 
       {analysis && (
         <div className="mt-3">
-          <MarkdownErrorBoundary fallback={analysis}>
-            <div className="prose prose-sm max-w-none break-words text-text-secondary prose-strong:text-text-primary prose-headings:text-text-primary prose-li:marker:text-text-tertiary">
-              <ReactMarkdown>{analysis}</ReactMarkdown>
-            </div>
-          </MarkdownErrorBoundary>
+          <SafeMarkdown content={analysis} size="sm" className="break-words" />
 
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3">
             <Button

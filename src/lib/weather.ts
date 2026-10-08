@@ -136,6 +136,34 @@ export interface WeatherInsights {
 }
 
 /**
+ * Thunderstorm probability and precipitation type implied by a WMO 4677 code.
+ * Shared by the current-conditions fallback (synthesizeOpenMeteoInsights) and
+ * the per-hour feasibility series (activity-feasibility hourInsights) so the
+ * two can never disagree about what a code means.
+ *
+ * - Thunderstorm: 95–99 graduated by severity (95 = 70, 96/97 = 85, 99 = 95).
+ * - precipitationType: 0=none, 1=rain, 2=snow, 3=freezing rain/drizzle, 4=ice pellets.
+ */
+export function wmoToInsightHazards(code: number): {
+  thunderstormProbability: number;
+  precipitationType: number;
+} {
+  let thunderstormProbability = 0;
+  if (code >= 99) thunderstormProbability = 95;
+  else if (code >= 96) thunderstormProbability = 85;
+  else if (code >= 95) thunderstormProbability = 70;
+
+  let precipitationType = 0;
+  if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86))
+    precipitationType = 2; // Snow + snow showers
+  else if (code === 66 || code === 67 || code === 56 || code === 57)
+    precipitationType = 3; // Freezing rain + freezing drizzle
+  else if (code >= 51) precipitationType = 1; // Rain/drizzle/thunderstorm
+
+  return { thunderstormProbability, precipitationType };
+}
+
+/**
  * Synthesize weather insights from Open-Meteo data for suitability evaluation.
  * Maps available Open-Meteo fields to the WeatherInsights interface so that
  * suitability rules produce meaningful ratings on the fallback path (when
@@ -148,29 +176,8 @@ export function synthesizeOpenMeteoInsights(
   const currentUv = data.current.uv_index;
   const weatherCode = data.current.weather_code;
 
-  // WMO weather codes 95–99 indicate thunderstorm activity.
-  // Graduate probability by severity: 95 = moderate, 96/97 = with hail, 99 = heavy hail.
-  let thunderstormProbability = 0;
-  if (weatherCode >= 99) thunderstormProbability = 95;
-  else if (weatherCode >= 96) thunderstormProbability = 85;
-  else if (weatherCode >= 95) thunderstormProbability = 70;
-
-  // Derive precipitationType from WMO weather codes:
-  //   0=none, 1=rain, 2=snow, 3=freezing rain, 4=ice pellets
-  let precipitationType = 0;
-  if (
-    (weatherCode >= 71 && weatherCode <= 77) ||
-    (weatherCode >= 85 && weatherCode <= 86)
-  )
-    precipitationType = 2; // Snow + snow showers
-  else if (
-    weatherCode === 66 ||
-    weatherCode === 67 ||
-    weatherCode === 56 ||
-    weatherCode === 57
-  )
-    precipitationType = 3; // Freezing rain + freezing drizzle
-  else if (weatherCode >= 51) precipitationType = 1; // Rain/drizzle/thunderstorm
+  const { thunderstormProbability, precipitationType } =
+    wmoToInsightHazards(weatherCode);
 
   return {
     windSpeed: data.current.wind_speed_10m,
@@ -390,6 +397,8 @@ export function weatherCodeToInfo(code: number): {
     45: { label: "Fog", icon: "cloud-fog" },
     48: { label: "Depositing rime fog", icon: "cloud-fog" },
     51: { label: "Light drizzle", icon: "cloud-drizzle" },
+    56: { label: "Light freezing drizzle", icon: "cloud-hail" },
+    57: { label: "Dense freezing drizzle", icon: "cloud-hail" },
     53: { label: "Moderate drizzle", icon: "cloud-drizzle" },
     55: { label: "Dense drizzle", icon: "cloud-drizzle" },
     61: { label: "Slight rain", icon: "cloud-rain" },
@@ -491,27 +500,35 @@ export function getZimbabweSeason(date: Date = new Date()): Season {
   return getDefaultSeason(date, -17);
 }
 
-export function windDirection(degrees: number): string {
-  const dirs = [
-    "N",
-    "NNE",
-    "NE",
-    "ENE",
-    "E",
-    "ESE",
-    "SE",
-    "SSE",
-    "S",
-    "SSW",
-    "SW",
-    "WSW",
-    "W",
-    "WNW",
-    "NW",
-    "NNW",
-  ];
-  const index = Math.round(degrees / 22.5) % 16;
-  return dirs[index];
+const COMPASS_16 = [
+  "N",
+  "NNE",
+  "NE",
+  "ENE",
+  "E",
+  "ESE",
+  "SE",
+  "SSE",
+  "S",
+  "SSW",
+  "SW",
+  "WSW",
+  "W",
+  "WNW",
+  "NW",
+  "NNW",
+];
+
+/**
+ * Compass label for a bearing in degrees. 16 points by default; `points: 8`
+ * returns the cardinal/intercardinal subset (N, NE, E, … NW).
+ */
+export function windDirection(
+  degrees: number,
+  { points = 16 }: { points?: 8 | 16 } = {},
+): string {
+  if (points === 8) return COMPASS_16[(Math.round(degrees / 45) % 8) * 2];
+  return COMPASS_16[Math.round(degrees / 22.5) % 16];
 }
 
 export function uvLevel(index: number): { label: string; color: string } {

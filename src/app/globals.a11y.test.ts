@@ -29,16 +29,42 @@ function blockAfter(source: string, marker: string): string {
   throw new Error(`unclosed block after: ${marker}`);
 }
 
-/** Resolve `--name: value;` declared in a block (hex values only). */
-function token(block: string, name: string): string {
-  const re = new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{3,6})\\s*;`);
-  const m = block.match(re);
-  if (!m) throw new Error(`token --${name} is not a hex value in this block`);
-  return m[1];
+/** Bodies of every top-level rule whose selector matches `sel`, concatenated. */
+function blocksMatching(source: string, sel: RegExp): string {
+  let out = "";
+  const bare = source.replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const m of bare.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (sel.test(m[1].trim())) out += `\n${m[2]}`;
+  }
+  return out;
 }
 
-const LIGHT = blockAfter(css, ":root {");
-const DARK = blockAfter(css, '[data-theme="dark"] {');
+/**
+ * Resolve `--name` to a hex value within a theme scope. Declarations are
+ * applied in source order (the last one wins, as in the cascade), and
+ * `var(--other)` aliases are followed, so globals.css can alias the Mzizi
+ * tokens in mzizi-tokens.css and this test still checks the real colour.
+ */
+function token(scope: string, name: string, depth = 0): string {
+  if (depth > 8) throw new Error(`alias cycle resolving --${name}`);
+  const decls = [...scope.matchAll(new RegExp(`--${name}:\\s*([^;]+);`, "g"))];
+  if (decls.length === 0) throw new Error(`token --${name} is not declared`);
+  const value = decls[decls.length - 1][1].trim();
+  const alias = value.match(/^var\((--[\w-]+)\)$/);
+  if (alias) return token(scope, alias[1].slice(2), depth + 1);
+  if (!/^#[0-9a-fA-F]{3,6}$/.test(value)) {
+    throw new Error(`token --${name} is not a hex value: ${value}`);
+  }
+  return value;
+}
+
+const mzizi = readFileSync(resolve(__dirname, "mzizi-tokens.css"), "utf-8");
+const LIGHT_GLOBALS = blockAfter(css, ":root {");
+const DARK_GLOBALS = blockAfter(css, '[data-theme="dark"] {');
+const LIGHT =
+  blocksMatching(mzizi, /^:root,\s*\[data-theme="light"\]$/) + LIGHT_GLOBALS;
+const DARK =
+  blocksMatching(mzizi, /^\.dark,\s*\[data-theme="dark"\]$/) + DARK_GLOBALS;
 
 const THEMES = {
   light: {
@@ -72,7 +98,7 @@ describe("--color-rain text contrast (WCAG 1.4.3, 4.5:1)", () => {
 });
 
 describe("focus rings (WCAG 1.4.11 non-text contrast, 3:1)", () => {
-  it("cobalt focus ring is >= 3:1 on the light page surface", () => {
+  it("primary (storm) focus ring is >= 3:1 on the light page surface", () => {
     expect(
       contrastRatio(
         token(LIGHT, "focus-ring"),
@@ -81,7 +107,7 @@ describe("focus rings (WCAG 1.4.11 non-text contrast, 3:1)", () => {
     ).toBeGreaterThanOrEqual(3);
   });
 
-  it("sky focus ring is >= 3:1 on the dark page surface", () => {
+  it("primary focus ring is >= 3:1 on the dark page surface", () => {
     expect(
       contrastRatio(
         token(DARK, "focus-ring"),
@@ -101,7 +127,7 @@ describe("focus rings (WCAG 1.4.11 non-text contrast, 3:1)", () => {
     }
   });
 
-  it("the default cobalt ring would be invisible on the cobalt pill (why .bee overrides it)", () => {
+  it("the default primary focus ring would be invisible on the primary pill (why .bee overrides it)", () => {
     expect(
       contrastRatio(token(LIGHT, "focus-ring"), token(LIGHT, "color-primary")),
     ).toBeCloseTo(1, 1);
@@ -112,7 +138,7 @@ describe("focus rings (WCAG 1.4.11 non-text contrast, 3:1)", () => {
 function focusVisibleGroups(source: string) {
   const groups: { selectors: string[]; body: string; topLevel: boolean }[] = [];
   const re =
-    /^(\.[\w-]+:focus-visible(?:,\s*\n?\s*\.[\w-]+:focus-visible)*)\s*\{([^}]*)\}/gm;
+    /^(\.[\w-]+:focus-visible(?:,\s*\.[\w-]+:focus-visible)*)\s*\{([^}]*)\}/gm;
   for (const m of source.matchAll(re)) {
     groups.push({
       selectors: m[1].split(",").map((s) =>

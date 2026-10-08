@@ -328,8 +328,9 @@ export function AviationWeather({ slug, lat, lon }: Props) {
   const picker =
     candidates.length > 1 ? (
       // Reserved-height, single-line row: its height is fixed at the touch
-      // target minimum whatever the chip count, so the list can't reflow the
-      // card (CLS). Chips never wrap — the row scrolls sideways instead.
+      // target minimum whatever the chip count, so the DB-backed station list
+      // replacing the static seed (or a different count) can't reflow the card
+      // (CLS). Chips never wrap — the row scrolls sideways instead.
       <div
         className="mt-4 flex min-h-[var(--touch-target-min)] items-center gap-2 overflow-x-auto"
         role="group"

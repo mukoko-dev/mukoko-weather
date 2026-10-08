@@ -1,35 +1,35 @@
+import {
+  readStorageJSON,
+  removeStorage,
+  writeStorageJSON,
+} from "./safe-storage";
+
 const RETRY_STORAGE_KEY = "mukoko-error-retries";
 const MAX_RETRIES = 3;
 
 export function getRetryCount(): number {
-  try {
-    const stored = sessionStorage.getItem(RETRY_STORAGE_KEY);
-    if (!stored) return 0;
-    const data = JSON.parse(stored);
-    if (data.url === window.location.href) return data.count;
-    return 0;
-  } catch {
-    return 0;
-  }
+  if (typeof window === "undefined") return 0;
+  const data = readStorageJSON<{ url?: string; count?: number } | null>(
+    RETRY_STORAGE_KEY,
+    null,
+    "session",
+  );
+  if (!data) return 0;
+  if (data.url === window.location.href) return data.count ?? 0;
+  return 0;
 }
 
 export function setRetryCount(count: number): void {
-  try {
-    sessionStorage.setItem(
-      RETRY_STORAGE_KEY,
-      JSON.stringify({ url: window.location.href, count }),
-    );
-  } catch {
-    // sessionStorage unavailable
-  }
+  if (typeof window === "undefined") return;
+  writeStorageJSON(
+    RETRY_STORAGE_KEY,
+    { url: window.location.href, count },
+    "session",
+  );
 }
 
 export function clearRetryCount(): void {
-  try {
-    sessionStorage.removeItem(RETRY_STORAGE_KEY);
-  } catch {
-    // sessionStorage unavailable
-  }
+  removeStorage(RETRY_STORAGE_KEY, "session");
 }
 
 export { MAX_RETRIES };

@@ -40,7 +40,7 @@ function isRateLimited(ip: string): boolean {
 // ─── Brand Tokens ────────────────────────────────────────────────────────────
 // NOTE: next/og (Satori) does not support CSS custom properties — inline hex
 // values are required here. Keep in sync with globals.css mineral tokens
-// (doctrine v4.1.0 — nyuchi_design_db → styling-minerals).
+// (doctrine v4.1.0 — Mzizi canon, src/app/mzizi-tokens.css).
 const brand = {
   tanzanite: "#4B0082", // --mineral-tanzanite (core / brand)
   cobalt: "#0047AB", // --mineral-cobalt    (CTAs, primary)

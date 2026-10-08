@@ -509,6 +509,7 @@ describe("sectionOrder", () => {
     expect([...DEFAULT_SECTION_ORDER]).toEqual([
       "current",
       "hourlyScroll",
+      "communityLane",
       "atmospheric",
       "reports",
       "activityInsights",
@@ -537,6 +538,7 @@ describe("mergeSectionOrder (Bug 2 — union stored order with defaults)", () =>
     expect(merged).toEqual([
       "current",
       "hourlyScroll",
+      "communityLane",
       "atmospheric",
       "reports",
       "activityInsights",
@@ -613,5 +615,14 @@ describe("selectedForecastModel", () => {
     expect(useAppStore.getState().selectedForecastModel).toBe("ecmwf_ifs04");
     // reset for other tests
     useAppStore.getState().setSelectedForecastModel("best_match");
+  });
+});
+
+describe("sectionOrder — Community Lane placement", () => {
+  it("places the community lane right after the hourly strip, before activity insights", () => {
+    const order = [...DEFAULT_SECTION_ORDER] as string[];
+    const lane = order.indexOf("communityLane");
+    expect(lane).toBe(order.indexOf("hourlyScroll") + 1);
+    expect(lane).toBeLessThan(order.indexOf("activityInsights"));
   });
 });

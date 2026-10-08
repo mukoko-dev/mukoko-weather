@@ -25,11 +25,16 @@ from __future__ import annotations
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from ._db import stamp_platform_fields, weather_db
+from ._db import (
+    air_quality_cache_collection,
+    is_valid_coords,
+    ttl_find_one,
+    ttl_upsert,
+)
+from ._http import get_http_client
 from ._circuit_breaker import open_meteo_breaker, CircuitOpenError
 
 router = APIRouter()
@@ -242,14 +247,8 @@ def compute_aqi(pollutants: dict[str, Optional[float]]) -> dict:
 # Open-Meteo client
 # ---------------------------------------------------------------------------
 
-_http_client: Optional[httpx.Client] = None
-
-
-def _get_http() -> httpx.Client:
-    global _http_client
-    if _http_client is None:
-        _http_client = httpx.Client(timeout=10.0)
-    return _http_client
+#: Open-Meteo timeout (seconds) — shared client via ``get_http_client``.
+OPEN_METEO_TIMEOUT_S = 10.0
 
 
 def _us_aqi_same_hour_pair(data: dict) -> dict:
@@ -325,7 +324,7 @@ def _fetch_open_meteo_air_quality(lat: float, lon: float, side: Optional[dict] =
     extra data costs no second round trip, and a caller that passes no ``side``
     gets the original behaviour.
     """
-    client = _get_http()
+    client = get_http_client(OPEN_METEO_TIMEOUT_S)
     fields = list(POLLUTANT_FIELD_MAP.keys())
     params = {
         "latitude": f"{lat}",
@@ -361,11 +360,6 @@ def _fetch_open_meteo_air_quality(lat: float, lon: float, side: Optional[dict] =
 # ---------------------------------------------------------------------------
 
 
-def _air_quality_cache_collection():
-    """``weather.air_quality_cache`` — 1-hour TTL keyed by lat/lon."""
-    return weather_db()["air_quality_cache"]
-
-
 def _cache_key(lat: float, lon: float) -> str:
     """Deterministic cache key — 4 decimals ≈ 11 m precision."""
     return f"{lat:.4f}_{lon:.4f}"
@@ -374,9 +368,7 @@ def _cache_key(lat: float, lon: float) -> str:
 def _get_cached(lat: float, lon: float) -> Optional[dict]:
     """Read a non-expired cache doc for these coordinates."""
     try:
-        return _air_quality_cache_collection().find_one(
-            {"_id": _cache_key(lat, lon), "expiresAt": {"$gt": datetime.now(timezone.utc)}}
-        )
+        return ttl_find_one(air_quality_cache_collection(), {"_id": _cache_key(lat, lon)})
     except Exception:
         return None
 
@@ -386,13 +378,13 @@ def _set_cached(lat: float, lon: float, payload: dict, country_code: Optional[st
     Upsert the cache doc using the deterministic key as ``_id``.
 
     Dedup discipline (Phase 0E): we always upsert by the same ``_id``, so two
-    concurrent requests for the same coords end up with one row, not two. Uses
-    ``stamp_platform_fields`` to satisfy platform-wide validators (schema
-    version, bundu, timestamps) — passing ``_id`` first preserves it.
+    concurrent requests for the same coords end up with one row, not two. The
+    platform stamp (schema version, bundu, timestamps) is applied by
+    ``ttl_upsert``; ``_id`` is passed first so it is preserved.
     """
-    now = datetime.now(timezone.utc)
-    doc = {
-        "_id": _cache_key(lat, lon),
+    key = _cache_key(lat, lon)
+    fields = {
+        "_id": key,
         "lat": lat,
         "lon": lon,
         "aqi": payload["aqi"],
@@ -404,16 +396,15 @@ def _set_cached(lat: float, lon: float, payload: dict, country_code: Optional[st
         "yesterdayAqi": payload.get("yesterdayAqi"),
         "trend": payload.get("trend"),
         "source": "open-meteo",
-        "fetchedAt": now,
-        "expiresAt": now + timedelta(seconds=AIR_QUALITY_CACHE_TTL_SECONDS),
     }
-    stamp_platform_fields(doc, country_code=country_code or "ZW")
-
     try:
-        _air_quality_cache_collection().update_one(
-            {"_id": doc["_id"]},
-            {"$set": doc},
-            upsert=True,
+        ttl_upsert(
+            air_quality_cache_collection(),
+            {"_id": key},
+            fields,
+            AIR_QUALITY_CACHE_TTL_SECONDS,
+            stamp=True,
+            country_code=country_code or "ZW",
         )
     except Exception:
         # Cache write failure must not break the response — log silently.
@@ -452,7 +443,7 @@ async def get_air_quality(lat: float, lon: float):
           "fetchedAt": "2026-06-29T12:00:00Z"
         }
     """
-    if lat < -90 or lat > 90 or lon < -180 or lon > 180:
+    if not is_valid_coords(lat, lon):
         raise HTTPException(status_code=400, detail="Invalid coordinates")
 
     # 1. Cache lookup

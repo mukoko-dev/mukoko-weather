@@ -234,7 +234,7 @@ class TestEndpointCacheFlow:
         mock_collection.find_one.return_value = cached_doc
 
         with patch(
-            "py._air_quality._air_quality_cache_collection",
+            "py._air_quality.air_quality_cache_collection",
             return_value=mock_collection,
         ):
             with patch("py._air_quality._fetch_open_meteo_air_quality") as fetch_mock:
@@ -253,7 +253,7 @@ class TestEndpointCacheFlow:
         mock_collection.find_one.return_value = None  # cache miss
 
         with patch(
-            "py._air_quality._air_quality_cache_collection",
+            "py._air_quality.air_quality_cache_collection",
             return_value=mock_collection,
         ):
             with patch(
@@ -278,7 +278,7 @@ class TestEndpointCacheFlow:
         mock_collection.find_one.return_value = None
 
         with patch(
-            "py._air_quality._air_quality_cache_collection",
+            "py._air_quality.air_quality_cache_collection",
             return_value=mock_collection,
         ):
             with patch(
@@ -314,7 +314,7 @@ class TestCircuitBreaker:
         mock_collection.find_one.return_value = None
 
         with patch(
-            "py._air_quality._air_quality_cache_collection",
+            "py._air_quality.air_quality_cache_collection",
             return_value=mock_collection,
         ):
             with pytest.raises(HTTPException) as exc:
@@ -346,7 +346,7 @@ class TestValidation:
         mock_collection = MagicMock()
         mock_collection.find_one.return_value = None
         with patch(
-            "py._air_quality._air_quality_cache_collection",
+            "py._air_quality.air_quality_cache_collection",
             return_value=mock_collection,
         ):
             with patch(
@@ -498,7 +498,7 @@ class TestYesterdayFieldsEndpoint:
             side.update({"todayUsAqi": 60, "yesterdayAqi": 85})
             return {"pm2_5": 5.0}
 
-        with patch("py._air_quality._air_quality_cache_collection", return_value=mock_collection):
+        with patch("py._air_quality.air_quality_cache_collection", return_value=mock_collection):
             with patch("py._air_quality._fetch_open_meteo_air_quality", side_effect=fake_fetch):
                 response = await get_air_quality(lat=-17.8252, lon=31.0335)
 
@@ -518,7 +518,7 @@ class TestYesterdayFieldsEndpoint:
     async def test_missing_hourly_series_yields_null_fields_not_error(self):
         mock_collection = MagicMock()
         mock_collection.find_one.return_value = None
-        with patch("py._air_quality._air_quality_cache_collection", return_value=mock_collection):
+        with patch("py._air_quality.air_quality_cache_collection", return_value=mock_collection):
             with patch("py._air_quality._fetch_open_meteo_air_quality", return_value={"pm2_5": 5.0}):
                 response = await get_air_quality(lat=-17.8252, lon=31.0335)
         import json
@@ -540,7 +540,7 @@ class TestYesterdayFieldsEndpoint:
         }
         mock_collection = MagicMock()
         mock_collection.find_one.return_value = cached_doc
-        with patch("py._air_quality._air_quality_cache_collection", return_value=mock_collection):
+        with patch("py._air_quality.air_quality_cache_collection", return_value=mock_collection):
             response = await get_air_quality(lat=-17.8252, lon=31.0335)
         import json
         body = json.loads(response.body.decode("utf-8"))
@@ -558,7 +558,7 @@ class TestYesterdayFieldsEndpoint:
         }
         mock_collection = MagicMock()
         mock_collection.find_one.return_value = cached_doc
-        with patch("py._air_quality._air_quality_cache_collection", return_value=mock_collection):
+        with patch("py._air_quality.air_quality_cache_collection", return_value=mock_collection):
             response = await get_air_quality(lat=-17.8252, lon=31.0335)
         import json
         body = json.loads(response.body.decode("utf-8"))
@@ -574,7 +574,7 @@ class TestFetchRequestShape:
         client = MagicMock()
         client.get.return_value = resp
         side: dict = {}
-        with patch("py._air_quality._get_http", return_value=client):
+        with patch("py._air_quality.get_http_client", return_value=client):
             pollutants = _fetch_open_meteo_air_quality(-17.8252, 31.0335, side)
 
         params = client.get.call_args.kwargs["params"]
@@ -590,6 +590,6 @@ class TestFetchRequestShape:
         resp.json.return_value = {"current": {"pm2_5": 5.0}}
         client = MagicMock()
         client.get.return_value = resp
-        with patch("py._air_quality._get_http", return_value=client):
+        with patch("py._air_quality.get_http_client", return_value=client):
             pollutants = _fetch_open_meteo_air_quality(0.0, 0.0)
         assert pollutants["pm2_5"] == 5.0

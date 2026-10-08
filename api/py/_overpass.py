@@ -40,6 +40,9 @@ from typing import Optional
 
 import httpx
 
+from ._http import get_http_client
+from ._db import is_valid_coords
+
 # Public Overpass instance. Both mirrors accept the same QL.
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
@@ -59,14 +62,8 @@ DEFAULT_RADIUS_M = 250
 OVERPASS_TIMEOUT_S = 5
 HTTP_TIMEOUT_S = 6.0
 
-_http_client: httpx.Client | None = None
-
-
 def _get_http() -> httpx.Client:
-    global _http_client
-    if _http_client is None:
-        _http_client = httpx.Client(timeout=HTTP_TIMEOUT_S)
-    return _http_client
+    return get_http_client(HTTP_TIMEOUT_S)
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +232,7 @@ def reverse_name(
     Returns ``None`` on any failure or when nothing nearby carries a name, which
     is the signal for the caller to fall back rather than an error.
     """
-    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+    if not is_valid_coords(lat, lon):
         return None
 
     try:
