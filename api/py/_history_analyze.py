@@ -31,6 +31,7 @@ from ._db import (
 )
 from ._places_resolver import find_location
 from ._circuit_breaker import anthropic_breaker, CircuitOpenError
+from ._wmo import WMO_LABELS
 
 router = APIRouter()
 
@@ -250,16 +251,7 @@ def _aggregate_stats(records: list[dict]) -> str:
     # Top weather conditions
     if weather_codes:
         top = sorted(weather_codes.items(), key=lambda x: x[1], reverse=True)[:3]
-        code_names = {
-            0: "Clear", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
-            45: "Fog", 48: "Fog", 51: "Light drizzle", 53: "Moderate drizzle",
-            55: "Dense drizzle", 61: "Slight rain", 63: "Moderate rain",
-            65: "Heavy rain", 71: "Slight snow", 73: "Moderate snow",
-            75: "Heavy snow", 80: "Slight showers", 81: "Moderate showers",
-            82: "Violent showers", 95: "Thunderstorm", 96: "Thunderstorm+hail",
-            99: "Thunderstorm+heavy hail",
-        }
-        conds = [f"{code_names.get(c, f'Code {c}')} ({n}d)" for c, n in top]
+        conds = [f"{WMO_LABELS.get(c, f'Code {c}')} ({n}d)" for c, n in top]
         lines.append(f"Most common conditions: {', '.join(conds)}")
 
     # Insights data if available
