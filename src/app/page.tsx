@@ -14,8 +14,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { checkFrostRisk, createFallbackWeather } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
 import { nearestSeedLocation } from "@/lib/places";
+import { SITE_URL } from "@/lib/site";
 
-const BASE_URL = "https://weather.mukoko.com";
 // Stable base for the server-to-self geo lookup. The per-deployment Vercel
 // hostname env var points at a protected preview origin that 401s the self-fetch
 // (Deployment Protection) — the failure is swallowed and onboarding silently
@@ -24,7 +24,7 @@ const BASE_URL = "https://weather.mukoko.com";
 // only in development.
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ??
-  (process.env.NODE_ENV === "production" ? BASE_URL : "http://localhost:3000");
+  (process.env.NODE_ENV === "production" ? SITE_URL : "http://localhost:3000");
 
 // Bound the server-to-self geo fetch so a hung or protected upstream can't stall
 // the home render — the onboarding chooser is a fine fallback.
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
   description:
     "Live weather for your current location — real-time conditions, hourly and 7-day forecasts, frost alerts, and AI-powered insights from mukoko weather.",
   alternates: {
-    canonical: `${BASE_URL}/`,
+    canonical: `${SITE_URL}/`,
   },
 };
 

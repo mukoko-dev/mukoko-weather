@@ -58,6 +58,7 @@ import type { TagDoc } from "./seed-tags";
 import type { SeasonDoc } from "./seed-seasons";
 import type { ActivityCategoryDoc } from "./seed-categories";
 import type { AIPromptDoc, AISuggestedPromptRule } from "./seed-ai-prompts";
+import { internalApiBase } from "@/lib/site";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -796,15 +797,6 @@ export interface WeatherResult {
   data: WeatherData;
   /** "cache" | "tomorrow" | "open-meteo" | "fallback" */
   source: string;
-}
-
-/**
- * Base URL for server-to-server calls into our own deployment (the Python
- * FastAPI functions live behind the same origin via vercel.json rewrites).
- */
-function internalApiBase(): string {
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return process.env.INTERNAL_API_BASE_URL ?? "http://localhost:3000";
 }
 
 /**

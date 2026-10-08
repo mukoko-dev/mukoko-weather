@@ -4,6 +4,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { getCurrentUser } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Developers & Public API",
@@ -13,9 +14,6 @@ export const metadata: Metadata = {
     canonical: "https://weather.mukoko.com/developers",
   },
 };
-
-const BASE_URL = "https://weather.mukoko.com";
-
 export default async function DevelopersPage() {
   const user = await getCurrentUser();
   const signedIn = user !== null;
@@ -30,16 +28,16 @@ export default async function DevelopersPage() {
     isPartOf: {
       "@type": "WebSite",
       name: "mukoko weather",
-      url: BASE_URL,
+      url: SITE_URL,
     },
     publisher: {
       "@type": "Organization",
       name: "Mukoko Africa",
-      url: BASE_URL,
+      url: SITE_URL,
     },
     mainEntityOfPage: {
       "@type": "WebPage",
-      "@id": `${BASE_URL}/developers`,
+      "@id": `${SITE_URL}/developers`,
     },
   };
 
