@@ -24,13 +24,17 @@ import type { WeatherInsights } from "@/lib/weather";
 import type { WeatherHistoryDoc } from "@/lib/db";
 import type { ActivityCategory } from "@/lib/activities";
 import type { ActivityCategoryDoc } from "@/lib/db";
+import type { WeatherLocation } from "@/lib/locations";
 import { CATEGORIES } from "@/lib/seed-categories";
+import { fetchJson } from "@/lib/fetch-json";
+import { fetchActivityCategories } from "@/lib/activities-client";
 import {
   heatStressLevel,
   uvConcernLabel,
 } from "@/components/weather/ActivityInsights";
 import { Spinner } from "@/components/ui/spinner";
 import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
+import { DEFAULT_LOCALE, formatDate as formatLocaleDate } from "@/lib/i18n";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -298,6 +302,37 @@ interface CategorySuitability {
   category: string;
 }
 
+type CategoryLevel = CategorySuitability["level"];
+
+/** Appends one category card, deriving its colour/label from the level. */
+function pushCategory(
+  results: CategorySuitability[],
+  label: string,
+  icon: string,
+  category: string,
+  level: CategoryLevel,
+  detail: string,
+): void {
+  const { colorClass, bgClass, label: levelLabel } = suitabilityColors(level);
+  results.push({
+    label,
+    level,
+    levelLabel,
+    colorClass,
+    bgClass,
+    detail,
+    icon,
+    category,
+  });
+}
+
+/** Tooltip title: "Thu, 08 Oct, 2026". */
+const formatDateTooltip = (dateStr: string) =>
+  formatLocaleDate(new Date(dateStr), DEFAULT_LOCALE, {
+    weekday: true,
+    month: "short",
+  });
+
 export function computeCategorySuitability(
   insightsRecords: InsightsRecord[],
 ): CategorySuitability[] {
@@ -331,17 +366,7 @@ export function computeCategorySuitability(
       level = "excellent";
       detail = `Strong growth period (avg GDD: ${avgGdd})`;
     }
-    const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
-    results.push({
-      label: "Farming",
-      level,
-      levelLabel: lvl,
-      colorClass,
-      bgClass,
-      detail,
-      icon: "🌱",
-      category: "farming",
-    });
+    pushCategory(results, "Farming", "🌱", "farming", level, detail);
   }
 
   // Mining
@@ -363,17 +388,7 @@ export function computeCategorySuitability(
       level = "good";
       detail = `Low risk — heat: ${avgHeat}, storm: ${Math.round(avgStorm)}%`;
     }
-    const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
-    results.push({
-      label: "Mining",
-      level,
-      levelLabel: lvl,
-      colorClass,
-      bgClass,
-      detail,
-      icon: "⛏️",
-      category: "mining",
-    });
+    pushCategory(results, "Mining", "⛏️", "mining", level, detail);
   }
 
   // Sports
@@ -392,17 +407,7 @@ export function computeCategorySuitability(
       level = "fair";
       detail = "Warm — hydration breaks recommended";
     }
-    const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
-    results.push({
-      label: "Sports",
-      level,
-      levelLabel: lvl,
-      colorClass,
-      bgClass,
-      detail,
-      icon: "🏃",
-      category: "sports",
-    });
+    pushCategory(results, "Sports", "🏃", "sports", level, detail);
   }
 
   // Travel
@@ -421,17 +426,7 @@ export function computeCategorySuitability(
       level = "fair";
       detail = `Moderate risk — vis: ${avgVis} km, storm: ${Math.round(avgStorm)}%`;
     }
-    const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
-    results.push({
-      label: "Travel",
-      level,
-      levelLabel: lvl,
-      colorClass,
-      bgClass,
-      detail,
-      icon: "🚗",
-      category: "travel",
-    });
+    pushCategory(results, "Travel", "🚗", "travel", level, detail);
   }
 
   // Tourism
@@ -450,17 +445,7 @@ export function computeCategorySuitability(
       level = "good";
       detail = `Good visibility (${avgVis} km) and moderate UV`;
     }
-    const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
-    results.push({
-      label: "Tourism",
-      level,
-      levelLabel: lvl,
-      colorClass,
-      bgClass,
-      detail,
-      icon: "🦁",
-      category: "tourism",
-    });
+    pushCategory(results, "Tourism", "🦁", "tourism", level, detail);
   }
 
   // Casual
@@ -479,17 +464,7 @@ export function computeCategorySuitability(
       level = "fair";
       detail = "Moderate conditions — check forecast";
     }
-    const { colorClass, bgClass, label: lvl } = suitabilityColors(level);
-    results.push({
-      label: "Casual",
-      level,
-      levelLabel: lvl,
-      colorClass,
-      bgClass,
-      detail,
-      icon: "☀️",
-      category: "casual",
-    });
+    pushCategory(results, "Casual", "☀️", "casual", level, detail);
   }
 
   return results;
@@ -581,12 +556,9 @@ export function HistoryDashboard() {
 
   // Fetch categories on mount (NOT all locations)
   useEffect(() => {
-    fetch("/api/py/activities?mode=categories")
-      .then((res) => (res.ok ? res.json() : { categories: [] }))
-      .then((data) => {
-        if (data?.categories?.length) setActivityCategories(data.categories);
-      })
-      .catch(() => {});
+    fetchActivityCategories().then((categories) => {
+      if (categories.length) setActivityCategories(categories);
+    });
   }, []);
 
   // Auto-select the global location (from My Weather / last visited location page)
@@ -595,8 +567,9 @@ export function HistoryDashboard() {
     if (didAutoSelect.current || !globalSlug) return;
     didAutoSelect.current = true;
 
-    fetch(`/api/py/locations?slug=${encodeURIComponent(globalSlug)}`)
-      .then((res) => (res.ok ? res.json() : null))
+    fetchJson<{ location?: WeatherLocation }>(
+      `/api/py/locations?slug=${encodeURIComponent(globalSlug)}`,
+    )
       .then((data) => {
         const loc = data?.location;
         if (!loc) return;
@@ -809,29 +782,18 @@ export function HistoryDashboard() {
     return insightsRecords;
   }, [insightsRecords]);
 
+  // Axis ticks: "8 Oct" within 90 days, "Oct 26" beyond.
   const formatDate = useCallback(
-    (dateStr: string) => {
-      const d = new Date(dateStr);
-      if (days <= 90) {
-        return d.toLocaleDateString("en-ZW", {
-          day: "numeric",
-          month: "short",
-        });
-      }
-      return d.toLocaleDateString("en-ZW", { month: "short", year: "2-digit" });
-    },
+    (dateStr: string) =>
+      formatLocaleDate(
+        new Date(dateStr),
+        DEFAULT_LOCALE,
+        days <= 90
+          ? { month: "short" }
+          : { month: "short", year: "2-digit", day: false },
+      ),
     [days],
   );
-
-  const formatDateFull = useCallback((dateStr: string) => {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("en-ZW", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  }, []);
 
   const showDots = chartData.length <= 31;
 
@@ -1113,7 +1075,7 @@ export function HistoryDashboard() {
                     <TemperatureTrendChart
                       data={chartData}
                       showDots={showDots}
-                      tooltipTitle={formatDateFull}
+                      tooltipTitle={formatDateTooltip}
                       xTickFormat={formatDate}
                     />
                     <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-base text-text-tertiary">
@@ -1149,7 +1111,7 @@ export function HistoryDashboard() {
                   <div className="pangolin mt-3">
                     <PrecipitationChart
                       data={chartData}
-                      tooltipTitle={formatDateFull}
+                      tooltipTitle={formatDateTooltip}
                       xTickFormat={formatDate}
                     />
                     <div className="mt-2 flex items-center justify-center gap-4 text-base text-text-tertiary">
@@ -1177,7 +1139,7 @@ export function HistoryDashboard() {
                   <div className="pangolin mt-3">
                     <UVCloudChart
                       data={chartData}
-                      tooltipTitle={formatDateFull}
+                      tooltipTitle={formatDateTooltip}
                       xTickFormat={formatDate}
                     />
                     <div className="mt-2 flex items-center justify-center gap-4 text-base text-text-tertiary">
@@ -1207,7 +1169,7 @@ export function HistoryDashboard() {
                       data={chartData}
                       labelKey="date"
                       showDots={showDots}
-                      tooltipTitle={formatDateFull}
+                      tooltipTitle={formatDateTooltip}
                       xTickFormat={formatDate}
                     />
                     <div className="mt-2 flex items-center justify-center gap-4 text-base text-text-tertiary">
@@ -1241,7 +1203,7 @@ export function HistoryDashboard() {
                       labelKey="date"
                       aspect="aspect-[16/4]"
                       showDots={showDots}
-                      tooltipTitle={formatDateFull}
+                      tooltipTitle={formatDateTooltip}
                       xTickFormat={formatDate}
                     />
                   </div>
@@ -1263,7 +1225,7 @@ export function HistoryDashboard() {
                     <HumidityChart
                       data={chartData}
                       showDots={showDots}
-                      tooltipTitle={formatDateFull}
+                      tooltipTitle={formatDateTooltip}
                       xTickFormat={formatDate}
                     />
                   </div>
@@ -1290,7 +1252,7 @@ export function HistoryDashboard() {
                       <DaylightChart
                         data={chartData}
                         showDots={showDots}
-                        tooltipTitle={formatDateFull}
+                        tooltipTitle={formatDateTooltip}
                         xTickFormat={formatDate}
                       />
                     </div>
@@ -1575,7 +1537,7 @@ export function HistoryDashboard() {
                           <HeatStressChart
                             data={insightsChartData}
                             showDots={showDots}
-                            tooltipTitle={formatDateFull}
+                            tooltipTitle={formatDateTooltip}
                             xTickFormat={formatDate}
                           />
                         </div>
@@ -1606,7 +1568,7 @@ export function HistoryDashboard() {
                           <ThunderstormChart
                             data={insightsChartData}
                             showDots={showDots}
-                            tooltipTitle={formatDateFull}
+                            tooltipTitle={formatDateTooltip}
                             xTickFormat={formatDate}
                           />
                         </div>
@@ -1637,7 +1599,7 @@ export function HistoryDashboard() {
                           <DewPointChart
                             data={insightsChartData}
                             showDots={showDots}
-                            tooltipTitle={formatDateFull}
+                            tooltipTitle={formatDateTooltip}
                             xTickFormat={formatDate}
                           />
                         </div>
@@ -1668,7 +1630,7 @@ export function HistoryDashboard() {
                           <VisibilityChart
                             data={insightsChartData}
                             showDots={showDots}
-                            tooltipTitle={formatDateFull}
+                            tooltipTitle={formatDateTooltip}
                             xTickFormat={formatDate}
                           />
                         </div>
@@ -1693,7 +1655,7 @@ export function HistoryDashboard() {
                           <GDDChart
                             data={insightsChartData}
                             showDots={showDots}
-                            tooltipTitle={formatDateFull}
+                            tooltipTitle={formatDateTooltip}
                             xTickFormat={formatDate}
                           />
                           <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-base text-text-tertiary">

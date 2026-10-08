@@ -1,5 +1,16 @@
 import type { CachedWeatherHint } from "./types";
 import { getCachedHint, cacheHint } from "../rxdb/collections";
+import {
+  listStorageKeys,
+  parseStoredJSON,
+  readStorage,
+  readStorageJSON,
+  removeStorage,
+  writeStorageJSON,
+} from "../safe-storage";
+
+/** Sentinel for "absent or malformed" — distinct from any stored value. */
+const MISSING = Symbol("missing");
 
 const KEY_PREFIX = "mukoko-weather-hint:";
 const MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
@@ -16,15 +27,9 @@ const MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
  * Writes to both RxDB (IndexedDB) and localStorage (sync fallback).
  */
 export function cacheWeatherHint(slug: string, hint: CachedWeatherHint): void {
-  // Sync write to localStorage for fast reads during loading scenes
-  if (typeof localStorage !== "undefined") {
-    try {
-      localStorage.setItem(KEY_PREFIX + slug, JSON.stringify(hint));
-      evictOldest();
-    } catch {
-      // localStorage full or unavailable — silently ignore
-    }
-  }
+  // Sync write to localStorage for fast reads during loading scenes.
+  // A failed write (full / unavailable) is silently ignored.
+  if (writeStorageJSON(KEY_PREFIX + slug, hint)) evictOldest();
 
   // Async write to RxDB (fire-and-forget)
   cacheHint(slug, {
@@ -42,29 +47,25 @@ export function cacheWeatherHint(slug: string, hint: CachedWeatherHint): void {
  * Returns null if no cache, expired (>2h), or unavailable.
  */
 export function getCachedWeatherHint(slug: string): CachedWeatherHint | null {
-  if (typeof localStorage === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(KEY_PREFIX + slug);
-    if (!raw) return null;
+  const key = KEY_PREFIX + slug;
+  // Absent or malformed JSON is a plain miss — the entry is left in place.
+  const hint = readStorageJSON<unknown>(key, MISSING);
+  if (hint === MISSING) return null;
 
-    const hint = JSON.parse(raw);
-    if (
-      typeof hint !== "object" ||
-      hint === null ||
-      typeof hint.timestamp !== "number"
-    ) {
-      localStorage.removeItem(KEY_PREFIX + slug);
-      return null;
-    }
-    if (Date.now() - hint.timestamp > MAX_AGE_MS) {
-      localStorage.removeItem(KEY_PREFIX + slug);
-      return null;
-    }
-
-    return hint as CachedWeatherHint;
-  } catch {
+  if (
+    typeof hint !== "object" ||
+    hint === null ||
+    typeof (hint as CachedWeatherHint).timestamp !== "number"
+  ) {
+    removeStorage(key);
     return null;
   }
+  if (Date.now() - (hint as CachedWeatherHint).timestamp > MAX_AGE_MS) {
+    removeStorage(key);
+    return null;
+  }
+
+  return hint as CachedWeatherHint;
 }
 
 /**
@@ -97,35 +98,29 @@ export async function getCachedWeatherHintAsync(
 const MAX_ENTRIES = 50;
 
 function evictOldest(): void {
-  let hintCount = 0;
-  for (let i = 0; i < localStorage.length; i++) {
-    if (localStorage.key(i)?.startsWith(KEY_PREFIX)) hintCount++;
-  }
-  if (hintCount <= MAX_ENTRIES) return;
-
-  const allKeys: string[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k) allKeys.push(k);
-  }
+  const allKeys = listStorageKeys();
+  const hintKeys = allKeys.filter((k) => k.startsWith(KEY_PREFIX));
+  if (hintKeys.length <= MAX_ENTRIES) return;
 
   const entries: { key: string; timestamp: number }[] = [];
   const corrupt: string[] = [];
 
-  for (const key of allKeys) {
-    if (!key.startsWith(KEY_PREFIX)) continue;
-    const raw = localStorage.getItem(key);
+  for (const key of hintKeys) {
+    const raw = readStorage(key);
     if (!raw) continue;
-    try {
-      const hint: CachedWeatherHint = JSON.parse(raw);
-      entries.push({ key, timestamp: hint.timestamp });
-    } catch {
+    const hint = parseStoredJSON<CachedWeatherHint | null | typeof MISSING>(
+      raw,
+      MISSING,
+    );
+    if (hint === MISSING || hint === null) {
       corrupt.push(key);
+      continue;
     }
+    entries.push({ key, timestamp: hint.timestamp });
   }
 
   for (const key of corrupt) {
-    localStorage.removeItem(key);
+    removeStorage(key);
   }
 
   if (entries.length <= MAX_ENTRIES) return;
@@ -133,6 +128,6 @@ function evictOldest(): void {
   entries.sort((a, b) => a.timestamp - b.timestamp);
   const toRemove = entries.length - MAX_ENTRIES;
   for (let i = 0; i < toRemove; i++) {
-    localStorage.removeItem(entries[i].key);
+    removeStorage(entries[i].key);
   }
 }

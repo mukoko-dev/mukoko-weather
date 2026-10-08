@@ -259,7 +259,7 @@ class TestAggregateStats:
 
 
 class TestBuildAnalysisSystemPrompt:
-    @patch("py._history_analyze._get_analysis_prompt")
+    @patch("py._history_analyze.get_ai_prompt")
     def test_uses_db_template_when_available(self, mock_get_prompt):
         """Should use template from database when available."""
         mock_get_prompt.return_value = {
@@ -268,7 +268,7 @@ class TestBuildAnalysisSystemPrompt:
         result = _build_analysis_system_prompt("Harare", 30)
         assert result == "Custom analysis for Harare over 30 days."
 
-    @patch("py._history_analyze._get_analysis_prompt")
+    @patch("py._history_analyze.get_ai_prompt")
     def test_falls_back_to_hardcoded_prompt(self, mock_get_prompt):
         """Should use fallback prompt when database template is unavailable."""
         mock_get_prompt.return_value = None
@@ -277,14 +277,14 @@ class TestBuildAnalysisSystemPrompt:
         assert "Harare" in result
         assert "30" in result
 
-    @patch("py._history_analyze._get_analysis_prompt")
+    @patch("py._history_analyze.get_ai_prompt")
     def test_falls_back_when_template_is_empty(self, mock_get_prompt):
         """Should use fallback when template field is empty."""
         mock_get_prompt.return_value = {"template": ""}
         result = _build_analysis_system_prompt("Harare", 30)
         assert "Shamwari Weather" in result
 
-    @patch("py._history_analyze._get_analysis_prompt")
+    @patch("py._history_analyze.get_ai_prompt")
     def test_replaces_location_and_days_placeholders(self, mock_get_prompt):
         """Should replace both {locationName} and {days} placeholders."""
         mock_get_prompt.return_value = {
@@ -436,9 +436,9 @@ class TestAnalyzeHistoryEndpoint:
         assert result["dataPoints"] == 1
 
     @pytest.mark.asyncio
-    @patch("py._history_analyze.anthropic_breaker")
-    @patch("py._history_analyze._get_client")
-    @patch("py._history_analyze._get_analysis_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
     @patch("py._history_analyze.find_location")
@@ -482,9 +482,9 @@ class TestAnalyzeHistoryEndpoint:
             mock_season.assert_called_once_with("KE", lat=-1.29, lon=36.82)
 
     @pytest.mark.asyncio
-    @patch("py._history_analyze.anthropic_breaker")
-    @patch("py._history_analyze._get_client")
-    @patch("py._history_analyze._get_analysis_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze._build_analysis_system_prompt", return_value="system prompt")
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
@@ -526,9 +526,9 @@ class TestAnalyzeHistoryEndpoint:
         assert result["cached"] is False
 
     @pytest.mark.asyncio
-    @patch("py._history_analyze.anthropic_breaker")
-    @patch("py._history_analyze._get_client")
-    @patch("py._history_analyze._get_analysis_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
     @patch("py._history_analyze.find_location")
@@ -577,9 +577,9 @@ class TestAnalyzeHistoryEndpoint:
         mock_breaker.record_success.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._history_analyze.anthropic_breaker")
-    @patch("py._history_analyze._get_client")
-    @patch("py._history_analyze._get_analysis_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
     @patch("py._history_analyze.find_location")
@@ -616,9 +616,9 @@ class TestAnalyzeHistoryEndpoint:
         mock_breaker.record_failure.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._history_analyze.anthropic_breaker")
-    @patch("py._history_analyze._get_client")
-    @patch("py._history_analyze._get_analysis_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
     @patch("py._history_analyze.find_location")
@@ -657,9 +657,9 @@ class TestAnalyzeHistoryEndpoint:
         mock_breaker.record_failure.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._history_analyze.anthropic_breaker")
-    @patch("py._history_analyze._get_client")
-    @patch("py._history_analyze._get_analysis_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
     @patch("py._history_analyze.find_location")
@@ -706,9 +706,9 @@ class TestAnalyzeHistoryEndpoint:
         assert "running" in user_message
 
     @pytest.mark.asyncio
-    @patch("py._history_analyze.anthropic_breaker")
-    @patch("py._history_analyze._get_client")
-    @patch("py._history_analyze._get_analysis_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
     @patch("py._history_analyze.find_location")

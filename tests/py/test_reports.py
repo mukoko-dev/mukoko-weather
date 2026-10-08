@@ -625,7 +625,7 @@ class TestClarifyReport:
         assert exc_info.value.status_code == 429
 
     @pytest.mark.asyncio
-    @patch("py._reports._get_client")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
     @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
@@ -643,8 +643,8 @@ class TestClarifyReport:
         assert any("lightning" in q.lower() or "hail" in q.lower() for q in result["questions"])
 
     @pytest.mark.asyncio
-    @patch("py._reports.anthropic_breaker")
-    @patch("py._reports._get_client")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
     @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
@@ -662,9 +662,9 @@ class TestClarifyReport:
         assert len(result["questions"]) == 2
 
     @pytest.mark.asyncio
-    @patch("py._reports._get_clarification_prompt")
-    @patch("py._reports.anthropic_breaker")
-    @patch("py._reports._get_client")
+    @patch("py._reports.get_ai_prompt")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
     @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
@@ -693,9 +693,9 @@ class TestClarifyReport:
         mock_breaker.record_success.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._reports._get_clarification_prompt")
-    @patch("py._reports.anthropic_breaker")
-    @patch("py._reports._get_client")
+    @patch("py._reports.get_ai_prompt")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
     @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
@@ -719,9 +719,9 @@ class TestClarifyReport:
         mock_breaker.record_failure.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._reports._get_clarification_prompt")
-    @patch("py._reports.anthropic_breaker")
-    @patch("py._reports._get_client")
+    @patch("py._reports.get_ai_prompt")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
     @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
@@ -750,9 +750,9 @@ class TestClarifyReport:
         assert any("dust" in q.lower() or "far" in q.lower() for q in result["questions"])
 
     @pytest.mark.asyncio
-    @patch("py._reports._get_clarification_prompt")
-    @patch("py._reports.anthropic_breaker")
-    @patch("py._reports._get_client")
+    @patch("py._reports.get_ai_prompt")
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
     @patch("py._reports.find_location")
     @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")

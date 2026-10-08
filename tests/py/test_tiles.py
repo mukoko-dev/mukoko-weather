@@ -264,7 +264,7 @@ class TestTileCache:
             "expiresAt": datetime.now(timezone.utc),
         }
 
-        with patch("py._tiles._map_tile_cache_collection", return_value=mock_collection):
+        with patch("py._tiles.map_tile_cache_collection", return_value=mock_collection):
             with patch("py._tiles.get_api_key") as mock_key:
                 with patch("py._tiles._get_http") as mock_http:
                     result = await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
@@ -287,7 +287,7 @@ class TestTileCache:
         mock_response.status_code = 200
         mock_response.content = tile_bytes
 
-        with patch("py._tiles._map_tile_cache_collection", return_value=mock_collection):
+        with patch("py._tiles.map_tile_cache_collection", return_value=mock_collection):
             with patch("py._tiles.get_api_key", return_value="test-key"):
                 with patch("py._tiles._get_http") as mock_http:
                     mock_http.return_value.get.return_value = mock_response
@@ -336,7 +336,7 @@ class TestTileCache:
         mock_response.status_code = 200
         mock_response.content = tile_bytes
 
-        with patch("py._tiles._map_tile_cache_collection", return_value=mock_collection):
+        with patch("py._tiles.map_tile_cache_collection", return_value=mock_collection):
             with patch("py._tiles.get_api_key", return_value="test-key"):
                 with patch("py._tiles._get_http") as mock_http:
                     mock_http.return_value.get.return_value = mock_response

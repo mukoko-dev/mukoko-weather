@@ -225,6 +225,8 @@
      [data-theme="dark"] block below) — same per-theme pattern as the
      --mineral-*-fg tokens. */
   --color-severity-fg: #ffffff;
+  /* Modal scrim behind Dialog / Sheet overlays */
+  --color-overlay: rgba(0, 0, 0, 0.5);
 }
 
 [data-theme="dark"] {
@@ -378,6 +380,8 @@
   --mineral-terracotta-fg: #0a0a0a;
   --mineral-sodalite-fg: #0a0a0a;
   --mineral-copper-fg: #0a0a0a;
+  /* Modal scrim behind Dialog / Sheet overlays */
+  --color-overlay: rgba(0, 0, 0, 0.5);
 }
 
 @theme inline {
@@ -510,6 +514,7 @@
   --animate-slide-up: slide-up 300ms ease-out;
   --animate-slide-down: slide-down 200ms ease-out forwards;
   --animate-nav-indicator-in: nav-indicator-in 300ms ease-out;
+  --color-overlay: var(--color-overlay);
 }
 
 @keyframes accordion-down {
@@ -1073,6 +1078,12 @@ body {
     @apply inline-flex items-center text-base font-medium
            text-primary underline underline-offset-4
            decoration-primary decoration-2;
+  }
+
+  /* .dikdik — inline text action (small antelope: Try again, Refresh, See all) */
+  .dikdik {
+    @apply text-base font-medium text-primary transition-colors
+           hover:text-primary/80;
   }
 
   /* ── Loading / Skeleton ──────────────────────────────────────────────── */
