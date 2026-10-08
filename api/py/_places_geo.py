@@ -19,6 +19,7 @@ forgets; there is no polling endpoint on this side.
 from __future__ import annotations
 
 import logging
+import math
 import re
 import time
 import unicodedata
@@ -168,6 +169,13 @@ def _names_match(candidate: str, target_normalised: str) -> bool:
 OSM_REF_FIELD = "sourceProvenance.mukokoOsmRef"
 
 
+def _bbox_deltas(lat: float, km: float) -> tuple[float, float]:
+    """Degree deltas (lat, lon) for a ``km`` box around ``lat`` (~111 km per degree)."""
+    delta = km / 111.0
+    cos_lat = max(0.01, math.cos(math.radians(lat)))
+    return delta, delta / cos_lat
+
+
 def find_placesgeo_by_osm_ref(osm_ref: str) -> Optional[dict]:
     """Return the placesGeo document carrying ``osm_ref``, or ``None``.
 
@@ -265,11 +273,8 @@ def find_nearby_placesgeo(
 
     # Fallback path — bounding box approximation (~1 deg lat ≈ 111 km)
     try:
-        delta = max_distance_km / 111.0
+        delta, lon_delta = _bbox_deltas(lat, max_distance_km)
         lat_min, lat_max = lat - delta, lat + delta
-        import math
-        cos_lat = max(0.01, math.cos(math.radians(lat)))
-        lon_delta = delta / cos_lat
         lon_min, lon_max = lon - lon_delta, lon + lon_delta
         bbox_query: dict = {
             "geo.coordinates.0": {"$gte": lon_min, "$lte": lon_max},
@@ -677,10 +682,7 @@ def _find_existing_seed_request(
     coll = places_db()["seedRequests"]
     # Bounding-box scan — the queue is short-lived and validatorless; a
     # 2dsphere index isn't guaranteed on this collection yet.
-    delta = radius_km / 111.0
-    import math
-    cos_lat = max(0.01, math.cos(math.radians(lat)))
-    lon_delta = delta / cos_lat
+    delta, lon_delta = _bbox_deltas(lat, radius_km)
     query: dict = {
         "status": {"$in": ["queued", "processing"]},
         "region.center.0": {"$gte": lon - lon_delta, "$lte": lon + lon_delta},

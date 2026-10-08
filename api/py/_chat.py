@@ -26,8 +26,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ._db import (
-    check_rate_limit,
-    get_client_ip,
+    enforce_rate_limit,
     get_api_key,
     get_known_tags,
     filter_known_activities,
@@ -654,13 +653,7 @@ async def chat(body: ChatRequest, request: Request):
         raise HTTPException(status_code=400, detail=f"Message too long (max {MAX_MESSAGE_LEN} characters)")
 
     # Rate limiting — extract real IP behind Vercel's reverse proxy
-    ip = get_client_ip(request)
-    if not ip:
-        raise HTTPException(status_code=400, detail="Could not determine IP")
-
-    rate = check_rate_limit(ip, "chat", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW)
-    if not rate["allowed"]:
-        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+    enforce_rate_limit(request, "chat", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW)
 
     # Truncate history — construct new objects to avoid mutating the request body
     history = [
