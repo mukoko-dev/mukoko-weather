@@ -16,6 +16,11 @@ const exploreTagLoading = readFileSync(
   resolve(__dirname, "[tag]/loading.tsx"),
   "utf-8",
 );
+// The shared frame owns role/aria/sr-only for every explore loading route.
+const exploreShell = readFileSync(
+  resolve(__dirname, "ExploreLoadingShell.tsx"),
+  "utf-8",
+);
 
 describe("explore page — ISR caching", () => {
   it("explore/page.tsx exports revalidate = 3600 for 1-hour ISR", () => {
@@ -29,11 +34,11 @@ describe("explore page — ISR caching", () => {
 
 describe("explore page — loading skeletons", () => {
   it('explore/loading.tsx exists and has role="status"', () => {
-    expect(exploreLoading).toContain('role="status"');
+    expect(exploreShell).toContain('role="status"');
   });
 
   it("explore/loading.tsx has sr-only text for screen readers", () => {
-    expect(exploreLoading).toContain("sr-only");
+    expect(exploreShell).toContain("sr-only");
     expect(exploreLoading).toContain("Loading");
   });
 
@@ -42,11 +47,11 @@ describe("explore page — loading skeletons", () => {
   });
 
   it('explore/[tag]/loading.tsx exists and has role="status"', () => {
-    expect(exploreTagLoading).toContain('role="status"');
+    expect(exploreShell).toContain('role="status"');
   });
 
   it("explore/[tag]/loading.tsx has sr-only text for screen readers", () => {
-    expect(exploreTagLoading).toContain("sr-only");
+    expect(exploreShell).toContain("sr-only");
     expect(exploreTagLoading).toContain("Loading");
   });
 
@@ -121,11 +126,11 @@ describe("explore page — data and accessibility", () => {
 
 describe("explore/loading.tsx — skeleton quality", () => {
   it("uses aria-busy=true on loading container", () => {
-    expect(exploreLoading).toContain('aria-busy="true"');
+    expect(exploreShell).toContain('aria-busy="true"');
   });
 
   it("tag loading skeleton uses aria-busy=true", () => {
-    expect(exploreTagLoading).toContain('aria-busy="true"');
+    expect(exploreShell).toContain('aria-busy="true"');
   });
 
   it("explore loading renders multiple card skeletons", () => {
@@ -136,5 +141,80 @@ describe("explore/loading.tsx — skeleton quality", () => {
   it("explore tag loading renders province group skeletons", () => {
     // Should render 2 province groups with 6 items each
     expect(exploreTagLoading).toContain("Array.from");
+  });
+});
+
+describe("explore — shared breadcrumb, empty state and loading shell", () => {
+  const pages = {
+    index: readFileSync(resolve(__dirname, "page.tsx"), "utf-8"),
+    tag: readFileSync(resolve(__dirname, "[tag]/page.tsx"), "utf-8"),
+    country: readFileSync(resolve(__dirname, "country/page.tsx"), "utf-8"),
+    countryCode: readFileSync(
+      resolve(__dirname, "country/[code]/page.tsx"),
+      "utf-8",
+    ),
+    province: readFileSync(
+      resolve(__dirname, "country/[code]/[province]/page.tsx"),
+      "utf-8",
+    ),
+  };
+
+  it("every explore page uses the shared Breadcrumb, not a hand-rolled nav", () => {
+    for (const source of Object.values(pages)) {
+      expect(source).toContain(
+        'import { Breadcrumb } from "@/components/layout/Breadcrumb"',
+      );
+      expect(source).toContain("<Breadcrumb");
+      expect(source).not.toContain('aria-label="Breadcrumb"');
+      expect(source).not.toContain("<ol className");
+    }
+  });
+
+  it("explore pages keep an accessible crumb trail with Home and Explore links", () => {
+    for (const source of Object.values(pages)) {
+      expect(source).toContain('{ label: "Home", href: "/" }');
+      expect(source).toContain('{ label: "Explore"');
+    }
+  });
+
+  it("explore link cards use .card-interactive instead of a hand-rolled hover chain", () => {
+    for (const source of Object.values(pages)) {
+      expect(source).not.toContain("hover:bg-surface-card/80");
+    }
+    expect(pages.index).toContain("card-interactive");
+    expect(pages.tag).toContain("card-interactive");
+    expect(pages.country).toContain("card-interactive");
+    expect(pages.countryCode).toContain("card-interactive");
+    expect(pages.province).toContain("card-interactive");
+  });
+
+  it("empty-list states use the shared EmptyState primitive", () => {
+    expect(pages.index).toContain("<EmptyState");
+    expect(pages.tag).toContain("<EmptyState");
+    expect(pages.countryCode).toContain("<EmptyState");
+  });
+
+  it("all five explore loading routes render through ExploreLoadingShell", () => {
+    const loadingFiles = [
+      "loading.tsx",
+      "[tag]/loading.tsx",
+      "country/loading.tsx",
+      "country/[code]/loading.tsx",
+      "country/[code]/[province]/loading.tsx",
+    ];
+    for (const file of loadingFiles) {
+      const source = readFileSync(resolve(__dirname, file), "utf-8");
+      expect(source).toContain("ExploreLoadingShell");
+      expect(source).toContain("<ExploreLoadingShell");
+      // Loading skeletons never mount the live client Header.
+      expect(source).not.toContain("<Header");
+      expect(source).not.toContain("Footer");
+    }
+  });
+
+  it("the shared shell uses HeaderSkeleton and BreadcrumbSkeleton", () => {
+    expect(exploreShell).toContain("HeaderSkeleton");
+    expect(exploreShell).toContain("BreadcrumbSkeleton");
+    expect(exploreShell).not.toContain("<Header ");
   });
 });

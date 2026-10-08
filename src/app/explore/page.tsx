@@ -3,6 +3,8 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { EmptyState } from "@/components/ui/empty-state";
 import { getTagCountsAndStats, getFeaturedTagsFromDb } from "@/lib/db";
 import { logError } from "@/lib/observability";
 import type { TagDoc } from "@/lib/db";
@@ -58,25 +60,9 @@ export default async function ExplorePage() {
     <>
       <Header />
 
-      <nav
-        aria-label="Breadcrumb"
-        className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8"
-      >
-        <ol className="flex items-center gap-1 text-base text-text-tertiary">
-          <li>
-            <Link
-              href="/"
-              className="hover:text-text-secondary transition-colors"
-            >
-              Home
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li aria-current="page">
-            <span className="font-medium text-text-primary">Explore</span>
-          </li>
-        </ol>
-      </nav>
+      <Breadcrumb
+        items={[{ label: "Home", href: "/" }, { label: "Explore" }]}
+      />
 
       <main
         id="main-content"
@@ -128,9 +114,9 @@ export default async function ExplorePage() {
           </p>
 
           {tagCounts.length === 0 && (
-            <div className="mt-6 rounded-[var(--radius-card)] bg-surface-card p-6 text-center text-text-tertiary">
-              <p>No locations available here yet.</p>
-            </div>
+            <EmptyState className="mt-6">
+              No locations available here yet.
+            </EmptyState>
           )}
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -142,7 +128,7 @@ export default async function ExplorePage() {
                 <Link
                   key={tag}
                   href={`/explore/${tag}`}
-                  className="group card-interactive baobab p-5 focus-visible:outline-2 focus-visible:outline-primary"
+                  className="group card-interactive baobab p-5"
                 >
                   <div className="flex items-start justify-between">
                     <h3 className="giraffe group-hover:text-primary transition-colors">
