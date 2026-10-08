@@ -86,9 +86,29 @@ describe("WelcomeBanner — hydration safety", () => {
     // hasStoreHydrated() alone is a module flag that can already be true
     // during hydration (fast storage, slow device), which rendered the banner
     // where the server rendered nothing and threw React error 418 on iOS Safari.
-    expect(source).toContain('from "@/lib/use-hydrated"');
-    expect(source).toMatch(
-      /if \(!hydrated \|\| !hasStoreHydrated\(\)\) return null/,
+    expect(source).toContain("useStoreHydrated()");
+    expect(source).not.toContain("hasStoreHydrated()");
+  });
+
+  it("re-renders when the store finishes loading after hydration", () => {
+    // A never-emitting subscription (or a bare hasStoreHydrated() read) left
+    // the banner hidden when RxDB resolved after React hydrated. The hook must
+    // subscribe to the store flag and keep `false` as the server snapshot.
+    const hook = readFileSync(
+      resolve(__dirname, "../../lib/use-hydrated.ts"),
+      "utf-8",
     );
+    expect(hook).toMatch(
+      /useSyncExternalStore\(\s*subscribeStoreHydrated,\s*hasStoreHydrated,\s*getHydratedServerSnapshot/,
+    );
+    const store = readFileSync(
+      resolve(__dirname, "../../lib/store.ts"),
+      "utf-8",
+    );
+    expect(store).toMatch(
+      /for \(const listener of _hydrationListeners\) listener\(\)/,
+    );
+    // Only markStoreHydrated() sets the flag, so listeners always fire.
+    expect(store.match(/_hasHydrated = true;/g)).toHaveLength(1);
   });
 });
