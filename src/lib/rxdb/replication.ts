@@ -119,6 +119,9 @@ async function startPrefsReplication(): Promise<void> {
             selectedForecastModel:
               serverPrefs.selectedForecastModel ?? "best_match",
             homeLocation: localDoc?.homeLocation ?? null,
+            // Suggested-place state is device-local too (see schemas.ts).
+            hiddenPresetSlugs: localDoc?.hiddenPresetSlugs ?? [],
+            presetAnchor: localDoc?.presetAnchor ?? null,
             updatedAt: Date.now(),
             _deleted: false,
           };

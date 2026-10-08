@@ -268,3 +268,128 @@ describe("cardHref", () => {
     expect(cardHref({ slug: "bulawayo", isCurrent: false })).toBe("/bulawayo");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mineral plates, the per-slug cache and the batch loader
+// ---------------------------------------------------------------------------
+
+import {
+  CARD_FETCH_CONCURRENCY,
+  CARD_WEATHER_TTL_MS,
+  PLATE_CLASSES,
+  PLATE_MINERAL,
+  TtlCache,
+  mapWithConcurrency,
+  plateClassesFor,
+  plateConditionFor,
+  plateName,
+} from "./location-card";
+
+describe("plate names and minerals", () => {
+  it("names plates plate-<condition>-<day|night>", () => {
+    expect(plateName("clear", true)).toBe("plate-clear-day");
+    expect(plateName("rain", false)).toBe("plate-rain-night");
+  });
+
+  it("maps every condition, day and night, to a mineral", () => {
+    const conditions = ["clear", "cloudy", "rain", "storm", "fog", "snow"] as const;
+    for (const condition of conditions) {
+      for (const isDay of [true, false]) {
+        expect(PLATE_MINERAL[plateName(condition, isDay)]).toBeDefined();
+      }
+    }
+  });
+
+  it("gives clear day and night different minerals", () => {
+    expect(PLATE_MINERAL["plate-clear-day"]).not.toBe(
+      PLATE_MINERAL["plate-clear-night"],
+    );
+  });
+
+  it("maps sky classes to condition families", () => {
+    expect(plateConditionFor("oryx-clear-day")).toBe("clear");
+    expect(plateConditionFor("oryx-clear-night")).toBe("clear");
+    expect(plateConditionFor("oryx-rain")).toBe("rain");
+    expect(plateConditionFor("oryx-storm")).toBe("storm");
+    expect(plateConditionFor("oryx-fog")).toBe("fog");
+    expect(plateConditionFor("oryx-snow")).toBe("snow");
+    expect(plateConditionFor("oryx-cloudy")).toBe("cloudy");
+  });
+
+  it("returns literal plate and edge classes for a card", () => {
+    const classes = plateClassesFor("oryx-rain", true);
+    expect(classes).toBe(PLATE_CLASSES.malachite);
+    expect(classes.plate).toContain("color-mix(");
+    expect(classes.plate).toContain("var(--mineral-malachite)");
+    expect(classes.edge).toBe("border-l-[var(--mineral-malachite)]");
+  });
+
+  it("uses no hardcoded hex or rgba in plate classes", () => {
+    for (const { plate, edge } of Object.values(PLATE_CLASSES)) {
+      expect(`${plate} ${edge}`).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/);
+    }
+  });
+});
+
+describe("TtlCache", () => {
+  it("returns a value until its TTL passes, then drops it", () => {
+    let now = 0;
+    const cache = new TtlCache<string>(1000, () => now);
+    cache.set("harare", "weather");
+    now = 999;
+    expect(cache.get("harare")).toBe("weather");
+    now = 1000;
+    expect(cache.get("harare")).toBeUndefined();
+  });
+
+  it("returns undefined for unknown keys and supports delete and clear", () => {
+    const cache = new TtlCache<number>(1000);
+    expect(cache.get("nope")).toBeUndefined();
+    cache.set("a", 1);
+    cache.set("b", 2);
+    cache.delete("a");
+    expect(cache.get("a")).toBeUndefined();
+    expect(cache.get("b")).toBe(2);
+    cache.clear();
+    expect(cache.get("b")).toBeUndefined();
+  });
+
+  it("uses a 10-minute TTL for the Locations list", () => {
+    expect(CARD_WEATHER_TTL_MS).toBe(10 * 60 * 1000);
+  });
+});
+
+describe("mapWithConcurrency", () => {
+  it("runs at most the limit of workers at once", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const items = Array.from({ length: 10 }, (_, i) => i);
+    await mapWithConcurrency(items, 3, async (n) => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      inFlight -= 1;
+      return n;
+    });
+    expect(peak).toBe(3);
+  });
+
+  it("keeps results in input order even when workers finish out of order", async () => {
+    const out = await mapWithConcurrency([30, 10, 20], 3, async (ms) => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+      return ms;
+    });
+    expect(out).toEqual([30, 10, 20]);
+  });
+
+  it("handles an empty list and a limit larger than the list", async () => {
+    expect(await mapWithConcurrency([], 3, async (n: number) => n)).toEqual([]);
+    expect(
+      await mapWithConcurrency([1, 2], 10, async (n) => n * 2),
+    ).toEqual([2, 4]);
+  });
+
+  it("defaults the card fetch concurrency to 3", () => {
+    expect(CARD_FETCH_CONCURRENCY).toBe(3);
+  });
+});

@@ -12,6 +12,8 @@ const clientSource = readFileSync(
   resolve(__dirname, "LocationsClient.tsx"),
   "utf-8",
 );
+const menuSource = readFileSync(resolve(__dirname, "LocationsMenu.tsx"), "utf-8");
+const searchSource = readFileSync(resolve(__dirname, "LocationsSearch.tsx"), "utf-8");
 const loadingSource = readFileSync(resolve(__dirname, "loading.tsx"), "utf-8");
 const css = readFileSync(resolve(__dirname, "../globals.css"), "utf-8");
 const proxySource = readFileSync(resolve(__dirname, "../../proxy.ts"), "utf-8");
@@ -49,40 +51,84 @@ describe("locations page — route contract", () => {
 });
 
 describe("locations list — client", () => {
-  it("has the Weather h1 and a labelled list of cards", () => {
+  it("has the Weather h1 in Noto Serif and a labelled My location and Your places", () => {
     expect(clientSource).toContain("<h1");
+    expect(clientSource).toContain("font-display");
     expect(clientSource).toContain("Weather");
-    expect(clientSource).toContain('aria-label="Locations"');
+    expect(clientSource).toContain('aria-label="My location"');
+    expect(clientSource).toContain('aria-labelledby="your-places-heading"');
+    expect(clientSource).toContain("Your places");
   });
 
-  it("opens My Weather on the Location tab from the search bar", () => {
-    expect(clientSource).toContain('openMyWeather("location")');
-    expect(clientSource).toContain("Search for a city or airport");
+  it("puts My Location first, then saved places, then suggested places", () => {
+    const current = clientSource.indexOf('aria-label="My location"');
+    const saved = clientSource.indexOf('aria-label="Saved places"');
+    const suggested = clientSource.indexOf('aria-label="Suggested places"');
+    expect(current).toBeGreaterThan(-1);
+    expect(saved).toBeGreaterThan(current);
+    expect(suggested).toBeGreaterThan(saved);
   });
 
-  it("caps saved places with the store limit and builds the list via the helper", () => {
+  it("builds the saved list with the store cap and the visible suggestions with the preset helper", () => {
     expect(clientSource).toContain("MAX_SAVED_LOCATIONS");
     expect(clientSource).toContain("buildLocationList(");
+    expect(clientSource).toContain("visiblePresetSlugs({");
+    expect(clientSource).toContain("hiddenSuggestedSlugs(");
   });
 
-  it("offers Set as Home and Remove through each card's menu", () => {
+  it("hides a suggested place and restores them all from the list", () => {
+    expect(clientSource).toContain("hidePresetLocation(slug)");
+    expect(clientSource).toContain("restorePresetLocations");
+    expect(clientSource).toContain("Restore suggested places");
+  });
+
+  it("removes saved places from the list in Edit mode", () => {
+    expect(clientSource).toContain("removeLocation(slug)");
+    expect(clientSource).toContain("editing={editing}");
+    expect(clientSource).toContain("Done");
+  });
+
+  it("offers Set as Home through each card's menu, outside Edit mode", () => {
     expect(clientSource).toContain("Set as Home");
     expect(clientSource).toContain("Remove Home");
-    expect(clientSource).toContain("removeLocation(entry.slug)");
-    expect(clientSource).toContain("setHomeLocation(");
+    expect(clientSource).toContain("setHomeLocation(isHome ? null : slug)");
+    expect(clientSource).toContain("menu={editing ? undefined : menu}");
   });
 
-  it("shows the search hint when nothing is saved", () => {
-    expect(clientSource).toContain("Search to add places");
+  it("anchors suggestions on first visit only, after the store has hydrated", () => {
+    expect(clientSource).toContain("useStoreHydrated()");
+    expect(clientSource).toContain("if (hydrated && !presetAnchor && ipAnchor)");
   });
 
-  it("fetches each place's weather from the Python weather endpoint", () => {
+  it("fetches weather in batches with the concurrency limit and a 10-minute cache", () => {
+    expect(clientSource).toContain("mapWithConcurrency(slugs, CARD_FETCH_CONCURRENCY");
+    expect(clientSource).toContain("CARD_WEATHER_TTL_MS");
+    expect(clientSource).toContain("new TtlCache<LoadedCard>(");
     expect(clientSource).toContain("/api/py/weather?lat=");
   });
 
+  it("pins the search bar to the bottom and reuses the shared quick search", () => {
+    expect(clientSource).toContain("<LocationsSearch");
+    expect(clientSource).toContain("sticky bottom-[4.5rem]");
+    expect(searchSource).toContain("useLocationQuickSearch({ limit: 8 })");
+    expect(searchSource).toContain("saveLocation(slug)");
+    expect(searchSource).toContain("Search for a city or airport");
+  });
+
+  it("offers Edit list, Units, Explore, History and Aviation from the ⋯ menu", () => {
+    expect(menuSource).toContain("aria-label=\"More: edit list, units, Explore, History, Aviation\"");
+    expect(menuSource).toContain("Edit list");
+    expect(menuSource).toContain('openMyWeather("settings")');
+    expect(menuSource).toContain('href="/explore"');
+    expect(menuSource).toContain('href="/history"');
+    expect(menuSource).toContain('href="/aviation"');
+  });
+
   it("uses the global styles only (no inline styles or hardcoded colours)", () => {
-    expect(clientSource).not.toMatch(/style=\{\{/);
-    expect(clientSource).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    for (const source of [clientSource, menuSource, searchSource]) {
+      expect(source).not.toMatch(/style=\{\{/);
+      expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    }
   });
 });
 

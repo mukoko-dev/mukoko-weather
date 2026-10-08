@@ -87,6 +87,8 @@ interface LegacyState {
   hasOnboarded?: boolean;
   selectedForecastModel?: string;
   homeLocation?: string | null;
+  hiddenPresetSlugs?: string[];
+  presetAnchor?: { lat: number; lon: number } | null;
 }
 
 /**
@@ -178,6 +180,8 @@ async function _doMigrate(): Promise<void> {
     hasOnboarded: legacy.hasOnboarded ?? false,
     selectedForecastModel: legacy.selectedForecastModel ?? "best_match",
     homeLocation: legacy.homeLocation ?? null,
+    hiddenPresetSlugs: legacy.hiddenPresetSlugs ?? [],
+    presetAnchor: legacy.presetAnchor ?? null,
     updatedAt: Date.now(),
   });
 
@@ -263,6 +267,8 @@ async function _doInitBridge(callbacks: BridgeCallbacks): Promise<void> {
         hasOnboarded: doc.hasOnboarded,
         selectedForecastModel: doc.selectedForecastModel,
         homeLocation: doc.homeLocation,
+        hiddenPresetSlugs: [...(doc.hiddenPresetSlugs ?? [])],
+        presetAnchor: doc.presetAnchor ?? null,
       });
     }
 
@@ -280,6 +286,8 @@ async function _doInitBridge(callbacks: BridgeCallbacks): Promise<void> {
           hasOnboarded: rxDoc.hasOnboarded,
           selectedForecastModel: rxDoc.selectedForecastModel,
           homeLocation: rxDoc.homeLocation,
+          hiddenPresetSlugs: [...(rxDoc.hiddenPresetSlugs ?? [])],
+          presetAnchor: rxDoc.presetAnchor ?? null,
         });
       } catch {
         // never let a subscription callback bubble into RxDB internals
@@ -332,6 +340,8 @@ export async function updatePreferences(
         hasOnboarded: false,
         selectedForecastModel: "best_match",
         homeLocation: null,
+        hiddenPresetSlugs: [],
+        presetAnchor: null,
         ...updates,
         updatedAt: Date.now(),
       });

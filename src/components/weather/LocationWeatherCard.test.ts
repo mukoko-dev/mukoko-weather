@@ -22,12 +22,21 @@ describe("LocationWeatherCard — structure", () => {
     expect(source).toMatch(/<Link\s[^>]*aria-label=\{accessibleName\}/);
   });
 
-  it("paints the condition sky through the oryx fauna class", () => {
-    expect(source).toContain("`oryx ${summary.sky}");
+  it("paints a mineral plate from the condition and day/night, with a 4px mineral edge", () => {
+    expect(source).toContain("plateClassesFor(summary.sky, summary.isDay)");
+    expect(source).toContain("border-l-4");
+    expect(source).toContain("${plate.edge}");
+    expect(source).toContain("${plate.plate}");
   });
 
-  it("uses the oryx card surface and white-on-sky text tokens only", () => {
-    expect(source).toContain("text-[var(--color-oryx-fg)]");
+  it("is a flat tile, never glass: no backdrop blur or translucent surface", () => {
+    expect(source).not.toContain("backdrop-blur");
+    expect(source).not.toContain("oryx");
+  });
+
+  it("sets the temperature in the Noto Serif display face and the label in mono", () => {
+    expect(source).toContain("font-display");
+    expect(source).toContain("font-mono");
   });
 });
 
@@ -41,6 +50,17 @@ describe("LocationWeatherCard — loading and error states", () => {
   it("keeps the name visible and says weather is unavailable on error", () => {
     expect(source).toContain("Weather unavailable");
     expect(source).toContain("acacia");
+  });
+});
+
+describe("LocationWeatherCard — edit mode", () => {
+  it("swaps the link for a non-navigating tile with a remove control", () => {
+    expect(source).toContain("editing && onRemove");
+    expect(source).toContain('aria-label={removeLabel ?? `Remove ${name}`}');
+  });
+
+  it("hides the ⋯ menu while editing", () => {
+    expect(source).toContain("!editing && menu && menu.length > 0");
   });
 });
 
