@@ -6,7 +6,7 @@ import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { resolveColor } from "@/components/ui/chart";
 import {
-  MAPLIBRE_WORKER_URL,
+  maplibreWorkerUrl,
   WEATHER_OVERLAY_ID,
   buildWeatherOverlaySource,
 } from "@/lib/map-layers";
@@ -122,11 +122,14 @@ export function MapLibreMap({
         NavigationControl,
         AttributionControl,
         setWorkerUrl,
+        getVersion,
       }) => {
         if (cancelled || !containerRef.current) return;
         // Must run before the first Map is created: the default worker URL
-        // points at a file webpack never emits (see MAPLIBRE_WORKER_URL).
-        setWorkerUrl(new URL(MAPLIBRE_WORKER_URL, window.location.href).href);
+        // points at a file webpack never emits (see maplibreWorkerUrl).
+        setWorkerUrl(
+          new URL(maplibreWorkerUrl(getVersion()), window.location.href).href,
+        );
         import("maplibre-gl/dist/maplibre-gl.css");
 
         const map: MapLibreGLMap = new Map({
@@ -253,7 +256,7 @@ export function MapLibreMap({
         and the empty div collapses to 0px tall (a blank map). The wrapper
         carries the absolute fill; the container just takes the wrapper's size.
       */}
-      <div className="absolute inset-0" aria-hidden="true">
+      <div className="absolute inset-0">
         <div ref={containerRef} className="h-full w-full" />
       </div>
       {baseMapMissingKey && (

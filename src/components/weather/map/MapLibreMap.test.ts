@@ -128,16 +128,17 @@ describe("MapLibre web worker (maplibre-gl v6)", () => {
     const mapIdx = source.indexOf("new Map(");
     expect(setIdx).toBeGreaterThan(-1);
     expect(setIdx).toBeLessThan(mapIdx);
-    expect(source).toContain("MAPLIBRE_WORKER_URL");
+    expect(source).toContain("maplibreWorkerUrl(getVersion())");
   });
 
-  it("serves the worker where the copy script puts it", async () => {
-    const { MAPLIBRE_WORKER_URL } = await import("@/lib/map-layers");
-    expect(MAPLIBRE_WORKER_URL).toBe(
-      "/vendor/maplibre-gl/maplibre-gl-worker.mjs",
+  it("serves the worker from a per-version folder the copy script fills", async () => {
+    // Versioned so a tab on an old bundle never pairs with a newer worker.
+    const { maplibreWorkerUrl } = await import("@/lib/map-layers");
+    expect(maplibreWorkerUrl("6.12.0")).toBe(
+      "/vendor/maplibre-gl/6.12.0/maplibre-gl-worker.mjs",
     );
     const script = read("scripts/copy-maplibre-worker.mjs");
-    expect(script).toContain('"public", "vendor", "maplibre-gl"');
+    expect(script).toContain('"public", "vendor", "maplibre-gl", version');
     // The worker imports ./maplibre-gl-shared.mjs, so both must be copied.
     expect(script).toContain("maplibre-gl-worker.mjs");
     expect(script).toContain("maplibre-gl-shared.mjs");
@@ -159,6 +160,18 @@ describe("MapLibre web worker (maplibre-gl v6)", () => {
     expect(
       readFileSync(resolve(dist, "maplibre-gl-worker.mjs"), "utf-8"),
     ).toContain("./maplibre-gl-shared.mjs");
+    // The module the worker imports must exist under exactly that name.
+    expect(() =>
+      readFileSync(resolve(dist, "maplibre-gl-shared.mjs")),
+    ).not.toThrow();
+  });
+
+  it("keeps MapLibre's focusable controls visible to assistive tech", () => {
+    // Zoom buttons and attribution links render inside the container; an
+    // aria-hidden ancestor would hide focusable controls (aria-hidden-focus).
+    expect(source).not.toMatch(
+      /aria-hidden="true">\s*<div ref=\{containerRef\}/,
+    );
   });
 });
 
