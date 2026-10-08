@@ -104,9 +104,14 @@ describe("Header — My Location centre action", () => {
     expect(source).toContain("detectUserLocation({ autoCreate: true })");
   });
 
-  it("navigates to the detected location and syncs the store", () => {
+  it("selects the detected location and returns to the home page (no slug URL)", () => {
     expect(source).toContain("setSelectedLocation(result.location.slug)");
-    expect(source).toContain("router.push(`/${result.location.slug}`)");
+    expect(source).toContain('router.push("/")');
+    expect(source).not.toContain("router.push(`/${result.location.slug}`)");
+  });
+
+  it("only accepts a valid location slug from geolocation", () => {
+    expect(source).toContain("isLocationSlug(result.location.slug)");
   });
 
   it("falls back to the My Weather modal on denial or failure", () => {
@@ -162,5 +167,29 @@ describe("Header — wordmark alignment", () => {
     expect(source).toContain(
       'aria-label="mukoko weather — return to home page"',
     );
+  });
+});
+
+describe("Header — weather map link", () => {
+  it("never defaults to a hardcoded city", () => {
+    expect(source).not.toContain("harare");
+    expect(source).not.toContain('|| "');
+  });
+
+  it("derives the slug from the current location (first path segment or store)", () => {
+    expect(source).toContain(
+      'import { currentLocationSlug, isLocationSlug } from "@/lib/current-slug"',
+    );
+    expect(source).toContain(
+      "const mapSlug = currentLocationSlug(pathname, selectedLocation);",
+    );
+  });
+
+  it("links to /{slug}/map when a location is known, otherwise to /explore", () => {
+    expect(source).toContain(
+      'const mapHref = mapSlug ? `/${mapSlug}/map` : "/explore";',
+    );
+    expect(source).toContain("href={mapHref}");
+    expect(source).toContain("Choose a location for the weather map");
   });
 });

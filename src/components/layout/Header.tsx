@@ -19,6 +19,7 @@ import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { trackEvent } from "@/lib/analytics";
 import { initialsFor, type PublicUser } from "@/lib/user-display";
+import { currentLocationSlug, isLocationSlug } from "@/lib/current-slug";
 
 // Code-split: MyWeatherModal imports LOCATIONS (154 items), ACTIVITIES (20 items),
 // geolocation, router, etc. Lazy-loading prevents this from bloating the initial
@@ -128,11 +129,12 @@ export function Header() {
     };
   }, [notificationsOpen]);
 
-  // Center mobile-nav action: jump straight to the weather for wherever the
-  // user is right now (same GPS → /api/py/geo flow as My Weather's "Use
-  // current location" button, autoCreate included). On denial or failure the
-  // My Weather modal opens instead — its Location tab has search plus a
-  // geolocation retry with proper error copy, so the user is never stranded.
+  // Center mobile-nav action: find where the user is right now (same GPS →
+  // /api/py/geo flow as My Weather's "Use current location" button, autoCreate
+  // included), select it, and land on the home page — the home page IS the
+  // current-location view and refreshes GPS in place, so no slug URL is needed.
+  // On denial or failure the My Weather modal opens instead — its Location tab
+  // has search plus a geolocation retry with proper error copy.
   const handleMyLocation = async () => {
     if (locating) return;
     setLocating(true);
@@ -147,15 +149,16 @@ export function Header() {
       });
       if (
         (result.status === "success" || result.status === "created") &&
-        result.location
+        result.location &&
+        isLocationSlug(result.location.slug)
       ) {
         trackEvent("location_changed", {
-          from: selectedLocation,
+          from: currentLocationSlug(pathname, selectedLocation) ?? "",
           to: result.location.slug,
           method: "geolocation",
         });
         setSelectedLocation(result.location.slug);
-        router.push(`/${result.location.slug}`);
+        router.push("/");
       } else {
         openMyWeather();
       }
@@ -180,6 +183,8 @@ export function Header() {
     !pathname.startsWith("/embed") &&
     !pathname.startsWith("/shamwari");
   const shamwariEnabled = isFeatureEnabled("shamwari_chat");
+  const mapSlug = currentLocationSlug(pathname, selectedLocation);
+  const mapHref = mapSlug ? `/${mapSlug}/map` : "/explore";
 
   return (
     <>
@@ -243,7 +248,11 @@ export function Header() {
                 for map / notifications / account, and My Weather must stay
                 reachable for anonymous desktop users too (mobile keeps its
                 own separate bottom-nav entry, unaffected). */}
-            <button type="button" onClick={openMyWeather} className="weaver">
+            <button
+              type="button"
+              onClick={() => openMyWeather()}
+              className="weaver"
+            >
               My Weather
             </button>
           </nav>
@@ -258,10 +267,16 @@ export function Header() {
               role="toolbar"
               aria-label="Quick actions"
             >
+              {/* Map for the location on screen; with no real location yet,
+                  send the user to Explore to pick one rather than guessing. */}
               <Link
-                href={`/${selectedLocation || "harare"}/map`}
+                href={mapHref}
                 prefetch={false}
-                aria-label="Weather map"
+                aria-label={
+                  mapSlug
+                    ? "Weather map"
+                    : "Choose a location for the weather map"
+                }
                 className="bee"
               >
                 <LayersIcon size={20} className="text-primary-foreground" />
@@ -448,7 +463,7 @@ export function Header() {
             )}
           </Link>
           <button
-            onClick={openMyWeather}
+            onClick={() => openMyWeather()}
             className="relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] text-text-tertiary hover:text-text-secondary active:scale-95"
             aria-label="My Weather settings"
             type="button"
