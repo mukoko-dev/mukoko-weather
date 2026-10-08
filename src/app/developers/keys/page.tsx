@@ -3,22 +3,21 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { requireUser } from "@/lib/auth";
 import { ApiKeysManager } from "./ApiKeysManager";
-
-const BASE_URL = "https://weather.mukoko.com";
+import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "API Keys",
   description:
     "Create and manage API keys for the mukoko weather developer API. The public weather API is free — keys are for attribution and future higher limits.",
   alternates: {
-    canonical: `${BASE_URL}/developers/keys`,
+    canonical: `${SITE_URL}/developers/keys`,
   },
   robots: { index: false, follow: false },
   openGraph: {
     title: "API Keys | mukoko weather",
     description:
       "Create and manage API keys for the mukoko weather developer API.",
-    url: `${BASE_URL}/developers/keys`,
+    url: `${SITE_URL}/developers/keys`,
     type: "website",
     locale: "en",
     siteName: "mukoko weather",

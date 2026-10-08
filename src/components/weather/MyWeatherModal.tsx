@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   useAppStore,
   MAX_SAVED_LOCATIONS,
+  type MyWeatherTab,
   type ThemePreference,
 } from "@/lib/store";
 import {
@@ -36,7 +37,12 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
-import { cn, slugToDisplayName } from "@/lib/utils";
+import {
+  currentLocationSlug,
+  displayNameFromSlug,
+  isLocationSlug,
+} from "@/lib/current-slug";
+import { cn } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { ForecastModel, FORECAST_MODEL_LABELS } from "@/lib/weather";
 import { t } from "@/lib/i18n";
@@ -70,19 +76,40 @@ function MonitorIcon({ size = 20 }: { size?: number }) {
   );
 }
 
-/** Debounce hook — returns the debounced value after delay ms */
+type PendingMethod = "saved" | "geolocation" | "search";
+
+/** A location picked in this session but not yet applied. */
+interface PendingLocation {
+  slug: string;
+  method: PendingMethod;
+}
+
+/**
+ * My Weather modal — location, activities and settings.
+ *
+ * Contract: closing (X, Escape, overlay, the Explore link) CANCELS. It writes
+ * nothing: no location change, no onboarding completion, no navigation. Only
+ * the primary button commits the pending location. Header mounts this
+ * component only while the modal is open, so pending state is discarded on
+ * every close by construction.
+ */
 export function MyWeatherModal() {
   const closeMyWeather = useAppStore((s) => s.closeMyWeather);
-  const myWeatherOpen = useAppStore((s) => s.myWeatherOpen);
   const completeOnboarding = useAppStore((s) => s.completeOnboarding);
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
+  const selectedLocation = useAppStore((s) => s.selectedLocation);
   const router = useRouter();
   const pathname = usePathname();
 
-  const currentSlug = pathname?.replace("/", "") || "harare";
-  const [pendingSlug, setPendingSlug] = useState(currentSlug);
-  const pendingMethodRef = useRef<"saved" | "geolocation" | "search">("saved");
-  const [activeTab, setActiveTab] = useState("saved");
+  // The location on screen — never a hardcoded fallback city.
+  const currentSlug = currentLocationSlug(pathname, selectedLocation);
+
+  const [pending, setPending] = useState<PendingLocation | null>(null);
+  const pendingSlug = pending?.slug ?? currentSlug;
+  const hasPendingChange = pending !== null && pending.slug !== currentSlug;
+  // Open on the tab the opener asked for (e.g. "activities"); default location.
+  const initialTab = useAppStore((s) => s.myWeatherTab);
+  const [activeTab, setActiveTab] = useState<MyWeatherTab>(initialTab);
 
   const [allActivities, setAllActivities] = useState<Activity[]>(ACTIVITIES);
   const [activityCategories, setActivityCategories] =
@@ -122,44 +149,46 @@ export function MyWeatherModal() {
     ]);
   }, []);
 
-  const handleDone = () => {
+  useEffect(() => {
+    trackEvent("modal_opened", { modal: "my-weather" });
+  }, []);
+
+  /** Pick a location as pending. Applied only by the primary button. */
+  const selectLocation = useCallback(
+    (slug: string, method: PendingMethod = "saved") => {
+      if (!isLocationSlug(slug)) return;
+      setPending({ slug, method });
+    },
+    [],
+  );
+
+  /** Close without writing anything. */
+  const handleCancel = () => {
+    closeMyWeather();
+  };
+
+  /** Primary button: commit the pending location, then close. */
+  const handleApply = () => {
+    if (pendingSlug) setSelectedLocation(pendingSlug);
     completeOnboarding();
     closeMyWeather();
-    setSelectedLocation(pendingSlug);
-    if (pendingSlug !== currentSlug) {
+    if (hasPendingChange && pendingSlug) {
       trackEvent("location_changed", {
-        from: currentSlug,
+        from: currentSlug ?? "",
         to: pendingSlug,
-        method: pendingMethodRef.current,
+        method: pending?.method ?? "saved",
       });
       router.push(`/${pendingSlug}`);
     }
   };
 
-  const handleOpenChange = (open: boolean) => {
-    if (open) {
-      setPendingSlug(currentSlug);
-      pendingMethodRef.current = "saved";
-      setActiveTab("saved");
-      trackEvent("modal_opened", { modal: "my-weather" });
-    } else {
-      handleDone();
-    }
-  };
-
-  /** When user selects a location from saved, navigate and close */
-  const handleSelectSavedLocation = useCallback(
-    (slug: string, method: "saved" | "geolocation" | "search" = "saved") => {
-      setPendingSlug(slug);
-      pendingMethodRef.current = method;
-    },
-    [],
-  );
-
-  const locationChanged = pendingSlug !== currentSlug;
-
   return (
-    <Dialog open={myWeatherOpen} onOpenChange={handleOpenChange}>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) handleCancel();
+      }}
+    >
       <DialogContent
         aria-describedby={undefined}
         className="flex h-[100dvh] flex-col p-0 sm:h-auto sm:max-h-[85vh]"
@@ -168,27 +197,29 @@ export function MyWeatherModal() {
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
           <DialogTitle>My Weather</DialogTitle>
-          <Button size="sm" onClick={handleDone}>
-            {locationChanged ? "Apply" : "Done"}
+          <Button size="sm" onClick={handleApply}>
+            {hasPendingChange ? "Apply" : "Done"}
           </Button>
         </div>
 
-        {/* Tabs — Saved locations first, then Activities, then Settings */}
+        {/* Tabs — Location (search + saved) first, then Activities, then Settings */}
         <Tabs
           value={activeTab}
-          onValueChange={setActiveTab}
+          onValueChange={(value) => setActiveTab(value as MyWeatherTab)}
           className="flex min-h-0 flex-1 flex-col"
         >
           <TabsList className="shrink-0">
-            <TabsTrigger value="saved">Saved</TabsTrigger>
+            <TabsTrigger value="location">Location</TabsTrigger>
             <TabsTrigger value="activities">Activities</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="saved">
+          <TabsContent value="location">
             <SavedTab
               pendingSlug={pendingSlug}
-              onSelectLocation={handleSelectSavedLocation}
+              currentSlug={currentSlug}
+              explicitSlug={pending?.slug ?? null}
+              onSelectLocation={selectLocation}
             />
           </TabsContent>
 
@@ -209,17 +240,21 @@ export function MyWeatherModal() {
   );
 }
 
-// ── Saved Locations Tab ─────────────────────────────────────────────────────
+// ── Location Tab (search + saved) ──────────────────────────────────────────
 
 function SavedTab({
   pendingSlug,
+  currentSlug,
+  explicitSlug,
   onSelectLocation,
 }: {
-  pendingSlug: string;
-  onSelectLocation: (
-    slug: string,
-    method?: "saved" | "geolocation" | "search",
-  ) => void;
+  /** Effective selection: the picked location, or the current one. */
+  pendingSlug: string | null;
+  /** The location on screen (first path segment, or the store selection). */
+  currentSlug: string | null;
+  /** Only a location the user actually picked in this session (or null). */
+  explicitSlug: string | null;
+  onSelectLocation: (slug: string, method?: PendingMethod) => void;
 }) {
   const savedLocations = useAppStore((s) => s.savedLocations);
   const locationLabels = useAppStore((s) => s.locationLabels);
@@ -227,6 +262,12 @@ function SavedTab({
   const removeLocation = useAppStore((s) => s.removeLocation);
   const setLocationLabel = useAppStore((s) => s.setLocationLabel);
   const closeMyWeather = useAppStore((s) => s.closeMyWeather);
+  const locationNames = useAppStore((s) => s.locationNames);
+  const rememberLocationName = useAppStore((s) => s.rememberLocationName);
+
+  /** Real name when seen this session, otherwise a readable name from the slug. */
+  const nameFor = (slug: string) =>
+    locationNames[slug] ?? displayNameFromSlug(slug);
 
   const [geoState, setGeoState] = useState<GeoResult | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
@@ -234,23 +275,21 @@ function SavedTab({
   const [editValue, setEditValue] = useState("");
   const editInputRef = useRef<HTMLInputElement>(null);
 
-  // Add location search — shared debounced quick-match search, same as
-  // Explore's instant results, filtered here to exclude already-saved slugs.
-  const [showAdd, setShowAdd] = useState(false);
-  const {
-    query: addQuery,
-    setQuery: setAddQuery,
-    results: addRawResults,
-    loading: addLoading,
-    reset: resetAddSearch,
-  } = useLocationQuickSearch();
-  const addResults = useMemo(
-    () => addRawResults.filter((l) => !savedLocations.includes(l.slug)),
-    [addRawResults, savedLocations],
-  );
-  const addInputRef = useRef<HTMLInputElement>(null);
+  // Location search — always visible. Tapping a result SELECTS it (pending,
+  // applied by the primary button). Saving is a separate explicit action.
+  const { query, setQuery, results, loading } = useLocationQuickSearch();
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const atCap = savedLocations.length >= MAX_SAVED_LOCATIONS;
+
+  // Focus the search on desktop only. On touch devices focusing an input
+  // raises the on-screen keyboard over the list before the user asked for it.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    if (!window.matchMedia("(pointer: fine)").matches) return;
+    const id = window.setTimeout(() => searchInputRef.current?.focus(), 50);
+    return () => window.clearTimeout(id);
+  }, []);
 
   // Focus edit input when editing starts
   useEffect(() => {
@@ -258,14 +297,6 @@ function SavedTab({
       setTimeout(() => editInputRef.current?.focus(), 50);
     }
   }, [editingSlug]);
-
-  // Focus add input when add mode opens
-  useEffect(() => {
-    if (showAdd) {
-      const t = setTimeout(() => addInputRef.current?.focus(), 50);
-      return () => clearTimeout(t);
-    }
-  }, [showAdd]);
 
   const handleGeolocate = useCallback(async () => {
     setGeoLoading(true);
@@ -276,10 +307,11 @@ function SavedTab({
       (result.status === "success" || result.status === "created") &&
       result.location
     ) {
-      saveLocation(result.location.slug);
+      // Selects only — the user decides whether to save it.
+      rememberLocationName(result.location.slug, result.location.name);
       onSelectLocation(result.location.slug, "geolocation");
     }
-  }, [onSelectLocation, saveLocation]);
+  }, [onSelectLocation, rememberLocationName]);
 
   const handleSaveLabel = useCallback(
     (slug: string, value: string) => {
@@ -289,12 +321,99 @@ function SavedTab({
     [setLocationLabel],
   );
 
-  const titleCase = slugToDisplayName;
+  const titleCase = nameFor;
 
   return (
     <div className="flex flex-col gap-2">
-      {/* Geolocation button */}
+      {/* Search — visible immediately when the modal opens */}
       <div className="px-4 pt-3">
+        <div className="relative">
+          <SearchIcon
+            size={14}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary"
+            aria-hidden="true"
+          />
+          <Input
+            ref={searchInputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search for a location..."
+            className="pl-9"
+            aria-label="Search for a location"
+          />
+        </div>
+
+        {loading && (
+          <div
+            className="mt-2 h-10 animate-pulse rounded-[var(--radius-input)] bg-surface-base"
+            role="status"
+            aria-label="Loading"
+          >
+            <span className="sr-only">Loading</span>
+          </div>
+        )}
+        {!loading && query.trim() && results.length === 0 && (
+          <p className="py-2 text-center text-base text-text-tertiary">
+            No results for &ldquo;{query}&rdquo;
+          </p>
+        )}
+        {results.length > 0 && (
+          <ul aria-label="Search results" className="mt-2 space-y-1">
+            {results.map((loc) => {
+              const isSaved = savedLocations.includes(loc.slug);
+              const isSelected = loc.slug === pendingSlug;
+              return (
+                <li key={loc.slug} className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      rememberLocationName(loc.slug, loc.name);
+                      onSelectLocation(loc.slug, "search");
+                    }}
+                    aria-pressed={isSelected}
+                    className={`flex min-h-[var(--touch-target-min)] min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-left text-base text-text-primary transition-colors ${
+                      isSelected ? "bg-primary/10" : "hover:bg-surface-base"
+                    }`}
+                  >
+                    <MapPinIcon
+                      size={14}
+                      className={
+                        isSelected ? "text-primary" : "text-text-tertiary"
+                      }
+                    />
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate">{loc.name}</span>
+                      {loc.province && (
+                        <span className="block truncate text-base text-text-tertiary">
+                          {loc.province}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      rememberLocationName(loc.slug, loc.name);
+                      saveLocation(loc.slug);
+                    }}
+                    disabled={isSaved || atCap}
+                    aria-label={
+                      isSaved ? `${loc.name} is saved` : `Save ${loc.name}`
+                    }
+                    className="shrink-0 min-h-[var(--touch-target-min)] text-primary"
+                  >
+                    {isSaved ? "Saved" : "Save"}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {/* Geolocation — selects the detected location, does not save it */}
+      <div className="px-4">
         <Button
           variant="ghost"
           onClick={handleGeolocate}
@@ -322,28 +441,60 @@ function SavedTab({
         )}
       </div>
 
+      {/* The location on screen, when it is not saved — always selectable */}
+      {currentSlug && !savedLocations.includes(currentSlug) && (
+        <div className="px-4">
+          <p className="mb-1 text-base font-medium text-text-secondary">
+            Current
+          </p>
+          <button
+            type="button"
+            onClick={() => onSelectLocation(currentSlug)}
+            aria-pressed={pendingSlug === currentSlug}
+            className={`flex min-h-[var(--touch-target-min)] w-full items-center gap-3 rounded-[var(--radius-card)] px-3 py-2 text-left text-base text-text-primary transition-colors ${
+              pendingSlug === currentSlug
+                ? "bg-primary/10"
+                : "hover:bg-surface-base"
+            }`}
+          >
+            <MapPinIcon
+              size={14}
+              className={
+                pendingSlug === currentSlug
+                  ? "text-primary"
+                  : "text-text-tertiary"
+              }
+            />
+            <span className="min-w-0 flex-1 truncate font-medium">
+              {nameFor(currentSlug)}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* A picked location that is not saved yet */}
+      {explicitSlug && !savedLocations.includes(explicitSlug) && (
+        <p
+          className="px-4 text-base text-text-secondary"
+          role="status"
+          aria-live="polite"
+        >
+          Selected:{" "}
+          <span className="font-medium">{titleCase(explicitSlug)}</span>
+        </p>
+      )}
+
       {/* Saved locations list */}
-      <div className="px-4">
+      <div className="px-4 pb-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-base font-medium text-text-secondary">
             {savedLocations.length}/{MAX_SAVED_LOCATIONS} saved
           </span>
-          {!showAdd && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowAdd(true)}
-              disabled={atCap}
-              className="text-primary min-h-[var(--touch-target-min)]"
-            >
-              + Add location
-            </Button>
-          )}
         </div>
 
-        {savedLocations.length === 0 && !showAdd && (
-          <p className="py-6 text-center text-base text-text-tertiary">
-            No saved locations yet. Add one or use geolocation above.
+        {savedLocations.length === 0 && (
+          <p className="py-4 text-center text-base text-text-tertiary">
+            No saved locations yet. Search above and tap Save to keep one here.
           </p>
         )}
 
@@ -447,73 +598,6 @@ function SavedTab({
           })}
         </ul>
       </div>
-
-      {/* Add location search */}
-      {showAdd && (
-        <div className="px-4 pb-3">
-          <div className="relative mb-2">
-            <SearchIcon
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary"
-            />
-            <Input
-              ref={addInputRef}
-              value={addQuery}
-              onChange={(e) => setAddQuery(e.target.value)}
-              placeholder="Search locations to add..."
-              className="pl-9"
-              aria-label="Search locations to add"
-            />
-          </div>
-          {addLoading && (
-            <div
-              className="h-10 animate-pulse rounded-[var(--radius-input)] bg-surface-base"
-              role="status"
-              aria-label="Loading"
-            >
-              <span className="sr-only">Loading</span>
-            </div>
-          )}
-          {!addLoading && addQuery.trim() && addResults.length === 0 && (
-            <p className="py-2 text-center text-base text-text-tertiary">
-              No results for &ldquo;{addQuery}&rdquo;
-            </p>
-          )}
-          <ul aria-label="Search results" className="space-y-1">
-            {addResults.map((loc) => (
-              <li key={loc.slug}>
-                <button
-                  onClick={() => {
-                    saveLocation(loc.slug);
-                    resetAddSearch();
-                  }}
-                  className="flex w-full min-h-[var(--touch-target-min)] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base text-text-primary hover:bg-surface-base transition-colors"
-                  type="button"
-                >
-                  <MapPinIcon size={14} className="text-text-tertiary" />
-                  <div className="min-w-0 flex-1 text-left">
-                    <span className="block truncate">{loc.name}</span>
-                    <span className="block text-base text-text-tertiary truncate">
-                      {loc.province}
-                    </span>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setShowAdd(false);
-              resetAddSearch();
-            }}
-            className="mt-1 text-text-tertiary"
-          >
-            Cancel
-          </Button>
-        </div>
-      )}
 
       {/* Explore link */}
       <div className="px-4 pb-3">

@@ -6,17 +6,15 @@ import { getAllCountries } from "@/lib/db";
 import { getFlagEmoji } from "@/lib/countries";
 import { logError } from "@/lib/observability";
 import type { CountryDoc } from "@/lib/db";
+import { SITE_URL } from "@/lib/site";
 
 export const revalidate = 3600;
-
-const BASE_URL = "https://weather.mukoko.com";
-
 export const metadata: Metadata = {
   title: "Browse Weather by Country | mukoko weather",
   description:
     "Explore weather forecasts worldwide — browse by country and region.",
   alternates: {
-    canonical: `${BASE_URL}/explore/country`,
+    canonical: `${SITE_URL}/explore/country`,
   },
   openGraph: {
     title: "Browse Weather by Country | mukoko weather",

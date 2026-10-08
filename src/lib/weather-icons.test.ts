@@ -150,12 +150,12 @@ describe("WeatherIcon mapping", () => {
     expect(weatherIconMatch![0]).toContain("CloudIcon");
   });
 
-  it("has exactly 10 weather icon cases", () => {
+  it("has exactly 12 weather icon cases (10 conditions + moon + cloud-moon)", () => {
     const weatherIconSection = source.slice(
       source.indexOf("function WeatherIcon"),
     );
     const caseMatches = weatherIconSection.match(/case "/g);
-    expect(caseMatches).toHaveLength(10);
+    expect(caseMatches).toHaveLength(12);
   });
 });
 
@@ -263,5 +263,22 @@ describe("Icon components", () => {
     const svgCount = (source.match(/viewBox="0 0 24 24"/g) || []).length;
     // Should be at least as many as exported icons (44 icons + 2 mapper functions)
     expect(svgCount).toBeGreaterThanOrEqual(allExportedIcons.length);
+  });
+});
+
+describe("nightIcon", () => {
+  it("swaps sun-based icons for night versions and leaves the rest", async () => {
+    const { nightIcon } = await import("./weather-icons");
+    expect(nightIcon("sun")).toBe("moon");
+    expect(nightIcon("cloud-sun")).toBe("cloud-moon");
+    expect(nightIcon("cloud-sun-rain")).toBe("cloud-rain");
+    expect(nightIcon("cloud-rain")).toBe("cloud-rain");
+    expect(nightIcon("cloud")).toBe("cloud");
+  });
+
+  it("WeatherIcon renders a moon at night instead of falling back to a cloud", () => {
+    const src = readFileSync(resolve(__dirname, "weather-icons.tsx"), "utf-8");
+    expect(src).toMatch(/case "moon":\s*return <MoonIcon/);
+    expect(src).toContain('case "cloud-moon"');
   });
 });
