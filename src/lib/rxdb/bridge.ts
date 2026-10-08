@@ -86,6 +86,7 @@ interface LegacyState {
   selectedActivities?: string[];
   hasOnboarded?: boolean;
   selectedForecastModel?: string;
+  homeLocation?: string | null;
 }
 
 /**
@@ -176,6 +177,7 @@ async function _doMigrate(): Promise<void> {
     selectedActivities: legacy.selectedActivities ?? [],
     hasOnboarded: legacy.hasOnboarded ?? false,
     selectedForecastModel: legacy.selectedForecastModel ?? "best_match",
+    homeLocation: legacy.homeLocation ?? null,
     updatedAt: Date.now(),
   });
 
@@ -260,6 +262,7 @@ async function _doInitBridge(callbacks: BridgeCallbacks): Promise<void> {
         selectedActivities: doc.selectedActivities,
         hasOnboarded: doc.hasOnboarded,
         selectedForecastModel: doc.selectedForecastModel,
+        homeLocation: doc.homeLocation,
       });
     }
 
@@ -276,6 +279,7 @@ async function _doInitBridge(callbacks: BridgeCallbacks): Promise<void> {
           selectedActivities: rxDoc.selectedActivities,
           hasOnboarded: rxDoc.hasOnboarded,
           selectedForecastModel: rxDoc.selectedForecastModel,
+          homeLocation: rxDoc.homeLocation,
         });
       } catch {
         // never let a subscription callback bubble into RxDB internals
@@ -327,6 +331,7 @@ export async function updatePreferences(
         selectedActivities: [],
         hasOnboarded: false,
         selectedForecastModel: "best_match",
+        homeLocation: null,
         ...updates,
         updatedAt: Date.now(),
       });

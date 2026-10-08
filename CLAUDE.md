@@ -96,6 +96,7 @@ mukoko-weather/
 │   │   │       ├── MapDashboard.tsx     # Client: full-viewport Leaflet map + layer switcher
 │   │   │       └── loading.tsx          # Full-viewport skeleton
 │   │   ├── explore/                  # Browse-only location/tag/country exploration
+│   │   ├── locations/                # iOS-style Locations list: My Location + saved place weather cards, Home location (noindex)
 │   │   │   ├── page.tsx              # Explore page (ISR 1h, category + country browse)
 │   │   │   ├── loading.tsx           # Explore loading skeleton
 │   │   │   ├── explore.test.ts       # Explore page tests
@@ -580,6 +581,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/[location]/map` — full-viewport interactive weather map with layer switcher (precipitation, cloud, temperature, wind)
 - `/shamwari` — Shamwari AI chat (full-viewport, Claude app style, input above mobile nav). **Paused** — `notFound()`s while `FLAGS.shamwari_chat` is `false` (see Feature Flags section)
 - `/explore` — browse locations by category and country (ISR 1h)
+- `/locations` — iOS Weather-style Locations list (noindex): current location first ("My Location"), then saved places as live weather cards (sky by condition, local time, H/L). The ⋯ menu sets Home or removes a place; the search bar opens My Weather's Location tab
 - `/explore/[tag]` — browse locations filtered by tag (city, farming, mining, tourism, etc.)
 - `/explore/country` — browse locations by country index
 - `/explore/country/[code]` — browse locations in a specific country (ISO alpha-2 code)
@@ -852,6 +854,8 @@ weather.stationObservations → QC pipeline → weather.observations
 - `toggleActivity(id)` — adds/removes an activity selection, queues device sync
 - `selectedForecastModel: string` — Windy-style forecast model preference (Open-Meteo model id or `"best_match"`, default `"best_match"`), persisted (RxDB) + device-synced. Set via the "Forecast model" radio group in the My Weather modal Settings tab; passed by `fetchWeather()` and highlighted in `ModelComparisonChart`
 - `setSelectedForecastModel(model)` — updates the model preference, persists to RxDB
+- `homeLocation: string | null` — the Home location slug (`/locations` ⌂), persisted in the RxDB `preferences` doc (schema v2). Device-local for now: the Python device-profile sync does not carry it yet, and the pull handler keeps the local value
+- `setHomeLocation(slug | null)` — set or clear the Home location (empty string clears), persists to RxDB
 - `savedLocations: string[]` — saved location slugs (up to `MAX_SAVED_LOCATIONS = 10`), persisted to localStorage, synced to server
 - `saveLocation(slug)` — adds a location to saved list (no-op if already saved or at cap), queues device sync
 - `removeLocation(slug)` — removes a location from saved list, queues device sync
@@ -910,6 +914,8 @@ Each activity category has a dedicated mineral color, defined as CSS custom prop
 - **Casual** → Primary (Cobalt brand color)
 
 Category styles are centralized in `CATEGORY_STYLES` (`src/lib/activities.ts`) with static Tailwind classes for `bg`, `border`, `text`, and `badge` per category. Each mineral color has a corresponding `--mineral-*-fg` foreground token for badge text contrast.
+
+**Condition sky (Locations list):** the `.oryx` card surface and its `.oryx-clear-day`, `.oryx-clear-night`, `.oryx-cloudy`, `.oryx-rain`, `.oryx-storm`, `.oryx-fog` and `.oryx-snow` modifiers paint each card's sky from `--oryx-*-top` / `--oryx-*-bottom` tokens in `globals.css` (light and `[data-theme="dark"]`). Text on the sky is always `--color-oryx-fg` (white). Every stop must stay at 4.5:1 or better against it; `locations.test.ts` enforces this. `cardTheme()` in `src/lib/location-card.ts` picks the class from the WMO code and day/night.
 
 **Severity / Status Color System:**
 For weather alerts, status indicators, and severity levels, use the semantic severity tokens defined in `globals.css`:

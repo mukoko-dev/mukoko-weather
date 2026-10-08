@@ -22,6 +22,7 @@ interface Props {
  *  /explore, /shamwari, etc. as weather locations when extracting from pathname. */
 const KNOWN_ROUTES = new Set([
   "explore",
+  "locations",
   "shamwari",
   "history",
   "aviation",

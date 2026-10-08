@@ -734,6 +734,47 @@ body {
 /* Update once here, every consumer picks it up. Composition over chains. */
 /* ====================================================================== */
 
+/* Oryx location-list cards (iOS Weather-style). Condition-based sky stops
+   for the Locations list. Every stop keeps WHITE text (--color-oryx-fg) at or
+   above 4.5:1 WCAG contrast, so no scrim is needed; dark variants are deeper
+   still. Consumed only by the .oryx-* fauna classes below. */
+:root {
+  --color-oryx-fg: #ffffff;
+  --oryx-star: rgb(255 255 255 / 0.85);
+  --oryx-clear-day-top: #2b6cb0;
+  --oryx-clear-day-bottom: #3576b8;
+  --oryx-clear-night-top: #0b1a33;
+  --oryx-clear-night-bottom: #1c3560;
+  --oryx-cloudy-top: #4a5563;
+  --oryx-cloudy-bottom: #5c6776;
+  --oryx-rain-top: #2f3f52;
+  --oryx-rain-bottom: #3d5068;
+  --oryx-storm-top: #2b2536;
+  --oryx-storm-bottom: #403650;
+  --oryx-fog-top: #5b6168;
+  --oryx-fog-bottom: #6b7178;
+  --oryx-snow-top: #4b6079;
+  --oryx-snow-bottom: #5f7691;
+}
+
+[data-theme="dark"] {
+  --oryx-star: rgb(255 255 255 / 0.7);
+  --oryx-clear-day-top: #245c9a;
+  --oryx-clear-day-bottom: #2c69a8;
+  --oryx-clear-night-top: #060f1f;
+  --oryx-clear-night-bottom: #132747;
+  --oryx-cloudy-top: #3d4653;
+  --oryx-cloudy-bottom: #4a5462;
+  --oryx-rain-top: #263444;
+  --oryx-rain-bottom: #33455b;
+  --oryx-storm-top: #221d2d;
+  --oryx-storm-bottom: #352d44;
+  --oryx-fog-top: #4c5258;
+  --oryx-fog-bottom: #585e65;
+  --oryx-snow-top: #3e5169;
+  --oryx-snow-bottom: #4d6480;
+}
+
 @layer components {
   /* ── Buttons ─────────────────────────────────────────────────────────── */
 
@@ -773,6 +814,54 @@ body {
            transition-all hover:border-text-tertiary/40 hover:bg-surface-card hover:text-text-primary
            disabled:opacity-50 disabled:pointer-events-none
            min-h-[var(--touch-target-min)];
+  }
+
+  /* .oryx — location-list card (iOS Weather-style). Large rounded surface,
+     white text, condition sky painted by one .oryx-* modifier. The modifier is
+     chosen by cardTheme() in src/lib/location-card.ts (literal names only). */
+  .oryx {
+    position: relative;
+    overflow: hidden;
+    color: var(--color-oryx-fg);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-sm);
+  }
+  .oryx-clear-day {
+    background: linear-gradient(
+      165deg,
+      var(--oryx-clear-day-top),
+      var(--oryx-clear-day-bottom)
+    );
+  }
+  .oryx-clear-night {
+    background-color: var(--oryx-clear-night-top);
+    background-image:
+      radial-gradient(1px 1px at 12% 22%, var(--oryx-star) 50%, transparent 51%),
+      radial-gradient(1px 1px at 58% 12%, var(--oryx-star) 50%, transparent 51%),
+      radial-gradient(1.5px 1.5px at 84% 46%, var(--oryx-star) 50%, transparent 51%),
+      radial-gradient(1px 1px at 30% 70%, var(--oryx-star) 50%, transparent 51%),
+      radial-gradient(1px 1px at 72% 84%, var(--oryx-star) 50%, transparent 51%),
+      radial-gradient(1px 1px at 44% 40%, var(--oryx-star) 50%, transparent 51%),
+      linear-gradient(170deg, var(--oryx-clear-night-top), var(--oryx-clear-night-bottom));
+  }
+  .oryx-cloudy {
+    background: linear-gradient(
+      165deg,
+      var(--oryx-cloudy-top),
+      var(--oryx-cloudy-bottom)
+    );
+  }
+  .oryx-rain {
+    background: linear-gradient(165deg, var(--oryx-rain-top), var(--oryx-rain-bottom));
+  }
+  .oryx-storm {
+    background: linear-gradient(165deg, var(--oryx-storm-top), var(--oryx-storm-bottom));
+  }
+  .oryx-fog {
+    background: linear-gradient(165deg, var(--oryx-fog-top), var(--oryx-fog-bottom));
+  }
+  .oryx-snow {
+    background: linear-gradient(165deg, var(--oryx-snow-top), var(--oryx-snow-bottom));
   }
 
   /* .dik-dik — small inline control (breadcrumb link, footer icon, attribution
