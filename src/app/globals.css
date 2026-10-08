@@ -1525,3 +1525,251 @@ body {
     --kori-fg: var(--plate-snow-fg);
   }
 }
+
+/* ===== Weather sky palette (redesign/weather-colours) =====
+   Real-weather sky colours for the animated backdrop + loading scene: blue
+   graded to a paler horizon on a clear day, deep navy at night, flat greys
+   when overcast, blue-grey rain, charcoal storms, pale grey fog, ochre haze,
+   grey-white snow, warm dawn/dusk horizons. Mirrors
+   src/lib/weather-scenes/palette.ts (the WebGL palette) exactly —
+   palette.test.ts fails if they drift. Dark theme = the same sky dimmed
+   toward black (darkThemeSky), so it never glares against the dark UI.
+   Brand minerals are deliberately not used as sky colours. */
+:root {
+  --weather-sky-clear-day-top: #2f6fc0;
+  --weather-sky-clear-day-horizon: #a9cdee;
+  --weather-sky-clear-night-top: #0a1530;
+  --weather-sky-clear-night-horizon: #1c2c52;
+  --weather-sky-partly-cloudy-day-top: #3b78c4;
+  --weather-sky-partly-cloudy-day-horizon: #b3d2ee;
+  --weather-sky-partly-cloudy-night-top: #0e1a36;
+  --weather-sky-partly-cloudy-night-horizon: #26365a;
+  --weather-sky-cloudy-day-top: #8d959e;
+  --weather-sky-cloudy-day-horizon: #bcc2c8;
+  --weather-sky-cloudy-night-top: #22262c;
+  --weather-sky-cloudy-night-horizon: #353a41;
+  --weather-sky-rain-day-top: #4f5e70;
+  --weather-sky-rain-day-horizon: #8794a3;
+  --weather-sky-rain-night-top: #151b24;
+  --weather-sky-rain-night-horizon: #262f3b;
+  --weather-sky-thunderstorm-day-top: #2a2f38;
+  --weather-sky-thunderstorm-day-horizon: #4a515c;
+  --weather-sky-thunderstorm-night-top: #0c0e13;
+  --weather-sky-thunderstorm-night-horizon: #1d2129;
+  --weather-sky-fog-day-top: #b9bcbf;
+  --weather-sky-fog-day-horizon: #d6d8d9;
+  --weather-sky-fog-night-top: #2c2e31;
+  --weather-sky-fog-night-horizon: #3e4043;
+  --weather-sky-haze-day-top: #b39c76;
+  --weather-sky-haze-day-horizon: #d9c49c;
+  --weather-sky-haze-night-top: #2e2619;
+  --weather-sky-haze-night-horizon: #4a3d29;
+  --weather-sky-snow-day-top: #c4cad1;
+  --weather-sky-snow-day-horizon: #e4e8ec;
+  --weather-sky-snow-night-top: #1f2530;
+  --weather-sky-snow-night-horizon: #343c49;
+  --weather-sky-windy-day-top: #4d82c2;
+  --weather-sky-windy-day-horizon: #b9d3ea;
+  --weather-sky-windy-night-top: #101a30;
+  --weather-sky-windy-night-horizon: #26324c;
+  --weather-sky-dawn-top: #4a6aa8;
+  --weather-sky-dawn-horizon: #f2a37a;
+  --weather-sky-dusk-top: #3b4a86;
+  --weather-sky-dusk-horizon: #e8857a;
+}
+
+[data-theme="dark"] {
+  --weather-sky-clear-day-top: #183860;
+  --weather-sky-clear-day-horizon: #556777;
+  --weather-sky-clear-night-top: #050b18;
+  --weather-sky-clear-night-horizon: #0e1629;
+  --weather-sky-partly-cloudy-day-top: #1e3c62;
+  --weather-sky-partly-cloudy-day-horizon: #5a6977;
+  --weather-sky-partly-cloudy-night-top: #070d1b;
+  --weather-sky-partly-cloudy-night-horizon: #131b2d;
+  --weather-sky-cloudy-day-top: #474b4f;
+  --weather-sky-cloudy-day-horizon: #5e6164;
+  --weather-sky-cloudy-night-top: #111316;
+  --weather-sky-cloudy-night-horizon: #1b1d21;
+  --weather-sky-rain-day-top: #282f38;
+  --weather-sky-rain-day-horizon: #444a52;
+  --weather-sky-rain-night-top: #0b0e12;
+  --weather-sky-rain-night-horizon: #13181e;
+  --weather-sky-thunderstorm-day-top: #15181c;
+  --weather-sky-thunderstorm-day-horizon: #25292e;
+  --weather-sky-thunderstorm-night-top: #06070a;
+  --weather-sky-thunderstorm-night-horizon: #0f1115;
+  --weather-sky-fog-day-top: #5d5e60;
+  --weather-sky-fog-day-horizon: #6b6c6d;
+  --weather-sky-fog-night-top: #161719;
+  --weather-sky-fog-night-horizon: #1f2022;
+  --weather-sky-haze-day-top: #5a4e3b;
+  --weather-sky-haze-day-horizon: #6d624e;
+  --weather-sky-haze-night-top: #17130d;
+  --weather-sky-haze-night-horizon: #251f15;
+  --weather-sky-snow-day-top: #626569;
+  --weather-sky-snow-day-horizon: #727476;
+  --weather-sky-snow-night-top: #101318;
+  --weather-sky-snow-night-horizon: #1a1e25;
+  --weather-sky-windy-day-top: #274161;
+  --weather-sky-windy-day-horizon: #5d6a75;
+  --weather-sky-windy-night-top: #080d18;
+  --weather-sky-windy-night-horizon: #131926;
+  --weather-sky-dawn-top: #253554;
+  --weather-sky-dawn-horizon: #79523d;
+  --weather-sky-dusk-top: #1e2543;
+  --weather-sky-dusk-horizon: #74433d;
+}
+
+@theme inline {
+  --color-weather-sky-clear-day-top: var(--weather-sky-clear-day-top);
+  --color-weather-sky-clear-day-horizon: var(--weather-sky-clear-day-horizon);
+  --color-weather-sky-clear-night-top: var(--weather-sky-clear-night-top);
+  --color-weather-sky-clear-night-horizon: var(--weather-sky-clear-night-horizon);
+  --color-weather-sky-partly-cloudy-day-top: var(--weather-sky-partly-cloudy-day-top);
+  --color-weather-sky-partly-cloudy-day-horizon: var(--weather-sky-partly-cloudy-day-horizon);
+  --color-weather-sky-partly-cloudy-night-top: var(--weather-sky-partly-cloudy-night-top);
+  --color-weather-sky-partly-cloudy-night-horizon: var(--weather-sky-partly-cloudy-night-horizon);
+  --color-weather-sky-cloudy-day-top: var(--weather-sky-cloudy-day-top);
+  --color-weather-sky-cloudy-day-horizon: var(--weather-sky-cloudy-day-horizon);
+  --color-weather-sky-cloudy-night-top: var(--weather-sky-cloudy-night-top);
+  --color-weather-sky-cloudy-night-horizon: var(--weather-sky-cloudy-night-horizon);
+  --color-weather-sky-rain-day-top: var(--weather-sky-rain-day-top);
+  --color-weather-sky-rain-day-horizon: var(--weather-sky-rain-day-horizon);
+  --color-weather-sky-rain-night-top: var(--weather-sky-rain-night-top);
+  --color-weather-sky-rain-night-horizon: var(--weather-sky-rain-night-horizon);
+  --color-weather-sky-thunderstorm-day-top: var(--weather-sky-thunderstorm-day-top);
+  --color-weather-sky-thunderstorm-day-horizon: var(--weather-sky-thunderstorm-day-horizon);
+  --color-weather-sky-thunderstorm-night-top: var(--weather-sky-thunderstorm-night-top);
+  --color-weather-sky-thunderstorm-night-horizon: var(--weather-sky-thunderstorm-night-horizon);
+  --color-weather-sky-fog-day-top: var(--weather-sky-fog-day-top);
+  --color-weather-sky-fog-day-horizon: var(--weather-sky-fog-day-horizon);
+  --color-weather-sky-fog-night-top: var(--weather-sky-fog-night-top);
+  --color-weather-sky-fog-night-horizon: var(--weather-sky-fog-night-horizon);
+  --color-weather-sky-haze-day-top: var(--weather-sky-haze-day-top);
+  --color-weather-sky-haze-day-horizon: var(--weather-sky-haze-day-horizon);
+  --color-weather-sky-haze-night-top: var(--weather-sky-haze-night-top);
+  --color-weather-sky-haze-night-horizon: var(--weather-sky-haze-night-horizon);
+  --color-weather-sky-snow-day-top: var(--weather-sky-snow-day-top);
+  --color-weather-sky-snow-day-horizon: var(--weather-sky-snow-day-horizon);
+  --color-weather-sky-snow-night-top: var(--weather-sky-snow-night-top);
+  --color-weather-sky-snow-night-horizon: var(--weather-sky-snow-night-horizon);
+  --color-weather-sky-windy-day-top: var(--weather-sky-windy-day-top);
+  --color-weather-sky-windy-day-horizon: var(--weather-sky-windy-day-horizon);
+  --color-weather-sky-windy-night-top: var(--weather-sky-windy-night-top);
+  --color-weather-sky-windy-night-horizon: var(--weather-sky-windy-night-horizon);
+  --color-weather-sky-dawn-top: var(--weather-sky-dawn-top);
+  --color-weather-sky-dawn-horizon: var(--weather-sky-dawn-horizon);
+  --color-weather-sky-dusk-top: var(--weather-sky-dusk-top);
+  --color-weather-sky-dusk-horizon: var(--weather-sky-dusk-horizon);
+}
+
+@layer components {
+  /* .hornbill-sky — fauna: the hornbill, loud herald of the weather. The
+     real-weather sky gradient (zenith → horizon). One literal modifier per
+     scene + day/night sets --hornbill-top/--hornbill-horizon; .hornbill-sky-dawn
+     / -dusk (applied after it) swap in the twilight horizon. This is ALSO the
+     reduced-motion and WebGL-failure fallback, so it is the same sky the
+     Three.js layer is drawn over. */
+  .hornbill-sky {
+    --hornbill-top: var(--weather-sky-partly-cloudy-day-top);
+    --hornbill-horizon: var(--weather-sky-partly-cloudy-day-horizon);
+    background: linear-gradient(
+      180deg,
+      var(--hornbill-top) 0%,
+      var(--hornbill-horizon) 60%
+    );
+  }
+  .hornbill-sky-clear-day {
+    --hornbill-top: var(--weather-sky-clear-day-top);
+    --hornbill-horizon: var(--weather-sky-clear-day-horizon);
+  }
+  .hornbill-sky-clear-night {
+    --hornbill-top: var(--weather-sky-clear-night-top);
+    --hornbill-horizon: var(--weather-sky-clear-night-horizon);
+  }
+  .hornbill-sky-partly-cloudy-day {
+    --hornbill-top: var(--weather-sky-partly-cloudy-day-top);
+    --hornbill-horizon: var(--weather-sky-partly-cloudy-day-horizon);
+  }
+  .hornbill-sky-partly-cloudy-night {
+    --hornbill-top: var(--weather-sky-partly-cloudy-night-top);
+    --hornbill-horizon: var(--weather-sky-partly-cloudy-night-horizon);
+  }
+  .hornbill-sky-cloudy-day {
+    --hornbill-top: var(--weather-sky-cloudy-day-top);
+    --hornbill-horizon: var(--weather-sky-cloudy-day-horizon);
+  }
+  .hornbill-sky-cloudy-night {
+    --hornbill-top: var(--weather-sky-cloudy-night-top);
+    --hornbill-horizon: var(--weather-sky-cloudy-night-horizon);
+  }
+  .hornbill-sky-rain-day {
+    --hornbill-top: var(--weather-sky-rain-day-top);
+    --hornbill-horizon: var(--weather-sky-rain-day-horizon);
+  }
+  .hornbill-sky-rain-night {
+    --hornbill-top: var(--weather-sky-rain-night-top);
+    --hornbill-horizon: var(--weather-sky-rain-night-horizon);
+  }
+  .hornbill-sky-thunderstorm-day {
+    --hornbill-top: var(--weather-sky-thunderstorm-day-top);
+    --hornbill-horizon: var(--weather-sky-thunderstorm-day-horizon);
+  }
+  .hornbill-sky-thunderstorm-night {
+    --hornbill-top: var(--weather-sky-thunderstorm-night-top);
+    --hornbill-horizon: var(--weather-sky-thunderstorm-night-horizon);
+  }
+  .hornbill-sky-fog-day {
+    --hornbill-top: var(--weather-sky-fog-day-top);
+    --hornbill-horizon: var(--weather-sky-fog-day-horizon);
+  }
+  .hornbill-sky-fog-night {
+    --hornbill-top: var(--weather-sky-fog-night-top);
+    --hornbill-horizon: var(--weather-sky-fog-night-horizon);
+  }
+  .hornbill-sky-haze-day {
+    --hornbill-top: var(--weather-sky-haze-day-top);
+    --hornbill-horizon: var(--weather-sky-haze-day-horizon);
+  }
+  .hornbill-sky-haze-night {
+    --hornbill-top: var(--weather-sky-haze-night-top);
+    --hornbill-horizon: var(--weather-sky-haze-night-horizon);
+  }
+  .hornbill-sky-snow-day {
+    --hornbill-top: var(--weather-sky-snow-day-top);
+    --hornbill-horizon: var(--weather-sky-snow-day-horizon);
+  }
+  .hornbill-sky-snow-night {
+    --hornbill-top: var(--weather-sky-snow-night-top);
+    --hornbill-horizon: var(--weather-sky-snow-night-horizon);
+  }
+  .hornbill-sky-windy-day {
+    --hornbill-top: var(--weather-sky-windy-day-top);
+    --hornbill-horizon: var(--weather-sky-windy-day-horizon);
+  }
+  .hornbill-sky-windy-night {
+    --hornbill-top: var(--weather-sky-windy-night-top);
+    --hornbill-horizon: var(--weather-sky-windy-night-horizon);
+  }
+  .hornbill-sky-dawn {
+    --hornbill-top: var(--weather-sky-dawn-top);
+    --hornbill-horizon: var(--weather-sky-dawn-horizon);
+  }
+  .hornbill-sky-dusk {
+    --hornbill-top: var(--weather-sky-dusk-top);
+    --hornbill-horizon: var(--weather-sky-dusk-horizon);
+  }
+  /* .hornbill-veil — readability veil over the sky behind the text that sits
+     directly on it (header + breadcrumb). The surface colour at 85% keeps
+     --color-text-tertiary at WCAG 4.5:1 over every sky in both themes
+     (asserted in palette.test.ts), then fades out so the sky shows below. */
+  .hornbill-veil {
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-surface-card) 85%, transparent) 0,
+      color-mix(in srgb, var(--color-surface-card) 85%, transparent) 7.5rem,
+      transparent 16rem
+    );
+  }
+}

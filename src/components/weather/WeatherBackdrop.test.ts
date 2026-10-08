@@ -73,11 +73,12 @@ describe("WeatherBackdrop — reduced motion + resilience", () => {
 
   it("only mounts the Three.js container when motion is allowed", () => {
     expect(source).toContain("{animate && (");
-    expect(source).toContain("<div ref={containerRef} className=");
+    expect(source).toContain("ref={containerRef}");
   });
 
-  it("always paints a static mineral gradient as the fallback", () => {
-    expect(source).toContain("weaver-sky");
+  it("always paints the static real-weather sky gradient as the fallback", () => {
+    // Same palette as the Three.js layer (palette.ts ↔ --weather-sky-*).
+    expect(source).toContain("skyClassName(sceneType, isDay, phase)");
   });
 
   it("catches scene creation failures so the card never breaks", () => {
@@ -95,8 +96,8 @@ describe("WeatherBackdrop — accessibility + layout", () => {
     expect(source).toContain("absolute inset-0");
   });
 
-  it("applies a readability scrim over the animation", () => {
-    expect(source).toContain("weaver-scrim");
+  it("applies a readability veil over the sky behind header/breadcrumb text", () => {
+    expect(source).toContain("hornbill-veil");
   });
 
   it("uses only token-backed gradient classes (no hardcoded hex)", () => {
@@ -105,30 +106,30 @@ describe("WeatherBackdrop — accessibility + layout", () => {
   });
 });
 
-describe("WeatherBackdrop — scene mapping", () => {
-  const sceneClasses = [
-    "weaver-sky-clear-day",
-    "weaver-sky-clear-night",
-    "weaver-sky-cloudy",
-    "weaver-sky-rain",
-    "weaver-sky-thunderstorm",
-    "weaver-sky-snow",
-    "weaver-sky-fog",
-    "weaver-sky-windy",
-  ];
+describe("WeatherBackdrop — scene mapping + twilight", () => {
+  it("resolves sky classes from the shared palette, not a local switch", () => {
+    expect(source).toContain("skyClassName");
+    expect(source).not.toContain("weaver-sky");
+  });
 
-  it("maps every scene type to a literal gradient class", () => {
-    for (const cls of sceneClasses) {
-      expect(source).toContain(cls);
-    }
+  it("derives a dawn/dusk phase from the location clock and passes it on", () => {
+    expect(source).toContain("skyPhase(isDay, currentTime, sunrise, sunset)");
+    expect(source).toContain("phase,");
+  });
+
+  it("restarts the scene when the phase changes", () => {
+    expect(source).toContain(
+      "[animate, isMobile, isDay, phase, sceneType, windSpeed]",
+    );
   });
 });
 
 describe("WeatherBackdrop — subdued behind the sky plate", () => {
   it("lowers the sky and particle layers so the hero plate reads as the hero", () => {
-    expect(source).toContain("absolute inset-0 opacity-60 weaver-sky");
+    expect(source).toContain("absolute inset-0 opacity-80 ${skyClassName(");
+    // Particles dim further in dark theme, like the dark-theme sky tokens.
     expect(source).toContain(
-      'ref={containerRef} className="absolute inset-0 opacity-60"',
+      'className="absolute inset-0 opacity-75 dark:opacity-40"',
     );
   });
 
