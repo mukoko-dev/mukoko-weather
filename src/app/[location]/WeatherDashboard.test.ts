@@ -218,3 +218,106 @@ describe("WeatherDashboard — weather scene caching", () => {
     expect(source).toContain("useEffect");
   });
 });
+
+describe("WeatherDashboard — layout control placement (bottom of page)", () => {
+  const customiseIdx = () =>
+    source.indexOf('aria-label="Customise section layout"');
+
+  it("renders the Customise layout button after the sortable sections grid", () => {
+    const gridEnd = source.indexOf("</DndContext>");
+    expect(gridEnd).toBeGreaterThan(-1);
+    expect(customiseIdx()).toBeGreaterThan(gridEnd);
+  });
+
+  it("renders it before the footer, at the bottom of main", () => {
+    const mainEnd = source.indexOf("</main>");
+    expect(customiseIdx()).toBeGreaterThan(-1);
+    expect(customiseIdx()).toBeLessThan(mainEnd);
+    expect(mainEnd).toBeLessThan(source.indexOf("<Footer />"));
+  });
+
+  it("uses the .impala-sm fauna button, centred", () => {
+    const block = source.slice(customiseIdx() - 200, customiseIdx() + 40);
+    expect(block).toContain('className="impala-sm"');
+    expect(source).toMatch(/mt-8 flex justify-center/);
+  });
+
+  it("keeps only the clock in the header row (no layout button there)", () => {
+    const clockIdx = source.indexOf("<LiveClock />");
+    const firstOpen = source.indexOf("setReordering(true)");
+    expect(clockIdx).toBeGreaterThan(-1);
+    // The only setReordering(true) trigger lives below the grid, never beside the clock.
+    expect(firstOpen).toBeGreaterThan(source.indexOf("</DndContext>"));
+    const clockBlock = source.slice(clockIdx - 200, clockIdx + 40);
+    expect(clockBlock).not.toContain("Customise");
+  });
+
+  it("hides the bottom trigger while reordering so the floating Done takes over", () => {
+    expect(source).toMatch(/\{!reordering && \(/);
+  });
+});
+
+describe("WeatherDashboard — floating Done pill (reorder mode)", () => {
+  it("renders Done only while reordering and it resets reorder state", () => {
+    expect(source).toMatch(/\{reordering && \(/);
+    expect(source).toMatch(
+      /onClick=\{\(\) => setReordering\(false\)\}\s*className="kudu-sm pointer-events-auto shadow-lg"/,
+    );
+  });
+
+  it("is fixed bottom-centre above the mobile nav and drops to bottom-6 on sm+", () => {
+    expect(source).toContain("fixed inset-x-0");
+    expect(source).toContain("bottom-[var(--mobile-nav-clearance)]");
+    expect(source).toContain("sm:bottom-6");
+    expect(source).toContain("justify-center");
+  });
+
+  it("sits above content but below modals (z-30 < Radix z-50)", () => {
+    expect(source).toContain("z-30");
+    expect(source).not.toMatch(/fixed[^"]*\bz-(50|60)\b/);
+  });
+
+  it("announces reorder mode through an always-mounted polite status region", () => {
+    expect(source).toContain('role="status"');
+    expect(source).toContain('aria-live="polite"');
+    expect(source).toContain("Reorder mode on: drag sections, then press Done");
+  });
+
+  it("does not change the reorder logic (handleDragEnd + DraggableSection wiring intact)", () => {
+    expect(source).toContain("onDragEnd={handleDragEnd}");
+    expect(source).toContain("reordering={reordering}");
+  });
+});
+
+describe("WeatherDashboard — mobile nav clearance and touch targets", () => {
+  it("main bottom padding uses the nav-clearance token instead of a fixed pb-20", () => {
+    expect(source).toContain("pb-[var(--mobile-nav-clearance)]");
+    expect(source).not.toMatch(/\bpb-20\b/);
+  });
+
+  it("inline breadcrumb Home link carries the .dik-dik touch-target class", () => {
+    const homeIdx = source.indexOf("href={BASE_URL}");
+    expect(homeIdx).toBeGreaterThan(-1);
+    expect(source.slice(homeIdx, homeIdx + 200)).toContain("dik-dik");
+  });
+});
+
+describe("globals.css — touch-target and nav-clearance tokens", () => {
+  const css = readFileSync(resolve(__dirname, "../globals.css"), "utf-8");
+
+  it("defines the mobile nav clearance token from the nav inset and height", () => {
+    expect(css).toContain("--mobile-nav-clearance:");
+    expect(css).toContain("env(safe-area-inset-bottom");
+    expect(css).toContain("--mobile-nav-inset:");
+    expect(css).toContain("--mobile-nav-height:");
+  });
+
+  it("defines .dik-dik to reach the touch-target minimum on coarse pointers only", () => {
+    const start = css.indexOf(".dik-dik {");
+    expect(start).toBeGreaterThan(-1);
+    const rule = css.slice(start, start + 400);
+    expect(css).toMatch(/@media \(pointer: coarse\)\s*\{\s*\.dik-dik/);
+    expect(rule).toContain("min-width: var(--touch-target-min)");
+    expect(rule).toContain("min-height: var(--touch-target-min)");
+  });
+});
