@@ -608,3 +608,34 @@ def check_rate_limit(ip: str, action: str, max_requests: int, window_seconds: in
     count = result.get("count", 1) if result else 1
     allowed = count <= max_requests
     return {"allowed": allowed, "remaining": max(0, max_requests - count)}
+
+
+def enforce_rate_limit(
+    request: Request | None,
+    action: str,
+    max_requests: int,
+    window_seconds: int,
+    *,
+    require_ip: bool = True,
+    detail: str | None = None,
+) -> str:
+    """Resolve the caller's IP, apply ``check_rate_limit``, raise 429 when over the limit.
+
+    Returns the IP used for the bucket. A missing IP is a 400 when
+    ``require_ip`` is True; otherwise the shared ``"unknown"`` bucket is used.
+    Inherits ``check_rate_limit``'s fail-open behaviour on DB errors.
+    """
+    ip = get_client_ip(request) if request is not None else None
+    if not ip:
+        if require_ip:
+            raise HTTPException(status_code=400, detail="Could not determine IP")
+        ip = "unknown"
+    rate = check_rate_limit(ip, action, max_requests, window_seconds)
+    if not rate["allowed"]:
+        raise HTTPException(status_code=429, detail=detail or "Rate limit exceeded. Try again later.")
+    return ip
+
+
+def is_valid_coords(lat: float, lon: float) -> bool:
+    """True for finite WGS 84 coordinates (NaN is rejected by the chained comparisons)."""
+    return -90 <= lat <= 90 and -180 <= lon <= 180

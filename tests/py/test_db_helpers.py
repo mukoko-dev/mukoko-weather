@@ -6,14 +6,17 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from py._db import (
+    enforce_rate_limit,
     get_client_ip,
     check_rate_limit,
     filter_known_activities,
     ttl_filter,
     ttl_find_one,
     ttl_upsert,
+    is_valid_coords,
 )
 
 
@@ -366,3 +369,88 @@ class TestTtlUpsert:
         coll.update_one.side_effect = RuntimeError("write failed")
         with pytest.raises(RuntimeError):
             ttl_upsert(coll, {"_id": "k"}, {"_id": "k"}, ttl_seconds=60)
+
+# enforce_rate_limit — shared IP resolve + limiter + 429 for every endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestEnforceRateLimit:
+    def test_allowed_returns_resolved_ip(self, mock_request):
+        req = mock_request(ip="10.0.0.1", forwarded_for="203.0.113.42")
+        with patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 4}) as limiter:
+            ip = enforce_rate_limit(req, "chat", 5, 3600)
+        assert ip == "203.0.113.42"
+        limiter.assert_called_once_with("203.0.113.42", "chat", 5, 3600)
+
+    def test_over_limit_raises_429_with_default_detail(self, mock_request):
+        req = mock_request(ip="203.0.113.42")
+        with patch("py._db.check_rate_limit", return_value={"allowed": False, "remaining": 0}):
+            with pytest.raises(HTTPException) as exc_info:
+                enforce_rate_limit(req, "chat", 5, 3600)
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.detail == "Rate limit exceeded. Try again later."
+
+    def test_over_limit_uses_custom_detail(self, mock_request):
+        req = mock_request(ip="203.0.113.42")
+        with patch("py._db.check_rate_limit", return_value={"allowed": False, "remaining": 0}):
+            with pytest.raises(HTTPException) as exc_info:
+                enforce_rate_limit(req, "report_clarify", 10, 3600, detail="Rate limit exceeded")
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.detail == "Rate limit exceeded"
+
+    def test_missing_ip_require_ip_raises_400(self, mock_request):
+        req = mock_request(ip=None)
+        with patch("py._db.check_rate_limit") as limiter:
+            with pytest.raises(HTTPException) as exc_info:
+                enforce_rate_limit(req, "chat", 5, 3600)
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "Could not determine IP"
+        limiter.assert_not_called()
+
+    def test_missing_ip_request_none_require_ip_raises_400(self):
+        with patch("py._db.check_rate_limit") as limiter:
+            with pytest.raises(HTTPException) as exc_info:
+                enforce_rate_limit(None, "chat", 5, 3600)
+        assert exc_info.value.status_code == 400
+        limiter.assert_not_called()
+
+    def test_missing_ip_optional_uses_unknown_bucket(self, mock_request):
+        req = mock_request(ip=None)
+        with patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 1}) as limiter:
+            ip = enforce_rate_limit(req, "device-create", 20, 3600, require_ip=False)
+        assert ip == "unknown"
+        limiter.assert_called_once_with("unknown", "device-create", 20, 3600)
+
+    def test_missing_ip_optional_request_none_uses_unknown_bucket(self):
+        with patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 1}) as limiter:
+            ip = enforce_rate_limit(None, "ai-summary", 30, 3600, require_ip=False)
+        assert ip == "unknown"
+        limiter.assert_called_once_with("unknown", "ai-summary", 30, 3600)
+
+    def test_optional_ip_over_limit_still_429(self, mock_request):
+        req = mock_request(ip=None)
+        with patch("py._db.check_rate_limit", return_value={"allowed": False, "remaining": 0}):
+            with pytest.raises(HTTPException) as exc_info:
+                enforce_rate_limit(req, "location-create", 5, 3600, require_ip=False)
+        assert exc_info.value.status_code == 429
+
+
+# ---------------------------------------------------------------------------
+# is_valid_coords — WGS 84 bounds, NaN rejected
+# ---------------------------------------------------------------------------
+
+
+class TestIsValidCoords:
+    @pytest.mark.parametrize(
+        "lat, lon",
+        [(0, 0), (90, 180), (-90, -180), (-17.83, 31.05), (51.51, -0.13)],
+    )
+    def test_valid(self, lat, lon):
+        assert is_valid_coords(lat, lon) is True
+
+    @pytest.mark.parametrize(
+        "lat, lon",
+        [(90.1, 0), (-90.1, 0), (0, 180.1), (0, -180.1), (float("nan"), 0), (0, float("nan"))],
+    )
+    def test_invalid(self, lat, lon):
+        assert is_valid_coords(lat, lon) is False

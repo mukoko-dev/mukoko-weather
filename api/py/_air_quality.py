@@ -28,7 +28,12 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from ._db import air_quality_cache_collection, ttl_find_one, ttl_upsert
+from ._db import (
+    air_quality_cache_collection,
+    is_valid_coords,
+    ttl_find_one,
+    ttl_upsert,
+)
 from ._http import get_http_client
 from ._circuit_breaker import open_meteo_breaker, CircuitOpenError
 
@@ -358,7 +363,7 @@ async def get_air_quality(lat: float, lon: float):
           "fetchedAt": "2026-06-29T12:00:00Z"
         }
     """
-    if lat < -90 or lat > 90 or lon < -180 or lon > 180:
+    if not is_valid_coords(lat, lon):
         raise HTTPException(status_code=400, detail="Invalid coordinates")
 
     # 1. Cache lookup
