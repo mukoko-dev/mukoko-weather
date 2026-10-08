@@ -24,6 +24,6 @@
   },
   "kv_namespaces": [
     // METAR answers, 30 min.
-    { "binding": "CACHE", "id": "00000000000000000000000000000000" }, // OWNER
+    { "binding": "CACHE", "id": "c7b9c50b55cd43fcbf3e077a19226109" },
   ],
 }

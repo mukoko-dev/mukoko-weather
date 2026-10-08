@@ -29,14 +29,14 @@
   "kv_namespaces": [
     // Geocoding (1 day), reverse geocoding (30 days), place lookups (1 day).
     // The same namespace as mukoko-weather-forecast, under its own prefixes.
-    { "binding": "CACHE", "id": "00000000000000000000000000000000" }, // OWNER
+    { "binding": "CACHE", "id": "c7b9c50b55cd43fcbf3e077a19226109" },
   ],
   "d1_databases": [
     {
       // Read only: place_daily (weather history), written by mukoko-weather-jobs.
       "binding": "WEATHER_DB",
       "database_name": "mukoko-weather",
-      "database_id": "00000000-0000-0000-0000-000000000000", // OWNER
+      "database_id": "9a8846ea-ee34-4479-bc4c-790ee2beabee",
       "migrations_dir": "../d1/migrations",
     },
   ],

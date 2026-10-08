@@ -33,6 +33,7 @@ import {
   ActivityInsightsSkeleton,
   AISummarySkeleton,
   AISummaryChatSkeleton,
+  EnsoOutlookSkeleton,
   MapPreviewSkeleton,
   SupportBannerSkeleton,
   LocationInfoSkeleton,
@@ -59,6 +60,7 @@ import { InfoRow } from "@/components/ui/info-row";
 import { SectionHeader } from "@/components/ui/section-header";
 import { SupportBanner } from "@/components/weather/SupportBanner";
 import { WeatherBackdrop } from "@/components/weather/WeatherBackdrop";
+import { EnsoOutlook } from "@/components/weather/EnsoOutlook";
 import { DraggableSection } from "@/components/weather/DraggableSection";
 import { LiveClock } from "@/components/weather/LiveClock";
 import { cacheWeatherHint } from "@/lib/weather-scenes";
@@ -514,6 +516,29 @@ export function WeatherDashboard({
                             </LazySection>
                           </DraggableSection>
                         ) : null;
+                      case "enso":
+                        return (
+                          <DraggableSection
+                            key="enso"
+                            id="enso"
+                            reordering={reordering}
+                          >
+                            <LazySection
+                              label="enso-outlook"
+                              fallback={<EnsoOutlookSkeleton />}
+                            >
+                              <ChartErrorBoundary name="ENSO outlook">
+                                <Suspense fallback={<EnsoOutlookSkeleton />}>
+                                  <EnsoOutlook
+                                    lat={location.lat}
+                                    lon={location.lon}
+                                    countryCode={location.country}
+                                  />
+                                </Suspense>
+                              </ChartErrorBoundary>
+                            </LazySection>
+                          </DraggableSection>
+                        );
                       default:
                         return null;
                     }
