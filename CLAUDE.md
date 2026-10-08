@@ -211,7 +211,7 @@ mukoko-weather/
 │   │   │   ├── Breadcrumb.test.ts
 │   │   │   └── Footer.tsx            # Footer with site stats, copyright, links, Ubuntu philosophy
 │   │   ├── weather/
-│   │   │   ├── CurrentConditions.tsx  # De-carded hero: large temp display, feels-like, daily high/low — reads directly over WeatherBackdrop
+│   │   │   ├── CurrentConditions.tsx  # iOS-style centred hero: MY LOCATION/HOME eyebrow, place, thin temp, condition, H/L, share, season footer slot — reads directly over WeatherBackdrop
 │   │   │   ├── WeatherBackdrop.tsx    # Fixed full-viewport condition-aware Three.js sky behind the whole location page (Apple Weather style)
 │   │   │   ├── WeatherBackdrop.test.ts
 │   │   │   ├── HourlyScrollCards.tsx  # Horizontal hour-by-hour strip + deterministic one-sentence outlook (hourly-summary.ts)
@@ -312,7 +312,9 @@ mukoko-weather/
 │   │   ├── suitability-cache.test.ts # Suitability cache tests
 │   │   ├── weather.ts             # Open-Meteo client, frost detection, weather utils, synthesizeOpenMeteoInsights
 │   │   ├── weather.test.ts
-│   │   ├── hourly-summary.ts      # Deterministic one-sentence hourly outlook (Apple-style, no AI): first condition-group change + peak gusts
+│   │   ├── hero.ts                # Pure hero helpers: eyebrow badge selection (MY LOCATION / HOME), H/L formatting
+│   ├── hero.test.ts
+│   ├── hourly-summary.ts      # Deterministic one-sentence hourly outlook (Apple-style, no AI): first condition-group change + peak gusts
 │   │   ├── hourly-summary.test.ts
 │   │   ├── weather-labels.ts      # Contextual label helpers (humidityLabel, pressureLabel, cloudLabel, feelsLikeContext)
 │   │   ├── weather-labels.test.ts
