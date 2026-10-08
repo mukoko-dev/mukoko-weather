@@ -1,6 +1,7 @@
 //! Resolving a place by slug or name.
 //!
-//! The app's seed locations are compiled in. Anything else is a canonical
+//! The app's seed locations are compiled in, and a `{name}--{geohash}` slug
+//! decodes to its own point. Anything else is a canonical
 //! place record, which only the Nyuchi API reads and writes: this asks
 //! `GET {NYUCHI_API_URL}/v1/places/{slug}` with a machine key and caches the
 //! answer (found for a day, not found for an hour). The Worker never reads a
@@ -10,6 +11,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use weather_core::locations::parse_spot_slug;
 use weather_core::places::{resolve_seed, slugify};
 use weather_core::Place;
 use weather_edge::{config, get_with_timeout};
@@ -46,6 +48,17 @@ pub fn nyuchi_api(env: &Env) -> Option<(String, String)> {
 pub async fn resolve(env: &Env, query: &str) -> Resolved {
     if let Some(p) = resolve_seed(query) {
         return Resolved::Found(p.clone());
+    }
+    // A `{name}--{geohash}` slug carries its own point (the app's smart slugs).
+    if let Some((name, lat, lon)) = parse_spot_slug(query.trim()) {
+        return Resolved::Found(Place {
+            slug: query.trim().to_owned(),
+            name: (!name.is_empty()).then_some(name),
+            lat,
+            lon,
+            elevation: None,
+            country: None,
+        });
     }
     let slug = slugify(query);
     if slug.is_empty() {

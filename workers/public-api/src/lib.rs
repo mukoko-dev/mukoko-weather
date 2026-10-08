@@ -9,6 +9,12 @@
 //! ```text
 //! GET /v1/weather?lat=&lon=[&models=a,b]   full WeatherData, the shape of /api/py/weather
 //! GET /v1/forecast?location=|lat=&lon=[&days=1..7]   the daily forecast contract
+//! GET /v1/air-quality?lat=&lon=                     the EPA AQI, the shape of /api/py/airquality
+//! GET /v1/metar?icao=                                METARs and TAF, the shape of /api/py/metar
+//! GET /v1/airports/nearest?lat=&lon=[&count=][&maxDistanceKm=]
+//!                                                    the shape of /api/py/airports/nearest
+//! GET /v1/locations, /v1/search, /v1/geo, /v1/history   places (mukoko-weather-places)
+//! POST /v1/ai, /v1/ai/{summary,followup,chat,history/analyze}   Shamwari Weather
 //! GET /health
 //! ```
 //!
@@ -17,36 +23,64 @@
 //! always renders. `/v1/forecast` (data for other apps) fails with `503`
 //! instead of estimating.
 //!
-//! Forecasts come from `mukoko-weather-forecast` over the `FORECAST` service
-//! binding. Requests are rate limited per client IP (`RATE_LIMITER`).
+//! Forecasts and air quality come from `mukoko-weather-forecast` over the
+//! `FORECAST` service binding; aviation weather from `mukoko-weather-aviation`
+//! over `AVIATION`; locations, search and history from `mukoko-weather-places`
+//! over `PLACES`; `/v1/ai/*` is forwarded to `mukoko-weather-ai` over
+//! `AI_SERVICE` with the client's IP (that Worker has its own, tighter limit).
+//! Anonymous requests are rate limited per client IP
+//! (`RATE_LIMITER`). A developer may send a Nyuchi API key, checked by the
+//! Nyuchi API (`keys`), and is then limited per key (`KEY_RATE_LIMITER`).
+
+mod keys;
 
 use serde_json::Value;
 use weather_core::cors::origin_allowed;
 use weather_core::query::ForecastQuery;
 use weather_core::{geo, normalize, places};
 use weather_edge::{config, error, json, now, query_pairs};
-use worker::{event, Context, Env, Headers, Method, Request, Response, Result};
+use worker::wasm_bindgen::JsValue;
+use worker::{event, Context, Env, Headers, Method, Request, RequestInit, Response, Result};
 
 const FORECAST_BINDING: &str = "FORECAST";
+const AVIATION_BINDING: &str = "AVIATION";
+const AI_BINDING: &str = "AI_SERVICE";
+/// AI request bodies larger than this are refused here.
+const MAX_AI_BODY_BYTES: usize = 64 * 1024;
 const RATE_LIMITER: &str = "RATE_LIMITER";
+const KEY_RATE_LIMITER: &str = "KEY_RATE_LIMITER";
+const PLACES_BINDING: &str = "PLACES";
 /// The Python backend's default point (Harare) when none is given.
 const DEFAULT_POINT: (f64, f64) = (-17.83, 31.05);
 /// The Python backend's default elevation for the seasonal estimate.
 const DEFAULT_ELEVATION_M: f64 = 1200.0;
 
 #[event(fetch)]
-pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let origin = req.headers().get("Origin")?.unwrap_or_default();
     let cors_origin = cors_origin(&env, &origin);
+    let is_ai = is_ai_path(&req.path());
 
     let resp = if req.method() == Method::Options {
         preflight(cors_origin.is_some())
+    } else if is_ai {
+        if req.method() != Method::Post {
+            error(405, "method_not_allowed", "Only POST is served.")
+        } else if let Some(limited) = rate_limited(&req, &env, &keys::Caller::Anonymous).await {
+            limited
+        } else {
+            forward_ai(&mut req, &env).await
+        }
     } else if req.method() != Method::Get {
         error(405, "method_not_allowed", "Only GET is served.")
-    } else if let Some(limited) = rate_limited(&req, &env).await {
-        limited
     } else {
-        route(&req, &env).await
+        match keys::caller(&req, &env).await? {
+            Err(refused) => Ok(refused),
+            Ok(caller) => match rate_limited(&req, &env, &caller).await {
+                Some(limited) => limited,
+                None => route(&req, &env).await,
+            },
+        }
     }?;
     with_cors(resp, cors_origin.as_deref())
 }
@@ -59,6 +93,28 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
         ),
         "/v1/weather" => weather(req, env).await,
         "/v1/forecast" => forecast(req, env).await,
+        "/v1/air-quality" => {
+            relay(
+                req,
+                env,
+                FORECAST_BINDING,
+                "/air-quality",
+                "public, max-age=1800",
+            )
+            .await
+        }
+        "/v1/metar" => relay(req, env, AVIATION_BINDING, "/metar", "public, max-age=600").await,
+        "/v1/airports/nearest" => {
+            relay(
+                req,
+                env,
+                AVIATION_BINDING,
+                "/airports/nearest",
+                "public, max-age=86400",
+            )
+            .await
+        }
+        "/v1/locations" | "/v1/search" | "/v1/geo" | "/v1/history" => places(req, env).await,
         _ => error(404, "not_found", "No such route."),
     }
 }
@@ -73,10 +129,10 @@ fn preflight(allowed: bool) -> Result<Response> {
     let resp = Response::empty()?.with_status(if allowed { 204 } else { 403 });
     if allowed {
         let h = resp.headers();
-        h.set("Access-Control-Allow-Methods", "GET, OPTIONS")?;
+        h.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")?;
         h.set(
             "Access-Control-Allow-Headers",
-            "Content-Type, Authorization, X-Mukoko-Client",
+            "Content-Type, Authorization, X-Mukoko-Client, X-API-Key, X-Client-Id, X-Client-Secret",
         )?;
         h.set("Access-Control-Max-Age", "86400")?;
     }
@@ -90,22 +146,30 @@ fn with_cors(resp: Response, origin: Option<&str>) -> Result<Response> {
         h.set("Access-Control-Allow-Origin", o)?;
         h.set(
             "Access-Control-Expose-Headers",
-            "X-Cache, X-Weather-Provider, X-Current-Source, X-Fetched-At",
+            "X-Cache, X-Weather-Provider, X-Current-Source, X-Fetched-At, X-AQ-Source",
         )?;
     }
     Ok(resp)
 }
 
-/// `Some(429)` when the client is over its limit. A missing limiter binding
-/// (local dev) does not block.
-async fn rate_limited(req: &Request, env: &Env) -> Option<Result<Response>> {
-    let limiter = env.rate_limiter(RATE_LIMITER).ok()?;
-    let key = req
-        .headers()
+fn client_ip(req: &Request) -> String {
+    req.headers()
         .get("CF-Connecting-IP")
         .ok()
         .flatten()
-        .unwrap_or_else(|| "service-binding".to_owned());
+        .unwrap_or_else(|| "service-binding".to_owned())
+}
+
+/// `Some(429)` when the caller is over its limit: per IP when anonymous, per
+/// key id with a key. A missing limiter binding (local dev) does not block.
+async fn rate_limited(req: &Request, env: &Env, caller: &keys::Caller) -> Option<Result<Response>> {
+    let (limiter, key) = match caller {
+        keys::Caller::Anonymous => (env.rate_limiter(RATE_LIMITER).ok()?, client_ip(req)),
+        keys::Caller::Key(ctx) => (
+            env.rate_limiter(KEY_RATE_LIMITER).ok()?,
+            format!("key:{}", ctx.key_id),
+        ),
+    };
     match limiter.limit(key).await {
         Ok(outcome) if !outcome.success => {
             let resp = error(429, "rate_limited", "Too many requests; slow down.");
@@ -115,6 +179,41 @@ async fn rate_limited(req: &Request, env: &Env) -> Option<Result<Response>> {
             Some(resp)
         }
         _ => None,
+    }
+}
+
+fn is_ai_path(path: &str) -> bool {
+    path == "/v1/ai" || path.starts_with("/v1/ai/")
+}
+
+/// Pass a Shamwari request to `mukoko-weather-ai` with the client's IP, and
+/// its answer back unchanged.
+async fn forward_ai(req: &mut Request, env: &Env) -> Result<Response> {
+    let body = req.text().await.unwrap_or_default();
+    if body.len() > MAX_AI_BODY_BYTES {
+        return error(413, "payload_too_large", "The request body is too large.");
+    }
+    let headers = Headers::new();
+    headers.set("Content-Type", "application/json")?;
+    if let Some(ip) = req.headers().get("CF-Connecting-IP")? {
+        headers.set("CF-Connecting-IP", &ip)?;
+    }
+    let mut init = RequestInit::new();
+    init.with_method(Method::Post)
+        .with_headers(headers)
+        .with_body(Some(JsValue::from_str(&body)));
+    let inner = Request::new_with_init(&format!("https://ai{}", req.path()), &init)?;
+    let Ok(mut upstream) = env.service(AI_BINDING)?.fetch_request(inner).await else {
+        return error(502, "upstream_unreachable", "Shamwari did not answer.");
+    };
+    let status = upstream.status_code();
+    match upstream.json::<Value>().await {
+        Ok(body) => {
+            let resp = json(status, &body)?;
+            copy_header(upstream.headers(), resp.headers(), "Retry-After")?;
+            Ok(resp)
+        }
+        Err(_) => error(502, "upstream_malformed", "Shamwari sent a bad answer."),
     }
 }
 
@@ -230,4 +329,74 @@ async fn forecast(req: &Request, env: &Env) -> Result<Response> {
         },
         _ => error(502, "upstream_error", "The forecast service failed."),
     }
+}
+
+/// Pass a request through to a service-bound Worker, keeping its JSON body
+/// and its client-error statuses. The query string is passed as is; the
+/// Worker behind validates it.
+async fn relay(
+    req: &Request,
+    env: &Env,
+    binding: &str,
+    path: &str,
+    cache_control: &str,
+) -> Result<Response> {
+    let query = req.url()?.query().unwrap_or("").to_owned();
+    let fetcher = env.service(binding)?;
+    let Ok(mut upstream) = fetcher
+        .fetch(format!("https://upstream{path}?{query}"), None)
+        .await
+    else {
+        return error(502, "upstream_unreachable", "The service did not answer.");
+    };
+    let status = upstream.status_code();
+    if !matches!(status, 200 | 400 | 404 | 422 | 502 | 503) {
+        return error(502, "upstream_error", "The service failed.");
+    }
+    let Ok(body) = upstream.json::<Value>().await else {
+        return error(502, "upstream_malformed", "The service sent a bad answer.");
+    };
+    let resp = json(status, &body)?;
+    for h in ["X-Cache", "X-AQ-Source"] {
+        copy_header(upstream.headers(), resp.headers(), h)?;
+    }
+    if status == 200 {
+        resp.headers().set("Cache-Control", cache_control)?;
+    }
+    Ok(resp)
+}
+
+/// Locations, search, nearest place and history, from `mukoko-weather-places`.
+/// The path loses its `/v1`; status, body and `Cache-Control` pass through.
+async fn places(req: &Request, env: &Env) -> Result<Response> {
+    let url = req.url()?;
+    let path = url.path().trim_start_matches("/v1");
+    let target = match url.query() {
+        Some(q) => format!("https://places{path}?{q}"),
+        None => format!("https://places{path}"),
+    };
+    let headers = Headers::new();
+    headers.set("X-Mukoko-Client-IP", &client_ip(req))?;
+    let mut init = worker::RequestInit::new();
+    init.with_headers(headers);
+    let Ok(mut upstream) = env.service(PLACES_BINDING)?.fetch(target, Some(init)).await else {
+        return error(
+            502,
+            "upstream_unreachable",
+            "The places service did not answer.",
+        );
+    };
+    let status = upstream.status_code();
+    let Ok(body) = upstream.json::<Value>().await else {
+        return error(
+            502,
+            "upstream_malformed",
+            "The places service sent a bad answer.",
+        );
+    };
+    let resp = json(status, &body)?;
+    if let Some(cc) = upstream.headers().get("Cache-Control")? {
+        resp.headers().set("Cache-Control", &cc)?;
+    }
+    Ok(resp)
 }

@@ -25,8 +25,9 @@
   },
   "vars": { "NYUCHI_API_URL": "https://api.nyuchi.com" },
   "kv_namespaces": [
-    // Forecasts (15 min) and place lookups (1 day / 1 hour for misses).
-    { "binding": "FORECAST_CACHE", "id": "00000000000000000000000000000000" }, // OWNER
+    // Forecasts (15 min), air quality (1 h) and place lookups (1 day / 1 hour
+    // for misses).
+    { "binding": "FORECAST_CACHE", "id": "c7b9c50b55cd43fcbf3e077a19226109" },
   ],
   "d1_databases": [
     {
@@ -34,7 +35,7 @@
       // Written by mukoko-weather-stations; schema in ../d1/migrations.
       "binding": "WEATHER_DB",
       "database_name": "mukoko-weather",
-      "database_id": "00000000-0000-0000-0000-000000000000", // OWNER
+      "database_id": "9a8846ea-ee34-4479-bc4c-790ee2beabee",
       "migrations_dir": "../d1/migrations",
     },
   ],

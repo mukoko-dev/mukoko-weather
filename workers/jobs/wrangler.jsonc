@@ -1,0 +1,67 @@
+// mukoko-weather-jobs: scheduled work (mukoko-dev/mukoko-weather#148).
+// No route and no workers.dev address. Cron Triggers only plan; each plan
+// goes on the `weather-jobs` queue and the consumer below does the work.
+//
+// No secrets. Vars: WARM_PLACES, RETENTION_DAYS, RAW_RETENTION_DAYS.
+// OWNER: replace the placeholder D1 id (the same database as
+// forecast/wrangler.jsonc), and create the queues (workers/README.md,
+// "Owner steps"). Deploy after mukoko-weather-forecast.
+{
+  "name": "mukoko-weather-jobs",
+  "main": "build/index.js",
+  "compatibility_date": "2026-09-15",
+  "build": { "command": "worker-build --release" },
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  // The code logs job kinds and counts only: no places, payloads or keys.
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true },
+  },
+  "triggers": {
+    "crons": [
+      // Cache warming: WARM_PLACES x 96 provider calls a day (576 for six).
+      "*/15 * * * *",
+      // Place history: 23:30 in Harare, one place_daily row per seed place.
+      "30 21 * * *",
+      // Maintenance: station_daily rollup, retention to R2, raw cleanup.
+      "15 2 * * *",
+    ],
+  },
+  "vars": {
+    // Popular places to keep warm: seed slugs, comma-separated (max 50).
+    "WARM_PLACES": "harare,bulawayo,mutare,gweru,masvingo,victoria-falls",
+    // D1 observations older than this move to R2 (archive/observations/).
+    "RETENTION_DAYS": "90",
+    // Raw uploads in R2 (raw/YYYY/MM/DD/) older than this are deleted.
+    "RAW_RETENTION_DAYS": "365",
+  },
+  "services": [{ "binding": "FORECAST", "service": "mukoko-weather-forecast" }],
+  "d1_databases": [
+    {
+      "binding": "WEATHER_DB",
+      "database_name": "mukoko-weather",
+      "database_id": "9a8846ea-ee34-4479-bc4c-790ee2beabee",
+      "migrations_dir": "../d1/migrations",
+    },
+  ],
+  "r2_buckets": [
+    // Raw uploads (written by mukoko-weather-stations) and the archive.
+    { "binding": "RAW_OBSERVATIONS", "bucket_name": "mukoko-weather-raw" },
+  ],
+  "queues": {
+    "producers": [{ "binding": "JOBS", "queue": "weather-jobs" }],
+    "consumers": [
+      {
+        "queue": "weather-jobs",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "weather-jobs-dlq",
+      },
+    ],
+  },
+}

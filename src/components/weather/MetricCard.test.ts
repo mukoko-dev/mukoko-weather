@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import { resolve } from "path";
+import { resolveColor, resolveFallbackColor } from "../ui/chart";
 import {
   gradientFromStrokeClass,
   valueTextSizeClass,
@@ -240,5 +243,47 @@ describe("MetricCard exports", () => {
     expect(typeof mod.MetricCard).toBe("function");
     expect(typeof mod.gradientFromStrokeClass).toBe("function");
     expect(typeof mod.valueTextSizeClass).toBe("function");
+  });
+});
+
+// ── Hydration: first client render must equal the server render ───────────
+
+describe("useResolvedColors hydration parity", () => {
+  const source = readFileSync(resolve(__dirname, "MetricCard.tsx"), "utf-8");
+
+  it("initial state is seeded from the server-equivalent fallback resolver", () => {
+    expect(source).toContain("tokens.map(resolveFallbackColor)");
+    expect(source).not.toMatch(
+      /useState<string\[\]>\(\(\) =>\s*tokens\.map\(resolveColor\)/,
+    );
+  });
+
+  it("computed theme colours are applied in the effect, after mount", () => {
+    const effectStart = source.indexOf("React.useEffect(");
+    expect(effectStart).toBeGreaterThan(-1);
+    expect(source.slice(effectStart)).toContain(
+      'key.split(",").map(resolveColor)',
+    );
+  });
+
+  it("server (node, no window) output equals the fallback seed for every ramp token", () => {
+    // Node env has no window, so resolveColor takes the SSR branch — the
+    // exact value the server renders into the HTML.
+    const tokens = [
+      ...new Set(
+        [
+          "stroke-severity-low",
+          "stroke-severity-moderate",
+          "stroke-severity-high",
+          "stroke-severity-severe",
+          "stroke-severity-extreme",
+          "stroke-severity-cold",
+        ].flatMap((c) => gradientFromStrokeClass(c)),
+      ),
+    ];
+    expect(tokens.length).toBeGreaterThan(0);
+    for (const t of tokens) {
+      expect(resolveFallbackColor(t), t).toBe(resolveColor(t));
+    }
   });
 });
