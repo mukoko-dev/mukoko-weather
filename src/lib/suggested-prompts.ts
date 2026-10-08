@@ -246,19 +246,6 @@ export function getExplorePrompts(
     .map((r) => ({ label: r.label, query: r.queryTemplate }));
 }
 
-/**
- * Async version that fetches rules from the database first.
- * Use this in components that can await.
- */
-export async function generateSuggestedPromptsAsync(
-  weather: WeatherData,
-  location: Pick<WeatherLocation, "name" | "slug">,
-  activities: string[],
-): Promise<SuggestedPrompt[]> {
-  const rules = await fetchSuggestedRules();
-  return generateSuggestedPrompts(weather, location, activities, rules);
-}
-
 // ---------------------------------------------------------------------------
 // Minimal fallback (only used when database is completely unavailable)
 // ---------------------------------------------------------------------------

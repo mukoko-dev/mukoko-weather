@@ -43,17 +43,6 @@ const clientProxy = new Proxy({} as MongoClient, {
 });
 export default clientProxy;
 
-/**
- * Backward-compat accessor. Pre-Phase-0B this returned the single
- * `mukoko-weather` database. The Nyuchi Platform cluster now hosts 27
- * databases — mukoko's primary home is `weather`, so this is aliased to
- * {@link weatherDb}. New code should call the explicit `*Db()` accessors
- * below.
- */
-export function getDb(): Db {
-  return weatherDb();
-}
-
 // ---------------------------------------------------------------------------
 // Platform database accessors (Phase 0B)
 //

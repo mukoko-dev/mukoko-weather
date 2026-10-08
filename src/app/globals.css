@@ -1,3 +1,4 @@
+@import "./mzizi-tokens.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -13,7 +14,7 @@
 }
 
 /* ===== Mukoko Weather Brand System v7 — Seven African Minerals · doctrine v4.1.0 =====
-   Token source: nyuchi_design_db → component_documents (collection=styling-minerals)
+   Token source: Mzizi canon, vendored in src/app/mzizi-tokens.css (imported above).
    If you change brand color tokens below, also update src/app/api/og/route.tsx brand object
    (Satori OG images use inline hex — CSS custom properties are not supported there). */
 
@@ -23,72 +24,65 @@
      Tanzanite is the core / brand mineral. */
 
   /* Cobalt — digital future, trust, CTAs (#0047AB light / #00B0FF dark) */
-  --color-mineral-cobalt-raw: #0047ab;
-  --container-cobalt: #e3f2fd;
-  --on-container-cobalt: #002966;
+  --color-mineral-cobalt-raw: var(--color-cobalt);
+  --container-cobalt: var(--color-cobalt-container);
+  --on-container-cobalt: var(--color-cobalt-on-container);
 
   /* Tanzanite — brand / logo, social, AI premium (#4B0082 light / #B388FF dark) */
-  --color-mineral-tanzanite-raw: #4b0082;
-  --container-tanzanite: #f3e5f5;
-  --on-container-tanzanite: #2e004d;
+  --color-mineral-tanzanite-raw: var(--color-tanzanite);
+  --container-tanzanite: var(--color-tanzanite-container);
+  --on-container-tanzanite: var(--color-tanzanite-on-container);
 
   /* Malachite — growth, success, nature (#004D40 light / #64FFDA dark) */
-  --color-mineral-malachite-raw: #004d40;
-  --container-malachite: #e0f2f1;
-  --on-container-malachite: #00332b;
+  --color-mineral-malachite-raw: var(--color-malachite);
+  --container-malachite: var(--color-malachite-container);
+  --on-container-malachite: var(--color-malachite-on-container);
 
   /* Gold — honey, rewards, warmth (#5D4037 light / #FFD740 dark) */
-  --color-mineral-gold-raw: #5d4037;
-  --container-gold: #fff8e1;
-  --on-container-gold: #3e2723;
+  --color-mineral-gold-raw: var(--color-gold);
+  --container-gold: var(--color-gold-container);
+  --on-container-gold: var(--color-gold-on-container);
 
   /* Terracotta — earth, community, grounding (#A0522D light / #E1B07E dark) */
-  --color-mineral-terracotta-raw: #a0522d;
-  --container-terracotta: #f5e6d3;
-  --on-container-terracotta: #5d2906;
+  --color-mineral-terracotta-raw: var(--color-terracotta);
+  --container-terracotta: var(--color-terracotta-container);
+  --on-container-terracotta: var(--color-terracotta-on-container);
 
   /* Sodalite — intelligence, AI/Shamwari surfaces (#283593 light / #3D5AFE dark) */
-  --color-mineral-sodalite-raw: #283593;
-  --container-sodalite: #e8eaf6;
-  --on-container-sodalite: #1a237e;
+  --color-mineral-sodalite-raw: var(--color-sodalite);
+  --container-sodalite: var(--color-sodalite-container);
+  --on-container-sodalite: var(--color-sodalite-on-container);
 
   /* Copper — connection, community features (#BF5A36 light / #FF8A65 dark) */
-  --color-mineral-copper-raw: #bf5a36;
-  --container-copper: #fbe4da;
-  --on-container-copper: #5a2310;
+  --color-mineral-copper-raw: var(--color-copper);
+  --container-copper: var(--color-copper-container);
+  --on-container-copper: var(--color-copper-on-container);
 
   /* Brand surface tokens */
-  --surface-paper: #f3f2ee;
-  --surface-ink: #141413;
-  --surface-stone: #1b1a17;
-  --surface-bone: #f5f5f4;
 
   /* Primary — Cobalt */
-  --color-primary: #0047ab;
+  --color-primary: var(--exp-storm);
   --color-primary-foreground: #ffffff;
   /* Secondary — Malachite */
-  --color-secondary: #004d40;
+  --color-secondary: var(--color-malachite);
   --color-secondary-foreground: #ffffff;
   /* Accent — Gold */
-  --color-accent: #5d4037;
+  --color-accent: var(--color-gold);
   --color-accent-foreground: #ffffff;
   /* Success / Clear skies — Malachite */
-  --color-success: #004d40;
+  --color-success: var(--color-malachite);
   --color-success-foreground: #ffffff;
   /* Warmth / Sun — Gold */
-  --color-warmth: #5d4037;
+  --color-warmth: var(--color-gold);
   --color-warmth-foreground: #ffffff;
   /* Community — Copper (replaces generic earth/terracotta) */
-  --color-earth: #bf5a36;
+  --color-earth: var(--color-copper);
   --color-earth-foreground: #ffffff;
   /* Tanzanite — AI insights, brand mark, premium */
-  --color-tanzanite: #4b0082;
   --color-tanzanite-foreground: #ffffff;
   /* Sodalite — AI/Shamwari accent */
-  --color-sodalite: #283593;
   --color-sodalite-foreground: #ffffff;
   /* Copper — community/commons features */
-  --color-copper: #bf5a36;
   --color-copper-foreground: #ffffff;
 
   /* Frost Alert Severity */
@@ -123,9 +117,9 @@
   --foreground: #141413;
 
   /* Focus ring — Cobalt primary, high-visibility for WCAG 2.4.7 / 2.4.13 */
-  --focus-ring: #0047ab;
+  --focus-ring: var(--exp-storm);
   --focus-ring-offset: 2px;
-  --focus-ring-width: 3px;
+  --focus-ring-width: 2px;
 
   /* Touch & Interaction — 56px optimal (Material Design 3 recommended) */
   --touch-target-min: 48px;
@@ -150,8 +144,8 @@
 
   /* Radii */
   --radius-button: 9999px;
-  --radius-card: 16px;
-  --radius-input: 8px;
+  --radius-card: var(--radius-lg);
+  --radius-input: var(--radius-md);
   --radius-badge: 9999px;
   --radius-icon: 24px;
 
@@ -161,13 +155,13 @@
   --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
 
   /* Minerals Stripe — Seven African Minerals (light mode values, doctrine v4.1.0) */
-  --mineral-tanzanite: #4b0082;
-  --mineral-cobalt: #0047ab;
-  --mineral-malachite: #004d40;
-  --mineral-gold: #5d4037;
-  --mineral-terracotta: #a0522d;
-  --mineral-sodalite: #283593;
-  --mineral-copper: #bf5a36;
+  --mineral-tanzanite: var(--color-tanzanite);
+  --mineral-cobalt: var(--color-cobalt);
+  --mineral-malachite: var(--color-malachite);
+  --mineral-gold: var(--color-gold);
+  --mineral-terracotta: var(--color-terracotta);
+  --mineral-sodalite: var(--color-sodalite);
+  --mineral-copper: var(--color-copper);
   /* Mineral foregrounds (light mode — white on rich mineral tones) */
   --mineral-tanzanite-fg: #ffffff;
   --mineral-cobalt-fg: #ffffff;
@@ -178,12 +172,12 @@
   --mineral-copper-fg: #ffffff;
 
   /* shadcn/ui tokens — mapped to brand system */
-  --radius: 0.625rem;
-  --card: #ffffff;
+  --radius: var(--radius-lg); /* Mzizi lg, 14px */
+  --card: var(--mzizi-card);
   --card-foreground: #141413;
   --popover: #ffffff;
   --popover-foreground: #141413;
-  --primary: #0047ab;
+  --primary: var(--exp-storm);
   --primary-foreground: #ffffff;
   --secondary: #f3f2ee;
   --secondary-foreground: #141413;
@@ -191,10 +185,10 @@
   --muted-foreground: #52524e;
   --accent: #f3f2ee;
   --accent-foreground: #141413;
-  --destructive: #b3261e;
-  --border: #c4c2bb;
+  --destructive: var(--mzizi-error);
+  --border: var(--mzizi-border);
   --input: #e5e4e0;
-  --ring: #0047ab;
+  --ring: var(--exp-storm);
 
   /* Chart colors — Five African Minerals Palette
      Order matches minerals stripe: Tanzanite → Cobalt → Malachite → Gold → Terracotta
@@ -246,59 +240,54 @@
 
 [data-theme="dark"] {
   /* ── Seven Minerals — dark variants (doctrine v4.1.0) ─────────────────── */
-  --color-mineral-cobalt-raw: #00b0ff;
-  --container-cobalt: #001f3f;
-  --on-container-cobalt: #b3e5fc;
-  --color-mineral-tanzanite-raw: #b388ff;
-  --container-tanzanite: #1a0033;
-  --on-container-tanzanite: #e1bee7;
-  --color-mineral-malachite-raw: #64ffda;
-  --container-malachite: #00251a;
-  --on-container-malachite: #a7ffeb;
-  --color-mineral-gold-raw: #ffd740;
-  --container-gold: #332200;
-  --on-container-gold: #ffecb3;
-  --color-mineral-terracotta-raw: #e1b07e;
-  --container-terracotta: #3e2817;
-  --on-container-terracotta: #ffccbc;
-  --color-mineral-sodalite-raw: #3d5afe;
-  --container-sodalite: #0d1442;
-  --on-container-sodalite: #c5cae9;
-  --color-mineral-copper-raw: #ff8a65;
-  --container-copper: #3a1a0e;
-  --on-container-copper: #ffccbc;
+  --color-mineral-cobalt-raw: var(--color-cobalt);
+  --container-cobalt: var(--color-cobalt-container);
+  --on-container-cobalt: var(--color-cobalt-on-container);
+  --color-mineral-tanzanite-raw: var(--color-tanzanite);
+  --container-tanzanite: var(--color-tanzanite-container);
+  --on-container-tanzanite: var(--color-tanzanite-on-container);
+  --color-mineral-malachite-raw: var(--color-malachite);
+  --container-malachite: var(--color-malachite-container);
+  --on-container-malachite: var(--color-malachite-on-container);
+  --color-mineral-gold-raw: var(--color-gold);
+  --container-gold: var(--color-gold-container);
+  --on-container-gold: var(--color-gold-on-container);
+  --color-mineral-terracotta-raw: var(--color-terracotta);
+  --container-terracotta: var(--color-terracotta-container);
+  --on-container-terracotta: var(--color-terracotta-on-container);
+  --color-mineral-sodalite-raw: var(--color-sodalite);
+  --container-sodalite: var(--color-sodalite-container);
+  --on-container-sodalite: var(--color-sodalite-on-container);
+  --color-mineral-copper-raw: var(--color-copper);
+  --container-copper: var(--color-copper-container);
+  --on-container-copper: var(--color-copper-on-container);
 
   /* Brand surface tokens — dark */
-  --surface-paper: #1b1a17;
-  --surface-ink: #f5f5f4;
   --surface-stone: #f3f2ee;
 
   /* Primary — Cobalt */
-  --color-primary: #00b0ff;
+  --color-primary: var(--exp-storm);
   --color-primary-foreground: #0a0a0a;
   /* Secondary — Malachite */
-  --color-secondary: #64ffda;
+  --color-secondary: var(--color-malachite);
   --color-secondary-foreground: #0a0a0a;
   /* Accent — Gold */
-  --color-accent: #ffd740;
+  --color-accent: var(--color-gold);
   --color-accent-foreground: #0a0a0a;
   /* Success / Clear skies — Malachite */
-  --color-success: #64ffda;
+  --color-success: var(--color-malachite);
   --color-success-foreground: #0a0a0a;
   /* Warmth / Sun — Gold */
-  --color-warmth: #ffd740;
+  --color-warmth: var(--color-gold);
   --color-warmth-foreground: #0a0a0a;
   /* Community — Copper */
-  --color-earth: #ff8a65;
+  --color-earth: var(--color-copper);
   --color-earth-foreground: #0a0a0a;
   /* Tanzanite */
-  --color-tanzanite: #b388ff;
   --color-tanzanite-foreground: #0a0a0a;
   /* Sodalite */
-  --color-sodalite: #3d5afe;
   --color-sodalite-foreground: #0a0a0a;
   /* Copper */
-  --color-copper: #ff8a65;
   --color-copper-foreground: #0a0a0a;
 
   /* Frost Alert Severity */
@@ -316,8 +305,8 @@
   --color-bmc-fg: #1a1a1a;
 
   /* Surfaces */
-  --color-surface-base: #0a0a0a;
-  --color-surface-card: #141414;
+  --color-surface-base: var(--surface-paper);
+  --color-surface-card: var(--mzizi-card);
   --color-surface-elevated: #1e1e1e;
   --color-surface-dim: #141414;
 
@@ -327,11 +316,11 @@
   --color-text-tertiary: #838380;
 
   /* Foreground / Background shortcuts */
-  --background: #0a0a0a;
+  --background: var(--surface-paper);
   --foreground: #f5f5f4;
 
   /* Focus ring — Cobalt, high-visibility on dark backgrounds */
-  --focus-ring: #00b0ff;
+  --focus-ring: var(--exp-storm);
 
   /* Shadows — Dark mode */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -339,11 +328,11 @@
   --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
 
   /* shadcn/ui tokens — dark mode */
-  --card: #141414;
+  --card: var(--mzizi-card);
   --card-foreground: #f5f5f4;
-  --popover: #141414;
+  --popover: var(--mzizi-card);
   --popover-foreground: #f5f5f4;
-  --primary: #00b0ff;
+  --primary: var(--exp-storm);
   --primary-foreground: #0a0a0a;
   --secondary: #1e1e1e;
   --secondary-foreground: #f5f5f4;
@@ -351,10 +340,10 @@
   --muted-foreground: #a8a8a3;
   --accent: #1e1e1e;
   --accent-foreground: #f5f5f4;
-  --destructive: #ff5252;
-  --border: rgba(255, 255, 255, 0.1);
+  --destructive: var(--mzizi-error);
+  --border: var(--mzizi-border);
   --input: rgba(255, 255, 255, 0.15);
-  --ring: #00b0ff;
+  --ring: var(--exp-storm);
 
   /* Chart colors — dark mode, Five African Minerals Palette */
   --chart-1: #b388ff; /* Tanzanite light */
@@ -390,13 +379,13 @@
   --color-moon-shadow: #1d2330;
 
   /* Minerals Stripe — dark mode (doctrine v4.1.0 dark values) */
-  --mineral-tanzanite: #b388ff;
-  --mineral-cobalt: #00b0ff;
-  --mineral-malachite: #64ffda;
-  --mineral-gold: #ffd740;
-  --mineral-terracotta: #e1b07e;
-  --mineral-sodalite: #3d5afe;
-  --mineral-copper: #ff8a65;
+  --mineral-tanzanite: var(--color-tanzanite);
+  --mineral-cobalt: var(--color-cobalt);
+  --mineral-malachite: var(--color-malachite);
+  --mineral-gold: var(--color-gold);
+  --mineral-terracotta: var(--color-terracotta);
+  --mineral-sodalite: var(--color-sodalite);
+  --mineral-copper: var(--color-copper);
   --mineral-tanzanite-fg: #0a0a0a;
   --mineral-cobalt-fg: #0a0a0a;
   --mineral-malachite-fg: #0a0a0a;
@@ -519,13 +508,13 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: 7px;
+  --radius-md: 12px;
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 12px);
-  --radius-4xl: calc(var(--radius) + 16px);
+  --radius-xl: 17px;
+  --radius-2xl: 17px;
+  --radius-3xl: 9999px;
+  --radius-4xl: 9999px;
   --spacing-touch: var(--touch-target-min);
 
   /* Accordion open/close animations */
@@ -1373,6 +1362,19 @@ body {
   footer {
     font-size: var(--text-body);
     line-height: var(--text-body-leading);
+  }
+
+  /* Mzizi typography: H1-H3 Noto Serif, H4 and below Noto Sans. */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-heading);
+  }
+
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-sans);
   }
 }
 
