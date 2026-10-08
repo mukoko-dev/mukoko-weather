@@ -19,9 +19,9 @@ logger = logging.getLogger(__name__)
 from ._geohash import build_place_slug, build_smart_slug, normalise_osm_ref
 from ._db import (
     get_db,
-    get_client_ip,
+    enforce_rate_limit,
     places_geo_collection,
-    check_rate_limit,
+    is_valid_coords,
     SLUG_RE,
 )
 from ._places_resolver import (
@@ -570,14 +570,6 @@ def _infer_tags(geocoded: dict) -> list[str]:
     return tags
 
 
-def _is_valid_coordinates(lat: float, lon: float) -> bool:
-    """Check if coordinates are valid WGS 84 values.
-
-    The app is fully global — any valid latitude/longitude is accepted.
-    """
-    return -90 <= lat <= 90 and -180 <= lon <= 180
-
-
 # Dedup radius — tight because location names are now specific (POIs, addresses,
 # suburbs). Two different places 2km apart are legitimately different locations.
 DEDUP_RADIUS_KM = 1
@@ -832,10 +824,7 @@ async def geo_lookup(
         # POST /api/py/locations/add's coordinates mode, which this mirrors.
         # The find-only path stays unlimited since it's a cheap read.
         if autoCreate:
-            ip = (get_client_ip(request) if request is not None else None) or "unknown"
-            rate = check_rate_limit(ip, "location-create", 5, 3600)
-            if not rate["allowed"]:
-                raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+            enforce_rate_limit(request, "location-create", 5, 3600, require_ip=False)
 
         # There is deliberately NO distance-based nearest-snap for GPS.
         # Explicit "use my current location" (autoCreate=true) must resolve to
@@ -979,14 +968,11 @@ async def add_location(request: Request):
         lat = float(body.get("lat", 0))
         lon = float(body.get("lon", 0))
 
-        if not _is_valid_coordinates(lat, lon):
+        if not is_valid_coords(lat, lon):
             raise HTTPException(status_code=400, detail="Invalid coordinates")
 
         # Rate limit — extract real IP behind Vercel's reverse proxy
-        ip = get_client_ip(request) or "unknown"
-        rate = check_rate_limit(ip, "location-create", 5, 3600)
-        if not rate["allowed"]:
-            raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+        enforce_rate_limit(request, "location-create", 5, 3600, require_ip=False)
 
         # Reverse-geocode → dedupe → create — shared with GET /api/py/geo's
         # autoCreate path via _create_location_from_coords; this handler only
