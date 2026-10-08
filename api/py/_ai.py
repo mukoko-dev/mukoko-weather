@@ -9,17 +9,15 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from datetime import datetime, timezone, timedelta
-from typing import Optional
 
-import anthropic
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ._db import get_db, get_api_key, enforce_rate_limit, filter_known_activities, get_activities_brief, require_internal_caller
-from ._circuit_breaker import anthropic_breaker, CircuitOpenError
+from ._db import get_db, enforce_rate_limit, filter_known_activities, get_activities_brief, require_internal_caller
+from ._anthropic import call_claude, first_text
+from ._ai_prompts import get_ai_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +51,6 @@ def _get_ttl(slug: str, tags: list[str]) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Module-level singleton client
-# ---------------------------------------------------------------------------
-
-_client: Optional[anthropic.Anthropic] = None
-_client_key_last: Optional[str] = None
-
 # Hardcoded fallback — only used if database prompt is unavailable
 _FALLBACK_SYSTEM_PROMPT = """You are Shamwari Weather, the AI assistant for mukoko weather — an AI-powered weather intelligence platform. You provide actionable, contextual weather advice grounded in local geography, agriculture, industry, and culture.
 
@@ -82,37 +74,9 @@ Format guidelines:
 - Do not use emoji
 - Do not use headings (no # or ##) — the section already has a heading"""
 
-# Module-level prompt cache (5-min TTL)
-import time as _time
-_prompt_cache: dict[str, dict] = {}
-_prompt_cache_at: float = 0
-_PROMPT_CACHE_TTL = 300  # 5 minutes
-
-
-def _get_prompt(prompt_key: str) -> dict | None:
-    """Fetch a prompt template from MongoDB with module-level caching."""
-    global _prompt_cache, _prompt_cache_at
-
-    now = _time.time()
-    if _prompt_cache and (now - _prompt_cache_at) < _PROMPT_CACHE_TTL:
-        return _prompt_cache.get(prompt_key)
-
-    try:
-        from ._db import ai_prompts_collection
-        docs = list(
-            ai_prompts_collection()
-            .find({"active": True}, {"_id": 0, "updatedAt": 0})
-        )
-        _prompt_cache = {d["promptKey"]: d for d in docs}
-        _prompt_cache_at = now
-        return _prompt_cache.get(prompt_key)
-    except Exception:
-        return _prompt_cache.get(prompt_key)
-
-
 def _get_system_prompt() -> str:
     """Get the system prompt for weather summaries from the database."""
-    doc = _get_prompt("system:summary")
+    doc = get_ai_prompt("system:summary")
     if doc and doc.get("template"):
         return doc["template"]
     return _FALLBACK_SYSTEM_PROMPT
@@ -120,26 +84,10 @@ def _get_system_prompt() -> str:
 
 def _get_user_prompt_template() -> str | None:
     """Get the user prompt template from the database."""
-    doc = _get_prompt("user:summary_request")
+    doc = get_ai_prompt("user:summary_request")
     if doc and doc.get("template"):
         return doc["template"]
     return None
-
-
-def _get_client() -> anthropic.Anthropic:
-    global _client, _client_key_last
-
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key:
-        key = get_api_key("anthropic")
-    if not key:
-        return None  # type: ignore[return-value]
-
-    if _client is None or _client_key_last != key:
-        _client = anthropic.Anthropic(api_key=key)
-        _client_key_last = key
-
-    return _client
 
 
 # ---------------------------------------------------------------------------
@@ -166,43 +114,34 @@ def _resolve_seasons_with_ai(
         logger.warning("Invalid country code rejected: %r", country_code[:20])
         return None
 
-    client = _get_client()
-    if not client or not anthropic_breaker.is_allowed:
-        return None
-
-    # --- Anthropic API call (circuit breaker scoped here only) ---
-    try:
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
-            messages=[{
-                "role": "user",
-                "content": (
-                    f"For country code {country_code} (representative coordinates "
-                    f"{lat:.1f}°, {lon:.1f}°), return the seasonal calendar as a JSON array.\n\n"
-                    "Each object must have:\n"
-                    '- "name": English season name (e.g. "Dry season", "Monsoon", "Summer")\n'
-                    '- "localName": Local language name (or English if unknown)\n'
-                    '- "months": Array of month numbers (1=Jan, 12=Dec) this season covers\n'
-                    '- "description": Brief typical weather for this season\n\n'
-                    "Rules:\n"
-                    "- Every month 1-12 must appear in exactly one season\n"
-                    "- Use culturally appropriate names for the region\n"
-                    "- Include local language names where known\n"
-                    "- Return ONLY the JSON array, no other text"
-                ),
-            }],
-        )
-        anthropic_breaker.record_success()
-    except Exception:
-        # Only trip breaker on actual Anthropic API failures — not JSON
-        # parse errors, dict key errors, or MongoDB write failures.
-        anthropic_breaker.record_failure()
+    # --- Anthropic API call (breaker bookkeeping lives in call_claude) ---
+    response, err = call_claude(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1024,
+        messages=[{
+            "role": "user",
+            "content": (
+                f"For country code {country_code} (representative coordinates "
+                f"{lat:.1f}°, {lon:.1f}°), return the seasonal calendar as a JSON array.\n\n"
+                "Each object must have:\n"
+                '- "name": English season name (e.g. "Dry season", "Monsoon", "Summer")\n'
+                '- "localName": Local language name (or English if unknown)\n'
+                '- "months": Array of month numbers (1=Jan, 12=Dec) this season covers\n'
+                '- "description": Brief typical weather for this season\n\n'
+                "Rules:\n"
+                "- Every month 1-12 must appear in exactly one season\n"
+                "- Use culturally appropriate names for the region\n"
+                "- Include local language names where known\n"
+                "- Return ONLY the JSON array, no other text"
+            ),
+        }],
+    )
+    if err is not None:
         return None
 
     # --- Response parsing + validation (errors here are soft, not breaker) ---
     try:
-        text = response.content[0].text.strip()
+        text = first_text(response).strip()
         # Extract JSON array from response
         if text.startswith("["):
             seasons_raw = json.loads(text)
@@ -452,6 +391,19 @@ class AISummaryRequest(BaseModel):
     activities: list[str] = Field(default_factory=list)
 
 
+def _fallback_insight(location: LocationInfo, weather_data: dict, season: dict) -> str:
+    """Deterministic summary used whenever Claude is unavailable."""
+    temp = weather_data.get("current", {}).get("temperature_2m")
+    humidity = weather_data.get("current", {}).get("relative_humidity_2m")
+    return (
+        f"Current conditions in {location.name}: "
+        f"{round(temp) if temp is not None else 'N/A'}°C with "
+        f"{humidity if humidity is not None else 'N/A'}% humidity. "
+        f"We are in the {season['localName']} season ({season['name']}). "
+        f"{season['description']}. Stay informed and plan your day accordingly."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Endpoint
 # ---------------------------------------------------------------------------
@@ -513,33 +465,6 @@ async def generate_summary(body: AISummaryRequest, request: Request = None):
     # Get season
     country = location.country if location.country and len(location.country) == 2 else ""
     season = _get_season(country, lat=location.lat, lon=location.lon)
-
-    # Try AI generation
-    client = _get_client()
-    if not client:
-        # Fallback summary
-        temp = weather_data.get("current", {}).get("temperature_2m")
-        humidity = weather_data.get("current", {}).get("relative_humidity_2m")
-        insight = (
-            f"Current conditions in {location.name}: "
-            f"{round(temp) if temp is not None else 'N/A'}\u00B0C with "
-            f"{humidity if humidity is not None else 'N/A'}% humidity. "
-            f"We are in the {season['localName']} season ({season['name']}). "
-            f"{season['description']}. Stay informed and plan your day accordingly."
-        )
-
-        # Best-effort cache write — same serve-first discipline as the main
-        # cache write below: a blocked write must never 500 the response.
-        try:
-            _set_cached_summary(
-                location_slug, insight,
-                {"temperature": current_temp, "weatherCode": current_code},
-                location_tags,
-                source="fallback",
-            )
-        except Exception:
-            pass
-        return {"insight": insight, "cached": False}
 
     # Build insights section
     insights = weather_data.get("daily", {}).get("insights") or weather_data.get("insights")
@@ -617,48 +542,38 @@ Provide:
 
     # Use database-driven prompt (with fallback)
     system_prompt = _get_system_prompt()
-    prompt_doc = _get_prompt("system:summary")
+    prompt_doc = get_ai_prompt("system:summary")
     model = (prompt_doc or {}).get("model", "claude-haiku-4-5-20251001")
     max_tokens = (prompt_doc or {}).get("maxTokens", 400)
 
+    # Circuit open, rate limited or any API error all degrade to the fallback
+    # summary; call_claude has already recorded the breaker outcome.
     summary_source = "ai"
-    if not anthropic_breaker.is_allowed:
-        # Circuit is open — skip AI and use fallback
-        summary_source = "fallback"
-        temp = weather_data.get("current", {}).get("temperature_2m")
-        humidity = weather_data.get("current", {}).get("relative_humidity_2m")
-        insight = (
-            f"Current conditions in {location.name}: "
-            f"{round(temp) if temp is not None else 'N/A'}\u00B0C with "
-            f"{humidity if humidity is not None else 'N/A'}% humidity. "
-            f"We are in the {season['localName']} season ({season['name']}). "
-            f"{season['description']}. Stay informed and plan your day accordingly."
-        )
-    else:
+    message, err = call_claude(
+        model=model,
+        max_tokens=max_tokens,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_content}],
+    )
+    if err == "no_client":
+        # No API key configured — deterministic fallback, cached with the
+        # short fallback TTL and returned in the no-key response shape.
+        insight = _fallback_insight(location, weather_data, season)
         try:
-            message = client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_content}],
+            _set_cached_summary(
+                location_slug, insight,
+                {"temperature": current_temp, "weatherCode": current_code},
+                location_tags,
+                source="fallback",
             )
-            anthropic_breaker.record_success()
-
-            text_block = next((b for b in message.content if b.type == "text"), None)
-            insight = text_block.text if text_block else "No insight available."
         except Exception:
-            anthropic_breaker.record_failure()
-            summary_source = "fallback"
-            # Fallback on any AI error
-            temp = weather_data.get("current", {}).get("temperature_2m")
-            humidity = weather_data.get("current", {}).get("relative_humidity_2m")
-            insight = (
-                f"Current conditions in {location.name}: "
-                f"{round(temp) if temp is not None else 'N/A'}\u00B0C with "
-                f"{humidity if humidity is not None else 'N/A'}% humidity. "
-                f"We are in the {season['localName']} season ({season['name']}). "
-                f"{season['description']}. Stay informed and plan your day accordingly."
-            )
+            pass
+        return {"insight": insight, "cached": False}
+    if err is not None:
+        summary_source = "fallback"
+        insight = _fallback_insight(location, weather_data, season)
+    else:
+        insight = first_text(message) or "No insight available."
 
     # Cache the summary — fallback text gets a short TTL (TTL_FALLBACK) so a
     # transient failure doesn't lock users out of real AI summaries for the

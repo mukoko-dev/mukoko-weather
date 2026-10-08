@@ -13,6 +13,11 @@
 import { CATEGORY_STYLES } from "./activities";
 import type { SuitabilityRuleDoc, ActivityCategoryDoc } from "./db";
 import { getCachedRules, cacheSuitabilityRules } from "./rxdb/collections";
+import { fetchJson } from "./fetch-json";
+import {
+  fetchActivityCategories,
+  resetActivitiesClientCache,
+} from "./activities-client";
 
 // ---------------------------------------------------------------------------
 // Suitability rules cache
@@ -76,23 +81,22 @@ export async function fetchSuitabilityRules(): Promise<SuitabilityRuleDoc[]> {
       Date.now() - localFetchedAt < RULES_CACHE_TTL;
     if (!cacheIsWarm) {
       try {
-        const res = await fetch("/api/py/suitability");
-        if (res.ok) {
-          const data = await res.json();
-          const rules = data?.rules;
-          if (rules && rules.length > 0) {
-            cachedRules = rules;
-            cachedRulesAt = Date.now();
+        const data = await fetchJson<{ rules?: SuitabilityRuleDoc[] }>(
+          "/api/py/suitability",
+        );
+        const rules = data?.rules;
+        if (rules && rules.length > 0) {
+          cachedRules = rules;
+          cachedRulesAt = Date.now();
 
-            // Persist to RxDB for offline access (fire-and-forget)
-            cacheSuitabilityRules(
-              rules.map((r: SuitabilityRuleDoc) => ({
-                key: r.key,
-                conditions: JSON.stringify(r.conditions),
-                fallback: JSON.stringify(r.fallback),
-              })),
-            ).catch(() => {});
-          }
+          // Persist to RxDB for offline access (fire-and-forget)
+          cacheSuitabilityRules(
+            rules.map((r: SuitabilityRuleDoc) => ({
+              key: r.key,
+              conditions: JSON.stringify(r.conditions),
+              fallback: JSON.stringify(r.fallback),
+            })),
+          ).catch(() => {});
         }
       } catch {
         // Network error — use whatever we got from RxDB
@@ -138,11 +142,10 @@ export async function fetchCategoryStyles(): Promise<
     return cachedCategoryStyles;
   }
   if (inFlightStyles) return inFlightStyles;
-  inFlightStyles = fetch("/api/py/activities?mode=categories")
-    .then((res) => (res.ok ? res.json() : null))
-    .then((data) => {
+  inFlightStyles = fetchActivityCategories()
+    .then((categories: ActivityCategoryDoc[]) => {
       const styles: Record<string, CategoryStyle> = {};
-      for (const cat of (data?.categories ?? []) as ActivityCategoryDoc[]) {
+      for (const cat of categories) {
         if (cat.style) styles[cat.id] = cat.style;
       }
       if (Object.keys(styles).length > 0) {
@@ -169,4 +172,5 @@ export function resetCaches(): void {
   cachedStylesAt = 0;
   inFlightRules = null;
   inFlightStyles = null;
+  resetActivitiesClientCache();
 }

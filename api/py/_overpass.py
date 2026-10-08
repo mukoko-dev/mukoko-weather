@@ -40,6 +40,7 @@ from typing import Optional
 
 import httpx
 
+from ._http import get_http_client
 from ._db import is_valid_coords
 
 # Public Overpass instance. Both mirrors accept the same QL.
@@ -61,14 +62,8 @@ DEFAULT_RADIUS_M = 250
 OVERPASS_TIMEOUT_S = 5
 HTTP_TIMEOUT_S = 6.0
 
-_http_client: httpx.Client | None = None
-
-
 def _get_http() -> httpx.Client:
-    global _http_client
-    if _http_client is None:
-        _http_client = httpx.Client(timeout=HTTP_TIMEOUT_S)
-    return _http_client
+    return get_http_client(HTTP_TIMEOUT_S)
 
 
 # ---------------------------------------------------------------------------
