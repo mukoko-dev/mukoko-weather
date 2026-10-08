@@ -129,7 +129,7 @@ class TestAggregateStats:
             {"date": "2025-01-18", "current": {"weather_code": 61}, "daily": {}},
         ]
         result = _aggregate_stats(records)
-        assert "Clear (2d)" in result
+        assert "Clear sky (2d)" in result
         assert "Most common conditions" in result
 
     def test_includes_insights_heat_stress(self):

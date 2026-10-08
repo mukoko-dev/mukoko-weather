@@ -302,6 +302,7 @@ mukoko-weather/
 │   │       └── index.ts
 │   ├── lib/
 │   │   ├── store.ts               # Zustand app state (theme, location, activities, hasOnboarded, ShamwariContext, reportModal, device sync)
+│   │   ├── theme.ts               # Dependency-free resolveTheme (re-exported from store.ts; used by the embed widget + MapLibreMap)
 │   │   ├── store.test.ts          # Theme resolution, ShamwariContext TTL tests, device sync init
 │   │   ├── device-sync.ts         # Device sync — bridges Zustand localStorage with Python device profile API
 │   │   ├── device-sync.test.ts
@@ -386,6 +387,7 @@ mukoko-weather/
 │       ├── index.py               # FastAPI app, router mounting, CORS, error handlers
 │       ├── _db.py                 # MongoDB connection, collection accessors, rate limiting
 │       ├── _weather.py            # Weather data endpoints (Tomorrow.io/Open-Meteo proxy)
+│       ├── _wmo.py                # WMO_LABELS — weather-code labels (mirror of weatherCodeToInfo in src/lib/weather.ts)
 │       ├── _ai.py                 # AI summary endpoint (Claude, tiered TTL cache)
 │       ├── _ai_followup.py        # Inline follow-up chat endpoint (pre-seeded history)
 │       ├── _ai_prompts.py         # AI prompt library CRUD (GET/PUT prompts + suggested rules)
