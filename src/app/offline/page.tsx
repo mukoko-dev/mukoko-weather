@@ -28,10 +28,7 @@ export default function OfflinePage() {
           Previously viewed locations may still be available from cache.
         </p>
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <Link
-            href="/"
-            className="inline-flex min-h-[var(--touch-target-min)] items-center justify-center rounded-[var(--radius-button)] bg-primary px-6 text-base font-medium text-primary-foreground"
-          >
+          <Link href="/" className="kudu text-base">
             Try again
           </Link>
         </div>
