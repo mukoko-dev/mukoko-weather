@@ -1,8 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { SunriseIcon, SunsetIcon, WeatherIcon } from "@/lib/weather-icons";
+import { psiBandInfo, sgRegionLabel, type SgAirResponse } from "@/lib/sg-air";
 import { hourlySummary } from "@/lib/hourly-summary";
 import {
   weatherCodeToInfo,
@@ -148,7 +149,14 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 /* ── Air quality ───────────────────────────────────────────────────────── */
 
-export function DisplayAirQuality({ air }: { air: AirQualityResponse | null }) {
+export function DisplayAirQuality({
+  air,
+  children,
+}: {
+  air: AirQualityResponse | null;
+  /** Optional extra readings shown inside this card (e.g. the NEA panel). */
+  children?: ReactNode;
+}) {
   if (!air) {
     return (
       <section aria-labelledby="display-aq-heading" className="acacia p-5">
@@ -158,6 +166,7 @@ export function DisplayAirQuality({ air }: { air: AirQualityResponse | null }) {
         <p className="mt-2 text-lg text-text-secondary">
           Air quality is unavailable right now. It will refresh on its own.
         </p>
+        {children}
       </section>
     );
   }
@@ -200,7 +209,83 @@ export function DisplayAirQuality({ air }: { air: AirQualityResponse | null }) {
       <p className="mt-3 text-lg leading-snug text-text-primary">
         {AQI_ADVICE[air.level]}
       </p>
+      {children}
     </section>
+  );
+}
+
+/**
+ * The official Singapore NEA reading, shown beneath the modelled US AQI inside
+ * the air-quality card. Singapore haze is reported in PSI, the number residents
+ * read, so it sits alongside the model rather than replacing it.
+ */
+export function DisplaySgPsi({
+  sg,
+  loading,
+}: {
+  sg: SgAirResponse | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div
+        className="chameleon mt-4 h-16"
+        role="status"
+        aria-label="Loading official NEA reading"
+      />
+    );
+  }
+
+  if (!sg || !sg.available || sg.psi24h === null) {
+    return (
+      <div className="mt-4 border-t border-border pt-3">
+        <p className="text-base text-text-secondary">
+          Official NEA reading is unavailable right now.
+        </p>
+      </div>
+    );
+  }
+
+  const band = psiBandInfo(sg.psi24h);
+  const region = sg.nearestRegion ? sgRegionLabel(sg.nearestRegion) : null;
+  const pm25 = sg.pm25OneHour;
+
+  return (
+    <div className="mt-4 border-t border-border pt-3">
+      <p className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">
+        Official · NEA Singapore
+      </p>
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <p className="text-xl text-text-primary">
+          PSI (24h){" "}
+          <span
+            className={cn(
+              "font-heading text-4xl font-bold tabular-nums",
+              band.textClass,
+            )}
+          >
+            {sg.psi24h}
+          </span>
+        </p>
+        <p className={cn("text-2xl font-semibold", band.textClass)}>
+          {band.label}
+        </p>
+      </div>
+      <p className="mt-1 text-base text-text-secondary">
+        {sg.psiBasis === "highest_region" ? "Highest region" : "National"}
+        {region && sg.psiBasis === "highest_region" ? `: ${region}` : ""}
+        {pm25 !== null ? ` · PM2.5 (1h) ${pm25} µg/m³` : ""}
+        {sg.observedAt && (
+          <>
+            {" · Updated "}
+            <time dateTime={sg.observedAt}>
+              {formatTime(new Date(sg.observedAt))}
+            </time>
+          </>
+        )}
+      </p>
+      <p className="text-sm text-text-tertiary">{sg.source}</p>
+    </div>
   );
 }
 
