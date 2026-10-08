@@ -44,7 +44,7 @@
     {
       "binding": "WEATHER_DB",
       "database_name": "mukoko-weather",
-      "database_id": "00000000-0000-0000-0000-000000000000", // OWNER
+      "database_id": "9a8846ea-ee34-4479-bc4c-790ee2beabee",
       "migrations_dir": "../d1/migrations",
     },
   ],

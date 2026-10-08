@@ -61,6 +61,7 @@ This repo holds three deployables, not one:
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/` + `api/py/` | **The app.** Next.js 16 App Router front end; Python FastAPI backend as Vercel serverless functions under `/api/py/*`. This is what ships to `weather.mukoko.com`.                                                                              |
 | `station-console/` | **Mukoko Station Console** — a second, separate Next.js app (dev port 3001) for community weather-station operators to register stations and review ingest. Added in #120; not yet on its own public domain.                                    |
+| `scripts/`         | Build helpers. `copy-maplibre-worker.mjs` runs before every `build`/`dev` (npm `prebuild`/`predev`) and copies MapLibre v6's web worker into `public/vendor/maplibre-gl/<version>/`; without it every map renders blank.                        |
 | `worker/`          | **Legacy.** A Cloudflare Worker (`nyuchi-weather-api`) from an earlier architecture. Its `wrangler.toml` still carries `REPLACE_WITH_KV_NAMESPACE_ID` placeholders and it has not been touched since March 2026. Nothing deploys from it today. |
 
 ## Stack
@@ -115,6 +116,8 @@ Almost all data, AI, and CRUD work runs in **Python FastAPI** under `api/py/`,
 proxied by a `vercel.json` rewrite (`/api/py/*` → `api/py/index.py`). Only four
 routes remain in TypeScript: OG image generation, DB init, the public embed API,
 and developer API-key management.
+
+`GET /api/py/enso` returns the latest El Niño / La Niña phase from NOAA CPC's Oceanic Niño Index (12 h in-memory cache; `available: false` when NOAA is unreachable).
 
 **Four-stage weather fallback** — MongoDB cache (15-min TTL) → Tomorrow.io →
 Open-Meteo → `createFallbackWeather` seasonal estimates. The last stage always

@@ -25,6 +25,8 @@ __pycache__/
 # serwist service worker (build artifact)
 /public/sw.js
 /public/sw.js.map
+# Copied from node_modules/maplibre-gl by scripts/copy-maplibre-worker.mjs
+/public/vendor/maplibre-gl/
 
 # production
 /build
