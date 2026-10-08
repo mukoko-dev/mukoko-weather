@@ -8,6 +8,10 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 
 const source = readFileSync(resolve(__dirname, "LazySection.tsx"), "utf-8");
+const skeletonSource = readFileSync(
+  resolve(__dirname, "SectionSkeleton.tsx"),
+  "utf-8",
+);
 
 describe("LazySection — sequential mount queue", () => {
   it("defines a global mountQueue as a QueueEntry array", () => {
@@ -91,22 +95,22 @@ describe("LazySection — bidirectional visibility", () => {
   });
 });
 
-describe("LazySection — default fallback accessibility", () => {
-  it('default fallback has role="status"', () => {
-    expect(source).toContain('role="status"');
+describe("LazySection — default fallback is the shared SectionSkeleton", () => {
+  it("imports SectionSkeleton instead of hand-rolling a placeholder", () => {
+    expect(source).toContain(
+      'import { SectionSkeleton } from "@/components/weather/SectionSkeleton"',
+    );
+    expect(source).toContain('<SectionSkeleton className="h-48" />');
+    expect(source).not.toContain("animate-pulse");
   });
 
-  it("default fallback has aria-label for loading state", () => {
-    expect(source).toContain('aria-label="Loading section"');
+  it("SectionSkeleton carries role=status and an aria-label for loading state", () => {
+    expect(skeletonSource).toContain('role="status"');
+    expect(skeletonSource).toContain('aria-label="Loading section"');
   });
 
-  it("default fallback includes sr-only text for screen readers", () => {
-    expect(source).toContain("sr-only");
-    expect(source).toContain("Loading section");
-  });
-
-  it("default fallback uses animate-pulse for visual loading indicator", () => {
-    expect(source).toContain("animate-pulse");
+  it("SectionSkeleton uses the chameleon skeleton surface (pulses via globals.css)", () => {
+    expect(skeletonSource).toContain("chameleon");
   });
 });
 
