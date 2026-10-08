@@ -34,14 +34,14 @@
   "services": [{ "binding": "FORECAST", "service": "mukoko-weather-forecast" }],
   "kv_namespaces": [
     // Summaries (30 min, 1 min for fallback text) and history analyses (1 h).
-    { "binding": "AI_CACHE", "id": "00000000000000000000000000000000" }, // OWNER
+    { "binding": "AI_CACHE", "id": "b0576f0244c0465d96a816a776e44e18" },
   ],
   "d1_databases": [
     {
       // place_daily, written by mukoko-weather-jobs; read for history.
       "binding": "WEATHER_DB",
       "database_name": "mukoko-weather",
-      "database_id": "00000000-0000-0000-0000-000000000000", // OWNER
+      "database_id": "9a8846ea-ee34-4479-bc4c-790ee2beabee",
       "migrations_dir": "../d1/migrations",
     },
   ],

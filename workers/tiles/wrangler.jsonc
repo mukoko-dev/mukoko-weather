@@ -29,7 +29,7 @@
   "kv_namespaces": [
     // Tiles for 24 hours: fresh for 90 minutes, then served only as a stale
     // fallback while Tomorrow.io is failing or rate limiting.
-    { "binding": "TILE_CACHE", "id": "00000000000000000000000000000000" }, // OWNER: mukoko-weather-forecast-cache
+    { "binding": "TILE_CACHE", "id": "c7b9c50b55cd43fcbf3e077a19226109" }, // mukoko-weather-forecast-cache
   ],
   // Per client IP. A map view is ~16 tiles and every pan loads more.
   "ratelimits": [
