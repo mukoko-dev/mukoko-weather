@@ -17,6 +17,7 @@
  */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { SITE_URL } from "@/lib/site";
 import {
   DEFAULT_SITE,
   shapeEmbedResponse,
@@ -24,6 +25,7 @@ import {
   type LocationMeta,
   type WeatherResponse,
 } from "./shape";
+import { fetchJson } from "@/lib/fetch-json";
 
 export const runtime = "edge";
 
@@ -38,25 +40,13 @@ const DEFAULT_LON = 31.05;
 // host that isn't reliably reachable here). Falls back to localhost in dev.
 const INTERNAL_BASE =
   process.env.NEXT_PUBLIC_APP_URL ??
-  (process.env.NODE_ENV === "production"
-    ? "https://weather.mukoko.com"
-    : "http://localhost:3000");
+  (process.env.NODE_ENV === "production" ? SITE_URL : "http://localhost:3000");
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
-
-async function fetchJson<T>(url: string): Promise<T | null> {
-  try {
-    const res = await fetch(url, { headers: { accept: "application/json" } });
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
-}
 
 function parseCoord(value: string | null): number | null {
   if (!value) return null;

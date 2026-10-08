@@ -31,6 +31,9 @@ const chartErrorBoundary = readComponent(
   "../components/weather/ChartErrorBoundary.tsx",
 );
 const lazySection = readComponent("../components/weather/LazySection.tsx");
+const sectionSkeleton = readComponent(
+  "../components/weather/SectionSkeleton.tsx",
+);
 const weatherDashboard = readComponent(
   "../app/[location]/WeatherDashboard.tsx",
 );
@@ -86,12 +89,13 @@ describe("Decorative icons — aria-hidden", () => {
 });
 
 describe('Loading states — role="status"', () => {
-  it('LazySection default fallback has role="status"', () => {
-    expect(lazySection).toContain('role="status"');
+  it('LazySection default fallback (SectionSkeleton) has role="status"', () => {
+    expect(lazySection).toContain("<SectionSkeleton");
+    expect(sectionSkeleton).toContain('role="status"');
   });
 
-  it("LazySection fallback has aria-label for loading state", () => {
-    expect(lazySection).toContain('aria-label="Loading section"');
+  it("LazySection fallback (SectionSkeleton) has aria-label for loading state", () => {
+    expect(sectionSkeleton).toContain('aria-label="Loading section"');
   });
 });
 
@@ -102,8 +106,8 @@ describe('Error states — role="alert"', () => {
 });
 
 describe("Screen reader text — sr-only", () => {
-  it("LazySection includes sr-only loading text", () => {
-    expect(lazySection).toContain("sr-only");
+  it("LazySection loading state is announced via SectionSkeleton aria-label", () => {
+    expect(sectionSkeleton).toContain('aria-label="Loading section"');
   });
 
   it("CurrentConditions share button text is sr-only on mobile", () => {

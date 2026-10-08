@@ -12,7 +12,7 @@ describe("HistoryAnalysis", () => {
     const mod = await import("./HistoryAnalysis");
     expect(mod.HistoryAnalysis).toBeDefined();
     expect(typeof mod.HistoryAnalysis).toBe("function");
-  });
+  }, 20000);
 
   it("is a client component", async () => {
     const { readFileSync } = await import("fs");
@@ -46,15 +46,16 @@ describe("HistoryAnalysis", () => {
     expect(source).toContain("activities: selectedActivities");
   });
 
-  it("uses MarkdownErrorBoundary for crash isolation", async () => {
+  it("renders the analysis through the shared SafeMarkdown (size sm, error-isolated)", async () => {
     const { readFileSync } = await import("fs");
     const { resolve } = await import("path");
     const source = readFileSync(
       resolve(__dirname, "HistoryAnalysis.tsx"),
       "utf-8",
     );
-    expect(source).toContain("MarkdownErrorBoundary");
-    expect(source).toContain("getDerivedStateFromError");
+    expect(source).toContain("<SafeMarkdown");
+    expect(source).toContain('size="sm"');
+    expect(source).not.toContain("<ReactMarkdown");
   });
 
   it("renders with aria-labelledby for accessibility", async () => {

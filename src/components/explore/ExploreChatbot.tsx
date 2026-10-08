@@ -1,17 +1,12 @@
 "use client";
 
-import {
-  useState,
-  useRef,
-  useEffect,
-  useCallback,
-  Component,
-  type ReactNode,
-} from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
+import { ArrowDown } from "lucide-react";
 import { SparklesIcon, MapPinIcon } from "@/lib/weather-icons";
-import { Button } from "@/components/ui/button";
+import { ChatComposer } from "@/components/ui/chat-composer";
+import { SafeMarkdown } from "@/components/ui/safe-markdown";
+import { TypingDots } from "@/components/ui/typing-dots";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   useAppStore,
@@ -25,33 +20,6 @@ import {
   getExplorePrompts,
   type SuggestedPrompt,
 } from "@/lib/suggested-prompts";
-
-// ---------------------------------------------------------------------------
-// Inline error boundary for ReactMarkdown — prevents malformed markdown from
-// crashing the entire chat UI. Aligns with per-section error isolation pattern.
-// ---------------------------------------------------------------------------
-
-interface MarkdownErrorBoundaryState {
-  hasError: boolean;
-}
-
-class MarkdownErrorBoundary extends Component<
-  { children: ReactNode; fallback: string },
-  MarkdownErrorBoundaryState
-> {
-  state: MarkdownErrorBoundaryState = { hasError: false };
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <p className="text-base text-text-secondary">{this.props.fallback}</p>
-      );
-    }
-    return this.props.children;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -70,42 +38,6 @@ interface ExploreResponse {
   references: { slug: string; name: string; type: string }[];
   error?: boolean;
 }
-
-// ---------------------------------------------------------------------------
-// Markdown link sanitisation — only allow safe hrefs (relative or https://)
-// ---------------------------------------------------------------------------
-
-/** Allow relative paths and https:// URLs only; block javascript:, data:, etc. */
-function isSafeHref(href: string | undefined): boolean {
-  if (!href) return false;
-  if (href.startsWith("/") || href.startsWith("#")) return true;
-  try {
-    const url = new URL(href);
-    // Only allow https: — http: could enable link injection to plaintext targets.
-    // Relative paths and fragment anchors are handled above.
-    return url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-const markdownComponents = {
-  a: ({
-    href,
-    children,
-    ...props
-  }: React.ComponentPropsWithoutRef<"a"> & { href?: string }) => {
-    if (!isSafeHref(href)) {
-      // Render unsafe links as plain text — no clickable element
-      return <span>{children}</span>;
-    }
-    return (
-      <a href={href} rel="noopener noreferrer" target="_blank" {...props}>
-        {children}
-      </a>
-    );
-  },
-};
 
 // ---------------------------------------------------------------------------
 // Suggested prompts
@@ -243,44 +175,6 @@ function getContextualGreeting(ctx: ShamwariContext): string | null {
 // Component
 // ---------------------------------------------------------------------------
 
-function ArrowUpIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="m5 12 7-7 7 7" />
-      <path d="M12 19V5" />
-    </svg>
-  );
-}
-
-function ArrowDownIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="m19 12-7 7-7-7" />
-      <path d="M12 5v14" />
-    </svg>
-  );
-}
-
 export function ExploreChatbot() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -412,7 +306,6 @@ export function ExploreChatbot() {
       );
       setInput("");
       // Reset textarea height back to single row after sending
-      if (inputRef.current) inputRef.current.style.height = "auto";
       setLoading(true);
       trackEvent("ai_chat_sent", { source: "shamwari" });
 
@@ -492,11 +385,6 @@ export function ExploreChatbot() {
     [loading, messages, selectedActivities],
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    sendMessage(input);
-  };
-
   const handleSuggestion = (query: string) => {
     sendMessage(query);
   };
@@ -564,52 +452,24 @@ export function ExploreChatbot() {
             className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center justify-center h-11 w-11 rounded-full bg-surface-card border border-border shadow-md text-text-secondary transition-colors hover:bg-surface-base hover:text-text-primary"
             aria-label="Scroll to bottom"
           >
-            <ArrowDownIcon size={16} />
+            <ArrowDown size={16} aria-hidden="true" />
           </button>
         )}
       </div>
 
-      {/* Input area — Claude-style card */}
+      {/* Input area — shared composer */}
       <div className="shrink-0 px-3 pb-3 pt-2">
-        <form onSubmit={handleSubmit}>
-          <div className="rounded-2xl border border-border bg-surface-card shadow-sm">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                // Auto-grow: reset height then expand to scrollHeight.
-                // Capped at 160px so inline style.height doesn't
-                // override the Tailwind max-height constraint.
-                e.target.style.height = "auto";
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
-              }}
-              onKeyDown={(e) => {
-                // Submit on Enter (without Shift); Shift+Enter inserts a newline
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage(input);
-                }
-              }}
-              placeholder="Ask about weather, locations, activities..."
-              rows={1}
-              className="block w-full resize-none bg-transparent px-4 pt-4 pb-2 text-base text-text-primary placeholder:text-text-tertiary outline-none disabled:cursor-not-allowed disabled:opacity-50 max-h-40 overflow-y-auto break-words"
-              aria-label="Ask Shamwari Explorer"
-              disabled={loading}
-            />
-            <div className="flex items-center justify-end px-3 pb-3">
-              <Button
-                type="submit"
-                size="sm"
-                disabled={loading || !input.trim()}
-                className="h-11 w-11 rounded-full p-0 shrink-0"
-                aria-label="Send message"
-              >
-                <ArrowUpIcon size={18} />
-              </Button>
-            </div>
-          </div>
-        </form>
+        <ChatComposer
+          value={input}
+          onChange={setInput}
+          onSend={() => sendMessage(input)}
+          disabled={loading}
+          maxHeight={160}
+          placeholder="Ask about weather, locations, activities..."
+          ariaLabel="Ask Shamwari Explorer"
+          surface="card"
+          textareaRef={inputRef}
+        />
       </div>
     </div>
   );
@@ -686,13 +546,10 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           <SparklesIcon size={14} className="text-primary" />
         </div>
         <div className="min-w-0 flex-1">
-          <MarkdownErrorBoundary fallback={message.content}>
-            <div className="prose prose-base max-w-none break-words overflow-hidden text-text-secondary prose-strong:text-text-primary prose-headings:text-text-primary prose-li:marker:text-text-tertiary prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-pre:overflow-x-auto prose-pre:max-w-full prose-code:break-words">
-              <ReactMarkdown components={markdownComponents}>
-                {message.content}
-              </ReactMarkdown>
-            </div>
-          </MarkdownErrorBoundary>
+          <SafeMarkdown
+            content={message.content}
+            className="break-words overflow-hidden prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-pre:overflow-x-auto prose-pre:max-w-full prose-code:break-words"
+          />
 
           {/* Location references as quick links */}
           {message.references && message.references.length > 0 && (
@@ -706,7 +563,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
                   <Link
                     key={ref.slug}
                     href={`/${ref.slug}`}
-                    className="inline-flex items-center gap-1 rounded-[var(--radius-badge)] bg-primary/10 px-2.5 py-1 text-base font-medium text-primary transition-colors hover:bg-primary/20"
+                    className="flamingo-link"
                   >
                     <MapPinIcon size={10} className="shrink-0" />
                     {ref.name}
@@ -726,17 +583,11 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
 function TypingIndicator() {
   return (
-    <div className="flex items-start gap-2.5" role="status">
+    <div className="flex items-start gap-2.5">
       <div className="hoopoe mt-0.5">
         <SparklesIcon size={14} className="text-primary" />
       </div>
-      <div className="flex gap-1.5 py-2">
-        <span className="h-2 w-2 animate-bounce rounded-full bg-text-tertiary [animation-delay:0ms]" />
-        <span className="h-2 w-2 animate-bounce rounded-full bg-text-tertiary [animation-delay:150ms]" />
-        <span className="h-2 w-2 animate-bounce rounded-full bg-text-tertiary [animation-delay:300ms]" />
-      </div>
-      {/* Inside role="status" so screen readers announce it */}
-      <span className="sr-only">Shamwari Explorer is thinking...</span>
+      <TypingDots label="Shamwari Explorer is thinking..." />
     </div>
   );
 }

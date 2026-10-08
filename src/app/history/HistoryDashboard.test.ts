@@ -585,3 +585,239 @@ describe("WeatherHistoryDoc insights field", () => {
     expect(py).toContain("_record_weather_history");
   });
 });
+
+// ---------------------------------------------------------------------------
+// computeCategorySuitability — output snapshots (guards the per-category
+// refactor: every category, every level, and the default-value branches)
+// ---------------------------------------------------------------------------
+
+describe("computeCategorySuitability snapshots", () => {
+  const rec = (over: Partial<InsightsRecord>): InsightsRecord => ({
+    date: "2026-01-01",
+    dewPoint: null,
+    heatStress: null,
+    thunderstorm: null,
+    visibility: null,
+    uvConcern: null,
+    gddMaize: null,
+    gddSorghum: null,
+    gddPotato: null,
+    evapotranspiration: null,
+    moonPhase: null,
+    ...over,
+  });
+
+  it("hot, stormy, low-visibility period flags every category", () => {
+    const result = computeCategorySuitability([
+      rec({
+        dewPoint: 22,
+        heatStress: 30,
+        thunderstorm: 45,
+        visibility: 0.5,
+        uvConcern: 8,
+        gddMaize: 16,
+      }),
+    ]);
+    expect(result).toMatchInlineSnapshot(`
+      [
+        {
+          "bgClass": "bg-severity-moderate/10",
+          "category": "farming",
+          "colorClass": "text-severity-moderate",
+          "detail": "High avg dew point — crop disease risk elevated",
+          "icon": "🌱",
+          "label": "Farming",
+          "level": "fair",
+          "levelLabel": "Fair",
+        },
+        {
+          "bgClass": "bg-severity-severe/10",
+          "category": "mining",
+          "colorClass": "text-severity-severe",
+          "detail": "Severe heat stress (avg: 30)",
+          "icon": "⛏️",
+          "label": "Mining",
+          "level": "poor",
+          "levelLabel": "Poor",
+        },
+        {
+          "bgClass": "bg-severity-severe/10",
+          "category": "sports",
+          "colorClass": "text-severity-severe",
+          "detail": "Too hot for outdoor sports",
+          "icon": "🏃",
+          "label": "Sports",
+          "level": "poor",
+          "levelLabel": "Poor",
+        },
+        {
+          "bgClass": "bg-severity-severe/10",
+          "category": "travel",
+          "colorClass": "text-severity-severe",
+          "detail": "Very poor visibility — travel not recommended",
+          "icon": "🚗",
+          "label": "Travel",
+          "level": "poor",
+          "levelLabel": "Poor",
+        },
+        {
+          "bgClass": "bg-severity-moderate/10",
+          "category": "tourism",
+          "colorClass": "text-severity-moderate",
+          "detail": "Very high UV — seek shade during midday",
+          "icon": "🦁",
+          "label": "Tourism",
+          "level": "fair",
+          "levelLabel": "Fair",
+        },
+        {
+          "bgClass": "bg-severity-severe/10",
+          "category": "casual",
+          "colorClass": "text-severity-severe",
+          "detail": "Thunderstorm risk — indoor activities recommended",
+          "icon": "☀️",
+          "label": "Casual",
+          "level": "poor",
+          "levelLabel": "Poor",
+        },
+      ]
+    `);
+  });
+
+  it("mild period with only partial inputs uses the default values", () => {
+    const result = computeCategorySuitability([
+      rec({ heatStress: 25, thunderstorm: 25, uvConcern: 3, visibility: 12 }),
+    ]);
+    expect(result).toMatchInlineSnapshot(`
+      [
+        {
+          "bgClass": "bg-severity-moderate/10",
+          "category": "mining",
+          "colorClass": "text-severity-moderate",
+          "detail": "Moderate risk — heat: 25, storm: 25%",
+          "icon": "⛏️",
+          "label": "Mining",
+          "level": "fair",
+          "levelLabel": "Fair",
+        },
+        {
+          "bgClass": "bg-severity-moderate/10",
+          "category": "sports",
+          "colorClass": "text-severity-moderate",
+          "detail": "Warm — hydration breaks recommended",
+          "icon": "🏃",
+          "label": "Sports",
+          "level": "fair",
+          "levelLabel": "Fair",
+        },
+        {
+          "bgClass": "bg-severity-moderate/10",
+          "category": "travel",
+          "colorClass": "text-severity-moderate",
+          "detail": "Moderate risk — vis: 12 km, storm: 25%",
+          "icon": "🚗",
+          "label": "Travel",
+          "level": "fair",
+          "levelLabel": "Fair",
+        },
+        {
+          "bgClass": "bg-severity-low/10",
+          "category": "tourism",
+          "colorClass": "text-severity-low",
+          "detail": "Good visibility (12 km) and moderate UV",
+          "icon": "🦁",
+          "label": "Tourism",
+          "level": "good",
+          "levelLabel": "Good",
+        },
+        {
+          "bgClass": "bg-severity-moderate/10",
+          "category": "casual",
+          "colorClass": "text-severity-moderate",
+          "detail": "Moderate conditions — check forecast",
+          "icon": "☀️",
+          "label": "Casual",
+          "level": "fair",
+          "levelLabel": "Fair",
+        },
+      ]
+    `);
+  });
+
+  it("cold, dry period hits the farming poor branch and sports/travel fair branches", () => {
+    const result = computeCategorySuitability([
+      rec({
+        dewPoint: 4,
+        heatStress: 24,
+        thunderstorm: 21,
+        visibility: 3,
+        uvConcern: 8,
+        gddMaize: 0,
+      }),
+    ]);
+    expect(result).toMatchInlineSnapshot(`
+      [
+        {
+          "bgClass": "bg-severity-severe/10",
+          "category": "farming",
+          "colorClass": "text-severity-severe",
+          "detail": "Low avg dew point — cold, dry air stress for crops",
+          "icon": "🌱",
+          "label": "Farming",
+          "level": "poor",
+          "levelLabel": "Poor",
+        },
+        {
+          "bgClass": "bg-severity-moderate/10",
+          "category": "mining",
+          "colorClass": "text-severity-moderate",
+          "detail": "Moderate risk — heat: 24, storm: 21%",
+          "icon": "⛏️",
+          "label": "Mining",
+          "level": "fair",
+          "levelLabel": "Fair",
+        },
+        {
+          "bgClass": "bg-severity-moderate/10",
+          "category": "sports",
+          "colorClass": "text-severity-moderate",
+          "detail": "High UV exposure (avg: 8) — sun protection needed",
+          "icon": "🏃",
+          "label": "Sports",
+          "level": "fair",
+          "levelLabel": "Fair",
+        },
+        {
+          "bgClass": "bg-severity-moderate/10",
+          "category": "travel",
+          "colorClass": "text-severity-moderate",
+          "detail": "Moderate risk — vis: 3 km, storm: 21%",
+          "icon": "🚗",
+          "label": "Travel",
+          "level": "fair",
+          "levelLabel": "Fair",
+        },
+        {
+          "bgClass": "bg-severity-moderate/10",
+          "category": "tourism",
+          "colorClass": "text-severity-moderate",
+          "detail": "Very high UV — seek shade during midday",
+          "icon": "🦁",
+          "label": "Tourism",
+          "level": "fair",
+          "levelLabel": "Fair",
+        },
+        {
+          "bgClass": "bg-severity-moderate/10",
+          "category": "casual",
+          "colorClass": "text-severity-moderate",
+          "detail": "Moderate conditions — check forecast",
+          "icon": "☀️",
+          "label": "Casual",
+          "level": "fair",
+          "levelLabel": "Fair",
+        },
+      ]
+    `);
+  });
+});

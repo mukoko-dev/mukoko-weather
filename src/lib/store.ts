@@ -4,8 +4,10 @@ import { startReplication } from "./rxdb/replication";
 import type { PreferencesDocType } from "./rxdb/schemas";
 import { isLocationSlug } from "./current-slug";
 import { isPresetAnchor, type PresetAnchor } from "./location-presets";
+import { resolveTheme, type ThemePreference } from "./theme";
 
-export type ThemePreference = "light" | "dark" | "system";
+export type { ThemePreference };
+export { resolveTheme };
 
 /** Tabs of the My Weather modal (ids match MyWeatherModal's TabsTrigger values). */
 export type MyWeatherTab = "location" | "activities" | "settings";
@@ -41,15 +43,6 @@ export function isShamwariContextValid(
 ): ctx is ShamwariContext {
   if (!ctx) return false;
   return Date.now() - ctx.timestamp < SHAMWARI_CONTEXT_TTL_MS;
-}
-
-/** Resolve the effective theme (light/dark) for a given preference */
-export function resolveTheme(pref: ThemePreference): "light" | "dark" {
-  if (pref !== "system") return pref;
-  if (typeof window === "undefined") return "light";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
 }
 
 /** Apply the resolved theme to the DOM */
@@ -225,7 +218,7 @@ const THEME_CYCLE: ThemePreference[] = ["light", "dark", "system"];
 /**
  * Module-level hydration flag — set once RxDB bridge finishes loading
  * preferences into the store. Components that depend on persisted state
- * (e.g. WelcomeBanner checking hasOnboarded) should wait for this to
+ * (e.g. a component checking hasOnboarded) should wait for this to
  * avoid a flash of incorrect content.
  */
 let _hasHydrated = false;

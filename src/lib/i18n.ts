@@ -33,6 +33,13 @@ const messages: Record<string, Record<string, string>> = {
     "geo.denied": "Location access denied — please search for your city.",
     "geo.error": "Could not detect location — please search for your city.",
 
+    // Relative time — formatRelative()
+    "time.justNow": "just now",
+    "time.minutesAgo": "{count} min ago",
+    "time.hoursAgo": "{count} h ago",
+    "time.dayAgo": "{count} day ago",
+    "time.daysAgo": "{count} days ago",
+
     // Weather
     "weather.current": "Current weather conditions in {location}",
     "weather.feelsLike": "Feels like",
@@ -172,11 +179,12 @@ export function formatPercent(
   }).format(value);
 }
 
-/** Format time (24h), e.g. "14:30" */
+/** Format time (24h), e.g. "14:30". Invalid dates format as "". */
 export function formatTime(
   date: Date,
   locale: Locale = DEFAULT_LOCALE,
 ): string {
+  if (Number.isNaN(date.getTime())) return "";
   const intlLocale = LOCALE_MAP[locale] ?? "en";
   return new Intl.DateTimeFormat(intlLocale, {
     hour: "2-digit",
@@ -185,24 +193,69 @@ export function formatTime(
   }).format(date);
 }
 
-/** Format day name, e.g. "Mon" */
+/** Format day name, e.g. "Mon". Invalid dates format as "". */
 export function formatDayName(
   date: Date,
   locale: Locale = DEFAULT_LOCALE,
 ): string {
+  if (Number.isNaN(date.getTime())) return "";
   const intlLocale = LOCALE_MAP[locale] ?? "en";
   return new Intl.DateTimeFormat(intlLocale, { weekday: "short" }).format(date);
 }
 
-/** Format full date, e.g. "9 February 2026" */
+/** Options for formatDate(). Defaults produce the full date "9 February 2026". */
+export interface FormatDateOptions {
+  /** Include the day of month (default true). */
+  day?: boolean;
+  /** Month name width (default "long"; "short" → "9 Feb 2026"). */
+  month?: "short" | "long";
+  /** Year width (default "numeric"; "2-digit" → "Feb 26"; false omits it). */
+  year?: "numeric" | "2-digit" | false;
+  /** Prefix the short weekday, e.g. "Mon 9 Feb 2026" (default false). */
+  weekday?: boolean;
+}
+
+/** Format a date, e.g. "9 February 2026". Invalid dates format as "". */
 export function formatDate(
   date: Date,
   locale: Locale = DEFAULT_LOCALE,
+  options: FormatDateOptions = {},
 ): string {
+  if (Number.isNaN(date.getTime())) return "";
+  const {
+    day = true,
+    month = "long",
+    year = "numeric",
+    weekday = false,
+  } = options;
   const intlLocale = LOCALE_MAP[locale] ?? "en";
   return new Intl.DateTimeFormat(intlLocale, {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
+    weekday: weekday ? "short" : undefined,
+    day: day ? "numeric" : undefined,
+    month,
+    year: year || undefined,
   }).format(date);
+}
+
+/**
+ * Relative time in the past, e.g. "just now", "5 min ago", "2 h ago",
+ * "1 day ago", "3 days ago". `now` is injectable for deterministic tests.
+ * Invalid dates format as "".
+ */
+export function formatRelative(
+  date: Date,
+  now: Date = new Date(),
+  locale: Locale = DEFAULT_LOCALE,
+): string {
+  const diffMs = now.getTime() - date.getTime();
+  if (Number.isNaN(diffMs)) return "";
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 1) return t("time.justNow", undefined, locale);
+  if (mins < 60) return t("time.minutesAgo", { count: mins }, locale);
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return t("time.hoursAgo", { count: hrs }, locale);
+  const days = Math.floor(hrs / 24);
+  return days === 1
+    ? t("time.dayAgo", { count: 1 }, locale)
+    : t("time.daysAgo", { count: days }, locale);
 }

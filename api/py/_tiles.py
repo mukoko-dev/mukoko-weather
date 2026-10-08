@@ -31,14 +31,15 @@ from __future__ import annotations
 import base64
 import logging
 import re
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
-from ._db import get_api_key, stamp_platform_fields, weather_db
+from ._db import get_api_key, map_tile_cache_collection, ttl_find_one, ttl_upsert
+from ._http import get_http_client
 
 router = APIRouter()
 
@@ -76,24 +77,17 @@ _TRANSPARENT_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 )
 
-_http_client: Optional[httpx.Client] = None
+#: Tomorrow.io tile upstream timeout (seconds).
+TILE_UPSTREAM_TIMEOUT_S = 8.0
 
 
 def _get_http() -> httpx.Client:
-    global _http_client
-    if _http_client is None:
-        _http_client = httpx.Client(timeout=8.0)
-    return _http_client
+    return get_http_client(TILE_UPSTREAM_TIMEOUT_S)
 
 
 # ---------------------------------------------------------------------------
 # Persistent tile cache (weather.map_tile_cache)
 # ---------------------------------------------------------------------------
-
-
-def _map_tile_cache_collection():
-    """``weather.map_tile_cache`` — TTL-expiring cache of proxied overlay tiles."""
-    return weather_db()["map_tile_cache"]
 
 
 def _timestamp_bucket(timestamp: str) -> str:
@@ -125,13 +119,8 @@ def _get_cached_tile(cache_id: str, *, allow_stale: bool = False) -> Optional[by
     swallowed — the caller falls through to Tomorrow.io / the transparent tile.
     """
     try:
-        query: dict = {"_id": cache_id}
-        if not allow_stale:
-            query["expiresAt"] = {"$gt": datetime.now(timezone.utc)}
-        doc = _map_tile_cache_collection().find_one(query)
-        if not doc:
-            return None
-        tile_b64 = doc.get("tile")
+        doc = ttl_find_one(map_tile_cache_collection(), {"_id": cache_id}, allow_stale=allow_stale)
+        tile_b64 = doc.get("tile") if doc else None
         if not tile_b64:
             return None
         return base64.b64decode(tile_b64)
@@ -147,18 +136,18 @@ def _set_cached_tile(cache_id: str, layer: str, tile_bytes: bytes) -> None:
     concurrent requests for the same tile end up with one row, not two. Cache
     write failures never break the response — they're swallowed silently.
     """
-    now = datetime.now(timezone.utc)
-    doc = {
+    fields = {
         "_id": cache_id,
         "layer": layer,
         "tile": base64.b64encode(tile_bytes).decode("ascii"),
-        "fetchedAt": now,
-        "expiresAt": now + timedelta(seconds=MAP_TILE_CACHE_TTL_SECONDS),
     }
-    stamp_platform_fields(doc)
     try:
-        _map_tile_cache_collection().update_one(
-            {"_id": cache_id}, {"$set": doc}, upsert=True
+        ttl_upsert(
+            map_tile_cache_collection(),
+            {"_id": cache_id},
+            fields,
+            MAP_TILE_CACHE_TTL_SECONDS,
+            stamp=True,
         )
     except Exception:
         pass

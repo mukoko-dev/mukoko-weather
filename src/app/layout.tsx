@@ -9,11 +9,10 @@ import { ServiceWorkerUpdater } from "@/components/pwa/ServiceWorkerUpdater";
 import { Analytics } from "@vercel/analytics/next";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import "./globals.css";
-
-const BASE_URL = "https://weather.mukoko.com";
+import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(BASE_URL),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "mukoko weather — Global Weather Intelligence",
     template: "%s | mukoko weather",
@@ -42,8 +41,8 @@ export const metadata: Metadata = {
   publisher: "Nyuchi Africa (PVT) Ltd",
   alternates: {
     languages: {
-      en: BASE_URL,
-      "x-default": BASE_URL,
+      en: SITE_URL,
+      "x-default": SITE_URL,
     },
   },
   openGraph: {
@@ -52,11 +51,11 @@ export const metadata: Metadata = {
       "AI-powered global weather intelligence. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 265+ locations worldwide.",
     type: "website",
     locale: "en",
-    url: BASE_URL,
+    url: SITE_URL,
     siteName: "mukoko weather",
     images: [
       {
-        url: `${BASE_URL}/api/og?${new URLSearchParams({ title: "mukoko weather", subtitle: "Global Weather Intelligence", template: "home" })}`,
+        url: `${SITE_URL}/api/og?${new URLSearchParams({ title: "mukoko weather", subtitle: "Global Weather Intelligence", template: "home" })}`,
         width: 1200,
         height: 630,
         alt: "mukoko weather — Global Weather Intelligence",
@@ -71,7 +70,7 @@ export const metadata: Metadata = {
     creator: "@mukokoafrica",
     site: "@mukokoafrica",
     images: [
-      `${BASE_URL}/api/og?${new URLSearchParams({ title: "mukoko weather", subtitle: "Global Weather Intelligence", template: "home" })}`,
+      `${SITE_URL}/api/og?${new URLSearchParams({ title: "mukoko weather", subtitle: "Global Weather Intelligence", template: "home" })}`,
     ],
   },
   robots: {
@@ -119,12 +118,12 @@ export default async function RootLayout({
   const webAppSchema = {
     "@context": "https://schema.org",
     "@type": "WebApplication",
-    "@id": `${BASE_URL}/#app`,
+    "@id": `${SITE_URL}/#app`,
     name: "mukoko weather",
     alternateName: "Mukoko Weather",
     description:
       "AI-powered global weather intelligence platform providing actionable forecasts for farming, mining, travel, and daily life across 265+ locations worldwide.",
-    url: BASE_URL,
+    url: SITE_URL,
     applicationCategory: "WeatherApplication",
     operatingSystem: "Any",
     browserRequirements: "Requires JavaScript",
@@ -133,8 +132,8 @@ export default async function RootLayout({
       { "@type": "Language", name: "Shona", alternateName: "sn" },
       { "@type": "Language", name: "Ndebele", alternateName: "nd" },
     ],
-    creator: { "@id": `${BASE_URL}/#org` },
-    publisher: { "@id": `${BASE_URL}/#org` },
+    creator: { "@id": `${SITE_URL}/#org` },
+    publisher: { "@id": `${SITE_URL}/#org` },
     areaServed: { "@type": "Place", name: "World" },
     offers: {
       "@type": "Offer",
@@ -159,14 +158,14 @@ export default async function RootLayout({
   const orgSchema = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    "@id": `${BASE_URL}/#org`,
+    "@id": `${SITE_URL}/#org`,
     name: "Nyuchi Africa (PVT) Ltd",
     legalName: "Nyuchi Africa (PVT) Ltd",
     url: "https://nyuchi.com",
     department: {
       "@type": "Organization",
       name: "Mukoko Africa",
-      url: BASE_URL,
+      url: SITE_URL,
     },
     brand: {
       "@type": "Brand",
@@ -197,17 +196,17 @@ export default async function RootLayout({
   const webSiteSchema = {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    "@id": `${BASE_URL}/#website`,
+    "@id": `${SITE_URL}/#website`,
     name: "mukoko weather",
     alternateName: "Mukoko Weather",
-    url: BASE_URL,
-    publisher: { "@id": `${BASE_URL}/#org` },
+    url: SITE_URL,
+    publisher: { "@id": `${SITE_URL}/#org` },
     inLanguage: "en",
     potentialAction: {
       "@type": "SearchAction",
       target: {
         "@type": "EntryPoint",
-        urlTemplate: `${BASE_URL}/{location}`,
+        urlTemplate: `${SITE_URL}/{location}`,
       },
       "query-input": "required name=location",
     },
@@ -222,7 +221,7 @@ export default async function RootLayout({
     {
       name: "Explore Locations",
       description: "Browse weather locations by category and country worldwide",
-      url: `${BASE_URL}/explore`,
+      url: `${SITE_URL}/explore`,
     },
     ...(isFeatureEnabled("shamwari_chat")
       ? [
@@ -230,7 +229,7 @@ export default async function RootLayout({
             name: "Shamwari AI",
             description:
               "AI-powered weather assistant for contextual advice and insights",
-            url: `${BASE_URL}/shamwari`,
+            url: `${SITE_URL}/shamwari`,
           },
         ]
       : []),
@@ -238,30 +237,30 @@ export default async function RootLayout({
       name: "Historical Weather Data",
       description:
         "Explore recorded weather trends and historical data worldwide",
-      url: `${BASE_URL}/history`,
+      url: `${SITE_URL}/history`,
     },
     {
       name: "Help & FAQ",
       description:
         "How to use mukoko weather, frequently asked questions, and support",
-      url: `${BASE_URL}/help`,
+      url: `${SITE_URL}/help`,
     },
     {
       name: "About",
       description: "About mukoko weather, Nyuchi Africa, and our data sources",
-      url: `${BASE_URL}/about`,
+      url: `${SITE_URL}/about`,
     },
     {
       name: "System Status",
       description: "Real-time health status of mukoko weather services",
-      url: `${BASE_URL}/status`,
+      url: `${SITE_URL}/status`,
     },
   ];
 
   const siteNavSchema = {
     "@context": "https://schema.org",
     "@type": "ItemList",
-    "@id": `${BASE_URL}/#navigation`,
+    "@id": `${SITE_URL}/#navigation`,
     name: "Main Navigation",
     itemListElement: navItems.map((item, i) => ({
       "@type": "SiteNavigationElement",
@@ -274,13 +273,13 @@ export default async function RootLayout({
   const breadcrumbSchema = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
-    "@id": `${BASE_URL}/#breadcrumb`,
+    "@id": `${SITE_URL}/#breadcrumb`,
     itemListElement: [
       {
         "@type": "ListItem",
         position: 1,
         name: "Home",
-        item: BASE_URL,
+        item: SITE_URL,
       },
     ],
   };

@@ -180,18 +180,18 @@ mukoko-weather/
 │   ├── components/
 │   │   ├── ui/                       # shadcn/ui primitives (Radix UI + CVA)
 │   │   │   ├── button.tsx            # Button (6 variants, 5 sizes, asChild support)
-│   │   │   ├── badge.tsx             # Badge (4 variants)
-│   │   │   ├── card.tsx              # Card, CardHeader, CardContent, etc.
+│   │   │   ├── badge.tsx             # Badge (5 variants, incl. rating)
 │   │   │   ├── chart.tsx             # CanvasChart, resolveColor (wraps Chart.js Canvas)
 │   │   │   ├── dialog.tsx            # Dialog (Radix, portal, overlay, animations)
 │   │   │   ├── input.tsx             # Input (styled with CSS custom properties)
-│   │   │   ├── skeleton.tsx         # Skeleton, CardSkeleton, ChartSkeleton, BadgeSkeleton, MetricCardSkeleton, ChatSkeleton
+│   │   │   ├── skeleton.tsx         # Skeleton, CardSkeleton, ChartSkeleton, MetricCardSkeleton, ChatSkeleton
 │   │   │   ├── spinner.tsx          # Spinner (shared loading ring — size/ring colors compose via className)
 │   │   │   ├── alert.tsx             # Alert, AlertTitle, AlertDescription (6 severity variants)
 │   │   │   ├── accordion.tsx        # Accordion (Radix, animated open/close)
 │   │   │   ├── section-header.tsx   # SectionHeader (title + optional action link/button)
 │   │   │   ├── info-row.tsx         # InfoRow (label + value pair for data lists)
 │   │   │   ├── toggle-group.tsx     # ToggleGroup (Radix, single/multiple, 3 variants incl. unstyled)
+│   │   ├── code-block.tsx       # CodeBlock (tortoise surface, scrollable code sample; docs pages)
 │   │   │   ├── scroll-area.tsx      # ScrollArea (Radix, custom scrollbar, horizontal/vertical)
 │   │   │   ├── status-indicator.tsx # StatusDot + StatusBadge (severity-colored status indicators)
 │   │   │   ├── cta-card.tsx         # CTACard (call-to-action card with title, description, action)
@@ -218,13 +218,17 @@ mukoko-weather/
 │   │   │   ├── HeaderSkeleton.tsx    # Header loading skeleton
 │   │   │   ├── Breadcrumb.tsx        # Shared Home / Location / Current-page trail (atmosphere, forecast, map sub-routes)
 │   │   │   ├── Breadcrumb.test.ts
-│   │   │   └── Footer.tsx            # Footer with site stats, copyright, links, Ubuntu philosophy
+│   │   │   ├── Footer.tsx            # Footer with site stats, copyright, links, Ubuntu philosophy
+│   │   │   └── PageShell.tsx         # Header + main-content column (3xl/5xl) + Footer for static pages
 │   │   ├── weather/
-│   │   │   ├── CurrentConditions.tsx  # iOS-style centred hero: MY LOCATION/HOME eyebrow, place, thin temp, condition, H/L, share, season footer slot — reads directly over WeatherBackdrop
+│   │   │   ├── CurrentConditions.tsx  # Mineral sky-plate hero (`.kori` + `--plate-*` tokens, family from src/lib/hero.ts): eyebrow, place, Noto Serif temp, condition, H/L, one-sentence outlook, activities line, share, season footer slot
 │   │   │   ├── WeatherBackdrop.tsx    # Fixed full-viewport condition-aware Three.js sky behind the whole location page (Apple Weather style)
 │   │   │   ├── WeatherBackdrop.test.ts
-│   │   │   ├── HourlyScrollCards.tsx  # Horizontal hour-by-hour strip + deterministic one-sentence outlook (hourly-summary.ts)
+│   │   │   ├── HourlyScrollCards.tsx  # Horizontal hour-by-hour strip (hours only — the one-sentence outlook lives in the hero)
 │   │   │   ├── HourlyScrollCards.test.ts
+│   │   │   ├── CommunityLane.tsx      # 24h suitability lane per selected activity with community reports pinned at their hour (logic in src/lib/community-lane.ts)
+│   │   │   ├── CommunityLaneSkeleton.tsx
+│   │   │   ├── CommunityLane.test.ts
 │   │   │   ├── HourlyForecast.tsx     # 24-hour hourly forecast
 │   │   │   ├── HourlyChart.tsx        # Canvas chart: temperature + rain over 24h
 │   │   │   ├── DailyForecast.tsx      # 7-day forecast cards
@@ -303,6 +307,7 @@ mukoko-weather/
 │   │       └── index.ts
 │   ├── lib/
 │   │   ├── store.ts               # Zustand app state (theme, location, activities, hasOnboarded, ShamwariContext, reportModal, device sync)
+│   │   ├── theme.ts               # Dependency-free resolveTheme (re-exported from store.ts; used by the embed widget + MapLibreMap)
 │   │   ├── store.test.ts          # Theme resolution, ShamwariContext TTL tests, device sync init
 │   │   ├── device-sync.ts         # Device sync — bridges Zustand localStorage with Python device profile API
 │   │   ├── device-sync.test.ts
@@ -355,6 +360,8 @@ mukoko-weather/
 │   │   ├── map-layers.ts          # Map layer config (Tomorrow.io tile layers, mineral color styles)
 │   │   ├── map-layers.test.ts
 │   │   ├── error-retry.ts         # Error retry logic with sessionStorage tracking (max 3 retries)
+│   │   ├── safe-storage.ts        # SSR-safe, never-throwing localStorage/sessionStorage wrappers — use instead of raw Storage access
+│   │   ├── safe-storage.test.ts
 │   │   ├── error-retry.test.ts
 │   │   ├── activity-feasibility.ts # 24h feasibility series — evaluates suitability rules per forecast hour (LEVEL_SCORES, hourInsights, feasibilitySeries)
 │   │   ├── activity-feasibility.test.ts
@@ -388,10 +395,13 @@ mukoko-weather/
 │   └── py/                        # Python FastAPI backend (Vercel serverless functions)
 │       ├── index.py               # FastAPI app, router mounting, CORS, error handlers
 │       ├── _db.py                 # MongoDB connection, collection accessors, rate limiting
+│       ├── _http.py               # Shared pooled httpx clients keyed by timeout (get_http_client)
 │       ├── _weather.py            # Weather data endpoints (Tomorrow.io/Open-Meteo proxy)
+│       ├── _anthropic.py          # Shared Claude plumbing: client singleton, breaker-guarded call_claude(), first_text()
+│       ├── _wmo.py                # WMO_LABELS — weather-code labels (mirror of weatherCodeToInfo in src/lib/weather.ts)
 │       ├── _ai.py                 # AI summary endpoint (Claude, tiered TTL cache)
 │       ├── _ai_followup.py        # Inline follow-up chat endpoint (pre-seeded history)
-│       ├── _ai_prompts.py         # AI prompt library CRUD (GET/PUT prompts + suggested rules)
+│       ├── _ai_prompts.py         # AI prompt library CRUD (GET/PUT prompts + suggested rules) + cached get_ai_prompt() loader
 │       ├── _chat.py               # Shamwari Explorer chatbot (Claude + tool use)
 │       ├── _locations.py          # Location CRUD, search, geo lookup
 │       ├── _history.py            # Historical weather data endpoint
@@ -571,12 +581,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 **Integration pattern:** All Python endpoints that call external APIs use the circuit breaker:
 
 - `_weather.py` — `tomorrow_breaker` + `open_meteo_breaker` (record-based: `is_allowed` / `record_success()` / `record_failure()`)
-- `_chat.py` — `anthropic_breaker` (guard before tool-use loop, falls back to error response)
-- `_ai.py` — `anthropic_breaker` (guard before Claude call, falls back to basic weather summary)
-- `_ai_followup.py` — `anthropic_breaker` (guard before Claude call, returns error with weather data note)
-- `_explore_search.py` — `anthropic_breaker` (guard before AI search, falls back to text search)
-- `_history_analyze.py` — `anthropic_breaker` (guard before analysis, returns stats-only response)
-- `_reports.py` — `anthropic_breaker` (guard before clarify call, falls back to hardcoded questions)
+- Claude callers (`_chat.py`, `_ai.py`, `_ai_followup.py`, `_explore_search.py`, `_history_analyze.py`, `_reports.py`) never touch `anthropic_breaker` directly. They call `call_claude()` in `api/py/_anthropic.py`, which checks the breaker, records success/failure, and returns `(response, error_kind)` with kinds `no_client` / `circuit_open` / `rate_limited` / `api_error`. Each caller maps those kinds to its own fallback or HTTP status (e.g. `_chat.py` returns an error reply, `_ai_followup.py` raises 429 on `rate_limited`). The client singleton is `get_anthropic_client()`, rebuilt when the key hash changes.
 
 ### Routing
 
@@ -607,7 +612,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/developers` — public developer/API documentation page
 - `/developers/keys` — auth-gated developer API-key management (create — full key shown once / list masked / revoke)
 - `/embed` — widget embedding docs
-- `/display` — full-screen weather display for TVs, tablets and monitors (kiosk). No header/footer, no sign-in, `robots: noindex`. URL-configured via `parseDisplayParams()` (`src/lib/display.ts`): `?location=<slug>` or `?lat=&lon=`, `?layer=<MAP_LAYERS id>` (default `precipitationIntensity`), `?theme=light|dark`. Falls back to the lastLocation cookie, then IP geo snapped to the nearest seed, then Harare. Panels (`src/components/display/DisplayPanels.tsx`): clock, current conditions, air quality with `AQI_ADVICE` haze guidance, radar (`MapLibreMap`, non-interactive), today's outlook (tall screens only), next hours, 5 days — each in its own `ChartErrorBoundary`. Runtime hooks (`src/lib/use-display-runtime.ts`): Screen Wake Lock, `usePolledJson` (weather 10 min, AQ 30 min, keeps the last good value on a failed refresh), 6-hour page reload. `display` is in the `KNOWN_ROUTES` sets of `src/proxy.ts` and `WeatherLoadingScene.tsx` so it never becomes the lastLocation cookie
+- `/display` — full-screen weather display for TVs, tablets and monitors (kiosk). No header/footer, no sign-in, `robots: noindex`. URL-configured via `parseDisplayParams()` (`src/lib/display.ts`): `?location=<slug>` or `?lat=&lon=`, `?layer=<MAP_LAYERS id>` (default `precipitationIntensity`), `?theme=light|dark`. Falls back to the lastLocation cookie, then IP geo snapped to the nearest seed, then Harare. Panels (`src/components/display/DisplayPanels.tsx`): clock, current conditions, air quality with `AQI_ADVICE` haze guidance, radar (`MapLibreMap`, non-interactive), today's outlook (tall screens only), next hours, 5 days — each in its own `ChartErrorBoundary`. The official NEA PSI panel (`DisplaySgPsi`, `src/lib/sg-air.ts`) sits inside the air-quality card and only polls `/api/py/sg-air` when the location's country is `SG`. Runtime hooks (`src/lib/use-display-runtime.ts`): Screen Wake Lock, `usePolledJson` (weather 10 min, AQ 30 min, NEA 15 min, keeps the last good value on a failed refresh), 6-hour page reload. `display` is in the `KNOWN_ROUTES` sets of `src/proxy.ts` and `WeatherLoadingScene.tsx` so it never becomes the lastLocation cookie
 - `/api/og` — GET, dynamic OG image generation (Edge runtime, Satori, TypeScript). Query: `title`, `subtitle`, optional `location`, `province`, `season`, `temp`, `condition`, `template` (home/location/explore/history/season/shamwari). In-memory rate-limited (30 req/min/IP), 1-day CDN cache
 - `/api/db-init` — POST, one-time DB setup + seed data (TypeScript). Requires `x-init-secret` header in production
 - `/api/keys` — GET (list caller's keys, masked) / POST (mint a developer API key in `platform.apiKeys`; full key returned ONCE, SHA-256 hashed at rest, 10/user cap, eligible entity-membership role required). Auth-gated via `withAuth()`
@@ -645,6 +650,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/airports/nearest` — GET, N nearest ICAO airports to `lat`/`lon` (query: `lat`, `lon`, optional `count` default 5 / max 20, optional `maxDistanceKm` default 500) via MongoDB `$geoNear` on the seeded `weather.airports` collection. Each result carries `icao` + `name` + `distanceKm`, sorted closest-first. Returns an empty list on any DB error so the TS client falls back to the static haversine scan
 - `/api/py/metar?icao=` — GET, METAR (last 12 h) + TAF for one ICAO station from AWC (cached 30 min; empty answers cached 2 min; failures never cached). Source `awc` | `checkwx` | `unavailable`
 - `/api/py/aviation/nearest-metar?lat&lon` — GET, nearest airport within `radiusKm` (default 150) with a METAR no older than `maxAgeMinutes` (default 180), with its METAR + TAF. `status`: `ok` | `no_recent_report` | `no_airports` | `unavailable`; `candidates` lists every airport considered
+- `/api/py/sg-air` — GET, official Singapore NEA air quality via data.gov.sg (no key): 24h PSI with band, per-region PSI and 1h PM2.5, nearest region for `lat`/`lon`. Cached 10 min in memory, read through `nea_breaker`; always HTTP 200 with `available: false` on failure. Shown on `/display` beside the modelled AQI for Singapore only
 - `/api/py/enso` — GET, latest El Niño / La Niña phase from NOAA CPC's Oceanic Niño Index (`oni.ascii.txt`): ONI, season, phase, strength, last 6 seasons. In-memory cache 12 h, guarded by `noaa_breaker`; returns 200 with `available: false` when the upstream fails. Feeds the location-page `EnsoOutlook` card
 - `/api/py/stations/register` — POST, register a community weather station (digital or manual/analog). Rate-limited 3/hour/IP. Returns `stationId` + `ingestKey` ONCE (SHA-256 hash at rest) with custom-server setup instructions
 - `/api/py/stations/ingest` — GET (Wunderground protocol, `ID`/`PASSWORD` query params) and POST (Ecowitt protocol, form fields with `PASSKEY=<stationId>:<ingestKey>`) — consumer station consoles push readings directly here via their "customized upload" setting. Imperial→metric conversion, inline QC range checks; raw payloads archived in `weather.stationObservations`, passing readings become validated `weather.observations` docs that `/api/py/weather` blends into current conditions (StationKit flow). Responds with the literal body `success` (WU protocol requirement)
@@ -974,14 +980,13 @@ Reusable skeleton components in `src/components/ui/skeleton.tsx`:
 - `Skeleton` — generic pulsing block (base building block)
 - `CardSkeleton` — card-shaped with title + content lines
 - `ChartSkeleton` — aspect-ratio-matched chart placeholder
-- `BadgeSkeleton` — pill-shaped badge placeholder
 - `MetricCardSkeleton` — matches AtmosphericSummary MetricCard shape
 - `ChatSkeleton` — matches ExploreChatbot container shape (used as Suspense fallback)
 
 Aspect-matched section skeletons in `src/components/weather/SectionSkeleton.tsx`:
 
 - `SectionSkeleton` — generic fallback (h-32 pulsing card)
-- `ReportsSkeleton`, `HourlyForecastSkeleton`, `ActivityInsightsSkeleton`, `DailyForecastSkeleton`, `AISummarySkeleton`, `AISummaryChatSkeleton`, `AtmosphericSummarySkeleton`, `SunTimesSkeleton`, `MapPreviewSkeleton`, `SupportBannerSkeleton`, `LocationInfoSkeleton` — each mirrors the shape of its corresponding component to prevent layout shift
+- `ReportsSkeleton`, `HourlyForecastSkeleton`, `ActivityInsightsSkeleton`, `DailyForecastSkeleton`, `AISummarySkeleton`, `AISummaryChatSkeleton`, `MapPreviewSkeleton`, `SupportBannerSkeleton`, `LocationInfoSkeleton` — each mirrors the shape of its corresponding component to prevent layout shift
 
 All skeletons include `role="status"` and `aria-label="Loading"` for screen readers. The `sr-only` span is optional when `aria-label` is present — both achieve the same result for assistive technology, so `aria-label` alone is sufficient.
 
@@ -1241,6 +1246,7 @@ All pages use a **TikTok-style sequential mounting** pattern — only ONE sectio
 **Location page — `CurrentConditions` and `AtmosphericSummary` load eagerly.** All other sections are lazy:
 
 - `HourlyScrollCards` → `ChartErrorBoundary` (eager)
+- `CommunityLane` → `LazySection` (`CommunityLaneSkeleton`) + `ChartErrorBoundary` — its own draggable section (`communityLane`), right after the hourly strip in `DEFAULT_SECTION_ORDER`
 - `CurrentConditions` → `ChartErrorBoundary` (eager — big temp, feels-like, daily high/low)
 - `AtmosphericSummary` → `ChartErrorBoundary` (eager — 7 gauge cards: humidity, cloud, wind, pressure, UV, feels-like, precipitation)
 - `RecentReports` → `LazySection` + `ChartErrorBoundary` + `Suspense`
@@ -1544,23 +1550,28 @@ Repeated Tailwind chains (3+ uses) are extracted into named component classes in
 
 **Current palette:**
 
-| Class            | Purpose                                    | Replaces                                                                                                                         |
-| ---------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| `.kudu`          | Primary pill button (filled, brand colour) | `rounded-button bg-primary px-5 py-3 ...`                                                                                        |
-| `.kudu-sm`       | Smaller primary pill (compact toolbars)    | `rounded-button bg-primary px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                                  |
-| `.impala`        | Secondary/outline pill button              | `border border-border bg-transparent px-5 py-3 ...`                                                                              |
-| `.impala-sm`     | Smaller outline pill (compact toolbars)    | `border border-border bg-transparent px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                        |
-| `.bee`           | Round icon button (mukoko = beehive)       | `w-[var(--touch-target-min)] h-[var(--touch-target-min)] rounded-full bg-background/10 ...`                                      |
-| `.hoopoe`        | Round avatar (initials or profile picture) | `flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10` (also `.hoopoe-lg` h-9, `.hoopoe-xl` h-12)        |
-| `.baobab`        | Primary card surface                       | `rounded-card border border-primary/25 bg-surface-card p-4 shadow-sm`                                                            |
-| `.acacia`        | Quieter card surface                       | `rounded-card border border-border bg-surface-card p-4`                                                                          |
-| `.giraffe`       | Section heading (tall, stands above)       | `text-base font-semibold text-text-primary font-heading`                                                                         |
-| `.gazelle`       | Body paragraph copy                        | `text-base text-text-secondary leading-relaxed`                                                                                  |
-| `.dove`          | Muted secondary text                       | `text-sm text-text-tertiary`                                                                                                     |
-| `.weaver`        | Primary nav link                           | `inline-flex items-center text-base font-medium text-text-secondary hover:...`                                                   |
-| `.weaver-active` | Active nav link (cobalt + underline)       | active variant of `.weaver`                                                                                                      |
-| `.chameleon`     | Skeleton placeholder                       | `animate-pulse rounded-card border border-surface-dim bg-surface-card shadow-sm`                                                 |
-| `.dik-dik`       | Small inline link with a full touch target | on `pointer: coarse` only: `inline-flex` + `min-w`/`min-h` `var(--touch-target-min)` (breadcrumb Home, footer icons/attribution) |
+| Class            | Purpose                                        | Replaces                                                                                                                         |
+| ---------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `.kudu`          | Primary pill button (filled, brand colour)     | `rounded-button bg-primary px-5 py-3 ...`                                                                                        |
+| `.kudu-sm`       | Smaller primary pill (compact toolbars)        | `rounded-button bg-primary px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                                  |
+| `.impala`        | Secondary/outline pill button                  | `border border-border bg-transparent px-5 py-3 ...`                                                                              |
+| `.impala-sm`     | Smaller outline pill (compact toolbars)        | `border border-border bg-transparent px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                        |
+| `.bee`           | Round icon button (mukoko = beehive)           | `w-[var(--touch-target-min)] h-[var(--touch-target-min)] rounded-full bg-background/10 ...`                                      |
+| `.hoopoe`        | Round avatar (initials or profile picture)     | `flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10` (also `.hoopoe-lg` h-9, `.hoopoe-xl` h-12)        |
+| `.baobab`        | Primary card surface                           | `rounded-card border border-primary/25 bg-surface-card p-4 shadow-sm`                                                            |
+| `.acacia`        | Quieter card surface                           | `rounded-card border border-border bg-surface-card p-4`                                                                          |
+| `.giraffe`       | Section heading (tall, stands above)           | `text-base font-semibold text-text-primary font-heading`                                                                         |
+| `.gazelle`       | Body paragraph copy                            | `text-base text-text-secondary leading-relaxed`                                                                                  |
+| `.dove`          | Muted secondary text                           | `text-sm text-text-tertiary`                                                                                                     |
+| `.weaver`        | Primary nav link                               | `inline-flex items-center text-base font-medium text-text-secondary hover:...`                                                   |
+| `.weaver-active` | Active nav link (cobalt + underline)           | active variant of `.weaver`                                                                                                      |
+| `.chameleon`     | Skeleton placeholder                           | `animate-pulse rounded-card border border-surface-dim bg-surface-card shadow-sm`                                                 |
+| `.termite`       | Inline code chip (mono text in a surface nest) | `rounded-badge bg-surface-base px-1.5 py-0.5 font-mono text-base` (was `rounded bg-surface-base ...`)                            |
+| `.sunbird`       | Prose link (perches on the text, underlined)   | `text-primary underline underline-offset-2 transition-colors hover:text-primary/80`                                              |
+| `.elephant`      | Page title h1 on static pages                  | `font-display text-3xl font-bold text-text-primary sm:text-4xl`                                                                  |
+| `.eland`         | Section heading h2 on static pages             | `font-heading text-2xl font-bold text-text-primary`                                                                              |
+| `.springbok`     | Bulleted list inside prose                     | `mt-2 list-disc space-y-1 pl-6`                                                                                                  |
+| `.dik-dik`       | Small inline link with a full touch target     | on `pointer: coarse` only: `inline-flex` + `min-w`/`min-h` `var(--touch-target-min)` (breadcrumb Home, footer icons/attribution) |
 
 **Rules:**
 

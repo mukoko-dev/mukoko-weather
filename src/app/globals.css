@@ -240,6 +240,8 @@
   /* Moon disc — lit limb and shadowed disc (metric-card MoonDisc) */
   --color-moon-lit: #f3ecd6;
   --color-moon-shadow: #d6d1c4;
+  /* Modal scrim behind Dialog / Sheet overlays */
+  --color-overlay: rgba(0, 0, 0, 0.5);
 }
 
 [data-theme="dark"] {
@@ -402,6 +404,8 @@
   --mineral-terracotta-fg: #0a0a0a;
   --mineral-sodalite-fg: #0a0a0a;
   --mineral-copper-fg: #0a0a0a;
+  /* Modal scrim behind Dialog / Sheet overlays */
+  --color-overlay: rgba(0, 0, 0, 0.5);
 }
 
 @theme inline {
@@ -536,6 +540,7 @@
   --animate-slide-up: slide-up 300ms ease-out;
   --animate-slide-down: slide-down 200ms ease-out forwards;
   --animate-nav-indicator-in: nav-indicator-in 300ms ease-out;
+  --color-overlay: var(--color-overlay);
 }
 
 @keyframes accordion-down {
@@ -1190,12 +1195,47 @@ body {
            decoration-primary decoration-2;
   }
 
+  /* .dikdik — inline text action (small antelope: Try again, Refresh, See all) */
+  .dikdik {
+    @apply text-base font-medium text-primary transition-colors
+           hover:text-primary/80;
+  }
+
   /* ── Loading / Skeleton ──────────────────────────────────────────────── */
 
   /* .chameleon — skeleton placeholder (changes/loads, blends with background) */
   .chameleon {
     @apply animate-pulse rounded-[var(--radius-card)]
            border border-surface-dim bg-surface-card shadow-sm;
+  }
+
+  /* ── Static-page typography ──────────────────────────────────────────── */
+
+  /* .termite — inline code chip (small mono nest inside prose) */
+  .termite {
+    @apply rounded-[var(--radius-badge)] bg-surface-base px-1.5 py-0.5
+           font-mono text-base;
+  }
+
+  /* .sunbird — prose link (perches on the text, underlined) */
+  .sunbird {
+    @apply text-primary underline underline-offset-2 transition-colors
+           hover:text-primary/80;
+  }
+
+  /* .elephant — page title h1 (largest, anchors every static page) */
+  .elephant {
+    @apply font-display text-3xl font-bold text-text-primary sm:text-4xl;
+  }
+
+  /* .eland — section heading h2 on static pages */
+  .eland {
+    @apply font-heading text-2xl font-bold text-text-primary;
+  }
+
+  /* .springbok — bulleted list inside prose (legal, help, about) */
+  .springbok {
+    @apply mt-2 list-disc space-y-1 pl-6;
   }
 }
 
