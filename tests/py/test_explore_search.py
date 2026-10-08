@@ -333,8 +333,8 @@ class TestExploreSearchEndpoint:
             await explore_search(body, mock_request)
         assert exc_info.value.status_code == 400
 
-    @patch("py._explore_search.check_rate_limit")
-    @patch("py._explore_search.get_client_ip")
+    @patch("py._db.check_rate_limit")
+    @patch("py._db.get_client_ip")
     @pytest.mark.asyncio
     async def test_rate_limiting_returns_429(self, mock_ip, mock_rate):
         mock_ip.return_value = "1.2.3.4"
@@ -348,8 +348,8 @@ class TestExploreSearchEndpoint:
 
     @patch("py._explore_search._text_search_fallback")
     @patch("py._explore_search.anthropic_breaker")
-    @patch("py._explore_search.check_rate_limit")
-    @patch("py._explore_search.get_client_ip")
+    @patch("py._db.check_rate_limit")
+    @patch("py._db.get_client_ip")
     @pytest.mark.asyncio
     async def test_circuit_breaker_falls_back_to_text_search(
         self, mock_ip, mock_rate, mock_breaker, mock_fallback
@@ -365,7 +365,7 @@ class TestExploreSearchEndpoint:
         assert result["summary"] == "fallback"
         mock_fallback.assert_called_once_with("farming")
 
-    @patch("py._explore_search.get_client_ip")
+    @patch("py._db.get_client_ip")
     @pytest.mark.asyncio
     async def test_no_ip_raises_400(self, mock_ip):
         mock_ip.return_value = None

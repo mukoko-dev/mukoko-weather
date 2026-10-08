@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PageShell } from "@/components/layout/PageShell";
 import { CodeBlock } from "@/components/ui/code-block";
 import { MukokoWeatherEmbed } from "@/components/embed";
+import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Embed Weather Widgets",
@@ -11,33 +12,30 @@ export const metadata: Metadata = {
     canonical: "https://weather.mukoko.com/embed",
   },
 };
-
-const SITE = "https://weather.mukoko.com";
-
 // Copy-paste iframe snippets — the primary, works-anywhere embed method.
 const IFRAME_CURRENT = `<iframe
-  src="${SITE}/embed/widget?type=current&location=harare"
+  src="${SITE_URL}/embed/widget?type=current&location=harare"
   width="340" height="120" style="border:0" loading="lazy"
   title="mukoko weather — current conditions"></iframe>`;
 
 const IFRAME_TODAY = `<iframe
-  src="${SITE}/embed/widget?type=today&location=bulawayo"
+  src="${SITE_URL}/embed/widget?type=today&location=bulawayo"
   width="380" height="230" style="border:0" loading="lazy"
   title="mukoko weather — today"></iframe>`;
 
 const IFRAME_5DAY = `<iframe
-  src="${SITE}/embed/widget?type=5day&location=victoria-falls"
+  src="${SITE_URL}/embed/widget?type=5day&location=victoria-falls"
   width="460" height="300" style="border:0" loading="lazy"
   title="mukoko weather — 5-day forecast"></iframe>`;
 
 const IFRAME_7DAY = `<iframe
-  src="${SITE}/embed/widget?type=7day&location=mutare"
+  src="${SITE_URL}/embed/widget?type=7day&location=mutare"
   width="460" height="380" style="border:0" loading="lazy"
   title="mukoko weather — 7-day forecast"></iframe>`;
 
 const IFRAME_IP = `<!-- No location = the visitor's own weather (from their IP) -->
 <iframe
-  src="${SITE}/embed/widget?type=today"
+  src="${SITE_URL}/embed/widget?type=today"
   width="380" height="230" style="border:0" loading="lazy"
   title="mukoko weather — your location"></iframe>`;
 
@@ -126,7 +124,7 @@ export default function EmbedPage() {
           <h2 className="eagle">3 · Widget URL parameters</h2>
           <p className="mt-2 text-base text-text-secondary">
             Configure the widget via query parameters on{" "}
-            <code className="termite">{SITE}/embed/widget</code>.
+            <code className="termite">{SITE_URL}/embed/widget</code>.
           </p>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-base">
@@ -187,13 +185,13 @@ export default function EmbedPage() {
           </p>
           <CodeBlock
             code={`# Visitor's local weather (IP-based)
-curl ${SITE}/api/embed/current
+curl ${SITE_URL}/api/embed/current
 
 # A specific location
-curl "${SITE}/api/embed/current?slug=harare"
+curl "${SITE_URL}/api/embed/current?slug=harare"
 
 # Explicit coordinates
-curl "${SITE}/api/embed/current?lat=-17.83&lon=31.05"`}
+curl "${SITE_URL}/api/embed/current?lat=-17.83&lon=31.05"`}
           />
           <p className="mt-4 text-base text-text-secondary">Response shape:</p>
           <CodeBlock
@@ -209,7 +207,7 @@ curl "${SITE}/api/embed/current?lat=-17.83&lon=31.05"`}
                "precipitationProbability": 0 } /* up to 7 */ ],
   "source": "ip",
   "attribution": { "name": "mukoko weather",
-                   "url": "${SITE}/harare" }
+                   "url": "${SITE_URL}/harare" }
 }`}
           />
         </section>
