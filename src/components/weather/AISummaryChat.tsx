@@ -1,18 +1,11 @@
 "use client";
 
-import {
-  useState,
-  useRef,
-  useEffect,
-  useCallback,
-  Component,
-  type ReactNode,
-} from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import ReactMarkdown from "react-markdown";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { SparklesIcon } from "@/lib/weather-icons";
-import { Button } from "@/components/ui/button";
+import { ChatComposer } from "@/components/ui/chat-composer";
+import { SafeMarkdown } from "@/components/ui/safe-markdown";
+import { TypingDots } from "@/components/ui/typing-dots";
 import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { ShamwariCTA } from "./ShamwariCTA";
@@ -26,32 +19,7 @@ import type { WeatherData } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
 import { trackEvent } from "@/lib/analytics";
 import type { AISummaryUser } from "./AISummary";
-
-// ---------------------------------------------------------------------------
-// Inline error boundary for ReactMarkdown
-// ---------------------------------------------------------------------------
-
-interface MarkdownErrorBoundaryState {
-  hasError: boolean;
-}
-
-class MarkdownErrorBoundary extends Component<
-  { children: ReactNode; fallback: string },
-  MarkdownErrorBoundaryState
-> {
-  state: MarkdownErrorBoundaryState = { hasError: false };
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <p className="text-base text-text-secondary">{this.props.fallback}</p>
-      );
-    }
-    return this.props.children;
-  }
-}
+import { ShamwariSignInCTA } from "./ShamwariSignInCTA";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,98 +47,6 @@ interface Props {
 
 /** Max follow-up messages before redirecting to Shamwari */
 const MAX_FOLLOWUP_MESSAGES = 5;
-
-// ---------------------------------------------------------------------------
-// Icons
-// ---------------------------------------------------------------------------
-
-function ArrowUpIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="m5 12 7-7 7 7" />
-      <path d="M12 19V5" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
-function ChevronUpIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="m18 15-6-6-6 6" />
-    </svg>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Markdown link sanitisation
-// ---------------------------------------------------------------------------
-
-function isSafeHref(href: string | undefined): boolean {
-  if (!href) return false;
-  if (href.startsWith("/") || href.startsWith("#")) return true;
-  try {
-    const url = new URL(href);
-    // Only allow https: — http: could enable link injection to plaintext targets.
-    return url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-const markdownComponents = {
-  a: ({
-    href,
-    children,
-    ...props
-  }: React.ComponentPropsWithoutRef<"a"> & { href?: string }) => {
-    if (!isSafeHref(href)) {
-      return <span>{children}</span>;
-    }
-    return (
-      <a href={href} rel="noopener noreferrer" target="_blank" {...props}>
-        {children}
-      </a>
-    );
-  },
-};
 
 // ---------------------------------------------------------------------------
 // Component
@@ -244,11 +120,6 @@ export function AISummaryChat({
       setLoading(true);
       trackEvent("ai_chat_sent", { source: "inline", location: location.slug });
 
-      // Reset textarea height
-      if (inputRef.current) {
-        inputRef.current.style.height = "auto";
-      }
-
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -314,11 +185,6 @@ export function AISummaryChat({
     ],
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    sendMessage(input);
-  };
-
   const shamwariContext = {
     source: "location" as const,
     locationSlug: location.slug,
@@ -331,7 +197,14 @@ export function AISummaryChat({
   };
 
   if (!initialSummary) return null;
-  if (!user) return <AISummaryChatSignInCTA locationName={location.name} />;
+  if (!user)
+    return (
+      <ShamwariSignInCTA
+        title="Ask Shamwari about this weather"
+        body={`Sign in to chat with Mukoko's AI about ${location.name}.`}
+        accent="tanzanite"
+      />
+    );
 
   return (
     <section aria-label="AI weather follow-up chat">
@@ -350,9 +223,9 @@ export function AISummaryChat({
             </span>
           </div>
           {expanded ? (
-            <ChevronUpIcon size={16} />
+            <ChevronUp size={16} aria-hidden="true" />
           ) : (
-            <ChevronDownIcon size={16} />
+            <ChevronDown size={16} aria-hidden="true" />
           )}
         </button>
 
@@ -384,20 +257,14 @@ export function AISummaryChat({
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
-                    className={`rounded-lg px-3 py-2.5 text-base ${
+                    className={`rounded-[var(--radius-input)] px-3 py-2.5 text-base ${
                       msg.role === "user"
                         ? "ml-8 bg-primary/10 text-text-primary"
                         : "mr-8 bg-surface-base text-text-secondary"
                     }`}
                   >
                     {msg.role === "assistant" ? (
-                      <MarkdownErrorBoundary fallback={msg.content}>
-                        <div className="prose prose-base max-w-none text-text-secondary prose-strong:text-text-primary prose-headings:text-text-primary prose-li:marker:text-text-tertiary">
-                          <ReactMarkdown components={markdownComponents}>
-                            {msg.content}
-                          </ReactMarkdown>
-                        </div>
-                      </MarkdownErrorBoundary>
+                      <SafeMarkdown content={msg.content} />
                     ) : (
                       msg.content
                     )}
@@ -406,16 +273,8 @@ export function AISummaryChat({
 
                 {/* Loading indicator */}
                 {loading && (
-                  <div
-                    className="mr-8 rounded-lg bg-surface-base px-3 py-2"
-                    role="status"
-                  >
-                    <div className="flex items-center gap-1">
-                      <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-tertiary [animation-delay:-0.3s]" />
-                      <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-tertiary [animation-delay:-0.15s]" />
-                      <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-tertiary" />
-                    </div>
-                    <span className="sr-only">Thinking...</span>
+                  <div className="mr-8 rounded-[var(--radius-input)] bg-surface-base px-3">
+                    <TypingDots size="sm" label="Thinking..." />
                   </div>
                 )}
 
@@ -427,7 +286,7 @@ export function AISummaryChat({
                 reachable destination; otherwise just say the limit was hit,
                 no dead link to a paused page. */}
             {atMessageLimit && (
-              <div className="mt-3 rounded-lg border border-tanzanite/20 bg-tanzanite/5 p-3 text-center">
+              <div className="mt-3 rounded-[var(--radius-input)] border border-tanzanite/20 bg-tanzanite/5 p-3 text-center">
                 {shamwariEnabled ? (
                   <>
                     <p className="gazelle">
@@ -449,45 +308,20 @@ export function AISummaryChat({
               </div>
             )}
 
-            {/* Chat input — card style */}
+            {/* Chat input — shared composer */}
             {!atMessageLimit && (
-              <form onSubmit={handleSubmit} className="mt-3">
-                <div className="rounded-2xl border border-border bg-surface-base shadow-sm">
-                  <textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={(e) => {
-                      setInput(e.target.value);
-                      // Auto-grow: capped at 96px (max-h-24) so inline style.height
-                      // doesn't override the Tailwind max-height constraint.
-                      e.target.style.height = "auto";
-                      e.target.style.height = `${Math.min(e.target.scrollHeight, 96)}px`;
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        sendMessage(input);
-                      }
-                    }}
-                    placeholder="Ask about this weather..."
-                    className="block w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base text-text-primary placeholder:text-text-tertiary outline-none disabled:cursor-not-allowed disabled:opacity-50 max-h-24 overflow-y-auto"
-                    rows={1}
-                    disabled={loading}
-                    aria-label="Follow-up question"
-                  />
-                  <div className="flex items-center justify-end px-3 pb-2.5">
-                    <Button
-                      type="submit"
-                      size="sm"
-                      disabled={loading || !input.trim()}
-                      className="h-11 w-11 rounded-full p-0 shrink-0"
-                      aria-label="Send follow-up question"
-                    >
-                      <ArrowUpIcon size={16} />
-                    </Button>
-                  </div>
-                </div>
-              </form>
+              <ChatComposer
+                className="mt-3"
+                value={input}
+                onChange={setInput}
+                onSend={() => sendMessage(input)}
+                disabled={loading}
+                maxHeight={96}
+                placeholder="Ask about this weather..."
+                ariaLabel="Follow-up question"
+                sendLabel="Send follow-up question"
+                textareaRef={inputRef}
+              />
             )}
 
             {/* Link to Shamwari (always visible when there are messages) */}
@@ -503,38 +337,6 @@ export function AISummaryChat({
             )}
           </div>
         )}
-      </div>
-    </section>
-  );
-}
-
-/**
- * Sign-in prompt shown to anonymous visitors in place of the follow-up
- * chat. Mirrors the AISummary CTA shape for consistency.
- */
-function AISummaryChatSignInCTA({ locationName }: { locationName: string }) {
-  const pathname = usePathname() ?? "/";
-  const href = `/auth/signin?returnTo=${encodeURIComponent(pathname)}`;
-  return (
-    <section aria-label="Sign in to chat with Shamwari">
-      <div className="baobab border-tanzanite/25 border-l-[6px] border-l-tanzanite">
-        <div className="flex items-center gap-2">
-          <SparklesIcon size={16} className="text-tanzanite" />
-          <span className="giraffe">Ask Shamwari about this weather</span>
-        </div>
-        <p className="gazelle mt-3">
-          Sign in to chat with Mukoko&apos;s AI about {locationName}.
-        </p>
-        <div className="mt-4">
-          <Link
-            href={href}
-            prefetch={false}
-            className="kudu-sm"
-            aria-label={`Sign in to chat about ${locationName}`}
-          >
-            Sign in
-          </Link>
-        </div>
       </div>
     </section>
   );

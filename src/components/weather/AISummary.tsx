@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import ReactMarkdown from "react-markdown";
 import { SparklesIcon } from "@/lib/weather-icons";
 import { useAppStore } from "@/lib/store";
 import type { WeatherData } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
 import { trackEvent } from "@/lib/analytics";
+import { SafeMarkdown } from "@/components/ui/safe-markdown";
+import { ShamwariSignInCTA } from "./ShamwariSignInCTA";
 
 /**
  * Minimal user shape needed to gate the AI summary. Mirrors the subset of
@@ -169,7 +168,13 @@ export function AISummary({ weather, location, user, onSummaryLoaded }: Props) {
 
   // ── Anonymous: sign-in CTA ──────────────────────────────────────────────
   if (!isAuthed) {
-    return <AISummarySignInCTA locationName={location.name} />;
+    return (
+      <ShamwariSignInCTA
+        title="Shamwari Weather Insight"
+        body={`Sign in to see Mukoko's AI insights for ${location.name}.`}
+        accent="sodalite"
+      />
+    );
   }
 
   return (
@@ -197,43 +202,8 @@ export function AISummary({ weather, location, user, onSummaryLoaded }: Props) {
           {error && <p className="text-base text-text-secondary">{error}</p>}
 
           {insight && !loading && (
-            <div className="animate-fade-in prose prose-base max-w-none text-text-secondary prose-strong:text-text-primary prose-headings:text-text-primary prose-li:marker:text-text-tertiary">
-              <ReactMarkdown>{insight}</ReactMarkdown>
-            </div>
+            <SafeMarkdown content={insight} className="animate-fade-in" />
           )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/**
- * Sign-in prompt shown to anonymous visitors in place of the AI summary.
- * Uses the `.baobab` fauna surface and `.kudu-sm` button per Phase 1D
- * styling guidance.
- */
-function AISummarySignInCTA({ locationName }: { locationName: string }) {
-  const pathname = usePathname() ?? "/";
-  const href = `/auth/signin?returnTo=${encodeURIComponent(pathname)}`;
-  return (
-    <section aria-label="Sign in to unlock AI weather insights">
-      <div className="baobab border-mineral-sodalite/25 border-l-[6px] border-l-mineral-sodalite">
-        <div className="flex items-center gap-2">
-          <SparklesIcon size={16} className="text-mineral-sodalite" />
-          <h2 className="giraffe">Shamwari Weather Insight</h2>
-        </div>
-        <p className="gazelle mt-3">
-          Sign in to see Mukoko&apos;s AI insights for {locationName}.
-        </p>
-        <div className="mt-4">
-          <Link
-            href={href}
-            prefetch={false}
-            className="kudu-sm"
-            aria-label={`Sign in to see AI insights for ${locationName}`}
-          >
-            Sign in
-          </Link>
         </div>
       </div>
     </section>

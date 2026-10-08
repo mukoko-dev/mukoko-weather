@@ -25,23 +25,21 @@ describe("AISummary — Phase 1D auth gating", () => {
     );
   });
 
-  it("renders the sign-in CTA branch when user is null", () => {
-    expect(source).toContain("AISummarySignInCTA");
+  it("renders the shared sign-in CTA branch when user is null", () => {
+    expect(source).toContain("<ShamwariSignInCTA");
+    expect(source).toContain(
+      'import { ShamwariSignInCTA } from "./ShamwariSignInCTA"',
+    );
     expect(source).toContain("if (!isAuthed)");
   });
 
   it("CTA copy mentions the location name", () => {
-    expect(source).toContain("AI insights for {locationName}");
+    expect(source).toContain("Mukoko's AI insights for ${location.name}");
   });
 
-  it("CTA uses the .baobab fauna surface and .kudu-sm button", () => {
-    expect(source).toContain('className="baobab');
-    expect(source).toContain('className="kudu-sm"');
-  });
-
-  it("CTA links to /auth/signin with a sanitised returnTo query param", () => {
-    expect(source).toContain("/auth/signin?returnTo=");
-    expect(source).toContain("encodeURIComponent(pathname)");
+  it("uses the shared SafeMarkdown for the summary body", () => {
+    expect(source).toContain("<SafeMarkdown content={insight}");
+    expect(source).not.toContain("<ReactMarkdown");
   });
 
   it("calls the auth-gated /api/ai/* proxy, not /api/py/ai/* directly", () => {
