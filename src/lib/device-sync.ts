@@ -10,6 +10,8 @@
  * Online-only for Phase 1 — no offline queue.
  */
 
+import { readStorage, readStorageJSON, writeStorage } from "./safe-storage";
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -58,14 +60,12 @@ function generateDeviceId(): string {
 
 /** Get the device ID from localStorage, or null if not set. */
 export function getDeviceId(): string | null {
-  if (typeof localStorage === "undefined") return null;
-  return localStorage.getItem(DEVICE_ID_KEY);
+  return readStorage(DEVICE_ID_KEY);
 }
 
 /** Store the device ID in localStorage. */
 function setDeviceId(id: string): void {
-  if (typeof localStorage === "undefined") return;
-  localStorage.setItem(DEVICE_ID_KEY, id);
+  writeStorage(DEVICE_ID_KEY, id);
 }
 
 // ---------------------------------------------------------------------------
@@ -212,27 +212,21 @@ export function flushSync(): void {
  * Returns null if no stored preferences exist.
  */
 export function readLocalStoragePrefs(): DevicePreferences | null {
-  if (typeof localStorage === "undefined") return null;
+  const parsed = readStorageJSON<{ state?: Partial<DevicePreferences> } | null>(
+    PREFS_KEY,
+    null,
+  );
+  const state = parsed?.state;
+  if (!state) return null;
 
-  try {
-    const raw = localStorage.getItem(PREFS_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw);
-    const state = parsed?.state;
-    if (!state) return null;
-
-    return {
-      theme: state.theme ?? "system",
-      selectedLocation: state.selectedLocation ?? "harare",
-      savedLocations: state.savedLocations ?? [],
-      locationLabels: state.locationLabels ?? {},
-      selectedActivities: state.selectedActivities ?? [],
-      hasOnboarded: state.hasOnboarded ?? false,
-    };
-  } catch {
-    return null;
-  }
+  return {
+    theme: state.theme ?? "system",
+    selectedLocation: state.selectedLocation ?? "harare",
+    savedLocations: state.savedLocations ?? [],
+    locationLabels: state.locationLabels ?? {},
+    selectedActivities: state.selectedActivities ?? [],
+    hasOnboarded: state.hasOnboarded ?? false,
+  };
 }
 
 // ---------------------------------------------------------------------------

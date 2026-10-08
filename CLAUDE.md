@@ -353,6 +353,8 @@ mukoko-weather/
 │   │   ├── map-layers.ts          # Map layer config (Tomorrow.io tile layers, mineral color styles)
 │   │   ├── map-layers.test.ts
 │   │   ├── error-retry.ts         # Error retry logic with sessionStorage tracking (max 3 retries)
+│   │   ├── safe-storage.ts        # SSR-safe, never-throwing localStorage/sessionStorage wrappers — use instead of raw Storage access
+│   │   ├── safe-storage.test.ts
 │   │   ├── error-retry.test.ts
 │   │   ├── activity-feasibility.ts # 24h feasibility series — evaluates suitability rules per forecast hour (LEVEL_SCORES, hourInsights, feasibilitySeries)
 │   │   ├── activity-feasibility.test.ts
