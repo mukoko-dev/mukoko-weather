@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
+import { PageShell } from "@/components/layout/PageShell";
+import { InfoRow } from "@/components/ui/info-row";
 
 export const metadata: Metadata = {
   title: "About",
@@ -12,17 +12,42 @@ export const metadata: Metadata = {
   },
 };
 
+const OFFERINGS = [
+  "Real-time weather conditions for 265+ locations worldwide",
+  "7-day daily forecasts and 24-hour hourly predictions",
+  "AI-powered weather summaries with contextual advice for farming, mining, travel, and tourism",
+  "Automated frost alerts for agricultural regions",
+  "Country-specific seasonal awareness with local season names and agricultural calendars",
+  "Embeddable weather widget for third-party websites",
+];
+
+const CONTACTS = [
+  { label: "General", href: "mailto:hi@mukoko.com", text: "hi@mukoko.com" },
+  {
+    label: "Support",
+    href: "mailto:support@mukoko.com",
+    text: "support@mukoko.com",
+  },
+  { label: "Legal", href: "mailto:legal@nyuchi.com", text: "legal@nyuchi.com" },
+  {
+    label: "Twitter",
+    href: "https://twitter.com/mukokoafrica",
+    text: "@mukokoafrica",
+    external: true,
+  },
+  {
+    label: "Instagram",
+    href: "https://instagram.com/mukoko.africa",
+    text: "@mukoko.africa",
+    external: true,
+  },
+];
+
 export default function AboutPage() {
   return (
     <>
-      <Header />
-      <main
-        id="main-content"
-        className="mx-auto max-w-3xl px-4 py-10 pb-24 sm:pb-10 sm:px-6 md:px-8"
-      >
-        <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">
-          About mukoko weather
-        </h1>
+      <PageShell>
+        <h1 className="elephant">About mukoko weather</h1>
 
         <section className="mt-8 space-y-4 text-text-secondary leading-relaxed">
           <p>
@@ -42,20 +67,14 @@ export default function AboutPage() {
         </section>
 
         <section className="mt-10">
-          <h2 className="font-heading text-2xl font-bold text-text-primary">
-            Who we are
-          </h2>
+          <h2 className="eland">Who we are</h2>
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
               <strong className="text-text-primary">mukoko weather</strong> is a
               product of{" "}
               <strong className="text-text-primary">Mukoko Africa</strong>, a
               division of{" "}
-              <a
-                href="https://nyuchi.com"
-                className="text-primary underline hover:text-primary/80 transition-colors"
-                rel="noopener"
-              >
+              <a href="https://nyuchi.com" className="sunbird" rel="noopener">
                 Nyuchi Africa (PVT) Ltd
               </a>
               .
@@ -76,73 +95,28 @@ export default function AboutPage() {
         </section>
 
         <section className="mt-10">
-          <h2 className="font-heading text-2xl font-bold text-text-primary">
-            What we offer
-          </h2>
+          <h2 className="eland">What we offer</h2>
           <ul className="mt-4 space-y-2 text-text-secondary">
-            <li className="flex items-start gap-2">
-              <span
-                className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary"
-                aria-hidden="true"
-              />
-              <span>
-                Real-time weather conditions for 265+ locations worldwide
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span
-                className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary"
-                aria-hidden="true"
-              />
-              <span>7-day daily forecasts and 24-hour hourly predictions</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span
-                className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary"
-                aria-hidden="true"
-              />
-              <span>
-                AI-powered weather summaries with contextual advice for farming,
-                mining, travel, and tourism
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span
-                className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary"
-                aria-hidden="true"
-              />
-              <span>Automated frost alerts for agricultural regions</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span
-                className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary"
-                aria-hidden="true"
-              />
-              <span>
-                Country-specific seasonal awareness with local season names and
-                agricultural calendars
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span
-                className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary"
-                aria-hidden="true"
-              />
-              <span>Embeddable weather widget for third-party websites</span>
-            </li>
+            {OFFERINGS.map((item) => (
+              <li key={item} className="flex items-start gap-2">
+                <span
+                  className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary"
+                  aria-hidden="true"
+                />
+                <span>{item}</span>
+              </li>
+            ))}
           </ul>
         </section>
 
         <section className="mt-10">
-          <h2 className="font-heading text-2xl font-bold text-text-primary">
-            Data sources
-          </h2>
+          <h2 className="eland">Data sources</h2>
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
               Weather data is sourced from{" "}
               <a
                 href="https://www.tomorrow.io"
-                className="text-primary underline hover:text-primary/80 transition-colors"
+                className="sunbird"
                 rel="noopener noreferrer"
               >
                 Tomorrow.io
@@ -150,7 +124,7 @@ export default function AboutPage() {
               (primary) and{" "}
               <a
                 href="https://open-meteo.com"
-                className="text-primary underline hover:text-primary/80 transition-colors"
+                className="sunbird"
                 rel="noopener noreferrer"
               >
                 Open-Meteo
@@ -158,7 +132,7 @@ export default function AboutPage() {
               (fallback). AI-powered summaries are generated using{" "}
               <a
                 href="https://anthropic.com"
-                className="text-primary underline hover:text-primary/80 transition-colors"
+                className="sunbird"
                 rel="noopener noreferrer"
               >
                 Anthropic Claude
@@ -169,88 +143,35 @@ export default function AboutPage() {
         </section>
 
         <section className="mt-10">
-          <h2 className="font-heading text-2xl font-bold text-text-primary">
-            Contact us
-          </h2>
+          <h2 className="eland">Contact us</h2>
           <dl className="mt-4 space-y-3 text-base">
-            <div className="flex gap-4">
-              <dt className="w-28 flex-shrink-0 text-text-tertiary">General</dt>
-              <dd>
-                <a
-                  href="mailto:hi@mukoko.com"
-                  className="text-primary underline hover:text-primary/80 transition-colors"
-                >
-                  hi@mukoko.com
-                </a>
-              </dd>
-            </div>
-            <div className="flex gap-4">
-              <dt className="w-28 flex-shrink-0 text-text-tertiary">Support</dt>
-              <dd>
-                <a
-                  href="mailto:support@mukoko.com"
-                  className="text-primary underline hover:text-primary/80 transition-colors"
-                >
-                  support@mukoko.com
-                </a>
-              </dd>
-            </div>
-            <div className="flex gap-4">
-              <dt className="w-28 flex-shrink-0 text-text-tertiary">Legal</dt>
-              <dd>
-                <a
-                  href="mailto:legal@nyuchi.com"
-                  className="text-primary underline hover:text-primary/80 transition-colors"
-                >
-                  legal@nyuchi.com
-                </a>
-              </dd>
-            </div>
-            <div className="flex gap-4">
-              <dt className="w-28 flex-shrink-0 text-text-tertiary">Twitter</dt>
-              <dd>
-                <a
-                  href="https://twitter.com/mukokoafrica"
-                  className="text-primary underline hover:text-primary/80 transition-colors"
-                  rel="noopener noreferrer"
-                >
-                  @mukokoafrica
-                </a>
-              </dd>
-            </div>
-            <div className="flex gap-4">
-              <dt className="w-28 flex-shrink-0 text-text-tertiary">
-                Instagram
-              </dt>
-              <dd>
-                <a
-                  href="https://instagram.com/mukoko.africa"
-                  className="text-primary underline hover:text-primary/80 transition-colors"
-                  rel="noopener noreferrer"
-                >
-                  @mukoko.africa
-                </a>
-              </dd>
-            </div>
+            {CONTACTS.map((c) => (
+              <InfoRow
+                key={c.label}
+                label={c.label}
+                value={
+                  <a
+                    href={c.href}
+                    className="sunbird"
+                    {...(c.external ? { rel: "noopener noreferrer" } : {})}
+                  >
+                    {c.text}
+                  </a>
+                }
+              />
+            ))}
           </dl>
         </section>
 
         <nav className="mt-10 flex gap-4 text-base" aria-label="Legal pages">
-          <Link
-            href="/privacy"
-            className="text-primary underline hover:text-primary/80 transition-colors"
-          >
+          <Link href="/privacy" className="sunbird">
             Privacy Policy
           </Link>
-          <Link
-            href="/terms"
-            className="text-primary underline hover:text-primary/80 transition-colors"
-          >
+          <Link href="/terms" className="sunbird">
             Terms of Service
           </Link>
         </nav>
-      </main>
-      <Footer />
+      </PageShell>
     </>
   );
 }

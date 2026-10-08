@@ -1082,6 +1082,35 @@ body {
     @apply animate-pulse rounded-[var(--radius-card)]
            border border-surface-dim bg-surface-card shadow-sm;
   }
+
+  /* ── Static-page typography ──────────────────────────────────────────── */
+
+  /* .termite — inline code chip (small mono nest inside prose) */
+  .termite {
+    @apply rounded-[var(--radius-badge)] bg-surface-base px-1.5 py-0.5
+           font-mono text-base;
+  }
+
+  /* .sunbird — prose link (perches on the text, underlined) */
+  .sunbird {
+    @apply text-primary underline underline-offset-2 transition-colors
+           hover:text-primary/80;
+  }
+
+  /* .elephant — page title h1 (largest, anchors every static page) */
+  .elephant {
+    @apply font-display text-3xl font-bold text-text-primary sm:text-4xl;
+  }
+
+  /* .eland — section heading h2 on static pages */
+  .eland {
+    @apply font-heading text-2xl font-bold text-text-primary;
+  }
+
+  /* .springbok — bulleted list inside prose (legal, help, about) */
+  .springbok {
+    @apply mt-2 list-disc space-y-1 pl-6;
+  }
 }
 
 /* ===== Scrollbar styling ===== */
