@@ -5,6 +5,7 @@ import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
 import { CloudSunIcon, MegaphoneIcon } from "@/lib/weather-icons";
 import { getReportTypeInfo } from "@/lib/report-types";
+import { fetchJson } from "@/lib/fetch-json";
 import { Spinner } from "@/components/ui/spinner";
 
 // ---------------------------------------------------------------------------
@@ -54,10 +55,10 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
   useEffect(() => {
     if (!locationSlug) return;
 
-    fetch(`/api/py/reports?location=${locationSlug}&hours=24`)
-      .then((res) => (res.ok ? res.json() : { reports: [] }))
-      .then((data) => setReports(data.reports || []))
-      .catch(() => setReports([]))
+    fetchJson<{ reports?: Report[] }>(
+      `/api/py/reports?location=${locationSlug}&hours=24`,
+    )
+      .then((data) => setReports(data?.reports || []))
       .finally(() => setLoading(false));
   }, [locationSlug]);
 
