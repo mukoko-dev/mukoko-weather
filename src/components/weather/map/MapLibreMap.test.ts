@@ -116,3 +116,72 @@ describe("marker theme color (issue #97)", () => {
     expect(restoreBlock).toContain("resolveColor");
   });
 });
+
+describe("MapLibre web worker (maplibre-gl v6)", () => {
+  const root = resolve(__dirname, "../../../..");
+  const read = (p: string) => readFileSync(resolve(root, p), "utf-8");
+
+  it("points setWorkerUrl at the served copy before creating a map", () => {
+    // v6 loads its worker from next to the bundled chunk, where webpack never
+    // emits it — without this every map renders blank ("Worker failed to load").
+    const setIdx = source.indexOf("setWorkerUrl(");
+    const mapIdx = source.indexOf("new Map(");
+    expect(setIdx).toBeGreaterThan(-1);
+    expect(setIdx).toBeLessThan(mapIdx);
+    expect(source).toContain("maplibreWorkerUrl(getVersion())");
+  });
+
+  it("serves the worker from a per-version folder the copy script fills", async () => {
+    // Versioned so a tab on an old bundle never pairs with a newer worker.
+    const { maplibreWorkerUrl } = await import("@/lib/map-layers");
+    expect(maplibreWorkerUrl("6.12.0")).toBe(
+      "/vendor/maplibre-gl/6.12.0/maplibre-gl-worker.mjs",
+    );
+    const script = read("scripts/copy-maplibre-worker.mjs");
+    expect(script).toContain('"public", "vendor", "maplibre-gl", version');
+    // The worker imports ./maplibre-gl-shared.mjs, so both must be copied.
+    expect(script).toContain("maplibre-gl-worker.mjs");
+    expect(script).toContain("maplibre-gl-shared.mjs");
+  });
+
+  it("copies the worker before every build and dev run", () => {
+    const pkg = JSON.parse(read("package.json")) as {
+      scripts: Record<string, string>;
+    };
+    expect(pkg.scripts.prebuild).toContain("copy-maplibre-worker.mjs");
+    expect(pkg.scripts.predev).toContain("copy-maplibre-worker.mjs");
+  });
+
+  it("the installed maplibre-gl still ships both worker files", () => {
+    const dist = resolve(root, "node_modules/maplibre-gl/dist");
+    expect(() =>
+      readFileSync(resolve(dist, "maplibre-gl-worker.mjs")),
+    ).not.toThrow();
+    expect(
+      readFileSync(resolve(dist, "maplibre-gl-worker.mjs"), "utf-8"),
+    ).toContain("./maplibre-gl-shared.mjs");
+    // The module the worker imports must exist under exactly that name.
+    expect(() =>
+      readFileSync(resolve(dist, "maplibre-gl-shared.mjs")),
+    ).not.toThrow();
+  });
+
+  it("keeps MapLibre's focusable controls visible to assistive tech", () => {
+    // Zoom buttons and attribution links render inside the container; an
+    // aria-hidden ancestor would hide focusable controls (aria-hidden-focus).
+    expect(source).not.toMatch(
+      /aria-hidden="true">\s*<div ref=\{containerRef\}/,
+    );
+  });
+});
+
+describe("map container sizing", () => {
+  it("never puts the absolute fill on the MapLibre container itself", () => {
+    // MapLibre's unlayered `.maplibregl-map { position: relative }` beats
+    // Tailwind 4's layered `absolute`, collapsing the container to 0px tall.
+    expect(source).not.toMatch(/ref=\{containerRef\}[^>]*absolute/);
+    expect(source).toMatch(
+      /<div className="absolute inset-0"[^>]*>\s*<div ref=\{containerRef\} className="h-full w-full"/,
+    );
+  });
+});

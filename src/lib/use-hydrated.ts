@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { hasStoreHydrated, subscribeStoreHydrated } from "@/lib/store";
 
 // A store that never emits — it exists only so `useSyncExternalStore` can
 // return a different value for the server snapshot (`false`) than the client
@@ -32,6 +33,20 @@ export function useHydrated(): boolean {
   return useSyncExternalStore(
     subscribe,
     getHydratedSnapshot,
+    getHydratedServerSnapshot,
+  );
+}
+
+/**
+ * `true` once BOTH React has hydrated AND the persisted store has loaded.
+ * The server snapshot is always `false`, so the hydration render matches the
+ * server HTML; afterwards it re-renders as soon as the store finishes loading,
+ * even when that happens after hydration (slow IndexedDB on phones).
+ */
+export function useStoreHydrated(): boolean {
+  return useSyncExternalStore(
+    subscribeStoreHydrated,
+    hasStoreHydrated,
     getHydratedServerSnapshot,
   );
 }
