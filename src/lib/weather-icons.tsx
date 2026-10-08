@@ -1766,6 +1766,25 @@ export function ActivityIcon({
 }
 
 /** Map weather icon names to components */
+/**
+ * The night-time version of a condition icon. Sun-based icons have no place
+ * after dark; everything else (rain, storm, fog…) reads the same at night.
+ * Previously callers passed a bare "moon" that WeatherIcon didn't handle, so
+ * every night-time condition — including "Clear sky" — rendered as a cloud.
+ */
+export function nightIcon(icon: string): string {
+  switch (icon) {
+    case "sun":
+      return "moon";
+    case "cloud-sun":
+      return "cloud-moon";
+    case "cloud-sun-rain":
+      return "cloud-rain";
+    default:
+      return icon;
+  }
+}
+
 export function WeatherIcon({
   icon,
   className = "",
@@ -1792,6 +1811,12 @@ export function WeatherIcon({
       return <CloudHailIcon className={className} size={size} />;
     case "snowflake":
       return <SnowflakeIcon className={className} size={size} />;
+    case "moon":
+      return <MoonIcon className={className} size={size} />;
+    case "cloud-moon": {
+      const CloudMoon = lucideIcons.CloudMoon;
+      return <CloudMoon className={className} size={size} aria-hidden="true" />;
+    }
     default:
       return <CloudIcon className={className} size={size} />;
   }
