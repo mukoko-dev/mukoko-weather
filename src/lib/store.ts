@@ -66,6 +66,7 @@ export const MAX_SAVED_LOCATIONS = 10;
 export const DEFAULT_SECTION_ORDER = [
   "current",
   "hourlyScroll",
+  "communityLane",
   "atmospheric",
   "reports",
   "activityInsights",

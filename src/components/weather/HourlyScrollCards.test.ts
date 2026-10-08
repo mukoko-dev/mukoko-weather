@@ -93,23 +93,21 @@ describe("HourlyScrollCards — weather data", () => {
   });
 });
 
-describe("HourlyScrollCards — one-sentence outlook", () => {
-  it("renders the deterministic hourly summary above the strip", () => {
-    expect(source).toContain('from "@/lib/hourly-summary"');
-    expect(source).toContain("hourlySummary(hourly, start)");
-    expect(source).toContain("{summary}");
+describe("HourlyScrollCards — no duplicate outlook", () => {
+  it("does not render the one-sentence outlook (the hero owns it)", () => {
+    // CurrentConditions shows the deterministic hourlySummary sentence; the
+    // strip repeating it was a duplicate, so the strip is hours only.
+    expect(source).not.toContain('from "@/lib/hourly-summary"');
+    expect(source).not.toContain("hourlySummary(");
+    expect(source).not.toContain("{summary}");
   });
 
-  it("derives the summary from the same start index as the strip", () => {
-    // One `start` feeds both the sentence and the hour cards — they can
-    // never disagree about what "now" is.
-    expect(source).toMatch(
-      /const summary = hydrated \? hourlySummary\(hourly, start\)/,
+  it("the hero still renders the outlook sentence", () => {
+    const hero = readFileSync(
+      resolve(__dirname, "CurrentConditions.tsx"),
+      "utf-8",
     );
-  });
-
-  it("gates the summary on hydration (depends on the client wall clock)", () => {
-    expect(source).toContain("hydrated ? hourlySummary");
+    expect(hero).toContain("heroOutlook(hourly");
   });
 });
 

@@ -28,6 +28,8 @@ import { HourlyScrollCards } from "@/components/weather/HourlyScrollCards";
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { LazySection } from "@/components/weather/LazySection";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
+import { CommunityLane } from "@/components/weather/CommunityLane";
+import { CommunityLaneSkeleton } from "@/components/weather/CommunityLaneSkeleton";
 import {
   SectionSkeleton,
   ReportsSkeleton,
@@ -398,11 +400,35 @@ export function WeatherDashboard({
                                 current={weather.current}
                                 locationName={location.name}
                                 daily={weather.daily}
+                                hourly={weather.hourly}
                                 slug={location.slug}
                                 isCurrentLocation={isCurrentLocation}
                                 footer={<SeasonBadge season={season} />}
                               />
                             </ChartErrorBoundary>
+                          </DraggableSection>
+                        );
+                      case "communityLane":
+                        return (
+                          <DraggableSection
+                            key="communityLane"
+                            id="communityLane"
+                            reordering={reordering}
+                          >
+                            <LazySection
+                              label="community-lane"
+                              fallback={<CommunityLaneSkeleton />}
+                            >
+                              <ChartErrorBoundary name="community lane">
+                                <CommunityLane
+                                  slug={location.slug}
+                                  lat={location.lat}
+                                  lon={location.lon}
+                                  weather={weather}
+                                  selectedActivities={selectedActivities}
+                                />
+                              </ChartErrorBoundary>
+                            </LazySection>
                           </DraggableSection>
                         );
                       case "atmospheric":
