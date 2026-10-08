@@ -4,6 +4,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { EmptyState } from "@/components/ui/empty-state";
 import { getCountryWithStats, getProvincesWithLocationCounts } from "@/lib/db";
 import { getFlagEmoji, COUNTRIES } from "@/lib/countries";
 
@@ -60,45 +62,14 @@ export default async function CountryDetailPage({ params }: Props) {
     <>
       <Header />
 
-      <nav
-        aria-label="Breadcrumb"
-        className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8"
-      >
-        <ol className="flex items-center gap-1 text-base text-text-tertiary">
-          <li>
-            <Link
-              href="/"
-              className="hover:text-text-secondary transition-colors"
-            >
-              Home
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li>
-            <Link
-              href="/explore"
-              className="hover:text-text-secondary transition-colors"
-            >
-              Explore
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li>
-            <Link
-              href="/explore/country"
-              className="hover:text-text-secondary transition-colors"
-            >
-              Countries
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li aria-current="page">
-            <span className="font-medium text-text-primary">
-              {country.name}
-            </span>
-          </li>
-        </ol>
-      </nav>
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/" },
+          { label: "Explore", href: "/explore" },
+          { label: "Countries", href: "/explore/country" },
+          { label: country.name },
+        ]}
+      />
 
       <main
         id="main-content"
@@ -120,9 +91,9 @@ export default async function CountryDetailPage({ params }: Props) {
         </div>
 
         {provinces.filter((p) => p.locationCount > 0).length === 0 ? (
-          <div className="mt-8 rounded-[var(--radius-card)] bg-surface-card p-6 text-center text-text-tertiary">
-            <p>No locations available here yet.</p>
-          </div>
+          <EmptyState className="mt-8">
+            No locations available here yet.
+          </EmptyState>
         ) : (
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {provinces.map((province) => {
@@ -131,7 +102,7 @@ export default async function CountryDetailPage({ params }: Props) {
                 <Link
                   key={province.slug}
                   href={`/explore/country/${code.toLowerCase()}/${province.slug}`}
-                  className="group rounded-[var(--radius-card)] bg-surface-card p-5 shadow-sm transition-all hover:shadow-md hover:bg-surface-card/80 focus-visible:outline-2 focus-visible:outline-primary"
+                  className="group card-interactive rounded-[var(--radius-card)] bg-surface-card p-5 shadow-sm"
                 >
                   <div className="flex items-start justify-between">
                     <h2 className="giraffe group-hover:text-primary transition-colors">

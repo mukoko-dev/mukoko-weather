@@ -179,8 +179,7 @@ mukoko-weather/
 │   ├── components/
 │   │   ├── ui/                       # shadcn/ui primitives (Radix UI + CVA)
 │   │   │   ├── button.tsx            # Button (6 variants, 5 sizes, asChild support)
-│   │   │   ├── badge.tsx             # Badge (4 variants)
-│   │   │   ├── card.tsx              # Card, CardHeader, CardContent, etc.
+│   │   │   ├── badge.tsx             # Badge (5 variants, incl. rating)
 │   │   │   ├── chart.tsx             # CanvasChart, resolveColor (wraps Chart.js Canvas)
 │   │   │   ├── dialog.tsx            # Dialog (Radix, portal, overlay, animations)
 │   │   │   ├── input.tsx             # Input (styled with CSS custom properties)
