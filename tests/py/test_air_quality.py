@@ -234,7 +234,7 @@ class TestEndpointCacheFlow:
         mock_collection.find_one.return_value = cached_doc
 
         with patch(
-            "py._air_quality._air_quality_cache_collection",
+            "py._air_quality.air_quality_cache_collection",
             return_value=mock_collection,
         ):
             with patch("py._air_quality._fetch_open_meteo_air_quality") as fetch_mock:
@@ -253,7 +253,7 @@ class TestEndpointCacheFlow:
         mock_collection.find_one.return_value = None  # cache miss
 
         with patch(
-            "py._air_quality._air_quality_cache_collection",
+            "py._air_quality.air_quality_cache_collection",
             return_value=mock_collection,
         ):
             with patch(
@@ -278,7 +278,7 @@ class TestEndpointCacheFlow:
         mock_collection.find_one.return_value = None
 
         with patch(
-            "py._air_quality._air_quality_cache_collection",
+            "py._air_quality.air_quality_cache_collection",
             return_value=mock_collection,
         ):
             with patch(
@@ -314,7 +314,7 @@ class TestCircuitBreaker:
         mock_collection.find_one.return_value = None
 
         with patch(
-            "py._air_quality._air_quality_cache_collection",
+            "py._air_quality.air_quality_cache_collection",
             return_value=mock_collection,
         ):
             with pytest.raises(HTTPException) as exc:
@@ -346,7 +346,7 @@ class TestValidation:
         mock_collection = MagicMock()
         mock_collection.find_one.return_value = None
         with patch(
-            "py._air_quality._air_quality_cache_collection",
+            "py._air_quality.air_quality_cache_collection",
             return_value=mock_collection,
         ):
             with patch(

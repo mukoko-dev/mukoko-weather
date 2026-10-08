@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { EmptyState } from "@/components/ui/empty-state";
 import { getLocationsByTagFromDb, getTagBySlug } from "@/lib/db";
 import { logError } from "@/lib/observability";
 import type { LocationDoc } from "@/lib/db";
@@ -74,34 +76,13 @@ export default async function ExploreTagPage({ params }: Props) {
     <>
       <Header />
 
-      <nav
-        aria-label="Breadcrumb"
-        className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8"
-      >
-        <ol className="flex items-center gap-1 text-base text-text-tertiary">
-          <li>
-            <Link
-              href="/"
-              className="hover:text-text-secondary transition-colors"
-            >
-              Home
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li>
-            <Link
-              href="/explore"
-              className="hover:text-text-secondary transition-colors"
-            >
-              Explore
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li aria-current="page">
-            <span className="font-medium text-text-primary">{meta.label}</span>
-          </li>
-        </ol>
-      </nav>
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/" },
+          { label: "Explore", href: "/explore" },
+          { label: meta.label },
+        ]}
+      />
 
       <main
         id="main-content"
@@ -115,9 +96,9 @@ export default async function ExploreTagPage({ params }: Props) {
         </p>
 
         {locations.length === 0 && (
-          <div className="mt-8 rounded-[var(--radius-card)] bg-surface-card p-6 text-center text-text-tertiary">
-            <p>No locations available here yet.</p>
-          </div>
+          <EmptyState className="mt-8">
+            No locations available here yet.
+          </EmptyState>
         )}
 
         <div className="mt-8 space-y-8">
@@ -139,7 +120,7 @@ export default async function ExploreTagPage({ params }: Props) {
                     <Link
                       key={loc.slug}
                       href={`/${loc.slug}`}
-                      className="group flex min-w-0 items-center justify-between rounded-[var(--radius-card)] bg-surface-card px-4 py-3 shadow-sm transition-all hover:bg-surface-card/80 hover:shadow-md focus-visible:outline-2 focus-visible:outline-primary"
+                      className="group card-interactive flex min-w-0 items-center justify-between rounded-[var(--radius-card)] bg-surface-card px-4 py-3 shadow-sm"
                     >
                       <div className="min-w-0 flex-1">
                         <span className="block truncate font-medium text-text-primary transition-colors group-hover:text-primary">

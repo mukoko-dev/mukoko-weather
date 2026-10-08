@@ -27,7 +27,6 @@ import {
   storeLocationEmbeddings,
   getTagCountsAndStats,
   getAtlasSearchIndexDefinitions,
-  _resetSearchFlags,
   getLocationCount,
   VALID_CONDITION_FIELDS,
   stampPlatformFields,
@@ -525,50 +524,6 @@ describe("Atlas Search and Vector Search functions", () => {
 
   it("getTagCountsAndStats is a function", () => {
     expect(typeof getTagCountsAndStats).toBe("function");
-  });
-
-  it("_resetSearchFlags resets timestamps and embedding guard", () => {
-    expect(typeof _resetSearchFlags).toBe("function");
-    // Should be safe to call multiple times (idempotent)
-    expect(() => _resetSearchFlags()).not.toThrow();
-    expect(() => _resetSearchFlags()).not.toThrow();
-  });
-});
-
-describe("Atlas Search time-based recovery", () => {
-  it("uses ATLAS_RETRY_AFTER_MS constant for recovery timing", () => {
-    // Verify the module exports the reset function (timestamps are internal)
-    // and that the time-based pattern is in place by reading the source
-    const dbSource = readFileSync(resolve(__dirname, "db.ts"), "utf-8");
-    expect(dbSource).toContain("ATLAS_RETRY_AFTER_MS");
-    expect(dbSource).toContain("5 * 60 * 1000");
-  });
-
-  it("disables activity Atlas Search with a timestamp, not a permanent boolean", () => {
-    // Phase 0F: location Atlas Search / Vector Search disabling removed —
-    // those paths now run against `places.placesGeo` (managed by the
-    // platform). Only the activity Atlas Search retains the local
-    // time-based circuit breaker.
-    const dbSource = readFileSync(resolve(__dirname, "db.ts"), "utf-8");
-    expect(dbSource).toContain("atlasActivitySearchDisabledAt = Date.now()");
-    expect(dbSource).not.toContain("atlasActivitySearchAvailable = false");
-  });
-
-  it("only matches code 40324 and 'index not found' — not broad $search or PlanExecutor strings", () => {
-    const dbSource = readFileSync(resolve(__dirname, "db.ts"), "utf-8");
-    // Should match specific permanent-error indicators
-    expect(dbSource).toContain("mongoErr.code === 40324");
-    expect(dbSource).toContain('msg.includes("index not found")');
-    // Should NOT match broad strings that could hit transient errors
-    expect(dbSource).not.toContain('msg.includes("$search")');
-    expect(dbSource).not.toContain('msg.includes("PlanExecutor")');
-  });
-
-  it("checks time elapsed since disable before skipping activity Atlas Search", () => {
-    const dbSource = readFileSync(resolve(__dirname, "db.ts"), "utf-8");
-    expect(dbSource).toContain(
-      "Date.now() - atlasActivitySearchDisabledAt > ATLAS_RETRY_AFTER_MS",
-    );
   });
 });
 

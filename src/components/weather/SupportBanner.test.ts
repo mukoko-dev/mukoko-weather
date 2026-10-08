@@ -17,9 +17,9 @@ describe("SupportBanner — component structure", () => {
     expect(source).toContain("export function SupportBanner");
   });
 
-  it("uses Card primitive for containment", () => {
-    expect(source).toContain('from "@/components/ui/card"');
-    expect(source).toContain("<Card");
+  it("uses the acacia fauna surface for containment (no Card primitive)", () => {
+    expect(source).toContain('className="acacia ');
+    expect(source).not.toContain("@/components/ui/card");
   });
 
   it("does not import from lucide-react (no external icon dependency)", () => {

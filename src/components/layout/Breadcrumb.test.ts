@@ -20,7 +20,24 @@ describe("Breadcrumb structure", () => {
   });
 
   it("marks the current page with aria-current and no link", () => {
-    expect(source).toContain('aria-current={item.href ? undefined : "page"}');
+    expect(source).toContain('aria-current={isCurrent ? "page" : undefined}');
+    expect(source).toContain("const isCurrent = !item.href && !item.plain;");
+  });
+
+  it("supports a non-current plain-text item kind in secondary text", () => {
+    expect(source).toContain("plain?: boolean");
+    expect(source).toContain('<span className="text-text-secondary">');
+  });
+
+  it("composes classes with cn() instead of filter(Boolean).join", () => {
+    expect(source).toContain('import { cn } from "@/lib/utils"');
+    expect(source).not.toContain("filter(Boolean)");
+    expect(source).not.toContain(".join(");
+  });
+
+  it("accepts a className for the container", () => {
+    expect(source).toContain("className?: string");
+    expect(source).toMatch(/<nav[\s\S]*?className=\{cn\(/);
   });
 
   it("hides separators from assistive tech", () => {
@@ -85,5 +102,11 @@ describe("BreadcrumbSkeleton (issue #104)", () => {
         '<span className="text-text-tertiary/30">/</span>',
       );
     }
+  });
+});
+
+describe("Breadcrumb touch targets", () => {
+  it("links carry the .dik-dik class so they reach 48px on coarse pointers", () => {
+    expect(source).toMatch(/<Link[\s\S]*?className="dik-dik /);
   });
 });

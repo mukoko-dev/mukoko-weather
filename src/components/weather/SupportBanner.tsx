@@ -1,7 +1,5 @@
 "use client";
 
-import { Card } from "@/components/ui/card";
-
 /**
  * SupportBanner — Buy Me a Coffee inline support card.
  * Placed as a LazySection + ChartErrorBoundary on the location page so a
@@ -11,7 +9,7 @@ import { Card } from "@/components/ui/card";
 export function SupportBanner() {
   return (
     <section aria-labelledby="support-banner-heading">
-      <Card className="border-bmc/40 bg-bmc/10 p-0 shadow-sm">
+      <div className="acacia border-bmc/40 bg-bmc/10 p-0 shadow-sm">
         <a
           href="https://www.buymeacoffee.com/bryany"
           target="_blank"
@@ -45,7 +43,7 @@ export function SupportBanner() {
             Buy me a coffee ☕
           </span>
         </a>
-      </Card>
+      </div>
     </section>
   );
 }
