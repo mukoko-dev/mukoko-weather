@@ -11,19 +11,17 @@ import type { TagDoc } from "@/lib/db";
 import { CTACard } from "@/components/ui/cta-card";
 import { ExploreSearch } from "@/components/explore/ExploreSearch";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { SITE_URL } from "@/lib/site";
 
 // Cache for 1 hour; regenerates in the background after expiry (ISR).
 // Location data changes rarely — this eliminates cold-start DB latency for visitors.
 export const revalidate = 3600;
-
-const BASE_URL = "https://weather.mukoko.com";
-
 export const metadata: Metadata = {
   title: "Explore Weather | mukoko weather",
   description:
     "Browse weather locations worldwide by category, country, and province. Discover cities, farming regions, national parks, and more.",
   alternates: {
-    canonical: `${BASE_URL}/explore`,
+    canonical: `${SITE_URL}/explore`,
   },
   openGraph: {
     title: "Explore Weather | mukoko weather",

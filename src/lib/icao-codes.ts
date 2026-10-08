@@ -1,3 +1,5 @@
+import { nearestWithin } from "./geo";
+
 /**
  * Maps location slugs to ICAO airport codes.
  * Also provides nearest-airport lookup by lat/lon for locations
@@ -31,12 +33,15 @@ export interface AirportDistance {
  * breaks offline.
  */
 export const AIRPORTS: Airport[] = [
-  // Zimbabwe
+  // Zimbabwe — only stations the Aviation Weather Center lists (METAR/TAF
+  // capable), coordinates from AWC station info (2026-10-08). FVHA is the
+  // retired code for Harare, now FVRG; FVGW, FVMU, FVGR, FVKK, FVBD, FVCI,
+  // FVBR and FVCP are not in AWC's station table, so no METAR can be served.
   {
-    icao: "FVHA",
+    icao: "FVRG",
     name: "Harare (Robert Gabriel Mugabe Intl)",
-    lat: -17.932,
-    lon: 31.093,
+    lat: -17.921,
+    lon: 31.1,
   },
   {
     icao: "FVBU",
@@ -46,26 +51,21 @@ export const AIRPORTS: Airport[] = [
   },
   { icao: "FVFA", name: "Victoria Falls Intl", lat: -18.096, lon: 25.839 },
   { icao: "FVMV", name: "Masvingo", lat: -20.055, lon: 30.859 },
-  { icao: "FVGW", name: "Gweru (Thornhill)", lat: -19.436, lon: 29.861 },
-  { icao: "FVMU", name: "Mutare", lat: -18.998, lon: 32.627 },
-  { icao: "FVGR", name: "Grand Reef (Mutare)", lat: -18.976, lon: 32.449 },
   { icao: "FVKB", name: "Kariba", lat: -16.52, lon: 28.885 },
   { icao: "FVWN", name: "Hwange National Park", lat: -18.63, lon: 27.021 },
-  { icao: "FVKK", name: "Kwekwe", lat: -18.933, lon: 29.841 }, // corrected lon (was 29.738)
-  { icao: "FVBB", name: "Beitbridge", lat: -22.198, lon: 30.013 }, // corrected lon (was 29.433)
-  { icao: "FVBD", name: "Bindura", lat: -17.304, lon: 31.327 }, // corrected lat (was -17.175)
-  { icao: "FVCH", name: "Chipinge", lat: -20.207, lon: 32.628 }, // was mislabelled "Chinhoyi"
-  { icao: "FVCI", name: "Chinhoyi", lat: -17.362, lon: 30.199 }, // Chinhoyi's actual ICAO
-  { icao: "FVBR", name: "Buffalo Range (Chiredzi)", lat: -21.001, lon: 31.579 },
-  { icao: "FVCP", name: "Charles Prince (Harare)", lat: -17.752, lon: 30.925 },
+  { icao: "FVBB", name: "Beitbridge", lat: -22.198, lon: 30.013 },
+  { icao: "FVCH", name: "Chipinge", lat: -20.207, lon: 32.628 },
 
   // Southern Africa
   {
-    icao: "FAJS",
+    icao: "FAOR",
     name: "Johannesburg (O.R. Tambo Intl)",
     lat: -26.139,
     lon: 28.246,
   },
+  // Reporting airports near Johannesburg (AWC station info + 24 h METARs).
+  { icao: "FALA", name: "Lanseria Intl", lat: -25.939, lon: 27.926 },
+  { icao: "FAWK", name: "Waterkloof (Pretoria)", lat: -25.83, lon: 28.223 },
   { icao: "FACT", name: "Cape Town Intl", lat: -33.965, lon: 18.602 },
   { icao: "FALE", name: "Durban (King Shaka Intl)", lat: -29.615, lon: 31.119 },
   {
@@ -247,23 +247,17 @@ const AIRPORT_BY_ICAO: Record<string, Airport> = Object.fromEntries(
 /** Slug→ICAO for seed locations (fast O(1) lookup) */
 const ICAO_MAP: Record<string, string> = {
   // Zimbabwe
-  harare: "FVHA",
+  harare: "FVRG",
   bulawayo: "FVBU",
   "victoria-falls": "FVFA",
   masvingo: "FVMV",
-  gweru: "FVGW",
-  mutare: "FVMU",
   kariba: "FVKB",
   "hwange-national-park": "FVWN",
   hwange: "FVWN",
-  kwekwe: "FVKK",
   beitbridge: "FVBB",
-  bindura: "FVBD",
-  chinhoyi: "FVCI",
   chipinge: "FVCH",
-  "buffalo-range": "FVBR",
   // Southern Africa
-  "johannesburg-za": "FAJS",
+  "johannesburg-za": "FAOR",
   "cape-town-za": "FACT",
   "durban-za": "FALE",
   "port-elizabeth-za": "FAPE",
@@ -308,23 +302,6 @@ const ICAO_MAP: Record<string, string> = {
   "colombo-lk": "VCBI",
 };
 
-function haversineKm(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 /** Returns the ICAO airport code for a location slug, or null if not mapped. */
 export function getIcaoForSlug(slug: string): string | null {
   return ICAO_MAP[slug] ?? null;
@@ -340,14 +317,13 @@ export function getNearestIcaos(
   count = 5,
   maxDistanceKm = 500,
 ): AirportDistance[] {
-  return AIRPORTS.map((a) => ({
-    icao: a.icao,
-    name: a.name,
-    distanceKm: haversineKm(lat, lon, a.lat, a.lon),
-  }))
-    .filter((a) => a.distanceKm <= maxDistanceKm)
-    .sort((a, b) => a.distanceKm - b.distanceKm)
-    .slice(0, count);
+  return nearestWithin(AIRPORTS, (a) => a, lat, lon, maxDistanceKm, count).map(
+    ({ item, distanceKm }) => ({
+      icao: item.icao,
+      name: item.name,
+      distanceKm,
+    }),
+  );
 }
 
 /**
