@@ -16,6 +16,14 @@ export interface GeoResult {
 const DEFAULT_TIMEOUT_MS = 10000;
 /** Default browser position-cache window — 1 minute. */
 const DEFAULT_MAXIMUM_AGE_MS = 60000;
+/**
+ * Cap on the /api/py/geo round-trip after the fix arrives. Find-only is a
+ * cheap DB read; create-on-demand reverse-geocodes (Overpass, then Nominatim)
+ * so it gets longer. Without a cap, a hung lookup left the visitor on a
+ * "Finding your location…" screen indefinitely.
+ */
+export const GEO_LOOKUP_TIMEOUT_MS = 8000;
+export const GEO_CREATE_TIMEOUT_MS = 15000;
 
 export interface DetectUserLocationOptions {
   /** If true, auto-creates a new location via reverse geocoding when
@@ -57,9 +65,15 @@ export function detectUserLocation({
       async (position) => {
         const { latitude, longitude } = position.coords;
 
+        const controller = new AbortController();
+        const timer = setTimeout(
+          () => controller.abort(),
+          autoCreate ? GEO_CREATE_TIMEOUT_MS : GEO_LOOKUP_TIMEOUT_MS,
+        );
         try {
           const res = await fetch(
             `/api/py/geo?lat=${latitude}&lon=${longitude}${autoCreate ? "&autoCreate=true" : ""}`,
+            { signal: controller.signal },
           );
           if (!res.ok) {
             resolve({
@@ -97,6 +111,8 @@ export function detectUserLocation({
             coords: { lat: latitude, lon: longitude },
             distanceKm: null,
           });
+        } finally {
+          clearTimeout(timer);
         }
       },
       (error) => {
