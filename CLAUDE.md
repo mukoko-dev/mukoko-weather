@@ -36,7 +36,7 @@ Social: Twitter @mukokoafrica, Instagram @mukoko.africa
 - **Analytics:** Google Analytics 4 (GA4, measurement ID `G-4KB2ZS573N`) + Vercel Web Analytics (`@vercel/analytics` ^1.6.1)
 - **3D Animations:** Three.js (weather-aware particle loading scenes via `src/lib/weather-scenes/`)
 - **Testing:** Vitest 4.0.18 (TypeScript, `@vitest/coverage-v8` for coverage) + pytest 8.3 (Python)
-- **CI/CD:** GitHub Actions (single `ci` job: lint → typecheck → TypeScript tests → Python tests, all steps visible in one check on push/PR; CodeQL security scanning for JS/TS, Python, and Actions; Claude AI review on PRs; post-deploy DB init). All workflows use `concurrency` groups with `cancel-in-progress: true` to prevent zombie runs from rapid pushes
+- **CI/CD:** GitHub Actions (single `ci` job: lint → typecheck → TypeScript tests → Python tests, all steps visible in one check on push/PR; CodeQL security scanning for JS/TS, Python, and Actions; Claude AI review on PRs; post-deploy DB init; `workers.yml` checks the Rust Workers; `workers-deploy.yml` deploys them by hand only, in service-binding order, behind the `workers-production` GitHub Environment). All workflows use `concurrency` groups with `cancel-in-progress: true` to prevent zombie runs from rapid pushes, except `workers-deploy.yml`, which never cancels a deploy in flight
 - **Deployment:** Vercel (with `@vercel/functions` for MongoDB connection pooling)
 - **Edge layer (optional):** Cloudflare Workers with Hono (`worker/` directory)
 
