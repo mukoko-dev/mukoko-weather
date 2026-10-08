@@ -9,7 +9,11 @@
  */
 
 import type { Activity } from "./activities";
-import type { HourlyWeather, WeatherInsights } from "./weather";
+import {
+  wmoToInsightHazards,
+  type HourlyWeather,
+  type WeatherInsights,
+} from "./weather";
 import type { SuitabilityRuleDoc } from "./db";
 import { evaluateRule, type SuitabilityRating } from "./suitability";
 
@@ -49,8 +53,8 @@ export function dewPointFromTempHumidity(
 /**
  * Build a per-hour WeatherInsights object from hourly forecast arrays.
  *
- * Mirrors `synthesizeOpenMeteoInsights`' conventions (same WMO-code →
- * thunderstorm/precipitationType mappings, same units) but samples a single
+ * Uses the same WMO-code → thunderstorm/precipitationType mapping as
+ * `synthesizeOpenMeteoInsights` (via `wmoToInsightHazards`) but samples a single
  * hour index instead of current conditions. Only fields that can honestly be
  * derived from hourly data are set — rule conditions on absent fields simply
  * don't match, which is how the rules engine already treats missing data.
@@ -59,29 +63,9 @@ export function hourInsights(
   hourly: HourlyWeather,
   i: number,
 ): WeatherInsights {
-  const weatherCode = hourly.weather_code?.[i] ?? 0;
-
-  // WMO 95–99 = thunderstorm activity (same graduation as synthesizeOpenMeteoInsights)
-  let thunderstormProbability = 0;
-  if (weatherCode >= 99) thunderstormProbability = 95;
-  else if (weatherCode >= 96) thunderstormProbability = 85;
-  else if (weatherCode >= 95) thunderstormProbability = 70;
-
-  // WMO code → precipitationType: 0=none, 1=rain, 2=snow, 3=freezing rain
-  let precipitationType = 0;
-  if (
-    (weatherCode >= 71 && weatherCode <= 77) ||
-    (weatherCode >= 85 && weatherCode <= 86)
-  )
-    precipitationType = 2;
-  else if (
-    weatherCode === 66 ||
-    weatherCode === 67 ||
-    weatherCode === 56 ||
-    weatherCode === 57
-  )
-    precipitationType = 3;
-  else if (weatherCode >= 51) precipitationType = 1;
+  const { thunderstormProbability, precipitationType } = wmoToInsightHazards(
+    hourly.weather_code?.[i] ?? 0,
+  );
 
   const temp = hourly.temperature_2m?.[i];
   const rh = hourly.relative_humidity_2m?.[i];

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Map as MapLibreGLMap, Marker } from "maplibre-gl";
 import { useAppStore } from "@/lib/store";
+import { resolveTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { resolveColor } from "@/components/ui/chart";
 import {
@@ -98,11 +99,7 @@ export function MapLibreMap({
   const [baseMapMissingKey] = useState(() => !MAPTILER_KEY);
   const theme = useAppStore((s) => s.theme);
 
-  const isDark =
-    theme === "dark" ||
-    (theme === "system" &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const isDark = resolveTheme(theme) === "dark";
 
   useEffect(() => {
     if (!containerRef.current) return;

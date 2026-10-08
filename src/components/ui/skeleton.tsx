@@ -78,15 +78,6 @@ function ChartSkeleton({
   );
 }
 
-/** Badge-shaped skeleton */
-function BadgeSkeleton({ className }: { className?: string }) {
-  return (
-    <Skeleton
-      className={cn("h-5 w-16 rounded-[var(--radius-badge)]", className)}
-    />
-  );
-}
-
 /** Metric card skeleton (matches AtmosphericSummary MetricCard shape with arc gauge) */
 function MetricCardSkeleton({ className }: { className?: string }) {
   return (
@@ -143,7 +134,6 @@ export {
   Skeleton,
   CardSkeleton,
   ChartSkeleton,
-  BadgeSkeleton,
   MetricCardSkeleton,
   ChatSkeleton,
 };
