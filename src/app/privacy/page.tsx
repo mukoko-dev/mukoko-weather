@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
+import { PageShell } from "@/components/layout/PageShell";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -15,23 +14,15 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   return (
     <>
-      <Header />
-      <main
-        id="main-content"
-        className="mx-auto max-w-3xl px-4 py-10 pb-24 sm:pb-10 sm:px-6 md:px-8"
-      >
-        <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">
-          Privacy Policy
-        </h1>
+      <PageShell>
+        <h1 className="elephant">Privacy Policy</h1>
         <p className="mt-2 text-base text-text-tertiary">
           Last updated: June 2026
         </p>
 
         <div className="mt-8 space-y-8 text-text-secondary leading-relaxed">
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              Introduction
-            </h2>
+            <h2 className="eland">Introduction</h2>
             <p className="mt-3">
               This Privacy Policy explains how{" "}
               <strong className="text-text-primary">Mukoko Africa</strong>, a
@@ -42,10 +33,7 @@ export default function PrivacyPage() {
               (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;), handles
               information when you use mukoko weather (&quot;the Service&quot;)
               at{" "}
-              <a
-                href="https://weather.mukoko.com"
-                className="text-primary underline"
-              >
+              <a href="https://weather.mukoko.com" className="sunbird">
                 weather.mukoko.com
               </a>
               .
@@ -57,9 +45,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              Information we collect
-            </h2>
+            <h2 className="eland">Information we collect</h2>
 
             <h3 className="mt-4 font-semibold text-text-primary">
               Information you provide
@@ -78,7 +64,7 @@ export default function PrivacyPage() {
               feature, your browser will ask for permission to share your
               geographic coordinates. This data is:
             </p>
-            <ul className="mt-2 list-disc pl-6 space-y-1">
+            <ul className="springbok">
               <li>
                 Used only to determine the nearest supported weather location
               </li>
@@ -142,7 +128,7 @@ export default function PrivacyPage() {
               If you submit a community weather report (e.g. reporting current
               rain or frost conditions), the following is stored:
             </p>
-            <ul className="mt-2 list-disc pl-6 space-y-1">
+            <ul className="springbok">
               <li>The report type and severity you selected</li>
               <li>The location you were viewing</li>
               <li>
@@ -172,7 +158,7 @@ export default function PrivacyPage() {
               can opt out by installing the{" "}
               <a
                 href="https://tools.google.com/dlpage/gaoptout"
-                className="text-primary underline"
+                className="sunbird"
                 rel="noopener noreferrer"
               >
                 Google Analytics Opt-out Browser Add-on
@@ -194,9 +180,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              Third-party services
-            </h2>
+            <h2 className="eland">Third-party services</h2>
             <p className="mt-3">
               mukoko weather uses the following third-party services:
             </p>
@@ -209,7 +193,7 @@ export default function PrivacyPage() {
                   transmitted. See their{" "}
                   <a
                     href="https://open-meteo.com/en/terms"
-                    className="text-primary underline"
+                    className="sunbird"
                     rel="noopener noreferrer"
                   >
                     terms
@@ -226,7 +210,7 @@ export default function PrivacyPage() {
                   their{" "}
                   <a
                     href="https://www.tomorrow.io/privacy-policy/"
-                    className="text-primary underline"
+                    className="sunbird"
                     rel="noopener noreferrer"
                   >
                     privacy policy
@@ -245,7 +229,7 @@ export default function PrivacyPage() {
                   standard request metadata is transmitted. See their{" "}
                   <a
                     href="https://www.maptiler.com/privacy-policy/"
-                    className="text-primary underline"
+                    className="sunbird"
                     rel="noopener noreferrer"
                   >
                     privacy policy
@@ -263,7 +247,7 @@ export default function PrivacyPage() {
                   personal data is transmitted. See their{" "}
                   <a
                     href="https://www.aviationweather.gov/disclaimer"
-                    className="text-primary underline"
+                    className="sunbird"
                     rel="noopener noreferrer"
                   >
                     terms
@@ -281,7 +265,7 @@ export default function PrivacyPage() {
                   data is transmitted. See their{" "}
                   <a
                     href="https://osmfoundation.org/wiki/Privacy_Policy"
-                    className="text-primary underline"
+                    className="sunbird"
                     rel="noopener noreferrer"
                   >
                     privacy policy
@@ -310,7 +294,7 @@ export default function PrivacyPage() {
                   request information. See their{" "}
                   <a
                     href="https://policies.google.com/privacy"
-                    className="text-primary underline"
+                    className="sunbird"
                     rel="noopener noreferrer"
                   >
                     privacy policy
@@ -327,7 +311,7 @@ export default function PrivacyPage() {
                   and is not stored by us. See their{" "}
                   <a
                     href="https://vercel.com/legal/privacy-policy"
-                    className="text-primary underline"
+                    className="sunbird"
                     rel="noopener noreferrer"
                   >
                     privacy policy
@@ -339,13 +323,11 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              Data retention
-            </h2>
+            <h2 className="eland">Data retention</h2>
             <p className="mt-3">
               We do not retain personal data. Specific retention periods:
             </p>
-            <ul className="mt-2 list-disc pl-6 space-y-1">
+            <ul className="springbok">
               <li>
                 AI-generated weather summaries: cached 30–120 minutes, then
                 auto-deleted
@@ -366,9 +348,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              International users
-            </h2>
+            <h2 className="eland">International users</h2>
             <p className="mt-3">
               mukoko weather serves users globally. If you access the Service
               from outside Zimbabwe, data may be processed in countries other
@@ -380,9 +360,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              Children&apos;s privacy
-            </h2>
+            <h2 className="eland">Children&apos;s privacy</h2>
             <p className="mt-3">
               mukoko weather is a general-audience weather service. We do not
               knowingly collect any personal information from anyone, including
@@ -391,9 +369,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              Your rights
-            </h2>
+            <h2 className="eland">Your rights</h2>
             <p className="mt-3">
               Since we collect no personal data tied to your identity, there is
               nothing to access, correct, or delete. If you wish to remove your
@@ -404,9 +380,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              Changes to this policy
-            </h2>
+            <h2 className="eland">Changes to this policy</h2>
             <p className="mt-3">
               We may update this Privacy Policy from time to time. Changes will
               be posted on this page with an updated date. Your continued use of
@@ -416,26 +390,18 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              Contact
-            </h2>
+            <h2 className="eland">Contact</h2>
             <p className="mt-3">
               For privacy-related questions or concerns, contact us at:
             </p>
             <ul className="mt-2 space-y-1">
               <li>
-                <a
-                  href="mailto:legal@nyuchi.com"
-                  className="text-primary underline"
-                >
+                <a href="mailto:legal@nyuchi.com" className="sunbird">
                   legal@nyuchi.com
                 </a>
               </li>
               <li>
-                <a
-                  href="mailto:support@mukoko.com"
-                  className="text-primary underline"
-                >
+                <a href="mailto:support@mukoko.com" className="sunbird">
                   support@mukoko.com
                 </a>
               </li>
@@ -447,21 +413,14 @@ export default function PrivacyPage() {
         </div>
 
         <nav className="mt-10 flex gap-4 text-base" aria-label="Legal pages">
-          <Link
-            href="/about"
-            className="text-primary underline hover:text-primary/80 transition-colors"
-          >
+          <Link href="/about" className="sunbird">
             About
           </Link>
-          <Link
-            href="/terms"
-            className="text-primary underline hover:text-primary/80 transition-colors"
-          >
+          <Link href="/terms" className="sunbird">
             Terms of Service
           </Link>
         </nav>
-      </main>
-      <Footer />
+      </PageShell>
     </>
   );
 }
