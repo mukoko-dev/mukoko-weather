@@ -385,6 +385,7 @@ mukoko-weather/
 │   └── py/                        # Python FastAPI backend (Vercel serverless functions)
 │       ├── index.py               # FastAPI app, router mounting, CORS, error handlers
 │       ├── _db.py                 # MongoDB connection, collection accessors, rate limiting
+│       ├── _http.py               # Shared pooled httpx clients keyed by timeout (get_http_client)
 │       ├── _weather.py            # Weather data endpoints (Tomorrow.io/Open-Meteo proxy)
 │       ├── _ai.py                 # AI summary endpoint (Claude, tiered TTL cache)
 │       ├── _ai_followup.py        # Inline follow-up chat endpoint (pre-seeded history)

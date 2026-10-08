@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
+from ._http import get_http_client
 from ._geohash import build_place_slug, build_smart_slug, normalise_osm_ref
 from ._db import (
     get_db,
@@ -47,7 +48,8 @@ from ._places_geo import (
 
 router = APIRouter()
 
-_http_client: Optional[httpx.Client] = None
+#: Nominatim / Open-Meteo geocoding timeout (seconds).
+GEOCODE_TIMEOUT_S = 5.0
 
 # City-states where state/province fields are meaningless (postal codes or same as country).
 # For these, province is derived from district-level fields (city_district, suburb, etc.).
@@ -55,10 +57,7 @@ _CITY_STATES = {"SG", "MC", "VA", "GI", "SM", "AD", "LI", "MT", "BN", "DJ", "BH"
 
 
 def _get_http() -> httpx.Client:
-    global _http_client
-    if _http_client is None:
-        _http_client = httpx.Client(timeout=5.0)
-    return _http_client
+    return get_http_client(GEOCODE_TIMEOUT_S)
 
 
 # ---------------------------------------------------------------------------

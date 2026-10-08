@@ -11,10 +11,10 @@ import os
 import time
 from datetime import datetime, timezone
 
-import httpx
 from fastapi import APIRouter
 
-from ._db import get_db, get_api_key
+from ._db import get_db, get_api_key, ttl_filter
+from ._http import get_http_client
 
 router = APIRouter()
 
@@ -30,6 +30,20 @@ def _failure_message(check: str, exc: Exception) -> str:
     """Log a failed check's exception and return the public-safe message."""
     logger.warning("Status check %s failed: %r", check, exc)
     return _CHECK_FAILED_MESSAGE
+
+
+#: Timeout for the live upstream probes (Tomorrow.io, Open-Meteo).
+PROBE_TIMEOUT_S = 10.0
+
+
+def _result(name: str, status: str, start: float, message: str) -> dict:
+    """One health-check row. ``latencyMs`` is measured from ``start`` to now."""
+    return {
+        "name": name,
+        "status": status,
+        "latencyMs": round((time.time() - start) * 1000),
+        "message": message,
+    }
 
 
 # Model the app actually runs (Haiku). Kept in sync with api/py/_ai.py.
@@ -53,119 +67,64 @@ def _check_mongodb() -> dict:
     start = time.time()
     try:
         get_db().command("ping")
-        return {
-            "name": "MongoDB Atlas",
-            "status": "operational",
-            "latencyMs": round((time.time() - start) * 1000),
-            "message": "Connected and responding",
-        }
+        return _result("MongoDB Atlas", "operational", start, "Connected and responding")
     except Exception as e:
-        return {
-            "name": "MongoDB Atlas",
-            "status": "down",
-            "latencyMs": round((time.time() - start) * 1000),
-            "message": _failure_message("MongoDB Atlas", e),
-        }
+        return _result("MongoDB Atlas", "down", start, _failure_message("MongoDB Atlas", e))
 
 
 def _check_tomorrow_io() -> dict:
+    name = "Tomorrow.io API"
     start = time.time()
     try:
         try:
             api_key = get_api_key("tomorrow")
         except Exception as e:
             _failure_message("Tomorrow.io API key lookup", e)
-            return {
-                "name": "Tomorrow.io API",
-                "status": "degraded",
-                "latencyMs": round((time.time() - start) * 1000),
-                "message": "Cannot retrieve API key — MongoDB unavailable",
-            }
+            return _result(name, "degraded", start, "Cannot retrieve API key — MongoDB unavailable")
 
         if not api_key:
-            return {
-                "name": "Tomorrow.io API",
-                "status": "degraded",
-                "latencyMs": round((time.time() - start) * 1000),
-                "message": "API key not configured in database — run POST /api/py/db-init with apiKeys.tomorrow to seed it. Using Open-Meteo fallback.",
-            }
-
-        with httpx.Client(timeout=10.0) as client:
-            resp = client.get(
-                "https://api.tomorrow.io/v4/weather/realtime",
-                params={"location": "-17.83,31.05", "apikey": api_key},
+            return _result(
+                name,
+                "degraded",
+                start,
+                "API key not configured in database — run POST /api/py/db-init with apiKeys.tomorrow to seed it. Using Open-Meteo fallback.",
             )
 
+        resp = get_http_client(PROBE_TIMEOUT_S).get(
+            "https://api.tomorrow.io/v4/weather/realtime",
+            params={"location": "-17.83,31.05", "apikey": api_key},
+        )
+
         if resp.status_code == 429:
-            return {
-                "name": "Tomorrow.io API",
-                "status": "degraded",
-                "latencyMs": round((time.time() - start) * 1000),
-                "message": "Rate limited (429) — falling back to Open-Meteo",
-            }
+            return _result(name, "degraded", start, "Rate limited (429) — falling back to Open-Meteo")
 
         if resp.status_code != 200:
-            return {
-                "name": "Tomorrow.io API",
-                "status": "down",
-                "latencyMs": round((time.time() - start) * 1000),
-                "message": f"HTTP {resp.status_code}: {resp.reason_phrase}",
-            }
+            return _result(name, "down", start, f"HTTP {resp.status_code}: {resp.reason_phrase}")
 
-        return {
-            "name": "Tomorrow.io API",
-            "status": "operational",
-            "latencyMs": round((time.time() - start) * 1000),
-            "message": "Responding normally",
-        }
+        return _result(name, "operational", start, "Responding normally")
     except Exception as e:
-        return {
-            "name": "Tomorrow.io API",
-            "status": "down",
-            "latencyMs": round((time.time() - start) * 1000),
-            "message": _failure_message("Tomorrow.io API", e),
-        }
+        return _result(name, "down", start, _failure_message(name, e))
 
 
 def _check_open_meteo() -> dict:
+    name = "Open-Meteo API"
     start = time.time()
     try:
-        with httpx.Client(timeout=10.0) as client:
-            resp = client.get(
-                "https://api.open-meteo.com/v1/forecast",
-                params={"latitude": "-17.83", "longitude": "31.05", "current": "temperature_2m"},
-            )
+        resp = get_http_client(PROBE_TIMEOUT_S).get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={"latitude": "-17.83", "longitude": "31.05", "current": "temperature_2m"},
+        )
 
         if resp.status_code != 200:
-            return {
-                "name": "Open-Meteo API",
-                "status": "down",
-                "latencyMs": round((time.time() - start) * 1000),
-                "message": f"HTTP {resp.status_code}: {resp.reason_phrase}",
-            }
+            return _result(name, "down", start, f"HTTP {resp.status_code}: {resp.reason_phrase}")
 
         data = resp.json()
         if data.get("current", {}).get("temperature_2m") is None:
-            return {
-                "name": "Open-Meteo API",
-                "status": "degraded",
-                "latencyMs": round((time.time() - start) * 1000),
-                "message": "Response received but missing expected data",
-            }
+            return _result(name, "degraded", start, "Response received but missing expected data")
 
-        return {
-            "name": "Open-Meteo API",
-            "status": "operational",
-            "latencyMs": round((time.time() - start) * 1000),
-            "message": "Responding normally",
-        }
+        return _result(name, "operational", start, "Responding normally")
     except Exception as e:
-        return {
-            "name": "Open-Meteo API",
-            "status": "down",
-            "latencyMs": round((time.time() - start) * 1000),
-            "message": _failure_message("Open-Meteo API", e),
-        }
+        return _result(name, "down", start, _failure_message(name, e))
 
 
 def _check_anthropic() -> dict:
@@ -176,6 +135,7 @@ def _check_anthropic() -> dict:
     the key is present and report the model the app is actually configured to
     run — a key-presence + model-config check that costs nothing.
     """
+    name = "Anthropic AI (Shamwari)"
     start = time.time()
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -186,71 +146,43 @@ def _check_anthropic() -> dict:
             pass
 
     if not api_key:
-        return {
-            "name": "Anthropic AI (Shamwari)",
-            "status": "degraded",
-            "latencyMs": round((time.time() - start) * 1000),
-            "message": "API key not configured — basic summary fallback active",
-        }
+        return _result(name, "degraded", start, "API key not configured — basic summary fallback active")
 
-    return {
-        "name": "Anthropic AI (Shamwari)",
-        "status": "operational",
-        "latencyMs": round((time.time() - start) * 1000),
-        "message": f"API key configured (model: {ANTHROPIC_MODEL})",
-    }
+    return _result(name, "operational", start, f"API key configured (model: {ANTHROPIC_MODEL})")
+
+
+def _count_active(collection: str, noun: tuple[str, str], empty_message: str, name: str) -> dict:
+    """Shared body for the cache-population checks (count of unexpired docs)."""
+    start = time.time()
+    try:
+        count = get_db()[collection].count_documents(ttl_filter({}))
+        singular, plural = noun
+        return _result(
+            name,
+            "operational" if count > 0 else "degraded",
+            start,
+            f"{count} active cached {singular if count == 1 else plural}" if count > 0 else empty_message,
+        )
+    except Exception as e:
+        return _result(name, "down", start, _failure_message(name, e))
 
 
 def _check_weather_cache() -> dict:
-    start = time.time()
-    try:
-        db = get_db()
-        count = db["weather_cache"].count_documents(
-            {"expiresAt": {"$gt": datetime.now(timezone.utc)}}
-        )
-        return {
-            "name": "Weather Cache",
-            "status": "operational" if count > 0 else "degraded",
-            "latencyMs": round((time.time() - start) * 1000),
-            "message": (
-                f"{count} active cached location{'s' if count != 1 else ''}"
-                if count > 0
-                else "Cache is empty — next requests will fetch fresh data"
-            ),
-        }
-    except Exception as e:
-        return {
-            "name": "Weather Cache",
-            "status": "down",
-            "latencyMs": round((time.time() - start) * 1000),
-            "message": _failure_message("Weather Cache", e),
-        }
+    return _count_active(
+        "weather_cache",
+        ("location", "locations"),
+        "Cache is empty — next requests will fetch fresh data",
+        "Weather Cache",
+    )
 
 
 def _check_ai_cache() -> dict:
-    start = time.time()
-    try:
-        db = get_db()
-        count = db["ai_summaries"].count_documents(
-            {"expiresAt": {"$gt": datetime.now(timezone.utc)}}
-        )
-        return {
-            "name": "AI Summary Cache",
-            "status": "operational" if count > 0 else "degraded",
-            "latencyMs": round((time.time() - start) * 1000),
-            "message": (
-                f"{count} active cached summar{'ies' if count != 1 else 'y'}"
-                if count > 0
-                else "Cache is empty — next requests will generate fresh summaries"
-            ),
-        }
-    except Exception as e:
-        return {
-            "name": "AI Summary Cache",
-            "status": "down",
-            "latencyMs": round((time.time() - start) * 1000),
-            "message": _failure_message("AI Summary Cache", e),
-        }
+    return _count_active(
+        "ai_summaries",
+        ("summary", "summaries"),
+        "Cache is empty — next requests will generate fresh summaries",
+        "AI Summary Cache",
+    )
 
 
 @router.get("/api/py/status")

@@ -226,6 +226,11 @@ def air_quality_cache_collection():
     return weather_db()["air_quality_cache"]
 
 
+def map_tile_cache_collection():
+    """Proxied Tomorrow.io overlay tiles (TTL, deterministic _id) — weather.map_tile_cache."""
+    return weather_db()["map_tile_cache"]
+
+
 # places domain
 def places_collection():
     """Places — landmarks, businesses, parks, etc. (schema.org-aligned)."""
@@ -357,6 +362,58 @@ def stamp_platform_fields(
     if province_slug:
         bundu.setdefault("provinceSlug", province_slug)
     return doc
+
+
+# ---------------------------------------------------------------------------
+# TTL cache helpers
+# ---------------------------------------------------------------------------
+
+
+def ttl_filter(filter: dict, allow_stale: bool = False) -> dict:
+    """Return ``filter`` scoped to unexpired docs unless ``allow_stale``."""
+    if allow_stale:
+        return dict(filter)
+    return {**filter, "expiresAt": {"$gt": datetime.now(timezone.utc)}}
+
+
+def ttl_find_one(
+    coll,
+    filter: dict,
+    projection: Optional[dict] = None,
+    allow_stale: bool = False,
+) -> Optional[dict]:
+    """
+    Read a TTL cache doc. Only unexpired docs match unless ``allow_stale``
+    (used to serve a stale copy while the upstream is failing).
+
+    Errors propagate: callers decide whether a cache failure is a miss.
+    """
+    return coll.find_one(ttl_filter(filter, allow_stale), projection)
+
+
+def ttl_upsert(
+    coll,
+    filter: dict,
+    fields: dict,
+    ttl_seconds: int,
+    stamp: bool = False,
+    country_code: str = DEFAULT_COUNTRY_CODE,
+) -> None:
+    """
+    Upsert a TTL cache doc: ``fields`` plus ``fetchedAt`` / ``expiresAt``.
+
+    ``stamp=True`` runs ``stamp_platform_fields`` for collections with strict
+    platform validators (``_id`` must then be part of ``fields`` or the filter
+    so the deterministic key is preserved).
+
+    Errors propagate: callers wrap the write so a cache failure never breaks
+    the response.
+    """
+    now = datetime.now(timezone.utc)
+    doc = {**fields, "fetchedAt": now, "expiresAt": now + timedelta(seconds=ttl_seconds)}
+    if stamp:
+        stamp_platform_fields(doc, country_code=country_code)
+    coll.update_one(filter, {"$set": doc}, upsert=True)
 
 
 def get_api_key(provider: str) -> Optional[str]:
