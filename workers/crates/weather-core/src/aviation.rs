@@ -147,6 +147,53 @@ pub fn format_visibility(statute_miles: Option<f64>) -> Option<String> {
     })
 }
 
+/// Parses a statute-mile fraction: `"3"`, `"1/2"`, `"1 1/2"`.
+fn parse_fraction(s: &str) -> Option<f64> {
+    let s = s.trim();
+    if let Some((whole, frac)) = s.split_once(' ') {
+        return Some(whole.parse::<f64>().ok()? + parse_fraction(frac)?);
+    }
+    if let Some((num, den)) = s.split_once('/') {
+        let den: f64 = den.parse().ok()?;
+        if den == 0.0 {
+            return None;
+        }
+        return Some(num.parse::<f64>().ok()? / den);
+    }
+    s.parse::<f64>().ok()
+}
+
+/// AWC's `visib` is statute miles, usually a STRING: `"6+"`, `"10"`, `"1 1/2"`.
+/// Returns the miles and whether it is the open-ended `N+` form.
+pub fn parse_statute_miles(v: &Value) -> Option<(f64, bool)> {
+    if let Some(x) = v.as_f64() {
+        return x.is_finite().then_some((x, false));
+    }
+    let upper = v.as_str()?.trim().to_ascii_uppercase();
+    let body = upper.strip_suffix("SM").unwrap_or(&upper).trim();
+    let (body, plus) = match body.strip_suffix('+') {
+        Some(rest) => (rest.trim(), true),
+        None => (body, false),
+    };
+    parse_fraction(body)
+        .filter(|m| m.is_finite())
+        .map(|m| (m, plus))
+}
+
+/// AWC visibility to the app's km string. `"6+"` is more than 6 SM (~9.7 km)
+/// and renders as `>9.7km`; anything at or beyond 10 km renders as `>10km`.
+pub fn format_awc_visibility(v: &Value) -> Option<String> {
+    let (miles, plus) = parse_statute_miles(v)?;
+    let km = miles * 1.60934;
+    Some(if km >= 10.0 {
+        ">10km".to_owned()
+    } else if plus {
+        format!(">{km:.1}km")
+    } else {
+        format!("{km:.1}km")
+    })
+}
+
 /// VFR, MVFR, IFR or LIFR from the ceiling (lowest BKN/OVC) and visibility.
 pub fn flight_category(clouds: &[CloudLayer], visibility: Option<&str>) -> &'static str {
     let vis_km = visibility.and_then(|v| {
@@ -219,7 +266,7 @@ pub fn decode_awc_metar(obs: &Value) -> MetarObs {
                 .collect()
         })
         .unwrap_or_default();
-    let visibility = format_visibility(num(&obs["visib"]));
+    let visibility = format_awc_visibility(&obs["visib"]);
 
     let wdir = &obs["wdir"];
     let wind_variable = wdir.as_str().is_some_and(|s| s.eq_ignore_ascii_case("VRB"));
@@ -229,23 +276,35 @@ pub fn decode_awc_metar(obs: &Value) -> MetarObs {
         num(wdir).map(|d| d as i64)
     };
 
-    let remarks = obs["remarks"].as_str().unwrap_or_default();
-    let change = if remarks.contains("NOSIG") {
+    // Change indicators live in the raw report text (there is no remarks field).
+    let text = format!(
+        "{} {}",
+        obs["rawOb"].as_str().unwrap_or_default(),
+        obs["remarks"].as_str().unwrap_or_default()
+    );
+    let words: Vec<&str> = text.split(|c: char| !c.is_ascii_alphabetic()).collect();
+    let has = |w: &str| words.contains(&w);
+    let change = if has("NOSIG") {
         Some("No Significant Change")
-    } else if remarks.contains("BECMG") {
+    } else if has("BECMG") {
         Some("Becoming")
-    } else if remarks.contains("TEMPO") {
+    } else if has("TEMPO") {
         Some("Temporary")
     } else {
         None
     };
 
-    // AWC gives the altimeter in inHg; the app shows hPa.
-    let pressure_hpa = num(&obs["altim"])
-        .filter(|a| *a != 0.0)
-        .map(|a| (a * 33.8639 * 10.0).round() / 10.0);
+    // AWC reports the altimeter in hPa (1024); legacy answers used inHg (30.2).
+    let pressure_hpa = num(&obs["altim"]).filter(|a| *a != 0.0).map(|a| {
+        let hpa = if a > 50.0 { a } else { a * 33.8639 };
+        (hpa * 10.0).round() / 10.0
+    });
 
-    let category = match obs["flightCategory"].as_str() {
+    // The category key is `fltCat`; `flightCategory` is the older name.
+    let category = match obs["fltCat"]
+        .as_str()
+        .or_else(|| obs["flightCategory"].as_str())
+    {
         Some(c @ ("VFR" | "MVFR" | "IFR" | "LIFR")) => c.to_owned(),
         _ => flight_category(&clouds, visibility.as_deref()).to_owned(),
     };
@@ -393,7 +452,7 @@ mod tests {
 
     #[test]
     fn icao_codes() {
-        assert_eq!(normalize_icao(" fvha "), Some("FVHA".into()));
+        assert_eq!(normalize_icao(" fvrg "), Some("FVRG".into()));
         assert_eq!(normalize_icao("FVH"), None);
         assert_eq!(normalize_icao("FV1A"), None);
         assert_eq!(normalize_icao("FVHAX"), None);
@@ -413,6 +472,34 @@ mod tests {
         assert_eq!(decode_wx(None), None);
         assert_eq!(decode_wx(Some("")), None);
         assert!(decode_wx(Some("XX")).unwrap().contains("XX"));
+    }
+
+    #[test]
+    fn parses_awc_visibility_strings() {
+        assert_eq!(
+            format_awc_visibility(&json!("6+")).as_deref(),
+            Some(">9.7km")
+        );
+        assert_eq!(
+            format_awc_visibility(&json!("10+")).as_deref(),
+            Some(">10km")
+        );
+        assert_eq!(format_awc_visibility(&json!("3")).as_deref(), Some("4.8km"));
+        assert_eq!(
+            format_awc_visibility(&json!("1 1/2")).as_deref(),
+            Some("2.4km")
+        );
+        assert_eq!(
+            format_awc_visibility(&json!("1/2")).as_deref(),
+            Some("0.8km")
+        );
+        assert_eq!(
+            format_awc_visibility(&json!(6.25)).as_deref(),
+            Some(">10km")
+        );
+        assert_eq!(format_awc_visibility(&json!("n/a")), None);
+        assert_eq!(format_awc_visibility(&json!(null)), None);
+        assert_eq!(parse_statute_miles(&json!("1/0")), None);
     }
 
     #[test]
@@ -454,37 +541,50 @@ mod tests {
         );
     }
 
+    /// A real AWC METAR record (FVRG, 2026-10-08 15:00Z): epoch `obsTime`,
+    /// string `visib`, hPa `altim`, `fltCat`, remarks inside `rawOb`.
     fn sample() -> Value {
         json!({
-            "rawOb": "FVHA 270800Z 04004KT 9999 BKN018 16/11 Q1029",
-            "obsTime": "2026-06-27T08:00:00Z",
-            "temp": 16.0, "dewp": 11.0, "wdir": 40, "wspd": 4,
-            "visib": 6.21, "altim": 30.39,
-            "clouds": [{"cover": "BKN", "base": 1800}],
-            "wxString": null, "remarks": "NOSIG", "flightCategory": "MVFR"
+            "icaoId": "FVRG",
+            "obsTime": 1791471600_i64,
+            "reportTime": "2026-10-08T15:00:00.000Z",
+            "temp": 19, "dewp": 17, "wdir": 100, "wspd": 7,
+            "visib": "6+", "altim": 1024,
+            "rawOb": "METAR FVRG 081500Z 10007KT 9999 FEW040CB BKN045 19/17 Q1024 RESHRA NOSIG",
+            "clouds": [{"cover": "FEW", "base": 4000}, {"cover": "BKN", "base": 4500}],
+            "fltCat": "VFR"
         })
     }
 
     #[test]
     fn decodes_an_awc_metar() {
         let o = decode_awc_metar(&sample());
-        assert_eq!(o.temp, Some(16.0));
-        assert_eq!(o.dewp, Some(11.0));
-        assert_eq!(o.wind_dir, Some(40));
-        assert_eq!(o.wind_speed, Some(4));
-        assert_eq!(o.flight_category, "MVFR");
-        assert_eq!(o.raw, "FVHA 270800Z 04004KT 9999 BKN018 16/11 Q1029");
+        assert_eq!(o.temp, Some(19.0));
+        assert_eq!(o.dewp, Some(17.0));
+        assert_eq!(o.wind_dir, Some(100));
+        assert_eq!(o.wind_speed, Some(7));
+        assert_eq!(o.flight_category, "VFR");
+        assert_eq!(o.visibility.as_deref(), Some(">9.7km"));
+        assert_eq!(
+            o.raw,
+            "METAR FVRG 081500Z 10007KT 9999 FEW040CB BKN045 19/17 Q1024 RESHRA NOSIG"
+        );
         assert_eq!(
             o.clouds,
-            vec![CloudLayer {
-                cover: "BKN".into(),
-                base_ft: Some(1800)
-            }]
+            vec![
+                CloudLayer {
+                    cover: "FEW".into(),
+                    base_ft: Some(4000)
+                },
+                CloudLayer {
+                    cover: "BKN".into(),
+                    base_ft: Some(4500)
+                },
+            ]
         );
         assert_eq!(o.change.as_deref(), Some("No Significant Change"));
-        let p = o.pressure_hpa.unwrap();
-        assert!(1028.0 < p && p < 1030.0);
-        assert_eq!(o.time, "2026-06-27T08:00:00+00:00");
+        assert_eq!(o.pressure_hpa, Some(1024.0));
+        assert_eq!(o.time, "2026-10-08T15:00:00+00:00");
         assert_eq!(o.weather, None);
     }
 
@@ -503,14 +603,32 @@ mod tests {
         assert!(decode_awc_metar(&s).time.ends_with("+00:00"));
 
         let mut s = sample();
-        s["flightCategory"] = json!("UNKNOWN");
-        assert_eq!(decode_awc_metar(&s).flight_category, "MVFR");
+        s["fltCat"] = json!("UNKNOWN");
+        // Ceiling 4500 ft and 9.7 km visibility are VFR-range, so computed VFR.
+        assert_eq!(decode_awc_metar(&s).flight_category, "VFR");
+
+        let mut s = sample();
+        s["fltCat"] = json!(null);
+        s["flightCategory"] = json!("IFR");
+        assert_eq!(decode_awc_metar(&s).flight_category, "IFR");
+
+        // Legacy inHg altimeter is still converted.
+        let mut s = sample();
+        s["altim"] = json!(30.39);
+        let p = decode_awc_metar(&s).pressure_hpa.unwrap();
+        assert!(1028.0 < p && p < 1030.0);
+
+        // Missing fields never panic.
+        let minimal = decode_awc_metar(&json!({"icaoId": "FVRG"}));
+        assert_eq!(minimal.visibility, None);
+        assert_eq!(minimal.pressure_hpa, None);
+        assert_eq!(minimal.flight_category, "VFR");
 
         assert_eq!(decode_awc_metars(&json!({"error": "x"})), vec![]);
         assert_eq!(decode_awc_metars(&json!([sample()])).len(), 1);
         assert_eq!(
-            awc_taf(&json!([{"rawTAF": "TAF FVHA ..."}])).as_deref(),
-            Some("TAF FVHA ...")
+            awc_taf(&json!([{"rawTAF": "TAF FVRG ..."}])).as_deref(),
+            Some("TAF FVRG ...")
         );
         assert_eq!(awc_taf(&json!([])), None);
     }
@@ -526,7 +644,7 @@ mod tests {
             "conditions": [{"text": "Light Rain"}],
             "barometer": {"hpa": 1029},
             "flight_category": "MVFR",
-            "raw_text": "FVHA ..."
+            "raw_text": "FVRG ..."
         }]});
         let o = &decode_checkwx(&body)[0];
         assert_eq!(o.visibility.as_deref(), Some(">10km"));
@@ -541,7 +659,7 @@ mod tests {
     fn nearest_airports_from_harare() {
         let near = nearest_airports(-17.85, 31.05, 5, 500.0);
         assert_eq!(near.len(), 5);
-        assert_eq!(near[0].icao, "FVHA");
+        assert_eq!(near[0].icao, "FVRG");
         assert!(near
             .windows(2)
             .all(|w| w[0].distance_km <= w[1].distance_km));
@@ -554,13 +672,13 @@ mod tests {
     #[test]
     fn response_shape_round_trips() {
         let r = MetarResponse {
-            icao: "FVHA".into(),
+            icao: "FVRG".into(),
             metar: vec![decode_awc_metar(&sample())],
             taf: None,
             source: "awc".into(),
         };
         let v = serde_json::to_value(&r).unwrap();
-        assert_eq!(v["metar"][0]["flight_category"], "MVFR");
+        assert_eq!(v["metar"][0]["flight_category"], "VFR");
         assert!(v["taf"].is_null());
         let back: MetarResponse = serde_json::from_value(v).unwrap();
         assert_eq!(back, r);

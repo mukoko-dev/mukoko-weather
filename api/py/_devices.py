@@ -12,8 +12,7 @@ from pymongo.errors import DuplicateKeyError
 
 from ._db import (
     device_profiles_collection,
-    get_client_ip,
-    check_rate_limit,
+    enforce_rate_limit,
     SLUG_RE,
 )
 
@@ -151,10 +150,7 @@ async def create_device(body: CreateDeviceRequest, request: Request = None):
     # doc) — an existing deviceId is idempotent (DuplicateKeyError returns the
     # existing profile below), so only the create path needs throttling.
     if not body.deviceId:
-        ip = (get_client_ip(request) if request is not None else None) or "unknown"
-        rate = check_rate_limit(ip, "device-create", 20, 3600)
-        if not rate["allowed"]:
-            raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+        enforce_rate_limit(request, "device-create", 20, 3600, require_ip=False)
 
     _ensure_indexes()
     device_id = body.deviceId or str(uuid.uuid4())

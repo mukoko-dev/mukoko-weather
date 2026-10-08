@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import type { WeatherData } from "@/lib/weather";
 import type { AirQualityResponse } from "@/components/weather/AirQualityCard";
+import { isSgAir, type SgAirResponse } from "@/lib/sg-air";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import {
   DisplayAirQuality,
@@ -12,6 +13,7 @@ import {
   DisplayNow,
   DisplayOutlook,
   DisplayRadar,
+  DisplaySgPsi,
 } from "@/components/display/DisplayPanels";
 import {
   DISPLAY_REFRESH_MS,
@@ -33,6 +35,8 @@ export interface DisplayLocation {
   name: string;
   lat: number;
   lon: number;
+  /** ISO 3166-1 alpha-2, when known. Gates the Singapore NEA panel. */
+  country?: string | null;
 }
 
 interface Props {
@@ -79,6 +83,15 @@ export function DisplayDashboard({
   const weather =
     weatherState.status === "loading" ? null : (weatherState.data ?? null);
   const air = airState.status === "loading" ? null : (airState.data ?? null);
+
+  // The NEA reading is official only for Singapore; nothing is fetched elsewhere.
+  const isSingapore = location.country === "SG";
+  const sgState = usePolledJson<SgAirResponse>(
+    isSingapore ? `/api/py/sg-air?${coords}` : null,
+    DISPLAY_REFRESH_MS.sgAir,
+    isSgAir,
+  );
+  const sg = sgState.status === "loading" ? null : (sgState.data ?? null);
   const stale = weatherState.status === "error" && weather !== null;
   const updatedAt =
     weatherState.status !== "loading" ? weatherState.updatedAt : undefined;
@@ -111,7 +124,16 @@ export function DisplayDashboard({
                 aria-label="Loading air quality"
               />
             ) : (
-              <DisplayAirQuality air={air} />
+              <DisplayAirQuality air={air}>
+                {isSingapore && (
+                  <ChartErrorBoundary name="official NEA reading">
+                    <DisplaySgPsi
+                      sg={sg}
+                      loading={sgState.status === "loading"}
+                    />
+                  </ChartErrorBoundary>
+                )}
+              </DisplayAirQuality>
             )}
           </ChartErrorBoundary>
           {weather && (

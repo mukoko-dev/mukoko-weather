@@ -57,6 +57,12 @@ PROVIDER_CONFIGS: dict[str, CircuitBreakerConfig] = {
     "anthropic": CircuitBreakerConfig(
         failure_threshold=3, cooldown_s=300, window_s=600, timeout_s=15,
     ),
+    "aviationweather-gov": CircuitBreakerConfig(
+        failure_threshold=3, cooldown_s=120, window_s=300, timeout_s=8,
+    ),
+    "nea-data-gov-sg": CircuitBreakerConfig(
+        failure_threshold=3, cooldown_s=300, window_s=600, timeout_s=8,
+    ),
     "noaa-cpc": CircuitBreakerConfig(
         failure_threshold=3, cooldown_s=600, window_s=600, timeout_s=8,
     ),
@@ -213,4 +219,6 @@ class CircuitBreaker:
 tomorrow_breaker = CircuitBreaker("tomorrow-io")
 open_meteo_breaker = CircuitBreaker("open-meteo")
 anthropic_breaker = CircuitBreaker("anthropic")
+aviation_breaker = CircuitBreaker("aviationweather-gov")
+nea_breaker = CircuitBreaker("nea-data-gov-sg")
 noaa_breaker = CircuitBreaker("noaa-cpc")

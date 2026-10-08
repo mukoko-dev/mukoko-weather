@@ -45,7 +45,12 @@ import {
   type WeatherLocation,
   type NominatimAddress,
 } from "./locations";
-import { parseSmartSlug, type ParsedSmartSlug } from "./smart-slug";
+import {
+  nameFromSlugSegment,
+  parseSmartSlug,
+  type ParsedSmartSlug,
+} from "./smart-slug";
+import { nearestWithin } from "./geo";
 import type { PlaceRef, SpotRef } from "./place-ref";
 
 // ---------------------------------------------------------------------------
@@ -149,14 +154,8 @@ export function normalizeName(name: string): string {
  * - "victoria-falls" → "Victoria Falls"
  */
 export function inferNameFromSlug(slug: string): string {
-  if (!slug) return "";
   // Strip a trailing 2-letter country code (matches our `{city}-{country}` slug format).
-  const withoutCountry = slug.replace(/-[a-z]{2}$/i, "");
-  return withoutCountry
-    .split("-")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+  return nameFromSlugSegment(slug.replace(/-[a-z]{2}$/i, ""));
 }
 
 // ---------------------------------------------------------------------------
@@ -312,25 +311,6 @@ export function adaptSeedToLocationDoc(seed: WeatherLocation): AdaptedLocation {
   };
 }
 
-/** Great-circle distance in km between two WGS 84 points. */
-function haversineKm(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 /**
  * Nearest static seed location to (lat, lon), or null when none is within
  * `maxKm`.
@@ -352,19 +332,8 @@ export function nearestSeedLocation(
 ): AdaptedLocation | null {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
 
-  let best: WeatherLocation | null = null;
-  let bestKm = Infinity;
-
-  for (const loc of LOCATIONS) {
-    const km = haversineKm(lat, lon, loc.lat, loc.lon);
-    if (km < bestKm) {
-      bestKm = km;
-      best = loc;
-    }
-  }
-
-  if (!best || bestKm > maxKm) return null;
-  return adaptSeedToLocationDoc(best);
+  const [nearest] = nearestWithin(LOCATIONS, (loc) => loc, lat, lon, maxKm, 1);
+  return nearest ? adaptSeedToLocationDoc(nearest.item) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -568,6 +537,9 @@ async function resolveSpotSlug(
  * `sourceProvenance.dataConfidence` desc — never by document age, never by
  * `-2`/`-3` suffix.
  */
+/** placesGeo platform slugs: `<slugified-name>-<6 hex>` (see upsert_placesgeo_city). */
+export const PLATFORM_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*-[0-9a-f]{6}$/;
+
 export async function resolveLocationSlug(
   slug: string,
 ): Promise<AdaptedLocation | null> {
@@ -602,6 +574,24 @@ export async function resolveLocationSlug(
     }
   } catch {
     // Continue to fallback strategies.
+  }
+
+  // 1b) Exact match on the platform's own slug (`harare-a1b2c3`). Search and
+  // the GPS lookup hand these out (`/api/py/search` returns placesGeo slugs),
+  // so a visitor picking "Bulawayo" from search lands on `/bulawayo-e7b1f4`.
+  // Without this step that URL fell through to a name guess of
+  // "Bulawayo E7b1f4" and rendered "Location not found".
+  if (PLATFORM_SLUG_RE.test(slug)) {
+    try {
+      const platform = (await coll.findOne({
+        slug,
+      })) as unknown as PlacesGeoDoc | null;
+      if (platform && platform.geoType !== "country") {
+        return adaptPlacesGeoToLocationDoc(platform, { cleanSlug: slug, seed });
+      }
+    } catch {
+      // Continue to fallback strategies.
+    }
   }
 
   // 2 + 3) Name lookup — prefer seed name, fall back to inferred name.
