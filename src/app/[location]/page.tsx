@@ -157,7 +157,7 @@ export default async function LocationPage({
   }
 
   const usingFallback = weatherSource === "fallback";
-  const frostAlert = usingFallback ? null : checkFrostRisk(weather.hourly);
+  const frostAlert = usingFallback ? null : checkFrostRisk(weather.hourly, weather.utc_offset_seconds);
   const conditionInfo = weatherCodeToInfo(weather.current.weather_code);
   // Guard against empty daily arrays — Math.max(...[]) is -Infinity and
   // Math.min(...[]) is Infinity, which would render as garbage in the FAQ schema.

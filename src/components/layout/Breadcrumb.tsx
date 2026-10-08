@@ -16,6 +16,14 @@ export interface BreadcrumbItem {
 interface BreadcrumbProps {
   items: BreadcrumbItem[];
   className?: string;
+  /**
+   * "page" (default): the inline trail under the header.
+   * "overlay": a compact single-line pill for full-screen surfaces (the
+   * weather map) — solid card surface so it reads over map tiles in light
+   * and dark, touch-target-min tall links, long names truncate instead of
+   * wrapping into the controls beside it.
+   */
+  variant?: "page" | "overlay";
 }
 
 /**
@@ -54,7 +62,63 @@ export function BreadcrumbSkeleton({ className }: { className?: string }) {
   );
 }
 
-export function Breadcrumb({ items, className }: BreadcrumbProps) {
+export function Breadcrumb({
+  items,
+  className,
+  variant = "page",
+}: BreadcrumbProps) {
+  if (variant === "overlay") {
+    return (
+      <nav
+        aria-label="Breadcrumb"
+        className={cn(
+          "pointer-events-auto flex min-w-0 max-w-full items-center rounded-full bg-surface-card px-3 shadow-md ring-1 ring-border",
+          className,
+        )}
+      >
+        <ol className="flex min-w-0 flex-nowrap items-center gap-1 text-sm text-text-tertiary">
+          {items.map((item, i) => {
+            const isCurrent = !item.href && !item.plain;
+            const isLast = i === items.length - 1;
+            return (
+              <Fragment key={item.label}>
+                {i > 0 && (
+                  <li aria-hidden="true" className="shrink-0">
+                    /
+                  </li>
+                )}
+                <li
+                  aria-current={isCurrent ? "page" : undefined}
+                  className={cn("min-w-0", isLast && "shrink-0")}
+                >
+                  {item.href ? (
+                    <Link
+                      href={item.href}
+                      className="flex min-h-[var(--touch-target-min)] min-w-0 items-center truncate transition-colors hover:text-text-secondary focus-visible:rounded focus-visible:outline-2 focus-visible:outline-primary"
+                    >
+                      <span className="truncate">{item.label}</span>
+                    </Link>
+                  ) : (
+                    <span
+                      className={cn(
+                        "flex min-h-[var(--touch-target-min)] items-center",
+                        isCurrent
+                          ? "font-medium text-text-primary"
+                          : "text-text-secondary",
+                      )}
+                    >
+                      {item.label}
+                    </span>
+                  )}
+                </li>
+              </Fragment>
+            );
+          })}
+        </ol>
+      </nav>
+    );
+  }
+
   return (
     <nav
       aria-label="Breadcrumb"

@@ -10,6 +10,11 @@
 
 import type { Activity, ActivityCategory } from "./activities";
 import type { WeatherData } from "./weather";
+import {
+  currentHourIndex,
+  locationHourLabel,
+  weatherOffsetSeconds,
+} from "./location-time";
 
 export const MAX_TIPS = 3;
 
@@ -31,20 +36,15 @@ function nextHours(weather: WeatherData, count: number): HourSlice[] {
   const hourly = weather.hourly;
   if (!hourly?.time?.length) return [];
 
-  const now = new Date();
-  const currentHour = now.getHours();
-  const startIndex = hourly.time.findIndex(
-    (t) =>
-      new Date(t).getHours() >= currentHour &&
-      new Date(t).getDate() === now.getDate(),
-  );
-  const start = startIndex >= 0 ? startIndex : 0;
+  // The LOCATION's current hour and hour labels, not the viewer's clock.
+  const offset = weatherOffsetSeconds(weather);
+  const start = currentHourIndex(hourly.time, offset);
 
   const slices: HourSlice[] = [];
   for (let i = 0; i < count && start + i < hourly.time.length; i++) {
     const idx = start + i;
     slices.push({
-      label: `${String(new Date(hourly.time[idx]).getHours()).padStart(2, "0")}:00`,
+      label: locationHourLabel(hourly.time[idx], offset),
       precipProb: hourly.precipitation_probability?.[idx] ?? 0,
       temp: hourly.temperature_2m?.[idx] ?? 0,
       wind: hourly.wind_speed_10m?.[idx] ?? 0,

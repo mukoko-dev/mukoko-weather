@@ -81,7 +81,10 @@ export function ForecastDashboard({
           {/* Hourly forecast (24h) */}
           <ChartErrorBoundary name="hourly forecast">
             <Suspense fallback={<SectionSkeleton />}>
-              <HourlyForecast hourly={weather.hourly} />
+              <HourlyForecast
+                hourly={weather.hourly}
+                utcOffsetSeconds={weather.utc_offset_seconds}
+              />
             </Suspense>
           </ChartErrorBoundary>
 
@@ -96,7 +99,10 @@ export function ForecastDashboard({
           <LazySection label="sun-times" className="lg:col-span-2">
             <ChartErrorBoundary name="sun times">
               <Suspense fallback={<SectionSkeleton />}>
-                <SunTimes daily={weather.daily} />
+                <SunTimes
+                  daily={weather.daily}
+                  utcOffsetSeconds={weather.utc_offset_seconds}
+                />
               </Suspense>
             </ChartErrorBoundary>
           </LazySection>

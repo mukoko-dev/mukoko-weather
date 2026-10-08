@@ -7,6 +7,12 @@
  * (resolveRule + hourInsights + evaluateRule from activity-feasibility /
  * suitability), so the lane and the cards can never disagree.
  *
+ * Time zone: cells are real instants (epoch ms), but every hour boundary and
+ * every "HH:00" label is read in the LOCATION's offset (`utc_offset_seconds`
+ * on the payload), never the viewer's clock — someone in Toronto looking at
+ * Harare sees Harare's hours. Omitting the offset falls back to the viewer's
+ * clock (payloads that predate the field).
+ *
  * No React or DOM imports here — everything is unit-testable.
  */
 
@@ -20,6 +26,12 @@ import {
   resolveRule,
   type SuitabilityLevel,
 } from "./activity-feasibility";
+import {
+  currentWallHourMs,
+  instantMs,
+  resolveOffsetSeconds,
+  wallHourLabel,
+} from "./location-time";
 
 export const LANE_HOURS = 24;
 export const LANE_PAST_HOURS = 12;
@@ -82,21 +94,34 @@ export function pad2(n: number): string {
   return n < 10 ? `0${n}` : `${n}`;
 }
 
-/** Local "HH:00" for an hour starting at `ms`. */
-export function formatLaneHour(ms: number): string {
-  return `${pad2(new Date(ms).getHours())}:00`;
+/** "HH:00" at the location for an hour starting at instant `ms`. */
+export function formatLaneHour(
+  ms: number,
+  offsetSeconds?: number | null,
+): string {
+  const offset = resolveOffsetSeconds(offsetSeconds, new Date(ms));
+  return wallHourLabel(ms + offset * 1000);
 }
 
-/** Start of the current hour minus LANE_PAST_HOURS, epoch ms. */
-export function laneBaseMs(now: Date): number {
-  const d = new Date(now.getTime());
-  d.setMinutes(0, 0, 0);
-  return d.getTime() - LANE_PAST_HOURS * HOUR_MS;
+/**
+ * Start of the location's current hour minus LANE_PAST_HOURS, epoch ms.
+ * Floors in the location's wall clock, so half-hour zones (India, Myanmar)
+ * still get cells that start on their own hour.
+ */
+export function laneBaseMs(now: Date, offsetSeconds?: number | null): number {
+  const offset = resolveOffsetSeconds(offsetSeconds, now);
+  return (
+    currentWallHourMs(offset, now) - offset * 1000 - LANE_PAST_HOURS * HOUR_MS
+  );
 }
 
 /** Start of lane cell `index`, epoch ms. Independent of forecast data. */
-export function laneCellMs(now: Date, index: number): number {
-  return laneBaseMs(now) + index * HOUR_MS;
+export function laneCellMs(
+  now: Date,
+  index: number,
+  offsetSeconds?: number | null,
+): number {
+  return laneBaseMs(now, offsetSeconds) + index * HOUR_MS;
 }
 
 /**
@@ -109,14 +134,18 @@ export function buildLaneCells(
   hourly: HourlyWeather | undefined,
   rules: Map<string, SuitabilityRuleDoc>,
   now: Date = new Date(),
+  offsetSeconds?: number | null,
 ): LaneCell[] {
-  const base = laneBaseMs(now);
+  const offset = resolveOffsetSeconds(offsetSeconds, now);
+  const base = laneBaseMs(now, offset);
   const rule = resolveRule(activity, rules);
 
+  // Naive local forecast strings ("2026-10-08T14:00") are wall time at the
+  // location; zoned ones are instants. instantMs() maps both to real epoch ms.
   const indexByMs = new Map<number, number>();
   hourly?.time?.forEach((t, i) => {
-    const ms = new Date(t).getTime();
-    if (!Number.isNaN(ms)) indexByMs.set(ms, i);
+    const ms = instantMs(t, offset);
+    if (ms !== null) indexByMs.set(ms, i);
   });
 
   return Array.from({ length: LANE_HOURS }, (_, i) => {
@@ -188,10 +217,16 @@ export function bestWindow(cells: LaneCell[]): BestWindow | null {
   return best;
 }
 
-/** Local "HH:00 to HH:00" for a cell range. */
-function rangeLabel(cells: LaneCell[], start: number, end: number): string {
-  return `${formatLaneHour(cells[start].at)} to ${formatLaneHour(
+/** Location-local "HH:00 to HH:00" for a cell range. */
+function rangeLabel(
+  cells: LaneCell[],
+  start: number,
+  end: number,
+  offsetSeconds?: number | null,
+): string {
+  return `${formatLaneHour(cells[start].at, offsetSeconds)} to ${formatLaneHour(
     cells[end - 1].at + HOUR_MS,
+    offsetSeconds,
   )}`;
 }
 
@@ -204,12 +239,14 @@ export function bestWindowText(
   cells: LaneCell[],
   best: BestWindow,
   separator = "–",
+  offsetSeconds?: number | null,
 ): string {
   if (best.end >= cells.length) {
-    return `from ${formatLaneHour(cells[best.start].at)}`;
+    return `from ${formatLaneHour(cells[best.start].at, offsetSeconds)}`;
   }
-  return `${formatLaneHour(cells[best.start].at)}${separator}${formatLaneHour(
+  return `${formatLaneHour(cells[best.start].at, offsetSeconds)}${separator}${formatLaneHour(
     cells[best.end - 1].at + HOUR_MS,
+    offsetSeconds,
   )}`;
 }
 
@@ -218,17 +255,21 @@ export function bestWindowText(
  * colour alone. Example: "Farming: Excellent 06:00 to 10:00, Poor 14:00 to
  * 18:00. Best window 06:00 to 10:00."
  */
-export function laneSummary(label: string, cells: LaneCell[]): string {
+export function laneSummary(
+  label: string,
+  cells: LaneCell[],
+  offsetSeconds?: number | null,
+): string {
   if (cells.every((c) => c.level === null)) {
     return `${label}: no forecast for this activity yet.`;
   }
   const parts = laneRuns(cells).map(
     (run) =>
-      `${LEVEL_WORDS[run.level]} ${rangeLabel(cells, run.start, run.end)}`,
+      `${LEVEL_WORDS[run.level]} ${rangeLabel(cells, run.start, run.end, offsetSeconds)}`,
   );
   const best = bestWindow(cells);
   const bestText = best
-    ? `Best window ${bestWindowText(cells, best, " to ")}.`
+    ? `Best window ${bestWindowText(cells, best, " to ", offsetSeconds)}.`
     : "No good window in the next 12 hours.";
   return `${label}: ${parts.join(", ")}. ${bestText}`;
 }
@@ -240,8 +281,9 @@ export function laneSummary(label: string, cells: LaneCell[]): string {
 export function groupReportsByHour(
   reports: ReportLike[],
   now: Date = new Date(),
+  offsetSeconds?: number | null,
 ): Map<number, PinGroup> {
-  const base = laneBaseMs(now);
+  const base = laneBaseMs(now, offsetSeconds);
   const byHour = new Map<number, Map<string, number>>();
   for (const report of reports) {
     const ms = new Date(report.reportedAt).getTime();

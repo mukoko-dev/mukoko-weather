@@ -10,6 +10,7 @@ import { fetchSuitabilityRules } from "@/lib/suitability-cache";
 import { getReportTypeInfo } from "@/lib/report-types";
 import { useAppStore } from "@/lib/store";
 import type { WeatherData } from "@/lib/weather";
+import { weatherOffsetSeconds } from "@/lib/location-time";
 import type { SuitabilityRuleDoc } from "@/lib/db";
 import {
   LANE_HOURS,
@@ -135,6 +136,8 @@ export function CommunityLane({
   const [reports, setReports] = useState<ReportLike[] | null>(null);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const [now] = useState(() => new Date());
+  // Hours and labels are read in the LOCATION's time zone, not the viewer's.
+  const offset = weatherOffsetSeconds(weather, now);
 
   const activities: Activity[] = useMemo(
     () =>
@@ -182,16 +185,22 @@ export function CommunityLane({
     () =>
       rules
         ? activities.map((activity) => {
-            const cells = buildLaneCells(activity, weather.hourly, rules, now);
+            const cells = buildLaneCells(
+              activity,
+              weather.hourly,
+              rules,
+              now,
+              offset,
+            );
             return { activity, cells, best: bestWindow(cells) };
           })
         : null,
-    [activities, rules, weather.hourly, now],
+    [activities, rules, weather.hourly, now, offset],
   );
 
   const pinGroups = useMemo(
-    () => groupReportsByHour(reports ?? [], now),
-    [reports, now],
+    () => groupReportsByHour(reports ?? [], now, offset),
+    [reports, now, offset],
   );
   const pinTiers = useMemo(
     () => assignPinTiers([...pinGroups.keys()]),
@@ -266,7 +275,7 @@ export function CommunityLane({
                         type="button"
                         aria-expanded={expanded}
                         aria-controls={panelId}
-                        aria-label={`${formatLaneHour(laneCellMs(now, index))}: ${lines.join(", ")}`}
+                        aria-label={`${formatLaneHour(laneCellMs(now, index, offset), offset)}: ${lines.join(", ")}`}
                         onClick={() => setOpenIndex(expanded ? null : index)}
                         className={`absolute top-0 ${pinAlignment(index)} z-10 flex min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] items-center justify-center rounded-full`}
                       >
@@ -298,11 +307,12 @@ export function CommunityLane({
           <div
             id={panelId}
             role="region"
-            aria-label={`Reports at ${formatLaneHour(laneCellMs(now, openGroup.index))}`}
+            aria-label={`Reports at ${formatLaneHour(laneCellMs(now, openGroup.index, offset), offset)}`}
             className="acacia space-y-2"
           >
             <p className="text-base font-semibold text-text-primary">
-              Reports at {formatLaneHour(laneCellMs(now, openGroup.index))}
+              Reports at{" "}
+              {formatLaneHour(laneCellMs(now, openGroup.index, offset), offset)}
             </p>
             <ul className="space-y-1">
               {openGroup.counts.map((c) => (
@@ -331,7 +341,7 @@ export function CommunityLane({
               const label =
                 i === LANE_PAST_HOURS
                   ? "Now"
-                  : formatLaneHour(laneCellMs(now, i));
+                  : formatLaneHour(laneCellMs(now, i, offset), offset);
               return (
                 <div key={i} className="relative h-5">
                   {i % 3 === 0 && (
@@ -367,7 +377,7 @@ export function CommunityLane({
           const summaryId = `${headingId}-${lane.activity.id}-summary`;
           const cells: LaneCell[] | null = lane.cells;
           const summary = cells
-            ? laneSummary(lane.activity.label, cells)
+            ? laneSummary(lane.activity.label, cells, offset)
             : `${lane.activity.label}: loading forecast.`;
           return (
             <div
@@ -389,7 +399,7 @@ export function CommunityLane({
                   className={`text-base font-medium ${style.text}`}
                 >
                   {lane.best && cells
-                    ? `Best: ${bestWindowText(cells, lane.best)}`
+                    ? `Best: ${bestWindowText(cells, lane.best, "–", offset)}`
                     : cells
                       ? "No good window"
                       : ""}

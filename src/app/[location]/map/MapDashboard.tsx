@@ -11,6 +11,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Layers, LayoutList, LocateFixed, Pause, Play, X } from "lucide-react";
+import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { MapSkeleton } from "@/components/weather/map/MapSkeleton";
 import { WeatherLayerPanel } from "@/components/weather/map/WeatherLayerPanel";
 import { detectUserLocation } from "@/lib/geolocation";
@@ -194,15 +195,28 @@ export function MapDashboard({ location }: MapDashboardProps) {
         className="h-full w-full"
       />
 
-      {/* Top-left: close (back to the location) and the legend for the active layer. */}
-      <div className="pointer-events-none absolute left-4 top-4 z-10 flex w-[min(16rem,calc(100%-7rem))] flex-col gap-2">
-        <Link
-          href={`/${location.slug}`}
-          aria-label={`Close map and return to ${location.name}`}
-          className="pointer-events-auto flex h-[var(--touch-target-min)] w-[var(--touch-target-min)] items-center justify-center rounded-full bg-surface-card text-text-primary shadow-md ring-1 ring-border hover:bg-surface-dim"
-        >
-          <X className="h-5 w-5" aria-hidden="true" />
-        </Link>
+      {/* Top-left: close (back to the location), the shared breadcrumb trail
+          as a compact overlay pill, and the legend for the active layer.
+          The column stops 7rem short of the right edge, so neither the
+          close button nor the trail can run under the control stack. */}
+      <div className="pointer-events-none absolute left-4 top-4 z-10 flex w-[min(20rem,calc(100%-7rem))] flex-col gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Link
+            href={`/${location.slug}`}
+            aria-label={`Close map and return to ${location.name}`}
+            className="pointer-events-auto flex h-[var(--touch-target-min)] w-[var(--touch-target-min)] shrink-0 items-center justify-center rounded-full bg-surface-card text-text-primary shadow-md ring-1 ring-border hover:bg-surface-dim"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </Link>
+          <Breadcrumb
+            variant="overlay"
+            items={[
+              { label: "Home", href: "/" },
+              { label: location.name, href: `/${location.slug}` },
+              { label: "Map" },
+            ]}
+          />
+        </div>
 
         {chip && (
           <section

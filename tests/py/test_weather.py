@@ -22,6 +22,8 @@ from py._weather import (
     _parse_models,
     _fetch_open_meteo_extras,
     _fetch_open_meteo,
+    _estimate_utc_offset,
+    _ensure_utc_offset,
     DEFAULT_FORECAST_MODELS,
     KNOWN_FORECAST_MODELS,
     STATION_MAX_AGE_MINUTES,
@@ -1614,10 +1616,11 @@ class TestUtcOffsetSeconds:
     @patch("py._weather.tomorrow_breaker")
     @patch("py._weather._get_cached_weather")
     @patch("py._weather._find_nearest_location")
-    async def test_offset_omitted_when_no_provider_knows_it(
+    async def test_offset_estimated_when_no_provider_knows_it(
         self, mock_nearest, mock_cache, mock_tmrw_breaker, mock_key, mock_fetch_tmrw,
         mock_breaker, mock_extras, mock_set, mock_record,
     ):
+        """Tomorrow.io + failed extras: the offset is still ALWAYS present."""
         import json
         mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
         mock_cache.return_value = None
@@ -1629,4 +1632,106 @@ class TestUtcOffsetSeconds:
         mock_extras.return_value = None
 
         response = await get_weather(-17.83, 31.05)
-        assert "utc_offset_seconds" not in json.loads(response.body)
+        body = json.loads(response.body)
+        assert body["utc_offset_seconds"] == 7200  # 31.05°E → UTC+2
+        assert body["utc_offset_estimated"] is True
+        # The cached provider object is never mutated.
+        assert "utc_offset_seconds" not in mock_fetch_tmrw.return_value
+
+
+class TestEstimateUtcOffset:
+    def test_harare(self):
+        assert _estimate_utc_offset(31.05) == 7200
+
+    def test_new_york_is_negative(self):
+        assert _estimate_utc_offset(-74.0) == -18000
+
+    def test_quarter_hour_steps(self):
+        # 82.5°E (India's meridian) → +05:30
+        assert _estimate_utc_offset(82.5) == 19800
+
+    def test_greenwich_and_garbage(self):
+        assert _estimate_utc_offset(0) == 0
+        assert _estimate_utc_offset(float("nan")) == 0
+        assert _estimate_utc_offset("not-a-number") == 0  # type: ignore[arg-type]
+
+
+class TestEnsureUtcOffset:
+    def test_provider_offset_wins(self):
+        data = {"utc_offset_seconds": 28800}
+        assert _ensure_utc_offset(data, 0.0) is data
+
+    def test_missing_offset_is_estimated_on_a_copy(self):
+        data = {"current": {}}
+        out = _ensure_utc_offset(data, 103.8)
+        assert out["utc_offset_seconds"] == 25200
+        assert out["utc_offset_estimated"] is True
+        assert "utc_offset_seconds" not in data
+
+    def test_non_numeric_offset_is_replaced(self):
+        out = _ensure_utc_offset({"utc_offset_seconds": "7200"}, 31.05)
+        assert out["utc_offset_seconds"] == 7200
+        assert out["utc_offset_estimated"] is True
+
+
+class TestFallbackWeatherLocationTime:
+    def test_fallback_carries_estimated_offset(self):
+        result = _create_fallback_weather(-17.83, 31.05, 1200)
+        assert result["utc_offset_seconds"] == 7200
+        assert result["utc_offset_estimated"] is True
+
+    def test_fallback_dates_and_day_night_use_location_clock(self):
+        # Singapore (103.8°E ≈ UTC+7 by meridian): the first daily date and
+        # is_day follow the location's wall clock, not the server's UTC.
+        result = _create_fallback_weather(1.3, 103.8, 15)
+        offset = result["utc_offset_seconds"]
+        local_now = datetime.now(timezone.utc) + timedelta(seconds=offset)
+        assert result["daily"]["time"][0] == local_now.strftime("%Y-%m-%d")
+        assert result["current"]["is_day"] == (1 if 6 <= local_now.hour < 18 else 0)
+
+    def test_fallback_hourly_times_are_zoned_instants(self):
+        result = _create_fallback_weather(40.7, -74.0, 10)
+        assert all(t.endswith("+00:00") for t in result["hourly"]["time"])
+
+    def test_fallback_sun_times_are_dated_local_strings(self):
+        result = _create_fallback_weather(-17.83, 31.05, 1200)
+        assert result["daily"]["sunrise"][0] == f"{result['daily']['time'][0]}T06:00"
+        assert result["daily"]["sunset"][0] == f"{result['daily']['time'][0]}T18:00"
+
+
+class TestStationKitResponseOffset:
+    @pytest.mark.asyncio
+    @patch("py._weather._fetch_open_meteo_extras")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather.nearest_station_observation")
+    @patch("py._weather._find_nearest_location")
+    async def test_stationkit_current_over_tomorrow_cache_still_has_offset(
+        self, mock_nearest, mock_station, mock_cache, mock_set, mock_record,
+        mock_breaker, mock_extras,
+    ):
+        """StationKit `current` + cached Tomorrow.io forecast + no extras."""
+        import json
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
+        mock_station.return_value = {
+            "observedAt": datetime(2026, 6, 29, 14, 0, tzinfo=timezone.utc),
+            "metrics": {"airTemperatureCelsius": 19.2},
+        }
+        mock_cache.return_value = {
+            "data": {
+                "current": {"temperature_2m": 25.0},
+                "hourly": {"time": ["2026-06-29T14:00:00Z"], "temperature_2m": [25.0]},
+                "daily": {"time": ["2026-06-29"]},
+            },
+            "provider": "tomorrow",
+        }
+        mock_breaker.is_allowed = False
+        mock_extras.return_value = None
+
+        response = await get_weather(-17.83, 31.05)
+        body = json.loads(response.body)
+        assert response.headers.get("x-current-source") == "stationkit"
+        assert body["utc_offset_seconds"] == 7200
+        assert body["utc_offset_estimated"] is True

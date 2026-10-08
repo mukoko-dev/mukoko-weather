@@ -176,7 +176,7 @@ export default async function Home() {
     location,
     weather,
     usingFallback,
-    frostAlert: usingFallback ? null : checkFrostRisk(weather.hourly),
+    frostAlert: usingFallback ? null : checkFrostRisk(weather.hourly, weather.utc_offset_seconds),
     season,
     countryName: countryDoc?.name ?? countryCode,
   };
