@@ -81,3 +81,21 @@ export function displayNameFromSlug(slug: string): string {
   const stripped = namePart.replace(PLATFORM_HASH_RE, "") || namePart;
   return slugToDisplayName(stripped);
 }
+
+/** Window event the header's "My Location" button fires when it resolves a
+ *  place while the visitor is already on `/` (a router.push("/") would be a
+ *  no-op there). CurrentLocationHome listens and swaps the dashboard. */
+export const CURRENT_LOCATION_EVENT = "mukoko:current-location";
+
+/**
+ * Remember a GPS-confirmed place so the NEXT server render of `/` seeds it.
+ * Same cookie name/options as the edge middleware (src/proxy.ts).
+ */
+export function writeLastLocationCookie(slug: string): void {
+  if (!isLocationSlug(slug)) return;
+  try {
+    document.cookie = `lastLocation=${slug}; max-age=2592000; path=/; samesite=lax`;
+  } catch {
+    /* non-browser environment */
+  }
+}

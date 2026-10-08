@@ -19,7 +19,12 @@ import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { trackEvent } from "@/lib/analytics";
 import { initialsFor, type PublicUser } from "@/lib/user-display";
-import { currentLocationSlug, isLocationSlug } from "@/lib/current-slug";
+import {
+  currentLocationSlug,
+  isLocationSlug,
+  CURRENT_LOCATION_EVENT,
+  writeLastLocationCookie,
+} from "@/lib/current-slug";
 
 // Code-split: MyWeatherModal imports LOCATIONS (154 items), ACTIVITIES (20 items),
 // geolocation, router, etc. Lazy-loading prevents this from bloating the initial
@@ -158,7 +163,18 @@ export function Header() {
           method: "geolocation",
         });
         setSelectedLocation(result.location.slug);
-        router.push("/");
+        // Seed the next server render of `/` with this place, then go home —
+        // or, already there, hand the place to CurrentLocationHome directly.
+        writeLastLocationCookie(result.location.slug);
+        if (pathname === "/") {
+          window.dispatchEvent(
+            new CustomEvent(CURRENT_LOCATION_EVENT, {
+              detail: result.location,
+            }),
+          );
+        } else {
+          router.push("/");
+        }
       } else {
         openMyWeather();
       }

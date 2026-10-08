@@ -65,10 +65,19 @@ describe("CurrentLocationHome — silent-URL model", () => {
   });
 
   it("refreshes the lastLocation cookie so the next server render seeds the new spot", () => {
-    expect(source).toContain(
-      "document.cookie = `lastLocation=${location.slug}",
+    expect(source).toContain("writeLastLocationCookie(location.slug)");
+    const helper = readFileSync(
+      resolve(__dirname, "../lib/current-slug.ts"),
+      "utf-8",
     );
-    expect(source).toContain("max-age=2592000");
+    expect(helper).toContain("document.cookie = `lastLocation=${slug}");
+    expect(helper).toContain("max-age=2592000");
+  });
+
+  it("picks up a place found by the header's My Location button while on /", () => {
+    expect(source).toContain(
+      "window.addEventListener(CURRENT_LOCATION_EVENT, onLocated)",
+    );
   });
 
   it("refreshes silently only when permission is already granted — never prompts on load", () => {

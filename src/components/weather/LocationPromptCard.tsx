@@ -36,7 +36,7 @@ export function LocationPromptCard({
   return (
     <section
       aria-label="Use your location"
-      className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom,0px)+5.25rem)] z-30 mx-auto max-w-md animate-fade-in-up rounded-[var(--radius-card)] border border-primary/25 bg-surface-card/95 p-3 shadow-lg backdrop-blur-xl sm:bottom-6"
+      className="fixed inset-x-3 bottom-[var(--mobile-nav-clearance)] z-30 mx-auto max-w-md animate-fade-in-up rounded-[var(--radius-card)] border border-primary/25 bg-surface-card/95 p-3 shadow-lg backdrop-blur-xl sm:bottom-6"
     >
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">

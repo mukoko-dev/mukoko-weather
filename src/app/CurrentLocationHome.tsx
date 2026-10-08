@@ -6,6 +6,10 @@ import type { WeatherLocation } from "@/lib/locations";
 import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
 import { checkFrostRisk, getDefaultSeason } from "@/lib/weather";
 import { fetchHomeWeather } from "@/lib/home-weather";
+import {
+  CURRENT_LOCATION_EVENT,
+  writeLastLocationCookie,
+} from "@/lib/current-slug";
 import { detectUserLocation } from "@/lib/geolocation";
 import { useAppStore } from "@/lib/store";
 import { COUNTRIES } from "@/lib/countries";
@@ -116,11 +120,7 @@ export function CurrentLocationHome({ initial, user }: Props) {
     setGpsConfirmed(true);
     setSelectedLocation(location.slug);
     // Refresh the cookie so the NEXT server render seeds this location.
-    try {
-      document.cookie = `lastLocation=${location.slug}; max-age=2592000; path=/; samesite=lax`;
-    } catch {
-      /* non-browser environment */
-    }
+    writeLastLocationCookie(location.slug);
     if (previousSlug && previousSlug !== location.slug) {
       trackEvent("location_changed", {
         from: previousSlug,
@@ -221,7 +221,10 @@ export function CurrentLocationHome({ initial, user }: Props) {
         return;
       }
       setGpsState("detecting");
-      const problem = await locate({ silent: true, isDisposed: () => disposed });
+      const problem = await locate({
+        silent: true,
+        isDisposed: () => disposed,
+      });
       if (disposed) return;
       setGpsState("idle");
       // A silent refresh that fails stays silent when weather is on screen.
@@ -235,6 +238,28 @@ export function CurrentLocationHome({ initial, user }: Props) {
     // Mount-only by design: `initial` is the server seed for this render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The header's "My Location" button resolved a place while we're on `/`.
+  useEffect(() => {
+    const onLocated = (event: Event) => {
+      const location = (event as CustomEvent<WeatherLocation>).detail;
+      if (!location?.slug) return;
+      if (location.slug === view?.location.slug) {
+        setGpsConfirmed(true);
+        return;
+      }
+      setGpsState("detecting");
+      swapTo(location, view?.location.slug)
+        .then(() => setMessage(null))
+        .catch(() => setMessage("no-weather"))
+        .finally(() => setGpsState("idle"));
+    };
+    window.addEventListener(CURRENT_LOCATION_EVENT, onLocated);
+    return () => window.removeEventListener(CURRENT_LOCATION_EVENT, onLocated);
+    // swapTo/view are read fresh on each event via the closure re-created
+    // when `view` changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
 
   // Explicit "Use my location" — the only path that can show the prompt.
   const handleGps = async () => {
@@ -265,15 +290,15 @@ export function CurrentLocationHome({ initial, user }: Props) {
     return (
       <>
         <WeatherDashboard
-        key={view.location.slug}
-        weather={view.weather}
-        location={view.location}
-        usingFallback={view.usingFallback}
-        frostAlert={view.frostAlert}
-        season={view.season}
-        countryName={view.countryName}
-        user={user}
-        isCurrentLocation={gpsConfirmed}
+          key={view.location.slug}
+          weather={view.weather}
+          location={view.location}
+          usingFallback={view.usingFallback}
+          frostAlert={view.frostAlert}
+          season={view.season}
+          countryName={view.countryName}
+          user={user}
+          isCurrentLocation={gpsConfirmed}
         />
         {showCard && (
           <LocationPromptCard
@@ -335,7 +360,10 @@ export function CurrentLocationHome({ initial, user }: Props) {
               <SearchIcon size={15} aria-hidden="true" />
               Search for a city
             </button>
-            <Link href="/explore" className="dove underline-offset-4 hover:underline">
+            <Link
+              href="/explore"
+              className="dove underline-offset-4 hover:underline"
+            >
               Browse all locations
             </Link>
           </div>
