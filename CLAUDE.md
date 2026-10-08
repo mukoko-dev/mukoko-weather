@@ -137,6 +137,11 @@ mukoko-weather/
 │   │   ├── privacy/page.tsx          # Privacy policy
 │   │   ├── terms/page.tsx            # Terms of service
 │   │   ├── embed/page.tsx            # Widget embedding docs
+│   │   ├── display/                  # Full-screen weather display (TV/tablet/monitor kiosk)
+│   │   │   ├── page.tsx              # Server: resolves location from URL/cookie/IP, seeds the forecast
+│   │   │   ├── DisplayDashboard.tsx  # Client: landscape/portrait layout, polling, wake lock, reload
+│   │   │   ├── loading.tsx
+│   │   │   └── error.tsx
 │   │   ├── aviation/                 # Aviation planner (auth-gated): METAR/TAF station picker + PDF pre-flight briefing
 │   │   │   ├── page.tsx              # Server wrapper (requireUser, metadata)
 │   │   │   ├── AviationPlanner.tsx   # Client: station search, METAR/TAF decode, flight-category badges
@@ -200,6 +205,8 @@ mukoko-weather/
 │   │   │   └── ThemeToggle.tsx       # Light/dark/system mode toggle (3-state cycle)
 │   │   ├── analytics/
 │   │   │   └── GoogleAnalytics.tsx   # Google Analytics 4 (gtag.js) via next/script
+│   │   ├── display/
+│   │   │   └── DisplayPanels.tsx     # Display panels: clock, now, AQI + haze advice, radar, outlook, hours, days
 │   │   ├── explore/                  # Shamwari chatbot + AI explore search
 │   │   │   ├── ExploreChatbot.tsx    # AI chatbot UI (message bubbles, typing indicator, contextual suggested prompts)
 │   │   │   ├── ExploreChatbot.test.ts
@@ -340,6 +347,9 @@ mukoko-weather/
 │   │   ├── flight-category-styles.test.ts
 │   │   ├── report-types.ts        # Shared id/label/icon map for community reports (WeatherReportModal + RecentReports)
 │   │   ├── report-types.test.ts
+│   │   ├── display.ts             # /display helpers: URL params, AQI haze advice, refresh cadence, hour slicing, response guards
+│   │   ├── display.test.ts
+│   │   ├── use-display-runtime.ts # useWakeLock, usePeriodicReload, usePolledJson (keeps last good data)
 │   │   ├── i18n.ts                # Lightweight i18n (en complete, sn/nd ready)
 │   │   ├── i18n.test.ts
 │   │   ├── map-layers.ts          # Map layer config (Tomorrow.io tile layers, mineral color styles)
@@ -597,6 +607,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/developers` — public developer/API documentation page
 - `/developers/keys` — auth-gated developer API-key management (create — full key shown once / list masked / revoke)
 - `/embed` — widget embedding docs
+- `/display` — full-screen weather display for TVs, tablets and monitors (kiosk). No header/footer, no sign-in, `robots: noindex`. URL-configured via `parseDisplayParams()` (`src/lib/display.ts`): `?location=<slug>` or `?lat=&lon=`, `?layer=<MAP_LAYERS id>` (default `precipitationIntensity`), `?theme=light|dark`. Falls back to the lastLocation cookie, then IP geo snapped to the nearest seed, then Harare. Panels (`src/components/display/DisplayPanels.tsx`): clock, current conditions, air quality with `AQI_ADVICE` haze guidance, radar (`MapLibreMap`, non-interactive), today's outlook (tall screens only), next hours, 5 days — each in its own `ChartErrorBoundary`. Runtime hooks (`src/lib/use-display-runtime.ts`): Screen Wake Lock, `usePolledJson` (weather 10 min, AQ 30 min, keeps the last good value on a failed refresh), 6-hour page reload. `display` is in the `KNOWN_ROUTES` sets of `src/proxy.ts` and `WeatherLoadingScene.tsx` so it never becomes the lastLocation cookie
 - `/api/og` — GET, dynamic OG image generation (Edge runtime, Satori, TypeScript). Query: `title`, `subtitle`, optional `location`, `province`, `season`, `temp`, `condition`, `template` (home/location/explore/history/season/shamwari). In-memory rate-limited (30 req/min/IP), 1-day CDN cache
 - `/api/db-init` — POST, one-time DB setup + seed data (TypeScript). Requires `x-init-secret` header in production
 - `/api/keys` — GET (list caller's keys, masked) / POST (mint a developer API key in `platform.apiKeys`; full key returned ONCE, SHA-256 hashed at rest, 10/user cap, eligible entity-membership role required). Auth-gated via `withAuth()`
@@ -634,6 +645,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/airports/nearest` — GET, N nearest ICAO airports to `lat`/`lon` (query: `lat`, `lon`, optional `count` default 5 / max 20, optional `maxDistanceKm` default 500) via MongoDB `$geoNear` on the seeded `weather.airports` collection. Each result carries `icao` + `name` + `distanceKm`, sorted closest-first. Returns an empty list on any DB error so the TS client falls back to the static haversine scan
 - `/api/py/metar?icao=` — GET, METAR (last 12 h) + TAF for one ICAO station from AWC (cached 30 min; empty answers cached 2 min; failures never cached). Source `awc` | `checkwx` | `unavailable`
 - `/api/py/aviation/nearest-metar?lat&lon` — GET, nearest airport within `radiusKm` (default 150) with a METAR no older than `maxAgeMinutes` (default 180), with its METAR + TAF. `status`: `ok` | `no_recent_report` | `no_airports` | `unavailable`; `candidates` lists every airport considered
+- `/api/py/enso` — GET, latest El Niño / La Niña phase from NOAA CPC's Oceanic Niño Index (`oni.ascii.txt`): ONI, season, phase, strength, last 6 seasons. In-memory cache 12 h, guarded by `noaa_breaker`; returns 200 with `available: false` when the upstream fails. Feeds the location-page `EnsoOutlook` card
 - `/api/py/stations/register` — POST, register a community weather station (digital or manual/analog). Rate-limited 3/hour/IP. Returns `stationId` + `ingestKey` ONCE (SHA-256 hash at rest) with custom-server setup instructions
 - `/api/py/stations/ingest` — GET (Wunderground protocol, `ID`/`PASSWORD` query params) and POST (Ecowitt protocol, form fields with `PASSKEY=<stationId>:<ingestKey>`) — consumer station consoles push readings directly here via their "customized upload" setting. Imperial→metric conversion, inline QC range checks; raw payloads archived in `weather.stationObservations`, passing readings become validated `weather.observations` docs that `/api/py/weather` blends into current conditions (StationKit flow). Responds with the literal body `success` (WU protocol requirement)
 - `/api/py/stations/manual` — POST, manual reading from an analog station (farmers/schools: rain gauge + thermometer, no digital infrastructure). Requires `stationId` + `key`; Pydantic range validation + same QC/observation flow. Rate-limited 12/hour/IP

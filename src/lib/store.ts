@@ -69,6 +69,7 @@ export const DEFAULT_SECTION_ORDER = [
   "activityInsights",
   "aiSummary",
   "aiChat",
+  "enso",
 ] as const;
 
 const SECTION_ORDER_KEY = "mukoko-section-order";

@@ -43,6 +43,14 @@ Claude-authored trend analysis, and an embeddable widget. It installs as a PWA.
 The Locations list (`/locations`) shows the current location and saved places as
 live weather cards, with a Home location, in the style of iOS Weather.
 
+**Weather display** — `/display` is a full-screen page for a TV, tablet or
+monitor on a wall: clock, current conditions, air quality with plain-language
+haze advice, a radar map of the area, the next hours and five days. It keeps the
+screen awake, refreshes itself (weather every 10 min, air quality every 30 min)
+and needs no sign-in. Configure it by URL, for example
+`/display?location=singapore-sg&theme=dark` or `/display?lat=-17.83&lon=31.05`;
+`layer` picks the map overlay (default `precipitationIntensity`).
+
 Some AI surfaces are behind flags. **Shamwari full-viewport chat is paused**
 (`FLAGS.shamwari_chat` is `false`; `/shamwari` 404s); inline AI summaries,
 follow-up chat, and AI explore search remain live.
@@ -113,6 +121,7 @@ and developer API-key management.
 
 Climate normals (1991–2020, ERA5 via Open-Meteo) are served at `GET /api/py/normals`, with one cached table per 0.25° grid cell in `weather.climate_normals`.
 **Air quality map** — `GET /api/py/airquality/grid` returns current US AQI on a 7×7 grid (±40 km) from one batched Open-Meteo request, cached 30 min; the `AirQualityMapCard` paints it over a non-interactive MapLibre map.
+`GET /api/py/enso` returns the latest El Niño / La Niña phase from NOAA CPC's Oceanic Niño Index (12 h in-memory cache; `available: false` when NOAA is unreachable).
 
 **Four-stage weather fallback** — MongoDB cache (15-min TTL) → Tomorrow.io →
 Open-Meteo → `createFallbackWeather` seasonal estimates. The last stage always
