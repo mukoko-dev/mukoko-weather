@@ -18,6 +18,8 @@ export const DISPLAY_REFRESH_MS = {
   weather: 10 * 60 * 1000,
   /** Air quality: the backend caches for 1 h; 30 min keeps haze changes visible. */
   airQuality: 30 * 60 * 1000,
+  /** Official Singapore NEA readings (Singapore only): NEA updates hourly. */
+  sgAir: 15 * 60 * 1000,
   /**
    * Full page reload. An unattended screen runs for weeks — a periodic reload
    * picks up new deploys and returns any memory the map has accumulated.
