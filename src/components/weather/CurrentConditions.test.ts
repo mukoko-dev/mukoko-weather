@@ -32,10 +32,20 @@ describe("CurrentConditions — centred hero structure", () => {
     expect(source).toContain('aria-labelledby="current-conditions-heading"');
   });
 
-  it("uses the lightest loaded Noto Sans weight for the large temperature", () => {
-    // layout.tsx loads Noto Sans at 400/500/600 only — font-normal is the lightest.
-    expect(source).toContain("font-sans text-8xl font-normal");
+  it("sets the temperature in Noto Serif display, semibold, with tabular figures", () => {
+    // Brand doctrine: temperature is Noto Serif (font-heading), never a thin
+    // system numeral. layout.tsx loads Noto Serif 400/600/700 — 600 is used.
+    expect(source).toContain(
+      "font-heading text-8xl font-semibold tabular-nums",
+    );
     expect(source).not.toMatch(/font-(thin|extralight|light)\b/);
+    expect(source).not.toContain("font-sans text-8xl");
+  });
+
+  it("renders the temperature on the sky plate, not a translucent card", () => {
+    expect(source).toContain("kori");
+    expect(source).toContain("PLATE_CLASS[family]");
+    expect(source).not.toMatch(/backdrop-blur|bg-white\/|glass/);
   });
 
   it("renders the temperature with an accessible degrees-Celsius label", () => {
@@ -51,7 +61,34 @@ describe("CurrentConditions — centred hero structure", () => {
   it("does not render the big condition icon in the hero", () => {
     expect(source).not.toContain("WeatherIcon");
     expect(source).not.toContain("nightIcon");
-    expect(source).not.toContain("is_day");
+  });
+
+  it("derives the plate family from the WMO code and is_day", () => {
+    expect(source).toContain("plateFamily(current.weather_code, isDay)");
+    expect(source).toContain("current.is_day === 1");
+  });
+
+  it("reads the clock only after mount, so the server (UTC) and client never disagree", () => {
+    expect(source).toContain("requestAnimationFrame(() => setNow(new Date()))");
+    expect(source).toContain("now ? heroOutlook(hourly, now) : null");
+  });
+
+  it("renders the one-sentence outlook from the hourly series, with no AI call", () => {
+    expect(source).toContain("heroOutlook(hourly, now)");
+    expect(source).not.toMatch(/\/api\/py\/ai|fetch\(\s*["'`]\/api\/py\/ai/);
+  });
+
+  it("shows the top selected activity's rating through the activity clause helper", () => {
+    expect(source).toContain("selectedActivities");
+    expect(source).toContain("feasibilitySeries(activity, hourly, dbRules)");
+    expect(source).toContain("heroActivityClause(");
+    expect(source).toContain("activityDotClass(activity.category)");
+  });
+
+  it("offers a quiet pick-activities button when nothing is selected", () => {
+    expect(source).toContain('openMyWeather("activities")');
+    expect(source).toContain("Pick activities for tailored advice");
+    expect(source).toContain("!hasSelection");
   });
 
   it("does not render the feels-like line (moved to the metric cards)", () => {
@@ -71,9 +108,13 @@ describe("CurrentConditions — centred hero structure", () => {
     expect(source).not.toMatch(/rgba?\(/);
   });
 
-  it("renders a footer slot below the hero (season line)", () => {
+  it("renders a footer slot below the sky plate (season line)", () => {
     expect(source).toContain("footer?: ReactNode");
     expect(source).toContain("{footer && (");
+    // The footer sits after the plate closes, outside the solid surface.
+    expect(source.indexOf("{footer && (")).toBeGreaterThan(
+      source.indexOf("className={`kori"),
+    );
   });
 });
 

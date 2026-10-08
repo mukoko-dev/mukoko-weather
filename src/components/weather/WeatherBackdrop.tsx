@@ -63,6 +63,10 @@ function skyClass(type: WeatherSceneType, isDay: boolean): string {
  * - `prefers-reduced-motion` skips Three.js entirely and shows only the static
  *   mineral gradient.
  *
+ * Subdued on purpose (opacity-60 on the sky and particle layers): the location
+ * hero is a solid sky plate (see CurrentConditions / `.kori`), and the page
+ * sky is texture behind it, never the hero itself.
+ *
  * Purely decorative — marked `aria-hidden`. A WebGL/import failure degrades to
  * the static gradient (createWeatherScene returns a no-op handle on failure),
  * and the whole card is additionally wrapped in ChartErrorBoundary upstream.
@@ -158,10 +162,12 @@ export function WeatherBackdrop({
     >
       {/* Static mineral gradient — always painted; the reduced-motion fallback. */}
       <div
-        className={`absolute inset-0 weaver-sky ${skyClass(sceneType, isDay)}`}
+        className={`absolute inset-0 opacity-60 weaver-sky ${skyClass(sceneType, isDay)}`}
       />
       {/* Three.js particle layer (transparent) — only when motion is allowed. */}
-      {animate && <div ref={containerRef} className="absolute inset-0" />}
+      {animate && (
+        <div ref={containerRef} className="absolute inset-0 opacity-60" />
+      )}
       {/* Readability scrim so hero text keeps contrast over the animation. */}
       <div className="absolute inset-0 weaver-scrim" />
       {/* Fade the sky into the normal surface background further down the

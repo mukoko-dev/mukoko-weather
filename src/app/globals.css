@@ -1391,3 +1391,95 @@ body {
     animation-delay: 350ms;
   }
 }
+
+/* ===== Location hero — solid sky plate (redesign/hero) =====
+   A flat, solid mineral surface behind the location hero: no gradient, no
+   glass, no animation. Each condition family maps to one Seven Minerals value
+   via var(), so light and dark follow the mineral tokens above and the
+   per-theme --mineral-*-fg pairs keep text contrast. The [data-theme="dark"]
+   block repeats the same var() references (they resolve per theme). Consumed
+   by the .kori fauna class and its family modifiers. */
+:root {
+  --radius-plate: 2rem;
+  --plate-clear-day: var(--mineral-cobalt);
+  --plate-clear-day-fg: var(--mineral-cobalt-fg);
+  --plate-clear-night: var(--mineral-tanzanite);
+  --plate-clear-night-fg: var(--mineral-tanzanite-fg);
+  --plate-cloudy-day: var(--mineral-gold);
+  --plate-cloudy-day-fg: var(--mineral-gold-fg);
+  --plate-cloudy-night: var(--mineral-tanzanite);
+  --plate-cloudy-night-fg: var(--mineral-tanzanite-fg);
+  --plate-fog: var(--mineral-terracotta);
+  --plate-fog-fg: var(--mineral-terracotta-fg);
+  --plate-rain: var(--mineral-malachite);
+  --plate-rain-fg: var(--mineral-malachite-fg);
+  --plate-storm: var(--mineral-tanzanite);
+  --plate-storm-fg: var(--mineral-tanzanite-fg);
+  --plate-snow: var(--mineral-cobalt);
+  --plate-snow-fg: var(--mineral-cobalt-fg);
+}
+
+[data-theme="dark"] {
+  --plate-clear-day: var(--mineral-cobalt);
+  --plate-clear-day-fg: var(--mineral-cobalt-fg);
+  --plate-clear-night: var(--mineral-tanzanite);
+  --plate-clear-night-fg: var(--mineral-tanzanite-fg);
+  --plate-cloudy-day: var(--mineral-gold);
+  --plate-cloudy-day-fg: var(--mineral-gold-fg);
+  --plate-cloudy-night: var(--mineral-tanzanite);
+  --plate-cloudy-night-fg: var(--mineral-tanzanite-fg);
+  --plate-fog: var(--mineral-terracotta);
+  --plate-fog-fg: var(--mineral-terracotta-fg);
+  --plate-rain: var(--mineral-malachite);
+  --plate-rain-fg: var(--mineral-malachite-fg);
+  --plate-storm: var(--mineral-tanzanite);
+  --plate-storm-fg: var(--mineral-tanzanite-fg);
+  --plate-snow: var(--mineral-cobalt);
+  --plate-snow-fg: var(--mineral-cobalt-fg);
+}
+
+@layer components {
+  /* .kori — the hero sky plate. Solid, rounded bottom corners, text in the
+     plate's foreground token. A family modifier points --kori-bg/fg at one
+     --plate-* pair; the default is the clear-day plate. */
+  .kori {
+    --kori-bg: var(--plate-clear-day);
+    --kori-fg: var(--plate-clear-day-fg);
+    background-color: var(--kori-bg);
+    color: var(--kori-fg);
+    border-bottom-left-radius: var(--radius-plate);
+    border-bottom-right-radius: var(--radius-plate);
+  }
+  .kori-clear-day {
+    --kori-bg: var(--plate-clear-day);
+    --kori-fg: var(--plate-clear-day-fg);
+  }
+  .kori-clear-night {
+    --kori-bg: var(--plate-clear-night);
+    --kori-fg: var(--plate-clear-night-fg);
+  }
+  .kori-cloudy-day {
+    --kori-bg: var(--plate-cloudy-day);
+    --kori-fg: var(--plate-cloudy-day-fg);
+  }
+  .kori-cloudy-night {
+    --kori-bg: var(--plate-cloudy-night);
+    --kori-fg: var(--plate-cloudy-night-fg);
+  }
+  .kori-fog {
+    --kori-bg: var(--plate-fog);
+    --kori-fg: var(--plate-fog-fg);
+  }
+  .kori-rain {
+    --kori-bg: var(--plate-rain);
+    --kori-fg: var(--plate-rain-fg);
+  }
+  .kori-storm {
+    --kori-bg: var(--plate-storm);
+    --kori-fg: var(--plate-storm-fg);
+  }
+  .kori-snow {
+    --kori-bg: var(--plate-snow);
+    --kori-fg: var(--plate-snow-fg);
+  }
+}
