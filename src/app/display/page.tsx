@@ -69,6 +69,7 @@ export default async function DisplayPage({
         name: location.name,
         lat: location.lat,
         lon: location.lon,
+        country: location.country,
       }}
       initialWeather={initialWeather}
       layer={params.layer}
@@ -77,9 +78,10 @@ export default async function DisplayPage({
   );
 }
 
-interface ResolvedLocation extends Omit<DisplayLocation, "slug"> {
+interface ResolvedLocation extends Omit<DisplayLocation, "slug" | "country"> {
   slug: string | null;
   elevation: number;
+  country: string | null;
 }
 
 async function resolveDisplayLocation(
@@ -102,6 +104,8 @@ async function resolveDisplayLocation(
       lat,
       lon,
       elevation: near?.elevation ?? 0,
+      // Same nearby place that lends the name, so the country can't disagree.
+      country: near?.country ?? null,
     };
   }
 
@@ -133,6 +137,7 @@ function fromKnown(l: {
   lat: number;
   lon: number;
   elevation: number;
+  country?: string;
 }): ResolvedLocation {
   return {
     slug: l.slug,
@@ -140,5 +145,6 @@ function fromKnown(l: {
     lat: l.lat,
     lon: l.lon,
     elevation: l.elevation,
+    country: l.country ?? null,
   };
 }

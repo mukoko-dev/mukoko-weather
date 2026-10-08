@@ -568,6 +568,9 @@ async function resolveSpotSlug(
  * `sourceProvenance.dataConfidence` desc — never by document age, never by
  * `-2`/`-3` suffix.
  */
+/** placesGeo platform slugs: `<slugified-name>-<6 hex>` (see upsert_placesgeo_city). */
+export const PLATFORM_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*-[0-9a-f]{6}$/;
+
 export async function resolveLocationSlug(
   slug: string,
 ): Promise<AdaptedLocation | null> {
@@ -602,6 +605,24 @@ export async function resolveLocationSlug(
     }
   } catch {
     // Continue to fallback strategies.
+  }
+
+  // 1b) Exact match on the platform's own slug (`harare-a1b2c3`). Search and
+  // the GPS lookup hand these out (`/api/py/search` returns placesGeo slugs),
+  // so a visitor picking "Bulawayo" from search lands on `/bulawayo-e7b1f4`.
+  // Without this step that URL fell through to a name guess of
+  // "Bulawayo E7b1f4" and rendered "Location not found".
+  if (PLATFORM_SLUG_RE.test(slug)) {
+    try {
+      const platform = (await coll.findOne({
+        slug,
+      })) as unknown as PlacesGeoDoc | null;
+      if (platform && platform.geoType !== "country") {
+        return adaptPlacesGeoToLocationDoc(platform, { cleanSlug: slug, seed });
+      }
+    } catch {
+      // Continue to fallback strategies.
+    }
   }
 
   // 2 + 3) Name lookup — prefer seed name, fall back to inferred name.
