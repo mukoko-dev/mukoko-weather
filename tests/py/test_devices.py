@@ -219,7 +219,7 @@ class TestCreateDevice:
         # Creating without a deviceId now rate-limits (unbounded doc creation
         # otherwise) — stub it open so these tests exercise validation/create
         # logic, not the rate limiter. See test_create_without_device_id_rate_limited.
-        with patch("py._devices.check_rate_limit", return_value={"allowed": True, "remaining": 19}):
+        with patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 19}):
             yield
 
     @patch("py._devices.device_profiles_collection")
@@ -314,7 +314,7 @@ class TestCreateDevice:
             await create_device(body)
         assert exc_info.value.status_code == 409
 
-    @patch("py._devices.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @pytest.mark.asyncio
     async def test_create_without_device_id_rate_limited(self, mock_rate):
         """Omitting deviceId always inserts a new doc (unbounded creation) —
@@ -327,7 +327,7 @@ class TestCreateDevice:
         mock_rate.assert_called_once_with("unknown", "device-create", 20, 3600)
 
     @patch("py._devices.device_profiles_collection")
-    @patch("py._devices.check_rate_limit")
+    @patch("py._db.check_rate_limit")
     @pytest.mark.asyncio
     async def test_create_with_device_id_is_not_rate_limited(self, mock_rate, mock_coll):
         """An existing/caller-supplied deviceId is idempotent (see

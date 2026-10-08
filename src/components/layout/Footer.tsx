@@ -57,7 +57,7 @@ export function Footer() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Twitter"
-                className="text-text-tertiary hover:text-text-primary transition-colors"
+                className="dik-dik text-text-tertiary hover:text-text-primary transition-colors"
               >
                 <svg
                   className="h-4 w-4"
@@ -73,7 +73,7 @@ export function Footer() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="GitHub"
-                className="text-text-tertiary hover:text-text-primary transition-colors"
+                className="dik-dik text-text-tertiary hover:text-text-primary transition-colors"
               >
                 <svg
                   className="h-4 w-4"
@@ -197,7 +197,7 @@ export function Footer() {
               href="https://nyuchi.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="transition-colors hover:text-text-secondary"
+              className="dik-dik transition-colors hover:text-text-secondary"
             >
               Nyuchi Africa (PVT) Ltd
             </a>
@@ -209,7 +209,7 @@ export function Footer() {
               href="https://www.tomorrow.io"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-text-secondary transition-colors"
+              className="dik-dik hover:text-text-secondary transition-colors"
             >
               Tomorrow.io
             </a>
@@ -218,7 +218,7 @@ export function Footer() {
               href="https://open-meteo.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-text-secondary transition-colors"
+              className="dik-dik hover:text-text-secondary transition-colors"
             >
               Open-Meteo
             </a>

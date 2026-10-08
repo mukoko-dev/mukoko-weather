@@ -56,6 +56,7 @@ import type { TagDoc } from "./seed-tags";
 import type { SeasonDoc } from "./seed-seasons";
 import type { ActivityCategoryDoc } from "./seed-categories";
 import type { AIPromptDoc, AISuggestedPromptRule } from "./seed-ai-prompts";
+import { internalApiBase } from "@/lib/site";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -687,15 +688,6 @@ export interface WeatherResult {
   data: WeatherData;
   /** "cache" | "tomorrow" | "open-meteo" | "fallback" */
   source: string;
-}
-
-/**
- * Base URL for server-to-server calls into our own deployment (the Python
- * FastAPI functions live behind the same origin via vercel.json rewrites).
- */
-function internalApiBase(): string {
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return process.env.INTERNAL_API_BASE_URL ?? "http://localhost:3000";
 }
 
 /**
@@ -1352,6 +1344,11 @@ export async function syncAirports(
   });
   if (bulkOps.length > 0) {
     await airportsCollection().bulkWrite(bulkOps);
+    // The catalogue is the full reference set: drop stations that were renamed
+    // or removed (e.g. retired FVHA / FAJS), or the nearest lookup keeps
+    // returning codes the Aviation Weather Center no longer serves.
+    const codes = airports.map((a) => a.icao.toUpperCase());
+    await airportsCollection().deleteMany({ _id: { $nin: codes } });
   }
 }
 

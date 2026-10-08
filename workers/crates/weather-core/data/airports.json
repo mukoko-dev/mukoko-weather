@@ -1,9 +1,9 @@
 [
   {
-    "icao": "FVHA",
+    "icao": "FVRG",
     "name": "Harare (Robert Gabriel Mugabe Intl)",
-    "lat": -17.932,
-    "lon": 31.093
+    "lat": -17.921,
+    "lon": 31.1
   },
   {
     "icao": "FVBU",
@@ -24,24 +24,6 @@
     "lon": 30.859
   },
   {
-    "icao": "FVGW",
-    "name": "Gweru (Thornhill)",
-    "lat": -19.436,
-    "lon": 29.861
-  },
-  {
-    "icao": "FVMU",
-    "name": "Mutare",
-    "lat": -18.998,
-    "lon": 32.627
-  },
-  {
-    "icao": "FVGR",
-    "name": "Grand Reef (Mutare)",
-    "lat": -18.976,
-    "lon": 32.449
-  },
-  {
     "icao": "FVKB",
     "name": "Kariba",
     "lat": -16.52,
@@ -54,22 +36,10 @@
     "lon": 27.021
   },
   {
-    "icao": "FVKK",
-    "name": "Kwekwe",
-    "lat": -18.933,
-    "lon": 29.841
-  },
-  {
     "icao": "FVBB",
     "name": "Beitbridge",
     "lat": -22.198,
     "lon": 30.013
-  },
-  {
-    "icao": "FVBD",
-    "name": "Bindura",
-    "lat": -17.304,
-    "lon": 31.327
   },
   {
     "icao": "FVCH",
@@ -78,28 +48,22 @@
     "lon": 32.628
   },
   {
-    "icao": "FVCI",
-    "name": "Chinhoyi",
-    "lat": -17.362,
-    "lon": 30.199
-  },
-  {
-    "icao": "FVBR",
-    "name": "Buffalo Range (Chiredzi)",
-    "lat": -21.001,
-    "lon": 31.579
-  },
-  {
-    "icao": "FVCP",
-    "name": "Charles Prince (Harare)",
-    "lat": -17.752,
-    "lon": 30.925
-  },
-  {
-    "icao": "FAJS",
+    "icao": "FAOR",
     "name": "Johannesburg (O.R. Tambo Intl)",
     "lat": -26.139,
     "lon": 28.246
+  },
+  {
+    "icao": "FALA",
+    "name": "Lanseria Intl",
+    "lat": -25.939,
+    "lon": 27.926
+  },
+  {
+    "icao": "FAWK",
+    "name": "Waterkloof (Pretoria)",
+    "lat": -25.83,
+    "lon": 28.223
   },
   {
     "icao": "FACT",
