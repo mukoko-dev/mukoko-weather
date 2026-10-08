@@ -57,15 +57,13 @@ class TestCheckMongodb:
 
 
 class TestCheckTomorrowIo:
-    @patch("py._status.httpx.Client")
+    @patch("py._status.get_http_client")
     @patch("py._status.get_api_key")
     def test_operational_on_200(self, mock_key, mock_client_cls):
         mock_key.return_value = "test-key"
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_client_cls.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_client_cls.return_value.__enter__.return_value.get.return_value = mock_resp
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+        mock_client_cls.return_value.get.return_value = mock_resp
 
         result = _check_tomorrow_io()
         assert result["status"] == "operational"
@@ -78,30 +76,26 @@ class TestCheckTomorrowIo:
         assert result["status"] == "degraded"
         assert "not configured" in result["message"]
 
-    @patch("py._status.httpx.Client")
+    @patch("py._status.get_http_client")
     @patch("py._status.get_api_key")
     def test_degraded_on_429(self, mock_key, mock_client_cls):
         mock_key.return_value = "test-key"
         mock_resp = MagicMock()
         mock_resp.status_code = 429
-        mock_client_cls.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_client_cls.return_value.__enter__.return_value.get.return_value = mock_resp
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+        mock_client_cls.return_value.get.return_value = mock_resp
 
         result = _check_tomorrow_io()
         assert result["status"] == "degraded"
         assert "Rate limited" in result["message"]
 
-    @patch("py._status.httpx.Client")
+    @patch("py._status.get_http_client")
     @patch("py._status.get_api_key")
     def test_down_on_non_200(self, mock_key, mock_client_cls):
         mock_key.return_value = "test-key"
         mock_resp = MagicMock()
         mock_resp.status_code = 500
         mock_resp.reason_phrase = "Internal Server Error"
-        mock_client_cls.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_client_cls.return_value.__enter__.return_value.get.return_value = mock_resp
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+        mock_client_cls.return_value.get.return_value = mock_resp
 
         result = _check_tomorrow_io()
         assert result["status"] == "down"
@@ -110,7 +104,7 @@ class TestCheckTomorrowIo:
     @patch("py._status.get_api_key")
     def test_down_on_exception(self, mock_key):
         mock_key.return_value = "test-key"
-        with patch("py._status.httpx.Client", side_effect=Exception("Network error")):
+        with patch("py._status.get_http_client", side_effect=Exception("Network error")):
             result = _check_tomorrow_io()
         assert result["status"] == "down"
         assert "Network error" not in result["message"]
@@ -130,47 +124,41 @@ class TestCheckTomorrowIo:
 
 
 class TestCheckOpenMeteo:
-    @patch("py._status.httpx.Client")
+    @patch("py._status.get_http_client")
     def test_operational_on_200_with_data(self, mock_client_cls):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"current": {"temperature_2m": 25.0}}
-        mock_client_cls.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_client_cls.return_value.__enter__.return_value.get.return_value = mock_resp
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+        mock_client_cls.return_value.get.return_value = mock_resp
 
         result = _check_open_meteo()
         assert result["status"] == "operational"
         assert "Responding normally" in result["message"]
 
-    @patch("py._status.httpx.Client")
+    @patch("py._status.get_http_client")
     def test_degraded_on_missing_data(self, mock_client_cls):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"current": {}}  # missing temperature_2m
-        mock_client_cls.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_client_cls.return_value.__enter__.return_value.get.return_value = mock_resp
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+        mock_client_cls.return_value.get.return_value = mock_resp
 
         result = _check_open_meteo()
         assert result["status"] == "degraded"
         assert "missing expected data" in result["message"]
 
-    @patch("py._status.httpx.Client")
+    @patch("py._status.get_http_client")
     def test_down_on_non_200(self, mock_client_cls):
         mock_resp = MagicMock()
         mock_resp.status_code = 503
         mock_resp.reason_phrase = "Service Unavailable"
-        mock_client_cls.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_client_cls.return_value.__enter__.return_value.get.return_value = mock_resp
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+        mock_client_cls.return_value.get.return_value = mock_resp
 
         result = _check_open_meteo()
         assert result["status"] == "down"
         assert "503" in result["message"]
 
     def test_down_on_exception(self):
-        with patch("py._status.httpx.Client", side_effect=Exception("Connection timeout")):
+        with patch("py._status.get_http_client", side_effect=Exception("Connection timeout")):
             result = _check_open_meteo()
         assert result["status"] == "down"
         assert "Connection timeout" not in result["message"]
@@ -218,7 +206,7 @@ class TestCheckAnthropic:
     def test_does_not_spend_tokens(self):
         """No live Anthropic request should ever be made (no token spend)."""
         with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}):
-            with patch("py._status.httpx.Client") as mock_client_cls:
+            with patch("py._status.get_http_client") as mock_client_cls:
                 result = _check_anthropic()
         mock_client_cls.assert_not_called()
         assert result["status"] == "operational"
@@ -386,3 +374,49 @@ class TestSystemStatus:
         # Each check ran exactly once despite two endpoint calls.
         for m in [mock_mongo, mock_tomorrow, mock_meteo, mock_anthro, mock_weather, mock_ai]:
             assert m.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# _result / cache-count message shape
+# ---------------------------------------------------------------------------
+
+
+class TestResultHelper:
+    def test_row_shape(self):
+        from py._status import _result
+
+        row = _result("Thing", "operational", 0.0, "ok")
+        assert set(row) == {"name", "status", "latencyMs", "message"}
+        assert row["name"] == "Thing"
+        assert row["status"] == "operational"
+        assert row["message"] == "ok"
+        assert isinstance(row["latencyMs"], int)
+
+
+class TestCacheCountMessages:
+    @patch("py._status.get_db")
+    def test_singular_location(self, mock_db):
+        mock_db.return_value.__getitem__.return_value.count_documents.return_value = 1
+        assert _check_weather_cache()["message"] == "1 active cached location"
+
+    @patch("py._status.get_db")
+    def test_plural_locations(self, mock_db):
+        mock_db.return_value.__getitem__.return_value.count_documents.return_value = 3
+        assert _check_weather_cache()["message"] == "3 active cached locations"
+
+    @patch("py._status.get_db")
+    def test_summary_singular_and_plural(self, mock_db):
+        from py._status import _check_ai_cache
+
+        coll = mock_db.return_value.__getitem__.return_value
+        coll.count_documents.return_value = 1
+        assert _check_ai_cache()["message"] == "1 active cached summary"
+        coll.count_documents.return_value = 2
+        assert _check_ai_cache()["message"] == "2 active cached summaries"
+
+    @patch("py._status.get_db")
+    def test_empty_is_degraded(self, mock_db):
+        mock_db.return_value.__getitem__.return_value.count_documents.return_value = 0
+        result = _check_weather_cache()
+        assert result["status"] == "degraded"
+        assert result["message"].startswith("Cache is empty")

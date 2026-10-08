@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,6 +13,9 @@ from py._db import (
     get_client_ip,
     check_rate_limit,
     filter_known_activities,
+    ttl_filter,
+    ttl_find_one,
+    ttl_upsert,
     is_valid_coords,
 )
 
@@ -277,6 +281,95 @@ class TestGetActivitiesBrief:
 
 
 # ---------------------------------------------------------------------------
+# TTL cache helpers — ttl_filter / ttl_find_one / ttl_upsert
+# ---------------------------------------------------------------------------
+
+
+
+class TestTtlFilter:
+    def test_unexpired_by_default(self):
+        before = datetime.now(timezone.utc)
+        f = ttl_filter({"_id": "k"})
+        assert f["_id"] == "k"
+        assert f["expiresAt"]["$gt"] >= before
+
+    def test_allow_stale_drops_expiry_clause(self):
+        assert ttl_filter({"_id": "k"}, allow_stale=True) == {"_id": "k"}
+
+    def test_does_not_mutate_input(self):
+        original = {"_id": "k"}
+        ttl_filter(original)
+        assert original == {"_id": "k"}
+
+
+class TestTtlFindOne:
+    def test_scopes_to_unexpired_docs(self):
+        coll = MagicMock()
+        coll.find_one.return_value = {"_id": "k"}
+        assert ttl_find_one(coll, {"_id": "k"}) == {"_id": "k"}
+        query, projection = coll.find_one.call_args.args
+        assert query["_id"] == "k"
+        assert "$gt" in query["expiresAt"]
+        assert projection is None
+
+    def test_allow_stale_has_no_expiry_clause(self):
+        coll = MagicMock()
+        ttl_find_one(coll, {"_id": "k"}, allow_stale=True)
+        query, _ = coll.find_one.call_args.args
+        assert query == {"_id": "k"}
+
+    def test_passes_projection_through(self):
+        coll = MagicMock()
+        ttl_find_one(coll, {"_id": "k"}, projection={"tile": 1})
+        assert coll.find_one.call_args.args[1] == {"tile": 1}
+
+    def test_errors_propagate_to_caller(self):
+        """Callers decide whether a cache failure is a miss (some must 503 on accessor errors)."""
+        coll = MagicMock()
+        coll.find_one.side_effect = RuntimeError("db down")
+        with pytest.raises(RuntimeError):
+            ttl_find_one(coll, {"_id": "k"})
+
+
+class TestTtlUpsert:
+    def test_upserts_by_filter_with_ttl_window(self):
+        coll = MagicMock()
+        ttl_upsert(coll, {"_id": "k"}, {"_id": "k", "v": 1}, ttl_seconds=3600)
+        filt = coll.update_one.call_args.args[0]
+        update = coll.update_one.call_args.args[1]
+        assert coll.update_one.call_args.kwargs == {"upsert": True}
+        assert filt == {"_id": "k"}
+        doc = update["$set"]
+        assert doc["_id"] == "k" and doc["v"] == 1
+        assert (doc["expiresAt"] - doc["fetchedAt"]).total_seconds() == 3600
+
+    def test_no_stamp_leaves_platform_fields_off(self):
+        coll = MagicMock()
+        ttl_upsert(coll, {"_id": "k"}, {"_id": "k"}, ttl_seconds=60)
+        doc = coll.update_one.call_args.args[1]["$set"]
+        assert "_schemaVersion" not in doc
+        assert "bundu" not in doc
+
+    def test_stamp_adds_platform_fields_with_country(self):
+        coll = MagicMock()
+        ttl_upsert(coll, {"_id": "k"}, {"_id": "k"}, ttl_seconds=60, stamp=True, country_code="KE")
+        doc = coll.update_one.call_args.args[1]["$set"]
+        assert doc["_id"] == "k"  # preserved, not replaced by a UUID
+        assert doc["_schemaVersion"] == "v3.1"
+        assert doc["bundu"]["countryCode"] == "KE"
+        assert "createdAt" in doc and "updatedAt" in doc
+
+    def test_stamp_defaults_to_zimbabwe(self):
+        coll = MagicMock()
+        ttl_upsert(coll, {"_id": "k"}, {"_id": "k"}, ttl_seconds=60, stamp=True)
+        assert coll.update_one.call_args.args[1]["$set"]["bundu"]["countryCode"] == "ZW"
+
+    def test_errors_propagate_to_caller(self):
+        coll = MagicMock()
+        coll.update_one.side_effect = RuntimeError("write failed")
+        with pytest.raises(RuntimeError):
+            ttl_upsert(coll, {"_id": "k"}, {"_id": "k"}, ttl_seconds=60)
+
 # enforce_rate_limit — shared IP resolve + limiter + 429 for every endpoint
 # ---------------------------------------------------------------------------
 
