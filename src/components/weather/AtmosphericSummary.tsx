@@ -8,6 +8,12 @@ import type {
   DailyWeather,
   WeatherData,
 } from "@/lib/weather";
+import {
+  currentWallHourMs,
+  locationDateString,
+  resolveOffsetSeconds,
+  wallClockMs,
+} from "@/lib/location-time";
 import { SectionHeader } from "@/components/ui/section-header";
 import { LazySection } from "./LazySection";
 import { ChartErrorBoundary } from "./ChartErrorBoundary";
@@ -155,30 +161,35 @@ export function aqiTrendSentence(
   }
 }
 
-/** Local wall-clock prefix (YYYY-MM-DDTHH) used to find the current hour. */
-function localHourPrefix(now: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}`;
-}
-
-/** Hourly precipitation (mm) for the next 24 slots from the current hour. */
+/**
+ * Hourly precipitation (mm) for the next 24 slots from the LOCATION's
+ * current hour (payload `utc_offset_seconds`; the viewer's clock is only a
+ * fallback for payloads that predate it).
+ */
 export function next24hPrecipSeries(
   hourly: HourlyWeather | undefined,
   now: Date,
+  offsetSeconds?: number | null,
 ): number[] {
   const times = hourly?.time ?? [];
-  const prefix = localHourPrefix(now);
-  const start = times.findIndex((t) => t >= prefix);
+  const offset = resolveOffsetSeconds(offsetSeconds, now);
+  const hourStart = currentWallHourMs(offset, now);
+  const start = times.findIndex((t) => {
+    const k = wallClockMs(t, offset);
+    return k !== null && k >= hourStart;
+  });
   if (start === -1) return [];
   return (hourly?.precipitation ?? [])
     .slice(start, start + 24)
     .map((v) => (Number.isFinite(v) ? v : 0));
 }
 
-/** Local calendar date (YYYY-MM-DD) for the normals request. */
-export function localIsoDate(now: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+/**
+ * The LOCATION's calendar date (YYYY-MM-DD) for the normals request. With
+ * no offset it falls back to the viewer's calendar day.
+ */
+export function localIsoDate(now: Date, offsetSeconds?: number | null): string {
+  return locationDateString(resolveOffsetSeconds(offsetSeconds, now), now);
 }
 
 /** Today's forecast high, or null when the daily series is empty. */
@@ -233,13 +244,17 @@ type NormalState =
   | { status: "ready"; normalHigh: number | null };
 
 /** ERA5 1991–2020 normal high for today at this place (null if unavailable). */
-function useNormalHigh(lat: number | undefined, lon: number | undefined) {
+function useNormalHigh(
+  lat: number | undefined,
+  lon: number | undefined,
+  offsetSeconds?: number,
+) {
   const [state, setState] = useState<NormalState>({ status: "loading" });
 
   useEffect(() => {
     if (typeof lat !== "number" || typeof lon !== "number") return;
     const controller = new AbortController();
-    const date = localIsoDate(new Date());
+    const date = localIsoDate(new Date(), offsetSeconds);
     fetch(`/api/py/normals?lat=${lat}&lon=${lon}&date=${date}`, {
       signal: controller.signal,
     })
@@ -262,7 +277,7 @@ function useNormalHigh(lat: number | undefined, lon: number | undefined) {
         }
       });
     return () => controller.abort();
-  }, [lat, lon]);
+  }, [lat, lon, offsetSeconds]);
 
   return state;
 }
@@ -380,13 +395,17 @@ export function AtmosphericSummary({
   };
   const now = new Date();
   const hasCoords = typeof lat === "number" && typeof lon === "number";
-  const normals = useNormalHigh(lat, lon);
+  const normals = useNormalHigh(lat, lon, data.utc_offset_seconds);
 
   const wind = windInsight(data, now);
   const uv = uvInsight(data, now);
   const feels = feelsLikeInsight(data);
   const rain = precipitationInsight(data, now);
-  const rainSeries = next24hPrecipSeries(data.hourly, now);
+  const rainSeries = next24hPrecipSeries(
+    data.hourly,
+    now,
+    data.utc_offset_seconds,
+  );
   const visibility = visibilityInsight(data, now);
   const humidity = humidityInsight(data);
   const pressure = pressureInsight(data, now);

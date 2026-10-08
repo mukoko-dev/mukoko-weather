@@ -41,9 +41,16 @@ describe("HourlyScrollCards — hour slicing", () => {
     expect(source).toContain("start + 24");
   });
 
-  it("finds the start index from current hour", () => {
-    expect(source).toContain("currentHour");
-    expect(source).toContain("findIndex");
+  it("finds the start index from the LOCATION's current hour", () => {
+    expect(source).toContain("currentHourIndex(hourly.time, offset)");
+    expect(source).toContain("resolveOffsetSeconds(utcOffsetSeconds)");
+    // Never the viewer's clock.
+    expect(source).not.toContain("getHours()");
+    expect(source).not.toContain("toLocaleTimeString");
+  });
+
+  it("labels hours on the location's clock", () => {
+    expect(source).toContain("locationClockLabel(time, offset)");
   });
 
   it('labels the first item as "Now"', () => {
@@ -57,7 +64,9 @@ describe("HourlyScrollCards — deterministic render (no #418)", () => {
     // The current-hour slice must only apply once hydrated; SSR + first client
     // render start at index 0 so the HTML matches and there is no text mismatch.
     expect(source).toContain("hydrated");
-    expect(source).toContain("startIndex = hydrated");
+    expect(source).toContain(
+      "start = hydrated ? currentHourIndex(hourly.time, offset) : 0",
+    );
   });
 
   it('only shows the "Now" label after hydration', () => {

@@ -90,7 +90,10 @@ export function AtmosphereDashboard({
           <LazySection label="atmospheric-details">
             <ChartErrorBoundary name="atmospheric details charts">
               <Suspense fallback={<SectionSkeleton />}>
-                <AtmosphericDetails hourly={weather.hourly} />
+                <AtmosphericDetails
+                  hourly={weather.hourly}
+                  utcOffsetSeconds={weather.utc_offset_seconds}
+                />
               </Suspense>
             </ChartErrorBoundary>
           </LazySection>

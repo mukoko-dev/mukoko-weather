@@ -341,6 +341,41 @@ def _utc_offset(data: dict) -> int | None:
     return int(value)
 
 
+def _estimate_utc_offset(lon: float) -> int:
+    """Solar-meridian UTC offset estimate (15° per hour, quarter-hour steps).
+
+    Last resort only — used when no provider supplied ``utc_offset_seconds``
+    (Tomorrow.io carries none, the seasonal fallback has no provider at all,
+    and the keyless Open-Meteo extras call may also have failed). Mirrors
+    ``longitudeOffsetSeconds`` in ``src/lib/location-time.ts``.
+    """
+    try:
+        lon_f = float(lon)
+    except (TypeError, ValueError):
+        return 0
+    if lon_f != lon_f or lon_f in (float("inf"), float("-inf")):
+        return 0
+    return int(round(lon_f / 15 * 4)) * 900
+
+
+def _ensure_utc_offset(data: dict, lon: float) -> dict:
+    """Guarantee ``utc_offset_seconds`` on a weather payload.
+
+    Every consumer reads "the current hour" and hour labels in the LOCATION's
+    time zone (anyone, anywhere in the world can open any place), so the
+    offset must always be present. A provider value wins; otherwise a
+    longitude estimate is stamped with ``utc_offset_estimated: True``.
+    Returns a shallow copy when it has to add the field, so a cached object
+    is never mutated.
+    """
+    if _utc_offset(data) is not None:
+        return data
+    out = dict(data)
+    out["utc_offset_seconds"] = _estimate_utc_offset(lon)
+    out["utc_offset_estimated"] = True
+    return out
+
+
 def _parse_minutely(data: dict) -> dict | None:
     """Extract the next-hour precipitation nowcast from an Open-Meteo payload.
 
@@ -518,11 +553,20 @@ def _create_fallback_weather(lat: float, lon: float, elevation: int) -> dict:
     elevation_adj = max(0, (elevation - 1000)) * 0.006
     temp = round(temp - elevation_adj, 1)
 
-    now = datetime.now(timezone.utc).isoformat()
-    times = [(datetime.now(timezone.utc) + timedelta(hours=i)).isoformat() for i in range(24)]
-    daily_times = [(datetime.now(timezone.utc) + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
+    # No provider answered, so estimate the location's UTC offset from
+    # longitude. Times stay zoned instants (``+00:00``, unambiguous); day/night
+    # and the calendar dates are read on the LOCATION's wall clock, never the
+    # server's UTC.
+    offset = _estimate_utc_offset(lon)
+    now_dt = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    now = now_dt.isoformat()
+    times = [(now_dt + timedelta(hours=i)).isoformat() for i in range(24)]
+    local_now = now_dt + timedelta(seconds=offset)
+    daily_times = [(local_now + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
 
-    now_dt = datetime.now(timezone.utc)
+    def _local_hour(i: int) -> int:
+        return (local_now + timedelta(hours=i)).hour
+
     return {
         "current": {
             "time": now,
@@ -537,7 +581,7 @@ def _create_fallback_weather(lat: float, lon: float, elevation: int) -> dict:
             "surface_pressure": 1013,
             "cloud_cover": 30,
             "uv_index": 5,
-            "is_day": 1 if 6 <= now_dt.hour < 18 else 0,
+            "is_day": 1 if 6 <= local_now.hour < 18 else 0,
         },
         "hourly": {
             "time": times,
@@ -552,7 +596,7 @@ def _create_fallback_weather(lat: float, lon: float, elevation: int) -> dict:
             "surface_pressure": [1013] * 24,
             "cloud_cover": [30] * 24,
             "uv_index": [5] * 24,
-            "is_day": [1 if 6 <= (now_dt + timedelta(hours=i)).hour < 18 else 0 for i in range(24)],
+            "is_day": [1 if 6 <= _local_hour(i) < 18 else 0 for i in range(24)],
         },
         "daily": {
             "time": daily_times,
@@ -567,11 +611,14 @@ def _create_fallback_weather(lat: float, lon: float, elevation: int) -> dict:
             "wind_gusts_10m_max": [25] * 7,
             "wind_direction_10m_dominant": [180] * 7,
             "uv_index_max": [7] * 7,
-            "sunrise": ["06:00"] * 7,
-            "sunset": ["18:00"] * 7,
+            # Naive local wall-clock strings, same shape as Open-Meteo's.
+            "sunrise": [f"{d}T06:00" for d in daily_times],
+            "sunset": [f"{d}T18:00" for d in daily_times],
         },
         "current_units": dict(_CURRENT_UNITS),
         "insights": None,
+        "utc_offset_seconds": offset,
+        "utc_offset_estimated": True,
     }
 
 
@@ -909,6 +956,10 @@ async def get_weather(lat: float = -17.83, lon: float = 31.05, models: str | Non
             # Multi-model/minutely is a non-critical enhancement — never fail
             # the whole response because the extras call errored.
             pass
+
+    # The offset must ALWAYS be present (Tomorrow.io + failed extras, cached
+    # Tomorrow.io rows, StationKit overlays on either) — see _ensure_utc_offset.
+    data = _ensure_utc_offset(data or {}, lon)
 
     return JSONResponse(
         content=data,

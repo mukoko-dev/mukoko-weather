@@ -68,20 +68,26 @@ describe("CurrentConditions — centred hero structure", () => {
     expect(source).toContain("current.is_day === 1");
   });
 
-  it("reads the clock only after mount, so the server (UTC) and client never disagree", () => {
+  it("reads the clock only after mount, in the LOCATION's offset", () => {
     expect(source).toContain("requestAnimationFrame(() => setNow(new Date()))");
-    expect(source).toContain("now ? heroOutlook(hourly, now) : null");
+    expect(source).toContain(
+      "now ? heroOutlook(hourly, now, utcOffsetSeconds) : null",
+    );
   });
 
   it("renders the one-sentence outlook from the hourly series, with no AI call", () => {
-    expect(source).toContain("heroOutlook(hourly, now)");
+    expect(source).toContain("heroOutlook(hourly, now, utcOffsetSeconds)");
     expect(source).not.toMatch(/\/api\/py\/ai|fetch\(\s*["'`]\/api\/py\/ai/);
   });
 
   it("shows the top selected activity's rating through the activity clause helper", () => {
     expect(source).toContain("selectedActivities");
-    expect(source).toContain("feasibilitySeries(activity, hourly, dbRules)");
+    expect(source).toContain(
+      "feasibilitySeries(activity, hourly, dbRules, 24, utcOffsetSeconds, now)",
+    );
     expect(source).toContain("heroActivityClause(");
+    // The clause labels hours in the location's zone too.
+    expect(source).toContain("utcOffsetSeconds,\n      );");
     expect(source).toContain("activityDotClass(activity.category)");
   });
 

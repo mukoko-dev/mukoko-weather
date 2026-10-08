@@ -327,6 +327,8 @@ mukoko-weather/
 │   ├── hero.test.ts
 │   ├── hourly-summary.ts      # Deterministic one-sentence hourly outlook (Apple-style, no AI): first condition-group change + peak gusts
 │   │   ├── hourly-summary.test.ts
+│   ├── location-time.ts       # Location time zone: current-hour index + "HH:00" labels in the PLACE's offset (utc_offset_seconds), never the viewer's clock
+│   ├── location-time.test.ts  # Viewer UTC+8 → Harare, viewer UTC-5 → Singapore (process TZ really set)
 │   │   ├── weather-labels.ts      # Contextual label helpers (humidityLabel, pressureLabel, cloudLabel, feelsLikeContext)
 │   │   ├── weather-labels.test.ts
 │   │   ├── api-keys.ts            # Developer API keys — mk_live_ generation (CSPRNG), SHA-256 hashing, masking, owner-scoped CRUD in platform.apiKeys
@@ -584,13 +586,13 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 
 **Philosophy:** The main location page (`/[location]`) is a compact overview — current conditions, AI summary, activity insights, and metric cards. Detail-heavy sections (charts, atmospheric trends, hourly/daily forecasts) live on dedicated sub-route pages. This reduces initial page load weight and prevents mobile OOM crashes from mounting all components simultaneously.
 
-**Sub-route back-navigation:** `/[location]/atmosphere` and `/[location]/forecast` render the shared `Breadcrumb` component (`src/components/layout/Breadcrumb.tsx` — `Home / {location.name} / {current page}`) instead of each hand-rolling its own trail. `/[location]/map` is the full-screen exception: it renders no site header and no breadcrumb bar, because the map takes the whole viewport. Its back-navigation is a round close button in the top-left corner that links to `/{slug}`, with the legend for the active layer beneath it. Its top-right corner holds a stacked control (layers panel toggle, centre on my location) and a list button to `/locations`.
+**Sub-route back-navigation:** `/[location]/atmosphere` and `/[location]/forecast` render the shared `Breadcrumb` component (`src/components/layout/Breadcrumb.tsx` — `Home / {location.name} / {current page}`) instead of each hand-rolling its own trail. `/[location]/map` takes the whole viewport, so it renders no site header and no page-width breadcrumb bar. Its back-navigation is a round close button in the top-left corner that links to `/{slug}`, with the SAME shared `Breadcrumb` beside it as a compact overlay pill (`variant="overlay"` — `Home / {location.name} / Map`, solid `bg-surface-card` so it reads over tiles in light and dark, `--touch-target-min` tall links, the location name truncates rather than wrapping, `aria-current="page"` on Map). The close + trail row sits in a column that stops 7rem short of the right edge, so it never runs under the control stack; the legend for the active layer sits beneath it. Its top-right corner holds a stacked control (layers panel toggle, centre on my location) and a list button to `/locations`.
 
 - `/` — the CURRENT-LOCATION weather page itself (silent URL — see "CurrentLocationHome (Silent-URL Home)" below): server-seeded from the lastLocation cookie / IP geo, client GPS swaps the dashboard in place. No redirect exists, so current location precedes saved by construction; `/{slug}` URLs remain for saved/browsed locations
 - `/[location]` — dynamic weather pages — overview: current conditions, AI summary, activity insights, atmospheric metric cards
 - `/[location]/atmosphere` — 24-hour atmospheric detail charts (humidity, wind, pressure, UV) for a location
 - `/[location]/forecast` — hourly (24h) + daily (7-day) forecast charts + sunrise/sunset for a location
-- `/[location]/map` — full-screen interactive weather map (no header or breadcrumb): close button to `/{slug}`, legend, labelled chips for Air quality, Rain, Temperature, Wind and Cloud (default Rain, last choice remembered in localStorage), AQI bubbles for air quality, and a 3-hourly Now to +3 days timeline for rain
+- `/[location]/map` — full-screen interactive weather map (no header): close button to `/{slug}` plus the shared breadcrumb as a compact overlay (`Home / {location} / Map`), legend, labelled chips for Air quality, Rain, Temperature, Wind and Cloud (default Rain, last choice remembered in localStorage), AQI bubbles for air quality, and a 3-hourly Now to +3 days timeline for rain
 - `/shamwari` — Shamwari AI chat (full-viewport, Claude app style, input above mobile nav). **Paused** — `notFound()`s while `FLAGS.shamwari_chat` is `false` (see Feature Flags section)
 - `/explore` — browse locations by category and country (ISR 1h)
 - `/locations` — iOS Weather-style Locations list (noindex): current location first ("My Location"), then saved places as live weather cards (sky by condition, local time, H/L). The ⋯ menu sets Home or removes a place; the search bar opens My Weather's Location tab
@@ -819,6 +821,8 @@ Database seed data files are read by `/api/db-init` for one-time bootstrap:
 - `windDirection(degrees)` — compass direction
 - `uvLevel(index)` — UV severity level
 - `synthesizeOpenMeteoInsights(data)` — constructs a `WeatherInsights` object from Open-Meteo data (wind speed, gusts, visibility) for suitability evaluation
+
+**Location time (worldwide viewers):** anyone, anywhere can open any place, so every "current hour" and every hour label is read in the LOCATION's time zone — never the viewer's clock, never the server's UTC. `/api/py/weather` ALWAYS returns `utc_offset_seconds` (Open-Meteo's value, else the Open-Meteo extras call's, else a longitude estimate via `_ensure_utc_offset` stamped `utc_offset_estimated: true` — covers Tomorrow.io, cached rows, StationKit overlays and the seasonal fallback). `src/lib/location-time.ts` (`currentHourIndex`, `locationHourLabel`, `locationClockLabel`, `instantMs`, `locationDateString`) handles both naive Open-Meteo wall-clock strings and zoned Tomorrow.io/fallback instants. Consumers (hero outlook + activity clause, `feasibilitySeries`, activity tips, `CommunityLane`, `HourlyScrollCards`, hourly/atmospheric charts, `AtmosphericSummary` + `metric-insights`, `SunTimes`, `DailyForecast`, `checkFrostRisk`, the wall display) take the payload's offset. Never call `getHours()` / `toLocaleTimeString()` on a forecast time.
 
 **Weather labels:** `src/lib/weather-labels.ts` — extracted contextual label helpers for weather metrics:
 
@@ -1384,6 +1388,7 @@ Users can submit real-time ground-truth weather observations, similar to Waze fo
 _Library tests:_
 
 - `src/lib/weather.test.ts` — frost detection, season logic, wind direction, UV levels, fallback weather, synthesizeOpenMeteoInsights
+- `src/lib/location-time.test.ts` — location time zone: viewer UTC+8 → Harare (UTC+2) and viewer UTC-5 → Singapore (UTC+8) with the process TZ really set; start hour + labels across hero, feasibility, lane, charts, tips, frost, sun
 - `src/lib/weather-labels.test.ts` — humidity/pressure/cloud/precipitation/feels-like label helpers
 - `src/lib/locations.test.ts` — location searching, tag filtering, nearest location
 - `src/lib/activities.test.ts` — activity definitions, categories, search, filtering, category styles
@@ -1464,7 +1469,7 @@ _Page/component tests:_
 - `src/components/explore/ExploreChatbot.test.ts` — chatbot component tests, MarkdownErrorBoundary, contextual navigation
 - `src/components/explore/ExploreSearch.test.ts` — AI search structure, search flow, results rendering, Shamwari context
 - `src/components/embed/MukokoWeatherEmbed.test.ts` — widget rendering, data fetching
-- `src/components/layout/Breadcrumb.test.ts` — shared sub-route breadcrumb trail, aria-current, usage across atmosphere/forecast dashboards (the map is the full-screen exception)
+- `src/components/layout/Breadcrumb.test.ts` — shared sub-route breadcrumb trail, aria-current, usage across atmosphere/forecast dashboards and the map's compact overlay variant
 - `src/components/ui/chart-fallbacks.test.ts` — CSS fallback table key parity (light/dark sync)
 - `src/components/ui/primitives.test.ts` — UI primitive variants (StatusIndicator, CTACard, ToggleGroup, InfoRow, SectionHeader)
 - `src/components/weather/charts.test.ts` — chart data preparation (hourly + daily + atmospheric), hexWithAlpha

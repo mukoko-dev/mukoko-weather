@@ -383,7 +383,12 @@ export function WeatherDashboard({
                                   }}
                                   className="mb-2"
                                 />
-                                <HourlyScrollCards hourly={weather.hourly} />
+                                <HourlyScrollCards
+                                  hourly={weather.hourly}
+                                  utcOffsetSeconds={
+                                    weather.utc_offset_seconds
+                                  }
+                                />
                               </section>
                             </ChartErrorBoundary>
                           </DraggableSection>
@@ -401,6 +406,7 @@ export function WeatherDashboard({
                                 locationName={location.name}
                                 daily={weather.daily}
                                 hourly={weather.hourly}
+                                utcOffsetSeconds={weather.utc_offset_seconds}
                                 slug={location.slug}
                                 isCurrentLocation={isCurrentLocation}
                                 footer={<SeasonBadge season={season} />}

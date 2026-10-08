@@ -6,6 +6,7 @@
  */
 
 import type { HourlyWeather } from "./weather";
+import { locationHourLabel, resolveOffsetSeconds } from "./location-time";
 
 /** Hours of forecast the summary looks ahead. */
 export const SUMMARY_LOOKAHEAD_HOURS = 12;
@@ -62,8 +63,9 @@ const CONTINUE_PHRASE: Record<ConditionGroup, string> = {
   stormy: "Thunderstorms",
 };
 
-function hourLabel(iso: string): string {
-  return `${String(new Date(iso).getHours()).padStart(2, "0")}:00`;
+/** "HH:00" at the LOCATION — never the viewer's clock. */
+function hourLabel(iso: string, offsetSeconds: number): string {
+  return locationHourLabel(iso, offsetSeconds);
 }
 
 /**
@@ -76,7 +78,9 @@ function hourLabel(iso: string): string {
 export function hourlySummary(
   hourly: HourlyWeather,
   start: number,
+  offsetSeconds?: number | null,
 ): string | null {
+  const offset = resolveOffsetSeconds(offsetSeconds);
   const codes = hourly.weather_code;
   const times = hourly.time;
   if (!codes?.length || !times?.length || start < 0 || start >= codes.length)
@@ -98,7 +102,7 @@ export function hourlySummary(
 
   let sentence: string;
   if (changeIdx > 0) {
-    sentence = `${ARRIVAL_PHRASE[conditionGroup(codes[changeIdx])]} expected around ${hourLabel(times[changeIdx])}.`;
+    sentence = `${ARRIVAL_PHRASE[conditionGroup(codes[changeIdx])]} expected around ${hourLabel(times[changeIdx], offset)}.`;
   } else {
     sentence = `${CONTINUE_PHRASE[nowGroup]} will continue for the next ${end - start} hours.`;
   }

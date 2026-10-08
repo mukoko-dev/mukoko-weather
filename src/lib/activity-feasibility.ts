@@ -16,6 +16,11 @@ import {
 } from "./weather";
 import type { SuitabilityRuleDoc } from "./db";
 import { evaluateRule, type SuitabilityRating } from "./suitability";
+import {
+  currentHourIndex,
+  locationHourLabel,
+  resolveOffsetSeconds,
+} from "./location-time";
 
 export type SuitabilityLevel = SuitabilityRating["level"];
 
@@ -98,6 +103,8 @@ export function resolveRule(
 export interface FeasibilityPoint {
   /** ISO time of the hour */
   time: string;
+  /** "HH:00" at the LOCATION (its own time zone, not the viewer's) */
+  label?: string;
   /** 0–100 feasibility score */
   score: number;
   /** The rule level that produced the score */
@@ -115,18 +122,16 @@ export function feasibilitySeries(
   hourly: HourlyWeather | undefined,
   dbRules: Map<string, SuitabilityRuleDoc>,
   hours = 24,
+  offsetSeconds?: number | null,
+  now: Date = new Date(),
 ): FeasibilityPoint[] {
   const rule = resolveRule(activity, dbRules);
   if (!rule || !hourly?.time?.length) return [];
 
-  const now = new Date();
-  const currentHour = now.getHours();
-  const startIndex = hourly.time.findIndex(
-    (t) =>
-      new Date(t).getHours() >= currentHour &&
-      new Date(t).getDate() === now.getDate(),
-  );
-  const start = startIndex >= 0 ? startIndex : 0;
+  // Start at the LOCATION's current hour (payload `utc_offset_seconds`) —
+  // never the viewer's clock or the server's UTC.
+  const offset = resolveOffsetSeconds(offsetSeconds, now);
+  const start = currentHourIndex(hourly.time, offset, now);
 
   const points: FeasibilityPoint[] = [];
   for (let i = 0; i < hours && start + i < hourly.time.length; i++) {
@@ -134,6 +139,7 @@ export function feasibilitySeries(
     const rating = evaluateRule(rule, hourInsights(hourly, idx));
     points.push({
       time: hourly.time[idx],
+      label: locationHourLabel(hourly.time[idx], offset),
       score: LEVEL_SCORES[rating.level] ?? LEVEL_SCORES.fair,
       level: rating.level,
     });

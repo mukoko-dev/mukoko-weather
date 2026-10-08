@@ -15,6 +15,13 @@ import type { WeatherData, HourlyWeather, DailyWeather } from "./weather";
 import { windDirection, uvLevel } from "./weather";
 import { cloudLabel } from "./weather-labels";
 import { dewPointFromTempHumidity } from "./activity-feasibility";
+import {
+  hasZone,
+  nowWallClockMs,
+  wallClockMs,
+  wallNaiveIso,
+  weatherOffsetSeconds,
+} from "./location-time";
 
 // ---------------------------------------------------------------------------
 // Tunables
@@ -75,22 +82,84 @@ function wallKey(iso: string | undefined): number | null {
   return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
 }
 
-/** Wall-clock key for a JS Date using its local components. */
+/**
+ * Time zone. Every exported insight that takes `now` first calls
+ * `locationFrame(w, now)`, which (a) rewrites any zoned forecast strings
+ * (Tomorrow.io "…Z", fallback "…+00:00") as naive wall-clock strings at the
+ * LOCATION, and (b) turns `now` into a "wall Date" — the location's wall
+ * clock encoded as UTC. The helpers below therefore read `now` with UTC
+ * getters and the strings with a plain regex: both are the place's own
+ * time, never the viewer's or the server's.
+ */
+const framedTimes = new WeakMap<WeatherData, Map<number, WeatherData>>();
+
+function localizeSeries(
+  arr: readonly string[] | undefined,
+  offset: number,
+): string[] | undefined {
+  if (!arr || !arr.some((t) => typeof t === "string" && hasZone(t)))
+    return arr as string[] | undefined;
+  return arr.map((t) => {
+    if (typeof t !== "string" || !hasZone(t)) return t;
+    const k = wallClockMs(t, offset);
+    return k === null ? t : wallNaiveIso(k);
+  });
+}
+
+function locationFrame(w: WeatherData, now: Date): [WeatherData, Date] {
+  const offset = weatherOffsetSeconds(w, now);
+  const wallNow = new Date(nowWallClockMs(offset, now));
+  if (!w) return [w, wallNow];
+  let byOffset = framedTimes.get(w);
+  let framed = byOffset?.get(offset);
+  if (!framed) {
+    framed = w;
+    const hourlyTime = localizeSeries(w.hourly?.time, offset);
+    const sunrise = localizeSeries(w.daily?.sunrise, offset);
+    const sunset = localizeSeries(w.daily?.sunset, offset);
+    const dailyTime = localizeSeries(w.daily?.time, offset);
+    if (
+      hourlyTime !== w.hourly?.time ||
+      sunrise !== w.daily?.sunrise ||
+      sunset !== w.daily?.sunset ||
+      dailyTime !== w.daily?.time
+    ) {
+      framed = {
+        ...w,
+        hourly: w.hourly && { ...w.hourly, time: hourlyTime ?? [] },
+        daily: w.daily && {
+          ...w.daily,
+          time: dailyTime ?? [],
+          sunrise: sunrise ?? [],
+          sunset: sunset ?? [],
+        },
+      };
+    }
+    if (!byOffset) {
+      byOffset = new Map();
+      framedTimes.set(w, byOffset);
+    }
+    byOffset.set(offset, framed);
+  }
+  return [framed, wallNow];
+}
+
+/** Wall-clock key for a wall Date (see `locationFrame`). */
 function nowWallKey(now: Date): number {
   return Date.UTC(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    now.getHours(),
-    now.getMinutes(),
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    now.getUTCHours(),
+    now.getUTCMinutes(),
   );
 }
 
-/** "YYYY-MM-DD" for the local calendar day of `now`. */
+/** "YYYY-MM-DD" for the location's calendar day of a wall Date. */
 function localDateString(now: Date): string {
-  const y = String(now.getFullYear()).padStart(4, "0");
-  const mo = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
+  const y = String(now.getUTCFullYear()).padStart(4, "0");
+  const mo = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(now.getUTCDate()).padStart(2, "0");
   return `${y}-${mo}-${d}`;
 }
 
@@ -220,6 +289,7 @@ export function windInsight(
   w: WeatherData,
   now: Date = new Date(),
 ): WindInsight {
+  [w, now] = locationFrame(w, now);
   const c = w?.current;
   const hourly = w?.hourly;
   const idx = currentIndex(hourly, now);
@@ -307,6 +377,7 @@ function uvLabel(v: number): string {
 }
 
 export function uvInsight(w: WeatherData, now: Date): UvInsight {
+  [w, now] = locationFrame(w, now);
   const c = w?.current;
   const hourly = w?.hourly;
   const idx = currentIndex(hourly, now);
@@ -471,7 +542,11 @@ function dayLabel(daily: DailyWeather, i: number, now: Date): string | null {
   const m = DATE_RE.exec(iso);
   if (!m) return null;
   const target = Date.UTC(+m[1], +m[2] - 1, +m[3]);
-  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+  );
   const diffDays = Math.round((target - today) / 86_400_000);
   if (diffDays === 0) return "today";
   if (diffDays === 1) return "tomorrow";
@@ -482,6 +557,7 @@ export function precipitationInsight(
   w: WeatherData,
   now: Date,
 ): PrecipitationInsight {
+  [w, now] = locationFrame(w, now);
   const hourly = w?.hourly ?? ({} as HourlyWeather);
   const daily = w?.daily ?? ({} as DailyWeather);
   const idx = currentIndex(hourly, now);
@@ -586,6 +662,7 @@ export function visibilityInsight(
   w: WeatherData,
   now: Date,
 ): VisibilityInsight {
+  [w, now] = locationFrame(w, now);
   const hourly = w?.hourly;
   const idx = currentIndex(hourly, now);
   const metres = at(hourly?.visibility, idx);
@@ -687,6 +764,7 @@ export interface PressureInsight {
 }
 
 export function pressureInsight(w: WeatherData, now: Date): PressureInsight {
+  [w, now] = locationFrame(w, now);
   const hourly = w?.hourly;
   const idx = currentIndex(hourly, now);
   const current =
@@ -746,12 +824,13 @@ function minutesOfDay(iso: string | undefined): number | null {
 }
 
 export function sunInsight(w: WeatherData, now: Date): SunInsight {
+  [w, now] = locationFrame(w, now);
   const daily = w?.daily ?? ({} as DailyWeather);
   const today = localDateString(now);
   const dayIdx = (daily.time ?? []).findIndex(
     (t) => typeof t === "string" && t.startsWith(today),
   );
-  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
 
   const riseIso = dayIdx >= 0 ? daily.sunrise?.[dayIdx] : undefined;
   const setIso = dayIdx >= 0 ? daily.sunset?.[dayIdx] : undefined;
@@ -828,6 +907,7 @@ export interface CloudInsight {
 }
 
 export function cloudInsight(w: WeatherData, now: Date): CloudInsight {
+  [w, now] = locationFrame(w, now);
   const hourly = w?.hourly;
   const idx = currentIndex(hourly, now);
   const value = Math.round(

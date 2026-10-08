@@ -8,6 +8,11 @@
 
 import type { HourlyWeather } from "./weather";
 import { hourlySummary } from "./hourly-summary";
+import {
+  currentHourIndex as locationCurrentHourIndex,
+  locationHourLabel,
+  resolveOffsetSeconds,
+} from "./location-time";
 
 /** Eyebrow badges shown above the place name, in display order. */
 export type HeroBadge = "current" | "home";
@@ -132,15 +137,21 @@ export function activityDotClass(category: string): string {
   return ACTIVITY_DOT_CLASS[category] ?? "bg-mineral-copper";
 }
 
-/** Index of the current hour in an hourly series (same rule as feasibility). */
-export function currentHourIndex(times: string[], now: Date): number {
-  const hour = now.getHours();
-  const day = now.getDate();
-  const idx = times.findIndex((t) => {
-    const d = new Date(t);
-    return d.getHours() >= hour && d.getDate() === day;
-  });
-  return idx >= 0 ? idx : 0;
+/**
+ * Index of the LOCATION's current hour in an hourly series (same rule as
+ * feasibility). `offsetSeconds` is the payload's `utc_offset_seconds`; the
+ * viewer's clock is only a fallback for payloads that predate it.
+ */
+export function currentHourIndex(
+  times: string[],
+  now: Date,
+  offsetSeconds?: number | null,
+): number {
+  return locationCurrentHourIndex(
+    times,
+    resolveOffsetSeconds(offsetSeconds, now),
+    now,
+  );
 }
 
 /**
@@ -150,9 +161,15 @@ export function currentHourIndex(times: string[], now: Date): number {
 export function heroOutlook(
   hourly: HourlyWeather | undefined,
   now: Date,
+  offsetSeconds?: number | null,
 ): string | null {
   if (!hourly?.time?.length) return null;
-  return hourlySummary(hourly, currentHourIndex(hourly.time, now));
+  const offset = resolveOffsetSeconds(offsetSeconds, now);
+  return hourlySummary(
+    hourly,
+    currentHourIndex(hourly.time, now, offset),
+    offset,
+  );
 }
 
 /** One point of a per-activity 24h suitability series. */
@@ -161,10 +178,8 @@ export interface ActivityLevelPoint {
   level: "excellent" | "good" | "fair" | "poor";
 }
 
-function hourClock(iso: string): string | null {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return `${String(d.getHours()).padStart(2, "0")}:00`;
+function hourClock(iso: string, offsetSeconds: number): string | null {
+  return locationHourLabel(iso, offsetSeconds) || null;
 }
 
 /**
@@ -175,12 +190,16 @@ function hourClock(iso: string): string | null {
  */
 export function heroActivityClause(
   points: ActivityLevelPoint[],
+  offsetSeconds?: number | null,
 ): string | null {
   if (!points.length) return null;
   const now = points[0].level;
   const change = points.findIndex((p, i) => i > 0 && p.level !== now);
   if (change > 0) {
-    const clock = hourClock(points[change].time);
+    const clock = hourClock(
+      points[change].time,
+      resolveOffsetSeconds(offsetSeconds),
+    );
     if (clock) return `${now} until ${clock}`;
   }
   return `${now} for the next ${points.length} hours`;

@@ -34,6 +34,9 @@ interface Props {
   daily?: DailyWeather;
   /** Hourly forecast — powers the one-sentence outlook and the activity clause. */
   hourly?: HourlyWeather;
+  /** The location's UTC offset (payload `utc_offset_seconds`) — the outlook
+   *  and activity clause read "now" and hour labels in the PLACE's time. */
+  utcOffsetSeconds?: number;
   slug?: string;
   /** GPS-confirmed current location (silent-URL home) — shows the
    *  MY LOCATION eyebrow above the location name. */
@@ -82,6 +85,7 @@ export function CurrentConditions({
   locationName,
   daily,
   hourly,
+  utcOffsetSeconds,
   slug,
   isCurrentLocation = false,
   footer,
@@ -138,8 +142,8 @@ export function CurrentConditions({
   }, [hasSelection]);
 
   const outlook = useMemo(
-    () => (now ? heroOutlook(hourly, now) : null),
-    [hourly, now],
+    () => (now ? heroOutlook(hourly, now, utcOffsetSeconds) : null),
+    [hourly, now, utcOffsetSeconds],
   );
 
   // "For your activities": the first selected activity with a readable series.
@@ -149,7 +153,8 @@ export function CurrentConditions({
       const activity = getActivityById(id);
       if (!activity) continue;
       const clause = heroActivityClause(
-        feasibilitySeries(activity, hourly, dbRules),
+        feasibilitySeries(activity, hourly, dbRules, 24, utcOffsetSeconds, now),
+        utcOffsetSeconds,
       );
       if (clause) {
         return {
@@ -160,7 +165,14 @@ export function CurrentConditions({
       }
     }
     return null;
-  }, [now, hourly, hasSelection, selectedActivities, dbRules]);
+  }, [
+    now,
+    hourly,
+    hasSelection,
+    selectedActivities,
+    dbRules,
+    utcOffsetSeconds,
+  ]);
 
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
