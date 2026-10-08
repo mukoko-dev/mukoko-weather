@@ -15,7 +15,7 @@ from fastapi import APIRouter
 
 from ._db import get_db, get_api_key, ttl_filter
 from ._http import get_http_client
-from ._ai_gateway import DEFAULT_GATEWAY_ID, ai_configured, resolve_model
+from ._ai_gateway import DEFAULT_GATEWAY_ID, missing_ai_config, resolve_model
 from ._circuit_breaker import ai_breaker
 
 router = APIRouter()
@@ -137,8 +137,15 @@ def _check_ai_gateway() -> dict:
     name = "Shamwari AI (Cloudflare AI Gateway)"
     start = time.time()
 
-    if not ai_configured():
-        return _result(name, "degraded", start, "AI gateway not configured — basic summary fallback active")
+    missing = missing_ai_config()
+    if missing:
+        # Env var NAMES only — never values.
+        return _result(
+            name,
+            "degraded",
+            start,
+            f"AI gateway not configured (missing {', '.join(missing)}) — basic summary fallback active",
+        )
 
     gateway = (os.environ.get("AI_GATEWAY_ID") or "").strip() or DEFAULT_GATEWAY_ID
     if not ai_breaker.is_allowed:

@@ -3,14 +3,17 @@ Shared AI plumbing for the Python backend — every model call goes through the
 Cloudflare AI Gateway named ``shamwari``.
 
 The gateway's OpenAI-compatible Unified API (``/compat/chat/completions``)
-fronts a GLM model hosted on Workers AI — no third-party provider key. Two
-Cloudflare API tokens are involved:
+fronts a GLM model hosted on Workers AI — no third-party provider key. One
+Cloudflare API token, ``CF_AI_API_TOKEN`` (*AI Gateway: Run* + *Workers AI:
+Read*), is sent in both auth headers:
 
-- ``CF_WORKERS_AI_TOKEN`` — provider auth (*Workers AI: Read*), sent as
-  ``Authorization: Bearer``.
-- ``AI_GATEWAY_TOKEN`` — gateway auth (*AI Gateway: Run*), sent as
-  ``cf-aig-authorization: Bearer``. Required because ``shamwari`` has
-  authentication switched on.
+- ``cf-aig-authorization: Bearer`` — gateway auth. Required because
+  ``shamwari`` has authentication switched on.
+- ``Authorization: Bearer`` — Workers AI provider auth.
+
+Per-header overrides let the two be split later: ``AI_GATEWAY_TOKEN`` (when
+set) replaces it for the gateway header, ``CF_WORKERS_AI_TOKEN`` for the
+provider header.
 
 - :func:`gateway_url` — the chat-completions URL, built from env.
 - :func:`gateway_headers` — request headers (``cf-aig-authorization``).
@@ -84,38 +87,66 @@ def _env(name: str) -> str:
     return (os.environ.get(name) or "").strip()
 
 
+# One Cloudflare API token (AI Gateway: Run + Workers AI: Read) for both
+# headers. The per-header names, when set, override it for their header.
+TOKEN_ENV = "CF_AI_API_TOKEN"
+GATEWAY_TOKEN_OVERRIDE_ENV = "AI_GATEWAY_TOKEN"
+PROVIDER_TOKEN_OVERRIDE_ENV = "CF_WORKERS_AI_TOKEN"
+
+
+def gateway_token() -> str:
+    """Token for ``cf-aig-authorization``: ``AI_GATEWAY_TOKEN`` if set, else ``CF_AI_API_TOKEN``."""
+    return _env(GATEWAY_TOKEN_OVERRIDE_ENV) or _env(TOKEN_ENV)
+
+
+def provider_token() -> str:
+    """Token for the provider ``Authorization``: ``CF_WORKERS_AI_TOKEN`` if set, else ``CF_AI_API_TOKEN``."""
+    return _env(PROVIDER_TOKEN_OVERRIDE_ENV) or _env(TOKEN_ENV)
+
+
 def gateway_headers() -> dict[str, str]:
     """Headers for a gateway request.
 
     ``Authorization`` carries the Workers AI provider token; ``cf-aig-authorization``
-    carries the gateway token. Each is sent only when its env var is set.
+    carries the gateway token. Each is sent only when a token resolves for it.
     """
     headers = {"Content-Type": "application/json"}
-    provider_token = _env("CF_WORKERS_AI_TOKEN")
-    if provider_token:
-        headers["Authorization"] = f"Bearer {provider_token}"
-    gateway_token = _env("AI_GATEWAY_TOKEN")
-    if gateway_token:
-        headers["cf-aig-authorization"] = f"Bearer {gateway_token}"
+    provider = provider_token()
+    if provider:
+        headers["Authorization"] = f"Bearer {provider}"
+    gateway = gateway_token()
+    if gateway:
+        headers["cf-aig-authorization"] = f"Bearer {gateway}"
     return headers
 
 
 _warned_unconfigured = False
 
 
-def ai_configured() -> bool:
-    """True when the gateway URL and both tokens are set.
+def missing_ai_config() -> list[str]:
+    """Names (never values) of the gateway config that is missing.
 
-    Logs one warning per process when they are not, so a missing config shows
-    up in the logs while the endpoints quietly use their fallbacks.
+    ``CF_AI_API_TOKEN`` alone covers both tokens; a header is only reported
+    missing when neither it nor that header's override is set.
     """
-    global _warned_unconfigured
     missing = []
     if gateway_url() is None:
         missing.append("CLOUDFLARE_ACCOUNT_ID (or AI_GATEWAY_URL)")
-    for name in ("CF_WORKERS_AI_TOKEN", "AI_GATEWAY_TOKEN"):
-        if not _env(name):
-            missing.append(name)
+    if not gateway_token():
+        missing.append(f"{TOKEN_ENV} (or {GATEWAY_TOKEN_OVERRIDE_ENV})")
+    if not provider_token():
+        missing.append(f"{TOKEN_ENV} (or {PROVIDER_TOKEN_OVERRIDE_ENV})")
+    return missing
+
+
+def ai_configured() -> bool:
+    """True when the gateway URL and both header tokens resolve.
+
+    Logs one warning per process when they do not, so a missing config shows
+    up in the logs while the endpoints quietly use their fallbacks.
+    """
+    global _warned_unconfigured
+    missing = missing_ai_config()
     if missing:
         if not _warned_unconfigured:
             logger.warning(

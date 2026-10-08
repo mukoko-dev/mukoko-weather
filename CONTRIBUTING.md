@@ -10,6 +10,8 @@ Thank you for your interest in contributing to mukoko weather. This project prov
 4. Create a feature branch: `git checkout -b feature/your-feature`
 5. Start the dev server: `npm run dev`
 
+AI features are optional locally: without the AI env vars every AI endpoint uses its fallback. To enable them, set `CLOUDFLARE_ACCOUNT_ID` and one server-only Cloudflare API token, `CF_AI_API_TOKEN` (AI Gateway: Run + Workers AI: Read), in `.env.local`. Never prefix it with `NEXT_PUBLIC_` or read it outside `api/py`.
+
 ## Development Workflow
 
 ### Branch Naming
