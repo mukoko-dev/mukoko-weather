@@ -19,9 +19,19 @@ on:
       - "src/lib/locations-global.ts"
       - "src/lib/icao-codes.ts"
       - ".github/workflows/workers.yml"
+  # The gate before a full deploy (workers-deploy.yml).
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to check. Empty = the caller's ref.
+        required: false
+        type: string
+        default: ""
 
+# The event name keeps a deploy's gate out of the push/PR group, so a push
+# can never cancel a gate that a deploy is waiting on.
 concurrency:
-  group: workers-${{ github.ref }}
+  group: workers-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -38,6 +48,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Install Rust (stable, wasm32)
         run: |
@@ -83,6 +95,8 @@ jobs:
         worker: [ai, forecast, internal-api, places, public-api, stations, aviation, jobs, tiles]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Install Rust (stable, wasm32)
         run: |
