@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import {
   deriveCeilingFt,
   deriveCloudBaseFt,
@@ -72,5 +74,33 @@ describe("summarizeCloudCover", () => {
 
   it("falls back to the raw code for unknown covers", () => {
     expect(summarizeCloudCover(layers(["XYZ", 1000]))).toBe("XYZ");
+  });
+});
+
+describe("AviationWeather — station chip row layout stability", () => {
+  const src = readFileSync(resolve(__dirname, "AviationWeather.tsx"), "utf-8");
+  const pickerStart = src.indexOf('aria-label="Nearby aviation stations"');
+  const pickerOpen = src.lastIndexOf("<div", pickerStart);
+  const pickerClass = src.slice(pickerOpen, pickerStart);
+
+  it("reserves the touch-target height on the chip row so it cannot reflow the card", () => {
+    expect(pickerClass).toContain("min-h-[var(--touch-target-min)]");
+  });
+
+  it("keeps the chip row on one line (no wrap) so the DB-backed list can't change its height", () => {
+    expect(pickerClass).not.toContain("flex-wrap");
+    expect(pickerClass).toContain("overflow-x-auto");
+  });
+
+  it("stops each chip from shrinking or wrapping inside the row", () => {
+    expect(src).toContain("${base} ${cls} shrink-0");
+  });
+
+  it("the touch-target token it references is defined in globals.css", () => {
+    const css = readFileSync(
+      resolve(__dirname, "../../app/globals.css"),
+      "utf-8",
+    );
+    expect(css).toMatch(/--touch-target-min:\s*48px/);
   });
 });

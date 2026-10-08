@@ -1,10 +1,14 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { WeatherIcon, nightIcon } from "@/lib/weather-icons";
 import { weatherCodeToInfo, type HourlyWeather } from "@/lib/weather";
 import { hourlySummary } from "@/lib/hourly-summary";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { useHydrated } from "@/lib/use-hydrated";
+
+/** Accessible name for the focusable horizontal scroll region. */
+export const HOURLY_SCROLL_LABEL = "Hourly forecast, scroll horizontally";
 
 interface Props {
   hourly: HourlyWeather;
@@ -39,6 +43,20 @@ export function HourlyScrollCards({ hourly }: Props) {
   // strip itself: the sentence depends on the client's wall clock.
   const summary = hydrated ? hourlySummary(hourly, start) : null;
 
+  // The horizontal scroller is Radix's Viewport, which ScrollArea doesn't let
+  // us attribute directly. Keyboard users need it focusable (axe:
+  // scrollable-region-focusable), so set the focus/landmark attributes on the
+  // viewport element once it mounts. Radix never manages these attributes, so
+  // they survive re-renders.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const viewport = scrollRef.current;
+    if (!viewport) return;
+    viewport.tabIndex = 0;
+    viewport.setAttribute("role", "region");
+    viewport.setAttribute("aria-label", HOURLY_SCROLL_LABEL);
+  }, []);
+
   return (
     <div className="baobab overflow-hidden p-3">
       {summary && (
@@ -46,7 +64,7 @@ export function HourlyScrollCards({ hourly }: Props) {
           {summary}
         </p>
       )}
-      <ScrollArea className="w-full" type="hover">
+      <ScrollArea className="w-full" type="hover" viewportRef={scrollRef}>
         <div
           className="flex gap-2.5 pb-2 [overscroll-behavior-x:contain]"
           role="list"
