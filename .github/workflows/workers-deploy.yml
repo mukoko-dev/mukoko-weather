@@ -1,0 +1,194 @@
+# Deploys the Rust Workers in workers/ by hand only: Actions → Workers deploy
+# → Run workflow. Nothing here runs on push.
+#
+# Deploy order follows the service bindings, so every Worker that others bind
+# to is live before them:
+#
+#   1. forecast, aviation, places, stations, tiles   (bind to no Worker)
+#   2. ai, internal-api, jobs                        (bind to forecast)
+#   3. public-api                                    (binds to forecast,
+#                                                     aviation, places, ai)
+#
+# The wrangler configs define no `env.*` blocks, so `production` is the only
+# environment: each Worker deploys from its top-level config. If a config
+# gains an env block, add it to the `environment` options and the deploy step
+# passes `--env` for it.
+#
+# Uses the repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID,
+# passed to wrangler as env. The Workers' runtime secrets (TOMORROW_API_KEY,
+# NYUCHI_API_KEY, WEATHER_SERVICE_API_KEY, CHECKWX_API_KEY) live on the
+# Workers, never here (workers/README.md, "Owner steps").
+#
+# The legacy worker/ (nyuchi-weather-api) is deliberately not deployed: its
+# wrangler.toml still has placeholder KV ids and no such Worker exists.
+name: Workers deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      worker:
+        description: Which Worker to deploy (all = every Worker, in binding order)
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - forecast
+          - aviation
+          - places
+          - stations
+          - tiles
+          - ai
+          - internal-api
+          - jobs
+          - public-api
+      environment:
+        description: Where to deploy
+        required: true
+        type: choice
+        default: production
+        options: [production]
+      ref:
+        description: Git ref to deploy (branch, tag or SHA). Empty = the ref this run was started from.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workers-deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  # The same fmt / clippy / test / build gate as push and PR runs, before a
+  # full deploy.
+  gate:
+    name: Gate (workers.yml)
+    if: inputs.worker == 'all'
+    uses: ./.github/workflows/workers.yml
+    with:
+      ref: ${{ inputs.ref }}
+
+  deploy:
+    name: Deploy ${{ inputs.worker }} (${{ inputs.environment }})
+    needs: gate
+    # Run when the gate passed, or was skipped for a single-Worker deploy.
+    if: ${{ !cancelled() && (needs.gate.result == 'success' || needs.gate.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: workers-${{ inputs.environment }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER_VERSION: 4.138.0
+      WORKER_BUILD_VERSION: 0.8.7
+      WORKER: ${{ inputs.worker }}
+      DEPLOY_ENV: ${{ inputs.environment }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: workers
+    steps:
+      - name: Check the Cloudflare secrets are set
+        working-directory: .
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::secret $name is not set (repository or workers-$DEPLOY_ENV environment)"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Install Rust (stable, wasm32)
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
+          rustup default stable
+
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/worker-build
+            workers/target
+          key: workers-deploy-${{ hashFiles('workers/Cargo.lock') }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - name: Install worker-build
+        run: |
+          set -euo pipefail
+          if ! worker-build --version 2>/dev/null | grep -qx "$WORKER_BUILD_VERSION"; then
+            cargo install --locked --force "worker-build@$WORKER_BUILD_VERSION"
+          fi
+          worker-build --version
+
+      - name: Build, deploy and smoke-check
+        run: |
+          set -euo pipefail
+
+          # Binding order: see the header of this file.
+          order=(forecast aviation places stations tiles ai internal-api jobs public-api)
+          if [ "$WORKER" = "all" ]; then
+            selected=("${order[@]}")
+          else
+            selected=("$WORKER")
+          fi
+
+          {
+            echo "## Workers deploy ($DEPLOY_ENV)"
+            echo
+            echo "Ref: \`$(git rev-parse HEAD)\`, wrangler $WRANGLER_VERSION"
+            echo
+            echo "| Worker | Script | Deploy | Smoke check |"
+            echo "| ------ | ------ | ------ | ----------- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for w in "${selected[@]}"; do
+            echo "::group::$w"
+            cfg="$w/wrangler.jsonc"
+            script=$(grep -m1 -oP '^\s*"name":\s*"\K[^"]+' "$cfg")
+
+            # Pass --env only when the config defines that environment.
+            env_args=()
+            if grep -qP '^\s*"env"\s*:' "$cfg"; then
+              env_args=(--env "$DEPLOY_ENV")
+            fi
+
+            # wrangler runs the config's build command (worker-build --release).
+            (cd "$w" && npx --yes "wrangler@$WRANGLER_VERSION" deploy "${env_args[@]}")
+
+            # Smoke-check the custom domain's /health, when the Worker has one.
+            host=$(grep -oP '"pattern":\s*"\K[^"/*]+(?=",\s*"custom_domain":\s*true)' "$cfg" | head -n1 || true)
+            if [ -n "$host" ]; then
+              ok=""
+              for _ in 1 2 3 4 5 6; do
+                if curl -fsS --max-time 10 "https://$host/health"; then ok=1; break; fi
+                sleep 10
+              done
+              echo
+              if [ -z "$ok" ]; then
+                echo "| $w | \`$script\` | deployed | :x: https://$host/health |" >> "$GITHUB_STEP_SUMMARY"
+                echo "::error::https://$host/health did not answer 2xx after deploying $script"
+                exit 1
+              fi
+              smoke=":white_check_mark: https://$host/health"
+            else
+              smoke="none (service binding / cron only)"
+            fi
+            echo "| $w | \`$script\` | deployed | $smoke |" >> "$GITHUB_STEP_SUMMARY"
+            echo "::endgroup::"
+          done

@@ -184,12 +184,14 @@ The old analyzer names may have silently fallen through to Atlas defaults — th
 
 All workflows use `concurrency` groups with `cancel-in-progress: true` — rapid pushes cancel stale runs instead of creating zombie checks.
 
-| Workflow         | Trigger                           | Purpose                                                                                                                                                   |
-| ---------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci.yml`         | Push/PR to `main`                 | Single job: lint → typecheck → TypeScript tests → Python tests. All steps appear under one check in the GitHub PR UI.                                     |
-| `codeql.yml`     | Push/PR to `main`                 | CodeQL security scanning for JavaScript/TypeScript, Python, and GitHub Actions workflows. Matrix strategy runs all 3 language analyses in parallel.       |
-| `db-init.yml`    | Vercel production deploy succeeds | Syncs seed data to MongoDB (locations, activities, rules, prompts)                                                                                        |
-| `release-pr.yml` | Manual (`workflow_dispatch`)      | Cuts `release/<date>` from `staging`, asserts main's content is already in staging, records main with `git merge -s ours`, opens the release PR to `main` |
+| Workflow             | Trigger                                                       | Purpose                                                                                                                                                   |
+| -------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`             | Push/PR to `main`                                             | Single job: lint → typecheck → TypeScript tests → Python tests. All steps appear under one check in the GitHub PR UI.                                     |
+| `codeql.yml`         | Push/PR to `main`                                             | CodeQL security scanning for JavaScript/TypeScript, Python, and GitHub Actions workflows. Matrix strategy runs all 3 language analyses in parallel.       |
+| `db-init.yml`        | Vercel production deploy succeeds                             | Syncs seed data to MongoDB (locations, activities, rules, prompts)                                                                                        |
+| `release-pr.yml`     | Manual (`workflow_dispatch`)                                  | Cuts `release/<date>` from `staging`, asserts main's content is already in staging, records main with `git merge -s ours`, opens the release PR to `main` |
+| `workers.yml`        | Push/PR touching `workers/**`; called by `workers-deploy.yml` | Rust Workers: fmt, clippy (native + wasm32), test, and build every Worker bundle                                                                          |
+| `workers-deploy.yml` | Manual (`workflow_dispatch`)                                  | Builds and deploys the Rust Workers to Cloudflare in service-binding order, then smoke-checks each public `/health`                                       |
 
 ## Releases
 
@@ -207,6 +209,18 @@ Squash-merge that PR. Because `main` is already in the branch's history, the squ
 Once the release is on `main`, tag it with the `tag-release` workflow (Actions → tag-release → Run workflow). It tags the tip of `main` as the next version (`bump`, default patch, or an explicit `vX.Y.Z`) and publishes the GitHub release, using `RELEASE_BUMP_TOKEN`.
 
 The release PR is opened with `RELEASE_BUMP_TOKEN` (an org secret), so CI runs on it like any other PR. The workflow fails before it touches git if that secret is missing. A PR opened with `GITHUB_TOKEN` does not start CI.
+
+## Deploying the Workers
+
+The Rust Workers in `workers/` deploy by hand only, from **Actions → Workers deploy → Run workflow** (`.github/workflows/workers-deploy.yml`). Inputs:
+
+- `worker`: `all` (default) or one Worker.
+- `environment`: `production`, the only environment the wrangler configs define. The job runs in the `workers-production` GitHub Environment, so required reviewers set there gate every deploy.
+- `ref`: optional branch, tag or SHA. Empty deploys the ref the run was started from.
+
+`all` first runs the `workers.yml` gate (fmt, clippy, test, build), then deploys in service-binding order: `forecast`, `aviation`, `places`, `stations`, `tiles`, then `ai`, `internal-api`, `jobs`, then `public-api`. Each Worker with a custom domain must answer `GET /health` with a 2xx, and the run summary lists every Worker's result. A single Worker skips the gate, so only deploy one alone when what it binds to is already live.
+
+The workflow needs the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets. The Workers' own runtime secrets are set on the Workers once (`workers/README.md`, "Owner steps"), never in the workflow. Deploys share one `concurrency` group per environment and never cancel each other.
 
 ## Reporting Issues
 
