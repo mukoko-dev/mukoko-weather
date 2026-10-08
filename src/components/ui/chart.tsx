@@ -135,7 +135,22 @@ function getFallback(prop: string): string | undefined {
   return map[prop];
 }
 
+/**
+ * Lowercase hex colours so the server (fallback table, uppercase) and the
+ * client (`getComputedStyle`, lowercase as written in globals.css) emit
+ * byte-identical strings. Without this, SVG paint attributes such as
+ * `stopColor` differ only by case and trigger a React hydration warning.
+ * Non-hex values (rgb(), named colours, raw var() strings) pass through as-is.
+ */
+export function normaliseColor(color: string): string {
+  return /^#[0-9a-f]{3,8}$/i.test(color) ? color.toLowerCase() : color;
+}
+
 function resolveColor(color: string): string {
+  return normaliseColor(resolveColorRaw(color));
+}
+
+function resolveColorRaw(color: string): string {
   if (typeof window === "undefined") {
     // SSR: return fallback if available, otherwise the raw var string
     if (color.startsWith("var(")) {
