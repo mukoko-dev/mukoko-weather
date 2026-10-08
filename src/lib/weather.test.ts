@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import {
+  wmoToInsightHazards,
   checkFrostRisk,
   weatherCodeToInfo,
   getDefaultSeason,
@@ -636,5 +639,82 @@ describe("multi-model + minutely (Windy-style)", () => {
       expect(data.models_available).toEqual(["gfs_seamless"]);
       expect(data.models_time).toEqual(["t0"]);
     });
+  });
+});
+
+describe("wmoToInsightHazards", () => {
+  it("returns no hazards for clear and cloudy codes", () => {
+    for (const code of [0, 1, 2, 3, 45, 51, 61]) {
+      const h = wmoToInsightHazards(code);
+      expect(h.thunderstormProbability).toBe(0);
+    }
+    expect(wmoToInsightHazards(0).precipitationType).toBe(0);
+    expect(wmoToInsightHazards(3).precipitationType).toBe(0);
+  });
+
+  it("graduates thunderstorm probability by WMO severity", () => {
+    expect(wmoToInsightHazards(95).thunderstormProbability).toBe(70);
+    expect(wmoToInsightHazards(96).thunderstormProbability).toBe(85);
+    expect(wmoToInsightHazards(97).thunderstormProbability).toBe(85);
+    expect(wmoToInsightHazards(99).thunderstormProbability).toBe(95);
+  });
+
+  it("classifies snow, freezing precipitation and rain", () => {
+    expect(wmoToInsightHazards(71).precipitationType).toBe(2);
+    expect(wmoToInsightHazards(86).precipitationType).toBe(2);
+    expect(wmoToInsightHazards(56).precipitationType).toBe(3);
+    expect(wmoToInsightHazards(67).precipitationType).toBe(3);
+    expect(wmoToInsightHazards(51).precipitationType).toBe(1);
+    expect(wmoToInsightHazards(82).precipitationType).toBe(1);
+  });
+
+  it("is used by synthesizeOpenMeteoInsights for the current code", () => {
+    const data = createFallbackWeather(-17.8, 31.0, 1470);
+    data.current.weather_code = 96;
+    const insights = synthesizeOpenMeteoInsights(data);
+    expect(insights.thunderstormProbability).toBe(
+      wmoToInsightHazards(96).thunderstormProbability,
+    );
+    expect(insights.precipitationType).toBe(
+      wmoToInsightHazards(96).precipitationType,
+    );
+  });
+});
+
+describe("windDirection points option", () => {
+  it("defaults to 16 compass points", () => {
+    expect(windDirection(22.5)).toBe("NNE");
+    expect(windDirection(135)).toBe("SE");
+    expect(windDirection(135, { points: 16 })).toBe("SE");
+  });
+
+  it("returns 8 cardinal/intercardinal points when asked", () => {
+    const eight = (d: number) => windDirection(d, { points: 8 });
+    expect(eight(0)).toBe("N");
+    expect(eight(22.5)).toBe("NE");
+    expect(eight(90)).toBe("E");
+    expect(eight(135)).toBe("SE");
+    expect(eight(180)).toBe("S");
+    expect(eight(225)).toBe("SW");
+    expect(eight(270)).toBe("W");
+    expect(eight(315)).toBe("NW");
+    expect(eight(360)).toBe("N");
+  });
+});
+
+describe("WMO label parity with api/py/_wmo.py", () => {
+  it("WMO_LABELS matches weatherCodeToInfo for every shipped code", () => {
+    const py = readFileSync(
+      resolve(__dirname, "../../api/py/_wmo.py"),
+      "utf-8",
+    );
+    const pairs = [...py.matchAll(/^\s+(\d+): "([^"]+)",$/gm)].map((m) => [
+      Number(m[1]),
+      m[2],
+    ]);
+    expect(pairs.length).toBeGreaterThan(20);
+    for (const [code, label] of pairs) {
+      expect(weatherCodeToInfo(code as number).label).toBe(label);
+    }
   });
 });
