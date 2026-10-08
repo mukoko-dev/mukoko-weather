@@ -23,7 +23,7 @@ from ._db import (
     MAX_MESSAGE_LEN,
 )
 from ._ai_prompts import get_ai_prompt
-from ._anthropic import call_claude, first_text
+from ._ai_gateway import call_ai, first_text
 
 router = APIRouter()
 
@@ -153,10 +153,10 @@ async def followup_chat(body: FollowupRequest, request: Request):
 
     # Get model config from database
     prompt_doc = get_ai_prompt("system:followup")
-    model = (prompt_doc or {}).get("model", "claude-haiku-4-5-20251001")
+    model = (prompt_doc or {}).get("model")
     max_tokens = (prompt_doc or {}).get("maxTokens", 600)
 
-    response, err = call_claude(
+    response, err = call_ai(
         model=model,
         max_tokens=max_tokens,
         system=system_prompt,

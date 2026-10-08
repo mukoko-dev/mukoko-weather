@@ -7,11 +7,10 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from py._status import (
-    ANTHROPIC_MODEL,
     _check_mongodb,
     _check_tomorrow_io,
     _check_open_meteo,
-    _check_anthropic,
+    _check_ai_gateway,
     _check_weather_cache,
     _check_ai_cache,
     _reset_status_cache,
@@ -166,54 +165,50 @@ class TestCheckOpenMeteo:
 
 
 # ---------------------------------------------------------------------------
-# _check_anthropic
+# _check_ai_gateway
 # ---------------------------------------------------------------------------
 
+_GW_ENV = {
+    "CLOUDFLARE_ACCOUNT_ID": "acct",
+    "AI_GATEWAY_TOKEN": "gw",
+    "CF_WORKERS_AI_TOKEN": "wai",
+}
 
-class TestCheckAnthropic:
-    """The check is now key/model-presence only — it must NOT spend tokens."""
 
-    def test_operational_with_env_key(self):
-        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}):
-            result = _check_anthropic()
+class TestCheckAiGateway:
+    """Config-presence check only — it must NOT spend tokens."""
+
+    def test_operational_when_configured(self):
+        with patch.dict("os.environ", _GW_ENV, clear=True):
+            with patch("py._status.ai_breaker") as breaker:
+                breaker.is_allowed = True
+                result = _check_ai_gateway()
         assert result["status"] == "operational"
-        assert result["name"] == "Anthropic AI (Shamwari)"
-        # Reports the model the app actually runs (Haiku), not Sonnet.
-        assert ANTHROPIC_MODEL in result["message"]
-        assert "claude-haiku-4-5-20251001" in result["message"]
+        assert result["name"] == "Shamwari AI (Cloudflare AI Gateway)"
+        assert "shamwari" in result["message"]
+        assert "glm" in result["message"]
 
-    def test_degraded_on_no_key(self):
+    def test_degraded_when_unconfigured(self):
         with patch.dict("os.environ", {}, clear=True):
-            with patch("py._status.get_api_key", return_value=None):
-                result = _check_anthropic()
+            result = _check_ai_gateway()
         assert result["status"] == "degraded"
         assert "not configured" in result["message"]
 
-    def test_uses_db_key_when_env_absent(self):
-        with patch.dict("os.environ", {}, clear=True):
-            with patch("py._status.get_api_key", return_value="sk-from-db"):
-                result = _check_anthropic()
-        assert result["status"] == "operational"
-        assert ANTHROPIC_MODEL in result["message"]
-
-    def test_degraded_when_db_key_lookup_raises(self):
-        with patch.dict("os.environ", {}, clear=True):
-            with patch("py._status.get_api_key", side_effect=Exception("DB down")):
-                result = _check_anthropic()
+    def test_degraded_when_circuit_open(self):
+        with patch.dict("os.environ", _GW_ENV, clear=True):
+            with patch("py._status.ai_breaker") as breaker:
+                breaker.is_allowed = False
+                result = _check_ai_gateway()
         assert result["status"] == "degraded"
-        assert "not configured" in result["message"]
+        assert "Circuit open" in result["message"]
 
     def test_does_not_spend_tokens(self):
-        """No live Anthropic request should ever be made (no token spend)."""
-        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}):
-            with patch("py._status.get_http_client") as mock_client_cls:
-                result = _check_anthropic()
+        with patch.dict("os.environ", _GW_ENV, clear=True):
+            with patch("py._status.get_http_client") as mock_client_cls, \
+                 patch("py._ai_gateway.httpx.Client") as mock_gw_http:
+                _check_ai_gateway()
         mock_client_cls.assert_not_called()
-        assert result["status"] == "operational"
-
-    def test_model_matches_configured_model(self):
-        # Guards against the Sonnet/Haiku mismatch regressing.
-        assert ANTHROPIC_MODEL == "claude-haiku-4-5-20251001"
+        mock_gw_http.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -302,7 +297,7 @@ class TestCheckAiCache:
 class TestSystemStatus:
     @patch("py._status._check_ai_cache")
     @patch("py._status._check_weather_cache")
-    @patch("py._status._check_anthropic")
+    @patch("py._status._check_ai_gateway")
     @patch("py._status._check_open_meteo")
     @patch("py._status._check_tomorrow_io")
     @patch("py._status._check_mongodb")
@@ -321,7 +316,7 @@ class TestSystemStatus:
 
     @patch("py._status._check_ai_cache")
     @patch("py._status._check_weather_cache")
-    @patch("py._status._check_anthropic")
+    @patch("py._status._check_ai_gateway")
     @patch("py._status._check_open_meteo")
     @patch("py._status._check_tomorrow_io")
     @patch("py._status._check_mongodb")
@@ -338,7 +333,7 @@ class TestSystemStatus:
 
     @patch("py._status._check_ai_cache")
     @patch("py._status._check_weather_cache")
-    @patch("py._status._check_anthropic")
+    @patch("py._status._check_ai_gateway")
     @patch("py._status._check_open_meteo")
     @patch("py._status._check_tomorrow_io")
     @patch("py._status._check_mongodb")
@@ -346,7 +341,7 @@ class TestSystemStatus:
     async def test_degraded_if_any_degraded(
         self, mock_mongo, mock_tomorrow, mock_meteo, mock_anthro, mock_weather, mock_ai
     ):
-        mock_anthro.return_value = {"name": "Anthropic", "status": "degraded", "latencyMs": 1, "message": "rate limited"}
+        mock_anthro.return_value = {"name": "Shamwari AI", "status": "degraded", "latencyMs": 1, "message": "rate limited"}
         for m in [mock_mongo, mock_tomorrow, mock_meteo, mock_weather, mock_ai]:
             m.return_value = {"name": "test", "status": "operational", "latencyMs": 1, "message": "ok"}
 
@@ -355,7 +350,7 @@ class TestSystemStatus:
 
     @patch("py._status._check_ai_cache")
     @patch("py._status._check_weather_cache")
-    @patch("py._status._check_anthropic")
+    @patch("py._status._check_ai_gateway")
     @patch("py._status._check_open_meteo")
     @patch("py._status._check_tomorrow_io")
     @patch("py._status._check_mongodb")

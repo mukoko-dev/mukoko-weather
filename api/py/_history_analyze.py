@@ -2,7 +2,7 @@
 AI history analysis endpoint — POST /api/py/history/analyze.
 
 Aggregates historical weather data server-side into a compact statistical
-summary (~800 tokens), then sends to Claude for analysis. Results are
+summary (~800 tokens), then sends to the AI model (GLM via the AI Gateway) for analysis. Results are
 cached in the history_analysis collection (location + days + data hash, 1h TTL).
 
 System prompt is fetched from the database (system:history_analysis).
@@ -26,7 +26,7 @@ from ._db import (
 )
 from ._places_resolver import find_location
 from ._ai_prompts import get_ai_prompt
-from ._anthropic import call_claude, first_text
+from ._ai_gateway import call_ai, first_text
 from ._wmo import WMO_LABELS
 
 router = APIRouter()
@@ -247,7 +247,7 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
     POST /api/py/history/analyze
 
     Aggregates historical weather data server-side, then sends a compact
-    summary to Claude for analysis. Cached for 1 hour.
+    summary to the AI model for analysis. Cached for 1 hour.
     """
     location_slug = body.location.strip().lower()
     if not location_slug:
@@ -342,10 +342,10 @@ Statistical summary:
 
     # Get model config
     prompt_doc = get_ai_prompt("system:history_analysis")
-    model = (prompt_doc or {}).get("model", "claude-haiku-4-5-20251001")
+    model = (prompt_doc or {}).get("model")
     max_tokens = (prompt_doc or {}).get("maxTokens", 500)
 
-    response, err = call_claude(
+    response, err = call_ai(
         model=model,
         max_tokens=max_tokens,
         system=system_prompt,

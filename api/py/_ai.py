@@ -1,7 +1,7 @@
 """
 AI summary endpoint — migrated from /api/ai.
 
-Generates weather briefings using Claude Haiku 3.5 with tiered
+Generates weather briefings using a GLM model (Workers AI, via the shamwari AI Gateway) with tiered
 MongoDB caching (30/60/120 min by location importance).
 """
 
@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ._db import get_db, enforce_rate_limit, filter_known_activities, get_activities_brief, require_internal_caller
-from ._anthropic import call_claude, first_text
+from ._ai_gateway import call_ai, first_text
 from ._ai_prompts import get_ai_prompt
 
 logger = logging.getLogger(__name__)
@@ -33,9 +33,9 @@ TTL_TIER_1 = 1800   # 30 min — cities with "city" tag
 TTL_TIER_2 = 3600   # 60 min — locations with industry/education/border tags
 TTL_TIER_3 = 7200   # 120 min — all other locations
 
-# Fallback summaries (no API key, open circuit breaker, or Anthropic error) get a
+# Fallback summaries (no API key, open circuit breaker, or AI gateway error) get a
 # much shorter TTL than a real AI-generated insight. Without this, a single
-# transient Anthropic failure gets cached with the SAME tiered TTL as a genuine
+# transient AI gateway failure gets cached with the SAME tiered TTL as a genuine
 # summary — up to 2 hours of every user seeing the generic fallback text per
 # location, long after the underlying failure (or the breaker itself) recovered.
 TTL_FALLBACK = 60  # 1 min
@@ -105,7 +105,7 @@ def _resolve_seasons_with_ai(
 ) -> list[dict] | None:
     """Use AI to generate season definitions for a country not in the seed data.
 
-    Calls Claude Haiku to produce a structured seasonal calendar, validates the
+    Calls the AI model to produce a structured seasonal calendar, validates the
     response, and stores the result in MongoDB for future lookups. Returns the
     list of season docs on success, or None if AI is unavailable/invalid.
     """
@@ -114,9 +114,9 @@ def _resolve_seasons_with_ai(
         logger.warning("Invalid country code rejected: %r", country_code[:20])
         return None
 
-    # --- Anthropic API call (breaker bookkeeping lives in call_claude) ---
-    response, err = call_claude(
-        model="claude-haiku-4-5-20251001",
+    # --- AI gateway call (breaker bookkeeping lives in call_ai) ---
+    response, err = call_ai(
+        model=None,
         max_tokens=1024,
         messages=[{
             "role": "user",
@@ -267,7 +267,7 @@ def _get_season(country: str = "", lat: float = 0.0, lon: float = 0.0) -> dict:
 
 
 # Countries currently being resolved in background threads — prevents
-# duplicate Claude calls when multiple requests arrive before DB is seeded.
+# duplicate AI calls when multiple requests arrive before DB is seeded.
 _resolution_in_progress: set[str] = set()
 _resolution_lock = __import__("threading").Lock()
 
@@ -278,7 +278,7 @@ def _trigger_background_season_resolution(
     """Fire-and-forget AI season resolution in a background thread.
 
     Uses a module-level in-progress set (guarded by a lock to prevent
-    TOCTOU races) to deduplicate concurrent Claude calls for the same
+    TOCTOU races) to deduplicate concurrent AI calls for the same
     country. On Vercel serverless, daemon threads are best-effort — the
     process may terminate after the response. If it does, the next
     _get_season call for this country will re-trigger enrichment.
@@ -352,7 +352,7 @@ def _set_cached_summary(
     source: str = "ai",
 ):
     db = get_db()
-    # Fallback text (no client, open breaker, or Anthropic error) gets a short
+    # Fallback text (no client, open breaker, or AI gateway error) gets a short
     # TTL regardless of location tier — see TTL_FALLBACK for why.
     ttl = TTL_FALLBACK if source == "fallback" else _get_ttl(slug, tags)
     now = datetime.now(timezone.utc)
@@ -392,7 +392,7 @@ class AISummaryRequest(BaseModel):
 
 
 def _fallback_insight(location: LocationInfo, weather_data: dict, season: dict) -> str:
-    """Deterministic summary used whenever Claude is unavailable."""
+    """Deterministic summary used whenever the AI model is unavailable."""
     temp = weather_data.get("current", {}).get("temperature_2m")
     humidity = weather_data.get("current", {}).get("relative_humidity_2m")
     return (
@@ -543,13 +543,13 @@ Provide:
     # Use database-driven prompt (with fallback)
     system_prompt = _get_system_prompt()
     prompt_doc = get_ai_prompt("system:summary")
-    model = (prompt_doc or {}).get("model", "claude-haiku-4-5-20251001")
+    model = (prompt_doc or {}).get("model")
     max_tokens = (prompt_doc or {}).get("maxTokens", 400)
 
     # Circuit open, rate limited or any API error all degrade to the fallback
-    # summary; call_claude has already recorded the breaker outcome.
+    # summary; call_ai has already recorded the breaker outcome.
     summary_source = "ai"
-    message, err = call_claude(
+    message, err = call_ai(
         model=model,
         max_tokens=max_tokens,
         system=system_prompt,
@@ -578,7 +578,7 @@ Provide:
     # Cache the summary — fallback text gets a short TTL (TTL_FALLBACK) so a
     # transient failure doesn't lock users out of real AI summaries for the
     # full tiered TTL window. Best-effort: the insight above is already
-    # generated (Claude tokens spent), so a failed cache write (storage
+    # generated (model tokens spent), so a failed cache write (storage
     # quota, transient outage) must never turn a good response into a 500 —
     # same serve-first discipline as the weather endpoint's cache writes.
     try:

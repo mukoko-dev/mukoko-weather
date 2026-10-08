@@ -15,6 +15,8 @@ from fastapi import APIRouter
 
 from ._db import get_db, get_api_key, ttl_filter
 from ._http import get_http_client
+from ._ai_gateway import DEFAULT_GATEWAY_ID, ai_configured, resolve_model
+from ._circuit_breaker import ai_breaker
 
 router = APIRouter()
 
@@ -45,9 +47,6 @@ def _result(name: str, status: str, start: float, message: str) -> dict:
         "message": message,
     }
 
-
-# Model the app actually runs (Haiku). Kept in sync with api/py/_ai.py.
-ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 
 # Server-side cache for the assembled status payload. The dashboard polls this
 # endpoint (and multiple tabs multiply that), so without a short TTL every poll
@@ -127,28 +126,25 @@ def _check_open_meteo() -> dict:
         return _result(name, "down", start, _failure_message(name, e))
 
 
-def _check_anthropic() -> dict:
-    """Check Anthropic availability WITHOUT spending tokens.
+def _check_ai_gateway() -> dict:
+    """Check the AI gateway WITHOUT spending tokens.
 
-    A live /v1/messages ping bills a request every time the status page is
+    A live chat-completions ping bills a request every time the status page is
     polled (and anonymous users could burn credits at will). Instead we verify
-    the key is present and report the model the app is actually configured to
-    run — a key-presence + model-config check that costs nothing.
+    the gateway config is present, report the gateway + model the app is
+    configured to run, and surface an open circuit breaker.
     """
-    name = "Anthropic AI (Shamwari)"
+    name = "Shamwari AI (Cloudflare AI Gateway)"
     start = time.time()
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        try:
-            api_key = get_api_key("anthropic")
-        except Exception:
-            pass
+    if not ai_configured():
+        return _result(name, "degraded", start, "AI gateway not configured — basic summary fallback active")
 
-    if not api_key:
-        return _result(name, "degraded", start, "API key not configured — basic summary fallback active")
+    gateway = (os.environ.get("AI_GATEWAY_ID") or "").strip() or DEFAULT_GATEWAY_ID
+    if not ai_breaker.is_allowed:
+        return _result(name, "degraded", start, f"Circuit open — gateway {gateway} recovering, fallbacks active")
 
-    return _result(name, "operational", start, f"API key configured (model: {ANTHROPIC_MODEL})")
+    return _result(name, "operational", start, f"Gateway {gateway} configured (model: {resolve_model()})")
 
 
 def _count_active(collection: str, noun: tuple[str, str], empty_message: str, name: str) -> dict:
@@ -203,7 +199,7 @@ async def system_status():
         _check_mongodb(),
         _check_tomorrow_io(),
         _check_open_meteo(),
-        _check_anthropic(),
+        _check_ai_gateway(),
         _check_weather_cache(),
         _check_ai_cache(),
     ]

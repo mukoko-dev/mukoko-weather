@@ -348,7 +348,7 @@ class TestExploreSearchEndpoint:
         assert exc_info.value.status_code == 429
 
     @patch("py._explore_search._text_search_fallback")
-    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._ai_gateway.ai_breaker")
     @patch("py._db.check_rate_limit")
     @patch("py._db.get_client_ip")
     @pytest.mark.asyncio
@@ -376,3 +376,55 @@ class TestExploreSearchEndpoint:
         with pytest.raises(HTTPException) as exc_info:
             await explore_search(body, mock_request)
         assert exc_info.value.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# OpenAI-style tool-use loop through the AI gateway helper
+# ---------------------------------------------------------------------------
+
+
+class TestExploreSearchToolLoop:
+    @pytest.fixture(autouse=True)
+    def _reset_caches(self):
+        import py._explore_search as mod
+        mod._location_context = []
+        mod._location_context_at = 0
+        yield
+        mod._location_context = None
+        mod._location_context_at = 0
+
+    def test_tools_in_openai_function_format(self):
+        from py._explore_search import TOOLS
+        assert {t["function"]["name"] for t in TOOLS} == {"search_locations", "get_weather"}
+        assert all(t["type"] == "function" for t in TOOLS)
+
+    @patch("py._explore_search.get_ai_prompt", return_value=None)
+    @patch("py._explore_search._get_location_context", return_value=[])
+    @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 10})
+    @patch("py._db.get_client_ip", return_value="1.2.3.4")
+    @pytest.mark.asyncio
+    async def test_tool_call_then_summary(self, _ip, _rate, _ctx, _prompt):
+        from py._ai_gateway import AIResponse, ToolCall
+
+        first = AIResponse(
+            text="",
+            tool_calls=[ToolCall(id="c1", name="search_locations", arguments={"tag": "farming"})],
+            message={"role": "assistant", "content": None, "tool_calls": [{"id": "c1"}]},
+        )
+        final = AIResponse(text="Two farming towns match.")
+        seen = []
+
+        def fake_call_ai(**kwargs):
+            seen.append([dict(m) for m in kwargs["messages"]])
+            return (first, None) if len(seen) == 1 else (final, None)
+
+        tool_out = json.dumps([{"slug": "marondera", "name": "Marondera"}])
+        with patch("py._explore_search.call_ai", side_effect=fake_call_ai), \
+             patch("py._explore_search._exec_tool", return_value=tool_out) as tool:
+            result = await explore_search(ExploreSearchRequest(query="farming areas"), MagicMock())
+
+        tool.assert_called_once_with("search_locations", {"tag": "farming"})
+        assert seen[1][-1] == {"role": "tool", "tool_call_id": "c1", "content": tool_out}
+        assert seen[1][-2]["role"] == "assistant"
+        assert result["summary"] == "Two farming towns match."
+        assert [l["slug"] for l in result["locations"]] == ["marondera"]
