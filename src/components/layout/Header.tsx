@@ -4,17 +4,11 @@ import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
+import { Ellipsis, List as ListIcon, Map as MapIcon } from "lucide-react";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
-import {
-  MapPinIcon,
-  ClockIcon,
-  SparklesIcon,
-  LayersIcon,
-  BellIcon,
-  UserIcon,
-  NavigationIcon,
-} from "@/lib/weather-icons";
+import { LayersIcon, BellIcon, UserIcon } from "@/lib/weather-icons";
 import { Spinner } from "@/components/ui/spinner";
+import { LocationPager } from "@/components/layout/LocationPager";
 import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { trackEvent } from "@/lib/analytics";
@@ -41,48 +35,19 @@ const WeatherReportModal = lazy(() =>
   })),
 );
 
-function HomeIcon({ size = 22 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
-      <path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-    </svg>
-  );
-}
+/** 48px round glass button for the bottom bar's left and right parts. */
+const ROUND_BUTTON_CLASS =
+  "flex h-[var(--touch-target-min)] w-[var(--touch-target-min)] shrink-0 items-center justify-center rounded-full border border-text-tertiary/10 bg-surface-card text-text-primary shadow-sm transition-transform active:scale-95";
 
-function CompassIcon({ size = 22 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
-    </svg>
-  );
-}
+/** One row of the mobile ⋯ menu — full 48px touch height. */
+const MENU_ITEM_CLASS =
+  "flex min-h-[var(--touch-target-min)] w-full items-center gap-2 rounded-lg px-3 text-left text-base font-medium text-text-primary transition-colors hover:bg-surface-dim aria-[current=page]:text-primary";
 
 export function Header() {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
   const myWeatherOpen = useAppStore((s) => s.myWeatherOpen);
   const selectedLocation = useAppStore((s) => s.selectedLocation);
+  const savedLocations = useAppStore((s) => s.savedLocations);
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const reportModalOpen = useAppStore((s) => s.reportModalOpen);
   const pathname = usePathname();
@@ -92,6 +57,10 @@ export function Header() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
   const bellButtonRef = useRef<HTMLButtonElement>(null);
+  // Mobile "⋯" menu — the destinations that used to sit in the bottom bar.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   // AuthKit's `useAuth()` is hydrated via `<AuthKitProvider initialAuth={…}>`
   // in the root layout, so this renders with the right state on first paint.
   const { user } = useAuth();
@@ -133,6 +102,29 @@ export function Header() {
       document.removeEventListener("keydown", handleKeydown);
     };
   }, [notificationsOpen]);
+
+  // Dismiss the mobile ⋯ menu on outside click or Escape (Escape returns focus
+  // to its trigger). Items close the menu themselves when activated.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        menuButtonRef.current?.focus();
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKeydown);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKeydown);
+    };
+  }, [menuOpen]);
 
   // Center mobile-nav action: find where the user is right now (same GPS →
   // /api/py/geo flow as My Weather's "Use current location" button, autoCreate
@@ -183,21 +175,11 @@ export function Header() {
     }
   };
 
-  // Determine which mobile nav item is active based on pathname
+  // Active page flags for the desktop nav and the mobile ⋯ menu.
   const isExplore = pathname === "/explore" || pathname.startsWith("/explore/");
   const isHistory = pathname === "/history";
   const isAviation = pathname === "/aviation";
-  const isHome =
-    !isExplore &&
-    !isHistory &&
-    !isAviation &&
-    !pathname.startsWith("/about") &&
-    !pathname.startsWith("/help") &&
-    !pathname.startsWith("/privacy") &&
-    !pathname.startsWith("/terms") &&
-    !pathname.startsWith("/status") &&
-    !pathname.startsWith("/embed") &&
-    !pathname.startsWith("/shamwari");
+  const isLocationList = pathname === "/locations";
   const shamwariEnabled = isFeatureEnabled("shamwari_chat");
   const mapSlug = currentLocationSlug(pathname, selectedLocation);
   const mapHref = mapSlug ? `/${mapSlug}/map` : "/explore";
@@ -293,10 +275,115 @@ export function Header() {
                     ? "Weather map"
                     : "Choose a location for the weather map"
                 }
-                className="bee"
+                className="bee hidden sm:flex"
               >
                 <LayersIcon size={20} className="text-primary-foreground" />
               </Link>
+
+              {/* Mobile only — Explore, History, Aviation, My Weather and the
+                  GPS action live here now that the bottom bar is map / pages /
+                  list. Desktop keeps its text nav instead. */}
+              <div className="relative sm:hidden" ref={menuRef}>
+                <button
+                  ref={menuButtonRef}
+                  onClick={() => setMenuOpen((v) => !v)}
+                  aria-label="More options"
+                  aria-expanded={menuOpen}
+                  aria-controls="mobile-more-menu"
+                  className="bee"
+                  type="button"
+                >
+                  <Ellipsis
+                    size={20}
+                    className="text-primary-foreground"
+                    aria-hidden="true"
+                  />
+                </button>
+                {menuOpen && (
+                  <div
+                    id="mobile-more-menu"
+                    className="absolute right-0 top-full z-40 mt-2 w-56 rounded-[var(--radius-card)] border border-text-tertiary/10 bg-surface-card p-2 shadow-lg"
+                  >
+                    <ul className="flex flex-col">
+                      <li>
+                        <Link
+                          href="/explore"
+                          prefetch={false}
+                          aria-current={isExplore ? "page" : undefined}
+                          onClick={() => setMenuOpen(false)}
+                          className={MENU_ITEM_CLASS}
+                        >
+                          Explore
+                        </Link>
+                      </li>
+                      {shamwariEnabled && (
+                        <li>
+                          <Link
+                            href="/shamwari"
+                            prefetch={false}
+                            aria-current={
+                              pathname === "/shamwari" ? "page" : undefined
+                            }
+                            onClick={() => setMenuOpen(false)}
+                            className={MENU_ITEM_CLASS}
+                          >
+                            Shamwari
+                          </Link>
+                        </li>
+                      )}
+                      <li>
+                        <Link
+                          href="/history"
+                          prefetch={false}
+                          aria-current={isHistory ? "page" : undefined}
+                          onClick={() => setMenuOpen(false)}
+                          className={MENU_ITEM_CLASS}
+                        >
+                          History
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          href="/aviation"
+                          prefetch={false}
+                          aria-current={isAviation ? "page" : undefined}
+                          onClick={() => setMenuOpen(false)}
+                          className={MENU_ITEM_CLASS}
+                        >
+                          Aviation
+                        </Link>
+                      </li>
+                      <li>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            openMyWeather();
+                          }}
+                          className={MENU_ITEM_CLASS}
+                        >
+                          My Weather
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            void handleMyLocation();
+                          }}
+                          disabled={locating}
+                          aria-busy={locating}
+                          className={MENU_ITEM_CLASS}
+                        >
+                          {locating && <Spinner className="h-4 w-4" />}
+                          Use my location
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
 
               <div className="relative" ref={notificationsRef}>
                 <button
@@ -361,134 +448,39 @@ export function Header() {
         </nav>
       </header>
 
-      {/* Mobile bottom navigation — floating glass pill, 5 items with the */}
-      {/* My Location GPS action in the centre slot. */}
-      {/* (Shamwari paused as a standalone destination — see FLAGS.shamwari_chat) */}
-      {/* Detached from the edges (floats above the safe-area) so mobile browser */}
-      {/* chrome never obscures it; stays put on scroll because it's fixed. */}
-      {/* 48px min touch targets, 22px icons, 10px labels */}
+      {/* Mobile bottom bar — iOS Weather style: a translucent full-width bar,
+          safe-area aware, with three parts. Left: the map for the location on
+          screen. Centre: the page indicator (My Location glyph + one dot per
+          saved location). Right: the location list. */}
       <nav
         aria-label="Mobile navigation"
-        className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] left-1/2 z-40 -translate-x-1/2 rounded-full border border-text-tertiary/10 bg-surface-base/90 shadow-lg backdrop-blur-xl sm:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-text-tertiary/10 bg-surface-base/80 px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom,0px)+0.625rem)] shadow-lg backdrop-blur-xl sm:hidden"
       >
-        <div className="flex items-center gap-1 px-2 py-1.5">
+        <div className="flex items-center gap-3">
           <Link
-            href="/"
-            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] active:scale-95 ${
-              isHome
-                ? "text-primary"
-                : "text-text-tertiary hover:text-text-secondary"
-            }`}
-            aria-label="Weather home"
-            aria-current={isHome ? "page" : undefined}
-          >
-            <HomeIcon size={22} />
-            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">
-              Weather
-            </span>
-            {isHome && (
-              <span
-                className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary"
-                aria-hidden="true"
-              />
-            )}
-          </Link>
-          <Link
-            href="/explore"
+            href={mapHref}
             prefetch={false}
-            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] active:scale-95 ${
-              isExplore
-                ? "text-primary"
-                : "text-text-tertiary hover:text-text-secondary"
-            }`}
-            aria-label="Explore locations"
-            aria-current={isExplore ? "page" : undefined}
+            aria-label={
+              mapSlug ? "Weather map" : "Choose a location for the weather map"
+            }
+            className={ROUND_BUTTON_CLASS}
           >
-            <CompassIcon size={22} />
-            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">
-              Explore
-            </span>
-            {isExplore && (
-              <span
-                className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary"
-                aria-hidden="true"
-              />
-            )}
+            <MapIcon size={22} aria-hidden="true" />
           </Link>
-          {shamwariEnabled && (
-            <Link
-              href="/shamwari"
-              prefetch={false}
-              className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] active:scale-95 ${
-                pathname === "/shamwari"
-                  ? "text-primary"
-                  : "text-text-tertiary hover:text-text-secondary"
-              }`}
-              aria-label="Shamwari AI assistant"
-              aria-current={pathname === "/shamwari" ? "page" : undefined}
-            >
-              <SparklesIcon size={22} />
-              <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">
-                Shamwari
-              </span>
-              {pathname === "/shamwari" && (
-                <span
-                  className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary"
-                  aria-hidden="true"
-                />
-              )}
-            </Link>
-          )}
-          <button
-            onClick={handleMyLocation}
-            disabled={locating}
-            aria-busy={locating}
-            className="relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] text-text-tertiary hover:text-text-secondary active:scale-95"
-            aria-label="Use my current location"
-            type="button"
-          >
-            {locating ? (
-              <Spinner className="h-[22px] w-[22px]" />
-            ) : (
-              <NavigationIcon size={22} />
-            )}
-            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">
-              My Location
-            </span>
-          </button>
+          <LocationPager
+            pathname={pathname}
+            savedLocations={savedLocations}
+            selectedLocation={selectedLocation}
+          />
           <Link
-            href="/history"
+            href="/locations"
             prefetch={false}
-            className={`relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] active:scale-95 ${
-              isHistory
-                ? "text-primary"
-                : "text-text-tertiary hover:text-text-secondary"
-            }`}
-            aria-label="Weather history"
-            aria-current={isHistory ? "page" : undefined}
+            aria-label="All locations"
+            aria-current={isLocationList ? "page" : undefined}
+            className={`${ROUND_BUTTON_CLASS} ${isLocationList ? "text-primary" : ""}`}
           >
-            <ClockIcon size={22} />
-            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">
-              History
-            </span>
-            {isHistory && (
-              <span
-                className="absolute bottom-1 h-0.5 w-5 rounded-full bg-primary"
-                aria-hidden="true"
-              />
-            )}
+            <ListIcon size={22} aria-hidden="true" />
           </Link>
-          <button
-            onClick={() => openMyWeather()}
-            className="relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl transition-all min-w-[var(--touch-target-min)] min-h-[var(--touch-target-min)] text-text-tertiary hover:text-text-secondary active:scale-95"
-            aria-label="My Weather settings"
-            type="button"
-          >
-            <MapPinIcon size={22} />
-            <span className="text-[10px] leading-tight font-medium truncate max-w-[56px]">
-              My Weather
-            </span>
-          </button>
         </div>
       </nav>
 

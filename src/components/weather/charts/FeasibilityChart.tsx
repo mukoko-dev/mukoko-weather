@@ -13,6 +13,7 @@
 import { TimeSeriesChart } from "./TimeSeriesChart";
 import { scoreLabel, type FeasibilityPoint } from "@/lib/activity-feasibility";
 import type { ActivityCategory } from "@/lib/activities";
+import { locationHourLabel, resolveOffsetSeconds } from "@/lib/location-time";
 
 /** Category → mineral color CSS custom property (see globals.css). */
 const CATEGORY_CHART_COLORS: Partial<Record<ActivityCategory, string>> = {
@@ -30,7 +31,9 @@ export function categoryChartColor(category: ActivityCategory): string {
 
 export function prepareFeasibilityData(points: FeasibilityPoint[]) {
   return points.map((p) => ({
-    label: `${String(new Date(p.time).getHours()).padStart(2, "0")}:00`,
+    // Location-local label from feasibilitySeries; the viewer-clock read is
+    // only a fallback for points built without one.
+    label: p.label ?? locationHourLabel(p.time, resolveOffsetSeconds(null)),
     score: p.score,
   }));
 }

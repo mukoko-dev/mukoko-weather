@@ -38,8 +38,10 @@ chart, not the page.
 Beyond the forecast, the app carries an aviation planner (METAR/TAF with
 VFR/MVFR/IFR/LIFR categories and PDF pre-flight briefings from NOAA data),
 Waze-style community weather reports cross-validated against API data, an EPA
-air-quality index with a full pollutant breakdown, a historical dashboard with
+air-quality index with a full pollutant breakdown, a global location-aware haze panel (smoke, dust, smog, regional seasons, official Singapore PSI), a historical dashboard with
 Claude-authored trend analysis, and an embeddable widget. It installs as a PWA.
+The Locations list (`/locations`) shows the current location and saved places as
+live weather cards, with a Home location, in the style of iOS Weather.
 
 **Weather display** — `/display` is a full-screen page for a TV, tablet or
 monitor on a wall: clock, current conditions, air quality with plain-language
@@ -122,6 +124,8 @@ proxied by a `vercel.json` rewrite (`/api/py/*` → `api/py/index.py`). Only fou
 routes remain in TypeScript: OG image generation, DB init, the public embed API,
 and developer API-key management.
 
+Climate normals (1991–2020, ERA5 via Open-Meteo) are served at `GET /api/py/normals`, with one cached table per 0.25° grid cell in `weather.climate_normals`.
+**Air quality map** — `GET /api/py/airquality/grid` returns current US AQI on a 7×7 grid (±40 km) from one batched Open-Meteo request, cached 30 min; the `AirQualityMapCard` paints it over a non-interactive MapLibre map.
 `GET /api/py/enso` returns the latest El Niño / La Niña phase from NOAA CPC's Oceanic Niño Index (12 h in-memory cache; `available: false` when NOAA is unreachable).
 
 **Four-stage weather fallback** — MongoDB cache (15-min TTL) → Tomorrow.io →
@@ -170,7 +174,8 @@ families in Mzizi's twenty-one; the app does not use the heritage or
 experimental families. Typography is Noto Serif / Noto Sans / JetBrains Mono,
 with the Seed of Life mark. Semantic Fauna component classes (`.kudu`,
 `.impala`, `.bee`, `.baobab`, `.weaver`) centralise repeated styles in
-`globals.css`.
+`globals.css`. Location-list cards use the `.oryx-*` sky classes, whose tokens are
+checked to keep white text at 4.5:1 or better on every stop in both themes.
 
 Accessibility targets **WCAG 3.0 APCA** — APCA-verified contrast (Lc 106/78/62),
 ARIA landmarks throughout, 3px `focus-visible` outlines, 56px minimum touch

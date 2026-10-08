@@ -24,11 +24,62 @@ export interface PreferencesDocType {
   hasOnboarded: boolean;
   /** Windy-style forecast model preference (Open-Meteo model id or "best_match") */
   selectedForecastModel: string;
+  /**
+   * Home location slug (⌂ on the Locations list), or null when unset.
+   * Device-local: not part of the Python device-profile sync yet.
+   */
+  homeLocation: string | null;
+  /**
+   * Suggested places the visitor hid on the Locations list. Device-local.
+   * Restored in one action ("Restore suggested places").
+   */
+  hiddenPresetSlugs: string[];
+  /**
+   * Rough position the suggested places are chosen around (IP geo on first
+   * visit to /locations), or null before that. Device-local.
+   */
+  presetAnchor: { lat: number; lon: number } | null;
   updatedAt: number;
 }
 
+/** v2 → v3 document shape (before the preset fields existed). */
+export type PreferencesDocV2 = Omit<
+  PreferencesDocType,
+  "hiddenPresetSlugs" | "presetAnchor"
+>;
+
+/**
+ * v2 → v3: adds `hiddenPresetSlugs` ([]) and `presetAnchor` (null). Existing
+ * documents keep every other field; a malformed anchor is dropped to null.
+ */
+export function migratePreferencesV2ToV3(
+  oldDoc: PreferencesDocV2 &
+    Partial<Pick<PreferencesDocType, "hiddenPresetSlugs" | "presetAnchor">>,
+): PreferencesDocType {
+  const anchor = oldDoc.presetAnchor;
+  const validAnchor =
+    anchor &&
+    typeof anchor.lat === "number" &&
+    typeof anchor.lon === "number" &&
+    Number.isFinite(anchor.lat) &&
+    Number.isFinite(anchor.lon)
+      ? { lat: anchor.lat, lon: anchor.lon }
+      : null;
+  return {
+    ...oldDoc,
+    hiddenPresetSlugs: Array.isArray(oldDoc.hiddenPresetSlugs)
+      ? oldDoc.hiddenPresetSlugs.filter(
+          (s): s is string => typeof s === "string",
+        )
+      : [],
+    presetAnchor: validAnchor,
+  };
+}
+
 export const preferencesSchema: RxJsonSchema<PreferencesDocType> = {
-  version: 1,
+  // v0 → v1: added selectedForecastModel. v1 → v2: added homeLocation.
+  // v2 → v3: added hiddenPresetSlugs and presetAnchor (suggested places).
+  version: 3,
   primaryKey: "id",
   type: "object",
   properties: {
@@ -52,6 +103,20 @@ export const preferencesSchema: RxJsonSchema<PreferencesDocType> = {
     },
     hasOnboarded: { type: "boolean", default: false },
     selectedForecastModel: { type: "string", default: "best_match" },
+    homeLocation: { type: ["string", "null"], default: null },
+    hiddenPresetSlugs: {
+      type: "array",
+      items: { type: "string" },
+      default: [],
+    },
+    presetAnchor: {
+      type: ["object", "null"],
+      properties: {
+        lat: { type: "number" },
+        lon: { type: "number" },
+      },
+      default: null,
+    },
     updatedAt: { type: "number" },
   },
   required: [
@@ -63,6 +128,9 @@ export const preferencesSchema: RxJsonSchema<PreferencesDocType> = {
     "selectedActivities",
     "hasOnboarded",
     "selectedForecastModel",
+    "homeLocation",
+    "hiddenPresetSlugs",
+    "presetAnchor",
     "updatedAt",
   ],
 };
