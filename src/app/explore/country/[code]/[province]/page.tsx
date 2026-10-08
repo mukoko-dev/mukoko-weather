@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import {
   getCountryByCode,
   getLocationsByProvince,
@@ -78,54 +79,18 @@ export default async function ProvinceDetailPage({ params }: Props) {
     <>
       <Header />
 
-      <nav
-        aria-label="Breadcrumb"
-        className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8"
-      >
-        <ol className="flex flex-wrap items-center gap-1 text-base text-text-tertiary">
-          <li>
-            <Link
-              href="/"
-              className="hover:text-text-secondary transition-colors"
-            >
-              Home
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li>
-            <Link
-              href="/explore"
-              className="hover:text-text-secondary transition-colors"
-            >
-              Explore
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li>
-            <Link
-              href="/explore/country"
-              className="hover:text-text-secondary transition-colors"
-            >
-              Countries
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li>
-            <Link
-              href={`/explore/country/${code.toLowerCase()}`}
-              className="hover:text-text-secondary transition-colors"
-            >
-              {countryName}
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li aria-current="page">
-            <span className="font-medium text-text-primary">
-              {provinceName}
-            </span>
-          </li>
-        </ol>
-      </nav>
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/" },
+          { label: "Explore", href: "/explore" },
+          { label: "Countries", href: "/explore/country" },
+          {
+            label: countryName,
+            href: `/explore/country/${code.toLowerCase()}`,
+          },
+          { label: provinceName },
+        ]}
+      />
 
       <main
         id="main-content"
@@ -151,7 +116,7 @@ export default async function ProvinceDetailPage({ params }: Props) {
             <Link
               key={loc.slug}
               href={`/${loc.slug}`}
-              className="group pangolin transition-all hover:shadow-md hover:bg-surface-card/80 focus-visible:outline-2 focus-visible:outline-primary"
+              className="group card-interactive pangolin"
             >
               <h2 className="font-medium text-text-primary group-hover:text-primary transition-colors">
                 {loc.name}
