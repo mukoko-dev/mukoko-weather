@@ -48,7 +48,7 @@ describe("ProfileClient — account section", () => {
 describe("ProfileClient — My Weather preferences section", () => {
   it("has an Edit preferences button wired to openMyWeather", () => {
     expect(source).toContain("Edit preferences");
-    expect(source).toContain("onClick={openMyWeather}");
+    expect(source).toContain("onClick={() => openMyWeather()}");
   });
 });
 
