@@ -112,3 +112,24 @@ describe("HourlyScrollCards — one-sentence outlook", () => {
     expect(source).toContain("hydrated ? hourlySummary");
   });
 });
+
+describe("HourlyScrollCards — keyboard-focusable scroll region", () => {
+  it("passes a ref to the ScrollArea viewport (the element that actually scrolls)", () => {
+    expect(source).toContain("viewportRef={scrollRef}");
+    expect(source).toContain("useRef<HTMLDivElement>(null)");
+  });
+
+  it("makes the viewport tab-focusable and a labelled region in an effect", () => {
+    expect(source).toContain("viewport.tabIndex = 0");
+    expect(source).toContain('viewport.setAttribute("role", "region")');
+    expect(source).toContain(
+      'viewport.setAttribute("aria-label", HOURLY_SCROLL_LABEL)',
+    );
+  });
+
+  it("exports a descriptive scroll-region label", () => {
+    expect(source).toContain(
+      'export const HOURLY_SCROLL_LABEL = "Hourly forecast, scroll horizontally"',
+    );
+  });
+});
