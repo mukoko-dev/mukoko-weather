@@ -1,8 +1,11 @@
 import type { WeatherSceneConfig, SceneElements } from "../types";
+import { getScenePalette } from "../palette";
+import { scatter, softPointsMaterial, softSprite } from "./shared";
 
 /**
- * Fog scene.
- * Dense white/grey particles at all depths, high fog density, muted palette.
+ * Fog / mist scene, also used for haze, smoke and dust.
+ * Colours: palette.ts — `fog` is desaturated pale grey; `haze` is warm tan /
+ * ochre with a dimmed sun showing through. Dense soft wisps at every depth.
  */
 export function buildFogScene(
   THREE: typeof import("three"),
@@ -10,56 +13,70 @@ export function buildFogScene(
   config: WeatherSceneConfig,
 ): SceneElements {
   const { isDay, isMobile } = config;
+  const isHaze = config.type === "haze";
+  const p = getScenePalette(isHaze ? "haze" : "fog", isDay, config.phase);
+  const sprite = softSprite(THREE);
   const disposables: { dispose(): void }[] = [];
+  if (sprite) disposables.push(sprite);
 
-  // Very dense fog
-  scene.fog = new THREE.FogExp2(isDay ? 0xc8c8c0 : 0x1a1a20, 0.04);
+  scene.fog = new THREE.FogExp2(p.fog, isHaze ? 0.03 : 0.04);
 
-  // Dense fog particles at multiple depths
-  const FOG_COUNT = isMobile ? 60 : 120;
-  const fogPos = new Float32Array(FOG_COUNT * 3);
-  const fogDrift = new Float32Array(FOG_COUNT);
-  for (let i = 0; i < FOG_COUNT; i++) {
-    fogPos[i * 3] = (Math.random() - 0.5) * 35;
-    fogPos[i * 3 + 1] = (Math.random() - 0.5) * 20;
-    fogPos[i * 3 + 2] = (Math.random() - 0.5) * 25;
-    fogDrift[i] = 0.002 + Math.random() * 0.004;
+  // Haze: a dimmed, diffuse sun disc behind the dust
+  let sunMat: InstanceType<typeof THREE.MeshBasicMaterial> | null = null;
+  if (isHaze && isDay) {
+    const sunGeo = new THREE.SphereGeometry(2.6, 16, 16);
+    sunMat = new THREE.MeshBasicMaterial({
+      color: p.body,
+      transparent: true,
+      opacity: 0.45,
+    });
+    const sun = new THREE.Mesh(sunGeo, sunMat);
+    sun.position.set(5, 6, -12);
+    scene.add(sun);
+    disposables.push(sunGeo, sunMat);
   }
+
+  // Dense wisps
+  const FOG_COUNT = isMobile ? 50 : 100;
+  const fogDrift = new Float32Array(FOG_COUNT);
+  for (let i = 0; i < FOG_COUNT; i++)
+    fogDrift[i] = 0.002 + Math.random() * 0.004;
   const fogGeo = new THREE.BufferGeometry();
-  fogGeo.setAttribute("position", new THREE.BufferAttribute(fogPos, 3));
-  const fogMat = new THREE.PointsMaterial({
-    color: isDay ? 0xe4e4e4 : 0x77778a,
-    size: 2.3,
-    transparent: true,
-    opacity: 0.26,
+  fogGeo.setAttribute(
+    "position",
+    new THREE.BufferAttribute(
+      scatter(FOG_COUNT, [-17.5, 17.5], [-10, 10], [-12.5, 12.5]),
+      3,
+    ),
+  );
+  const fogMat = softPointsMaterial(THREE, sprite, {
+    color: p.cloud,
+    size: 9,
+    opacity: 0.22,
   });
-  const fogParticles = new THREE.Points(fogGeo, fogMat);
-  scene.add(fogParticles);
+  scene.add(new THREE.Points(fogGeo, fogMat));
   disposables.push(fogGeo, fogMat);
 
-  // Secondary — finer mist particles
+  // Finer mist (fog) / suspended dust (haze)
   const MIST_COUNT = isMobile ? 30 : 60;
-  const mistPos = new Float32Array(MIST_COUNT * 3);
-  for (let i = 0; i < MIST_COUNT; i++) {
-    mistPos[i * 3] = (Math.random() - 0.5) * 30;
-    mistPos[i * 3 + 1] = (Math.random() - 0.5) * 15;
-    mistPos[i * 3 + 2] = (Math.random() - 0.5) * 20;
-  }
   const mistGeo = new THREE.BufferGeometry();
-  mistGeo.setAttribute("position", new THREE.BufferAttribute(mistPos, 3));
-  const mistMat = new THREE.PointsMaterial({
-    color: isDay ? 0xf4f4f4 : 0x66667a,
-    size: 0.95,
-    transparent: true,
-    opacity: 0.3,
+  mistGeo.setAttribute(
+    "position",
+    new THREE.BufferAttribute(
+      scatter(MIST_COUNT, [-15, 15], [-7.5, 7.5], [-10, 10]),
+      3,
+    ),
+  );
+  const mistMat = softPointsMaterial(THREE, sprite, {
+    color: p.particle,
+    size: isHaze ? 0.5 : 2.4,
+    opacity: isHaze ? 0.6 : 0.35,
   });
-  const mist = new THREE.Points(mistGeo, mistMat);
-  scene.add(mist);
+  scene.add(new THREE.Points(mistGeo, mistMat));
   disposables.push(mistGeo, mistMat);
 
   return {
     update(elapsed) {
-      // Fog drifts slowly in random directions
       const pos = fogGeo.attributes.position as InstanceType<
         typeof THREE.BufferAttribute
       >;
@@ -70,7 +87,6 @@ export function buildFogScene(
       }
       pos.needsUpdate = true;
 
-      // Mist has gentle vertical float
       const mpos = mistGeo.attributes.position as InstanceType<
         typeof THREE.BufferAttribute
       >;
@@ -81,8 +97,8 @@ export function buildFogScene(
       }
       mpos.needsUpdate = true;
 
-      // Opacity undulates slowly
-      fogMat.opacity = 0.26 + Math.sin(elapsed * 0.3) * 0.04;
+      fogMat.opacity = 0.22 + Math.sin(elapsed * 0.3) * 0.03;
+      if (sunMat) sunMat.opacity = 0.45 + Math.sin(elapsed * 0.4) * 0.05;
     },
     dispose() {
       for (const d of disposables) d.dispose();

@@ -1,9 +1,12 @@
 import type { WeatherSceneConfig, SceneElements } from "../types";
+import { getScenePalette } from "../palette";
+import { scatter, softGlow, softPointsMaterial, softSprite } from "./shared";
 
 /**
- * Clear sky scene.
- * Day: bright sun sphere + golden glow ring + warm dust motes floating slowly.
- * Night: moon sphere + tiny star points + cool blue palette.
+ * Clear sky scene. Colours: palette.ts (`clear`).
+ * Day: warm yellow-white sun + soft halo + faint sunlit motes.
+ * Night: cool white moon + twinkling cool white stars over deep navy.
+ * Dawn/dusk (phase): the sun and halo warm to orange/pink.
  */
 export function buildClearScene(
   THREE: typeof import("three"),
@@ -11,63 +14,61 @@ export function buildClearScene(
   config: WeatherSceneConfig,
 ): SceneElements {
   const { isDay, isMobile } = config;
+  const p = getScenePalette("clear", isDay, config.phase);
   const geoDetail = isMobile ? 8 : 16;
+  const sprite = softSprite(THREE);
   const disposables: { dispose(): void }[] = [];
+  if (sprite) disposables.push(sprite);
 
-  // Sky color via fog
-  scene.fog = new THREE.FogExp2(isDay ? 0x87ceeb : 0x0a0f2a, 0.008);
+  scene.fog = new THREE.FogExp2(p.fog, 0.008);
 
   if (isDay) {
-    // Sun
-    const sunGeo = new THREE.SphereGeometry(4, geoDetail, geoDetail);
+    // Sun — low at dawn/dusk, high otherwise
+    const twilight = config.phase === "dawn" || config.phase === "dusk";
+    const sunGeo = new THREE.SphereGeometry(3.4, geoDetail, geoDetail);
     const sunMat = new THREE.MeshBasicMaterial({
-      color: 0xffc233,
+      color: p.body,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.85,
     });
     const sun = new THREE.Mesh(sunGeo, sunMat);
-    sun.position.set(6, 6, -12);
+    sun.position.set(6, twilight ? -2 : 6, -12);
     scene.add(sun);
     disposables.push(sunGeo, sunMat);
 
-    // Glow ring
-    const glowGeo = new THREE.RingGeometry(4, 8, isMobile ? 16 : 32);
-    const glowMat = new THREE.MeshBasicMaterial({
-      color: 0xffdd66,
-      transparent: true,
-      opacity: 0.24,
-      side: THREE.DoubleSide,
+    // Halo
+    const glow = softGlow(THREE, sprite, {
+      color: p.glow,
+      size: 22,
+      opacity: 0.5,
+      position: sun.position,
     });
-    const glow = new THREE.Mesh(glowGeo, glowMat);
-    glow.position.copy(sun.position);
-    scene.add(glow);
-    disposables.push(glowGeo, glowMat);
+    const glowMat = glow.material;
+    scene.add(glow.object);
+    disposables.push(glow.geometry, glowMat);
 
-    // Dust motes
-    const DUST_COUNT = isMobile ? 45 : 110;
-    const dustPos = new Float32Array(DUST_COUNT * 3);
-    for (let i = 0; i < DUST_COUNT; i++) {
-      dustPos[i * 3] = (Math.random() - 0.5) * 40;
-      dustPos[i * 3 + 1] = (Math.random() - 0.5) * 25;
-      dustPos[i * 3 + 2] = (Math.random() - 0.5) * 30;
-    }
+    // Sunlit motes
+    const DUST_COUNT = isMobile ? 40 : 100;
     const dustGeo = new THREE.BufferGeometry();
-    dustGeo.setAttribute("position", new THREE.BufferAttribute(dustPos, 3));
-    const dustMat = new THREE.PointsMaterial({
-      color: 0xffd700,
-      size: 0.19,
-      transparent: true,
-      opacity: 0.6,
+    dustGeo.setAttribute(
+      "position",
+      new THREE.BufferAttribute(
+        scatter(DUST_COUNT, [-20, 20], [-12.5, 12.5], [-15, 15]),
+        3,
+      ),
+    );
+    const dustMat = softPointsMaterial(THREE, sprite, {
+      color: p.particle,
+      size: 0.35,
+      opacity: 0.55,
     });
-    const dust = new THREE.Points(dustGeo, dustMat);
-    scene.add(dust);
+    scene.add(new THREE.Points(dustGeo, dustMat));
     disposables.push(dustGeo, dustMat);
 
     return {
       update(elapsed) {
-        sunMat.opacity = 0.6 + Math.sin(elapsed * 1.2) * 0.1;
-        glowMat.opacity = 0.24 + Math.sin(elapsed * 0.8) * 0.06;
-        // Gentle float
+        sunMat.opacity = 0.85 + Math.sin(elapsed * 1.2) * 0.06;
+        glowMat.opacity = 0.5 + Math.sin(elapsed * 0.8) * 0.08;
         const pos = dustGeo.attributes.position as InstanceType<
           typeof THREE.BufferAttribute
         >;
@@ -84,42 +85,53 @@ export function buildClearScene(
     };
   }
 
-  // Night scene
-  const moonGeo = new THREE.SphereGeometry(3, geoDetail, geoDetail);
+  // Night — moon
+  const moonGeo = new THREE.SphereGeometry(2.4, geoDetail, geoDetail);
   const moonMat = new THREE.MeshBasicMaterial({
-    color: 0xd2d2e0,
+    color: p.body,
     transparent: true,
-    opacity: 0.55,
+    opacity: 0.9,
   });
   const moon = new THREE.Mesh(moonGeo, moonMat);
   moon.position.set(-5, 7, -12);
   scene.add(moon);
   disposables.push(moonGeo, moonMat);
 
-  // Stars
-  const STAR_COUNT = isMobile ? 70 : 150;
-  const starPos = new Float32Array(STAR_COUNT * 3);
-  for (let i = 0; i < STAR_COUNT; i++) {
-    starPos[i * 3] = (Math.random() - 0.5) * 50;
-    starPos[i * 3 + 1] = Math.random() * 20;
-    starPos[i * 3 + 2] = -10 - Math.random() * 20;
-  }
-  const starGeo = new THREE.BufferGeometry();
-  starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
-  const starMat = new THREE.PointsMaterial({
-    color: 0xffffff,
-    size: 0.14,
-    transparent: true,
-    opacity: 0.9,
+  const moonGlow = softGlow(THREE, sprite, {
+    color: p.glow,
+    size: 12,
+    opacity: 0.3,
+    position: moon.position,
   });
-  const stars = new THREE.Points(starGeo, starMat);
-  scene.add(stars);
-  disposables.push(starGeo, starMat);
+  const moonGlowMat = moonGlow.material;
+  scene.add(moonGlow.object);
+  disposables.push(moonGlow.geometry, moonGlowMat);
+
+  // Stars — two twinkle groups out of phase
+  const STAR_COUNT = isMobile ? 70 : 150;
+  const half = Math.floor(STAR_COUNT / 2);
+  const starMats = [0, 1].map(() =>
+    softPointsMaterial(THREE, sprite, {
+      color: p.particle,
+      size: 0.32,
+      opacity: 0.9,
+    }),
+  );
+  [half, STAR_COUNT - half].forEach((n, k) => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute(
+      "position",
+      new THREE.BufferAttribute(scatter(n, [-25, 25], [0, 20], [-30, -10]), 3),
+    );
+    scene.add(new THREE.Points(geo, starMats[k]));
+    disposables.push(geo, starMats[k]);
+  });
 
   return {
     update(elapsed) {
-      moonMat.opacity = 0.55 + Math.sin(elapsed * 0.8) * 0.07;
-      starMat.opacity = 0.72 + Math.sin(elapsed * 2) * 0.22;
+      moonMat.opacity = 0.9 + Math.sin(elapsed * 0.8) * 0.05;
+      starMats[0].opacity = 0.7 + Math.sin(elapsed * 2) * 0.25;
+      starMats[1].opacity = 0.7 + Math.cos(elapsed * 1.6) * 0.25;
     },
     dispose() {
       for (const d of disposables) d.dispose();
