@@ -22,12 +22,10 @@ APIError = anth.anthropic.APIError
 @pytest.fixture(autouse=True)
 def _reset_module_state():
     anth._client = None
-    anth._client_key_hash = None
     prompts._prompt_doc_cache = {}
     prompts._prompt_doc_cache_at = 0
     yield
     anth._client = None
-    anth._client_key_hash = None
     prompts._prompt_doc_cache = {}
     prompts._prompt_doc_cache_at = 0
 
@@ -85,6 +83,9 @@ class TestGetAnthropicClient:
     @patch("py._anthropic.get_api_key")
     @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "same-key"}, clear=True)
     def test_reuses_singleton_for_same_key(self, _mock_key, mock_cls):
+        # The real client exposes the key it was built with; the singleton
+        # check compares against it.
+        mock_cls.return_value.api_key = "same-key"
         first = get_anthropic_client()
         second = get_anthropic_client()
         assert first is second
@@ -103,12 +104,10 @@ class TestGetAnthropicClient:
 
     @patch("py._anthropic.anthropic.Anthropic")
     @patch("py._anthropic.get_api_key", return_value=None)
-    def test_stores_key_hash_not_raw_key(self, _mock_key, _mock_cls):
+    def test_no_key_digest_kept_at_module_level(self, _mock_key, _mock_cls):
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "secret-value"}, clear=True):
             get_anthropic_client()
-        assert anth._client_key_hash is not None
-        assert "secret-value" not in anth._client_key_hash
-        assert len(anth._client_key_hash) == 64
+        assert not hasattr(anth, "_client_key_hash")
 
 
 # ---------------------------------------------------------------------------
