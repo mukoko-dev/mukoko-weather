@@ -41,6 +41,14 @@ Waze-style community weather reports cross-validated against API data, an EPA
 air-quality index with a full pollutant breakdown, a historical dashboard with
 Claude-authored trend analysis, and an embeddable widget. It installs as a PWA.
 
+**Weather display** — `/display` is a full-screen page for a TV, tablet or
+monitor on a wall: clock, current conditions, air quality with plain-language
+haze advice, a radar map of the area, the next hours and five days. It keeps the
+screen awake, refreshes itself (weather every 10 min, air quality every 30 min)
+and needs no sign-in. Configure it by URL, for example
+`/display?location=singapore-sg&theme=dark` or `/display?lat=-17.83&lon=31.05`;
+`layer` picks the map overlay (default `precipitationIntensity`).
+
 Some AI surfaces are behind flags. **Shamwari full-viewport chat is paused**
 (`FLAGS.shamwari_chat` is `false`; `/shamwari` 404s); inline AI summaries,
 follow-up chat, and AI explore search remain live.
