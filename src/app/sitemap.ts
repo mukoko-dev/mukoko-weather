@@ -8,12 +8,12 @@ import {
 import { TAGS } from "@/lib/seed-tags";
 import { logError } from "@/lib/observability";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 3600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = "https://weather.mukoko.com";
   const now = new Date();
 
   // Priority tiers for sitelink signals:
@@ -23,61 +23,61 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // 0.3-0.5 — legal / utility pages
   const staticPages: MetadataRoute.Sitemap = [
     {
-      url: baseUrl,
+      url: SITE_URL,
       lastModified: now,
       changeFrequency: "hourly",
       priority: 1.0,
     },
     {
-      url: `${baseUrl}/harare`,
+      url: `${SITE_URL}/harare`,
       lastModified: now,
       changeFrequency: "hourly",
       priority: 0.9,
     },
     {
-      url: `${baseUrl}/bulawayo`,
+      url: `${SITE_URL}/bulawayo`,
       lastModified: now,
       changeFrequency: "hourly",
       priority: 0.9,
     },
     {
-      url: `${baseUrl}/victoria-falls`,
+      url: `${SITE_URL}/victoria-falls`,
       lastModified: now,
       changeFrequency: "hourly",
       priority: 0.9,
     },
     {
-      url: `${baseUrl}/history`,
+      url: `${SITE_URL}/history`,
       lastModified: now,
       changeFrequency: "daily",
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/aviation`,
+      url: `${SITE_URL}/aviation`,
       lastModified: now,
       changeFrequency: "daily",
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/help`,
+      url: `${SITE_URL}/help`,
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.7,
     },
     {
-      url: `${baseUrl}/about`,
+      url: `${SITE_URL}/about`,
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.7,
     },
     {
-      url: `${baseUrl}/status`,
+      url: `${SITE_URL}/status`,
       lastModified: now,
       changeFrequency: "always",
       priority: 0.6,
     },
     {
-      url: `${baseUrl}/explore`,
+      url: `${SITE_URL}/explore`,
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.8,
@@ -87,7 +87,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...(isFeatureEnabled("shamwari_chat")
       ? [
           {
-            url: `${baseUrl}/shamwari`,
+            url: `${SITE_URL}/shamwari`,
             lastModified: now,
             changeFrequency: "daily" as const,
             priority: 0.8,
@@ -95,25 +95,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         ]
       : []),
     {
-      url: `${baseUrl}/embed`,
+      url: `${SITE_URL}/embed`,
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.5,
     },
     {
-      url: `${baseUrl}/developers`,
+      url: `${SITE_URL}/developers`,
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.6,
     },
     {
-      url: `${baseUrl}/privacy`,
+      url: `${SITE_URL}/privacy`,
       lastModified: now,
       changeFrequency: "yearly",
       priority: 0.3,
     },
     {
-      url: `${baseUrl}/terms`,
+      url: `${SITE_URL}/terms`,
       lastModified: now,
       changeFrequency: "yearly",
       priority: 0.3,
@@ -154,13 +154,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Explore tag pages — sourced from DB so new tags appear without deploys
   const explorePages: MetadataRoute.Sitemap = [
     {
-      url: `${baseUrl}/explore/country`,
+      url: `${SITE_URL}/explore/country`,
       lastModified: now,
       changeFrequency: "weekly" as const,
       priority: 0.8,
     },
     ...featuredTagSlugs.map((tag) => ({
-      url: `${baseUrl}/explore/${tag}`,
+      url: `${SITE_URL}/explore/${tag}`,
       lastModified: now,
       changeFrequency: "weekly" as const,
       priority: 0.7,
@@ -169,7 +169,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Country pages
   const countryPages: MetadataRoute.Sitemap = countryCodes.map((code) => ({
-    url: `${baseUrl}/explore/country/${code.toLowerCase()}`,
+    url: `${SITE_URL}/explore/country/${code.toLowerCase()}`,
     lastModified: now,
     changeFrequency: "weekly" as const,
     priority: 0.6,
@@ -180,7 +180,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const locationPages: MetadataRoute.Sitemap = locations
     .filter((loc) => !boostedSlugs.has(loc.slug))
     .map((loc) => ({
-      url: `${baseUrl}/${loc.slug}`,
+      url: `${SITE_URL}/${loc.slug}`,
       lastModified: now,
       changeFrequency: "hourly" as const,
       priority: loc.tags.includes("city") ? 0.9 : 0.7,
@@ -189,19 +189,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Sub-route pages for each location (atmosphere, forecast, map)
   const subRoutePages: MetadataRoute.Sitemap = locations.flatMap((loc) => [
     {
-      url: `${baseUrl}/${loc.slug}/atmosphere`,
+      url: `${SITE_URL}/${loc.slug}/atmosphere`,
       lastModified: now,
       changeFrequency: "hourly" as const,
       priority: loc.tags.includes("city") ? 0.6 : 0.4,
     },
     {
-      url: `${baseUrl}/${loc.slug}/forecast`,
+      url: `${SITE_URL}/${loc.slug}/forecast`,
       lastModified: now,
       changeFrequency: "hourly" as const,
       priority: loc.tags.includes("city") ? 0.7 : 0.5,
     },
     {
-      url: `${baseUrl}/${loc.slug}/map`,
+      url: `${SITE_URL}/${loc.slug}/map`,
       lastModified: now,
       changeFrequency: "daily" as const,
       priority: loc.tags.includes("city") ? 0.5 : 0.3,
@@ -210,7 +210,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Province pages — /explore/country/{code}/{province-slug}
   const provincePages: MetadataRoute.Sitemap = provinces.map((p) => ({
-    url: `${baseUrl}/explore/country/${p.countryCode.toLowerCase()}/${p.slug}`,
+    url: `${SITE_URL}/explore/country/${p.countryCode.toLowerCase()}/${p.slug}`,
     lastModified: now,
     changeFrequency: "weekly" as const,
     priority: 0.5,
