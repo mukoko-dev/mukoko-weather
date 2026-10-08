@@ -130,6 +130,8 @@ Both the location and history pages load progressively through `LazySection`, an
 IntersectionObserver wrapper — only the first section is eager, which is what
 keeps low-end mobile from running out of memory.
 
+**Official Singapore air quality** — `/api/py/sg-air` serves the National Environment Agency's PSI and PM2.5 readings from data.gov.sg. It is cached for 10 minutes, guarded by a circuit breaker, and returns `available: false` instead of failing. The `/display` page shows it beside the modelled AQI for Singapore.
+
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the search and caching internals, and
 [CLAUDE.md](CLAUDE.md) for the full route, component, and styling map.
 
