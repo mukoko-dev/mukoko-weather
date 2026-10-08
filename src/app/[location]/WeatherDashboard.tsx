@@ -20,6 +20,7 @@ import {
   restrictToParentElement,
 } from "@dnd-kit/modifiers";
 import { Header } from "@/components/layout/Header";
+import { useLocationSwipe } from "@/components/layout/LocationPager";
 import { Footer } from "@/components/layout/Footer";
 import { CurrentConditions } from "@/components/weather/CurrentConditions";
 import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";
@@ -158,6 +159,8 @@ export function WeatherDashboard({
   const hydrateSectionOrder = useAppStore((s) => s.hydrateSectionOrder);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
+  // Swipe left/right between the visitor's locations (off while reordering).
+  const swipe = useLocationSwipe({ enabled: !reordering });
   // Windy-style ADDITIONAL data — multi-model comparison + minutely nowcast.
   // Fetched client-side from Open-Meteo (free, keyless) so it never blocks the
   // server-rendered base forecast. Re-fetched when the user changes model.
@@ -339,6 +342,7 @@ export function WeatherDashboard({
           id="main-content"
           className="animate-fade-in mx-auto max-w-7xl overflow-x-hidden px-4 py-3 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-6 md:px-8"
           aria-label={`Weather dashboard for ${location.name}`}
+          {...swipe}
         >
           {/* H1 for SEO — visually integrated but semantically correct */}
           <h1 className="sr-only">
