@@ -112,7 +112,7 @@ describe("focus rings (WCAG 1.4.11 non-text contrast, 3:1)", () => {
 function focusVisibleGroups(source: string) {
   const groups: { selectors: string[]; body: string; topLevel: boolean }[] = [];
   const re =
-    /^(\.[\w-]+:focus-visible(?:,\s*\n?\s*\.[\w-]+:focus-visible)*)\s*\{([^}]*)\}/gm;
+    /^(\.[\w-]+:focus-visible(?:,\s*\.[\w-]+:focus-visible)*)\s*\{([^}]*)\}/gm;
   for (const m of source.matchAll(re)) {
     groups.push({
       selectors: m[1].split(",").map((s) =>
