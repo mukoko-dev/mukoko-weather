@@ -230,7 +230,14 @@ describe("heroActivityClause", () => {
 });
 
 describe("sky plate tokens — contrast", () => {
-  const css = readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8");
+  // globals.css @imports the Mzizi tokens (the --color-<mineral> sources the
+  // plate tokens resolve through), so read both in cascade order. The Mzizi
+  // light block is `:root, [data-theme="light"]`; normalise it to `:root`.
+  const css =
+    readFileSync(resolve(__dirname, "../app/mzizi-tokens.css"), "utf-8")
+      .replace(/:root,\s*\[data-theme="light"\] \{/g, ":root {") +
+    "\n" +
+    readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8");
 
   /** Body of the first top-level block whose selector matches. */
   function blockBody(selector: string): string {
