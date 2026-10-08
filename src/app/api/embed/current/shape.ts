@@ -5,49 +5,10 @@
  * export route handlers + config — arbitrary named exports are rejected at build.
  */
 
+import { weatherCodeToInfo, windDirection } from "@/lib/weather";
 import { SITE_URL } from "@/lib/site";
 
 export const DEFAULT_SITE = SITE_URL;
-
-// WMO 4677 weather-code → human label (mirrors the embed widget map).
-export function weatherLabel(code: number): string {
-  const map: Record<number, string> = {
-    0: "Clear sky",
-    1: "Mainly clear",
-    2: "Partly cloudy",
-    3: "Overcast",
-    45: "Fog",
-    48: "Fog",
-    51: "Drizzle",
-    53: "Drizzle",
-    55: "Drizzle",
-    56: "Freezing drizzle",
-    57: "Freezing drizzle",
-    61: "Rain",
-    63: "Rain",
-    65: "Heavy rain",
-    66: "Freezing rain",
-    67: "Freezing rain",
-    71: "Snow",
-    73: "Snow",
-    75: "Heavy snow",
-    77: "Snow grains",
-    80: "Showers",
-    81: "Showers",
-    82: "Violent showers",
-    85: "Snow showers",
-    86: "Snow showers",
-    95: "Thunderstorm",
-    96: "Thunderstorm",
-    99: "Thunderstorm",
-  };
-  return map[code] ?? "Unknown";
-}
-
-export function windDir(deg: number): string {
-  const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-  return dirs[Math.round(deg / 45) % 8];
-}
 
 // Weather shapes we consume from /api/py/weather (only the fields we use).
 export interface WeatherCurrent {
@@ -139,7 +100,7 @@ export function shapeEmbedResponse(
       date,
       day: dayName(date, i),
       code,
-      condition: weatherLabel(code),
+      condition: weatherCodeToInfo(code).label,
       high: round(daily.temperature_2m_max?.[i]),
       low: round(daily.temperature_2m_min?.[i]),
       precipitationProbability: round(daily.precipitation_probability_max?.[i]),
@@ -154,14 +115,14 @@ export function shapeEmbedResponse(
       temp: round(current.temperature_2m),
       feelsLike: round(current.apparent_temperature),
       code,
-      condition: weatherLabel(code),
+      condition: weatherCodeToInfo(code).label,
       high: dailyEntries[0]?.high ?? null,
       low: dailyEntries[0]?.low ?? null,
       humidity: round(current.relative_humidity_2m),
       windSpeed: round(current.wind_speed_10m),
       windDirection:
         typeof current.wind_direction_10m === "number"
-          ? windDir(current.wind_direction_10m)
+          ? windDirection(current.wind_direction_10m, { points: 8 })
           : null,
       isDay: current.is_day !== 0,
     },
