@@ -80,3 +80,13 @@ describe("WelcomeBanner — styling", () => {
     expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}/);
   });
 });
+
+describe("WelcomeBanner — hydration safety", () => {
+  it("renders nothing until React has hydrated, like the server", () => {
+    // hasStoreHydrated() alone is a module flag that can already be true
+    // during hydration (fast storage, slow device), which rendered the banner
+    // where the server rendered nothing and threw React error 418 on iOS Safari.
+    expect(source).toContain('from "@/lib/use-hydrated"');
+    expect(source).toMatch(/if \(!hydrated \|\| !hasStoreHydrated\(\)\) return null/);
+  });
+});
