@@ -32,4 +32,6 @@ for (const file of WORKER_FILES) {
   copyFileSync(join(dist, file), join(outDir, file));
 }
 const { version } = JSON.parse(readFileSync(pkgPath, "utf8"));
-console.log(`maplibre-gl ${version}: worker copied to public/vendor/maplibre-gl/`);
+console.log(
+  `maplibre-gl ${version}: worker copied to public/vendor/maplibre-gl/`,
+);
