@@ -31,6 +31,12 @@ const localStorageMock = (() => {
 })();
 
 Object.defineProperty(globalThis, "localStorage", { value: localStorageMock });
+// Simulate a browser environment so SSR guards in safe-storage pass
+Object.defineProperty(globalThis, "window", {
+  value: globalThis,
+  writable: true,
+  configurable: true,
+});
 
 // ---------------------------------------------------------------------------
 // Mock fetch
