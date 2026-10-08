@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   StatusDot,
   StatusBadge,
@@ -31,32 +32,31 @@ function OverallBanner({
   const isOperational = status === "operational";
 
   return (
-    <div
-      className={`mt-6 flex items-center gap-3 rounded-[var(--radius-card)] border p-4 ${
-        isOperational
-          ? "border-severity-low/30 bg-severity-low/5"
-          : "border-severity-moderate/30 bg-severity-moderate/5"
-      }`}
+    <Alert
+      variant={isOperational ? "success" : "warning"}
+      role="status"
+      className="mt-6 flex items-center gap-3"
     >
-      <span
-        className={`inline-flex h-4 w-4 rounded-full ${
-          isOperational ? "bg-severity-low" : "bg-severity-moderate"
-        }`}
+      <StatusDot
+        status={isOperational ? "operational" : "degraded"}
+        size="lg"
         aria-hidden="true"
       />
       <div>
-        <p
-          className={`font-semibold ${isOperational ? "text-severity-low" : "text-severity-moderate"}`}
+        <AlertTitle
+          className={
+            isOperational ? "text-severity-low" : "text-severity-moderate"
+          }
         >
           {isOperational
             ? "All systems operational"
             : "Some systems are experiencing issues"}
-        </p>
-        <p className="text-base text-text-tertiary">
+        </AlertTitle>
+        <AlertDescription className="text-base text-text-tertiary">
           Last checked: {new Date(timestamp).toLocaleString()}
-        </p>
+        </AlertDescription>
       </div>
-    </div>
+    </Alert>
   );
 }
 
@@ -104,18 +104,13 @@ export function StatusDashboard() {
 
   if (error && !data) {
     return (
-      <div className="mt-8 rounded-[var(--radius-card)] border border-severity-severe/30 bg-severity-severe/5 p-6 text-center">
-        <p className="font-semibold text-severity-severe">
-          Unable to fetch status
-        </p>
-        <p className="mt-1 text-base text-text-secondary">{error}</p>
-        <button
-          onClick={fetchStatus}
-          className="mt-4 rounded-md bg-primary px-4 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-        >
+      <Alert variant="severe" className="mt-8 text-center">
+        <AlertTitle>Unable to fetch status</AlertTitle>
+        <AlertDescription className="text-base">{error}</AlertDescription>
+        <button onClick={fetchStatus} className="kudu-sm mt-4">
           Retry
         </button>
-      </div>
+      </Alert>
     );
   }
 
@@ -153,11 +148,7 @@ export function StatusDashboard() {
 
       <div className="mt-6 flex items-center justify-between text-base text-text-tertiary">
         <p>Total check time: {data.totalLatencyMs}ms</p>
-        <button
-          onClick={fetchStatus}
-          disabled={loading}
-          className="rounded-md bg-surface-card px-3 py-1.5 font-medium text-text-secondary shadow-sm transition-colors hover:bg-surface-card/80 disabled:opacity-50"
-        >
+        <button onClick={fetchStatus} disabled={loading} className="impala-sm">
           {loading ? "Checking..." : "Refresh"}
         </button>
       </div>

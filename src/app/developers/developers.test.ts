@@ -31,9 +31,8 @@ describe("developers page — structure", () => {
     expect(pageSource).toContain("@/lib/auth");
   });
 
-  it("renders the shared Header and Footer", () => {
-    expect(pageSource).toContain("Header");
-    expect(pageSource).toContain("Footer");
+  it("renders the shared Header and Footer via PageShell", () => {
+    expect(pageSource).toContain("PageShell");
   });
 
   it("includes JSON-LD structured data (TechArticle)", () => {
@@ -45,8 +44,9 @@ describe("developers page — structure", () => {
     expect(pageSource).toContain("eagle");
   });
 
-  it("uses the fauna code-block surface class (tortoise)", () => {
-    expect(pageSource).toContain("tortoise");
+  it("renders code samples through the shared CodeBlock (tortoise surface)", () => {
+    expect(pageSource).toContain("CodeBlock");
+    expect(pageSource).not.toContain("tortoise");
   });
 
   it("links to the embed page for the widget", () => {

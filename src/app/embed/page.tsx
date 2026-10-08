@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
+import { PageShell } from "@/components/layout/PageShell";
+import { CodeBlock } from "@/components/ui/code-block";
 import { MukokoWeatherEmbed } from "@/components/embed";
 
 export const metadata: Metadata = {
@@ -41,34 +41,16 @@ const IFRAME_IP = `<!-- No location = the visitor's own weather (from their IP) 
   width="380" height="230" style="border:0" loading="lazy"
   title="mukoko weather — your location"></iframe>`;
 
-function CodeBlock({ children }: { children: string }) {
-  return (
-    <div className="mt-4 tortoise">
-      <pre className="overflow-x-auto text-base">
-        <code className="font-mono text-text-primary">{children}</code>
-      </pre>
-    </div>
-  );
-}
-
 export default function EmbedPage() {
   return (
     <>
-      <Header />
-      <main className="mx-auto max-w-3xl px-4 py-10 pb-24 sm:pb-10 sm:px-6 md:px-8">
-        <h1 className="font-display text-3xl font-bold text-text-primary">
-          Embed Weather Widgets
-        </h1>
+      <PageShell>
+        <h1 className="elephant">Embed Weather Widgets</h1>
         <p className="mt-4 text-text-secondary">
           Add live weather to any website — no build step, no API key, all free.
           The fastest way is a copy-paste{" "}
-          <code className="rounded bg-surface-base px-1.5 py-0.5 font-mono text-base">
-            &lt;iframe&gt;
-          </code>
-          . Four widget types are available. Omit the{" "}
-          <code className="rounded bg-surface-base px-1.5 py-0.5 font-mono text-base">
-            location
-          </code>{" "}
+          <code className="termite">&lt;iframe&gt;</code>. Four widget types are
+          available. Omit the <code className="termite">location</code>{" "}
           parameter and the widget automatically shows the visitor&apos;s local
           weather (detected from their IP).
         </p>
@@ -87,33 +69,33 @@ export default function EmbedPage() {
           <p className="mt-1 text-base text-text-secondary">
             A compact inline card — current temperature, condition, and an icon.
           </p>
-          <CodeBlock>{IFRAME_CURRENT}</CodeBlock>
+          <CodeBlock code={IFRAME_CURRENT} />
 
           <h3 className="mt-6 giraffe">Today card</h3>
           <p className="mt-1 text-base text-text-secondary">
             A fuller current-day card — temperature, condition, feels-like, and
             today&apos;s high / low.
           </p>
-          <CodeBlock>{IFRAME_TODAY}</CodeBlock>
+          <CodeBlock code={IFRAME_TODAY} />
 
           <h3 className="mt-6 giraffe">5-day forecast</h3>
           <p className="mt-1 text-base text-text-secondary">
             A five-day forecast strip — day, condition, and high / low per day.
           </p>
-          <CodeBlock>{IFRAME_5DAY}</CodeBlock>
+          <CodeBlock code={IFRAME_5DAY} />
 
           <h3 className="mt-6 giraffe">7-day forecast</h3>
           <p className="mt-1 text-base text-text-secondary">
             The same layout as the 5-day card, extended to a full week.
           </p>
-          <CodeBlock>{IFRAME_7DAY}</CodeBlock>
+          <CodeBlock code={IFRAME_7DAY} />
 
           <h3 className="mt-6 giraffe">Visitor&apos;s own location</h3>
           <p className="mt-1 text-base text-text-secondary">
             Drop the <code className="font-mono">location</code> parameter and
             the widget resolves the visitor&apos;s weather from their IP.
           </p>
-          <CodeBlock>{IFRAME_IP}</CodeBlock>
+          <CodeBlock code={IFRAME_IP} />
         </section>
 
         {/* 2 · Live preview — proves it works with real data */}
@@ -144,10 +126,7 @@ export default function EmbedPage() {
           <h2 className="eagle">3 · Widget URL parameters</h2>
           <p className="mt-2 text-base text-text-secondary">
             Configure the widget via query parameters on{" "}
-            <code className="rounded bg-surface-base px-1.5 py-0.5 font-mono text-base">
-              {SITE}/embed/widget
-            </code>
-            .
+            <code className="termite">{SITE}/embed/widget</code>.
           </p>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-base">
@@ -201,30 +180,24 @@ export default function EmbedPage() {
             Prefer to build your own UI? The widget is powered by a public JSON
             endpoint you can call directly from any site or server. With no
             parameters it returns weather for the visitor&apos;s location
-            (derived from their IP); pass{" "}
-            <code className="rounded bg-surface-base px-1.5 py-0.5 font-mono text-base">
-              slug
-            </code>{" "}
-            or{" "}
-            <code className="rounded bg-surface-base px-1.5 py-0.5 font-mono text-base">
-              lat
-            </code>{" "}
-            &amp;{" "}
-            <code className="rounded bg-surface-base px-1.5 py-0.5 font-mono text-base">
-              lon
-            </code>{" "}
-            to pin a location. CORS is open to all origins.
+            (derived from their IP); pass <code className="termite">slug</code>{" "}
+            or <code className="termite">lat</code> &amp;{" "}
+            <code className="termite">lon</code> to pin a location. CORS is open
+            to all origins.
           </p>
-          <CodeBlock>{`# Visitor's local weather (IP-based)
+          <CodeBlock
+            code={`# Visitor's local weather (IP-based)
 curl ${SITE}/api/embed/current
 
 # A specific location
 curl "${SITE}/api/embed/current?slug=harare"
 
 # Explicit coordinates
-curl "${SITE}/api/embed/current?lat=-17.83&lon=31.05"`}</CodeBlock>
+curl "${SITE}/api/embed/current?lat=-17.83&lon=31.05"`}
+          />
           <p className="mt-4 text-base text-text-secondary">Response shape:</p>
-          <CodeBlock>{`{
+          <CodeBlock
+            code={`{
   "location": { "name": "Harare", "province": "Harare",
                 "slug": "harare", "country": "ZW" },
   "current":  { "temp": 24, "feelsLike": 23, "code": 2,
@@ -237,17 +210,15 @@ curl "${SITE}/api/embed/current?lat=-17.83&lon=31.05"`}</CodeBlock>
   "source": "ip",
   "attribution": { "name": "mukoko weather",
                    "url": "${SITE}/harare" }
-}`}</CodeBlock>
+}`}
+          />
         </section>
 
         {/* npm package — clearly marked as not yet available */}
         <section className="mt-10 mb-10">
           <h2 className="eagle">React / npm package</h2>
           <p className="mt-2 text-base text-text-secondary">
-            A published{" "}
-            <code className="rounded bg-surface-base px-1.5 py-0.5 font-mono text-base">
-              @mukoko/weather-embed
-            </code>{" "}
+            A published <code className="termite">@mukoko/weather-embed</code>{" "}
             React package is{" "}
             <strong className="text-text-primary">
               not yet available — coming soon
@@ -257,8 +228,7 @@ curl "${SITE}/api/embed/current?lat=-17.83&lon=31.05"`}</CodeBlock>
             React and every other framework) or call the JSON API directly.
           </p>
         </section>
-      </main>
-      <Footer />
+      </PageShell>
     </>
   );
 }
