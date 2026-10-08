@@ -4,14 +4,15 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { WeatherLocation } from "@/lib/locations";
 import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
-import { fetchWeather, checkFrostRisk, getDefaultSeason } from "@/lib/weather";
+import { checkFrostRisk, getDefaultSeason } from "@/lib/weather";
+import { fetchHomeWeather } from "@/lib/home-weather";
 import { detectUserLocation } from "@/lib/geolocation";
 import { useAppStore } from "@/lib/store";
 import { COUNTRIES } from "@/lib/countries";
 import { trackEvent } from "@/lib/analytics";
 import { SearchIcon, NavigationIcon } from "@/lib/weather-icons";
-import { t } from "@/lib/i18n";
-import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
+import { Spinner } from "@/components/ui/spinner";
+import { LocationPromptCard } from "@/components/weather/LocationPromptCard";
 import { WeatherDashboard } from "./[location]/WeatherDashboard";
 import type { AISummaryUser } from "@/components/weather/AISummary";
 
@@ -36,74 +37,85 @@ interface Props {
   user: AISummaryUser | null;
 }
 
-type GpsState = "idle" | "detecting" | "denied" | "error";
+type GpsState = "idle" | "detecting";
 
-/**
- * One-time flag: once we've auto-prompted a visitor for GPS (whatever the
- * outcome), we never auto-prompt again on future visits — unless the browser
- * reports the permission as already granted, in which case the refresh is
- * silent and free. Kept in localStorage so it's readable synchronously.
- */
-const GPS_AUTOPROMPT_KEY = "mukoko-gps-autoprompted";
+/** Set when the visitor dismisses the location card — the only thing that
+ *  stops us offering it again. Never set automatically. */
+const LOCATION_CARD_DISMISSED_KEY = "mukoko-location-card-dismissed";
 
-// Fast, cache-friendly GPS check for the silent refresh (a device usually
-// has a recent fix; 5-min maximumAge makes the common case near-instant).
+// Fast, cache-friendly GPS read for the silent refresh (a device usually
+// has a recent fix; a 5-min maximumAge makes the common case near-instant).
 const GPS_TIMEOUT_MS = 4000;
 const GPS_MAX_AGE_MS = 300000;
-// When the find-only lookup's nearest KNOWN location is further than this
-// from the GPS fix, the user's actual spot isn't in the catalog — escalate
-// to create-on-demand so they see their real place.
-const FAR_NEAREST_KM = 25;
+// When the nearest KNOWN place is further than this from the fix, the
+// visitor's actual spot isn't in the catalog yet — create it on demand so
+// "MY LOCATION" never labels a place several kilometres away.
+const FAR_NEAREST_KM = 3;
 
 function countryNameFor(code?: string): string {
   const cc = (code ?? "").toUpperCase();
   return COUNTRIES.find((c) => c.code === cc)?.name ?? cc;
 }
 
+/** Why the last attempt didn't land, in words a visitor can act on. */
+type PromptMessage = "denied" | "no-location" | "no-weather" | null;
+
+const PROMPT_COPY: Record<Exclude<PromptMessage, null>, string> = {
+  denied: "Location is blocked in your browser settings.",
+  "no-location": "We couldn't find where you are.",
+  "no-weather": "Found you, but the weather didn't load. Try again shortly.",
+};
+
 /**
  * The home page IS the current-location weather page — Apple Weather's
  * MY LOCATION model with the URL kept silent:
  *
- * - The server seeds the dashboard with the best location it knows (the
- *   lastLocation cookie, else IP geo), so returning visitors get a full
- *   server-rendered page instantly — no countdown, no redirect, ever.
- * - On mount, the client refreshes via GPS. Same slug → nothing moves.
- *   Different slug → weather for the new spot is fetched client-side and the
- *   dashboard swaps IN PLACE (stale-while-refresh, like Apple) — the URL
- *   stays `/`. Current location takes precedence over saved by construction:
- *   there is no redirect for a saved location to win.
- * - GPS auto-runs when the browser permission is already granted (silent,
- *   free) or once ever for brand-new visitors (the one-time prompt flag).
- *   Denial/failure just leaves the seeded content — nobody gets stranded.
+ * - The server seeds the dashboard with its best guess (last visited place,
+ *   else IP location), so every visitor sees weather immediately. Nothing is
+ *   asked before value.
+ * - If the browser has ALREADY granted location, the client refreshes
+ *   silently: same place → just the MY LOCATION eyebrow; different place →
+ *   the dashboard swaps in place (URL stays `/`).
+ * - Otherwise we never trigger the permission prompt on load. A slim
+ *   LocationPromptCard offers "Use my location"; the prompt appears only
+ *   when the visitor taps it, so they know why it's being asked.
+ * - MY LOCATION is shown only when GPS produced the place on screen.
  * - Explicit `/{slug}` URLs remain the shareable/SEO surface for saved and
  *   browsed locations; they are untouched by this flow.
  */
 export function CurrentLocationHome({ initial, user }: Props) {
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
+  const openMyWeather = useAppStore((s) => s.openMyWeather);
   const [view, setView] = useState<HomeWeatherPayload | null>(initial);
   const [gpsState, setGpsState] = useState<GpsState>("idle");
   // True once GPS has confirmed (or produced) the location on screen — drives
-  // the MY LOCATION badge. Server-seeded content starts unconfirmed.
+  // the MY LOCATION eyebrow. Server-seeded content starts unconfirmed.
   const [gpsConfirmed, setGpsConfirmed] = useState(false);
+  // The card waits for the permission check so a visitor who already granted
+  // location never sees it flash before the silent refresh lands.
+  const [promptReady, setPromptReady] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [message, setMessage] = useState<PromptMessage>(null);
 
-  // Build the full dashboard payload for a GPS-resolved location client-side.
-  // Weather comes straight from the coordinate-based API; season falls back
-  // to the hemisphere-aware default (the DB-driven localName is a
-  // server-render nicety, not worth a round-trip here).
+  // Build the full dashboard payload for a GPS-resolved location. Weather
+  // goes through our own API (same chain as the server render) — see
+  // fetchHomeWeather. Throws when no weather could be loaded at all.
   async function swapTo(location: WeatherLocation, previousSlug?: string) {
-    const weather = await fetchWeather(location.lat, location.lon);
+    const { weather, usingFallback } = await fetchHomeWeather(
+      location.lat,
+      location.lon,
+    );
     setView({
       location,
       weather,
-      usingFallback: false,
+      usingFallback,
       frostAlert: checkFrostRisk(weather.hourly),
       season: getDefaultSeason(new Date(), location.lat),
       countryName: countryNameFor(location.country),
     });
     setGpsConfirmed(true);
     setSelectedLocation(location.slug);
-    // Refresh the cookie so the NEXT server render seeds this location —
-    // same name/options the edge middleware uses on /{slug} pages.
+    // Refresh the cookie so the NEXT server render seeds this location.
     try {
       document.cookie = `lastLocation=${location.slug}; max-age=2592000; path=/; samesite=lax`;
     } catch {
@@ -118,85 +130,103 @@ export function CurrentLocationHome({ initial, user }: Props) {
     }
   }
 
-  // ── GPS refresh on mount — current location always has the last word ─────
+  /**
+   * GPS → place → weather, shared by the silent refresh and the button.
+   * Returns the problem to show, or null on success.
+   */
+  async function locate(opts: {
+    silent: boolean;
+    isDisposed: () => boolean;
+  }): Promise<PromptMessage> {
+    const result = await detectUserLocation(
+      opts.silent
+        ? {
+            autoCreate: false,
+            timeoutMs: GPS_TIMEOUT_MS,
+            maximumAgeMs: GPS_MAX_AGE_MS,
+          }
+        : { autoCreate: false },
+    );
+    if (opts.isDisposed()) return null;
+    trackEvent("geolocation_result", {
+      status: result.status,
+      location: result.location?.slug,
+    });
+    if (result.status === "denied") return "denied";
+    if (
+      (result.status !== "success" && result.status !== "created") ||
+      !result.location
+    ) {
+      return "no-location";
+    }
+
+    let resolved = result.location;
+    const far = result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM;
+    if (far) {
+      // The fix is fresh, so this second read comes from the browser's
+      // cache — a network hop to create the real place, not another wait.
+      const precise = await detectUserLocation({
+        autoCreate: true,
+        maximumAgeMs: GPS_MAX_AGE_MS,
+      });
+      if (opts.isDisposed()) return null;
+      if (
+        (precise.status === "success" || precise.status === "created") &&
+        precise.location
+      ) {
+        resolved = precise.location;
+      } else if (view) {
+        // Couldn't pin down the exact spot: keep what's on screen rather
+        // than relabel a place kilometres away as MY LOCATION.
+        return "no-location";
+      }
+    }
+
+    if (resolved.slug === view?.location.slug) {
+      setGpsConfirmed(true);
+      return null;
+    }
+    try {
+      await swapTo(resolved, view?.location.slug);
+    } catch {
+      return "no-weather";
+    }
+    return null;
+  }
+
+  // ── Silent refresh on mount — only when location is already granted ──────
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     let disposed = false;
+    try {
+      setDismissed(Boolean(localStorage.getItem(LOCATION_CARD_DISMISSED_KEY)));
+    } catch {
+      /* storage blocked — the card stays available */
+    }
 
     void (async () => {
-      // Decide whether to touch GPS at all:
-      //  - permission already granted → silent refresh, always run;
-      //  - never auto-prompted before → run once (may show the prompt);
-      //  - previously prompted but not granted → leave the seeded content.
-      let granted = false;
+      let state: PermissionState | "unknown" = "unknown";
       try {
         const status = await navigator.permissions?.query({
           name: "geolocation",
         });
-        granted = status?.state === "granted";
-        if (status?.state === "denied") return;
+        if (status) state = status.state;
       } catch {
-        // Permissions API unavailable — fall through to the one-time flag.
+        // Permissions API unavailable (older Safari) — don't guess; offer the card.
       }
-      let promptedBefore = false;
-      try {
-        promptedBefore = Boolean(localStorage.getItem(GPS_AUTOPROMPT_KEY));
-        if (!promptedBefore) localStorage.setItem(GPS_AUTOPROMPT_KEY, "1");
-      } catch {
-        /* ignore */
-      }
-      if (!granted && promptedBefore) return;
       if (disposed) return;
-
-      // No seeded content → show the "finding you" scene while GPS runs.
-      if (!initial) setGpsState("detecting");
-
-      try {
-        const result = await detectUserLocation({
-          autoCreate: false,
-          timeoutMs: GPS_TIMEOUT_MS,
-          maximumAgeMs: GPS_MAX_AGE_MS,
-        });
-        if (disposed) return;
-        trackEvent("geolocation_result", {
-          status: result.status,
-          location: result.location?.slug,
-        });
-
-        if (
-          (result.status === "success" || result.status === "created") &&
-          result.location
-        ) {
-          let resolved = result.location;
-          if (result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM) {
-            // Nearest catalog entry is far from the fix — create-on-demand
-            // resolves the user's actual place (the browser already has a
-            // fresh fix, so this is a network hop, not a second GPS wait).
-            const precise = await detectUserLocation({ autoCreate: true });
-            if (disposed) return;
-            if (
-              (precise.status === "success" || precise.status === "created") &&
-              precise.location
-            ) {
-              resolved = precise.location;
-            }
-          }
-          if (resolved.slug !== initial?.location.slug) {
-            await swapTo(resolved, initial?.location.slug);
-          } else {
-            setGpsConfirmed(true);
-          }
-          if (!disposed) setGpsState("idle");
-        } else if (!initial) {
-          // Nothing seeded AND GPS failed → the chooser below takes over.
-          setGpsState(result.status === "denied" ? "denied" : "error");
-        } else {
-          setGpsState("idle");
-        }
-      } catch {
-        if (!disposed) setGpsState(initial ? "idle" : "error");
+      if (state !== "granted") {
+        if (state === "denied") setMessage("denied");
+        setPromptReady(true);
+        return;
       }
+      setGpsState("detecting");
+      const problem = await locate({ silent: true, isDisposed: () => disposed });
+      if (disposed) return;
+      setGpsState("idle");
+      // A silent refresh that fails stays silent when weather is on screen.
+      if (problem && !view) setMessage(problem);
+      setPromptReady(true);
     })();
 
     return () => {
@@ -206,33 +236,35 @@ export function CurrentLocationHome({ initial, user }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Manual "Use my current location" — explicit intent, so autoCreate directly.
+  // Explicit "Use my location" — the only path that can show the prompt.
   const handleGps = async () => {
+    if (gpsState === "detecting") return;
     setGpsState("detecting");
+    setMessage(null);
     try {
-      const result = await detectUserLocation({ autoCreate: true });
-      trackEvent("geolocation_result", {
-        status: result.status,
-        location: result.location?.slug,
-      });
-      if (
-        (result.status === "success" || result.status === "created") &&
-        result.location
-      ) {
-        await swapTo(result.location, view?.location.slug);
-        setGpsState("idle");
-      } else {
-        setGpsState(result.status === "denied" ? "denied" : "error");
-      }
+      setMessage(await locate({ silent: false, isDisposed: () => false }));
     } catch {
-      setGpsState("error");
+      setMessage("no-location");
+    } finally {
+      setGpsState("idle");
+    }
+  };
+
+  const dismissCard = () => {
+    setDismissed(true);
+    try {
+      localStorage.setItem(LOCATION_CARD_DISMISSED_KEY, "1");
+    } catch {
+      /* ignore */
     }
   };
 
   // ── Current-location dashboard (server-seeded or GPS-swapped) ────────────
   if (view) {
+    const showCard = promptReady && !gpsConfirmed && !dismissed;
     return (
-      <WeatherDashboard
+      <>
+        <WeatherDashboard
         key={view.location.slug}
         weather={view.weather}
         location={view.location}
@@ -242,13 +274,19 @@ export function CurrentLocationHome({ initial, user }: Props) {
         countryName={view.countryName}
         user={user}
         isCurrentLocation={gpsConfirmed}
-      />
+        />
+        {showCard && (
+          <LocationPromptCard
+            placeName={view.location.name}
+            busy={gpsState === "detecting"}
+            message={message ? PROMPT_COPY[message] : null}
+            onUseLocation={handleGps}
+            onDismiss={dismissCard}
+            onSearch={() => openMyWeather()}
+          />
+        )}
+      </>
     );
-  }
-
-  // ── GPS in flight with nothing seeded ─────────────────────────────────────
-  if (gpsState === "detecting") {
-    return <WeatherLoadingScene statusText="Finding your location…" />;
   }
 
   // ── Nothing to show — city chooser ────────────────────────────────────────
@@ -276,20 +314,35 @@ export function CurrentLocationHome({ initial, user }: Props) {
             <button
               type="button"
               onClick={handleGps}
+              disabled={gpsState === "detecting"}
+              aria-busy={gpsState === "detecting"}
               className="kudu press-scale"
             >
-              <NavigationIcon size={15} aria-hidden="true" />
-              Use my current location
+              {gpsState === "detecting" ? (
+                <Spinner className="h-4 w-4 border-current border-t-transparent" />
+              ) : (
+                <NavigationIcon size={15} aria-hidden="true" />
+              )}
+              {gpsState === "detecting"
+                ? "Finding your location…"
+                : "Use my current location"}
             </button>
-            <Link href="/explore" className="impala press-scale">
+            <button
+              type="button"
+              onClick={() => openMyWeather()}
+              className="impala press-scale"
+            >
               <SearchIcon size={15} aria-hidden="true" />
+              Search for a city
+            </button>
+            <Link href="/explore" className="dove underline-offset-4 hover:underline">
               Browse all locations
             </Link>
           </div>
 
-          {(gpsState === "denied" || gpsState === "error") && (
+          {message && (
             <p className="text-sm text-severity-moderate" role="alert">
-              {gpsState === "denied" ? t("geo.denied") : t("geo.error")}
+              {PROMPT_COPY[message]}
             </p>
           )}
         </section>

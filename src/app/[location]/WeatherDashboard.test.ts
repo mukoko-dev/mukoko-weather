@@ -182,22 +182,12 @@ describe("WeatherDashboard — props and integration", () => {
   });
 });
 
-describe("WeatherDashboard — welcome banner onboarding", () => {
-  it("renders WelcomeBanner inline for first-time visitors", () => {
-    // The banner itself gates on hasOnboarded (returns null once onboarded),
-    // so mounting it unconditionally here is safe and lets first-time
-    // visitors see it instead of silently skipping onboarding.
-    expect(source).toContain("<WelcomeBanner");
-    expect(source).toContain("@/components/weather/WelcomeBanner");
-  });
-
-  it("wires WelcomeBanner's personalise action to the My Weather modal", () => {
-    expect(source).toContain("openMyWeather");
-    expect(source).toContain("onChangeLocation={openMyWeather}");
-  });
-
-  it("passes the current location name to WelcomeBanner", () => {
-    expect(source).toContain("locationName={location.name}");
+describe("WeatherDashboard — no first-visit banner", () => {
+  it("does not put a welcome banner above the weather", () => {
+    // The banner pushed the temperature ~1.5 screens down on phones and made
+    // visitors choose before seeing value. Location is offered by the home
+    // page's LocationPromptCard; activities by ActivityInsights' empty state.
+    expect(source).not.toContain("<WelcomeBanner");
   });
 
   it("does not auto-open modal for first-time visitors", () => {

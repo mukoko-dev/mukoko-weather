@@ -39,7 +39,6 @@ import {
 } from "@/components/weather/SectionSkeleton";
 import { FrostAlertBanner } from "./FrostAlertBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
-import { WelcomeBanner } from "@/components/weather/WelcomeBanner";
 import { useAppStore } from "@/lib/store";
 import type {
   WeatherData,
@@ -155,7 +154,6 @@ export function WeatherDashboard({
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const selectedForecastModel = useAppStore((s) => s.selectedForecastModel);
-  const openMyWeather = useAppStore((s) => s.openMyWeather);
   const sectionOrder = useAppStore((s) => s.sectionOrder);
   const setSectionOrder = useAppStore((s) => s.setSectionOrder);
   const hydrateSectionOrder = useAppStore((s) => s.hydrateSectionOrder);
@@ -390,12 +388,6 @@ export function WeatherDashboard({
           <div className="mb-3">
             <SeasonBadge season={season} />
           </div>
-
-          {/* Welcome banner — first-time visitors only, dismissed via its own buttons */}
-          <WelcomeBanner
-            locationName={location.name}
-            onChangeLocation={openMyWeather}
-          />
 
           {/* Weather unavailable banner — shown when all providers failed */}
           {usingFallback && <WeatherUnavailableBanner />}
