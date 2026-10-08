@@ -1,6 +1,6 @@
 "use client";
 
-import { WeatherIcon } from "@/lib/weather-icons";
+import { WeatherIcon, nightIcon } from "@/lib/weather-icons";
 import { weatherCodeToInfo, type HourlyWeather } from "@/lib/weather";
 import { hourlySummary } from "@/lib/hourly-summary";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -77,7 +77,7 @@ export function HourlyScrollCards({ hourly }: Props) {
                   {timeLabel}
                 </span>
                 <WeatherIcon
-                  icon={isDay ? info.icon : "moon"}
+                  icon={isDay ? info.icon : nightIcon(info.icon)}
                   size={20}
                   className="text-primary"
                 />

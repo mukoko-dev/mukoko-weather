@@ -409,7 +409,12 @@ describe("resolveLocationSlug — platform slugs from search", () => {
   it("never resolves a platform slug to a country document", async () => {
     findOneImpl = async (filter) =>
       (filter as Record<string, unknown>).slug
-        ? { _id: "c", name: "Narnia", slug: "narnia-abcdef", geoType: "country" }
+        ? {
+            _id: "c",
+            name: "Narnia",
+            slug: "narnia-abcdef",
+            geoType: "country",
+          }
         : null;
     expect(await resolveLocationSlug("narnia-abcdef")).toBeNull();
   });

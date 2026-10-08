@@ -177,8 +177,8 @@ describe("Header — weather map link", () => {
   });
 
   it("derives the slug from the current location (first path segment or store)", () => {
-    expect(source).toContain(
-      'import { currentLocationSlug, isLocationSlug } from "@/lib/current-slug"',
+    expect(source).toMatch(
+      /import \{[^}]*currentLocationSlug[^}]*isLocationSlug[^}]*\} from "@\/lib\/current-slug"/,
     );
     expect(source).toContain(
       "const mapSlug = currentLocationSlug(pathname, selectedLocation);",
@@ -191,5 +191,13 @@ describe("Header — weather map link", () => {
     );
     expect(source).toContain("href={mapHref}");
     expect(source).toContain("Choose a location for the weather map");
+  });
+});
+
+describe("Header — My Location button", () => {
+  it("seeds the home page with the found place and refreshes it in place on /", () => {
+    expect(source).toContain("writeLastLocationCookie(result.location.slug)");
+    expect(source).toContain("new CustomEvent(CURRENT_LOCATION_EVENT");
+    expect(source).toContain('router.push("/")');
   });
 });

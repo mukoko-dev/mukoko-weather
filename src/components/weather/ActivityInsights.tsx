@@ -160,13 +160,16 @@ export function ActivityInsights({
   // offered where their payoff is (this section), not above the temperature.
   if (selectedItems.length === 0) {
     return (
-      <section aria-labelledby="activity-insights-empty-heading" className="acacia">
+      <section
+        aria-labelledby="activity-insights-empty-heading"
+        className="acacia"
+      >
         <h2 id="activity-insights-empty-heading" className="giraffe">
           Advice for what you do
         </h2>
         <p className="mt-1 gazelle">
-          Farming, football, a braai, the school run — pick a few activities
-          and we&apos;ll tell you how today&apos;s weather affects them.
+          Farming, football, a braai, the school run — pick a few activities and
+          we&apos;ll tell you how today&apos;s weather affects them.
         </p>
         <button
           type="button"
