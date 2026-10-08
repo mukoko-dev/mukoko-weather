@@ -25,7 +25,7 @@ Social: Twitter @mukokoafrica, Instagram @mukoko.africa
 - **Aviation:** NOAA Aviation Weather Center for METAR/TAF data; `@react-pdf/renderer` for pre-flight briefing PDFs; 70+ ICAO airports mapped (`src/lib/icao-codes.ts`, name + verified WGS 84 coords), seeded into the DB-backed `weather.airports` collection (2dsphere-indexed) via `POST /api/db-init` → `syncAirports`. Nearest-station lookup uses MongoDB `$geoNear` through `GET /api/py/airports/nearest`; the TS client `fetchNearestAirports(lat, lon, count)` prefers the DB result and falls back to the static `getNearestIcaos(lat, lon, count)` haversine scan when the DB/API is unavailable, so the location aviation station picker keeps working offline. `getNearestIcao(lat, lon)` remains the primary-station haversine fallback. Flight-category (VFR/MVFR/IFR/LIFR) badge colors are centralized in `src/lib/flight-category-styles.ts` (`FLIGHT_CATEGORY_STYLES`, `getFlightCategoryClass()`), shared by `AviationWeather.tsx` (location page) and `AviationPlanner.tsx` (`/aviation`) so the safety-relevant color coding can't drift between the two
 - **Drag-and-drop:** `@dnd-kit/core` + `@dnd-kit/sortable` for user-reorderable sections on the location page
 - **Branding:** Mukoko brand kit doctrine v4.1.0 — 7 minerals (cobalt, tanzanite, malachite, gold, terracotta, sodalite, copper); Noto Serif (display/wordmark), Noto Sans (UI), JetBrains Mono (code/labels)
-- **Styling:** Tailwind CSS 4 with CSS custom properties (Brand System v6)
+- **Styling:** Tailwind CSS 4 with CSS custom properties (Brand System v6) on the Mzizi design tokens (`src/app/mzizi-tokens.css`, imported first by `globals.css`)
 - **Markdown:** react-markdown 10 (AI summary rendering)
 - **State:** Zustand 5.0.11 (with `persist` middleware — theme, location, activities, hasOnboarded saved to localStorage; device sync to Python backend)
 - **AI:** Anthropic Claude SDK 0.76.0 (server-side via Python FastAPI, Haiku 3.5 model `claude-haiku-4-5-20251001`)
@@ -405,8 +405,8 @@ mukoko-weather/
 │       └── _tiles.py              # Map tile proxy for Tomorrow.io
 ├── station-console/               # Station console app (MONOREPO sub-app — separate Vercel project at weatherstations.nyuchi.com)
 │   ├── package.json               # Own Next.js app: web-only, NO PWA/offline; WorkOS AuthKit with the SAME credentials as the main app (register the /callback redirect URI in WorkOS)
-│   ├── components.json            # Nyuchi Design registry config — bootstrapped via `npx @nyuchi/design-cli init`, components installed from the registry (design.nyuchi.com → mzizi.dev) via the shadcn CLI
-│   ├── .claude/skills/            # Nyuchi Design agent skills (`npx @nyuchi/design-cli skills install`; versions pinned in .nyuchi-design.json)
+│   ├── components.json            # Mzizi design registry config — bootstrapped via `npx @nyuchi/design-cli init`, components installed from the registry (design.nyuchi.com → mzizi.dev) via the shadcn CLI
+│   ├── .claude/skills/            # Mzizi design agent skills (`npx @nyuchi/design-cli skills install`; versions pinned in .nyuchi-design.json)
 │   └── src/                       # Public landing page at / (anonymous visitors get a sign-in CTA; signed-in users get the console — middleware lists "/" in unauthenticatedPaths); console: register stations, one-time credentials + WU/Ecowitt setup instructions, manual readings, status. Calls the /api/py/stations/* endpoints (CORS-allowed origin); station keys live in the owner's browser localStorage.
 │                                  # Styling per Mzizi doctrine: canonical Nyuchi L1 tokens in src/app/globals.css + registry L2 primitives in src/components/ui/ (Button, Input, Label, Card, Badge, Alert, RadioGroup) + vendored L7 shell (src/components/shell/nyuchi-header.tsx, nyuchi-footer.tsx from the Mzizi registry, wired app-wide in layout.tsx with a local @/lib/harness shim until the real harness package ships; icons via @/lib/icons, never lucide direct) — pages are pure composition, no hand-rolled CSS classes; theme via next-themes (class-based dark mode); fonts Noto Sans/Serif + JetBrains Mono via next/font. The seven-mineral brand ribbon is ALWAYS VERTICAL: fixed 4px .minerals-stripe down the left viewport edge (same as the main app), never a horizontal strip
 ├── worker/                        # Cloudflare Workers edge API (optional)
@@ -905,7 +905,7 @@ weather.stationObservations → QC pipeline → weather.observations
 
 ### Styling / Brand System
 
-CSS custom properties are defined in `src/app/globals.css` (Brand System v6). Colors are WCAG 3.0 APCA/AAA compliant. The theme supports light/dark mode with system preference detection, `prefers-contrast: more`, `prefers-reduced-motion: reduce`, and `forced-colors: active`.
+The canonical Mzizi tokens (all 21 colour families, the radius scale, the surface and semantic values) are vendored in `src/app/mzizi-tokens.css`, generated upstream in `@nyuchi/mzizi-skills` (`skills/mzizi-design/tokens-update.css`). `src/app/globals.css` aliases the app's tokens to those Mzizi variables (for example `--mineral-cobalt: var(--color-cobalt)`), so there are no mineral hex literals in `globals.css`. Brand-only extensions (frost, severity, BMC, chart and scene tokens) stay in `globals.css`. Colors are WCAG 3.0 APCA/AAA compliant. The theme supports light/dark mode with system preference detection, `prefers-contrast: more`, `prefers-reduced-motion: reduce`, and `forced-colors: active`.
 
 **Mineral Color System:**
 Each activity category has a dedicated mineral color, defined as CSS custom properties with light and dark variants:
@@ -915,7 +915,7 @@ Each activity category has a dedicated mineral color, defined as CSS custom prop
 - **Travel** → Cobalt (`--mineral-cobalt`)
 - **Tourism** → Tanzanite (`--mineral-tanzanite`)
 - **Sports** → Gold (`--mineral-gold`)
-- **Casual** → Primary (Cobalt brand color)
+- **Casual** → Primary (Storm, Mzizi experimental family)
 
 Category styles are centralized in `CATEGORY_STYLES` (`src/lib/activities.ts`) with static Tailwind classes for `bg`, `border`, `text`, and `badge` per category. Each mineral color has a corresponding `--mineral-*-fg` foreground token for badge text contrast.
 
@@ -1516,7 +1516,8 @@ Before every commit, you MUST complete ALL of these steps. Do not skip any.
 
 ### Styling
 
-- **Global styles only** — all colors and tokens defined in `globals.css` as CSS custom properties
+- **Global styles only** — all colors and tokens defined in `globals.css` as CSS custom properties, aliasing Mzizi variables from `mzizi-tokens.css` for minerals, surfaces and borders
+- **Mzizi is the canon** — to change a mineral, surface or radius value, change it upstream and re-vendor `mzizi-tokens.css`; never retype a hex into `globals.css`. Primary is the Mzizi experimental storm family (an owner decision: the super app owns tanzanite, and sub-apps take a Heritage or Experimental family with a weather connection); cobalt remains the travel mineral
 - **Never hardcode** — no hex colors, rgba(), inline `style={{}}`, or dynamic Tailwind class construction
 - **Tailwind classes** — always use Tailwind utility classes backed by CSS custom properties
 - **Canvas chart colors** — resolved at render time via `resolveColor()` from `src/components/ui/chart.tsx`
