@@ -33,10 +33,20 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      - name: Require RELEASE_BUMP_TOKEN
+        env:
+          RELEASE_BUMP_TOKEN: ${{ secrets.RELEASE_BUMP_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_BUMP_TOKEN" ]; then
+            echo "::error::RELEASE_BUMP_TOKEN is not set. A release PR opened with GITHUB_TOKEN never starts CI. Add the secret and rerun."
+            exit 1
+          fi
+
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: staging
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_BUMP_TOKEN }}
 
       - name: Resolve the release branch name
         id: name
@@ -100,7 +110,7 @@ jobs:
 
       - name: Open the release PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_BUMP_TOKEN }}
           BRANCH: ${{ steps.name.outputs.branch }}
           DATE: ${{ steps.name.outputs.date }}
         run: |
