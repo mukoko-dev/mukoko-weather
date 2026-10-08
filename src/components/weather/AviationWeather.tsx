@@ -224,8 +224,12 @@ export function AviationWeather({ slug: _slug, icao, nearby }: Props) {
   // between. Lets the user switch which nearby station's METAR/TAF they view.
   const picker =
     stations.length > 1 ? (
+      // Reserved-height, single-line row: its height is fixed at the touch
+      // target minimum whatever the chip count, so the DB-backed station list
+      // replacing the static seed (or a different count) can't reflow the card
+      // (CLS). Chips never wrap — the row scrolls sideways instead.
       <div
-        className="mt-4 flex flex-wrap gap-2"
+        className="mt-4 flex min-h-[var(--touch-target-min)] items-center gap-2 overflow-x-auto"
         role="group"
         aria-label="Nearby aviation stations"
       >
@@ -242,7 +246,7 @@ export function AviationWeather({ slug: _slug, icao, nearby }: Props) {
               type="button"
               onClick={() => setSelectedIcao(s.icao)}
               aria-pressed={active}
-              className={`${base} ${cls}`}
+              className={`${base} ${cls} shrink-0`}
               title={s.name}
             >
               <span className="font-mono text-xs font-bold">{s.icao}</span>
