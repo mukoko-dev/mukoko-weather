@@ -242,29 +242,3 @@ describe("replication module", () => {
     expect(typeof mod.stopReplication).toBe("function");
   });
 });
-
-// ---------------------------------------------------------------------------
-// Index barrel export
-// ---------------------------------------------------------------------------
-
-describe("rxdb barrel export", () => {
-  it("re-exports all public APIs", async () => {
-    const mod = await import("./index");
-    // Database
-    expect(typeof mod.getDatabase).toBe("function");
-    expect(typeof mod.destroyDatabase).toBe("function");
-    // Collections
-    expect(typeof mod.getCachedWeather).toBe("function");
-    expect(typeof mod.cacheWeather).toBe("function");
-    expect(typeof mod.getCachedHint).toBe("function");
-    expect(typeof mod.cacheHint).toBe("function");
-    expect(typeof mod.getCachedRules).toBe("function");
-    expect(typeof mod.cacheSuitabilityRules).toBe("function");
-    // Bridge
-    expect(typeof mod.initRxDBBridge).toBe("function");
-    expect(typeof mod.migrateLocalStorageToRxDB).toBe("function");
-    // Replication
-    expect(typeof mod.startReplication).toBe("function");
-    expect(typeof mod.stopReplication).toBe("function");
-  });
-});

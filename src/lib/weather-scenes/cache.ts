@@ -1,5 +1,5 @@
 import type { CachedWeatherHint } from "./types";
-import { getCachedHint, cacheHint } from "../rxdb/collections";
+import { cacheHint } from "../rxdb/collections";
 import {
   listStorageKeys,
   parseStoredJSON,
@@ -66,29 +66,6 @@ export function getCachedWeatherHint(slug: string): CachedWeatherHint | null {
   }
 
   return hint as CachedWeatherHint;
-}
-
-/**
- * Async version — reads from RxDB (IndexedDB).
- * Use when async access is acceptable (e.g., in useEffect).
- */
-export async function getCachedWeatherHintAsync(
-  slug: string,
-): Promise<CachedWeatherHint | null> {
-  // Try RxDB first
-  const rxdbHint = await getCachedHint(slug);
-  if (rxdbHint) {
-    return {
-      weatherCode: rxdbHint.weatherCode,
-      isDay: rxdbHint.isDay,
-      temperature: 0,
-      windSpeed: 0,
-      timestamp: rxdbHint.timestamp,
-    };
-  }
-
-  // Fall back to localStorage
-  return getCachedWeatherHint(slug);
 }
 
 // ---------------------------------------------------------------------------
