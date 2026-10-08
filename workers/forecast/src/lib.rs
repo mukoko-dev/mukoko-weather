@@ -40,12 +40,16 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
         "/weather" => weather(&req, &env, &ctx).await,
         "/daily" => daily(&req, &env, &ctx).await,
         "/air-quality" => air::air_quality(&req, &env, &ctx).await,
-        "/health" => health(&env),
+        "/health" => health(&env).await,
         _ => error(404, "not_found", "No such route."),
     }
 }
 
-fn health(env: &Env) -> Result<Response> {
+async fn health(env: &Env) -> Result<Response> {
+    let tomorrow = weather_edge::secret(env, weather_core::secrets::TOMORROW_API_KEY)
+        .await
+        .is_some();
+    let nyuchi_api = places::nyuchi_api(env).await.is_some();
     json(
         200,
         &json!({
@@ -54,8 +58,8 @@ fn health(env: &Env) -> Result<Response> {
             "configured": {
                 "cache": env.kv(chain::CACHE_BINDING).is_ok(),
                 "stations_db": env.d1(stations::DB_BINDING).is_ok(),
-                "tomorrow": weather_edge::config(env, "TOMORROW_API_KEY").is_some(),
-                "nyuchi_api": places::nyuchi_api(env).is_some(),
+                "tomorrow": tomorrow,
+                "nyuchi_api": nyuchi_api,
             }
         }),
     )
