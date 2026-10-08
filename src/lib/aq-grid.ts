@@ -11,12 +11,7 @@ import type { Feature, FeatureCollection, Polygon } from "geojson";
 
 /** EPA US AQI categories, lowest to highest severity. */
 export type AqiBand =
-  | "good"
-  | "moderate"
-  | "usg"
-  | "unhealthy"
-  | "very_unhealthy"
-  | "hazardous";
+  "good" | "moderate" | "usg" | "unhealthy" | "very_unhealthy" | "hazardous";
 
 export const AQI_BANDS: readonly AqiBand[] = [
   "good",
@@ -49,6 +44,68 @@ export const AQI_BAND_SEVERITY_TOKEN: Record<AqiBand, string> = {
   very_unhealthy: "--color-severity-extreme",
   hazardous: "--color-severity-extreme",
 };
+
+/**
+ * Static Tailwind classes for a band's bubble fill. Built from the same severity
+ * tokens as AQI_BAND_SEVERITY_TOKEN, so the map fill, the bubbles and the legend
+ * cannot drift apart.
+ */
+export const AQI_BAND_BG_CLASS: Record<AqiBand, string> = {
+  good: "bg-severity-low",
+  moderate: "bg-severity-moderate",
+  usg: "bg-severity-high",
+  unhealthy: "bg-severity-severe",
+  very_unhealthy: "bg-severity-extreme",
+  hazardous: "bg-severity-extreme",
+};
+
+/** One AQI bubble on the full-screen map. `isCenter` marks the "my location" bubble. */
+export interface AqBubble {
+  lat: number;
+  lon: number;
+  aqi: number;
+  band: AqiBand;
+  isCenter: boolean;
+}
+
+/**
+ * Bubbles for a grid response: one per grid point with a reading, plus the
+ * centre reading as a larger "my location" bubble. The centre is also a grid
+ * point, so that point is dropped to avoid drawing two bubbles on one spot.
+ * Returns [] when the grid is unavailable.
+ */
+export function aqBubbles(grid: AqGridResponse): AqBubble[] {
+  if (!grid.available) return [];
+  const center = grid.center && grid.center.aqi !== null ? grid.center : null;
+  const bubbles: AqBubble[] = [];
+  for (const p of grid.points) {
+    if (p.aqi === null) continue;
+    if (
+      center &&
+      Math.abs(p.lat - center.lat) < 1e-6 &&
+      Math.abs(p.lon - center.lon) < 1e-6
+    ) {
+      continue;
+    }
+    bubbles.push({
+      lat: p.lat,
+      lon: p.lon,
+      aqi: Math.round(p.aqi),
+      band: aqiBand(p.aqi),
+      isCenter: false,
+    });
+  }
+  if (center && center.aqi !== null) {
+    bubbles.push({
+      lat: center.lat,
+      lon: center.lon,
+      aqi: Math.round(center.aqi),
+      band: aqiBand(center.aqi),
+      isCenter: true,
+    });
+  }
+  return bubbles;
+}
 
 /** EPA breakpoints: an integer AQI maps to the first band whose ceiling it does not exceed. */
 const BAND_CEILINGS: ReadonlyArray<[number, AqiBand]> = [

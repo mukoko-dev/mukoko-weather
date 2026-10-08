@@ -37,10 +37,9 @@ describe("Breadcrumb usage sites", () => {
   const usageFiles = [
     "../../app/[location]/atmosphere/AtmosphereDashboard.tsx",
     "../../app/[location]/forecast/ForecastDashboard.tsx",
-    "../../app/[location]/map/MapDashboard.tsx",
   ];
 
-  it("is imported by all three location sub-route dashboards", () => {
+  it("is imported by the atmosphere and forecast sub-route dashboards", () => {
     for (const file of usageFiles) {
       const dashboardSource = readFileSync(resolve(__dirname, file), "utf-8");
       expect(dashboardSource).toContain("@/components/layout/Breadcrumb");
@@ -48,12 +47,15 @@ describe("Breadcrumb usage sites", () => {
     }
   });
 
-  it("MapDashboard no longer renders a floating back-to-weather pill", () => {
+  it("MapDashboard is the full-screen exception: no breadcrumb, a close button instead", () => {
     const mapSource = readFileSync(
       resolve(__dirname, "../../app/[location]/map/MapDashboard.tsx"),
       "utf-8",
     );
     expect(mapSource).not.toContain("Back to weather");
+    expect(mapSource).not.toContain("<Breadcrumb");
+    expect(mapSource).toContain("href={`/${location.slug}`}");
+    expect(mapSource).toContain("Close map and return to");
   });
 });
 
@@ -77,7 +79,6 @@ describe("BreadcrumbSkeleton (issue #104)", () => {
     for (const file of [
       "../../app/[location]/atmosphere/loading.tsx",
       "../../app/[location]/forecast/loading.tsx",
-      "../../app/[location]/map/loading.tsx",
     ]) {
       const loadingSource = readFileSync(resolve(__dirname, file), "utf-8");
       expect(loadingSource).toContain("<BreadcrumbSkeleton");

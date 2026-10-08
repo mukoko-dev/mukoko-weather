@@ -223,3 +223,32 @@ describe("AQI grid overlay (Air Quality Map card)", () => {
     expect(source).toContain("}, [aqiOverlay]);");
   });
 });
+
+describe("weather timeline + AQI bubbles (full-screen map)", () => {
+  it("takes a forecast timestamp and passes it to the overlay source", () => {
+    expect(source).toContain("weatherTimestamp?: string;");
+    expect(source).toContain("buildWeatherOverlaySource(layer, timestamp)");
+  });
+
+  it("updates the existing overlay's tiles in place rather than rebuilding it", () => {
+    expect(source).toContain("existing.setTiles(spec.tiles)");
+  });
+
+  it("renders AQI bubbles as HTML markers coloured from the severity classes", () => {
+    expect(source).toContain("aqiBubbles?: readonly AqBubble[] | null;");
+    expect(source).toContain("new MarkerCtor({ element: el })");
+    expect(source).toContain("AQI_BAND_BG_CLASS[b.band]");
+    expect(source).toContain('"size-12 text-sm"');
+  });
+
+  it("removes stale bubble markers before drawing a new set", () => {
+    expect(source).toContain(
+      "bubbleMarkersRef.current.forEach((m) => m.remove())",
+    );
+  });
+
+  it("makes the zoom control optional so the full-screen map can keep its top-right corner", () => {
+    expect(source).toContain("navigationControl = true,");
+    expect(source).toContain("if (interactive && navigationControl)");
+  });
+});

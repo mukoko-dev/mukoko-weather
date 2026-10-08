@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type {
   Map as MapLibreGLMap,
   Marker,
+  RasterTileSource,
   ExpressionSpecification,
 } from "maplibre-gl";
 import type { FeatureCollection } from "geojson";
@@ -16,7 +17,13 @@ import {
   AQI_OVERLAY_ID,
   buildWeatherOverlaySource,
 } from "@/lib/map-layers";
-import { AQI_BANDS, AQI_BAND_SEVERITY_TOKEN } from "@/lib/aq-grid";
+import {
+  AQI_BANDS,
+  AQI_BAND_BG_CLASS,
+  AQI_BAND_LABELS,
+  AQI_BAND_SEVERITY_TOKEN,
+  type AqBubble,
+} from "@/lib/aq-grid";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
 
@@ -41,23 +48,67 @@ export function classifyMapError(
 }
 
 /**
- * Adds (or replaces) the Tomorrow.io weather overlay on a loaded map.
- * Idempotent — removes any existing overlay first, then re-adds it for the
- * given layer. A null/empty layer just clears the overlay. Safe to call after
- * a style switch (which wipes all sources/layers) to restore the overlay.
+ * Adds (or updates) the Tomorrow.io weather overlay on a loaded map. When the
+ * overlay already exists, only its tile URL changes (`setTiles`), so a layer or
+ * timeline change swaps tiles without tearing the layer down. A null layer
+ * clears the overlay. A style switch wipes all sources, so the restore path
+ * takes the add branch. `timestamp` defaults to the current tiles ("now").
  */
-function applyWeatherOverlay(map: MapLibreGLMap, layer: string | null) {
+function applyWeatherOverlay(
+  map: MapLibreGLMap,
+  layer: string | null,
+  timestamp: string = "now",
+) {
+  if (!layer) {
+    if (map.getLayer(WEATHER_OVERLAY_ID)) map.removeLayer(WEATHER_OVERLAY_ID);
+    if (map.getSource(WEATHER_OVERLAY_ID)) map.removeSource(WEATHER_OVERLAY_ID);
+    return;
+  }
+
+  const spec = buildWeatherOverlaySource(layer, timestamp);
+  const existing = map.getSource(WEATHER_OVERLAY_ID) as
+    RasterTileSource | undefined;
+  if (existing && map.getLayer(WEATHER_OVERLAY_ID)) {
+    existing.setTiles(spec.tiles);
+    return;
+  }
+
   if (map.getLayer(WEATHER_OVERLAY_ID)) map.removeLayer(WEATHER_OVERLAY_ID);
   if (map.getSource(WEATHER_OVERLAY_ID)) map.removeSource(WEATHER_OVERLAY_ID);
-
-  if (!layer) return;
-
-  map.addSource(WEATHER_OVERLAY_ID, buildWeatherOverlaySource(layer));
+  map.addSource(WEATHER_OVERLAY_ID, spec);
   map.addLayer({
     id: WEATHER_OVERLAY_ID,
     type: "raster",
     source: WEATHER_OVERLAY_ID,
     paint: { "raster-opacity": 0.6 },
+  });
+}
+
+/**
+ * Renders AQI bubbles as HTML markers. Each is a severity-coloured disc with
+ * its US AQI value, so the number reads without a symbol layer or glyphs. The
+ * centre ("my location") bubble is larger. Returns the markers so the caller
+ * can remove them on the next render.
+ */
+function renderAqiBubbles(
+  map: MapLibreGLMap,
+  MarkerCtor: typeof Marker,
+  bubbles: readonly AqBubble[],
+): Marker[] {
+  return bubbles.map((b) => {
+    const el = document.createElement("div");
+    el.className = cn(
+      "flex items-center justify-center rounded-full font-semibold text-severity-fg shadow-md ring-2 ring-surface-card",
+      AQI_BAND_BG_CLASS[b.band],
+      b.isCenter ? "size-12 text-sm" : "size-8 text-xs",
+    );
+    el.setAttribute("role", "img");
+    el.setAttribute(
+      "aria-label",
+      `US AQI ${b.aqi}, ${AQI_BAND_LABELS[b.band]}${b.isCenter ? ", your location" : ""}`,
+    );
+    el.textContent = String(b.aqi);
+    return new MarkerCtor({ element: el }).setLngLat([b.lon, b.lat]).addTo(map);
   });
 }
 
@@ -122,6 +173,27 @@ interface MapLibreMapProps {
   interactive?: boolean;
   weatherLayer?: string | null;
   /**
+   * Forecast time for the weather tiles: "now" or an hourly
+   * `YYYY-MM-DDTHH:00:00Z` (see timelineTimestamp). Ignored when no layer is set.
+   */
+  weatherTimestamp?: string;
+  /**
+   * AQI bubbles (see aqBubbles). Rendered as HTML markers over the map. Omit
+   * or pass null for none.
+   */
+  aqiBubbles?: readonly AqBubble[] | null;
+  /**
+   * Show MapLibre's zoom buttons (top-right). Pages with their own top-right
+   * controls turn this off; pinch and scroll zoom still work. Default true.
+   */
+  navigationControl?: boolean;
+  /**
+   * Add MapLibre's attribution control (bottom-left). A page whose bottom sheet
+   * covers that corner can turn it off and print the MapTiler/OpenStreetMap
+   * credits itself. Default true.
+   */
+  attributionControl?: boolean;
+  /**
    * Optional AQI grid (cells with `band` properties, see `gridToGeoJSON`).
    * Rendered as a fill layer beneath map labels. Omit for no overlay.
    */
@@ -135,6 +207,10 @@ export function MapLibreMap({
   zoom = 8,
   interactive = true,
   weatherLayer = null,
+  weatherTimestamp = "now",
+  aqiBubbles = null,
+  navigationControl = true,
+  attributionControl = true,
   aqiOverlay = null,
   className = "h-full w-full",
 }: MapLibreMapProps) {
@@ -148,6 +224,14 @@ export function MapLibreMap({
   // restore) always apply the current selection.
   const weatherLayerRef = useRef<string | null>(weatherLayer);
   weatherLayerRef.current = weatherLayer;
+  const weatherTimestampRef = useRef<string>(weatherTimestamp);
+  weatherTimestampRef.current = weatherTimestamp;
+  // AQI bubbles: markers are created with the Marker constructor, which is only
+  // available after the async import, so it is held in a ref from mount.
+  const bubbleMarkersRef = useRef<Marker[]>([]);
+  const markerCtorRef = useRef<typeof Marker | null>(null);
+  const aqiBubblesRef = useRef<readonly AqBubble[] | null>(aqiBubbles);
+  aqiBubblesRef.current = aqiBubbles;
   // Same pattern for the AQI overlay: restore() reads the latest collection.
   const aqiOverlayRef = useRef<FeatureCollection | null>(aqiOverlay);
   aqiOverlayRef.current = aqiOverlay;
@@ -221,16 +305,19 @@ export function MapLibreMap({
         }
 
         mapRef.current = map;
+        markerCtorRef.current = MLMarker;
 
-        map.addControl(
-          new AttributionControl({
-            customAttribution:
-              '© <a href="https://www.maptiler.com/">MapTiler</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-          }),
-          "bottom-left",
-        );
+        if (attributionControl) {
+          map.addControl(
+            new AttributionControl({
+              customAttribution:
+                '© <a href="https://www.maptiler.com/">MapTiler</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+            }),
+            "bottom-left",
+          );
+        }
 
-        if (interactive) {
+        if (interactive && navigationControl) {
           map.addControl(
             new NavigationControl({ showCompass: false }),
             "top-right",
@@ -246,8 +333,16 @@ export function MapLibreMap({
           })
             .setLngLat([lon, lat])
             .addTo(map);
-          applyWeatherOverlay(map, weatherLayerRef.current);
+          applyWeatherOverlay(
+            map,
+            weatherLayerRef.current,
+            weatherTimestampRef.current,
+          );
           applyAqiOverlay(map, aqiOverlayRef.current);
+          bubbleMarkersRef.current.forEach((m) => m.remove());
+          bubbleMarkersRef.current = aqiBubblesRef.current
+            ? renderAqiBubbles(map, MLMarker, aqiBubblesRef.current)
+            : [];
         };
         restoreRef.current = restore;
 
@@ -283,6 +378,8 @@ export function MapLibreMap({
     return () => {
       cancelled = true;
       markerRef.current?.remove();
+      bubbleMarkersRef.current.forEach((m) => m.remove());
+      bubbleMarkersRef.current = [];
       mapRef.current?.remove();
       mapRef.current = null;
       markerRef.current = null;
@@ -309,14 +406,36 @@ export function MapLibreMap({
     setOverlayError(false);
     overlayErrorLoggedRef.current = false;
     if (!map.isStyleLoaded()) {
-      const apply = () => applyWeatherOverlay(map, weatherLayer);
+      const apply = () =>
+        applyWeatherOverlay(map, weatherLayer, weatherTimestamp);
       map.once("idle", apply);
       return () => {
         map.off("idle", apply);
       };
     }
-    applyWeatherOverlay(map, weatherLayer);
-  }, [weatherLayer]);
+    applyWeatherOverlay(map, weatherLayer, weatherTimestamp);
+  }, [weatherLayer, weatherTimestamp]);
+
+  // Draw AQI bubbles when the set changes. Like the fill overlay, defer to the
+  // next idle while the style is still loading.
+  useEffect(() => {
+    const map = mapRef.current;
+    const MarkerCtor = markerCtorRef.current;
+    if (!map || !MarkerCtor) return;
+    const draw = () => {
+      bubbleMarkersRef.current.forEach((m) => m.remove());
+      bubbleMarkersRef.current = aqiBubbles
+        ? renderAqiBubbles(map, MarkerCtor, aqiBubbles)
+        : [];
+    };
+    if (!map.isStyleLoaded()) {
+      map.once("idle", draw);
+      return () => {
+        map.off("idle", draw);
+      };
+    }
+    draw();
+  }, [aqiBubbles]);
 
   // Switch the AQI overlay when the grid changes. Mirrors the weather-layer
   // effect: defer to the next idle if the style is still loading.
