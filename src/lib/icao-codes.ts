@@ -1,3 +1,5 @@
+import { nearestWithin } from "@/lib/geo";
+
 /**
  * Maps location slugs to ICAO airport codes.
  * Also provides nearest-airport lookup by lat/lon for locations
@@ -308,23 +310,6 @@ const ICAO_MAP: Record<string, string> = {
   "colombo-lk": "VCBI",
 };
 
-function haversineKm(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 /** Returns the ICAO airport code for a location slug, or null if not mapped. */
 export function getIcaoForSlug(slug: string): string | null {
   return ICAO_MAP[slug] ?? null;
@@ -340,14 +325,9 @@ export function getNearestIcaos(
   count = 5,
   maxDistanceKm = 500,
 ): AirportDistance[] {
-  return AIRPORTS.map((a) => ({
-    icao: a.icao,
-    name: a.name,
-    distanceKm: haversineKm(lat, lon, a.lat, a.lon),
-  }))
-    .filter((a) => a.distanceKm <= maxDistanceKm)
-    .sort((a, b) => a.distanceKm - b.distanceKm)
-    .slice(0, count);
+  return nearestWithin(AIRPORTS, (a) => a, lat, lon, maxDistanceKm, count).map(
+    ({ item, distanceKm }) => ({ icao: item.icao, name: item.name, distanceKm }),
+  );
 }
 
 /**

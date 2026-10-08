@@ -1,6 +1,7 @@
 "use client";
 
 import type { WeatherLocation } from "./locations";
+import { haversineKm } from "./geo";
 
 export interface GeoResult {
   status: "success" | "created" | "denied" | "unavailable" | "error";
@@ -74,17 +75,13 @@ export function detectUserLocation({
           const nearest: WeatherLocation = data.nearest;
           const isNew: boolean = data.isNew ?? false;
 
-          // Calculate distance to nearest for display
-          const R = 6371;
-          const dLat = ((nearest.lat - latitude) * Math.PI) / 180;
-          const dLon = ((nearest.lon - longitude) * Math.PI) / 180;
-          const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos((latitude * Math.PI) / 180) *
-              Math.cos((nearest.lat * Math.PI) / 180) *
-              Math.sin(dLon / 2) *
-              Math.sin(dLon / 2);
-          const distanceKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          // Distance to the nearest location, for display
+          const distanceKm = haversineKm(
+            latitude,
+            longitude,
+            nearest.lat,
+            nearest.lon,
+          );
 
           resolve({
             status: isNew ? "created" : "success",

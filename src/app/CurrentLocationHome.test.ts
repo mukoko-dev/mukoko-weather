@@ -158,7 +158,7 @@ describe("page.tsx — server seeding", () => {
   });
 
   it("canonical is the home page itself (it is real content, not a chooser)", () => {
-    expect(pageSource).toContain("canonical: `${BASE_URL}/`");
+    expect(pageSource).toContain("canonical: `${SITE_URL}/`");
     expect(pageSource).not.toContain("canonical: `${BASE_URL}/harare`");
   });
 
