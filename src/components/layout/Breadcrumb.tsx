@@ -63,7 +63,7 @@ export function Breadcrumb({ items, className }: BreadcrumbProps) {
               {item.href ? (
                 <Link
                   href={item.href}
-                  className="hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded"
+                  className="dik-dik hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded"
                 >
                   {item.label}
                 </Link>

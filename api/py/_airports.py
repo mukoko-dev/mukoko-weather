@@ -11,7 +11,7 @@ Design note — why a dedicated `weather.airports` collection (not
 `places.placesGeo`): airports are fixed aviation reference data specific to the
 METAR/TAF feature, not admin geography (`placesGeo`) or OSM POIs (`places`).
 `placesGeo` carries a strict validator, hash-suffixed slugs, and a Python-only
-5 km dedup upsert helper — all wrong for a fixed 72-row reference seed written
+5 km dedup upsert helper — all wrong for a fixed reference seed written
 from the TypeScript db-init flow. A plain reference collection keyed by ICAO
 code (its natural `_id`) with a 2dsphere index is the right fit, mirroring the
 existing `metar_cache` / `air_quality_cache` reference collections.

@@ -124,6 +124,17 @@
   /* Touch & Interaction — 56px optimal (Material Design 3 recommended) */
   --touch-target-min: 48px;
 
+  /* Mobile bottom nav geometry (Header.tsx: fixed, bottom = inset, sm:hidden).
+     --mobile-nav-clearance is the space page content must leave at the bottom
+     so nothing sits under the floating pill, including the iOS home-indicator
+     safe area. Floating controls above the nav (e.g. reorder "Done") use it too. */
+  --mobile-nav-inset: 0.75rem;
+  --mobile-nav-height: 4.25rem;
+  --mobile-nav-clearance: calc(
+    env(safe-area-inset-bottom, 0px) + var(--mobile-nav-inset) +
+      var(--mobile-nav-height) + 0.5rem
+  );
+
   /* Typography — 16px base, 18px larger variant */
   --text-body: 1rem; /* 16px — base body/footer text */
   --text-body-lg: 1.125rem; /* 18px — larger body text variant */
@@ -196,8 +207,10 @@
   --color-temp-hot: #c62828;
   --color-temp-bar-track: rgba(0, 0, 0, 0.06);
 
-  /* Rain probability */
-  --color-rain: #0288d1;
+  /* Rain probability — text + chart fill. #0277bd keeps >= 4.5:1 on the
+     light surfaces the hourly strip sits on (#faf9f5 base, #ffffff card/hover);
+     the previous #0288d1 measured 3.66:1 (WCAG 1.4.3 fail). */
+  --color-rain: #0277bd;
 
   /* Severity / status levels — for weather insights, alerts */
   --color-severity-low: #004d40;
@@ -736,6 +749,20 @@ body {
            min-h-[var(--touch-target-min)];
   }
 
+  /* .dik-dik — small inline control (breadcrumb link, footer icon, attribution
+     link). Inline boxes ignore min-height, which is why the global coarse-pointer
+     rule never reached these. On coarse pointers only, they become inline-flex
+     and grow to the touch-target minimum in both dimensions; desktop is unchanged. */
+  @media (pointer: coarse) {
+    .dik-dik {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: var(--touch-target-min);
+      min-height: var(--touch-target-min);
+    }
+  }
+
   /* .impala-primary — outline button in brand colour (download/secondary CTA) */
   .impala-primary {
     @apply press-scale inline-flex items-center gap-2
@@ -1078,6 +1105,38 @@ body {
 /* Remove default focus ring for mouse users, keep for keyboard */
 :focus:not(:focus-visible) {
   outline: none;
+}
+
+/* Button fauna focus rings (WCAG 2.4.7). These are deliberately UNLAYERED with
+   a class + pseudo-class selector: the global :focus-visible rule above is
+   unlayered too, and unlayered declarations beat every @layer, so a rule inside
+   @layer components could never win over it. Keyboard focus only — mouse users
+   keep the ring-free look.
+
+   The global rule also forces `border-radius: 4px` on every focused element,
+   which squares off the pill buttons (--radius-button) on keyboard focus, so
+   each button rule restores its own radius. */
+.kudu:focus-visible,
+.kudu-sm:focus-visible,
+.impala:focus-visible,
+.impala-sm:focus-visible,
+.impala-primary:focus-visible,
+.quail:focus-visible {
+  outline: var(--focus-ring-width, 3px) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset, 2px);
+  border-radius: var(--radius-button);
+}
+
+/* .bee sits on the bg-primary header action pill. The cobalt ring is the same
+   colour as that pill, so it would vanish into it; use the on-primary
+   foreground (white on light, near-black on dark — both >= 3:1 against the
+   primary, see globals.a11y.test.ts) instead. */
+.bee:focus-visible {
+  outline: var(--focus-ring-width, 3px) solid var(--color-primary-foreground);
+  /* No offset: the pill only pads its buttons by 2px, so a zero-offset ring
+     stays on the cobalt pill instead of spilling onto the light header. */
+  outline-offset: 0px;
+  border-radius: 9999px;
 }
 
 /* ===== Reduced Motion — WCAG 2.3.3 ===== */
