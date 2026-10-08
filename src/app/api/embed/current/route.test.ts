@@ -6,7 +6,8 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { weatherLabel, windDir, shapeEmbedResponse } from "./shape";
+import { weatherCodeToInfo, windDirection } from "@/lib/weather";
+import { shapeEmbedResponse } from "./shape";
 
 const source = readFileSync(resolve(__dirname, "route.ts"), "utf-8");
 
@@ -47,26 +48,33 @@ const WEATHER = {
   },
 };
 
-describe("weatherLabel", () => {
+describe("embed condition labels (canonical weatherCodeToInfo)", () => {
   it("maps known WMO codes", () => {
-    expect(weatherLabel(0)).toBe("Clear sky");
-    expect(weatherLabel(2)).toBe("Partly cloudy");
-    expect(weatherLabel(65)).toBe("Heavy rain");
-    expect(weatherLabel(95)).toBe("Thunderstorm");
+    expect(weatherCodeToInfo(0).label).toBe("Clear sky");
+    expect(weatherCodeToInfo(2).label).toBe("Partly cloudy");
+    expect(weatherCodeToInfo(65).label).toBe("Heavy rain");
+    expect(weatherCodeToInfo(95).label).toBe("Thunderstorm");
+  });
+
+  it("keeps freezing drizzle codes labelled", () => {
+    expect(weatherCodeToInfo(56).label).toBe("Light freezing drizzle");
+    expect(weatherCodeToInfo(57).label).toBe("Dense freezing drizzle");
   });
 
   it("falls back to Unknown for unmapped codes", () => {
-    expect(weatherLabel(999)).toBe("Unknown");
+    expect(weatherCodeToInfo(999).label).toBe("Unknown");
   });
 });
 
-describe("windDir", () => {
+describe("embed wind direction (8-point)", () => {
+  const eightPoint = (deg: number) => windDirection(deg, { points: 8 });
+
   it("maps degrees to compass points", () => {
-    expect(windDir(0)).toBe("N");
-    expect(windDir(90)).toBe("E");
-    expect(windDir(135)).toBe("SE");
-    expect(windDir(180)).toBe("S");
-    expect(windDir(360)).toBe("N");
+    expect(eightPoint(0)).toBe("N");
+    expect(eightPoint(90)).toBe("E");
+    expect(eightPoint(135)).toBe("SE");
+    expect(eightPoint(180)).toBe("S");
+    expect(eightPoint(360)).toBe("N");
   });
 });
 
@@ -91,7 +99,7 @@ describe("shapeEmbedResponse", () => {
     const out = shapeEmbedResponse(WEATHER, LOCATION, "slug");
     expect(out.daily).toHaveLength(7);
     expect(out.daily[0].day).toBe("Today");
-    expect(out.daily[2].condition).toBe("Rain");
+    expect(out.daily[2].condition).toBe("Slight rain");
     expect(out.daily[2].precipitationProbability).toBe(80);
   });
 
