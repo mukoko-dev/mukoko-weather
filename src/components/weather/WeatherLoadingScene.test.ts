@@ -136,6 +136,27 @@ describe("WeatherLoadingScene — display", () => {
   });
 });
 
+describe("WeatherLoadingScene — real-weather sky", () => {
+  it("paints the static sky gradient from the shared palette", () => {
+    expect(source).toContain("skyClassName(sceneType, sceneIsDay)");
+  });
+
+  it("reads the cached hint client-side after mount (deferred via rAF)", () => {
+    expect(source).toContain(
+      "setHint(resolvedSlug ? getCachedWeatherHint(resolvedSlug) : null)",
+    );
+  });
+
+  it("keeps text readable on a surface panel over the sky", () => {
+    expect(source).toContain("bg-surface-card/85");
+  });
+
+  it("uses no hardcoded colours", () => {
+    expect(source).not.toMatch(/#[0-9a-fA-F]{3,6}\b/);
+    expect(source).not.toContain("rgba(");
+  });
+});
+
 describe("WeatherLoadingScene — accessibility", () => {
   it("marks 3D canvas as aria-hidden", () => {
     expect(source).toContain('aria-hidden="true"');

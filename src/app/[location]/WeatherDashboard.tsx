@@ -20,6 +20,7 @@ import {
   restrictToParentElement,
 } from "@dnd-kit/modifiers";
 import { Header } from "@/components/layout/Header";
+import { useLocationSwipe } from "@/components/layout/LocationPager";
 import { Footer } from "@/components/layout/Footer";
 import { CurrentConditions } from "@/components/weather/CurrentConditions";
 import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";
@@ -27,6 +28,8 @@ import { HourlyScrollCards } from "@/components/weather/HourlyScrollCards";
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { LazySection } from "@/components/weather/LazySection";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
+import { CommunityLane } from "@/components/weather/CommunityLane";
+import { CommunityLaneSkeleton } from "@/components/weather/CommunityLaneSkeleton";
 import {
   SectionSkeleton,
   ReportsSkeleton,
@@ -35,6 +38,8 @@ import {
   AISummaryChatSkeleton,
   EnsoOutlookSkeleton,
   MapPreviewSkeleton,
+  AirQualityMapSkeleton,
+  HazeSkeleton,
   SupportBannerSkeleton,
   LocationInfoSkeleton,
 } from "@/components/weather/SectionSkeleton";
@@ -62,8 +67,11 @@ import { SupportBanner } from "@/components/weather/SupportBanner";
 import { WeatherBackdrop } from "@/components/weather/WeatherBackdrop";
 import { EnsoOutlook } from "@/components/weather/EnsoOutlook";
 import { DraggableSection } from "@/components/weather/DraggableSection";
-import { LiveClock } from "@/components/weather/LiveClock";
 import { cacheWeatherHint } from "@/lib/weather-scenes";
+import {
+  backdropClock,
+  type BackdropClock,
+} from "@/lib/weather-scenes/backdrop-clock";
 
 // ── Code-split heavy components ─────────────────────────────────────────────
 // These use React.lazy() so their JS chunks (Chart.js, ReactMarkdown, etc.)
@@ -82,6 +90,16 @@ const ActivityInsights = lazy(() =>
 const MapPreview = lazy(() =>
   import("@/components/weather/map/MapPreview").then((m) => ({
     default: m.MapPreview,
+  })),
+);
+const AirQualityMapCard = lazy(() =>
+  import("@/components/weather/AirQualityMapCard").then((m) => ({
+    default: m.AirQualityMapCard,
+  })),
+);
+const HazePanel = lazy(() =>
+  import("@/components/weather/HazePanel").then((m) => ({
+    default: m.HazePanel,
   })),
 );
 const AviationWeather = lazy(() =>
@@ -153,7 +171,21 @@ export function WeatherDashboard({
   const setSectionOrder = useAppStore((s) => s.setSectionOrder);
   const hydrateSectionOrder = useAppStore((s) => s.hydrateSectionOrder);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  // Location-local clock for the backdrop's dawn/dusk sky. Client-only (after
+  // mount, then every 5 min) so SSR and hydration agree and it tracks time.
+  const [skyClock, setSkyClock] = useState<BackdropClock | null>(null);
+  useEffect(() => {
+    const tick = () => setSkyClock(backdropClock(weather, location));
+    const raf = requestAnimationFrame(tick);
+    const id = window.setInterval(tick, 5 * 60_000);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearInterval(id);
+    };
+  }, [weather, location]);
   const [reordering, setReordering] = useState(false);
+  // Swipe left/right between the visitor's locations (off while reordering).
+  const swipe = useLocationSwipe({ enabled: !reordering });
   // Windy-style ADDITIONAL data — multi-model comparison + minutely nowcast.
   // Fetched client-side from Open-Meteo (free, keyless) so it never blocks the
   // server-rendered base forecast. Re-fetched when the user changes model.
@@ -257,6 +289,9 @@ export function WeatherDashboard({
         weatherCode={weather.current.weather_code}
         windSpeed={weather.current.wind_speed_10m}
         isDay={weather.current.is_day === 1}
+        currentTime={skyClock?.currentTime}
+        sunrise={skyClock?.sunrise}
+        sunset={skyClock?.sunset}
       />
       {/* Everything above the backdrop — an explicit positive stacking layer.
           Negative z-index on the backdrop was invisible on iOS Safari (fixed
@@ -308,17 +343,13 @@ export function WeatherDashboard({
           </ol>
         </nav>
 
-        {/* Clock only — the layout control lives at the bottom of the page */}
-        <div className="mx-auto max-w-7xl px-4 pt-1 pb-0 sm:px-6 md:px-8">
-          <LiveClock />
-        </div>
-
         {/* Mobile bottom padding clears the floating nav (token includes the
           safe-area inset); sm:pb-6 restores normal padding where the nav is hidden. */}
         <main
           id="main-content"
           className="animate-fade-in mx-auto max-w-7xl overflow-x-hidden px-4 py-3 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-6 md:px-8"
           aria-label={`Weather dashboard for ${location.name}`}
+          {...swipe}
         >
           {/* H1 for SEO — visually integrated but semantically correct */}
           <h1 className="sr-only">
@@ -329,11 +360,6 @@ export function WeatherDashboard({
           {/* Screen reader announcement for loading→loaded transition (WCAG) */}
           <div aria-live="polite" className="sr-only">
             Weather loaded for {location.name}
-          </div>
-
-          {/* Season indicator */}
-          <div className="mb-3">
-            <SeasonBadge season={season} />
           </div>
 
           {/* Weather unavailable banner — shown when all providers failed */}
@@ -376,7 +402,10 @@ export function WeatherDashboard({
                                   }}
                                   className="mb-2"
                                 />
-                                <HourlyScrollCards hourly={weather.hourly} />
+                                <HourlyScrollCards
+                                  hourly={weather.hourly}
+                                  utcOffsetSeconds={weather.utc_offset_seconds}
+                                />
                               </section>
                             </ChartErrorBoundary>
                           </DraggableSection>
@@ -393,10 +422,36 @@ export function WeatherDashboard({
                                 current={weather.current}
                                 locationName={location.name}
                                 daily={weather.daily}
+                                hourly={weather.hourly}
+                                utcOffsetSeconds={weather.utc_offset_seconds}
                                 slug={location.slug}
                                 isCurrentLocation={isCurrentLocation}
+                                footer={<SeasonBadge season={season} />}
                               />
                             </ChartErrorBoundary>
+                          </DraggableSection>
+                        );
+                      case "communityLane":
+                        return (
+                          <DraggableSection
+                            key="communityLane"
+                            id="communityLane"
+                            reordering={reordering}
+                          >
+                            <LazySection
+                              label="community-lane"
+                              fallback={<CommunityLaneSkeleton />}
+                            >
+                              <ChartErrorBoundary name="community lane">
+                                <CommunityLane
+                                  slug={location.slug}
+                                  lat={location.lat}
+                                  lon={location.lon}
+                                  weather={weather}
+                                  selectedActivities={selectedActivities}
+                                />
+                              </ChartErrorBoundary>
+                            </LazySection>
                           </DraggableSection>
                         );
                       case "atmospheric":
@@ -409,8 +464,24 @@ export function WeatherDashboard({
                             <ChartErrorBoundary name="atmospheric conditions">
                               <AtmosphericSummary
                                 current={weather.current}
+                                weather={weather}
                                 lat={location.lat}
                                 lon={location.lon}
+                                afterAirQuality={
+                                  <LazySection
+                                    label="haze"
+                                    fallback={<HazeSkeleton />}
+                                  >
+                                    <ChartErrorBoundary name="haze outlook">
+                                      <Suspense fallback={<HazeSkeleton />}>
+                                        <HazePanel
+                                          lat={location.lat}
+                                          lon={location.lon}
+                                        />
+                                      </Suspense>
+                                    </ChartErrorBoundary>
+                                  </LazySection>
+                                }
                               />
                             </ChartErrorBoundary>
                           </DraggableSection>
@@ -549,6 +620,21 @@ export function WeatherDashboard({
 
             {/* Sidebar — stacks below on mobile, col-span-1 on lg and xl */}
             <div className="min-w-0 space-y-4 lg:col-span-1 xl:col-span-1">
+              <LazySection
+                label="air-quality-map"
+                fallback={<AirQualityMapSkeleton />}
+              >
+                <ChartErrorBoundary name="air quality map">
+                  <Suspense fallback={<AirQualityMapSkeleton />}>
+                    <AirQualityMapCard
+                      lat={location.lat}
+                      lon={location.lon}
+                      placeName={location.name}
+                    />
+                  </Suspense>
+                </ChartErrorBoundary>
+              </LazySection>
+
               <LazySection
                 label="weather-map"
                 fallback={<MapPreviewSkeleton />}

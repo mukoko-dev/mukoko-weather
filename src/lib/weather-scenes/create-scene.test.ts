@@ -151,7 +151,7 @@ describe("createWeatherScene — dispose cleanup", () => {
 });
 
 describe("loadSceneBuilder — scene type coverage", () => {
-  it("handles all 8 weather scene types", () => {
+  it("handles all 9 weather scene types", () => {
     const sceneTypes = [
       "clear",
       "partly-cloudy",
@@ -159,6 +159,7 @@ describe("loadSceneBuilder — scene type coverage", () => {
       "rain",
       "thunderstorm",
       "fog",
+      "haze",
       "snow",
       "windy",
     ];
@@ -171,6 +172,10 @@ describe("loadSceneBuilder — scene type coverage", () => {
     expect(source).toContain('import("./scenes/clear")');
     expect(source).toContain('import("./scenes/rain")');
     expect(source).toContain('import("./scenes/thunderstorm")');
+  });
+
+  it("renders haze with the palette-driven fog builder", () => {
+    expect(source).toMatch(/case "haze":\s*\{[\s\S]*?scenes\/fog/);
   });
 
   it("falls back to partly-cloudy for unknown types", () => {

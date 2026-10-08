@@ -1,6 +1,11 @@
 "use client";
 
 import type { HourlyWeather } from "@/lib/weather";
+import {
+  currentHourIndex,
+  locationClockLabel,
+  resolveOffsetSeconds,
+} from "@/lib/location-time";
 import { HumidityCloudChart } from "@/components/weather/charts/HumidityCloudChart";
 import { WindSpeedChart } from "@/components/weather/charts/WindSpeedChart";
 import { PressureChart } from "@/components/weather/charts/PressureChart";
@@ -8,6 +13,8 @@ import { UVIndexChart } from "@/components/weather/charts/UVIndexChart";
 
 interface Props {
   hourly: HourlyWeather;
+  /** The location's UTC offset (payload `utc_offset_seconds`). */
+  utcOffsetSeconds?: number;
 }
 
 interface AtmosphericDataPoint {
@@ -23,29 +30,18 @@ interface AtmosphericDataPoint {
 /** Prepare 24-hour atmospheric data slice starting from the current hour */
 export function prepareAtmosphericData(
   hourly: HourlyWeather,
+  offsetSeconds?: number | null,
+  now: Date = new Date(),
 ): AtmosphericDataPoint[] {
-  const now = new Date();
-  const currentHour = now.getHours();
-  const startIndex = hourly.time.findIndex(
-    (t) =>
-      new Date(t).getHours() >= currentHour &&
-      new Date(t).getDate() === now.getDate(),
-  );
-  const start = startIndex >= 0 ? startIndex : 0;
+  // The LOCATION's current hour and labels — never the viewer's clock.
+  const offset = resolveOffsetSeconds(offsetSeconds, now);
+  const start = currentHourIndex(hourly.time, offset, now);
 
   const points: AtmosphericDataPoint[] = [];
   for (let i = 0; i < 24 && start + i < hourly.time.length; i++) {
     const idx = start + i;
-    const date = new Date(hourly.time[idx]);
     points.push({
-      label:
-        i === 0
-          ? "Now"
-          : date.toLocaleTimeString("en-ZW", {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false,
-            }),
+      label: i === 0 ? "Now" : locationClockLabel(hourly.time[idx], offset),
       humidity: hourly.relative_humidity_2m[idx],
       cloudCover: hourly.cloud_cover[idx],
       pressure: Math.round(hourly.surface_pressure[idx]),
@@ -57,8 +53,8 @@ export function prepareAtmosphericData(
   return points;
 }
 
-export function AtmosphericDetails({ hourly }: Props) {
-  const data = prepareAtmosphericData(hourly);
+export function AtmosphericDetails({ hourly, utcOffsetSeconds }: Props) {
+  const data = prepareAtmosphericData(hourly, utcOffsetSeconds);
   if (data.length < 2) return null;
 
   return (

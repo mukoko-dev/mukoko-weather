@@ -1,114 +1,137 @@
 import type { WeatherSceneConfig, SceneElements } from "../types";
+import { getScenePalette } from "../palette";
+import { rainStreaks, scatter, softPointsMaterial, softSprite } from "./shared";
 
 /**
- * Thunderstorm scene.
- * Heavy rain + periodic lightning flashes (emissive white burst) + dark sky.
+ * Thunderstorm scene. Colours: palette.ts (`thunderstorm`) — dark slate /
+ * charcoal clouds, heavy grey-blue rain, and a brief white-violet lightning
+ * flash that lights the sky (a full-frame plane) and the cloud deck.
  */
 export function buildThunderstormScene(
   THREE: typeof import("three"),
   scene: import("three").Scene,
   config: WeatherSceneConfig,
 ): SceneElements {
-  const { isMobile } = config;
+  const { isDay, isMobile } = config;
+  const p = getScenePalette("thunderstorm", isDay, config.phase);
+  const flashColour = p.flash ?? p.particle;
+  const sprite = softSprite(THREE);
   const disposables: { dispose(): void }[] = [];
+  if (sprite) disposables.push(sprite);
 
-  // Very dark sky
-  scene.fog = new THREE.FogExp2(0x080a12, 0.022);
+  scene.fog = new THREE.FogExp2(p.fog, 0.022);
 
-  // Dark cloud layer
-  const CLOUD_COUNT = isMobile ? 20 : 40;
-  const cloudPos = new Float32Array(CLOUD_COUNT * 3);
-  for (let i = 0; i < CLOUD_COUNT; i++) {
-    cloudPos[i * 3] = (Math.random() - 0.5) * 45;
-    cloudPos[i * 3 + 1] = 5 + Math.random() * 7;
-    cloudPos[i * 3 + 2] = -5 + (Math.random() - 0.5) * 18;
-  }
-  const cloudGeo = new THREE.BufferGeometry();
-  cloudGeo.setAttribute("position", new THREE.BufferAttribute(cloudPos, 3));
-  const cloudMat = new THREE.PointsMaterial({
-    color: 0x3d3d52,
-    size: 2.2,
+  // Lightning sheet — behind everything, invisible until a strike
+  const flashGeo = new THREE.PlaneGeometry(120, 80);
+  const flashMat = new THREE.MeshBasicMaterial({
+    color: flashColour,
     transparent: true,
-    opacity: 0.45,
+    opacity: 0,
+    depthWrite: false,
+    fog: false, // a strike lights the whole sky, not a fogged far plane
   });
-  const clouds = new THREE.Points(cloudGeo, cloudMat);
-  scene.add(clouds);
+  const flashPlane = new THREE.Mesh(flashGeo, flashMat);
+  flashPlane.position.set(0, 0, -25);
+  scene.add(flashPlane);
+  disposables.push(flashGeo, flashMat);
+
+  // Storm cloud deck: charcoal underside + slate tops
+  const SHADE_COUNT = isMobile ? 18 : 34;
+  const TOP_COUNT = isMobile ? 16 : 30;
+  const shadeGeo = new THREE.BufferGeometry();
+  shadeGeo.setAttribute(
+    "position",
+    new THREE.BufferAttribute(
+      scatter(SHADE_COUNT, [-22.5, 22.5], [4, 10], [-12, 4]),
+      3,
+    ),
+  );
+  const shadeMat = softPointsMaterial(THREE, sprite, {
+    color: p.cloudShade,
+    size: 6.5,
+    opacity: 0.75,
+  });
+  scene.add(new THREE.Points(shadeGeo, shadeMat));
+  disposables.push(shadeGeo, shadeMat);
+
+  const cloudGeo = new THREE.BufferGeometry();
+  cloudGeo.setAttribute(
+    "position",
+    new THREE.BufferAttribute(
+      scatter(TOP_COUNT, [-22.5, 22.5], [7, 13], [-14, 2]),
+      3,
+    ),
+  );
+  const cloudColour = new THREE.Color(p.cloud);
+  const cloudFlash = new THREE.Color(flashColour);
+  const cloudMat = softPointsMaterial(THREE, sprite, {
+    color: p.cloud,
+    size: 6,
+    opacity: 0.7,
+  });
+  scene.add(new THREE.Points(cloudGeo, cloudMat));
   disposables.push(cloudGeo, cloudMat);
 
   // Heavy rain
-  const RAIN_COUNT = isMobile ? 210 : 480;
-  const rainPos = new Float32Array(RAIN_COUNT * 3);
-  const rainVel = new Float32Array(RAIN_COUNT);
-  for (let i = 0; i < RAIN_COUNT; i++) {
-    rainPos[i * 3] = (Math.random() - 0.5) * 45;
-    rainPos[i * 3 + 1] = Math.random() * 35 - 5;
-    rainPos[i * 3 + 2] = (Math.random() - 0.5) * 35;
-    rainVel[i] = 0.15 + Math.random() * 0.25;
-  }
-  const rainGeo = new THREE.BufferGeometry();
-  rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
-  const rainMat = new THREE.PointsMaterial({
-    color: 0x6f93c8,
-    size: 0.18,
-    transparent: true,
-    opacity: 0.78,
+  const rain = rainStreaks(THREE, {
+    count: isMobile ? 190 : 440,
+    spreadX: 45,
+    spreadZ: 35,
+    length: 1.1,
+    slant: 0.14,
+    minSpeed: 0.22,
+    maxSpeed: 0.42,
+    color: p.particle,
+    opacity: 0.6,
   });
-  const rain = new THREE.Points(rainGeo, rainMat);
-  scene.add(rain);
-  disposables.push(rainGeo, rainMat);
+  scene.add(rain.object);
+  disposables.push(rain.geometry, rain.material);
 
-  // Lightning flash — ambient light that flashes white
-  const flashLight = new THREE.AmbientLight(0xffffff, 0);
-  scene.add(flashLight);
-
-  // Lightning state
-  let nextFlash = 2 + Math.random() * 3; // first flash in 2-5s
-  let flashIntensity = 0;
+  // Lightning state: a strike is a sharp double flicker then a fast decay.
+  let nextFlash = 2 + Math.random() * 3; // first strike in 2–5 s
+  let strikeAt = -1;
 
   return {
     update(elapsed) {
-      // Rain falls with wind drift
-      const pos = rainGeo.attributes.position as InstanceType<
-        typeof THREE.BufferAttribute
-      >;
-      for (let i = 0; i < RAIN_COUNT; i++) {
-        pos.array[i * 3 + 1] -= rainVel[i];
-        pos.array[i * 3] += 0.008; // wind
-        if (pos.array[i * 3 + 1] < -10) {
-          pos.array[i * 3 + 1] = 22;
-          pos.array[i * 3] = (Math.random() - 0.5) * 45;
-        }
-      }
-      pos.needsUpdate = true;
+      rain.step(0.008);
 
-      // Clouds drift
       const cpos = cloudGeo.attributes.position as InstanceType<
         typeof THREE.BufferAttribute
       >;
-      for (let i = 0; i < CLOUD_COUNT; i++) {
+      for (let i = 0; i < TOP_COUNT; i++) {
         cpos.array[i * 3] += 0.008;
         if (cpos.array[i * 3] > 24) cpos.array[i * 3] = -24;
       }
       cpos.needsUpdate = true;
+      const spos = shadeGeo.attributes.position as InstanceType<
+        typeof THREE.BufferAttribute
+      >;
+      for (let i = 0; i < SHADE_COUNT; i++) {
+        spos.array[i * 3] += 0.006;
+        if (spos.array[i * 3] > 24) spos.array[i * 3] = -24;
+      }
+      spos.needsUpdate = true;
 
-      // Lightning flash logic
-      if (elapsed >= nextFlash && flashIntensity <= 0) {
-        flashIntensity = 1.0;
-        nextFlash = elapsed + 3 + Math.random() * 4; // next flash in 3-7s
+      if (elapsed >= nextFlash) {
+        strikeAt = elapsed;
+        nextFlash = elapsed + 3 + Math.random() * 4; // next in 3–7 s
       }
 
-      if (flashIntensity > 0) {
-        flashIntensity -= 0.08; // rapid decay
-        if (flashIntensity < 0) flashIntensity = 0;
-        flashLight.intensity = flashIntensity * 2;
-        // Flash brightens clouds and rain momentarily
-        cloudMat.opacity = 0.45 + flashIntensity * 0.4;
-        rainMat.opacity = 0.78 + flashIntensity * 0.2;
-      } else {
-        flashLight.intensity = 0;
-        cloudMat.opacity = 0.45 + Math.sin(elapsed * 0.4) * 0.04;
-        rainMat.opacity = 0.78;
+      // 0 → 1 → 0.35 → 0.9 → decay, over ~0.45 s
+      let flash = 0;
+      if (strikeAt >= 0) {
+        const t = elapsed - strikeAt;
+        if (t < 0.06) flash = 1;
+        else if (t < 0.12) flash = 0.35;
+        else if (t < 0.18) flash = 0.9;
+        else if (t < 0.45) flash = 0.9 * (1 - (t - 0.18) / 0.27);
+        else strikeAt = -1;
       }
+
+      flashMat.opacity = flash * 0.55;
+      cloudMat.color.copy(cloudColour).lerp(cloudFlash, flash * 0.6);
+      cloudMat.opacity = 0.7 + flash * 0.25;
+      rain.material.opacity = 0.6 + flash * 0.3;
     },
     dispose() {
       for (const d of disposables) d.dispose();

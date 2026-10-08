@@ -113,7 +113,7 @@ export function CurrentLocationHome({ initial, user }: Props) {
       location,
       weather,
       usingFallback,
-      frostAlert: checkFrostRisk(weather.hourly),
+      frostAlert: checkFrostRisk(weather.hourly, weather.utc_offset_seconds),
       season: getDefaultSeason(new Date(), location.lat),
       countryName: countryNameFor(location.country),
     });

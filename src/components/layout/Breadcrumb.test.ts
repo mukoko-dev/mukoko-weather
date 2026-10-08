@@ -54,10 +54,9 @@ describe("Breadcrumb usage sites", () => {
   const usageFiles = [
     "../../app/[location]/atmosphere/AtmosphereDashboard.tsx",
     "../../app/[location]/forecast/ForecastDashboard.tsx",
-    "../../app/[location]/map/MapDashboard.tsx",
   ];
 
-  it("is imported by all three location sub-route dashboards", () => {
+  it("is imported by the atmosphere and forecast sub-route dashboards", () => {
     for (const file of usageFiles) {
       const dashboardSource = readFileSync(resolve(__dirname, file), "utf-8");
       expect(dashboardSource).toContain("@/components/layout/Breadcrumb");
@@ -65,12 +64,50 @@ describe("Breadcrumb usage sites", () => {
     }
   });
 
-  it("MapDashboard no longer renders a floating back-to-weather pill", () => {
+  it("MapDashboard renders the shared trail as a compact overlay beside its close button", () => {
     const mapSource = readFileSync(
       resolve(__dirname, "../../app/[location]/map/MapDashboard.tsx"),
       "utf-8",
     );
+    expect(mapSource).toContain("@/components/layout/Breadcrumb");
+    expect(mapSource).toContain("<Breadcrumb");
+    expect(mapSource).toContain('variant="overlay"');
+    // Home / {location} / Map — the last item is the current page.
+    expect(mapSource).toContain('{ label: "Home", href: "/" }');
+    expect(mapSource).toContain(
+      "{ label: location.name, href: `/${location.slug}` }",
+    );
+    expect(mapSource).toContain('{ label: "Map" }');
+    // The close button stays, and the old floating pill never comes back.
     expect(mapSource).not.toContain("Back to weather");
+    expect(mapSource).toContain("href={`/${location.slug}`}");
+    expect(mapSource).toContain("Close map and return to");
+  });
+});
+
+describe("Breadcrumb overlay variant", () => {
+  const source = readFileSync(resolve(__dirname, "Breadcrumb.tsx"), "utf-8");
+  // The overlay branch: from its `if` to the default trail's `return (`.
+  const overlay = source.slice(
+    source.indexOf('if (variant === "overlay")'),
+    source.lastIndexOf("return ("),
+  );
+
+  it("is a single-line card-surface pill that works in light and dark", () => {
+    expect(overlay).toContain("bg-surface-card");
+    expect(overlay).toContain("ring-border");
+    expect(overlay).toContain("flex-nowrap");
+    expect(overlay).toContain("truncate");
+    expect(overlay).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|style=\{\{/);
+  });
+
+  it("keeps links at the touch-target minimum", () => {
+    expect(overlay).toContain("min-h-[var(--touch-target-min)]");
+  });
+
+  it("is a labelled nav with aria-current on the current page", () => {
+    expect(overlay).toContain('aria-label="Breadcrumb"');
+    expect(overlay).toContain('aria-current={isCurrent ? "page" : undefined}');
   });
 });
 
@@ -94,7 +131,6 @@ describe("BreadcrumbSkeleton (issue #104)", () => {
     for (const file of [
       "../../app/[location]/atmosphere/loading.tsx",
       "../../app/[location]/forecast/loading.tsx",
-      "../../app/[location]/map/loading.tsx",
     ]) {
       const loadingSource = readFileSync(resolve(__dirname, file), "utf-8");
       expect(loadingSource).toContain("<BreadcrumbSkeleton");

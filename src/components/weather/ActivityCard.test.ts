@@ -236,8 +236,8 @@ describe("ActivityCard — feasibility trend and tips", () => {
 
   it("keeps trend + tips optional — card renders without the weather prop", () => {
     expect(source).toContain("weather?: WeatherData");
-    expect(source).toMatch(/weather \? feasibilitySeries/);
-    expect(source).toMatch(/weather \? getActivityTips/);
+    expect(source).toMatch(/weather\s*\?\s*feasibilitySeries/);
+    expect(source).toMatch(/weather\s*\?\s*getActivityTips/);
   });
 
   it("memoizes the per-card computation", () => {
