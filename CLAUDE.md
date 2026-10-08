@@ -250,8 +250,7 @@ mukoko-weather/
 │   │   │   │   ├── VisibilityChart.tsx     # Visibility distance
 │   │   │   │   ├── FeasibilityChart.tsx    # 24h activity feasibility line (mineral-colored, rating-word axis)
 │   │   │   │   └── FeasibilityChart.test.ts
-│   │   │   ├── WelcomeBanner.tsx      # Inline welcome banner for first-time visitors (replaces auto-modal)
-│   │   │   ├── WelcomeBanner.test.ts
+│   │   │   ├── LocationPromptCard.tsx # Home page's single, dismissible "Use my location" card (floats above the mobile nav)
 │   │   │   ├── MyWeatherModal.tsx     # Centralized preferences modal (location, activities, settings)
 │   │   │   ├── SupportBanner.tsx           # Buy Me a Coffee inline support card (BMC brand yellow)
 │   │   │   ├── SupportBanner.test.ts       # SupportBanner tests (structure, accessibility, isolation)
@@ -1141,19 +1140,19 @@ The header takes no props — location context comes from the URL path.
 1. **Weather** (home icon) → `/`
 2. **Explore** (compass icon) → `/explore`
 3. **Shamwari** (sparkles icon) → `/shamwari` — hidden entirely while paused
-4. **My Location** (navigation-arrow button, centre slot) — GPS action, not a route: runs the shared `detectUserLocation({ autoCreate: true })` flow (via deferred `import("@/lib/geolocation")` so the header bundle stays lean), then navigates to the detected location and syncs `selectedLocation`. Shows a `Spinner` while locating (double-tap guarded, `aria-busy`). On denial/unavailability/error it opens the My Weather modal instead — its Location tab has search plus a geolocation retry with proper error copy. Fires `geolocation_result` and, on success, `location_changed` (`method: "geolocation"`) analytics events
+4. **My Location** (navigation-arrow button, centre slot) — GPS action, not a route: runs the shared `detectUserLocation({ autoCreate: true })` flow (via deferred `import("@/lib/geolocation")` so the header bundle stays lean), syncs `selectedLocation`, writes the `lastLocation` cookie (`writeLastLocationCookie`, `src/lib/current-slug.ts`) and goes to `/` — the home page IS the current-location page. Already on `/`, it dispatches `CURRENT_LOCATION_EVENT` instead and `CurrentLocationHome` swaps the dashboard in place. Shows a `Spinner` while locating (double-tap guarded, `aria-busy`). On denial/unavailability/error it opens the My Weather modal instead — its Location tab has search plus a geolocation retry with proper error copy. Fires `geolocation_result` and, on success, `location_changed` (`method: "geolocation"`) analytics events
 5. **History** (clock icon) → `/history`
 6. **My Weather** (map-pin button) → opens modal
 
 **My Weather Modal** (`src/components/weather/MyWeatherModal.tsx`): A centralized preferences modal (shadcn Dialog + Tabs) with three tabs:
 
-- **Location** — search input (via the shared `useLocationQuickSearch` hook — also used by `ExploreSearch`), geolocation button, tag filter pills, scrollable location list with pending-slug highlighting. Selecting a location sets it as _pending_ (does not navigate immediately).
+- **Location** (default tab; `openMyWeather(tab?)` / `myWeatherTab` open any tab) — search input shown immediately (via the shared `useLocationQuickSearch` hook — also used by `ExploreSearch`), the viewed place as a "Current" row, geolocation button, saved list. Tapping a search result, a row or the GPS result SELECTS it as pending; saving is a separate per-row action. Display names come from the result's `name` (hash suffixes like `-e7b1f4` are stripped from slug-derived fallbacks).
 - **Activities** — category tabs (mineral-colored), search, 2-column activity grid with toggle selection. Uses `CATEGORY_STYLES` for consistent mineral color theming. Auto-scrolls into view after location selection.
 - **Settings** — theme radio group (light/dark/system) with visual indicators.
 
-**Welcome Banner** (`src/components/weather/WelcomeBanner.tsx`): Inline banner shown to first-time visitors (`hasOnboarded === false`) above the weather grid. Replaces the old auto-opening modal approach which caused a disruptive loading sequence. Two buttons: "Personalise" (opens My Weather modal) and "Continue with {locationName}" (marks onboarding complete). Both buttons use 56px min-height touch targets.
+**No welcome banner.** The old first-visit banner sat above the temperature (pushing it ~1.5 screens down on phones) and asked visitors to decide before seeing anything. Location is offered by the home page's `LocationPromptCard`; activities by `ActivityInsights`' empty state ("Advice for what you do" → `openMyWeather("activities")`).
 
-**Deferred navigation:** Location and activity selection are unified — picking a location (either manually or via geolocation) highlights it as pending and auto-advances to the Activities tab so the user can also select activities before navigating. The Done/Apply button commits both choices at once. Navigation only occurs on Done/Apply, not on location tap or geolocation detection. Built with shadcn Dialog (Radix), Tabs, Input, Button, and Badge components.
+**Close cancels, Apply commits.** X, Escape and outside click discard the pending location — no `setSelectedLocation`, no `completeOnboarding`, no navigation. Only the primary button (labelled Apply when something is pending) commits and navigates. The current slug is derived by `currentLocationSlug(pathname, selectedLocation)` (`src/lib/current-slug.ts`): first path segment only, never a known route, never a literal "harare" fallback. Built with shadcn Dialog (Radix), Tabs, Input, Button, and Badge components.
 
 ### Weather Loading Scenes (Three.js)
 
@@ -1190,10 +1189,11 @@ Built around one hard constraint: **device GPS only exists in the browser** — 
 - `src/app/page.tsx` — server component. Resolves the `lastLocation` cookie to a real `WeatherLocation` via `getLocationFromDb()` (only trusts a slug that both looks valid AND actually resolves), else falls back to IP geo (Vercel `x-vercel-ip-*` headers, find-only, `autoCreate=false`). For the resolved location it fetches the FULL dashboard payload server-side (same double-caught `getWeatherForLocation` + season + country as `/{slug}` pages) and renders `CurrentLocationHome` with it — a complete server-rendered weather page, instantly. With nothing to resolve, it renders `CurrentLocationHome` with `initial={null}`. Home canonical is `/` itself (it is real content now, not a chooser).
 - `src/app/CurrentLocationHome.tsx` — client component:
   1. Renders `WeatherDashboard` (keyed by slug) from the server seed immediately — stale-while-refresh, like Apple.
-  2. On mount, refreshes via GPS: runs silently whenever the browser permission is already **granted**; auto-prompts **once ever** for brand-new visitors (`mukoko-gps-autoprompted` localStorage flag); skips entirely when permission is denied or the visitor previously declined the one prompt.
+  2. On mount, refreshes via GPS **only when the browser permission is already granted** (silent). It never triggers the permission prompt on load. Otherwise `LocationPromptCard` floats above the mobile nav — "Showing weather for {place} · Use my location · ×" — and the prompt only follows a tap. Denied/failed attempts explain why and offer Search; dismissing sets `mukoko-location-card-dismissed`.
   3. GPS resolving a **different** slug → fetches that spot's weather client-side (`fetchWeather(lat, lon)`, coordinate-based — no navigation), computes frost/season/country client-side, and **swaps the dashboard in place**. The URL stays `/`. When the nearest known location is > 25 km from the fix (`FAR_NEAREST_KM`), a create-on-demand lookup (`autoCreate: true`) resolves the user's actual place first. The `lastLocation` cookie is rewritten client-side (same name/options as the middleware) so the NEXT server render seeds the fresh spot, and `selectedLocation` is synced to the store.
   4. GPS confirming the seeded slug (or producing the swap) sets `isCurrentLocation` — `WeatherDashboard` → `CurrentConditions` renders the **MY LOCATION** eyebrow above the location name, Apple style. Server-seeded-but-unconfirmed content shows no eyebrow.
-  5. Nothing seeded + GPS fails/denied → the accessible city chooser (manual "Use my current location" with `autoCreate: true`, "Browse all locations", shared `geo.denied`/`geo.error` i18n copy).
+  5. Nothing seeded → the accessible city chooser ("Use my current location" with in-button progress, "Search for a city", "Browse all locations"). There is no full-screen "Finding your location…" loader: it had no exit, and `/api/py/geo` lookups now time out (8 s find-only / 15 s create).
+  6. Swapped weather loads through `fetchHomeWeather()` (`src/lib/home-weather.ts` → `/api/py/weather`, the same cached chain as the server render), falling back to direct Open-Meteo only if our API is unreachable. Location failures and weather failures have different copy. Create-on-demand kicks in when the nearest known place is > 3 km away (`FAR_NEAREST_KM`); if that fails, the seeded place stays rather than relabelling a far place as MY LOCATION.
 
 **Why current location precedes saved by construction:** previous designs redirected `/` to a cached slug and later gated that redirect on a GPS recheck. Both had a race or a wait. Rendering the current location AT `/` removes the redirect entirely — a saved location can't win a race that doesn't exist, and GPS updates land as an in-place content swap whenever they resolve.
 
@@ -1448,7 +1448,6 @@ _Page/component tests:_
 - `src/components/weather/ChartErrorBoundary.test.ts` — error boundary rendering
 - `src/components/weather/CurrentConditions.test.ts` — current conditions rendering
 - `src/components/weather/LazySection.test.ts` — lazy section mounting, visibility
-- `src/components/weather/WelcomeBanner.test.ts` — welcome banner rendering, onboarding state, accessibility
 - `src/components/weather/SupportBanner.test.ts` — BMC support card structure, accessibility, error isolation, no hardcoded styles
 - `src/components/weather/AISummaryChat.test.ts` — inline follow-up chat structure, max message cap, accessibility
 - `src/components/weather/HistoryAnalysis.test.ts` — analysis structure, endpoint, request body, ShamwariContext, accessibility
@@ -1516,22 +1515,23 @@ Repeated Tailwind chains (3+ uses) are extracted into named component classes in
 
 **Current palette:**
 
-| Class            | Purpose                                    | Replaces                                                                                                                  |
-| ---------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `.kudu`          | Primary pill button (filled, brand colour) | `rounded-button bg-primary px-5 py-3 ...`                                                                                 |
-| `.kudu-sm`       | Smaller primary pill (compact toolbars)    | `rounded-button bg-primary px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                           |
-| `.impala`        | Secondary/outline pill button              | `border border-border bg-transparent px-5 py-3 ...`                                                                       |
-| `.impala-sm`     | Smaller outline pill (compact toolbars)    | `border border-border bg-transparent px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                 |
-| `.bee`           | Round icon button (mukoko = beehive)       | `w-[var(--touch-target-min)] h-[var(--touch-target-min)] rounded-full bg-background/10 ...`                               |
-| `.hoopoe`        | Round avatar (initials or profile picture) | `flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10` (also `.hoopoe-lg` h-9, `.hoopoe-xl` h-12) |
-| `.baobab`        | Primary card surface                       | `rounded-card border border-primary/25 bg-surface-card p-4 shadow-sm`                                                     |
-| `.acacia`        | Quieter card surface                       | `rounded-card border border-border bg-surface-card p-4`                                                                   |
-| `.giraffe`       | Section heading (tall, stands above)       | `text-base font-semibold text-text-primary font-heading`                                                                  |
-| `.gazelle`       | Body paragraph copy                        | `text-base text-text-secondary leading-relaxed`                                                                           |
-| `.dove`          | Muted secondary text                       | `text-sm text-text-tertiary`                                                                                              |
-| `.weaver`        | Primary nav link                           | `inline-flex items-center text-base font-medium text-text-secondary hover:...`                                            |
-| `.weaver-active` | Active nav link (cobalt + underline)       | active variant of `.weaver`                                                                                               |
-| `.chameleon`     | Skeleton placeholder                       | `animate-pulse rounded-card border border-surface-dim bg-surface-card shadow-sm`                                          |
+| Class            | Purpose                                    | Replaces                                                                                                                         |
+| ---------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `.kudu`          | Primary pill button (filled, brand colour) | `rounded-button bg-primary px-5 py-3 ...`                                                                                        |
+| `.kudu-sm`       | Smaller primary pill (compact toolbars)    | `rounded-button bg-primary px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                                  |
+| `.impala`        | Secondary/outline pill button              | `border border-border bg-transparent px-5 py-3 ...`                                                                              |
+| `.impala-sm`     | Smaller outline pill (compact toolbars)    | `border border-border bg-transparent px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                        |
+| `.bee`           | Round icon button (mukoko = beehive)       | `w-[var(--touch-target-min)] h-[var(--touch-target-min)] rounded-full bg-background/10 ...`                                      |
+| `.hoopoe`        | Round avatar (initials or profile picture) | `flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10` (also `.hoopoe-lg` h-9, `.hoopoe-xl` h-12)        |
+| `.baobab`        | Primary card surface                       | `rounded-card border border-primary/25 bg-surface-card p-4 shadow-sm`                                                            |
+| `.acacia`        | Quieter card surface                       | `rounded-card border border-border bg-surface-card p-4`                                                                          |
+| `.giraffe`       | Section heading (tall, stands above)       | `text-base font-semibold text-text-primary font-heading`                                                                         |
+| `.gazelle`       | Body paragraph copy                        | `text-base text-text-secondary leading-relaxed`                                                                                  |
+| `.dove`          | Muted secondary text                       | `text-sm text-text-tertiary`                                                                                                     |
+| `.weaver`        | Primary nav link                           | `inline-flex items-center text-base font-medium text-text-secondary hover:...`                                                   |
+| `.weaver-active` | Active nav link (cobalt + underline)       | active variant of `.weaver`                                                                                                      |
+| `.chameleon`     | Skeleton placeholder                       | `animate-pulse rounded-card border border-surface-dim bg-surface-card shadow-sm`                                                 |
+| `.dik-dik`       | Small inline link with a full touch target | on `pointer: coarse` only: `inline-flex` + `min-w`/`min-h` `var(--touch-target-min)` (breadcrumb Home, footer icons/attribution) |
 
 **Rules:**
 
