@@ -16,8 +16,15 @@ import {
 
 describe("RxDB schemas", () => {
   describe("preferencesSchema", () => {
-    it("has version 1", () => {
-      expect(preferencesSchema.version).toBe(1);
+    it("has version 2 (added homeLocation)", () => {
+      expect(preferencesSchema.version).toBe(2);
+    });
+
+    it("defines homeLocation as nullable string, required", () => {
+      const prop = preferencesSchema.properties.homeLocation;
+      expect(prop.type).toEqual(["string", "null"]);
+      expect(prop.default).toBeNull();
+      expect(preferencesSchema.required).toContain("homeLocation");
     });
 
     it("uses 'id' as primary key", () => {
@@ -116,6 +123,7 @@ describe("schema type compatibility", () => {
       selectedActivities: ["running"],
       hasOnboarded: true,
       selectedForecastModel: "best_match",
+      homeLocation: "harare",
       updatedAt: Date.now(),
     };
     expect(doc.id).toBe("test-uuid");

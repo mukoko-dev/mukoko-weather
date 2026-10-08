@@ -40,6 +40,8 @@ VFR/MVFR/IFR/LIFR categories and PDF pre-flight briefings from NOAA data),
 Waze-style community weather reports cross-validated against API data, an EPA
 air-quality index with a full pollutant breakdown, a historical dashboard with
 Claude-authored trend analysis, and an embeddable widget. It installs as a PWA.
+The Locations list (`/locations`) shows the current location and saved places as
+live weather cards, with a Home location, in the style of iOS Weather.
 
 Some AI surfaces are behind flags. **Shamwari full-viewport chat is paused**
 (`FLAGS.shamwari_chat` is `false`; `/shamwari` 404s); inline AI summaries,
@@ -153,7 +155,8 @@ families in Mzizi's twenty-one; the app does not use the heritage or
 experimental families. Typography is Noto Serif / Noto Sans / JetBrains Mono,
 with the Seed of Life mark. Semantic Fauna component classes (`.kudu`,
 `.impala`, `.bee`, `.baobab`, `.weaver`) centralise repeated styles in
-`globals.css`.
+`globals.css`. Location-list cards use the `.oryx-*` sky classes, whose tokens are
+checked to keep white text at 4.5:1 or better on every stop in both themes.
 
 Accessibility targets **WCAG 3.0 APCA** — APCA-verified contrast (Lc 106/78/62),
 ARIA landmarks throughout, 3px `focus-visible` outlines, 56px minimum touch

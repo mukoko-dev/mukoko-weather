@@ -124,10 +124,16 @@ async function _initDb(): Promise<MukokoDatabase> {
     preferences: {
       schema: preferencesSchema,
       // v0 → v1: added `selectedForecastModel` (Windy-style model preference).
+      // v1 → v2: added `homeLocation`.
       migrationStrategies: {
         1: (oldDoc: PreferencesDocType) => ({
           ...oldDoc,
           selectedForecastModel: oldDoc.selectedForecastModel ?? "best_match",
+        }),
+        // v1 → v2: added `homeLocation` (null = no home location set).
+        2: (oldDoc: PreferencesDocType) => ({
+          ...oldDoc,
+          homeLocation: oldDoc.homeLocation ?? null,
         }),
       },
     },

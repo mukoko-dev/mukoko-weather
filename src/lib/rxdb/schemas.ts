@@ -24,11 +24,17 @@ export interface PreferencesDocType {
   hasOnboarded: boolean;
   /** Windy-style forecast model preference (Open-Meteo model id or "best_match") */
   selectedForecastModel: string;
+  /**
+   * Home location slug (⌂ on the Locations list), or null when unset.
+   * Device-local: not part of the Python device-profile sync yet.
+   */
+  homeLocation: string | null;
   updatedAt: number;
 }
 
 export const preferencesSchema: RxJsonSchema<PreferencesDocType> = {
-  version: 1,
+  // v0 → v1: added selectedForecastModel. v1 → v2: added homeLocation.
+  version: 2,
   primaryKey: "id",
   type: "object",
   properties: {
@@ -52,6 +58,7 @@ export const preferencesSchema: RxJsonSchema<PreferencesDocType> = {
     },
     hasOnboarded: { type: "boolean", default: false },
     selectedForecastModel: { type: "string", default: "best_match" },
+    homeLocation: { type: ["string", "null"], default: null },
     updatedAt: { type: "number" },
   },
   required: [
@@ -63,6 +70,7 @@ export const preferencesSchema: RxJsonSchema<PreferencesDocType> = {
     "selectedActivities",
     "hasOnboarded",
     "selectedForecastModel",
+    "homeLocation",
     "updatedAt",
   ],
 };

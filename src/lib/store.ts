@@ -157,6 +157,13 @@ interface AppState {
   saveLocation: (slug: string) => void;
   /** Remove a location from saved list */
   removeLocation: (slug: string) => void;
+  /**
+   * The visitor's Home location slug (⌂ on the Locations list), or null.
+   * Persisted in RxDB; device-local for now (not yet part of the device sync).
+   */
+  homeLocation: string | null;
+  /** Set (or clear with null) the Home location */
+  setHomeLocation: (slug: string | null) => void;
   /** Custom labels for saved locations (e.g., "Home", "Work") — keyed by slug */
   locationLabels: Record<string, string>;
   /** Set a custom label for a saved location */
@@ -257,6 +264,12 @@ export const useAppStore = create<AppState>()((set) => ({
   setSelectedLocation: (slug) => {
     set({ selectedLocation: slug });
     if (!_suppressRxDBWrites) updatePreferences({ selectedLocation: slug });
+  },
+  homeLocation: null,
+  setHomeLocation: (slug) => {
+    const next = slug && slug.length > 0 ? slug : null;
+    set({ homeLocation: next });
+    if (!_suppressRxDBWrites) updatePreferences({ homeLocation: next });
   },
   savedLocations: [],
   saveLocation: (slug) =>
@@ -407,6 +420,9 @@ export function initializeDeviceSync(): void {
             selectedForecastModel: prefs.selectedForecastModel,
           });
         }
+        if (prefs.homeLocation !== undefined) {
+          useAppStore.setState({ homeLocation: prefs.homeLocation });
+        }
       } finally {
         _suppressRxDBWrites = false;
       }
@@ -422,6 +438,7 @@ export function initializeDeviceSync(): void {
         selectedActivities: s.selectedActivities,
         hasOnboarded: s.hasOnboarded,
         selectedForecastModel: s.selectedForecastModel,
+        homeLocation: s.homeLocation,
       };
     },
   })
