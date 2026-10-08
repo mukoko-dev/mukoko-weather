@@ -22,7 +22,7 @@ export function WeatherUnavailableBanner() {
         </p>
         <button
           onClick={() => window.location.reload()}
-          className="mt-2 text-base font-medium text-primary transition-colors hover:text-primary/80"
+          className="dikdik mt-2"
         >
           Refresh now
         </button>

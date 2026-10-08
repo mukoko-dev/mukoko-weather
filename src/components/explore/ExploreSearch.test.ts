@@ -144,3 +144,13 @@ describe("UI patterns", () => {
     expect(source).toContain("No locations found");
   });
 });
+
+describe("ExploreSearch — error alert", () => {
+  it("renders search errors through the Alert severe variant", () => {
+    expect(source).toContain(
+      'import { Alert, AlertDescription } from "@/components/ui/alert"',
+    );
+    expect(source).toContain('<Alert variant="severe">');
+    expect(source).not.toContain("border-destructive/30");
+  });
+});
