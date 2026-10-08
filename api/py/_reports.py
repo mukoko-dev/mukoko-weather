@@ -12,12 +12,9 @@ expiration. AI clarification uses the system:report_clarification prompt.
 from __future__ import annotations
 
 import hashlib
-import os
-import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-import anthropic
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -25,13 +22,12 @@ from pydantic import BaseModel, Field
 from ._db import (
     enforce_rate_limit,
     get_client_ip,
-    get_api_key,
     weather_reports_collection,
     weather_cache_collection,
-    ai_prompts_collection,
 )
+from ._ai_prompts import get_ai_prompt
+from ._anthropic import call_claude, first_text
 from ._places_resolver import find_location
-from ._circuit_breaker import anthropic_breaker
 
 router = APIRouter()
 
@@ -55,55 +51,6 @@ SEVERITY_TTL = {
     "moderate": 172800,  # 48h
     "severe": 259200,    # 72h
 }
-
-# ---------------------------------------------------------------------------
-# Module-level caches
-# ---------------------------------------------------------------------------
-
-_client: Optional[anthropic.Anthropic] = None
-_client_key_last: Optional[str] = None
-
-# Prompt cache (5-min TTL)
-_prompt_cache: dict[str, dict] = {}
-_prompt_cache_at: float = 0
-_PROMPT_CACHE_TTL = 300
-
-
-def _get_client() -> Optional[anthropic.Anthropic]:
-    global _client, _client_key_last
-
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key:
-        key = get_api_key("anthropic")
-    if not key:
-        return None
-
-    if _client is None or _client_key_last != key:
-        _client = anthropic.Anthropic(api_key=key)
-        _client_key_last = key
-
-    return _client
-
-
-def _get_clarification_prompt() -> dict | None:
-    """Fetch the report clarification prompt from MongoDB."""
-    global _prompt_cache, _prompt_cache_at
-
-    now = time.time()
-    if _prompt_cache and (now - _prompt_cache_at) < _PROMPT_CACHE_TTL:
-        return _prompt_cache.get("system:report_clarification")
-
-    try:
-        docs = list(
-            ai_prompts_collection()
-            .find({"active": True}, {"_id": 0, "updatedAt": 0})
-        )
-        _prompt_cache = {d["promptKey"]: d for d in docs}
-        _prompt_cache_at = now
-        return _prompt_cache.get("system:report_clarification")
-    except Exception:
-        return _prompt_cache.get("system:report_clarification")
-
 
 _FALLBACK_CLARIFICATION_PROMPT = """You are helping a user submit a weather report for {locationName}. They selected: {reportType}.
 
@@ -345,15 +292,8 @@ async def clarify_report(body: ClarifyRequest, request: Request):
     loc = find_location(body.locationSlug)
     location_name = loc.get("name") if loc else body.locationSlug
 
-    client = _get_client()
-    if not client or not anthropic_breaker.is_allowed:
-        # Fallback questions (AI unavailable or circuit open)
-        return {
-            "questions": _fallback_questions(body.reportType),
-        }
-
     # Build prompt from database
-    prompt_doc = _get_clarification_prompt()
+    prompt_doc = get_ai_prompt("system:report_clarification")
     template = (
         prompt_doc["template"]
         if prompt_doc and prompt_doc.get("template")
@@ -369,30 +309,26 @@ async def clarify_report(body: ClarifyRequest, request: Request):
     model = (prompt_doc or {}).get("model", "claude-haiku-4-5-20251001")
     max_tokens = (prompt_doc or {}).get("maxTokens", 150)
 
-    try:
-        response = client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            system=system_prompt,
-            messages=[{"role": "user", "content": f"I'm reporting: {body.reportType}"}],
-        )
-        anthropic_breaker.record_success()
-
-        text_block = next((b for b in response.content if b.type == "text"), None)
-        questions_text = text_block.text if text_block else ""
-
-        # Parse numbered questions
-        questions = [
-            line.strip().lstrip("0123456789.").strip()
-            for line in questions_text.strip().split("\n")
-            if line.strip() and line.strip()[0].isdigit()
-        ]
-
-        return {"questions": questions[:2] if questions else _fallback_questions(body.reportType)}
-
-    except Exception:
-        anthropic_breaker.record_failure()
+    # No key, open circuit or any Claude error: hardcoded fallback questions
+    response, err = call_claude(
+        model=model,
+        max_tokens=max_tokens,
+        system=system_prompt,
+        messages=[{"role": "user", "content": f"I'm reporting: {body.reportType}"}],
+    )
+    if err is not None:
         return {"questions": _fallback_questions(body.reportType)}
+
+    questions_text = first_text(response)
+
+    # Parse numbered questions
+    questions = [
+        line.strip().lstrip("0123456789.").strip()
+        for line in questions_text.strip().split("\n")
+        if line.strip() and line.strip()[0].isdigit()
+    ]
+
+    return {"questions": questions[:2] if questions else _fallback_questions(body.reportType)}
 
 
 def _fallback_questions(report_type: str) -> list[str]:
