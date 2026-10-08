@@ -35,9 +35,15 @@ describe("CurrentLocationHome — silent-URL model", () => {
   });
 
   it("swaps the dashboard in place when GPS resolves a different slug", () => {
-    expect(source).toContain("resolved.slug !== initial?.location.slug");
+    expect(source).toContain("resolved.slug === view?.location.slug");
     expect(source).toContain("await swapTo(resolved");
-    expect(source).toContain("fetchWeather(location.lat, location.lon)");
+  });
+
+  it("loads swapped weather through our own API, not the browser's Open-Meteo quota", () => {
+    // A browser-side Open-Meteo 429 used to surface as "Could not detect
+    // location" even though GPS had worked.
+    expect(source).toContain("fetchHomeWeather(");
+    expect(source).not.toMatch(/\bfetchWeather\(/);
   });
 
   it("remounts the dashboard per location via key", () => {
@@ -49,7 +55,13 @@ describe("CurrentLocationHome — silent-URL model", () => {
     expect(source).toContain(
       "result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM",
     );
-    expect(source).toContain("detectUserLocation({ autoCreate: true })");
+    expect(source).toMatch(/detectUserLocation\(\{\s*autoCreate: true/);
+  });
+
+  it("keeps the seeded place rather than relabelling a far one as MY LOCATION", () => {
+    // Singapore audit: a POI ~9 km away was shown as MY LOCATION.
+    expect(source).toMatch(/const FAR_NEAREST_KM = [1-5];/);
+    expect(source).toContain("} else if (view) {");
   });
 
   it("refreshes the lastLocation cookie so the next server render seeds the new spot", () => {
@@ -59,16 +71,31 @@ describe("CurrentLocationHome — silent-URL model", () => {
     expect(source).toContain("max-age=2592000");
   });
 
-  it("silently refreshes when permission is already granted; auto-prompts only once", () => {
+  it("refreshes silently only when permission is already granted — never prompts on load", () => {
     expect(source).toMatch(
       /navigator\.permissions\?\.query\(\{\s*name: "geolocation",?\s*\}\)/,
     );
-    expect(source).toContain("GPS_AUTOPROMPT_KEY");
-    expect(source).toContain("if (!granted && promptedBefore) return;");
+    expect(source).toContain('if (state !== "granted") {');
+    // The old once-ever auto-prompt is gone: the prompt only follows a tap.
+    expect(source).not.toContain("GPS_AUTOPROMPT_KEY");
   });
 
-  it("skips GPS outright when permission is denied", () => {
-    expect(source).toContain('status?.state === "denied"');
+  it("explains a blocked permission instead of failing silently", () => {
+    expect(source).toContain('if (state === "denied") setMessage("denied");');
+    expect(source).toContain("Location is blocked in your browser settings.");
+  });
+
+  it("offers location through one dismissible card over the seeded weather", () => {
+    expect(source).toContain("<LocationPromptCard");
+    expect(source).toContain(
+      "const showCard = promptReady && !gpsConfirmed && !dismissed;",
+    );
+    expect(source).toContain("LOCATION_CARD_DISMISSED_KEY");
+  });
+
+  it("tells a weather failure apart from a location failure", () => {
+    expect(source).toContain('return "no-weather";');
+    expect(source).toContain('"no-location"');
   });
 
   it("marks the dashboard as current-location only after GPS confirms", () => {
@@ -90,19 +117,20 @@ describe("CurrentLocationHome — GPS chooser fallback", () => {
     expect(source).toContain("Find your weather");
   });
 
-  it("manual GPS creates the location on demand (autoCreate)", () => {
-    expect(source).toContain("detectUserLocation({ autoCreate: true })");
-    expect(source).toContain('result.status === "created"');
+  it("accepts a created location from the lookup", () => {
+    expect(source).toContain('result.status !== "created"');
   });
 
-  it("shows the loading scene while GPS runs with nothing seeded", () => {
-    expect(source).toContain("WeatherLoadingScene");
+  it("never blocks the screen while GPS runs — the button shows progress", () => {
+    // The old full-screen "Finding your location…" scene had no way out.
+    expect(source).not.toContain("WeatherLoadingScene");
+    expect(source).toContain('aria-busy={gpsState === "detecting"}');
     expect(source).toContain("Finding your location…");
   });
 
-  it("shows error copy from shared i18n keys", () => {
-    expect(source).toContain('t("geo.denied")');
-    expect(source).toContain('t("geo.error")');
+  it("always offers search as a way forward", () => {
+    expect(source).toContain("Search for a city");
+    expect(source).toContain("onSearch={() => openMyWeather()}");
   });
 
   it("keeps the accessible main landmark in the chooser state", () => {

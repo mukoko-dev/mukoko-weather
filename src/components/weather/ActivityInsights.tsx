@@ -152,7 +152,32 @@ export function ActivityInsights({
       .filter((a): a is Activity => a != null);
   }, [selectedActivities, activities]);
 
-  if (selectedItems.length === 0) return null;
+  // Activities still loading → nothing yet.
+  if (activities.length === 0) return null;
+
+  // Nothing picked yet → a quiet, in-context invitation. This replaces the
+  // old first-visit welcome banner: activities are optional, so they're
+  // offered where their payoff is (this section), not above the temperature.
+  if (selectedItems.length === 0) {
+    return (
+      <section aria-labelledby="activity-insights-empty-heading" className="acacia">
+        <h2 id="activity-insights-empty-heading" className="giraffe">
+          Advice for what you do
+        </h2>
+        <p className="mt-1 gazelle">
+          Farming, football, a braai, the school run — pick a few activities
+          and we&apos;ll tell you how today&apos;s weather affects them.
+        </p>
+        <button
+          type="button"
+          onClick={() => openMyWeather("activities")}
+          className="impala-sm mt-3"
+        >
+          Choose activities
+        </button>
+      </section>
+    );
+  }
 
   // When insights data is available, show per-activity suitability cards
   if (insights) {

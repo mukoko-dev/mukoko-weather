@@ -377,3 +377,40 @@ describe("resolvePlaceSlug — identity from the map", () => {
     expect(loc?._id).toBe("geo:ksy4dd7");
   });
 });
+
+describe("resolveLocationSlug — platform slugs from search", () => {
+  beforeEach(() => {
+    findOneImpl = async () => null;
+    findArrayImpl = async () => [];
+  });
+
+  it("resolves a placesGeo platform slug (name-<6hex>) by exact slug match", async () => {
+    // Search hands out `bulawayo-e7b1f4`; it used to render "Location not found".
+    findOneImpl = async (filter) => {
+      const f = filter as Record<string, unknown>;
+      if (f.slug === "bulawayo-e7b1f4") {
+        return {
+          _id: "pg-bulawayo",
+          name: "Bulawayo",
+          slug: "bulawayo-e7b1f4",
+          geoType: "city",
+          isoCode: "ZW",
+          geo: { type: "Point", coordinates: [28.58, -20.15] },
+        };
+      }
+      return null;
+    };
+    const loc = await resolveLocationSlug("bulawayo-e7b1f4");
+    expect(loc?.name).toBe("Bulawayo");
+    expect(loc?.slug).toBe("bulawayo-e7b1f4");
+    expect(loc?.lat).toBeCloseTo(-20.15, 1);
+  });
+
+  it("never resolves a platform slug to a country document", async () => {
+    findOneImpl = async (filter) =>
+      (filter as Record<string, unknown>).slug
+        ? { _id: "c", name: "Narnia", slug: "narnia-abcdef", geoType: "country" }
+        : null;
+    expect(await resolveLocationSlug("narnia-abcdef")).toBeNull();
+  });
+});
