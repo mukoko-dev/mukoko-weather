@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
+import { PageShell } from "@/components/layout/PageShell";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
@@ -15,23 +14,15 @@ export const metadata: Metadata = {
 export default function TermsPage() {
   return (
     <>
-      <Header />
-      <main
-        id="main-content"
-        className="mx-auto max-w-3xl px-4 py-10 pb-24 sm:pb-10 sm:px-6 md:px-8"
-      >
-        <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">
-          Terms of Service
-        </h1>
+      <PageShell>
+        <h1 className="elephant">Terms of Service</h1>
         <p className="mt-2 text-base text-text-tertiary">
           Last updated: June 2026
         </p>
 
         <div className="mt-8 space-y-8 text-text-secondary leading-relaxed">
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              1. Agreement
-            </h2>
+            <h2 className="eland">1. Agreement</h2>
             <p className="mt-3">
               These Terms of Service (&quot;Terms&quot;) govern your use of
               mukoko weather (&quot;the Service&quot;), operated by{" "}
@@ -45,10 +36,7 @@ export default function TermsPage() {
             </p>
             <p className="mt-3">
               By accessing or using the Service at{" "}
-              <a
-                href="https://weather.mukoko.com"
-                className="text-primary underline"
-              >
+              <a href="https://weather.mukoko.com" className="sunbird">
                 weather.mukoko.com
               </a>
               , you agree to be bound by these Terms. If you do not agree,
@@ -57,9 +45,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              2. Description of Service
-            </h2>
+            <h2 className="eland">2. Description of Service</h2>
             <p className="mt-3">
               mukoko weather provides weather forecasts, current conditions,
               AI-generated weather summaries, frost alerts, aviation weather
@@ -70,15 +56,13 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              3. Weather data disclaimer
-            </h2>
+            <h2 className="eland">3. Weather data disclaimer</h2>
             <p className="mt-3">
               Weather information provided by the Service is sourced from
               third-party data providers (Tomorrow.io, Open-Meteo) and AI models
               (Anthropic Claude). While we strive for accuracy:
             </p>
-            <ul className="mt-2 list-disc pl-6 space-y-1">
+            <ul className="springbok">
               <li>
                 Weather forecasts are inherently uncertain and should be used as
                 guidance, not guarantees
@@ -108,9 +92,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              4. Aviation weather disclaimer
-            </h2>
+            <h2 className="eland">4. Aviation weather disclaimer</h2>
             <p className="mt-3">
               The aviation weather features (METAR observations, TAF forecasts,
               and pre-flight weather briefings including PDF exports) are
@@ -120,7 +102,7 @@ export default function TermsPage() {
               </strong>
               .
             </p>
-            <ul className="mt-2 list-disc pl-6 space-y-1">
+            <ul className="springbok">
               <li>
                 Aviation weather data is sourced from the Aviation Weather
                 Center (NOAA) and may be delayed, incomplete, or unavailable
@@ -153,13 +135,11 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              5. Community weather reports
-            </h2>
+            <h2 className="eland">5. Community weather reports</h2>
             <p className="mt-3">
               By submitting a community weather report, you:
             </p>
-            <ul className="mt-2 list-disc pl-6 space-y-1">
+            <ul className="springbok">
               <li>
                 Confirm that the report reflects your genuine current
                 observation
@@ -182,14 +162,12 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              6. Acceptable use
-            </h2>
+            <h2 className="eland">6. Acceptable use</h2>
             <p className="mt-3">
               You may use the Service for personal, educational, and commercial
               purposes. You may not:
             </p>
-            <ul className="mt-2 list-disc pl-6 space-y-1">
+            <ul className="springbok">
               <li>
                 Attempt to disrupt, overload, or interfere with the
                 Service&apos;s infrastructure
@@ -211,9 +189,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              7. API and embed usage
-            </h2>
+            <h2 className="eland">7. API and embed usage</h2>
             <p className="mt-3">
               The Service provides API endpoints and an embeddable widget. These
               are provided for reasonable use. We reserve the right to
@@ -223,16 +199,14 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              8. Intellectual property
-            </h2>
+            <h2 className="eland">8. Intellectual property</h2>
             <p className="mt-3">
               The mukoko weather name, logo, and brand are trademarks of Mukoko
               Africa / Nyuchi Africa (PVT) Ltd. The Service&apos;s source code
               is licensed under the{" "}
               <a
                 href="https://github.com/nyuchi/mukoko-weather/blob/main/LICENSE"
-                className="text-primary underline"
+                className="sunbird"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -244,9 +218,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              9. Limitation of liability
-            </h2>
+            <h2 className="eland">9. Limitation of liability</h2>
             <p className="mt-3">
               THE SERVICE IS PROVIDED &quot;AS IS&quot; AND &quot;AS
               AVAILABLE&quot; WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
@@ -264,9 +236,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              10. Service availability
-            </h2>
+            <h2 className="eland">10. Service availability</h2>
             <p className="mt-3">
               We aim to keep the Service available at all times but do not
               guarantee uninterrupted access. The Service may be temporarily
@@ -277,9 +247,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              11. Changes to these Terms
-            </h2>
+            <h2 className="eland">11. Changes to these Terms</h2>
             <p className="mt-3">
               We may update these Terms from time to time. Changes will be
               posted on this page with an updated date. Your continued use of
@@ -289,9 +257,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              12. Governing law
-            </h2>
+            <h2 className="eland">12. Governing law</h2>
             <p className="mt-3">
               These Terms are governed by the laws of the Republic of Zimbabwe,
               where Nyuchi Africa (PVT) Ltd is incorporated. Any disputes
@@ -303,26 +269,18 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-xl font-bold text-text-primary">
-              13. Contact
-            </h2>
+            <h2 className="eland">13. Contact</h2>
             <p className="mt-3">
               For questions about these Terms, contact us at:
             </p>
             <ul className="mt-2 space-y-1">
               <li>
-                <a
-                  href="mailto:legal@nyuchi.com"
-                  className="text-primary underline"
-                >
+                <a href="mailto:legal@nyuchi.com" className="sunbird">
                   legal@nyuchi.com
                 </a>
               </li>
               <li>
-                <a
-                  href="mailto:support@mukoko.com"
-                  className="text-primary underline"
-                >
+                <a href="mailto:support@mukoko.com" className="sunbird">
                   support@mukoko.com
                 </a>
               </li>
@@ -334,21 +292,14 @@ export default function TermsPage() {
         </div>
 
         <nav className="mt-10 flex gap-4 text-base" aria-label="Legal pages">
-          <Link
-            href="/about"
-            className="text-primary underline hover:text-primary/80 transition-colors"
-          >
+          <Link href="/about" className="sunbird">
             About
           </Link>
-          <Link
-            href="/privacy"
-            className="text-primary underline hover:text-primary/80 transition-colors"
-          >
+          <Link href="/privacy" className="sunbird">
             Privacy Policy
           </Link>
         </nav>
-      </main>
-      <Footer />
+      </PageShell>
     </>
   );
 }
