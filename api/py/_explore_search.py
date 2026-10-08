@@ -20,8 +20,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ._db import (
-    check_rate_limit,
-    get_client_ip,
+    enforce_rate_limit,
     get_api_key,
     weather_cache_collection,
     ai_prompts_collection,
@@ -348,13 +347,7 @@ async def explore_search(body: ExploreSearchRequest, request: Request):
         raise HTTPException(status_code=400, detail="Query is required")
 
     # Rate limiting — extract real IP behind Vercel's reverse proxy
-    ip = get_client_ip(request)
-    if not ip:
-        raise HTTPException(status_code=400, detail="Could not determine IP")
-
-    rate = check_rate_limit(ip, "explore_search", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW)
-    if not rate["allowed"]:
-        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+    enforce_rate_limit(request, "explore_search", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW)
 
     # Circuit breaker check — fall back to text search if Anthropic is down
     if not anthropic_breaker.is_allowed:

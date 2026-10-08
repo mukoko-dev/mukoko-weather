@@ -40,6 +40,8 @@ from typing import Optional
 
 import httpx
 
+from ._db import is_valid_coords
+
 # Public Overpass instance. Both mirrors accept the same QL.
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
@@ -235,7 +237,7 @@ def reverse_name(
     Returns ``None`` on any failure or when nothing nearby carries a name, which
     is the signal for the caller to fall back rather than an error.
     """
-    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+    if not is_valid_coords(lat, lon):
         return None
 
     try:
