@@ -71,7 +71,11 @@ export function ProfileClient({ user }: { user: ProfileUser }) {
         <p className="gazelle mb-4">
           Your saved location, activities, and app settings.
         </p>
-        <button type="button" onClick={openMyWeather} className="kudu-sm">
+        <button
+          type="button"
+          onClick={() => openMyWeather()}
+          className="kudu-sm"
+        >
           Edit preferences
         </button>
       </section>
