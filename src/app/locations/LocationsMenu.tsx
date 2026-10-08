@@ -14,7 +14,10 @@ interface LocationsMenuProps {
  * Explore, History and Aviation. Units has no switch of its own yet, so it
  * opens the My Weather Settings tab, where preferences live.
  */
-export function LocationsMenu({ editing, onToggleEditing }: LocationsMenuProps) {
+export function LocationsMenu({
+  editing,
+  onToggleEditing,
+}: LocationsMenuProps) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const wrapRef = useRef<HTMLDivElement>(null);

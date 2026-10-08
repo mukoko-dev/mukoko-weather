@@ -1,6 +1,10 @@
 import { SunriseIcon, SunsetIcon, SunIcon } from "@/lib/weather-icons";
 import type { DailyWeather } from "@/lib/weather";
-import { resolveOffsetSeconds, wallClockMs, wallClockLabel } from "@/lib/location-time";
+import {
+  resolveOffsetSeconds,
+  wallClockMs,
+  wallClockLabel,
+} from "@/lib/location-time";
 
 interface Props {
   daily: DailyWeather;

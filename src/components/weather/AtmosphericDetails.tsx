@@ -41,10 +41,7 @@ export function prepareAtmosphericData(
   for (let i = 0; i < 24 && start + i < hourly.time.length; i++) {
     const idx = start + i;
     points.push({
-      label:
-        i === 0
-          ? "Now"
-          : locationClockLabel(hourly.time[idx], offset),
+      label: i === 0 ? "Now" : locationClockLabel(hourly.time[idx], offset),
       humidity: hourly.relative_humidity_2m[idx],
       cloudCover: hourly.cloud_cover[idx],
       pressure: Math.round(hourly.surface_pressure[idx]),

@@ -68,7 +68,8 @@ function applyWeatherOverlay(
 
   const spec = buildWeatherOverlaySource(layer, timestamp);
   const existing = map.getSource(WEATHER_OVERLAY_ID) as
-    RasterTileSource | undefined;
+    | RasterTileSource
+    | undefined;
   if (existing && map.getLayer(WEATHER_OVERLAY_ID)) {
     existing.setTiles(spec.tiles);
     return;

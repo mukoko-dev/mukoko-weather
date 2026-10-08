@@ -292,7 +292,14 @@ describe("plate names and minerals", () => {
   });
 
   it("maps every condition, day and night, to a mineral", () => {
-    const conditions = ["clear", "cloudy", "rain", "storm", "fog", "snow"] as const;
+    const conditions = [
+      "clear",
+      "cloudy",
+      "rain",
+      "storm",
+      "fog",
+      "snow",
+    ] as const;
     for (const condition of conditions) {
       for (const isDay of [true, false]) {
         expect(PLATE_MINERAL[plateName(condition, isDay)]).toBeDefined();
@@ -384,9 +391,9 @@ describe("mapWithConcurrency", () => {
 
   it("handles an empty list and a limit larger than the list", async () => {
     expect(await mapWithConcurrency([], 3, async (n: number) => n)).toEqual([]);
-    expect(
-      await mapWithConcurrency([1, 2], 10, async (n) => n * 2),
-    ).toEqual([2, 4]);
+    expect(await mapWithConcurrency([1, 2], 10, async (n) => n * 2)).toEqual([
+      2, 4,
+    ]);
   });
 
   it("defaults the card fetch concurrency to 3", () => {

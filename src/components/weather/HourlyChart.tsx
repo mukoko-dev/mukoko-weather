@@ -36,10 +36,7 @@ export function prepareHourlyData(
   for (let i = 0; i < 24 && start + i < hourly.time.length; i++) {
     const idx = start + i;
     points.push({
-      label:
-        i === 0
-          ? "Now"
-          : locationClockLabel(hourly.time[idx], offset),
+      label: i === 0 ? "Now" : locationClockLabel(hourly.time[idx], offset),
       temp: Math.round(hourly.temperature_2m[idx]),
       feelsLike: Math.round(hourly.apparent_temperature[idx]),
       rain: hourly.precipitation_probability[idx],

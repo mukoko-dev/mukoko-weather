@@ -42,7 +42,11 @@ export function LocationsSearch({ listed }: LocationsSearchProps) {
       {hasQuery && (
         <div className="absolute bottom-full left-0 right-0 mb-2 max-h-72 overflow-y-auto rounded-card border border-border bg-surface-card p-1 shadow-lg">
           {loading && (
-            <p role="status" aria-label="Loading" className="px-3 py-3 text-sm text-text-secondary">
+            <p
+              role="status"
+              aria-label="Loading"
+              className="px-3 py-3 text-sm text-text-secondary"
+            >
               Searching…
             </p>
           )}

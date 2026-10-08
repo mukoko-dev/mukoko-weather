@@ -36,7 +36,9 @@ describe("isPresetAnchor", () => {
   it("rejects missing, non-numeric, non-finite and out-of-range values", () => {
     expect(isPresetAnchor(null)).toBe(false);
     expect(isPresetAnchor("harare")).toBe(false);
-    expect(isPresetAnchor({ lat: "-17" as unknown as number, lon: 31 })).toBe(false);
+    expect(isPresetAnchor({ lat: "-17" as unknown as number, lon: 31 })).toBe(
+      false,
+    );
     expect(isPresetAnchor({ lat: Number.NaN, lon: 31 })).toBe(false);
     expect(isPresetAnchor({ lat: 91, lon: 0 })).toBe(false);
     expect(isPresetAnchor({ lat: 0, lon: 181 })).toBe(false);
@@ -58,7 +60,9 @@ describe("suggestPresetSlugs", () => {
 
   it("adds the nearest seeded cities first, then Harare and Bulawayo", () => {
     const list = suggestPresetSlugs(NAIROBI);
-    expect(list).toHaveLength(PRESET_NEAREST_COUNT + PRESET_ALWAYS_SLUGS.length);
+    expect(list).toHaveLength(
+      PRESET_NEAREST_COUNT + PRESET_ALWAYS_SLUGS.length,
+    );
     expect(list.slice(-2)).toEqual(["harare", "bulawayo"]);
     // The nearest of the nearest is Nairobi itself (distance 0).
     expect(list[0]).toBe("nairobi-ke");
@@ -154,9 +158,9 @@ describe("visiblePresetSlugs", () => {
 
 describe("hiddenSuggestedSlugs", () => {
   it("lists only the hidden places that are actually suggested for this anchor", () => {
-    expect(
-      hiddenSuggestedSlugs(null, ["harare", "not-a-suggestion"]),
-    ).toEqual(["harare"]);
+    expect(hiddenSuggestedSlugs(null, ["harare", "not-a-suggestion"])).toEqual([
+      "harare",
+    ]);
   });
 
   it("is empty when nothing is hidden", () => {

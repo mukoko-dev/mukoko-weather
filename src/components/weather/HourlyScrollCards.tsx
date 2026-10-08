@@ -69,9 +69,7 @@ export function HourlyScrollCards({ hourly, utcOffsetSeconds }: Props) {
             const isDay = hourly.is_day[idx];
             const temp = Math.round(hourly.temperature_2m[idx]);
             const timeLabel =
-              hydrated && i === 0
-                ? "Now"
-                : locationClockLabel(time, offset);
+              hydrated && i === 0 ? "Now" : locationClockLabel(time, offset);
             return (
               <div
                 key={time}

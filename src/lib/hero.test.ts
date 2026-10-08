@@ -234,8 +234,10 @@ describe("sky plate tokens — contrast", () => {
   // plate tokens resolve through), so read both in cascade order. The Mzizi
   // light block is `:root, [data-theme="light"]`; normalise it to `:root`.
   const css =
-    readFileSync(resolve(__dirname, "../app/mzizi-tokens.css"), "utf-8")
-      .replace(/:root,\s*\[data-theme="light"\] \{/g, ":root {") +
+    readFileSync(
+      resolve(__dirname, "../app/mzizi-tokens.css"),
+      "utf-8",
+    ).replace(/:root,\s*\[data-theme="light"\] \{/g, ":root {") +
     "\n" +
     readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8");
 

@@ -830,13 +830,41 @@ body {
   .oryx-clear-night {
     background-color: var(--oryx-clear-night-top);
     background-image:
-      radial-gradient(1px 1px at 12% 22%, var(--oryx-star) 50%, transparent 51%),
-      radial-gradient(1px 1px at 58% 12%, var(--oryx-star) 50%, transparent 51%),
-      radial-gradient(1.5px 1.5px at 84% 46%, var(--oryx-star) 50%, transparent 51%),
-      radial-gradient(1px 1px at 30% 70%, var(--oryx-star) 50%, transparent 51%),
-      radial-gradient(1px 1px at 72% 84%, var(--oryx-star) 50%, transparent 51%),
-      radial-gradient(1px 1px at 44% 40%, var(--oryx-star) 50%, transparent 51%),
-      linear-gradient(170deg, var(--oryx-clear-night-top), var(--oryx-clear-night-bottom));
+      radial-gradient(
+        1px 1px at 12% 22%,
+        var(--oryx-star) 50%,
+        transparent 51%
+      ),
+      radial-gradient(
+        1px 1px at 58% 12%,
+        var(--oryx-star) 50%,
+        transparent 51%
+      ),
+      radial-gradient(
+        1.5px 1.5px at 84% 46%,
+        var(--oryx-star) 50%,
+        transparent 51%
+      ),
+      radial-gradient(
+        1px 1px at 30% 70%,
+        var(--oryx-star) 50%,
+        transparent 51%
+      ),
+      radial-gradient(
+        1px 1px at 72% 84%,
+        var(--oryx-star) 50%,
+        transparent 51%
+      ),
+      radial-gradient(
+        1px 1px at 44% 40%,
+        var(--oryx-star) 50%,
+        transparent 51%
+      ),
+      linear-gradient(
+        170deg,
+        var(--oryx-clear-night-top),
+        var(--oryx-clear-night-bottom)
+      );
   }
   .oryx-cloudy {
     background: linear-gradient(
@@ -846,16 +874,32 @@ body {
     );
   }
   .oryx-rain {
-    background: linear-gradient(165deg, var(--oryx-rain-top), var(--oryx-rain-bottom));
+    background: linear-gradient(
+      165deg,
+      var(--oryx-rain-top),
+      var(--oryx-rain-bottom)
+    );
   }
   .oryx-storm {
-    background: linear-gradient(165deg, var(--oryx-storm-top), var(--oryx-storm-bottom));
+    background: linear-gradient(
+      165deg,
+      var(--oryx-storm-top),
+      var(--oryx-storm-bottom)
+    );
   }
   .oryx-fog {
-    background: linear-gradient(165deg, var(--oryx-fog-top), var(--oryx-fog-bottom));
+    background: linear-gradient(
+      165deg,
+      var(--oryx-fog-top),
+      var(--oryx-fog-bottom)
+    );
   }
   .oryx-snow {
-    background: linear-gradient(165deg, var(--oryx-snow-top), var(--oryx-snow-bottom));
+    background: linear-gradient(
+      165deg,
+      var(--oryx-snow-top),
+      var(--oryx-snow-bottom)
+    );
   }
 
   /* .dik-dik — small inline control (breadcrumb link, footer icon, attribution
@@ -1625,23 +1669,43 @@ body {
   --color-weather-sky-clear-day-top: var(--weather-sky-clear-day-top);
   --color-weather-sky-clear-day-horizon: var(--weather-sky-clear-day-horizon);
   --color-weather-sky-clear-night-top: var(--weather-sky-clear-night-top);
-  --color-weather-sky-clear-night-horizon: var(--weather-sky-clear-night-horizon);
-  --color-weather-sky-partly-cloudy-day-top: var(--weather-sky-partly-cloudy-day-top);
-  --color-weather-sky-partly-cloudy-day-horizon: var(--weather-sky-partly-cloudy-day-horizon);
-  --color-weather-sky-partly-cloudy-night-top: var(--weather-sky-partly-cloudy-night-top);
-  --color-weather-sky-partly-cloudy-night-horizon: var(--weather-sky-partly-cloudy-night-horizon);
+  --color-weather-sky-clear-night-horizon: var(
+    --weather-sky-clear-night-horizon
+  );
+  --color-weather-sky-partly-cloudy-day-top: var(
+    --weather-sky-partly-cloudy-day-top
+  );
+  --color-weather-sky-partly-cloudy-day-horizon: var(
+    --weather-sky-partly-cloudy-day-horizon
+  );
+  --color-weather-sky-partly-cloudy-night-top: var(
+    --weather-sky-partly-cloudy-night-top
+  );
+  --color-weather-sky-partly-cloudy-night-horizon: var(
+    --weather-sky-partly-cloudy-night-horizon
+  );
   --color-weather-sky-cloudy-day-top: var(--weather-sky-cloudy-day-top);
   --color-weather-sky-cloudy-day-horizon: var(--weather-sky-cloudy-day-horizon);
   --color-weather-sky-cloudy-night-top: var(--weather-sky-cloudy-night-top);
-  --color-weather-sky-cloudy-night-horizon: var(--weather-sky-cloudy-night-horizon);
+  --color-weather-sky-cloudy-night-horizon: var(
+    --weather-sky-cloudy-night-horizon
+  );
   --color-weather-sky-rain-day-top: var(--weather-sky-rain-day-top);
   --color-weather-sky-rain-day-horizon: var(--weather-sky-rain-day-horizon);
   --color-weather-sky-rain-night-top: var(--weather-sky-rain-night-top);
   --color-weather-sky-rain-night-horizon: var(--weather-sky-rain-night-horizon);
-  --color-weather-sky-thunderstorm-day-top: var(--weather-sky-thunderstorm-day-top);
-  --color-weather-sky-thunderstorm-day-horizon: var(--weather-sky-thunderstorm-day-horizon);
-  --color-weather-sky-thunderstorm-night-top: var(--weather-sky-thunderstorm-night-top);
-  --color-weather-sky-thunderstorm-night-horizon: var(--weather-sky-thunderstorm-night-horizon);
+  --color-weather-sky-thunderstorm-day-top: var(
+    --weather-sky-thunderstorm-day-top
+  );
+  --color-weather-sky-thunderstorm-day-horizon: var(
+    --weather-sky-thunderstorm-day-horizon
+  );
+  --color-weather-sky-thunderstorm-night-top: var(
+    --weather-sky-thunderstorm-night-top
+  );
+  --color-weather-sky-thunderstorm-night-horizon: var(
+    --weather-sky-thunderstorm-night-horizon
+  );
   --color-weather-sky-fog-day-top: var(--weather-sky-fog-day-top);
   --color-weather-sky-fog-day-horizon: var(--weather-sky-fog-day-horizon);
   --color-weather-sky-fog-night-top: var(--weather-sky-fog-night-top);
@@ -1657,7 +1721,9 @@ body {
   --color-weather-sky-windy-day-top: var(--weather-sky-windy-day-top);
   --color-weather-sky-windy-day-horizon: var(--weather-sky-windy-day-horizon);
   --color-weather-sky-windy-night-top: var(--weather-sky-windy-night-top);
-  --color-weather-sky-windy-night-horizon: var(--weather-sky-windy-night-horizon);
+  --color-weather-sky-windy-night-horizon: var(
+    --weather-sky-windy-night-horizon
+  );
   --color-weather-sky-dawn-top: var(--weather-sky-dawn-top);
   --color-weather-sky-dawn-horizon: var(--weather-sky-dawn-horizon);
   --color-weather-sky-dusk-top: var(--weather-sky-dusk-top);

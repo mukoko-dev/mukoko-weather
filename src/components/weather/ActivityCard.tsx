@@ -55,14 +55,16 @@ export function ActivityCard({
   // 24h feasibility trend — evaluates the same DB rule against each forecast
   // hour. Empty when rules haven't loaded or hourly data is missing.
   const trend = useMemo(
-    () => (weather ? feasibilitySeries(
+    () =>
+      weather
+        ? feasibilitySeries(
             activity,
             weather.hourly,
             dbRules,
             24,
             weather.utc_offset_seconds,
           )
-        : []),
+        : [],
     [activity, weather, dbRules],
   );
 

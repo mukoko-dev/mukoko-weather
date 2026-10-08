@@ -53,7 +53,8 @@ export type PreferencesDocV2 = Omit<
  * documents keep every other field; a malformed anchor is dropped to null.
  */
 export function migratePreferencesV2ToV3(
-  oldDoc: PreferencesDocV2 & Partial<Pick<PreferencesDocType, "hiddenPresetSlugs" | "presetAnchor">>,
+  oldDoc: PreferencesDocV2 &
+    Partial<Pick<PreferencesDocType, "hiddenPresetSlugs" | "presetAnchor">>,
 ): PreferencesDocType {
   const anchor = oldDoc.presetAnchor;
   const validAnchor =
@@ -67,7 +68,9 @@ export function migratePreferencesV2ToV3(
   return {
     ...oldDoc,
     hiddenPresetSlugs: Array.isArray(oldDoc.hiddenPresetSlugs)
-      ? oldDoc.hiddenPresetSlugs.filter((s): s is string => typeof s === "string")
+      ? oldDoc.hiddenPresetSlugs.filter(
+          (s): s is string => typeof s === "string",
+        )
       : [],
     presetAnchor: validAnchor,
   };
@@ -101,7 +104,11 @@ export const preferencesSchema: RxJsonSchema<PreferencesDocType> = {
     hasOnboarded: { type: "boolean", default: false },
     selectedForecastModel: { type: "string", default: "best_match" },
     homeLocation: { type: ["string", "null"], default: null },
-    hiddenPresetSlugs: { type: "array", items: { type: "string" }, default: [] },
+    hiddenPresetSlugs: {
+      type: "array",
+      items: { type: "string" },
+      default: [],
+    },
     presetAnchor: {
       type: ["object", "null"],
       properties: {

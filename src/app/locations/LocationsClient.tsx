@@ -208,7 +208,8 @@ export function LocationsClient({ initialCurrentSlug, ipAnchor }: Props) {
     const state = cards[slug];
     const place = state?.place ?? null;
     const summary = state?.summary ?? null;
-    const name = place?.name ?? locationNames[slug] ?? displayNameFromSlug(slug);
+    const name =
+      place?.name ?? locationNames[slug] ?? displayNameFromSlug(slug);
     const isHome = homeLocation === slug;
     const kindLabel =
       kind === "current"
@@ -319,7 +320,10 @@ export function LocationsClient({ initialCurrentSlug, ipAnchor }: Props) {
         )}
 
         {presets.length > 0 && (
-          <ul aria-label="Suggested places" className="mt-3 flex flex-col gap-4">
+          <ul
+            aria-label="Suggested places"
+            className="mt-3 flex flex-col gap-4"
+          >
             {presets.map((slug) => (
               <li key={slug}>{renderCard(slug, "suggested")}</li>
             ))}

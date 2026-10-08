@@ -322,9 +322,13 @@ describe("palette — globals.css mirrors it exactly", () => {
   });
 
   it("every sky token is registered in @theme", () => {
+    // Whitespace-tolerant: the formatter wraps long declarations as
+    // `var(\n    --weather-sky-…\n  )`.
     for (const [name] of entries) {
-      expect(globals).toContain(
-        `--color-weather-sky-${name}: var(--weather-sky-${name});`,
+      expect(globals).toMatch(
+        new RegExp(
+          `--color-weather-sky-${name}:\\s*var\\(\\s*--weather-sky-${name}\\s*\\);`,
+        ),
       );
     }
   });

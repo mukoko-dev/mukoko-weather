@@ -285,8 +285,7 @@ export const useAppStore = create<AppState>()((set) => ({
         return {};
       }
       const next = [...state.hiddenPresetSlugs, slug];
-      if (!_suppressRxDBWrites)
-        updatePreferences({ hiddenPresetSlugs: next });
+      if (!_suppressRxDBWrites) updatePreferences({ hiddenPresetSlugs: next });
       return { hiddenPresetSlugs: next };
     }),
   restorePresetLocations: () =>

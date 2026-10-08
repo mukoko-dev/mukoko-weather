@@ -56,7 +56,7 @@ describe("LocationWeatherCard — loading and error states", () => {
 describe("LocationWeatherCard — edit mode", () => {
   it("swaps the link for a non-navigating tile with a remove control", () => {
     expect(source).toContain("editing && onRemove");
-    expect(source).toContain('aria-label={removeLabel ?? `Remove ${name}`}');
+    expect(source).toContain("aria-label={removeLabel ?? `Remove ${name}`}");
   });
 
   it("hides the ⋯ menu while editing", () => {

@@ -339,13 +339,9 @@ export function DisplayHours({ weather }: { weather: WeatherData }) {
   const h = weather.hourly;
   const offset = weatherOffsetSeconds(weather);
   // Every 2 hours for the next 16 — eight readable cells across a TV.
-  const idxs = hydrated ? nextHourIndexes(
-        h.time,
-        new Date(),
-        8,
-        2,
-        weather.utc_offset_seconds,
-      ) : [];
+  const idxs = hydrated
+    ? nextHourIndexes(h.time, new Date(), 8, 2, weather.utc_offset_seconds)
+    : [];
 
   return (
     <section aria-labelledby="display-hours-heading" className="acacia p-4">

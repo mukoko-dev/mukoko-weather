@@ -73,7 +73,11 @@ describe("RxDB schemas", () => {
       it("drops a malformed anchor to null and non-string hidden entries", () => {
         const migrated = migratePreferencesV2ToV3({
           ...v2Doc,
-          hiddenPresetSlugs: ["harare", 7 as unknown as string, null as unknown as string],
+          hiddenPresetSlugs: [
+            "harare",
+            7 as unknown as string,
+            null as unknown as string,
+          ],
           presetAnchor: { lat: Number.NaN, lon: 31 },
         });
         expect(migrated.presetAnchor).toBeNull();

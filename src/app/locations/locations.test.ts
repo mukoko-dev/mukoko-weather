@@ -12,8 +12,14 @@ const clientSource = readFileSync(
   resolve(__dirname, "LocationsClient.tsx"),
   "utf-8",
 );
-const menuSource = readFileSync(resolve(__dirname, "LocationsMenu.tsx"), "utf-8");
-const searchSource = readFileSync(resolve(__dirname, "LocationsSearch.tsx"), "utf-8");
+const menuSource = readFileSync(
+  resolve(__dirname, "LocationsMenu.tsx"),
+  "utf-8",
+);
+const searchSource = readFileSync(
+  resolve(__dirname, "LocationsSearch.tsx"),
+  "utf-8",
+);
 const loadingSource = readFileSync(resolve(__dirname, "loading.tsx"), "utf-8");
 const css = readFileSync(resolve(__dirname, "../globals.css"), "utf-8");
 const proxySource = readFileSync(resolve(__dirname, "../../proxy.ts"), "utf-8");
@@ -97,11 +103,15 @@ describe("locations list — client", () => {
 
   it("anchors suggestions on first visit only, after the store has hydrated", () => {
     expect(clientSource).toContain("useStoreHydrated()");
-    expect(clientSource).toContain("if (hydrated && !presetAnchor && ipAnchor)");
+    expect(clientSource).toContain(
+      "if (hydrated && !presetAnchor && ipAnchor)",
+    );
   });
 
   it("fetches weather in batches with the concurrency limit and a 10-minute cache", () => {
-    expect(clientSource).toContain("mapWithConcurrency(slugs, CARD_FETCH_CONCURRENCY");
+    expect(clientSource).toContain(
+      "mapWithConcurrency(slugs, CARD_FETCH_CONCURRENCY",
+    );
     expect(clientSource).toContain("CARD_WEATHER_TTL_MS");
     expect(clientSource).toContain("new TtlCache<LoadedCard>(");
     expect(clientSource).toContain("/api/py/weather?lat=");
@@ -116,7 +126,9 @@ describe("locations list — client", () => {
   });
 
   it("offers Edit list, Units, Explore, History and Aviation from the ⋯ menu", () => {
-    expect(menuSource).toContain("aria-label=\"More: edit list, units, Explore, History, Aviation\"");
+    expect(menuSource).toContain(
+      'aria-label="More: edit list, units, Explore, History, Aviation"',
+    );
     expect(menuSource).toContain("Edit list");
     expect(menuSource).toContain('openMyWeather("settings")');
     expect(menuSource).toContain('href="/explore"');
