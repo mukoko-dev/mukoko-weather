@@ -70,3 +70,15 @@ describe("model colour tokens", () => {
     }
   });
 });
+
+describe("hour labels", () => {
+  it("formats axis hours through the shared i18n formatTime (24h en-ZW)", async () => {
+    const fs = await import("fs");
+    const source = fs.readFileSync(
+      "src/components/weather/charts/ModelComparisonChart.tsx",
+      "utf-8",
+    );
+    expect(source).toContain('from "@/lib/i18n"');
+    expect(source).not.toContain("toLocaleTimeString");
+  });
+});

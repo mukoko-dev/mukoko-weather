@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { PlusIcon, TrashIcon } from "@/lib/weather-icons";
+import { DEFAULT_LOCALE, formatDate } from "@/lib/i18n";
 
 interface ApiKey {
   id: string;
@@ -59,18 +60,6 @@ function CheckIcon({ size = 16 }: { size?: number }) {
       <polyline points="20 6 9 17 4 12" />
     </svg>
   );
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString("en-ZW", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return iso;
-  }
 }
 
 export function ApiKeysManager() {
@@ -285,7 +274,12 @@ export function ApiKeysManager() {
                   {k.label}
                 </p>
                 <p className="dove font-mono">{k.maskedKey}</p>
-                <p className="dove">Created {formatDate(k.createdAt)}</p>
+                <p className="dove">
+                  Created{" "}
+                  {formatDate(new Date(k.createdAt), DEFAULT_LOCALE, {
+                    month: "short",
+                  })}
+                </p>
               </div>
               <button
                 type="button"

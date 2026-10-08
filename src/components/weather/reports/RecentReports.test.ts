@@ -62,8 +62,9 @@ describe("report display", () => {
     expect(source).toContain("Verified");
   });
 
-  it("shows time ago", () => {
-    expect(source).toContain("timeAgo");
+  it("shows time ago via the shared i18n formatRelative", () => {
+    expect(source).toContain("formatRelative");
+    expect(source).not.toContain("function timeAgo");
   });
 });
 
