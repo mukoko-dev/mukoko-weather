@@ -55,7 +55,7 @@ class TestCorsPreflight:
 # ---------------------------------------------------------------------------
 
 
-_GW_ENV = {"CLOUDFLARE_ACCOUNT_ID": "acct", "AI_GATEWAY_TOKEN": "gw", "CF_WORKERS_AI_TOKEN": "wai"}
+_GW_ENV = {"CLOUDFLARE_ACCOUNT_ID": "acct", "CF_AI_API_TOKEN": "tok"}
 
 
 class TestHealthEndpoint:

@@ -19,6 +19,7 @@ from py._ai_gateway import (
     DEFAULT_MODEL,
     ai_configured,
     call_ai,
+    missing_ai_config,
     first_text,
     function_tools,
     gateway_headers,
@@ -30,6 +31,11 @@ from py._ai_prompts import get_ai_prompt
 
 ACCOUNT = "acct123"
 FULL_ENV = {
+    "CLOUDFLARE_ACCOUNT_ID": ACCOUNT,
+    "CF_AI_API_TOKEN": "cf-ai-token",
+}
+# Legacy split: one token per header, no CF_AI_API_TOKEN.
+SPLIT_ENV = {
     "CLOUDFLARE_ACCOUNT_ID": ACCOUNT,
     "AI_GATEWAY_TOKEN": "gw-token",
     "CF_WORKERS_AI_TOKEN": "wai-token",
@@ -116,11 +122,33 @@ class TestGatewayUrl:
 
 class TestGatewayHeaders:
     @patch.dict(os.environ, FULL_ENV, clear=True)
-    def test_both_tokens_sent(self):
+    def test_primary_token_used_for_both_headers(self):
+        h = gateway_headers()
+        assert h["cf-aig-authorization"] == "Bearer cf-ai-token"
+        assert h["Authorization"] == "Bearer cf-ai-token"
+        assert h["Content-Type"] == "application/json"
+
+    @patch.dict(os.environ, SPLIT_ENV, clear=True)
+    def test_legacy_split_tokens_sent(self):
         h = gateway_headers()
         assert h["cf-aig-authorization"] == "Bearer gw-token"
         assert h["Authorization"] == "Bearer wai-token"
-        assert h["Content-Type"] == "application/json"
+
+    @patch.dict(os.environ, {**FULL_ENV, "AI_GATEWAY_TOKEN": "gw-token"}, clear=True)
+    def test_gateway_override_only_affects_gateway_header(self):
+        h = gateway_headers()
+        assert h["cf-aig-authorization"] == "Bearer gw-token"
+        assert h["Authorization"] == "Bearer cf-ai-token"
+
+    @patch.dict(os.environ, {**FULL_ENV, "CF_WORKERS_AI_TOKEN": "wai-token"}, clear=True)
+    def test_provider_override_only_affects_provider_header(self):
+        h = gateway_headers()
+        assert h["cf-aig-authorization"] == "Bearer cf-ai-token"
+        assert h["Authorization"] == "Bearer wai-token"
+
+    @patch.dict(os.environ, {**FULL_ENV, "AI_GATEWAY_TOKEN": "  "}, clear=True)
+    def test_blank_override_falls_back_to_primary(self):
+        assert gateway_headers()["cf-aig-authorization"] == "Bearer cf-ai-token"
 
     @patch.dict(os.environ, {"CLOUDFLARE_ACCOUNT_ID": ACCOUNT}, clear=True)
     def test_no_auth_headers_when_tokens_unset(self):
@@ -142,8 +170,25 @@ class TestGatewayHeaders:
 
 class TestAiConfigured:
     @patch.dict(os.environ, FULL_ENV, clear=True)
-    def test_true_when_complete(self):
+    def test_true_with_primary_token_alone(self):
         assert ai_configured() is True
+        assert missing_ai_config() == []
+
+    @patch.dict(os.environ, SPLIT_ENV, clear=True)
+    def test_true_with_legacy_split_tokens(self):
+        assert ai_configured() is True
+
+    @patch.dict(os.environ, {"CLOUDFLARE_ACCOUNT_ID": ACCOUNT, "AI_GATEWAY_TOKEN": "gw"}, clear=True)
+    def test_false_when_provider_token_unresolved(self):
+        assert ai_configured() is False
+        assert missing_ai_config() == ["CF_AI_API_TOKEN (or CF_WORKERS_AI_TOKEN)"]
+
+    @patch.dict(os.environ, {"CLOUDFLARE_ACCOUNT_ID": ACCOUNT}, clear=True)
+    def test_degrades_when_no_token_set(self, caplog):
+        with caplog.at_level("WARNING"):
+            assert ai_configured() is False
+            assert call_ai(max_tokens=10, messages=[{"role": "user", "content": "hi"}]) == (None, "no_client")
+        assert "CF_AI_API_TOKEN" in caplog.text
 
     @pytest.mark.parametrize("missing", list(FULL_ENV))
     def test_false_and_warns_when_any_piece_missing(self, missing, caplog):
@@ -229,7 +274,8 @@ class TestCallAi:
         url = client.post.call_args.args[0]
         kwargs = client.post.call_args.kwargs
         assert url == f"https://gateway.ai.cloudflare.com/v1/{ACCOUNT}/shamwari/compat/chat/completions"
-        assert kwargs["headers"]["cf-aig-authorization"] == "Bearer gw-token"
+        assert kwargs["headers"]["cf-aig-authorization"] == "Bearer cf-ai-token"
+        assert kwargs["headers"]["Authorization"] == "Bearer cf-ai-token"
         payload = kwargs["json"]
         assert payload["model"] == DEFAULT_MODEL
         assert payload["max_tokens"] == 50

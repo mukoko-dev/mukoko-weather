@@ -105,6 +105,8 @@ CLOSED ──(failures >= threshold)──> OPEN ──(cooldown expires)──>
 | `open_meteo_breaker` | Open-Meteo API   |         5         |  5 min   | 5 min  |   8s    |
 | `ai_breaker`         | AI Gateway (GLM) |         3         |  5 min   | 10 min |   15s   |
 
+The AI Gateway is called only from the Python backend (`api/py/_ai_gateway.py`). It authenticates with one server-only Cloudflare API token, `CF_AI_API_TOKEN` (AI Gateway: Run + Workers AI: Read), sent as both `cf-aig-authorization` and the provider `Authorization`. `AI_GATEWAY_TOKEN` and `CF_WORKERS_AI_TOKEN` optionally override it per header.
+
 ### Weather Fallback Chain
 
 4-stage fallback ensures weather data is always available:

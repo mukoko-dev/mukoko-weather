@@ -170,8 +170,7 @@ class TestCheckOpenMeteo:
 
 _GW_ENV = {
     "CLOUDFLARE_ACCOUNT_ID": "acct",
-    "AI_GATEWAY_TOKEN": "gw",
-    "CF_WORKERS_AI_TOKEN": "wai",
+    "CF_AI_API_TOKEN": "tok",
 }
 
 
@@ -193,6 +192,23 @@ class TestCheckAiGateway:
             result = _check_ai_gateway()
         assert result["status"] == "degraded"
         assert "not configured" in result["message"]
+        assert "CF_AI_API_TOKEN" in result["message"]
+
+    def test_reports_names_never_values(self):
+        env = {"CLOUDFLARE_ACCOUNT_ID": "acct", "AI_GATEWAY_TOKEN": "secret-gw-value"}
+        with patch.dict("os.environ", env, clear=True):
+            result = _check_ai_gateway()
+        assert result["status"] == "degraded"
+        assert "CF_WORKERS_AI_TOKEN" in result["message"]
+        assert "secret-gw-value" not in result["message"]
+
+    def test_legacy_split_tokens_still_operational(self):
+        env = {"CLOUDFLARE_ACCOUNT_ID": "acct", "AI_GATEWAY_TOKEN": "gw", "CF_WORKERS_AI_TOKEN": "wai"}
+        with patch.dict("os.environ", env, clear=True):
+            with patch("py._status.ai_breaker") as breaker:
+                breaker.is_allowed = True
+                result = _check_ai_gateway()
+        assert result["status"] == "operational"
 
     def test_degraded_when_circuit_open(self):
         with patch.dict("os.environ", _GW_ENV, clear=True):
