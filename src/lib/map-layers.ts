@@ -117,6 +117,20 @@ export function getMapLayerById(id: string): MapLayer | undefined {
 export const WEATHER_OVERLAY_MIN_ZOOM = 1;
 export const WEATHER_OVERLAY_MAX_ZOOM = 12;
 
+/**
+ * Where the browser loads MapLibre's web worker from. maplibre-gl v6 ships
+ * its worker as a separate ES module and, by default, looks for it next to
+ * the bundled chunk, where webpack never puts it, so the worker fails to load
+ * and every map renders blank. scripts/copy-maplibre-worker.mjs copies the
+ * worker (and the shared module it imports) into a per-version folder before
+ * every build/dev run; MapLibreMap passes `maplibreWorkerUrl(getVersion())` to
+ * setWorkerUrl() before creating a map. Keying the path by version keeps an
+ * old tab's bundle paired with its own worker across deploys.
+ */
+export function maplibreWorkerUrl(version: string): string {
+  return `/vendor/maplibre-gl/${version}/maplibre-gl-worker.mjs`;
+}
+
 /** Shared MapLibre source/layer id for the weather overlay. */
 export const WEATHER_OVERLAY_ID = "weather-overlay";
 

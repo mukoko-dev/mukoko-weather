@@ -1,8 +1,9 @@
 "use client";
 
-import { useAppStore, hasStoreHydrated } from "@/lib/store";
+import { useAppStore } from "@/lib/store";
 import { MapPinIcon, SparklesIcon } from "@/lib/weather-icons";
 import { trackEvent } from "@/lib/analytics";
+import { useStoreHydrated } from "@/lib/use-hydrated";
 
 /**
  * Inline welcome banner for first-time visitors.
@@ -30,9 +31,12 @@ export function WelcomeBanner({
   const hasOnboarded = useAppStore((s) => s.hasOnboarded);
   const completeOnboarding = useAppStore((s) => s.completeOnboarding);
 
-  // Don't render until the store has hydrated from localStorage —
-  // prevents a flash for returning users whose hasOnboarded is true.
-  if (!hasStoreHydrated()) return null;
+  // Server snapshot is false, so the hydration render matches the server's
+  // empty output (no React error 418); it then re-renders the moment the
+  // persisted store loads, even if that lands after hydration. Waiting for the
+  // store also avoids flashing the banner at returning users.
+  const storeReady = useStoreHydrated();
+  if (!storeReady) return null;
   if (hasOnboarded) return null;
 
   return (
