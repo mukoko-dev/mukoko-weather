@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { getAllCountries } from "@/lib/db";
 import { getFlagEmoji } from "@/lib/countries";
 import { logError } from "@/lib/observability";
@@ -65,34 +66,13 @@ export default async function ExploreCountryPage() {
     <>
       <Header />
 
-      <nav
-        aria-label="Breadcrumb"
-        className="mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8"
-      >
-        <ol className="flex items-center gap-1 text-base text-text-tertiary">
-          <li>
-            <Link
-              href="/"
-              className="hover:text-text-secondary transition-colors"
-            >
-              Home
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li>
-            <Link
-              href="/explore"
-              className="hover:text-text-secondary transition-colors"
-            >
-              Explore
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li aria-current="page">
-            <span className="font-medium text-text-primary">Countries</span>
-          </li>
-        </ol>
-      </nav>
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/" },
+          { label: "Explore", href: "/explore" },
+          { label: "Countries" },
+        ]}
+      />
 
       {/* pb-24 reserves space on mobile for a future sticky bottom nav bar;
           sm:pb-8 restores normal padding on larger screens. */}
@@ -126,7 +106,7 @@ export default async function ExploreCountryPage() {
                 <Link
                   key={country.code}
                   href={`/explore/country/${country.code.toLowerCase()}`}
-                  className="group pangolin flex items-center gap-3 transition-all hover:shadow-md hover:bg-surface-card/80 focus-visible:outline-2 focus-visible:outline-primary"
+                  className="group card-interactive pangolin flex items-center gap-3"
                 >
                   <span className="text-2xl" aria-hidden="true">
                     {getFlagEmoji(country.code)}

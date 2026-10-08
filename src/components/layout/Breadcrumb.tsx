@@ -1,10 +1,16 @@
 import { Fragment } from "react";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 export interface BreadcrumbItem {
   label: string;
-  /** Omit for the current page — rendered as plain text with aria-current="page" */
+  /** Link target. Omit for non-link items. */
   href?: string;
+  /**
+   * Non-link item that is NOT the current page — plain secondary text with
+   * no aria-current. Only meaningful when `href` is omitted.
+   */
+  plain?: boolean;
 }
 
 interface BreadcrumbProps {
@@ -14,8 +20,11 @@ interface BreadcrumbProps {
 
 /**
  * Shared breadcrumb trail for location sub-routes (atmosphere, forecast,
- * map). Centralizes the Home / Location / Current-page pattern previously
- * hand-rolled separately in each sub-route dashboard.
+ * map) and the explore pages. Centralizes the Home / Location / Current-page
+ * pattern previously hand-rolled separately in each page.
+ *
+ * An item with no `href` and no `plain` flag is the current page: rendered as
+ * emphasised text with aria-current="page".
  */
 /**
  * Loading placeholder matching the 3-segment Breadcrumb trail — same outer
@@ -28,9 +37,7 @@ export function BreadcrumbSkeleton({ className }: { className?: string }) {
     <div
       role="status"
       aria-label="Loading"
-      className={["mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8", className]
-        .filter(Boolean)
-        .join(" ")}
+      className={cn("mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8", className)}
     >
       <div className="flex items-center gap-1">
         <div className="h-3 w-10 animate-pulse rounded bg-text-tertiary/15" />
@@ -51,30 +58,33 @@ export function Breadcrumb({ items, className }: BreadcrumbProps) {
   return (
     <nav
       aria-label="Breadcrumb"
-      className={["mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8", className]
-        .filter(Boolean)
-        .join(" ")}
+      className={cn("mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8", className)}
     >
-      <ol className="flex items-center gap-1 text-base text-text-tertiary">
-        {items.map((item, i) => (
-          <Fragment key={item.label}>
-            {i > 0 && <li aria-hidden="true">/</li>}
-            <li aria-current={item.href ? undefined : "page"}>
-              {item.href ? (
-                <Link
-                  href={item.href}
-                  className="hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded"
-                >
-                  {item.label}
-                </Link>
-              ) : (
-                <span className="font-medium text-text-primary">
-                  {item.label}
-                </span>
-              )}
-            </li>
-          </Fragment>
-        ))}
+      <ol className="flex flex-wrap items-center gap-1 text-base text-text-tertiary">
+        {items.map((item, i) => {
+          const isCurrent = !item.href && !item.plain;
+          return (
+            <Fragment key={item.label}>
+              {i > 0 && <li aria-hidden="true">/</li>}
+              <li aria-current={isCurrent ? "page" : undefined}>
+                {item.href ? (
+                  <Link
+                    href={item.href}
+                    className="hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded"
+                  >
+                    {item.label}
+                  </Link>
+                ) : isCurrent ? (
+                  <span className="font-medium text-text-primary">
+                    {item.label}
+                  </span>
+                ) : (
+                  <span className="text-text-secondary">{item.label}</span>
+                )}
+              </li>
+            </Fragment>
+          );
+        })}
       </ol>
     </nav>
   );
