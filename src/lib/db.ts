@@ -1712,6 +1712,11 @@ export async function syncAirports(
   });
   if (bulkOps.length > 0) {
     await airportsCollection().bulkWrite(bulkOps);
+    // The catalogue is the full reference set: drop stations that were renamed
+    // or removed (e.g. retired FVHA / FAJS), or the nearest lookup keeps
+    // returning codes the Aviation Weather Center no longer serves.
+    const codes = airports.map((a) => a.icao.toUpperCase());
+    await airportsCollection().deleteMany({ _id: { $nin: codes } });
   }
 }
 
