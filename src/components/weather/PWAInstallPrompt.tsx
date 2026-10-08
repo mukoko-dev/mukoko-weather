@@ -168,33 +168,21 @@ export function PWAInstallPrompt() {
 
         {/* Feature highlights */}
         <ul className="space-y-3 py-2 text-sm text-text-secondary">
-          <li className="flex items-start gap-3">
-            <span
-              className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
-              aria-hidden="true"
-            >
-              1
-            </span>
-            <span>Works offline with cached weather data</span>
-          </li>
-          <li className="flex items-start gap-3">
-            <span
-              className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
-              aria-hidden="true"
-            >
-              2
-            </span>
-            <span>Faster loads — no browser overhead</span>
-          </li>
-          <li className="flex items-start gap-3">
-            <span
-              className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
-              aria-hidden="true"
-            >
-              3
-            </span>
-            <span>Full-screen experience on your device</span>
-          </li>
+          {[
+            "Works offline with cached weather data",
+            "Faster loads — no browser overhead",
+            "Full-screen experience on your device",
+          ].map((highlight, index) => (
+            <li key={highlight} className="flex items-start gap-3">
+              <span
+                className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
+                aria-hidden="true"
+              >
+                {index + 1}
+              </span>
+              <span>{highlight}</span>
+            </li>
+          ))}
         </ul>
 
         {/* Actions */}
