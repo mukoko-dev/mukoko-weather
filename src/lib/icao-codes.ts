@@ -1,4 +1,4 @@
-import { nearestWithin } from "@/lib/geo";
+import { nearestWithin } from "./geo";
 
 /**
  * Maps location slugs to ICAO airport codes.
@@ -326,7 +326,11 @@ export function getNearestIcaos(
   maxDistanceKm = 500,
 ): AirportDistance[] {
   return nearestWithin(AIRPORTS, (a) => a, lat, lon, maxDistanceKm, count).map(
-    ({ item, distanceKm }) => ({ icao: item.icao, name: item.name, distanceKm }),
+    ({ item, distanceKm }) => ({
+      icao: item.icao,
+      name: item.name,
+      distanceKm,
+    }),
   );
 }
 
