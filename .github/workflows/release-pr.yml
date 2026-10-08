@@ -1,0 +1,125 @@
+# Release PR: staging → main, without the "dirty" squash trap.
+#
+# Releases squash staging into main. A squash records no parent on staging,
+# so the NEXT release PR sees main's squash commit as unknown history and
+# GitHub reports it as conflicting even when the content is identical.
+#
+# This workflow cuts `release/<date>` from origin/staging, proves main's
+# content is already in staging, then records main in the branch's history
+# with `git merge -s ours` (the tree stays exactly staging's). The squash
+# into main is then always clean. See CONTRIBUTING.md → Releases.
+name: Release PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: Release date for the branch name (YYYY-MM-DD). Defaults to today (UTC).
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-pr
+  cancel-in-progress: true
+
+jobs:
+  release-pr:
+    name: Open staging → main release PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: staging
+          fetch-depth: 0
+
+      - name: Resolve the release branch name
+        id: name
+        env:
+          INPUT_DATE: ${{ inputs.date }}
+        run: |
+          set -euo pipefail
+          date="${INPUT_DATE:-$(date -u +%Y-%m-%d)}"
+          if ! [[ "$date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "::error::date must be YYYY-MM-DD, got '$date'"
+            exit 1
+          fi
+          branch="release/$date"
+          git fetch --no-tags origin staging main
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "::error::$branch already exists on origin — pass a different date or delete it first"
+            exit 1
+          fi
+          echo "date=$date" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Assert main's content is already in staging
+        run: |
+          set -euo pipefail
+          # Every blob ever reachable from staging (any commit, any path).
+          git rev-list --objects origin/staging | cut -d' ' -f1 | sort -u > staging-objects.txt
+          missing=0
+          while IFS=$'\t' read -r meta path; do
+            blob="$(cut -d' ' -f3 <<<"$meta")"
+            # Same blob at the same path on staging's tip: identical content.
+            if [ "$(git rev-parse -q --verify "origin/staging:$path" 2>/dev/null || true)" = "$blob" ]; then
+              continue
+            fi
+            # Otherwise main's version must have existed somewhere in staging's
+            # history (staging moved on from it, or deleted it) — never content
+            # that only exists on main.
+            if ! grep -qx "$blob" staging-objects.txt; then
+              echo "::error file=$path::main's version of $path ($blob) is not in staging or its history"
+              missing=$((missing + 1))
+            fi
+          done < <(git ls-tree -r origin/main)
+          rm -f staging-objects.txt
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::$missing file(s) on main are not in staging. Merge main back into staging first (hotfix?), then rerun."
+            exit 1
+          fi
+          echo "All of main's content is present in staging."
+
+      - name: Cut the branch and record main in its history
+        env:
+          BRANCH: ${{ steps.name.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH" origin/staging
+          git merge -s ours origin/main -m "chore: record main in release history"
+          # -s ours must leave staging's tree untouched.
+          git diff --quiet origin/staging HEAD
+          git push origin "$BRANCH"
+
+      - name: Open the release PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ steps.name.outputs.branch }}
+          DATE: ${{ steps.name.outputs.date }}
+        run: |
+          set -euo pipefail
+          {
+            echo "Release of \`staging\` to \`main\` ($DATE)."
+            echo
+            echo "Cut by the **Release PR** workflow from \`origin/staging\` at \`$(git rev-parse --short origin/staging)\`."
+            echo "Main's content was verified to be in staging, then main was recorded in this branch's history"
+            echo "with \`git merge -s ours\` (tree unchanged), so a **squash** merge into main is always clean."
+            echo
+            echo "## Commits since the last release"
+            echo
+            # Releases are squashes, so main never contains staging's commits;
+            # list staging commits made after main's last release commit.
+            git log --format='- %s' --no-merges --since="$(git log -1 --format=%cI origin/main)" origin/staging
+          } > release-body.md
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "release: staging → main ($DATE)" \
+            --body-file release-body.md
