@@ -6,6 +6,7 @@ import { trackEvent } from "@/lib/analytics";
 import { CloudSunIcon, MegaphoneIcon } from "@/lib/weather-icons";
 import { getReportTypeInfo } from "@/lib/report-types";
 import { Spinner } from "@/components/ui/spinner";
+import { formatRelative } from "@/lib/i18n";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,16 +32,6 @@ const SEVERITY_CLASSES: Record<string, string> = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -191,7 +182,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
                     </p>
                   )}
                   <p className="mt-0.5 text-base text-text-tertiary">
-                    {timeAgo(report.reportedAt)}
+                    {formatRelative(new Date(report.reportedAt))}
                   </p>
                 </div>
                 <button

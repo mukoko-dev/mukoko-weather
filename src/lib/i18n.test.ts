@@ -7,6 +7,7 @@ import {
   formatTime,
   formatDayName,
   formatDate,
+  formatRelative,
   DEFAULT_LOCALE,
   SUPPORTED_LOCALES,
 } from "./i18n";
@@ -157,5 +158,96 @@ describe("formatDate", () => {
     expect(result).toContain("14");
     // Should contain month name (February)
     expect(result).toMatch(/February|Feb/i);
+  });
+});
+
+describe("formatDate options", () => {
+  // Local-time construction keeps these deterministic across timezones.
+  const oct8 = new Date(2026, 9, 8, 12);
+
+  it("defaults to the full long-month date", () => {
+    expect(formatDate(oct8)).toBe("8 October 2026");
+  });
+
+  it("month: short gives the compact history-axis date", () => {
+    expect(formatDate(oct8, DEFAULT_LOCALE, { month: "short" })).toBe(
+      "08 Oct, 2026",
+    );
+  });
+
+  it("day: false + year: 2-digit gives the month/year axis label", () => {
+    expect(
+      formatDate(oct8, DEFAULT_LOCALE, {
+        month: "short",
+        year: "2-digit",
+        day: false,
+      }),
+    ).toBe("Oct 26");
+  });
+
+  it("weekday: true prefixes the short weekday for tooltips", () => {
+    expect(
+      formatDate(oct8, DEFAULT_LOCALE, { weekday: true, month: "short" }),
+    ).toBe("Thu, 08 Oct, 2026");
+  });
+
+  it("year: false omits the year", () => {
+    expect(
+      formatDate(oct8, DEFAULT_LOCALE, { month: "short", year: false }),
+    ).toBe("08 Oct");
+  });
+
+  it("returns an empty string for an invalid date instead of throwing", () => {
+    expect(formatDate(new Date("not a date"))).toBe("");
+  });
+});
+
+describe("formatTime invalid input", () => {
+  it("returns an empty string for an invalid date instead of throwing", () => {
+    expect(formatTime(new Date("not a date"))).toBe("");
+  });
+});
+
+describe("formatRelative", () => {
+  const now = new Date("2026-10-08T12:00:00Z");
+  const ago = (ms: number) => new Date(now.getTime() - ms);
+  const MIN = 60_000;
+  const HOUR = 60 * MIN;
+  const DAY = 24 * HOUR;
+
+  it("reads 'just now' under a minute", () => {
+    expect(formatRelative(ago(30_000), now)).toBe("just now");
+    expect(formatRelative(now, now)).toBe("just now");
+  });
+
+  it("treats a timestamp slightly in the future as 'just now'", () => {
+    expect(formatRelative(new Date(now.getTime() + 5 * MIN), now)).toBe(
+      "just now",
+    );
+  });
+
+  it("uses minutes up to 59 minutes", () => {
+    expect(formatRelative(ago(1 * MIN), now)).toBe("1 min ago");
+    expect(formatRelative(ago(5 * MIN), now)).toBe("5 min ago");
+    expect(formatRelative(ago(59 * MIN + 59_000), now)).toBe("59 min ago");
+  });
+
+  it("switches to hours at exactly 60 minutes", () => {
+    expect(formatRelative(ago(60 * MIN), now)).toBe("1 h ago");
+    expect(formatRelative(ago(2 * HOUR), now)).toBe("2 h ago");
+    expect(formatRelative(ago(23 * HOUR + 59 * MIN), now)).toBe("23 h ago");
+  });
+
+  it("uses singular 'day' for one day and plural beyond", () => {
+    expect(formatRelative(ago(DAY), now)).toBe("1 day ago");
+    expect(formatRelative(ago(3 * DAY), now)).toBe("3 days ago");
+  });
+
+  it("returns an empty string for an invalid date", () => {
+    expect(formatRelative(new Date("not a date"), now)).toBe("");
+  });
+
+  it("defaults now to the current time", () => {
+    expect(formatRelative(new Date(Date.now() - 10 * MIN))).toBe("10 min ago");
   });
 });
