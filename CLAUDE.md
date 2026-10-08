@@ -136,6 +136,11 @@ mukoko-weather/
 │   │   ├── privacy/page.tsx          # Privacy policy
 │   │   ├── terms/page.tsx            # Terms of service
 │   │   ├── embed/page.tsx            # Widget embedding docs
+│   │   ├── display/                  # Full-screen weather display (TV/tablet/monitor kiosk)
+│   │   │   ├── page.tsx              # Server: resolves location from URL/cookie/IP, seeds the forecast
+│   │   │   ├── DisplayDashboard.tsx  # Client: landscape/portrait layout, polling, wake lock, reload
+│   │   │   ├── loading.tsx
+│   │   │   └── error.tsx
 │   │   ├── aviation/                 # Aviation planner (auth-gated): METAR/TAF station picker + PDF pre-flight briefing
 │   │   │   ├── page.tsx              # Server wrapper (requireUser, metadata)
 │   │   │   ├── AviationPlanner.tsx   # Client: station search, METAR/TAF decode, flight-category badges
@@ -199,6 +204,8 @@ mukoko-weather/
 │   │   │   └── ThemeToggle.tsx       # Light/dark/system mode toggle (3-state cycle)
 │   │   ├── analytics/
 │   │   │   └── GoogleAnalytics.tsx   # Google Analytics 4 (gtag.js) via next/script
+│   │   ├── display/
+│   │   │   └── DisplayPanels.tsx     # Display panels: clock, now, AQI + haze advice, radar, outlook, hours, days
 │   │   ├── explore/                  # Shamwari chatbot + AI explore search
 │   │   │   ├── ExploreChatbot.tsx    # AI chatbot UI (message bubbles, typing indicator, contextual suggested prompts)
 │   │   │   ├── ExploreChatbot.test.ts
@@ -337,6 +344,9 @@ mukoko-weather/
 │   │   ├── flight-category-styles.test.ts
 │   │   ├── report-types.ts        # Shared id/label/icon map for community reports (WeatherReportModal + RecentReports)
 │   │   ├── report-types.test.ts
+│   │   ├── display.ts             # /display helpers: URL params, AQI haze advice, refresh cadence, hour slicing, response guards
+│   │   ├── display.test.ts
+│   │   ├── use-display-runtime.ts # useWakeLock, usePeriodicReload, usePolledJson (keeps last good data)
 │   │   ├── i18n.ts                # Lightweight i18n (en complete, sn/nd ready)
 │   │   ├── i18n.test.ts
 │   │   ├── map-layers.ts          # Map layer config (Tomorrow.io tile layers, mineral color styles)
@@ -591,6 +601,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/developers` — public developer/API documentation page
 - `/developers/keys` — auth-gated developer API-key management (create — full key shown once / list masked / revoke)
 - `/embed` — widget embedding docs
+- `/display` — full-screen weather display for TVs, tablets and monitors (kiosk). No header/footer, no sign-in, `robots: noindex`. URL-configured via `parseDisplayParams()` (`src/lib/display.ts`): `?location=<slug>` or `?lat=&lon=`, `?layer=<MAP_LAYERS id>` (default `precipitationIntensity`), `?theme=light|dark`. Falls back to the lastLocation cookie, then IP geo snapped to the nearest seed, then Harare. Panels (`src/components/display/DisplayPanels.tsx`): clock, current conditions, air quality with `AQI_ADVICE` haze guidance, radar (`MapLibreMap`, non-interactive), today's outlook (tall screens only), next hours, 5 days — each in its own `ChartErrorBoundary`. Runtime hooks (`src/lib/use-display-runtime.ts`): Screen Wake Lock, `usePolledJson` (weather 10 min, AQ 30 min, keeps the last good value on a failed refresh), 6-hour page reload. `display` is in the `KNOWN_ROUTES` sets of `src/proxy.ts` and `WeatherLoadingScene.tsx` so it never becomes the lastLocation cookie
 - `/api/og` — GET, dynamic OG image generation (Edge runtime, Satori, TypeScript). Query: `title`, `subtitle`, optional `location`, `province`, `season`, `temp`, `condition`, `template` (home/location/explore/history/season/shamwari). In-memory rate-limited (30 req/min/IP), 1-day CDN cache
 - `/api/db-init` — POST, one-time DB setup + seed data (TypeScript). Requires `x-init-secret` header in production
 - `/api/keys` — GET (list caller's keys, masked) / POST (mint a developer API key in `platform.apiKeys`; full key returned ONCE, SHA-256 hashed at rest, 10/user cap, eligible entity-membership role required). Auth-gated via `withAuth()`
