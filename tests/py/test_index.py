@@ -245,6 +245,10 @@ class TestRouterMounting:
         paths = self._get_route_paths()
         assert "/api/py/airquality/grid" in paths
 
+    def test_haze_router_mounted(self):
+        paths = self._get_route_paths()
+        assert "/api/py/haze" in paths
+
     def test_health_endpoint_mounted(self):
         paths = self._get_route_paths()
         assert "/api/py/health" in paths

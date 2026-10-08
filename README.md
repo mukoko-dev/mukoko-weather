@@ -38,7 +38,7 @@ chart, not the page.
 Beyond the forecast, the app carries an aviation planner (METAR/TAF with
 VFR/MVFR/IFR/LIFR categories and PDF pre-flight briefings from NOAA data),
 Waze-style community weather reports cross-validated against API data, an EPA
-air-quality index with a full pollutant breakdown, a historical dashboard with
+air-quality index with a full pollutant breakdown, a global location-aware haze panel (smoke, dust, smog, regional seasons, official Singapore PSI), a historical dashboard with
 Claude-authored trend analysis, and an embeddable widget. It installs as a PWA.
 The Locations list (`/locations`) shows the current location and saved places as
 live weather cards, with a Home location, in the style of iOS Weather.
