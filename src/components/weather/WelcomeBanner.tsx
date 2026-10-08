@@ -3,6 +3,7 @@
 import { useAppStore, hasStoreHydrated } from "@/lib/store";
 import { MapPinIcon, SparklesIcon } from "@/lib/weather-icons";
 import { trackEvent } from "@/lib/analytics";
+import { useHydrated } from "@/lib/use-hydrated";
 
 /**
  * Inline welcome banner for first-time visitors.
@@ -30,9 +31,16 @@ export function WelcomeBanner({
   const hasOnboarded = useAppStore((s) => s.hasOnboarded);
   const completeOnboarding = useAppStore((s) => s.completeOnboarding);
 
+  const hydrated = useHydrated();
+
   // Don't render until the store has hydrated from localStorage —
   // prevents a flash for returning users whose hasOnboarded is true.
-  if (!hasStoreHydrated()) return null;
+  // `hydrated` comes first: the server always renders nothing here, so the
+  // first client render must too. hasStoreHydrated() is a plain module flag
+  // that can already be true by then (fast storage, slow React hydration —
+  // common on iOS Safari), which rendered the banner during hydration and
+  // threw React error 418, forcing the whole location page to re-render.
+  if (!hydrated || !hasStoreHydrated()) return null;
   if (hasOnboarded) return null;
 
   return (
