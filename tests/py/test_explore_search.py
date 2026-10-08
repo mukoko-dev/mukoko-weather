@@ -279,26 +279,26 @@ class TestTextSearchFallback:
 
 
 class TestBuildSearchSystemPrompt:
-    @patch("py._explore_search._get_search_prompt")
+    @patch("py._explore_search.get_ai_prompt")
     def test_uses_db_template(self, mock_prompt):
         mock_prompt.return_value = {"template": "Custom search for: {query}"}
         result = _build_search_system_prompt("farming areas")
         assert "Custom search for: farming areas" in result
 
-    @patch("py._explore_search._get_search_prompt")
+    @patch("py._explore_search.get_ai_prompt")
     def test_falls_back_to_hardcoded(self, mock_prompt):
         mock_prompt.return_value = None
         result = _build_search_system_prompt("farming areas")
         assert "Shamwari Weather" in result
         assert "farming areas" in result
 
-    @patch("py._explore_search._get_search_prompt")
+    @patch("py._explore_search.get_ai_prompt")
     def test_replaces_query_placeholder(self, mock_prompt):
         mock_prompt.return_value = None
         result = _build_search_system_prompt("test query")
         assert "test query" in result
 
-    @patch("py._explore_search._get_search_prompt")
+    @patch("py._explore_search.get_ai_prompt")
     def test_truncates_long_query_in_prompt(self, mock_prompt):
         mock_prompt.return_value = {"template": "Q: {query}"}
         long_query = "x" * 500
@@ -319,8 +319,9 @@ class TestExploreSearchEndpoint:
         import py._explore_search as mod
         mod._location_context = None
         mod._location_context_at = 0
-        mod._prompt_cache = {}
-        mod._prompt_cache_at = 0
+        import py._ai_prompts as prompts_mod
+        prompts_mod._prompt_doc_cache = {}
+        prompts_mod._prompt_doc_cache_at = 0
         yield
         mod._location_context = None
         mod._location_context_at = 0
@@ -347,7 +348,7 @@ class TestExploreSearchEndpoint:
         assert exc_info.value.status_code == 429
 
     @patch("py._explore_search._text_search_fallback")
-    @patch("py._explore_search.anthropic_breaker")
+    @patch("py._anthropic.anthropic_breaker")
     @patch("py._explore_search.check_rate_limit")
     @patch("py._explore_search.get_client_ip")
     @pytest.mark.asyncio

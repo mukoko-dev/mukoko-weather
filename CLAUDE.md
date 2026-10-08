@@ -386,9 +386,10 @@ mukoko-weather/
 │       ├── index.py               # FastAPI app, router mounting, CORS, error handlers
 │       ├── _db.py                 # MongoDB connection, collection accessors, rate limiting
 │       ├── _weather.py            # Weather data endpoints (Tomorrow.io/Open-Meteo proxy)
+│       ├── _anthropic.py          # Shared Claude plumbing: client singleton, breaker-guarded call_claude(), first_text()
 │       ├── _ai.py                 # AI summary endpoint (Claude, tiered TTL cache)
 │       ├── _ai_followup.py        # Inline follow-up chat endpoint (pre-seeded history)
-│       ├── _ai_prompts.py         # AI prompt library CRUD (GET/PUT prompts + suggested rules)
+│       ├── _ai_prompts.py         # AI prompt library CRUD (GET/PUT prompts + suggested rules) + cached get_ai_prompt() loader
 │       ├── _chat.py               # Shamwari Explorer chatbot (Claude + tool use)
 │       ├── _locations.py          # Location CRUD, search, geo lookup
 │       ├── _history.py            # Historical weather data endpoint
@@ -568,12 +569,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 **Integration pattern:** All Python endpoints that call external APIs use the circuit breaker:
 
 - `_weather.py` — `tomorrow_breaker` + `open_meteo_breaker` (record-based: `is_allowed` / `record_success()` / `record_failure()`)
-- `_chat.py` — `anthropic_breaker` (guard before tool-use loop, falls back to error response)
-- `_ai.py` — `anthropic_breaker` (guard before Claude call, falls back to basic weather summary)
-- `_ai_followup.py` — `anthropic_breaker` (guard before Claude call, returns error with weather data note)
-- `_explore_search.py` — `anthropic_breaker` (guard before AI search, falls back to text search)
-- `_history_analyze.py` — `anthropic_breaker` (guard before analysis, returns stats-only response)
-- `_reports.py` — `anthropic_breaker` (guard before clarify call, falls back to hardcoded questions)
+- Claude callers (`_chat.py`, `_ai.py`, `_ai_followup.py`, `_explore_search.py`, `_history_analyze.py`, `_reports.py`) never touch `anthropic_breaker` directly. They call `call_claude()` in `api/py/_anthropic.py`, which checks the breaker, records success/failure, and returns `(response, error_kind)` with kinds `no_client` / `circuit_open` / `rate_limited` / `api_error`. Each caller maps those kinds to its own fallback or HTTP status (e.g. `_chat.py` returns an error reply, `_ai_followup.py` raises 429 on `rate_limited`). The client singleton is `get_anthropic_client()`, rebuilt when the key hash changes.
 
 ### Routing
 

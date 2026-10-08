@@ -46,7 +46,7 @@ class TestConstants:
 
 
 class TestBuildFollowupSystemPrompt:
-    @patch("py._ai_followup._get_followup_prompt")
+    @patch("py._ai_followup.get_ai_prompt")
     def test_uses_db_template_when_available(self, mock_get_prompt):
         """Should use template from database when available."""
         mock_get_prompt.return_value = {
@@ -61,7 +61,7 @@ class TestBuildFollowupSystemPrompt:
         assert "running" in result
         assert "Zhizha" in result
 
-    @patch("py._ai_followup._get_followup_prompt")
+    @patch("py._ai_followup.get_ai_prompt")
     def test_falls_back_to_hardcoded_prompt(self, mock_get_prompt):
         """Should use fallback prompt when database template is unavailable."""
         mock_get_prompt.return_value = None
@@ -71,7 +71,7 @@ class TestBuildFollowupSystemPrompt:
         assert "Shamwari Weather" in result
         assert "Harare" in result
 
-    @patch("py._ai_followup._get_followup_prompt")
+    @patch("py._ai_followup.get_ai_prompt")
     def test_falls_back_when_template_is_empty(self, mock_get_prompt):
         """Should use fallback when template field is empty string."""
         mock_get_prompt.return_value = {"template": ""}
@@ -80,7 +80,7 @@ class TestBuildFollowupSystemPrompt:
         )
         assert "Shamwari Weather" in result
 
-    @patch("py._ai_followup._get_followup_prompt")
+    @patch("py._ai_followup.get_ai_prompt")
     def test_replaces_all_placeholders(self, mock_get_prompt):
         """Should replace all five placeholders."""
         mock_get_prompt.return_value = {
@@ -91,7 +91,7 @@ class TestBuildFollowupSystemPrompt:
         )
         assert result == "Victoria Falls|victoria-falls|Misty conditions near the falls.|tourism, hiking|Chirimo"
 
-    @patch("py._ai_followup._get_followup_prompt")
+    @patch("py._ai_followup.get_ai_prompt")
     def test_truncates_weather_summary_to_500_chars(self, mock_get_prompt):
         """weatherSummary should be truncated to 500 characters."""
         mock_get_prompt.return_value = {
@@ -105,7 +105,7 @@ class TestBuildFollowupSystemPrompt:
         assert len(result) == len("Summary: ") + 500
         assert result == "Summary: " + "A" * 500
 
-    @patch("py._ai_followup._get_followup_prompt")
+    @patch("py._ai_followup.get_ai_prompt")
     def test_uses_none_selected_when_no_activities(self, mock_get_prompt):
         """Should use 'none selected' when activities list is empty."""
         mock_get_prompt.return_value = {
@@ -116,7 +116,7 @@ class TestBuildFollowupSystemPrompt:
         )
         assert result == "Activities: none selected"
 
-    @patch("py._ai_followup._get_followup_prompt")
+    @patch("py._ai_followup.get_ai_prompt")
     def test_limits_activities_to_five(self, mock_get_prompt):
         """Should only include the first 5 activities."""
         mock_get_prompt.return_value = {
@@ -129,7 +129,7 @@ class TestBuildFollowupSystemPrompt:
         assert "a5" in result
         assert "a6" not in result
 
-    @patch("py._ai_followup._get_followup_prompt")
+    @patch("py._ai_followup.get_ai_prompt")
     def test_handles_none_season(self, mock_get_prompt):
         """Should use 'unknown' when season is None/empty."""
         mock_get_prompt.return_value = {
@@ -240,9 +240,9 @@ class TestFollowupChatAI:
         return req
 
     @pytest.mark.asyncio
-    @patch("py._ai_followup.anthropic_breaker")
-    @patch("py._ai_followup._get_client")
-    @patch("py._ai_followup._get_followup_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
     async def test_circuit_breaker_open_returns_error_response(
@@ -263,9 +263,9 @@ class TestFollowupChatAI:
         assert "temporarily unavailable" in result["response"]
 
     @pytest.mark.asyncio
-    @patch("py._ai_followup.anthropic_breaker")
-    @patch("py._ai_followup._get_client")
-    @patch("py._ai_followup._get_followup_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
     async def test_successful_ai_call_returns_response(
@@ -294,9 +294,9 @@ class TestFollowupChatAI:
         mock_breaker.record_success.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._ai_followup.anthropic_breaker")
-    @patch("py._ai_followup._get_client")
-    @patch("py._ai_followup._get_followup_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
     async def test_weather_summary_pre_seeded_as_first_assistant_message(
@@ -332,9 +332,9 @@ class TestFollowupChatAI:
         assert messages[-1]["content"] == "What about rain?"
 
     @pytest.mark.asyncio
-    @patch("py._ai_followup.anthropic_breaker")
-    @patch("py._ai_followup._get_client")
-    @patch("py._ai_followup._get_followup_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
     async def test_no_summary_omits_assistant_preseed(
@@ -367,9 +367,9 @@ class TestFollowupChatAI:
         assert messages[0]["role"] == "user"
 
     @pytest.mark.asyncio
-    @patch("py._ai_followup.anthropic_breaker")
-    @patch("py._ai_followup._get_client")
-    @patch("py._ai_followup._get_followup_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
     async def test_history_truncated_to_max_history(
@@ -408,9 +408,9 @@ class TestFollowupChatAI:
         assert len(messages) == 1 + MAX_HISTORY + 1
 
     @pytest.mark.asyncio
-    @patch("py._ai_followup.anthropic_breaker")
-    @patch("py._ai_followup._get_client")
-    @patch("py._ai_followup._get_followup_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
     async def test_message_content_truncated_to_max_len(
@@ -448,9 +448,9 @@ class TestFollowupChatAI:
         assert len(history_msg["content"]) == MAX_MESSAGE_LEN
 
     @pytest.mark.asyncio
-    @patch("py._ai_followup.anthropic_breaker")
-    @patch("py._ai_followup._get_client")
-    @patch("py._ai_followup._get_followup_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
     async def test_ai_rate_limit_error_raises_429(
@@ -474,9 +474,9 @@ class TestFollowupChatAI:
         mock_breaker.record_failure.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._ai_followup.anthropic_breaker")
-    @patch("py._ai_followup._get_client")
-    @patch("py._ai_followup._get_followup_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
     async def test_ai_api_error_returns_graceful_fallback(
@@ -499,9 +499,9 @@ class TestFollowupChatAI:
         mock_breaker.record_failure.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._ai_followup.anthropic_breaker")
-    @patch("py._ai_followup._get_client")
-    @patch("py._ai_followup._get_followup_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
     async def test_message_at_exact_max_len_is_accepted(
@@ -528,9 +528,9 @@ class TestFollowupChatAI:
         assert result["response"] == "Response"
 
     @pytest.mark.asyncio
-    @patch("py._ai_followup.anthropic_breaker")
-    @patch("py._ai_followup._get_client")
-    @patch("py._ai_followup._get_followup_prompt", return_value=None)
+    @patch("py._anthropic.anthropic_breaker")
+    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._ai_followup.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._ai_followup.get_client_ip", return_value="1.2.3.4")
     async def test_history_messages_preserved_in_order(

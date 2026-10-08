@@ -29,7 +29,7 @@ from py._db import get_known_tags
 
 
 class TestBuildChatSystemPrompt:
-    @patch("py._chat._get_chat_prompt_template", return_value=None)
+    @patch("py._chat.get_ai_prompt", return_value=None)
     @patch("py._chat._get_activities_list")
     @patch("py._chat._get_location_context")
     def test_includes_location_names(self, mock_ctx, mock_act, _mock_tmpl):
@@ -42,7 +42,7 @@ class TestBuildChatSystemPrompt:
         prompt = _build_chat_system_prompt([])
         assert "Harare (harare)" in prompt
 
-    @patch("py._chat._get_chat_prompt_template", return_value=None)
+    @patch("py._chat.get_ai_prompt", return_value=None)
     @patch("py._chat._get_activities_list")
     @patch("py._chat._get_location_context")
     def test_includes_location_count(self, mock_ctx, mock_act, _mock_tmpl):
@@ -52,7 +52,7 @@ class TestBuildChatSystemPrompt:
         prompt = _build_chat_system_prompt([])
         assert "142" in prompt
 
-    @patch("py._chat._get_chat_prompt_template", return_value=None)
+    @patch("py._chat.get_ai_prompt", return_value=None)
     @patch("py._chat._get_activities_list")
     @patch("py._chat._get_location_context")
     def test_includes_activity_list(self, mock_ctx, mock_act, _mock_tmpl):
@@ -62,7 +62,7 @@ class TestBuildChatSystemPrompt:
         prompt = _build_chat_system_prompt([])
         assert "Running (running)" in prompt
 
-    @patch("py._chat._get_chat_prompt_template", return_value=None)
+    @patch("py._chat.get_ai_prompt", return_value=None)
     @patch("py._chat._get_activities_list")
     @patch("py._chat._get_location_context")
     def test_includes_user_activities_section(self, mock_ctx, mock_act, _mock_tmpl):
@@ -74,7 +74,7 @@ class TestBuildChatSystemPrompt:
         assert "drone-flying" in prompt
         assert "interests" in prompt.lower()
 
-    @patch("py._chat._get_chat_prompt_template", return_value=None)
+    @patch("py._chat.get_ai_prompt", return_value=None)
     @patch("py._chat._get_activities_list")
     @patch("py._chat._get_location_context")
     def test_no_user_activities_omits_section(self, mock_ctx, mock_act, _mock_tmpl):
@@ -85,7 +85,7 @@ class TestBuildChatSystemPrompt:
         assert "interests" not in prompt.lower()
 
 
-    @patch("py._chat._get_chat_prompt_template", return_value=None)
+    @patch("py._chat.get_ai_prompt", return_value=None)
     @patch("py._chat._get_activities_list")
     @patch("py._chat._get_location_context")
     def test_user_activity_section_includes_ai_guidance(self, mock_ctx, mock_act, _mock_tmpl):
@@ -104,7 +104,7 @@ class TestBuildChatSystemPrompt:
         # Activities without instructions don't emit empty guidance lines
         assert "Mining: " not in prompt
 
-    @patch("py._chat._get_chat_prompt_template", return_value=None)
+    @patch("py._chat.get_ai_prompt", return_value=None)
     @patch("py._chat._get_activities_list")
     @patch("py._chat._get_location_context")
     def test_uses_fallback_prompt_when_db_unavailable(self, mock_ctx, mock_act, _mock_tmpl):
@@ -123,14 +123,14 @@ class TestBuildChatSystemPrompt:
 
         db_template = "Custom prompt. Locations: {locationList}. Count: {locationCount}."
         with patch(
-            "py._chat._get_chat_prompt_template",
+            "py._chat.get_ai_prompt",
             return_value={"template": db_template},
         ):
             prompt = _build_chat_system_prompt([])
         assert prompt.startswith("Custom prompt.")
         assert "50" in prompt
 
-    @patch("py._chat._get_chat_prompt_template", return_value=None)
+    @patch("py._chat.get_ai_prompt", return_value=None)
     @patch("py._chat._get_activities_list")
     @patch("py._chat._get_location_context")
     def test_caps_location_sample_at_20(self, mock_ctx, mock_act, _mock_tmpl):
@@ -377,7 +377,7 @@ class TestListByTagCap:
 
 
 class TestLocationCountFallback:
-    @patch("py._chat._get_chat_prompt_template", return_value=None)
+    @patch("py._chat.get_ai_prompt", return_value=None)
     @patch("py._chat._get_activities_list", return_value=[])
     @patch("py._chat.count_all_locations")
     @patch("py._chat.find_all_locations")
@@ -395,3 +395,69 @@ class TestLocationCountFallback:
 
         prompt = _build_chat_system_prompt([])
         assert "many" in prompt
+
+
+# ---------------------------------------------------------------------------
+# /api/py/chat endpoint — Claude error-kind mapping (call_claude)
+# ---------------------------------------------------------------------------
+
+
+class TestChatEndpointClaudeErrors:
+    """The endpoint maps call_claude's error kinds to its own replies/statuses."""
+
+    def _run(self, call_result=None, client_side_effect=None):
+        import asyncio
+        from py._chat import chat, ChatRequest
+
+        body = ChatRequest(message="Will it rain in Harare?")
+        request = MagicMock()
+        patches = [
+            patch("py._chat.check_rate_limit", return_value={"allowed": True}),
+            patch("py._chat.get_client_ip", return_value="203.0.113.7"),
+            patch("py._chat.filter_known_activities", return_value=[]),
+            patch("py._chat._build_chat_system_prompt", return_value="system"),
+            patch("py._chat.get_ai_prompt", return_value=None),
+            patch("py._chat.get_anthropic_client", side_effect=client_side_effect,
+                  return_value=MagicMock()),
+        ]
+        if call_result is not None:
+            patches.append(patch("py._chat.call_claude", return_value=call_result))
+        for p in patches:
+            p.start()
+        try:
+            return asyncio.run(chat(body, request))
+        finally:
+            for p in patches:
+                p.stop()
+
+    def test_no_key_raises_503(self):
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc:
+            self._run(client_side_effect=HTTPException(status_code=503, detail="AI service unavailable"))
+        assert exc.value.status_code == 503
+
+    def test_success_returns_text_reply(self):
+        block = MagicMock()
+        block.text = "Light showers this afternoon."
+        response = MagicMock()
+        response.stop_reason = "end_turn"
+        response.content = [block]
+        result = self._run(call_result=(response, None))
+        assert result.response == "Light showers this afternoon."
+        assert not result.error
+
+    def test_api_error_returns_error_reply(self):
+        result = self._run(call_result=(None, "api_error"))
+        assert result.error is True
+        assert "trouble connecting" in result.response
+
+    def test_circuit_open_returns_recovering_reply(self):
+        result = self._run(call_result=(None, "circuit_open"))
+        assert result.error is True
+        assert "recovers" in result.response
+
+    def test_rate_limited_raises_429(self):
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc:
+            self._run(call_result=(None, "rate_limited"))
+        assert exc.value.status_code == 429

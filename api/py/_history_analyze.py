@@ -12,26 +12,21 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import time
 from datetime import datetime, timezone, timedelta
-from typing import Optional
 
-import anthropic
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ._db import (
     check_rate_limit,
     get_client_ip,
-    get_api_key,
     get_db,
-    ai_prompts_collection,
     history_analysis_collection,
     filter_known_activities,
 )
 from ._places_resolver import find_location
-from ._circuit_breaker import anthropic_breaker, CircuitOpenError
+from ._ai_prompts import get_ai_prompt
+from ._anthropic import call_claude, first_text
 
 router = APIRouter()
 
@@ -42,55 +37,6 @@ router = APIRouter()
 RATE_LIMIT_MAX = 10
 RATE_LIMIT_WINDOW = 3600  # 1 hour
 CACHE_TTL = 3600  # 1 hour
-
-# ---------------------------------------------------------------------------
-# Module-level singleton client
-# ---------------------------------------------------------------------------
-
-_client: Optional[anthropic.Anthropic] = None
-_client_key_last: Optional[str] = None
-
-# Prompt cache (5-min TTL)
-_prompt_cache: dict[str, dict] = {}
-_prompt_cache_at: float = 0
-_PROMPT_CACHE_TTL = 300
-
-
-def _get_client() -> anthropic.Anthropic:
-    global _client, _client_key_last
-
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key:
-        key = get_api_key("anthropic")
-    if not key:
-        raise HTTPException(status_code=503, detail="AI service unavailable")
-
-    if _client is None or _client_key_last != key:
-        _client = anthropic.Anthropic(api_key=key)
-        _client_key_last = key
-
-    return _client
-
-
-def _get_analysis_prompt() -> dict | None:
-    """Fetch the history analysis system prompt from MongoDB."""
-    global _prompt_cache, _prompt_cache_at
-
-    now = time.time()
-    if _prompt_cache and (now - _prompt_cache_at) < _PROMPT_CACHE_TTL:
-        return _prompt_cache.get("system:history_analysis")
-
-    try:
-        docs = list(
-            ai_prompts_collection()
-            .find({"active": True}, {"_id": 0, "updatedAt": 0})
-        )
-        _prompt_cache = {d["promptKey"]: d for d in docs}
-        _prompt_cache_at = now
-        return _prompt_cache.get("system:history_analysis")
-    except Exception:
-        return _prompt_cache.get("system:history_analysis")
-
 
 # Hardcoded fallback
 _FALLBACK_SYSTEM_PROMPT = """You are Shamwari Weather, analyzing historical weather data for {locationName}.
@@ -113,7 +59,7 @@ Rules:
 
 def _build_analysis_system_prompt(location_name: str, days: int) -> str:
     """Build the analysis system prompt from database template."""
-    prompt_doc = _get_analysis_prompt()
+    prompt_doc = get_ai_prompt("system:history_analysis")
     template = (
         prompt_doc["template"]
         if prompt_doc and prompt_doc.get("template")
@@ -409,13 +355,19 @@ Statistical summary:
     system_prompt = _build_analysis_system_prompt(location_name, body.days)
 
     # Get model config
-    prompt_doc = _get_analysis_prompt()
+    prompt_doc = get_ai_prompt("system:history_analysis")
     model = (prompt_doc or {}).get("model", "claude-haiku-4-5-20251001")
     max_tokens = (prompt_doc or {}).get("maxTokens", 500)
 
-    client = _get_client()
-
-    if not anthropic_breaker.is_allowed:
+    response, err = call_claude(
+        model=model,
+        max_tokens=max_tokens,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_content}],
+    )
+    if err == "no_client":
+        raise HTTPException(status_code=503, detail="AI service unavailable")
+    if err == "circuit_open":
         return {
             "analysis": "AI analysis is temporarily unavailable while the service recovers. The statistical summary is available above.",
             "stats": stats_summary,
@@ -423,24 +375,9 @@ Statistical summary:
             "error": True,
             "dataPoints": len(history),
         }
-
-    try:
-        response = client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_content}],
-        )
-        anthropic_breaker.record_success()
-
-        text_block = next((b for b in response.content if b.type == "text"), None)
-        analysis = text_block.text if text_block else "Unable to generate analysis."
-
-    except anthropic.RateLimitError:
-        anthropic_breaker.record_failure()
+    if err == "rate_limited":
         raise HTTPException(status_code=429, detail="AI service rate limited. Try again later.")
-    except anthropic.APIError:
-        anthropic_breaker.record_failure()
+    if err is not None:
         return {
             "analysis": "AI analysis is temporarily unavailable. The statistical summary is available above.",
             "stats": stats_summary,
@@ -448,6 +385,8 @@ Statistical summary:
             "error": True,
             "dataPoints": len(history),
         }
+
+    analysis = first_text(response) or "Unable to generate analysis."
 
     # Cache the analysis
     try:

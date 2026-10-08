@@ -10,25 +10,23 @@ System prompt is fetched from the database (system:explore_search).
 
 from __future__ import annotations
 
-import os
 import time
 from datetime import datetime, timezone
 from typing import Optional
 
-import anthropic
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ._db import (
     check_rate_limit,
     get_client_ip,
-    get_api_key,
     weather_cache_collection,
-    ai_prompts_collection,
     SLUG_RE,
 )
+from ._ai_prompts import get_ai_prompt
+from ._anthropic import call_claude
 from ._places_resolver import find_all_locations
-from ._circuit_breaker import anthropic_breaker, CircuitOpenError
+from ._circuit_breaker import anthropic_breaker
 
 router = APIRouter()
 
@@ -45,54 +43,10 @@ MAX_TOOL_ITERATIONS = 3
 # Module-level caches
 # ---------------------------------------------------------------------------
 
-_client: Optional[anthropic.Anthropic] = None
-_client_key_last: Optional[str] = None
-
-# Prompt cache (5-min TTL)
-_prompt_cache: dict[str, dict] = {}
-_prompt_cache_at: float = 0
-_PROMPT_CACHE_TTL = 300
-
 # Location context cache (5-min TTL)
 _location_context: Optional[list[dict]] = None
 _location_context_at: float = 0
 CONTEXT_TTL = 300
-
-
-def _get_client() -> anthropic.Anthropic:
-    global _client, _client_key_last
-
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key:
-        key = get_api_key("anthropic")
-    if not key:
-        raise HTTPException(status_code=503, detail="AI service unavailable")
-
-    if _client is None or _client_key_last != key:
-        _client = anthropic.Anthropic(api_key=key)
-        _client_key_last = key
-
-    return _client
-
-
-def _get_search_prompt() -> dict | None:
-    """Fetch the explore search system prompt from MongoDB."""
-    global _prompt_cache, _prompt_cache_at
-
-    now = time.time()
-    if _prompt_cache and (now - _prompt_cache_at) < _PROMPT_CACHE_TTL:
-        return _prompt_cache.get("system:explore_search")
-
-    try:
-        docs = list(
-            ai_prompts_collection()
-            .find({"active": True}, {"_id": 0, "updatedAt": 0})
-        )
-        _prompt_cache = {d["promptKey"]: d for d in docs}
-        _prompt_cache_at = now
-        return _prompt_cache.get("system:explore_search")
-    except Exception:
-        return _prompt_cache.get("system:explore_search")
 
 
 _FALLBACK_SYSTEM_PROMPT = """You are Shamwari Weather, helping users find locations based on weather conditions.
@@ -111,7 +65,7 @@ Rules:
 
 def _build_search_system_prompt(query: str) -> str:
     """Build the search system prompt from database template."""
-    prompt_doc = _get_search_prompt()
+    prompt_doc = get_ai_prompt("system:explore_search")
     template = (
         prompt_doc["template"]
         if prompt_doc and prompt_doc.get("template")
@@ -361,11 +315,6 @@ async def explore_search(body: ExploreSearchRequest, request: Request):
         return _text_search_fallback(query)
 
     # Try AI-powered search
-    try:
-        client = _get_client()
-    except HTTPException:
-        return _text_search_fallback(query)
-
     # Build location list for system prompt context
     locations = _get_location_context()
     loc_list = ", ".join(f"{l['name']} ({l['slug']})" for l in locations[:50])
@@ -373,7 +322,7 @@ async def explore_search(body: ExploreSearchRequest, request: Request):
     system_prompt = _build_search_system_prompt(query)
     system_prompt += f"\n\nAvailable locations include: {loc_list}"
 
-    prompt_doc = _get_search_prompt()
+    prompt_doc = get_ai_prompt("system:explore_search")
     model = (prompt_doc or {}).get("model", "claude-haiku-4-5-20251001")
     max_tokens = (prompt_doc or {}).get("maxTokens", 400)
 
@@ -383,14 +332,17 @@ async def explore_search(body: ExploreSearchRequest, request: Request):
 
         # Tool-use loop
         for _ in range(MAX_TOOL_ITERATIONS):
-            response = client.messages.create(
+            # No key, open circuit, rate limit or API error: text-search fallback
+            # (call_claude has already recorded any breaker failure).
+            response, err = call_claude(
                 model=model,
                 max_tokens=max_tokens,
                 system=system_prompt,
                 tools=TOOLS,
                 messages=messages,
             )
-            anthropic_breaker.record_success()
+            if err is not None:
+                return _text_search_fallback(query)
 
             # Process response blocks
             tool_uses = []
@@ -456,12 +408,8 @@ async def explore_search(body: ExploreSearchRequest, request: Request):
             "summary": text_content or f"Found {len(collected_locations)} locations matching your search.",
         }
 
-    except anthropic.RateLimitError:
-        anthropic_breaker.record_failure()
-        return _text_search_fallback(query)
-    except anthropic.APIError:
-        anthropic_breaker.record_failure()
-        return _text_search_fallback(query)
     except Exception:
+        # Non-Anthropic failures (tool execution, parsing) still trip the
+        # breaker here, as before; Anthropic errors are recorded by call_claude.
         anthropic_breaker.record_failure()
         return _text_search_fallback(query)
