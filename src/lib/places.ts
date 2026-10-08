@@ -39,7 +39,7 @@
  * `add_location` endpoint, so step (1) above resolves them directly.
  */
 
-import { placesGeoCollection, placesCollection } from "./db";
+import { placesGeoCollection } from "./db";
 import {
   LOCATIONS,
   type WeatherLocation,
@@ -704,77 +704,6 @@ export function poiTypeFromPlace(
     (t) => typeof t === "string" && t.trim(),
   );
   return extra ? extra.trim() : undefined;
-}
-
-/**
- * Find the nearest `places.places` POI to (lat, lon) within `maxKm`.
- * Uses `$nearSphere` on the 2dsphere index against `places.places.geo`.
- *
- * Returns `null` on any error, a missing index, or when nothing is in range —
- * POI matching must NEVER break location resolution, so every failure path
- * falls back to `null` and the caller keeps its reverse-geocode result.
- */
-export async function nearestPlace(
-  lat: number,
-  lon: number,
-  maxKm: number = POI_MATCH_RADIUS_KM,
-): Promise<PlaceDoc | null> {
-  try {
-    const doc = (await placesCollection().findOne({
-      geo: {
-        $nearSphere: {
-          $geometry: { type: "Point", coordinates: [lon, lat] },
-          $maxDistance: Math.max(0, maxKm) * 1000,
-        },
-      },
-    })) as unknown as PlaceDoc | null;
-    return doc;
-  } catch {
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Search places (POIs) — used by explore/search flows
-// ---------------------------------------------------------------------------
-
-/**
- * Search `places.places` by name + optional bounding box for the
- * explore/search flows. Falls back to a `$text` search if a bbox isn't
- * provided. Returns up to 20 results.
- */
-export async function searchPlaces(
-  query: string,
-  bbox?: BBox,
-): Promise<PlaceDoc[]> {
-  const q = (query ?? "").trim();
-  if (!q) return [];
-
-  try {
-    const coll = placesCollection();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const filter: Record<string, any> = {
-      $text: { $search: q },
-    };
-    if (bbox) {
-      const [minLon, minLat, maxLon, maxLat] = bbox.bounds;
-      filter.geo = {
-        $geoWithin: {
-          $box: [
-            [minLon, minLat],
-            [maxLon, maxLat],
-          ],
-        },
-      };
-    }
-    return (await coll
-      .find(filter, { projection: { score: { $meta: "textScore" } } })
-      .sort({ score: { $meta: "textScore" } })
-      .limit(20)
-      .toArray()) as unknown as PlaceDoc[];
-  } catch {
-    return [];
-  }
 }
 
 // ---------------------------------------------------------------------------

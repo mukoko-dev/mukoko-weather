@@ -200,8 +200,7 @@ mukoko-weather/
 │   │   ├── brand/                    # Branding components
 │   │   │   ├── MukokoLogo.tsx        # Logo with text fallback
 │   │   │   ├── MineralsStripe.tsx    # 7-mineral decorative stripe (main layout only — covered by modal overlays, z-20)
-│   │   │   ├── ThemeProvider.tsx     # Syncs Zustand theme to document, listens for OS changes
-│   │   │   └── ThemeToggle.tsx       # Light/dark/system mode toggle (3-state cycle)
+│   │   │   └── ThemeProvider.tsx     # Syncs Zustand theme to document, listens for OS changes
 │   │   ├── analytics/
 │   │   │   └── GoogleAnalytics.tsx   # Google Analytics 4 (gtag.js) via next/script
 │   │   ├── display/
@@ -230,7 +229,6 @@ mukoko-weather/
 │   │   │   ├── DailyChart.tsx         # Canvas chart: high/low temps over 7 days
 │   │   │   ├── AtmosphericSummary.tsx  # Compact metric cards with gauges (humidity, wind, pressure, UV, cloud, feels-like, precipitation)
 │   │   │   ├── AtmosphericDetails.tsx # Imports chart components for 24h atmospheric views
-│   │   │   ├── LazyAtmosphericDetails.tsx # Lazy-load wrapper (React.lazy + Suspense)
 │   │   │   ├── MetricCard.tsx           # MetricCard + ArcGauge (radial gauge with value display)
 │   │   │   ├── ActivityCard.tsx        # ActivityCard (per-activity rating badge + 24h feasibility trend + weather tips)
 │   │   │   ├── StatCard.tsx            # Reusable stat card (label + value)
@@ -301,11 +299,10 @@ mukoko-weather/
 │   │       ├── MukokoWeatherEmbed.test.ts
 │   │       └── index.ts
 │   ├── lib/
-│   │   ├── store.ts               # Zustand app state (theme, location, activities, hasOnboarded, ShamwariContext, reportModal, device sync)
+│   │   ├── store.ts               # Zustand app state (theme, location, activities, hasOnboarded, ShamwariContext, reportModal, RxDB init via initializeDeviceSync)
 │   │   ├── theme.ts               # Dependency-free resolveTheme (re-exported from store.ts; used by the embed widget + MapLibreMap)
-│   │   ├── store.test.ts          # Theme resolution, ShamwariContext TTL tests, device sync init
-│   │   ├── device-sync.ts         # Device sync — bridges Zustand localStorage with Python device profile API
-│   │   ├── device-sync.test.ts
+│   │   ├── store.test.ts          # Theme resolution, ShamwariContext TTL tests, RxDB init
+│   │   ├── rxdb/                  # RxDB local-first store: bridge.ts (Zustand ↔ IndexedDB preferences), replication.ts (sync to /api/py/devices), database/collections/schemas
 │   │   ├── suggested-prompts.ts   # Database-driven suggested prompt generation (fetches from /api/py/ai/prompts)
 │   │   ├── suggested-prompts.test.ts
 │   │   ├── locations.ts           # WeatherLocation type, 98 ZW seed locations, search, filtering
@@ -528,7 +525,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - Collection accessors (existing): `weather_cache_collection()`, `ai_summaries_collection()`, `locations_collection()`, etc. — all routed through the appropriate platform DB. `device_profiles_collection()` now lives in the platform `device` DB.
 - Platform collection accessors (new, camelCase, schema-validated): `stations_collection()`, `observations_collection()`, `alerts_collection()`, `community_reports_collection()`, `places_collection()`, `places_geo_collection()`, `persons_collection()`, `credentials_collection()`, `activity_log_collection()`, `conversations_collection()`, `messages_collection()`, `guardrails_collection()`, `devices_collection()`, `provider_configurations_collection()`, etc.
 - **Auto-stamped writes:** `stamp_platform_fields(doc, country_code="ZW", province_slug=None)` adds the required `_id` (UUID), `_schemaVersion: "v3.1"`, `bundu` sub-doc, `createdAt`, and `updatedAt`. Strict validators (`validationAction: "error"`) reject writes that lack these fields, so call this on every insert into a platform collection.
-- TypeScript mirror: `src/lib/mongo.ts` exports `weatherDb()`, `placesDb()`, `identityDb()`, `shamwariDb()`, `deviceDb()`, `integrationsDb()`. `src/lib/db.ts` exports `stampPlatformFields()` plus the matching collection accessors (`stationsCollection`, `placesCollection`, `personsCollection`, etc.).
+- TypeScript mirror: `src/lib/mongo.ts` exports `weatherDb()`, `placesDb()`, `identityDb()`, `shamwariDb()`, `deviceDb()`, `integrationsDb()`. `src/lib/db.ts` exports `stampPlatformFields()` plus the matching collection accessors (`placesCollection`, `personsCollection`, etc.).
 
 **CORS:** Restricted to `https://weather.mukoko.com` and `http://localhost:3000` (not wildcard).
 
@@ -730,7 +727,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 
 **Countries & Provinces:** `src/lib/countries.ts` — `Country` type (code, name, region, supported), `Province` type (slug, name, countryCode), 64 seed countries (54 AU + ASEAN), 80+ province definitions, `getFlagEmoji(code)`, `generateProvinceSlug(name, code)`.
 
-Key functions: `getLocationBySlug(slug)`, `searchLocationsFromDb(query, options)` (Atlas Search with fuzzy matching + $text fallback), `getLocationsByTag(tag)`, `findNearestLocation(lat, lon)`, `createLocation(location)`, `findDuplicateLocation(lat, lon, radiusKm)`, `getLocationsForContext(limit)` (bounded DB query for AI context, seed locations prioritized), `vectorSearchLocations(embedding, options)` (foundation for semantic search — requires embedding pipeline), `getTagCountsAndStats()` ($facet aggregation for tag counts + location stats in one query).
+Key functions: `getLocationBySlug(slug)`, `searchLocationsFromDb(query, options)` (Atlas Search with fuzzy matching + $text fallback), `getLocationsByTag(tag)`, `findNearestLocation(lat, lon)`, `createLocation(location)`, `getLocationsForContext(limit)` (bounded DB query for AI context, seed locations prioritized), `vectorSearchLocations(embedding, options)` (foundation for semantic search — requires embedding pipeline), `getTagCountsAndStats()` ($facet aggregation for tag counts + location stats in one query).
 
 ### Activities
 
@@ -862,7 +859,7 @@ weather.stationObservations → QC pipeline → weather.observations
 - `setSelectedLocation(slug)` — updates location, queues device sync
 - `selectedActivities: string[]` — activity IDs (from `src/lib/activities.ts`), persisted to localStorage, synced to server
 - `toggleActivity(id)` — adds/removes an activity selection, queues device sync
-- `selectedForecastModel: string` — Windy-style forecast model preference (Open-Meteo model id or `"best_match"`, default `"best_match"`), persisted (RxDB) + device-synced. Set via the "Forecast model" radio group in the My Weather modal Settings tab; passed by `fetchWeather()` and highlighted in `ModelComparisonChart`
+- `selectedForecastModel: string` — Windy-style forecast model preference (Open-Meteo model id or `"best_match"`, default `"best_match"`), persisted (RxDB) + replicated to `/api/py/devices`. Set via the "Forecast model" radio group in the My Weather modal Settings tab; passed by `fetchWeather()` and highlighted in `ModelComparisonChart`
 - `setSelectedForecastModel(model)` — updates the model preference, persists to RxDB
 - `savedLocations: string[]` — saved location slugs (up to `MAX_SAVED_LOCATIONS = 10`), persisted to localStorage, synced to server
 - `saveLocation(slug)` — adds a location to saved list (no-op if already saved or at cap), queues device sync
@@ -889,16 +886,12 @@ weather.stationObservations → QC pipeline → weather.observations
 - `myWeatherOpen`, `shamwariContext`, and `reportModalOpen` are transient (reset on page load)
 - `onRehydrateStorage` callback applies the persisted theme to the DOM on load
 
-**Device Sync:**
+**Local-first sync (RxDB):**
 
-- `src/lib/device-sync.ts` bridges Zustand localStorage with the Python device profile API (`/api/py/devices`)
-- **Hybrid approach:** localStorage is the primary read source (instant), MongoDB is the persistence layer (recoverable)
-- Changes are synced to server on mutation (debounced 1.5s via `queueSync`)
-- On first visit: generates a device UUID, reads any existing localStorage prefs, creates a server profile
-- On returning visit: fetches server profile; if local state looks like defaults but server has real data, restores from server (e.g., user cleared localStorage or new browser)
-- `flushSync()` fires via `beforeunload` listener (with duplicate registration guard) to persist pending changes before page unload using `navigator.sendBeacon`
+- `src/lib/rxdb/bridge.ts` owns persisted preferences. `initRxDBBridge()` hydrates the Zustand store from the RxDB `preferences` document (keyed by a device UUID kept in localStorage under `mukoko-device-id`), `updatePreferences()` writes to RxDB, and RxDB change subscriptions push multi-tab changes back into Zustand. `migrateLocalStorageToRxDB()` runs once to move the legacy `mukoko-weather-prefs` localStorage blob into IndexedDB
+- `src/lib/rxdb/replication.ts` replicates preferences bidirectionally with `/api/py/devices` (PATCH to push, GET to pull). Only the leader tab replicates. Suitability rules are pull-only from `/api/py/suitability` every 10 minutes
+- `initializeDeviceSync()` in `src/lib/store.ts` is the single entry point: it runs the bridge, then `startReplication()`
 - **Merge strategy:** Last-write-wins (not CRDT). If a user has multiple devices, whichever syncs last determines the server value for array fields like `selectedActivities` and `savedLocations`. A per-field timestamp merge is a future enhancement
-- `initializeDeviceSync()` is called once on client-side app load after Zustand rehydrates
 
 **Theme system:**
 
@@ -1262,7 +1255,7 @@ All pages use a **TikTok-style sequential mounting** pattern — only ONE sectio
 
 ### Atmospheric Details (Atmosphere Sub-Route & History Page)
 
-`src/components/weather/AtmosphericDetails.tsx` — orchestrates four chart components for 24-hour hourly atmospheric views. Used by the `/${slug}/atmosphere` sub-route page and the history page (via `LazyAtmosphericDetails`). Not rendered on the main location page.
+`src/components/weather/AtmosphericDetails.tsx` — orchestrates four chart components for 24-hour hourly atmospheric views. Lazy-imported by `AtmosphereDashboard.tsx` on the `/${slug}/atmosphere` sub-route. Not rendered on the main location page.
 
 **Imports chart components from `src/components/weather/charts/`:**
 
@@ -1379,7 +1372,7 @@ _Library tests:_
 - `src/lib/countries.test.ts` — country/province data, flag emoji, province slug generation
 - `src/lib/store.test.ts` — theme resolution (light/dark/system), SSR fallback, ShamwariContext set/clear/expiry, savedLocations CRUD/cap/persistence
 - `src/lib/suggested-prompts.test.ts` — suggested prompt generation, weather condition matching, max 3 cap
-- `src/lib/device-sync.test.ts` — device sync CRUD, debounced sync, migration, beforeunload
+- `src/lib/rxdb/bridge.test.ts` — RxDB bridge: device ID, legacy localStorage migration, preference hydration, writes, retry, reset
 - `src/lib/map-layers.test.ts` — map layer config, default layer, getMapLayerById
 - `src/lib/utils.test.ts` — Tailwind class merging (cn utility), getScrollBehavior reduced-motion detection
 - `src/lib/i18n.test.ts` — translations, formatting, interpolation
@@ -1387,7 +1380,7 @@ _Library tests:_
 - `src/lib/smart-slug.test.ts` — build/parse round-trip, `--` delimiter safety against every shipped seed slug (the `/gweru` → Arctic hazard), legacy-slug complement
 - `src/lib/places.test.ts` — resolver pure logic (normalizeName, inferNameFromSlug, adapters, `adaptSeedToLocationDoc`, `nearestSeedLocation`, seed-slug uniqueness)
 - `src/lib/places-resolver.test.ts` — `resolveLocationSlug` with a mocked placesGeo collection: seed fallback on no-match / DB throw, genuine unknown slugs still 404, real placesGeo docs still win, city-state country-doc acceptance, `CITY_STATE_COUNTRIES` parity with `api/py/_locations.py`
-- `src/lib/db.test.ts` — database operations (CRUD, TTL, API keys, activities, suitability rules, Atlas Search time-based recovery, Vector Search embedding guard, $facet aggregation)
+- `src/lib/db.test.ts` — database operations (CRUD, TTL, suitability rules, Vector Search embedding guard, $facet aggregation)
 - `src/lib/suitability-cache.test.ts` — suitability cache TTL, reset, category styles
 - `src/lib/geolocation.test.ts` — browser geolocation API wrapper, auto-creation statuses
 - `src/lib/observability.test.ts` — structured logging, error reporting
@@ -1690,7 +1683,7 @@ The Python FastAPI backend auto-generates an **OpenAPI 3.1** specification from 
 - Leaflet/react-leaflet must be loaded as a `"use client"` component with `next/dynamic` and `ssr: false` (Leaflet requires the DOM)
 - Premium map layers are gated server-side — tile proxy routes check Stytch session before forwarding to Tomorrow.io
 
-**API key storage:** Third-party API keys (Tomorrow.io, Stytch) are stored in MongoDB (`api_keys` collection via `getApiKey`/`setApiKey` in `src/lib/db.ts`), not as server environment variables. This allows key rotation and management without redeployment. Keys are seeded via `POST /api/db-init` with body `{ "apiKeys": { "tomorrow": "..." } }`.
+**API key storage:** Third-party API keys (Tomorrow.io, Stytch) are stored in MongoDB (`api_keys` collection, written by `setApiKey` in `src/lib/db.ts` during db-init and read by the Python backend), not as server environment variables. This allows key rotation and management without redeployment. Keys are seeded via `POST /api/db-init` with body `{ "apiKeys": { "tomorrow": "..." } }`.
 
 ## Environment Variables
 
@@ -1711,17 +1704,16 @@ mukoko-weather uses **WorkOS AuthKit** (`@workos-inc/authkit-nextjs`) for user a
 
 ### Pieces
 
-| File                                                        | Role                                                                                                                                                                                                                                                                                                                                                                    |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/proxy.ts`                                              | Edge middleware. Calls `authkit(request)` on every request to refresh the WorkOS session, then layers our existing `lastLocation` cookie / home-page redirect logic via `handleAuthkitProxy` (so AuthKit headers survive the redirect)                                                                                                                                  |
-| `src/app/callback/route.ts`                                 | OAuth callback handler. Wraps `handleAuth({ onSuccess })` — on a successful WorkOS exchange, calls `upsertPlatformPerson(user)` to mirror the user into `identity.persons`                                                                                                                                                                                              |
-| `src/app/auth/signin/route.ts`                              | Server redirect to the WorkOS-hosted sign-in URL (`getSignInUrl()`)                                                                                                                                                                                                                                                                                                     |
-| `src/app/auth/signout/route.ts`                             | Server route that invokes `signOut({ returnTo: "/" })` — clears the session cookie and redirects through WorkOS logout                                                                                                                                                                                                                                                  |
-| `src/lib/auth.ts`                                           | Server helpers: `getCurrentUser()` (returns user or null), `requireUser()` (enforces sign-in), `upsertPlatformPerson()` (the dedup-disciplined identity.persons writer). Re-exports `getSignInUrl`, `signOut`                                                                                                                                                           |
-| `src/components/auth/SignInButton.tsx`, `SignOutButton.tsx` | Reusable buttons that link to `/auth/signin` and `/auth/signout` respectively                                                                                                                                                                                                                                                                                           |
-| `src/app/layout.tsx`                                        | Wraps the entire tree in `<AuthKitProvider initialAuth={…}>`. `initialAuth` is hydrated server-side via `withAuth()` (minus `accessToken`) so the client renders the right state on first paint with no fetch waterfall                                                                                                                                                 |
-| `src/lib/user-display.ts`                                   | Shared client-safe helpers (`initialsFor`, `displayNameFor`) for rendering a WorkOS user — used by the header's account icon and `/profile`. Replaces the standalone `UserMenu` component (removed): the account icon now lives inside the header's icon pill and routes straight to `/auth/signin` or `/profile` instead of rendering an inline avatar + Sign out link |
-| `src/app/profile/page.tsx` + `ProfileClient.tsx`            | `/profile` — `await requireUser()` gated. Server page fetches the WorkOS user; `ProfileClient` renders account details + a button that opens the existing My Weather modal (`openMyWeather()`) rather than duplicating its Location/Activities/Settings tabs                                                                                                            |
+| File                                             | Role                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/proxy.ts`                                   | Edge middleware. Calls `authkit(request)` on every request to refresh the WorkOS session, then layers our existing `lastLocation` cookie / home-page redirect logic via `handleAuthkitProxy` (so AuthKit headers survive the redirect)                                                                                                                                  |
+| `src/app/callback/route.ts`                      | OAuth callback handler. Wraps `handleAuth({ onSuccess })` — on a successful WorkOS exchange, calls `upsertPlatformPerson(user)` to mirror the user into `identity.persons`                                                                                                                                                                                              |
+| `src/app/auth/signin/route.ts`                   | Server redirect to the WorkOS-hosted sign-in URL (`getSignInUrl()`)                                                                                                                                                                                                                                                                                                     |
+| `src/app/auth/signout/route.ts`                  | Server route that invokes `signOut({ returnTo: "/" })` — clears the session cookie and redirects through WorkOS logout                                                                                                                                                                                                                                                  |
+| `src/lib/auth.ts`                                | Server helpers: `getCurrentUser()` (returns user or null), `requireUser()` (enforces sign-in), `upsertPlatformPerson()` (the dedup-disciplined identity.persons writer). Re-exports `getSignInUrl`, `signOut`                                                                                                                                                           |
+| `src/app/layout.tsx`                             | Wraps the entire tree in `<AuthKitProvider initialAuth={…}>`. `initialAuth` is hydrated server-side via `withAuth()` (minus `accessToken`) so the client renders the right state on first paint with no fetch waterfall                                                                                                                                                 |
+| `src/lib/user-display.ts`                        | Shared client-safe helpers (`initialsFor`, `displayNameFor`) for rendering a WorkOS user — used by the header's account icon and `/profile`. Replaces the standalone `UserMenu` component (removed): the account icon now lives inside the header's icon pill and routes straight to `/auth/signin` or `/profile` instead of rendering an inline avatar + Sign out link |
+| `src/app/profile/page.tsx` + `ProfileClient.tsx` | `/profile` — `await requireUser()` gated. Server page fetches the WorkOS user; `ProfileClient` renders account details + a button that opens the existing My Weather modal (`openMyWeather()`) rather than duplicating its Location/Activities/Settings tabs                                                                                                            |
 
 ### Sign-in flow
 
@@ -1841,14 +1833,12 @@ Mukoko-weather sits on the shared **Nyuchi Platform cluster** (27 databases). Mu
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `resolveLocationSlug(slug)`              | Clean URL slug → adapted `LocationDoc` via placesGeo                                                                      |
 | `nearestPlacesGeo(lat, lon, maxKm?)`     | $nearSphere on placesGeo for IP-geo / GPS reverse lookup                                                                  |
-| `nearestPlace(lat, lon, maxKm?)`         | $nearSphere on `places.places` POIs — tight ≤250 m match                                                                  |
 | `poiTypeFromPlace(doc)`                  | Extract a single POI type (school/hospital/market/park)                                                                   |
-| `searchPlaces(query, bbox?)`             | Searches `places.places` POIs for the explore/search flows                                                                |
 | `adaptPlacesGeoToLocationDoc(doc, hint)` | Adapter — placesGeo doc → legacy `LocationDoc` shape                                                                      |
 | `adaptSeedToLocationDoc(seed)`           | Adapter — static seed entry → `AdaptedLocation` (`_id: "seed:<slug>"`)                                                    |
 | `nearestSeedLocation(lat, lon, maxKm?)`  | Haversine scan over the static seed — coordinate fallback when placesGeo has no city/town/village nearby (default 250 km) |
 
-**POI-nearest refinement (create-on-demand):** After a GPS/coords reverse-geocode, `geo_lookup` / `add_location` (`api/py/_locations.py` `_match_nearby_poi` → `_places_geo.find_nearest_place`) query `places.places` for the nearest POI within **≤250 m** (`POI_MATCH_RADIUS_KM`). If a named POI is that close, its name replaces the raw reverse-geocode name (richer + consistent with the platform POI catalog) and its type is stamped onto `sourceProvenance.mukokoPoiType` and surfaced as `poiType` on the location payload (so the location page + AI summary can mention "school", "hospital", "market", "park"). This is deliberately tight — NOT a coarse distance-snap to far-away places. The whole lookup is wrapped in try/except and falls back to the reverse-geocode on any miss, empty result, or missing 2dsphere index. TS mirror: `nearestPlace` / `poiTypeFromPlace` in `src/lib/places.ts`; the adapter surfaces `poiType` from `sourceProvenance.mukokoPoiType`.
+**POI-nearest refinement (create-on-demand):** After a GPS/coords reverse-geocode, `geo_lookup` / `add_location` (`api/py/_locations.py` `_match_nearby_poi` → `_places_geo.find_nearest_place`) query `places.places` for the nearest POI within **≤250 m** (`POI_MATCH_RADIUS_KM`). If a named POI is that close, its name replaces the raw reverse-geocode name (richer + consistent with the platform POI catalog) and its type is stamped onto `sourceProvenance.mukokoPoiType` and surfaced as `poiType` on the location payload (so the location page + AI summary can mention "school", "hospital", "market", "park"). This is deliberately tight — NOT a coarse distance-snap to far-away places. The whole lookup is wrapped in try/except and falls back to the reverse-geocode on any miss, empty result, or missing 2dsphere index. TS mirror: `poiTypeFromPlace` in `src/lib/places.ts` (the TS POI lookup `nearestPlace` was removed as dead code); the adapter surfaces `poiType` from `sourceProvenance.mukokoPoiType`.
 
 Resolution chain for `/harare`:
 
@@ -1965,7 +1955,7 @@ The creation lock is keyed by the ref when there is one (`placesgeo:osm:w890123`
 
 **Static `LOCATIONS` array still ships in code** (`src/lib/locations.ts`) — but **not as a database seed source**. It's the canonical clean-slug → display-name/tags/province/elevation map for the 265 places the app ships with. New community-created entries get those fields via `sourceProvenance.mukoko*` on the placesGeo doc itself.
 
-**Backward compat:** `getDb()` / `get_db()` is aliased to `weatherDb()` / `weather_db()` so existing call sites keep working. Legacy collection accessors (`weather_cache_collection`, `locations_collection`, etc.) now route to the appropriate platform DB internally — no call-site changes required.
+**Backward compat:** Python `get_db()` is aliased to `weather_db()` so existing call sites keep working (the TS `getDb()` alias was removed). Legacy collection accessors (`weather_cache_collection`, `locations_collection`, etc.) now route to the appropriate platform DB internally — no call-site changes required.
 
 **Other notes:**
 
@@ -1975,10 +1965,8 @@ The creation lock is keyed by the ref when there is one (`placesgeo:osm:w890123`
 
 **Atlas Search (fuzzy text search):**
 
-- `searchActivitiesFromDb(query)` — Atlas Search → `$text` fallback for activities
 - Phase 0F: `searchLocationsFromDb` now scans the static `LOCATIONS` seed catalog directly (no Atlas Search). Location text search will be reimplemented against `places.placesGeo` or `places.places` in a follow-up.
-- Requires an Atlas Search index named `activity_search` (definitions in `src/lib/db.ts` via `getAtlasSearchIndexDefinitions()`)
-- **Time-based recovery:** When a missing-index error is detected (MongoDB code 40324), search is disabled for `ATLAS_RETRY_AFTER_MS` (5 minutes), then automatically retries.
+- The `activity_search` Atlas Search index is still defined in `src/lib/db.ts` (`getAtlasSearchIndexDefinitions()`) and created by db-init, but no TS reader queries it: `searchActivitiesFromDb` and its time-based recovery were removed as dead code
 
 **Vector Search (semantic search — Phase 0F neutralised):**
 
