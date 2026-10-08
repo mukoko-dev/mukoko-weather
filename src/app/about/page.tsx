@@ -131,11 +131,11 @@ export default function AboutPage() {
               </a>{" "}
               (fallback). AI-powered summaries are generated using{" "}
               <a
-                href="https://anthropic.com"
+                href="https://developers.cloudflare.com/workers-ai/"
                 className="sunbird"
                 rel="noopener noreferrer"
               >
-                Anthropic Claude
+                GLM on Cloudflare Workers AI
               </a>
               .
             </p>

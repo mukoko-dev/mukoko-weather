@@ -1,14 +1,10 @@
 """
 Shamwari Explorer chatbot — Phase 2 Python migration.
 
-Replaces the TypeScript /api/explore route with Python + Anthropic SDK.
-Uses Claude with 4 tools: search_locations, get_weather, get_activity_advice,
-list_locations_by_tag.
-
-Key advantages over the TypeScript version:
-- Anthropic Python SDK (primary SDK, features land first)
-- Cleaner tool-use loop with native Python patterns
-- Foundation for Claude Agent SDK migration (Phase 2b)
+Replaces the TypeScript /api/explore route. Calls a GLM model through the
+Cloudflare AI Gateway (``shamwari``, OpenAI-compatible tool calling — see
+``_ai_gateway.py``) with 4 tools: search_locations, get_weather,
+get_activity_advice, list_locations_by_tag.
 """
 
 from __future__ import annotations
@@ -25,7 +21,6 @@ from pydantic import BaseModel, Field
 
 from ._db import (
     enforce_rate_limit,
-    get_api_key,
     get_known_tags,
     filter_known_activities,
     get_activities_brief,
@@ -44,8 +39,8 @@ from ._places_resolver import (
     search_locations_by_name,
 )
 from ._ai_prompts import get_ai_prompt
-from ._anthropic import call_claude, get_anthropic_client
-from ._circuit_breaker import anthropic_breaker
+from ._ai_gateway import ai_configured, call_ai, function_tools, tool_result_message
+from ._circuit_breaker import ai_breaker
 
 router = APIRouter()
 
@@ -56,12 +51,13 @@ router = APIRouter()
 MAX_ACTIVITIES = 20  # user-selected activities from client
 MAX_TOOL_ITERATIONS = 5
 TOOL_TIMEOUT_S = 15  # applied to each tool execution via asyncio.wait_for
+AI_CALL_TIMEOUT_S = 30  # per model call (gateway client itself times out at 25s)
 MAX_ACTIVITIES_IN_PROMPT = 60  # cap activity list in system prompt (grows with categories)
 RATE_LIMIT_MAX = 20
 RATE_LIMIT_WINDOW = 3600  # 1 hour
 
 # Thread pool for running sync tool functions with timeouts.
-# max_workers=2: one for the Anthropic API call, one for tool execution.
+# max_workers=2: one for the model call, one for tool execution.
 # In Vercel serverless, each function instance handles one request at a time,
 # so higher values waste threads and risk MongoDB connection pool exhaustion.
 _tool_executor = ThreadPoolExecutor(max_workers=2)
@@ -91,7 +87,7 @@ def _get_location_context() -> tuple[list[dict], str]:
     try:
         # Phase 0G: sample drawn from `places.placesGeo` via the resolver.
         # The LOCATION DISCOVERY guardrails mandate using search_locations
-        # for all queries, so Claude does not treat this as an exhaustive list.
+        # for all queries, so the model does not treat this as an exhaustive list.
         all_locs = find_all_locations(limit=20)
         docs = [
             {
@@ -124,11 +120,11 @@ def _get_activities_list() -> list[dict]:
 # Tool definitions (same as TypeScript version)
 # ---------------------------------------------------------------------------
 
-TOOLS = [
+TOOLS = function_tools([
     {
         "name": "search_locations",
         "description": "Search for locations by name, province, or keyword. Returns matching locations with slugs.",
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {
                 "query": {
@@ -142,7 +138,7 @@ TOOLS = [
     {
         "name": "get_weather",
         "description": "Get current weather conditions and forecast for a specific location by its slug.",
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {
                 "location_slug": {
@@ -156,7 +152,7 @@ TOOLS = [
     {
         "name": "get_activity_advice",
         "description": "Get weather suitability advice for specific activities at a location.",
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {
                 "location_slug": {
@@ -175,7 +171,7 @@ TOOLS = [
     {
         "name": "list_locations_by_tag",
         "description": "List locations that have a specific tag (e.g. 'farming', 'mining', 'tourism').",
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {
                 "tag": {
@@ -186,7 +182,7 @@ TOOLS = [
             "required": ["tag"],
         },
     },
-]
+])
 
 # ---------------------------------------------------------------------------
 # Tool execution
@@ -592,7 +588,7 @@ class ChatResponse(BaseModel):
 @router.post("/api/py/chat")
 async def chat(body: ChatRequest, request: Request):
     """
-    Shamwari Explorer chatbot — Claude with tool use.
+    Shamwari Explorer chatbot — GLM (via the AI Gateway) with tool use.
 
     Rate-limited to 20 requests/hour/IP. Uses the same MongoDB data
     as the Next.js app (locations, weather cache, suitability rules).
@@ -618,19 +614,20 @@ async def chat(body: ChatRequest, request: Request):
     # in the system prompt (see _build_chat_system_prompt).
     user_activities = filter_known_activities(body.activities)[:MAX_ACTIVITIES]
 
-    # Build messages for Claude
+    # Build messages for the model
     messages = []
     for msg in history:
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": message})
 
-    # Fail fast with 503 when no API key is configured, before any prompt work.
-    get_anthropic_client(required=True)
+    # Fail fast with 503 when the AI gateway is not configured, before any prompt work.
+    if not ai_configured():
+        raise HTTPException(status_code=503, detail="AI service unavailable")
     system_prompt = _build_chat_system_prompt(user_activities)
 
     # Model config from database (with fallback)
     prompt_doc = get_ai_prompt("system:chat")
-    chat_model = (prompt_doc or {}).get("model", "claude-haiku-4-5-20251001")
+    chat_model = (prompt_doc or {}).get("model")
     chat_max_tokens = (prompt_doc or {}).get("maxTokens", 1024)
 
     # Per-request caches (avoid redundant DB queries within tool-use loop)
@@ -647,11 +644,11 @@ async def chat(body: ChatRequest, request: Request):
         try:
             # Default-argument capture: snapshot `messages` by value so the
             # lambda is not affected if the list mutates before the executor runs.
-            # call_claude owns the breaker check and success/failure recording.
+            # call_ai owns the breaker check and success/failure recording.
             response, err = await asyncio.wait_for(
                 loop.run_in_executor(
                     _tool_executor,
-                    lambda msgs=messages: call_claude(
+                    lambda msgs=messages: call_ai(
                         model=chat_model,
                         max_tokens=chat_max_tokens,
                         system=system_prompt,
@@ -659,10 +656,10 @@ async def chat(body: ChatRequest, request: Request):
                         tools=TOOLS,
                     ),
                 ),
-                timeout=TOOL_TIMEOUT_S,
+                timeout=AI_CALL_TIMEOUT_S,
             )
         except asyncio.TimeoutError:
-            anthropic_breaker.record_failure()
+            ai_breaker.record_failure()
             return ChatResponse(
                 response="My AI service is taking too long to respond. Please try again.",
                 error=True,
@@ -683,77 +680,68 @@ async def chat(body: ChatRequest, request: Request):
                 error=True,
             )
 
-        # Check if Claude wants to use tools
-        if response.stop_reason == "tool_use":
+        # Check if the model wants to use tools
+        if response.tool_calls:
             # Process tool calls
             tool_results = []
-            for block in response.content:
-                if block.type == "tool_use":
-                    try:
-                        tool_result = await asyncio.wait_for(
-                            loop.run_in_executor(
-                                _tool_executor,
-                                lambda b=block: _execute_tool(  # type: ignore[misc]
-                                    b.name,
-                                    b.input,
-                                    weather_cache,
-                                    rules_cache,
-                                ),
+            for block in response.tool_calls:
+                try:
+                    tool_result = await asyncio.wait_for(
+                        loop.run_in_executor(
+                            _tool_executor,
+                            lambda b=block: _execute_tool(  # type: ignore[misc]
+                                b.name,
+                                b.arguments,
+                                weather_cache,
+                                rules_cache,
                             ),
-                            timeout=TOOL_TIMEOUT_S,
-                        )
-                    except asyncio.TimeoutError:
-                        tool_result = json.dumps({"error": f"Tool {block.name} timed out after {TOOL_TIMEOUT_S}s"})
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": tool_result,
-                    })
+                        ),
+                        timeout=TOOL_TIMEOUT_S,
+                    )
+                except asyncio.TimeoutError:
+                    tool_result = json.dumps({"error": f"Tool {block.name} timed out after {TOOL_TIMEOUT_S}s"})
+                tool_results.append(tool_result_message(block.id, tool_result))
 
-                    # Extract references from tool calls
-                    if block.name in ("search_locations", "list_locations_by_tag"):
+                # Extract references from tool calls
+                if block.name in ("search_locations", "list_locations_by_tag"):
+                    try:
+                        parsed = json.loads(tool_result)
+                        for loc in parsed.get("locations", []):
+                            slug = loc.get("slug", "")
+                            if slug and slug not in seen_slugs:
+                                seen_slugs.add(slug)
+                                references.append(Reference(
+                                    slug=slug,
+                                    name=loc.get("name", slug),
+                                    type="location",
+                                ))
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                elif block.name == "get_weather":
+                    slug = block.arguments.get("location_slug", "")
+                    if slug and slug not in seen_slugs:
+                        seen_slugs.add(slug)
+                        # Resolve location name from the tool result
+                        # (already fetched in the executor thread — no sync DB call here)
+                        loc_name = slug
                         try:
                             parsed = json.loads(tool_result)
-                            for loc in parsed.get("locations", []):
-                                slug = loc.get("slug", "")
-                                if slug and slug not in seen_slugs:
-                                    seen_slugs.add(slug)
-                                    references.append(Reference(
-                                        slug=slug,
-                                        name=loc.get("name", slug),
-                                        type="location",
-                                    ))
+                            # _execute_get_weather stores location_name if available
+                            loc_name = parsed.get("location_name", slug)
                         except (json.JSONDecodeError, TypeError):
                             pass
-                    elif block.name == "get_weather":
-                        slug = block.input.get("location_slug", "")
-                        if slug and slug not in seen_slugs:
-                            seen_slugs.add(slug)
-                            # Resolve location name from the tool result
-                            # (already fetched in the executor thread — no sync DB call here)
-                            loc_name = slug
-                            try:
-                                parsed = json.loads(tool_result)
-                                # _execute_get_weather stores location_name if available
-                                loc_name = parsed.get("location_name", slug)
-                            except (json.JSONDecodeError, TypeError):
-                                pass
-                            references.append(Reference(
-                                slug=slug,
-                                name=loc_name,
-                                type="weather",
-                            ))
+                        references.append(Reference(
+                            slug=slug,
+                            name=loc_name,
+                            type="weather",
+                        ))
 
             # Add assistant response + tool results to messages
-            messages.append({"role": "assistant", "content": response.content})
-            messages.append({"role": "user", "content": tool_results})
+            messages.append(response.message)
+            messages.extend(tool_results)
         else:
-            # Claude is done — extract the text response
-            text_parts = [
-                block.text for block in response.content
-                if hasattr(block, "text")
-            ]
-            final_response = "\n\n".join(text_parts) if text_parts else "I wasn't able to generate a response. Please try again."
+            # The model is done — extract the text response
+            final_response = response.text.strip() or "I wasn't able to generate a response. Please try again."
 
             # Deduplicate references (prefer "location" type over "weather")
             unique_refs: dict[str, Reference] = {}

@@ -2,7 +2,7 @@
 AI-powered explore search — POST /api/py/explore/search.
 
 Lightweight single-query endpoint (no conversation history) that uses
-Claude with tools to find locations matching natural-language queries.
+a GLM model (via the shamwari AI Gateway) with tools to find locations matching natural-language queries.
 Falls back to text search if AI is unavailable.
 
 System prompt is fetched from the database (system:explore_search).
@@ -19,14 +19,13 @@ from pydantic import BaseModel, Field
 
 from ._db import (
     enforce_rate_limit,
-    get_api_key,
     weather_cache_collection,
     SLUG_RE,
 )
 from ._ai_prompts import get_ai_prompt
-from ._anthropic import call_claude
+from ._ai_gateway import call_ai, function_tools, tool_result_message
 from ._places_resolver import find_all_locations
-from ._circuit_breaker import anthropic_breaker
+from ._circuit_breaker import ai_breaker
 
 router = APIRouter()
 
@@ -108,11 +107,11 @@ def _get_location_context() -> list[dict]:
 # Tool definitions
 # ---------------------------------------------------------------------------
 
-TOOLS = [
+TOOLS = function_tools([
     {
         "name": "search_locations",
         "description": "Search for locations by name, tag, or province. Returns matching locations.",
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {
                 "query": {
@@ -130,7 +129,7 @@ TOOLS = [
     {
         "name": "get_weather",
         "description": "Get current weather for a specific location by slug.",
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {
                 "slug": {
@@ -141,7 +140,7 @@ TOOLS = [
             "required": ["slug"],
         },
     },
-]
+])
 
 
 # ---------------------------------------------------------------------------
@@ -304,8 +303,8 @@ async def explore_search(body: ExploreSearchRequest, request: Request):
     # Rate limiting — extract real IP behind Vercel's reverse proxy
     enforce_rate_limit(request, "explore_search", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW)
 
-    # Circuit breaker check — fall back to text search if Anthropic is down
-    if not anthropic_breaker.is_allowed:
+    # Circuit breaker check — fall back to text search if the AI gateway is down
+    if not ai_breaker.is_allowed:
         return _text_search_fallback(query)
 
     # Try AI-powered search
@@ -317,7 +316,7 @@ async def explore_search(body: ExploreSearchRequest, request: Request):
     system_prompt += f"\n\nAvailable locations include: {loc_list}"
 
     prompt_doc = get_ai_prompt("system:explore_search")
-    model = (prompt_doc or {}).get("model", "claude-haiku-4-5-20251001")
+    model = (prompt_doc or {}).get("model")
     max_tokens = (prompt_doc or {}).get("maxTokens", 400)
 
     try:
@@ -327,8 +326,8 @@ async def explore_search(body: ExploreSearchRequest, request: Request):
         # Tool-use loop
         for _ in range(MAX_TOOL_ITERATIONS):
             # No key, open circuit, rate limit or API error: text-search fallback
-            # (call_claude has already recorded any breaker failure).
-            response, err = call_claude(
+            # (call_ai has already recorded any breaker failure).
+            response, err = call_ai(
                 model=model,
                 max_tokens=max_tokens,
                 system=system_prompt,
@@ -338,31 +337,19 @@ async def explore_search(body: ExploreSearchRequest, request: Request):
             if err is not None:
                 return _text_search_fallback(query)
 
-            # Process response blocks
-            tool_uses = []
-            text_content = ""
-
-            for block in response.content:
-                if block.type == "text":
-                    text_content += block.text
-                elif block.type == "tool_use":
-                    tool_uses.append(block)
+            text_content = response.text
+            tool_uses = response.tool_calls
 
             if not tool_uses:
                 # Done — no more tool calls
                 break
 
             # Execute tools and build results
-            messages.append({"role": "assistant", "content": response.content})
-            tool_results = []
+            messages.append(response.message)
 
             for tool_use in tool_uses:
-                result = _exec_tool(tool_use.name, tool_use.input)
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tool_use.id,
-                    "content": result,
-                })
+                result = _exec_tool(tool_use.name, tool_use.arguments)
+                messages.append(tool_result_message(tool_use.id, result))
 
                 # Collect location results for the response
                 if tool_use.name == "search_locations":
@@ -395,7 +382,6 @@ async def explore_search(body: ExploreSearchRequest, request: Request):
                     except Exception:
                         pass
 
-            messages.append({"role": "user", "content": tool_results})
 
         return {
             "locations": collected_locations[:10],
@@ -403,7 +389,7 @@ async def explore_search(body: ExploreSearchRequest, request: Request):
         }
 
     except Exception:
-        # Non-Anthropic failures (tool execution, parsing) still trip the
-        # breaker here, as before; Anthropic errors are recorded by call_claude.
-        anthropic_breaker.record_failure()
+        # Non-gateway failures (tool execution, parsing) still trip the
+        # breaker here, as before; gateway errors are recorded by call_ai.
+        ai_breaker.record_failure()
         return _text_search_fallback(query)
