@@ -204,6 +204,8 @@ To open a release PR, never open `staging → main` by hand. Run the **Release P
 
 Squash-merge that PR. Because `main` is already in the branch's history, the squash is always clean.
 
+Once the release is on `main`, tag it with the `tag-release` workflow (Actions → tag-release → Run workflow). It tags the tip of `main` as the next version (`bump`, default patch, or an explicit `vX.Y.Z`) and publishes the GitHub release, using `RELEASE_BUMP_TOKEN`.
+
 The release PR is opened with `RELEASE_BUMP_TOKEN` (an org secret), so CI runs on it like any other PR. The workflow fails before it touches git if that secret is missing. A PR opened with `GITHUB_TOKEN` does not start CI.
 
 ## Reporting Issues
