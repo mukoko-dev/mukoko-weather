@@ -61,13 +61,6 @@ import { SupportBanner } from "@/components/weather/SupportBanner";
 import { WeatherBackdrop } from "@/components/weather/WeatherBackdrop";
 import { DraggableSection } from "@/components/weather/DraggableSection";
 import { LiveClock } from "@/components/weather/LiveClock";
-import {
-  getIcaoForSlug,
-  getNearestIcao,
-  getNearestIcaos,
-  fetchNearestAirports,
-  type AirportDistance,
-} from "@/lib/icao-codes";
 import { cacheWeatherHint } from "@/lib/weather-scenes";
 
 // ── Code-split heavy components ─────────────────────────────────────────────
@@ -165,27 +158,6 @@ export function WeatherDashboard({
   const [minutely, setMinutely] = useState<MinutelyData | null>(null);
   const [modelSeries, setModelSeries] = useState<ModelForecast[]>([]);
   const [modelsTime, setModelsTime] = useState<string[]>([]);
-  const icao =
-    getIcaoForSlug(location.slug) ?? getNearestIcao(location.lat, location.lon);
-  // Nearby stations the user can switch between in the aviation section.
-  // Seeded with the static haversine scan (instant, works offline), then
-  // upgraded to the DB-backed $nearSphere result once it resolves. If the DB
-  // call fails, `fetchNearestAirports` already returns the static fallback.
-  const [nearbyIcaos, setNearbyIcaos] = useState<AirportDistance[]>(() =>
-    getNearestIcaos(location.lat, location.lon, 5),
-  );
-  useEffect(() => {
-    let cancelled = false;
-    // `fetchNearestAirports` prefers the DB $nearSphere result and already
-    // falls back to the static haversine scan on failure, so whatever it
-    // resolves is the best available list for the current coordinates.
-    fetchNearestAirports(location.lat, location.lon, 5).then((airports) => {
-      if (!cancelled && airports.length > 0) setNearbyIcaos(airports);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [location.lat, location.lon]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -563,22 +535,20 @@ export function WeatherDashboard({
                 </ChartErrorBoundary>
               </LazySection>
 
-              {icao && (
-                <LazySection
-                  label="aviation-weather"
-                  fallback={<SectionSkeleton />}
-                >
-                  <ChartErrorBoundary name="aviation weather">
-                    <Suspense fallback={<SectionSkeleton />}>
-                      <AviationWeather
-                        slug={location.slug}
-                        icao={icao}
-                        nearby={nearbyIcaos}
-                      />
-                    </Suspense>
-                  </ChartErrorBoundary>
-                </LazySection>
-              )}
+              <LazySection
+                label="aviation-weather"
+                fallback={<SectionSkeleton />}
+              >
+                <ChartErrorBoundary name="aviation weather">
+                  <Suspense fallback={<SectionSkeleton />}>
+                    <AviationWeather
+                      slug={location.slug}
+                      lat={location.lat}
+                      lon={location.lon}
+                    />
+                  </Suspense>
+                </ChartErrorBoundary>
+              </LazySection>
 
               <LazySection
                 label="support-banner"
