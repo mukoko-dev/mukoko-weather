@@ -36,6 +36,8 @@ import {
   AISummaryChatSkeleton,
   EnsoOutlookSkeleton,
   MapPreviewSkeleton,
+  AirQualityMapSkeleton,
+  HazeSkeleton,
   SupportBannerSkeleton,
   LocationInfoSkeleton,
 } from "@/components/weather/SectionSkeleton";
@@ -82,6 +84,16 @@ const ActivityInsights = lazy(() =>
 const MapPreview = lazy(() =>
   import("@/components/weather/map/MapPreview").then((m) => ({
     default: m.MapPreview,
+  })),
+);
+const AirQualityMapCard = lazy(() =>
+  import("@/components/weather/AirQualityMapCard").then((m) => ({
+    default: m.AirQualityMapCard,
+  })),
+);
+const HazePanel = lazy(() =>
+  import("@/components/weather/HazePanel").then((m) => ({
+    default: m.HazePanel,
   })),
 );
 const AviationWeather = lazy(() =>
@@ -403,8 +415,24 @@ export function WeatherDashboard({
                             <ChartErrorBoundary name="atmospheric conditions">
                               <AtmosphericSummary
                                 current={weather.current}
+                                weather={weather}
                                 lat={location.lat}
                                 lon={location.lon}
+                                afterAirQuality={
+                                  <LazySection
+                                    label="haze"
+                                    fallback={<HazeSkeleton />}
+                                  >
+                                    <ChartErrorBoundary name="haze outlook">
+                                      <Suspense fallback={<HazeSkeleton />}>
+                                        <HazePanel
+                                          lat={location.lat}
+                                          lon={location.lon}
+                                        />
+                                      </Suspense>
+                                    </ChartErrorBoundary>
+                                  </LazySection>
+                                }
                               />
                             </ChartErrorBoundary>
                           </DraggableSection>
@@ -543,6 +571,21 @@ export function WeatherDashboard({
 
             {/* Sidebar — stacks below on mobile, col-span-1 on lg and xl */}
             <div className="min-w-0 space-y-4 lg:col-span-1 xl:col-span-1">
+              <LazySection
+                label="air-quality-map"
+                fallback={<AirQualityMapSkeleton />}
+              >
+                <ChartErrorBoundary name="air quality map">
+                  <Suspense fallback={<AirQualityMapSkeleton />}>
+                    <AirQualityMapCard
+                      lat={location.lat}
+                      lon={location.lon}
+                      placeName={location.name}
+                    />
+                  </Suspense>
+                </ChartErrorBoundary>
+              </LazySection>
+
               <LazySection
                 label="weather-map"
                 fallback={<MapPreviewSkeleton />}

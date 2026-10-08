@@ -58,6 +58,23 @@ describe("WeatherDashboard — section ordering (Google Weather pattern)", () =>
     expect(currentPos).toBeLessThan(firstLazy);
   });
 
+  it("mounts the haze panel and AQ map card lazily with their own boundaries", () => {
+    expect(source).toContain("HazePanel");
+    expect(source).toContain('label="haze"');
+    expect(source).toContain("AirQualityMapCard");
+    expect(source).toContain('label="air-quality-map"');
+    expect(source).toContain("HazeSkeleton");
+    expect(source).toContain("AirQualityMapSkeleton");
+  });
+
+  it("passes the full forecast to AtmosphericSummary and places haze after it", () => {
+    expect(source).toContain("weather={weather}");
+    const aqSlot = source.indexOf("afterAirQuality={");
+    const hazePos = source.indexOf('label="haze"');
+    expect(aqSlot).toBeGreaterThan(-1);
+    expect(hazePos).toBeGreaterThan(aqSlot);
+  });
+
   it("sidebar starts with the weather map preview (SunTimes moved to /forecast only)", () => {
     const sidebarStart = source.indexOf("Sidebar");
     const mapPos = source.indexOf('label="weather-map"');

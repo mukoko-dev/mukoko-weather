@@ -78,6 +78,7 @@ export function AtmosphereDashboard({
           <ChartErrorBoundary name="atmospheric conditions">
             <AtmosphericSummary
               current={weather.current}
+              weather={weather}
               lat={location.lat}
               lon={location.lon}
             />
