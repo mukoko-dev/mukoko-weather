@@ -25,6 +25,12 @@ Object.defineProperty(globalThis, "localStorage", {
   value: localStorageMock,
   writable: true,
 });
+// Simulate a browser environment so SSR guards in safe-storage pass
+Object.defineProperty(globalThis, "window", {
+  value: globalThis,
+  writable: true,
+  configurable: true,
+});
 
 // Import after localStorage is mocked
 const { cacheWeatherHint, getCachedWeatherHint } = await import("./cache");

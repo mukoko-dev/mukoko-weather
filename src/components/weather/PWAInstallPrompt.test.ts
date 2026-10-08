@@ -21,6 +21,11 @@ describe("PWAInstallPrompt — component structure", () => {
     expect(src).toContain("mukoko-pwa-install-dismissed");
   });
 
+  it("uses safe-storage and never touches raw localStorage/sessionStorage", () => {
+    expect(src).toContain('from "@/lib/safe-storage"');
+    expect(src).not.toMatch(/\b(local|session)Storage\b/);
+  });
+
   it("delays showing the prompt to let user experience the app", () => {
     expect(src).toContain("SHOW_DELAY_MS");
   });

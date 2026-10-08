@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { trackEvent } from "@/lib/analytics";
+import { readStorage, removeStorage, writeStorage } from "@/lib/safe-storage";
 
 // ---------------------------------------------------------------------------
 // Types for the beforeinstallprompt event (not in lib.dom.d.ts)
@@ -29,7 +30,7 @@ interface BeforeInstallPromptEvent extends Event {
 // Constants
 // ---------------------------------------------------------------------------
 
-/** localStorage key to track dismissal — respects user choice */
+/** Storage key to track dismissal — respects user choice */
 const DISMISSED_KEY = "mukoko-pwa-install-dismissed";
 
 /** Don't re-prompt for 30 days after dismissal */
@@ -64,16 +65,14 @@ export function PWAInstallPrompt() {
     }
 
     // Check dismissal cooldown
-    if (typeof localStorage !== "undefined") {
-      const dismissed = localStorage.getItem(DISMISSED_KEY);
-      if (dismissed) {
-        const dismissedAt = parseInt(dismissed, 10);
-        if (
-          !isNaN(dismissedAt) &&
-          Date.now() - dismissedAt < DISMISS_COOLDOWN_MS
-        ) {
-          return;
-        }
+    const dismissed = readStorage(DISMISSED_KEY);
+    if (dismissed) {
+      const dismissedAt = parseInt(dismissed, 10);
+      if (
+        !isNaN(dismissedAt) &&
+        Date.now() - dismissedAt < DISMISS_COOLDOWN_MS
+      ) {
+        return;
       }
     }
 
@@ -107,9 +106,7 @@ export function PWAInstallPrompt() {
 
       if (outcome === "accepted") {
         // User accepted — mark as installed
-        if (typeof localStorage !== "undefined") {
-          localStorage.removeItem(DISMISSED_KEY);
-        }
+        removeStorage(DISMISSED_KEY);
       }
     } catch {
       // prompt() can throw if already called or dismissed
@@ -129,9 +126,7 @@ export function PWAInstallPrompt() {
     deferredPrompt.current = null;
 
     // Record dismissal with timestamp for cooldown
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(DISMISSED_KEY, String(Date.now()));
-    }
+    writeStorage(DISMISSED_KEY, String(Date.now()));
 
     trackEvent("onboarding_completed", { method: "pwa_install_dismissed" });
   }, []);

@@ -19,6 +19,8 @@
  *   localStorage.removeItem("ff:premium_maps")          // revert to default
  */
 
+import { readStorage } from "./safe-storage";
+
 // ── Flag definitions ────────────────────────────────────────────────────────
 
 /**
@@ -76,15 +78,11 @@ export function isFeatureEnabled(flag: FeatureFlag): boolean {
  * Only checks localStorage on the client (no-ops to default on server).
  */
 export function isFeatureEnabledWithOverride(flag: FeatureFlag): boolean {
-  if (typeof window !== "undefined") {
-    try {
-      const override = localStorage.getItem(`ff:${flag}`);
-      if (override === "true") return true;
-      if (override === "false") return false;
-    } catch {
-      // localStorage unavailable (private browsing, quota exceeded) — use default
-    }
-  }
+  // readStorage is SSR-safe and returns null when storage is unavailable
+  // (private browsing, blocked) — the default applies in that case.
+  const override = readStorage(`ff:${flag}`);
+  if (override === "true") return true;
+  if (override === "false") return false;
   return FLAGS[flag] ?? false;
 }
 
