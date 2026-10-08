@@ -4,6 +4,7 @@ import { authkit, handleAuthkitProxy } from "@workos-inc/authkit-nextjs";
 /** Routes that are NOT location slugs — must match WeatherLoadingScene KNOWN_ROUTES */
 const KNOWN_ROUTES = new Set([
   "explore",
+  "locations",
   "shamwari",
   "history",
   "aviation",
