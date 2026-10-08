@@ -68,6 +68,10 @@ import { WeatherBackdrop } from "@/components/weather/WeatherBackdrop";
 import { EnsoOutlook } from "@/components/weather/EnsoOutlook";
 import { DraggableSection } from "@/components/weather/DraggableSection";
 import { cacheWeatherHint } from "@/lib/weather-scenes";
+import {
+  backdropClock,
+  type BackdropClock,
+} from "@/lib/weather-scenes/backdrop-clock";
 
 // ── Code-split heavy components ─────────────────────────────────────────────
 // These use React.lazy() so their JS chunks (Chart.js, ReactMarkdown, etc.)
@@ -167,6 +171,18 @@ export function WeatherDashboard({
   const setSectionOrder = useAppStore((s) => s.setSectionOrder);
   const hydrateSectionOrder = useAppStore((s) => s.hydrateSectionOrder);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  // Location-local clock for the backdrop's dawn/dusk sky. Client-only (after
+  // mount, then every 5 min) so SSR and hydration agree and it tracks time.
+  const [skyClock, setSkyClock] = useState<BackdropClock | null>(null);
+  useEffect(() => {
+    const tick = () => setSkyClock(backdropClock(weather, location));
+    const raf = requestAnimationFrame(tick);
+    const id = window.setInterval(tick, 5 * 60_000);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearInterval(id);
+    };
+  }, [weather, location]);
   const [reordering, setReordering] = useState(false);
   // Swipe left/right between the visitor's locations (off while reordering).
   const swipe = useLocationSwipe({ enabled: !reordering });
@@ -273,6 +289,9 @@ export function WeatherDashboard({
         weatherCode={weather.current.weather_code}
         windSpeed={weather.current.wind_speed_10m}
         isDay={weather.current.is_day === 1}
+        currentTime={skyClock?.currentTime}
+        sunrise={skyClock?.sunrise}
+        sunset={skyClock?.sunset}
       />
       {/* Everything above the backdrop — an explicit positive stacking layer.
           Negative z-index on the backdrop was invisible on iOS Safari (fixed
@@ -385,9 +404,7 @@ export function WeatherDashboard({
                                 />
                                 <HourlyScrollCards
                                   hourly={weather.hourly}
-                                  utcOffsetSeconds={
-                                    weather.utc_offset_seconds
-                                  }
+                                  utcOffsetSeconds={weather.utc_offset_seconds}
                                 />
                               </section>
                             </ChartErrorBoundary>
