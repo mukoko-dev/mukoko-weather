@@ -56,9 +56,7 @@ describe("Mzizi token adoption", () => {
     });
 
     it("scopes the OS-preference fallback so an explicit theme wins", () => {
-      expect(canon).toContain(
-        ':root:not([data-theme="light"]):not(.light)',
-      );
+      expect(canon).toContain(':root:not([data-theme="light"]):not(.light)');
     });
   });
 
@@ -99,11 +97,20 @@ describe("Mzizi token adoption", () => {
     });
 
     it("points primary, ring and focus at the Mzizi storm experimental family", () => {
-      for (const token of ["--color-primary", "--primary", "--ring", "--focus-ring"]) {
-        expect(globals).toMatch(new RegExp(`${token}:\\s*var\\(--exp-storm\\);`));
+      for (const token of [
+        "--color-primary",
+        "--primary",
+        "--ring",
+        "--focus-ring",
+      ]) {
+        expect(globals).toMatch(
+          new RegExp(`${token}:\\s*var\\(--exp-storm\\);`),
+        );
       }
       expect(canon).toMatch(/--exp-storm:\s*#284ca6;/);
-      expect(canon).toMatch(/\.dark,\s*\[data-theme="dark"\][\s\S]*?--exp-storm:\s*#7e9be0;/);
+      expect(canon).toMatch(
+        /\.dark,\s*\[data-theme="dark"\][\s\S]*?--exp-storm:\s*#7e9be0;/,
+      );
     });
 
     it("keeps cobalt as the travel-category mineral", () => {
@@ -133,7 +140,9 @@ describe("Mzizi token adoption", () => {
     });
 
     it("uses the Mzizi dark page surface and darker dark card", () => {
-      expect(canon).toMatch(/\.dark,\s*\[data-theme="dark"\][\s\S]*?--surface-paper:\s*#1b1a17;/);
+      expect(canon).toMatch(
+        /\.dark,\s*\[data-theme="dark"\][\s\S]*?--surface-paper:\s*#1b1a17;/,
+      );
       expect(globals).toMatch(/--background:\s*var\(--surface-paper\);/);
       expect(globals).toMatch(/--card:\s*var\(--mzizi-card\);/);
       expect(canon).toMatch(/--mzizi-card:\s*#100f0e;/);
@@ -145,8 +154,12 @@ describe("Mzizi token adoption", () => {
     });
 
     it("sets H1-H3 to the serif and H4-H6 to the sans family", () => {
-      expect(globals).toMatch(/h1,\s*h2,\s*h3\s*\{\s*font-family:\s*var\(--font-heading\);/);
-      expect(globals).toMatch(/h4,\s*h5,\s*h6\s*\{\s*font-family:\s*var\(--font-sans\);/);
+      expect(globals).toMatch(
+        /h1,\s*h2,\s*h3\s*\{\s*font-family:\s*var\(--font-heading\);/,
+      );
+      expect(globals).toMatch(
+        /h4,\s*h5,\s*h6\s*\{\s*font-family:\s*var\(--font-sans\);/,
+      );
     });
   });
 });
