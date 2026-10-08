@@ -60,7 +60,6 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { SupportBanner } from "@/components/weather/SupportBanner";
 import { WeatherBackdrop } from "@/components/weather/WeatherBackdrop";
 import { DraggableSection } from "@/components/weather/DraggableSection";
-import { LiveClock } from "@/components/weather/LiveClock";
 import {
   getIcaoForSlug,
   getNearestIcao,
@@ -334,11 +333,6 @@ export function WeatherDashboard({
           </ol>
         </nav>
 
-        {/* Clock only — the layout control lives at the bottom of the page */}
-        <div className="mx-auto max-w-7xl px-4 pt-1 pb-0 sm:px-6 md:px-8">
-          <LiveClock />
-        </div>
-
         {/* Mobile bottom padding clears the floating nav (token includes the
           safe-area inset); sm:pb-6 restores normal padding where the nav is hidden. */}
         <main
@@ -355,11 +349,6 @@ export function WeatherDashboard({
           {/* Screen reader announcement for loading→loaded transition (WCAG) */}
           <div aria-live="polite" className="sr-only">
             Weather loaded for {location.name}
-          </div>
-
-          {/* Season indicator */}
-          <div className="mb-3">
-            <SeasonBadge season={season} />
           </div>
 
           {/* Weather unavailable banner — shown when all providers failed */}
@@ -421,6 +410,7 @@ export function WeatherDashboard({
                                 daily={weather.daily}
                                 slug={location.slug}
                                 isCurrentLocation={isCurrentLocation}
+                                footer={<SeasonBadge season={season} />}
                               />
                             </ChartErrorBoundary>
                           </DraggableSection>
