@@ -130,6 +130,17 @@
   /* Touch & Interaction — 56px optimal (Material Design 3 recommended) */
   --touch-target-min: 48px;
 
+  /* Mobile bottom nav geometry (Header.tsx: fixed, bottom = inset, sm:hidden).
+     --mobile-nav-clearance is the space page content must leave at the bottom
+     so nothing sits under the floating pill, including the iOS home-indicator
+     safe area. Floating controls above the nav (e.g. reorder "Done") use it too. */
+  --mobile-nav-inset: 0.75rem;
+  --mobile-nav-height: 4.25rem;
+  --mobile-nav-clearance: calc(
+    env(safe-area-inset-bottom, 0px) + var(--mobile-nav-inset) +
+      var(--mobile-nav-height) + 0.5rem
+  );
+
   /* Typography — 16px base, 18px larger variant */
   --text-body: 1rem; /* 16px — base body/footer text */
   --text-body-lg: 1.125rem; /* 18px — larger body text variant */
@@ -745,6 +756,20 @@ body {
            transition-all hover:border-text-tertiary/40 hover:bg-surface-card hover:text-text-primary
            disabled:opacity-50 disabled:pointer-events-none
            min-h-[var(--touch-target-min)];
+  }
+
+  /* .dik-dik — small inline control (breadcrumb link, footer icon, attribution
+     link). Inline boxes ignore min-height, which is why the global coarse-pointer
+     rule never reached these. On coarse pointers only, they become inline-flex
+     and grow to the touch-target minimum in both dimensions; desktop is unchanged. */
+  @media (pointer: coarse) {
+    .dik-dik {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: var(--touch-target-min);
+      min-height: var(--touch-target-min);
+    }
   }
 
   /* .impala-primary — outline button in brand colour (download/secondary CTA) */

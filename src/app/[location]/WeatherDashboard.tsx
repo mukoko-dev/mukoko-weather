@@ -300,7 +300,7 @@ export function WeatherDashboard({
             <li>
               <a
                 href={BASE_URL}
-                className="hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded"
+                className="dik-dik hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded"
               >
                 Home
               </a>
@@ -334,43 +334,16 @@ export function WeatherDashboard({
           </ol>
         </nav>
 
-        {/* Clock + customise layout — same row, no extra vertical space */}
-        <div className="mx-auto max-w-7xl px-4 pt-1 pb-0 sm:px-6 md:px-8 flex items-center justify-between">
+        {/* Clock only — the layout control lives at the bottom of the page */}
+        <div className="mx-auto max-w-7xl px-4 pt-1 pb-0 sm:px-6 md:px-8">
           <LiveClock />
-          {reordering ? (
-            <button
-              type="button"
-              onClick={() => setReordering(false)}
-              className="kudu-sm"
-            >
-              Done
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setReordering(true)}
-              className="impala-sm"
-              aria-label="Customise section layout"
-            >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 16 16"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path d="M5 3a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 7a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 11a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2z" />
-              </svg>
-              Customise layout
-            </button>
-          )}
         </div>
 
-        {/* pb-24 reserves space on mobile for a future sticky bottom nav bar;
-          sm:pb-6 restores normal padding on larger screens where there is no nav bar. */}
+        {/* Mobile bottom padding clears the floating nav (token includes the
+          safe-area inset); sm:pb-6 restores normal padding where the nav is hidden. */}
         <main
           id="main-content"
-          className="animate-fade-in mx-auto max-w-7xl overflow-x-hidden px-4 py-3 pb-20 sm:px-6 sm:pb-6 md:px-8"
+          className="animate-fade-in mx-auto max-w-7xl overflow-x-hidden px-4 py-3 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-6 md:px-8"
           aria-label={`Weather dashboard for ${location.name}`}
         >
           {/* H1 for SEO — visually integrated but semantically correct */}
@@ -691,6 +664,51 @@ export function WeatherDashboard({
                   </Suspense>
                 </ChartErrorBoundary>
               </LazySection>
+            </div>
+          )}
+
+          {/* Layout control — bottom of the page, out of the way of the header.
+            While reordering, the floating Done pill below takes over. */}
+          {!reordering && (
+            <div className="mt-8 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setReordering(true)}
+                className="impala-sm"
+                aria-label="Customise section layout"
+              >
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path d="M5 3a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 7a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zM5 11a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2z" />
+                </svg>
+                Customise layout
+              </button>
+            </div>
+          )}
+
+          {/* Announces reorder mode to screen readers (always mounted so the change is spoken). */}
+          <div role="status" aria-live="polite" className="sr-only">
+            {reordering
+              ? "Reorder mode on: drag sections, then press Done"
+              : ""}
+          </div>
+
+          {/* Floating Done — reachable from anywhere in the list without scrolling.
+            Sits above the mobile nav; on sm+ the nav is hidden so it drops to bottom-6. */}
+          {reordering && (
+            <div className="pointer-events-none fixed inset-x-0 bottom-[var(--mobile-nav-clearance)] z-30 flex justify-center sm:bottom-6">
+              <button
+                type="button"
+                onClick={() => setReordering(false)}
+                className="kudu-sm pointer-events-auto shadow-lg"
+              >
+                Done
+              </button>
             </div>
           )}
         </main>
