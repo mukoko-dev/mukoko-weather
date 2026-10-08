@@ -184,7 +184,7 @@ mukoko-weather/
 │   │   │   ├── chart.tsx             # CanvasChart, resolveColor (wraps Chart.js Canvas)
 │   │   │   ├── dialog.tsx            # Dialog (Radix, portal, overlay, animations)
 │   │   │   ├── input.tsx             # Input (styled with CSS custom properties)
-│   │   │   ├── skeleton.tsx         # Skeleton, CardSkeleton, ChartSkeleton, BadgeSkeleton, MetricCardSkeleton, ChatSkeleton
+│   │   │   ├── skeleton.tsx         # Skeleton, CardSkeleton, ChartSkeleton, MetricCardSkeleton, ChatSkeleton
 │   │   │   ├── spinner.tsx          # Spinner (shared loading ring — size/ring colors compose via className)
 │   │   │   ├── alert.tsx             # Alert, AlertTitle, AlertDescription (6 severity variants)
 │   │   │   ├── accordion.tsx        # Accordion (Radix, animated open/close)
@@ -299,6 +299,7 @@ mukoko-weather/
 │   │       └── index.ts
 │   ├── lib/
 │   │   ├── store.ts               # Zustand app state (theme, location, activities, hasOnboarded, ShamwariContext, reportModal, RxDB init via initializeDeviceSync)
+│   │   ├── theme.ts               # Dependency-free resolveTheme (re-exported from store.ts; used by the embed widget + MapLibreMap)
 │   │   ├── store.test.ts          # Theme resolution, ShamwariContext TTL tests, RxDB init
 │   │   ├── rxdb/                  # RxDB local-first store: bridge.ts (Zustand ↔ IndexedDB preferences), replication.ts (sync to /api/py/devices), database/collections/schemas
 │   │   ├── suggested-prompts.ts   # Database-driven suggested prompt generation (fetches from /api/py/ai/prompts)
@@ -382,6 +383,7 @@ mukoko-weather/
 │       ├── index.py               # FastAPI app, router mounting, CORS, error handlers
 │       ├── _db.py                 # MongoDB connection, collection accessors, rate limiting
 │       ├── _weather.py            # Weather data endpoints (Tomorrow.io/Open-Meteo proxy)
+│       ├── _wmo.py                # WMO_LABELS — weather-code labels (mirror of weatherCodeToInfo in src/lib/weather.ts)
 │       ├── _ai.py                 # AI summary endpoint (Claude, tiered TTL cache)
 │       ├── _ai_followup.py        # Inline follow-up chat endpoint (pre-seeded history)
 │       ├── _ai_prompts.py         # AI prompt library CRUD (GET/PUT prompts + suggested rules)
@@ -956,14 +958,13 @@ Reusable skeleton components in `src/components/ui/skeleton.tsx`:
 - `Skeleton` — generic pulsing block (base building block)
 - `CardSkeleton` — card-shaped with title + content lines
 - `ChartSkeleton` — aspect-ratio-matched chart placeholder
-- `BadgeSkeleton` — pill-shaped badge placeholder
 - `MetricCardSkeleton` — matches AtmosphericSummary MetricCard shape
 - `ChatSkeleton` — matches ExploreChatbot container shape (used as Suspense fallback)
 
 Aspect-matched section skeletons in `src/components/weather/SectionSkeleton.tsx`:
 
 - `SectionSkeleton` — generic fallback (h-32 pulsing card)
-- `ReportsSkeleton`, `HourlyForecastSkeleton`, `ActivityInsightsSkeleton`, `DailyForecastSkeleton`, `AISummarySkeleton`, `AISummaryChatSkeleton`, `AtmosphericSummarySkeleton`, `SunTimesSkeleton`, `MapPreviewSkeleton`, `SupportBannerSkeleton`, `LocationInfoSkeleton` — each mirrors the shape of its corresponding component to prevent layout shift
+- `ReportsSkeleton`, `HourlyForecastSkeleton`, `ActivityInsightsSkeleton`, `DailyForecastSkeleton`, `AISummarySkeleton`, `AISummaryChatSkeleton`, `MapPreviewSkeleton`, `SupportBannerSkeleton`, `LocationInfoSkeleton` — each mirrors the shape of its corresponding component to prevent layout shift
 
 All skeletons include `role="status"` and `aria-label="Loading"` for screen readers. The `sr-only` span is optional when `aria-label` is present — both achieve the same result for assistive technology, so `aria-label` alone is sufficient.
 
