@@ -30,8 +30,6 @@ import {
   placesDb,
   identityDb,
   shamwariDb,
-  deviceDb,
-  integrationsDb,
   platformDb,
   entityDb,
 } from "./mongo";
@@ -45,7 +43,7 @@ import {
 } from "./weather";
 import { logWarn, logError } from "./observability";
 import type { WeatherLocation } from "./locations";
-import type { Activity, ActivityCategory } from "./activities";
+import type { Activity } from "./activities";
 import {
   generateProvinceSlug,
   COUNTRIES,
@@ -616,44 +614,6 @@ function randomUuid(): string {
 // ---------------------------------------------------------------------------
 
 // weather domain
-/** StationKit hardware registry — `weather.stations`. */
-export function stationsCollection() {
-  return weatherDb().collection("stations");
-}
-
-/** QC-validated station observations — `weather.observations`. */
-export function observationsCollection() {
-  return weatherDb().collection("observations");
-}
-
-/** Raw station payloads — `weather.stationObservations`. */
-export function stationObservationsCollection() {
-  return weatherDb().collection("stationObservations");
-}
-
-/** CAP-format severe weather alerts — `weather.alerts`. */
-export function alertsCollection() {
-  return weatherDb().collection("alerts");
-}
-
-/** Community weather reports (Waze-style) — `weather.communityReports` (camelCase). */
-export function communityReportsCollection() {
-  return weatherDb().collection("communityReports");
-}
-
-/**
- * Air quality cache — `weather.air_quality_cache`. Deterministic `_id`
- * (`{lat:.4f}_{lon:.4f}`), 1-hour TTL via `expiresAt` index.
- *
- * Read/write owned by the Python backend (`api/py/_air_quality.py`); this
- * accessor exists for parity so future TS callers (e.g., OG image generation
- * with an AQ badge, or a server-rendered AQ chip) don't have to reach into
- * `weatherDb()` directly.
- */
-export function airQualityCacheCollection() {
-  return weatherDb().collection("air_quality_cache");
-}
-
 // places domain
 /** Places (landmarks, businesses, parks, etc.) — `places.places`. */
 export function placesCollection() {
@@ -663,19 +623,6 @@ export function placesCollection() {
 /** Administrative geography — `places.placesGeo` (camelCase). */
 export function placesGeoCollection() {
   return placesDb().collection("placesGeo");
-}
-
-export function categoriesCollection() {
-  return placesDb().collection("categories");
-}
-
-export function routesCollection() {
-  return placesDb().collection("routes");
-}
-
-/** Per-place community condition reports — `places.conditionReports`. */
-export function conditionReportsCollection() {
-  return placesDb().collection("conditionReports");
 }
 
 // identity domain
@@ -695,69 +642,13 @@ export function activityLogCollection() {
 }
 
 // shamwari domain
-/** Per-user chat sessions — `shamwari.conversations`. */
-export function conversationsCollection() {
-  return shamwariDb().collection("conversations");
-}
-
-/** Chat messages (Anthropic content-block format) — `shamwari.messages`. */
-export function messagesCollection() {
-  return shamwariDb().collection("messages");
-}
-
-/** Cross-app guardrails — `shamwari.guardrails`. */
-export function guardrailsCollection() {
-  return shamwariDb().collection("guardrails");
-}
-
-/** Vector-embedded knowledge resources (RAG) — `shamwari.knowledgeBase`. */
-export function knowledgeBaseCollection() {
-  return shamwariDb().collection("knowledgeBase");
-}
-
 /** Per-person Shamwari preferences — `shamwari.preferences`. */
 export function preferencesCollection() {
   return shamwariDb().collection("preferences");
 }
 
 // device domain
-/** Every device on the platform — `device.devices`. */
-export function devicesCollection() {
-  return deviceDb().collection("devices");
-}
-
-export function commandsCollection() {
-  return deviceDb().collection("commands");
-}
-
-export function telemetryCollection() {
-  return deviceDb().collection("telemetry");
-}
-
-/** Device state transition audit log — `device.deviceHistory` (camelCase). */
-export function deviceHistoryCollection() {
-  return deviceDb().collection("deviceHistory");
-}
-
-/**
- * Legacy mukoko device profile sync — now lives in the platform `device` DB.
- * Phase 0D will migrate writers to `device.devices`.
- */
-export function deviceProfilesCollection() {
-  return deviceDb().collection("device_profiles");
-}
-
 // integrations domain
-/** External provider catalog (WorkOS, Tomorrow.io, etc.) — `integrations.providers`. */
-export function providersCollection() {
-  return integrationsDb().collection("providers");
-}
-
-/** Per-env/per-country provider configs — `integrations.providerConfigurations`. */
-export function providerConfigurationsCollection() {
-  return integrationsDb().collection("providerConfigurations");
-}
-
 // platform domain
 /** Canonical developer API keys (strict validator) — `platform.apiKeys`. */
 export function platformApiKeysCollection() {
@@ -916,49 +807,6 @@ export function getTtlForLocation(
   return { seconds: TTL_TIER_3, tier: 3 };
 }
 
-export interface CachedAISummary {
-  insight: string;
-  generatedAt: string; // ISO timestamp
-  locationSlug: string;
-  weatherSnapshot: {
-    temperature: number;
-    weatherCode: number;
-  };
-}
-
-export async function getCachedAISummary(
-  locationSlug: string,
-): Promise<AISummaryDoc | null> {
-  return aiSummariesCollection().findOne({
-    locationSlug,
-    expiresAt: { $gt: new Date() },
-  });
-}
-
-export async function setCachedAISummary(
-  locationSlug: string,
-  insight: string,
-  weatherSnapshot: { temperature: number; weatherCode: number },
-  tags: string[] = [],
-): Promise<void> {
-  const now = new Date();
-  const { seconds: ttlSeconds, tier } = getTtlForLocation(locationSlug, tags);
-
-  await aiSummariesCollection().updateOne(
-    { locationSlug },
-    {
-      $set: {
-        insight,
-        generatedAt: now,
-        weatherSnapshot,
-        expiresAt: new Date(now.getTime() + ttlSeconds * 1000),
-        tier,
-      },
-    },
-    { upsert: true },
-  );
-}
-
 /**
  * Check if the cached summary is stale (weather changed dramatically).
  * Temperature shifted >5C or weather code changed => stale.
@@ -978,22 +826,6 @@ export function isSummaryStale(
 // single writer; see getWeatherForLocation)
 // ---------------------------------------------------------------------------
 
-export async function getWeatherHistory(
-  locationSlug: string,
-  days: number = 30,
-): Promise<WeatherHistoryDoc[]> {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - days);
-
-  return weatherHistoryCollection()
-    .find({
-      locationSlug,
-      recordedAt: { $gte: cutoff },
-    })
-    .sort({ date: -1 })
-    .toArray();
-}
-
 // ---------------------------------------------------------------------------
 // API key storage (provider keys stored in MongoDB, not env vars)
 // ---------------------------------------------------------------------------
@@ -1011,11 +843,6 @@ function apiKeysCollection() {
   return weatherDb().collection<ApiKeyDoc>("api_keys");
 }
 
-export async function getApiKey(provider: string): Promise<string | null> {
-  const doc = await apiKeysCollection().findOne({ provider });
-  return doc?.key ?? null;
-}
-
 export async function setApiKey(provider: string, key: string): Promise<void> {
   await apiKeysCollection().updateOne(
     { provider },
@@ -1029,11 +856,7 @@ export async function setApiKey(provider: string, key: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 import { LOCATIONS } from "./locations";
-import {
-  resolveLocationSlug,
-  nearestPlacesGeo,
-  adaptPlacesGeoToLocationDoc,
-} from "./places";
+import { resolveLocationSlug } from "./places";
 
 /**
  * Canonical location lookup. Returns the platform `placesGeo` entry adapted
@@ -1101,65 +924,9 @@ export async function getLocationCount(): Promise<number> {
   return LOCATIONS.length;
 }
 
-/** Check if a location already exists within a given radius (delegates to placesGeo). */
-export async function findDuplicateLocation(
-  lat: number,
-  lon: number,
-  radiusKm: number = 5,
-): Promise<LocationDoc | null> {
-  const doc = await nearestPlacesGeo(lat, lon, radiusKm);
-  if (!doc) return null;
-  const adapted = await adaptPlacesGeoToLocationDoc(doc, {
-    cleanSlug: doc.sourceProvenance?.mukokoSlug ?? doc.slug ?? "",
-  });
-  return { ...adapted, updatedAt: new Date() } as LocationDoc;
-}
-
 // ---------------------------------------------------------------------------
 // Search operations (Phase 0F — placesGeo-backed)
 // ---------------------------------------------------------------------------
-
-/** Retained for backwards-compat with existing tests/imports. */
-const ATLAS_RETRY_AFTER_MS = 5 * 60 * 1000; // 5 minutes
-
-/**
- * Check whether a MongoDB error indicates a missing Atlas Search index
- * (permanent) vs. a transient failure. Used by the activity search path.
- */
-function isAtlasSearchIndexMissing(err: unknown): boolean {
-  if (err && typeof err === "object") {
-    const mongoErr = err as {
-      code?: number;
-      codeName?: string;
-      message?: string;
-    };
-    if (mongoErr.code === 40324) return true;
-    const msg = mongoErr.message ?? "";
-    if (msg.includes("index not found")) return true;
-  }
-  return false;
-}
-
-/**
- * Find nearest locations to coordinates via placesGeo.
- *
- * Phase 0F: delegates to `nearestPlacesGeo` from `places.ts`. Only returns
- * a single nearest result because that's all the previous callers (geo
- * lookup, dedup check) actually used.
- */
-export async function findNearestLocationsFromDb(
-  lat: number,
-  lon: number,
-  options: { limit?: number; maxDistanceKm?: number } = {},
-): Promise<LocationDoc[]> {
-  const { maxDistanceKm = 200 } = options;
-  const doc = await nearestPlacesGeo(lat, lon, maxDistanceKm);
-  if (!doc) return [];
-  const adapted = await adaptPlacesGeoToLocationDoc(doc, {
-    cleanSlug: doc.sourceProvenance?.mukokoSlug ?? doc.slug ?? "",
-  });
-  return [{ ...adapted, updatedAt: new Date() } as LocationDoc];
-}
 
 /** Tag counts derived from the static seed catalog. */
 export async function getTagCounts(): Promise<
@@ -1174,15 +941,6 @@ export async function getTagCounts(): Promise<
   return [...counts.entries()]
     .map(([tag, count]) => ({ tag, count }))
     .sort((a, b) => b.count - a.count);
-}
-
-/** Location + province counts derived from the static seed catalog. */
-export async function getLocationStats(): Promise<{
-  locations: number;
-  provinces: number;
-}> {
-  const provinces = new Set(LOCATIONS.map((l) => l.province));
-  return { locations: LOCATIONS.length, provinces: provinces.size };
 }
 
 // ---------------------------------------------------------------------------
@@ -1206,92 +964,6 @@ export async function syncActivities(activities: Activity[]): Promise<void> {
   if (bulkOps.length > 0) {
     await activitiesCollection().bulkWrite(bulkOps);
   }
-}
-
-export async function getAllActivitiesFromDb(): Promise<ActivityDoc[]> {
-  return activitiesCollection()
-    .find({})
-    .sort({ category: 1, label: 1 })
-    .toArray();
-}
-
-export async function getActivitiesByCategoryFromDb(
-  category: ActivityCategory,
-): Promise<ActivityDoc[]> {
-  return activitiesCollection().find({ category }).sort({ label: 1 }).toArray();
-}
-
-export async function getActivityByIdFromDb(
-  id: string,
-): Promise<ActivityDoc | null> {
-  return activitiesCollection().findOne({ id });
-}
-
-export async function getActivityLabelsFromDb(
-  ids: string[],
-): Promise<string[]> {
-  const docs = await activitiesCollection()
-    .find({ id: { $in: ids } })
-    .toArray();
-  return docs.map((d) => d.label);
-}
-
-/** Track Atlas Search availability for activities (same pattern as locations). */
-let atlasActivitySearchDisabledAt = 0;
-
-/**
- * Search activities using Atlas Search (fuzzy) with $text fallback.
- * Requires an Atlas Search index named "activity_search" on the activities
- * collection. See getAtlasSearchIndexDefinitions() for the index spec.
- */
-export async function searchActivitiesFromDb(
-  query: string,
-): Promise<ActivityDoc[]> {
-  const q = query.trim();
-  if (!q) return getAllActivitiesFromDb();
-
-  // Try Atlas Search first (auto-recovers after ATLAS_RETRY_AFTER_MS)
-  const activitySearchAvailable =
-    !atlasActivitySearchDisabledAt ||
-    Date.now() - atlasActivitySearchDisabledAt > ATLAS_RETRY_AFTER_MS;
-  if (activitySearchAvailable) {
-    try {
-      const col = activitiesCollection();
-      const pipeline = [
-        {
-          $search: {
-            index: "activity_search",
-            text: {
-              query: q,
-              path: ["label", "description", "category"],
-              fuzzy: { maxEdits: 1, prefixLength: 1 },
-            },
-          },
-        },
-        { $limit: 20 },
-      ];
-      return await col.aggregate<ActivityDoc>(pipeline).toArray();
-    } catch (err) {
-      if (isAtlasSearchIndexMissing(err)) {
-        atlasActivitySearchDisabledAt = Date.now();
-      }
-    }
-  }
-
-  // Fallback: $text search
-  return activitiesCollection()
-    .find({ $text: { $search: q } })
-    .project({ score: { $meta: "textScore" as const } })
-    .sort({ score: { $meta: "textScore" as const } })
-    .toArray() as Promise<ActivityDoc[]>;
-}
-
-export async function getActivityCategoriesFromDb(): Promise<
-  ActivityCategory[]
-> {
-  return activitiesCollection().distinct("category") as Promise<
-    ActivityCategory[]
-  >;
 }
 
 // ---------------------------------------------------------------------------
@@ -1350,16 +1022,6 @@ export async function syncSuitabilityRules(
   }
 }
 
-export async function getAllSuitabilityRules(): Promise<SuitabilityRuleDoc[]> {
-  return suitabilityRulesCollection().find({}).toArray();
-}
-
-export async function getSuitabilityRuleByKey(
-  key: string,
-): Promise<SuitabilityRuleDoc | null> {
-  return suitabilityRulesCollection().findOne({ key });
-}
-
 // ---------------------------------------------------------------------------
 // Activity category operations (database-driven category styles)
 // ---------------------------------------------------------------------------
@@ -1378,18 +1040,6 @@ export async function syncActivityCategories(
   if (bulkOps.length > 0) {
     await activityCategoriesCollection().bulkWrite(bulkOps);
   }
-}
-
-export async function getAllActivityCategories(): Promise<
-  ActivityCategoryDoc[]
-> {
-  return activityCategoriesCollection().find({}).sort({ order: 1 }).toArray();
-}
-
-export async function getActivityCategoryById(
-  id: string,
-): Promise<ActivityCategoryDoc | null> {
-  return activityCategoriesCollection().findOne({ id });
 }
 
 // ---------------------------------------------------------------------------
@@ -1450,16 +1100,6 @@ export async function getCountryWithStats(
 // geographic hierarchy lives in `places.placesGeo` (Fundi-seeded). Readers keep
 // their async signatures + ProvinceDoc return shape for caller compatibility.
 // ---------------------------------------------------------------------------
-
-export async function getLocationsByCountry(
-  countryCode: string,
-): Promise<LocationDoc[]> {
-  const now = new Date();
-  const upper = countryCode.toUpperCase();
-  return LOCATIONS.filter((l) => (l.country ?? "").toUpperCase() === upper)
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((loc) => ({ ...loc, updatedAt: now })) as LocationDoc[];
-}
 
 export async function getLocationsByProvince(
   provinceSlug: string,
@@ -1998,9 +1638,4 @@ export async function syncAISuggestedRules(
   if (bulkOps.length > 0) {
     await aiSuggestedRulesCollection().bulkWrite(bulkOps);
   }
-}
-
-/** Reset Atlas Search availability flags (for testing). */
-export function _resetSearchFlags(): void {
-  atlasActivitySearchDisabledAt = 0;
 }
