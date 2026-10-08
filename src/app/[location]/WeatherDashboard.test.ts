@@ -58,6 +58,23 @@ describe("WeatherDashboard — section ordering (Google Weather pattern)", () =>
     expect(currentPos).toBeLessThan(firstLazy);
   });
 
+  it("mounts the haze panel and AQ map card lazily with their own boundaries", () => {
+    expect(source).toContain("HazePanel");
+    expect(source).toContain('label="haze"');
+    expect(source).toContain("AirQualityMapCard");
+    expect(source).toContain('label="air-quality-map"');
+    expect(source).toContain("HazeSkeleton");
+    expect(source).toContain("AirQualityMapSkeleton");
+  });
+
+  it("passes the full forecast to AtmosphericSummary and places haze after it", () => {
+    expect(source).toContain("weather={weather}");
+    const aqSlot = source.indexOf("afterAirQuality={");
+    const hazePos = source.indexOf('label="haze"');
+    expect(aqSlot).toBeGreaterThan(-1);
+    expect(hazePos).toBeGreaterThan(aqSlot);
+  });
+
   it("sidebar starts with the weather map preview (SunTimes moved to /forecast only)", () => {
     const sidebarStart = source.indexOf("Sidebar");
     const mapPos = source.indexOf('label="weather-map"');
@@ -232,14 +249,20 @@ describe("WeatherDashboard — layout control placement (bottom of page)", () =>
     expect(source).toMatch(/mt-8 flex justify-center/);
   });
 
-  it("keeps only the clock in the header row (no layout button there)", () => {
-    const clockIdx = source.indexOf("<LiveClock />");
+  it("has no LiveClock in the hero area (the iOS status bar shows the time)", () => {
+    expect(source).not.toContain("LiveClock");
+  });
+
+  it("the only layout trigger lives below the grid, never in the hero", () => {
     const firstOpen = source.indexOf("setReordering(true)");
-    expect(clockIdx).toBeGreaterThan(-1);
-    // The only setReordering(true) trigger lives below the grid, never beside the clock.
     expect(firstOpen).toBeGreaterThan(source.indexOf("</DndContext>"));
-    const clockBlock = source.slice(clockIdx - 200, clockIdx + 40);
-    expect(clockBlock).not.toContain("Customise");
+  });
+
+  it("renders the season pill as the hero footer, not as a block above the grid", () => {
+    const currentIdx = source.indexOf("<CurrentConditions");
+    const footerIdx = source.indexOf("footer={<SeasonBadge");
+    expect(footerIdx).toBeGreaterThan(currentIdx);
+    expect(source).not.toMatch(/<div className="mb-3">\s*<SeasonBadge/);
   });
 
   it("hides the bottom trigger while reordering so the floating Done takes over", () => {
@@ -309,5 +332,30 @@ describe("globals.css — touch-target and nav-clearance tokens", () => {
     expect(css).toMatch(/@media \(pointer: coarse\)\s*\{\s*\.dik-dik/);
     expect(rule).toContain("min-width: var(--touch-target-min)");
     expect(rule).toContain("min-height: var(--touch-target-min)");
+  });
+});
+
+describe("WeatherDashboard — redesign wiring", () => {
+  it("passes the hourly series to the hero so it can render the outlook", () => {
+    expect(source).toMatch(
+      /<CurrentConditions[\s\S]*?hourly=\{weather\.hourly\}[\s\S]*?\/>/,
+    );
+  });
+
+  it("mounts the Community Lane in LazySection + ChartErrorBoundary with its skeleton", () => {
+    expect(source).toContain('case "communityLane"');
+    expect(source).toContain('label="community-lane"');
+    expect(source).toContain("fallback={<CommunityLaneSkeleton />}");
+    expect(source).toContain('<ChartErrorBoundary name="community lane">');
+    const lane = source.slice(source.indexOf("<CommunityLane\n"));
+    for (const prop of [
+      "slug={location.slug}",
+      "lat={location.lat}",
+      "lon={location.lon}",
+      "weather={weather}",
+      "selectedActivities={selectedActivities}",
+    ]) {
+      expect(lane.slice(0, 400)).toContain(prop);
+    }
   });
 });

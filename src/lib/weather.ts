@@ -1,5 +1,16 @@
 /* Open-Meteo weather API client */
 
+import {
+  currentHourIndex,
+  currentWallHourMs,
+  locationHourOf,
+  longitudeOffsetSeconds,
+  nowWallClockMs,
+  resolveOffsetSeconds,
+  wallNaiveIso,
+  weatherOffsetSeconds,
+} from "./location-time";
+
 export interface CurrentWeather {
   temperature_2m: number;
   relative_humidity_2m: number;
@@ -64,6 +75,15 @@ export interface WeatherData {
   models_available?: string[];
   /** Shared hourly time axis (ISO 8601) for the per-model comparison series */
   models_time?: string[];
+  /**
+   * The LOCATION's UTC offset in seconds (Open-Meteo `utc_offset_seconds`).
+   * `/api/py/weather` always sets it (provider value, else a longitude
+   * estimate). Every "current hour" and hour label must read the forecast in
+   * this offset — see `src/lib/location-time.ts` — never the viewer's clock.
+   */
+  utc_offset_seconds?: number;
+  /** True when `utc_offset_seconds` is a longitude estimate, not a tz lookup. */
+  utc_offset_estimated?: boolean;
 }
 
 /**
@@ -182,8 +202,12 @@ export function synthesizeOpenMeteoInsights(
   return {
     windSpeed: data.current.wind_speed_10m,
     windGust: data.current.wind_gusts_10m,
-    // Open-Meteo hourly arrays start at midnight UTC; use the current hour's value.
-    visibility: data.hourly?.visibility?.[new Date().getUTCHours()],
+    // The location's current hour — read in its own time zone, not the
+    // viewer's or the server's (see location-time.ts).
+    visibility:
+      data.hourly?.visibility?.[
+        currentHourIndex(data.hourly?.time, weatherOffsetSeconds(data))
+      ],
     // Open-Meteo UV index is 0–11+; Tomorrow.io uvHealthConcern uses the same scale
     uvHealthConcern: currentUv,
     thunderstormProbability,
@@ -360,12 +384,21 @@ export function normalizeMultiModel(
   return data;
 }
 
-export function checkFrostRisk(hourly: HourlyWeather): FrostAlert | null {
+/**
+ * Frost risk: any hour at or below 3°C between 22:00 and 08:00 at the
+ * LOCATION (pass the payload's `utc_offset_seconds`; zoned Tomorrow.io
+ * instants would otherwise be read in the server's UTC clock).
+ */
+export function checkFrostRisk(
+  hourly: HourlyWeather,
+  offsetSeconds?: number | null,
+): FrostAlert | null {
+  const offset = resolveOffsetSeconds(offsetSeconds);
   const frostHours = hourly.temperature_2m
     .map((temp, i) => ({ temp, time: hourly.time[i] }))
     .filter((h) => {
-      const hour = new Date(h.time).getHours();
-      return (hour >= 22 || hour <= 8) && h.temp <= 3;
+      const hour = locationHourOf(h.time, offset);
+      return hour !== null && (hour >= 22 || hour <= 8) && h.temp <= 3;
     });
 
   if (frostHours.length > 0) {
@@ -551,8 +584,13 @@ export function createFallbackWeather(
 ): WeatherData {
   const now = new Date();
   const season = getDefaultSeason(now, lat);
-  const hour = now.getHours();
+  // No provider answered, so estimate the location's offset from longitude
+  // and build the series on ITS wall clock (naive local strings, like
+  // Open-Meteo) — never the server's or the viewer's.
+  const offset = longitudeOffsetSeconds(lon);
+  const hour = new Date(nowWallClockMs(offset, now)).getUTCHours();
   const isDay = hour >= 6 && hour < 18 ? 1 : 0;
+  const firstHourWall = currentWallHourMs(offset, now);
 
   // Seasonal base temperatures (°C) at ~1200m reference elevation
   const seasonalBase: Record<
@@ -590,14 +628,14 @@ export function createFallbackWeather(
   const hourlyIsDay: number[] = [];
 
   for (let i = 0; i < 48; i++) {
-    const t = new Date(now.getTime() + i * 3600_000);
-    const h = t.getHours();
+    const wall = firstHourWall + i * 3600_000;
+    const h = new Date(wall).getUTCHours();
     const daylight = h >= 6 && h < 18;
     // Sinusoidal temperature curve: low at 5am, high at 2pm
     const tempFrac = Math.sin(((h - 5) / 24) * Math.PI);
     const temp = Math.round(low + (high - low) * Math.max(0, tempFrac));
 
-    hourlyTimes.push(t.toISOString());
+    hourlyTimes.push(wallNaiveIso(wall));
     hourlyTemps.push(temp);
     hourlyApparent.push(temp - 1);
     hourlyHumidity.push(base.humidity);
@@ -630,22 +668,18 @@ export function createFallbackWeather(
   const dailyGustMax: number[] = [];
 
   for (let d = 0; d < 7; d++) {
-    const day = new Date(now);
-    day.setDate(day.getDate() + d);
-    day.setHours(0, 0, 0, 0);
-    const sunrise = new Date(day);
-    sunrise.setHours(5, 45, 0, 0);
-    const sunset = new Date(day);
-    sunset.setHours(18, 15, 0, 0);
+    const dayWall =
+      Math.floor(firstHourWall / 86_400_000) * 86_400_000 + d * 86_400_000;
+    const date = wallNaiveIso(dayWall).slice(0, 10);
 
-    dailyTimes.push(day.toISOString().slice(0, 10));
+    dailyTimes.push(date);
     dailyHighs.push(high);
     dailyLows.push(low);
     dailyApparentHighs.push(high - 1);
     dailyApparentLows.push(low - 1);
     dailyCodes.push(base.code);
-    dailySunrise.push(sunrise.toISOString());
-    dailySunset.push(sunset.toISOString());
+    dailySunrise.push(`${date}T05:45`);
+    dailySunset.push(`${date}T18:15`);
     dailyUV.push(7);
     dailyPrecipSum.push(0);
     dailyPrecipProbMax.push(0);
@@ -711,5 +745,7 @@ export function createFallbackWeather(
       surface_pressure: "hPa",
       cloud_cover: "%",
     },
+    utc_offset_seconds: offset,
+    utc_offset_estimated: true,
   };
 }

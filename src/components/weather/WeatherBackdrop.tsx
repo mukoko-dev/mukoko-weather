@@ -4,8 +4,9 @@ import { useRef, useEffect, useState } from "react";
 import {
   createWeatherScene,
   resolveScene,
+  skyClassName,
+  skyPhase,
   type WeatherSceneConfig,
-  type WeatherSceneType,
   type WeatherSceneHandle,
 } from "@/lib/weather-scenes";
 
@@ -16,34 +17,15 @@ interface Props {
   windSpeed?: number;
   /** Whether it is daytime at the location (Open-Meteo `is_day`). */
   isDay?: boolean;
-}
-
-/**
- * Map a resolved scene type (+ day/night) to its static gradient class.
- * Returns a full literal class name — never a constructed one — so Tailwind's
- * JIT keeps them and the "no dynamic class names" rule holds.
- */
-function skyClass(type: WeatherSceneType, isDay: boolean): string {
-  switch (type) {
-    case "clear":
-      return isDay ? "weaver-sky-clear-day" : "weaver-sky-clear-night";
-    case "partly-cloudy":
-      return isDay ? "weaver-sky-clear-day" : "weaver-sky-clear-night";
-    case "cloudy":
-      return "weaver-sky-cloudy";
-    case "rain":
-      return "weaver-sky-rain";
-    case "thunderstorm":
-      return "weaver-sky-thunderstorm";
-    case "snow":
-      return "weaver-sky-snow";
-    case "fog":
-      return "weaver-sky-fog";
-    case "windy":
-      return "weaver-sky-windy";
-    default:
-      return "";
-  }
+  /**
+   * Optional location-local clock + today's sunrise/sunset (ISO-8601, the
+   * same timezone — Open-Meteo `current.time`, `daily.sunrise[0]`,
+   * `daily.sunset[0]`). When all are given, the 40 min around sunrise/sunset
+   * paints a warm dawn/dusk horizon; otherwise the sky follows `isDay`.
+   */
+  currentTime?: string;
+  sunrise?: string;
+  sunset?: string;
 }
 
 /**
@@ -61,7 +43,18 @@ function skyClass(type: WeatherSceneType, isDay: boolean): string {
  *   on-screen while the page is visible.)
  * - Everything is disposed on unmount.
  * - `prefers-reduced-motion` skips Three.js entirely and shows only the static
- *   mineral gradient.
+ *   sky gradient.
+ *
+ * Colour: every sky, cloud, particle and light colour is the real colour of
+ * that weather at that time of day (src/lib/weather-scenes/palette.ts). The
+ * static `.hornbill-sky-*` gradient under the canvas is built from the SAME
+ * palette (mirrored as --weather-sky-* tokens in globals.css), so the
+ * reduced-motion / WebGL-failure fallback is the same sky as the animation.
+ *
+ * Subdued on purpose (sky at opacity-80, particles at opacity-75 — 40 in
+ * dark theme, matching the dimmed dark-theme sky tokens): the location
+ * hero is a solid sky plate (see CurrentConditions / `.kori`), and the page
+ * sky is texture behind it, never the hero itself.
  *
  * Purely decorative — marked `aria-hidden`. A WebGL/import failure degrades to
  * the static gradient (createWeatherScene returns a no-op handle on failure),
@@ -71,6 +64,9 @@ export function WeatherBackdrop({
   weatherCode,
   windSpeed,
   isDay = true,
+  currentTime,
+  sunrise,
+  sunset,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -94,6 +90,7 @@ export function WeatherBackdrop({
   }, []);
 
   const sceneType = resolveScene(weatherCode, windSpeed);
+  const phase = skyPhase(isDay, currentTime, sunrise, sunset);
 
   useEffect(() => {
     if (!animate) return;
@@ -120,6 +117,7 @@ export function WeatherBackdrop({
     const config: WeatherSceneConfig = {
       type: sceneType,
       isDay,
+      phase,
       isMobile,
       windSpeed,
       maxPixelRatio: 1,
@@ -144,7 +142,7 @@ export function WeatherBackdrop({
       document.removeEventListener("visibilitychange", handleVisibility);
       handle?.dispose();
     };
-  }, [animate, isMobile, isDay, sceneType, windSpeed]);
+  }, [animate, isMobile, isDay, phase, sceneType, windSpeed]);
 
   return (
     <div
@@ -156,14 +154,21 @@ export function WeatherBackdrop({
       // z-10 (see WeatherDashboard) — deterministic in every engine.
       className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
     >
-      {/* Static mineral gradient — always painted; the reduced-motion fallback. */}
+      {/* Static real-weather sky gradient — always painted; the reduced-motion
+          and WebGL-failure fallback, same palette as the animation. */}
       <div
-        className={`absolute inset-0 weaver-sky ${skyClass(sceneType, isDay)}`}
+        className={`absolute inset-0 opacity-80 ${skyClassName(sceneType, isDay, phase)}`}
       />
       {/* Three.js particle layer (transparent) — only when motion is allowed. */}
-      {animate && <div ref={containerRef} className="absolute inset-0" />}
-      {/* Readability scrim so hero text keeps contrast over the animation. */}
-      <div className="absolute inset-0 weaver-scrim" />
+      {animate && (
+        <div
+          ref={containerRef}
+          className="absolute inset-0 opacity-75 dark:opacity-40"
+        />
+      )}
+      {/* Readability veil behind the header + breadcrumb text that sits
+          directly on the sky (WCAG 4.5:1 for text-tertiary on every sky). */}
+      <div className="absolute inset-0 hornbill-veil" />
       {/* Fade the sky into the normal surface background further down the
           page so cards, charts and body text keep their usual contrast. */}
       <div className="absolute inset-0 bg-gradient-to-b from-transparent from-25% via-surface-base/70 via-65% to-surface-base" />

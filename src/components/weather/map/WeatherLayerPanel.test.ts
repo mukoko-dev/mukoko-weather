@@ -1,64 +1,52 @@
 /**
- * Tests for the compact overlay layer switcher (WeatherLayerPanel).
- * Node-env structural checks (no DOM renderer) — read the component source and
- * assert every configured layer resolves to a lucide icon, plus that the map
- * route places the switcher bottom-RIGHT.
+ * Tests for the bottom-sheet layer chips (WeatherLayerPanel).
+ * Node-env structural checks (no DOM renderer): the chips must be labelled,
+ * drawn from MAP_CHIPS, and sized from the touch-target token.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { MAP_LAYERS } from "@/lib/map-layers";
+import { MAP_CHIPS, AIR_QUALITY_LAYER_ID } from "@/lib/map-layers";
 
 const panelSource = readFileSync(
   resolve(__dirname, "WeatherLayerPanel.tsx"),
   "utf-8",
 );
-const dashboardSource = readFileSync(
-  resolve(__dirname, "../../../app/[location]/map/MapDashboard.tsx"),
-  "utf-8",
-);
 
-describe("WeatherLayerPanel — icon per layer (item 3)", () => {
-  it("imports and registers a lucide icon for EVERY configured layer", () => {
-    // The registry keys are the MapLayer.icon names; the icons are imported
-    // from lucide-react. If a layer's icon is missing here it would fall back
-    // silently, so assert every one is present in both the import and registry.
-    for (const layer of MAP_LAYERS) {
-      expect(panelSource).toContain(layer.icon);
-    }
+describe("WeatherLayerPanel — labelled chips", () => {
+  it("renders chip labels from MAP_CHIPS, not icons", () => {
+    expect(panelSource).toContain("MAP_CHIPS.map");
+    expect(panelSource).toContain("{chip.label}");
+    expect(panelSource).not.toContain("lucide-react");
   });
 
-  it("includes the Cloud icon (the cloud layer was previously iconless)", () => {
-    expect(panelSource).toContain('from "lucide-react"');
-    expect(panelSource).toMatch(/LAYER_ICONS[\s\S]*Cloud/);
-    const cloud = MAP_LAYERS.find((l) => l.id === "cloudCover");
-    expect(cloud!.icon).toBe("Cloud");
+  it("offers exactly the five chips the brief asks for, in order", () => {
+    expect(MAP_CHIPS.map((c) => c.label)).toEqual([
+      "Air quality",
+      "Rain",
+      "Temperature",
+      "Wind",
+      "Cloud",
+    ]);
+    expect(MAP_CHIPS[0].id).toBe(AIR_QUALITY_LAYER_ID);
   });
 
-  it("renders an <Icon> for each layer button with a safe fallback", () => {
-    expect(panelSource).toContain(
-      "const Icon = LAYER_ICONS[layer.icon] ?? Cloud",
-    );
-    expect(panelSource).toContain("<Icon");
+  it("is single-select: aria-pressed marks the active chip only", () => {
+    expect(panelSource).toContain("aria-pressed={isActive}");
+    expect(panelSource).toContain('role="group"');
   });
 });
 
-describe("MapDashboard — switcher placement (item 4)", () => {
-  it("positions the overlay switcher on the RIGHT, not the left", () => {
-    expect(dashboardSource).toContain("<WeatherLayerPanel");
-    expect(dashboardSource).toContain("right-3");
-    expect(dashboardSource).not.toContain("bottom-6 left-3");
-  });
-});
-
-describe("WeatherLayerPanel — touch targets (issue #96)", () => {
-  it("sizes every layer button from the touch-target token, not hardcoded h-10/w-10", () => {
-    expect(panelSource).toContain("h-[var(--touch-target-min)]");
-    expect(panelSource).toContain("w-[var(--touch-target-min)]");
-    expect(panelSource).not.toContain("h-10 w-10");
+describe("WeatherLayerPanel — touch targets", () => {
+  it("sizes each chip to the 48px touch-target minimum", () => {
+    expect(panelSource).toContain("min-h-[var(--touch-target-min)]");
   });
 
-  it("the duplicate MapLayerSwitcher component is gone (WeatherLayerPanel is canonical)", () => {
+  it("uses no hardcoded sizes", () => {
+    expect(panelSource).not.toMatch(/h-10 w-10|h-\[44px\]|h-11/);
+  });
+
+  it("does not use the old duplicate switcher component", () => {
     expect(() =>
       readFileSync(resolve(__dirname, "MapLayerSwitcher.tsx"), "utf-8"),
     ).toThrow();

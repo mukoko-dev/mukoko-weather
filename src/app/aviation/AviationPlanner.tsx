@@ -5,6 +5,7 @@ import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 import { getIcaoForSlug, getAirportByIcao } from "@/lib/icao-codes";
 import { SearchIcon, MapPinIcon, NavigationIcon } from "@/lib/weather-icons";
 import { getFlightCategoryClass } from "@/lib/flight-category-styles";
+import { locationClockLabel, resolveOffsetSeconds } from "@/lib/location-time";
 import type {
   AirportBriefing,
   BriefingData,
@@ -336,16 +337,10 @@ export function AviationPlanner() {
       // `/api/py/weather` returns `daily` at the TOP LEVEL (not under `weather`).
       const daily = d.daily;
       if (daily?.sunrise?.[0]) {
-        sunrise = new Date(daily.sunrise[0]).toLocaleTimeString("en-ZW", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        });
-        sunset = new Date(daily.sunset[0]).toLocaleTimeString("en-ZW", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        });
+        // Local time at the station, not the pilot's own clock.
+        const offset = resolveOffsetSeconds(d.utc_offset_seconds);
+        sunrise = locationClockLabel(daily.sunrise[0], offset) || undefined;
+        sunset = locationClockLabel(daily.sunset?.[0], offset) || undefined;
       }
     }
 

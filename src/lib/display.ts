@@ -11,6 +11,10 @@ import type {
 } from "@/components/weather/AirQualityCard";
 import type { WeatherData } from "@/lib/weather";
 import { MAP_LAYERS } from "@/lib/map-layers";
+import {
+  currentHourIndex as locationCurrentHourIndex,
+  resolveOffsetSeconds,
+} from "@/lib/location-time";
 
 /** How often the display re-fetches each data source. */
 export const DISPLAY_REFRESH_MS = {
@@ -112,12 +116,18 @@ export const AQI_TEXT_CLASS: Record<AqiLevel, string> = {
  * Index of the first hourly slot at or after `now` (same wall-clock rule as
  * HourlyScrollCards), or 0 when the forecast doesn't reach that far.
  */
-export function currentHourIndex(times: string[], now: Date): number {
-  const idx = times.findIndex((t) => {
-    const d = new Date(t);
-    return d.getHours() >= now.getHours() && d.getDate() === now.getDate();
-  });
-  return idx >= 0 ? idx : 0;
+export function currentHourIndex(
+  times: string[],
+  now: Date,
+  offsetSeconds?: number | null,
+): number {
+  // The LOCATION's current hour (payload `utc_offset_seconds`), not the
+  // viewer's clock — a wall display can show any place in the world.
+  return locationCurrentHourIndex(
+    times,
+    resolveOffsetSeconds(offsetSeconds, now),
+    now,
+  );
 }
 
 /** Index range of the next `count` hours, every `step` hours, starting now. */
@@ -126,8 +136,9 @@ export function nextHourIndexes(
   now: Date,
   count: number,
   step = 1,
+  offsetSeconds?: number | null,
 ): number[] {
-  const start = currentHourIndex(times, now);
+  const start = currentHourIndex(times, now, offsetSeconds);
   const out: number[] = [];
   for (let i = start; i < times.length && out.length < count; i += step) {
     out.push(i);

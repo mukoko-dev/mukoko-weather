@@ -119,9 +119,12 @@ describe("Screen reader text — sr-only", () => {
     expect(weatherDashboard).toContain("Weather Forecast");
   });
 
-  it("CurrentConditions heading is sr-only", () => {
+  it("CurrentConditions section is labelled by the visible place-name heading", () => {
+    expect(currentConditions).toContain(
+      '<h2\n          id="current-conditions-heading"',
+    );
     expect(currentConditions).toContain("sr-only");
-    expect(currentConditions).toContain("Current weather conditions in");
+    expect(currentConditions).toContain("degrees Celsius");
   });
 });
 

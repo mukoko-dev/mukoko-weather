@@ -41,9 +41,16 @@ describe("HourlyScrollCards — hour slicing", () => {
     expect(source).toContain("start + 24");
   });
 
-  it("finds the start index from current hour", () => {
-    expect(source).toContain("currentHour");
-    expect(source).toContain("findIndex");
+  it("finds the start index from the LOCATION's current hour", () => {
+    expect(source).toContain("currentHourIndex(hourly.time, offset)");
+    expect(source).toContain("resolveOffsetSeconds(utcOffsetSeconds)");
+    // Never the viewer's clock.
+    expect(source).not.toContain("getHours()");
+    expect(source).not.toContain("toLocaleTimeString");
+  });
+
+  it("labels hours on the location's clock", () => {
+    expect(source).toContain("locationClockLabel(time, offset)");
   });
 
   it('labels the first item as "Now"', () => {
@@ -57,7 +64,9 @@ describe("HourlyScrollCards — deterministic render (no #418)", () => {
     // The current-hour slice must only apply once hydrated; SSR + first client
     // render start at index 0 so the HTML matches and there is no text mismatch.
     expect(source).toContain("hydrated");
-    expect(source).toContain("startIndex = hydrated");
+    expect(source).toContain(
+      "start = hydrated ? currentHourIndex(hourly.time, offset) : 0",
+    );
   });
 
   it('only shows the "Now" label after hydration', () => {
@@ -93,23 +102,42 @@ describe("HourlyScrollCards — weather data", () => {
   });
 });
 
-describe("HourlyScrollCards — one-sentence outlook", () => {
-  it("renders the deterministic hourly summary above the strip", () => {
-    expect(source).toContain('from "@/lib/hourly-summary"');
-    expect(source).toContain("hourlySummary(hourly, start)");
-    expect(source).toContain("{summary}");
+describe("HourlyScrollCards — no duplicate outlook", () => {
+  it("does not render the one-sentence outlook (the hero owns it)", () => {
+    // CurrentConditions shows the deterministic hourlySummary sentence; the
+    // strip repeating it was a duplicate, so the strip is hours only.
+    expect(source).not.toContain('from "@/lib/hourly-summary"');
+    expect(source).not.toContain("hourlySummary(");
+    expect(source).not.toContain("{summary}");
   });
 
-  it("derives the summary from the same start index as the strip", () => {
-    // One `start` feeds both the sentence and the hour cards — they can
-    // never disagree about what "now" is.
-    expect(source).toMatch(
-      /const summary = hydrated \? hourlySummary\(hourly, start\)/,
+  it("the hero still renders the outlook sentence", () => {
+    const hero = readFileSync(
+      resolve(__dirname, "CurrentConditions.tsx"),
+      "utf-8",
+    );
+    expect(hero).toContain("heroOutlook(hourly");
+  });
+});
+
+describe("HourlyScrollCards — keyboard-focusable scroll region", () => {
+  it("passes a ref to the ScrollArea viewport (the element that actually scrolls)", () => {
+    expect(source).toContain("viewportRef={scrollRef}");
+    expect(source).toContain("useRef<HTMLDivElement>(null)");
+  });
+
+  it("makes the viewport tab-focusable and a labelled region in an effect", () => {
+    expect(source).toContain("viewport.tabIndex = 0");
+    expect(source).toContain('viewport.setAttribute("role", "region")');
+    expect(source).toContain(
+      'viewport.setAttribute("aria-label", HOURLY_SCROLL_LABEL)',
     );
   });
 
-  it("gates the summary on hydration (depends on the client wall clock)", () => {
-    expect(source).toContain("hydrated ? hourlySummary");
+  it("exports a descriptive scroll-region label", () => {
+    expect(source).toContain(
+      'export const HOURLY_SCROLL_LABEL = "Hourly forecast, scroll horizontally"',
+    );
   });
 });
 

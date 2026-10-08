@@ -28,6 +28,22 @@ export function resolveScene(
       scene = "cloudy";
       break;
 
+    // Smoke, haze, dust and sand (WMO 4677 04–09, 30–35)
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+    case 8:
+    case 9:
+    case 30:
+    case 31:
+    case 32:
+    case 33:
+    case 34:
+    case 35:
+      scene = "haze";
+      break;
+
     // Fog
     case 45:
     case 48:

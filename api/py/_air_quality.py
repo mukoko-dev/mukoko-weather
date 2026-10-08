@@ -22,7 +22,7 @@ cascade — when the circuit is open, the endpoint returns a 503 immediately.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -52,6 +52,10 @@ AIR_QUALITY_CACHE_TTL_SECONDS = 3600
 
 #: Schema version stamped onto every cached doc.
 AQ_CACHE_SCHEMA_VERSION = "v3.1"
+
+#: Yesterday-vs-today trend: a change of more than this many US AQI points is
+#: "better" or "worse"; anything within the band is "similar".
+AQI_TREND_BAND = 10
 
 #: AQI level buckets (EPA standard 0-500 scale).
 AQI_LEVELS: list[tuple[int, str]] = [
@@ -247,12 +251,78 @@ def compute_aqi(pollutants: dict[str, Optional[float]]) -> dict:
 OPEN_METEO_TIMEOUT_S = 10.0
 
 
-def _fetch_open_meteo_air_quality(lat: float, lon: float) -> dict:
+def _us_aqi_same_hour_pair(data: dict) -> dict:
+    """
+    Extract today's and yesterday's US AQI at the current local hour.
+
+    Reads the hourly ``us_aqi`` series returned alongside ``current`` (requested
+    with ``past_days=1``). The current hour is taken from ``current.time`` and
+    yesterday's same hour is that timestamp minus 24 h. Both values come from
+    Open-Meteo's own US AQI series, so the comparison is like-for-like.
+
+    Returns ``{"todayUsAqi": int|None, "yesterdayAqi": int|None}``. A missing
+    series or unparseable timestamp yields ``None`` for both.
+    """
+    empty = {"todayUsAqi": None, "yesterdayAqi": None}
+    current_time = (data.get("current") or {}).get("time")
+    hourly = data.get("hourly") or {}
+    times = hourly.get("time") or []
+    values = hourly.get("us_aqi") or []
+    if not current_time or len(times) != len(values):
+        return empty
+    try:
+        now = datetime.fromisoformat(current_time)
+    except (TypeError, ValueError):
+        return empty
+
+    # Compare on "YYYY-MM-DDTHH" so minute/second suffixes never break the match.
+    by_hour = {str(t)[:13]: v for t, v in zip(times, values)}
+
+    def _as_int(raw) -> Optional[int]:
+        if raw is None:
+            return None
+        try:
+            return int(round(float(raw)))
+        except (TypeError, ValueError):
+            return None
+
+    today_key = now.strftime("%Y-%m-%dT%H")
+    yesterday_key = (now - timedelta(days=1)).strftime("%Y-%m-%dT%H")
+    return {
+        "todayUsAqi": _as_int(by_hour.get(today_key)),
+        "yesterdayAqi": _as_int(by_hour.get(yesterday_key)),
+    }
+
+
+def compute_aqi_trend(today: Optional[int], yesterday: Optional[int]) -> Optional[str]:
+    """
+    Classify today's AQI against yesterday's at the same hour.
+
+    ``"better"`` when today is more than AQI_TREND_BAND points lower,
+    ``"worse"`` when more than AQI_TREND_BAND points higher, else ``"similar"``.
+    ``None`` when either value is unavailable.
+    """
+    if today is None or yesterday is None:
+        return None
+    delta = today - yesterday
+    if delta < -AQI_TREND_BAND:
+        return "better"
+    if delta > AQI_TREND_BAND:
+        return "worse"
+    return "similar"
+
+
+def _fetch_open_meteo_air_quality(lat: float, lon: float, side: Optional[dict] = None) -> dict:
     """
     Call Open-Meteo Air Quality API for current pollutant concentrations.
 
     Returns a dict of ``{pollutant_key: µg/m³ float}``. Raises on HTTP error
     (caller wraps in the circuit breaker).
+
+    The same request also asks for the hourly US AQI with ``past_days=1``. When
+    ``side`` is given, it is filled with ``todayUsAqi`` and ``yesterdayAqi``. The
+    extra data costs no second round trip, and a caller that passes no ``side``
+    gets the original behaviour.
     """
     client = get_http_client(OPEN_METEO_TIMEOUT_S)
     fields = list(POLLUTANT_FIELD_MAP.keys())
@@ -260,11 +330,15 @@ def _fetch_open_meteo_air_quality(lat: float, lon: float) -> dict:
         "latitude": f"{lat}",
         "longitude": f"{lon}",
         "current": ",".join(fields),
+        "hourly": "us_aqi",
+        "past_days": 1,
         "timezone": "auto",
     }
     resp = client.get(OPEN_METEO_AQ_URL, params=params)
     resp.raise_for_status()
     data = resp.json()
+    if side is not None:
+        side.update(_us_aqi_same_hour_pair(data))
 
     current = data.get("current") or {}
     pollutants: dict[str, Optional[float]] = {}
@@ -318,6 +392,9 @@ def _set_cached(lat: float, lon: float, payload: dict, country_code: Optional[st
         "dominantPollutant": payload.get("dominantPollutant"),
         "pollutants": payload["pollutants"],
         "subIndexes": payload.get("subIndexes", {}),
+        "todayUsAqi": payload.get("todayUsAqi"),
+        "yesterdayAqi": payload.get("yesterdayAqi"),
+        "trend": payload.get("trend"),
         "source": "open-meteo",
     }
     try:
@@ -358,6 +435,9 @@ async def get_air_quality(lat: float, lon: float):
           "dominantPollutant": "pm2_5",
           "pollutants": { "pm2_5": 24.1, "pm10": 38.0, "o3": 88.2, ... },
           "subIndexes": { "pm2_5": 73, "pm10": 35, "o3": 41, ... },
+          "todayUsAqi": 72,
+          "yesterdayAqi": 64,
+          "trend": "worse" | "better" | "similar" | null,
           "whoGuidelines": { "pm2_5": 15.0, ... },
           "source": "cache" | "open-meteo",
           "fetchedAt": "2026-06-29T12:00:00Z"
@@ -376,6 +456,9 @@ async def get_air_quality(lat: float, lon: float):
                 "dominantPollutant": cached.get("dominantPollutant"),
                 "pollutants": cached.get("pollutants", {}),
                 "subIndexes": cached.get("subIndexes", {}),
+                "todayUsAqi": cached.get("todayUsAqi"),
+                "yesterdayAqi": cached.get("yesterdayAqi"),
+                "trend": cached.get("trend"),
                 "whoGuidelines": WHO_GUIDELINES_UGM3,
                 "source": "cache",
                 "fetchedAt": cached.get("fetchedAt").isoformat() if cached.get("fetchedAt") else None,
@@ -390,9 +473,10 @@ async def get_air_quality(lat: float, lon: float):
             detail="Air quality provider temporarily unavailable",
         )
 
+    side: dict = {}
     try:
         pollutants = await open_meteo_breaker.execute(
-            lambda: _run_sync(lambda: _fetch_open_meteo_air_quality(lat, lon))
+            lambda: _run_sync(lambda: _fetch_open_meteo_air_quality(lat, lon, side))
         )
     except CircuitOpenError:
         raise HTTPException(
@@ -407,12 +491,19 @@ async def get_air_quality(lat: float, lon: float):
 
     # 3. Compute EPA AQI from the pollutant map
     computed = compute_aqi(pollutants)
+    yesterday_aqi = side.get("yesterdayAqi")
+    today_us_aqi = side.get("todayUsAqi")
     payload = {
         "aqi": computed["aqi"],
         "level": computed["level"],
         "dominantPollutant": computed["dominantPollutant"],
         "pollutants": pollutants,
         "subIndexes": computed["subIndexes"],
+        # aqi above is this service's EPA port; todayUsAqi/yesterdayAqi are both
+        # Open-Meteo US AQI, so the trend compares like with like.
+        "todayUsAqi": today_us_aqi,
+        "yesterdayAqi": yesterday_aqi,
+        "trend": compute_aqi_trend(today_us_aqi, yesterday_aqi),
     }
 
     # 4. Persist to cache (fire-and-forget on failure)

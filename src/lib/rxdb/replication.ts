@@ -104,6 +104,10 @@ async function startPrefsReplication(): Promise<void> {
           const serverPrefs = profile.preferences;
           if (!serverPrefs) return { documents: [], checkpoint: null };
 
+          // homeLocation is device-local until the device profile API carries
+          // it, so keep the local value rather than letting the pull null it.
+          const localDoc = await col.findOne(deviceId).exec();
+
           const doc = {
             id: deviceId,
             theme: serverPrefs.theme ?? "system",
@@ -114,6 +118,10 @@ async function startPrefsReplication(): Promise<void> {
             hasOnboarded: serverPrefs.hasOnboarded ?? false,
             selectedForecastModel:
               serverPrefs.selectedForecastModel ?? "best_match",
+            homeLocation: localDoc?.homeLocation ?? null,
+            // Suggested-place state is device-local too (see schemas.ts).
+            hiddenPresetSlugs: localDoc?.hiddenPresetSlugs ?? [],
+            presetAnchor: localDoc?.presetAnchor ?? null,
             updatedAt: Date.now(),
             _deleted: false,
           };

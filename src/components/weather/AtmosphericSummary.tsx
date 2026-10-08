@@ -1,176 +1,423 @@
 "use client";
 
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
-import type { CurrentWeather } from "@/lib/weather";
+import type {
+  CurrentWeather,
+  HourlyWeather,
+  DailyWeather,
+  WeatherData,
+} from "@/lib/weather";
+import {
+  currentWallHourMs,
+  locationDateString,
+  resolveOffsetSeconds,
+  wallClockMs,
+} from "@/lib/location-time";
 import { SectionHeader } from "@/components/ui/section-header";
-import { windDirection, uvLevel } from "@/lib/weather";
+import { LazySection } from "./LazySection";
+import { ChartErrorBoundary } from "./ChartErrorBoundary";
 import {
-  humidityLabel,
-  pressureLabel,
-  cloudLabel,
-  feelsLikeContext,
-  precipitationLabel,
-} from "@/lib/weather-labels";
+  humidityInsight,
+  pressureInsight,
+  sunInsight,
+  windInsight,
+  uvInsight,
+  feelsLikeInsight,
+  precipitationInsight,
+  visibilityInsight,
+  temperatureAverageInsight,
+} from "@/lib/metric-insights";
+import { moonPhase } from "@/lib/moon";
+import { AQI_BAND_LABELS, aqiBand } from "@/lib/aq-grid";
+import { cn } from "@/lib/utils";
 import {
-  DropletIcon,
   CloudIcon,
   CloudRainIcon,
-  WindIcon,
-  GaugeIcon,
-  SunIcon,
+  DropletIcon,
   EyeIcon,
+  GaugeIcon,
+  MoonIcon,
+  SunIcon,
+  SunriseIcon,
+  ThermometerIcon,
+  WindIcon,
 } from "@/lib/weather-icons";
-import { MetricCard, type GaugeConfig } from "./MetricCard";
-import { AirQualityCard } from "./AirQualityCard";
+import {
+  InsightCard,
+  InsightGrid,
+  CompassDial,
+  GradientScale,
+  MiniBars,
+  MoonDisc,
+  PressureDial,
+  ScaleReadout,
+  SunArc,
+} from "./widgets";
+import { POLLUTANT_LABELS, type AirQualityResponse } from "./AirQualityCard";
+import { AirQualityWideSkeleton } from "./SectionSkeleton";
 
 interface Props {
   current: CurrentWeather;
-  /** Optional location coords — when supplied, an 8th AQI card is rendered. */
+  /**
+   * Full forecast. Drives the time-aware insight cards (UV peak, next-24h rain,
+   * sun arc, averages). Optional so callers that only hold `current` still
+   * render the instantaneous cards.
+   */
+  weather?: WeatherData;
+  /** Optional location coords — when supplied, the AQI card and normals load. */
   lat?: number;
   lon?: number;
+  /** Rendered directly under the AQI card (e.g. the haze panel). */
+  afterAirQuality?: ReactNode;
 }
 
-// ── Gauge configurations ─────────────────────────────────────────────────────
-// Each metric gets a radial arc gauge showing where its value falls on a
-// severity-colored scale. The arc spans 270° (open at bottom) and is painted
-// with a multi-colour SVG gradient (`gradient`) resolved from the globals.css
-// mineral/severity CSS custom properties. `strokeClass` is retained for the
-// current-severity semantics and as the gradient fallback.
+// ── Mineral edges ───────────────────────────────────────────────────────────
+// Each card carries a 4px mineral leading edge chosen by the data's role, so
+// colour reads as meaning (travel, sun, moisture) rather than as decoration.
+// Literal class names so Tailwind generates them.
 
-// Gradient ramps (ordered CSS custom-property tokens). Severity-monotonic
-// metrics sweep the natural malachite→gold→terracotta→red ramp; non-monotonic
-// metrics (humidity, pressure) use a bespoke ramp that reads light→saturated.
-const SEVERITY_GRADIENT = [
-  "var(--color-severity-low)",
-  "var(--color-severity-moderate)",
-  "var(--color-severity-high)",
-  "var(--color-severity-severe)",
-];
-const SEVERITY_GRADIENT_EXTREME = [
-  ...SEVERITY_GRADIENT,
-  "var(--color-severity-extreme)",
-];
-// Dry (warm) → comfortable (green) → humid (cool/blue).
-const HUMIDITY_GRADIENT = [
-  "var(--color-severity-moderate)",
-  "var(--color-severity-low)",
-  "var(--color-severity-cold)",
-];
-// Clear → partly → overcast.
-const CLOUD_GRADIENT = [
-  "var(--color-severity-low)",
-  "var(--color-severity-moderate)",
-  "var(--color-severity-high)",
-];
-// Low (unsettled) → normal → high pressure.
-const PRESSURE_GRADIENT = [
-  "var(--color-severity-moderate)",
-  "var(--color-severity-low)",
-  "var(--color-severity-moderate)",
-];
+type Mineral =
+  | "cobalt"
+  | "gold"
+  | "copper"
+  | "sodalite"
+  | "malachite"
+  | "tanzanite"
+  | "terracotta";
 
-/** UV Index: 0–11+ scale */
-export function uvGauge(uv: number): GaugeConfig {
-  const percent = Math.min((uv / 11) * 100, 100);
-  const gradient = SEVERITY_GRADIENT_EXTREME;
-  if (uv <= 2) return { percent, strokeClass: "stroke-severity-low", gradient };
-  if (uv <= 5)
-    return { percent, strokeClass: "stroke-severity-moderate", gradient };
-  if (uv <= 7)
-    return { percent, strokeClass: "stroke-severity-high", gradient };
-  if (uv <= 10)
-    return { percent, strokeClass: "stroke-severity-severe", gradient };
-  return { percent, strokeClass: "stroke-severity-extreme", gradient };
+const EDGE_CLASS: Record<Mineral, string> = {
+  cobalt: "bg-mineral-cobalt",
+  gold: "bg-mineral-gold",
+  copper: "bg-mineral-copper",
+  sodalite: "bg-mineral-sodalite",
+  malachite: "bg-mineral-malachite",
+  tanzanite: "bg-mineral-tanzanite",
+  terracotta: "bg-mineral-terracotta",
+};
+
+/** Wraps a card with the mineral leading edge (a 4px rule, not glass). */
+function EdgeTile({
+  mineral,
+  className,
+  children,
+}: {
+  mineral: Mineral;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative min-w-0 overflow-hidden rounded-[var(--radius-card)]",
+        className,
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "absolute inset-y-0 left-0 z-[1] w-1",
+          EDGE_CLASS[mineral],
+        )}
+      />
+      {children}
+    </div>
+  );
 }
 
-/** Humidity: 0–100%, comfort zone is 30–60% */
-export function humidityGauge(h: number): GaugeConfig {
-  const percent = Math.min(h, 100);
-  const gradient = HUMIDITY_GRADIENT;
-  if (h < 30)
-    return { percent, strokeClass: "stroke-severity-moderate", gradient };
-  if (h <= 60) return { percent, strokeClass: "stroke-severity-low", gradient };
-  if (h <= 80)
-    return { percent, strokeClass: "stroke-severity-moderate", gradient };
-  return { percent, strokeClass: "stroke-severity-high", gradient };
+// ── Pure helpers (exported for tests) ───────────────────────────────────────
+
+/**
+ * Position on the AQI scale bar, 0–100. Each EPA band occupies an equal
+ * sixth of the bar so the colour ramp and the band edges line up by eye.
+ */
+export function aqiScalePct(aqi: number): number {
+  const v = Math.max(0, Math.min(500, aqi));
+  const edges = [0, 50, 100, 150, 200, 300, 500];
+  for (let i = 1; i < edges.length; i++) {
+    if (v <= edges[i]) {
+      const lo = edges[i - 1];
+      const hi = edges[i];
+      const within = (v - lo) / (hi - lo);
+      return ((i - 1 + within) / (edges.length - 1)) * 100;
+    }
+  }
+  return 100;
 }
 
-/** Cloud cover: 0–100% */
-export function cloudGauge(c: number): GaugeConfig {
-  const percent = Math.min(c, 100);
-  const gradient = CLOUD_GRADIENT;
-  if (c <= 50) return { percent, strokeClass: "stroke-severity-low", gradient };
-  if (c <= 75)
-    return { percent, strokeClass: "stroke-severity-moderate", gradient };
-  return { percent, strokeClass: "stroke-severity-high", gradient };
+/** One-line comparison with yesterday at the same hour, or null if unknown. */
+export function aqiTrendSentence(
+  trend: "worse" | "better" | "similar" | null | undefined,
+): string | null {
+  switch (trend) {
+    case "worse":
+      return "Worse than yesterday at this time.";
+    case "better":
+      return "Better than yesterday at this time.";
+    case "similar":
+      return "About the same as yesterday at this time.";
+    default:
+      return null;
+  }
 }
 
-/** Wind speed: 0–80+ km/h scale */
-export function windGauge(speed: number): GaugeConfig {
-  const percent = Math.min((speed / 80) * 100, 100);
-  const gradient = SEVERITY_GRADIENT;
-  if (speed <= 19)
-    return { percent, strokeClass: "stroke-severity-low", gradient };
-  if (speed <= 38)
-    return { percent, strokeClass: "stroke-severity-moderate", gradient };
-  if (speed <= 61)
-    return { percent, strokeClass: "stroke-severity-high", gradient };
-  return { percent, strokeClass: "stroke-severity-severe", gradient };
+/**
+ * Hourly precipitation (mm) for the next 24 slots from the LOCATION's
+ * current hour (payload `utc_offset_seconds`; the viewer's clock is only a
+ * fallback for payloads that predate it).
+ */
+export function next24hPrecipSeries(
+  hourly: HourlyWeather | undefined,
+  now: Date,
+  offsetSeconds?: number | null,
+): number[] {
+  const times = hourly?.time ?? [];
+  const offset = resolveOffsetSeconds(offsetSeconds, now);
+  const hourStart = currentWallHourMs(offset, now);
+  const start = times.findIndex((t) => {
+    const k = wallClockMs(t, offset);
+    return k !== null && k >= hourStart;
+  });
+  if (start === -1) return [];
+  return (hourly?.precipitation ?? [])
+    .slice(start, start + 24)
+    .map((v) => (Number.isFinite(v) ? v : 0));
 }
 
-/** Pressure: 980–1040 hPa range mapped to gauge */
-export function pressureGauge(p: number): GaugeConfig {
-  const min = 980;
-  const max = 1040;
-  const clamped = Math.max(min, Math.min(p, max));
-  const percent = ((clamped - min) / (max - min)) * 100;
-  const gradient = PRESSURE_GRADIENT;
-  if (p < 1000)
-    return { percent, strokeClass: "stroke-severity-moderate", gradient };
-  if (p <= 1020)
-    return { percent, strokeClass: "stroke-severity-low", gradient };
-  return { percent, strokeClass: "stroke-severity-moderate", gradient };
+/**
+ * The LOCATION's calendar date (YYYY-MM-DD) for the normals request. With
+ * no offset it falls back to the viewer's calendar day.
+ */
+export function localIsoDate(now: Date, offsetSeconds?: number | null): string {
+  return locationDateString(resolveOffsetSeconds(offsetSeconds, now), now);
 }
 
-/** Precipitation: 0–20mm scale */
-export function precipitationGauge(p: number): GaugeConfig {
-  const percent = Math.min((p / 20) * 100, 100);
-  const gradient = SEVERITY_GRADIENT;
-  if (p === 0)
-    return { percent: 0, strokeClass: "stroke-severity-low", gradient };
-  if (p < 2)
-    return { percent, strokeClass: "stroke-severity-moderate", gradient };
-  if (p < 10) return { percent, strokeClass: "stroke-severity-high", gradient };
-  return { percent, strokeClass: "stroke-severity-severe", gradient };
+/** Today's forecast high, or null when the daily series is empty. */
+export function todayHighFrom(daily: DailyWeather | undefined): number | null {
+  const v = daily?.temperature_2m_max?.[0];
+  return typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null;
 }
 
-/** Feels-like difference from actual */
-export function feelsLikeGauge(feelsLike: number, actual: number): GaugeConfig {
-  const diff = Math.abs(feelsLike - actual);
-  const percent = Math.min((diff / 15) * 100, 100);
-  const gradient = SEVERITY_GRADIENT;
-  if (diff <= 2)
-    return {
-      percent: Math.max(percent, 8),
-      strokeClass: "stroke-severity-low",
-      gradient,
-    };
-  if (diff <= 5)
-    return { percent, strokeClass: "stroke-severity-moderate", gradient };
-  if (diff <= 10)
-    return { percent, strokeClass: "stroke-severity-high", gradient };
-  return { percent, strokeClass: "stroke-severity-severe", gradient };
+const EMPTY_HOURLY: HourlyWeather = {
+  time: [],
+  temperature_2m: [],
+  apparent_temperature: [],
+  relative_humidity_2m: [],
+  precipitation_probability: [],
+  precipitation: [],
+  weather_code: [],
+  visibility: [],
+  cloud_cover: [],
+  surface_pressure: [],
+  wind_speed_10m: [],
+  wind_direction_10m: [],
+  wind_gusts_10m: [],
+  uv_index: [],
+  is_day: [],
+};
+
+const EMPTY_DAILY: DailyWeather = {
+  time: [],
+  weather_code: [],
+  temperature_2m_max: [],
+  temperature_2m_min: [],
+  apparent_temperature_max: [],
+  apparent_temperature_min: [],
+  sunrise: [],
+  sunset: [],
+  uv_index_max: [],
+  precipitation_sum: [],
+  precipitation_probability_max: [],
+  wind_speed_10m_max: [],
+  wind_gusts_10m_max: [],
+};
+
+// ── Data hooks ──────────────────────────────────────────────────────────────
+
+interface NormalsPayload {
+  available: boolean;
+  normalHigh?: number | null;
+}
+
+type NormalState =
+  | { status: "loading" }
+  | { status: "ready"; normalHigh: number | null };
+
+/** ERA5 1991–2020 normal high for today at this place (null if unavailable). */
+function useNormalHigh(
+  lat: number | undefined,
+  lon: number | undefined,
+  offsetSeconds?: number,
+) {
+  const [state, setState] = useState<NormalState>({ status: "loading" });
+
+  useEffect(() => {
+    if (typeof lat !== "number" || typeof lon !== "number") return;
+    const controller = new AbortController();
+    const date = localIsoDate(new Date(), offsetSeconds);
+    fetch(`/api/py/normals?lat=${lat}&lon=${lon}&date=${date}`, {
+      signal: controller.signal,
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return (await res.json()) as NormalsPayload;
+      })
+      .then((json) => {
+        setState({
+          status: "ready",
+          normalHigh:
+            json.available && typeof json.normalHigh === "number"
+              ? json.normalHigh
+              : null,
+        });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setState({ status: "ready", normalHigh: null });
+        }
+      });
+    return () => controller.abort();
+  }, [lat, lon, offsetSeconds]);
+
+  return state;
+}
+
+type AqPayload = AirQualityResponse & {
+  trend?: "worse" | "better" | "similar" | null;
+};
+
+type AqState =
+  | { status: "loading" }
+  | { status: "ready"; data: AqPayload }
+  | { status: "error" };
+
+function useAirQuality(lat: number | undefined, lon: number | undefined) {
+  const [state, setState] = useState<AqState>({ status: "loading" });
+
+  useEffect(() => {
+    if (typeof lat !== "number" || typeof lon !== "number") return;
+    const controller = new AbortController();
+    fetch(`/api/py/airquality?lat=${lat}&lon=${lon}`, {
+      signal: controller.signal,
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return (await res.json()) as AqPayload;
+      })
+      .then((json) => setState({ status: "ready", data: json }))
+      .catch(() => {
+        if (!controller.signal.aborted) setState({ status: "error" });
+      });
+    return () => controller.abort();
+  }, [lat, lon]);
+
+  return state;
+}
+
+// ── Air quality (wide) ──────────────────────────────────────────────────────
+
+function AirQualityWide({ lat, lon }: { lat: number; lon: number }) {
+  const state = useAirQuality(lat, lon);
+
+  if (state.status === "loading") return <AirQualityWideSkeleton />;
+
+  if (state.status === "error") {
+    return (
+      <section
+        aria-labelledby="air-quality-heading"
+        className="acacia flex min-w-0 flex-col gap-2 p-4"
+      >
+        <h3 id="air-quality-heading" className="hornbill text-sm">
+          Air quality
+        </h3>
+        <p className="dove">Air quality is unavailable right now.</p>
+      </section>
+    );
+  }
+
+  const data = state.data;
+  const band = aqiBand(data.aqi);
+  const pollutant = data.dominantPollutant
+    ? POLLUTANT_LABELS[data.dominantPollutant]
+    : null;
+  const sentenceParts = [
+    `${AQI_BAND_LABELS[band]}${pollutant ? `, mainly ${pollutant}` : ""}.`,
+    aqiTrendSentence(data.trend),
+  ].filter(Boolean);
+
+  return (
+    <EdgeTile mineral="terracotta" className="mb-2.5 sm:mb-3">
+      <section
+        aria-labelledby="air-quality-heading"
+        className="acacia flex min-w-0 flex-col gap-3 p-4"
+      >
+        <header className="flex items-center gap-1.5">
+          <span className="text-text-tertiary" aria-hidden="true">
+            <CloudIcon size={16} />
+          </span>
+          <h3 id="air-quality-heading" className="hornbill text-sm">
+            Air quality
+          </h3>
+        </header>
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
+            {data.aqi}
+          </p>
+          <p className="giraffe">{AQI_BAND_LABELS[band]}</p>
+        </div>
+        <GradientScale
+          positionPct={aqiScalePct(data.aqi)}
+          stops="aqi"
+          label={`US AQI ${data.aqi}, ${AQI_BAND_LABELS[band]}`}
+        />
+        <p className="dove leading-snug">{sentenceParts.join(" ")}</p>
+      </section>
+    </EdgeTile>
+  );
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export function AtmosphericSummary({ current, lat, lon }: Props) {
+export function AtmosphericSummary({
+  current,
+  weather,
+  lat,
+  lon,
+  afterAirQuality,
+}: Props) {
   const pathname = usePathname();
   const locationSlug = pathname?.split("/")[1] || "";
-  const uv = uvLevel(current.uv_index);
-  const wind = Math.round(current.wind_speed_10m);
-  const gusts = Math.round(current.wind_gusts_10m);
-  const showAqi = typeof lat === "number" && typeof lon === "number";
+  const data: WeatherData = weather ?? {
+    current,
+    hourly: EMPTY_HOURLY,
+    daily: EMPTY_DAILY,
+    current_units: {},
+  };
+  const now = new Date();
+  const hasCoords = typeof lat === "number" && typeof lon === "number";
+  const normals = useNormalHigh(lat, lon, data.utc_offset_seconds);
+
+  const wind = windInsight(data, now);
+  const uv = uvInsight(data, now);
+  const feels = feelsLikeInsight(data);
+  const rain = precipitationInsight(data, now);
+  const rainSeries = next24hPrecipSeries(
+    data.hourly,
+    now,
+    data.utc_offset_seconds,
+  );
+  const visibility = visibilityInsight(data, now);
+  const humidity = humidityInsight(data);
+  const pressure = pressureInsight(data, now);
+  const sun = sunInsight(data, now);
+  const moon = moonPhase(now);
+  const todayHigh = todayHighFrom(data.daily);
+  const normalHigh = normals.status === "ready" ? normals.normalHigh : null;
+  const averages =
+    todayHigh !== null
+      ? temperatureAverageInsight(todayHigh, normalHigh)
+      : null;
+  const moonPct = Math.round(moon.illumination * 100);
 
   return (
     <section aria-labelledby="atmospheric-heading">
@@ -180,65 +427,191 @@ export function AtmosphericSummary({ current, lat, lon }: Props) {
         action={{ label: "24h trends →", href: `/${locationSlug}/atmosphere` }}
         className="mb-3"
       />
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 sm:gap-3">
-        <MetricCard
-          icon={<DropletIcon size={16} />}
-          label="Humidity"
-          value={`${Math.round(current.relative_humidity_2m)}%`}
-          context={humidityLabel(current.relative_humidity_2m)}
-          gauge={humidityGauge(current.relative_humidity_2m)}
-        />
-        <MetricCard
-          icon={<CloudIcon size={16} />}
-          label="Cloud Cover"
-          value={`${Math.round(current.cloud_cover)}%`}
-          context={cloudLabel(current.cloud_cover)}
-          gauge={cloudGauge(current.cloud_cover)}
-        />
-        <MetricCard
-          icon={<WindIcon size={16} />}
-          label="Wind"
-          value={`${wind}`}
-          context={`Gusts ${gusts} · ${windDirection(current.wind_direction_10m)}`}
-          gauge={windGauge(wind)}
-        />
-        <MetricCard
-          icon={<GaugeIcon size={16} />}
-          label="Pressure"
-          value={`${Math.round(current.surface_pressure)}`}
-          context={pressureLabel(current.surface_pressure)}
-          gauge={pressureGauge(current.surface_pressure)}
-        />
-        <MetricCard
-          icon={<SunIcon size={16} />}
-          label="UV Index"
-          value={`${Math.round(current.uv_index)}`}
-          context={uv.label}
-          contextColor={uv.color}
-          gauge={uvGauge(current.uv_index)}
-        />
-        <MetricCard
-          icon={<EyeIcon size={16} />}
-          label="Feels Like"
-          value={`${Math.round(current.apparent_temperature)}°`}
-          context={feelsLikeContext(
-            current.apparent_temperature,
-            current.temperature_2m,
-          )}
-          gauge={feelsLikeGauge(
-            current.apparent_temperature,
-            current.temperature_2m,
-          )}
-        />
-        <MetricCard
-          icon={<CloudRainIcon size={16} />}
-          label="Precipitation"
-          value={`${current.precipitation}mm`}
-          context={precipitationLabel(current.precipitation)}
-          gauge={precipitationGauge(current.precipitation)}
-        />
-        {showAqi && <AirQualityCard lat={lat!} lon={lon!} />}
-      </div>
+
+      {hasCoords && (
+        <LazySection label="air-quality" fallback={<AirQualityWideSkeleton />}>
+          <ChartErrorBoundary name="air quality">
+            <AirQualityWide lat={lat} lon={lon} />
+          </ChartErrorBoundary>
+        </LazySection>
+      )}
+
+      {afterAirQuality}
+
+      <InsightGrid>
+        <EdgeTile mineral="cobalt">
+          <InsightCard
+            headingId="insight-wind"
+            icon={<WindIcon size={16} />}
+            label="Wind"
+            sentence={wind.sentence}
+          >
+            <CompassDial
+              directionDeg={wind.directionDeg}
+              speed={wind.speed}
+              gust={wind.gust}
+            />
+          </InsightCard>
+        </EdgeTile>
+
+        <EdgeTile mineral="gold">
+          <InsightCard
+            headingId="insight-uv"
+            icon={<SunIcon size={16} />}
+            label="UV index"
+            sentence={uv.sentence}
+          >
+            <div className="flex w-full flex-col gap-2">
+              <ScaleReadout
+                value={uv.value}
+                label={uv.label}
+                positionPct={uv.positionPct}
+                preset="uv"
+              />
+              {uv.peakTime && (
+                <p className="dove text-center">Peak {uv.peakTime}</p>
+              )}
+            </div>
+          </InsightCard>
+        </EdgeTile>
+
+        <EdgeTile mineral="copper">
+          <InsightCard
+            headingId="insight-feels"
+            icon={<ThermometerIcon size={16} />}
+            label="Feels like"
+            sentence={feels.sentence}
+          >
+            <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
+              {feels.value}°
+            </p>
+          </InsightCard>
+        </EdgeTile>
+
+        <EdgeTile mineral="sodalite" className="col-span-full">
+          <InsightCard
+            headingId="insight-rain"
+            icon={<CloudRainIcon size={16} />}
+            label="Precipitation"
+            sentence={rain.sentence}
+            size="wide"
+          >
+            <div className="flex w-full flex-col gap-2">
+              <p className="font-heading text-center text-2xl font-semibold leading-none tabular-nums text-text-primary">
+                {rain.next24hMm} mm
+              </p>
+              {rainSeries.length > 0 && (
+                <MiniBars
+                  values={rainSeries}
+                  label="Rain next 24 hours"
+                  highlightIndex={0}
+                />
+              )}
+            </div>
+          </InsightCard>
+        </EdgeTile>
+
+        <EdgeTile mineral="tanzanite">
+          <InsightCard
+            headingId="insight-visibility"
+            icon={<EyeIcon size={16} />}
+            label="Visibility"
+            sentence={visibility.sentence}
+          >
+            <div className="flex flex-col items-center gap-1">
+              <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
+                {visibility.km !== null ? `${visibility.km} km` : "—"}
+              </p>
+              <p className="dove">{visibility.label}</p>
+            </div>
+          </InsightCard>
+        </EdgeTile>
+
+        <EdgeTile mineral="malachite">
+          <InsightCard
+            headingId="insight-humidity"
+            icon={<DropletIcon size={16} />}
+            label="Humidity"
+            sentence={humidity.sentence}
+          >
+            <div className="flex flex-col items-center gap-1">
+              <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
+                {humidity.value}%
+              </p>
+              <p className="dove">Dew point {humidity.dewPoint}°</p>
+            </div>
+          </InsightCard>
+        </EdgeTile>
+
+        <EdgeTile mineral="cobalt">
+          <InsightCard
+            headingId="insight-pressure"
+            icon={<GaugeIcon size={16} />}
+            label="Pressure"
+            sentence={pressure.sentence}
+          >
+            <PressureDial hPa={pressure.hPa} trend={pressure.trend} />
+          </InsightCard>
+        </EdgeTile>
+
+        <EdgeTile mineral="gold">
+          <InsightCard
+            headingId="insight-sun"
+            icon={<SunriseIcon size={16} />}
+            label="Sun"
+            sentence={sun.sentence}
+          >
+            <div className="flex w-full flex-col gap-1">
+              <SunArc
+                arcPct={sun.arcPct}
+                sunrise={sun.sunrise ?? "—"}
+                sunset={sun.sunset ?? "—"}
+              />
+              <p className="dove flex justify-between">
+                <span>{sun.sunrise ?? "—"}</span>
+                <span>{sun.sunset ?? "—"}</span>
+              </p>
+            </div>
+          </InsightCard>
+        </EdgeTile>
+
+        <EdgeTile mineral="tanzanite">
+          <InsightCard
+            headingId="insight-moon"
+            icon={<MoonIcon size={16} />}
+            label="Moon"
+            sentence={`${moon.name}, ${moonPct}% lit.`}
+          >
+            <MoonDisc
+              phase={moon.phase}
+              illumination={moon.illumination}
+              southernHemisphere={typeof lat === "number" && lat < 0}
+            />
+          </InsightCard>
+        </EdgeTile>
+
+        {averages && (
+          <EdgeTile mineral="copper">
+            <InsightCard
+              headingId="insight-averages"
+              icon={<ThermometerIcon size={16} />}
+              label="Averages"
+              sentence={averages.sentence}
+            >
+              <div className="flex flex-col items-center gap-1">
+                <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
+                  {todayHigh}°
+                </p>
+                <p className="dove">
+                  {normalHigh !== null
+                    ? `Normal high ${Math.round(normalHigh)}°`
+                    : "Today's high"}
+                </p>
+              </div>
+            </InsightCard>
+          </EdgeTile>
+        )}
+      </InsightGrid>
     </section>
   );
 }

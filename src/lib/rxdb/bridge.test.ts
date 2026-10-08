@@ -74,6 +74,9 @@ function makeCallbacks(overrides?: Partial<BridgeCallbacks>): BridgeCallbacks {
       selectedActivities: [],
       hasOnboarded: false,
       selectedForecastModel: "best_match",
+      homeLocation: null,
+      hiddenPresetSlugs: [],
+      presetAnchor: null,
     })),
     ...overrides,
   };
@@ -258,6 +261,9 @@ describe("bridge — initRxDBBridge", () => {
         selectedActivities: ["farming"],
         hasOnboarded: true,
         selectedForecastModel: "best_match",
+        homeLocation: "harare",
+        hiddenPresetSlugs: [],
+        presetAnchor: null,
       })),
     });
 

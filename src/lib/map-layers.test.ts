@@ -10,6 +10,16 @@ import {
   WEATHER_OVERLAY_MAX_ZOOM,
   weatherOverlayTileUrl,
   buildWeatherOverlaySource,
+  AIR_QUALITY_LAYER_ID,
+  MAP_CHIPS,
+  getMapChip,
+  layerSupportsTimeline,
+  timelineTimestamp,
+  timelineLabel,
+  TIMELINE_STEPS,
+  MAP_LAYER_STORAGE_KEY,
+  readStoredMapLayer,
+  writeStoredMapLayer,
 } from "./map-layers";
 
 describe("MAP_LAYERS", () => {
@@ -69,10 +79,8 @@ describe("DEFAULT_LAYER", () => {
     expect(MAP_LAYERS.some((l) => l.id === DEFAULT_LAYER)).toBe(true);
   });
 
-  it("defaults to a reliably-rendering (non-time-indexed) overlay, not precipitation", () => {
-    // Precipitation radar tiles can 400 without a valid recent timestamp, so the
-    // map opens on cloud cover to avoid an error banner on first paint.
-    expect(DEFAULT_LAYER).toBe("cloudCover");
+  it("defaults to rain (the design brief: the map opens on precipitation)", () => {
+    expect(DEFAULT_LAYER).toBe("precipitationIntensity");
   });
 });
 
@@ -109,6 +117,20 @@ describe("weatherOverlayTileUrl", () => {
     const url = weatherOverlayTileUrl("temp erature");
     expect(url).toContain("layer=temp%20erature");
     expect(url).toContain("{z}");
+  });
+
+  it("adds an hourly timestamp only when one is given (now stays implicit)", () => {
+    expect(weatherOverlayTileUrl("precipitationIntensity")).not.toContain(
+      "timestamp=",
+    );
+    expect(
+      weatherOverlayTileUrl("precipitationIntensity", "now"),
+    ).not.toContain("timestamp=");
+    const url = weatherOverlayTileUrl(
+      "precipitationIntensity",
+      "2026-10-08T06:00:00Z",
+    );
+    expect(url).toContain("timestamp=2026-10-08T06%3A00%3A00Z");
   });
 
   it("builds valid URLs for every configured layer", () => {
@@ -156,5 +178,126 @@ describe("MapTiler style URLs", () => {
 
   it("light and dark styles are different URLs", () => {
     expect(MAPTILER_STYLE_LIGHT).not.toBe(MAPTILER_STYLE_DARK);
+  });
+});
+
+describe("map chips (full-screen map)", () => {
+  it("lists air quality plus the four tile layers, each with a label and a legend", () => {
+    expect(MAP_CHIPS.map((c) => c.id)).toEqual([
+      AIR_QUALITY_LAYER_ID,
+      "precipitationIntensity",
+      "temperature",
+      "windSpeed",
+      "cloudCover",
+    ]);
+    for (const chip of MAP_CHIPS) {
+      expect(chip.label).toBeTruthy();
+      expect(chip.legend.unit).toBeTruthy();
+      expect(chip.legend.segments.length).toBeGreaterThan(1);
+    }
+  });
+
+  it("gives each legend segment a static Tailwind class, never a raw colour", () => {
+    for (const chip of MAP_CHIPS) {
+      for (const seg of chip.legend.segments) {
+        expect(seg.className).toMatch(/^bg-/);
+        expect(seg.className).not.toMatch(/#|rgb/);
+      }
+    }
+  });
+
+  it("uses US AQI units for air quality and the brief's units for the rest", () => {
+    expect(getMapChip(AIR_QUALITY_LAYER_ID)!.legend.unit).toBe("US AQI");
+    expect(getMapChip("precipitationIntensity")!.legend.unit).toBe("mm/h");
+    expect(getMapChip("temperature")!.legend.unit).toBe("°C");
+    expect(getMapChip("windSpeed")!.legend.unit).toBe("km/h");
+    expect(getMapChip("cloudCover")!.legend.unit).toBe("%");
+  });
+
+  it("returns undefined for unknown chip ids", () => {
+    expect(getMapChip("humidity")).toBeUndefined();
+  });
+});
+
+describe("timeline (forecast scrubber)", () => {
+  it("offers the scrubber for rain only (other layers are not verified for forecast timestamps)", () => {
+    expect(layerSupportsTimeline("precipitationIntensity")).toBe(true);
+    expect(layerSupportsTimeline("temperature")).toBe(false);
+    expect(layerSupportsTimeline("windSpeed")).toBe(false);
+    expect(layerSupportsTimeline("cloudCover")).toBe(false);
+    expect(layerSupportsTimeline(AIR_QUALITY_LAYER_ID)).toBe(false);
+  });
+
+  it("runs from Now to +3 days in 3-hour stops (25 stops)", () => {
+    expect(TIMELINE_STEPS).toBe(25);
+    expect(timelineLabel(0)).toBe("Now");
+    expect(timelineLabel(1)).toBe("+3h");
+    expect(timelineLabel(8)).toBe("+1d");
+    expect(timelineLabel(TIMELINE_STEPS - 1)).toBe("+3d");
+  });
+
+  it("step 0 is the live tile; later steps are hour-aligned ISO timestamps the proxy accepts", () => {
+    const now = new Date("2026-10-08T06:41:12Z");
+    expect(timelineTimestamp(0, now)).toBe("now");
+    const t3 = timelineTimestamp(1, now);
+    expect(t3).toBe("2026-10-08T09:00:00Z");
+    expect(t3).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    expect(timelineTimestamp(TIMELINE_STEPS - 1, now)).toBe(
+      "2026-10-11T06:00:00Z",
+    );
+  });
+
+  it("does not mutate the Date it is given", () => {
+    const now = new Date("2026-10-08T06:41:12Z");
+    timelineTimestamp(4, now);
+    expect(now.toISOString()).toBe("2026-10-08T06:41:12.000Z");
+  });
+});
+
+describe("remembered map layer (localStorage)", () => {
+  function memory(initial: Record<string, string> = {}) {
+    const store = { ...initial };
+    return {
+      store,
+      getItem: (k: string) => (k in store ? store[k] : null),
+      setItem: (k: string, v: string) => {
+        store[k] = v;
+      },
+    };
+  }
+
+  it("round-trips a chosen layer under a stable key", () => {
+    const m = memory();
+    writeStoredMapLayer(m, "temperature");
+    expect(m.store[MAP_LAYER_STORAGE_KEY]).toBe("temperature");
+    expect(readStoredMapLayer(m)).toBe("temperature");
+  });
+
+  it("ignores unknown or missing values", () => {
+    expect(readStoredMapLayer(memory())).toBeNull();
+    expect(
+      readStoredMapLayer(memory({ [MAP_LAYER_STORAGE_KEY]: "nope" })),
+    ).toBeNull();
+  });
+
+  it("returns null when storage is missing or throws (private windows, blocked storage)", () => {
+    expect(readStoredMapLayer(null)).toBeNull();
+    expect(readStoredMapLayer(undefined)).toBeNull();
+    const throwing = {
+      getItem: () => {
+        throw new Error("SecurityError");
+      },
+    };
+    expect(readStoredMapLayer(throwing)).toBeNull();
+  });
+
+  it("never throws when writing to blocked storage", () => {
+    const throwing = {
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+    };
+    expect(() => writeStoredMapLayer(throwing, "windSpeed")).not.toThrow();
+    expect(() => writeStoredMapLayer(null, "windSpeed")).not.toThrow();
   });
 });

@@ -4,6 +4,7 @@ import {
   weatherCacheSchema,
   weatherHintSchema,
   suitabilityRuleSchema,
+  migratePreferencesV2ToV3,
   type PreferencesDocType,
   type WeatherCacheDocType,
   type WeatherHintDocType,
@@ -16,8 +17,87 @@ import {
 
 describe("RxDB schemas", () => {
   describe("preferencesSchema", () => {
-    it("has version 1", () => {
-      expect(preferencesSchema.version).toBe(1);
+    it("has version 3 (added hiddenPresetSlugs and presetAnchor)", () => {
+      expect(preferencesSchema.version).toBe(3);
+    });
+
+    it("defines hiddenPresetSlugs as a required string array defaulting to []", () => {
+      const prop = preferencesSchema.properties.hiddenPresetSlugs;
+      expect(prop.type).toBe("array");
+      expect(prop.default).toEqual([]);
+      expect(preferencesSchema.required).toContain("hiddenPresetSlugs");
+    });
+
+    it("defines presetAnchor as a nullable lat/lon object, required", () => {
+      const prop = preferencesSchema.properties.presetAnchor;
+      expect(prop.type).toEqual(["object", "null"]);
+      expect(prop.default).toBeNull();
+      expect(prop.properties).toEqual({
+        lat: { type: "number" },
+        lon: { type: "number" },
+      });
+      expect(preferencesSchema.required).toContain("presetAnchor");
+    });
+
+    describe("v2 → v3 migration", () => {
+      const v2Doc = {
+        id: "device-1",
+        theme: "dark",
+        selectedLocation: "harare",
+        savedLocations: ["bulawayo"],
+        locationLabels: { bulawayo: "Work" },
+        selectedActivities: ["farming"],
+        hasOnboarded: true,
+        selectedForecastModel: "gfs_seamless",
+        homeLocation: "harare",
+        updatedAt: 1234,
+      };
+
+      it("adds an empty hidden list and a null anchor, keeping every other field", () => {
+        const migrated = migratePreferencesV2ToV3(v2Doc);
+        expect(migrated.hiddenPresetSlugs).toEqual([]);
+        expect(migrated.presetAnchor).toBeNull();
+        expect(migrated).toMatchObject(v2Doc);
+      });
+
+      it("keeps a valid anchor and a valid hidden list if they are already present", () => {
+        const migrated = migratePreferencesV2ToV3({
+          ...v2Doc,
+          hiddenPresetSlugs: ["nairobi-ke"],
+          presetAnchor: { lat: -17.8, lon: 31.05 },
+        });
+        expect(migrated.hiddenPresetSlugs).toEqual(["nairobi-ke"]);
+        expect(migrated.presetAnchor).toEqual({ lat: -17.8, lon: 31.05 });
+      });
+
+      it("drops a malformed anchor to null and non-string hidden entries", () => {
+        const migrated = migratePreferencesV2ToV3({
+          ...v2Doc,
+          hiddenPresetSlugs: [
+            "harare",
+            7 as unknown as string,
+            null as unknown as string,
+          ],
+          presetAnchor: { lat: Number.NaN, lon: 31 },
+        });
+        expect(migrated.presetAnchor).toBeNull();
+        expect(migrated.hiddenPresetSlugs).toEqual(["harare"]);
+      });
+
+      it("treats a non-array hidden list as empty", () => {
+        const migrated = migratePreferencesV2ToV3({
+          ...v2Doc,
+          hiddenPresetSlugs: "harare" as unknown as string[],
+        });
+        expect(migrated.hiddenPresetSlugs).toEqual([]);
+      });
+    });
+
+    it("defines homeLocation as nullable string, required", () => {
+      const prop = preferencesSchema.properties.homeLocation;
+      expect(prop.type).toEqual(["string", "null"]);
+      expect(prop.default).toBeNull();
+      expect(preferencesSchema.required).toContain("homeLocation");
     });
 
     it("uses 'id' as primary key", () => {
@@ -116,6 +196,9 @@ describe("schema type compatibility", () => {
       selectedActivities: ["running"],
       hasOnboarded: true,
       selectedForecastModel: "best_match",
+      homeLocation: "harare",
+      hiddenPresetSlugs: [],
+      presetAnchor: null,
       updatedAt: Date.now(),
     };
     expect(doc.id).toBe("test-uuid");
