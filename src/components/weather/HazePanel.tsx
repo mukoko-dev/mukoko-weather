@@ -117,7 +117,7 @@ export function HazePanel({ lat, lon }: Props) {
   return (
     <section
       aria-labelledby="haze-panel-heading"
-      className="baobab w-full space-y-4 p-4 sm:p-5"
+      className="baobab mb-[var(--space-stack)] w-full space-y-4"
     >
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">

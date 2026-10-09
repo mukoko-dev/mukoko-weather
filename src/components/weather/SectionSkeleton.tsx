@@ -44,11 +44,7 @@ export function ReportsSkeleton() {
 
 export function HourlyForecastSkeleton() {
   return (
-    <div
-      className="baobab p-5 sm:p-6"
-      role="status"
-      aria-label="Loading hourly forecast"
-    >
+    <div className="baobab" role="status" aria-label="Loading hourly forecast">
       {/* Heading */}
       <Skeleton className="h-6 w-44" />
       {/* Chart area */}
@@ -114,11 +110,7 @@ export function ActivityInsightsSkeleton() {
 
 export function DailyForecastSkeleton() {
   return (
-    <div
-      className="baobab p-5 sm:p-6"
-      role="status"
-      aria-label="Loading daily forecast"
-    >
+    <div className="baobab" role="status" aria-label="Loading daily forecast">
       {/* Heading */}
       <Skeleton className="h-6 w-36" />
       {/* Chart area */}
@@ -158,7 +150,7 @@ export function DailyForecastSkeleton() {
 export function AISummarySkeleton() {
   return (
     <div
-      className="baobab border-l-[6px] border-l-tanzanite p-5 sm:p-6"
+      className="baobab border-l-[6px] border-l-tanzanite"
       role="status"
       aria-label="Loading AI summary"
     >
@@ -234,7 +226,7 @@ export function MapPreviewSkeleton() {
 export function AirQualityWideSkeleton() {
   return (
     <div
-      className="chameleon mb-2.5 flex min-w-0 flex-col gap-3 p-4 sm:mb-3"
+      className="chameleon mb-[var(--space-stack)] flex min-w-0 flex-col gap-3 p-[var(--space-card)]"
       role="status"
       aria-label="Loading air quality"
     >
@@ -269,7 +261,7 @@ export function AirQualityMapSkeleton() {
 export function HazeSkeleton() {
   return (
     <div
-      className="chameleon mb-2.5 h-20 w-full sm:mb-3"
+      className="chameleon mb-[var(--space-stack)] h-20 w-full"
       role="status"
       aria-label="Loading haze outlook"
     />
@@ -288,7 +280,7 @@ export function SupportBannerSkeleton() {
       role="status"
       aria-label="Loading support banner"
     >
-      <div className="px-5 py-4">
+      <div className="p-[var(--space-card)]">
         {/* Dot + heading */}
         <div className="flex items-center gap-3">
           <Skeleton className="h-3 w-3 shrink-0 rounded-full" />
@@ -311,7 +303,7 @@ export function SupportBannerSkeleton() {
 export function LocationInfoSkeleton() {
   return (
     <div
-      className="baobab p-5 sm:p-6"
+      className="baobab"
       role="status"
       aria-label="Loading location information"
     >
@@ -337,7 +329,7 @@ export function LocationInfoSkeleton() {
 
 export function EnsoOutlookSkeleton() {
   return (
-    <div className="baobab p-5 sm:p-6" role="status" aria-label="Loading">
+    <div className="baobab" role="status" aria-label="Loading">
       {/* Heading */}
       <Skeleton className="h-6 w-56" />
       {/* Phase + strength badges */}

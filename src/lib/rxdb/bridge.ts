@@ -124,7 +124,7 @@ function writeLegacyPrefs(
   try {
     const raw = localStorage.getItem(LEGACY_PREFS_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
-    const state = { ...(parsed?.state ?? {}), ...updates };
+    const state = { ...parsed?.state, ...updates };
     localStorage.setItem(
       LEGACY_PREFS_KEY,
       JSON.stringify({ ...parsed, state }),

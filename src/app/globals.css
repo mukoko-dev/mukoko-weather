@@ -142,6 +142,16 @@
   /* 1rem (16px) — minimum font size per app-wide hard rule. */
   --text-nav-label: 1rem;
 
+  /* Layout rhythm — ONE spacing scale for the location page and every card
+     (Mzizi spacing: md 12px, base 16px, base-plus 20px, lg 24px).
+     --space-section: gap between page sections and between the main column
+       and the sidebar (base on mobile, lg from the lg breakpoint).
+     --space-stack: heading-to-card and card-to-card inside one section (md).
+     --space-card: padding inside every card surface (base, base-plus from sm). */
+  --space-section: 1rem;
+  --space-stack: 0.75rem;
+  --space-card: 1rem;
+
   /* Radii */
   --radius-button: 9999px;
   --radius-card: var(--radius-lg);
@@ -395,6 +405,19 @@
   --mineral-copper-fg: #0a0a0a;
   /* Modal scrim behind Dialog / Sheet overlays */
   --color-overlay: rgba(0, 0, 0, 0.5);
+}
+
+/* Layout rhythm steps up on larger screens (spacing is theme-independent,
+   so no dark-mode counterpart is needed). */
+@media (min-width: 640px) {
+  :root {
+    --space-card: 1.25rem;
+  }
+}
+@media (min-width: 1024px) {
+  :root {
+    --space-section: 1.5rem;
+  }
 }
 
 @theme inline {
@@ -778,7 +801,8 @@ body {
            rounded-[var(--radius-button)] bg-primary
            px-5 py-3 text-sm font-medium text-primary-foreground
            transition-all hover:bg-primary/90 hover:shadow-md
-           disabled:opacity-50 disabled:pointer-events-none;
+           disabled:opacity-50 disabled:pointer-events-none
+           min-h-[var(--touch-target-min)];
   }
 
   /* .kudu-sm — smaller primary pill (compact toolbars, secondary actions) */
@@ -797,7 +821,8 @@ body {
            rounded-[var(--radius-button)] border border-border bg-transparent
            px-5 py-3 text-sm font-medium text-text-secondary
            transition-all hover:border-text-tertiary/40 hover:bg-surface-card hover:text-text-primary
-           disabled:opacity-50 disabled:pointer-events-none;
+           disabled:opacity-50 disabled:pointer-events-none
+           min-h-[var(--touch-target-min)];
   }
 
   /* .impala-sm — smaller outline pill (compact toolbars, paired with kudu-sm) */
@@ -948,6 +973,9 @@ body {
            text-base text-text-secondary transition-colors
            hover:bg-surface-card hover:text-text-primary hover:border-primary/30
            focus-visible:outline-2 focus-visible:outline-primary
+           aria-pressed:border-primary aria-pressed:bg-primary
+           aria-pressed:text-primary-foreground
+           disabled:cursor-not-allowed disabled:opacity-50
            min-h-[var(--touch-target-min)];
   }
 
@@ -996,21 +1024,31 @@ body {
 
   /* ── Surfaces ────────────────────────────────────────────────────────── */
 
+  /* .herd — a vertical stack of page sections, one --space-section apart.
+     A lazy wrapper whose card rendered nothing (no <section>, no loading
+     skeleton) is dropped, so an empty slot never leaves a doubled gap. */
+  .herd {
+    @apply flex min-w-0 flex-col gap-[var(--space-section)];
+  }
+  .herd > [data-lazy-section]:not(:has(section, [role="status"])) {
+    display: none;
+  }
+
   /* .baobab — primary card surface (foundational, holds content) */
   .baobab {
     @apply rounded-[var(--radius-card)] border border-primary/25
-           bg-surface-card p-4 shadow-sm;
+           bg-surface-card p-[var(--space-card)] shadow-sm;
   }
 
   /* .acacia — quieter card surface (no primary border, lighter shadow) */
   .acacia {
     @apply rounded-[var(--radius-card)] border border-border
-           bg-surface-card p-4;
+           bg-surface-card p-[var(--space-card)];
   }
 
   /* .pangolin — soft card surface (no border, light shadow — armoured but unobtrusive) */
   .pangolin {
-    @apply rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm;
+    @apply rounded-[var(--radius-card)] bg-surface-card p-[var(--space-card)] shadow-sm;
   }
 
   /* ── Hero weather background ──────────────────────────────────────────────
@@ -1230,8 +1268,8 @@ body {
 
   /* .dikdik — inline text action (small antelope: Try again, Refresh, See all) */
   .dikdik {
-    @apply text-base font-medium text-primary transition-colors
-           hover:text-primary/80;
+    @apply inline-flex items-center gap-1 text-base font-medium text-primary
+           transition-colors hover:text-primary/80;
   }
 
   /* ── Loading / Skeleton ──────────────────────────────────────────────── */
@@ -1525,7 +1563,7 @@ body {
 }
 
 @layer components {
-  /* .kori — the hero sky plate. Solid, rounded bottom corners, text in the
+  /* .kori — the hero sky plate. Solid, fully rounded card, text in the
      plate's foreground token. A family modifier points --kori-bg/fg at one
      --plate-* pair; the default is the clear-day plate. */
   .kori {
@@ -1533,8 +1571,25 @@ body {
     --kori-fg: var(--plate-clear-day-fg);
     background-color: var(--kori-bg);
     color: var(--kori-fg);
-    border-bottom-left-radius: var(--radius-plate);
-    border-bottom-right-radius: var(--radius-plate);
+    border-radius: var(--radius-plate);
+  }
+  /* .kudu-plate — the hero plate's primary pill (Mzizi Button, sm size). The
+     plate's own fg/bg pair inverted, so it carries the plate's AAA contrast. */
+  .kudu-plate {
+    @apply press-scale inline-flex items-center justify-center gap-2
+           rounded-[var(--radius-button)] px-5 py-2.5 text-base font-semibold
+           transition-opacity hover:opacity-90
+           min-h-[var(--touch-target-min)];
+    background-color: var(--kori-fg);
+    color: var(--kori-bg);
+  }
+  /* .impala-plate — quiet (ghost) pill on the plate: plate text, no fill
+     until hovered. Same shape and target as every other Mzizi button. */
+  .impala-plate {
+    @apply press-scale inline-flex items-center justify-center gap-1.5
+           rounded-[var(--radius-button)] px-4 py-2.5 text-base font-medium
+           transition-colors hover:bg-current/10
+           min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)];
   }
   .kori-clear-day {
     --kori-bg: var(--plate-clear-day);

@@ -19,13 +19,18 @@ const buttonVariants = cva(
           "text-text-secondary hover:bg-surface-base hover:text-text-primary",
         link: "text-primary underline-offset-4 hover:underline",
       },
+      /* Mzizi Button contract (mzizi.dev/components/button): every size is
+         a pill (rounded-full via --radius-button); 56px default, 48px `sm`
+         (the touch-target floor, --touch-target-min), never smaller. */
       size: {
         default:
-          "h-10 min-h-[var(--touch-target-min)] rounded-[var(--radius-button)] px-4 py-2",
-        sm: "h-8 min-h-[var(--touch-target-min)] rounded-[var(--radius-button)] px-3 text-base",
-        lg: "h-12 min-h-[var(--touch-target-min)] rounded-[var(--radius-button)] px-6 py-3",
-        icon: "h-10 w-10 rounded-full",
-        "icon-lg": "h-11 w-11 rounded-full",
+          "h-14 min-h-[var(--touch-target-min)] rounded-[var(--radius-button)] px-5",
+        sm: "h-12 min-h-[var(--touch-target-min)] rounded-[var(--radius-button)] px-4 text-base",
+        lg: "h-14 min-h-[var(--touch-target-min)] rounded-[var(--radius-button)] px-6",
+        icon: "size-14 rounded-full",
+        "icon-sm": "size-12 rounded-full",
+        /** Legacy alias of `icon` (56px square). */
+        "icon-lg": "size-14 rounded-full",
       },
     },
     defaultVariants: {
@@ -50,6 +55,9 @@ function Button({
   return (
     <Comp
       data-slot="button"
+      data-portal="https://mzizi.dev/components/button"
+      data-variant={variant ?? "default"}
+      data-size={size ?? "default"}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

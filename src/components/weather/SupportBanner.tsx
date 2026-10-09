@@ -14,7 +14,7 @@ export function SupportBanner() {
           href="https://www.buymeacoffee.com/bryany"
           target="_blank"
           rel="noopener noreferrer"
-          className="group block rounded-[var(--radius-card)] px-5 py-4 transition-colors hover:bg-bmc/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bmc"
+          className="group block rounded-[var(--radius-card)] p-[var(--space-card)] transition-colors hover:bg-bmc/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bmc"
           aria-label="Support mukoko weather — Buy Me a Coffee"
         >
           <div className="flex items-center gap-3">

@@ -38,8 +38,8 @@ describe("WeatherLayerPanel — labelled chips", () => {
 });
 
 describe("WeatherLayerPanel — touch targets", () => {
-  it("sizes each chip to the 48px touch-target minimum", () => {
-    expect(panelSource).toContain("min-h-[var(--touch-target-min)]");
+  it("uses the shared .quail chip, which carries the 48px touch-target minimum", () => {
+    expect(panelSource).toContain('"quail shrink-0');
   });
 
   it("uses no hardcoded sizes", () => {

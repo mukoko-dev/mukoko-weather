@@ -556,7 +556,7 @@ function SavedTab({
                               setEditValue(label || "");
                               setEditingSlug(slug);
                             }}
-                            className="text-base text-primary/60 hover:text-primary"
+                            className="dikdik"
                             type="button"
                           >
                             {label ? "Edit label" : "+ Add label"}
@@ -584,14 +584,16 @@ function SavedTab({
                       </span>
                     )}
                   </button>
-                  <button
+                  <Button
                     onClick={() => removeLocation(slug)}
                     aria-label={`Remove ${titleCase(slug)}`}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-tertiary hover:text-severity-severe hover:bg-severity-severe/10 transition-colors"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="shrink-0 text-text-tertiary hover:bg-severity-severe/10 hover:text-severity-severe"
                     type="button"
                   >
                     <TrashIcon size={14} />
-                  </button>
+                  </Button>
                 </div>
               </li>
             );

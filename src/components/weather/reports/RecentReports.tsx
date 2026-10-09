@@ -7,6 +7,7 @@ import { CloudSunIcon, MegaphoneIcon } from "@/lib/weather-icons";
 import { getReportTypeInfo } from "@/lib/report-types";
 import { fetchJson } from "@/lib/fetch-json";
 import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
 import { formatRelative } from "@/lib/i18n";
 
 // ---------------------------------------------------------------------------
@@ -83,34 +84,40 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
   // Don't render section if no reports and not loading
   if (!loading && reports.length === 0) {
     return (
-      <section
-        aria-labelledby="community-reports-heading"
-        className="space-y-3"
-      >
-        <h2 id="community-reports-heading" className="giraffe">
-          Community Reports
-        </h2>
-        <button
-          type="button"
-          onClick={openReportModal}
-          className="flex w-full items-center gap-3 rounded-[var(--radius-card)] bg-mineral-copper p-4 text-left text-mineral-copper-fg shadow-sm transition-shadow hover:shadow-md min-h-[var(--touch-target-min)]"
-        >
-          <span aria-hidden="true">
-            <MegaphoneIcon size={20} />
-          </span>
-          <div>
-            <p className="text-base font-bold">Report Weather</p>
-            <p className="text-base opacity-80">
-              No reports in the last 24 hours. Be the first!
-            </p>
-          </div>
-        </button>
+      <section aria-labelledby="community-reports-heading">
+        {/* Calm card grammar: a quiet card with the copper (community)
+            mineral as a 4px leading-edge rule, not a full saturated fill. */}
+        <div className="acacia relative overflow-hidden">
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-0 left-0 w-1 bg-mineral-copper"
+          />
+          <h2 id="community-reports-heading" className="giraffe">
+            Community Reports
+          </h2>
+          <p className="gazelle mt-1">
+            No reports in the last 24 hours. Be the first!
+          </p>
+          <button
+            type="button"
+            onClick={openReportModal}
+            className="kudu-sm mt-[var(--space-stack)]"
+          >
+            <span aria-hidden="true">
+              <MegaphoneIcon size={18} />
+            </span>
+            Report Weather
+          </button>
+        </div>
       </section>
     );
   }
 
   return (
-    <section aria-labelledby="community-reports-heading" className="space-y-3">
+    <section
+      aria-labelledby="community-reports-heading"
+      className="space-y-[var(--space-stack)]"
+    >
       <div className="flex items-center justify-between">
         <h2 id="community-reports-heading" className="giraffe">
           Community Reports
@@ -120,11 +127,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
             </span>
           )}
         </h2>
-        <button
-          type="button"
-          onClick={openReportModal}
-          className="inline-flex items-center gap-2 rounded-[var(--radius-button)] bg-mineral-copper px-4 py-2 text-base font-bold text-mineral-copper-fg transition-shadow hover:shadow-md min-h-[var(--touch-target-min)]"
-        >
+        <button type="button" onClick={openReportModal} className="kudu-sm">
           <span aria-hidden="true">
             <MegaphoneIcon size={18} />
           </span>
@@ -186,10 +189,12 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
                     {formatRelative(new Date(report.reportedAt))}
                   </p>
                 </div>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon-sm"
                   onClick={() => handleUpvote(report.id)}
-                  className="flex items-center gap-1 rounded-[var(--radius-input)] px-2 py-1 text-base text-text-tertiary transition-colors hover:text-mineral-copper hover:bg-mineral-copper/10 min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] justify-center"
+                  className="w-auto min-w-12 gap-1 px-2 text-text-tertiary hover:bg-mineral-copper/10 hover:text-mineral-copper"
                   aria-label={`Upvote report (${report.upvotes} votes)`}
                 >
                   <svg
@@ -207,7 +212,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
                     <path d="M12 19V5" />
                   </svg>
                   {report.upvotes > 0 && <span>{report.upvotes}</span>}
-                </button>
+                </Button>
               </div>
             );
           })}

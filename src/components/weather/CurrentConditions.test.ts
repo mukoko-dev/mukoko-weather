@@ -179,9 +179,18 @@ describe("CurrentConditions — share button accessibility", () => {
     expect(source).toContain("aria-label");
   });
 
-  it("share button meets 56px minimum touch target", () => {
-    expect(source).toContain("min-h-[var(--touch-target-min)]");
-    expect(source).toContain("min-w-[var(--touch-target-min)]");
+  it("share button is the .impala-plate pill (carries the touch-target minimums)", () => {
+    expect(source).toContain('className="impala-plate mt-3"');
+  });
+
+  it("the activities CTA is the .kudu-plate Mzizi pill, not a hand-rolled box", () => {
+    expect(source).toContain('className="kudu-plate mt-4"');
+    expect(source).not.toContain("border border-current");
+  });
+
+  it("the plate spans the main column with no horizontal inset", () => {
+    expect(source).toContain('className="relative"');
+    expect(source).not.toContain("px-3 sm:px-6");
   });
 
   it("ShareIcon is aria-hidden to avoid duplicate label", () => {

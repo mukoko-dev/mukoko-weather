@@ -109,9 +109,9 @@ export function AirQualityMapCard({
 
   return (
     <section aria-labelledby={headingId} className="baobab overflow-hidden p-0">
-      <div className="flex items-center justify-between p-4 pb-2 sm:px-5">
-        <h2 id={headingId} className="dove font-semibold tracking-wide">
-          AIR QUALITY MAP
+      <div className="flex items-center justify-between gap-2 px-[var(--space-card)] pt-[var(--space-card)] pb-2">
+        <h2 id={headingId} className="giraffe">
+          Air Quality Map
         </h2>
         <span className="dove text-xs">{state.data.source}</span>
       </div>

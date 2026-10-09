@@ -129,9 +129,14 @@ describe("Screen reader text — sr-only", () => {
 });
 
 describe("Touch targets — 56px minimum", () => {
-  it("CurrentConditions share button meets 56px touch target requirement", () => {
-    expect(currentConditions).toContain("min-h-[var(--touch-target-min)]");
-    expect(currentConditions).toContain("min-w-[var(--touch-target-min)]");
+  it("CurrentConditions share button meets the touch target requirement", () => {
+    // Share is the .impala-plate Mzizi pill, which carries both minimums.
+    expect(currentConditions).toContain('className="impala-plate mt-3"');
+    const css = readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8");
+    const rule = css.slice(css.indexOf(".impala-plate {"));
+    const body = rule.slice(0, rule.indexOf("}"));
+    expect(body).toContain("min-h-[var(--touch-target-min)]");
+    expect(body).toContain("min-w-[var(--touch-target-min)]");
   });
 });
 

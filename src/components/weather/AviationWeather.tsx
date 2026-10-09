@@ -83,13 +83,6 @@ function formatWind(obs: MetarObs): string {
   return `${obs.wind_dir ?? "VRB"}° ${obs.wind_speed ?? 0}kt`;
 }
 
-function formatClouds(clouds: CloudLayer[]): string {
-  if (!clouds.length) return "Clear";
-  return clouds
-    .map((c) => (c.base_ft !== null ? `${c.cover} ${c.base_ft}ft` : c.cover))
-    .join(", ");
-}
-
 /**
  * Cloud-cover codes that constitute a *ceiling* for aviation — the lowest
  * BKN (broken) or OVC (overcast) layer. FEW/SCT layers do not form a ceiling.
@@ -165,13 +158,13 @@ function formatFt(ft: number | null): string {
   return ft === null ? "—" : `${ft.toLocaleString("en-GB")} ft`;
 }
 
-function formatTime(iso: string): string {
+/** "10:00" — short enough for the sidebar table's time column (the full
+ *  timestamp and the raw METAR ride on the row's title). */
+function formatShortTime(iso: string): string {
   try {
     return new Intl.DateTimeFormat("en-GB", {
       hour: "2-digit",
       minute: "2-digit",
-      day: "2-digit",
-      month: "short",
     }).format(new Date(iso));
   } catch {
     return iso;
@@ -222,6 +215,9 @@ interface Pick {
   distanceKm: number | null;
 }
 
+/** METAR rows shown before "Show all" in the sidebar card. */
+const METAR_PREVIEW_ROWS = 6;
+
 export function AviationWeather({ slug, lat, lon }: Props) {
   const coordKey = `${lat},${lon}`;
 
@@ -229,6 +225,8 @@ export function AviationWeather({ slug, lat, lon }: Props) {
   // coordinates it was made for, so moving to another location resets it to
   // the nearest reporting station without a setState-in-effect.
   const [pick, setPick] = useState<Pick | null>(null);
+  // The sidebar shows the latest few METARs; the rest are one tap away.
+  const [showAllMetar, setShowAllMetar] = useState(false);
   const picked = pick?.key === coordKey ? pick : null;
   const pickedIcao = picked?.icao ?? null;
 
@@ -338,11 +336,9 @@ export function AviationWeather({ slug, lat, lon }: Props) {
       >
         {candidates.map((s) => {
           const active = view?.icao === s.icao;
-          const base =
-            "inline-flex items-center gap-1 rounded-[var(--radius-input)] px-3 py-1.5 text-sm font-medium transition-colors";
-          const cls = active
-            ? "bg-primary/10 text-text-primary ring-1 ring-primary/40"
-            : "border border-border bg-transparent text-text-secondary hover:text-text-primary hover:border-text-tertiary/40";
+          // Mzizi chip: the shared .quail pill; aria-pressed paints the
+          // selected state, so no hand-rolled border or radius here.
+          const weight = active ? "font-semibold" : "font-medium";
           const title = s.reported
             ? `${s.name} · ${formatAge(s.ageMinutes)}`
             : `${s.name} · no METAR in the last 3 hours`;
@@ -360,7 +356,7 @@ export function AviationWeather({ slug, lat, lon }: Props) {
               }
               disabled={!s.reported}
               aria-pressed={active}
-              className={`${base} ${cls} shrink-0 disabled:cursor-not-allowed disabled:opacity-50`}
+              className={`quail inline-flex shrink-0 items-center gap-1 text-sm ${weight}`}
               title={title}
             >
               <span className="font-mono text-xs font-bold">{s.icao}</span>
@@ -494,82 +490,79 @@ export function AviationWeather({ slug, lat, lon }: Props) {
                   No recent METAR observations.
                 </p>
               ) : (
-                <div className="overflow-x-auto -mx-1">
+                <>
+                  {/* Compact sidebar table: four short columns that fit the
+                      card width without a sideways scroll; the full decode
+                      (visibility, weather, clouds, pressure, raw) rides on each
+                      row's title and lives on the /aviation planner. */}
                   <table
-                    className="w-full text-xs border-collapse min-w-[700px]"
+                    className="w-full table-fixed border-collapse text-sm"
                     aria-label={`METAR observations for ${view.icao}`}
                   >
                     <thead>
-                      <tr className="bg-surface-base text-text-secondary text-left">
-                        <th className="px-2 py-2 font-semibold">Time</th>
-                        <th className="px-2 py-2 font-semibold">Conditions</th>
-                        <th className="px-2 py-2 font-semibold">Temp / Dew</th>
-                        <th className="px-2 py-2 font-semibold">Wind</th>
-                        <th className="px-2 py-2 font-semibold">Visibility</th>
-                        <th className="px-2 py-2 font-semibold">Weather</th>
-                        <th className="px-2 py-2 font-semibold">Clouds</th>
-                        <th className="px-2 py-2 font-semibold">Pressure</th>
-                        <th className="px-2 py-2 font-semibold">Change</th>
-                        <th className="px-2 py-2 font-semibold">Raw</th>
+                      <tr className="bg-surface-base text-left text-text-secondary">
+                        <th className="w-[22%] px-1 py-1.5 font-semibold">
+                          Time
+                        </th>
+                        <th className="w-[20%] px-1 py-1.5 font-semibold">
+                          Cat
+                        </th>
+                        <th className="w-[28%] px-1 py-1.5 font-semibold">
+                          <abbr title="Temperature / dew point">T / Dp</abbr>
+                        </th>
+                        <th className="px-1 py-1.5 font-semibold">Wind</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {view.metar.map((obs, i) => (
+                      {(showAllMetar
+                        ? view.metar
+                        : view.metar.slice(0, METAR_PREVIEW_ROWS)
+                      ).map((obs, i) => (
                         <tr
                           key={i}
-                          className="border-t border-surface-dim hover:bg-surface-base/50 transition-colors"
+                          title={`${obs.time} · ${obs.raw}`}
+                          className="border-t border-surface-dim"
                         >
-                          <td className="px-2 py-2 text-text-secondary whitespace-nowrap">
-                            {formatTime(obs.time)}
+                          <td className="truncate px-1 py-1.5 tabular-nums text-text-secondary">
+                            {formatShortTime(obs.time)}
                           </td>
-                          <td className="px-2 py-2">
+                          <td className="px-1 py-1.5">
                             <span
-                              className={`inline-flex items-center justify-center rounded-[var(--radius-input)] px-2 py-0.5 text-xs font-bold min-w-[3rem] ${getFlightCategoryClass(obs.flight_category)}`}
+                              className={`inline-flex items-center justify-center rounded-[var(--radius-badge)] px-2 py-0.5 text-xs font-bold ${getFlightCategoryClass(obs.flight_category)}`}
                               aria-label={`Flight category: ${obs.flight_category}`}
                             >
                               {obs.flight_category}
                             </span>
                           </td>
-                          <td className="px-2 py-2 text-text-primary whitespace-nowrap">
+                          <td className="truncate px-1 py-1.5 tabular-nums text-text-primary">
                             {obs.temp !== null
-                              ? `${Math.round(obs.temp)}°C`
+                              ? `${Math.round(obs.temp)}°`
                               : "—"}
-                            {" / "}
+                            {"/"}
                             {obs.dewp !== null
-                              ? `${Math.round(obs.dewp)}°C`
+                              ? `${Math.round(obs.dewp)}°`
                               : "—"}
                           </td>
-                          <td className="px-2 py-2 text-text-primary whitespace-nowrap">
+                          <td className="truncate px-1 py-1.5 tabular-nums text-text-primary">
                             {formatWind(obs)}
-                          </td>
-                          <td className="px-2 py-2 text-text-primary">
-                            {obs.visibility ?? "—"}
-                          </td>
-                          <td className="px-2 py-2 text-text-secondary">
-                            {obs.weather ?? "—"}
-                          </td>
-                          <td className="px-2 py-2 text-text-primary">
-                            {formatClouds(obs.clouds)}
-                          </td>
-                          <td className="px-2 py-2 text-text-primary whitespace-nowrap">
-                            {obs.pressure_hpa !== null
-                              ? `${obs.pressure_hpa} hPa`
-                              : "—"}
-                          </td>
-                          <td className="px-2 py-2 text-text-secondary">
-                            {obs.change ?? "—"}
-                          </td>
-                          <td
-                            className="px-2 py-2 font-mono text-text-tertiary max-w-[200px] truncate"
-                            title={obs.raw}
-                          >
-                            {obs.raw}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                </div>
+                  {view.metar.length > METAR_PREVIEW_ROWS && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllMetar((v) => !v)}
+                      aria-expanded={showAllMetar}
+                      className="dikdik mt-2 min-h-[var(--touch-target-min)]"
+                    >
+                      {showAllMetar
+                        ? "Show fewer"
+                        : `Show all ${view.metar.length} observations`}
+                    </button>
+                  )}
+                </>
               )}
             </div>
 

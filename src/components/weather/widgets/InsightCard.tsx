@@ -46,7 +46,7 @@ export function InsightCard({
     <section
       aria-labelledby={headingId}
       className={cn(
-        "acacia flex min-w-0 flex-col gap-3 p-4",
+        "acacia flex min-w-0 flex-col gap-3",
         insightCardSizeClass(size),
       )}
       data-size={size}
@@ -76,7 +76,12 @@ export function InsightGrid({
   className?: string;
 }) {
   return (
-    <div className={cn("grid grid-cols-2 gap-3 lg:grid-cols-4", className)}>
+    <div
+      className={cn(
+        "grid grid-cols-2 gap-[var(--space-stack)] lg:grid-cols-4",
+        className,
+      )}
+    >
       {children}
     </div>
   );
