@@ -214,11 +214,10 @@ The release PR is opened with `RELEASE_BUMP_TOKEN` (an org secret), so CI runs o
 
 ## Deploying the Workers
 
-The Rust Workers in `workers/` deploy by hand only, from **Actions → Workers deploy → Run workflow** (`.github/workflows/workers-deploy.yml`). Inputs:
+The Rust Workers in `workers/` deploy by hand only, from **Actions → Workers deploy → Run workflow** (`.github/workflows/workers-deploy.yml`). Production deploys `main` only: dispatch the run on `main` (a guard job fails it on any other ref), and it deploys exactly the commit it was dispatched on. There is no `ref` input, so the job holding the Cloudflare secrets never checks out a caller-chosen ref. Inputs:
 
 - `worker`: `all` (default) or one Worker.
 - `environment`: `production`, the only environment the wrangler configs define. The job runs in the `workers-production` GitHub Environment, so required reviewers set there gate every deploy.
-- `ref`: optional branch, tag or SHA. Empty deploys the ref the run was started from.
 
 `all` first runs the `workers.yml` gate (fmt, clippy, test, build), then deploys in service-binding order: `forecast`, `aviation`, `places`, `stations`, `tiles`, then `ai`, `internal-api`, `jobs`, then `public-api`. Each Worker with a custom domain must answer `GET /health` with a 2xx, and the run summary lists every Worker's result. A single Worker skips the gate, so only deploy one alone when what it binds to is already live.
 
