@@ -6,8 +6,9 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use weather_core::breaker::{self, Breaker};
+use weather_core::secrets;
 use weather_core::{geo, normalize, Source};
-use weather_edge::{config, get_with_timeout, now_ms, now_rfc3339};
+use weather_edge::{get_with_timeout, now_ms, now_rfc3339, secret};
 use worker::{Context, Env};
 
 pub const CACHE_BINDING: &str = "FORECAST_CACHE";
@@ -73,7 +74,7 @@ pub async fn forecast(env: &Env, ctx: &Context, lat: f64, lon: f64, refresh: boo
 }
 
 async fn tomorrow(env: &Env, lat: f64, lon: f64) -> Option<Value> {
-    let key = config(env, "TOMORROW_API_KEY")?;
+    let key = secret(env, secrets::TOMORROW_API_KEY).await?;
     if !TOMORROW.with(|b| b.borrow_mut().allow(now_ms())) {
         return None;
     }

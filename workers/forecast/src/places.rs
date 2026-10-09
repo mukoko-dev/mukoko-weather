@@ -13,8 +13,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use weather_core::locations::parse_spot_slug;
 use weather_core::places::{resolve_seed, slugify};
+use weather_core::secrets;
 use weather_core::Place;
-use weather_edge::{config, get_with_timeout};
+use weather_edge::{config, get_with_timeout, secret};
 use worker::{Env, Headers};
 
 use crate::chain::CACHE_BINDING;
@@ -36,12 +37,12 @@ struct Cached {
 }
 
 /// `(base URL, machine key)` when the Nyuchi API is configured.
-pub fn nyuchi_api(env: &Env) -> Option<(String, String)> {
+pub async fn nyuchi_api(env: &Env) -> Option<(String, String)> {
     Some((
         config(env, "NYUCHI_API_URL")?
             .trim_end_matches('/')
             .to_owned(),
-        config(env, "NYUCHI_API_KEY")?,
+        secret(env, secrets::NYUCHI_API_KEY).await?,
     ))
 }
 
@@ -64,7 +65,7 @@ pub async fn resolve(env: &Env, query: &str) -> Resolved {
     if slug.is_empty() {
         return Resolved::Unknown;
     }
-    let Some((base, key)) = nyuchi_api(env) else {
+    let Some((base, key)) = nyuchi_api(env).await else {
         return Resolved::Unknown;
     };
 

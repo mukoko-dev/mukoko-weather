@@ -8,7 +8,8 @@ use js_sys::{Function, Promise, Reflect, JSON};
 use serde_json::{json, Value};
 use weather_core::ai::guardrails::{self, Compiled, Fetched, Freshness};
 use weather_core::ai::{allowed_model, is_content_block, is_rate_limited, Turn, DEFAULT_MODEL};
-use weather_edge::{config, get_with_timeout, now_ms};
+use weather_core::secrets;
+use weather_edge::{config, get_with_timeout, now_ms, secret};
 use worker::wasm_bindgen::{JsCast, JsValue};
 use worker::wasm_bindgen_futures::JsFuture;
 use worker::{Env, Headers};
@@ -37,8 +38,10 @@ pub async fn guardrails(env: &Env) -> Option<Compiled> {
 }
 
 async fn fetch_guardrails(env: &Env, etag: Option<&str>, now: u64) -> Fetched {
-    let (Some(base), Some(key)) = (config(env, "NYUCHI_API_URL"), config(env, "NYUCHI_API_KEY"))
-    else {
+    let (Some(base), Some(key)) = (
+        config(env, "NYUCHI_API_URL"),
+        secret(env, secrets::NYUCHI_API_KEY).await,
+    ) else {
         return Fetched::Failed;
     };
     let headers = Headers::new();
