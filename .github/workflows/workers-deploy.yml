@@ -1,6 +1,11 @@
 # Deploys the Rust Workers in workers/ by hand only: Actions → Workers deploy
 # → Run workflow. Nothing here runs on push.
 #
+# Production deploys main only. The run must be dispatched on main (the guard
+# job fails otherwise) and deploys exactly the commit it was dispatched on
+# (github.sha). There is no ref input: a caller-chosen ref would check out
+# unreviewed code in a job that holds the Cloudflare secrets.
+#
 # Deploy order follows the service bindings, so every Worker that others bind
 # to is live before them:
 #
@@ -51,11 +56,6 @@ on:
         type: choice
         default: production
         options: [production]
-      ref:
-        description: Git ref to deploy (branch, tag or SHA). Empty = the ref this run was started from.
-        required: false
-        type: string
-        default: ""
 
 permissions:
   contents: read
@@ -65,20 +65,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Fail before anything else unless the run was dispatched on main.
+  guard:
+    name: Dispatched on main
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require refs/heads/main
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::Workers deploy runs from main only (dispatched on $REF)"
+            exit 1
+          fi
+
   # The same fmt / clippy / test / build gate as push and PR runs, before a
   # full deploy.
   gate:
     name: Gate (workers.yml)
+    needs: guard
     if: inputs.worker == 'all'
     uses: ./.github/workflows/workers.yml
-    with:
-      ref: ${{ inputs.ref }}
 
   deploy:
     name: Deploy ${{ inputs.worker }} (${{ inputs.environment }})
-    needs: gate
-    # Run when the gate passed, or was skipped for a single-Worker deploy.
-    if: ${{ !cancelled() && (needs.gate.result == 'success' || needs.gate.result == 'skipped') }}
+    needs: [guard, gate]
+    # Run when the guard passed and the gate passed, or was skipped for a
+    # single-Worker deploy.
+    if: ${{ !cancelled() && needs.guard.result == 'success' && (needs.gate.result == 'success' || needs.gate.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: workers-${{ inputs.environment }}
@@ -109,7 +124,6 @@ jobs:
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Install Rust (stable, wasm32)
