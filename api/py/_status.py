@@ -91,7 +91,8 @@ def _check_tomorrow_io() -> dict:
 
         resp = get_http_client(PROBE_TIMEOUT_S).get(
             "https://api.tomorrow.io/v4/weather/realtime",
-            params={"location": "-17.83,31.05", "apikey": api_key},
+            params={"location": "-17.83,31.05"},
+            headers={"apikey": api_key},  # header, not query: URLs get logged
         )
 
         if resp.status_code == 429:

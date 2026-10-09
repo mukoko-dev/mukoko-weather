@@ -245,10 +245,11 @@ async def proxy_map_tile(
             )
             raise HTTPException(status_code=503, detail="Map service unavailable")
 
-        tile_url = f"{TOMORROW_TILE_ORIGIN}/v4/map/tile/{z}/{x}/{y}/{layer}/{timestamp}.png?apikey={api_key}"
+        tile_url = f"{TOMORROW_TILE_ORIGIN}/v4/map/tile/{z}/{x}/{y}/{layer}/{timestamp}.png"
 
+        # Key in the `apikey` header, never the URL — request URLs get logged.
         client = _get_http()
-        resp = client.get(tile_url)
+        resp = client.get(tile_url, headers={"apikey": api_key})
 
         # 2. Upstream error (429 rate limit or anything non-200) — degrade
         #    gracefully: serve a stale cached tile if we have one, else a
