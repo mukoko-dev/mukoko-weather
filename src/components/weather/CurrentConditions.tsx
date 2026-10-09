@@ -211,13 +211,11 @@ export function CurrentConditions({
   }
 
   return (
-    <section
-      aria-labelledby="current-conditions-heading"
-      className="relative px-3 sm:px-6"
-    >
+    <section aria-labelledby="current-conditions-heading" className="relative">
       {/* Sky plate — one solid mineral surface (no translucent material, no animation) that
           holds the whole hero. Tint = condition family × day/night, see
-          src/lib/hero.ts. Rounded bottom corners only. */}
+          src/lib/hero.ts. It spans the main column edge to edge (no inset),
+          so it lines up with every card below it and with the sidebar. */}
       <div
         data-plate={family}
         className={`kori ${PLATE_CLASS[family]} relative z-10 flex flex-col items-center px-5 pt-7 pb-7 text-center sm:px-8 sm:pt-9`}
@@ -274,7 +272,7 @@ export function CurrentConditions({
             <button
               type="button"
               onClick={() => openMyWeather("activities")}
-              className="press-scale mt-4 inline-flex min-h-[var(--touch-target-min)] items-center rounded-button border border-current px-5 text-base font-medium hover:opacity-80"
+              className="kudu-plate mt-4"
             >
               Pick activities for tailored advice
             </button>
@@ -284,7 +282,7 @@ export function CurrentConditions({
           type="button"
           onClick={handleShare}
           aria-label={`Share weather for ${locationName}`}
-          className="press-scale mt-3 flex min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] items-center justify-center gap-1.5 rounded-[var(--radius-input)] px-3 text-base transition-opacity hover:opacity-80"
+          className="impala-plate mt-3"
         >
           <ShareIcon size={16} aria-hidden="true" />
           <span className="sr-only sm:not-sr-only">
@@ -293,7 +291,9 @@ export function CurrentConditions({
         </button>
       </div>
       {footer && (
-        <div className="relative z-10 mt-4 flex justify-center">{footer}</div>
+        <div className="relative z-10 mt-[var(--space-stack)] flex justify-center">
+          {footer}
+        </div>
       )}
     </section>
   );

@@ -226,7 +226,7 @@ export function CommunityLane({
         <button
           type="button"
           onClick={() => openMyWeather("activities")}
-          className="kudu min-h-[var(--touch-target-min)]"
+          className="kudu-sm"
         >
           Pick activities
         </button>
@@ -327,7 +327,7 @@ export function CommunityLane({
             <button
               type="button"
               onClick={() => setOpenIndex(null)}
-              className="impala-sm min-h-[var(--touch-target-min)]"
+              className="impala-sm"
             >
               Close
             </button>

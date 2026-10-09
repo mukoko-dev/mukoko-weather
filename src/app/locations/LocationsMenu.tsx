@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
@@ -44,14 +45,16 @@ export function LocationsMenu({
 
   return (
     <div ref={wrapRef} className="relative">
-      <button
+      <Button
         type="button"
+        variant="outline"
+        size="icon-sm"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
         aria-label="More: edit list, units, Explore, History, Aviation"
         onClick={() => setOpen((v) => !v)}
-        className="press-scale flex h-[var(--touch-target-min)] w-[var(--touch-target-min)] items-center justify-center rounded-full border border-border bg-surface-card text-text-primary"
+        className="press-scale bg-surface-card"
       >
         <svg
           width="20"
@@ -64,7 +67,7 @@ export function LocationsMenu({
           <circle cx="12" cy="12" r="1.8" />
           <circle cx="19" cy="12" r="1.8" />
         </svg>
-      </button>
+      </Button>
       {open && (
         <ul
           id={menuId}
