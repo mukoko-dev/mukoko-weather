@@ -214,7 +214,10 @@ class TestProxyMapTile:
         url = call_args[0][0]
         assert url.startswith("https://api.tomorrow.io/")
         assert "/5/18/17/windSpeed/now.png" in url
-        assert "apikey=my-key" in url
+        # Key travels in the header, never the (logged) URL.
+        assert "my-key" not in url
+        assert "apikey" not in url
+        assert call_args.kwargs["headers"] == {"apikey": "my-key"}
 
 
 # ---------------------------------------------------------------------------

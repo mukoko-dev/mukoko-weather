@@ -57,12 +57,13 @@ def _fetch_tomorrow(lat: float, lon: float, api_key: str) -> dict | None:
     url = "https://api.tomorrow.io/v4/weather/forecast"
     params = {
         "location": f"{lat},{lon}",
-        "apikey": api_key,
         "timesteps": "1h,1d",
         "units": "metric",
     }
 
-    resp = client.get(url, params=params)
+    # Key travels in the `apikey` header (supported by every Tomorrow.io REST
+    # endpoint), never the query string — request URLs end up in logs.
+    resp = client.get(url, params=params, headers={"apikey": api_key})
 
     if resp.status_code == 429:
         return None  # Rate limited — fall back to Open-Meteo
