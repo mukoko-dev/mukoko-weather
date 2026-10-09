@@ -558,6 +558,11 @@ mod tests {
     #[test]
     fn reasoning_models_get_headroom_and_low_effort() {
         assert!(is_reasoning_model("@cf/zai-org/glm-5.3"));
+        // Flash reasons too (low/high/max; it cannot be switched off), so it
+        // keeps the headroom and is asked for low effort.
+        assert!(is_reasoning_model(DEFAULT_MODEL));
+        assert_eq!(DEFAULT_MODEL, "@cf/zai-org/glm-5.3-flash");
+        assert_eq!(token_budget(DEFAULT_MODEL, 400), 400 + REASONING_HEADROOM);
         assert!(!is_reasoning_model(
             "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
         ));

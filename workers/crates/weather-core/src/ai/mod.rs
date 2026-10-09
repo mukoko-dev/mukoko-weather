@@ -24,9 +24,9 @@ pub const MAX_HISTORY: usize = 10;
 /// Most activities taken from a request into a prompt.
 pub const MAX_ACTIVITIES: usize = 5;
 
-/// The default model: open weights on Workers AI (Z.ai GLM, with function
-/// calling and reasoning). The Workers' `AI_MODEL` var overrides it.
-pub const DEFAULT_MODEL: &str = "@cf/zai-org/glm-5.3";
+/// The default model: open weights on Workers AI (Z.ai GLM-5.3 Flash, with
+/// function calling and low-effort reasoning). The Workers' `AI_MODEL` var overrides it.
+pub const DEFAULT_MODEL: &str = "@cf/zai-org/glm-5.3-flash";
 
 /// Only Workers AI models (`@cf/…`, open weights) are allowed, so the gateway
 /// can never be pointed at a closed third-party model by configuration.

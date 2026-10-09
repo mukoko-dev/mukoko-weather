@@ -23,7 +23,6 @@ from py._ai_gateway import (
     function_tools,
     gateway_headers,
     gateway_url,
-    resolve_model,
     tool_result_message,
 )
 from py._ai_prompts import get_ai_prompt
@@ -155,26 +154,6 @@ class TestAiConfigured:
 
 
 # ---------------------------------------------------------------------------
-# resolve_model — the Worker owns the model
-# ---------------------------------------------------------------------------
-
-
-class TestResolveModel:
-    def test_default_is_the_workers(self):
-        assert resolve_model() is None
-        assert resolve_model("") is None
-
-    def test_legacy_claude_id_dropped(self):
-        assert resolve_model("claude-haiku-4-5-20251001") is None
-
-    def test_cf_id_honoured(self):
-        assert resolve_model("@cf/zai-org/glm-5.3") == "@cf/zai-org/glm-5.3"
-
-    def test_unified_api_prefix_stripped(self):
-        assert resolve_model("workers-ai/@cf/zai-org/glm-5.3") == "@cf/zai-org/glm-5.3"
-
-
-# ---------------------------------------------------------------------------
 # call_ai — breaker-guarded call
 # ---------------------------------------------------------------------------
 
@@ -265,12 +244,13 @@ class TestCallAi:
         breaker.record_success.assert_not_called()
 
     @patch.dict(os.environ, FULL_ENV, clear=True)
-    def test_cf_model_is_forwarded(self, breaker):
+    def test_db_model_is_not_forwarded(self, breaker):
+        # The Worker's AI_MODEL decides; a DB prompt's model can't override it.
         breaker.is_allowed = True
         client = _mock_http(_http_response(200, _completion("ok")))
         with patch("py._ai_gateway.httpx.Client", return_value=client):
             call_ai(model="@cf/zai-org/glm-5.3", max_tokens=5, messages=[{"role": "user", "content": "x"}])
-        assert client.post.call_args.kwargs["json"]["model"] == "@cf/zai-org/glm-5.3"
+        assert "model" not in client.post.call_args.kwargs["json"]
 
     @pytest.mark.parametrize("status", [400, 413, 422])
     @patch.dict(os.environ, FULL_ENV, clear=True)

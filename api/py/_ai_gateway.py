@@ -25,8 +25,8 @@ Configuration (names only, never values):
 
 - :func:`gateway_url` — the chat-completions URL, built from env.
 - :func:`gateway_headers` — request headers (``Authorization: Bearer``).
-- :func:`resolve_model` — a ``@cf/`` model a DB prompt names, or None (the
-  Worker's ``AI_MODEL`` then decides). Legacy ``claude-*`` ids give None.
+- The model is the Worker's (its ``AI_MODEL`` var); a ``model`` argument
+  (from a DB prompt) is accepted for compatibility and not sent.
 - :func:`get_gateway_client` — module-level :class:`GatewayClient`, or None
   when the env is incomplete.
 - :func:`call_ai` — one breaker-guarded chat-completions call. Returns
@@ -143,20 +143,6 @@ def ai_configured() -> bool:
     return True
 
 
-def resolve_model(requested: Optional[str] = None) -> Optional[str]:
-    """The model id to ask the Worker for, or None for the Worker's own.
-
-    The Worker owns the model (its ``AI_MODEL`` var) and only accepts
-    Workers AI ``@cf/`` ids. A DB prompt may still name one; a legacy
-    ``claude-*`` id (or anything not ``@cf/``) gives None. The Unified API's
-    ``workers-ai/`` provider prefix is dropped.
-    """
-    model = (requested or "").strip()
-    if model.startswith("workers-ai/"):
-        model = model[len("workers-ai/"):]
-    return model if model.startswith("@cf/") else None
-
-
 # ---------------------------------------------------------------------------
 # Response shape + tool helpers
 # ---------------------------------------------------------------------------
@@ -246,9 +232,9 @@ class GatewayClient:
             "max_tokens": max_tokens,
             "messages": ([{"role": "system", "content": system}] if system else []) + list(messages),
         }
-        chosen = resolve_model(model)
-        if chosen:
-            payload["model"] = chosen
+        # The Worker owns the model (AI_MODEL); a DB prompt's ``model`` is
+        # not forwarded, so one config change moves every surface at once.
+        del model
         if tools:
             payload["tools"] = tools
         try:
