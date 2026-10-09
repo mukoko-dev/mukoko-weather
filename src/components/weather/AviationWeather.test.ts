@@ -96,7 +96,7 @@ describe("AviationWeather — station chip row layout stability", () => {
   });
 
   it("stops each chip from shrinking or wrapping inside the row", () => {
-    expect(src).toContain("${base} ${cls} shrink-0");
+    expect(src).toContain("quail inline-flex shrink-0 items-center");
   });
 
   it("the touch-target token it references is defined in globals.css", () => {

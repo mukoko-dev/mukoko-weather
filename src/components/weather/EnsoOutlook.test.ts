@@ -134,7 +134,8 @@ describe("EnsoOutlook — styling rules", () => {
   });
 
   it("uses fauna classes for the card and its text (heading class comes from SectionHeader)", () => {
-    expect(source).toContain('className="baobab p-5 sm:p-6"');
+    // Card padding comes from the .baobab token (--space-card), not overrides.
+    expect(source).toContain('className="baobab"');
     expect(source).toContain("dove");
     expect(source).toContain("gazelle");
   });

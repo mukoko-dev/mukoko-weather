@@ -246,7 +246,7 @@ describe("WeatherDashboard — layout control placement (bottom of page)", () =>
   it("uses the .impala-sm fauna button, centred", () => {
     const block = source.slice(customiseIdx() - 200, customiseIdx() + 40);
     expect(block).toContain('className="impala-sm"');
-    expect(source).toMatch(/mt-8 flex justify-center/);
+    expect(source).toMatch(/mt-\[var\(--space-section\)\] flex justify-center/);
   });
 
   it("has no LiveClock in the hero area (the iOS status bar shows the time)", () => {

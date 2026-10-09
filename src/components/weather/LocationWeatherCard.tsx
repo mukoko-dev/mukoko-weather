@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import {
@@ -85,17 +86,19 @@ export function LocationWeatherCard({
   const menuButton =
     !editing && menu && menu.length > 0 ? (
       <div ref={wrapRef} className="absolute right-2 top-2 z-10">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-sm"
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           aria-controls={menuId}
           aria-label={`More options for ${name}`}
           onClick={() => setMenuOpen((open) => !open)}
-          className="press-scale flex h-[var(--touch-target-min)] w-[var(--touch-target-min)] items-center justify-center rounded-full text-xl leading-none text-text-secondary"
+          className="press-scale text-xl leading-none"
         >
           <span aria-hidden="true">⋯</span>
-        </button>
+        </Button>
         {menuOpen && (
           <ul
             id={menuId}
