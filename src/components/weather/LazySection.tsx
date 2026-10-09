@@ -2,6 +2,12 @@
 
 import { SectionSkeleton } from "@/components/weather/SectionSkeleton";
 import {
+  hasLayoutBox,
+  reservedHeightPx,
+  shouldUnloadSection,
+} from "@/lib/lazy-visibility";
+import { cn } from "@/lib/utils";
+import {
   useRef,
   useState,
   useEffect,
@@ -100,6 +106,16 @@ function enqueueMount(mountFn: () => void): () => void {
 // The unload margin is much larger than the load margin (1500px vs 300px)
 // to prevent flickering on normal scroll speed. A section must scroll well
 // past the viewport before being reclaimed.
+//
+// Two further guards keep the mount/unmount cycle from feeding itself:
+//
+// - A section with no layout box (display: none, e.g. the .herd stack hiding
+//   a card that rendered nothing) is never unmounted. IntersectionObserver
+//   reports a box-less element as "not intersecting" wherever it is, which
+//   used to unmount it, re-show the skeleton, remount it, hide it again —
+//   a loop of several cycles a second (see shouldUnloadSection).
+// - While unmounted, the wrapper keeps the height the content had, so the
+//   shorter skeleton never shifts the sections below it.
 
 const UNLOAD_MARGIN = "1500px";
 
@@ -127,6 +143,9 @@ export function LazySection({
   const loadMargin = rootMargin ?? getLoadMargin();
   const sentinelRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
+  // True while unmounted with the content's last measured height reserved
+  // on the wrapper (via the --lazy-reserved-height custom property).
+  const [reserved, setReserved] = useState(false);
 
   // Start invisible unless IntersectionObserver is unavailable
   const [visible, setVisible] = useState(
@@ -154,6 +173,7 @@ export function LazySection({
           observer.disconnect();
           cancelRef.current = enqueueMount(() => {
             setAnimate(!hasRendered.current);
+            setReserved(false);
             setVisible(true);
             hasRendered.current = true;
           });
@@ -179,8 +199,19 @@ export function LazySection({
     const observer = new IntersectionObserver(
       ([entry]) => {
         // When the element is NOT intersecting with the extended margin,
-        // it's far enough off-screen to reclaim.
-        if (!entry.isIntersecting) {
+        // it's far enough off-screen to reclaim — unless it has no layout
+        // box at all, which reads as "not intersecting" from anywhere.
+        if (
+          shouldUnloadSection({
+            isIntersecting: entry.isIntersecting,
+            hasLayoutBox: hasLayoutBox(el),
+          })
+        ) {
+          const height = reservedHeightPx(entry.boundingClientRect.height);
+          if (height !== null) {
+            el.style.setProperty("--lazy-reserved-height", `${height}px`);
+            setReserved(true);
+          }
           setVisible(false);
         }
       },
@@ -193,7 +224,14 @@ export function LazySection({
 
   // Maintain a persistent ref div that the observer can track even after unmount
   return (
-    <div ref={sentinelRef} data-lazy-section={label} className={className}>
+    <div
+      ref={sentinelRef}
+      data-lazy-section={label}
+      className={cn(
+        className,
+        !visible && reserved && "min-h-[var(--lazy-reserved-height)]",
+      )}
+    >
       {visible ? (
         <div className={animate ? "animate-fade-in-up" : undefined}>
           {children}

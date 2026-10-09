@@ -155,3 +155,32 @@ describe("useMemoryPressure hook", () => {
     expect(source).toContain("clearInterval");
   });
 });
+
+describe("LazySection — flicker guards (mount/unmount loop regression)", () => {
+  it("decides unloads through shouldUnloadSection with a layout-box check", () => {
+    expect(source).toContain("shouldUnloadSection");
+    expect(source).toContain("hasLayoutBox: hasLayoutBox(el)");
+  });
+
+  it("no longer unmounts on a bare !entry.isIntersecting", () => {
+    expect(source).not.toMatch(
+      /if \(!entry\.isIntersecting\) \{\s*setVisible\(false\)/,
+    );
+  });
+
+  it("reserves the content's measured height while unmounted", () => {
+    expect(source).toContain(
+      "reservedHeightPx(entry.boundingClientRect.height)",
+    );
+    expect(source).toContain('"--lazy-reserved-height"');
+    expect(source).toContain("min-h-[var(--lazy-reserved-height)]");
+  });
+
+  it("releases the reserved height when the section remounts", () => {
+    const mountBlock = source.slice(
+      source.indexOf("enqueueMount(() => {"),
+      source.indexOf("hasRendered.current = true;"),
+    );
+    expect(mountBlock).toContain("setReserved(false)");
+  });
+});
