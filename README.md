@@ -101,22 +101,18 @@ locations.
 
 ### Environment variables
 
-| Variable                          | Required | Description                                                                                                                           |
-| --------------------------------- | :------: | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `MONGODB_URI`                     |   Yes    | MongoDB Atlas connection string                                                                                                       |
-| `WORKOS_API_KEY`                  |   Yes    | Server-side WorkOS API key (`sk_…`) — AuthKit middleware, callback exchange, `identity.persons` upsert                                |
-| `WORKOS_CLIENT_ID`                |   Yes    | WorkOS Client ID (`client_…`)                                                                                                         |
-| `WORKOS_COOKIE_PASSWORD`          |   Yes    | 32+ character session-cookie secret. Rotating it invalidates every session                                                            |
-| `NEXT_PUBLIC_WORKOS_REDIRECT_URI` |   Yes    | OAuth callback URL; must match the WorkOS dashboard (`https://weather.mukoko.com/callback` in production)                             |
-| `CLOUDFLARE_ACCOUNT_ID`           |    No    | Account owning the `shamwari` AI Gateway. Without the AI vars, summaries fall back to a basic generated summary                       |
-| `AI_GATEWAY_ID`                   |    No    | AI Gateway id (default `shamwari`)                                                                                                    |
-| `AI_GATEWAY_URL`                  |    No    | Full gateway base override (up to `/compat`)                                                                                          |
-| `CF_AI_API_TOKEN`                 |    No    | Server-only. One Cloudflare token with AI Gateway: Run + Workers AI: Read, sent in both auth headers — the only AI token Vercel needs |
-| `AI_GATEWAY_TOKEN`                |    No    | Server-only. Optional override for the `cf-aig-authorization` header only                                                             |
-| `CF_WORKERS_AI_TOKEN`             |    No    | Server-only. Optional override for the provider `Authorization` header only                                                           |
-| `AI_MODEL`                        |    No    | Model override (default `workers-ai/@cf/zai-org/glm-5.3`)                                                                             |
-| `DB_INIT_SECRET`                  |    No    | Protects `/api/db-init` in production (`x-init-secret` header)                                                                        |
-| `INTERNAL_API_BASE_URL`           |    No    | Base URL for server-to-server SSR calls into `/api/py/*`                                                                              |
+| Variable                          | Required | Description                                                                                                                                                                                              |
+| --------------------------------- | :------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MONGODB_URI`                     |   Yes    | MongoDB Atlas connection string                                                                                                                                                                          |
+| `WORKOS_API_KEY`                  |   Yes    | Server-side WorkOS API key (`sk_…`) — AuthKit middleware, callback exchange, `identity.persons` upsert                                                                                                   |
+| `WORKOS_CLIENT_ID`                |   Yes    | WorkOS Client ID (`client_…`)                                                                                                                                                                            |
+| `WORKOS_COOKIE_PASSWORD`          |   Yes    | 32+ character session-cookie secret. Rotating it invalidates every session                                                                                                                               |
+| `NEXT_PUBLIC_WORKOS_REDIRECT_URI` |   Yes    | OAuth callback URL; must match the WorkOS dashboard (`https://weather.mukoko.com/callback` in production)                                                                                                |
+| `WEATHER_SERVICE_URL`             |    No    | Internal weather Worker origin (`https://weather-internal.mukoko.com`). Every AI call goes to its `/internal/ai/chat/completions`. Without the AI vars, summaries fall back to a basic generated summary |
+| `WEATHER_AI_URL`                  |    No    | Optional AI URL override (full `…/chat/completions` URL, or a base)                                                                                                                                      |
+| `WEATHER_SERVICE_API_KEY`         |    No    | Server-only. The service key `mukoko-weather-internal` checks. Vercel holds no Cloudflare AI token; the model is set by the AI Worker                                                                    |
+| `DB_INIT_SECRET`                  |    No    | Protects `/api/db-init` in production (`x-init-secret` header)                                                                                                                                           |
+| `INTERNAL_API_BASE_URL`           |    No    | Base URL for server-to-server SSR calls into `/api/py/*`                                                                                                                                                 |
 
 ## Architecture
 

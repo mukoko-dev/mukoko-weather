@@ -99,13 +99,13 @@ CLOSED ──(failures >= threshold)──> OPEN ──(cooldown expires)──>
 
 **Per-provider singletons:**
 
-| Breaker              | Provider         | Failure Threshold | Cooldown | Window | Timeout |
-| -------------------- | ---------------- | :---------------: | :------: | :----: | :-----: |
-| `tomorrow_breaker`   | Tomorrow.io API  |         3         |  2 min   | 5 min  |   5s    |
-| `open_meteo_breaker` | Open-Meteo API   |         5         |  5 min   | 5 min  |   8s    |
-| `ai_breaker`         | AI Gateway (GLM) |         3         |  5 min   | 10 min |   15s   |
+| Breaker              | Provider        | Failure Threshold | Cooldown | Window | Timeout |
+| -------------------- | --------------- | :---------------: | :------: | :----: | :-----: |
+| `tomorrow_breaker`   | Tomorrow.io API |         3         |  2 min   | 5 min  |   5s    |
+| `open_meteo_breaker` | Open-Meteo API  |         5         |  5 min   | 5 min  |   8s    |
+| `ai_breaker`         | AI Worker (GLM) |         3         |  5 min   | 10 min |   15s   |
 
-The AI Gateway is called only from the Python backend (`api/py/_ai_gateway.py`). It authenticates with one server-only Cloudflare API token, `CF_AI_API_TOKEN` (AI Gateway: Run + Workers AI: Read), sent as both `cf-aig-authorization` and the provider `Authorization`. `AI_GATEWAY_TOKEN` and `CF_WORKERS_AI_TOKEN` optionally override it per header.
+AI is called only from the Python backend (`api/py/_ai_gateway.py`), and only through the weather Worker: `POST {WEATHER_SERVICE_URL}/internal/ai/chat/completions` with `Authorization: Bearer WEATHER_SERVICE_API_KEY`. `mukoko-weather-internal` checks the key and forwards over a service binding to `mukoko-weather-ai`, which runs Workers AI GLM through the `shamwari` AI Gateway with the native `env.AI` binding. No Cloudflare AI token exists on Vercel.
 
 ### Weather Fallback Chain
 
