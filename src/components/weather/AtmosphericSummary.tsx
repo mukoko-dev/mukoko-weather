@@ -30,6 +30,7 @@ import {
 } from "@/lib/metric-insights";
 import { moonPhase } from "@/lib/moon";
 import { AQI_BAND_LABELS, aqiBand } from "@/lib/aq-grid";
+import { lastTileSpanClass } from "@/lib/dashboard-layout";
 import { cn } from "@/lib/utils";
 import {
   CloudIcon,
@@ -325,7 +326,7 @@ function AirQualityWide({ lat, lon }: { lat: number; lon: number }) {
     return (
       <section
         aria-labelledby="air-quality-heading"
-        className="acacia flex min-w-0 flex-col gap-2 p-4"
+        className="acacia mb-[var(--space-stack)] flex min-w-0 flex-col gap-2"
       >
         <h3 id="air-quality-heading" className="hornbill text-sm">
           Air quality
@@ -346,10 +347,10 @@ function AirQualityWide({ lat, lon }: { lat: number; lon: number }) {
   ].filter(Boolean);
 
   return (
-    <EdgeTile mineral="terracotta" className="mb-2.5 sm:mb-3">
+    <EdgeTile mineral="terracotta" className="mb-[var(--space-stack)]">
       <section
         aria-labelledby="air-quality-heading"
-        className="acacia flex min-w-0 flex-col gap-3 p-4"
+        className="acacia flex min-w-0 flex-col gap-3"
       >
         <header className="flex items-center gap-1.5">
           <span className="text-text-tertiary" aria-hidden="true">
@@ -425,7 +426,7 @@ export function AtmosphericSummary({
         headingId="atmospheric-heading"
         title="Conditions"
         action={{ label: "24h trends →", href: `/${locationSlug}/atmosphere` }}
-        className="mb-3"
+        className="mb-[var(--space-stack)]"
       />
 
       {hasCoords && (
@@ -438,6 +439,10 @@ export function AtmosphericSummary({
 
       {afterAirQuality}
 
+      {/* Tile order fills the grid: four square tiles (one full row on lg,
+          two on mobile), the full-width precipitation tile, then the rest,
+          whose last tile spans whatever the final row has left
+          (lastTileSpanClass), so no layout ends with an empty slot. */}
       <InsightGrid>
         <EdgeTile mineral="cobalt">
           <InsightCard
@@ -488,6 +493,22 @@ export function AtmosphericSummary({
           </InsightCard>
         </EdgeTile>
 
+        <EdgeTile mineral="tanzanite">
+          <InsightCard
+            headingId="insight-visibility"
+            icon={<EyeIcon size={16} />}
+            label="Visibility"
+            sentence={visibility.sentence}
+          >
+            <div className="flex flex-col items-center gap-1">
+              <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
+                {visibility.km !== null ? `${visibility.km} km` : "—"}
+              </p>
+              <p className="dove">{visibility.label}</p>
+            </div>
+          </InsightCard>
+        </EdgeTile>
+
         <EdgeTile mineral="sodalite" className="col-span-full">
           <InsightCard
             headingId="insight-rain"
@@ -507,22 +528,6 @@ export function AtmosphericSummary({
                   highlightIndex={0}
                 />
               )}
-            </div>
-          </InsightCard>
-        </EdgeTile>
-
-        <EdgeTile mineral="tanzanite">
-          <InsightCard
-            headingId="insight-visibility"
-            icon={<EyeIcon size={16} />}
-            label="Visibility"
-            sentence={visibility.sentence}
-          >
-            <div className="flex flex-col items-center gap-1">
-              <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
-                {visibility.km !== null ? `${visibility.km} km` : "—"}
-              </p>
-              <p className="dove">{visibility.label}</p>
             </div>
           </InsightCard>
         </EdgeTile>
@@ -575,7 +580,10 @@ export function AtmosphericSummary({
           </InsightCard>
         </EdgeTile>
 
-        <EdgeTile mineral="tanzanite">
+        <EdgeTile
+          mineral="tanzanite"
+          className={averages ? undefined : lastTileSpanClass(4)}
+        >
           <InsightCard
             headingId="insight-moon"
             icon={<MoonIcon size={16} />}
@@ -591,7 +599,7 @@ export function AtmosphericSummary({
         </EdgeTile>
 
         {averages && (
-          <EdgeTile mineral="copper">
+          <EdgeTile mineral="copper" className={lastTileSpanClass(5)}>
             <InsightCard
               headingId="insight-averages"
               icon={<ThermometerIcon size={16} />}

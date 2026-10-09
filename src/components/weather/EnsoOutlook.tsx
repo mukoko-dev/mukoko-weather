@@ -139,7 +139,7 @@ export function EnsoOutlook({ lat, lon, countryCode }: Props) {
   const impact = ensoImpact(data.phase, countryCode, lat, lon);
 
   return (
-    <section aria-labelledby={headingId} className="baobab p-5 sm:p-6">
+    <section aria-labelledby={headingId} className="baobab">
       <SectionHeader title="El Niño / La Niña outlook" headingId={headingId} />
 
       <div className="mt-3 flex flex-wrap items-center gap-2">

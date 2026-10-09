@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import {
   useCallback,
   useEffect,
@@ -323,8 +324,9 @@ export function MapDashboard({ location }: MapDashboardProps) {
 
           {timelineOn && (
             <div className="mt-2 flex items-center gap-3">
-              <button
+              <Button
                 type="button"
+                size="icon-sm"
                 onClick={() => setPlaying((p) => !p)}
                 aria-pressed={isPlaying}
                 aria-label={
@@ -332,14 +334,14 @@ export function MapDashboard({ location }: MapDashboardProps) {
                     ? "Pause forecast timeline"
                     : "Play forecast timeline"
                 }
-                className="flex size-[var(--touch-target-min)] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                className="shrink-0"
               >
                 {isPlaying ? (
                   <Pause className="h-5 w-5" aria-hidden="true" />
                 ) : (
                   <Play className="h-5 w-5" aria-hidden="true" />
                 )}
-              </button>
+              </Button>
               <div className="flex min-w-0 flex-1 flex-col">
                 <input
                   type="range"

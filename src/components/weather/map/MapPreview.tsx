@@ -18,13 +18,13 @@ export function MapPreview({ location }: MapPreviewProps) {
   return (
     <section aria-labelledby="map-preview-heading">
       <div className="baobab p-0 overflow-hidden">
-        <div className="flex items-center justify-between p-4 pb-2 sm:px-5">
+        <div className="flex items-center justify-between gap-2 px-[var(--space-card)] pt-[var(--space-card)] pb-2">
           <h2 id="map-preview-heading" className="giraffe">
             Weather Map
           </h2>
           <Link
             href={`/${location.slug}/map`}
-            className="text-sm font-medium text-primary transition-colors hover:text-primary/80 min-h-[var(--touch-target-min)] px-2 flex items-center"
+            className="dikdik min-h-[var(--touch-target-min)]"
           >
             Explore map &rarr;
           </Link>

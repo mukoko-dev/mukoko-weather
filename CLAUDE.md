@@ -403,6 +403,7 @@ mukoko-weather/
 │       ├── _ai_prompts.py         # AI prompt library CRUD (GET/PUT prompts + suggested rules) + cached get_ai_prompt() loader
 │       ├── _chat.py               # Shamwari Explorer chatbot (Claude + tool use)
 │       ├── _locations.py          # Location CRUD, search, geo lookup
+│       ├── _logging.py            # Log hygiene: httpx/httpcore → WARNING + secret query-param redaction (configure_logging)
 │       ├── _history.py            # Historical weather data endpoint
 │       ├── _history_analyze.py    # AI history analysis (server-side aggregation + Claude)
 │       ├── _explore_search.py     # AI-powered explore search (Claude + tool use)
@@ -552,6 +553,8 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/reports/clarify` — 10 req/hour
 - `/api/py/stations/register` — 3 req/hour
 - `/api/py/stations/manual` — 12 req/hour (ingest endpoints authenticate by station key instead)
+
+**Secrets never in logs:** provider keys travel in request headers wherever the provider supports it (Tomorrow.io `apikey` header for forecast, status probe and map tiles; CheckWX `X-API-Key`), never in the URL query string. `api/py/_logging.py` `configure_logging()` runs at the top of `index.py` before any router import: it pins the `httpx`/`httpcore` loggers to WARNING (httpx logs every request URL at INFO) and installs a log-record factory plus `RedactSecretsFilter` that mask `apikey`/`api_key`/`key`/`token`/`access_token`/`password`/`passkey` query values in every record and traceback. Never log a full upstream URL that could carry a credential.
 
 **Resilience:** Module-level AI gateway client singleton (`get_gateway_client()`). Graceful degradation — AI endpoints return basic summaries when the gateway is unconfigured or unavailable. Weather endpoints fall back through Tomorrow.io → Open-Meteo → seasonal estimates.
 
@@ -955,6 +958,13 @@ Never use generic Tailwind colors (`text-green-600`, `text-red-500`, `bg-amber-5
 - `--color-bmc-fg` → dark text for BMC yellow backgrounds (`#1A1A1A`)
 
 Use via Tailwind: `bg-bmc`, `border-bmc/40`, `text-bmc-fg`, `ring-bmc`, etc. Used by `SupportBanner` component.
+
+**Layout rhythm tokens (one spacing scale, Mzizi spacing):**
+
+- `--space-section` — gap between page sections and between the main column and the sidebar (1rem; 1.5rem from `lg`)
+- `--space-stack` — heading-to-card and card-to-card inside one section (0.75rem)
+- `--space-card` — padding inside every card surface; `.baobab` / `.acacia` / `.pangolin` use it, so never override card padding with `p-5 sm:p-6` (1rem; 1.25rem from `sm`)
+- Location page: both dashboard columns are `.herd` stacks (`src/lib/dashboard-layout.ts`). The hero plate spans the main column edge to edge and sits one `--space-section` below the breadcrumb, so its top lines up with the sidebar's first card. Minutely nowcast and Model comparison close the main column (not full-width below the grid). The Conditions tile grid uses `lastTileSpanClass()` so neither the 2-column nor the 4-column layout ends on an empty slot
 
 **Typography tokens:**
 
@@ -1458,6 +1468,7 @@ _Python backend tests (pytest):_
 - `tests/py/test_index.py` — FastAPI app: CORS origins, health endpoint, ConnectionFailure handler, all 16 routers mounted
 - `tests/py/test_tiles.py` — Map tiles: Tomorrow.io weather overlay proxy (layer validation, zoom range, timestamp validation, SSRF protection, proxy behavior, cache headers) + Mapbox base tile proxy (style validation, zoom range, URL construction, dark mode)
 - `tests/py/test_stations.py` — Station ingest: unit conversions (°F/mph/inHg/inches), QC range filter, hashed-key auth, registration (key never stored raw, GeoJSON location), manual readings (validated observation writes, 401/400 paths)
+- `tests/py/test_log_redaction.py` — Secrets out of logs: Tomorrow.io key sent as a header (forecast + status probe), redaction filter/record factory masks secret query params in messages and tracebacks, httpx/httpcore at WARNING after app import
 - `tests/py/test_status.py` — System health: MongoDB/Tomorrow.io/Open-Meteo/AI-gateway/cache checks, overall status aggregation
 - `tests/py/test_embeddings.py` — Embeddings stub: status endpoint shape
 
@@ -1556,13 +1567,16 @@ Repeated Tailwind chains (3+ uses) are extracted into named component classes in
 | Class            | Purpose                                        | Replaces                                                                                                                         |
 | ---------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `.kudu`          | Primary pill button (filled, brand colour)     | `rounded-button bg-primary px-5 py-3 ...`                                                                                        |
+| `.kudu-plate`    | Primary pill on the hero sky plate             | plate fg/bg pair inverted (`--kori-fg` / `--kori-bg`), pill radius, `min-h-[var(--touch-target-min)]`                            |
+| `.impala-plate`  | Quiet (ghost) pill on the hero sky plate       | transparent pill, `hover:bg-current/10`, both touch-target minimums                                                              |
+| `.herd`          | Vertical stack of page sections                | `flex flex-col gap-[var(--space-section)]`; hides a lazy wrapper whose card rendered nothing                                     |
 | `.kudu-sm`       | Smaller primary pill (compact toolbars)        | `rounded-button bg-primary px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                                  |
 | `.impala`        | Secondary/outline pill button                  | `border border-border bg-transparent px-5 py-3 ...`                                                                              |
 | `.impala-sm`     | Smaller outline pill (compact toolbars)        | `border border-border bg-transparent px-5 py-2.5 ...` + `min-h-[var(--touch-target-min)]`                                        |
 | `.bee`           | Round icon button (mukoko = beehive)           | `w-[var(--touch-target-min)] h-[var(--touch-target-min)] rounded-full bg-background/10 ...`                                      |
 | `.hoopoe`        | Round avatar (initials or profile picture)     | `flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10` (also `.hoopoe-lg` h-9, `.hoopoe-xl` h-12)        |
-| `.baobab`        | Primary card surface                           | `rounded-card border border-primary/25 bg-surface-card p-4 shadow-sm`                                                            |
-| `.acacia`        | Quieter card surface                           | `rounded-card border border-border bg-surface-card p-4`                                                                          |
+| `.baobab`        | Primary card surface                           | `rounded-card border border-primary/25 bg-surface-card p-[var(--space-card)] shadow-sm`                                          |
+| `.acacia`        | Quieter card surface                           | `rounded-card border border-border bg-surface-card p-[var(--space-card)]`                                                        |
 | `.giraffe`       | Section heading (tall, stands above)           | `text-base font-semibold text-text-primary font-heading`                                                                         |
 | `.gazelle`       | Body paragraph copy                            | `text-base text-text-secondary leading-relaxed`                                                                                  |
 | `.dove`          | Muted secondary text                           | `text-sm text-text-tertiary`                                                                                                     |
@@ -1578,6 +1592,7 @@ Repeated Tailwind chains (3+ uses) are extracted into named component classes in
 
 **Rules:**
 
+- **Mzizi alignment guard** — `src/lib/mzizi-alignment.test.ts` scans every `<button` / `role="button"` in `src/components/**` and `src/app/**`. Each must compose a fauna control class (`kudu*`, `impala*`, `bee`, `quail`, `dikdik`, `dik-dik`, `weaver*`) or be the shared `Button` primitive (`src/components/ui/button.tsx`, which implements the Mzizi Button contract: pill radius, 56px default, 48px `sm` floor). The few legitimate non-pill controls (menu rows, list rows, segmented controls, drag handles) are counted per file in `ALLOWED_EXCEPTIONS`, each with a reason. Hardcoded Tailwind radii (`rounded`, `rounded-md`, `rounded-lg`, `rounded-[6px]`, …) on a button fail with no exceptions — use `rounded-full` or `rounded-[var(--radius-*)]`
 - Add new fauna classes when a pattern is duplicated 3+ times
 - Compose fauna classes with custom utilities where needed: `<button class="kudu press-scale">`
 - Fauna classes live in `@layer components` so per-utility classes still override them
