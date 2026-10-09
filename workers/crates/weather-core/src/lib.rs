@@ -12,6 +12,7 @@
 
 pub mod ai;
 pub mod air_quality;
+pub mod auth;
 pub mod aviation;
 pub mod breaker;
 pub mod cors;

@@ -2,8 +2,8 @@
 Shamwari Explorer chatbot — Phase 2 Python migration.
 
 Replaces the TypeScript /api/explore route. Calls a GLM model through the
-Cloudflare AI Gateway (``shamwari``, OpenAI-compatible tool calling — see
-``_ai_gateway.py``) with 4 tools: search_locations, get_weather,
+weather AI Worker (Workers AI via the ``shamwari`` gateway, OpenAI-compatible
+tool calling — see ``_ai_gateway.py``) with 4 tools: search_locations, get_weather,
 get_activity_advice, list_locations_by_tag.
 """
 
@@ -620,7 +620,7 @@ async def chat(body: ChatRequest, request: Request):
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": message})
 
-    # Fail fast with 503 when the AI gateway is not configured, before any prompt work.
+    # Fail fast with 503 when the AI Worker is not configured, before any prompt work.
     if not ai_configured():
         raise HTTPException(status_code=503, detail="AI service unavailable")
     system_prompt = _build_chat_system_prompt(user_activities)

@@ -55,7 +55,7 @@ class TestCorsPreflight:
 # ---------------------------------------------------------------------------
 
 
-_GW_ENV = {"CLOUDFLARE_ACCOUNT_ID": "acct", "CF_AI_API_TOKEN": "tok"}
+_GW_ENV = {"WEATHER_SERVICE_URL": "https://weather-internal.example", "WEATHER_SERVICE_API_KEY": "key"}
 
 
 class TestHealthEndpoint:

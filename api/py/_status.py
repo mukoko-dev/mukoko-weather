@@ -7,7 +7,6 @@ Live system health dashboard checks.
 from __future__ import annotations
 
 import logging
-import os
 import time
 from datetime import datetime, timezone
 
@@ -15,7 +14,7 @@ from fastapi import APIRouter
 
 from ._db import get_db, get_api_key, ttl_filter
 from ._http import get_http_client
-from ._ai_gateway import DEFAULT_GATEWAY_ID, missing_ai_config, resolve_model
+from ._ai_gateway import DEFAULT_GATEWAY_ID, missing_ai_config
 from ._circuit_breaker import ai_breaker
 
 router = APIRouter()
@@ -135,7 +134,7 @@ def _check_ai_gateway() -> dict:
     the gateway config is present, report the gateway + model the app is
     configured to run, and surface an open circuit breaker.
     """
-    name = "Shamwari AI (Cloudflare AI Gateway)"
+    name = "Shamwari AI (weather AI Worker)"
     start = time.time()
 
     missing = missing_ai_config()
@@ -145,14 +144,16 @@ def _check_ai_gateway() -> dict:
             name,
             "degraded",
             start,
-            f"AI gateway not configured (missing {', '.join(missing)}) — basic summary fallback active",
+            f"AI Worker not configured (missing {', '.join(missing)}) — basic summary fallback active",
         )
 
-    gateway = (os.environ.get("AI_GATEWAY_ID") or "").strip() or DEFAULT_GATEWAY_ID
+    gateway = DEFAULT_GATEWAY_ID
     if not ai_breaker.is_allowed:
         return _result(name, "degraded", start, f"Circuit open — gateway {gateway} recovering, fallbacks active")
 
-    return _result(name, "operational", start, f"Gateway {gateway} configured (model: {resolve_model()})")
+    return _result(
+        name, "operational", start, f"AI Worker configured (gateway {gateway}, model set by the Worker)"
+    )
 
 
 def _count_active(collection: str, noun: tuple[str, str], empty_message: str, name: str) -> dict:
