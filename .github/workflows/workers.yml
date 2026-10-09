@@ -19,9 +19,15 @@ on:
       - "src/lib/locations-global.ts"
       - "src/lib/icao-codes.ts"
       - ".github/workflows/workers.yml"
+  # The gate before a full deploy (workers-deploy.yml). It takes no ref
+  # input: called from the deploy, it checks out github.sha, the same
+  # main commit the deploy builds, never a caller-chosen ref.
+  workflow_call:
 
+# The event name keeps a deploy's gate out of the push/PR group, so a push
+# can never cancel a gate that a deploy is waiting on.
 concurrency:
-  group: workers-${{ github.ref }}
+  group: workers-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -37,7 +43,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Install Rust (stable, wasm32)
         run: |
@@ -45,7 +53,7 @@ jobs:
             --component rustfmt,clippy --target wasm32-unknown-unknown
           rustup default stable
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
@@ -53,7 +61,7 @@ jobs:
             workers/target
           key: workers-check-${{ hashFiles('workers/Cargo.lock') }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
 
@@ -82,14 +90,16 @@ jobs:
       matrix:
         worker: [ai, forecast, internal-api, places, public-api, stations, aviation, jobs, tiles]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Install Rust (stable, wasm32)
         run: |
           rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
           rustup default stable
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry

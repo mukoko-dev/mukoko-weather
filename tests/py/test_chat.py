@@ -7,6 +7,8 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
+from py._ai_gateway import AIResponse, ToolCall
+
 from py._chat import (
     _build_chat_system_prompt,
     _execute_search_locations,
@@ -398,14 +400,14 @@ class TestLocationCountFallback:
 
 
 # ---------------------------------------------------------------------------
-# /api/py/chat endpoint — Claude error-kind mapping (call_claude)
+# /api/py/chat endpoint — AI error-kind mapping (call_ai)
 # ---------------------------------------------------------------------------
 
 
-class TestChatEndpointClaudeErrors:
-    """The endpoint maps call_claude's error kinds to its own replies/statuses."""
+class TestChatEndpointAiErrors:
+    """The endpoint maps call_ai's error kinds to its own replies/statuses."""
 
-    def _run(self, call_result=None, client_side_effect=None):
+    def _run(self, call_result=None, configured=True, call_side_effect=None):
         import asyncio
         from py._chat import chat, ChatRequest
 
@@ -417,42 +419,71 @@ class TestChatEndpointClaudeErrors:
             patch("py._chat.filter_known_activities", return_value=[]),
             patch("py._chat._build_chat_system_prompt", return_value="system"),
             patch("py._chat.get_ai_prompt", return_value=None),
-            patch("py._chat.get_anthropic_client", side_effect=client_side_effect,
-                  return_value=MagicMock()),
+            patch("py._chat.ai_configured", return_value=configured),
         ]
-        if call_result is not None:
-            patches.append(patch("py._chat.call_claude", return_value=call_result))
-        for p in patches:
-            p.start()
+        if call_result is not None or call_side_effect is not None:
+            patches.append(patch("py._chat.call_ai", return_value=call_result, side_effect=call_side_effect))
+        mocks = []
         try:
-            return asyncio.run(chat(body, request))
-        finally:
             for p in patches:
-                p.stop()
+                mocks.append(p.start())
+            result = asyncio.run(chat(body, request))
+            return result, (mocks[-1] if call_result is not None or call_side_effect is not None else None)
+        finally:
+            patch.stopall()
 
-    def test_no_key_raises_503(self):
+    def test_no_gateway_config_raises_503(self):
         from fastapi import HTTPException
         with pytest.raises(HTTPException) as exc:
-            self._run(client_side_effect=HTTPException(status_code=503, detail="AI service unavailable"))
+            self._run(configured=False)
         assert exc.value.status_code == 503
 
     def test_success_returns_text_reply(self):
-        block = MagicMock()
-        block.text = "Light showers this afternoon."
-        response = MagicMock()
-        response.stop_reason = "end_turn"
-        response.content = [block]
-        result = self._run(call_result=(response, None))
+        result, _ = self._run(call_result=(AIResponse(text="Light showers this afternoon."), None))
         assert result.response == "Light showers this afternoon."
         assert not result.error
 
+    def test_tool_call_round_trip_uses_openai_messages(self):
+        """A tool call is executed, its result returned as a role=tool message
+        keyed by tool_call_id, and the final text reply is returned."""
+        first = AIResponse(
+            text="",
+            tool_calls=[ToolCall(id="call_1", name="get_weather", arguments={"location_slug": "harare"})],
+            message={"role": "assistant", "content": None, "tool_calls": [{"id": "call_1"}]},
+        )
+        final = AIResponse(text="Rain after 3pm in Harare.")
+        snapshots = []
+
+        def fake_call_ai(**kwargs):
+            snapshots.append([dict(m) for m in kwargs["messages"]])
+            return (first, None) if len(snapshots) == 1 else (final, None)
+
+        with patch("py._chat._execute_tool", return_value='{"location_name": "Harare"}') as tool:
+            result, _ = self._run(call_side_effect=fake_call_ai)
+        tool.assert_called_once()
+        assert tool.call_args.args[0] == "get_weather"
+        assert tool.call_args.args[1] == {"location_slug": "harare"}
+        second_msgs = snapshots[1]
+        assert second_msgs[-2]["role"] == "assistant" and second_msgs[-2]["tool_calls"]
+        assert second_msgs[-1] == {"role": "tool", "tool_call_id": "call_1", "content": '{"location_name": "Harare"}'}
+        assert result.response == "Rain after 3pm in Harare."
+        assert [(r.slug, r.name, r.type) for r in result.references] == [("harare", "Harare", "weather")]
+
+    def test_tools_sent_in_openai_function_format(self):
+        from py._chat import TOOLS
+        names = {t["function"]["name"] for t in TOOLS}
+        assert names == {"search_locations", "get_weather", "get_activity_advice", "list_locations_by_tag"}
+        for t in TOOLS:
+            assert t["type"] == "function"
+            assert t["function"]["parameters"]["type"] == "object"
+
     def test_api_error_returns_error_reply(self):
-        result = self._run(call_result=(None, "api_error"))
+        result, _ = self._run(call_result=(None, "api_error"))
         assert result.error is True
         assert "trouble connecting" in result.response
 
     def test_circuit_open_returns_recovering_reply(self):
-        result = self._run(call_result=(None, "circuit_open"))
+        result, _ = self._run(call_result=(None, "circuit_open"))
         assert result.error is True
         assert "recovers" in result.response
 

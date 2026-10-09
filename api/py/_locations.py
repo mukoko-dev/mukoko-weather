@@ -900,7 +900,7 @@ def _enrich_location_with_ai(country_code: str, lat: float, lon: float) -> None:
     """Trigger AI season resolution for a country if not already in DB.
 
     Called after creating a community/geolocation location. Runs in a
-    background thread so the HTTP response is not blocked by the Claude API
+    background thread so the HTTP response is not blocked by the AI model
     call (~5-15s). If AI is unavailable, season data will be resolved on
     the next weather request via _get_season().
     """

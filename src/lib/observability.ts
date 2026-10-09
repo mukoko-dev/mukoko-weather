@@ -22,7 +22,7 @@ export type ErrorSource =
   | "mongodb"
   | "tomorrow-io"
   | "open-meteo"
-  | "anthropic"
+  | "ai-gateway"
   | "client-render"
   | "client-fetch"
   | "unhandled";
@@ -120,7 +120,7 @@ export function reportErrorToAnalytics(
  * Tracks which providers are failing and how often.
  */
 export function reportProviderFailure(
-  provider: "tomorrow-io" | "open-meteo" | "mongodb" | "anthropic",
+  provider: "tomorrow-io" | "open-meteo" | "mongodb" | "ai-gateway",
   errorType: string,
   location?: string,
 ) {

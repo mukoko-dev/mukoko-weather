@@ -278,7 +278,7 @@ def conversations_collection():
 
 
 def messages_collection():
-    """Chat messages (Anthropic content-block format) — shamwari.messages."""
+    """Chat messages (chat message format) — shamwari.messages."""
     return shamwari_db()["messages"]
 
 

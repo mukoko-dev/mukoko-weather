@@ -30,12 +30,12 @@ use serde::{Deserialize, Serialize};
 use weather_core::breaker::{self, Breaker};
 use weather_core::cors::origin_allowed;
 use weather_core::tiles::{self, TileRequest};
-use weather_edge::{config, error, get_with_timeout, json, now, now_ms, query_pairs};
+use weather_edge::{config, error, get_with_timeout, json, now, now_ms, query_pairs, secret};
 use worker::{event, Cache, Context, Env, Method, Request, Response, Result};
 
 const KV_BINDING: &str = "TILE_CACHE";
 const RATE_LIMITER: &str = "RATE_LIMITER";
-const KEY_SECRET: &str = "TOMORROW_API_KEY";
+const KEY_SECRET: &str = weather_core::secrets::TOMORROW_API_KEY;
 /// Stale tiles are kept this long in KV.
 const KV_TTL_SECONDS: u64 = 86_400;
 const UPSTREAM_TIMEOUT: Duration = Duration::from_secs(8);
@@ -191,7 +191,7 @@ async fn tile(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
     }
 
     // 3. Tomorrow.io.
-    let Some(api_key) = config(env, KEY_SECRET) else {
+    let Some(api_key) = secret(env, KEY_SECRET).await else {
         return error(503, "not_configured", "Map service unavailable");
     };
     let fallback = |stale: Option<Vec<u8>>| match stale {

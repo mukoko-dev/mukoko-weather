@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock, PropertyMock
 
-import anthropic
+from py._ai_gateway import GatewayError, GatewayRateLimitError
 import pytest
 from fastapi import HTTPException
 
@@ -436,8 +436,8 @@ class TestAnalyzeHistoryEndpoint:
         assert result["dataPoints"] == 1
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
@@ -468,8 +468,8 @@ class TestAnalyzeHistoryEndpoint:
         text_block.type = "text"
         text_block.text = "Analysis text."
         mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_client.return_value.messages.create.return_value = mock_response
+        mock_response.text = text_block.text
+        mock_client.return_value.create.return_value = mock_response
 
         body = AnalyzeRequest(location="nairobi-ke", days=30)
         request = self._make_request()
@@ -482,8 +482,8 @@ class TestAnalyzeHistoryEndpoint:
             mock_season.assert_called_once_with("KE", lat=-1.29, lon=36.82)
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze._build_analysis_system_prompt", return_value="system prompt")
     @patch("py._history_analyze.history_analysis_collection")
@@ -526,8 +526,8 @@ class TestAnalyzeHistoryEndpoint:
         assert result["cached"] is False
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
@@ -556,13 +556,13 @@ class TestAnalyzeHistoryEndpoint:
         # Circuit breaker is closed
         type(mock_breaker).is_allowed = PropertyMock(return_value=True)
 
-        # Mock Claude response
+        # Mock model response
         text_block = MagicMock()
         text_block.type = "text"
         text_block.text = "The weather has been warming over the past 30 days."
         mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_client.return_value.messages.create.return_value = mock_response
+        mock_response.text = text_block.text
+        mock_client.return_value.create.return_value = mock_response
 
         body = AnalyzeRequest(location="harare", days=30)
         request = self._make_request()
@@ -577,8 +577,8 @@ class TestAnalyzeHistoryEndpoint:
         mock_breaker.record_success.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
@@ -589,7 +589,7 @@ class TestAnalyzeHistoryEndpoint:
         self, _mock_ip, _mock_rate, mock_loc, mock_db,
         mock_cache_coll, _mock_prompt_get, mock_client, mock_breaker,
     ):
-        """Anthropic rate limit error should raise 429."""
+        """Gateway rate limit error should raise 429."""
         mock_loc.return_value = {
             "slug": "harare", "name": "Harare", "country": "ZW",
         }
@@ -604,7 +604,7 @@ class TestAnalyzeHistoryEndpoint:
         mock_cache_coll.return_value.find_one.return_value = None
         type(mock_breaker).is_allowed = PropertyMock(return_value=True)
 
-        mock_client.return_value.messages.create.side_effect = anthropic.RateLimitError("rate limited")
+        mock_client.return_value.create.side_effect = GatewayRateLimitError("rate limited")
 
         body = AnalyzeRequest(location="harare", days=30)
         request = self._make_request()
@@ -616,8 +616,8 @@ class TestAnalyzeHistoryEndpoint:
         mock_breaker.record_failure.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
@@ -628,7 +628,7 @@ class TestAnalyzeHistoryEndpoint:
         self, _mock_ip, _mock_rate, mock_loc, mock_db,
         mock_cache_coll, _mock_prompt_get, mock_client, mock_breaker,
     ):
-        """Anthropic APIError should return stats-only graceful fallback, not raise."""
+        """Gateway error should return stats-only graceful fallback, not raise."""
         mock_loc.return_value = {
             "slug": "harare", "name": "Harare", "country": "ZW",
         }
@@ -643,7 +643,7 @@ class TestAnalyzeHistoryEndpoint:
         mock_cache_coll.return_value.find_one.return_value = None
         type(mock_breaker).is_allowed = PropertyMock(return_value=True)
 
-        mock_client.return_value.messages.create.side_effect = anthropic.APIError("API error")
+        mock_client.return_value.create.side_effect = GatewayError("API error")
 
         body = AnalyzeRequest(location="harare", days=30)
         request = self._make_request()
@@ -657,8 +657,8 @@ class TestAnalyzeHistoryEndpoint:
         mock_breaker.record_failure.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
@@ -689,8 +689,8 @@ class TestAnalyzeHistoryEndpoint:
         text_block.type = "text"
         text_block.text = "Analysis text"
         mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_client.return_value.messages.create.return_value = mock_response
+        mock_response.text = text_block.text
+        mock_client.return_value.create.return_value = mock_response
 
         body = AnalyzeRequest(location="harare", days=30, activities=["farming", "running"])
         request = self._make_request()
@@ -699,15 +699,15 @@ class TestAnalyzeHistoryEndpoint:
             await analyze_history(body, request)
 
         # Check that the user message content includes activities
-        call_args = mock_client.return_value.messages.create.call_args
+        call_args = mock_client.return_value.create.call_args
         messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
         user_message = messages[0]["content"]
         assert "farming" in user_message
         assert "running" in user_message
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
     @patch("py._history_analyze.get_db")
@@ -737,8 +737,8 @@ class TestAnalyzeHistoryEndpoint:
         text_block.type = "text"
         text_block.text = "Analysis text"
         mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_client.return_value.messages.create.return_value = mock_response
+        mock_response.text = text_block.text
+        mock_client.return_value.create.return_value = mock_response
 
         body = AnalyzeRequest(location="harare", days=30, activities=[])
         request = self._make_request()
@@ -746,7 +746,7 @@ class TestAnalyzeHistoryEndpoint:
         with patch("py._ai._get_season", return_value={"name": "Spring", "localName": "Spring", "description": "Warming temperatures"}):
             await analyze_history(body, request)
 
-        call_args = mock_client.return_value.messages.create.call_args
+        call_args = mock_client.return_value.create.call_args
         messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
         user_message = messages[0]["content"]
         assert "User activities" not in user_message

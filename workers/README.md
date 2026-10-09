@@ -131,17 +131,23 @@ Creating Cloudflare resources and deploying are owner actions. Run these from `w
    npx wrangler queues create weather-jobs-dlq
    ```
 
-2. Set the secrets. These are names only; the values are in 1Password:
+2. Put the secrets in the account's Cloudflare Secrets Store (`56f84bfa8a564c54a95dbf4f4b4281b4`). Each key is one store secret, bound by every Worker that needs it (`secrets_store_secrets` in each `wrangler.jsonc`); there are no per-Worker copies. The values are in 1Password. Each command prompts for the value, so nothing lands in shell history:
 
    ```bash
-   (cd forecast && npx wrangler secret put TOMORROW_API_KEY)       # today in Mongo weather.api_keys "tomorrow"
-   (cd forecast && npx wrangler secret put NYUCHI_API_KEY)         # internal key, places read
-   (cd places && npx wrangler secret put NYUCHI_API_KEY)           # the same key
-   (cd tiles && npx wrangler secret put TOMORROW_API_KEY)          # same value as on forecast
-   (cd internal-api && npx wrangler secret put WEATHER_SERVICE_API_KEY)  # new random value, e.g. openssl rand -hex 32
-   (cd aviation && npx wrangler secret put CHECKWX_API_KEY)        # optional; today in Mongo weather.api_keys "checkwx"
-   (cd ai && npx wrangler secret put NYUCHI_API_KEY)               # internal key with the `ai` scope (guardrails read)
+   npx wrangler secrets-store secret create 56f84bfa8a564c54a95dbf4f4b4281b4 --name MUKOKO_WEATHER_TOMORROW_API_KEY --scopes workers --remote
+   npx wrangler secrets-store secret create 56f84bfa8a564c54a95dbf4f4b4281b4 --name MUKOKO_WEATHER_NYUCHI_API_KEY --scopes workers --remote
+   npx wrangler secrets-store secret create 56f84bfa8a564c54a95dbf4f4b4281b4 --name MUKOKO_WEATHER_SERVICE_API_KEY --scopes workers --remote
+   npx wrangler secrets-store secret create 56f84bfa8a564c54a95dbf4f4b4281b4 --name MUKOKO_WEATHER_CHECKWX_API_KEY --scopes workers --remote  # optional
    ```
+
+   | Store secret                      | Bound by (`workers/<dir>`) | Required | Value                                                                                         |
+   | --------------------------------- | -------------------------- | -------- | --------------------------------------------------------------------------------------------- |
+   | `MUKOKO_WEATHER_TOMORROW_API_KEY` | `forecast`, `tiles`        | Required | Tomorrow.io key (today in Mongo `weather.api_keys` "tomorrow")                                |
+   | `MUKOKO_WEATHER_NYUCHI_API_KEY`   | `forecast`, `places`, `ai` | Required | This app's internal Nyuchi API key: places read, plus the `ai` scope for the guardrails read  |
+   | `MUKOKO_WEATHER_SERVICE_API_KEY`  | `internal-api`             | Required | The bearer key nyuchi-api presents as `WEATHER_SERVICE_API_KEY` (e.g. `openssl rand -hex 32`) |
+   | `MUKOKO_WEATHER_CHECKWX_API_KEY`  | `aviation`                 | Optional | CheckWX key, the METAR fallback (today in Mongo `weather.api_keys` "checkwx")                 |
+
+   The code asks for each secret by its plain name (`TOMORROW_API_KEY`, ...) through `weather_edge::secret`, which reads the store binding and keeps the value for the isolate (`crates/weather-core/src/secrets.rs`). Transition: until every value is confirmed in the store, it falls back to a plain `wrangler secret put` secret of the plain name, logging a warning once per isolate (name and reason, never the value). Once confirmed, remove the fallback and delete the plain secrets (`npx wrangler secret delete <NAME>` in each Worker). Deploying a Worker that binds a store secret needs a token with Account → Secrets Store → Edit.
 
    The AI Worker also needs the `shamwari` AI Gateway on the Nyuchi Web Services account, with Guardrails on and logging off.
 

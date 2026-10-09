@@ -2,10 +2,11 @@
 // (mukoko-dev/mukoko-weather#148). The Nyuchi API sets
 //   WEATHER_SERVICE_URL     = https://weather-internal.mukoko.com
 //   WEATHER_SERVICE_API_KEY = the same value as this Worker's secret below
+//                             (Secrets Store: MUKOKO_WEATHER_SERVICE_API_KEY)
 // and proxies GET /v1/weather/forecast to /internal/forecast here.
 //
 // Names only, never values:
-//   secrets: WEATHER_SERVICE_API_KEY
+//   secrets: WEATHER_SERVICE_API_KEY, from the Secrets Store (below)
 {
   "name": "mukoko-weather-internal",
   "main": "build/index.js",
@@ -20,6 +21,21 @@
     "logs": { "enabled": true, "invocation_logs": true },
     "traces": { "enabled": true },
   },
+  // Secrets: the account's Cloudflare Secrets Store (the store id is not a
+  // credential). Each secret must be in the store with the "workers" scope.
+  // The code reads them by plain name through weather_edge::secret.
+  // TRANSITION: until the owner confirms every value is in the store, the
+  // code falls back to the plain wrangler secret of the plain name
+  // (warning once per isolate); remove the fallback and the plain secrets
+  // then. The binding names differ from the plain names because two
+  // bindings on a Worker may not share a name.
+  "secrets_store_secrets": [
+    {
+      "binding": "MUKOKO_WEATHER_SERVICE_API_KEY",
+      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+      "secret_name": "MUKOKO_WEATHER_SERVICE_API_KEY",
+    },
+  ],
   "routes": [
     { "pattern": "weather-internal.mukoko.com", "custom_domain": true },
   ],

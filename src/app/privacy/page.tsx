@@ -275,7 +275,7 @@ export default function PrivacyPage() {
               </div>
               <div>
                 <dt className="font-semibold text-text-primary">
-                  Anthropic Claude
+                  Cloudflare Workers AI (GLM)
                 </dt>
                 <dd className="mt-1">
                   AI model used to generate weather summaries and power the

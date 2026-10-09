@@ -9,7 +9,12 @@ use futures::future::{select, Either};
 use serde::Serialize;
 use serde_json::json;
 use subtle::ConstantTimeEq;
-use worker::{AbortController, Delay, Env, Fetch, Headers, Request, Response, Result, Url};
+use weather_core::secrets::{self, SecretCache, StoreRead};
+use worker::wasm_bindgen::JsValue;
+use worker::{
+    console_warn, AbortController, Delay, Env, Fetch, Headers, Request, Response, Result,
+    SecretStore, Url,
+};
 
 /// Milliseconds since the epoch, from the Worker clock.
 pub fn now_ms() -> u64 {
@@ -42,13 +47,74 @@ pub fn error(status: u16, code: &str, description: &str) -> Result<Response> {
     )
 }
 
-/// Read a secret or a plain var; `None` when unset or empty.
+/// Read a plain var (or a plain wrangler secret); `None` when unset or empty.
+/// Secrets go through [`secret`], which reads the Secrets Store first.
 pub fn config(env: &Env, name: &str) -> Option<String> {
     env.secret(name)
         .map(|s| s.to_string())
         .or_else(|_| env.var(name).map(|v| v.to_string()))
         .ok()
         .filter(|s| !s.trim().is_empty())
+}
+
+thread_local! {
+    /// Secrets read in this isolate (`weather_core::secrets`).
+    static SECRETS: std::rc::Rc<SecretCache> = std::rc::Rc::new(SecretCache::new());
+}
+
+/// A secret by its plain name (`weather_core::secrets::TOMORROW_API_KEY`
+/// and friends); `None` when unset or empty.
+///
+/// Read from the Cloudflare Secrets Store binding named after the key's one
+/// store secret (`weather_core::secrets::ALL`) and kept for the isolate. TRANSITION: falls back to the plain wrangler
+/// secret `<name>` when the binding is missing, the secret is not in the
+/// store, or the read fails, logging a warning once per isolate (name and
+/// reason only, never the value). Remove the fallback once every secret is
+/// confirmed in the store (see `weather_core::secrets`).
+pub async fn secret(env: &Env, name: &str) -> Option<String> {
+    let cache = SECRETS.with(|c| c.clone());
+    let lookup = cache
+        .get(name, || read_store(env, name), || config(env, name))
+        .await;
+    if let Some(why) = lookup.warn {
+        console_warn!(
+            "secrets: {name} read from the plain Worker secret ({}); add {} to the Secrets Store",
+            why.reason(),
+            secrets::store_name(name).unwrap_or("its store secret")
+        );
+    }
+    lookup.value
+}
+
+async fn read_store(env: &Env, name: &str) -> StoreRead {
+    let Some(binding) = secrets::store_name(name) else {
+        return StoreRead::Unbound;
+    };
+    let Ok(value) = js_sys::Reflect::get(env, &JsValue::from_str(binding)) else {
+        return StoreRead::Unbound;
+    };
+    if value.is_undefined() || value.is_null() {
+        return StoreRead::Unbound;
+    }
+    // `wrangler dev --var` / `.dev.vars` under the store name: a plain string.
+    if let Some(v) = value.as_string() {
+        return StoreRead::Value(v);
+    }
+    // A Secrets Store binding is an object with an async `get()`. workers-rs's
+    // `Env::secret_store` also checks the constructor name; this does not
+    // depend on it.
+    let is_store = js_sys::Reflect::get(&value, &JsValue::from_str("get"))
+        .map(|get| get.is_function())
+        .unwrap_or(false);
+    if !is_store {
+        return StoreRead::Unbound;
+    }
+    match SecretStore::from(value).get().await {
+        Ok(Some(v)) => StoreRead::Value(v),
+        Ok(None) => StoreRead::Missing,
+        // The runtime rejects `get()` for a secret the store does not hold.
+        Err(_) => StoreRead::Failed,
+    }
 }
 
 /// Check `Authorization: Bearer <key>` against the expected key in constant

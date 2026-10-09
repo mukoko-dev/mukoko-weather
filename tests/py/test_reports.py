@@ -625,7 +625,7 @@ class TestClarifyReport:
         assert exc_info.value.status_code == 429
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._reports.find_location")
     @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
@@ -643,8 +643,8 @@ class TestClarifyReport:
         assert any("lightning" in q.lower() or "hail" in q.lower() for q in result["questions"])
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._reports.find_location")
     @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
@@ -663,8 +663,8 @@ class TestClarifyReport:
 
     @pytest.mark.asyncio
     @patch("py._reports.get_ai_prompt")
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._reports.find_location")
     @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
@@ -676,14 +676,14 @@ class TestClarifyReport:
         mock_breaker.is_allowed = True
         mock_prompt.return_value = None  # Use fallback prompt template
 
-        # Mock Claude response with numbered questions
+        # Mock model response with numbered questions
         text_block = MagicMock()
         text_block.type = "text"
         text_block.text = "1. How far can you see ahead?\n2. Is it getting thicker?"
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         body = ClarifyRequest(locationSlug="harare", reportType="fog")
@@ -694,8 +694,8 @@ class TestClarifyReport:
 
     @pytest.mark.asyncio
     @patch("py._reports.get_ai_prompt")
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._reports.find_location")
     @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
@@ -709,7 +709,7 @@ class TestClarifyReport:
         mock_prompt.return_value = None
 
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.side_effect = Exception("API Error")
+        mock_ai_client.create.side_effect = Exception("API Error")
         mock_client.return_value = mock_ai_client
 
         body = ClarifyRequest(locationSlug="harare", reportType="frost")
@@ -720,8 +720,8 @@ class TestClarifyReport:
 
     @pytest.mark.asyncio
     @patch("py._reports.get_ai_prompt")
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._reports.find_location")
     @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
@@ -738,9 +738,9 @@ class TestClarifyReport:
         text_block.type = "text"
         text_block.text = "No numbered questions here."
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         body = ClarifyRequest(locationSlug="harare", reportType="dust")
@@ -751,8 +751,8 @@ class TestClarifyReport:
 
     @pytest.mark.asyncio
     @patch("py._reports.get_ai_prompt")
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._reports.find_location")
     @patch("py._db.check_rate_limit")
     @patch("py._reports.get_client_ip")
@@ -769,9 +769,9 @@ class TestClarifyReport:
         text_block.type = "text"
         text_block.text = "1. First question?\n2. Second question?\n3. Third question?"
         mock_message = MagicMock()
-        mock_message.content = [text_block]
+        mock_message.text = text_block.text
         mock_ai_client = MagicMock()
-        mock_ai_client.messages.create.return_value = mock_message
+        mock_ai_client.create.return_value = mock_message
         mock_client.return_value = mock_ai_client
 
         body = ClarifyRequest(locationSlug="harare", reportType="heavy-rain")

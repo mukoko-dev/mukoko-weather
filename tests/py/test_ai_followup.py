@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch, MagicMock, PropertyMock
 
-import anthropic
+from py._ai_gateway import GatewayError, GatewayRateLimitError
 import pytest
 from fastapi import HTTPException
 
@@ -240,8 +240,8 @@ class TestFollowupChatAI:
         return req
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -263,8 +263,8 @@ class TestFollowupChatAI:
         assert "temporarily unavailable" in result["response"]
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -278,8 +278,8 @@ class TestFollowupChatAI:
         text_block.type = "text"
         text_block.text = "Tomorrow will be slightly cooler."
         mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_client.return_value.messages.create.return_value = mock_response
+        mock_response.text = text_block.text
+        mock_client.return_value.create.return_value = mock_response
 
         body = FollowupRequest(
             message="What about tomorrow?",
@@ -294,8 +294,8 @@ class TestFollowupChatAI:
         mock_breaker.record_success.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -309,8 +309,8 @@ class TestFollowupChatAI:
         text_block.type = "text"
         text_block.text = "Response"
         mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_client.return_value.messages.create.return_value = mock_response
+        mock_response.text = text_block.text
+        mock_client.return_value.create.return_value = mock_response
 
         body = FollowupRequest(
             message="What about rain?",
@@ -322,7 +322,7 @@ class TestFollowupChatAI:
 
         await followup_chat(body, request)
 
-        call_args = mock_client.return_value.messages.create.call_args
+        call_args = mock_client.return_value.create.call_args
         messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
         # First message should be the assistant with weather summary
         assert messages[0]["role"] == "assistant"
@@ -332,8 +332,8 @@ class TestFollowupChatAI:
         assert messages[-1]["content"] == "What about rain?"
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -347,8 +347,8 @@ class TestFollowupChatAI:
         text_block.type = "text"
         text_block.text = "Response"
         mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_client.return_value.messages.create.return_value = mock_response
+        mock_response.text = text_block.text
+        mock_client.return_value.create.return_value = mock_response
 
         body = FollowupRequest(
             message="What about rain?",
@@ -360,15 +360,15 @@ class TestFollowupChatAI:
 
         await followup_chat(body, request)
 
-        call_args = mock_client.return_value.messages.create.call_args
+        call_args = mock_client.return_value.create.call_args
         messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
         # Only the user message should be present
         assert len(messages) == 1
         assert messages[0]["role"] == "user"
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -382,8 +382,8 @@ class TestFollowupChatAI:
         text_block.type = "text"
         text_block.text = "Response"
         mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_client.return_value.messages.create.return_value = mock_response
+        mock_response.text = text_block.text
+        mock_client.return_value.create.return_value = mock_response
 
         # Create 15 history messages (exceeds MAX_HISTORY=10)
         history = [
@@ -402,14 +402,14 @@ class TestFollowupChatAI:
 
         await followup_chat(body, request)
 
-        call_args = mock_client.return_value.messages.create.call_args
+        call_args = mock_client.return_value.create.call_args
         messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
         # 1 (weatherSummary) + MAX_HISTORY (10) + 1 (new message) = 12
         assert len(messages) == 1 + MAX_HISTORY + 1
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -423,8 +423,8 @@ class TestFollowupChatAI:
         text_block.type = "text"
         text_block.text = "Response"
         mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_client.return_value.messages.create.return_value = mock_response
+        mock_response.text = text_block.text
+        mock_client.return_value.create.return_value = mock_response
 
         long_content = "B" * 5000
         history = [
@@ -441,24 +441,24 @@ class TestFollowupChatAI:
 
         await followup_chat(body, request)
 
-        call_args = mock_client.return_value.messages.create.call_args
+        call_args = mock_client.return_value.create.call_args
         messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
         # Find the history message (not the new user message which is last)
         history_msg = messages[0]  # No weatherSummary, so history is first
         assert len(history_msg["content"]) == MAX_MESSAGE_LEN
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_ai_rate_limit_error_raises_429(
         self, _mock_ip, _mock_rate, _mock_prompt, mock_client, mock_breaker,
     ):
-        """Anthropic rate limit error should raise 429."""
+        """Gateway rate limit error should raise 429."""
         type(mock_breaker).is_allowed = PropertyMock(return_value=True)
-        mock_client.return_value.messages.create.side_effect = anthropic.RateLimitError("rate limited")
+        mock_client.return_value.create.side_effect = GatewayRateLimitError("rate limited")
 
         body = FollowupRequest(
             message="What about tomorrow?",
@@ -474,17 +474,17 @@ class TestFollowupChatAI:
         mock_breaker.record_failure.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
     async def test_ai_api_error_returns_graceful_fallback(
         self, _mock_ip, _mock_rate, _mock_prompt, mock_client, mock_breaker,
     ):
-        """Anthropic APIError should return graceful fallback, not raise."""
+        """Gateway error should return graceful fallback, not raise."""
         type(mock_breaker).is_allowed = PropertyMock(return_value=True)
-        mock_client.return_value.messages.create.side_effect = anthropic.APIError("server error")
+        mock_client.return_value.create.side_effect = GatewayError("server error")
 
         body = FollowupRequest(
             message="What about tomorrow?",
@@ -499,8 +499,8 @@ class TestFollowupChatAI:
         mock_breaker.record_failure.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -514,8 +514,8 @@ class TestFollowupChatAI:
         text_block.type = "text"
         text_block.text = "Response"
         mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_client.return_value.messages.create.return_value = mock_response
+        mock_response.text = text_block.text
+        mock_client.return_value.create.return_value = mock_response
 
         body = FollowupRequest(
             message="X" * MAX_MESSAGE_LEN,
@@ -528,8 +528,8 @@ class TestFollowupChatAI:
         assert result["response"] == "Response"
 
     @pytest.mark.asyncio
-    @patch("py._anthropic.anthropic_breaker")
-    @patch("py._anthropic.get_anthropic_client")
+    @patch("py._ai_gateway.ai_breaker")
+    @patch("py._ai_gateway.get_gateway_client")
     @patch("py._ai_followup.get_ai_prompt", return_value=None)
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -543,8 +543,8 @@ class TestFollowupChatAI:
         text_block.type = "text"
         text_block.text = "Response"
         mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_client.return_value.messages.create.return_value = mock_response
+        mock_response.text = text_block.text
+        mock_client.return_value.create.return_value = mock_response
 
         history = [
             FollowupMessage(role="user", content="First question"),
@@ -563,7 +563,7 @@ class TestFollowupChatAI:
 
         await followup_chat(body, request)
 
-        call_args = mock_client.return_value.messages.create.call_args
+        call_args = mock_client.return_value.create.call_args
         messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
 
         # Expected: assistant (summary), user (first), assistant (first answer),

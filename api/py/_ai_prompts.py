@@ -31,7 +31,7 @@ _suggested_cache_at: float = 0
 CACHE_TTL = 300  # 5 minutes
 
 # Snapshot of every active prompt doc, keyed by promptKey (shared by all
-# Claude-backed modules through get_ai_prompt). Separate from the route cache
+# AI-backed modules through get_ai_prompt). Separate from the route cache
 # above, which holds the serialised list for the HTTP endpoint.
 _prompt_doc_cache: dict[str, dict] = {}
 _prompt_doc_cache_at: float = 0

@@ -103,7 +103,9 @@ CLOSED ──(failures >= threshold)──> OPEN ──(cooldown expires)──>
 | -------------------- | ---------------- | :---------------: | :------: | :----: | :-----: |
 | `tomorrow_breaker`   | Tomorrow.io API  |         3         |  2 min   | 5 min  |   5s    |
 | `open_meteo_breaker` | Open-Meteo API   |         5         |  5 min   | 5 min  |   8s    |
-| `anthropic_breaker`  | Anthropic Claude |         3         |  5 min   | 10 min |   15s   |
+| `ai_breaker`         | AI Gateway (GLM) |         3         |  5 min   | 10 min |   15s   |
+
+The AI Gateway is called only from the Python backend (`api/py/_ai_gateway.py`). It authenticates with one server-only Cloudflare API token, `CF_AI_API_TOKEN` (AI Gateway: Run + Workers AI: Read), sent as both `cf-aig-authorization` and the provider `Authorization`. `AI_GATEWAY_TOKEN` and `CF_WORKERS_AI_TOKEN` optionally override it per header.
 
 ### Weather Fallback Chain
 
@@ -152,7 +154,7 @@ The Shamwari chatbot (`/api/py/chat`) has multiple resilience layers:
 | ----------------- | --------------------------------------------------- | ------------ |
 | Rate limiter      | 20 req/hour/IP (MongoDB-backed)                     | Per-client   |
 | Input validation  | Type + length checks, slug regex, tag allowlist     | Per-request  |
-| Circuit breaker   | `anthropic_breaker` on all Claude calls             | Per-provider |
+| Circuit breaker   | `ai_breaker` on all AI gateway calls                | Per-provider |
 | Tool timeout      | 15s per tool execution                              | Per-tool     |
 | Tool loop bound   | Max 5 iterations                                    | Per-request  |
 | Tool result cap   | `list_locations_by_tag` capped to 20 results        | Per-tool     |

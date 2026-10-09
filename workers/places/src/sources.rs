@@ -8,7 +8,8 @@ use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use weather_core::locations::{encode_geohash, LocationDoc, GEOHASH_PRECISION};
 use weather_core::places::slugify;
-use weather_edge::{config, get_with_timeout};
+use weather_core::secrets;
+use weather_edge::{config, get_with_timeout, secret};
 use worker::{Env, Headers, Url};
 
 const CACHE: &str = "CACHE";
@@ -37,17 +38,17 @@ async fn store<T: Serialize>(env: &Env, key: &str, value: &T, ttl: u64) {
 }
 
 /// `(base URL, machine key)` when the Nyuchi API is configured.
-fn nyuchi_api(env: &Env) -> Option<(String, String)> {
+async fn nyuchi_api(env: &Env) -> Option<(String, String)> {
     Some((
         config(env, "NYUCHI_API_URL")?
             .trim_end_matches('/')
             .to_owned(),
-        config(env, "NYUCHI_API_KEY")?,
+        secret(env, secrets::NYUCHI_API_KEY).await?,
     ))
 }
 
 async fn nyuchi_get(env: &Env, path_and_query: &str) -> Result<Option<Value>, ()> {
-    let Some((base, key)) = nyuchi_api(env) else {
+    let Some((base, key)) = nyuchi_api(env).await else {
         return Ok(None);
     };
     let headers = Headers::new();
