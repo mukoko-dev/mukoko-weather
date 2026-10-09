@@ -3,7 +3,8 @@
 //! The Nyuchi API (nyuchi-api) proxies `GET /v1/weather/forecast` here
 //! (nyuchi/api-gateway#154), configured with `WEATHER_SERVICE_URL` (this
 //! Worker's origin) and `WEATHER_SERVICE_API_KEY` (the same value as this
-//! Worker's secret of that name).
+//! Worker's secret of that name, read from the Secrets Store as
+//! `MUKOKO_WEATHER_SERVICE_API_KEY`).
 //!
 //! ```text
 //! GET /internal/forecast?location=<slug|name> | lat=&lon= [&days=1..7]
@@ -19,10 +20,10 @@
 //! `mukoko-weather-forecast` over the `FORECAST` service binding.
 
 use weather_core::query::ForecastQuery;
-use weather_edge::{bearer_matches, config, error, json, query_pairs};
+use weather_edge::{bearer_matches, error, json, query_pairs, secret};
 use worker::{event, Context, Env, Method, Request, Response, Result};
 
-const KEY_SECRET: &str = "WEATHER_SERVICE_API_KEY";
+const KEY_SECRET: &str = weather_core::secrets::WEATHER_SERVICE_API_KEY;
 const FORECAST_BINDING: &str = "FORECAST";
 
 #[event(fetch)]
@@ -42,7 +43,7 @@ pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
 
 async fn forecast(req: Request, env: &Env) -> Result<Response> {
     // Fail closed: with no key configured, nobody is let in.
-    let Some(expected) = config(env, KEY_SECRET) else {
+    let Some(expected) = secret(env, KEY_SECRET).await else {
         return error(
             503,
             "not_configured",

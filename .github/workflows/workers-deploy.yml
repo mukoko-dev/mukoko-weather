@@ -15,9 +15,12 @@
 # passes `--env` for it.
 #
 # Uses the repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID,
-# passed to wrangler as env. The Workers' runtime secrets (TOMORROW_API_KEY,
-# NYUCHI_API_KEY, WEATHER_SERVICE_API_KEY, CHECKWX_API_KEY) live on the
-# Workers, never here (workers/README.md, "Owner steps").
+# passed to wrangler as env. The Workers' runtime secrets live in the
+# account's Cloudflare Secrets Store, one store secret per key, bound in each
+# wrangler.jsonc (secrets_store_secrets), never here: MUKOKO_WEATHER_
+# TOMORROW_API_KEY, _NYUCHI_API_KEY, _SERVICE_API_KEY, _CHECKWX_API_KEY
+# (CONTRIBUTING.md, "Deploying the Workers"). Binding a store secret on
+# deploy needs the token to hold Account Secrets Store Edit.
 #
 # The legacy worker/ (nyuchi-weather-api) is deliberately not deployed: its
 # wrangler.toml still has placeholder KV ids and no such Worker exists.

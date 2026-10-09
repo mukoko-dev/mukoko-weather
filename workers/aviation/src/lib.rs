@@ -22,7 +22,8 @@ use std::time::Duration;
 
 use serde_json::{json as j, Value};
 use weather_core::aviation::{self as avn, MetarResponse};
-use weather_edge::{config, error, get_with_timeout, json, query_pairs, FetchError};
+use weather_core::secrets;
+use weather_edge::{error, get_with_timeout, json, query_pairs, secret, FetchError};
 use worker::{event, Context, Env, Headers, Method, Request, Response, Result};
 
 const CACHE_BINDING: &str = "CACHE";
@@ -36,17 +37,20 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
     match req.path().as_str() {
         "/metar" => metar(&req, &env, &ctx).await,
         "/airports/nearest" => nearest(&req),
-        "/health" => json(
-            200,
-            &j!({
+        "/health" => {
+            let checkwx = secret(&env, secrets::CHECKWX_API_KEY).await.is_some();
+            json(
+                200,
+                &j!({
                 "service": "mukoko-weather-aviation",
                 "status": "ok",
                 "configured": {
                     "cache": env.kv(CACHE_BINDING).is_ok(),
-                    "checkwx": config(&env, "CHECKWX_API_KEY").is_some(),
-                }
-            }),
-        ),
+                    "checkwx": checkwx,
+                    }
+                }),
+            )
+        }
         _ => error(404, "not_found", "No such route."),
     }
 }
@@ -130,7 +134,7 @@ async fn metar(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
 
     let (metar, source) = match awc_metars(&icao).await {
         Some(obs) => (Some(obs), "awc"),
-        None => match config(env, "CHECKWX_API_KEY") {
+        None => match secret(env, secrets::CHECKWX_API_KEY).await {
             Some(k) => (checkwx(&icao, &k).await, "checkwx"),
             None => (None, "awc"),
         },
