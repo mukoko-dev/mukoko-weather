@@ -169,8 +169,8 @@ export function StatusDashboard() {
             Fallback weather data provider (free, no auth)
           </li>
           <li>
-            <strong className="text-text-primary">Anthropic AI</strong> —
-            Shamwari AI weather summaries (Claude)
+            <strong className="text-text-primary">Shamwari AI</strong> — AI
+            weather summaries (GLM on Workers AI, via Cloudflare AI Gateway)
           </li>
           <li>
             <strong className="text-text-primary">Weather Cache</strong> —

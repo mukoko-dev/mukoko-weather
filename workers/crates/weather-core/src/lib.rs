@@ -23,6 +23,7 @@ pub mod locations;
 pub mod normalize;
 pub mod places;
 pub mod query;
+pub mod secrets;
 pub mod station;
 pub mod tiles;
 pub mod wmo;

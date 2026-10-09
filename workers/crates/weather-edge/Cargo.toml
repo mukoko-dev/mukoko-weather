@@ -15,4 +15,5 @@ serde_json.workspace = true
 futures.workspace = true
 js-sys.workspace = true
 subtle.workspace = true
+weather-core.workspace = true
 chrono.workspace = true

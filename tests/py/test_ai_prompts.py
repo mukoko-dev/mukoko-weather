@@ -37,7 +37,7 @@ class TestGetPrompts:
         mock_coll.return_value.find_one.return_value = {
             "promptKey": "system:weather_summary",
             "template": "You are Shamwari Weather...",
-            "model": "claude-haiku-4-5-20251001",
+            "model": "workers-ai/@cf/zai-org/glm-5.3",
             "maxTokens": 800,
             "active": True,
         }

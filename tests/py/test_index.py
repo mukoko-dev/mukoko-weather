@@ -55,18 +55,21 @@ class TestCorsPreflight:
 # ---------------------------------------------------------------------------
 
 
+_GW_ENV = {"CLOUDFLARE_ACCOUNT_ID": "acct", "CF_AI_API_TOKEN": "tok"}
+
+
 class TestHealthEndpoint:
     @patch("py.index.get_db")
     @pytest.mark.asyncio
-    async def test_mongo_up_anthropic_available(self, mock_db):
+    async def test_mongo_up_ai_available(self, mock_db):
         mock_db.return_value.command.return_value = {"ok": 1}
 
-        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test-key"}):
+        with patch.dict("os.environ", _GW_ENV, clear=True):
             result = await health()
 
         assert result["status"] == "ok"
         assert result["database"] == "connected"
-        assert result["anthropic"] == "available"
+        assert result["ai"] == "available"
         assert result["service"] == "mukoko-weather-py"
 
     @patch("py.index.get_db")
@@ -74,23 +77,22 @@ class TestHealthEndpoint:
     async def test_mongo_down(self, mock_db):
         mock_db.return_value.command.side_effect = Exception("Connection refused")
 
-        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test-key"}, clear=False):
+        with patch.dict("os.environ", _GW_ENV, clear=True):
             result = await health()
 
         assert result["status"] == "degraded"
         assert result["database"] == "unavailable"
 
-    @patch("py._db.get_api_key", return_value=None)
     @patch("py.index.get_db")
     @pytest.mark.asyncio
-    async def test_anthropic_unavailable(self, mock_db, mock_key):
+    async def test_ai_unavailable_without_gateway_config(self, mock_db):
         mock_db.return_value.command.return_value = {"ok": 1}
 
         with patch.dict("os.environ", {}, clear=True):
             result = await health()
 
         assert result["status"] == "degraded"
-        assert result["anthropic"] == "unavailable"
+        assert result["ai"] == "unavailable"
         assert result["database"] == "connected"
 
     @patch("py.index.get_db")
@@ -103,20 +105,7 @@ class TestHealthEndpoint:
 
         assert result["status"] == "degraded"
         assert result["database"] == "unavailable"
-        assert result["anthropic"] == "unavailable"
-
-    @patch("py._db.get_api_key", return_value="sk-from-db")
-    @patch("py.index.get_db")
-    @pytest.mark.asyncio
-    async def test_anthropic_from_db_key(self, mock_db, mock_key):
-        """When env var is absent, health should check MongoDB for the key."""
-        mock_db.return_value.command.return_value = {"ok": 1}
-
-        with patch.dict("os.environ", {}, clear=True):
-            result = await health()
-
-        assert result["status"] == "ok"
-        assert result["anthropic"] == "available"
+        assert result["ai"] == "unavailable"
 
 
 # ---------------------------------------------------------------------------

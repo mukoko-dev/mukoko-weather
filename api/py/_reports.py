@@ -26,7 +26,7 @@ from ._db import (
     weather_cache_collection,
 )
 from ._ai_prompts import get_ai_prompt
-from ._anthropic import call_claude, first_text
+from ._ai_gateway import call_ai, first_text
 from ._places_resolver import find_location
 
 router = APIRouter()
@@ -306,11 +306,11 @@ async def clarify_report(body: ClarifyRequest, request: Request):
         .replace("{reportType}", body.reportType)
     )
 
-    model = (prompt_doc or {}).get("model", "claude-haiku-4-5-20251001")
+    model = (prompt_doc or {}).get("model")
     max_tokens = (prompt_doc or {}).get("maxTokens", 150)
 
-    # No key, open circuit or any Claude error: hardcoded fallback questions
-    response, err = call_claude(
+    # No key, open circuit or any AI error: hardcoded fallback questions
+    response, err = call_ai(
         model=model,
         max_tokens=max_tokens,
         system=system_prompt,

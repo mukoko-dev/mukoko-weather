@@ -58,12 +58,6 @@ sys.modules["pymongo"] = _mock_pymongo
 sys.modules["pymongo.database"] = _mock_pymongo_database
 sys.modules["pymongo.errors"] = _mock_pymongo_errors
 
-# Mock anthropic SDK
-_mock_anthropic = types.ModuleType("anthropic")
-_mock_anthropic.Anthropic = MagicMock  # type: ignore[attr-defined]
-_mock_anthropic.RateLimitError = type("RateLimitError", (Exception,), {})  # type: ignore[attr-defined]
-_mock_anthropic.APIError = type("APIError", (Exception,), {})  # type: ignore[attr-defined]
-sys.modules["anthropic"] = _mock_anthropic
 
 # ---------------------------------------------------------------------------
 # Now safe to import from our api/py package
