@@ -366,6 +366,8 @@ mukoko-weather/
 │   │   ├── activity-feasibility.test.ts
 │   │   ├── activity-tips.ts        # Deterministic weather-driven tips per activity (category-aware, no AI call)
 │   │   ├── activity-tips.test.ts
+│   │   ├── lazy-visibility.ts      # LazySection unload rules: never unmount a box-less (display:none) section; reserve measured height while unmounted
+│   │   ├── lazy-visibility.test.ts
 │   │   ├── use-debounce.ts         # Shared useDebounce hook (generic, reusable across components)
 │   │   ├── use-debounce.test.ts
 │   │   ├── use-location-quick-search.ts      # Shared debounced /api/py/search hook (MyWeatherModal, ExploreSearch, HistoryDashboard, AviationPlanner)
@@ -1251,7 +1253,7 @@ All pages use a **TikTok-style sequential mounting** pattern — only ONE sectio
 `LazySection` (`src/components/weather/LazySection.tsx`) provides:
 
 1. **Sequential mount queue** — global FIFO queue mounts ONE component at a time with rAF + settle delay (150ms mobile, 50ms desktop) between mounts
-2. **Bidirectional visibility** — sections mount when entering viewport (100-300px margin) and UNMOUNT when scrolling 1500px past viewport to reclaim memory
+2. **Bidirectional visibility** — sections mount when entering viewport (100-300px margin) and UNMOUNT when scrolling 1500px past viewport to reclaim memory. Two guards (`src/lib/lazy-visibility.ts`) stop the cycle feeding itself: a section with **no layout box** is never unmounted (IntersectionObserver reports a `display: none` target as "not intersecting" from anywhere — the `.herd` stack hides a lazy wrapper whose card rendered nothing, and unmounting it re-showed the skeleton, which un-hid the wrapper, which remounted the empty card: a ~7 Hz skeleton blink, e.g. the Minutely slot when `minutely.precipitation` is empty), and an unmounted section **keeps its measured height** (`--lazy-reserved-height` on the wrapper) so swapping a tall card for its shorter skeleton never shifts the sections below
 3. **Adaptive timing** — mobile gets longer settle delays than desktop
 4. **Skeleton fallbacks** — each section has an aspect-matched skeleton placeholder shown before mounting
 5. **Memory pressure monitoring** — `useMemoryPressure()` hook monitors `performance.memory` for JS heap pressure
