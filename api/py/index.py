@@ -17,6 +17,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pymongo.errors import ConnectionFailure
 
+# Install log redaction + quiet httpx/httpcore BEFORE any router module is
+# imported, so no upstream request URL (which may carry a provider key in its
+# query string) is ever logged — not even during module import.
+from ._logging import configure_logging
+
+configure_logging()
+
 from ._devices import router as devices_router
 from ._chat import router as chat_router
 from ._suitability import router as suitability_router

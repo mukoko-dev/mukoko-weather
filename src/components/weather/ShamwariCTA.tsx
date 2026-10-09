@@ -12,9 +12,9 @@ const VARIANT_CLASSES: Record<ShamwariCTAVariant, string> = {
   tanzanite:
     "inline-flex items-center gap-1.5 rounded-[var(--radius-badge)] bg-tanzanite px-4 py-2 text-base font-medium text-mineral-tanzanite-fg transition-colors hover:bg-tanzanite/90 min-h-[var(--touch-target-min)]",
   primary:
-    "inline-flex items-center gap-1 rounded-[var(--radius-input)] bg-primary px-3 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 min-h-[var(--touch-target-min)]",
+    "inline-flex items-center gap-1 rounded-[var(--radius-button)] bg-primary px-3 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 min-h-[var(--touch-target-min)]",
   subtle:
-    "press-scale inline-flex items-center gap-1.5 rounded-[var(--radius-input)] bg-primary/10 px-4 py-2 text-base font-medium text-primary transition-all hover:bg-primary/20 min-h-[var(--touch-target-min)]",
+    "press-scale inline-flex items-center gap-1.5 rounded-[var(--radius-button)] bg-primary/10 px-4 py-2 text-base font-medium text-primary transition-all hover:bg-primary/20 min-h-[var(--touch-target-min)]",
   text: "inline-flex items-center gap-1 text-base text-text-tertiary transition-colors hover:text-tanzanite",
 };
 

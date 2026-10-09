@@ -46,10 +46,8 @@ export function WeatherLayerPanel({
             onClick={() => handleSelect(chip.id)}
             aria-pressed={isActive}
             className={cn(
-              "min-h-[var(--touch-target-min)] shrink-0 rounded-full border px-4 text-sm font-medium transition-colors",
-              isActive
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-transparent text-text-secondary hover:bg-surface-dim hover:text-text-primary",
+              "quail shrink-0 px-4 text-sm font-medium",
+              isActive && "font-semibold",
             )}
           >
             {chip.label}

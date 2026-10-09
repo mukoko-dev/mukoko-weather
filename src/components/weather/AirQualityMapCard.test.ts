@@ -16,8 +16,8 @@ describe("AirQualityMapCard structure", () => {
     expect(source).toContain('import("./map/MapLibreMap")');
   });
 
-  it("renders the AIR QUALITY MAP eyebrow as a labelled section", () => {
-    expect(source).toContain("AIR QUALITY MAP");
+  it("renders the Air Quality Map heading as a labelled section", () => {
+    expect(source).toContain("Air Quality Map");
     expect(source).toContain("aria-labelledby={headingId}");
     expect(source).toContain("useId()");
   });

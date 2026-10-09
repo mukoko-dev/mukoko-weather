@@ -78,9 +78,17 @@ describe("upvoting", () => {
     expect(source).toContain("Upvote report");
   });
 
-  it("has 56px minimum touch target for upvote", () => {
-    expect(source).toContain("min-h-[var(--touch-target-min)]");
-    expect(source).toContain("min-w-[var(--touch-target-min)]");
+  it("upvote is the shared Button primitive at the 48px icon-sm size", () => {
+    expect(source).toContain('size="icon-sm"');
+    expect(source).toContain('from "@/components/ui/button"');
+  });
+
+  it("the empty state is a calm card with a copper edge, not a saturated fill", () => {
+    expect(source).toContain('className="acacia relative overflow-hidden"');
+    expect(source).toContain("w-1 bg-mineral-copper");
+    expect(source).not.toContain(
+      "rounded-[var(--radius-card)] bg-mineral-copper p-4",
+    );
   });
 });
 

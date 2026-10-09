@@ -43,6 +43,11 @@ import {
   SupportBannerSkeleton,
   LocationInfoSkeleton,
 } from "@/components/weather/SectionSkeleton";
+import {
+  MAIN_COLUMN_CLASS,
+  SECTION_STACK_CLASS,
+  SIDEBAR_COLUMN_CLASS,
+} from "@/lib/dashboard-layout";
 import { FrostAlertBanner } from "./FrostAlertBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
 import { useAppStore } from "@/lib/store";
@@ -347,7 +352,7 @@ export function WeatherDashboard({
           safe-area inset); sm:pb-6 restores normal padding where the nav is hidden. */}
         <main
           id="main-content"
-          className="animate-fade-in mx-auto max-w-7xl overflow-x-hidden px-4 py-3 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-6 md:px-8"
+          className="animate-fade-in mx-auto max-w-7xl overflow-x-hidden px-4 pt-[var(--space-section)] pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-6 md:px-8"
           aria-label={`Weather dashboard for ${location.name}`}
           {...swipe}
         >
@@ -369,257 +374,298 @@ export function WeatherDashboard({
           {frostAlert && <FrostAlertBanner alert={frostAlert} />}
 
           {/* Main grid: mobile = 1 col, lg = 3 col (2+1), xl = 4 col (3+1) */}
-          <div className="grid gap-4 lg:grid-cols-3 lg:gap-6 xl:grid-cols-4">
+          <div className="grid gap-[var(--space-section)] lg:grid-cols-3 xl:grid-cols-4">
             {/* Primary content — lg:col-span-2, xl:col-span-3, DnD sortable */}
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={sectionOrder}
-                strategy={verticalListSortingStrategy}
+            <div className={MAIN_COLUMN_CLASS}>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+                onDragEnd={handleDragEnd}
               >
-                <div className="min-w-0 space-y-4 lg:col-span-2 xl:col-span-3">
-                  {sectionOrder.map((sectionId) => {
-                    switch (sectionId) {
-                      case "hourlyScroll":
-                        return (
-                          <DraggableSection
-                            key="hourlyScroll"
-                            id="hourlyScroll"
-                            reordering={reordering}
-                          >
-                            <ChartErrorBoundary name="hourly scroll cards">
-                              <section aria-labelledby="hourly-scroll-heading">
-                                <SectionHeader
-                                  headingId="hourly-scroll-heading"
-                                  title="Hourly"
-                                  action={{
-                                    label: "Full forecast →",
-                                    href: `/${location.slug}/forecast`,
-                                  }}
-                                  className="mb-2"
-                                />
-                                <HourlyScrollCards
+                <SortableContext
+                  items={sectionOrder}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className={SECTION_STACK_CLASS}>
+                    {sectionOrder.map((sectionId) => {
+                      switch (sectionId) {
+                        case "hourlyScroll":
+                          return (
+                            <DraggableSection
+                              key="hourlyScroll"
+                              id="hourlyScroll"
+                              reordering={reordering}
+                            >
+                              <ChartErrorBoundary name="hourly scroll cards">
+                                <section aria-labelledby="hourly-scroll-heading">
+                                  <SectionHeader
+                                    headingId="hourly-scroll-heading"
+                                    title="Hourly"
+                                    action={{
+                                      label: "Full forecast →",
+                                      href: `/${location.slug}/forecast`,
+                                    }}
+                                    className="mb-[var(--space-stack)]"
+                                  />
+                                  <HourlyScrollCards
+                                    hourly={weather.hourly}
+                                    utcOffsetSeconds={
+                                      weather.utc_offset_seconds
+                                    }
+                                  />
+                                </section>
+                              </ChartErrorBoundary>
+                            </DraggableSection>
+                          );
+                        case "current":
+                          return (
+                            <DraggableSection
+                              key="current"
+                              id="current"
+                              reordering={reordering}
+                            >
+                              <ChartErrorBoundary name="current conditions">
+                                <CurrentConditions
+                                  current={weather.current}
+                                  locationName={location.name}
+                                  daily={weather.daily}
                                   hourly={weather.hourly}
                                   utcOffsetSeconds={weather.utc_offset_seconds}
-                                />
-                              </section>
-                            </ChartErrorBoundary>
-                          </DraggableSection>
-                        );
-                      case "current":
-                        return (
-                          <DraggableSection
-                            key="current"
-                            id="current"
-                            reordering={reordering}
-                          >
-                            <ChartErrorBoundary name="current conditions">
-                              <CurrentConditions
-                                current={weather.current}
-                                locationName={location.name}
-                                daily={weather.daily}
-                                hourly={weather.hourly}
-                                utcOffsetSeconds={weather.utc_offset_seconds}
-                                slug={location.slug}
-                                isCurrentLocation={isCurrentLocation}
-                                footer={<SeasonBadge season={season} />}
-                              />
-                            </ChartErrorBoundary>
-                          </DraggableSection>
-                        );
-                      case "communityLane":
-                        return (
-                          <DraggableSection
-                            key="communityLane"
-                            id="communityLane"
-                            reordering={reordering}
-                          >
-                            <LazySection
-                              label="community-lane"
-                              fallback={<CommunityLaneSkeleton />}
-                            >
-                              <ChartErrorBoundary name="community lane">
-                                <CommunityLane
                                   slug={location.slug}
-                                  lat={location.lat}
-                                  lon={location.lon}
-                                  weather={weather}
-                                  selectedActivities={selectedActivities}
+                                  isCurrentLocation={isCurrentLocation}
+                                  footer={<SeasonBadge season={season} />}
                                 />
                               </ChartErrorBoundary>
-                            </LazySection>
-                          </DraggableSection>
-                        );
-                      case "atmospheric":
-                        return (
-                          <DraggableSection
-                            key="atmospheric"
-                            id="atmospheric"
-                            reordering={reordering}
-                          >
-                            <ChartErrorBoundary name="atmospheric conditions">
-                              <AtmosphericSummary
-                                current={weather.current}
-                                weather={weather}
-                                lat={location.lat}
-                                lon={location.lon}
-                                afterAirQuality={
-                                  <LazySection
-                                    label="haze"
-                                    fallback={<HazeSkeleton />}
-                                  >
-                                    <ChartErrorBoundary name="haze outlook">
-                                      <Suspense fallback={<HazeSkeleton />}>
-                                        <HazePanel
-                                          lat={location.lat}
-                                          lon={location.lon}
-                                        />
-                                      </Suspense>
-                                    </ChartErrorBoundary>
-                                  </LazySection>
-                                }
-                              />
-                            </ChartErrorBoundary>
-                          </DraggableSection>
-                        );
-                      case "reports":
-                        return (
-                          <DraggableSection
-                            key="reports"
-                            id="reports"
-                            reordering={reordering}
-                          >
-                            <LazySection
-                              label="community-reports"
-                              fallback={<ReportsSkeleton />}
+                            </DraggableSection>
+                          );
+                        case "communityLane":
+                          return (
+                            <DraggableSection
+                              key="communityLane"
+                              id="communityLane"
+                              reordering={reordering}
                             >
-                              <ChartErrorBoundary name="community reports">
-                                <Suspense fallback={<ReportsSkeleton />}>
-                                  <RecentReports locationSlug={location.slug} />
-                                </Suspense>
-                              </ChartErrorBoundary>
-                            </LazySection>
-                          </DraggableSection>
-                        );
-                      case "activityInsights":
-                        return (
-                          <DraggableSection
-                            key="activityInsights"
-                            id="activityInsights"
-                            reordering={reordering}
-                          >
-                            <LazySection
-                              label="activity-insights"
-                              fallback={<ActivityInsightsSkeleton />}
-                            >
-                              <ChartErrorBoundary name="activity insights">
-                                <Suspense
-                                  fallback={<ActivityInsightsSkeleton />}
-                                >
-                                  {/* Insights synthesized from the base forecast when the provider
-                                    (Open-Meteo fallback) doesn't supply them — activity cards
-                                    must never render without data. */}
-                                  <ActivityInsights
-                                    insights={
-                                      weather.insights ??
-                                      synthesizeOpenMeteoInsights(weather)
-                                    }
-                                    activities={allActivities}
-                                    weather={weather}
-                                  />
-                                </Suspense>
-                              </ChartErrorBoundary>
-                            </LazySection>
-                          </DraggableSection>
-                        );
-                      case "aiSummary":
-                        return (
-                          <DraggableSection
-                            key="aiSummary"
-                            id="aiSummary"
-                            reordering={reordering}
-                          >
-                            <LazySection
-                              label="ai-summary"
-                              fallback={<AISummarySkeleton />}
-                            >
-                              <ChartErrorBoundary name="AI summary">
-                                <Suspense fallback={<AISummarySkeleton />}>
-                                  {!usingFallback && (
-                                    <AISummary
-                                      weather={weather}
-                                      location={location}
-                                      user={user}
-                                      onSummaryLoaded={setAiSummary}
-                                    />
-                                  )}
-                                </Suspense>
-                              </ChartErrorBoundary>
-                            </LazySection>
-                          </DraggableSection>
-                        );
-                      case "aiChat":
-                        return aiSummary && !usingFallback ? (
-                          <DraggableSection
-                            key="aiChat"
-                            id="aiChat"
-                            reordering={reordering}
-                          >
-                            <LazySection
-                              label="ai-followup-chat"
-                              fallback={<AISummaryChatSkeleton />}
-                            >
-                              <ChartErrorBoundary name="AI follow-up chat">
-                                <Suspense fallback={<AISummaryChatSkeleton />}>
-                                  <AISummaryChat
-                                    weather={weather}
-                                    location={location}
-                                    initialSummary={aiSummary}
-                                    season={`${season.localName} (${season.name})`}
-                                    user={user}
-                                  />
-                                </Suspense>
-                              </ChartErrorBoundary>
-                            </LazySection>
-                          </DraggableSection>
-                        ) : null;
-                      case "enso":
-                        return (
-                          <DraggableSection
-                            key="enso"
-                            id="enso"
-                            reordering={reordering}
-                          >
-                            <LazySection
-                              label="enso-outlook"
-                              fallback={<EnsoOutlookSkeleton />}
-                            >
-                              <ChartErrorBoundary name="ENSO outlook">
-                                <Suspense fallback={<EnsoOutlookSkeleton />}>
-                                  <EnsoOutlook
+                              <LazySection
+                                label="community-lane"
+                                fallback={<CommunityLaneSkeleton />}
+                              >
+                                <ChartErrorBoundary name="community lane">
+                                  <CommunityLane
+                                    slug={location.slug}
                                     lat={location.lat}
                                     lon={location.lon}
-                                    countryCode={location.country}
+                                    weather={weather}
+                                    selectedActivities={selectedActivities}
                                   />
-                                </Suspense>
+                                </ChartErrorBoundary>
+                              </LazySection>
+                            </DraggableSection>
+                          );
+                        case "atmospheric":
+                          return (
+                            <DraggableSection
+                              key="atmospheric"
+                              id="atmospheric"
+                              reordering={reordering}
+                            >
+                              <ChartErrorBoundary name="atmospheric conditions">
+                                <AtmosphericSummary
+                                  current={weather.current}
+                                  weather={weather}
+                                  lat={location.lat}
+                                  lon={location.lon}
+                                  afterAirQuality={
+                                    <LazySection
+                                      label="haze"
+                                      fallback={<HazeSkeleton />}
+                                    >
+                                      <ChartErrorBoundary name="haze outlook">
+                                        <Suspense fallback={<HazeSkeleton />}>
+                                          <HazePanel
+                                            lat={location.lat}
+                                            lon={location.lon}
+                                          />
+                                        </Suspense>
+                                      </ChartErrorBoundary>
+                                    </LazySection>
+                                  }
+                                />
                               </ChartErrorBoundary>
-                            </LazySection>
-                          </DraggableSection>
-                        );
-                      default:
-                        return null;
-                    }
-                  })}
-                </div>
-              </SortableContext>
-            </DndContext>
+                            </DraggableSection>
+                          );
+                        case "reports":
+                          return (
+                            <DraggableSection
+                              key="reports"
+                              id="reports"
+                              reordering={reordering}
+                            >
+                              <LazySection
+                                label="community-reports"
+                                fallback={<ReportsSkeleton />}
+                              >
+                                <ChartErrorBoundary name="community reports">
+                                  <Suspense fallback={<ReportsSkeleton />}>
+                                    <RecentReports
+                                      locationSlug={location.slug}
+                                    />
+                                  </Suspense>
+                                </ChartErrorBoundary>
+                              </LazySection>
+                            </DraggableSection>
+                          );
+                        case "activityInsights":
+                          return (
+                            <DraggableSection
+                              key="activityInsights"
+                              id="activityInsights"
+                              reordering={reordering}
+                            >
+                              <LazySection
+                                label="activity-insights"
+                                fallback={<ActivityInsightsSkeleton />}
+                              >
+                                <ChartErrorBoundary name="activity insights">
+                                  <Suspense
+                                    fallback={<ActivityInsightsSkeleton />}
+                                  >
+                                    {/* Insights synthesized from the base forecast when the provider
+                                    (Open-Meteo fallback) doesn't supply them — activity cards
+                                    must never render without data. */}
+                                    <ActivityInsights
+                                      insights={
+                                        weather.insights ??
+                                        synthesizeOpenMeteoInsights(weather)
+                                      }
+                                      activities={allActivities}
+                                      weather={weather}
+                                    />
+                                  </Suspense>
+                                </ChartErrorBoundary>
+                              </LazySection>
+                            </DraggableSection>
+                          );
+                        case "aiSummary":
+                          return (
+                            <DraggableSection
+                              key="aiSummary"
+                              id="aiSummary"
+                              reordering={reordering}
+                            >
+                              <LazySection
+                                label="ai-summary"
+                                fallback={<AISummarySkeleton />}
+                              >
+                                <ChartErrorBoundary name="AI summary">
+                                  <Suspense fallback={<AISummarySkeleton />}>
+                                    {!usingFallback && (
+                                      <AISummary
+                                        weather={weather}
+                                        location={location}
+                                        user={user}
+                                        onSummaryLoaded={setAiSummary}
+                                      />
+                                    )}
+                                  </Suspense>
+                                </ChartErrorBoundary>
+                              </LazySection>
+                            </DraggableSection>
+                          );
+                        case "aiChat":
+                          return aiSummary && !usingFallback ? (
+                            <DraggableSection
+                              key="aiChat"
+                              id="aiChat"
+                              reordering={reordering}
+                            >
+                              <LazySection
+                                label="ai-followup-chat"
+                                fallback={<AISummaryChatSkeleton />}
+                              >
+                                <ChartErrorBoundary name="AI follow-up chat">
+                                  <Suspense
+                                    fallback={<AISummaryChatSkeleton />}
+                                  >
+                                    <AISummaryChat
+                                      weather={weather}
+                                      location={location}
+                                      initialSummary={aiSummary}
+                                      season={`${season.localName} (${season.name})`}
+                                      user={user}
+                                    />
+                                  </Suspense>
+                                </ChartErrorBoundary>
+                              </LazySection>
+                            </DraggableSection>
+                          ) : null;
+                        case "enso":
+                          return (
+                            <DraggableSection
+                              key="enso"
+                              id="enso"
+                              reordering={reordering}
+                            >
+                              <LazySection
+                                label="enso-outlook"
+                                fallback={<EnsoOutlookSkeleton />}
+                              >
+                                <ChartErrorBoundary name="ENSO outlook">
+                                  <Suspense fallback={<EnsoOutlookSkeleton />}>
+                                    <EnsoOutlook
+                                      lat={location.lat}
+                                      lon={location.lon}
+                                      countryCode={location.country}
+                                    />
+                                  </Suspense>
+                                </ChartErrorBoundary>
+                              </LazySection>
+                            </DraggableSection>
+                          );
+                        default:
+                          return null;
+                      }
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
+              {/* Windy-style additions — the last items of the main column
+                    (not full-width below the grid), so the main column and the
+                    sidebar end together instead of leaving a dead band of
+                    backdrop. Not draggable: they only exist when Open-Meteo
+                    returned data. */}
+              {minutely && (
+                <LazySection
+                  label="minutely-nowcast"
+                  fallback={<SectionSkeleton />}
+                >
+                  <ChartErrorBoundary name="minutely nowcast">
+                    <Suspense fallback={<SectionSkeleton />}>
+                      <MinutelyNowcast minutely={minutely} />
+                    </Suspense>
+                  </ChartErrorBoundary>
+                </LazySection>
+              )}
+
+              {modelSeries.length > 0 && modelsTime.length > 0 && (
+                <LazySection
+                  label="model-comparison"
+                  fallback={<SectionSkeleton />}
+                >
+                  <ChartErrorBoundary name="model comparison">
+                    <Suspense fallback={<SectionSkeleton />}>
+                      <ModelComparisonChart
+                        models={modelSeries}
+                        time={modelsTime}
+                      />
+                    </Suspense>
+                  </ChartErrorBoundary>
+                </LazySection>
+              )}
+            </div>
 
             {/* Sidebar — stacks below on mobile, col-span-1 on lg and xl */}
-            <div className="min-w-0 space-y-4 lg:col-span-1 xl:col-span-1">
+            <div className={SIDEBAR_COLUMN_CLASS}>
               <LazySection
                 label="air-quality-map"
                 fallback={<AirQualityMapSkeleton />}
@@ -680,7 +726,7 @@ export function WeatherDashboard({
                     <h2 id={`about-${location.slug}`} className="giraffe">
                       About {location.name}
                     </h2>
-                    <dl className="mt-3 space-y-2 text-base">
+                    <dl className="mt-[var(--space-stack)] space-y-2 text-base">
                       {countryName && (
                         <InfoRow label="Country" value={countryName} />
                       )}
@@ -692,7 +738,7 @@ export function WeatherDashboard({
                       <InfoRow
                         label="Coordinates"
                         value={
-                          <span className="font-mono text-base">
+                          <span className="tabular-nums">
                             {formatCoords(location.lat, location.lon)}
                           </span>
                         }
@@ -714,44 +760,10 @@ export function WeatherDashboard({
             </div>
           </div>
 
-          {/* Windy-style additions — full width, only when Open-Meteo returned data */}
-          {minutely && (
-            <div className="mt-4">
-              <LazySection
-                label="minutely-nowcast"
-                fallback={<SectionSkeleton />}
-              >
-                <ChartErrorBoundary name="minutely nowcast">
-                  <Suspense fallback={<SectionSkeleton />}>
-                    <MinutelyNowcast minutely={minutely} />
-                  </Suspense>
-                </ChartErrorBoundary>
-              </LazySection>
-            </div>
-          )}
-
-          {modelSeries.length > 0 && modelsTime.length > 0 && (
-            <div className="mt-4">
-              <LazySection
-                label="model-comparison"
-                fallback={<SectionSkeleton />}
-              >
-                <ChartErrorBoundary name="model comparison">
-                  <Suspense fallback={<SectionSkeleton />}>
-                    <ModelComparisonChart
-                      models={modelSeries}
-                      time={modelsTime}
-                    />
-                  </Suspense>
-                </ChartErrorBoundary>
-              </LazySection>
-            </div>
-          )}
-
           {/* Layout control — bottom of the page, out of the way of the header.
             While reordering, the floating Done pill below takes over. */}
           {!reordering && (
-            <div className="mt-8 flex justify-center">
+            <div className="mt-[var(--space-section)] flex justify-center">
               <button
                 type="button"
                 onClick={() => setReordering(true)}
