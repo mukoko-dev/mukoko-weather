@@ -169,8 +169,8 @@ class TestCheckOpenMeteo:
 # ---------------------------------------------------------------------------
 
 _GW_ENV = {
-    "CLOUDFLARE_ACCOUNT_ID": "acct",
-    "CF_AI_API_TOKEN": "tok",
+    "WEATHER_SERVICE_URL": "https://weather-internal.example",
+    "WEATHER_SERVICE_API_KEY": "key",
 }
 
 
@@ -183,32 +183,31 @@ class TestCheckAiGateway:
                 breaker.is_allowed = True
                 result = _check_ai_gateway()
         assert result["status"] == "operational"
-        assert result["name"] == "Shamwari AI (Cloudflare AI Gateway)"
+        assert result["name"] == "Shamwari AI (weather AI Worker)"
         assert "shamwari" in result["message"]
-        assert "glm" in result["message"]
+        assert "Worker" in result["message"]
 
     def test_degraded_when_unconfigured(self):
         with patch.dict("os.environ", {}, clear=True):
             result = _check_ai_gateway()
         assert result["status"] == "degraded"
         assert "not configured" in result["message"]
-        assert "CF_AI_API_TOKEN" in result["message"]
+        assert "WEATHER_SERVICE_API_KEY" in result["message"]
+        assert "WEATHER_SERVICE_URL" in result["message"]
 
     def test_reports_names_never_values(self):
-        env = {"CLOUDFLARE_ACCOUNT_ID": "acct", "AI_GATEWAY_TOKEN": "secret-gw-value"}
+        env = {"WEATHER_SERVICE_API_KEY": "secret-svc-value"}
         with patch.dict("os.environ", env, clear=True):
             result = _check_ai_gateway()
         assert result["status"] == "degraded"
-        assert "CF_WORKERS_AI_TOKEN" in result["message"]
-        assert "secret-gw-value" not in result["message"]
+        assert "WEATHER_SERVICE_URL" in result["message"]
+        assert "secret-svc-value" not in result["message"]
 
-    def test_legacy_split_tokens_still_operational(self):
-        env = {"CLOUDFLARE_ACCOUNT_ID": "acct", "AI_GATEWAY_TOKEN": "gw", "CF_WORKERS_AI_TOKEN": "wai"}
+    def test_old_cloudflare_token_alone_is_not_enough(self):
+        env = {"CLOUDFLARE_ACCOUNT_ID": "acct", "CF_AI_API_TOKEN": "tok"}
         with patch.dict("os.environ", env, clear=True):
-            with patch("py._status.ai_breaker") as breaker:
-                breaker.is_allowed = True
-                result = _check_ai_gateway()
-        assert result["status"] == "operational"
+            result = _check_ai_gateway()
+        assert result["status"] == "degraded"
 
     def test_degraded_when_circuit_open(self):
         with patch.dict("os.environ", _GW_ENV, clear=True):

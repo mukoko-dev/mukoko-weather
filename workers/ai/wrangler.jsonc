@@ -1,6 +1,8 @@
 // mukoko-weather-ai: Shamwari Weather (mukoko-dev/mukoko-weather#148).
-// No route and no workers.dev address: mukoko-weather-api forwards
-// /v1/ai/* here over a service binding (AI_SERVICE).
+// No route and no workers.dev address. Reached over service bindings
+// (AI_SERVICE) only: mukoko-weather-api forwards /v1/ai/*, and
+// mukoko-weather-internal forwards the Python backend's model calls
+// (service key checked there) to /internal/chat/completions.
 //
 // Every model call goes through the `shamwari` AI Gateway (Guardrails on,
 // logging off) to an open-weights Workers AI model. The guardrails block
@@ -9,7 +11,8 @@
 // Names only, never values:
 //   secrets: NYUCHI_API_KEY (internal key, `ai` scope), from the Secrets
 //            Store as MUKOKO_WEATHER_NYUCHI_API_KEY (below)
-//   vars:    NYUCHI_API_URL, AI_MODEL (a @cf/ model)
+//   vars:    NYUCHI_API_URL, AI_MODEL (a @cf/ model; Z.ai GLM, a reasoning
+//            model with function calling)
 // OWNER: replace the placeholder ids below with the created resources'
 // ids (workers/README.md, "Owner steps").
 {
@@ -44,7 +47,7 @@
   ],
   "vars": {
     "NYUCHI_API_URL": "https://api.nyuchi.com",
-    "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "AI_MODEL": "@cf/zai-org/glm-5.3-flash",
   },
   "ai": { "binding": "AI" },
   "services": [{ "binding": "FORECAST", "service": "mukoko-weather-forecast" }],
