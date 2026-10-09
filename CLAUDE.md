@@ -403,6 +403,7 @@ mukoko-weather/
 │       ├── _ai_prompts.py         # AI prompt library CRUD (GET/PUT prompts + suggested rules) + cached get_ai_prompt() loader
 │       ├── _chat.py               # Shamwari Explorer chatbot (Claude + tool use)
 │       ├── _locations.py          # Location CRUD, search, geo lookup
+│       ├── _logging.py            # Log hygiene: httpx/httpcore → WARNING + secret query-param redaction (configure_logging)
 │       ├── _history.py            # Historical weather data endpoint
 │       ├── _history_analyze.py    # AI history analysis (server-side aggregation + Claude)
 │       ├── _explore_search.py     # AI-powered explore search (Claude + tool use)
@@ -552,6 +553,8 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/reports/clarify` — 10 req/hour
 - `/api/py/stations/register` — 3 req/hour
 - `/api/py/stations/manual` — 12 req/hour (ingest endpoints authenticate by station key instead)
+
+**Secrets never in logs:** provider keys travel in request headers wherever the provider supports it (Tomorrow.io `apikey` header for forecast, status probe and map tiles; CheckWX `X-API-Key`), never in the URL query string. `api/py/_logging.py` `configure_logging()` runs at the top of `index.py` before any router import: it pins the `httpx`/`httpcore` loggers to WARNING (httpx logs every request URL at INFO) and installs a log-record factory plus `RedactSecretsFilter` that mask `apikey`/`api_key`/`key`/`token`/`access_token`/`password`/`passkey` query values in every record and traceback. Never log a full upstream URL that could carry a credential.
 
 **Resilience:** Module-level AI gateway client singleton (`get_gateway_client()`). Graceful degradation — AI endpoints return basic summaries when the gateway is unconfigured or unavailable. Weather endpoints fall back through Tomorrow.io → Open-Meteo → seasonal estimates.
 
@@ -1458,6 +1461,7 @@ _Python backend tests (pytest):_
 - `tests/py/test_index.py` — FastAPI app: CORS origins, health endpoint, ConnectionFailure handler, all 16 routers mounted
 - `tests/py/test_tiles.py` — Map tiles: Tomorrow.io weather overlay proxy (layer validation, zoom range, timestamp validation, SSRF protection, proxy behavior, cache headers) + Mapbox base tile proxy (style validation, zoom range, URL construction, dark mode)
 - `tests/py/test_stations.py` — Station ingest: unit conversions (°F/mph/inHg/inches), QC range filter, hashed-key auth, registration (key never stored raw, GeoJSON location), manual readings (validated observation writes, 401/400 paths)
+- `tests/py/test_log_redaction.py` — Secrets out of logs: Tomorrow.io key sent as a header (forecast + status probe), redaction filter/record factory masks secret query params in messages and tracebacks, httpx/httpcore at WARNING after app import
 - `tests/py/test_status.py` — System health: MongoDB/Tomorrow.io/Open-Meteo/AI-gateway/cache checks, overall status aggregation
 - `tests/py/test_embeddings.py` — Embeddings stub: status endpoint shape
 
