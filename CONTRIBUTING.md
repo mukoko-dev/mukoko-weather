@@ -10,7 +10,7 @@ Thank you for your interest in contributing to mukoko weather. This project prov
 4. Create a feature branch: `git checkout -b feature/your-feature`
 5. Start the dev server: `npm run dev`
 
-AI features are optional locally: without the AI env vars every AI endpoint uses its fallback. To enable them, set `CLOUDFLARE_ACCOUNT_ID` and one server-only Cloudflare API token, `CF_AI_API_TOKEN` (AI Gateway: Run + Workers AI: Read), in `.env.local`. Never prefix it with `NEXT_PUBLIC_` or read it outside `api/py`.
+AI features are optional locally: without the AI env vars every AI endpoint uses its fallback. To enable them, set `WEATHER_SERVICE_URL` (`https://weather-internal.mukoko.com`, or a local `wrangler dev` of `workers/internal-api`) and the server-only service key `WEATHER_SERVICE_API_KEY` in `.env.local`. The backend never holds a Cloudflare AI token: the weather Worker runs the model through its Workers AI binding. Never prefix either with `NEXT_PUBLIC_` or read them outside `api/py`.
 
 ## Development Workflow
 

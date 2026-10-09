@@ -1,4 +1,4 @@
-"""Tests for _ai_gateway.py (Cloudflare AI Gateway URL/headers, model
+"""Tests for _ai_gateway.py (the weather AI Worker client: URL/headers, model
 resolution, breaker-guarded call, response parsing) and the cached prompt
 loader get_ai_prompt in _ai_prompts.py."""
 
@@ -16,7 +16,6 @@ import py._ai_gateway as gw
 import py._ai_prompts as prompts
 from py._ai_gateway import (
     AIResponse,
-    DEFAULT_MODEL,
     ai_configured,
     call_ai,
     missing_ai_config,
@@ -24,22 +23,14 @@ from py._ai_gateway import (
     function_tools,
     gateway_headers,
     gateway_url,
-    resolve_model,
     tool_result_message,
 )
 from py._ai_prompts import get_ai_prompt
 
-ACCOUNT = "acct123"
-FULL_ENV = {
-    "CLOUDFLARE_ACCOUNT_ID": ACCOUNT,
-    "CF_AI_API_TOKEN": "cf-ai-token",
-}
-# Legacy split: one token per header, no CF_AI_API_TOKEN.
-SPLIT_ENV = {
-    "CLOUDFLARE_ACCOUNT_ID": ACCOUNT,
-    "AI_GATEWAY_TOKEN": "gw-token",
-    "CF_WORKERS_AI_TOKEN": "wai-token",
-}
+SERVICE = "https://weather-internal.example"
+KEY = "svc-key-value"
+FULL_ENV = {"WEATHER_SERVICE_URL": SERVICE, "WEATHER_SERVICE_API_KEY": KEY}
+COMPLETIONS_URL = f"{SERVICE}/internal/ai/chat/completions"
 
 
 @pytest.fixture(autouse=True)
@@ -56,7 +47,7 @@ def _reset_module_state():
 
 
 def _http_response(status: int = 200, json_body: dict | None = None) -> httpx.Response:
-    req = httpx.Request("POST", "https://gateway.example/compat/chat/completions")
+    req = httpx.Request("POST", COMPLETIONS_URL)
     return httpx.Response(status, json=json_body or {}, request=req)
 
 
@@ -77,166 +68,93 @@ def _mock_http(response: httpx.Response | Exception) -> MagicMock:
 
 
 # ---------------------------------------------------------------------------
-# gateway_url — base URL construction
+# gateway_url — the Worker's chat-completions URL
 # ---------------------------------------------------------------------------
 
 
 class TestGatewayUrl:
-    @patch.dict(os.environ, {"CLOUDFLARE_ACCOUNT_ID": ACCOUNT}, clear=True)
-    def test_defaults_to_shamwari_gateway(self):
-        assert gateway_url() == (
-            f"https://gateway.ai.cloudflare.com/v1/{ACCOUNT}/shamwari/compat/chat/completions"
-        )
+    @patch.dict(os.environ, {"WEATHER_SERVICE_URL": SERVICE}, clear=True)
+    def test_built_from_service_url(self):
+        assert gateway_url() == COMPLETIONS_URL
 
-    @patch.dict(os.environ, {"CLOUDFLARE_ACCOUNT_ID": ACCOUNT, "AI_GATEWAY_ID": "other"}, clear=True)
-    def test_gateway_id_from_env(self):
-        assert gateway_url() == (
-            f"https://gateway.ai.cloudflare.com/v1/{ACCOUNT}/other/compat/chat/completions"
-        )
+    @patch.dict(os.environ, {"WEATHER_SERVICE_URL": SERVICE + "/"}, clear=True)
+    def test_trailing_slash_ignored(self):
+        assert gateway_url() == COMPLETIONS_URL
 
-    @patch.dict(os.environ, {"CLOUDFLARE_ACCOUNT_ID": ACCOUNT, "AI_GATEWAY_ID": "  "}, clear=True)
-    def test_blank_gateway_id_falls_back_to_shamwari(self):
-        assert "/shamwari/" in gateway_url()
+    @patch.dict(os.environ, {"WEATHER_SERVICE_URL": SERVICE, "WEATHER_AI_URL": "https://ai.example"}, clear=True)
+    def test_ai_url_base_wins(self):
+        assert gateway_url() == "https://ai.example/internal/ai/chat/completions"
 
-    @patch.dict(
-        os.environ,
-        {"AI_GATEWAY_URL": "https://gw.example/v1/a/g/compat/", "CLOUDFLARE_ACCOUNT_ID": ACCOUNT},
-        clear=True,
-    )
-    def test_url_override_wins(self):
-        assert gateway_url() == "https://gw.example/v1/a/g/compat/chat/completions"
-
-    @patch.dict(os.environ, {"AI_GATEWAY_URL": "https://gw.example/compat/chat/completions"}, clear=True)
-    def test_url_override_already_complete(self):
-        assert gateway_url() == "https://gw.example/compat/chat/completions"
+    @patch.dict(os.environ, {"WEATHER_AI_URL": "https://ai.example/x/chat/completions"}, clear=True)
+    def test_ai_url_already_complete(self):
+        assert gateway_url() == "https://ai.example/x/chat/completions"
 
     @patch.dict(os.environ, {}, clear=True)
     def test_none_when_unset(self):
         assert gateway_url() is None
 
+    @patch.dict(
+        os.environ,
+        {"CLOUDFLARE_ACCOUNT_ID": "acct", "CF_AI_API_TOKEN": "t", "AI_GATEWAY_URL": "https://gateway.ai.cloudflare.com/v1/x"},
+        clear=True,
+    )
+    def test_old_gateway_env_is_ignored(self):
+        # The backend no longer calls Cloudflare AI directly at all.
+        assert gateway_url() is None
+        assert ai_configured() is False
+
 
 # ---------------------------------------------------------------------------
-# gateway_headers — auth headers present or absent
+# gateway_headers — the service key, nothing Cloudflare
 # ---------------------------------------------------------------------------
 
 
 class TestGatewayHeaders:
     @patch.dict(os.environ, FULL_ENV, clear=True)
-    def test_primary_token_used_for_both_headers(self):
+    def test_service_key_is_the_bearer(self):
         h = gateway_headers()
-        assert h["cf-aig-authorization"] == "Bearer cf-ai-token"
-        assert h["Authorization"] == "Bearer cf-ai-token"
+        assert h["Authorization"] == f"Bearer {KEY}"
         assert h["Content-Type"] == "application/json"
-
-    @patch.dict(os.environ, SPLIT_ENV, clear=True)
-    def test_legacy_split_tokens_sent(self):
-        h = gateway_headers()
-        assert h["cf-aig-authorization"] == "Bearer gw-token"
-        assert h["Authorization"] == "Bearer wai-token"
-
-    @patch.dict(os.environ, {**FULL_ENV, "AI_GATEWAY_TOKEN": "gw-token"}, clear=True)
-    def test_gateway_override_only_affects_gateway_header(self):
-        h = gateway_headers()
-        assert h["cf-aig-authorization"] == "Bearer gw-token"
-        assert h["Authorization"] == "Bearer cf-ai-token"
-
-    @patch.dict(os.environ, {**FULL_ENV, "CF_WORKERS_AI_TOKEN": "wai-token"}, clear=True)
-    def test_provider_override_only_affects_provider_header(self):
-        h = gateway_headers()
-        assert h["cf-aig-authorization"] == "Bearer cf-ai-token"
-        assert h["Authorization"] == "Bearer wai-token"
-
-    @patch.dict(os.environ, {**FULL_ENV, "AI_GATEWAY_TOKEN": "  "}, clear=True)
-    def test_blank_override_falls_back_to_primary(self):
-        assert gateway_headers()["cf-aig-authorization"] == "Bearer cf-ai-token"
-
-    @patch.dict(os.environ, {"CLOUDFLARE_ACCOUNT_ID": ACCOUNT}, clear=True)
-    def test_no_auth_headers_when_tokens_unset(self):
-        h = gateway_headers()
         assert "cf-aig-authorization" not in h
-        assert "Authorization" not in h
 
-    @patch.dict(os.environ, {"AI_GATEWAY_TOKEN": "gw-token"}, clear=True)
-    def test_gateway_token_only(self):
-        h = gateway_headers()
-        assert h["cf-aig-authorization"] == "Bearer gw-token"
-        assert "Authorization" not in h
+    @patch.dict(os.environ, {"WEATHER_SERVICE_URL": SERVICE}, clear=True)
+    def test_no_auth_header_without_key(self):
+        assert "Authorization" not in gateway_headers()
 
 
 # ---------------------------------------------------------------------------
-# ai_configured — missing config degrades with a warning
+# ai_configured / missing_ai_config
 # ---------------------------------------------------------------------------
 
 
 class TestAiConfigured:
     @patch.dict(os.environ, FULL_ENV, clear=True)
-    def test_true_with_primary_token_alone(self):
+    def test_true_with_url_and_key(self):
         assert ai_configured() is True
         assert missing_ai_config() == []
 
-    @patch.dict(os.environ, SPLIT_ENV, clear=True)
-    def test_true_with_legacy_split_tokens(self):
+    @patch.dict(os.environ, {"WEATHER_AI_URL": "https://ai.example", "WEATHER_SERVICE_API_KEY": KEY}, clear=True)
+    def test_true_with_ai_url_and_key(self):
         assert ai_configured() is True
 
-    @patch.dict(os.environ, {"CLOUDFLARE_ACCOUNT_ID": ACCOUNT, "AI_GATEWAY_TOKEN": "gw"}, clear=True)
-    def test_false_when_provider_token_unresolved(self):
-        assert ai_configured() is False
-        assert missing_ai_config() == ["CF_AI_API_TOKEN (or CF_WORKERS_AI_TOKEN)"]
-
-    @patch.dict(os.environ, {"CLOUDFLARE_ACCOUNT_ID": ACCOUNT}, clear=True)
-    def test_degrades_when_no_token_set(self, caplog):
-        with caplog.at_level("WARNING"):
-            assert ai_configured() is False
-            assert call_ai(max_tokens=10, messages=[{"role": "user", "content": "hi"}]) == (None, "no_client")
-        assert "CF_AI_API_TOKEN" in caplog.text
-
-    @pytest.mark.parametrize("missing", list(FULL_ENV))
+    @pytest.mark.parametrize("missing", ["WEATHER_SERVICE_URL", "WEATHER_SERVICE_API_KEY"])
     def test_false_and_warns_when_any_piece_missing(self, missing, caplog):
         env = {k: v for k, v in FULL_ENV.items() if k != missing}
         with patch.dict(os.environ, env, clear=True):
-            with caplog.at_level("WARNING"):
-                assert ai_configured() is False
-        assert "AI gateway not configured" in caplog.text
+            assert ai_configured() is False
+            assert any(missing in m for m in missing_ai_config())
+        assert "AI Worker not configured" in caplog.text
+        assert KEY not in caplog.text
 
     @patch.dict(os.environ, {}, clear=True)
     def test_warns_only_once(self, caplog):
-        with caplog.at_level("WARNING"):
-            ai_configured()
-            ai_configured()
-        assert caplog.text.count("AI gateway not configured") == 1
+        ai_configured()
+        ai_configured()
+        assert caplog.text.count("AI Worker not configured") == 1
 
 
 # ---------------------------------------------------------------------------
-# resolve_model — honour DB ids, migrate legacy Anthropic ids
-# ---------------------------------------------------------------------------
-
-
-class TestResolveModel:
-    @patch.dict(os.environ, {}, clear=True)
-    def test_default_is_workers_ai_glm(self):
-        assert resolve_model() == DEFAULT_MODEL
-        assert DEFAULT_MODEL.startswith("workers-ai/@cf/zai-org/glm")
-
-    @patch.dict(os.environ, {}, clear=True)
-    def test_legacy_claude_id_migrated(self):
-        assert resolve_model("claude-haiku-4-5-20251001") == DEFAULT_MODEL
-
-    @patch.dict(os.environ, {}, clear=True)
-    def test_db_glm_id_honoured(self):
-        assert resolve_model("workers-ai/@cf/zai-org/glm-4.7-flash") == "workers-ai/@cf/zai-org/glm-4.7-flash"
-
-    @patch.dict(os.environ, {}, clear=True)
-    def test_bare_cf_id_gets_provider_prefix(self):
-        assert resolve_model("@cf/zai-org/glm-5.2") == "workers-ai/@cf/zai-org/glm-5.2"
-
-    @patch.dict(os.environ, {"AI_MODEL": "workers-ai/@cf/zai-org/glm-5.3-flash"}, clear=True)
-    def test_env_overrides_default(self):
-        assert resolve_model(None) == "workers-ai/@cf/zai-org/glm-5.3-flash"
-        assert resolve_model("claude-x") == "workers-ai/@cf/zai-org/glm-5.3-flash"
-
-
-# ---------------------------------------------------------------------------
-# call_ai — breaker-guarded gateway call
+# call_ai — breaker-guarded call
 # ---------------------------------------------------------------------------
 
 
@@ -260,7 +178,7 @@ class TestCallAi:
         get_http.return_value.post.assert_not_called()
 
     @patch.dict(os.environ, FULL_ENV, clear=True)
-    def test_success_posts_to_gateway_and_parses(self, breaker):
+    def test_success_posts_to_the_worker_and_parses(self, breaker):
         breaker.is_allowed = True
         client = _mock_http(_http_response(200, _completion("Hello")))
         with patch("py._ai_gateway.httpx.Client", return_value=client):
@@ -273,11 +191,11 @@ class TestCallAi:
         breaker.record_success.assert_called_once()
         url = client.post.call_args.args[0]
         kwargs = client.post.call_args.kwargs
-        assert url == f"https://gateway.ai.cloudflare.com/v1/{ACCOUNT}/shamwari/compat/chat/completions"
-        assert kwargs["headers"]["cf-aig-authorization"] == "Bearer cf-ai-token"
-        assert kwargs["headers"]["Authorization"] == "Bearer cf-ai-token"
+        assert url == COMPLETIONS_URL
+        assert kwargs["headers"]["Authorization"] == f"Bearer {KEY}"
+        assert "cf-aig-authorization" not in kwargs["headers"]
         payload = kwargs["json"]
-        assert payload["model"] == DEFAULT_MODEL
+        assert "model" not in payload, "the Worker picks the model"
         assert payload["max_tokens"] == 50
         assert payload["messages"][0] == {"role": "system", "content": "SYS"}
         assert payload["messages"][1] == {"role": "user", "content": "hi"}
@@ -326,6 +244,58 @@ class TestCallAi:
         breaker.record_success.assert_not_called()
 
     @patch.dict(os.environ, FULL_ENV, clear=True)
+    def test_db_model_is_not_forwarded(self, breaker):
+        # The Worker's AI_MODEL decides; a DB prompt's model can't override it.
+        breaker.is_allowed = True
+        client = _mock_http(_http_response(200, _completion("ok")))
+        with patch("py._ai_gateway.httpx.Client", return_value=client):
+            call_ai(model="@cf/zai-org/glm-5.3", max_tokens=5, messages=[{"role": "user", "content": "x"}])
+        assert "model" not in client.post.call_args.kwargs["json"]
+
+    @pytest.mark.parametrize("status", [400, 413, 422])
+    @patch.dict(os.environ, FULL_ENV, clear=True)
+    def test_refused_request_is_api_error_without_tripping_breaker(self, breaker, status):
+        # e.g. 422 personal_data_detected: the Worker is fine, the input is not.
+        breaker.is_allowed = True
+        body = {"error": "personal_data_detected", "error_description": "remove personal details"}
+        with patch("py._ai_gateway.httpx.Client", return_value=_mock_http(_http_response(status, body))):
+            assert call_ai(max_tokens=5, messages=[]) == (None, "api_error")
+        breaker.record_failure.assert_not_called()
+        breaker.record_success.assert_not_called()
+
+    @pytest.mark.parametrize("status", [401, 502, 503])
+    @patch.dict(os.environ, FULL_ENV, clear=True)
+    def test_worker_down_or_misconfigured_trips_breaker(self, breaker, status):
+        breaker.is_allowed = True
+        with patch("py._ai_gateway.httpx.Client", return_value=_mock_http(_http_response(status))):
+            assert call_ai(max_tokens=5, messages=[]) == (None, "api_error")
+        breaker.record_failure.assert_called_once()
+
+    @patch.dict(os.environ, FULL_ENV, clear=True)
+    def test_tool_loop_round_trip(self, breaker):
+        """A tool call comes back, its result goes in, the answer comes out."""
+        breaker.is_allowed = True
+        first = _completion(None, tool_calls=[{
+            "id": "call_0", "type": "function",
+            "function": {"name": "get_weather", "arguments": '{"location_slug": "harare"}'},
+        }], finish="tool_calls")
+        second = _completion("Harare: **dry and warm**.")
+        client = MagicMock()
+        client.post.side_effect = [_http_response(200, first), _http_response(200, second)]
+        tools = function_tools([{"name": "get_weather", "description": "d", "parameters": {"type": "object"}}])
+        messages = [{"role": "user", "content": "Weather in Harare?"}]
+        with patch("py._ai_gateway.httpx.Client", return_value=client):
+            resp, err = call_ai(max_tokens=50, system="SYS", messages=messages, tools=tools)
+            assert err is None and resp.tool_calls[0].name == "get_weather"
+            messages = messages + [resp.message, tool_result_message(resp.tool_calls[0].id, '{"temp": 28}')]
+            resp, err = call_ai(max_tokens=50, system="SYS", messages=messages, tools=tools)
+        assert err is None and resp.text == "Harare: **dry and warm**."
+        sent = client.post.call_args_list[1].kwargs["json"]["messages"]
+        assert [m["role"] for m in sent] == ["system", "user", "assistant", "tool"]
+        assert sent[2]["tool_calls"][0]["id"] == "call_0"
+        assert sent[3] == {"role": "tool", "tool_call_id": "call_0", "content": '{"temp": 28}'}
+
+    @patch.dict(os.environ, FULL_ENV, clear=True)
     def test_transport_error_trips_breaker(self, breaker):
         breaker.is_allowed = True
         with patch("py._ai_gateway.httpx.Client", return_value=_mock_http(httpx.ConnectTimeout("t"))):
@@ -368,6 +338,15 @@ class TestEveryEndpointUsesHelper:
             src = path.read_text()
             if re.search(r"gateway\.ai\.cloudflare\.com|chat/completions|^import anthropic|^from anthropic|^import openai", src, re.M):
                 offenders.append(path.name)
+        assert offenders == []
+
+    def test_backend_holds_no_cloudflare_ai_token_or_host(self):
+        """AI goes through the weather Worker; api/py names no CF AI host or token."""
+        forbidden = re.compile(
+            r"gateway\.ai\.cloudflare\.com|api\.cloudflare\.com/client/v4/accounts/\S*/ai\b|/ai/run\b|"
+            r"\bCF_AI_API_TOKEN\b|\bAI_GATEWAY_TOKEN\b|\bCF_WORKERS_AI_TOKEN\b|\bAI_GATEWAY_URL\b"
+        )
+        offenders = [p.name for p in API_DIR.glob("*.py") if forbidden.search(p.read_text())]
         assert offenders == []
 
     def test_requirements_drop_anthropic(self):
