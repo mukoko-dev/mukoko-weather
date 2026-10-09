@@ -9,6 +9,7 @@
 //! `_history_analyze.py`. The prompts that lived in Mongo `ai_prompts` are
 //! compiled in: the Workers never read a database outside their own stores.
 
+pub mod completions;
 pub mod guardrails;
 pub mod history;
 pub mod pii;
@@ -23,8 +24,9 @@ pub const MAX_HISTORY: usize = 10;
 /// Most activities taken from a request into a prompt.
 pub const MAX_ACTIVITIES: usize = 5;
 
-/// The default model: open weights on Workers AI.
-pub const DEFAULT_MODEL: &str = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+/// The default model: open weights on Workers AI (Z.ai GLM, with function
+/// calling and reasoning). The Workers' `AI_MODEL` var overrides it.
+pub const DEFAULT_MODEL: &str = "@cf/zai-org/glm-5.3";
 
 /// Only Workers AI models (`@cf/…`, open weights) are allowed, so the gateway
 /// can never be pointed at a closed third-party model by configuration.
@@ -169,6 +171,7 @@ mod tests {
     fn models_must_be_open_weights() {
         assert!(allowed_model(DEFAULT_MODEL));
         assert!(allowed_model("@cf/qwen/qwen3-30b-a3b-fp8"));
+        assert!(allowed_model("@cf/meta/llama-3.3-70b-instruct-fp8-fast"));
         assert!(!allowed_model("gpt-4o"));
         assert!(!allowed_model("anthropic/claude"));
         assert!(!allowed_model("@cf/"));

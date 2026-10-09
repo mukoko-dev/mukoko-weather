@@ -1,26 +1,34 @@
 """
-Shared AI plumbing for the Python backend — every model call goes through the
-Cloudflare AI Gateway named ``shamwari``.
+Shared AI plumbing for the Python backend — every model call goes to the
+weather AI Worker; this backend holds no Cloudflare AI token.
 
-The gateway's OpenAI-compatible Unified API (``/compat/chat/completions``)
-fronts a GLM model hosted on Workers AI — no third-party provider key. One
-Cloudflare API token, ``CF_AI_API_TOKEN`` (*AI Gateway: Run* + *Workers AI:
-Read*), is sent in both auth headers:
+``POST {WEATHER_SERVICE_URL}/internal/ai/chat/completions`` on
+``mukoko-weather-internal`` (``Authorization: Bearer WEATHER_SERVICE_API_KEY``,
+the same service key the Nyuchi API uses there). That Worker forwards the
+call over a service binding to ``mukoko-weather-ai``, which runs it on a
+Workers AI GLM model through the ``shamwari`` AI Gateway with the native
+``env.AI`` binding — no token anywhere — with the Nyuchi guardrails first in
+the system prompt. The wire format is OpenAI chat completions (``messages``,
+``tools``, ``max_tokens``), so the tool loops in ``_chat.py`` and
+``_explore_search.py`` work unchanged. The Worker returns the model's
+``content`` only, never its reasoning, and adds reasoning headroom to the
+token budget itself.
 
-- ``cf-aig-authorization: Bearer`` — gateway auth. Required because
-  ``shamwari`` has authentication switched on.
-- ``Authorization: Bearer`` — Workers AI provider auth.
+Configuration (names only, never values):
 
-Per-header overrides let the two be split later: ``AI_GATEWAY_TOKEN`` (when
-set) replaces it for the gateway header, ``CF_WORKERS_AI_TOKEN`` for the
-provider header.
+- ``WEATHER_AI_URL`` — optional full URL of the chat-completions route (or a
+  base, to which ``/internal/ai/chat/completions`` is added). Wins over
+  ``WEATHER_SERVICE_URL``.
+- ``WEATHER_SERVICE_URL`` — the internal Worker's origin,
+  ``https://weather-internal.mukoko.com``.
+- ``WEATHER_SERVICE_API_KEY`` — the service key.
 
 - :func:`gateway_url` — the chat-completions URL, built from env.
-- :func:`gateway_headers` — request headers (``cf-aig-authorization``).
-- :func:`resolve_model` — honours a DB ``model`` override, migrating legacy
-  non-GLM ids (``claude-*``) to the configured default.
+- :func:`gateway_headers` — request headers (``Authorization: Bearer``).
+- :func:`resolve_model` — a ``@cf/`` model a DB prompt names, or None (the
+  Worker's ``AI_MODEL`` then decides). Legacy ``claude-*`` ids give None.
 - :func:`get_gateway_client` — module-level :class:`GatewayClient`, or None
-  when the gateway env is incomplete.
+  when the env is incomplete.
 - :func:`call_ai` — one breaker-guarded chat-completions call. Returns
   ``(AIResponse, None)`` on success or ``(None, error_kind)`` on failure and
   records breaker success/failure itself, so callers never double-record.
@@ -28,7 +36,7 @@ provider header.
 - :func:`function_tools` / :func:`tool_result_message` — OpenAI-style tool
   definitions and tool-result messages for the tool-use loops.
 
-When the gateway env is incomplete, a warning is logged and calls return
+When the env is incomplete, a warning is logged and calls return
 ``"no_client"`` so every endpoint degrades to its existing fallback (basic
 summary, text search, hardcoded questions) instead of breaking.
 
@@ -52,71 +60,54 @@ logger = logging.getLogger(__name__)
 
 ErrorKind = Literal["no_client", "circuit_open", "rate_limited", "api_error"]
 
-GATEWAY_HOST = "https://gateway.ai.cloudflare.com/v1"
+# The gateway the Worker routes through (reported by the status page only).
 DEFAULT_GATEWAY_ID = "shamwari"
-# Strongest Workers AI GLM with function calling (needed by chat + explore).
-DEFAULT_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
+COMPLETIONS_PATH = "/internal/ai/chat/completions"
+# Under _chat.py's 30 s per-call guard. GLM reasons first; the Worker asks
+# for low reasoning effort to keep calls short.
 REQUEST_TIMEOUT_S = 25.0
+
+URL_ENV = "WEATHER_AI_URL"
+SERVICE_URL_ENV = "WEATHER_SERVICE_URL"
+KEY_ENV = "WEATHER_SERVICE_API_KEY"
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
 
-def gateway_url() -> Optional[str]:
-    """Return the gateway chat-completions URL, or None when unconfigured.
-
-    ``AI_GATEWAY_URL`` (the gateway base up to and including ``/compat``)
-    overrides everything; otherwise the URL is built from
-    ``CLOUDFLARE_ACCOUNT_ID`` and ``AI_GATEWAY_ID`` (default ``shamwari``).
-    """
-    override = (os.environ.get("AI_GATEWAY_URL") or "").strip().rstrip("/")
-    if override:
-        if override.endswith("/chat/completions"):
-            return override
-        return f"{override}/chat/completions"
-
-    account = (os.environ.get("CLOUDFLARE_ACCOUNT_ID") or "").strip()
-    if not account:
-        return None
-    gateway = (os.environ.get("AI_GATEWAY_ID") or "").strip() or DEFAULT_GATEWAY_ID
-    return f"{GATEWAY_HOST}/{account}/{gateway}/compat/chat/completions"
-
-
 def _env(name: str) -> str:
     return (os.environ.get(name) or "").strip()
 
 
-# One Cloudflare API token (AI Gateway: Run + Workers AI: Read) for both
-# headers. The per-header names, when set, override it for their header.
-TOKEN_ENV = "CF_AI_API_TOKEN"
-GATEWAY_TOKEN_OVERRIDE_ENV = "AI_GATEWAY_TOKEN"
-PROVIDER_TOKEN_OVERRIDE_ENV = "CF_WORKERS_AI_TOKEN"
+def gateway_url() -> Optional[str]:
+    """Return the Worker's chat-completions URL, or None when unconfigured.
+
+    ``WEATHER_AI_URL`` (a full URL ending in ``/chat/completions``, or a base)
+    wins; otherwise ``WEATHER_SERVICE_URL`` + ``/internal/ai/chat/completions``.
+    """
+    override = _env(URL_ENV).rstrip("/")
+    if override:
+        if override.endswith("/chat/completions"):
+            return override
+        return f"{override}{COMPLETIONS_PATH}"
+    base = _env(SERVICE_URL_ENV).rstrip("/")
+    if not base:
+        return None
+    return f"{base}{COMPLETIONS_PATH}"
 
 
-def gateway_token() -> str:
-    """Token for ``cf-aig-authorization``: ``AI_GATEWAY_TOKEN`` if set, else ``CF_AI_API_TOKEN``."""
-    return _env(GATEWAY_TOKEN_OVERRIDE_ENV) or _env(TOKEN_ENV)
-
-
-def provider_token() -> str:
-    """Token for the provider ``Authorization``: ``CF_WORKERS_AI_TOKEN`` if set, else ``CF_AI_API_TOKEN``."""
-    return _env(PROVIDER_TOKEN_OVERRIDE_ENV) or _env(TOKEN_ENV)
+def service_key() -> str:
+    """The service key for ``mukoko-weather-internal``."""
+    return _env(KEY_ENV)
 
 
 def gateway_headers() -> dict[str, str]:
-    """Headers for a gateway request.
-
-    ``Authorization`` carries the Workers AI provider token; ``cf-aig-authorization``
-    carries the gateway token. Each is sent only when a token resolves for it.
-    """
-    headers = {"Content-Type": "application/json"}
-    provider = provider_token()
-    if provider:
-        headers["Authorization"] = f"Bearer {provider}"
-    gateway = gateway_token()
-    if gateway:
-        headers["cf-aig-authorization"] = f"Bearer {gateway}"
+    """Headers for a Worker request: the service key as a bearer token."""
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    key = service_key()
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
     return headers
 
 
@@ -124,25 +115,19 @@ _warned_unconfigured = False
 
 
 def missing_ai_config() -> list[str]:
-    """Names (never values) of the gateway config that is missing.
-
-    ``CF_AI_API_TOKEN`` alone covers both tokens; a header is only reported
-    missing when neither it nor that header's override is set.
-    """
+    """Names (never values) of the AI Worker config that is missing."""
     missing = []
     if gateway_url() is None:
-        missing.append("CLOUDFLARE_ACCOUNT_ID (or AI_GATEWAY_URL)")
-    if not gateway_token():
-        missing.append(f"{TOKEN_ENV} (or {GATEWAY_TOKEN_OVERRIDE_ENV})")
-    if not provider_token():
-        missing.append(f"{TOKEN_ENV} (or {PROVIDER_TOKEN_OVERRIDE_ENV})")
+        missing.append(f"{SERVICE_URL_ENV} (or {URL_ENV})")
+    if not service_key():
+        missing.append(KEY_ENV)
     return missing
 
 
 def ai_configured() -> bool:
-    """True when the gateway URL and both header tokens resolve.
+    """True when the Worker URL and the service key are set.
 
-    Logs one warning per process when they do not, so a missing config shows
+    Logs one warning per process when they are not, so a missing config shows
     up in the logs while the endpoints quietly use their fallbacks.
     """
     global _warned_unconfigured
@@ -150,7 +135,7 @@ def ai_configured() -> bool:
     if missing:
         if not _warned_unconfigured:
             logger.warning(
-                "AI gateway not configured (missing %s) — AI endpoints use fallbacks",
+                "AI Worker not configured (missing %s) — AI endpoints use fallbacks",
                 ", ".join(missing),
             )
             _warned_unconfigured = True
@@ -158,21 +143,18 @@ def ai_configured() -> bool:
     return True
 
 
-def resolve_model(requested: Optional[str] = None) -> str:
-    """Pick the model id for a call.
+def resolve_model(requested: Optional[str] = None) -> Optional[str]:
+    """The model id to ask the Worker for, or None for the Worker's own.
 
-    ``AI_MODEL`` env replaces the built-in default. A DB-supplied id is
-    honoured unless it is a legacy Anthropic id (``claude-*``), which is
-    migrated to the default. A bare Workers AI id (``@cf/...``) gets the
-    ``workers-ai/`` provider prefix the Unified API expects.
+    The Worker owns the model (its ``AI_MODEL`` var) and only accepts
+    Workers AI ``@cf/`` ids. A DB prompt may still name one; a legacy
+    ``claude-*`` id (or anything not ``@cf/``) gives None. The Unified API's
+    ``workers-ai/`` provider prefix is dropped.
     """
-    default = (os.environ.get("AI_MODEL") or "").strip() or DEFAULT_MODEL
     model = (requested or "").strip()
-    if not model or model.lower().startswith("claude"):
-        model = default
-    if model.startswith("@cf/"):
-        model = f"workers-ai/{model}"
-    return model
+    if model.startswith("workers-ai/"):
+        model = model[len("workers-ai/"):]
+    return model if model.startswith("@cf/") else None
 
 
 # ---------------------------------------------------------------------------
@@ -233,15 +215,20 @@ def _parse_response(data: dict[str, Any]) -> AIResponse:
 
 
 class GatewayError(Exception):
-    """Any non-429 gateway/transport failure or malformed response."""
+    """Any non-429 Worker/transport failure or malformed response."""
 
 
 class GatewayRateLimitError(GatewayError):
-    """HTTP 429 from the gateway (its rate limit or the model's)."""
+    """HTTP 429 from the Worker (the gateway's or the model's rate limit)."""
+
+
+class GatewayRequestError(GatewayError):
+    """HTTP 400/413/422: this request was refused (bad shape, personal data,
+    a guardrails block). The Worker is healthy, so the breaker is not told."""
 
 
 class GatewayClient:
-    """Thin chat-completions client for the AI Gateway's Unified API."""
+    """Thin chat-completions client for the weather AI Worker."""
 
     def __init__(self) -> None:
         self._http = httpx.Client(timeout=REQUEST_TIMEOUT_S)
@@ -256,10 +243,12 @@ class GatewayClient:
         tools: Optional[list[dict[str, Any]]] = None,
     ) -> AIResponse:
         payload: dict[str, Any] = {
-            "model": resolve_model(model),
             "max_tokens": max_tokens,
             "messages": ([{"role": "system", "content": system}] if system else []) + list(messages),
         }
+        chosen = resolve_model(model)
+        if chosen:
+            payload["model"] = chosen
         if tools:
             payload["tools"] = tools
         try:
@@ -268,6 +257,8 @@ class GatewayClient:
             raise GatewayError(type(exc).__name__) from exc
         if resp.status_code == 429:
             raise GatewayRateLimitError("rate limited")
+        if resp.status_code in (400, 413, 422):
+            raise GatewayRequestError(f"HTTP {resp.status_code} {_error_code(resp)}")
         if resp.status_code >= 400:
             raise GatewayError(f"HTTP {resp.status_code}")
         try:
@@ -276,11 +267,20 @@ class GatewayClient:
             raise GatewayError("malformed response") from exc
 
 
+def _error_code(resp: httpx.Response) -> str:
+    """The Worker's error code (``personal_data_detected``…), never content."""
+    try:
+        code = resp.json().get("error")
+    except (ValueError, AttributeError):
+        return ""
+    return code if isinstance(code, str) and code.replace("_", "").isalnum() else ""
+
+
 _client: Optional[GatewayClient] = None
 
 
 def get_gateway_client() -> Optional[GatewayClient]:
-    """Return the shared client, or None when the gateway is not configured."""
+    """Return the shared client, or None when the AI Worker is not configured."""
     global _client
     if not ai_configured():
         return None
@@ -302,16 +302,17 @@ def call_ai(
     messages: list[dict[str, Any]],
     tools: Optional[list[dict[str, Any]]] = None,
 ) -> tuple[AIResponse | None, ErrorKind | None]:
-    """Call the model once through the gateway, guarded by ``ai_breaker``.
+    """Call the model once through the AI Worker, guarded by ``ai_breaker``.
 
     Returns ``(response, None)`` on success. On failure returns
     ``(None, kind)``:
 
-    - ``"no_client"`` — gateway not configured (breaker untouched)
+    - ``"no_client"`` — AI Worker not configured (breaker untouched)
     - ``"circuit_open"`` — breaker is open, the model was not called (untouched)
-    - ``"rate_limited"`` — HTTP 429 from the gateway (breaker failure recorded)
-    - ``"api_error"`` — any other HTTP/transport error, malformed response or
-      unexpected exception (breaker failure recorded)
+    - ``"rate_limited"`` — HTTP 429 (breaker failure recorded)
+    - ``"api_error"`` — the request was refused (400/413/422: breaker
+      untouched, the Worker is healthy), or any other HTTP/transport error,
+      malformed response or unexpected exception (breaker failure recorded)
     """
     client = get_gateway_client()
     if client is None:
@@ -330,12 +331,15 @@ def call_ai(
     except GatewayRateLimitError:
         ai_breaker.record_failure()
         return None, "rate_limited"
+    except GatewayRequestError as exc:
+        logger.info("AI Worker refused the request: %s", exc)
+        return None, "api_error"
     except GatewayError as exc:
-        logger.warning("AI gateway call failed: %s", exc)
+        logger.warning("AI Worker call failed: %s", exc)
         ai_breaker.record_failure()
         return None, "api_error"
     except Exception as exc:  # noqa: BLE001 — breaker must still see the failure
-        logger.warning("Unexpected AI gateway failure: %s", type(exc).__name__)
+        logger.warning("Unexpected AI Worker failure: %s", type(exc).__name__)
         ai_breaker.record_failure()
         return None, "api_error"
 

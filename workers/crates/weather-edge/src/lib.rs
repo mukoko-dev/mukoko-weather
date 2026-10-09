@@ -8,7 +8,6 @@ use std::time::Duration;
 use futures::future::{select, Either};
 use serde::Serialize;
 use serde_json::json;
-use subtle::ConstantTimeEq;
 use weather_core::secrets::{self, SecretCache, StoreRead};
 use worker::wasm_bindgen::JsValue;
 use worker::{
@@ -120,17 +119,8 @@ async fn read_store(env: &Env, name: &str) -> StoreRead {
 /// Check `Authorization: Bearer <key>` against the expected key in constant
 /// time. `false` when either side is missing.
 pub fn bearer_matches(headers: &Headers, expected: &str) -> bool {
-    let Ok(Some(value)) = headers.get("Authorization") else {
-        return false;
-    };
-    let Some(token) = value
-        .strip_prefix("Bearer ")
-        .or_else(|| value.strip_prefix("bearer "))
-    else {
-        return false;
-    };
-    let token = token.trim();
-    !token.is_empty() && !expected.is_empty() && token.as_bytes().ct_eq(expected.as_bytes()).into()
+    let value = headers.get("Authorization").ok().flatten();
+    weather_core::auth::bearer_matches(value.as_deref(), expected)
 }
 
 /// Decoded query pairs of a request URL.

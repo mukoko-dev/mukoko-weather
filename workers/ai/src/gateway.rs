@@ -7,7 +7,7 @@ use std::time::Duration;
 use js_sys::{Function, Promise, Reflect, JSON};
 use serde_json::{json, Value};
 use weather_core::ai::guardrails::{self, Compiled, Fetched, Freshness};
-use weather_core::ai::{allowed_model, is_content_block, is_rate_limited, Turn, DEFAULT_MODEL};
+use weather_core::ai::{completions, is_content_block, is_rate_limited, Turn};
 use weather_core::secrets;
 use weather_edge::{config, get_with_timeout, now_ms, secret};
 use worker::wasm_bindgen::{JsCast, JsValue};
@@ -89,6 +89,21 @@ pub struct Call<'a> {
     pub max_tokens: u32,
 }
 
+/// The configured model (`AI_MODEL`, `@cf/` only), else the default.
+pub fn configured_model(env: &Env) -> String {
+    completions::pick_model(None, config(env, "AI_MODEL").as_deref())
+}
+
+fn gateway_options(route: &str) -> Value {
+    json!({
+        "gateway": {
+            "id": GATEWAY_ID,
+            "collectLog": false,
+            "metadata": {"route": route, "surface": "weather", "call": "mukoko-weather-ai"},
+        }
+    })
+}
+
 /// Run the model: `system` (guardrails first, already joined) then `turns`.
 pub async fn run(
     env: &Env,
@@ -96,32 +111,41 @@ pub async fn run(
     system: &str,
     turns: &[Turn],
 ) -> Result<String, ModelError> {
-    let model = config(env, "AI_MODEL")
-        .filter(|m| allowed_model(m))
-        .unwrap_or_else(|| DEFAULT_MODEL.to_owned());
+    let model = configured_model(env);
     let mut messages = vec![json!({"role": "system", "content": system})];
     messages.extend(
         turns
             .iter()
             .map(|t| json!({"role": t.role, "content": t.content})),
     );
-    let input = json!({"messages": messages, "max_tokens": call.max_tokens});
-    let options = json!({
-        "gateway": {
-            "id": GATEWAY_ID,
-            "collectLog": false,
-            "metadata": {"route": call.route, "surface": "weather", "call": "mukoko-weather-ai"},
-        }
+    let mut input = json!({
+        "messages": messages,
+        "max_tokens": completions::token_budget(&model, call.max_tokens),
     });
-
-    let out = invoke(env, &model, &input, &options)
+    if completions::is_reasoning_model(&model) {
+        input["reasoning_effort"] = json!(completions::REASONING_EFFORT);
+    }
+    let out = invoke(env, &model, &input, &gateway_options(call.route))
         .await
         .map_err(|e| classify(&e))?;
-    let text = out["response"].as_str().unwrap_or("").trim().to_owned();
-    if text.is_empty() {
-        return Err(ModelError::Failed);
-    }
-    Ok(text)
+    completions::completion(&out)
+        .map(|c| c.content)
+        .filter(|t| !t.is_empty())
+        .ok_or(ModelError::Failed)
+}
+
+/// Run a prepared chat-completions `input` (see
+/// `weather_core::ai::completions::build_input`) on `model`.
+pub async fn complete(
+    env: &Env,
+    route: &str,
+    model: &str,
+    input: &Value,
+) -> Result<completions::Completion, ModelError> {
+    let out = invoke(env, model, input, &gateway_options(route))
+        .await
+        .map_err(|e| classify(&e))?;
+    completions::completion(&out).ok_or(ModelError::Failed)
 }
 
 fn classify(err: &str) -> ModelError {

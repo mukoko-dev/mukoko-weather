@@ -915,7 +915,6 @@ dependencies = [
  "js-sys",
  "serde",
  "serde_json",
- "subtle",
  "weather-core",
  "worker",
 ]

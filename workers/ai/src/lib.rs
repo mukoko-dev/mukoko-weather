@@ -10,6 +10,10 @@
 //! POST /v1/ai/chat              {message, history, activities} → {response, references}
 //! POST /v1/ai/history/analyze   {location, days 7..365, activities}
 //!                               → {analysis, stats, cached, dataPoints}
+//! POST /internal/chat/completions  OpenAI-style {messages, tools?, max_tokens?, model?}
+//!                               → an OpenAI chat completion. Only from
+//!                                 mukoko-weather-internal (service key checked
+//!                                 there): the Python backend's model calls.
 //! GET  /health
 //! ```
 //!
@@ -21,6 +25,7 @@
 
 mod gateway;
 mod handlers;
+mod passthrough;
 
 use weather_edge::{error, json};
 use worker::{event, Context, Env, Method, Request, Response, Result};
@@ -31,6 +36,8 @@ pub(crate) const DB_BINDING: &str = "WEATHER_DB";
 const RATE_LIMITER: &str = "RATE_LIMITER";
 /// Bodies larger than this are refused before parsing.
 const MAX_BODY_BYTES: usize = 64 * 1024;
+/// The backend passthrough carries whole tool loops (forecasts as JSON).
+const MAX_INTERNAL_BODY_BYTES: usize = 512 * 1024;
 
 #[event(fetch)]
 pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
@@ -52,17 +59,29 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         "/v1/ai/followup" => Route::Followup,
         "/v1/ai/chat" => Route::Chat,
         "/v1/ai/history/analyze" => Route::History,
+        "/internal/chat/completions" => Route::Completions,
         _ => return error(404, "not_found", "No such route."),
     };
     if req.method() != Method::Post {
         return error(405, "method_not_allowed", "Only POST is served.");
     }
-    if let Some(limited) = rate_limited(&req, &env).await {
-        return limited;
+    // The per-IP limit is for the app's own /v1/ai/* callers. Backend calls
+    // all arrive with one key, so a shared bucket would throttle the whole
+    // site; the backend rate-limits per visitor itself.
+    let internal = matches!(route, Route::Completions);
+    if !internal {
+        if let Some(limited) = rate_limited(&req, &env).await {
+            return limited;
+        }
     }
 
     let text = req.text().await.unwrap_or_default();
-    if text.len() > MAX_BODY_BYTES {
+    let cap = if internal {
+        MAX_INTERNAL_BODY_BYTES
+    } else {
+        MAX_BODY_BYTES
+    };
+    if text.len() > cap {
         return error(413, "payload_too_large", "The request body is too large.");
     }
     let Ok(body) = serde_json::from_str::<serde_json::Value>(&text) else {
@@ -86,6 +105,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         Route::Followup => handlers::followup(&ctx, body).await,
         Route::Chat => handlers::chat(&ctx, body).await,
         Route::History => handlers::history(&ctx, body).await,
+        Route::Completions => passthrough::handle(&env, &ctx.guardrails, &body).await,
     }
 }
 
@@ -94,6 +114,7 @@ enum Route {
     Followup,
     Chat,
     History,
+    Completions,
 }
 
 /// `Some(429)` when the client is over its limit. A missing limiter binding
