@@ -116,7 +116,7 @@ locations.
 | `WEATHER_AI_URL`                  |    No    | Optional AI URL override (full `…/chat/completions` URL, or a base)                                                                                                                                      |
 | `WEATHER_SERVICE_API_KEY`         |    No    | Server-only. The service key `mukoko-weather-internal` checks. Vercel holds no Cloudflare AI token; the model is set by the AI Worker                                                                    |
 | `DB_INIT_SECRET`                  |    No    | Protects `/api/db-init` in production (`x-init-secret` header)                                                                                                                                           |
-| `INTERNAL_API_BASE_URL`           |    No    | Base URL for server-to-server SSR calls into `/api/py/*`                                                                                                                                                 |
+| `INTERNAL_API_BASE_URL`           |    No    | Base URL for server-to-server SSR calls into `/api/py/*`. Overrides the default: the production domain in production, the protected deployment URL plus the automation bypass header on previews         |
 
 ## Architecture
 
