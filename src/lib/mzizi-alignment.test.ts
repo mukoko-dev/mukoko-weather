@@ -77,6 +77,20 @@ const ALLOWED_EXCEPTIONS: Record<string, { count: number; reason: string }> = {
     count: 1,
     reason: "round dismiss (×) icon control",
   },
+  "src/app/profile/ProfileClient.tsx": {
+    count: 1,
+    reason:
+      "Preferences settings-list row (.guineafowl-row) — list row, not a pill",
+  },
+  "src/components/profile/ProfileAppearance.tsx": {
+    count: 1,
+    reason:
+      "Light/Dark/System option tiles (role=radio) — radio cards, not pills",
+  },
+  "src/components/profile/ProfileIdentity.tsx": {
+    count: 1,
+    reason: "round edit (pencil) icon control beside the profile name",
+  },
   "src/components/weather/LocationWeatherCard.tsx": {
     count: 2,
     reason:
