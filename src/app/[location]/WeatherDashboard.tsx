@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -59,6 +59,7 @@ import type {
   ModelForecast,
 } from "@/lib/weather";
 import {
+  checkFrostRisk,
   COMPARISON_MODELS,
   normalizeForecastModel,
   synthesizeOpenMeteoInsights,
@@ -163,8 +164,8 @@ interface WeatherDashboardProps {
 export function WeatherDashboard({
   weather: seedWeather,
   location,
-  usingFallback,
-  frostAlert,
+  usingFallback: seedUsingFallback,
+  frostAlert: seedFrostAlert,
   season,
   countryName,
   user,
@@ -175,6 +176,17 @@ export function WeatherDashboard({
   // seed, which is the Africa-weighted multi-model blend.
   const [modelBaseline, setModelBaseline] = useState<WeatherData | null>(null);
   const weather = modelBaseline ?? seedWeather;
+  // Everything derived from the forecast follows the baseline on screen: a
+  // GFS baseline must not keep the blend's frost banner (or miss its own).
+  // A model the server confirmed is never the seasonal fallback.
+  const frostAlert = useMemo(
+    () =>
+      modelBaseline
+        ? checkFrostRisk(modelBaseline.hourly, modelBaseline.utc_offset_seconds)
+        : seedFrostAlert,
+    [modelBaseline, seedFrostAlert],
+  );
+  const usingFallback = modelBaseline ? false : seedUsingFallback;
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const selectedForecastModel = useAppStore((s) => s.selectedForecastModel);

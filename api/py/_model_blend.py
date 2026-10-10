@@ -50,7 +50,7 @@ ARPEGE = "meteofrance_arpege_world"  # Météo-France ARPEGE world
 MODEL_ALIASES = {"ecmwf_ifs04": ECMWF_IFS}
 
 #: Starting weights — ECMWF-heavy everywhere (owner direction). Tune per
-#: region via a ``weather.model_blend_config`` doc (``_id`` = region key,
+#: region via a ``weather.modelBlendConfig`` doc (``_id`` = region key,
 #: ``weights`` = {model: weight}) once verification data
 #: (``_verification.py``) supports fitting by measured skill.
 _ECMWF_HEAVY = {
@@ -113,7 +113,7 @@ def weights_for(region: str) -> dict[str, float]:
     try:
         from ._db import weather_db
 
-        doc = weather_db()["model_blend_config"].find_one({"_id": region}, {"weights": 1})
+        doc = weather_db()["modelBlendConfig"].find_one({"_id": region}, {"weights": 1})
         override = (doc or {}).get("weights")
         if isinstance(override, dict):
             cleaned = {
@@ -341,8 +341,11 @@ def members_with_data(raw: dict, models: Iterable[str]) -> list[str]:
     return present
 
 
-def parse_minutely_any(raw: dict, models: Iterable[str]) -> dict | None:
-    """Next-hour nowcast from ``minutely_15`` — unsuffixed or the first member's."""
+def parse_minutely_any(raw: dict, models: Iterable[str], steps: int = 4) -> dict | None:
+    """Nowcast from ``minutely_15`` — unsuffixed or the first member's.
+
+    Keeps ``steps`` 15-minute steps; the serving path trims them to the next
+    hour (``_weather._fresh_minutely``)."""
     minutely = raw.get("minutely_15") or {}
     times = minutely.get("time") or []
     if not times:
@@ -355,8 +358,8 @@ def parse_minutely_any(raw: dict, models: Iterable[str]) -> dict | None:
                 break
     precip = precip or []
     return {
-        "time": list(times[:4]),
-        "precipitation": [p if p is not None else 0 for p in precip[:4]],
+        "time": list(times[:steps]),
+        "precipitation": [p if p is not None else 0 for p in precip[:steps]],
     }
 
 

@@ -211,6 +211,32 @@ class TestFetchBlend:
         assert payload["models_available"] == ["ecmwf_ifs", "gfs_seamless"]
         assert used == W
 
+    def test_single_member_override_still_reads_suffixed_keys(self):
+        from py._weather import _fetch_blend
+
+        raw = {
+            "current": {"time": "2026-10-10T10:00", "temperature_2m": 24},
+            "hourly": {"time": ["2026-10-10T10:00"], "temperature_2m_gfs_seamless": [26.0],
+                       "temperature_2m_best_match": [25.0]},
+            "daily": {"time": ["2026-10-10"]},
+        }
+        client = self._client(raw)
+        with patch("py._weather._get_http_client", return_value=client):
+            payload, _, used = _fetch_blend(-17.83, 31.05, "x", {"gfs_seamless": 1.0})
+        assert client.get.call_args.kwargs["params"]["models"] == "gfs_seamless,best_match"
+        assert payload["hourly"]["temperature_2m"] == [26.0]
+        assert used == {"gfs_seamless": 1.0}
+
+    def test_http_error_raises_for_the_breaker(self):
+        from py._weather import OpenMeteoUpstreamError, _fetch_blend
+
+        resp = MagicMock(status_code=503)
+        client = MagicMock()
+        client.get.return_value = resp
+        with patch("py._weather._get_http_client", return_value=client):
+            with pytest.raises(OpenMeteoUpstreamError):
+                _fetch_blend(-17.83, 31.05, "x", dict(W))
+
     def test_too_few_members_returns_none(self):
         from py._weather import _fetch_blend
 

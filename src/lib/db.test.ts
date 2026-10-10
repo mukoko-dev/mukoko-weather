@@ -795,3 +795,37 @@ describe("getWeatherForLocation — read-only SSR path (issue #101)", () => {
     expect(fs.existsSync("src/lib/tomorrow.ts")).toBe(false);
   });
 });
+
+describe("db-init indexes for the model baseline (issue #246)", () => {
+  it("TTL-indexes every new collection that relies on expiresAt", async () => {
+    const fs = await import("fs");
+    const source = fs.readFileSync("src/lib/db.ts", "utf-8");
+    for (const name of [
+      "providerBudget",
+      "enrichmentCache",
+      "forecastVerification",
+    ]) {
+      const idx = source.indexOf(
+        `collection("${name}"),\n      { expiresAt: 1 }`,
+      );
+      expect(idx, name).toBeGreaterThan(-1);
+    }
+  });
+
+  it("uses the same camelCase collection names as the Python writers", async () => {
+    const fs = await import("fs");
+    const py = [
+      fs.readFileSync("api/py/_enrichment.py", "utf-8"),
+      fs.readFileSync("api/py/_verification.py", "utf-8"),
+      fs.readFileSync("api/py/_model_blend.py", "utf-8"),
+    ].join("\n");
+    for (const name of [
+      "providerBudget",
+      "enrichmentCache",
+      "forecastVerification",
+      "modelBlendConfig",
+    ]) {
+      expect(py).toContain(`weather_db()["${name}"]`);
+    }
+  });
+});

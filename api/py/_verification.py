@@ -9,7 +9,7 @@ by ``validAt`` against what actually happened —
 2. ERA5 reanalysis via the Open-Meteo archive API —
 
 and fits per-region weights by measured skill (inverse-MSE / CRPS), writing
-them to ``weather.model_blend_config`` which ``_model_blend.weights_for``
+them to ``weather.modelBlendConfig`` which ``_model_blend.weights_for``
 already reads.
 
 Volume is bounded: at most one doc per location per 6-hour issuance bucket
@@ -94,7 +94,7 @@ def capture(doc: dict | None) -> None:
     try:
         from ._db import weather_db
 
-        weather_db()["forecast_verification"].update_one(
+        weather_db()["forecastVerification"].update_one(
             {"_id": doc["_id"]},
             {"$setOnInsert": {k: v for k, v in doc.items() if k != "_id"}},
             upsert=True,

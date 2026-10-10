@@ -668,6 +668,29 @@ class TestGetWeatherEndpoint:
         response = await get_weather(-17.83, 31.05)
         assert response.headers.get("x-weather-provider") == "open-meteo:best_match"
         assert response.headers.get("x-weather-blend") is None
+        # "Too few members" is not an upstream outage — it must not count
+        # against the shared breaker (that would open it for everyone).
+        mock_breaker.record_failure.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._fetch_open_meteo")
+    @patch("py._weather._fetch_blend")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather._find_nearest_location")
+    async def test_upstream_http_error_counts_against_breaker(self, mock_nearest, mock_cache, mock_breaker,
+                                                              mock_blend, mock_fetch_om, mock_set, mock_record):
+        from py._weather import OpenMeteoUpstreamError
+
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
+        mock_cache.return_value = None
+        mock_breaker.is_allowed = True
+        mock_blend.side_effect = OpenMeteoUpstreamError("HTTP 503")
+        mock_fetch_om.return_value = {"current": {"temperature_2m": 24}, "hourly": {}, "daily": {}}
+
+        await get_weather(-17.83, 31.05)
         mock_breaker.record_failure.assert_called_once()
 
     @pytest.mark.asyncio
@@ -832,9 +855,11 @@ class TestEnrichmentInEndpoint:
         assert body["insights"]["thunderstormProbability"] == 55
         assert body["insights"]["dewPoint"] == 12.0
         assert body["current"]["temperature_2m"] == 24.0
-        # The CACHED baseline keeps derived insights only (enrichment has its own cache).
+        # The cached row carries the enrichment too: the TS server render reads
+        # weather_cache directly (getWeatherForLocation), not this response.
         cached_payload = mock_set.call_args.args[3]
-        assert cached_payload["insights"]["thunderstormProbability"] == 0
+        assert cached_payload["insights"]["thunderstormProbability"] == 55
+        assert cached_payload["insights"]["dewPoint"] == 12.0
         # History gets the merged insights.
         assert mock_record.call_args.args[1]["insights"]["thunderstormProbability"] == 55
 
@@ -885,13 +910,45 @@ class TestEnrichmentInEndpoint:
             return None, "none"
 
         with patch("py._weather.enrichment.enrich", side_effect=fake_enrich):
-            mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
+            mock_nearest.return_value = {"slug": "harare", "elevation": 1200, "lat": -17.83, "lon": 31.05}
             await get_weather(-17.83, 31.05)
-            mock_nearest.return_value = {"slug": "west-paddock--ksy4dd7", "elevation": 1200}
+            mock_nearest.return_value = {"slug": "west-paddock--ksy4dd7", "elevation": 1200,
+                                         "lat": -17.83, "lon": 31.05}
             await get_weather(-17.83, 31.05)
             mock_nearest.return_value = None
             await get_weather(-17.83, 31.05)
-        assert calls == [True, False, False]
+            # The cache-key lookup searches 20,000 km: a seed slug far away
+            # (Harare for a point in the Atlantic) is NOT priority.
+            mock_nearest.return_value = {"slug": "harare", "elevation": 1200, "lat": -17.83, "lon": 31.05}
+            await get_weather(-30.0, -10.0)
+        assert calls == [True, False, False, False]
+
+
+class TestFreshMinutely:
+    def test_drops_past_steps_in_location_time(self):
+        from py._weather import _fresh_minutely
+
+        now_local = datetime.now(timezone.utc) + timedelta(seconds=7200)
+        q = now_local.replace(minute=(now_local.minute // 15) * 15, second=0, microsecond=0)
+        times = [(q + timedelta(minutes=15 * i)).strftime("%Y-%m-%dT%H:%M") for i in range(-2, 6)]
+        out = _fresh_minutely({"time": times, "precipitation": list(range(8))}, 7200)
+        assert out["time"] == times[2:6]
+        assert out["precipitation"] == [2, 3, 4, 5]
+
+    def test_all_past_is_none(self):
+        from py._weather import _fresh_minutely
+
+        assert _fresh_minutely({"time": ["2000-01-01T00:00"], "precipitation": [1]}, 0) is None
+        assert _fresh_minutely(None, 0) is None
+
+
+class TestWithinKm:
+    def test_distance(self):
+        from py._weather import _within_km
+
+        assert _within_km({"lat": -17.83, "lon": 31.05}, -17.9, 31.1, 25)
+        assert not _within_km({"lat": -17.83, "lon": 31.05}, -20.15, 28.58, 25)  # Bulawayo
+        assert not _within_km({}, 0, 0, 25)
 
 
 class TestIsPriority:
@@ -904,6 +961,9 @@ class TestIsPriority:
         assert _is_priority(req, "x--abc", False) is False
         monkeypatch.setenv("MUKOKO_INTERNAL_SECRET", "s3cret")
         assert _is_priority(req, "x--abc", False) is True
+        req.headers = {}
+        assert _is_priority(req, "harare", True) is True
+        assert _is_priority(req, "harare", False) is False
         req.headers = {"x-mukoko-priority": "1", "x-mukoko-internal": "wrong"}
         assert _is_priority(req, "x--abc", False) is False
 

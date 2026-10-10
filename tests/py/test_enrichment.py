@@ -57,6 +57,13 @@ class FakeBudget:
         return [d for k, d in self.docs.items() if k in flt["_id"]["$in"]]
 
 
+@pytest.fixture(autouse=True)
+def _clear_memos():
+    enrichment._reset_memos()
+    yield
+    enrichment._reset_memos()
+
+
 @pytest.fixture
 def budget():
     fake = FakeBudget()
@@ -116,12 +123,21 @@ class TestBudgetGuard:
 class TestRecordSkip:
     def test_counts_by_reason(self, budget):
         enrichment.record_skip(enrichment.SKIPPED_ERROR, "harare", NOW)
-        enrichment.record_skip(enrichment.SKIPPED_ERROR, "harare", NOW)
+        enrichment.record_skip(enrichment.SKIPPED_ERROR, "mutare", NOW)
         enrichment.record_skip(enrichment.SKIPPED_BUDGET, "bulawayo", NOW)
         stats = budget.docs["tomorrow:stats:20261010"]
         assert stats["skippedError"] == 2
         assert stats["skippedBudget"] == 1
         assert stats["lastSkipSlug"] == "bulawayo"
+
+
+    def test_deduplicated_per_location_hour(self, budget):
+        # A busy location adds one stats write per hour, not one per request.
+        for _ in range(5):
+            enrichment.record_skip(enrichment.SKIPPED_BUDGET, "harare", NOW)
+        assert budget.docs["tomorrow:stats:20261010"]["skippedBudget"] == 1
+        enrichment.record_skip(enrichment.SKIPPED_BUDGET, "harare", NOW.replace(hour=10))
+        assert budget.docs["tomorrow:stats:20261010"]["skippedBudget"] == 2
 
 
 class TestMerge:
@@ -137,8 +153,10 @@ class TestMerge:
         assert merge_insights({"a": 1}, None) == {"a": 1}
         assert merge_insights(None, None) == {}
 
-    def test_wind_and_visibility_are_never_enrichment_fields(self):
-        for k in ("windSpeed", "windGust", "visibility", "dewPoint"):
+    def test_wind_visibility_and_uv_are_never_enrichment_fields(self):
+        # uvHealthConcern: Tomorrow.io's is a 0–4 category; the rules expect
+        # the 0–11+ UV index (e.g. "gt 7"), so it must stay with the baseline.
+        for k in ("windSpeed", "windGust", "visibility", "dewPoint", "uvHealthConcern"):
             assert k not in ENRICHMENT_FIELDS
 
 
@@ -181,6 +199,15 @@ class TestEnrich:
             fetch.assert_not_called()
         _reserve.assert_called_once_with(priority=True)
 
+    @patch("py._db.get_api_key", return_value="k")
+    @patch("py._enrichment.tomorrow_breaker")
+    def test_exhausted_budget_is_memoised_for_the_hour(self, breaker, _key):
+        breaker.is_allowed = True
+        with patch.object(enrichment, "reserve_call", return_value=False) as reserve:
+            for _ in range(4):
+                assert enrichment.enrich("harare", -17.8, 31.0) == (None, "skipped-budget")
+        reserve.assert_called_once()  # later requests skip the reservation write
+
     @patch("py._enrichment.reserve_call", return_value=True)
     @patch("py._db.get_api_key", return_value="k")
     @patch("py._enrichment.tomorrow_breaker")
@@ -222,3 +249,10 @@ class TestFetchTomorrowInsights:
         out = enrichment.fetch_tomorrow_insights(-17.8, 31.0, "k")
         assert client.return_value.get.call_args.kwargs["params"]["timesteps"] == "1d"
         assert out == {"thunderstormProbability": 30, "heatStressIndex": 33, "moonPhase": 2}
+
+    @patch("py._http.get_http_client")
+    def test_uv_health_concern_category_is_dropped(self, client):
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {"timelines": {"daily": [{"values": {"uvHealthConcernMax": 4}}]}}
+        client.return_value.get.return_value = resp
+        assert enrichment.fetch_tomorrow_insights(-17.8, 31.0, "k") is None

@@ -516,6 +516,32 @@ export async function ensureIndexes(): Promise<void> {
       { expireAfterSeconds: 0 },
     ),
 
+    // Global-model baseline + Tomorrow.io enrichment (issue #246). All three
+    // rely on `expiresAt` for cleanup: budget buckets (hour/day/stats docs),
+    // the 3-hour enrichment cache, and the 180-day verification capture.
+    safeCreateIndex(
+      weatherDb().collection("providerBudget"),
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    ),
+    safeCreateIndex(
+      weatherDb().collection("enrichmentCache"),
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    ),
+    safeCreateIndex(
+      weatherDb().collection("forecastVerification"),
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    ),
+    safeCreateIndex(weatherDb().collection("forecastVerification"), {
+      locationSlug: 1,
+      issuedAt: -1,
+    }),
+    safeCreateIndex(weatherDb().collection("forecastVerification"), {
+      location: "2dsphere",
+    }),
+
     // Airports: ICAO reference data for METAR/TAF. `_id` is the ICAO code
     // (unique for free); the 2dsphere index powers the $nearSphere
     // nearest-airport lookup in api/py/_airports.py.

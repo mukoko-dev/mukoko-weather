@@ -48,10 +48,12 @@ PROVIDER = "tomorrow"
 
 #: Insights fields Tomorrow.io is allowed to override on the baseline.
 #: Wind, visibility and dew point stay with the (fresher, hourly) baseline.
+#: ``uvHealthConcern`` is deliberately NOT here: Tomorrow.io's
+#: ``uvHealthConcernMax`` is a 0–4 category, while the suitability rules
+#: compare the field against the 0–11+ UV index (e.g. ``gt 7``).
 ENRICHMENT_FIELDS = (
     "thunderstormProbability",
     "heatStressIndex",
-    "uvHealthConcern",
     "gdd10To30",
     "evapotranspiration",
     "cloudBase",
@@ -70,13 +72,13 @@ NONE = "none"
 def _budget_collection():
     from ._db import weather_db
 
-    return weather_db()["provider_budget"]
+    return weather_db()["providerBudget"]
 
 
 def _enrichment_collection():
     from ._db import weather_db
 
-    return weather_db()["enrichment_cache"]
+    return weather_db()["enrichmentCache"]
 
 
 def _bucket_ids(now: datetime) -> tuple[str, str]:
@@ -131,9 +133,34 @@ def reserve_call(priority: bool = False, now: datetime | None = None) -> bool:
     return True
 
 
+#: In-process memo of budget tiers known to be exhausted for the current
+#: hour bucket — once a reservation fails, later requests in this warm
+#: instance skip the reservation write entirely until the hour rolls over.
+_exhausted: dict[bool, str] = {}
+#: (slug, hour bucket, reason) skips already counted by this instance, so a
+#: busy location adds one stats write + one log line per hour, not per request.
+_skips_seen: set[tuple[str, str, str]] = set()
+
+
+def _reset_memos() -> None:
+    """Clear the in-process memos (used by tests)."""
+    _exhausted.clear()
+    _skips_seen.clear()
+
+
 def record_skip(reason: str, slug: str, now: datetime | None = None) -> None:
-    """Count an enrichment skip on the day's stats doc + log it."""
+    """Count an enrichment skip on the day's stats doc + log it.
+
+    Deduplicated per (slug, hour, reason) within a warm instance, so the
+    counters measure skipped locations-per-hour rather than raw requests.
+    """
     now = now or datetime.now(timezone.utc)
+    seen_key = (slug, now.strftime("%Y%m%d%H"), reason)
+    if seen_key in _skips_seen:
+        return
+    if len(_skips_seen) > 5000:
+        _skips_seen.clear()
+    _skips_seen.add(seen_key)
     field = "skippedBudget" if reason == SKIPPED_BUDGET else "skippedError"
     try:
         _budget_collection().update_one(
@@ -250,7 +277,9 @@ def enrich(slug: str, lat: float, lon: float, priority: bool = False) -> tuple[d
     if not api_key:
         return None, NONE
 
-    if not reserve_call(priority=priority):
+    hour_bucket = datetime.now(timezone.utc).strftime("%Y%m%d%H")
+    if _exhausted.get(priority) == hour_bucket or not reserve_call(priority=priority):
+        _exhausted[priority] = hour_bucket
         record_skip(SKIPPED_BUDGET, slug)
         return None, SKIPPED_BUDGET
 

@@ -13,6 +13,7 @@ normalized WeatherData.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -492,8 +493,22 @@ def _finalize_baseline(payload: dict) -> dict:
     return strip_intermediate(out)
 
 
-def _open_meteo_forecast(lat: float, lon: float, models: list[str] | None) -> dict | None:
-    """One Open-Meteo forecast call. ``None`` on a non-200."""
+class OpenMeteoUpstreamError(Exception):
+    """Open-Meteo answered with a non-200 — the only outcome that should
+    count against ``open_meteo_breaker`` (a model with no data at one point
+    is not an upstream outage)."""
+
+
+#: Minutely steps requested; the response is sliced to the next 4 at serve
+#: time so a cached row's nowcast never starts in the past (``_fresh_minutely``).
+MINUTELY_STEPS_FETCHED = 8
+
+
+def _open_meteo_forecast(
+    lat: float, lon: float, models: list[str] | None, *, raise_on_error: bool = False
+) -> dict | None:
+    """One Open-Meteo forecast call. ``None`` on a non-200 (or raises
+    :class:`OpenMeteoUpstreamError` when ``raise_on_error``)."""
     client = _get_http_client()
     params = {
         "latitude": str(lat),
@@ -502,7 +517,7 @@ def _open_meteo_forecast(lat: float, lon: float, models: list[str] | None) -> di
         "hourly": blend.HOURLY_VARS,
         "daily": blend.DAILY_VARS,
         "minutely_15": "precipitation",
-        "forecast_minutely_15": "4",
+        "forecast_minutely_15": str(MINUTELY_STEPS_FETCHED),
         "timezone": "auto",
         "forecast_days": "7",
     }
@@ -510,6 +525,8 @@ def _open_meteo_forecast(lat: float, lon: float, models: list[str] | None) -> di
         params["models"] = ",".join(models)
     resp = client.get("https://api.open-meteo.com/v1/forecast", params=params)
     if resp.status_code != 200:
+        if raise_on_error:
+            raise OpenMeteoUpstreamError(f"HTTP {resp.status_code}")
         return None
     return resp.json()
 
@@ -519,34 +536,36 @@ def _fetch_blend(
     lon: float,
     region: str,
     weights: dict[str, float],
-    comparison: list[str] | None = None,
 ) -> tuple[dict, dict, dict[str, float]] | None:
     """Fetch every blend member in ONE call and blend them.
 
     Returns ``(payload, raw, weights_used)`` — ``payload`` is the canonical
     WeatherData (insights derived, intermediates stripped) already carrying
-    the comparison series + minutely nowcast from the same response, so the
-    old separate per-request "extras" call is no longer needed. ``None`` when
-    the call fails or fewer than two members returned data.
+    the members' comparison series + minutely nowcast from the same response.
+    Only the members' series are stored, so a cached row never inherits
+    another caller's ``?models=`` choice (``_attach_comparison`` fetches
+    extras per request). ``None`` when too few members returned data;
+    raises :class:`OpenMeteoUpstreamError` on an upstream HTTP failure.
     """
     members = blend.order_members(weights)
-    extra = [m for m in (comparison or []) if m not in members]
-    raw = _open_meteo_forecast(lat, lon, members + extra)
+    # A single-model request comes back UNSUFFIXED; adding best_match keeps
+    # the response suffixed so the blend path reads it the same way.
+    request = members if len(members) > 1 else members + ["best_match"]
+    raw = _open_meteo_forecast(lat, lon, request, raise_on_error=True)
     if not raw:
         return None
 
     # Members that came back empty (e.g. an upstream outage of one model)
     # drop out and the remaining weights renormalise.
     present = blend.members_with_data(raw, members)
-    if len(present) < 2:
+    if len(present) < min(2, len(members)):
         return None
     used = {m: weights[m] for m in present}
     payload = blend.blend_payload(raw, used)
     payload = _finalize_baseline(payload)
 
-    series_models = present + [m for m in extra if m in blend.members_with_data(raw, extra)]
-    series, available = _parse_models(raw, series_models)
-    payload["minutely"] = blend.parse_minutely_any(raw, members)
+    series, available = _parse_models(raw, present)
+    payload["minutely"] = blend.parse_minutely_any(raw, members, steps=MINUTELY_STEPS_FETCHED)
     payload["models"] = series
     payload["models_available"] = available
     payload["models_time"] = list(((raw.get("hourly") or {}).get("time") or [])[:24])
@@ -560,7 +579,7 @@ def _fetch_single_model(lat: float, lon: float, model: str) -> dict | None:
     gets all the weight and best_match only fills variables the model does not
     publish (e.g. ECMWF has no UV index).
     """
-    raw = _open_meteo_forecast(lat, lon, [model, "best_match"])
+    raw = _open_meteo_forecast(lat, lon, [model, "best_match"], raise_on_error=True)
     if not raw or not blend.members_with_data(raw, [model]):
         return None
     payload = blend.blend_payload(raw, {model: 1.0})
@@ -580,7 +599,7 @@ def _fetch_single_model(lat: float, lon: float, model: str) -> dict | None:
         if value is None and idx < len(arr):
             payload["current"][var] = arr[idx]
     payload = _finalize_baseline(payload)
-    payload["minutely"] = blend.parse_minutely_any(raw, [model, "best_match"])
+    payload["minutely"] = blend.parse_minutely_any(raw, [model, "best_match"], steps=MINUTELY_STEPS_FETCHED)
     return payload
 
 
@@ -900,7 +919,47 @@ def _find_nearest_location(lat: float, lon: float) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
-def _is_priority(request: Request | None, slug: str, is_coordinate_key: bool) -> bool:
+#: A known place must be this close to the requested coordinates for the
+#: request to count as that (priority) location for the Tomorrow.io budget.
+PRIORITY_MAX_DISTANCE_KM = 25.0
+
+
+def _within_km(loc: dict, lat: float, lon: float, max_km: float) -> bool:
+    """Haversine distance check between ``loc`` (``lat``/``lon``) and a point."""
+    import math
+
+    try:
+        lat2, lon2 = float(loc["lat"]), float(loc["lon"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    p1, p2 = math.radians(lat), math.radians(lat2)
+    dp, dl = p2 - p1, math.radians(lon2 - lon)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * 6371.0 * math.asin(min(1.0, math.sqrt(a))) <= max_km
+
+
+def _fresh_minutely(minutely: dict | None, offset_seconds: int | None) -> dict | None:
+    """Trim a (possibly cached) nowcast to the next four 15-minute steps.
+
+    Minutely times are the location's naive wall clock; anything before the
+    current quarter-hour is dropped, so a 14-minute-old cache row never
+    serves a nowcast that starts in the past. ``None`` when nothing is left.
+    """
+    if not minutely or not minutely.get("time"):
+        return minutely
+    offset = offset_seconds if isinstance(offset_seconds, int) else 0
+    local_now = datetime.now(timezone.utc) + timedelta(seconds=offset)
+    floor = local_now.replace(minute=(local_now.minute // 15) * 15, second=0, microsecond=0)
+    cutoff = floor.strftime("%Y-%m-%dT%H:%M")
+    times = list(minutely.get("time") or [])
+    precip = list(minutely.get("precipitation") or [])
+    keep = [i for i, t in enumerate(times) if str(t)[:16] >= cutoff][:4]
+    if not keep:
+        return None
+    return {"time": [times[i] for i in keep], "precipitation": [precip[i] if i < len(precip) else 0 for i in keep]}
+
+
+def _is_priority(request: Request | None, slug: str, known_nearby: bool) -> bool:
     """Whether this request may use the reserved Tomorrow.io budget.
 
     Priority = curated seed / high-traffic locations (legacy catalog slugs —
@@ -919,7 +978,7 @@ def _is_priority(request: Request | None, slug: str, is_coordinate_key: bool) ->
 
             if hmac.compare_digest(request.headers.get("x-mukoko-internal") or "", secret):
                 return True
-    return not is_coordinate_key and "--" not in slug
+    return known_nearby and "--" not in slug
 
 
 def _attach_comparison(data: dict, lat: float, lon: float, requested: list[str] | None) -> dict:
@@ -1010,14 +1069,16 @@ async def get_weather(
 
     # Resolve to nearest known location for cache key
     location_slug = f"{lat:.2f}_{lon:.2f}"
-    is_coordinate_key = True
+    known_nearby = False  # a known place actually near these coordinates
     elevation = 1200
     try:
         nearest = _find_nearest_location(lat, lon)
         if nearest and nearest.get("slug"):
             location_slug = nearest["slug"]
-            is_coordinate_key = False
             elevation = nearest.get("elevation", elevation)
+            # The cache-key lookup searches 20,000 km, so "has a slug" says
+            # nothing; priority budget needs the place to really be here.
+            known_nearby = _within_km(nearest, lat, lon, PRIORITY_MAX_DISTANCE_KM)
     except Exception:
         pass
     cache_key = location_slug if baseline_model is None else f"{location_slug}::{baseline_model}"
@@ -1054,10 +1115,13 @@ async def get_weather(
         pass
 
     # 2-4. Fetch fresh forecast data if no cache hit
+    raw_for_verification: tuple | None = None
     if data is None:
-        raw_for_verification: tuple | None = None
-
-        # 2. Global-model baseline (circuit breaker protected)
+        # 2. Global-model baseline (circuit breaker protected). Only an
+        # upstream HTTP failure / exception counts against the breaker —
+        # "too few members" or "this model has no data here" is not an
+        # outage, and recording it would open the breaker for everyone
+        # (record_success does not clear failures while CLOSED).
         if open_meteo_breaker.is_allowed:
             try:
                 if baseline_model:
@@ -1066,7 +1130,7 @@ async def get_weather(
                         source = f"open-meteo:{baseline_model}"
                 else:
                     weights = blend.weights_for(region)
-                    result = _fetch_blend(lat, lon, region, weights, _sanitize_models(requested_models) if requested_models else None)
+                    result = _fetch_blend(lat, lon, region, weights)
                     if result:
                         data, raw, used = result
                         source = "open-meteo:blend"
@@ -1074,8 +1138,6 @@ async def get_weather(
                         raw_for_verification = (raw, used)
                 if data:
                     open_meteo_breaker.record_success()
-                else:
-                    open_meteo_breaker.record_failure()
             except Exception:
                 data = None
                 open_meteo_breaker.record_failure()
@@ -1097,13 +1159,35 @@ async def get_weather(
             data = _create_fallback_weather(lat, lon, elevation)
             source = "fallback"
 
-        # Cache the baseline (skip the seasonal fallback so we keep retrying
-        # upstream). This is the ONLY weather_cache writer (issue #101).
-        if source and source != "fallback":
-            try:
-                _set_cached_weather(cache_key, lat, lon, data, source)
-            except Exception:
-                pass
+    # Tomorrow.io ENRICHMENT — insights only, budgeted, never blocking. Runs
+    # BEFORE the cache write so the row the TS server render reads directly
+    # (getWeatherForLocation → weather_cache) carries it too. Not attempted
+    # for the seasonal fallback. Off the event loop: it may wait up to the
+    # provider timeout.
+    enrichment_status = enrichment.NONE
+    if source != "fallback":
+        try:
+            extra, enrichment_status = await asyncio.to_thread(
+                enrichment.enrich,
+                location_slug,
+                lat,
+                lon,
+                _is_priority(request, location_slug, known_nearby),
+            )
+        except Exception:
+            extra, enrichment_status = None, enrichment.SKIPPED_ERROR
+        if extra:
+            data = dict(data)
+            data["insights"] = enrichment.merge_insights(data.get("insights"), extra)
+
+    if cache_status == "MISS" and source and source != "fallback":
+        # Cache the baseline (+ enrichment). The seasonal fallback is never
+        # cached so we keep retrying upstream. This is the ONLY weather_cache
+        # writer (issue #101).
+        try:
+            _set_cached_weather(cache_key, lat, lon, data, source)
+        except Exception:
+            pass
 
         # Verification capture — default blend only, at most once per 6 h.
         if raw_for_verification:
@@ -1118,27 +1202,13 @@ async def get_weather(
             except Exception:
                 pass
 
-    # Tomorrow.io ENRICHMENT — insights only, budgeted, never blocking. Not
-    # attempted for the seasonal fallback (nothing real to enrich).
-    enrichment_status = enrichment.NONE
-    if source != "fallback":
-        try:
-            extra, enrichment_status = enrichment.enrich(
-                location_slug, lat, lon, priority=_is_priority(request, location_slug, is_coordinate_key)
-            )
-        except Exception:
-            extra, enrichment_status = None, enrichment.SKIPPED_ERROR
-        if extra:
-            data = dict(data)
-            data["insights"] = enrichment.merge_insights(data.get("insights"), extra)
-
-    # History — recorded on fresh fetches of the default baseline only, so the
-    # series is one consistent source (merged insights included).
-    if cache_status == "MISS" and source and source != "fallback" and baseline_model is None:
-        try:
-            _record_weather_history(location_slug, data)
-        except Exception:
-            pass
+        # History — default baseline only, so the series is one consistent
+        # source (merged insights included).
+        if baseline_model is None:
+            try:
+                _record_weather_history(location_slug, data)
+            except Exception:
+                pass
 
     # Blend StationKit observation into the response: overlay the station's
     # sensor fields onto the forecast `current` (keeping forecast-only fields
@@ -1156,6 +1226,9 @@ async def get_weather(
 
     # The offset must ALWAYS be present — see _ensure_utc_offset.
     data = _ensure_utc_offset(data or {}, lon)
+    if data.get("minutely"):
+        data = dict(data)
+        data["minutely"] = _fresh_minutely(data["minutely"], _utc_offset(data))
 
     headers = {
         "X-Cache": cache_status,
