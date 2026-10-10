@@ -1,5 +1,9 @@
 import type { NextConfig } from "next";
 import withSerwistInit from "@serwist/next";
+import {
+  MISSING_ASSET_DESTINATION,
+  MISSING_ASSET_SOURCE,
+} from "./src/lib/missing-asset";
 
 const withSerwist = withSerwistInit({
   swSrc: "src/app/sw.ts",
@@ -13,20 +17,16 @@ const nextConfig: NextConfig = {
     // Silence the multiple-lockfiles warning — parent dir has a lockfile from oss-weather
     root: __dirname,
   },
-  // A missing top-level file (`/favicon-48.png`, `/old-logo.svg`, ...) would
-  // otherwise fall through to the `[location]` route, which renders "Location
-  // not found" with HTTP 200 (the not-found is streamed after the 200 starts).
-  // Location slugs never contain a dot, so any single-segment dotted path that
-  // isn't a real public file or a static route goes to a plain 404 handler.
-  // `afterFiles` runs after public files and static routes (robots.txt,
-  // sitemap.xml, manifest.json and so on) but before dynamic routes.
+  // A missing top-level file (`/favicon-48.png`, `/old-logo.svg`, ...) goes
+  // to a plain 404 instead of the `[location]` route's streamed 200. The
+  // pattern and the reasoning are in src/lib/missing-asset.ts.
   async rewrites() {
     return {
       beforeFiles: [],
       afterFiles: [
         {
-          source: "/:file([^/]*\\.[A-Za-z0-9]+)",
-          destination: "/api/missing-asset",
+          source: MISSING_ASSET_SOURCE,
+          destination: MISSING_ASSET_DESTINATION,
         },
       ],
       fallback: [],
