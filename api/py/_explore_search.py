@@ -24,7 +24,8 @@ from ._db import (
 )
 from ._ai_prompts import get_ai_prompt
 from ._ai_gateway import call_ai, function_tools, tool_result_message
-from ._places_resolver import find_all_locations
+from ._places_resolver import find_all_locations, find_location
+from ._weather_cache_key import weather_cache_key_for
 from ._circuit_breaker import ai_breaker
 
 router = APIRouter()
@@ -93,6 +94,8 @@ def _get_location_context() -> list[dict]:
                 "province": loc.get("province", ""),
                 "tags": loc.get("tags", []),
                 "country": loc.get("country", "ZW"),
+                "lat": loc.get("lat"),
+                "lon": loc.get("lon"),
             }
             for loc in adapted
             if loc.get("slug")
@@ -194,10 +197,12 @@ def _exec_weather(args: dict) -> str:
         return json.dumps({"error": "Invalid location slug"})
 
     try:
+        # The cache is keyed by coordinate cell, not by place slug (#252).
+        key = weather_cache_key_for(find_location(slug))
         cached = weather_cache_collection().find_one(
-            {"locationSlug": slug},
+            {"locationSlug": key},
             {"_id": 0, "data": 1, "provider": 1},
-        )
+        ) if key else None
         if cached and cached.get("data"):
             data = cached["data"]
             current = data.get("current", {})
@@ -246,10 +251,11 @@ def _text_search_fallback(query: str) -> dict:
             # Try to get cached weather
             weather_info = {}
             try:
+                key = weather_cache_key_for(loc)
                 cached = weather_cache_collection().find_one(
-                    {"locationSlug": loc["slug"]},
+                    {"locationSlug": key},
                     {"_id": 0, "data.current.temperature_2m": 1, "data.current.weather_code": 1},
-                )
+                ) if key else None
                 if cached and cached.get("data", {}).get("current"):
                     curr = cached["data"]["current"]
                     weather_info = {

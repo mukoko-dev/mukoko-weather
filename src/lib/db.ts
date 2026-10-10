@@ -57,12 +57,14 @@ import type { SeasonDoc } from "./seed-seasons";
 import type { ActivityCategoryDoc } from "./seed-categories";
 import type { AIPromptDoc, AISuggestedPromptRule } from "./seed-ai-prompts";
 import { internalApiBase } from "@/lib/site";
+import { weatherCacheKey } from "./weather-cache-key";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface WeatherCacheDoc {
+  /** Coordinate-cell key (`weatherCacheKey`), not a place slug (#252). */
   locationSlug: string;
   lat: number;
   lon: number;
@@ -391,7 +393,7 @@ export async function ensureIndexes(): Promise<void> {
   // other collection still gets seeded). `safeCreateIndex` never rejects, but
   // we use `allSettled` as a belt-and-braces guard.
   await Promise.allSettled([
-    // Weather cache: one doc per location, auto-expire
+    // Weather cache: one doc per 0.05° coordinate cell (#252), auto-expire
     safeCreateIndex(
       weatherCacheCollection(),
       { locationSlug: 1 },
@@ -680,11 +682,16 @@ export function entityMembershipsCollection() {
 // Weather cache operations
 // ---------------------------------------------------------------------------
 
+/**
+ * Read a live cache row by its key. Rows are keyed by coordinate grid cell
+ * (`weatherCacheKey(lat, lon)`, issue #252), never by place slug, and the
+ * column keeps its historical name `locationSlug`.
+ */
 export async function getCachedWeather(
-  locationSlug: string,
+  cacheKey: string,
 ): Promise<WeatherData | null> {
   const doc = await weatherCacheCollection().findOne({
-    locationSlug,
+    locationSlug: cacheKey,
     expiresAt: { $gt: new Date() },
   });
   return doc?.data ?? null;
@@ -721,9 +728,10 @@ export async function getWeatherForLocation(
   lon: number,
   elevation: number,
 ): Promise<WeatherResult> {
-  // 1. MongoDB cache — fast path, no HTTP hop. Written only by Python.
+  // 1. MongoDB cache — fast path, no HTTP hop. Written only by Python, under
+  // the same coordinate-cell key it derives from the lat/lon sent below.
   try {
-    const cached = await getCachedWeather(slug);
+    const cached = await getCachedWeather(weatherCacheKey(lat, lon));
     if (cached) return { data: cached, source: "cache" };
   } catch {
     // DB unavailable — proceed to the endpoint
@@ -733,8 +741,9 @@ export async function getWeatherForLocation(
   // Tomorrow.io → Open-Meteo → seasonal), writes the cache, records history.
   try {
     const res = await fetch(
-      // `location` keys the cache row + history doc under THIS page's slug,
-      // so /api/py/history?location=<slug> reads what gets recorded (#245).
+      // `location` keys the history doc under THIS page's slug, so
+      // /api/py/history?location=<slug> reads what gets recorded (#245).
+      // The cache row is keyed by the lat/lon cell, not the slug (#252).
       `${internalApiBase()}/api/py/weather?lat=${lat}&lon=${lon}&location=${encodeURIComponent(slug)}`,
       { cache: "no-store", signal: AbortSignal.timeout(15_000) },
     );

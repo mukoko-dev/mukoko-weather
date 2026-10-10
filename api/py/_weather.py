@@ -24,6 +24,7 @@ from ._db import (
     weather_cache_collection,
 )
 from ._places_resolver import find_location, find_nearest_location
+from ._weather_cache_key import weather_cache_key
 from ._history_store import record_weather_history
 from ._circuit_breaker import tomorrow_breaker, open_meteo_breaker, CircuitOpenError
 
@@ -774,7 +775,8 @@ def _record_weather_history(
 #: within this distance of the requested coordinates before weather for those
 #: coordinates is recorded as that location's history. Stops a caller from
 #: writing London's weather into Harare's history, and stops the 20,000 km
-#: nearest-match (used for cache keys) from filing Karachi under Bosaso.
+#: nearest-place search from filing Karachi under Bosaso. The same cap gates
+#: using that place's elevation.
 HISTORY_MAX_DISTANCE_KM = 25.0
 
 
@@ -821,9 +823,9 @@ def _find_nearest_location(lat: float, lon: float) -> dict | None:
     field reads keep working.
     """
     try:
-        # Wide radius — this fn is used for cache-key derivation, so we want a
-        # best-effort match anywhere on the globe rather than a tight 50 km cap.
-        return find_nearest_location(lat, lon, max_km=20_000)
+        # Only a place within HISTORY_MAX_DISTANCE_KM is ever used (history
+        # slug + elevation). It no longer feeds the cache key (#252).
+        return find_nearest_location(lat, lon, max_km=HISTORY_MAX_DISTANCE_KM)
     except Exception:
         return None
 
@@ -847,7 +849,8 @@ async def get_weather(
     (SSR passes the page slug). It is honoured only when it resolves to a
     known place within ``HISTORY_MAX_DISTANCE_KM`` of ``lat``/``lon``; it then
     keys the history doc, so ``/api/py/history?location=`` reads exactly what
-    this endpoint records. The cache stays keyed on the nearest known place.
+    this endpoint records. The cache is keyed by the coordinate's 0.05° grid
+    cell (``_weather_cache_key.weather_cache_key``), independent of any place.
 
     Weather proxy with multi-provider fallback chain:
 
@@ -880,23 +883,21 @@ async def get_weather(
 
     requested_models = [m for m in (models or "").split(",") if m.strip()] or None
 
-    # Resolve to nearest known location for cache key
-    location_slug = f"{lat:.2f}_{lon:.2f}"
+    # The cache is keyed by the requested coordinate on a fixed grid (#252),
+    # never by the nearest known place: that search reaches 20,000 km, so a
+    # place key let distant cities share (and overwrite) one row.
+    cache_key = weather_cache_key(lat, lon)
     elevation = 1200
     # History is only recorded under a slug we're confident describes these
     # coordinates (validated hint, or a nearby known place) — never under a
-    # raw coordinate key nobody reads, nor a place thousands of km away.
-    # The CACHE stays keyed on the nearest known place so nearby page slugs
-    # keep sharing one provider fetch (Tomorrow.io free tier: 500/day). Only
-    # the history doc takes the validated hint.
+    # place thousands of km away. The nearby place also supplies elevation
+    # for the seasonal fallback, under the same distance cap.
     history_slug: str | None = None
     try:
         nearest = _find_nearest_location(lat, lon)
-        if nearest:
-            location_slug = nearest.get("slug", location_slug)
+        if nearest and _near(nearest, lat, lon):
+            history_slug = nearest.get("slug")
             elevation = nearest.get("elevation", elevation)
-            if _near(nearest, lat, lon):
-                history_slug = location_slug
     except Exception:
         pass
     hinted = _resolve_location_hint(location, lat, lon)
@@ -918,7 +919,7 @@ async def get_weather(
     source: str | None = None
     cache_status = "MISS"
     try:
-        cached = _get_cached_weather(location_slug)
+        cached = _get_cached_weather(cache_key)
         if cached:
             data = cached.get("data", {})
             source = cached.get("provider", "cache")
@@ -971,9 +972,9 @@ async def get_weather(
         # day's history doc (and vice versa). Neither may fail the response.
         if source and source != "fallback":
             try:
-                _set_cached_weather(location_slug, lat, lon, data, source)
+                _set_cached_weather(cache_key, lat, lon, data, source)
             except Exception as exc:  # noqa: BLE001
-                logger.warning("weather_cache write failed for %s: %s", location_slug, exc)
+                logger.warning("weather_cache write failed for %s: %s", cache_key, exc)
             if history_slug:
                 try:
                     _record_weather_history(history_slug, data, source, lon)
