@@ -232,9 +232,19 @@ class TestEnrich:
 
 class TestFetchTomorrowInsights:
     @patch("py._http.get_http_client")
-    def test_429_returns_none(self, client):
+    def test_429_raises_unavailable_with_status_only(self, client):
         client.return_value.get.return_value = MagicMock(status_code=429)
-        assert enrichment.fetch_tomorrow_insights(-17.8, 31.0, "k") is None
+        with pytest.raises(enrichment.TomorrowUnavailable) as exc:
+            enrichment.fetch_tomorrow_insights(-17.8, 31.0, "secret-key")
+        assert str(exc.value) == "HTTP 429"
+        assert "secret-key" not in str(exc.value)
+
+    @patch("py._http.get_http_client")
+    def test_timeout_raises_unavailable(self, client):
+        client.return_value.get.side_effect = TimeoutError("read timed out")
+        with pytest.raises(enrichment.TomorrowUnavailable) as exc:
+            enrichment.fetch_tomorrow_insights(-17.8, 31.0, "k")
+        assert str(exc.value) == "TimeoutError"
 
     @patch("py._http.get_http_client")
     def test_daily_only_and_filtered_fields(self, client):
@@ -256,4 +266,147 @@ class TestFetchTomorrowInsights:
         resp = MagicMock(status_code=200)
         resp.json.return_value = {"timelines": {"daily": [{"values": {"uvHealthConcernMax": 4}}]}}
         client.return_value.get.return_value = resp
-        assert enrichment.fetch_tomorrow_insights(-17.8, 31.0, "k") is None
+        assert enrichment.fetch_tomorrow_insights(-17.8, 31.0, "k") == {}
+
+
+#: A clear-sky day as the free /v4/weather/forecast endpoint returns it: the
+#: daily values carry none of thunderstormProbability / heatIndexMax / gdd /
+#: moonPhase / precipitationTypeMax, and cloudBaseAvg / cloudCeilingAvg are
+#: null without cloud. This is what production saw on v0.7.0.
+CLEAR_SKY_DAILY = {
+    "timelines": {
+        "daily": [{
+            "time": "2026-10-10T04:00:00Z",
+            "values": {
+                "cloudBaseAvg": None, "cloudCeilingAvg": None, "cloudCoverAvg": 4,
+                "evapotranspirationAvg": 0.218, "uvHealthConcernMax": 3, "uvIndexMax": 10,
+                "temperatureMax": 28.1, "temperatureMin": 16.4, "windSpeedMax": 5.2,
+                "visibilityAvg": 24.1, "weatherCodeMax": 1000, "moonriseTime": "2026-10-10T03:51:00Z",
+            },
+        }],
+    }
+}
+
+
+class TestClearSkyIsNotAFailure:
+    """Regression: a 200 with nothing to merge tripped the breaker in prod."""
+
+    @patch("py._http.get_http_client")
+    def test_fetch_returns_empty_dict_on_200_without_enrichable_fields(self, client):
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = CLEAR_SKY_DAILY
+        client.return_value.get.return_value = resp
+        assert enrichment.fetch_tomorrow_insights(-17.83, 31.05, "k") == {}
+
+    @patch("py._enrichment.reserve_call", return_value=True)
+    @patch("py._db.get_api_key", return_value="k")
+    @patch("py._enrichment.tomorrow_breaker")
+    @patch("py._http.get_http_client")
+    def test_enrich_reports_tomorrow_records_success_and_caches(self, client, breaker, _key, _reserve):
+        breaker.is_allowed = True
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = CLEAR_SKY_DAILY
+        client.return_value.get.return_value = resp
+        with patch.object(enrichment, "get_cached_enrichment", return_value=None), patch.object(
+            enrichment, "set_cached_enrichment"
+        ) as setter, patch.object(enrichment, "record_skip") as skip:
+            assert enrichment.enrich("cell:-17.85_31.05", -17.83, 31.05) == (None, "tomorrow")
+        breaker.record_failure.assert_not_called()
+        breaker.record_success.assert_called_once()
+        setter.assert_called_once_with("cell:-17.85_31.05", {})
+        skip.assert_not_called()
+
+    def test_cached_empty_answer_is_a_hit_and_spends_nothing(self):
+        with patch.object(enrichment, "get_cached_enrichment", return_value={}), patch.object(
+            enrichment, "reserve_call"
+        ) as reserve:
+            assert enrichment.enrich("cell:x", 0, 0) == (None, "tomorrow")
+        reserve.assert_not_called()
+
+    def test_get_cached_enrichment_distinguishes_miss_from_empty(self):
+        coll = MagicMock()
+        with patch.object(enrichment, "_enrichment_collection", return_value=coll):
+            coll.find_one.return_value = None
+            assert enrichment.get_cached_enrichment("a") is None
+            coll.find_one.return_value = {"_id": "a", "insights": {}}
+            assert enrichment.get_cached_enrichment("a") == {}
+            coll.find_one.return_value = {"_id": "a", "insights": {"cloudBase": 1.2}}
+            assert enrichment.get_cached_enrichment("a") == {"cloudBase": 1.2}
+
+
+class TestEnrichThroughRealFetch:
+    """enrich() driven through fetch_tomorrow_insights with a fake HTTP client."""
+
+    @pytest.fixture(autouse=True)
+    def _stubs(self):
+        with patch.object(enrichment, "get_cached_enrichment", return_value=None), patch.object(
+            enrichment, "set_cached_enrichment"
+        ) as setter, patch.object(enrichment, "reserve_call", return_value=True), patch(
+            "py._db.get_api_key", return_value="super-secret"
+        ), patch.object(enrichment, "_budget_collection") as coll:
+            self.setter = setter
+            self.coll = coll
+            yield
+
+    def _stats_set(self):
+        return self.coll.return_value.update_one.call_args.args[1]["$set"]
+
+    @patch("py._enrichment.tomorrow_breaker")
+    @patch("py._http.get_http_client")
+    def test_429_is_a_budget_skip_not_a_breaker_failure(self, client, breaker):
+        breaker.is_allowed = True
+        client.return_value.get.return_value = MagicMock(status_code=429)
+        assert enrichment.enrich("cell:a", 0, 0) == (None, "skipped-budget")
+        breaker.record_failure.assert_not_called()
+        assert self._stats_set()["lastErrorDetail"] == "HTTP 429"
+        # The rest of the hour skips the call (and its reservation) entirely.
+        assert enrichment.enrich("cell:b", 0, 0) == (None, "skipped-budget")
+        assert client.return_value.get.call_count == 1
+
+    @patch("py._enrichment.tomorrow_breaker")
+    @patch("py._http.get_http_client")
+    def test_401_trips_breaker_and_records_reason_without_key(self, client, breaker):
+        breaker.is_allowed = True
+        client.return_value.get.return_value = MagicMock(status_code=401)
+        assert enrichment.enrich("cell:a", 0, 0) == (None, "skipped-error")
+        breaker.record_failure.assert_called_once()
+        assert self._stats_set()["lastErrorDetail"] == "HTTP 401"
+        assert "super-secret" not in str(self.coll.return_value.update_one.call_args)
+
+    @patch("py._enrichment.tomorrow_breaker")
+    @patch("py._http.get_http_client")
+    def test_real_httpx_timeout_is_a_breaker_failure(self, client, breaker):
+        import httpx
+
+        breaker.is_allowed = True
+        client.return_value.get.side_effect = httpx.ReadTimeout("timed out")
+        assert enrichment.enrich("cell:a", 0, 0) == (None, "skipped-error")
+        breaker.record_failure.assert_called_once()
+        assert self._stats_set()["lastErrorDetail"] == "ReadTimeout"
+
+    @pytest.mark.parametrize("body", [None, [], {}, {"timelines": None}, {"timelines": {"daily": []}}])
+    @patch("py._enrichment.tomorrow_breaker")
+    @patch("py._http.get_http_client")
+    def test_200_without_daily_timeline_is_not_cached_as_healthy(self, client, breaker, body):
+        breaker.is_allowed = True
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = body
+        client.return_value.get.return_value = resp
+        assert enrichment.enrich("cell:a", 0, 0) == (None, "skipped-error")
+        breaker.record_failure.assert_called_once()
+        breaker.record_success.assert_not_called()
+        self.setter.assert_not_called()
+
+
+class TestEmptyAnswerTtl:
+    def test_empty_answer_uses_the_shorter_ttl(self):
+        coll = MagicMock()
+        with patch.object(enrichment, "_enrichment_collection", return_value=coll):
+            enrichment.set_cached_enrichment("a", {})
+            empty = coll.update_one.call_args.args[1]["$set"]
+            enrichment.set_cached_enrichment("a", {"cloudBase": 1.0})
+            full = coll.update_one.call_args.args[1]["$set"]
+        assert enrichment.EMPTY_ENRICHMENT_TTL_S < enrichment.ENRICHMENT_TTL_S
+        span = lambda d: (d["expiresAt"] - d["fetchedAt"]).total_seconds()  # noqa: E731
+        assert span(empty) == enrichment.EMPTY_ENRICHMENT_TTL_S
+        assert span(full) == enrichment.ENRICHMENT_TTL_S
