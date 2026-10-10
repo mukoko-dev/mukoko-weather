@@ -1046,6 +1046,28 @@ body {
            bg-surface-card p-[var(--space-card)];
   }
 
+  /* .guineafowl — grouped list card (a flock in one frame). The Mukoko
+     ecosystem profile standard (mukoko-news / mukoko-events /profile): a
+     bordered card holding an uppercase heading and full-width rows. */
+  .guineafowl {
+    @apply mb-6 overflow-hidden rounded-[var(--radius-card)] border
+           border-border bg-surface-card;
+  }
+
+  /* .guineafowl-heading — the small uppercase label at the top of the card */
+  .guineafowl-heading {
+    @apply border-b border-border px-4 py-3 text-xs font-bold uppercase
+           tracking-wider text-text-tertiary;
+  }
+
+  /* .guineafowl-row — one full-width row (link or button) inside the card */
+  .guineafowl-row {
+    @apply flex min-h-[var(--touch-target-min)] w-full items-center
+           justify-between gap-3 border-b border-border px-4 py-4 text-left
+           text-text-primary transition-colors last:border-b-0
+           hover:bg-surface-dim;
+  }
+
   /* .pangolin — soft card surface (no border, light shadow — armoured but unobtrusive) */
   .pangolin {
     @apply rounded-[var(--radius-card)] bg-surface-card p-[var(--space-card)] shadow-sm;
