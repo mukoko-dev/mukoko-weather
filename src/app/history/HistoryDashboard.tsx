@@ -53,17 +53,21 @@ type SelectedHistoryLocation = {
 
 interface HistoryRecord {
   date: string;
+  /** Provenance — archive days are ERA5 reanalysis daily means. */
+  source: "recorded" | "open-meteo-archive";
   tempHigh: number;
   tempLow: number;
   feelsLikeHigh: number;
   feelsLikeLow: number;
   precipitation: number;
   rainProbability: number;
-  humidity: number;
-  cloudCover: number;
-  pressure: number;
-  uvIndex: number;
-  windSpeed: number;
+  /** null when an archive day has no daily mean for the field. */
+  humidity: number | null;
+  cloudCover: number | null;
+  pressure: number | null;
+  /** null for archive days — the reanalysis archive has no UV index. */
+  uvIndex: number | null;
+  windSpeed: number | null;
   windGusts: number;
   windDirection: number;
   windDirectionLabel: string;
@@ -109,12 +113,39 @@ function formatSunTime(iso: string): string {
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
 }
 
+/**
+ * User-facing copy for a failed /api/py/history request. Exported for tests.
+ * The raw server detail is shown only for client errors (it's our own,
+ * human-readable validation text); 5xx gets a plain retry message.
+ */
+export function historyErrorMessage(status: number, detail?: unknown): string {
+  if (status === 404) return "We don't have this location on record.";
+  if (status >= 500) {
+    return "Weather history is temporarily unavailable. Please try again in a moment.";
+  }
+  return typeof detail === "string" && detail
+    ? detail
+    : `Request failed (HTTP ${status})`;
+}
+
+/** Number of archive-filled days in a record set. Exported for tests. */
+export function countArchiveDays(records: { source: string }[]): number {
+  return records.filter((r) => r.source === "open-meteo-archive").length;
+}
+
+/** Round a value that may be null/undefined (archive daily means can be). */
+function roundOrNull(v: number | null | undefined): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null;
+}
+
 export function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
   return (
     docs
       // A persisted doc missing `current` would throw on the unguarded
-      // `current.*` reads below and blank the whole dashboard. Skip such docs.
-      .filter((doc) => doc.current != null)
+      // `current.*` reads below and blank the whole dashboard. Skip such docs,
+      // and docs without a `date` (the pre-#245 Python writer omitted it),
+      // which would crash the `date.localeCompare` sort below.
+      .filter((doc) => doc.current != null && typeof doc.date === "string")
       .map((doc) => {
         const daily = doc.daily;
         const current = doc.current;
@@ -124,6 +155,9 @@ export function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
 
         return {
           date: doc.date,
+          source: (doc.source === "open-meteo-archive"
+            ? "open-meteo-archive"
+            : "recorded") as HistoryRecord["source"],
           tempHigh:
             daily?.temperature_2m_max?.[0] != null
               ? Math.round(daily.temperature_2m_max[0])
@@ -142,11 +176,11 @@ export function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
               : Math.round(current.apparent_temperature - 5),
           precipitation: daily?.precipitation_sum?.[0] ?? current.precipitation,
           rainProbability: daily?.precipitation_probability_max?.[0] ?? 0,
-          humidity: current.relative_humidity_2m,
-          cloudCover: current.cloud_cover,
-          pressure: Math.round(current.surface_pressure),
-          uvIndex: daily?.uv_index_max?.[0] ?? current.uv_index,
-          windSpeed: Math.round(current.wind_speed_10m),
+          humidity: roundOrNull(current.relative_humidity_2m),
+          cloudCover: roundOrNull(current.cloud_cover),
+          pressure: roundOrNull(current.surface_pressure),
+          uvIndex: daily?.uv_index_max?.[0] ?? current.uv_index ?? null,
+          windSpeed: roundOrNull(current.wind_speed_10m),
           windGusts:
             daily?.wind_gusts_10m_max?.[0] != null
               ? Math.round(daily.wind_gusts_10m_max[0])
@@ -561,53 +595,6 @@ export function HistoryDashboard() {
     });
   }, []);
 
-  // Auto-select the global location (from My Weather / last visited location page)
-  // by fetching just that one location from the API.
-  useEffect(() => {
-    if (didAutoSelect.current || !globalSlug) return;
-    didAutoSelect.current = true;
-
-    fetchJson<{ location?: WeatherLocation }>(
-      `/api/py/locations?slug=${encodeURIComponent(globalSlug)}`,
-    )
-      .then((data) => {
-        const loc = data?.location;
-        if (!loc) return;
-        setSelectedLocation(loc);
-        setQuery(loc.name);
-        setLoading(true);
-        setFetched(true);
-        return fetch(`/api/py/history?location=${loc.slug}&days=30`);
-      })
-      .then((res) => {
-        if (!res || !res.ok) {
-          if (res)
-            return res
-              .json()
-              .catch(() => ({ error: "Request failed" }))
-              .then((b: { error?: string }) => {
-                throw new Error(b.error || `HTTP ${res.status}`);
-              });
-          return;
-        }
-        return res.json();
-      })
-      .then((json) => {
-        if (!json) return;
-        setRecords(transformHistory(json.data));
-        setInsightsRecords(transformInsights(json.data));
-        setVisibleRowCount(50);
-      })
-      .catch((err) => {
-        setError(
-          err instanceof Error ? err.message : "Failed to fetch history",
-        );
-        setRecords([]);
-        setInsightsRecords([]);
-      })
-      .finally(() => setLoading(false));
-  }, [globalSlug]);
-
   // Hide quick matches when the input just shows the picked location's name
   // (the hook still fetched for it, but re-opening the dropdown for the
   // selection you just made is noise, matching the previous behavior).
@@ -645,7 +632,10 @@ export function HistoryDashboard() {
           const body = await res
             .json()
             .catch(() => ({ error: "Request failed" }));
-          throw new Error(body.error || `HTTP ${res.status}`);
+          // FastAPI errors carry `detail`; keep `error` for older shapes.
+          throw new Error(
+            historyErrorMessage(res.status, body.detail ?? body.error),
+          );
         }
         const json = await res.json();
         setRecords(transformHistory(json.data));
@@ -664,6 +654,28 @@ export function HistoryDashboard() {
     [],
   );
 
+  // Auto-select the global location (from My Weather / last visited location page)
+  // by fetching just that one location from the API.
+  useEffect(() => {
+    if (didAutoSelect.current || !globalSlug) return;
+    didAutoSelect.current = true;
+
+    fetchJson<{ location?: WeatherLocation }>(
+      `/api/py/locations?slug=${encodeURIComponent(globalSlug)}`,
+    )
+      .then((data) => {
+        const loc = data?.location;
+        if (!loc) return;
+        setSelectedLocation(loc);
+        setQuery(loc.name);
+        // Same path as a manual pick, so error copy and state can't drift.
+        void fetchHistory(loc, 30);
+      })
+      .catch(() => {
+        // Location lookup failed: leave the "select a location" state.
+      });
+  }, [globalSlug, fetchHistory]);
+
   const handleSelectLocation = (loc: SelectedHistoryLocation) => {
     setSelectedLocation(loc);
     setQuery(loc.name);
@@ -680,6 +692,7 @@ export function HistoryDashboard() {
 
   const hasInsights = insightsRecords.length > 0;
 
+  const uvValues = records.map((r) => r.uvIndex).filter(defined);
   const stats =
     records.length > 0
       ? {
@@ -692,15 +705,18 @@ export function HistoryDashboard() {
           totalRain: sum(records.map((r) => r.precipitation)),
           rainyDays: records.filter((r) => r.precipitation > 0.1).length,
           avgRainProb: avg(records.map((r) => r.rainProbability)),
-          avgHumidity: avg(records.map((r) => r.humidity)),
-          avgCloudCover: avg(records.map((r) => r.cloudCover)),
-          avgPressure: avg(records.map((r) => r.pressure)),
-          avgUv: avg(records.map((r) => Math.round(r.uvIndex))),
+          avgHumidity: avg(records.map((r) => r.humidity).filter(defined)),
+          avgCloudCover: avg(records.map((r) => r.cloudCover).filter(defined)),
+          avgPressure: avg(records.map((r) => r.pressure).filter(defined)),
+          // Archive days carry no UV — use only the days that have it, and
+          // show "—" (not a misleading 0 / Low) when none do.
+          avgUv: uvValues.length > 0 ? avg(uvValues.map(Math.round)) : null,
           maxUv:
-            Math.round(
-              records.reduce((m, r) => Math.max(m, r.uvIndex), 0) * 10,
-            ) / 10,
-          avgWind: avg(records.map((r) => r.windSpeed)),
+            uvValues.length > 0
+              ? Math.round(uvValues.reduce((m, v) => Math.max(m, v), 0) * 10) /
+                10
+              : null,
+          avgWind: avg(records.map((r) => r.windSpeed).filter(defined)),
           maxGusts: records.reduce((m, r) => Math.max(m, r.windGusts), 0),
           avgDaylight: records[0]?.daylightHours
             ? Math.round(
@@ -940,8 +956,20 @@ export function HistoryDashboard() {
       )}
 
       {error && (
-        <div className="rounded-[var(--radius-card)] border border-destructive/30 bg-frost-severe-bg p-4 text-base text-destructive">
-          {error}
+        <div
+          role="alert"
+          className="rounded-[var(--radius-card)] border border-destructive/30 bg-frost-severe-bg p-4 text-base text-destructive"
+        >
+          <p>{error}</p>
+          {selectedLocation && (
+            <button
+              type="button"
+              className="impala-sm mt-3"
+              onClick={() => fetchHistory(selectedLocation, days)}
+            >
+              Try again
+            </button>
+          )}
         </div>
       )}
 
@@ -956,8 +984,9 @@ export function HistoryDashboard() {
               last {days} days.
             </p>
             <p className="mt-2 text-base text-text-tertiary">
-              Historical data is recorded each time weather is fetched. Data
-              builds up over time as the service is used.
+              Past days are filled from the Open-Meteo climate archive, which
+              runs about two days behind, and today is recorded as weather is
+              fetched. Try a longer period, or check back shortly.
             </p>
           </div>
         )}
@@ -984,6 +1013,13 @@ export function HistoryDashboard() {
               {selectedLocation?.name} —{" "}
               {DAY_OPTIONS.find((o) => o.value === days)?.label} summary
             </h2>
+            {countArchiveDays(records) > 0 && (
+              <p className="dove mt-1">
+                {countArchiveDays(records)} of {records.length} days come from
+                the Open-Meteo climate archive (ERA5 reanalysis, daily
+                averages). The rest were recorded live.
+              </p>
+            )}
             <h3 className="hornbill mt-4">Temperature</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Avg High" value={`${stats.avgHigh}°C`} />
@@ -1021,9 +1057,16 @@ export function HistoryDashboard() {
               />
               <StatCard
                 label="Avg UV"
-                value={`${stats.avgUv} (${uvLevel(stats.avgUv).label})`}
+                value={
+                  stats.avgUv != null
+                    ? `${stats.avgUv} (${uvLevel(stats.avgUv).label})`
+                    : "—"
+                }
               />
-              <StatCard label="Peak UV" value={`${stats.maxUv}`} />
+              <StatCard
+                label="Peak UV"
+                value={stats.maxUv != null ? `${stats.maxUv}` : "—"}
+              />
             </div>
             <h3 className="hornbill mt-4">Wind & Daylight</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -1364,13 +1407,13 @@ export function HistoryDashboard() {
                             {r.rainProbability}%
                           </td>
                           <td className="hidden px-3 py-2 text-right text-text-secondary sm:table-cell">
-                            {r.humidity}%
+                            {r.humidity != null ? `${r.humidity}%` : "—"}
                           </td>
                           <td className="hidden px-3 py-2 text-right text-text-tertiary md:table-cell">
-                            {r.cloudCover}%
+                            {r.cloudCover != null ? `${r.cloudCover}%` : "—"}
                           </td>
                           <td className="hidden px-3 py-2 text-right text-text-secondary sm:table-cell">
-                            {r.windSpeed}
+                            {r.windSpeed ?? "—"}
                           </td>
                           <td className="hidden px-3 py-2 text-right text-text-tertiary md:table-cell">
                             {r.windGusts}
@@ -1379,10 +1422,10 @@ export function HistoryDashboard() {
                             {r.windDirectionLabel}
                           </td>
                           <td className="hidden px-3 py-2 text-right text-text-secondary md:table-cell">
-                            {Math.round(r.uvIndex)}
+                            {r.uvIndex != null ? Math.round(r.uvIndex) : "—"}
                           </td>
                           <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">
-                            {r.pressure}
+                            {r.pressure ?? "—"}
                           </td>
                           <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">
                             {r.sunrise}
