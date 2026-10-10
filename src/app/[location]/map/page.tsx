@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getLocationFromDb } from "@/lib/db";
+import { loadLocation } from "../load-location";
 import { safeJsonLd } from "@/lib/json-ld";
 import { MapDashboard } from "./MapDashboard";
 import { SITE_URL } from "@/lib/site";
@@ -12,7 +12,7 @@ export async function generateMetadata({
   params: Promise<{ location: string }>;
 }): Promise<Metadata> {
   const { location: slug } = await params;
-  const loc = await getLocationFromDb(slug);
+  const loc = await loadLocation(slug);
   if (!loc) return { title: "Location not found" };
 
   const title = `${loc.name} Weather Map — Rain, Cloud, Temperature & Wind Layers`;
@@ -49,7 +49,7 @@ export default async function MapPage({
   params: Promise<{ location: string }>;
 }) {
   const { location: slug } = await params;
-  const location = await getLocationFromDb(slug);
+  const location = await loadLocation(slug);
   if (!location) notFound();
 
   const breadcrumbSchema = {

@@ -1,11 +1,8 @@
+import { loadLocation } from "../load-location";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { checkFrostRisk, createFallbackWeather } from "@/lib/weather";
-import {
-  getWeatherForLocation,
-  getLocationFromDb,
-  getSeasonForDate,
-} from "@/lib/db";
+import { getWeatherForLocation, getSeasonForDate } from "@/lib/db";
 import { safeJsonLd } from "@/lib/json-ld";
 import { ForecastDashboard } from "./ForecastDashboard";
 import { SITE_URL } from "@/lib/site";
@@ -17,7 +14,7 @@ export async function generateMetadata({
   params: Promise<{ location: string }>;
 }): Promise<Metadata> {
   const { location: slug } = await params;
-  const loc = await getLocationFromDb(slug);
+  const loc = await loadLocation(slug);
   if (!loc) return { title: "Location not found" };
 
   const title = `${loc.name} 7-Day Forecast — Hourly & Daily Weather`;
@@ -56,7 +53,7 @@ export default async function ForecastPage({
   params: Promise<{ location: string }>;
 }) {
   const { location: slug } = await params;
-  const location = await getLocationFromDb(slug);
+  const location = await loadLocation(slug);
   if (!location) notFound();
 
   let weather;
