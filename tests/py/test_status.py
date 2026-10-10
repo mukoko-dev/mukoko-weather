@@ -10,6 +10,7 @@ from py._status import (
     _check_mongodb,
     _check_tomorrow_io,
     _check_open_meteo,
+    AI_PROBE_TIMEOUT_S,
     _check_ai_gateway,
     _check_weather_cache,
     _check_ai_cache,
@@ -174,56 +175,105 @@ _GW_ENV = {
 }
 
 
-class TestCheckAiGateway:
-    """Config-presence check only — it must NOT spend tokens."""
+def _probe_client(status_code=400, side_effect=None):
+    """A stand-in shared HTTP client whose POST answers ``status_code``."""
+    client = MagicMock()
+    if side_effect is not None:
+        client.post.side_effect = side_effect
+    else:
+        client.post.return_value = MagicMock(status_code=status_code)
+    return client
 
-    def test_operational_when_configured(self):
-        with patch.dict("os.environ", _GW_ENV, clear=True):
-            with patch("py._status.ai_breaker") as breaker:
-                breaker.is_allowed = True
+
+class TestCheckAiGateway:
+    """A real liveness probe of the AI path that never reaches the model."""
+
+    def _run(self, client, *, allowed=True, env=None):
+        with patch.dict("os.environ", _GW_ENV if env is None else env, clear=True):
+            with patch("py._status.get_http_client", return_value=client) as factory, \
+                 patch("py._status.ai_breaker") as breaker:
+                breaker.is_allowed = allowed
                 result = _check_ai_gateway()
+        return result, factory, breaker
+
+    def test_operational_when_worker_validates_probe(self):
+        result, _, _ = self._run(_probe_client(400))
         assert result["status"] == "operational"
         assert result["name"] == "Shamwari AI (weather AI Worker)"
         assert "shamwari" in result["message"]
-        assert "Worker" in result["message"]
+        assert "reachable" in result["message"]
 
-    def test_degraded_when_unconfigured(self):
-        with patch.dict("os.environ", {}, clear=True):
-            result = _check_ai_gateway()
+    def test_probe_hits_completions_route_with_service_key(self):
+        client = _probe_client(400)
+        self._run(client)
+        args, kwargs = client.post.call_args
+        assert args[0] == "https://weather-internal.example/internal/ai/chat/completions"
+        assert kwargs["headers"]["Authorization"] == "Bearer key"
+
+    def test_probe_cannot_reach_the_model(self):
+        """Empty ``messages`` is refused by the Worker before any model call."""
+        client = _probe_client(400)
+        self._run(client)
+        body = client.post.call_args.kwargs["json"]
+        assert body == {"messages": []}
+        assert "max_tokens" not in body
+
+    def test_uses_short_timeout(self):
+        _, factory, _ = self._run(_probe_client(400))
+        factory.assert_called_once_with(AI_PROBE_TIMEOUT_S)
+        assert AI_PROBE_TIMEOUT_S <= 5.0
+
+    def test_down_on_unauthorized(self):
+        result, _, _ = self._run(_probe_client(401))
+        assert result["status"] == "down"
+        assert "401" in result["message"]
+
+    @pytest.mark.parametrize("code", [500, 502, 503, 404])
+    def test_down_on_worker_failure(self, code):
+        result, _, _ = self._run(_probe_client(code))
+        assert result["status"] == "down"
+        assert str(code) in result["message"]
+
+    def test_degraded_on_rate_limit(self):
+        result, _, _ = self._run(_probe_client(429))
+        assert result["status"] == "degraded"
+        assert "429" in result["message"]
+
+    def test_down_on_transport_error_without_leaking_detail(self):
+        exc = Exception("connect failed to weather-internal.example:443")
+        result, _, _ = self._run(_probe_client(side_effect=exc))
+        assert result["status"] == "down"
+        assert "weather-internal.example" not in result["message"]
+
+    def test_degraded_when_circuit_open(self):
+        result, _, _ = self._run(_probe_client(400), allowed=False)
+        assert result["status"] == "degraded"
+        assert "Circuit open" in result["message"]
+
+    def test_probe_never_touches_breaker_counts(self):
+        _, _, breaker = self._run(_probe_client(502))
+        breaker.record_failure.assert_not_called()
+        breaker.record_success.assert_not_called()
+
+    def test_degraded_when_unconfigured_without_probing(self):
+        client = _probe_client(400)
+        result, _, _ = self._run(client, env={})
         assert result["status"] == "degraded"
         assert "not configured" in result["message"]
         assert "WEATHER_SERVICE_API_KEY" in result["message"]
         assert "WEATHER_SERVICE_URL" in result["message"]
+        client.post.assert_not_called()
 
     def test_reports_names_never_values(self):
-        env = {"WEATHER_SERVICE_API_KEY": "secret-svc-value"}
-        with patch.dict("os.environ", env, clear=True):
-            result = _check_ai_gateway()
+        result, _, _ = self._run(_probe_client(400), env={"WEATHER_SERVICE_API_KEY": "secret-svc-value"})
         assert result["status"] == "degraded"
         assert "WEATHER_SERVICE_URL" in result["message"]
         assert "secret-svc-value" not in result["message"]
 
     def test_old_cloudflare_token_alone_is_not_enough(self):
         env = {"CLOUDFLARE_ACCOUNT_ID": "acct", "CF_AI_API_TOKEN": "tok"}
-        with patch.dict("os.environ", env, clear=True):
-            result = _check_ai_gateway()
+        result, _, _ = self._run(_probe_client(400), env=env)
         assert result["status"] == "degraded"
-
-    def test_degraded_when_circuit_open(self):
-        with patch.dict("os.environ", _GW_ENV, clear=True):
-            with patch("py._status.ai_breaker") as breaker:
-                breaker.is_allowed = False
-                result = _check_ai_gateway()
-        assert result["status"] == "degraded"
-        assert "Circuit open" in result["message"]
-
-    def test_does_not_spend_tokens(self):
-        with patch.dict("os.environ", _GW_ENV, clear=True):
-            with patch("py._status.get_http_client") as mock_client_cls, \
-                 patch("py._ai_gateway.httpx.Client") as mock_gw_http:
-                _check_ai_gateway()
-        mock_client_cls.assert_not_called()
-        mock_gw_http.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
