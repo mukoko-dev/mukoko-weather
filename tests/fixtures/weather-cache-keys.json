@@ -1,0 +1,111 @@
+{
+  "_comment": "Shared weather_cache key vectors (issue #252). Read by tests/py/test_weather_cache_key.py and src/lib/weather-cache-key.test.ts so the Python writer and the TypeScript SSR reader can never derive different keys.",
+  "gridDeg": 0.05,
+  "vectors": [
+    {
+      "lat": -17.83,
+      "lon": 31.05,
+      "key": "cell:-17.85_31.05"
+    },
+    {
+      "lat": -17.8292,
+      "lon": 31.0522,
+      "key": "cell:-17.85_31.05"
+    },
+    {
+      "lat": 24.86,
+      "lon": 67.01,
+      "key": "cell:24.85_67.00"
+    },
+    {
+      "lat": 11.28,
+      "lon": 49.18,
+      "key": "cell:11.30_49.20"
+    },
+    {
+      "lat": 0,
+      "lon": 0,
+      "key": "cell:0.00_0.00"
+    },
+    {
+      "lat": -0.01,
+      "lon": -0.01,
+      "key": "cell:0.00_0.00"
+    },
+    {
+      "lat": -0.03,
+      "lon": 0.03,
+      "key": "cell:-0.05_0.05"
+    },
+    {
+      "lat": 90,
+      "lon": 180,
+      "key": "cell:90.00_-180.00"
+    },
+    {
+      "lat": -90,
+      "lon": -180,
+      "key": "cell:-90.00_-180.00"
+    },
+    {
+      "lat": 0,
+      "lon": 179.99,
+      "key": "cell:0.00_-180.00"
+    },
+    {
+      "lat": 51.5,
+      "lon": -0.12,
+      "key": "cell:51.50_-0.10"
+    },
+    {
+      "lat": 50.1112,
+      "lon": 8.6831,
+      "key": "cell:50.10_8.70"
+    },
+    {
+      "lat": 41.85003,
+      "lon": -87.65005,
+      "key": "cell:41.85_-87.65"
+    },
+    {
+      "lat": 23.92298,
+      "lon": 90.71768,
+      "key": "cell:23.90_90.70"
+    },
+    {
+      "lat": 1.4412,
+      "lon": 103.802,
+      "key": "cell:1.45_103.80"
+    },
+    {
+      "lat": -17.825,
+      "lon": 31.025,
+      "key": "cell:-17.80_31.05"
+    },
+    {
+      "lat": 0.025,
+      "lon": -0.025,
+      "key": "cell:0.05_0.00"
+    },
+    {
+      "lat": -33.92,
+      "lon": 18.42,
+      "key": "cell:-33.90_18.40"
+    },
+    {
+      "lat": 64.13,
+      "lon": -21.9,
+      "key": "cell:64.15_-21.90"
+    },
+    {
+      "lat": -1.2921,
+      "lon": 36.8219,
+      "key": "cell:-1.30_36.80"
+    },
+    {
+      "lat": 13.7563,
+      "lon": 100.5018,
+      "key": "cell:13.75_100.50"
+    }
+  ]
+}

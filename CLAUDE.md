@@ -326,6 +326,8 @@ mukoko-weather/
 │   │   ├── suitability-cache.test.ts # Suitability cache tests
 │   │   ├── weather.ts             # Open-Meteo client, frost detection, weather utils, synthesizeOpenMeteoInsights
 │   │   ├── weather.test.ts
+│   │   ├── weather-cache-key.ts   # weatherCacheKey(lat, lon) — SSR reads weather_cache under the writer's 0.05° grid-cell key (#252)
+│   │   ├── weather-cache-key.test.ts
 │   │   ├── hero.ts                # Pure hero helpers: eyebrow badge selection (MY LOCATION / HOME), H/L formatting
 │   ├── hero.test.ts
 │   ├── hourly-summary.ts      # Deterministic one-sentence hourly outlook (Apple-style, no AI): first condition-group change + peak gusts
@@ -402,6 +404,7 @@ mukoko-weather/
 │       ├── _http.py               # Shared pooled httpx clients keyed by timeout (get_http_client)
 │       ├── _weather.py            # Weather data endpoints (Tomorrow.io/Open-Meteo proxy)
 │       ├── _ai_gateway.py         # Shared AI plumbing: shamwari AI Gateway URL/headers, GatewayClient singleton, breaker-guarded call_ai(), first_text(), OpenAI-style tool helpers
+│       ├── _weather_cache_key.py  # weather_cache_key(lat, lon) — 0.05° grid-cell cache key (mirror of src/lib/weather-cache-key.ts, #252)
 │       ├── _wmo.py                # WMO_LABELS — weather-code labels (mirror of weatherCodeToInfo in src/lib/weather.ts)
 │       ├── _ai.py                 # AI summary endpoint (Workers AI via the gateway, tiered TTL cache)
 │       ├── _ai_followup.py        # Inline follow-up chat endpoint (pre-seeded history)
@@ -819,7 +822,8 @@ Database seed data files are read by `/api/db-init` for one-time bootstrap:
 **Tomorrow.io (primary):** fetched and normalized exclusively in Python (`api/py/_weather.py` — `_fetch_tomorrow`, `_normalize_tomorrow`, `_tomorrow_code_to_wmo`). The TypeScript client (`src/lib/tomorrow.ts`) was removed (issue #101): it was a second, independent cache writer whose document shape (missing `is_day`/`current_units`) and Tomorrow→WMO mapping had drifted from the Python writer's, so the two poisoned each other's `weather_cache` rows. Python's normalization now emits the FULL `WeatherData` shape — `is_day` (current + hourly, computed from daily sunrise/sunset), `precipitation_probability`, `visibility` (km→m), and `current_units`.
 
 - Free tier limits: 500 calls/day, 25/hour, 3/second; 5-day forecast
-- SSR (`getWeatherForLocation` in `src/lib/db.ts`) is READ-ONLY against `weather_cache`: cache hit → serve; miss → server-to-server `GET /api/py/weather` (the single canonical fetch/cache/history writer); endpoint unreachable (e.g. plain `next dev` without Python functions) → direct Open-Meteo fetch WITHOUT caching → seasonal fallback
+- **Cache key = coordinate grid cell, never a place (issue #252).** `weather_cache.locationSlug` holds `weather_cache_key(lat, lon)` (`api/py/_weather_cache_key.py`, mirrored by `weatherCacheKey` in `src/lib/weather-cache-key.ts`): the requested coordinate rounded to a 0.05° (~5.6 km) cell, e.g. `cell:-17.85_31.05`. Keying by the nearest place (searched to 20,000 km) let Frankfurt's forecast sit under Bizerte and Karachi's under Bosaso. The cell is finer than the forecast models behind the providers, yet coarse enough that one town's page, GPS fix and client refresh share one provider fetch. Both implementations are pinned to `tests/fixtures/weather-cache-keys.json`. Readers that start from a slug (`_reports.py`, `_chat.py`, `_explore_search.py`) resolve the place first and read by `weather_cache_key_for(loc)`. The nearest-place lookup in `/api/py/weather` is capped at 25 km and feeds only the history slug and the fallback elevation
+- SSR (`getWeatherForLocation` in `src/lib/db.ts`) is READ-ONLY against `weather_cache` and reads `weatherCacheKey(lat, lon)`, the same key the writer derives from the lat/lon it sends: cache hit → serve; miss → server-to-server `GET /api/py/weather` (the single canonical fetch/cache/history writer); endpoint unreachable (e.g. plain `next dev` without Python functions) → direct Open-Meteo fetch WITHOUT caching → seasonal fallback
 
 **Open-Meteo (fallback):** `src/lib/weather.ts` — Open-Meteo client and pure utility functions:
 
@@ -1055,7 +1059,7 @@ All AI system prompts, suggested prompt rules, and model configurations are stor
 
 **Server-side (MongoDB):**
 
-- Weather cache: 15-min TTL (auto-expires via TTL index)
+- Weather cache: 15-min TTL (auto-expires via TTL index), one row per 0.05° coordinate cell (`weather_cache_key`, #252)
 - AI summaries: tiered TTL — 30 min (major cities), 60 min (mid-tier), 120 min (small locations) for real model-generated insights. Fallback text (gateway unconfigured, open circuit breaker, or a gateway/model error) is tagged `source: "fallback"` and cached for only 60s (`TTL_FALLBACK` in `api/py/_ai.py`) regardless of location tier — otherwise a single transient failure would serve the generic fallback summary for up to 2 hours per location
 - Weather history: unlimited retention. One doc per `(locationSlug, date)` — see "Weather history store" below
 - History analysis: 1h TTL in `history_analysis` collection (keyed by location + days + data hash)
@@ -1468,6 +1472,7 @@ _Python backend tests (pytest):_
 - `tests/py/test_db_helpers.py` — `get_client_ip` (x-forwarded-for, x-real-ip, client.host, None), `check_rate_limit` (allow/deny/boundary/composite-key/None-result)
 - `tests/py/test_chat.py` — `_build_chat_system_prompt` (location list, count, activities, fallback vs DB template, 20-location cap), SLUG_RE, KNOWN_TAGS, tool helpers (search, list_by_tag, get_weather cache, tool dispatch)
 - `tests/py/test_weather.py` — Weather proxy: Tomorrow.io/Open-Meteo fallback chain, seasonal estimates, cache operations, normalization, circuit breaker integration
+- `tests/py/test_weather_cache_key.py` — weather_cache grid key (#252): shared TS/Python vectors, far-apart coordinates never share a row, nearby requests in one cell do, endpoint no longer keys by the nearest place
 - `tests/py/test_geohash.py` — Python geohash mirror: published reference vectors, cross-language parity with the TS suite, slugify/delimiter safety, smart-slug determinism and collision behaviour
 - `tests/py/test_overpass.py` — Overpass naming: feature ranking, `is_in` admin extraction (incl. city-states with no admin_level 4), degrade-don't-fail on every failure path, `_reverse_geocode` Overpass-primary / Nominatim-fallback integration
 - `tests/py/test_locations.py` — Location CRUD: slug generation, geocoding, deduplication, region validation, search/filter, geo lookup, add location
