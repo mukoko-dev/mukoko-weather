@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import {
@@ -15,6 +16,7 @@ import { checkFrostRisk, createFallbackWeather } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
 import { nearestSeedLocation } from "@/lib/places";
 import { SITE_URL } from "@/lib/site";
+import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
 
 // Stable base for the server-to-self geo lookup. The per-deployment Vercel
 // hostname env var points at a protected preview origin that 401s the self-fetch
@@ -63,7 +65,22 @@ export const dynamic = "force-dynamic";
  * IN PLACE when the visitor is somewhere else — no redirect exists for a
  * saved location to win, so current location takes precedence by construction.
  */
-export default async function Home() {
+export default function Home() {
+  // The home page's own loading boundary. This used to be a root
+  // `src/app/loading.tsx`, but a root loading boundary wraps EVERY route in
+  // Suspense, so the 200 shell was flushed before any page could call
+  // notFound() or send a redirect status: unknown slugs answered 200
+  // "Location not found" and /profile a 200 meta-refresh (#237). Scoping the
+  // boundary to `/` keeps the home loading scene and lets every other route
+  // send its real status.
+  return (
+    <Suspense fallback={<WeatherLoadingScene />}>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+async function HomeContent() {
   // Only trust a cookie whose slug both looks valid AND actually resolves to
   // a real location. A stale cookie pointing at a deleted/never-existent slug
   // would otherwise strand the visitor on a broken page every time — falling
