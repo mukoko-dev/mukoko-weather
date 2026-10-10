@@ -20,7 +20,6 @@ from pydantic import BaseModel, Field
 from ._db import (
     enforce_rate_limit,
     get_api_key,
-    get_db,
     history_analysis_collection,
     filter_known_activities,
 )
@@ -273,17 +272,14 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
     loc_lat = loc.get("lat", 0.0)
     loc_lon = loc.get("lon", 0.0)
 
-    # Fetch history from MongoDB
-    db = get_db()
-    cutoff = datetime.now(timezone.utc) - timedelta(days=body.days)
+    # Same reader as GET /api/py/history (date-keyed, alias-merged), oldest
+    # first for trend analysis. Gaps were already filled when the user loaded
+    # the dashboard, so no archive call is made here.
+    from ._history import history_slugs
+    from ._history_store import read_history
 
     history = list(
-        db["weather_history"]
-        .find(
-            {"locationSlug": location_slug, "recordedAt": {"$gte": cutoff}},
-            {"_id": 0},
-        )
-        .sort("recordedAt", 1)
+        reversed(read_history(history_slugs(location_slug, loc), body.days, lon=float(loc_lon or 0.0)))
     )
 
     if not history:

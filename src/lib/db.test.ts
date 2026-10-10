@@ -786,6 +786,9 @@ describe("getWeatherForLocation — read-only SSR path (issue #101)", () => {
     const source = fs.readFileSync("src/lib/db.ts", "utf-8");
     expect(source).toContain("/api/py/weather?lat=");
     expect(source).toContain("x-weather-provider");
+    // #245: SSR passes its slug so the cache row + history doc are keyed
+    // under the slug /api/py/history?location= reads.
+    expect(source).toContain("&location=${encodeURIComponent(slug)}");
     // Direct Open-Meteo remains ONLY as a read-only local-dev fallback.
     expect(source).toContain("fetchWeather(lat, lon)");
   });

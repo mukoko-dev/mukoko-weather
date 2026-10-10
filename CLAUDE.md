@@ -549,6 +549,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/ai/followup` — 30 req/hour
 - `/api/py/explore/search` — 15 req/hour
 - `/api/py/history/analyze` — 10 req/hour
+- `/api/py/history` archive backfill — 30 attempts/hour (bucket key `history-backfill`; only gates the Open-Meteo archive gap-fill, never the read itself)
 - `/api/py/locations/add` — 5 req/hour
 - `/api/py/geo?autoCreate=true` — 5 req/hour (bucket key `location-create`, shared with `/api/py/locations/add`'s coordinates mode — same expensive reverse-geocode + DB-write cost). The find-only path (`autoCreate=false`) stays unlimited since it's a cheap read
 - `/api/py/devices` (create) — 20 req/hour, only when `deviceId` is omitted/fresh (unbounded doc creation); an existing/caller-supplied `deviceId` is idempotent and skips the limiter
@@ -624,7 +625,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/keys` — GET (list caller's keys, masked) / POST (mint a developer API key in `platform.apiKeys`; full key returned ONCE, SHA-256 hashed at rest, 10/user cap, eligible entity-membership role required). Auth-gated via `withAuth()`
 - `/api/keys/[id]` — DELETE, revoke one of the caller's own keys (soft-delete, `ownerPersonId`-scoped). Auth-gated via `withAuth()`
 - `/api/ai/[[...path]]` — ANY (Phase 1D), auth-gated proxy (OPTIONAL catch-all — the bare `/api/ai` is the AI summary endpoint itself; a required catch-all 404'd it) for all `/api/py/ai/*` endpoints. Validates the AuthKit session via `withAuth()` (401 if anonymous), then forwards to `/api/py/ai/${path}` with `X-Mukoko-User-Id` + `X-Mukoko-User-Email` headers (cookies stripped). The UI calls `/api/ai/*` exclusively — Python AI routes still exist and can be called directly by internal/server-side consumers, but the browser never touches them.
-- `/api/py/weather` — GET, proxies Tomorrow.io/Open-Meteo (MongoDB cached 15-min TTL + historical recording). Also attaches Windy-style ADDITIONAL data from Open-Meteo (free, keyless): `minutely` (next-hour precip nowcast, 4×15-min steps, always attempted) and, via the optional `?models=` comma list (`gfs_seamless,ecmwf_ifs04,icon_seamless,meteofrance_seamless`), a multi-model comparison — `models` (per-model hourly temp/precip series), `models_available`, `models_time`. The extras fetch is circuit-breaker gated (`open_meteo_breaker`) and best-effort — never blocks the base forecast
+- `/api/py/weather` — GET, proxies Tomorrow.io/Open-Meteo (MongoDB cached 15-min TTL + historical recording). Optional `?location=<slug>` (SSR passes the page slug): honoured only when it resolves to a place within 25 km (`HISTORY_MAX_DISTANCE_KM`) of `lat`/`lon`, and then keys both the cache row and the history doc. Without a valid hint, history is recorded only when the nearest known place is within 25 km — never under a raw coordinate key or a far-away nearest match. Also attaches Windy-style ADDITIONAL data from Open-Meteo (free, keyless): `minutely` (next-hour precip nowcast, 4×15-min steps, always attempted) and, via the optional `?models=` comma list (`gfs_seamless,ecmwf_ifs04,icon_seamless,meteofrance_seamless`), a multi-model comparison — `models` (per-model hourly temp/precip series), `models_available`, `models_time`. The extras fetch is circuit-breaker gated (`open_meteo_breaker`) and best-effort — never blocks the base forecast
 - `/api/py/ai` — POST, AI weather summaries (MongoDB cached with tiered TTL: 30/60/120 min)
 - `/api/py/chat` — POST, Shamwari Explorer chatbot (Claude + tool use: search_locations, get_weather, get_activity_advice, list_locations_by_tag). Rate-limited 20 req/hour/IP
 - `/api/py/ai/followup` — POST, inline follow-up chat for AI summaries. Pre-seeded with the AI summary as conversation context. Max 5 exchanges then redirects to Shamwari. Rate-limited 30 req/hour/IP
@@ -639,7 +640,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/tags` — GET, tag metadata (all or featured only)
 - `/api/py/regions` — GET, region reference data (bounding boxes, no restrictions enforced)
 - `/api/py/status` — GET, system health checks (MongoDB ping, Tomorrow.io, Open-Meteo, AI gateway config + breaker — no token spend, cache)
-- `/api/py/history` — GET, historical weather data (query: `location`, `days`)
+- `/api/py/history` — GET, historical weather data (query: `location`, `days`). One doc per location-local day, newest first, each tagged `source: "recorded" | "open-meteo-archive"`; response adds `backfilled` (count of days filled this call). Missing past days are filled on demand from the Open-Meteo Historical/Archive API (see "Weather history store" below)
 - `/api/py/history/analyze` — POST, AI-powered historical weather analysis. Server-side aggregation (~800 tokens) + Claude analysis. Cached 1h in `history_analysis` collection. Rate-limited 10 req/hour/IP
 - `/api/py/explore/search` — POST, AI-powered location search using Claude with `search_locations` + `get_weather` tools. Falls back to text search if AI unavailable. Rate-limited 15 req/hour/IP
 - `/api/py/map-tiles` — GET, tile proxy for Tomorrow.io weather overlay layers (query: `z`, `x`, `y`, `layer`, optional `timestamp`; keeps API key server-side)
@@ -1054,7 +1055,7 @@ All AI system prompts, suggested prompt rules, and model configurations are stor
 
 - Weather cache: 15-min TTL (auto-expires via TTL index)
 - AI summaries: tiered TTL — 30 min (major cities), 60 min (mid-tier), 120 min (small locations) for real model-generated insights. Fallback text (gateway unconfigured, open circuit breaker, or a gateway/model error) is tagged `source: "fallback"` and cached for only 60s (`TTL_FALLBACK` in `api/py/_ai.py`) regardless of location tier — otherwise a single transient failure would serve the generic fallback summary for up to 2 hours per location
-- Weather history: unlimited retention (recorded on every fresh API fetch)
+- Weather history: unlimited retention. One doc per `(locationSlug, date)` — see "Weather history store" below
 - History analysis: 1h TTL in `history_analysis` collection (keyed by location + days + data hash)
 - Weather reports: TTL by severity — 24h (mild), 48h (moderate), 72h (severe) in `weather_reports` collection
 - Explore route: in-memory location context (5-min TTL), activities (5-min TTL), in-request weather cache (`Map<string, WeatherResult>` per request), in-request suitability rules cache (`rulesCache` ref per request)
@@ -1143,8 +1144,15 @@ All AI system prompts, suggested prompt rules, and model configurations are stor
 - **Components:** `src/app/history/page.tsx` (server, metadata) + `src/app/history/HistoryDashboard.tsx` (client)
 - **Features:** location search, configurable time period (7d–1y), comprehensive charts, summary statistics, daily records table, and AI-powered analysis
 - **AI analysis:** `src/components/weather/HistoryAnalysis.tsx` — button-triggered analysis ("Analyze with Shamwari"). Server-side aggregation computes compact stats (~800 tokens) from raw records, sends to Claude for trend/pattern analysis. Results rendered as markdown with tanzanite border. Renders the shared `ShamwariCTA` (`source: "history"` + `historyDays` + `historyAnalysis`) as its "Discuss in Shamwari" link. Cached 1h server-side
-- **Data source:** `GET /api/history?location=<slug>&days=<n>` backed by MongoDB `weather_history` collection
+- **Data source:** `GET /api/py/history?location=<slug>&days=<n>` backed by MongoDB `weather_history` collection. Archive-filled days are flagged in the summary ("N of M days come from the Open-Meteo climate archive"); archive days have no UV (shown as "—", excluded from UV averages). Errors show a retry button; 5xx copy never leaks server detail (`historyErrorMessage`)
 - **Charts:** Reusable chart components from `src/components/weather/charts/` (Canvas 2D via Chart.js)
+
+**Weather history store (`api/py/_history_store.py`, issue #245):** the single writer/reader for `weather.weather_history`. db-init creates a UNIQUE index `{locationSlug: 1, date: -1}`, so every write is an UPSERT on `(locationSlug, date)` with `date` = the location-local `YYYY-MM-DD` — never a bare `insert_one`. (The pre-#245 Python writer inserted without `date`; every doc indexed as `(slug, null)`, the second write per slug raised DuplicateKeyError, and `except: pass` hid it — history stopped growing when #112 retired the TS writer.) Doc shape mirrors `WeatherHistoryDoc`: `current`, `daily` as one-day WeatherData arrays (`daily.<field>[0]`), optional `insights`, `source`, `provider`, `recordedAt`, `createdAt`. Two provenances:
+
+- `source: "recorded"` — written by `/api/py/weather` on every fresh provider fetch (`$set`, so the latest fetch of the day wins).
+- `source: "open-meteo-archive"` — past days filled by `/api/py/history` from `archive-api.open-meteo.com/v1/archive` (ERA5 / best-match, ~2-day lag; `current` holds daily MEANS, `aggregation: "daily-mean"`, `uv_index: null`). Insert-only (`$setOnInsert`), so it never overwrites a recorded day. At most ONE archive request per call (span capped at 366 days), gated by `open_meteo_breaker`, a per-location 1 h cooldown (in-memory) and a per-IP `history-backfill` rate limit; never fails the response. Today is never backfilled. Null ERA5 days are skipped and retried after the cooldown.
+
+The reader filters by `date` (not `recordedAt`, which would put every backfilled day inside any window), also reads the placesGeo platform-slug alias (`harare-35c223`) that some writes used, and merges per date: recorded > archive, canonical slug > alias. `_history_analyze` uses the same reader.
 
 **Dashboard metrics (7 charts + stats + table):**
 
@@ -1463,7 +1471,8 @@ _Python backend tests (pytest):_
 - `tests/py/test_locations.py` — Location CRUD: slug generation, geocoding, deduplication, region validation, search/filter, geo lookup, add location
 - `tests/py/test_ai.py` — AI summaries: tiered TTL, client singleton, season lookup, staleness detection, caching, system prompt, generate endpoint with fallback
 - `tests/py/test_reports.py` — Community reports: cross-validation, IP hashing, fallback questions, submit/list/upvote/clarify endpoints, rate limiting
-- `tests/py/test_history.py` — Historical weather data: validation, location verification, datetime serialization, query shape
+- `tests/py/test_history.py` — Historical weather data: validation, location verification, platform-slug alias, backfill wiring + merge, error paths
+- `tests/py/test_history_store.py` — History store: unique-key upsert (the #245 regression guard), local-date math, duplicate-key race retry, logged failures, date-window reader + per-date merge, archive doc shape, backfill gating (breaker, cooldown, per-IP limit, single capped request, insert-only)
 - `tests/py/test_history_analyze.py` — History analysis: stats aggregation (temps, precip, trends, insights), system prompt building, caching, rate limiting, AI fallback
 - `tests/py/test_ai_followup.py` — Follow-up chat: system prompt building, message truncation, history capping, rate limiting, circuit breaker, AI error handling
 - `tests/py/test_devices.py` — Device sync: validation (theme, slug, savedLocations, activities), CRUD endpoints, DuplicateKeyError handling, partial updates

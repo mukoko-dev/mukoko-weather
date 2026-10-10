@@ -53,6 +53,8 @@ type SelectedHistoryLocation = {
 
 interface HistoryRecord {
   date: string;
+  /** Provenance — archive days are ERA5 reanalysis daily means. */
+  source: "recorded" | "open-meteo-archive";
   tempHigh: number;
   tempLow: number;
   feelsLikeHigh: number;
@@ -62,7 +64,8 @@ interface HistoryRecord {
   humidity: number;
   cloudCover: number;
   pressure: number;
-  uvIndex: number;
+  /** null for archive days — the reanalysis archive has no UV index. */
+  uvIndex: number | null;
   windSpeed: number;
   windGusts: number;
   windDirection: number;
@@ -109,12 +112,34 @@ function formatSunTime(iso: string): string {
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
 }
 
+/**
+ * User-facing copy for a failed /api/py/history request. Exported for tests.
+ * The raw server detail is shown only for client errors (it's our own,
+ * human-readable validation text); 5xx gets a plain retry message.
+ */
+export function historyErrorMessage(status: number, detail?: unknown): string {
+  if (status === 404) return "We don't have this location on record.";
+  if (status >= 500) {
+    return "Weather history is temporarily unavailable. Please try again in a moment.";
+  }
+  return typeof detail === "string" && detail
+    ? detail
+    : `Request failed (HTTP ${status})`;
+}
+
+/** Number of archive-filled days in a record set. Exported for tests. */
+export function countArchiveDays(records: { source: string }[]): number {
+  return records.filter((r) => r.source === "open-meteo-archive").length;
+}
+
 export function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
   return (
     docs
       // A persisted doc missing `current` would throw on the unguarded
-      // `current.*` reads below and blank the whole dashboard. Skip such docs.
-      .filter((doc) => doc.current != null)
+      // `current.*` reads below and blank the whole dashboard. Skip such docs,
+      // and docs without a `date` (the pre-#245 Python writer omitted it),
+      // which would crash the `date.localeCompare` sort below.
+      .filter((doc) => doc.current != null && typeof doc.date === "string")
       .map((doc) => {
         const daily = doc.daily;
         const current = doc.current;
@@ -124,6 +149,9 @@ export function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
 
         return {
           date: doc.date,
+          source: (doc.source === "open-meteo-archive"
+            ? "open-meteo-archive"
+            : "recorded") as HistoryRecord["source"],
           tempHigh:
             daily?.temperature_2m_max?.[0] != null
               ? Math.round(daily.temperature_2m_max[0])
@@ -145,7 +173,7 @@ export function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
           humidity: current.relative_humidity_2m,
           cloudCover: current.cloud_cover,
           pressure: Math.round(current.surface_pressure),
-          uvIndex: daily?.uv_index_max?.[0] ?? current.uv_index,
+          uvIndex: daily?.uv_index_max?.[0] ?? current.uv_index ?? null,
           windSpeed: Math.round(current.wind_speed_10m),
           windGusts:
             daily?.wind_gusts_10m_max?.[0] != null
@@ -645,7 +673,10 @@ export function HistoryDashboard() {
           const body = await res
             .json()
             .catch(() => ({ error: "Request failed" }));
-          throw new Error(body.error || `HTTP ${res.status}`);
+          // FastAPI errors carry `detail`; keep `error` for older shapes.
+          throw new Error(
+            historyErrorMessage(res.status, body.detail ?? body.error),
+          );
         }
         const json = await res.json();
         setRecords(transformHistory(json.data));
@@ -695,10 +726,16 @@ export function HistoryDashboard() {
           avgHumidity: avg(records.map((r) => r.humidity)),
           avgCloudCover: avg(records.map((r) => r.cloudCover)),
           avgPressure: avg(records.map((r) => r.pressure)),
-          avgUv: avg(records.map((r) => Math.round(r.uvIndex))),
+          // Archive days carry no UV — average only the days that have it.
+          avgUv: avg(
+            records
+              .map((r) => r.uvIndex)
+              .filter(defined)
+              .map((v) => Math.round(v)),
+          ),
           maxUv:
             Math.round(
-              records.reduce((m, r) => Math.max(m, r.uvIndex), 0) * 10,
+              records.reduce((m, r) => Math.max(m, r.uvIndex ?? 0), 0) * 10,
             ) / 10,
           avgWind: avg(records.map((r) => r.windSpeed)),
           maxGusts: records.reduce((m, r) => Math.max(m, r.windGusts), 0),
@@ -940,8 +977,20 @@ export function HistoryDashboard() {
       )}
 
       {error && (
-        <div className="rounded-[var(--radius-card)] border border-destructive/30 bg-frost-severe-bg p-4 text-base text-destructive">
-          {error}
+        <div
+          role="alert"
+          className="rounded-[var(--radius-card)] border border-destructive/30 bg-frost-severe-bg p-4 text-base text-destructive"
+        >
+          <p>{error}</p>
+          {selectedLocation && (
+            <button
+              type="button"
+              className="impala-sm mt-3"
+              onClick={() => fetchHistory(selectedLocation, days)}
+            >
+              Try again
+            </button>
+          )}
         </div>
       )}
 
@@ -956,8 +1005,9 @@ export function HistoryDashboard() {
               last {days} days.
             </p>
             <p className="mt-2 text-base text-text-tertiary">
-              Historical data is recorded each time weather is fetched. Data
-              builds up over time as the service is used.
+              Past days are filled from the Open-Meteo climate archive, which
+              runs about two days behind, and today is recorded as weather is
+              fetched. Try a longer period, or check back shortly.
             </p>
           </div>
         )}
@@ -984,6 +1034,13 @@ export function HistoryDashboard() {
               {selectedLocation?.name} —{" "}
               {DAY_OPTIONS.find((o) => o.value === days)?.label} summary
             </h2>
+            {countArchiveDays(records) > 0 && (
+              <p className="dove mt-1">
+                {countArchiveDays(records)} of {records.length} days come from
+                the Open-Meteo climate archive (ERA5 reanalysis, daily
+                averages). The rest were recorded live.
+              </p>
+            )}
             <h3 className="hornbill mt-4">Temperature</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Avg High" value={`${stats.avgHigh}°C`} />
@@ -1379,7 +1436,7 @@ export function HistoryDashboard() {
                             {r.windDirectionLabel}
                           </td>
                           <td className="hidden px-3 py-2 text-right text-text-secondary md:table-cell">
-                            {Math.round(r.uvIndex)}
+                            {r.uvIndex != null ? Math.round(r.uvIndex) : "—"}
                           </td>
                           <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">
                             {r.pressure}
