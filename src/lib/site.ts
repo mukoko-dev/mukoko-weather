@@ -29,28 +29,28 @@ type Env = Record<string, string | undefined>;
  *
  * 1. `INTERNAL_API_BASE_URL` — an explicit override always wins (set it per
  *    Vercel environment; it is not set today).
- * 2. On Vercel with `VERCEL_AUTOMATION_BYPASS_SECRET` (injected when
- *    "Protection Bypass for Automation" is on) — this deployment's own
- *    `VERCEL_URL` plus the bypass header, so the Next.js and Python halves
- *    of one deployment always talk to each other.
- * 3. Production without the secret — `SITE_URL`. Custom domains are not
- *    protected; this reaches the promoted production deployment.
- * 4. Preview without the secret — `VERCEL_URL` (the protection redirect is
- *    then logged by name; previews need the bypass to reach their Python).
- * 5. Local — `http://localhost:3000`.
+ * 2. Production — `SITE_URL`. Custom domains are not protected, and the
+ *    custom domain serves the promoted production deployment, which is the
+ *    one rendering. Measured on the #264 preview: the injected
+ *    `VERCEL_AUTOMATION_BYPASS_SECRET` was still answered with the SSO 302,
+ *    so production must not depend on the bypass.
+ * 3. Preview / development on Vercel — this deployment's own `VERCEL_URL`,
+ *    plus the `x-vercel-protection-bypass` header when Vercel injects
+ *    `VERCEL_AUTOMATION_BYPASS_SECRET`. A refused bypass is logged by name
+ *    (status 3xx, `bypassHeader: true`).
+ * 4. Local — `http://localhost:3000`.
  */
 export function internalApiTarget(env: Env = process.env): InternalApiTarget {
   if (env.INTERNAL_API_BASE_URL) {
     return { base: env.INTERNAL_API_BASE_URL.replace(/\/+$/, ""), headers: {} };
   }
-  const secret = env.VERCEL_AUTOMATION_BYPASS_SECRET;
-  if (env.VERCEL_URL && secret) {
+  if (env.VERCEL_ENV === "production") return { base: SITE_URL, headers: {} };
+  if (env.VERCEL_URL) {
+    const secret = env.VERCEL_AUTOMATION_BYPASS_SECRET;
     return {
       base: `https://${env.VERCEL_URL}`,
-      headers: { [PROTECTION_BYPASS_HEADER]: secret },
+      headers: secret ? { [PROTECTION_BYPASS_HEADER]: secret } : {},
     };
   }
-  if (env.VERCEL_ENV === "production") return { base: SITE_URL, headers: {} };
-  if (env.VERCEL_URL) return { base: `https://${env.VERCEL_URL}`, headers: {} };
   return { base: "http://localhost:3000", headers: {} };
 }

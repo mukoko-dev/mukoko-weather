@@ -33,17 +33,14 @@ describe("internalApiTarget (issue #262)", () => {
     expect(target).toEqual({ base: SITE_URL, headers: {} });
   });
 
-  it("production with a bypass secret calls its own deployment (no version skew)", () => {
+  it("production uses the public origin even when a bypass secret is injected", () => {
     expect(
       internalApiTarget({
         VERCEL_ENV: "production",
         VERCEL_URL: "weather-abc.vercel.app",
         VERCEL_AUTOMATION_BYPASS_SECRET: "s3cret",
       }),
-    ).toEqual({
-      base: "https://weather-abc.vercel.app",
-      headers: { [PROTECTION_BYPASS_HEADER]: "s3cret" },
-    });
+    ).toEqual({ base: SITE_URL, headers: {} });
   });
 
   it("sends the protection bypass header to a preview's own host", () => {
