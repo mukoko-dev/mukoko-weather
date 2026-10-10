@@ -24,6 +24,7 @@ Social: Twitter @mukokoafrica, Instagram @mukoko.africa
 - **Maps:** MapLibre GL JS + MapTiler Cloud (vector tiles direct from CDN via `NEXT_PUBLIC_MAPTILER_API_KEY` — no server proxy; GPU-rendered; theme-aware streets-v2 / streets-v2-dark styles); Tomorrow.io raster weather overlays still proxied via `/api/py/map-tiles`. **MapLibre v6 worker:** v6 ships its web worker as a separate ES module (`maplibre-gl-worker.mjs` → imports `maplibre-gl-shared.mjs`) and by default loads it from beside the bundled chunk, where webpack never emits it, so the worker fails and every map renders blank. `scripts/copy-maplibre-worker.mjs` (run by the `prebuild`/`predev` npm scripts) copies both files (and their source maps) to `public/vendor/maplibre-gl/<version>/` (gitignored), and `MapLibreMap` calls `setWorkerUrl(maplibreWorkerUrl(getVersion()))` before creating a map — the version in the path keeps a tab on an old bundle paired with its own worker after a deploy. **Container sizing:** MapLibre's unlayered `.maplibregl-map { position: relative }` beats Tailwind 4's layered utilities, so never put `absolute inset-0` on the map container itself — wrap it in an absolutely-positioned div and give the container `h-full w-full`
 - **Aviation:** NOAA Aviation Weather Center for METAR/TAF data; `@react-pdf/renderer` for pre-flight briefing PDFs; 66 ICAO airports mapped (`src/lib/icao-codes.ts`, name + WGS 84 coords checked against AWC station info; only stations AWC serves are listed — a retired or unlisted code is removed, and `syncAirports` deletes stale `weather.airports` docs), seeded into the DB-backed `weather.airports` collection (2dsphere-indexed) via `POST /api/db-init` → `syncAirports`. Nearest-station lookup uses MongoDB `$geoNear` through `GET /api/py/airports/nearest`; the location page's aviation card calls `GET /api/py/aviation/nearest-metar?lat&lon` — the nearest airport within 150 km that has a METAR in the last 3 h (candidates from the DB, one batched AWC request, cache-first) — and shows the server's explanation when none reports. AWC JSON gotchas: `visib` is a string (`"6+"`), `obsTime` is epoch seconds, `altim` is hPa. `fetchNearestAirports` / `getNearestIcao` remain as the static haversine fallback for the planner and offline use. Flight-category (VFR/MVFR/IFR/LIFR) badge colors are centralized in `src/lib/flight-category-styles.ts` (`FLIGHT_CATEGORY_STYLES`, `getFlightCategoryClass()`), shared by `AviationWeather.tsx` (location page) and `AviationPlanner.tsx` (`/aviation`) so the safety-relevant color coding can't drift between the two
 - **Drag-and-drop:** `@dnd-kit/core` + `@dnd-kit/sortable` for user-reorderable sections on the location page
+- **Favicon / app icons:** the files in `public/` (`favicon.ico`, `favicon.svg`, `favicon-16/32.png`, `apple-touch-icon.png`, `icon-192/512.png`, `icon-maskable-192/512.png`) are byte-identical copies of mukoko-news `public/`. mukoko-news is the source of truth, so change them there first and copy them here. `src/app/favicon-parity.test.ts` pins the hashes. Never add app-dir icons (`src/app/icon.*`, `apple-icon.*`).
 - **Branding:** Mukoko brand kit doctrine v4.1.0 — 7 minerals (cobalt, tanzanite, malachite, gold, terracotta, sodalite, copper); Noto Serif (display/wordmark), Noto Sans (UI), JetBrains Mono (code/labels)
 - **Styling:** Tailwind CSS 4 with CSS custom properties (Brand System v6) on the Mzizi design tokens (`src/app/mzizi-tokens.css`, imported first by `globals.css`)
 - **Markdown:** react-markdown 10 (AI summary rendering)
@@ -68,8 +69,7 @@ mukoko-weather/
 │   │   ├── globals.css               # Brand System v6 CSS custom properties
 │   │   ├── loading.tsx               # Root loading skeleton
 │   │   ├── error.tsx                 # Global error boundary (client component)
-│   │   ├── icon.svg                  # SVG favicon
-│   │   ├── apple-icon.png            # Apple touch icon
+│   │   ├── favicon-parity.test.ts    # Pins public/ favicon set to mukoko-news (sha256)
 │   │   ├── robots.ts                 # Dynamic robots.txt
 │   │   ├── sitemap.ts                # Dynamic XML sitemap (all locations + pages)
 │   │   ├── seo.test.ts               # SEO tests
@@ -435,7 +435,7 @@ mukoko-weather/
 │   └── package.json               # Hono 4, Wrangler 4 (no AI SDK — AI goes through the Python backend)
 ├── public/
 │   ├── manifest.json              # PWA manifest (installable, shortcuts)
-│   └── icons/                     # PWA icons (192px, 512px)
+│   └── favicon.*, icon-*.png      # Favicon + PWA icons (copied from mukoko-news — source of truth)
 ├── .github/
 │   ├── ISSUE_TEMPLATE/            # Bug report and feature request templates
 │   └── workflows/
@@ -1087,7 +1087,7 @@ All AI system prompts, suggested prompt rules, and model configurations are stor
 ### PWA
 
 - `public/manifest.json` — installable app with shortcuts, theme colors, display modes
-- Icons: 192px and 512px in `public/icons/`
+- Icons: `public/icon-192.png`, `icon-512.png`, `icon-maskable-192/512.png`, plus favicons (all copied from mukoko-news)
 - Geolocation support for location detection
 
 ### Analytics
