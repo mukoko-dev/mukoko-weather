@@ -37,7 +37,7 @@ Social: Twitter @mukokoafrica, Instagram @mukoko.africa
 - **Analytics:** Google Analytics 4 (GA4, measurement ID `G-4KB2ZS573N`) + Vercel Web Analytics (`@vercel/analytics` ^1.6.1)
 - **3D Animations:** Three.js (weather-aware particle loading scenes via `src/lib/weather-scenes/`)
 - **Testing:** Vitest 4.0.18 (TypeScript, `@vitest/coverage-v8` for coverage) + pytest 8.3 (Python)
-- **CI/CD:** GitHub Actions (single `ci` job: lint → typecheck → TypeScript tests → Python tests, all steps visible in one check on push/PR; CodeQL security scanning for JS/TS, Python, and Actions; Claude AI review on PRs; post-deploy DB init; `workers.yml` checks the Rust Workers; `workers-deploy.yml` deploys them by hand only, in service-binding order, behind the `workers-production` GitHub Environment; the Workers' runtime secrets are Cloudflare Secrets Store bindings, one `MUKOKO_WEATHER_*` store secret per key shared by every Worker that needs it, read via `weather_edge::secret` — see CONTRIBUTING.md "Deploying the Workers"). All workflows use `concurrency` groups with `cancel-in-progress: true` to prevent zombie runs from rapid pushes, except `workers-deploy.yml`, which never cancels a deploy in flight
+- **CI/CD:** GitHub Actions (single `ci` job: lint → typecheck → TypeScript tests → Python tests, all steps visible in one check on push/PR; CodeQL security scanning for JS/TS, Python, and Actions; Claude AI review on PRs; post-deploy DB init; `workers.yml` checks the Rust Workers; `workers-deploy.yml` deploys them by hand only, in service-binding order, behind the `workers-production` GitHub Environment; the Workers' runtime secrets are Cloudflare Secrets Store bindings, one `MUKOKO_WEATHER_*` store secret per key shared by every Worker that needs it, read via `weather_edge::secret` — see CONTRIBUTING.md "Deploying the Workers"). All workflows use `concurrency` groups with `cancel-in-progress: true` to prevent zombie runs from rapid pushes, except `workers-deploy.yml`, which never cancels a deploy in flight, and `db-init.yml`, whose job-level `db-init-production` group (`cancel-in-progress: false`) never cancels a seed in flight. `db-init.yml` runs only for the exact environment `Production – mukoko-weather` (en dash): two Vercel projects deploy from this repo, so a `Production` prefix would also seed after a `Production – mukoko-station-console` deploy
 - **Deployment:** Vercel (with `@vercel/functions` for MongoDB connection pooling)
 - **Edge layer (optional):** Cloudflare Workers with Hono (`worker/` directory)
 
@@ -67,7 +67,7 @@ mukoko-weather/
 │   │   ├── CurrentLocationHome.tsx   # Client: silent-URL home — renders the current-location dashboard inline, GPS swaps content in place (no redirect)
 │   │   ├── CurrentLocationHome.test.ts # CurrentLocationHome + page.tsx + proxy.ts tests (silent-URL model, server seeding, edge routing)
 │   │   ├── globals.css               # Brand System v6 CSS custom properties
-│   │   ├── loading.tsx               # Root loading skeleton
+│   │   ├── not-found.tsx             # Root 404 boundary (renders LocationNotFound; catches the [location] layout's notFound())
 │   │   ├── error.tsx                 # Global error boundary (client component)
 │   │   ├── favicon-parity.test.ts    # Pins public/ favicon set to mukoko-news (sha256)
 │   │   ├── robots.ts                 # Dynamic robots.txt
@@ -79,7 +79,9 @@ mukoko-weather/
 │   │   │   ├── WeatherDashboard.test.ts
 │   │   │   ├── loading.tsx           # Branded skeleton matching page layout
 │   │   │   ├── error.tsx             # Location-specific error boundary (sessionStorage retry tracking)
-│   │   │   ├── not-found.tsx         # 404 for invalid locations
+│   │   │   ├── layout.tsx            # Resolves the slug and calls notFound() above loading.tsx, so unknown slugs get a real 404 (#237)
+│   │   │   ├── load-location.ts      # Shared per-request cache() loader (layout + page + metadata share one lookup)
+│   │   │   ├── not-found.tsx         # 404 for invalid locations (renders components/layout/LocationNotFound)
 │   │   │   ├── FrostAlertBanner.tsx  # Frost warning/advisory banner
 │   │   │   ├── FrostAlertBanner.test.ts
 │   │   │   ├── WeatherUnavailableBanner.tsx  # Weather data unavailability alert
@@ -442,7 +444,7 @@ mukoko-weather/
 │   └── workflows/
 │       ├── ci.yml                 # Single job: lint → typecheck → TypeScript tests → Python tests (concurrency-grouped)
 │       ├── codeql.yml             # CodeQL security scanning (JS/TS, Python, Actions; concurrency-grouped)
-│       └── db-init.yml            # Post-deploy DB seed data sync (Vercel deployment webhook)
+│       └── db-init.yml            # Post-deploy DB seed data sync (Vercel deployment webhook; exact `Production – mukoko-weather` match, serialised)
 ├── tests/
 │   └── py/                        # Python backend tests (pytest, 19 files, 587 tests)
 │       ├── conftest.py            # Shared fixtures, sys.path/module mocking
@@ -549,6 +551,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/ai/followup` — 30 req/hour
 - `/api/py/explore/search` — 15 req/hour
 - `/api/py/history/analyze` — 10 req/hour
+- `/api/py/history` archive backfill — 30 attempts/hour (bucket key `history-backfill`; only gates the Open-Meteo archive gap-fill, never the read itself)
 - `/api/py/locations/add` — 5 req/hour
 - `/api/py/geo?autoCreate=true` — 5 req/hour (bucket key `location-create`, shared with `/api/py/locations/add`'s coordinates mode — same expensive reverse-geocode + DB-write cost). The find-only path (`autoCreate=false`) stays unlimited since it's a cheap read
 - `/api/py/devices` (create) — 20 req/hour, only when `deviceId` is omitted/fresh (unbounded doc creation); an existing/caller-supplied `deviceId` is idempotent and skips the limiter
@@ -620,11 +623,11 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/display` — full-screen weather display for TVs, tablets and monitors (kiosk). No header/footer, no sign-in, `robots: noindex`. URL-configured via `parseDisplayParams()` (`src/lib/display.ts`): `?location=<slug>` or `?lat=&lon=`, `?layer=<MAP_LAYERS id>` (default `precipitationIntensity`), `?theme=light|dark`. Falls back to the lastLocation cookie, then IP geo snapped to the nearest seed, then Harare. Panels (`src/components/display/DisplayPanels.tsx`): clock, current conditions, air quality with `AQI_ADVICE` haze guidance, radar (`MapLibreMap`, non-interactive), today's outlook (tall screens only), next hours, 5 days — each in its own `ChartErrorBoundary`. The official NEA PSI panel (`DisplaySgPsi`, `src/lib/sg-air.ts`) sits inside the air-quality card and only polls `/api/py/sg-air` when the location's country is `SG`. Runtime hooks (`src/lib/use-display-runtime.ts`): Screen Wake Lock, `usePolledJson` (weather 10 min, AQ 30 min, NEA 15 min, keeps the last good value on a failed refresh), 6-hour page reload. `display` is in the `KNOWN_ROUTES` sets of `src/proxy.ts` and `WeatherLoadingScene.tsx` so it never becomes the lastLocation cookie
 - `/api/og` — GET, dynamic OG image generation (Edge runtime, Satori, TypeScript). Query: `title`, `subtitle`, optional `location`, `province`, `season`, `temp`, `condition`, `template` (home/location/explore/history/season/shamwari). In-memory rate-limited (30 req/min/IP), 1-day CDN cache
 - `/api/db-init` — POST, one-time DB setup + seed data (TypeScript). Requires `x-init-secret` header in production
-- `/api/missing-asset` — GET/HEAD, plain 404 (static). `next.config.ts` rewrites any top-level dotted path that isn't a public file or static route here (`afterFiles`, pattern in `src/lib/missing-asset.ts`), so a deleted file 404s instead of reaching `[location]`, which streams a 200 "Location not found". `src/proxy.ts`'s matcher skips every dotted path plus `icons/` and `vendor/`, so files never run the AuthKit refresh or become the `lastLocation` cookie
+- `/api/missing-asset` — GET/HEAD, plain 404 (static). `next.config.ts` rewrites any top-level dotted path that isn't a public file or static route here (`afterFiles`, pattern in `src/lib/missing-asset.ts`), so a deleted file 404s as a plain file 404 instead of reaching `[location]` and rendering the "Location not found" page. `src/proxy.ts`'s matcher skips every dotted path plus `icons/` and `vendor/`, so files never run the AuthKit refresh or become the `lastLocation` cookie
 - `/api/keys` — GET (list caller's keys, masked) / POST (mint a developer API key in `platform.apiKeys`; full key returned ONCE, SHA-256 hashed at rest, 10/user cap, eligible entity-membership role required). Auth-gated via `withAuth()`
 - `/api/keys/[id]` — DELETE, revoke one of the caller's own keys (soft-delete, `ownerPersonId`-scoped). Auth-gated via `withAuth()`
 - `/api/ai/[[...path]]` — ANY (Phase 1D), auth-gated proxy (OPTIONAL catch-all — the bare `/api/ai` is the AI summary endpoint itself; a required catch-all 404'd it) for all `/api/py/ai/*` endpoints. Validates the AuthKit session via `withAuth()` (401 if anonymous), then forwards to `/api/py/ai/${path}` with `X-Mukoko-User-Id` + `X-Mukoko-User-Email` headers (cookies stripped). The UI calls `/api/ai/*` exclusively — Python AI routes still exist and can be called directly by internal/server-side consumers, but the browser never touches them.
-- `/api/py/weather` — GET, proxies Tomorrow.io/Open-Meteo (MongoDB cached 15-min TTL + historical recording). Also attaches Windy-style ADDITIONAL data from Open-Meteo (free, keyless): `minutely` (next-hour precip nowcast, 4×15-min steps, always attempted) and, via the optional `?models=` comma list (`gfs_seamless,ecmwf_ifs04,icon_seamless,meteofrance_seamless`), a multi-model comparison — `models` (per-model hourly temp/precip series), `models_available`, `models_time`. The extras fetch is circuit-breaker gated (`open_meteo_breaker`) and best-effort — never blocks the base forecast
+- `/api/py/weather` — GET, proxies Tomorrow.io/Open-Meteo (MongoDB cached 15-min TTL + historical recording). Optional `?location=<slug>` (SSR passes the page slug): honoured only when it resolves to a place within 25 km (`HISTORY_MAX_DISTANCE_KM`) of `lat`/`lon`, and then keys the history doc (the cache row stays keyed on the nearest known place so nearby page slugs keep sharing one provider fetch). Without a valid hint, history is recorded only when the nearest known place is within 25 km — never under a raw coordinate key or a far-away nearest match. Also attaches Windy-style ADDITIONAL data from Open-Meteo (free, keyless): `minutely` (next-hour precip nowcast, 4×15-min steps, always attempted) and, via the optional `?models=` comma list (`gfs_seamless,ecmwf_ifs04,icon_seamless,meteofrance_seamless`), a multi-model comparison — `models` (per-model hourly temp/precip series), `models_available`, `models_time`. The extras fetch is circuit-breaker gated (`open_meteo_breaker`) and best-effort — never blocks the base forecast
 - `/api/py/ai` — POST, AI weather summaries (MongoDB cached with tiered TTL: 30/60/120 min)
 - `/api/py/chat` — POST, Shamwari Explorer chatbot (Workers AI + tool use: search_locations, get_weather, get_activity_advice, list_locations_by_tag). Rate-limited 20 req/hour/IP
 - `/api/py/ai/followup` — POST, inline follow-up chat for AI summaries. Pre-seeded with the AI summary as conversation context. Max 5 exchanges then redirects to Shamwari. Rate-limited 30 req/hour/IP
@@ -639,7 +642,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/tags` — GET, tag metadata (all or featured only)
 - `/api/py/regions` — GET, region reference data (bounding boxes, no restrictions enforced)
 - `/api/py/status` — GET, system health checks (MongoDB ping, Tomorrow.io, Open-Meteo, AI path liveness probe + breaker — no token spend, cache)
-- `/api/py/history` — GET, historical weather data (query: `location`, `days`)
+- `/api/py/history` — GET, historical weather data (query: `location`, `days`). One doc per location-local day, newest first, each tagged `source: "recorded" | "open-meteo-archive"`; response adds `backfilled` (count of days filled this call). Missing past days are filled on demand from the Open-Meteo Historical/Archive API (see "Weather history store" below)
 - `/api/py/history/analyze` — POST, AI-powered historical weather analysis. Server-side aggregation (~800 tokens) + model analysis through the AI Worker. Cached 1h in `history_analysis` collection. Rate-limited 10 req/hour/IP
 - `/api/py/explore/search` — POST, AI-powered location search using the AI model with `search_locations` + `get_weather` tools. Falls back to text search if AI unavailable. Rate-limited 15 req/hour/IP
 - `/api/py/map-tiles` — GET, tile proxy for Tomorrow.io weather overlay layers (query: `z`, `x`, `y`, `layer`, optional `timestamp`; keeps API key server-side)
@@ -1027,6 +1030,7 @@ All skeletons include `role="status"` and `aria-label="Loading"` for screen read
 - Summaries are **markdown-formatted** — the system prompt requests bold, bullet points, and no headings
 - Rendered with `react-markdown` inside Tailwind `prose` classes
 - Cached in MongoDB with tiered TTL (30/60/120 min by location tier)
+- **Request contract:** `AISummary` sends `location: { slug, name, lat, lon, elevation, country, tags }` and `activities` as activity **ids** (`selectedActivities`). The backend keys the `ai_summaries` row by `slug` (`_summary_cache_key`, name-derived only for older clients), picks the TTL tier from the request's `tags` filtered by `get_known_tags()` (`_location_tags`; `weather.locations` is gone, so there is nothing to look up), and resolves labels + AI guidance from the ids itself. Never send the `/api/py/activities?labels=` map: it is an `{id: label}` object, fails `list[str]` validation, and 422s the whole request
 - If the AI Worker env (`WEATHER_SERVICE_URL` or `WEATHER_AI_URL`, plus `WEATHER_SERVICE_API_KEY`) is incomplete, a basic weather summary fallback is generated. `/api/py/status` reports which env var NAMES are missing (`missing_ai_config()`), never their values
 - **Inline follow-up chat:** `AISummary` fires `onSummaryLoaded(text)` callback; `WeatherDashboard` passes the summary to `AISummaryChat` which allows up to 5 follow-up messages before rendering the shared `ShamwariCTA` (`source: "location"`) to redirect to Shamwari
 - **Shared Shamwari handoff:** `src/components/weather/ShamwariCTA.tsx` centralizes the `FLAGS.shamwari_chat` gate + `setShamwariContext` call + styled `/shamwari` link that `AISummaryChat`, `HistoryAnalysis`, and `ExploreSearch` all render — previously each hand-rolled its own copy of this logic. Renders `null` while the flag is off. Exposes 4 visual variants (`tanzanite`, `primary`, `subtle`, `text`) matching each call site's prior styling
@@ -1053,7 +1057,7 @@ All AI system prompts, suggested prompt rules, and model configurations are stor
 
 - Weather cache: 15-min TTL (auto-expires via TTL index)
 - AI summaries: tiered TTL — 30 min (major cities), 60 min (mid-tier), 120 min (small locations) for real model-generated insights. Fallback text (gateway unconfigured, open circuit breaker, or a gateway/model error) is tagged `source: "fallback"` and cached for only 60s (`TTL_FALLBACK` in `api/py/_ai.py`) regardless of location tier — otherwise a single transient failure would serve the generic fallback summary for up to 2 hours per location
-- Weather history: unlimited retention (recorded on every fresh API fetch)
+- Weather history: unlimited retention. One doc per `(locationSlug, date)` — see "Weather history store" below
 - History analysis: 1h TTL in `history_analysis` collection (keyed by location + days + data hash)
 - Weather reports: TTL by severity — 24h (mild), 48h (moderate), 72h (severe) in `weather_reports` collection
 - Explore route: in-memory location context (5-min TTL), activities (5-min TTL), in-request weather cache (`Map<string, WeatherResult>` per request), in-request suitability rules cache (`rulesCache` ref per request)
@@ -1142,8 +1146,15 @@ All AI system prompts, suggested prompt rules, and model configurations are stor
 - **Components:** `src/app/history/page.tsx` (server, metadata) + `src/app/history/HistoryDashboard.tsx` (client)
 - **Features:** location search, configurable time period (7d–1y), comprehensive charts, summary statistics, daily records table, and AI-powered analysis
 - **AI analysis:** `src/components/weather/HistoryAnalysis.tsx` — button-triggered analysis ("Analyze with Shamwari"). Server-side aggregation computes compact stats (~800 tokens) from raw records, sends them through the AI Worker for trend/pattern analysis. Results rendered as markdown with tanzanite border. Renders the shared `ShamwariCTA` (`source: "history"` + `historyDays` + `historyAnalysis`) as its "Discuss in Shamwari" link. Cached 1h server-side
-- **Data source:** `GET /api/history?location=<slug>&days=<n>` backed by MongoDB `weather_history` collection
+- **Data source:** `GET /api/py/history?location=<slug>&days=<n>` backed by MongoDB `weather_history` collection. Archive-filled days are flagged in the summary ("N of M days come from the Open-Meteo climate archive"); archive days have no UV (shown as "—", excluded from UV averages). Errors show a retry button; 5xx copy never leaks server detail (`historyErrorMessage`)
 - **Charts:** Reusable chart components from `src/components/weather/charts/` (Canvas 2D via Chart.js)
+
+**Weather history store (`api/py/_history_store.py`, issue #245):** the single writer/reader for `weather.weather_history`. db-init creates a UNIQUE index `{locationSlug: 1, date: -1}`, so every write is an UPSERT on `(locationSlug, date)` with `date` = the location-local `YYYY-MM-DD` — never a bare `insert_one`. (The pre-#245 Python writer inserted without `date`; every doc indexed as `(slug, null)`, the second write per slug raised DuplicateKeyError, and `except: pass` hid it — history stopped growing when #112 retired the TS writer.) Doc shape mirrors `WeatherHistoryDoc`: `current`, `daily` as one-day WeatherData arrays (`daily.<field>[0]`), optional `insights`, `source`, `provider`, `recordedAt`, `createdAt`. Two provenances:
+
+- `source: "recorded"` — written by `/api/py/weather` on every fresh provider fetch (`$set`, so the latest fetch of the day wins).
+- `source: "open-meteo-archive"` — past days filled by `/api/py/history` from `archive-api.open-meteo.com/v1/archive` (ERA5 / best-match, ~2-day lag; `current` holds daily MEANS, `aggregation: "daily-mean"`, `uv_index: null`). Insert-only (`$setOnInsert`), so it never overwrites a recorded day. At most ONE archive request per call (span capped at 366 days), gated by `open_meteo_breaker` (only 5xx/429 count as breaker failures — a 4xx is our request and must not open the breaker that also gates the forecast fallback), a per-location 1 h cooldown (in-memory, set only after a fetch that succeeded AND was saved, so transient failures retry on the next view) and a per-IP `history-backfill` rate limit; runs off the event loop (`asyncio.to_thread`); never fails the response. Today is never backfilled. Null ERA5 days are skipped and retried after the cooldown.
+
+The reader filters by `date` (not `recordedAt`, which would put every backfilled day inside any window), also reads the placesGeo platform-slug alias (`harare-35c223`) that some writes used, and merges per date: recorded > archive, canonical slug > alias. `_history_analyze` uses the same reader.
 
 **Dashboard metrics (7 charts + stats + table):**
 
@@ -1381,7 +1392,7 @@ Users can submit real-time ground-truth weather observations, similar to Waze fo
 
 - `src/app/status/page.tsx` — server wrapper (metadata)
 - `src/app/status/StatusDashboard.tsx` — client component, calls `GET /api/py/status`
-- Checks: MongoDB connectivity, Tomorrow.io API key, Open-Meteo availability, AI path liveness (a probe the AI Worker refuses with 400 before any model call, so no token spend) + circuit state, weather cache health
+- Checks: MongoDB connectivity, Tomorrow.io API key, Open-Meteo availability, AI path liveness (an empty-`messages` probe the AI Worker refuses before any model call, so no token spend; only that exact refusal — HTTP 400 with error `invalid_request` and the Worker's empty-messages description, `AI_PROBE_EXPECTED_ERROR` / `AI_PROBE_EXPECTED_DESCRIPTION` in `api/py/_status.py` — counts as healthy, any other 400 reports degraded with its error code) + circuit state, weather cache health
 - Each service shows operational/degraded/down status with latency
 
 ## Testing
@@ -1462,7 +1473,8 @@ _Python backend tests (pytest):_
 - `tests/py/test_locations.py` — Location CRUD: slug generation, geocoding, deduplication, region validation, search/filter, geo lookup, add location
 - `tests/py/test_ai.py` — AI summaries: tiered TTL, client singleton, season lookup, staleness detection, caching, system prompt, generate endpoint with fallback
 - `tests/py/test_reports.py` — Community reports: cross-validation, IP hashing, fallback questions, submit/list/upvote/clarify endpoints, rate limiting
-- `tests/py/test_history.py` — Historical weather data: validation, location verification, datetime serialization, query shape
+- `tests/py/test_history.py` — Historical weather data: validation, location verification, platform-slug alias, backfill wiring + merge, error paths
+- `tests/py/test_history_store.py` — History store: unique-key upsert (the #245 regression guard), local-date math, duplicate-key race retry, logged failures, date-window reader + per-date merge, archive doc shape, backfill gating (breaker, cooldown, per-IP limit, single capped request, insert-only)
 - `tests/py/test_history_analyze.py` — History analysis: stats aggregation (temps, precip, trends, insights), system prompt building, caching, rate limiting, AI fallback
 - `tests/py/test_ai_followup.py` — Follow-up chat: system prompt building, message truncation, history capping, rate limiting, circuit breaker, AI error handling
 - `tests/py/test_devices.py` — Device sync: validation (theme, slug, savedLocations, activities), CRUD endpoints, DuplicateKeyError handling, partial updates
@@ -1976,6 +1988,8 @@ Those requirements point in opposite directions, so **no precision setting satis
 Tests must not reach Overpass: `tests/py/conftest.py` has an autouse fixture making it unreachable by default, so existing Nominatim-path assertions keep their exact semantics. Tests wanting the Overpass path patch `py._overpass._get_http` themselves.
 
 **Advertised means renderable (seed fallback).** The browse/advertise surfaces (`sitemap.ts`, `/explore/[tag]`, `GET /api/py/search`, and `not-found.tsx`'s own "try one of these cities" list) all enumerate the static `LOCATIONS` catalog, while rendering resolves through `places.placesGeo`. When those two disagreed, a slug the app itself advertised rendered "Location not found" — Google indexed the sitemap's 265 URLs, users searched and clicked, and the 404 page suggested 20 more slugs that could 404 in turn. `resolveLocationSlug` therefore falls back to the static seed on EVERY miss path (no placesGeo document, no name match, or a thrown DB error), since the seed already carries name/lat/lon/elevation/province/country/tags — everything a weather page needs. placesGeo is an _enrichment_, never a _gate_: a real document still wins when one exists, and a slug the app does NOT ship still 404s correctly. A transient Mongo failure now degrades to seed data instead of presenting as a permanent 404.
+
+**Real 404 status (#237).** Next.js can only send a non-200 status before the shell's first byte is flushed, and any Suspense boundary above the `notFound()` call flushes it early. So `src/app/[location]/layout.tsx` resolves the slug (via the shared `loadLocation` in `load-location.ts`) and calls `notFound()` itself, above `[location]/loading.tsx`, and there is **no root `src/app/loading.tsx`** — a root loading boundary wraps every route, which is also why `/profile`'s sign-in redirect used to arrive as a 200 meta-refresh. The home page wraps its own content in `<Suspense fallback={<WeatherLoadingScene />}>` instead. A layout's own `not-found.tsx` can't catch its throw, so the root `src/app/not-found.tsx` renders the same `LocationNotFound` view (`src/components/layout/LocationNotFound.tsx`). Do not add a root `loading.tsx` back; give a slow route its own segment-level one.
 
 **City-states.** `places.placesGeo` carries Singapore, Monaco, Gibraltar and friends only as `geoType: "country"` documents, which both `resolveLocationSlug` and `nearestPlacesGeo` filter out — so those slugs were unresolvable and their coordinates matched nothing. The resolver now accepts a country-level document when the seed's country code is in `CITY_STATE_COUNTRIES` (`src/lib/places.ts`, mirrors `_CITY_STATES` in `api/py/_locations.py` — keep the two in sync). The check keys off the COUNTRY CODE deliberately: the normalised name being matched is itself derived from the seed's name, so a name-equality check there is always true and would let a country document hijack any slug.
 
