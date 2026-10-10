@@ -83,11 +83,21 @@ export interface AISummaryDoc {
   tier: 1 | 2 | 3;
 }
 
+/**
+ * Provenance of a history doc: a fresh provider fetch recorded by
+ * /api/py/weather, or a past day filled from the Open-Meteo archive (ERA5
+ * reanalysis; `current` then holds daily means). Legacy docs have no source.
+ */
+export type WeatherHistorySource = "recorded" | "open-meteo-archive";
+
 export interface WeatherHistoryDoc {
   locationSlug: string;
-  date: string; // YYYY-MM-DD
+  date: string; // YYYY-MM-DD, location-local
+  source?: WeatherHistorySource;
   current: WeatherData["current"];
-  hourly: WeatherData["hourly"];
+  /** Only on legacy (pre-#245) docs — the Python writer doesn't store hourly. */
+  hourly?: WeatherData["hourly"];
+  /** One-day slice of the WeatherData daily arrays (`daily.<field>[0]`). */
   daily: WeatherData["daily"];
   /** Activity-specific insights — only present when Tomorrow.io was the provider */
   insights?: WeatherData["insights"];
@@ -723,7 +733,9 @@ export async function getWeatherForLocation(
   // Tomorrow.io → Open-Meteo → seasonal), writes the cache, records history.
   try {
     const res = await fetch(
-      `${internalApiBase()}/api/py/weather?lat=${lat}&lon=${lon}`,
+      // `location` keys the cache row + history doc under THIS page's slug,
+      // so /api/py/history?location=<slug> reads what gets recorded (#245).
+      `${internalApiBase()}/api/py/weather?lat=${lat}&lon=${lon}&location=${encodeURIComponent(slug)}`,
       { cache: "no-store", signal: AbortSignal.timeout(15_000) },
     );
     if (res.ok) {

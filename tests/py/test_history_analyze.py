@@ -25,6 +25,19 @@ from py._history_analyze import (
 
 
 class TestAggregateStats:
+    def test_flags_archive_vs_recorded_provenance(self):
+        recs = [
+            {"date": "2026-10-01", "source": "open-meteo-archive", "current": {"temperature_2m": 20}, "daily": {"temperature_2m_max": [25], "temperature_2m_min": [12]}},
+            {"date": "2026-10-02", "source": "recorded", "current": {"temperature_2m": 22}, "daily": {"temperature_2m_max": [26], "temperature_2m_min": [13]}},
+        ]
+        out = _aggregate_stats(recs)
+        assert "1 days recorded live" in out
+        assert "1 days from the ERA5 climate archive" in out
+
+    def test_no_provenance_line_when_all_recorded(self):
+        recs = [{"date": "2026-10-02", "source": "recorded", "current": {"temperature_2m": 22}, "daily": {}}]
+        assert "Data sources" not in _aggregate_stats(recs)
+
     def test_empty_records_returns_no_data(self):
         """Empty record list should return a 'No data available' message."""
         result = _aggregate_stats([])
@@ -383,7 +396,7 @@ class TestAnalyzeHistoryEndpoint:
         mock_loc.assert_called_once_with("harare")
 
     @pytest.mark.asyncio
-    @patch("py._history_analyze.get_db")
+    @patch("py._history_store.get_db")
     @patch("py._history_analyze.find_location")
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -405,7 +418,7 @@ class TestAnalyzeHistoryEndpoint:
 
     @pytest.mark.asyncio
     @patch("py._history_analyze.history_analysis_collection")
-    @patch("py._history_analyze.get_db")
+    @patch("py._history_store.get_db")
     @patch("py._history_analyze.find_location")
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -440,7 +453,7 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._ai_gateway.get_gateway_client")
     @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
-    @patch("py._history_analyze.get_db")
+    @patch("py._history_store.get_db")
     @patch("py._history_analyze.find_location")
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -487,7 +500,7 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze._build_analysis_system_prompt", return_value="system prompt")
     @patch("py._history_analyze.history_analysis_collection")
-    @patch("py._history_analyze.get_db")
+    @patch("py._history_store.get_db")
     @patch("py._history_analyze.find_location")
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -530,7 +543,7 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._ai_gateway.get_gateway_client")
     @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
-    @patch("py._history_analyze.get_db")
+    @patch("py._history_store.get_db")
     @patch("py._history_analyze.find_location")
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -581,7 +594,7 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._ai_gateway.get_gateway_client")
     @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
-    @patch("py._history_analyze.get_db")
+    @patch("py._history_store.get_db")
     @patch("py._history_analyze.find_location")
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -620,7 +633,7 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._ai_gateway.get_gateway_client")
     @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
-    @patch("py._history_analyze.get_db")
+    @patch("py._history_store.get_db")
     @patch("py._history_analyze.find_location")
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -661,7 +674,7 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._ai_gateway.get_gateway_client")
     @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
-    @patch("py._history_analyze.get_db")
+    @patch("py._history_store.get_db")
     @patch("py._history_analyze.find_location")
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
@@ -710,7 +723,7 @@ class TestAnalyzeHistoryEndpoint:
     @patch("py._ai_gateway.get_gateway_client")
     @patch("py._history_analyze.get_ai_prompt", return_value=None)
     @patch("py._history_analyze.history_analysis_collection")
-    @patch("py._history_analyze.get_db")
+    @patch("py._history_store.get_db")
     @patch("py._history_analyze.find_location")
     @patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9})
     @patch("py._db.get_client_ip", return_value="1.2.3.4")
