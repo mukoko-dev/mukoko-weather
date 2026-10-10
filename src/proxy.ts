@@ -1,7 +1,11 @@
 import { NextRequest } from "next/server";
 import { authkit, handleAuthkitProxy } from "@workos-inc/authkit-nextjs";
 
-/** Routes that are NOT location slugs — must match WeatherLoadingScene KNOWN_ROUTES */
+/**
+ * Top-level routes that are NOT location slugs. Every directory under
+ * src/app (other than [location]) must be listed — src/proxy.test.ts fails
+ * when one is missing. WeatherLoadingScene keeps the page-route subset.
+ */
 const KNOWN_ROUTES = new Set([
   "explore",
   "locations",
@@ -16,6 +20,8 @@ const KNOWN_ROUTES = new Set([
   "embed",
   "display",
   "offline",
+  "profile",
+  "developers",
   "api",
   // WorkOS AuthKit routes — never confuse with location slugs
   "auth",

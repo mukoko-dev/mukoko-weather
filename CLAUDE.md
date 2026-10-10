@@ -1481,6 +1481,7 @@ _Python backend tests (pytest):_
 _Page/component tests:_
 
 - `src/app/seo.test.ts` — metadata generation, schema validation, canonical URL coverage (layout bleed guard, per-page canonical presence)
+- `src/proxy.test.ts` — lastLocation cookie is never set for a top-level app route (every `src/app` directory is checked), set for location slugs and their sub-routes; WeatherLoadingScene `KNOWN_ROUTES` covers every page route
 - `src/app/CurrentLocationHome.test.ts` — silent-URL home model (no redirect, in-place GPS swap, cookie refresh, far-nearest escalation, once-only auto-prompt), page.tsx server seeding, proxy.ts edge routing
 - `src/app/explore/explore.test.ts` — explore page tests (browse-only, Shamwari CTA link)
 - `src/app/shamwari/shamwari.test.ts` — Shamwari page structure, full-viewport layout, loading skeleton
