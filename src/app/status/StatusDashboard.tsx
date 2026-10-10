@@ -13,10 +13,14 @@ interface CheckResult {
   status: ServiceStatus;
   latencyMs: number;
   message: string;
+  /** "enrichment" rows (Tomorrow.io) never degrade the overall status. */
+  role?: "enrichment";
 }
 
 interface StatusResponse {
   status: "operational" | "degraded";
+  /** Enrichment-only providers, summarised separately from `status`. */
+  enrichment?: "operational" | "degraded";
   timestamp: string;
   totalLatencyMs: number;
   checks: CheckResult[];
@@ -132,6 +136,9 @@ export function StatusDashboard() {
                   {check.name}
                 </h3>
                 <StatusBadge status={check.status} />
+                {check.role === "enrichment" && (
+                  <span className="dove">Enrichment only</span>
+                )}
               </div>
               <p className="mt-0.5 text-base text-text-secondary">
                 {check.message}
@@ -161,12 +168,15 @@ export function StatusDashboard() {
             Database connectivity (weather cache, AI summaries, historical data)
           </li>
           <li>
-            <strong className="text-text-primary">Tomorrow.io API</strong> —
-            Primary weather data provider (realtime + forecast)
+            <strong className="text-text-primary">Open-Meteo API</strong> —
+            Forecast baseline: an Africa-weighted blend of global models (ECMWF,
+            NOAA GFS, DWD ICON, ECCC GEM, Météo-France ARPEGE)
           </li>
           <li>
-            <strong className="text-text-primary">Open-Meteo API</strong> —
-            Fallback weather data provider (free, no auth)
+            <strong className="text-text-primary">Tomorrow.io</strong> —
+            Optional insights enrichment, within a call budget. When it is rate
+            limited the forecast is unaffected, so it does not change the
+            overall status
           </li>
           <li>
             <strong className="text-text-primary">Shamwari AI</strong> — AI

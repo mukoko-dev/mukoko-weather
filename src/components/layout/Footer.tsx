@@ -203,8 +203,28 @@ export function Footer() {
             </a>
             . <span className="italic">Ndiri nekuti tiri.</span>
           </p>
+          {/* Model attribution (issue #246) — required by the CC BY 4.0
+              licences of ECMWF open data, DWD and Open-Meteo. */}
           <p className="text-sm text-text-tertiary">
-            Weather data:{" "}
+            Weather data: ECMWF, NOAA, DWD, ECCC, Météo-France via{" "}
+            <a
+              href="https://open-meteo.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="dik-dik hover:text-text-secondary transition-colors"
+            >
+              Open-Meteo.com
+            </a>{" "}
+            (
+            <a
+              href="https://creativecommons.org/licenses/by/4.0/"
+              target="_blank"
+              rel="noopener noreferrer license"
+              className="dik-dik hover:text-text-secondary transition-colors"
+            >
+              CC BY 4.0
+            </a>
+            ); insights enrichment by{" "}
             <a
               href="https://www.tomorrow.io"
               target="_blank"
@@ -212,15 +232,6 @@ export function Footer() {
               className="dik-dik hover:text-text-secondary transition-colors"
             >
               Tomorrow.io
-            </a>
-            {" & "}
-            <a
-              href="https://open-meteo.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="dik-dik hover:text-text-secondary transition-colors"
-            >
-              Open-Meteo
             </a>
           </p>
         </div>

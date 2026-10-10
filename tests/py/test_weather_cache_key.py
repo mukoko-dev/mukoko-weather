@@ -117,7 +117,10 @@ class TestEndpointUsesGridKey:
         return [
             patch("py._weather._get_cached_weather", side_effect=get_cached),
             patch("py._weather._set_cached_weather", side_effect=set_cached),
-            patch("py._weather.tomorrow_breaker", MagicMock(is_allowed=False)),
+            # The blend baseline (#246) is stubbed out so these requests take
+            # the best_match path deterministically, with no network.
+            patch("py._weather._fetch_blend", return_value=None),
+            patch("py._weather.enrichment.enrich", return_value=(None, "none")),
             patch("py._weather.open_meteo_breaker", MagicMock(is_allowed=True)),
             patch("py._weather._fetch_open_meteo", side_effect=fetch),
             patch("py._weather._fetch_open_meteo_extras", return_value=None),
@@ -194,7 +197,6 @@ class TestValidationAndElevation:
         hinted = {"slug": "kariba", "lat": -16.52, "lon": 28.80, "elevation": 485}
         with patch("py._weather._create_fallback_weather", return_value={"current": {"x": 1}}) as fb, \
              patch("py._weather._get_cached_weather", return_value=None), \
-             patch("py._weather.tomorrow_breaker", MagicMock(is_allowed=False)), \
              patch("py._weather.open_meteo_breaker", MagicMock(is_allowed=False)), \
              patch("py._weather.nearest_station_observation", return_value=None), \
              patch("py._weather._find_nearest_location", return_value=None), \

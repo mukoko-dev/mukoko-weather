@@ -121,10 +121,15 @@ curl "https://weather.mukoko.com/api/embed/current?lat=-17.83&lon=31.05"`}
           <p className="mt-2 text-base text-text-secondary">
             <code className="termite">GET /api/py/weather?lat=&amp;lon=</code> —
             the complete forecast: current conditions plus 24-hour hourly and
-            7-day daily arrays. Add{" "}
-            <code className="termite">&amp;models=</code> (a comma list of{" "}
+            7-day daily arrays. The baseline is an Africa-weighted blend of
+            global models (ECMWF IFS and AIFS weighted highest, then NOAA GFS,
+            DWD ICON, ECCC GEM and Météo-France ARPEGE). Add{" "}
+            <code className="termite">&amp;model=</code> (for example{" "}
+            <code className="termite">ecmwf_ifs</code>) to base the forecast on
+            one model instead, and <code className="termite">&amp;models=</code>{" "}
+            (a comma list of{" "}
             <code className="termite">
-              gfs_seamless,ecmwf_ifs04,icon_seamless,meteofrance_seamless
+              ecmwf_ifs,ecmwf_aifs025_single,gfs_seamless,icon_global,gem_global,meteofrance_arpege_world
             </code>
             ) for a Windy-style multi-model comparison. A next-hour
             precipitation nowcast (<code className="termite">minutely</code>,
@@ -135,15 +140,24 @@ curl "https://weather.mukoko.com/api/embed/current?lat=-17.83&lon=31.05"`}
 curl "https://weather.mukoko.com/api/py/weather?lat=-17.83&lon=31.05"
 
 # With a multi-model comparison
-curl "https://weather.mukoko.com/api/py/weather?lat=-17.83&lon=31.05&models=gfs_seamless,ecmwf_ifs04"`}
+curl "https://weather.mukoko.com/api/py/weather?lat=-17.83&lon=31.05&models=gfs_seamless,ecmwf_ifs"
+
+# Based on a single model
+curl "https://weather.mukoko.com/api/py/weather?lat=-17.83&lon=31.05&model=ecmwf_ifs"`}
           />
           <p className="mt-4 text-base text-text-secondary">
             The response carries headers that tell you which provider served
-            what: <code className="termite">X-Weather-Provider</code> (origin of
-            the hourly/daily forecast —{" "}
-            <code className="termite">tomorrow</code> /{" "}
-            <code className="termite">open-meteo</code> /{" "}
-            <code className="termite">fallback</code>) and{" "}
+            what: <code className="termite">X-Weather-Provider</code> (the
+            forecast baseline —{" "}
+            <code className="termite">open-meteo:blend</code> /{" "}
+            <code className="termite">open-meteo:&lt;model&gt;</code> /{" "}
+            <code className="termite">open-meteo:best_match</code> /{" "}
+            <code className="termite">fallback</code>),{" "}
+            <code className="termite">X-Enrichment</code> (whether Tomorrow.io
+            insights were merged — <code className="termite">tomorrow</code> /{" "}
+            <code className="termite">skipped-budget</code> /{" "}
+            <code className="termite">skipped-error</code> /{" "}
+            <code className="termite">none</code>) and{" "}
             <code className="termite">X-Current-Source</code> (origin of the{" "}
             <code className="termite">current</code> block, which may be{" "}
             <code className="termite">stationkit</code> when a nearby weather
@@ -286,22 +300,23 @@ curl "https://weather.mukoko.com/api/py/search?q=nairobi"`}
             rate-limited per IP to keep the service healthy for everyone, so
             cache responses where you can and avoid hammering them in tight
             loops. Please keep the <code className="termite">attribution</code>{" "}
-            back to mukoko weather when you display our data. Weather data is
-            sourced from{" "}
-            <a
-              href="https://www.tomorrow.io"
-              className="sunbird"
-              rel="noopener noreferrer"
-            >
-              Tomorrow.io
-            </a>{" "}
-            and{" "}
+            back to mukoko weather when you display our data, and credit the
+            model providers: forecasts come from ECMWF, NOAA, DWD, ECCC and
+            Météo-France via{" "}
             <a
               href="https://open-meteo.com"
               className="sunbird"
               rel="noopener noreferrer"
             >
               Open-Meteo
+            </a>{" "}
+            (CC BY 4.0), with insights enrichment from{" "}
+            <a
+              href="https://www.tomorrow.io"
+              className="sunbird"
+              rel="noopener noreferrer"
+            >
+              Tomorrow.io
             </a>
             . For a ready-made UI, use the{" "}
             <Link href="/embed" prefetch={false} className="sunbird">

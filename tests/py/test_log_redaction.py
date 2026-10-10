@@ -25,14 +25,15 @@ FAKE_KEY = "test-fake-key-123"
 
 
 class TestTomorrowKeyInHeader:
-    @patch("py._weather._get_http_client")
+    @patch("py._http.get_http_client")
     def test_forecast_sends_key_in_header(self, mock_client):
-        from py._weather import _fetch_tomorrow
+        # Tomorrow.io is enrichment-only now (issue #246); same key rule applies.
+        from py._enrichment import fetch_tomorrow_insights
 
         resp = MagicMock(status_code=500)
         mock_client.return_value.get.return_value = resp
 
-        _fetch_tomorrow(-17.83, 31.05, FAKE_KEY)
+        fetch_tomorrow_insights(-17.83, 31.05, FAKE_KEY)
 
         call = mock_client.return_value.get.call_args
         url = call.args[0]
@@ -42,20 +43,20 @@ class TestTomorrowKeyInHeader:
         assert FAKE_KEY not in str(params)
         assert call.kwargs["headers"] == {"apikey": FAKE_KEY}
 
+    @patch("py._enrichment.budget_snapshot")
     @patch("py._status.get_http_client")
     @patch("py._status.get_api_key")
-    def test_status_probe_sends_key_in_header(self, mock_key, mock_client):
+    def test_status_check_never_sends_the_key_anywhere(self, mock_key, mock_client, mock_budget):
+        """The Tomorrow.io status row is read from config/budget — no probe,
+        so the key never leaves the server (and no quota is spent)."""
         from py._status import _check_tomorrow_io
 
         mock_key.return_value = FAKE_KEY
-        mock_client.return_value.get.return_value = MagicMock(status_code=200)
+        mock_budget.return_value = {"hourUsed": 0, "hourCap": 20, "dayUsed": 0, "dayCap": 400}
 
         _check_tomorrow_io()
 
-        call = mock_client.return_value.get.call_args
-        assert FAKE_KEY not in call.args[0]
-        assert "apikey" not in (call.kwargs.get("params") or {})
-        assert call.kwargs["headers"] == {"apikey": FAKE_KEY}
+        mock_client.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
