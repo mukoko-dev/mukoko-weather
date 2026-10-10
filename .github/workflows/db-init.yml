@@ -12,15 +12,23 @@ permissions:
 jobs:
   db-init:
     name: Sync database seed data
-    # Only run when the production deployment succeeds. Vercel names the
-    # environment "Production – <project>" (e.g. "Production – mukoko-weather"),
-    # not bare "Production", so an exact match never fired. Previews are
-    # "Preview – <project>" and never match the prefix.
+    # Only run when THIS app's production deployment succeeds. Vercel names
+    # the environment "Production – <project>" (en dash). Two Vercel projects
+    # deploy from this repo, so match mukoko-weather's name exactly: a
+    # "Production" prefix also matched "Production – mukoko-station-console".
+    # Previews ("Preview – <project>") and "workers-production" never match.
     if: >-
       github.event.deployment_status.state == 'success' &&
-      startsWith(github.event.deployment.environment, 'Production')
+      github.event.deployment.environment == 'Production – mukoko-weather'
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    # Never run two seeds at once, and never cancel one in flight: a cancelled
+    # db-init can leave a half-synced collection. A second deploy's run waits.
+    # Job-level (not workflow-level) so the skipped runs every preview
+    # deployment creates never join the group and displace a pending seed.
+    concurrency:
+      group: db-init-production
+      cancel-in-progress: false
 
     steps:
       - name: Validate DB_INIT_SECRET is configured

@@ -34,6 +34,7 @@ for _key in list(sys.modules.keys()):
 # Build a fake pymongo package with the submodules that _db.py imports
 _mock_pymongo = types.ModuleType("pymongo")
 _mock_pymongo.MongoClient = MagicMock  # type: ignore[attr-defined]
+_mock_pymongo.UpdateOne = MagicMock  # type: ignore[attr-defined]
 
 _mock_pymongo_database = types.ModuleType("pymongo.database")
 _mock_pymongo_database.Database = MagicMock  # type: ignore[attr-defined]
