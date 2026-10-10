@@ -311,3 +311,37 @@ class TestBackfillPersistFailure:
             "harare", -17.83, 31.05, 4, [], http_client=_http(), breaker=_breaker(), now=NOW,
         )
         assert [d["date"] for d in docs] == ["2026-10-07", "2026-10-08"]
+
+
+class TestBackfillReviewFixes:
+    def test_client_error_does_not_trip_shared_breaker(self):
+        """A 4xx is our request, not an Open-Meteo outage — it must not open
+        the breaker that also gates the forecast fallback."""
+        breaker = _breaker()
+        assert hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=_http(status=400), breaker=breaker, now=NOW) == []
+        breaker.record_failure.assert_not_called()
+
+    def test_failed_fetch_sets_no_cooldown(self):
+        http = MagicMock()
+        http.get.side_effect = [Exception("timeout"), MagicMock(status_code=200, json=MagicMock(return_value=ARCHIVE_PAYLOAD))]
+        with patch("py._history_store.get_db") as mock_db:
+            _coll(mock_db)
+            assert hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=http, breaker=_breaker(), now=NOW) == []
+            # Retried straight away on the next view — no hour-long lockout.
+            docs = hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=http, breaker=_breaker(), now=NOW)
+        assert [d["date"] for d in docs] == ["2026-10-07", "2026-10-08"]
+
+    @patch("py._history_store.get_db")
+    def test_failed_persist_sets_no_cooldown(self, mock_db):
+        coll = _coll(mock_db)
+        coll.bulk_write.side_effect = Exception("over quota")
+        http = _http()
+        hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=http, breaker=_breaker(), now=NOW)
+        hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=http, breaker=_breaker(), now=NOW)
+        assert http.get.call_count == 2
+
+    def test_offset_estimate_matches_weather_endpoint(self):
+        from py._weather import _estimate_utc_offset
+
+        for lon in (31.05, 77.2, 87.6, -75.0, 103.8):
+            assert hs.estimate_utc_offset_seconds(lon) == _estimate_utc_offset(lon)

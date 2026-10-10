@@ -604,6 +604,29 @@ class TestHistoryKeying:
         assert record.call_args[0][0] == "harare"
 
     @pytest.mark.asyncio
+    async def test_hint_keys_history_but_cache_stays_on_nearest(self):
+        """Nearby page slugs must keep sharing one cache row (Tomorrow.io
+        free-tier quota); only the history doc takes the hint."""
+        record = MagicMock()
+        set_cache = MagicMock()
+        ps = self._fresh_fetch_patches()
+        ps[1] = patch("py._weather._set_cached_weather", set_cache)
+        ps += [
+            patch("py._weather._find_nearest_location", return_value={"slug": "harare", "lat": -17.83, "lon": 31.05}),
+            patch("py._weather.find_location", return_value={"slug": "avondale--ksy4dd7", "lat": -17.80, "lon": 31.03}),
+            patch("py._weather._record_weather_history", record),
+        ]
+        for p in ps:
+            p.start()
+        try:
+            await get_weather(lat=-17.80, lon=31.03, location="avondale--ksy4dd7")
+        finally:
+            for p in ps:
+                p.stop()
+        assert set_cache.call_args[0][0] == "harare"
+        assert record.call_args[0][0] == "avondale--ksy4dd7"
+
+    @pytest.mark.asyncio
     async def test_hint_far_from_coords_is_ignored(self):
         """A caller can't file London's weather under Harare."""
         record = MagicMock()

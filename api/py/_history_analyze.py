@@ -174,6 +174,16 @@ def _aggregate_stats(records: list[dict]) -> str:
     lines = [
         f"Period: {date_range} ({len(records)} data points)",
     ]
+    # Provenance (#245): archive days carry 24h DAILY MEANS for humidity,
+    # wind, pressure and cloud; recorded days carry a point-in-time snapshot.
+    # Tell the model so it doesn't read the mix as a trend.
+    archive_days = sum(1 for r in records if r.get("source") == "open-meteo-archive")
+    if archive_days:
+        lines.append(
+            f"Data sources: {len(records) - archive_days} days recorded live (point-in-time "
+            f"humidity/wind/pressure/cloud), {archive_days} days from the ERA5 climate archive "
+            "(24h daily means, no UV). Do not treat differences between the two as a trend."
+        )
 
     if temps_high:
         lines.append(f"Temperature: avg high {_avg(temps_high)}°C (range {_rng(temps_high)}), avg low {_avg(temps_low)}°C (range {_rng(temps_low)})")

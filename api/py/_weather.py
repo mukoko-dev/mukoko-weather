@@ -846,8 +846,8 @@ async def get_weather(
     ``location`` (optional) is the caller's clean slug for these coordinates
     (SSR passes the page slug). It is honoured only when it resolves to a
     known place within ``HISTORY_MAX_DISTANCE_KM`` of ``lat``/``lon``; it then
-    keys both the cache row and the history doc, so ``/api/py/history?location=``
-    reads exactly what this endpoint records.
+    keys the history doc, so ``/api/py/history?location=`` reads exactly what
+    this endpoint records. The cache stays keyed on the nearest known place.
 
     Weather proxy with multi-provider fallback chain:
 
@@ -886,22 +886,22 @@ async def get_weather(
     # History is only recorded under a slug we're confident describes these
     # coordinates (validated hint, or a nearby known place) — never under a
     # raw coordinate key nobody reads, nor a place thousands of km away.
+    # The CACHE stays keyed on the nearest known place so nearby page slugs
+    # keep sharing one provider fetch (Tomorrow.io free tier: 500/day). Only
+    # the history doc takes the validated hint.
     history_slug: str | None = None
+    try:
+        nearest = _find_nearest_location(lat, lon)
+        if nearest:
+            location_slug = nearest.get("slug", location_slug)
+            elevation = nearest.get("elevation", elevation)
+            if _near(nearest, lat, lon):
+                history_slug = location_slug
+    except Exception:
+        pass
     hinted = _resolve_location_hint(location, lat, lon)
     if hinted:
-        location_slug = hinted.get("slug") or location
-        history_slug = location_slug
-        elevation = hinted.get("elevation", elevation)
-    else:
-        try:
-            nearest = _find_nearest_location(lat, lon)
-            if nearest:
-                location_slug = nearest.get("slug", location_slug)
-                elevation = nearest.get("elevation", elevation)
-                if _near(nearest, lat, lon):
-                    history_slug = location_slug
-        except Exception:
-            pass
+        history_slug = hinted.get("slug") or location
 
     # 0. Look for a nearby StationKit observation. Cheap (single MongoDB query)
     # and graceful — returns None on any error.

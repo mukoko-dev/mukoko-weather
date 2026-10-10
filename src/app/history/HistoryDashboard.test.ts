@@ -255,9 +255,38 @@ describe("transformHistory provenance (#245)", () => {
 
   it("archive days without UV yield null, not NaN/0", () => {
     const doc = makeDoc("2026-01-01");
-    doc.daily = { ...doc.daily, uv_index_max: [] } as WeatherHistoryDoc["daily"];
+    doc.daily = {
+      ...doc.daily,
+      uv_index_max: [],
+    } as WeatherHistoryDoc["daily"];
     (doc.current as unknown as { uv_index: number | null }).uv_index = null;
     expect(transformHistory([doc])[0].uvIndex).toBeNull();
+  });
+});
+
+describe("transformHistory null archive means (#245)", () => {
+  it("keeps missing daily means as null instead of rounding them to 0", () => {
+    const doc = makeDoc("2026-01-01");
+    const cur = doc.current as unknown as Record<string, number | null>;
+    cur.surface_pressure = null;
+    cur.wind_speed_10m = null;
+    cur.relative_humidity_2m = null;
+    cur.cloud_cover = null;
+    const [r] = transformHistory([doc]);
+    expect(r.pressure).toBeNull();
+    expect(r.windSpeed).toBeNull();
+    expect(r.humidity).toBeNull();
+    expect(r.cloudCover).toBeNull();
+  });
+
+  it("the auto-select path reuses fetchHistory (one error-copy path)", async () => {
+    const fs = await import("fs");
+    const src = fs.readFileSync(
+      "src/app/history/HistoryDashboard.tsx",
+      "utf-8",
+    );
+    expect(src).toContain("void fetchHistory(loc, 30);");
+    expect(src).not.toContain("b.error ||");
   });
 });
 

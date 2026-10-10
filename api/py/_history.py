@@ -8,6 +8,8 @@ on demand from the Open-Meteo Historical/Archive API (see ``_history_store``).
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Request
 
 from ._circuit_breaker import open_meteo_breaker
@@ -62,7 +64,7 @@ async def get_history(location: str, days: int = 30, request: Request = None):
     lon = float(loc.get("lon") or 0.0)
 
     try:
-        history = read_history(slugs, days, lon=lon)
+        history = await asyncio.to_thread(read_history, slugs, days, lon=lon)
     except Exception:
         raise HTTPException(status_code=502, detail="Failed to fetch weather history")
 
@@ -70,7 +72,10 @@ async def get_history(location: str, days: int = 30, request: Request = None):
     backfilled: list[dict] = []
     lat = loc.get("lat")
     if lat is not None and loc.get("lon") is not None:
-        backfilled = backfill_history(
+        # Sync httpx + pymongo work: run it off the event loop so a slow
+        # archive response never stalls other requests on this instance.
+        backfilled = await asyncio.to_thread(
+            backfill_history,
             location,
             float(lat),
             lon,

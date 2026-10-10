@@ -85,11 +85,25 @@ def _collection():
 
 
 def estimate_utc_offset_seconds(lon: float) -> int:
-    """Longitude-based UTC offset (15° per hour), whole hours."""
+    """Longitude-based UTC offset — the SAME estimator ``/api/py/weather``
+    uses when a provider gives no offset, so the writer and reader agree on
+    "today" whenever neither has the real one.
+
+    Where the writer DID have the provider's real offset (e.g. India +5:30,
+    western China +8) the reader's estimate can be up to a day out at the
+    window edges. That only moves one boundary day in or out of the window;
+    it never loses a doc, because the reader has no upper bound and dates
+    are unique per location.
+    """
     try:
-        return int(round(float(lon) / 15.0)) * 3600
-    except (TypeError, ValueError):
-        return 0
+        from ._weather import _estimate_utc_offset
+
+        return int(_estimate_utc_offset(float(lon)))
+    except Exception:  # noqa: BLE001
+        try:
+            return int(round(float(lon) / 15.0)) * 3600
+        except (TypeError, ValueError):
+            return 0
 
 
 def local_date(utc_offset_seconds: Optional[int], now: Optional[datetime] = None) -> str:
@@ -359,7 +373,8 @@ def build_archive_docs(slug: str, payload: dict, wanted: Iterable[str], *, now: 
     return docs
 
 
-def fetch_archive(http_client, lat: float, lon: float, start: str, end: str) -> Optional[dict]:
+def fetch_archive(http_client, lat: float, lon: float, start: str, end: str) -> tuple[int, Optional[dict]]:
+    """Returns ``(status_code, payload_or_None)``."""
     resp = http_client.get(
         ARCHIVE_URL,
         params={
@@ -373,8 +388,8 @@ def fetch_archive(http_client, lat: float, lon: float, start: str, end: str) -> 
         timeout=ARCHIVE_TIMEOUT_S,
     )
     if resp.status_code != 200:
-        return None
-    return resp.json()
+        return resp.status_code, None
+    return 200, resp.json()
 
 
 def backfill_history(
@@ -409,28 +424,36 @@ def backfill_history(
             if not rate_limiter(client_ip, "history-backfill", BACKFILL_RATE_LIMIT, BACKFILL_RATE_WINDOW_S).get("allowed", True):
                 return []
 
-        _backfill_attempts[slug] = (time.monotonic(), missing[0])
         try:
-            payload = fetch_archive(http_client, lat, lon, missing[0], missing[-1])
+            status, payload = fetch_archive(http_client, lat, lon, missing[0], missing[-1])
         except Exception as exc:  # noqa: BLE001
             breaker.record_failure()
             logger.warning("Open-Meteo archive fetch failed for %s: %s", slug, exc)
             return []
         if payload is None:
-            breaker.record_failure()
+            # Only 5xx / 429 say Open-Meteo is unwell. A 4xx is OUR request
+            # (bad range or variable) and must not open the breaker that
+            # also gates the forecast fallback, AQ, haze and normals.
+            if status >= 500 or status == 429:
+                breaker.record_failure()
+            else:
+                logger.warning("Open-Meteo archive rejected request for %s: HTTP %s", slug, status)
             return []
         breaker.record_success()
 
         docs = build_archive_docs(slug, payload, missing, now=now)
-        if docs:
-            _upsert_archive_docs(docs)
+        persisted = _upsert_archive_docs(docs) if docs else True
+        # Cool down only after a fetch that succeeded AND was saved, so a
+        # transient timeout or failed write is retried on the next view.
+        if persisted:
+            _backfill_attempts[slug] = (time.monotonic(), missing[0])
         return docs
     except Exception as exc:  # noqa: BLE001
         logger.warning("History backfill failed for %s: %s", slug, exc)
         return []
 
 
-def _upsert_archive_docs(docs: list[dict]) -> None:
+def _upsert_archive_docs(docs: list[dict]) -> bool:
     """Persist archive docs insert-only. Never raises: the caller still
     returns the fetched days to the user even if saving them failed."""
     try:
@@ -447,8 +470,11 @@ def _upsert_archive_docs(docs: list[dict]) -> None:
                 )
             )
         _collection().bulk_write(ops, ordered=False)
+        return True
     except Exception as exc:  # noqa: BLE001
         # Duplicate-key races with a concurrent writer are harmless here —
-        # the other writer's doc is at least as good. Log anything else.
-        if type(exc).__name__ != "BulkWriteError":
-            logger.warning("Archive history upsert failed: %s", exc)
+        # the other writer's doc is at least as good. Anything else failed.
+        if type(exc).__name__ == "BulkWriteError":
+            return True
+        logger.warning("Archive history upsert failed: %s", exc)
+        return False
