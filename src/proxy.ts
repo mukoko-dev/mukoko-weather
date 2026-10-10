@@ -68,7 +68,11 @@ export default async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Run on every path except Next.js internals and static assets
-    "/((?!_next/static|_next/image|favicon[^/]*\\.(?:ico|svg|png)|apple-touch-icon\\.png|icon-(?:maskable-)?(?:192|512)\\.png|manifest.json|sw.js).*)",
+    // Run on every page path, never on a file. A path with a dot anywhere
+    // (/favicon.ico, /sw.js, /vendor/maplibre-gl/x/worker.mjs, a missing
+    // /old.png) is a file, never a location slug, and must not run the
+    // AuthKit refresh or write the lastLocation cookie. icons/ and vendor/
+    // are listed too so a dot-less request under them can't become a slug.
+    "/((?!_next/static|_next/image|icons/|vendor/|.*\\..*).*)",
   ],
 };
