@@ -33,7 +33,7 @@ def _failure_message(check: str, exc: Exception) -> str:
     return _CHECK_FAILED_MESSAGE
 
 
-#: Timeout for the live upstream probes (Tomorrow.io, Open-Meteo).
+#: Timeout for the live Open-Meteo probe (Tomorrow.io is no longer probed live).
 PROBE_TIMEOUT_S = 10.0
 
 #: Timeout for the AI liveness probe. Short: it never reaches the model.
@@ -59,8 +59,8 @@ def _result(name: str, status: str, start: float, message: str) -> dict:
 
 # Server-side cache for the assembled status payload. The dashboard polls this
 # endpoint (and multiple tabs multiply that), so without a short TTL every poll
-# fans out to live MongoDB / Tomorrow.io / Open-Meteo checks — which burns the
-# shared Tomorrow.io free-tier quota (25/hr) and can 429 real weather serving.
+# fans out to live MongoDB / Open-Meteo / AI checks. (Tomorrow.io is no longer
+# probed live at all — that probe used to burn its 25/hr free-tier quota.)
 _STATUS_CACHE_TTL_S = 60.0
 _status_cache: dict = {"data": None, "ts": 0.0}
 
@@ -81,38 +81,55 @@ def _check_mongodb() -> dict:
 
 
 def _check_tomorrow_io() -> dict:
-    name = "Tomorrow.io API"
+    """Tomorrow.io — ENRICHMENT only (issue #246), never a live probe.
+
+    The forecast baseline comes from global models via Open-Meteo, so this
+    row is tagged ``role: "enrichment"`` and never degrades the overall
+    status. It deliberately makes NO call to Tomorrow.io: the old live probe
+    itself spent the 25/h free-tier quota. Health is read from the API-key
+    config, the circuit breaker and the MongoDB budget counters instead.
+    """
+    from ._circuit_breaker import tomorrow_breaker
+    from . import _enrichment as enrichment
+
+    name = "Tomorrow.io (insights enrichment)"
     start = time.time()
+
+    def row(status: str, message: str) -> dict:
+        r = _result(name, status, start, message)
+        r["role"] = "enrichment"
+        return r
+
     try:
-        try:
-            api_key = get_api_key("tomorrow")
-        except Exception as e:
-            _failure_message("Tomorrow.io API key lookup", e)
-            return _result(name, "degraded", start, "Cannot retrieve API key — MongoDB unavailable")
+        api_key = get_api_key("tomorrow")
+    except Exception as e:
+        _failure_message("Tomorrow.io API key lookup", e)
+        return row("degraded", "Enrichment degraded — cannot read API key (MongoDB unavailable); derived insights in use")
 
-        if not api_key:
-            return _result(
-                name,
-                "degraded",
-                start,
-                "API key not configured in database — run POST /api/py/db-init with apiKeys.tomorrow to seed it. Using Open-Meteo fallback.",
-            )
-
-        resp = get_http_client(PROBE_TIMEOUT_S).get(
-            "https://api.tomorrow.io/v4/weather/realtime",
-            params={"location": "-17.83,31.05"},
-            headers={"apikey": api_key},  # header, not query: URLs get logged
+    if not api_key:
+        return row(
+            "degraded",
+            "Enrichment off — no API key configured (seed apiKeys.tomorrow via db-init). Baseline + derived insights unaffected.",
         )
 
-        if resp.status_code == 429:
-            return _result(name, "degraded", start, "Rate limited (429) — falling back to Open-Meteo")
+    if not tomorrow_breaker.is_allowed:
+        return row(
+            "degraded",
+            "Enrichment degraded — circuit open after rate limiting (429) or errors; baseline unaffected",
+        )
 
-        if resp.status_code != 200:
-            return _result(name, "down", start, f"HTTP {resp.status_code}: {resp.reason_phrase}")
-
-        return _result(name, "operational", start, "Responding normally")
+    try:
+        b = enrichment.budget_snapshot()
     except Exception as e:
-        return _result(name, "down", start, _failure_message(name, e))
+        _failure_message("Tomorrow.io budget read", e)
+        return row("degraded", "Enrichment degraded — budget counters unavailable")
+
+    usage = f"{b['hourUsed']}/{b['hourCap']} this hour, {b['dayUsed']}/{b['dayCap']} today"
+    if b["dayUsed"] >= b["dayCap"] or b["hourUsed"] >= b["hourCap"]:
+        return row("degraded", f"Enrichment degraded — call budget exhausted ({usage}); baseline unaffected")
+    skipped = b.get("skippedBudget", 0) + b.get("skippedError", 0)
+    note = f"; {skipped} enrichments skipped today" if skipped else ""
+    return row("operational", f"Enrichment active — {usage}{note}")
 
 
 def _check_open_meteo() -> dict:
@@ -225,7 +242,9 @@ async def system_status():
     """GET /api/py/status — Live system health checks.
 
     Result is cached server-side for ~60s so rapid/multi-tab polling doesn't
-    multiply upstream calls (protects the shared Tomorrow.io free-tier quota).
+    multiply upstream calls. Tomorrow.io is enrichment-only: its row carries
+    ``role: "enrichment"``, is summarised in the top-level ``enrichment``
+    field and never degrades the overall ``status``.
     """
     now = time.time()
     cached = _status_cache["data"]
@@ -243,14 +262,20 @@ async def system_status():
         _check_ai_cache(),
     ]
 
+    # Enrichment-only providers (Tomorrow.io) never degrade the overall status:
+    # the baseline forecast does not depend on them.
+    core = [c for c in checks if c.get("role") != "enrichment"]
     overall = "operational"
-    if any(c["status"] == "down" for c in checks):
+    if any(c["status"] in ("down", "degraded") for c in core):
         overall = "degraded"
-    elif any(c["status"] == "degraded" for c in checks):
-        overall = "degraded"
+    enrichment_rows = [c for c in checks if c.get("role") == "enrichment"]
+    enrichment_status = (
+        "degraded" if any(c["status"] != "operational" for c in enrichment_rows) else "operational"
+    )
 
     result = {
         "status": overall,
+        "enrichment": enrichment_status,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "totalLatencyMs": round((time.time() - start) * 1000),
         "checks": checks,

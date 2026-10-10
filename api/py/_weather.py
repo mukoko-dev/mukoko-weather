@@ -1,8 +1,13 @@
 """
-Weather proxy — migrated from /api/weather.
+Weather proxy — the single canonical forecast fetch / cache / history writer.
 
-Fetches weather from Tomorrow.io (primary) or Open-Meteo (fallback),
-caches in MongoDB with 15-min TTL, records history, and returns
+Baseline (issue #246): an Africa-weighted blend of global NWP models served
+keyless by Open-Meteo (ECMWF IFS + AIFS, GFS, ICON, GEM, ARPEGE — see
+``_model_blend.py``). Tomorrow.io is ENRICHMENT ONLY — its insights fields are
+merged on top under a MongoDB-backed quota budget (``_enrichment.py``) and it
+can never block or replace the baseline.
+
+Caches the baseline in MongoDB with a 15-min TTL, records history and returns
 normalized WeatherData.
 """
 
@@ -17,12 +22,19 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from ._db import (
-    get_api_key,
     observations_collection,
     weather_cache_collection,
 )
 from ._places_resolver import find_nearest_location
-from ._circuit_breaker import tomorrow_breaker, open_meteo_breaker, CircuitOpenError
+from ._circuit_breaker import open_meteo_breaker
+from . import _enrichment as enrichment
+from . import _model_blend as blend
+from . import _verification as verification
+from ._insights import (
+    current_hour_index,
+    derive_insights,
+    strip_intermediate,
+)
 
 router = APIRouter()
 
@@ -47,32 +59,6 @@ def _get_http_client() -> httpx.Client:
 # ---------------------------------------------------------------------------
 # Weather provider clients
 # ---------------------------------------------------------------------------
-
-
-def _fetch_tomorrow(lat: float, lon: float, api_key: str) -> dict | None:
-    """Fetch weather from Tomorrow.io API."""
-    client = _get_http_client()
-
-    # Realtime + forecast in one call
-    url = "https://api.tomorrow.io/v4/weather/forecast"
-    params = {
-        "location": f"{lat},{lon}",
-        "timesteps": "1h,1d",
-        "units": "metric",
-    }
-
-    # Key travels in the `apikey` header (supported by every Tomorrow.io REST
-    # endpoint), never the query string — request URLs end up in logs.
-    resp = client.get(url, params=params, headers={"apikey": api_key})
-
-    if resp.status_code == 429:
-        return None  # Rate limited — fall back to Open-Meteo
-
-    if resp.status_code != 200:
-        return None
-
-    data = resp.json()
-    return _normalize_tomorrow(data)
 
 
 def _compute_is_day(time_str: str, daily_raw: list[dict]) -> int:
@@ -298,36 +284,60 @@ def _tomorrow_code_to_wmo(code: int) -> int:
 # Open-Meteo multi-model + minutely nowcast (Windy-style)
 # ---------------------------------------------------------------------------
 
-# Default comparison models requested from Open-Meteo. Open-Meteo returns
-# model-suffixed hourly fields (e.g. `temperature_2m_ecmwf_ifs04`) when
-# `models` is set, falling back to the unsuffixed best_match key otherwise.
-DEFAULT_FORECAST_MODELS = ["gfs_seamless", "ecmwf_ifs04", "icon_seamless"]
+# Default comparison models — the blend's core members (issue #246). Open-Meteo
+# returns model-suffixed hourly fields (e.g. `temperature_2m_ecmwf_ifs`) when
+# `models` lists several, falling back to unsuffixed keys for a single model.
+DEFAULT_FORECAST_MODELS = [blend.ECMWF_IFS, blend.ECMWF_AIFS, blend.GFS, blend.ICON]
 
 # Allowlist of models we forward to Open-Meteo — guards against a caller
-# injecting arbitrary strings into the upstream request via `?models=`.
+# injecting arbitrary strings into the upstream request via `?models=`. Every
+# id was checked live against Open-Meteo on 2026-10-10. `ecmwf_ifs04` is dead
+# upstream and is accepted only as an alias (see `blend.MODEL_ALIASES`).
 KNOWN_FORECAST_MODELS = {
     "best_match",
-    "gfs_seamless",
-    "ecmwf_ifs04",
+    blend.ECMWF_IFS,
+    blend.ECMWF_IFS025,
+    blend.ECMWF_AIFS,
+    blend.GFS,
+    blend.ICON,
     "icon_seamless",
+    blend.GEM,
+    blend.ARPEGE,
     "meteofrance_seamless",
 }
+
+
+def _canonical_model(m: str | None) -> str:
+    m = (m or "").strip()
+    return blend.MODEL_ALIASES.get(m, m)
 
 
 def _sanitize_models(models: list[str] | None) -> list[str]:
     """Filter a requested model list down to the known allowlist.
 
-    Falls back to :data:`DEFAULT_FORECAST_MODELS` when nothing valid is given.
-    ``best_match`` is dropped from the upstream request (it is the unsuffixed
-    baseline Open-Meteo always returns) but its data is still available via the
-    unsuffixed keys.
+    Legacy ids are mapped through :data:`blend.MODEL_ALIASES`. Falls back to
+    :data:`DEFAULT_FORECAST_MODELS` when nothing valid is given. ``best_match``
+    is dropped from the upstream comparison request (it is the unsuffixed
+    baseline Open-Meteo always returns).
     """
     cleaned: list[str] = []
     for m in models or []:
-        m = (m or "").strip()
+        m = _canonical_model(m)
         if m in KNOWN_FORECAST_MODELS and m != "best_match" and m not in cleaned:
             cleaned.append(m)
     return cleaned or list(DEFAULT_FORECAST_MODELS)
+
+
+def _sanitize_baseline_model(model: str | None) -> str | None:
+    """The user's single-model baseline choice, or ``None`` for the blend.
+
+    ``best_match`` (the stored default preference) and anything unknown mean
+    the Africa-weighted blend.
+    """
+    m = _canonical_model(model)
+    if not m or m == "best_match" or m not in KNOWN_FORECAST_MODELS:
+        return None
+    return m
 
 
 def _utc_offset(data: dict) -> int | None:
@@ -468,47 +478,131 @@ def _fetch_open_meteo_extras(lat: float, lon: float, models: list[str] | None = 
     return result
 
 
-def _fetch_open_meteo(lat: float, lon: float) -> dict | None:
-    """Fetch weather from Open-Meteo API (free fallback)."""
-    client = _get_http_client()
+def _finalize_baseline(payload: dict) -> dict:
+    """Derive insights from a baseline payload, then strip intermediate fields.
 
-    url = "https://api.open-meteo.com/v1/forecast"
+    The intermediate fields (CAPE, lifted index, dew point, ET₀) exist only to
+    derive insights; removing them keeps the cached WeatherData shape exactly
+    what the UI and history writer have always seen (issue #101).
+    """
+    out = dict(payload)
+    if not out.get("current_units"):
+        out["current_units"] = dict(_CURRENT_UNITS)
+    out["insights"] = derive_insights(payload) or None
+    return strip_intermediate(out)
+
+
+def _open_meteo_forecast(lat: float, lon: float, models: list[str] | None) -> dict | None:
+    """One Open-Meteo forecast call. ``None`` on a non-200."""
+    client = _get_http_client()
     params = {
         "latitude": str(lat),
         "longitude": str(lon),
-        "current": "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,cloud_cover,uv_index,is_day",
-        "hourly": "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,cloud_cover,uv_index,visibility,is_day",
-        "daily": "weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,sunrise,sunset,uv_index_max,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant",
+        "current": blend.CURRENT_VARS,
+        "hourly": blend.HOURLY_VARS,
+        "daily": blend.DAILY_VARS,
         "minutely_15": "precipitation",
         "forecast_minutely_15": "4",
         "timezone": "auto",
         "forecast_days": "7",
     }
-
-    resp = client.get(url, params=params)
+    if models:
+        params["models"] = ",".join(models)
+    resp = client.get("https://api.open-meteo.com/v1/forecast", params=params)
     if resp.status_code != 200:
         return None
+    return resp.json()
 
-    data = resp.json()
 
-    # Synthesize basic insights from Open-Meteo current data
-    current = data.get("current", {})
-    insights = {}
-    wind_speed = current.get("wind_speed_10m")
-    if wind_speed is not None:
-        insights["windSpeed"] = wind_speed
-    wind_gust = current.get("wind_gusts_10m")
-    if wind_gust is not None:
-        insights["windGust"] = wind_gust
+def _fetch_blend(
+    lat: float,
+    lon: float,
+    region: str,
+    weights: dict[str, float],
+    comparison: list[str] | None = None,
+) -> tuple[dict, dict, dict[str, float]] | None:
+    """Fetch every blend member in ONE call and blend them.
+
+    Returns ``(payload, raw, weights_used)`` — ``payload`` is the canonical
+    WeatherData (insights derived, intermediates stripped) already carrying
+    the comparison series + minutely nowcast from the same response, so the
+    old separate per-request "extras" call is no longer needed. ``None`` when
+    the call fails or fewer than two members returned data.
+    """
+    members = blend.order_members(weights)
+    extra = [m for m in (comparison or []) if m not in members]
+    raw = _open_meteo_forecast(lat, lon, members + extra)
+    if not raw:
+        return None
+
+    # Members that came back empty (e.g. an upstream outage of one model)
+    # drop out and the remaining weights renormalise.
+    present = blend.members_with_data(raw, members)
+    if len(present) < 2:
+        return None
+    used = {m: weights[m] for m in present}
+    payload = blend.blend_payload(raw, used)
+    payload = _finalize_baseline(payload)
+
+    series_models = present + [m for m in extra if m in blend.members_with_data(raw, extra)]
+    series, available = _parse_models(raw, series_models)
+    payload["minutely"] = blend.parse_minutely_any(raw, members)
+    payload["models"] = series
+    payload["models_available"] = available
+    payload["models_time"] = list(((raw.get("hourly") or {}).get("time") or [])[:24])
+    return payload, raw, used
+
+
+def _fetch_single_model(lat: float, lon: float, model: str) -> dict | None:
+    """Baseline from ONE user-selected model, nulls filled from best_match.
+
+    Requests ``models=<model>,best_match`` in one call; the selected model
+    gets all the weight and best_match only fills variables the model does not
+    publish (e.g. ECMWF has no UV index).
+    """
+    raw = _open_meteo_forecast(lat, lon, [model, "best_match"])
+    if not raw or not blend.members_with_data(raw, [model]):
+        return None
+    payload = blend.blend_payload(raw, {model: 1.0})
+    filler = blend.blend_payload(raw, {"best_match": 1.0})
+    for section in ("hourly", "daily"):
+        base = payload.get(section) or {}
+        fill = filler.get(section) or {}
+        for var, arr in base.items():
+            other = fill.get(var) or []
+            payload[section][var] = [
+                v if v is not None or i >= len(other) else other[i] for i, v in enumerate(arr)
+            ]
+    hourly = payload.get("hourly") or {}
+    idx = current_hour_index(hourly, payload["current"].get("time"))
+    for var, value in list(payload["current"].items()):
+        arr = hourly.get(var) or []
+        if value is None and idx < len(arr):
+            payload["current"][var] = arr[idx]
+    payload = _finalize_baseline(payload)
+    payload["minutely"] = blend.parse_minutely_any(raw, [model, "best_match"])
+    return payload
+
+
+def _fetch_open_meteo(lat: float, lon: float) -> dict | None:
+    """Open-Meteo ``best_match`` — the alternate single-request baseline.
+
+    Used when the blend fails (too few members / upstream error). Requests
+    current ``uv_index,is_day`` and hourly ``visibility,is_day`` (plus the
+    intermediate insight fields) and returns the canonical shape.
+    """
+    data = _open_meteo_forecast(lat, lon, None)
+    if not data:
+        return None
 
     result = {
-        "current": current,
+        "current": {k: v for k, v in (data.get("current") or {}).items() if k != "interval"},
         "hourly": data.get("hourly", {}),
         "daily": data.get("daily", {}),
         "current_units": data.get("current_units", dict(_CURRENT_UNITS)),
-        "insights": insights if insights else None,
-        "minutely": _parse_minutely(data),
     }
+    result = _finalize_baseline(result)
+    result["minutely"] = _parse_minutely(data)
     if (offset := _utc_offset(data)) is not None:
         result["utc_offset_seconds"] = offset
     return result
@@ -806,52 +900,127 @@ def _find_nearest_location(lat: float, lon: float) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/api/py/weather")
-async def get_weather(lat: float = -17.83, lon: float = 31.05, models: str | None = None):
+def _is_priority(request: Request | None, slug: str, is_coordinate_key: bool) -> bool:
+    """Whether this request may use the reserved Tomorrow.io budget.
+
+    Priority = curated seed / high-traffic locations (legacy catalog slugs —
+    community "smart" slugs contain ``--``) or a caller marked as paying via
+    ``X-Mukoko-Priority: 1``. The header is only honoured when
+    ``MUKOKO_INTERNAL_SECRET`` is configured AND the request carries it, so
+    an anonymous direct caller cannot claim priority. (No paid plan exists
+    yet — P0-1 in #238 — so the header is a hook.)
     """
-    GET /api/py/weather?lat=-17.83&lon=31.05&models=gfs_seamless,ecmwf_ifs04
+    if request is not None and request.headers.get("x-mukoko-priority") == "1":
+        import os
 
-    Weather proxy with multi-provider fallback chain:
+        secret = os.environ.get("MUKOKO_INTERNAL_SECRET", "")
+        if secret:
+            import hmac
 
-    * **Priority 0** — Nyuchi StationKit observation (within 50 km, last 60 min).
-      Used as the ``current`` block only; hourly/daily forecast still come from
-      a commercial provider so callers get a full response.
-    * **Priority 1** — MongoDB cache (15-min TTL)
-    * **Priority 2** — Tomorrow.io (primary, richer data)
-    * **Priority 3** — Open-Meteo (free fallback)
-    * **Priority 4** — Seasonal estimates (never fails)
+            if hmac.compare_digest(request.headers.get("x-mukoko-internal") or "", secret):
+                return True
+    return not is_coordinate_key and "--" not in slug
 
-    In addition to the base current/hourly/daily forecast, the endpoint attaches
-    Windy-style ADDITIONAL data sourced from Open-Meteo (free, keyless):
 
-    * ``minutely`` — next-hour precipitation nowcast (4 × 15-min steps). Always
-      attempted, best-effort.
-    * ``models`` / ``models_available`` / ``models_time`` — per-model hourly
-      temperature/precip comparison series. The optional ``?models=`` query is a
-      comma list (``gfs_seamless,ecmwf_ifs04,icon_seamless,meteofrance_seamless``);
-      unknown models are dropped and a sensible default set is used otherwise.
+def _attach_comparison(data: dict, lat: float, lon: float, requested: list[str] | None) -> dict:
+    """Make sure every requested comparison model has a series.
+
+    The blended baseline already carries its members' series. Only when the
+    caller asks for a model that is not there (or the baseline came from a
+    path without series) is the keyless extras call made — best-effort,
+    circuit-breaker gated, never fails the response.
+    """
+    wanted = _sanitize_models(requested) if requested else None
+    have = set(data.get("models_available") or [])
+    if data.get("models") and (wanted is None or set(wanted) <= have):
+        if wanted:
+            data = dict(data)
+            data["models"] = [s for s in data["models"] if s.get("model") in wanted]
+            data["models_available"] = [m for m in data["models_available"] if m in wanted]
+        return data
+    if not open_meteo_breaker.is_allowed:
+        return data
+    try:
+        extras = _fetch_open_meteo_extras(lat, lon, requested)
+    except Exception:
+        # Multi-model/minutely is a non-critical enhancement.
+        return data
+    if not extras:
+        return data
+    data = dict(data)
+    if data.get("minutely") is None:
+        data["minutely"] = extras.get("minutely")
+    data["models"] = extras.get("models", [])
+    data["models_available"] = extras.get("models_available", [])
+    data["models_time"] = extras.get("models_time", [])
+    # The seasonal fallback carries no UTC offset; the keyless extras call
+    # resolves it for the same point.
+    if data.get("utc_offset_seconds") is None and extras.get("utc_offset_seconds") is not None:
+        data["utc_offset_seconds"] = extras["utc_offset_seconds"]
+    return data
+
+
+@router.get("/api/py/weather")
+async def get_weather(
+    lat: float = -17.83,
+    lon: float = 31.05,
+    models: str | None = None,
+    model: str | None = None,
+    request: Request = None,  # type: ignore[assignment]  # injected by FastAPI
+):
+    """
+    GET /api/py/weather?lat=-17.83&lon=31.05[&model=ecmwf_ifs][&models=gfs_seamless,icon_global]
+
+    Provider chain (issue #246 — global models are the baseline, Tomorrow.io
+    only enriches):
+
+    * **Priority 0** — Nyuchi StationKit observation (within 50 km, last 60 min),
+      overlaid onto the ``current`` block only.
+    * **1** — MongoDB cache (15-min TTL; one row per location, plus one per
+      location × user-selected model).
+    * **2** — Open-Meteo **Africa-weighted blend** (ECMWF IFS + AIFS heaviest,
+      then GFS, ICON, GEM, ARPEGE — weights per region in ``_model_blend``),
+      or the single model named by ``?model=`` (the user's
+      ``selectedForecastModel``; ``best_match`` means the blend).
+    * **3** — Open-Meteo ``best_match`` (alternate single request).
+    * **4** — Seasonal estimate (never fails).
+
+    Insights are always derived from the baseline (``_insights``); Tomorrow.io
+    enrichment is merged on top when the quota budget allows and it answers
+    in time — it never blocks or replaces the baseline.
+
+    ``?models=`` picks the comparison series (``models`` / ``models_available``
+    / ``models_time``); the blend members are returned by default.
 
     Response headers:
       * ``X-Cache`` — ``HIT`` | ``MISS``
-      * ``X-Weather-Provider`` — origin of the hourly/daily forecast
+      * ``X-Weather-Provider`` — the baseline: ``open-meteo:blend`` |
+        ``open-meteo:<model>`` | ``open-meteo:best_match`` | ``fallback``
+      * ``X-Weather-Blend`` — region + normalised weights (blend only)
+      * ``X-Enrichment`` — ``tomorrow`` | ``skipped-budget`` |
+        ``skipped-error`` | ``none``
       * ``X-Current-Source`` — origin of the ``current`` block
-        (``stationkit`` | ``tomorrow`` | ``open-meteo`` | ``fallback``)
+        (``stationkit`` | the baseline provider | ``fallback``)
     """
     if lat < -90 or lat > 90 or lon < -180 or lon > 180:
         raise HTTPException(status_code=400, detail="Invalid coordinates")
 
     requested_models = [m for m in (models or "").split(",") if m.strip()] or None
+    baseline_model = _sanitize_baseline_model(model)
 
     # Resolve to nearest known location for cache key
     location_slug = f"{lat:.2f}_{lon:.2f}"
+    is_coordinate_key = True
     elevation = 1200
     try:
         nearest = _find_nearest_location(lat, lon)
-        if nearest:
-            location_slug = nearest.get("slug", location_slug)
+        if nearest and nearest.get("slug"):
+            location_slug = nearest["slug"]
+            is_coordinate_key = False
             elevation = nearest.get("elevation", elevation)
     except Exception:
         pass
+    cache_key = location_slug if baseline_model is None else f"{location_slug}::{baseline_model}"
 
     # 0. Look for a nearby StationKit observation. Cheap (single MongoDB query)
     # and graceful — returns None on any error.
@@ -863,48 +1032,60 @@ async def get_weather(lat: float = -17.83, lon: float = 31.05, models: str | Non
         except Exception:
             station_current = None
 
+    region = blend.region_for(lat, lon)
+    blend_header: str | None = None
+
     # 1. Try cache
     data: dict | None = None
     source: str | None = None
     cache_status = "MISS"
     try:
-        cached = _get_cached_weather(location_slug)
+        cached = _get_cached_weather(cache_key)
         if cached:
             data = cached.get("data", {})
             source = cached.get("provider", "cache")
             cache_status = "HIT"
+            # Rows written before derived insights existed get them now
+            # (cached values win where both exist).
+            if data.get("current"):
+                data = dict(data)
+                data["insights"] = {**derive_insights(data), **(data.get("insights") or {})}
     except Exception:
         pass
 
     # 2-4. Fetch fresh forecast data if no cache hit
     if data is None:
-        # 2. Try Tomorrow.io (circuit breaker protected)
-        if tomorrow_breaker.is_allowed:
-            try:
-                tomorrow_key = get_api_key("tomorrow")
-                if tomorrow_key:
-                    data = _fetch_tomorrow(lat, lon, tomorrow_key)
-                    # _normalize_tomorrow always returns a non-empty dict with
-                    # current/hourly/daily/insights keys, even when Tomorrow.io's
-                    # `timelines.hourly` came back empty (coverage gap, partial
-                    # quota response) — `current` itself is `{}` in that case, so
-                    # a plain truthiness check on `data` never falls through to
-                    # Open-Meteo. Require a non-empty `current` block too.
-                    if data and data.get("current"):
-                        source = "tomorrow"
-                        tomorrow_breaker.record_success()
-                    else:
-                        data = None
-                        tomorrow_breaker.record_failure()
-            except Exception:
-                tomorrow_breaker.record_failure()
+        raw_for_verification: tuple | None = None
 
-        # 3. Try Open-Meteo (circuit breaker protected)
+        # 2. Global-model baseline (circuit breaker protected)
+        if open_meteo_breaker.is_allowed:
+            try:
+                if baseline_model:
+                    data = _fetch_single_model(lat, lon, baseline_model)
+                    if data:
+                        source = f"open-meteo:{baseline_model}"
+                else:
+                    weights = blend.weights_for(region)
+                    result = _fetch_blend(lat, lon, region, weights, _sanitize_models(requested_models) if requested_models else None)
+                    if result:
+                        data, raw, used = result
+                        source = "open-meteo:blend"
+                        blend_header = blend.format_weights(region, used)
+                        raw_for_verification = (raw, used)
+                if data:
+                    open_meteo_breaker.record_success()
+                else:
+                    open_meteo_breaker.record_failure()
+            except Exception:
+                data = None
+                open_meteo_breaker.record_failure()
+
+        # 3. Alternate: Open-Meteo best_match in a single request
         if not data and open_meteo_breaker.is_allowed:
             try:
                 data = _fetch_open_meteo(lat, lon)
                 if data:
-                    source = "open-meteo"
+                    source = "open-meteo:best_match"
                     open_meteo_breaker.record_success()
                 else:
                     open_meteo_breaker.record_failure()
@@ -916,57 +1097,72 @@ async def get_weather(lat: float = -17.83, lon: float = 31.05, models: str | Non
             data = _create_fallback_weather(lat, lon, elevation)
             source = "fallback"
 
-        # Cache + record history (skip the seasonal fallback so we keep retrying upstream)
+        # Cache the baseline (skip the seasonal fallback so we keep retrying
+        # upstream). This is the ONLY weather_cache writer (issue #101).
         if source and source != "fallback":
             try:
-                _set_cached_weather(location_slug, lat, lon, data, source)
-                _record_weather_history(location_slug, data)
+                _set_cached_weather(cache_key, lat, lon, data, source)
             except Exception:
                 pass
+
+        # Verification capture — default blend only, at most once per 6 h.
+        if raw_for_verification:
+            try:
+                raw, used = raw_for_verification
+                idx = current_hour_index(data.get("hourly") or {}, (data.get("current") or {}).get("time"))
+                verification.capture(
+                    verification.build_verification_doc(
+                        location_slug, lat, lon, region, used, raw, data.get("hourly") or {}, idx
+                    )
+                )
+            except Exception:
+                pass
+
+    # Tomorrow.io ENRICHMENT — insights only, budgeted, never blocking. Not
+    # attempted for the seasonal fallback (nothing real to enrich).
+    enrichment_status = enrichment.NONE
+    if source != "fallback":
+        try:
+            extra, enrichment_status = enrichment.enrich(
+                location_slug, lat, lon, priority=_is_priority(request, location_slug, is_coordinate_key)
+            )
+        except Exception:
+            extra, enrichment_status = None, enrichment.SKIPPED_ERROR
+        if extra:
+            data = dict(data)
+            data["insights"] = enrichment.merge_insights(data.get("insights"), extra)
+
+    # History — recorded on fresh fetches of the default baseline only, so the
+    # series is one consistent source (merged insights included).
+    if cache_status == "MISS" and source and source != "fallback" and baseline_model is None:
+        try:
+            _record_weather_history(location_slug, data)
+        except Exception:
+            pass
 
     # Blend StationKit observation into the response: overlay the station's
     # sensor fields onto the forecast `current` (keeping forecast-only fields
     # like is_day/uv_index that the hardware doesn't measure), keep hourly/
-    # daily from the commercial provider. Shallow-copy first so we don't
-    # mutate any cached object held by callers / the cache layer.
+    # daily from the model baseline. Shallow-copy first so we don't mutate
+    # any cached object held by callers / the cache layer.
     current_source = source or "fallback"
     if station_current:
         data = dict(data) if data else {}
         data["current"] = {**(data.get("current") or {}), **station_current}
         current_source = "stationkit"
 
-    # ADDITIONAL Windy-style data — multi-model comparison + minutely nowcast.
-    # Always attempted (Open-Meteo, free), best-effort, circuit-breaker gated so
-    # a base commercial forecast is never held hostage to this extra call.
-    # Shallow-copy `data` before merging so we never mutate the cache layer's
-    # object (which may be shared across warm invocations).
-    if open_meteo_breaker.is_allowed:
-        try:
-            extras = _fetch_open_meteo_extras(lat, lon, requested_models)
-            if extras:
-                data = dict(data) if data else {}
-                data["minutely"] = extras.get("minutely")
-                data["models"] = extras.get("models", [])
-                data["models_available"] = extras.get("models_available", [])
-                data["models_time"] = extras.get("models_time", [])
-                # Tomorrow.io (and seasonal fallback) carry no UTC offset; the
-                # keyless Open-Meteo extras call resolves it for the same point.
-                if data.get("utc_offset_seconds") is None and extras.get("utc_offset_seconds") is not None:
-                    data["utc_offset_seconds"] = extras["utc_offset_seconds"]
-        except Exception:
-            # Multi-model/minutely is a non-critical enhancement — never fail
-            # the whole response because the extras call errored.
-            pass
+    # Comparison series + minutely nowcast (usually already in the blend).
+    data = _attach_comparison(data or {}, lat, lon, requested_models)
 
-    # The offset must ALWAYS be present (Tomorrow.io + failed extras, cached
-    # Tomorrow.io rows, StationKit overlays on either) — see _ensure_utc_offset.
+    # The offset must ALWAYS be present — see _ensure_utc_offset.
     data = _ensure_utc_offset(data or {}, lon)
 
-    return JSONResponse(
-        content=data,
-        headers={
-            "X-Cache": cache_status,
-            "X-Weather-Provider": source or "fallback",
-            "X-Current-Source": current_source,
-        },
-    )
+    headers = {
+        "X-Cache": cache_status,
+        "X-Weather-Provider": source or "fallback",
+        "X-Enrichment": enrichment_status,
+        "X-Current-Source": current_source,
+    }
+    if blend_header:
+        headers["X-Weather-Blend"] = blend_header
+    return JSONResponse(content=data, headers=headers)
