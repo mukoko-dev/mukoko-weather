@@ -62,7 +62,7 @@ describe("isValidImageUrl", () => {
       true,
     );
     expect(isValidImageUrl("http://example.com/a.png")).toBe(true);
-    expect(isValidImageUrl("/icons/icon-192.png")).toBe(true);
+    expect(isValidImageUrl("/icon-192.png")).toBe(true);
   });
 
   it("rejects empty, protocol-relative, and non-http schemes", () => {
