@@ -12,11 +12,12 @@
  * these paths.
  */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const ROOT = process.cwd();
+// Repo root, resolved from this file so the test works from any cwd.
+const ROOT = resolve(__dirname, "../..");
 
 /** sha256 of each file in mukoko-news `public/` (mukoko-news v4.82.0). */
 const NEWS_ICON_SHA256: Record<string, string> = {
@@ -55,17 +56,12 @@ describe("favicon parity with mukoko-news (source of truth)", () => {
   }
 
   it("has no competing app-dir icon files", () => {
-    for (const f of [
-      "icon.svg",
-      "icon.png",
-      "icon.ico",
-      "favicon.ico",
-      "apple-icon.png",
-    ]) {
-      expect(existsSync(join(ROOT, "src", "app", f)), `src/app/${f}`).toBe(
-        false,
-      );
-    }
+    // Next.js turns any src/app/{icon,apple-icon}[N].{ext} or favicon.ico
+    // into its own <link rel="icon">, which competes with metadata.icons.
+    const appDirIcons = readdirSync(join(ROOT, "src", "app")).filter((f) =>
+      /^(icon|apple-icon)\d*\.|^favicon\.ico$/.test(f),
+    );
+    expect(appDirIcons).toEqual([]);
     expect(existsSync(join(ROOT, "public", "favicon-dark.svg"))).toBe(false);
     expect(existsSync(join(ROOT, "public", "icons", "icon.svg"))).toBe(false);
   });
@@ -81,7 +77,7 @@ describe("favicon parity with mukoko-news (source of truth)", () => {
     ]) {
       expect(layout).toContain(`url: "${url}"`);
     }
-    expect(layout).not.toMatch(/<link\s+rel="(icon|apple-touch-icon)"/);
+    expect(layout).not.toMatch(/<link\b[^>]*\brel=["'][^"']*icon/);
   });
 
   it("manifest icons point only at news-set files", () => {
