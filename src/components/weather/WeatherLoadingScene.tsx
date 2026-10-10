@@ -38,6 +38,9 @@ const KNOWN_ROUTES = new Set([
   "status",
   "embed",
   "display",
+  "offline",
+  "profile",
+  "developers",
 ]);
 
 /**
