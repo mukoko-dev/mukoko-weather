@@ -121,6 +121,12 @@ proxied by a `vercel.json` rewrite (`/api/py/*` → `api/py/index.py`). Only fou
 routes remain in TypeScript: OG image generation, DB init, the public embed API,
 and developer API-key management.
 
+**Missing files 404.** A top-level path containing a dot that isn't a real
+public file or static route, such as a deleted `/favicon-48.png`, is rewritten
+(`afterFiles`, pattern in `src/lib/missing-asset.ts`) to `/api/missing-asset`,
+which returns a plain 404. Without it the request would fall through to the
+`[location]` page and get a 200 "Location not found".
+
 Climate normals (1991–2020, ERA5 via Open-Meteo) are served at `GET /api/py/normals`, with one cached table per 0.25° grid cell in `weather.climate_normals`.
 **Air quality map** — `GET /api/py/airquality/grid` returns current US AQI on a 7×7 grid (±40 km) from one batched Open-Meteo request, cached 30 min; the `AirQualityMapCard` paints it over a non-interactive MapLibre map.
 `GET /api/py/enso` returns the latest El Niño / La Niña phase from NOAA CPC's Oceanic Niño Index (12 h in-memory cache; `available: false` when NOAA is unreachable).
