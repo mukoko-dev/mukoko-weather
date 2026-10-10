@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 // Repo root, resolved from this file so the test works from any cwd.
 const ROOT = resolve(__dirname, "../..");
 
-/** sha256 of each file in mukoko-news `public/` (mukoko-news v4.82.0). */
+/** sha256 of each icon file in mukoko-news `public/` (the 9-file set). */
 const NEWS_ICON_SHA256: Record<string, string> = {
   "favicon.ico":
     "5c84a6138d3b6ef0dda733e90c85ba1a432ce3d5ac0de4b9d05eaf7cebb2e116",
@@ -29,10 +29,6 @@ const NEWS_ICON_SHA256: Record<string, string> = {
     "bf47306ede458717f2aced0f2e8100d31416a4a52d0edcaa7904d30b40c6aa18",
   "favicon-32.png":
     "f7f0e44db9fb572d22178650fbcc4f2c07b3dfdea0fc600f3ed7684112b4a07e",
-  "favicon-48.png":
-    "73de9583fbdbf5bd8473cab7bf11fc18ff9db3c52e995abbbc6cf167b7d2cb16",
-  "favicon-180.png":
-    "45913f352bb9814731d8b7673362e772b333b77e6dee8503d92ed885374e1b8a",
   "apple-touch-icon.png":
     "45913f352bb9814731d8b7673362e772b333b77e6dee8503d92ed885374e1b8a",
   "icon-192.png":
@@ -62,8 +58,16 @@ describe("favicon parity with mukoko-news (source of truth)", () => {
       /^(icon|apple-icon)\d*\.|^favicon\.ico$/.test(f),
     );
     expect(appDirIcons).toEqual([]);
-    expect(existsSync(join(ROOT, "public", "favicon-dark.svg"))).toBe(false);
-    expect(existsSync(join(ROOT, "public", "icons", "icon.svg"))).toBe(false);
+    // Deleted on purpose (owner, 2026-10-10). Re-adding any of these brings
+    // back an icon source outside the news set.
+    for (const f of [
+      "favicon-dark.svg",
+      "favicon-48.png",
+      "favicon-180.png",
+      "icons",
+    ]) {
+      expect(existsSync(join(ROOT, "public", f)), `public/${f}`).toBe(false);
+    }
   });
 
   it("layout metadata declares the news icon set and no hand-written icon links", () => {
