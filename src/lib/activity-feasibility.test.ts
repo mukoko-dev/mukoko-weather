@@ -129,7 +129,7 @@ describe("hourInsights", () => {
     const ins = hourInsights(hourly, 5);
     expect(ins.windSpeed).toBe(22);
     expect(ins.windGust).toBe(33);
-    expect(ins.visibility).toBe(20000);
+    expect(ins.visibility).toBe(20); // metres → km (rule thresholds are km)
     expect(ins.uvHealthConcern).toBe(5);
     expect(ins.dewPoint).toBeCloseTo(dewPointFromTempHumidity(25, 50), 5);
   });

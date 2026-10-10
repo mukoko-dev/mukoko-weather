@@ -402,6 +402,10 @@ class TestSubmitReport:
         assert result["verified"] is True
         assert result["expiresIn"] == SEVERITY_TTL["mild"]
         assert result["id"] == "507f1f77bcf86cd799439011"
+        # The snapshot is read by the place's coordinate cell, not slug (#252).
+        assert mock_cache.return_value.find_one.call_args[0][0] == {
+            "locationSlug": "cell:-17.85_31.05"
+        }
 
     @pytest.mark.asyncio
     @patch("py._reports.weather_cache_collection")

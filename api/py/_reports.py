@@ -26,6 +26,7 @@ from ._db import (
     weather_cache_collection,
 )
 from ._ai_prompts import get_ai_prompt
+from ._weather_cache_key import weather_cache_key_for
 from ._ai_gateway import call_ai, first_text
 from ._places_resolver import find_location
 
@@ -122,10 +123,11 @@ async def submit_report(body: SubmitReportRequest, request: Request):
     # Get weather snapshot for cross-validation
     weather_snapshot = {}
     try:
+        key = weather_cache_key_for(loc)
         cached = weather_cache_collection().find_one(
-            {"locationSlug": body.locationSlug},
+            {"locationSlug": key},
             {"_id": 0, "data.current": 1},
-        )
+        ) if key else None
         if cached and cached.get("data", {}).get("current"):
             curr = cached["data"]["current"]
             weather_snapshot = {

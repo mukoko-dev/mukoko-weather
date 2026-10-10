@@ -54,3 +54,53 @@ export async function fetchHomeWeather(
   }
   return { weather: await fetchWeather(lat, lon), usingFallback: false };
 }
+
+/** How long the dashboard waits on the model-baseline / comparison fetch. */
+export const MODEL_WEATHER_TIMEOUT_MS = 10_000;
+
+/**
+ * Forecast for a user-selected model plus the comparison series (issue #246).
+ *
+ * Goes through our own `/api/py/weather` — the canonical, cached chain — with
+ * `?model=` (the `selectedForecastModel` preference; `best_match` means the
+ * server's Africa-weighted blend) and `?models=` (comparison series). Only
+ * when our API is unreachable does it fall back to a direct Open-Meteo call,
+ * which still yields comparison series but cannot serve as a model baseline.
+ *
+ * `baseline` is set only when a specific model was picked AND our API served
+ * it, so the caller can swap the dashboard onto that model.
+ */
+export async function fetchModelWeather(
+  lat: number,
+  lon: number,
+  model: string,
+  models: string[],
+): Promise<{ data: WeatherData; baseline: WeatherData | null }> {
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lon: String(lon),
+    models: models.filter((m) => m && m !== "best_match").join(","),
+  });
+  if (model && model !== "best_match") params.set("model", model);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MODEL_WEATHER_TIMEOUT_MS);
+  try {
+    const res = await fetch(`/api/py/weather?${params}`, {
+      signal: controller.signal,
+    });
+    if (res.ok) {
+      const data: unknown = await res.json();
+      if (isRenderableWeather(data)) {
+        const provider = res.headers.get("X-Weather-Provider") ?? "";
+        const servedModel = provider === `open-meteo:${model}`;
+        return { data, baseline: servedModel ? data : null };
+      }
+    }
+  } catch {
+    // Unreachable / timed out — fall through to the direct provider.
+  } finally {
+    clearTimeout(timer);
+  }
+  return { data: await fetchWeather(lat, lon, models), baseline: null };
+}

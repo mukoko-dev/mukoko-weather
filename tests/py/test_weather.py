@@ -33,6 +33,37 @@ from py._weather import (
 )
 
 
+from py._weather_cache_key import weather_cache_key
+
+
+def _blend_ok(current=None, **extra):
+    """A `_fetch_blend` result: (payload, raw, weights_used)."""
+    payload = {
+        "current": current or {"temperature_2m": 24.0},
+        "hourly": {},
+        "daily": {},
+        "insights": {"dewPoint": 12.0},
+        "models": [{"model": "ecmwf_ifs", "temperature_2m": [24.0], "precipitation": [0]}],
+        "models_available": ["ecmwf_ifs"],
+        "models_time": ["t0"],
+    }
+    payload.update(extra)
+    return payload, {"hourly": {}}, {"ecmwf_ifs": 0.6, "gfs_seamless": 0.4}
+
+
+@pytest.fixture(autouse=True)
+def _isolate_upstreams(monkeypatch):
+    """No test in this file reaches Open-Meteo or Tomorrow.io by accident.
+
+    The blend / single-model fetchers return None and enrichment reports
+    "none" unless a test patches them explicitly.
+    """
+    monkeypatch.setattr("py._weather._fetch_blend", lambda *a, **k: None)
+    monkeypatch.setattr("py._weather._fetch_single_model", lambda *a, **k: None)
+    monkeypatch.setattr("py._weather.enrichment.enrich", lambda *a, **k: (None, "none"))
+    monkeypatch.setattr("py._weather._fetch_open_meteo_extras", lambda *a, **k: None)
+
+
 # ---------------------------------------------------------------------------
 # _tomorrow_code_to_wmo
 # ---------------------------------------------------------------------------
@@ -568,7 +599,8 @@ class TestHistoryKeying:
         return [
             patch("py._weather._get_cached_weather", return_value=None),
             patch("py._weather._set_cached_weather"),
-            patch("py._weather.tomorrow_breaker", MagicMock(is_allowed=False)),
+            # Tomorrow.io is enrichment-only now (#246); the module-level
+            # autouse fixture already stubs enrichment out.
             patch("py._weather.open_meteo_breaker", MagicMock(is_allowed=True)),
             patch(
                 "py._weather._fetch_open_meteo",
@@ -604,9 +636,9 @@ class TestHistoryKeying:
         assert record.call_args[0][0] == "harare"
 
     @pytest.mark.asyncio
-    async def test_hint_keys_history_but_cache_stays_on_nearest(self):
-        """Nearby page slugs must keep sharing one cache row (Tomorrow.io
-        free-tier quota); only the history doc takes the hint."""
+    async def test_hint_keys_history_but_cache_uses_coordinate_cell(self):
+        """The cache row is keyed by the coordinate's grid cell (#252); only
+        the history doc takes the hint."""
         record = MagicMock()
         set_cache = MagicMock()
         ps = self._fresh_fetch_patches()
@@ -623,7 +655,7 @@ class TestHistoryKeying:
         finally:
             for p in ps:
                 p.stop()
-        assert set_cache.call_args[0][0] == "harare"
+        assert set_cache.call_args[0][0] == "cell:-17.80_31.05"
         assert record.call_args[0][0] == "avondale--ksy4dd7"
 
     @pytest.mark.asyncio
@@ -725,97 +757,148 @@ class TestGetWeatherEndpoint:
     @pytest.mark.asyncio
     @patch("py._weather._record_weather_history")
     @patch("py._weather._set_cached_weather")
-    @patch("py._weather._fetch_tomorrow")
-    @patch("py._weather.get_api_key")
-    @patch("py._weather.tomorrow_breaker")
+    @patch("py._weather._fetch_blend")
+    @patch("py._weather.open_meteo_breaker")
     @patch("py._weather._get_cached_weather")
     @patch("py._weather._find_nearest_location")
-    async def test_tomorrow_success(self, mock_nearest, mock_cache, mock_breaker, mock_key, mock_fetch, mock_set, mock_record):
-        """When cache misses and Tomorrow.io succeeds."""
-        mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
+    async def test_blend_is_the_baseline(self, mock_nearest, mock_cache, mock_breaker, mock_blend, mock_set, mock_record):
+        """Cache miss → the Africa-weighted global-model blend serves the baseline."""
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1200, "lat": -17.83, "lon": 31.05}
         mock_cache.return_value = None
         mock_breaker.is_allowed = True
-        mock_key.return_value = "fake-key"
-        mock_fetch.return_value = {"current": {"temperature_2m": 26}, "hourly": {}, "daily": {}, "insights": None}
+        mock_blend.return_value = _blend_ok()
 
         response = await get_weather(-17.83, 31.05)
         assert response.headers.get("x-cache") == "MISS"
-        assert response.headers.get("x-weather-provider") == "tomorrow"
+        assert response.headers.get("x-weather-provider") == "open-meteo:blend"
+        assert response.headers.get("x-weather-blend").startswith("southern-africa; ecmwf_ifs=0.60")
+        assert response.headers.get("x-enrichment") == "none"
         mock_breaker.record_success.assert_called_once()
+        # Canonical single writer: cached + history recorded.
+        # Cache rows are keyed by the coordinate grid cell (#252).
+        assert mock_set.call_args.args[0] == weather_cache_key(-17.83, 31.05)
+        assert mock_set.call_args.args[4] == "open-meteo:blend"
+        mock_record.assert_called_once()
 
     @pytest.mark.asyncio
     @patch("py._weather._record_weather_history")
     @patch("py._weather._set_cached_weather")
     @patch("py._weather._fetch_open_meteo")
+    @patch("py._weather._fetch_blend")
     @patch("py._weather.open_meteo_breaker")
-    @patch("py._weather._fetch_tomorrow")
-    @patch("py._weather.get_api_key")
-    @patch("py._weather.tomorrow_breaker")
     @patch("py._weather._get_cached_weather")
     @patch("py._weather._find_nearest_location")
-    async def test_open_meteo_fallback(self, mock_nearest, mock_cache, mock_tmrw_breaker, mock_key,
-                                        mock_fetch_tmrw, mock_om_breaker, mock_fetch_om, mock_set, mock_record):
-        """When Tomorrow.io fails, falls back to Open-Meteo."""
+    async def test_best_match_is_the_alternate(self, mock_nearest, mock_cache, mock_breaker, mock_blend,
+                                               mock_fetch_om, mock_set, mock_record):
+        """Blend fails → Open-Meteo best_match single request."""
         mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
         mock_cache.return_value = None
-        mock_tmrw_breaker.is_allowed = True
-        mock_key.return_value = "fake-key"
-        mock_fetch_tmrw.return_value = None  # Tomorrow fails
-        mock_om_breaker.is_allowed = True
+        mock_breaker.is_allowed = True
+        mock_blend.return_value = None
         mock_fetch_om.return_value = {"current": {"temperature_2m": 24}, "hourly": {}, "daily": {}, "insights": None}
 
         response = await get_weather(-17.83, 31.05)
-        assert response.headers.get("x-weather-provider") == "open-meteo"
+        assert response.headers.get("x-weather-provider") == "open-meteo:best_match"
+        assert response.headers.get("x-weather-blend") is None
+        # "Too few members" is not an upstream outage — it must not count
+        # against the shared breaker (that would open it for everyone).
+        mock_breaker.record_failure.assert_not_called()
 
     @pytest.mark.asyncio
     @patch("py._weather._record_weather_history")
     @patch("py._weather._set_cached_weather")
     @patch("py._weather._fetch_open_meteo")
+    @patch("py._weather._fetch_blend")
     @patch("py._weather.open_meteo_breaker")
-    @patch("py._weather._fetch_tomorrow")
-    @patch("py._weather.get_api_key")
-    @patch("py._weather.tomorrow_breaker")
     @patch("py._weather._get_cached_weather")
     @patch("py._weather._find_nearest_location")
-    async def test_tomorrow_empty_current_falls_back_to_open_meteo(
-        self, mock_nearest, mock_cache, mock_tmrw_breaker, mock_key,
-        mock_fetch_tmrw, mock_om_breaker, mock_fetch_om, mock_set, mock_record,
-    ):
-        """_normalize_tomorrow always returns a non-empty dict (with
-        hourly/daily/insights keys) even when Tomorrow.io's `timelines.hourly`
-        came back empty — `current` itself is `{}` in that case. A plain
-        truthiness check on the returned dict would never fall through to
-        Open-Meteo; this must be treated as a Tomorrow.io failure instead."""
+    async def test_upstream_http_error_counts_against_breaker(self, mock_nearest, mock_cache, mock_breaker,
+                                                              mock_blend, mock_fetch_om, mock_set, mock_record):
+        from py._weather import OpenMeteoUpstreamError
+
         mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
         mock_cache.return_value = None
-        mock_tmrw_breaker.is_allowed = True
-        mock_key.return_value = "fake-key"
-        mock_fetch_tmrw.return_value = {"current": {}, "hourly": {}, "daily": {}, "insights": None}
-        mock_om_breaker.is_allowed = True
+        mock_breaker.is_allowed = True
+        mock_blend.side_effect = OpenMeteoUpstreamError("HTTP 503")
+        mock_fetch_om.return_value = {"current": {"temperature_2m": 24}, "hourly": {}, "daily": {}}
+
+        await get_weather(-17.83, 31.05)
+        mock_breaker.record_failure.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._fetch_open_meteo")
+    @patch("py._weather._fetch_blend")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather._find_nearest_location")
+    async def test_blend_exception_falls_through(self, mock_nearest, mock_cache, mock_breaker, mock_blend,
+                                                 mock_fetch_om, mock_set, mock_record):
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
+        mock_cache.return_value = None
+        mock_breaker.is_allowed = True
+        mock_blend.side_effect = RuntimeError("boom")
         mock_fetch_om.return_value = {"current": {"temperature_2m": 24}, "hourly": {}, "daily": {}, "insights": None}
 
         response = await get_weather(-17.83, 31.05)
-        assert response.headers.get("x-weather-provider") == "open-meteo"
-        mock_tmrw_breaker.record_failure.assert_called_once()
-        mock_tmrw_breaker.record_success.assert_not_called()
+        assert response.headers.get("x-weather-provider") == "open-meteo:best_match"
+
+    @pytest.mark.asyncio
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._fetch_single_model")
+    @patch("py._weather._fetch_blend")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather._find_nearest_location")
+    async def test_selected_model_is_the_baseline(self, mock_nearest, mock_cache, mock_breaker, mock_blend,
+                                                  mock_single, mock_set, mock_record):
+        """?model=<id> (selectedForecastModel) → that model is the baseline, own cache row, no history."""
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1200, "lat": -17.83, "lon": 31.05}
+        mock_cache.return_value = None
+        mock_breaker.is_allowed = True
+        mock_single.return_value = {"current": {"temperature_2m": 22}, "hourly": {}, "daily": {}, "insights": None}
+
+        response = await get_weather(-17.83, 31.05, model="gfs_seamless")
+        assert response.headers.get("x-weather-provider") == "open-meteo:gfs_seamless"
+        mock_blend.assert_not_called()
+        cell = weather_cache_key(-17.83, 31.05)
+        mock_cache.assert_called_once_with(f"{cell}::gfs_seamless")
+        assert mock_set.call_args.args[0] == f"{cell}::gfs_seamless"
+        mock_record.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("py._weather._fetch_single_model")
+    @patch("py._weather._fetch_blend")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather._find_nearest_location")
+    async def test_legacy_model_alias_and_best_match_mean_blend(self, mock_nearest, mock_cache, mock_breaker,
+                                                                mock_blend, mock_single):
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
+        mock_cache.return_value = None
+        mock_breaker.is_allowed = True
+        mock_blend.return_value = _blend_ok()
+        mock_single.return_value = {"current": {"temperature_2m": 22}, "hourly": {}, "daily": {}}
+
+        r = await get_weather(-17.83, 31.05, model="best_match")
+        assert r.headers.get("x-weather-provider") == "open-meteo:blend"
+        r = await get_weather(-17.83, 31.05, model="not-a-model")
+        assert r.headers.get("x-weather-provider") == "open-meteo:blend"
+        r = await get_weather(-17.83, 31.05, model="ecmwf_ifs04")  # dead upstream id
+        assert r.headers.get("x-weather-provider") == "open-meteo:ecmwf_ifs"
 
     @pytest.mark.asyncio
     @patch("py._weather._create_fallback_weather")
     @patch("py._weather._fetch_open_meteo")
     @patch("py._weather.open_meteo_breaker")
-    @patch("py._weather._fetch_tomorrow")
-    @patch("py._weather.get_api_key")
-    @patch("py._weather.tomorrow_breaker")
     @patch("py._weather._get_cached_weather")
     @patch("py._weather._find_nearest_location")
-    async def test_seasonal_fallback(self, mock_nearest, mock_cache, mock_tmrw_breaker, mock_key,
-                                      mock_fetch_tmrw, mock_om_breaker, mock_fetch_om, mock_fallback):
-        """When all providers fail, use seasonal estimates."""
+    async def test_seasonal_fallback(self, mock_nearest, mock_cache, mock_om_breaker, mock_fetch_om, mock_fallback):
+        """When blend + best_match fail, use seasonal estimates (no enrichment attempted)."""
         mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
         mock_cache.return_value = None
-        mock_tmrw_breaker.is_allowed = True
-        mock_key.return_value = "fake-key"
-        mock_fetch_tmrw.return_value = None
         mock_om_breaker.is_allowed = True
         mock_fetch_om.return_value = None
         mock_fallback.return_value = {
@@ -827,43 +910,37 @@ class TestGetWeatherEndpoint:
 
         response = await get_weather(-17.83, 31.05)
         assert response.headers.get("x-weather-provider") == "fallback"
+        assert response.headers.get("x-enrichment") == "none"
         mock_fallback.assert_called_once()
 
     @pytest.mark.asyncio
     @patch("py._weather._create_fallback_weather")
     @patch("py._weather._fetch_open_meteo")
+    @patch("py._weather._fetch_blend")
     @patch("py._weather.open_meteo_breaker")
-    @patch("py._weather.get_api_key")
-    @patch("py._weather.tomorrow_breaker")
     @patch("py._weather._get_cached_weather")
     @patch("py._weather._find_nearest_location")
-    async def test_circuit_breaker_integration_tomorrow_closed(self, mock_nearest, mock_cache,
-                                                                mock_tmrw_breaker, mock_key,
-                                                                mock_om_breaker, mock_fetch_om, mock_fallback):
-        """When Tomorrow.io circuit is open, skip directly to Open-Meteo."""
+    async def test_open_breaker_skips_straight_to_seasonal(self, mock_nearest, mock_cache, mock_om_breaker,
+                                                           mock_blend, mock_fetch_om, mock_fallback):
         mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
         mock_cache.return_value = None
-        mock_tmrw_breaker.is_allowed = False  # Circuit open
-        mock_om_breaker.is_allowed = True
-        mock_fetch_om.return_value = {"current": {"temperature_2m": 24}, "hourly": {}, "daily": {}, "insights": None}
+        mock_om_breaker.is_allowed = False
+        mock_fallback.return_value = {"current": {"temperature_2m": 20}, "hourly": {}, "daily": {}}
 
         response = await get_weather(-17.83, 31.05)
-        assert response.headers.get("x-weather-provider") == "open-meteo"
+        assert response.headers.get("x-weather-provider") == "fallback"
+        mock_blend.assert_not_called()
+        mock_fetch_om.assert_not_called()
 
     @pytest.mark.asyncio
     @patch("py._weather._record_weather_history")
     @patch("py._weather._set_cached_weather")
-    @patch("py._weather._fetch_tomorrow")
-    @patch("py._weather.get_api_key")
-    @patch("py._weather.tomorrow_breaker")
     @patch("py._weather._get_cached_weather")
     @patch("py._weather._find_nearest_location")
-    async def test_does_not_cache_fallback_data(self, mock_nearest, mock_cache, mock_tmrw_breaker,
-                                                 mock_key, mock_fetch_tmrw, mock_set, mock_record):
+    async def test_does_not_cache_fallback_data(self, mock_nearest, mock_cache, mock_set, mock_record):
         """Seasonal fallback data should not be cached."""
         mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
         mock_cache.return_value = None
-        mock_tmrw_breaker.is_allowed = False
 
         with patch("py._weather.open_meteo_breaker") as mock_om:
             mock_om.is_allowed = False
@@ -880,13 +957,148 @@ class TestGetWeatherEndpoint:
         mock_nearest.side_effect = Exception("DB down")
         mock_cache.return_value = None
 
-        with patch("py._weather.tomorrow_breaker") as mock_tb:
-            mock_tb.is_allowed = False
-            with patch("py._weather.open_meteo_breaker") as mock_ob:
-                mock_ob.is_allowed = False
+        with patch("py._weather.open_meteo_breaker") as mock_ob:
+            mock_ob.is_allowed = False
 
-                response = await get_weather(-17.83, 31.05)
-                assert response.headers.get("x-weather-provider") == "fallback"
+            response = await get_weather(-17.83, 31.05)
+            assert response.headers.get("x-weather-provider") == "fallback"
+
+
+class TestEnrichmentInEndpoint:
+    """Tomorrow.io only enriches insights and never blocks the baseline."""
+
+    @pytest.mark.asyncio
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._fetch_blend")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather._find_nearest_location")
+    async def test_enrichment_merges_onto_insights_not_baseline(self, mock_nearest, mock_cache, mock_breaker,
+                                                                mock_blend, mock_set, mock_record):
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1200, "lat": -17.83, "lon": 31.05}
+        mock_cache.return_value = None
+        mock_breaker.is_allowed = True
+        mock_blend.return_value = _blend_ok(insights={"dewPoint": 12.0, "thunderstormProbability": 0})
+        with patch("py._weather.enrichment.enrich", return_value=({"thunderstormProbability": 55}, "tomorrow")):
+            response = await get_weather(-17.83, 31.05)
+        import json
+        body = json.loads(response.body)
+        assert response.headers.get("x-enrichment") == "tomorrow"
+        assert body["insights"]["thunderstormProbability"] == 55
+        assert body["insights"]["dewPoint"] == 12.0
+        assert body["current"]["temperature_2m"] == 24.0
+        # The cached row carries the enrichment too: the TS server render reads
+        # weather_cache directly (getWeatherForLocation), not this response.
+        cached_payload = mock_set.call_args.args[3]
+        assert cached_payload["insights"]["thunderstormProbability"] == 55
+        assert cached_payload["insights"]["dewPoint"] == 12.0
+        # History gets the merged insights.
+        assert mock_record.call_args.args[1]["insights"]["thunderstormProbability"] == 55
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", ["skipped-budget", "skipped-error"])
+    @patch("py._weather._record_weather_history")
+    @patch("py._weather._set_cached_weather")
+    @patch("py._weather._fetch_blend")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather._find_nearest_location")
+    async def test_enrichment_skip_serves_baseline(self, mock_nearest, mock_cache, mock_breaker, mock_blend,
+                                                   mock_set, mock_record, status):
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
+        mock_cache.return_value = None
+        mock_breaker.is_allowed = True
+        mock_blend.return_value = _blend_ok()
+        with patch("py._weather.enrichment.enrich", return_value=(None, status)):
+            response = await get_weather(-17.83, 31.05)
+        assert response.status_code == 200
+        assert response.headers.get("x-enrichment") == status
+        assert response.headers.get("x-weather-provider") == "open-meteo:blend"
+
+    @pytest.mark.asyncio
+    @patch("py._weather._fetch_blend")
+    @patch("py._weather.open_meteo_breaker")
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather._find_nearest_location")
+    async def test_enrichment_crash_never_fails_response(self, mock_nearest, mock_cache, mock_breaker, mock_blend):
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
+        mock_cache.return_value = None
+        mock_breaker.is_allowed = True
+        mock_blend.return_value = _blend_ok()
+        with patch("py._weather.enrichment.enrich", side_effect=RuntimeError("tomorrow down")):
+            response = await get_weather(-17.83, 31.05)
+        assert response.status_code == 200
+        assert response.headers.get("x-enrichment") == "skipped-error"
+
+    @pytest.mark.asyncio
+    @patch("py._weather._get_cached_weather")
+    @patch("py._weather._find_nearest_location")
+    async def test_priority_for_seed_slug_not_smart_slug(self, mock_nearest, mock_cache):
+        mock_cache.return_value = {"data": {"current": {"temperature_2m": 20}}, "provider": "open-meteo:blend"}
+        calls = []
+
+        def fake_enrich(slug, lat, lon, priority=False):
+            calls.append(priority)
+            return None, "none"
+
+        with patch("py._weather.enrichment.enrich", side_effect=fake_enrich):
+            mock_nearest.return_value = {"slug": "harare", "elevation": 1200, "lat": -17.83, "lon": 31.05}
+            await get_weather(-17.83, 31.05)
+            mock_nearest.return_value = {"slug": "west-paddock--ksy4dd7", "elevation": 1200,
+                                         "lat": -17.83, "lon": 31.05}
+            await get_weather(-17.83, 31.05)
+            mock_nearest.return_value = None
+            await get_weather(-17.83, 31.05)
+            # The cache-key lookup searches 20,000 km: a seed slug far away
+            # (Harare for a point in the Atlantic) is NOT priority.
+            mock_nearest.return_value = {"slug": "harare", "elevation": 1200, "lat": -17.83, "lon": 31.05}
+            await get_weather(-30.0, -10.0)
+        assert calls == [True, False, False, False]
+
+
+class TestFreshMinutely:
+    def test_drops_past_steps_in_location_time(self):
+        from py._weather import _fresh_minutely
+
+        now_local = datetime.now(timezone.utc) + timedelta(seconds=7200)
+        q = now_local.replace(minute=(now_local.minute // 15) * 15, second=0, microsecond=0)
+        times = [(q + timedelta(minutes=15 * i)).strftime("%Y-%m-%dT%H:%M") for i in range(-2, 6)]
+        out = _fresh_minutely({"time": times, "precipitation": list(range(8))}, 7200)
+        assert out["time"] == times[2:6]
+        assert out["precipitation"] == [2, 3, 4, 5]
+
+    def test_all_past_is_none(self):
+        from py._weather import _fresh_minutely
+
+        assert _fresh_minutely({"time": ["2000-01-01T00:00"], "precipitation": [1]}, 0) is None
+        assert _fresh_minutely(None, 0) is None
+
+
+class TestWithinKm:
+    def test_distance(self):
+        from py._weather import _within_km
+
+        assert _within_km({"lat": -17.83, "lon": 31.05}, -17.9, 31.1, 25)
+        assert not _within_km({"lat": -17.83, "lon": 31.05}, -20.15, 28.58, 25)  # Bulawayo
+        assert not _within_km({}, 0, 0, 25)
+
+
+class TestIsPriority:
+    def test_header_requires_internal_secret(self, monkeypatch):
+        from py._weather import _is_priority
+
+        req = MagicMock()
+        req.headers = {"x-mukoko-priority": "1", "x-mukoko-internal": "s3cret"}
+        monkeypatch.delenv("MUKOKO_INTERNAL_SECRET", raising=False)
+        assert _is_priority(req, "x--abc", False) is False
+        monkeypatch.setenv("MUKOKO_INTERNAL_SECRET", "s3cret")
+        assert _is_priority(req, "x--abc", False) is True
+        req.headers = {}
+        assert _is_priority(req, "harare", True) is True
+        assert _is_priority(req, "harare", False) is False
+        req.headers = {"x-mukoko-priority": "1", "x-mukoko-internal": "wrong"}
+        assert _is_priority(req, "x--abc", False) is False
 
 
 # ---------------------------------------------------------------------------
@@ -1089,17 +1301,15 @@ class TestStationKitEndpointBlending:
     @pytest.mark.asyncio
     @patch("py._weather._record_weather_history")
     @patch("py._weather._set_cached_weather")
-    @patch("py._weather._fetch_tomorrow")
-    @patch("py._weather.get_api_key")
-    @patch("py._weather.tomorrow_breaker")
+    @patch("py._weather._fetch_blend")
+    @patch("py._weather.open_meteo_breaker")
     @patch("py._weather._get_cached_weather")
     @patch("py._weather.nearest_station_observation")
     @patch("py._weather._find_nearest_location")
-    async def test_station_hit_blends_into_fresh_tomorrow_data(
-        self, mock_nearest, mock_station, mock_cache, mock_breaker, mock_key,
-        mock_fetch, mock_set, mock_record,
+    async def test_station_hit_blends_into_fresh_model_data(
+        self, mock_nearest, mock_station, mock_cache, mock_breaker, mock_blend, mock_set, mock_record,
     ):
-        """Station hit + Tomorrow.io fetch: hourly/daily kept, current overlaid."""
+        """Station hit + fresh blend: hourly/daily kept, current overlaid."""
         mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
         mock_station.return_value = {
             "observedAt": datetime(2026, 6, 29, 14, 0, tzinfo=timezone.utc),
@@ -1107,95 +1317,76 @@ class TestStationKitEndpointBlending:
         }
         mock_cache.return_value = None
         mock_breaker.is_allowed = True
-        mock_key.return_value = "fake-tomorrow-key"
-        mock_fetch.return_value = {
-            "current": {"temperature_2m": 24.0},
-            "hourly": {"time": ["t1"], "temperature_2m": [24.0]},
-            "daily": {"time": ["d1"], "temperature_2m_max": [26.0]},
-            "insights": None,
-        }
+        mock_blend.return_value = _blend_ok(current={"temperature_2m": 24.0, "is_day": 1})
 
         response = await get_weather(-17.83, 31.05)
-
+        import json
+        body = json.loads(response.body)
         assert response.headers.get("x-cache") == "MISS"
-        assert response.headers.get("x-weather-provider") == "tomorrow"
+        assert response.headers.get("x-weather-provider") == "open-meteo:blend"
         assert response.headers.get("x-current-source") == "stationkit"
+        assert body["current"]["temperature_2m"] == 19.5
+        assert body["current"]["is_day"] == 1
 
     @pytest.mark.asyncio
     @patch("py._weather._record_weather_history")
     @patch("py._weather._set_cached_weather")
-    @patch("py._weather._fetch_tomorrow")
-    @patch("py._weather.get_api_key")
-    @patch("py._weather.tomorrow_breaker")
+    @patch("py._weather._fetch_blend")
+    @patch("py._weather.open_meteo_breaker")
     @patch("py._weather._get_cached_weather")
     @patch("py._weather.nearest_station_observation")
     @patch("py._weather._find_nearest_location")
     async def test_no_station_uses_provider_for_current_source(
-        self, mock_nearest, mock_station, mock_cache, mock_breaker, mock_key,
-        mock_fetch, mock_set, mock_record,
+        self, mock_nearest, mock_station, mock_cache, mock_breaker, mock_blend, mock_set, mock_record,
     ):
-        """No station within range → X-Current-Source matches the provider that filled `current`."""
+        """No station within range → X-Current-Source matches the baseline provider."""
         mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
         mock_station.return_value = None
         mock_cache.return_value = None
         mock_breaker.is_allowed = True
-        mock_key.return_value = "fake-tomorrow-key"
-        mock_fetch.return_value = {"current": {"temperature_2m": 24.0}, "hourly": {}, "daily": {}, "insights": None}
+        mock_blend.return_value = _blend_ok()
 
         response = await get_weather(-17.83, 31.05)
 
-        assert response.headers.get("x-current-source") == "tomorrow"
-        assert response.headers.get("x-weather-provider") == "tomorrow"
+        assert response.headers.get("x-current-source") == "open-meteo:blend"
+        assert response.headers.get("x-weather-provider") == "open-meteo:blend"
 
     @pytest.mark.asyncio
     @patch("py._weather._record_weather_history")
     @patch("py._weather._set_cached_weather")
     @patch("py._weather._fetch_open_meteo")
     @patch("py._weather.open_meteo_breaker")
-    @patch("py._weather._fetch_tomorrow")
-    @patch("py._weather.get_api_key")
-    @patch("py._weather.tomorrow_breaker")
     @patch("py._weather._get_cached_weather")
     @patch("py._weather.nearest_station_observation")
     @patch("py._weather._find_nearest_location")
-    async def test_open_meteo_fallback_sets_current_source_open_meteo(
-        self, mock_nearest, mock_station, mock_cache, mock_tmrw_breaker, mock_key,
-        mock_fetch_tmrw, mock_om_breaker, mock_fetch_om, mock_set, mock_record,
+    async def test_best_match_sets_current_source(
+        self, mock_nearest, mock_station, mock_cache, mock_om_breaker, mock_fetch_om, mock_set, mock_record,
     ):
-        """No station, Tomorrow.io fails, Open-Meteo wins → X-Current-Source: open-meteo."""
+        """No station, blend fails, best_match wins → X-Current-Source: open-meteo:best_match."""
         mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
         mock_station.return_value = None
         mock_cache.return_value = None
-        mock_tmrw_breaker.is_allowed = True
-        mock_key.return_value = "fake-tomorrow-key"
-        mock_fetch_tmrw.return_value = None
         mock_om_breaker.is_allowed = True
         mock_fetch_om.return_value = {"current": {"temperature_2m": 23.0}, "hourly": {}, "daily": {}, "insights": None}
 
         response = await get_weather(-17.83, 31.05)
 
-        assert response.headers.get("x-current-source") == "open-meteo"
-        assert response.headers.get("x-weather-provider") == "open-meteo"
+        assert response.headers.get("x-current-source") == "open-meteo:best_match"
+        assert response.headers.get("x-weather-provider") == "open-meteo:best_match"
 
     @pytest.mark.asyncio
     @patch("py._weather._create_fallback_weather")
-    @patch("py._weather._fetch_open_meteo")
     @patch("py._weather.open_meteo_breaker")
-    @patch("py._weather._fetch_tomorrow")
-    @patch("py._weather.get_api_key")
-    @patch("py._weather.tomorrow_breaker")
     @patch("py._weather._get_cached_weather")
     @patch("py._weather.nearest_station_observation")
     @patch("py._weather._find_nearest_location")
     async def test_fallback_sets_current_source_fallback(
-        self, mock_nearest, mock_station, mock_cache, mock_tmrw_breaker, mock_key,
-        mock_fetch_tmrw, mock_om_breaker, mock_fetch_om, mock_fallback,
+        self, mock_nearest, mock_station, mock_cache, mock_om_breaker, mock_fallback,
     ):
         """No station and every provider down → X-Current-Source: fallback."""
         mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
         mock_station.return_value = None
         mock_cache.return_value = None
-        mock_tmrw_breaker.is_allowed = False
         mock_om_breaker.is_allowed = False
         mock_fallback.return_value = {
             "current": {"temperature_2m": 18},
@@ -1210,26 +1401,20 @@ class TestStationKitEndpointBlending:
 
     @pytest.mark.asyncio
     @patch("py._weather._create_fallback_weather")
-    @patch("py._weather._fetch_open_meteo")
     @patch("py._weather.open_meteo_breaker")
-    @patch("py._weather._fetch_tomorrow")
-    @patch("py._weather.get_api_key")
-    @patch("py._weather.tomorrow_breaker")
     @patch("py._weather._get_cached_weather")
     @patch("py._weather.nearest_station_observation")
     @patch("py._weather._find_nearest_location")
     async def test_station_overrides_fallback_current(
-        self, mock_nearest, mock_station, mock_cache, mock_tmrw_breaker, mock_key,
-        mock_fetch_tmrw, mock_om_breaker, mock_fetch_om, mock_fallback,
+        self, mock_nearest, mock_station, mock_cache, mock_om_breaker, mock_fallback,
     ):
-        """Even when every commercial provider fails, a nearby station still wins for `current`."""
+        """Even when every model provider fails, a nearby station still wins for `current`."""
         mock_nearest.return_value = {"slug": "harare", "elevation": 1490}
         mock_station.return_value = {
             "observedAt": datetime(2026, 6, 29, 14, 0, tzinfo=timezone.utc),
             "metrics": {"airTemperatureCelsius": 21.0},
         }
         mock_cache.return_value = None
-        mock_tmrw_breaker.is_allowed = False
         mock_om_breaker.is_allowed = False
         mock_fallback.return_value = {
             "current": {"temperature_2m": 18},
@@ -1281,8 +1466,13 @@ class TestSanitizeModels:
         assert _sanitize_models([]) == DEFAULT_FORECAST_MODELS
 
     def test_keeps_only_known_models(self):
-        result = _sanitize_models(["ecmwf_ifs04", "not_a_model", "gfs_seamless"])
-        assert result == ["ecmwf_ifs04", "gfs_seamless"]
+        result = _sanitize_models(["ecmwf_ifs", "not_a_model", "gfs_seamless"])
+        assert result == ["ecmwf_ifs", "gfs_seamless"]
+
+    def test_dead_ecmwf_ifs04_is_aliased_to_ecmwf_ifs(self):
+        # ecmwf_ifs04 returns all-null series upstream; stored prefs keep working.
+        assert _sanitize_models(["ecmwf_ifs04"]) == ["ecmwf_ifs"]
+        assert _sanitize_models(["ecmwf_ifs04", "ecmwf_ifs"]) == ["ecmwf_ifs"]
 
     def test_drops_best_match_from_upstream_request(self):
         # best_match is the unsuffixed baseline — never forwarded as a model.
@@ -1298,14 +1488,20 @@ class TestSanitizeModels:
         assert result == ["gfs_seamless"]
 
     def test_strips_whitespace(self):
-        result = _sanitize_models([" ecmwf_ifs04 ", "meteofrance_seamless"])
-        assert result == ["ecmwf_ifs04", "meteofrance_seamless"]
+        result = _sanitize_models([" ecmwf_ifs ", "meteofrance_seamless"])
+        assert result == ["ecmwf_ifs", "meteofrance_seamless"]
 
     def test_all_known_models_present(self):
+        # Every id verified live against Open-Meteo (issue #246).
         assert KNOWN_FORECAST_MODELS == {
-            "best_match", "gfs_seamless", "ecmwf_ifs04",
-            "icon_seamless", "meteofrance_seamless",
+            "best_match", "ecmwf_ifs", "ecmwf_ifs025", "ecmwf_aifs025_single",
+            "gfs_seamless", "icon_global", "icon_seamless", "gem_global",
+            "meteofrance_arpege_world", "meteofrance_seamless",
         }
+        assert "ecmwf_ifs04" not in KNOWN_FORECAST_MODELS
+
+    def test_defaults_are_the_blend_core(self):
+        assert DEFAULT_FORECAST_MODELS == ["ecmwf_ifs", "ecmwf_aifs025_single", "gfs_seamless", "icon_global"]
 
 
 # ---------------------------------------------------------------------------
@@ -1424,10 +1620,12 @@ class TestFetchOpenMeteoExtras:
                 "time": ["t0", "t1"],
                 "temperature_2m_gfs_seamless": [20.0, 21.0],
                 "precipitation_gfs_seamless": [0.0, 0.2],
-                "temperature_2m_ecmwf_ifs04": [19.5, 20.0],
-                "precipitation_ecmwf_ifs04": [0.1, 0.0],
-                "temperature_2m_icon_seamless": [18.0, 18.5],
-                "precipitation_icon_seamless": [0.0, 0.0],
+                "temperature_2m_ecmwf_ifs": [19.5, 20.0],
+                "precipitation_ecmwf_ifs": [0.1, 0.0],
+                "temperature_2m_ecmwf_aifs025_single": [19.0, 19.5],
+                "precipitation_ecmwf_aifs025_single": [0.0, 0.0],
+                "temperature_2m_icon_global": [18.0, 18.5],
+                "precipitation_icon_global": [0.0, 0.0],
             },
             "minutely_15": {
                 "time": ["m0", "m1", "m2", "m3"],
@@ -1440,7 +1638,7 @@ class TestFetchOpenMeteoExtras:
         assert result["minutely"]["precipitation"] == [0.0, 0.1, 0.4, 0.2]
         assert result["models_available"] == DEFAULT_FORECAST_MODELS
         assert result["models_time"] == ["t0", "t1"]
-        assert len(result["models"]) == 3
+        assert len(result["models"]) == 4
 
     @patch("py._weather._get_http_client")
     def test_requests_minutely_and_models_params(self, mock_client_fn):
@@ -1451,7 +1649,7 @@ class TestFetchOpenMeteoExtras:
         params = kwargs["params"]
         assert params["minutely_15"] == "precipitation"
         assert params["forecast_minutely_15"] == "4"
-        assert params["models"] == "ecmwf_ifs04"
+        assert params["models"] == "ecmwf_ifs"  # legacy id aliased
 
 
 # ---------------------------------------------------------------------------
@@ -1599,11 +1797,32 @@ class TestCanonicalWeatherShape:
     its output must carry every field the UI consumes."""
 
     def test_open_meteo_requests_is_day_and_uv_index(self):
-        import inspect
-        from py._weather import _fetch_open_meteo
-        src = inspect.getsource(_fetch_open_meteo)
-        assert "uv_index,is_day" in src          # current params
-        assert "visibility,is_day" in src        # hourly params
+        from py import _model_blend as blend
+        assert "uv_index,is_day" in blend.CURRENT_VARS          # current params
+        assert "visibility,is_day" in blend.HOURLY_VARS         # hourly params
+
+    @patch("py._weather._get_http_client")
+    def test_best_match_strips_intermediate_fields(self, mock_client):
+        """CAPE / lifted index / dew point / ET0 are requested only to derive
+        insights and never reach the cached document (issue #101 shape)."""
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {
+            "current": {"time": "2026-10-10T12:00", "interval": 900, "temperature_2m": 30,
+                        "relative_humidity_2m": 40, "weather_code": 0},
+            "hourly": {"time": ["2026-10-10T12:00"], "temperature_2m": [30], "cape": [1200],
+                       "lifted_index": [-2], "dew_point_2m": [15.0]},
+            "daily": {"time": ["2026-10-10"], "temperature_2m_max": [32], "temperature_2m_min": [16],
+                      "et0_fao_evapotranspiration": [6.1]},
+        }
+        mock_client.return_value.get.return_value = resp
+        out = _fetch_open_meteo(-17.83, 31.05)
+        assert "cape" not in out["hourly"] and "lifted_index" not in out["hourly"]
+        assert "dew_point_2m" not in out["hourly"]
+        assert "et0_fao_evapotranspiration" not in out["daily"]
+        assert "interval" not in out["current"]
+        assert out["insights"]["dewPoint"] == 15.0
+        assert out["insights"]["evapotranspiration"] == 6.1
+        assert out["insights"]["thunderstormProbability"] == 40  # CAPE ≥ 1000
 
     def test_fallback_weather_includes_is_day_and_units(self):
         from py._weather import _create_fallback_weather
@@ -1706,55 +1925,18 @@ class TestUtcOffsetSeconds:
     @patch("py._weather._set_cached_weather")
     @patch("py._weather._fetch_open_meteo_extras")
     @patch("py._weather.open_meteo_breaker")
-    @patch("py._weather._fetch_tomorrow")
-    @patch("py._weather.get_api_key")
-    @patch("py._weather.tomorrow_breaker")
-    @patch("py._weather._get_cached_weather")
-    @patch("py._weather._find_nearest_location")
-    async def test_tomorrow_response_borrows_offset_from_extras(
-        self, mock_nearest, mock_cache, mock_tmrw_breaker, mock_key, mock_fetch_tmrw,
-        mock_breaker, mock_extras, mock_set, mock_record,
-    ):
-        """Tomorrow.io has no offset; the keyless Open-Meteo extras resolve it."""
-        import json
-        mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
-        mock_cache.return_value = None
-        mock_tmrw_breaker.is_allowed = True
-        mock_key.return_value = "fake-key"
-        mock_fetch_tmrw.return_value = {"current": {"temperature_2m": 26}, "hourly": {}, "daily": {},
-                                        "insights": None}
-        mock_breaker.is_allowed = True
-        mock_extras.return_value = {"minutely": None, "models": [], "models_available": [],
-                                    "models_time": [], "utc_offset_seconds": 7200}
-
-        response = await get_weather(-17.83, 31.05)
-        body = json.loads(response.body)
-        assert response.headers.get("x-weather-provider") == "tomorrow"
-        assert body["utc_offset_seconds"] == 7200
-        assert "utc_offset_seconds" not in mock_fetch_tmrw.return_value
-
-    @pytest.mark.asyncio
-    @patch("py._weather._record_weather_history")
-    @patch("py._weather._set_cached_weather")
-    @patch("py._weather._fetch_open_meteo_extras")
-    @patch("py._weather.open_meteo_breaker")
-    @patch("py._weather._fetch_tomorrow")
-    @patch("py._weather.get_api_key")
-    @patch("py._weather.tomorrow_breaker")
+    @patch("py._weather._fetch_open_meteo")
     @patch("py._weather._get_cached_weather")
     @patch("py._weather._find_nearest_location")
     async def test_offset_estimated_when_no_provider_knows_it(
-        self, mock_nearest, mock_cache, mock_tmrw_breaker, mock_key, mock_fetch_tmrw,
-        mock_breaker, mock_extras, mock_set, mock_record,
+        self, mock_nearest, mock_cache, mock_fetch_om, mock_breaker, mock_extras, mock_set, mock_record,
     ):
-        """Tomorrow.io + failed extras: the offset is still ALWAYS present."""
+        """A baseline without an offset + failed extras: the offset is still ALWAYS present."""
         import json
         mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
         mock_cache.return_value = None
-        mock_tmrw_breaker.is_allowed = True
-        mock_key.return_value = "fake-key"
-        mock_fetch_tmrw.return_value = {"current": {"temperature_2m": 26}, "hourly": {}, "daily": {},
-                                        "insights": None}
+        provider_payload = {"current": {"temperature_2m": 26}, "hourly": {}, "daily": {}, "insights": None}
+        mock_fetch_om.return_value = provider_payload
         mock_breaker.is_allowed = True
         mock_extras.return_value = None
 
@@ -1763,7 +1945,7 @@ class TestUtcOffsetSeconds:
         assert body["utc_offset_seconds"] == 7200  # 31.05°E → UTC+2
         assert body["utc_offset_estimated"] is True
         # The cached provider object is never mutated.
-        assert "utc_offset_seconds" not in mock_fetch_tmrw.return_value
+        assert "utc_offset_seconds" not in provider_payload
 
 
 class TestEstimateUtcOffset:

@@ -31,7 +31,7 @@ Social: Twitter @mukokoafrica, Instagram @mukoko.africa
 - **State:** Zustand 5.0.11 (with `persist` middleware — theme, location, activities, hasOnboarded saved to localStorage; device sync to Python backend)
 - **AI:** the Workers AI model configured in the shamwari gateway (Cloudflare Workers AI, function calling; the Worker's `AI_MODEL` var picks it), run by the `mukoko-weather-ai` Worker through its native `env.AI` binding and the `shamwari` AI Gateway. The Python backend reaches it only via `api/py/_ai_gateway.py` → `mukoko-weather-internal` `/internal/ai/chat/completions` (service key, OpenAI-compatible, plain `httpx` — no AI SDK, no Cloudflare token)
 - **Backend API:** Python FastAPI (Vercel serverless functions under `api/py/`; all data, AI, and CRUD operations migrated from TypeScript)
-- **Weather data:** Tomorrow.io API (primary, free tier) + Open-Meteo API (fallback)
+- **Weather data:** Africa-weighted blend of global NWP models via Open-Meteo (ECMWF IFS + AIFS, NOAA GFS, DWD ICON, ECCC GEM, Météo-France ARPEGE — the baseline) + Tomorrow.io (insights enrichment only, budgeted). See Weather Data below
 - **Database:** MongoDB Atlas 7.1.0 (weather cache, AI summaries, historical data, locations; Atlas Search for fuzzy queries, Vector Search infrastructure for semantic search)
 - **i18n:** Custom lightweight system (`src/lib/i18n.ts`) — English complete, Shona/Ndebele structurally ready
 - **Analytics:** Google Analytics 4 (GA4, measurement ID `G-4KB2ZS573N`) + Vercel Web Analytics (`@vercel/analytics` ^1.6.1)
@@ -326,6 +326,8 @@ mukoko-weather/
 │   │   ├── suitability-cache.test.ts # Suitability cache tests
 │   │   ├── weather.ts             # Open-Meteo client, frost detection, weather utils, synthesizeOpenMeteoInsights
 │   │   ├── weather.test.ts
+│   │   ├── weather-cache-key.ts   # weatherCacheKey(lat, lon) — SSR reads weather_cache under the writer's 0.05° grid-cell key (#252)
+│   │   ├── weather-cache-key.test.ts
 │   │   ├── hero.ts                # Pure hero helpers: eyebrow badge selection (MY LOCATION / HOME), H/L formatting
 │   ├── hero.test.ts
 │   ├── hourly-summary.ts      # Deterministic one-sentence hourly outlook (Apple-style, no AI): first condition-group change + peak gusts
@@ -400,8 +402,13 @@ mukoko-weather/
 │       ├── index.py               # FastAPI app, router mounting, CORS, error handlers
 │       ├── _db.py                 # MongoDB connection, collection accessors, rate limiting
 │       ├── _http.py               # Shared pooled httpx clients keyed by timeout (get_http_client)
-│       ├── _weather.py            # Weather data endpoints (Tomorrow.io/Open-Meteo proxy)
+│       ├── _weather.py            # /api/py/weather — provider chain, cache + history writer
+│       ├── _model_blend.py        # Africa-weighted multi-model baseline (regions, weights, blend math)
+│       ├── _insights.py           # Insights derived from model data (dew point, GDD, heat index, storm proxy…)
+│       ├── _enrichment.py         # Tomorrow.io enrichment: MongoDB quota budget, 3 h cache, merge
+│       ├── _verification.py       # Per-model forecast capture for future weight fitting
 │       ├── _ai_gateway.py         # Shared AI plumbing: shamwari AI Gateway URL/headers, GatewayClient singleton, breaker-guarded call_ai(), first_text(), OpenAI-style tool helpers
+│       ├── _weather_cache_key.py  # weather_cache_key(lat, lon) — 0.05° grid-cell cache key (mirror of src/lib/weather-cache-key.ts, #252)
 │       ├── _wmo.py                # WMO_LABELS — weather-code labels (mirror of weatherCodeToInfo in src/lib/weather.ts)
 │       ├── _ai.py                 # AI summary endpoint (Workers AI via the gateway, tiered TTL cache)
 │       ├── _ai_followup.py        # Inline follow-up chat endpoint (pre-seeded history)
@@ -560,9 +567,9 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/stations/register` — 3 req/hour
 - `/api/py/stations/manual` — 12 req/hour (ingest endpoints authenticate by station key instead)
 
-**Secrets never in logs:** provider keys travel in request headers wherever the provider supports it (Tomorrow.io `apikey` header for forecast, status probe and map tiles; CheckWX `X-API-Key`), never in the URL query string. `api/py/_logging.py` `configure_logging()` runs at the top of `index.py` before any router import: it pins the `httpx`/`httpcore` loggers to WARNING (httpx logs every request URL at INFO) and installs a log-record factory plus `RedactSecretsFilter` that mask `apikey`/`api_key`/`key`/`token`/`access_token`/`password`/`passkey` query values in every record and traceback. Never log a full upstream URL that could carry a credential.
+**Secrets never in logs:** provider keys travel in request headers wherever the provider supports it (Tomorrow.io `apikey` header for the enrichment fetch and map tiles — the status row no longer calls Tomorrow.io at all; CheckWX `X-API-Key`), never in the URL query string. `api/py/_logging.py` `configure_logging()` runs at the top of `index.py` before any router import: it pins the `httpx`/`httpcore` loggers to WARNING (httpx logs every request URL at INFO) and installs a log-record factory plus `RedactSecretsFilter` that mask `apikey`/`api_key`/`key`/`token`/`access_token`/`password`/`passkey` query values in every record and traceback. Never log a full upstream URL that could carry a credential.
 
-**Resilience:** Module-level AI gateway client singleton (`get_gateway_client()`). Graceful degradation — AI endpoints return basic summaries when the gateway is unconfigured or unavailable. Weather endpoints fall back through Tomorrow.io → Open-Meteo → seasonal estimates.
+**Resilience:** Module-level AI gateway client singleton (`get_gateway_client()`). Graceful degradation — AI endpoints return basic summaries when the gateway is unconfigured or unavailable. Weather endpoints fall back through the Open-Meteo multi-model blend → Open-Meteo `best_match` → seasonal estimates; Tomorrow.io only enriches insights and never blocks the baseline.
 
 **Input validation:** All endpoints validate slugs via `SLUG_RE` (`^[a-z0-9-]{1,80}$`), cap message lengths at 2000 chars (returns HTTP 400 on oversized), and limit history/activity arrays. Tags validated against `KNOWN_TAGS` allowlist. The client-supplied `activities` list (user's selected activities, feeds personalized AI advice — e.g. "you selected soccer, here's how the forecast affects that") is validated via `filter_known_activities()` in `_db.py` (same 5-min-cached DB-lookup-with-fallback pattern as `get_known_tags()`, filtering built into the one function since nothing needs the raw id set on its own) before being spliced into any system/user prompt in `_chat.py`, `_ai.py`, `_ai_followup.py`, and `_history_analyze.py` — unknown entries are silently dropped rather than rejected, since legitimate callers only ever send ids from `src/lib/activities.ts`'s activity picker.
 
@@ -588,7 +595,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 
 **Integration pattern:** All Python endpoints that call external APIs use the circuit breaker:
 
-- `_weather.py` — `tomorrow_breaker` + `open_meteo_breaker` (record-based: `is_allowed` / `record_success()` / `record_failure()`)
+- `_weather.py` — `open_meteo_breaker` for the baseline; `_enrichment.py` — `tomorrow_breaker` for insights enrichment (record-based: `is_allowed` / `record_success()` / `record_failure()`)
 - AI callers (`_chat.py`, `_ai.py`, `_ai_followup.py`, `_explore_search.py`, `_history_analyze.py`, `_reports.py`) call `call_ai()` in `api/py/_ai_gateway.py`, which checks the breaker, records success/failure, and returns `(AIResponse, error_kind)` with kinds `no_client` (gateway env incomplete) / `circuit_open` / `rate_limited` (HTTP 429) / `api_error`. Each caller maps those kinds to its own fallback or HTTP status (e.g. `_chat.py` returns an error reply, `_ai_followup.py` raises 429 on `rate_limited`). `AIResponse` carries `text`, OpenAI-style `tool_calls` (parsed `ToolCall(id, name, arguments)`) and the raw assistant `message` for re-appending in tool loops; `function_tools()` / `tool_result_message()` build OpenAI tool definitions and `role: "tool"` results. `_chat.py` / `_explore_search.py` only touch `ai_breaker` directly for non-gateway failures (call timeout, tool/parse errors).
 
 ### Routing
@@ -609,7 +616,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/explore/country` — browse locations by country index
 - `/explore/country/[code]` — browse locations in a specific country (ISO alpha-2 code)
 - `/explore/country/[code]/[province]` — browse locations in a specific province
-- `/status` — system health dashboard (live checks: MongoDB, Tomorrow.io, Open-Meteo, Shamwari AI gateway, cache)
+- `/status` — system health dashboard (live checks: MongoDB, Open-Meteo, Shamwari AI gateway, cache; Tomorrow.io as an enrichment-only row that never degrades the overall status)
 - `/about` — about page (company info, contact details)
 - `/privacy` — privacy policy
 - `/terms` — terms of service
@@ -627,7 +634,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/keys` — GET (list caller's keys, masked) / POST (mint a developer API key in `platform.apiKeys`; full key returned ONCE, SHA-256 hashed at rest, 10/user cap, eligible entity-membership role required). Auth-gated via `withAuth()`
 - `/api/keys/[id]` — DELETE, revoke one of the caller's own keys (soft-delete, `ownerPersonId`-scoped). Auth-gated via `withAuth()`
 - `/api/ai/[[...path]]` — ANY (Phase 1D), auth-gated proxy (OPTIONAL catch-all — the bare `/api/ai` is the AI summary endpoint itself; a required catch-all 404'd it) for all `/api/py/ai/*` endpoints. Validates the AuthKit session via `withAuth()` (401 if anonymous), then forwards to `/api/py/ai/${path}` with `X-Mukoko-User-Id` + `X-Mukoko-User-Email` headers (cookies stripped). The UI calls `/api/ai/*` exclusively — Python AI routes still exist and can be called directly by internal/server-side consumers, but the browser never touches them.
-- `/api/py/weather` — GET, proxies Tomorrow.io/Open-Meteo (MongoDB cached 15-min TTL + historical recording). Optional `?location=<slug>` (SSR passes the page slug): honoured only when it resolves to a place within 25 km (`HISTORY_MAX_DISTANCE_KM`) of `lat`/`lon`, and then keys the history doc (the cache row stays keyed on the nearest known place so nearby page slugs keep sharing one provider fetch). Without a valid hint, history is recorded only when the nearest known place is within 25 km — never under a raw coordinate key or a far-away nearest match. Also attaches Windy-style ADDITIONAL data from Open-Meteo (free, keyless): `minutely` (next-hour precip nowcast, 4×15-min steps, always attempted) and, via the optional `?models=` comma list (`gfs_seamless,ecmwf_ifs04,icon_seamless,meteofrance_seamless`), a multi-model comparison — `models` (per-model hourly temp/precip series), `models_available`, `models_time`. The extras fetch is circuit-breaker gated (`open_meteo_breaker`) and best-effort — never blocks the base forecast
+- `/api/py/weather` — GET (`lat`, `lon`, optional `model`, optional `models`, optional `location`). The baseline is the Africa-weighted multi-model blend from Open-Meteo, or the single model named by `?model=` (the user's `selectedForecastModel`; `best_match` means the blend). MongoDB cached 15-min TTL + historical recording. Optional `?location=<slug>` (SSR passes the page slug): honoured only when it resolves to a place within 25 km (`HISTORY_MAX_DISTANCE_KM`) of `lat`/`lon`, and then keys the history doc (the cache row stays keyed on the nearest known place so nearby page slugs keep sharing one fetch). Without a valid hint, history is recorded only when the nearest known place is within 25 km — never under a raw coordinate key or a far-away nearest match. Insights are derived from the model data, with Tomorrow.io merged on top when its budget allows. The same Open-Meteo call carries `minutely` (next-hour precip nowcast, 4×15-min steps) and the multi-model comparison — `models` (per-model hourly temp/precip series), `models_available`, `models_time`; `?models=` picks the comparison set from `ecmwf_ifs,ecmwf_ifs025,ecmwf_aifs025_single,gfs_seamless,icon_global,icon_seamless,gem_global,meteofrance_arpege_world,meteofrance_seamless` (`ecmwf_ifs04` is dead upstream and is aliased to `ecmwf_ifs`). A separate extras call is made only for comparison models the baseline did not carry. See Weather Data → Provider strategy for the headers
 - `/api/py/ai` — POST, AI weather summaries (MongoDB cached with tiered TTL: 30/60/120 min)
 - `/api/py/chat` — POST, Shamwari Explorer chatbot (Workers AI + tool use: search_locations, get_weather, get_activity_advice, list_locations_by_tag). Rate-limited 20 req/hour/IP
 - `/api/py/ai/followup` — POST, inline follow-up chat for AI summaries. Pre-seeded with the AI summary as conversation context. Max 5 exchanges then redirects to Shamwari. Rate-limited 30 req/hour/IP
@@ -641,7 +648,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/suitability` — GET, suitability rules from MongoDB (all rules or by key; key validated against `^(activity|category):[a-z0-9-]+$`)
 - `/api/py/tags` — GET, tag metadata (all or featured only)
 - `/api/py/regions` — GET, region reference data (bounding boxes, no restrictions enforced)
-- `/api/py/status` — GET, system health checks (MongoDB ping, Tomorrow.io, Open-Meteo, AI path liveness probe + breaker — no token spend, cache)
+- `/api/py/status` — GET, system health checks (MongoDB ping, Open-Meteo, AI path liveness probe + breaker — no token spend, cache). Tomorrow.io is read from its key config, breaker and budget counters — never probed live, since the old probe spent its quota — and carries `role: "enrichment"`; it is summarised in the top-level `enrichment` field and never degrades `status`
 - `/api/py/history` — GET, historical weather data (query: `location`, `days`). One doc per location-local day, newest first, each tagged `source: "recorded" | "open-meteo-archive"`; response adds `backfilled` (count of days filled this call). Missing past days are filled on demand from the Open-Meteo Historical/Archive API (see "Weather history store" below)
 - `/api/py/history/analyze` — POST, AI-powered historical weather analysis. Server-side aggregation (~800 tokens) + model analysis through the AI Worker. Cached 1h in `history_analysis` collection. Rate-limited 10 req/hour/IP
 - `/api/py/explore/search` — POST, AI-powered location search using the AI model with `search_locations` + `get_weather` tools. Falls back to text search if AI unavailable. Rate-limited 15 req/hour/IP
@@ -776,7 +783,7 @@ Key functions: `getLocationBySlug(slug)`, `searchLocationsFromDb(query, options)
 
 **UI:** Activity selection is centralized in the **My Weather** modal (`src/components/weather/MyWeatherModal.tsx`), accessible from the header pill icon group. The Activities tab shows mineral-colored activity cards in a 2-column grid with icon, label, and category badge. Selected activities display as bordered cards with a checkmark. Category tabs and search allow filtering. Selections are persisted in Zustand (`selectedActivities`) via localStorage and sent to the AI prompt for context-aware advice.
 
-**Insights:** `src/components/weather/ActivityInsights.tsx` — category-specific weather insight cards (farming GDD, mining safety, sports fitness, travel driving, tourism photography, casual comfort). Each card uses its category's mineral color border and icon accent. Only shown when Tomorrow.io data provides extended fields (GDD, heat stress, thunderstorm probability, etc.). Uses `suitability-cache.ts` for client-side caching of rules and category styles.
+**Insights:** `src/components/weather/ActivityInsights.tsx` — category-specific weather insight cards (farming GDD, mining safety, sports fitness, travel driving, tourism photography, casual comfort). Each card uses its category's mineral color border and icon accent. The extended fields (GDD, heat stress, thunderstorm probability, etc.) are derived from the model baseline, so the cards work without Tomorrow.io; Tomorrow.io enrichment refines them when available. Uses `suitability-cache.ts` for client-side caching of rules and category styles.
 
 ### Suitability Rules Engine
 
@@ -816,20 +823,50 @@ Database seed data files are read by `/api/db-init` for one-time bootstrap:
 
 ### Weather Data
 
-**Tomorrow.io (primary):** fetched and normalized exclusively in Python (`api/py/_weather.py` — `_fetch_tomorrow`, `_normalize_tomorrow`, `_tomorrow_code_to_wmo`). The TypeScript client (`src/lib/tomorrow.ts`) was removed (issue #101): it was a second, independent cache writer whose document shape (missing `is_day`/`current_units`) and Tomorrow→WMO mapping had drifted from the Python writer's, so the two poisoned each other's `weather_cache` rows. Python's normalization now emits the FULL `WeatherData` shape — `is_day` (current + hourly, computed from daily sunrise/sunset), `precipitation_probability`, `visibility` (km→m), and `current_units`.
+**Baseline = global models, Africa-weighted (issue #246).** The owner's decision: "Tomorrow.io has limits. We need to pull data from other global models tomorrow is used to enrich not the baseline". The forecast baseline is a weighted blend of the global NWP models Open-Meteo serves keyless, built in Python (`api/py/_model_blend.py`):
 
-- Free tier limits: 500 calls/day, 25/hour, 3/second; 5-day forecast
-- SSR (`getWeatherForLocation` in `src/lib/db.ts`) is READ-ONLY against `weather_cache`: cache hit → serve; miss → server-to-server `GET /api/py/weather` (the single canonical fetch/cache/history writer); endpoint unreachable (e.g. plain `next dev` without Python functions) → direct Open-Meteo fetch WITHOUT caching → seasonal fallback
+| Member                                    | Open-Meteo id              | Start weight |
+| ----------------------------------------- | -------------------------- | ------------ |
+| ECMWF IFS HRES 9 km                       | `ecmwf_ifs`                | 0.35         |
+| ECMWF AIFS 0.25° (machine-learning model) | `ecmwf_aifs025_single`     | 0.25         |
+| NOAA GFS                                  | `gfs_seamless`             | 0.15         |
+| DWD ICON global                           | `icon_global`              | 0.15         |
+| ECCC GEM global                           | `gem_global`               | 0.05         |
+| Météo-France ARPEGE world                 | `meteofrance_arpege_world` | 0.05         |
 
-**Open-Meteo (fallback):** `src/lib/weather.ts` — Open-Meteo client and pure utility functions:
+- Ids were checked live on 2026-10-10. `ecmwf_ifs04` returns all-null series upstream; it is accepted only as an alias for `ecmwf_ifs` so stored preferences keep working (`MODEL_ALIASES` in Python, `normalizeForecastModel()` in `src/lib/weather.ts`). ECMWF IFS 9 km is used rather than `ecmwf_ifs025` because it is the same model at higher resolution under the same open licence.
+- **Weights are per region** (`BLEND_WEIGHTS`, keyed `southern-africa`, `east-africa`, `west-africa-sahel`, `central-africa`, `north-africa`, `default`; regions picked by bounding box in `REGION_BOXES`). They start ECMWF-heavy everywhere. A `weather.modelBlendConfig` doc (`_id` = region, `weights` = `{model: weight}`, 5-min cache) overrides them without a deploy.
+- **Per-variable rule:** weighted mean over the members that have a value, with weights renormalised over those present (so UV and lifted index, which only GFS publishes, come from GFS alone); wind direction is a vector mean; the WMO code is a weighted vote with ties going to the more severe code; `is_day`/sunrise/sunset take the first non-null. Precipitation probability is `0.5 × ensemble + 0.5 × agreement` when any member reports one, else agreement alone (agreement = weighted share of members with ≥ 0.1 mm/h, or ≥ 1 mm/day for daily values). Open-Meteo returns `current` only for the first-listed model, so the highest-weight member (IFS) is listed first and its nulls are filled from the blended hourly value at the current hour.
+- **One call** fetches every member plus their comparison series and the minutely nowcast (8 steps), all cached together with the baseline. Only the members' series are stored; other `?models=` ids are fetched per request by `_attach_comparison`. At serve time `_fresh_minutely` trims the nowcast to the next four 15-minute steps in location time, so a cached row never starts in the past.
+- **Breaker accounting:** only an upstream HTTP failure (`OpenMeteoUpstreamError`) or exception counts against `open_meteo_breaker`. "Too few members" or "this model has no data here" falls through to `best_match` without recording a failure — `record_success` does not clear failures while the breaker is closed, so those would otherwise open it for everyone.
+- **User model:** `?model=<id>` makes that one model the baseline (`_fetch_single_model`, which requests `<id>,best_match` and fills only the variables the model does not publish from `best_match`). It gets its own cache row `{grid cell}::{model}`; history is recorded from the default blend only. `WeatherDashboard` calls `fetchModelWeather()` (`src/lib/home-weather.ts`) and swaps the page onto the chosen model when the server confirms it via `X-Weather-Provider`; the frost banner is then recomputed from that model (`checkFrostRisk`) and the fallback banner cleared.
 
-- `fetchWeather(lat, lon)` — API call (7-day forecast, no auth required)
+**Tomorrow.io = enrichment only** (`api/py/_enrichment.py`). Fetched with `timesteps=1d` for its insights fields only — `thunderstormProbability`, `heatStressIndex`, `gdd10To30`, `cloudBase`, `cloudCeiling`, `moonPhase`, `precipitationType` (`ENRICHMENT_FIELDS`) — and merged over the derived insights. Wind, visibility, dew point and `uvHealthConcern` always stay with the baseline (Tomorrow.io's `uvHealthConcernMax` is a 0–4 category, while the rules compare the field with the 0–11+ UV index), and so does `evapotranspiration` (Tomorrow.io's is an hourly average; the rules use daily ET₀ in mm/day). Enrichment runs before the cache write, so the row the TS server render reads carries it, and it runs in a worker thread (`asyncio.to_thread`) so it never blocks the event loop. It never touches current/hourly/daily and never blocks: a 4 s timeout, and on a 429, timeout, open breaker or empty budget the baseline is served without it.
+
+- **Quota guard** in MongoDB (`weather.providerBudget`, hour and day buckets reserved with an atomic guarded `$inc` upsert, the hour slot refunded if the day bucket is full; fails closed on DB errors). Hard caps **20/hour** and **400/day** (free tier: 25 and 500). Normal traffic stops at **12/hour** and **250/day**; the rest is reserved for priority requests — curated seed slugs (no `--`) whose known place is within 25 km of the request (`PRIORITY_MAX_DISTANCE_KM`; the cache-key lookup itself searches 20,000 km) and callers sending `X-Mukoko-Priority: 1` together with a valid `X-Mukoko-Internal` secret (a hook for paying users; no paid plan exists yet).
+- **Enrichment cache:** `weather.enrichmentCache`, keyed by the same 0.05° grid cell as `weather_cache` (`weather_cache_key`), 3 h TTL, so a cell costs at most 8 calls a day.
+- **Exhausted budgets are memoised** per warm instance until the hour bucket rolls over, so later requests skip the reservation write. **Skips are recorded** (once per location, hour and reason per instance) on the day's stats doc (`tomorrow:stats:YYYYMMDD`: `skippedBudget`, `skippedError`, `lastSkipReason`, `lastSkipAt`, `lastSkipSlug`) and logged.
+- `_normalize_tomorrow` / `_tomorrow_code_to_wmo` remain the canonical Tomorrow.io normalisation (issue #101); the TS client stays removed.
+
+**Derived insights** (`api/py/_insights.py`, TS mirror `src/lib/derived-insights.ts` used by `synthesizeOpenMeteoInsights`). Every rule field is computed from model data, so ActivityInsights and the suitability rules work without Tomorrow.io: dew point (model value or Magnus), GDD ×4 from today's max/min (base/cap clamped), heat index (NOAA Rothfusz; air temperature below 27 °C), thunderstorm proxy (max of the WMO-code value and a CAPE/lifted-index score over the next 6 h, halved when precipitation agreement is below 20 %), UV, precipitation type, visibility in **km** (fixes a units bug — metres were compared against km thresholds, also in `hourInsights`), ET₀, moon phase (synodic month, 0–7) and cloud base/ceiling (LCL ≈ 125 m × (T − Td); ceiling only at ≥ 50 % cover). The intermediate fields requested for this (`cape`, `lifted_index`, `dew_point_2m`, `et0_fao_evapotranspiration`) are stripped before caching, so the `WeatherData` document shape is unchanged and Python stays the single cache writer.
+
+**Verification capture** (`api/py/_verification.py`, groundwork only; db-init creates the TTL, `locationSlug`/`issuedAt` and 2dsphere indexes, plus TTL indexes for `providerBudget` and `enrichmentCache`). Each fresh blend stores what every member and the blend forecast at +6/+24/+48/+72 h (temperature, precipitation, wind) in `weather.forecastVerification` — at most one doc per location per 6-hour issuance (`_id` `{slug}:{YYYYMMDDHH}`, 180-day TTL). A future job will join these against StationKit observations (else ERA5) and fit per-region weights into `weather.modelBlendConfig`.
+
+**Licensing.** Open-Meteo's free API is for non-commercial use only; paid features would need its commercial plan, a self-hosted Open-Meteo, or direct ECMWF/GFS/ICON ingestion (owner decision, issue #246). Data is CC BY 4.0, so the footer credits "Weather data: ECMWF, NOAA, DWD, ECCC, Météo-France via Open-Meteo.com (CC BY 4.0); insights enrichment by Tomorrow.io".
+
+- **Cache key = coordinate grid cell, never a place (issue #252).** `weather_cache.locationSlug` holds `weather_cache_key(lat, lon)` (`api/py/_weather_cache_key.py`, mirrored by `weatherCacheKey` in `src/lib/weather-cache-key.ts`): the requested coordinate rounded to a 0.05° (~5.6 km) cell, e.g. `cell:-17.85_31.05`. Keying by the nearest place (searched to 20,000 km) let Frankfurt's forecast sit under Bizerte and Karachi's under Bosaso. The cell is finer than the forecast models behind the providers, yet coarse enough that one town's page, GPS fix and client refresh share one provider fetch. Both implementations are pinned to `tests/fixtures/weather-cache-keys.json`. Readers that start from a slug (`_reports.py`, `_chat.py`, `_explore_search.py`) resolve the place first and read by `weather_cache_key_for(loc)`. The nearest-place lookup in `/api/py/weather` is capped at 25 km and feeds only the history slug and the fallback elevation
+- SSR (`getWeatherForLocation` in `src/lib/db.ts`) is READ-ONLY against `weather_cache` and reads `weatherCacheKey(lat, lon)`, the same key the writer derives from the lat/lon it sends: cache hit → serve; miss → server-to-server `GET /api/py/weather` (the single canonical fetch/cache/history writer); endpoint unreachable (e.g. plain `next dev` without Python functions) → direct Open-Meteo fetch WITHOUT caching → seasonal fallback
+
+**TS Open-Meteo client:** `src/lib/weather.ts` — direct-fetch fallback and pure utility functions:
+
+- `fetchWeather(lat, lon, models?)` — API call (7-day forecast, no auth required; also requests the insight inputs)
 - `checkFrostRisk(hourly)` — frost detection (temps <= 3°C between 10pm-8am)
 - `weatherCodeToInfo(code)` — WMO code to label/icon
 - `getDefaultSeason(date, lat)` — hemisphere-aware default season based on latitude. `getZimbabweSeason` is a backward-compat alias
 - `windDirection(degrees)` — compass direction
 - `uvLevel(index)` — UV severity level
-- `synthesizeOpenMeteoInsights(data)` — constructs a `WeatherInsights` object from Open-Meteo data (wind speed, gusts, visibility) for suitability evaluation
+- `synthesizeOpenMeteoInsights(data)` — derives the full `WeatherInsights` set from model data (mirror of `api/py/_insights.py`)
+- `normalizeForecastModel(id)` — maps legacy model ids (`ecmwf_ifs04`, `icon_seamless`) and unknown values to the current enum
 
 **Location time (worldwide viewers):** anyone, anywhere can open any place, so every "current hour" and every hour label is read in the LOCATION's time zone — never the viewer's clock, never the server's UTC. `/api/py/weather` ALWAYS returns `utc_offset_seconds` (Open-Meteo's value, else the Open-Meteo extras call's, else a longitude estimate via `_ensure_utc_offset` stamped `utc_offset_estimated: true` — covers Tomorrow.io, cached rows, StationKit overlays and the seasonal fallback). `src/lib/location-time.ts` (`currentHourIndex`, `locationHourLabel`, `locationClockLabel`, `instantMs`, `locationDateString`) handles both naive Open-Meteo wall-clock strings and zoned Tomorrow.io/fallback instants. Consumers (hero outlook + activity clause, `feasibilitySeries`, activity tips, `CommunityLane`, `HourlyScrollCards`, hourly/atmospheric charts, `AtmosphericSummary` + `metric-insights`, `SunTimes`, `DailyForecast`, `checkFrostRisk`, the wall display) take the payload's offset. Never call `getHours()` / `toLocaleTimeString()` on a forecast time.
 
@@ -844,16 +881,20 @@ Database seed data files are read by `/api/db-init` for one-time bootstrap:
 **Provider strategy (priority 0 = StationKit, then forecast chain):** The weather API route (`/api/py/weather`) consults sources in this order:
 
 0. **Nyuchi StationKit** (`api/py/_weather.py` `nearest_station_observation`) — most recent QC-validated `weather.observations` doc within **50 km** and the **last 60 minutes**. If a station is in range, its sensor data replaces the `current` block of the response while hourly/daily are still served from the commercial provider/cache below.
-1. **MongoDB cache** (`weather_cache`, 15-min TTL)
-2. **Tomorrow.io** (primary commercial provider)
-3. **Open-Meteo** (free fallback)
+1. **MongoDB cache** (`weather_cache`, 15-min TTL; one row per 0.05° grid cell, plus `{cell}::{model}` rows for user-selected models)
+2. **Open-Meteo multi-model blend** (Africa-weighted), or the user's single model
+3. **Open-Meteo `best_match`** (alternate single request)
 4. **Seasonal estimate** (never fails)
 
-The endpoint sets three response headers so callers can verify which source served what:
+Every Open-Meteo step is gated by `open_meteo_breaker`. Tomorrow.io enrichment runs after the baseline is settled and is skipped for the seasonal estimate.
+
+The endpoint sets these response headers so callers can verify which source served what:
 
 - `X-Cache` — `HIT` | `MISS` (cache status for the forecast data)
-- `X-Weather-Provider` — origin of the **hourly/daily forecast** (`tomorrow` | `open-meteo` | `fallback`)
-- `X-Current-Source` — origin of the **`current` block** (`stationkit` | `tomorrow` | `open-meteo` | `fallback`)
+- `X-Weather-Provider` — the **baseline**: `open-meteo:blend` | `open-meteo:<model>` | `open-meteo:best_match` | `fallback`
+- `X-Weather-Blend` — the region and normalised weights actually used (fresh blends only), e.g. `southern-africa; ecmwf_ifs=0.35,…`
+- `X-Enrichment` — `tomorrow` | `skipped-budget` | `skipped-error` | `none` (no key configured, or the seasonal estimate)
+- `X-Current-Source` — origin of the **`current` block** (`stationkit` | the baseline provider | `fallback`)
 
 **StationKit integration loop (Phase 0D):**
 
@@ -883,7 +924,7 @@ weather.stationObservations → QC pipeline → weather.observations
 - `setSelectedLocation(slug)` — updates location, queues device sync
 - `selectedActivities: string[]` — activity IDs (from `src/lib/activities.ts`), persisted to localStorage, synced to server
 - `toggleActivity(id)` — adds/removes an activity selection, queues device sync
-- `selectedForecastModel: string` — Windy-style forecast model preference (Open-Meteo model id or `"best_match"`, default `"best_match"`), persisted (RxDB) + replicated to `/api/py/devices`. Set via the "Forecast model" radio group in the My Weather modal Settings tab; passed by `fetchWeather()` and highlighted in `ModelComparisonChart`
+- `selectedForecastModel: string` — Windy-style forecast model preference (Open-Meteo model id or `"best_match"`, default `"best_match"`), persisted (RxDB) + replicated to `/api/py/devices`. Set via the "Forecast model" radio group in the My Weather modal Settings tab; `best_match` means the server's Africa-weighted blend; any other id makes that model the dashboard baseline via `fetchModelWeather()` (`src/lib/home-weather.ts` → `/api/py/weather?model=`). Legacy ids are mapped by `normalizeForecastModel()`; highlighted in `ModelComparisonChart`
 - `setSelectedForecastModel(model)` — updates the model preference, persists to RxDB
 - `homeLocation: string | null` — the Home location slug (`/locations` ⌂), persisted in the RxDB `preferences` doc (schema v2). Device-local for now: the Python device-profile sync does not carry it yet, and the pull handler keeps the local value
 - `setHomeLocation(slug | null)` — set or clear the Home location (empty string clears), persists to RxDB
@@ -1055,7 +1096,7 @@ All AI system prompts, suggested prompt rules, and model configurations are stor
 
 **Server-side (MongoDB):**
 
-- Weather cache: 15-min TTL (auto-expires via TTL index)
+- Weather cache: 15-min TTL (auto-expires via TTL index), one row per 0.05° coordinate cell (`weather_cache_key`, #252)
 - AI summaries: tiered TTL — 30 min (major cities), 60 min (mid-tier), 120 min (small locations) for real model-generated insights. Fallback text (gateway unconfigured, open circuit breaker, or a gateway/model error) is tagged `source: "fallback"` and cached for only 60s (`TTL_FALLBACK` in `api/py/_ai.py`) regardless of location tier — otherwise a single transient failure would serve the generic fallback summary for up to 2 hours per location
 - Weather history: unlimited retention. One doc per `(locationSlug, date)` — see "Weather history store" below
 - History analysis: 1h TTL in `history_analysis` collection (keyed by location + days + data hash)
@@ -1392,7 +1433,7 @@ Users can submit real-time ground-truth weather observations, similar to Waze fo
 
 - `src/app/status/page.tsx` — server wrapper (metadata)
 - `src/app/status/StatusDashboard.tsx` — client component, calls `GET /api/py/status`
-- Checks: MongoDB connectivity, Tomorrow.io API key, Open-Meteo availability, AI path liveness (an empty-`messages` probe the AI Worker refuses before any model call, so no token spend; only that exact refusal — HTTP 400 with error `invalid_request` and the Worker's empty-messages description, `AI_PROBE_EXPECTED_ERROR` / `AI_PROBE_EXPECTED_DESCRIPTION` in `api/py/_status.py` — counts as healthy, any other 400 reports degraded with its error code) + circuit state, weather cache health
+- Checks: MongoDB connectivity, Open-Meteo availability, Tomorrow.io enrichment (key, breaker and budget counters only — no live probe; tagged `role: "enrichment"` and excluded from the overall status), AI path liveness (an empty-`messages` probe the AI Worker refuses before any model call, so no token spend; only that exact refusal — HTTP 400 with error `invalid_request` and the Worker's empty-messages description, `AI_PROBE_EXPECTED_ERROR` / `AI_PROBE_EXPECTED_DESCRIPTION` in `api/py/_status.py` — counts as healthy, any other 400 reports degraded with its error code) + circuit state, weather cache health
 - Each service shows operational/degraded/down status with latency
 
 ## Testing
@@ -1417,7 +1458,9 @@ Users can submit real-time ground-truth weather observations, similar to Waze fo
 
 _Library tests:_
 
-- `src/lib/weather.test.ts` — frost detection, season logic, wind direction, UV levels, fallback weather, synthesizeOpenMeteoInsights
+- `src/lib/weather.test.ts` — frost detection, season logic, wind direction, UV levels, fallback weather, synthesizeOpenMeteoInsights, model ids + `normalizeForecastModel`
+- `src/lib/derived-insights.test.ts` — derived-insight helpers (same reference vectors as `tests/py/test_insights.py`) and full derivation without Tomorrow.io
+- `src/lib/home-weather.test.ts` — `fetchModelWeather`: model/models query, blend default never swaps, fallen-back provider is not treated as the chosen model
 - `src/lib/location-time.test.ts` — location time zone: viewer UTC+8 → Harare (UTC+2) and viewer UTC-5 → Singapore (UTC+8) with the process TZ really set; start hour + labels across hero, feasibility, lane, charts, tips, frost, sun
 - `src/lib/weather-labels.test.ts` — humidity/pressure/cloud/precipitation/feels-like label helpers
 - `src/lib/locations.test.ts` — location searching, tag filtering, nearest location
@@ -1467,7 +1510,12 @@ _Python backend tests (pytest):_
 - `tests/py/test_circuit_breaker.py` — circuit breaker state machine (closed→open→half_open), failure window pruning, async execute with timeout, singleton breaker configs
 - `tests/py/test_db_helpers.py` — `get_client_ip` (x-forwarded-for, x-real-ip, client.host, None), `check_rate_limit` (allow/deny/boundary/composite-key/None-result)
 - `tests/py/test_chat.py` — `_build_chat_system_prompt` (location list, count, activities, fallback vs DB template, 20-location cap), SLUG_RE, KNOWN_TAGS, tool helpers (search, list_by_tag, get_weather cache, tool dispatch)
-- `tests/py/test_weather.py` — Weather proxy: Tomorrow.io/Open-Meteo fallback chain, seasonal estimates, cache operations, normalization, circuit breaker integration
+- `tests/py/test_weather.py` — Weather proxy: blend → best_match → seasonal fallback order, selected-model baseline + cache key, legacy model alias, enrichment merge/skip in the endpoint, priority rules, cache operations, Tomorrow.io normalization, circuit breaker integration
+- `tests/py/test_model_blend.py` — Blend: region boxes, ECMWF-heavy weights, DB override sanitising, weighted mean with renormalisation, circular wind mean, weather-code vote, precipitation probability (ensemble + agreement), current fill, single-model fill from best_match
+- `tests/py/test_enrichment.py` — Tomorrow.io budget guard (normal/priority caps, hour reset, day-cap refund, fail closed), skip recording, merge rules, enrich() order, daily-only fetch
+- `tests/py/test_insights.py` — Derived insights: dew point, heat index, GDD, WMO hazards, convective proxy, moon phase, cloud base, full derivation, intermediate-field stripping
+- `tests/py/test_verification.py` — Verification capture doc shape, 6-hour buckets, first-write-wins upsert
+- `tests/py/test_weather_cache_key.py` — weather_cache grid key (#252): shared TS/Python vectors, far-apart coordinates never share a row, nearby requests in one cell do, endpoint no longer keys by the nearest place
 - `tests/py/test_geohash.py` — Python geohash mirror: published reference vectors, cross-language parity with the TS suite, slugify/delimiter safety, smart-slug determinism and collision behaviour
 - `tests/py/test_overpass.py` — Overpass naming: feature ranking, `is_in` admin extraction (incl. city-states with no admin_level 4), degrade-don't-fail on every failure path, `_reverse_geocode` Overpass-primary / Nominatim-fallback integration
 - `tests/py/test_locations.py` — Location CRUD: slug generation, geocoding, deduplication, region validation, search/filter, geo lookup, add location
@@ -1485,8 +1533,8 @@ _Python backend tests (pytest):_
 - `tests/py/test_index.py` — FastAPI app: CORS origins, health endpoint, ConnectionFailure handler, all 16 routers mounted
 - `tests/py/test_tiles.py` — Map tiles: Tomorrow.io weather overlay proxy (layer validation, zoom range, timestamp validation, SSRF protection, proxy behavior, cache headers)
 - `tests/py/test_stations.py` — Station ingest: unit conversions (°F/mph/inHg/inches), QC range filter, hashed-key auth, registration (key never stored raw, GeoJSON location), manual readings (validated observation writes, 401/400 paths)
-- `tests/py/test_log_redaction.py` — Secrets out of logs: Tomorrow.io key sent as a header (forecast + status probe), redaction filter/record factory masks secret query params in messages and tracebacks, httpx/httpcore at WARNING after app import
-- `tests/py/test_status.py` — System health: MongoDB/Tomorrow.io/Open-Meteo/AI-gateway/cache checks, overall status aggregation
+- `tests/py/test_log_redaction.py` — Secrets out of logs: Tomorrow.io key sent as a header (enrichment fetch; the status row makes no call at all), redaction filter/record factory masks secret query params in messages and tracebacks, httpx/httpcore at WARNING after app import
+- `tests/py/test_status.py` — System health: MongoDB/Open-Meteo/AI-gateway/cache checks, Tomorrow.io enrichment row (no probe, budget/breaker based), overall status aggregation that ignores enrichment rows
 - `tests/py/test_embeddings.py` — Embeddings stub: status endpoint shape
 
 _Page/component tests:_

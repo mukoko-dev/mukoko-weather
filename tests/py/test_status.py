@@ -56,59 +56,78 @@ class TestCheckMongodb:
 # ---------------------------------------------------------------------------
 
 
+def _budget(**over):
+    b = {"hourUsed": 3, "hourCap": 20, "dayUsed": 40, "dayCap": 400, "skippedBudget": 0, "skippedError": 0}
+    b.update(over)
+    return b
+
+
 class TestCheckTomorrowIo:
+    """Tomorrow.io is enrichment-only: no live probe, role-tagged row."""
+
+    @patch("py._enrichment.budget_snapshot")
+    @patch("py._circuit_breaker.tomorrow_breaker")
     @patch("py._status.get_http_client")
     @patch("py._status.get_api_key")
-    def test_operational_on_200(self, mock_key, mock_client_cls):
+    def test_operational_from_budget_without_probe(self, mock_key, mock_client, mock_breaker, mock_budget):
         mock_key.return_value = "test-key"
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_client_cls.return_value.get.return_value = mock_resp
+        mock_breaker.is_allowed = True
+        mock_budget.return_value = _budget()
 
         result = _check_tomorrow_io()
         assert result["status"] == "operational"
-        assert "Responding normally" in result["message"]
+        assert result["role"] == "enrichment"
+        assert "3/20 this hour" in result["message"] and "40/400 today" in result["message"]
+        mock_client.assert_not_called()  # never spends quota
 
     @patch("py._status.get_api_key")
     def test_degraded_on_no_key(self, mock_key):
         mock_key.return_value = None
         result = _check_tomorrow_io()
         assert result["status"] == "degraded"
-        assert "not configured" in result["message"]
+        assert result["role"] == "enrichment"
+        assert "no API key" in result["message"]
 
-    @patch("py._status.get_http_client")
+    @patch("py._circuit_breaker.tomorrow_breaker")
     @patch("py._status.get_api_key")
-    def test_degraded_on_429(self, mock_key, mock_client_cls):
+    def test_rate_limited_shows_enrichment_degraded(self, mock_key, mock_breaker):
         mock_key.return_value = "test-key"
-        mock_resp = MagicMock()
-        mock_resp.status_code = 429
-        mock_client_cls.return_value.get.return_value = mock_resp
-
+        mock_breaker.is_allowed = False  # tripped by 429s
         result = _check_tomorrow_io()
         assert result["status"] == "degraded"
-        assert "Rate limited" in result["message"]
+        assert result["message"].startswith("Enrichment degraded")
+        assert "429" in result["message"]
 
-    @patch("py._status.get_http_client")
+    @patch("py._enrichment.budget_snapshot")
+    @patch("py._circuit_breaker.tomorrow_breaker")
     @patch("py._status.get_api_key")
-    def test_down_on_non_200(self, mock_key, mock_client_cls):
+    def test_degraded_when_budget_exhausted(self, mock_key, mock_breaker, mock_budget):
         mock_key.return_value = "test-key"
-        mock_resp = MagicMock()
-        mock_resp.status_code = 500
-        mock_resp.reason_phrase = "Internal Server Error"
-        mock_client_cls.return_value.get.return_value = mock_resp
-
+        mock_breaker.is_allowed = True
+        mock_budget.return_value = _budget(dayUsed=400)
         result = _check_tomorrow_io()
-        assert result["status"] == "down"
-        assert "500" in result["message"]
+        assert result["status"] == "degraded"
+        assert "budget exhausted" in result["message"]
 
+    @patch("py._enrichment.budget_snapshot")
+    @patch("py._circuit_breaker.tomorrow_breaker")
     @patch("py._status.get_api_key")
-    def test_down_on_exception(self, mock_key):
+    def test_reports_skips(self, mock_key, mock_breaker, mock_budget):
         mock_key.return_value = "test-key"
-        with patch("py._status.get_http_client", side_effect=Exception("Network error")):
-            result = _check_tomorrow_io()
-        assert result["status"] == "down"
-        assert "Network error" not in result["message"]
-        assert "server logs" in result["message"]
+        mock_breaker.is_allowed = True
+        mock_budget.return_value = _budget(skippedBudget=2, skippedError=1)
+        assert "3 enrichments skipped today" in _check_tomorrow_io()["message"]
+
+    @patch("py._enrichment.budget_snapshot")
+    @patch("py._circuit_breaker.tomorrow_breaker")
+    @patch("py._status.get_api_key")
+    def test_budget_read_failure_is_degraded_not_raised(self, mock_key, mock_breaker, mock_budget):
+        mock_key.return_value = "test-key"
+        mock_breaker.is_allowed = True
+        mock_budget.side_effect = Exception("db down")
+        result = _check_tomorrow_io()
+        assert result["status"] == "degraded"
+        assert "db down" not in result["message"]
 
     @patch("py._status.get_api_key")
     def test_degraded_on_db_unavailable_for_key(self, mock_key):
@@ -463,6 +482,26 @@ class TestSystemStatus:
 
         result = await system_status()
         assert result["status"] == "degraded"
+
+    @patch("py._status._check_ai_cache")
+    @patch("py._status._check_weather_cache")
+    @patch("py._status._check_ai_gateway")
+    @patch("py._status._check_open_meteo")
+    @patch("py._status._check_tomorrow_io")
+    @patch("py._status._check_mongodb")
+    @pytest.mark.asyncio
+    async def test_enrichment_degraded_does_not_degrade_overall(
+        self, mock_mongo, mock_tomorrow, mock_meteo, mock_anthro, mock_weather, mock_ai
+    ):
+        """Tomorrow.io rate-limited → enrichment degraded, overall still operational."""
+        for m in [mock_mongo, mock_meteo, mock_anthro, mock_weather, mock_ai]:
+            m.return_value = {"name": "test", "status": "operational", "latencyMs": 1, "message": "ok"}
+        mock_tomorrow.return_value = {"name": "Tomorrow.io", "status": "degraded", "latencyMs": 0,
+                                      "message": "Enrichment degraded", "role": "enrichment"}
+
+        result = await system_status()
+        assert result["status"] == "operational"
+        assert result["enrichment"] == "degraded"
 
     @patch("py._status._check_ai_cache")
     @patch("py._status._check_weather_cache")

@@ -21,6 +21,7 @@ import {
 /** Mineral colour token per model — distinct hues, Windy-style. */
 export const MODEL_COLORS: Record<string, string> = {
   [ForecastModel.ECMWF]: "var(--chart-1)", // Tanzanite
+  [ForecastModel.AIFS]: "var(--chart-6)", // Sodalite
   [ForecastModel.GFS]: "var(--chart-2)", // Cobalt
   [ForecastModel.ICON]: "var(--chart-3)", // Malachite
   [ForecastModel.MeteoFrance]: "var(--chart-4)", // Gold
@@ -30,6 +31,7 @@ export const MODEL_COLORS: Record<string, string> = {
 /** Static token-backed swatch classes (no dynamic class construction). */
 export const MODEL_SWATCH_CLASS: Record<string, string> = {
   [ForecastModel.ECMWF]: "bg-[var(--chart-1)]",
+  [ForecastModel.AIFS]: "bg-[var(--chart-6)]",
   [ForecastModel.GFS]: "bg-[var(--chart-2)]",
   [ForecastModel.ICON]: "bg-[var(--chart-3)]",
   [ForecastModel.MeteoFrance]: "bg-[var(--chart-4)]",

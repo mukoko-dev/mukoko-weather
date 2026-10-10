@@ -16,6 +16,7 @@ import {
   ForecastModel,
   FORECAST_MODEL_LABELS,
   COMPARISON_MODELS,
+  normalizeForecastModel,
   type HourlyWeather,
 } from "./weather";
 
@@ -454,12 +455,12 @@ describe("synthesizeOpenMeteoInsights", () => {
     expect(insights.windGust).toBe(data.current.wind_gusts_10m);
   });
 
-  it("returns visibility from the current UTC hour's entry", () => {
+  it("returns visibility in km from the current hour's entry", () => {
+    // Open-Meteo reports metres; the suitability thresholds (1/2/3/5) are km.
     const data = createFallbackWeather(-17.83, 31.05, 1483);
+    data.hourly.visibility = data.hourly.visibility.map(() => 24000);
     const insights = synthesizeOpenMeteoInsights(data);
-
-    const nowHour = new Date().getUTCHours();
-    expect(insights.visibility).toBe(data.hourly.visibility[nowHour]);
+    expect(insights.visibility).toBe(24);
   });
 
   it("derives precipitationType from WMO weather code", () => {
@@ -541,9 +542,24 @@ describe("multi-model + minutely (Windy-style)", () => {
   it("ForecastModel enum exposes the expected model ids", () => {
     expect(ForecastModel.BestMatch).toBe("best_match");
     expect(ForecastModel.GFS).toBe("gfs_seamless");
-    expect(ForecastModel.ECMWF).toBe("ecmwf_ifs04");
-    expect(ForecastModel.ICON).toBe("icon_seamless");
+    // Ids checked live against Open-Meteo (issue #246); ecmwf_ifs04 is dead.
+    expect(ForecastModel.ECMWF).toBe("ecmwf_ifs");
+    expect(ForecastModel.AIFS).toBe("ecmwf_aifs025_single");
+    expect(ForecastModel.ICON).toBe("icon_global");
     expect(ForecastModel.MeteoFrance).toBe("meteofrance_seamless");
+  });
+
+  it("normalizeForecastModel maps legacy and unknown ids", () => {
+    expect(normalizeForecastModel("ecmwf_ifs04")).toBe(ForecastModel.ECMWF);
+    expect(normalizeForecastModel("icon_seamless")).toBe(ForecastModel.ICON);
+    expect(normalizeForecastModel("gfs_seamless")).toBe(ForecastModel.GFS);
+    expect(normalizeForecastModel("nope")).toBe(ForecastModel.BestMatch);
+    expect(normalizeForecastModel(undefined)).toBe(ForecastModel.BestMatch);
+  });
+
+  it("COMPARISON_MODELS is the ECMWF-led blend core", () => {
+    expect(COMPARISON_MODELS[0]).toBe(ForecastModel.ECMWF);
+    expect(COMPARISON_MODELS).toContain(ForecastModel.AIFS);
   });
 
   it("COMPARISON_MODELS excludes best_match", () => {
