@@ -88,21 +88,6 @@ export function AISummary({ weather, location, user, onSummaryLoaded }: Props) {
       setLoading(true);
       setError(null);
       try {
-        // Fetch activity labels from MongoDB via API
-        let activityLabels: string[] = [];
-        if (selectedActivities.length > 0) {
-          try {
-            const labelsRes = await fetch(
-              `/api/py/activities?labels=${selectedActivities.join(",")}`,
-            );
-            if (labelsRes.ok) {
-              const labelsData = await labelsRes.json();
-              activityLabels = labelsData.labels ?? [];
-            }
-          } catch {
-            // Activity labels unavailable — continue without them
-          }
-        }
         const res = await fetch("/api/ai", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -126,12 +111,22 @@ export function AISummary({ weather, location, user, onSummaryLoaded }: Props) {
               insights: weather.insights,
             },
             location: {
+              // slug keys the shared ai_summaries cache row; country and
+              // tags ground the prompt and pick the cache TTL tier.
+              slug: location.slug,
               name: location.name,
               lat: location.lat,
               lon: location.lon,
               elevation: location.elevation,
+              country: location.country ?? "",
+              tags: location.tags ?? [],
             },
-            activities: activityLabels,
+            // Activity IDS — the backend validates them against the
+            // activities collection and resolves labels + AI guidance
+            // itself. Sending the labels endpoint's response here (an
+            // {id: label} object) failed the request's list[str]
+            // validation with a 422 for every user with activities picked.
+            activities: selectedActivities,
           }),
         });
         if (!res.ok) {
