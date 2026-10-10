@@ -8,20 +8,17 @@ import {
 } from "@/lib/weather";
 import {
   getWeatherForLocation,
-  getLocationFromDb,
   getCountryByCode,
   getSeasonForDate,
 } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { safeJsonLd } from "@/lib/json-ld";
 import { WeatherDashboard } from "./WeatherDashboard";
+import { loadLocation } from "./load-location";
 import { SITE_URL } from "@/lib/site";
 
-// Deduplicate DB calls between generateMetadata and the page component.
-// Both are called for the same request; cache() ensures a single DB round-trip.
-const loadLocation = cache((slug: string) =>
-  getLocationFromDb(slug).catch(() => null),
-);
+// Location lookups go through the shared loadLocation (./load-location) so the
+// layout, generateMetadata and the page share one DB round-trip per request.
 const loadCountry = cache((code: string) =>
   getCountryByCode(code).catch(() => null),
 );
