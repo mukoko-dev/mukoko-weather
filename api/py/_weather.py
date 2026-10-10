@@ -9,6 +9,7 @@ normalized WeatherData.
 from __future__ import annotations
 
 import logging
+import math
 import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -878,7 +879,8 @@ async def get_weather(
       * ``X-Current-Source`` — origin of the ``current`` block
         (``stationkit`` | ``tomorrow`` | ``open-meteo`` | ``fallback``)
     """
-    if lat < -90 or lat > 90 or lon < -180 or lon > 180:
+    # isfinite: "nan" parses as a float and slips past the range check.
+    if not (math.isfinite(lat) and math.isfinite(lon)) or lat < -90 or lat > 90 or lon < -180 or lon > 180:
         raise HTTPException(status_code=400, detail="Invalid coordinates")
 
     requested_models = [m for m in (models or "").split(",") if m.strip()] or None
@@ -903,6 +905,7 @@ async def get_weather(
     hinted = _resolve_location_hint(location, lat, lon)
     if hinted:
         history_slug = hinted.get("slug") or location
+        elevation = hinted.get("elevation", elevation)
 
     # 0. Look for a nearby StationKit observation. Cheap (single MongoDB query)
     # and graceful — returns None on any error.

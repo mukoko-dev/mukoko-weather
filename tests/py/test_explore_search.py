@@ -148,6 +148,16 @@ class TestExecWeather:
             "locationSlug": "cell:-17.85_31.05"
         }
 
+    @patch("py._explore_search.find_location")
+    @patch("py._explore_search._get_location_context")
+    @patch("py._explore_search.weather_cache_collection")
+    def test_uses_context_coordinates_without_resolving(self, mock_coll, mock_ctx, mock_fl):
+        mock_ctx.return_value = [{"slug": "harare", "name": "Harare", "lat": -17.83, "lon": 31.05}]
+        mock_coll.return_value.find_one.return_value = None
+        _exec_weather({"slug": "harare"})
+        mock_fl.assert_not_called()
+        assert mock_coll.return_value.find_one.call_args[0][0] == {"locationSlug": "cell:-17.85_31.05"}
+
     @patch("py._explore_search.find_location", return_value=None)
     @patch("py._explore_search.weather_cache_collection")
     def test_unresolvable_slug_never_reads_cache(self, mock_coll, _fl):

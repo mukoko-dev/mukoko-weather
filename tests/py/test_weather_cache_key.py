@@ -177,3 +177,27 @@ class TestEndpointUsesGridKey:
                 for p in ps:
                     p.stop()
         assert fb.call_args[0][2] == 1200
+
+
+class TestValidationAndElevation:
+    @pytest.mark.asyncio
+    async def test_nan_coordinates_are_rejected_not_500(self):
+        from fastapi import HTTPException
+
+        for lat, lon in [(float("nan"), 31.0), (-17.0, float("nan")), (float("inf"), 0.0)]:
+            with pytest.raises(HTTPException) as exc:
+                await get_weather(lat=lat, lon=lon)
+            assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_validated_hint_supplies_fallback_elevation(self):
+        hinted = {"slug": "kariba", "lat": -16.52, "lon": 28.80, "elevation": 485}
+        with patch("py._weather._create_fallback_weather", return_value={"current": {"x": 1}}) as fb, \
+             patch("py._weather._get_cached_weather", return_value=None), \
+             patch("py._weather.tomorrow_breaker", MagicMock(is_allowed=False)), \
+             patch("py._weather.open_meteo_breaker", MagicMock(is_allowed=False)), \
+             patch("py._weather.nearest_station_observation", return_value=None), \
+             patch("py._weather._find_nearest_location", return_value=None), \
+             patch("py._weather.find_location", return_value=hinted):
+            await get_weather(lat=-16.52, lon=28.80, location="kariba")
+        assert fb.call_args[0][2] == 485

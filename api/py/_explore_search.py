@@ -198,7 +198,12 @@ def _exec_weather(args: dict) -> str:
 
     try:
         # The cache is keyed by coordinate cell, not by place slug (#252).
-        key = weather_cache_key_for(find_location(slug))
+        # Coordinates from the cached location context first (no DB hit),
+        # falling back to the resolver for slugs outside it.
+        loc = next((l for l in _get_location_context() if l.get("slug") == slug), None)
+        if not loc or loc.get("lat") is None:
+            loc = find_location(slug)
+        key = weather_cache_key_for(loc)
         cached = weather_cache_collection().find_one(
             {"locationSlug": key},
             {"_id": 0, "data": 1, "provider": 1},
