@@ -189,7 +189,7 @@ Sections also UNMOUNT when scrolled 1500px past the viewport (bidirectional), re
 
 | Collection            |        TTL         | Purpose                                             |
 | --------------------- | :----------------: | --------------------------------------------------- |
-| `weather_cache`       |       15 min       | Cached weather API responses                        |
+| `weather_cache`       |       15 min       | Weather API responses, keyed by 0.05° grid cell     |
 | `ai_summaries`        |   30/60/120 min    | Cached AI weather summaries (tiered by location)    |
 | `weather_history`     |        None        | Permanent historical weather records                |
 | `history_analysis`    |       1 hour       | Cached AI history analysis results                  |

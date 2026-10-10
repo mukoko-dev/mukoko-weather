@@ -242,6 +242,26 @@ class TestGetWeather:
         result = _execute_get_weather("harare", cache)
         assert result["current"]["temperature"] == 25
 
+    @patch("py._chat.find_location")
+    @patch("py._chat.weather_cache_collection")
+    def test_reads_cache_by_coordinate_cell(self, mock_coll, mock_loc):
+        """#252: the row is found by the place's grid cell, never its slug."""
+        mock_loc.return_value = {"slug": "harare", "name": "Harare", "lat": -17.83, "lon": 31.05}
+        mock_coll.return_value.find_one.return_value = {
+            "data": {"current": {"temperature_2m": 22}, "daily": {}},
+        }
+        result = _execute_get_weather("harare", {})
+        assert result["current"]["temperature"] == 22
+        assert result["location_name"] == "Harare"
+        assert mock_coll.return_value.find_one.call_args[0][0]["locationSlug"] == "cell:-17.85_31.05"
+
+    @patch("py._chat.find_location", return_value=None)
+    @patch("py._chat.weather_cache_collection")
+    def test_unknown_place_never_reads_cache(self, mock_coll, _loc):
+        result = _execute_get_weather("harare", {})
+        assert "error" in result
+        mock_coll.return_value.find_one.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # Tool dispatch

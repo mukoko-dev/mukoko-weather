@@ -604,9 +604,9 @@ class TestHistoryKeying:
         assert record.call_args[0][0] == "harare"
 
     @pytest.mark.asyncio
-    async def test_hint_keys_history_but_cache_stays_on_nearest(self):
-        """Nearby page slugs must keep sharing one cache row (Tomorrow.io
-        free-tier quota); only the history doc takes the hint."""
+    async def test_hint_keys_history_but_cache_uses_coordinate_cell(self):
+        """The cache row is keyed by the coordinate's grid cell (#252); only
+        the history doc takes the hint."""
         record = MagicMock()
         set_cache = MagicMock()
         ps = self._fresh_fetch_patches()
@@ -623,7 +623,7 @@ class TestHistoryKeying:
         finally:
             for p in ps:
                 p.stop()
-        assert set_cache.call_args[0][0] == "harare"
+        assert set_cache.call_args[0][0] == "cell:-17.80_31.05"
         assert record.call_args[0][0] == "avondale--ksy4dd7"
 
     @pytest.mark.asyncio
