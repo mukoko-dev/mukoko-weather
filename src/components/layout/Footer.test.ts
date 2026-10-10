@@ -21,6 +21,17 @@ describe("Footer touch targets", () => {
     expect(linkBlock('aria-label="GitHub"')).toContain("dik-dik");
   });
 
+  it("credits every forecast model provider (issue #246, CC BY 4.0)", () => {
+    expect(source).toContain(
+      "Weather data: ECMWF, NOAA, DWD, ECCC, Météo-France via",
+    );
+    expect(source).toContain("Open-Meteo.com");
+    expect(source).toContain(
+      'href="https://creativecommons.org/licenses/by/4.0/"',
+    );
+    expect(source).toContain("insights enrichment by");
+  });
+
   it("Tomorrow.io and Open-Meteo attribution links carry .dik-dik", () => {
     expect(linkBlock('href="https://www.tomorrow.io"')).toContain("dik-dik");
     expect(linkBlock('href="https://open-meteo.com"')).toContain("dik-dik");

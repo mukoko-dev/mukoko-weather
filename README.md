@@ -29,9 +29,13 @@ farming vocabulary. The same machinery now covers 265 seed locations across 64
 countries, and grows by use — a search or a GPS fix in an unmapped place
 reverse-geocodes through Nominatim and becomes a location.
 
-Two things keep it honest where connectivity and upstream APIs are not. Weather
-resolves through a four-stage chain — MongoDB cache, Tomorrow.io, Open-Meteo,
-then seasonal estimates that always succeed — so a page never renders empty.
+Two things keep it honest where connectivity and upstream APIs are not. The forecast
+baseline is an Africa-weighted blend of global weather models (ECMWF IFS and
+AIFS weighted highest, then NOAA GFS, DWD ICON, ECCC GEM and Météo-France
+ARPEGE) served keyless by Open-Meteo, resolved through a four-stage chain —
+MongoDB cache, the blend, Open-Meteo `best_match`, then seasonal estimates that
+always succeed — so a page never renders empty. Tomorrow.io only enriches the
+activity insights, within a call budget, and never blocks the forecast.
 And the UI is error-isolated per section: a chart that crashes takes down the
 chart, not the page.
 
@@ -68,19 +72,19 @@ This repo holds three deployables, not one:
 
 ## Stack
 
-| Layer          | Technology                                                                                                                                                                    |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Framework      | [Next.js 16](https://nextjs.org) (App Router), TypeScript 5, React 19                                                                                                         |
-| Backend API    | [Python FastAPI](https://fastapi.tiangolo.com) — Vercel serverless functions under `api/py/`                                                                                  |
-| Authentication | [WorkOS AuthKit](https://workos.com/docs/authkit) — hosted sign-in, signed-cookie sessions, users mirrored into `identity.persons`                                            |
-| Database       | [MongoDB Atlas](https://mongodb.com/atlas) — cache, AI summaries, history, locations, airports; Atlas Search for fuzzy queries                                                |
-| AI             | The [Workers AI](https://developers.cloudflare.com/workers-ai/) model set in the `shamwari` [AI Gateway](https://developers.cloudflare.com/ai-gateway/) (Python backend only) |
-| Weather data   | [Tomorrow.io](https://tomorrow.io) primary, [Open-Meteo](https://open-meteo.com) fallback, [NOAA AWC](https://aviationweather.gov) for METAR/TAF                              |
-| UI             | [shadcn/ui](https://ui.shadcn.com) (Radix + CVA), [Tailwind CSS 4](https://tailwindcss.com)                                                                                   |
-| Charts & maps  | [Chart.js 4](https://www.chartjs.org), [MapLibre GL](https://maplibre.org) + [MapTiler](https://www.maptiler.com), [Three.js](https://threejs.org)                            |
-| State          | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist`                                                                                                                      |
-| Testing        | [Vitest](https://vitest.dev) (TS, v8 coverage) + [pytest](https://pytest.org) (Python)                                                                                        |
-| Deployment     | [Vercel](https://vercel.com)                                                                                                                                                  |
+| Layer          | Technology                                                                                                                                                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework      | [Next.js 16](https://nextjs.org) (App Router), TypeScript 5, React 19                                                                                                                                                                                         |
+| Backend API    | [Python FastAPI](https://fastapi.tiangolo.com) — Vercel serverless functions under `api/py/`                                                                                                                                                                  |
+| Authentication | [WorkOS AuthKit](https://workos.com/docs/authkit) — hosted sign-in, signed-cookie sessions, users mirrored into `identity.persons`                                                                                                                            |
+| Database       | [MongoDB Atlas](https://mongodb.com/atlas) — cache, AI summaries, history, locations, airports; Atlas Search for fuzzy queries                                                                                                                                |
+| AI             | The [Workers AI](https://developers.cloudflare.com/workers-ai/) model set in the `shamwari` [AI Gateway](https://developers.cloudflare.com/ai-gateway/) (Python backend only)                                                                                 |
+| Weather data   | Global models (ECMWF, NOAA GFS, DWD ICON, ECCC GEM, Météo-France ARPEGE) via [Open-Meteo](https://open-meteo.com) as the baseline, [Tomorrow.io](https://tomorrow.io) for budgeted insights enrichment, [NOAA AWC](https://aviationweather.gov) for METAR/TAF |
+| UI             | [shadcn/ui](https://ui.shadcn.com) (Radix + CVA), [Tailwind CSS 4](https://tailwindcss.com)                                                                                                                                                                   |
+| Charts & maps  | [Chart.js 4](https://www.chartjs.org), [MapLibre GL](https://maplibre.org) + [MapTiler](https://www.maptiler.com), [Three.js](https://threejs.org)                                                                                                            |
+| State          | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist`                                                                                                                                                                                                      |
+| Testing        | [Vitest](https://vitest.dev) (TS, v8 coverage) + [pytest](https://pytest.org) (Python)                                                                                                                                                                        |
+| Deployment     | [Vercel](https://vercel.com)                                                                                                                                                                                                                                  |
 
 ## Getting started
 
@@ -131,9 +135,19 @@ Climate normals (1991–2020, ERA5 via Open-Meteo) are served at `GET /api/py/no
 **Air quality map** — `GET /api/py/airquality/grid` returns current US AQI on a 7×7 grid (±40 km) from one batched Open-Meteo request, cached 30 min; the `AirQualityMapCard` paints it over a non-interactive MapLibre map.
 `GET /api/py/enso` returns the latest El Niño / La Niña phase from NOAA CPC's Oceanic Niño Index (12 h in-memory cache; `available: false` when NOAA is unreachable).
 
-**Four-stage weather fallback** — MongoDB cache (15-min TTL) → Tomorrow.io →
-Open-Meteo → `createFallbackWeather` seasonal estimates. The last stage always
-succeeds, so a request never returns nothing.
+**Four-stage weather fallback** — MongoDB cache (15-min TTL) → Open-Meteo
+Africa-weighted multi-model blend (or the user's chosen model via `?model=`) →
+Open-Meteo `best_match` → `createFallbackWeather` seasonal estimates. The last
+stage always succeeds, so a request never returns nothing. Activity insights
+(GDD, heat index, thunderstorm proxy, dew point, UV, cloud base, moon phase)
+are derived from the model data; Tomorrow.io is merged on top only when its
+MongoDB-backed budget (20/hour, 400/day, with headroom reserved for seed
+locations) allows. Response headers: `X-Weather-Provider`
+(`open-meteo:blend` | `open-meteo:<model>` | `open-meteo:best_match` |
+`fallback`), `X-Weather-Blend`, `X-Enrichment` (`tomorrow` | `skipped-budget` |
+`skipped-error` | `none`) and `X-Current-Source`. Data credit: ECMWF, NOAA,
+DWD, ECCC, Météo-France via Open-Meteo.com (CC BY 4.0). Open-Meteo's free API
+is non-commercial only — see issue #246 for the licensing options.
 
 **Three-layer error isolation** — `page.tsx` wraps fetching in try/catch so the
 server always renders something; each weather section sits inside a

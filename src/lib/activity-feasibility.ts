@@ -74,11 +74,14 @@ export function hourInsights(
 
   const temp = hourly.temperature_2m?.[i];
   const rh = hourly.relative_humidity_2m?.[i];
+  // Open-Meteo visibility is metres; the insights field (and the 1/2/3/5 km
+  // rule thresholds) are km — same conversion as synthesizeOpenMeteoInsights.
+  const visM = hourly.visibility?.[i];
 
   return {
     windSpeed: hourly.wind_speed_10m?.[i],
     windGust: hourly.wind_gusts_10m?.[i],
-    visibility: hourly.visibility?.[i],
+    visibility: visM != null ? visM / 1000 : undefined,
     uvHealthConcern: hourly.uv_index?.[i],
     thunderstormProbability,
     precipitationType,

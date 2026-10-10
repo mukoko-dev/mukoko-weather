@@ -208,6 +208,7 @@
   --chart-3: #2d6a4f; /* Malachite — success/growth */
   --chart-4: #b8860b; /* Gold — warmth/accent */
   --chart-5: #c1440e; /* Terracotta — earth/alert */
+  --chart-6: #283593; /* Sodalite — ECMWF AIFS series */
 
   /* Temperature bar gradient — warm spectrum */
   --color-temp-cold: #0047ab;
@@ -361,6 +362,7 @@
   --chart-3: #64ffda; /* Malachite light */
   --chart-4: #ffd740; /* Gold light */
   --chart-5: #d4a574; /* Terracotta light */
+  --chart-6: #3d5afe; /* Sodalite light */
 
   /* Temperature bar gradient — dark mode warm spectrum */
   --color-temp-cold: #42a5f5;
@@ -517,6 +519,7 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
   --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
