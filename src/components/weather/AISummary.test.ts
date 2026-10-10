@@ -51,3 +51,20 @@ describe("AISummary — Phase 1D auth gating", () => {
     expect(source).toContain("if (!isAuthed) return;");
   });
 });
+
+describe("AISummary — request body matches the /api/py/ai contract", () => {
+  it("sends activity IDS, not the /api/py/activities?labels= map", () => {
+    // That endpoint returns { labels: { id: label } }. Sent as `activities`
+    // it failed the backend's list[str] validation with a 422, so signed-in
+    // users with activities picked never got (or cached) a summary.
+    expect(source).toContain("activities: selectedActivities,");
+    expect(source).not.toContain("/api/py/activities?labels=");
+    expect(source).not.toContain("activityLabels");
+  });
+
+  it("sends the slug, country and tags with the location", () => {
+    expect(source).toContain("slug: location.slug,");
+    expect(source).toContain('country: location.country ?? "",');
+    expect(source).toContain("tags: location.tags ?? [],");
+  });
+});

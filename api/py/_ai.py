@@ -15,7 +15,15 @@ from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ._db import get_db, enforce_rate_limit, filter_known_activities, get_activities_brief, require_internal_caller
+from ._db import (
+    SLUG_RE,
+    enforce_rate_limit,
+    filter_known_activities,
+    get_activities_brief,
+    get_db,
+    get_known_tags,
+    require_internal_caller,
+)
 from ._ai_gateway import call_ai, first_text
 from ._ai_prompts import get_ai_prompt
 
@@ -383,6 +391,34 @@ class LocationInfo(BaseModel):
     lat: float = 0.0
     lon: float = 0.0
     country: str = ""
+    # The page's own slug. Keys the shared ai_summaries row; without it the
+    # key was derived from the display name, so "phuket-th" cached under
+    # "phuket" and two same-named places shared one summary.
+    slug: str = ""
+    # The location's tags (city, farming, ...). Pick the cache TTL tier and
+    # ground the prompt. Validated against the known-tag allowlist.
+    tags: list[str] = Field(default_factory=list, max_length=20)
+
+
+def _summary_cache_key(location: LocationInfo) -> str:
+    """Cache key for a location: its slug when valid, else the legacy
+    name-derived key (older clients that don't send a slug)."""
+    slug = (location.slug or "").strip().lower()
+    if SLUG_RE.match(slug):
+        return slug
+    return location.name.lower().replace(" ", "-")
+
+
+def _location_tags(location: LocationInfo) -> list[str]:
+    """Client-supplied tags filtered to the known-tag allowlist, in order,
+    de-duplicated. Unknown entries are dropped, never spliced into a prompt."""
+    known = get_known_tags()
+    seen: list[str] = []
+    for tag in location.tags:
+        t = tag.strip().lower() if isinstance(tag, str) else ""
+        if t in known and t not in seen:
+            seen.append(t)
+    return seen
 
 
 class AISummaryRequest(BaseModel):
@@ -440,15 +476,12 @@ async def generate_summary(body: AISummaryRequest, request: Request = None):
 
     current_temp = weather_data.get("current", {}).get("temperature_2m", 0) or 0
     current_code = weather_data.get("current", {}).get("weather_code", 0) or 0
-    location_slug = location.name.lower().replace(" ", "-")
+    location_slug = _summary_cache_key(location)
 
-    # Get location tags for tiered TTL
-    try:
-        db = get_db()
-        loc_doc = db["locations"].find_one({"slug": location_slug}, {"tags": 1, "_id": 0})
-        location_tags = loc_doc.get("tags", []) if loc_doc else []
-    except Exception:
-        location_tags = []
+    # Tags for the tiered TTL and the prompt come from the request now:
+    # weather.locations (where this used to look them up) was dropped in
+    # Phase 0F, so the lookup always returned [] and every place got tier 3.
+    location_tags = _location_tags(location)
 
     # Check cache
     cached = _get_cached_summary(location_slug)
