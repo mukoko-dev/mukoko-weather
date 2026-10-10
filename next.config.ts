@@ -13,6 +13,25 @@ const nextConfig: NextConfig = {
     // Silence the multiple-lockfiles warning — parent dir has a lockfile from oss-weather
     root: __dirname,
   },
+  // A missing top-level file (`/favicon-48.png`, `/old-logo.svg`, ...) would
+  // otherwise fall through to the `[location]` route, which renders "Location
+  // not found" with HTTP 200 (the not-found is streamed after the 200 starts).
+  // Location slugs never contain a dot, so any single-segment dotted path that
+  // isn't a real public file or a static route goes to a plain 404 handler.
+  // `afterFiles` runs after public files and static routes (robots.txt,
+  // sitemap.xml, manifest.json and so on) but before dynamic routes.
+  async rewrites() {
+    return {
+      beforeFiles: [],
+      afterFiles: [
+        {
+          source: "/:file([^/]*\\.[A-Za-z0-9]+)",
+          destination: "/api/missing-asset",
+        },
+      ],
+      fallback: [],
+    };
+  },
   async headers() {
     return [
       {

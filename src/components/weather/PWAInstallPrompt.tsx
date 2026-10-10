@@ -143,7 +143,7 @@ export function PWAInstallPrompt() {
           {/* App icon — full-color brand mark */}
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-surface-dim">
             <Image
-              src="/icons/icon.svg"
+              src="/favicon.svg"
               alt="mukoko weather"
               width={48}
               height={48}

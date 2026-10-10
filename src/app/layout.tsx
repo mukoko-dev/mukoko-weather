@@ -86,6 +86,22 @@ export const metadata: Metadata = {
   },
   category: "weather",
   verification: {},
+  // Favicons: the single Mukoko icon set, copied byte for byte from
+  // mukoko-news/public. mukoko-news is the source of truth. Change it there
+  // first, then copy it here (src/app/favicon-parity.test.ts checks the hashes).
+  // Do not add app-dir icon files (src/app/icon.*, apple-icon.*) because they
+  // would compete with this set.
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon.ico", sizes: "48x48" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
 };
 
 export default async function RootLayout({
@@ -316,38 +332,7 @@ export default async function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="format-detection" content="telephone=no" />
         <link rel="manifest" href="/manifest.json" />
-        {/* Favicons — full-colour 7-mineral Seed of Life mark (matches the header logo) */}
-        <link
-          rel="icon"
-          type="image/svg+xml"
-          href="/favicon.svg"
-          media="(prefers-color-scheme: light)"
-        />
-        <link
-          rel="icon"
-          type="image/svg+xml"
-          href="/favicon-dark.svg"
-          media="(prefers-color-scheme: dark)"
-        />
-        <link
-          rel="icon"
-          type="image/png"
-          sizes="16x16"
-          href="/favicon-16.png"
-        />
-        <link
-          rel="icon"
-          type="image/png"
-          sizes="32x32"
-          href="/favicon-32.png"
-        />
-        <link
-          rel="icon"
-          type="image/png"
-          sizes="48x48"
-          href="/favicon-48.png"
-        />
-        <link rel="apple-touch-icon" sizes="180x180" href="/favicon-180.png" />
+        {/* Favicons come from `metadata.icons` above, which is the mukoko-news set. */}
         {/* Brand typography — Noto Serif (display/headings) · Noto Sans (UI/body) · JetBrains Mono (data/code) */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
