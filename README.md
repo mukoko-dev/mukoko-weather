@@ -39,7 +39,7 @@ Beyond the forecast, the app carries an aviation planner (METAR/TAF with
 VFR/MVFR/IFR/LIFR categories and PDF pre-flight briefings from NOAA data),
 Waze-style community weather reports cross-validated against API data, an EPA
 air-quality index with a full pollutant breakdown, a global location-aware haze panel (smoke, dust, smog, regional seasons, official Singapore PSI), a historical dashboard with
-Claude-authored trend analysis, and an embeddable widget. It installs as a PWA.
+AI trend analysis, and an embeddable widget. It installs as a PWA.
 The Locations list (`/locations`) shows the current location and saved places as
 live weather cards, with a Home location, in the style of iOS Weather.
 
@@ -68,19 +68,19 @@ This repo holds three deployables, not one:
 
 ## Stack
 
-| Layer          | Technology                                                                                                                                                                         |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Framework      | [Next.js 16](https://nextjs.org) (App Router), TypeScript 5, React 19                                                                                                              |
-| Backend API    | [Python FastAPI](https://fastapi.tiangolo.com) — Vercel serverless functions under `api/py/`                                                                                       |
-| Authentication | [WorkOS AuthKit](https://workos.com/docs/authkit) — hosted sign-in, signed-cookie sessions, users mirrored into `identity.persons`                                                 |
-| Database       | [MongoDB Atlas](https://mongodb.com/atlas) — cache, AI summaries, history, locations, airports; Atlas Search for fuzzy queries                                                     |
-| AI             | GLM on [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) via the `shamwari` [AI Gateway](https://developers.cloudflare.com/ai-gateway/) (Python backend only) |
-| Weather data   | [Tomorrow.io](https://tomorrow.io) primary, [Open-Meteo](https://open-meteo.com) fallback, [NOAA AWC](https://aviationweather.gov) for METAR/TAF                                   |
-| UI             | [shadcn/ui](https://ui.shadcn.com) (Radix + CVA), [Tailwind CSS 4](https://tailwindcss.com)                                                                                        |
-| Charts & maps  | [Chart.js 4](https://www.chartjs.org), [MapLibre GL](https://maplibre.org) + [MapTiler](https://www.maptiler.com), [Three.js](https://threejs.org)                                 |
-| State          | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist`                                                                                                                           |
-| Testing        | [Vitest](https://vitest.dev) (TS, v8 coverage) + [pytest](https://pytest.org) (Python)                                                                                             |
-| Deployment     | [Vercel](https://vercel.com)                                                                                                                                                       |
+| Layer          | Technology                                                                                                                                                                    |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework      | [Next.js 16](https://nextjs.org) (App Router), TypeScript 5, React 19                                                                                                         |
+| Backend API    | [Python FastAPI](https://fastapi.tiangolo.com) — Vercel serverless functions under `api/py/`                                                                                  |
+| Authentication | [WorkOS AuthKit](https://workos.com/docs/authkit) — hosted sign-in, signed-cookie sessions, users mirrored into `identity.persons`                                            |
+| Database       | [MongoDB Atlas](https://mongodb.com/atlas) — cache, AI summaries, history, locations, airports; Atlas Search for fuzzy queries                                                |
+| AI             | The [Workers AI](https://developers.cloudflare.com/workers-ai/) model set in the `shamwari` [AI Gateway](https://developers.cloudflare.com/ai-gateway/) (Python backend only) |
+| Weather data   | [Tomorrow.io](https://tomorrow.io) primary, [Open-Meteo](https://open-meteo.com) fallback, [NOAA AWC](https://aviationweather.gov) for METAR/TAF                              |
+| UI             | [shadcn/ui](https://ui.shadcn.com) (Radix + CVA), [Tailwind CSS 4](https://tailwindcss.com)                                                                                   |
+| Charts & maps  | [Chart.js 4](https://www.chartjs.org), [MapLibre GL](https://maplibre.org) + [MapTiler](https://www.maptiler.com), [Three.js](https://threejs.org)                            |
+| State          | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist`                                                                                                                      |
+| Testing        | [Vitest](https://vitest.dev) (TS, v8 coverage) + [pytest](https://pytest.org) (Python)                                                                                        |
+| Deployment     | [Vercel](https://vercel.com)                                                                                                                                                  |
 
 ## Getting started
 
