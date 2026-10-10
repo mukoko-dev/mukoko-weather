@@ -121,8 +121,9 @@ class TestExecWeather:
         assert "error" in result
         assert "Invalid" in result["error"]
 
+    @patch("py._explore_search.find_location", return_value={"slug": "harare", "name": "Harare", "lat": -17.83, "lon": 31.05})
     @patch("py._explore_search.weather_cache_collection")
-    def test_cached_weather_returned(self, mock_coll):
+    def test_cached_weather_returned(self, mock_coll, _fl):
         mock_coll.return_value.find_one.return_value = {
             "data": {
                 "current": {
@@ -142,16 +143,39 @@ class TestExecWeather:
         assert result["temperature"] == 25.0
         assert result["humidity"] == 60
         assert result["provider"] == "tomorrow"
+        # Read by the place's coordinate cell, never by slug (#252).
+        assert mock_coll.return_value.find_one.call_args[0][0] == {
+            "locationSlug": "cell:-17.85_31.05"
+        }
 
+    @patch("py._explore_search.find_location")
+    @patch("py._explore_search._get_location_context")
     @patch("py._explore_search.weather_cache_collection")
-    def test_no_cache_returns_error(self, mock_coll):
+    def test_uses_context_coordinates_without_resolving(self, mock_coll, mock_ctx, mock_fl):
+        mock_ctx.return_value = [{"slug": "harare", "name": "Harare", "lat": -17.83, "lon": 31.05}]
+        mock_coll.return_value.find_one.return_value = None
+        _exec_weather({"slug": "harare"})
+        mock_fl.assert_not_called()
+        assert mock_coll.return_value.find_one.call_args[0][0] == {"locationSlug": "cell:-17.85_31.05"}
+
+    @patch("py._explore_search.find_location", return_value=None)
+    @patch("py._explore_search.weather_cache_collection")
+    def test_unresolvable_slug_never_reads_cache(self, mock_coll, _fl):
+        result = json.loads(_exec_weather({"slug": "harare"}))
+        assert "No weather data" in result["error"]
+        mock_coll.return_value.find_one.assert_not_called()
+
+    @patch("py._explore_search.find_location", return_value={"slug": "harare", "name": "Harare", "lat": -17.83, "lon": 31.05})
+    @patch("py._explore_search.weather_cache_collection")
+    def test_no_cache_returns_error(self, mock_coll, _fl):
         mock_coll.return_value.find_one.return_value = None
         result = json.loads(_exec_weather({"slug": "harare"}))
         assert "error" in result
         assert "No weather data" in result["error"]
 
+    @patch("py._explore_search.find_location", return_value={"slug": "harare", "name": "Harare", "lat": -17.83, "lon": 31.05})
     @patch("py._explore_search.weather_cache_collection")
-    def test_db_exception_returns_error(self, mock_coll):
+    def test_db_exception_returns_error(self, mock_coll, _fl):
         mock_coll.return_value.find_one.side_effect = Exception("DB down")
         result = json.loads(_exec_weather({"slug": "harare"}))
         assert "error" in result
@@ -251,7 +275,8 @@ class TestTextSearchFallback:
     @patch("py._explore_search._get_location_context")
     def test_includes_weather_if_cached(self, mock_ctx, mock_weather_coll):
         mock_ctx.return_value = [
-            {"slug": "harare", "name": "Harare", "province": "Harare", "tags": ["city"], "country": "ZW"},
+            {"slug": "harare", "name": "Harare", "province": "Harare", "tags": ["city"], "country": "ZW",
+             "lat": -17.83, "lon": 31.05},
         ]
         mock_weather_coll.return_value.find_one.return_value = {
             "data": {"current": {"temperature_2m": 28, "weather_code": 0}}
@@ -261,6 +286,9 @@ class TestTextSearchFallback:
         loc = result["locations"][0]
         assert loc.get("temperature") == 28
         assert loc.get("weatherCode") == 0
+        assert mock_weather_coll.return_value.find_one.call_args[0][0] == {
+            "locationSlug": "cell:-17.85_31.05"
+        }
 
     @patch("py._explore_search._get_location_context")
     def test_no_match_returns_helpful_message(self, mock_ctx):

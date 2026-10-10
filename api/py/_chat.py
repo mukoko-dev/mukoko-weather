@@ -31,6 +31,7 @@ from ._db import (
     MAX_HISTORY,
     MAX_MESSAGE_LEN,
 )
+from ._weather_cache_key import weather_cache_key_for
 from ._places_resolver import (
     find_all_locations,
     find_location,
@@ -222,21 +223,21 @@ def _execute_get_weather(slug: str, weather_cache: dict) -> dict:
         return weather_cache[slug]
 
     try:
-        doc = weather_cache_collection().find_one(
-            {"locationSlug": slug, "expiresAt": {"$gt": datetime.now(timezone.utc)}},
-        )
-        if not doc:
-            return {"error": f"No cached weather for {slug}. Weather data may not be available yet."}
-
-        # Resolve location name for reference extraction (runs in executor thread).
-        # Phase 0G: resolved via places.placesGeo through the canonical resolver.
-        loc_name = slug
+        # Resolve the place first (runs in executor thread): the cache is keyed
+        # by its coordinate cell, not by slug (#252), and the name feeds
+        # reference extraction. Phase 0G: via places.placesGeo.
         try:
             loc_doc = find_location(slug)
-            if loc_doc and loc_doc.get("name"):
-                loc_name = loc_doc["name"]
         except Exception:
-            pass
+            loc_doc = None
+        loc_name = (loc_doc or {}).get("name") or slug
+
+        key = weather_cache_key_for(loc_doc)
+        doc = weather_cache_collection().find_one(
+            {"locationSlug": key, "expiresAt": {"$gt": datetime.now(timezone.utc)}},
+        ) if key else None
+        if not doc:
+            return {"error": f"No cached weather for {slug}. Weather data may not be available yet."}
 
         data = doc.get("data", {})
         current = data.get("current", {})
