@@ -156,7 +156,8 @@ class TestMerge:
     def test_wind_visibility_and_uv_are_never_enrichment_fields(self):
         # uvHealthConcern: Tomorrow.io's is a 0–4 category; the rules expect
         # the 0–11+ UV index (e.g. "gt 7"), so it must stay with the baseline.
-        for k in ("windSpeed", "windGust", "visibility", "dewPoint", "uvHealthConcern"):
+        # evapotranspiration: Tomorrow.io's is an hourly average, the rules use mm/day.
+        for k in ("windSpeed", "windGust", "visibility", "dewPoint", "uvHealthConcern", "evapotranspiration"):
             assert k not in ENRICHMENT_FIELDS
 
 

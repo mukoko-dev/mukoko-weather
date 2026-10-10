@@ -50,12 +50,14 @@ PROVIDER = "tomorrow"
 #: Wind, visibility and dew point stay with the (fresher, hourly) baseline.
 #: ``uvHealthConcern`` is deliberately NOT here: Tomorrow.io's
 #: ``uvHealthConcernMax`` is a 0–4 category, while the suitability rules
-#: compare the field against the 0–11+ UV index (e.g. ``gt 7``).
+#: compare the field against the 0–11+ UV index (e.g. ``gt 7``). Nor is
+#: ``evapotranspiration``: Tomorrow.io's ``evapotranspirationAvg`` is an
+#: hourly average (≈0.2 mm, seen live on the preview), while the rules and
+#: the derived value use daily FAO ET₀ in mm/day (≈6 mm).
 ENRICHMENT_FIELDS = (
     "thunderstormProbability",
     "heatStressIndex",
     "gdd10To30",
-    "evapotranspiration",
     "cloudBase",
     "cloudCeiling",
     "moonPhase",
