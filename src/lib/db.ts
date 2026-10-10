@@ -56,7 +56,7 @@ import type { TagDoc } from "./seed-tags";
 import type { SeasonDoc } from "./seed-seasons";
 import type { ActivityCategoryDoc } from "./seed-categories";
 import type { AIPromptDoc, AISuggestedPromptRule } from "./seed-ai-prompts";
-import { internalApiBase } from "@/lib/site";
+import { internalApiTarget } from "@/lib/site";
 import { weatherCacheKey } from "./weather-cache-key";
 
 // ---------------------------------------------------------------------------
@@ -733,6 +733,33 @@ export interface WeatherResult {
   source: string;
 }
 
+/** Host of a base URL for logs; never throws on a malformed override. */
+function hostOf(base: string): string {
+  try {
+    return new URL(base).host;
+  } catch {
+    return "invalid-base-url";
+  }
+}
+
+/**
+ * Log message for a non-JSON / non-2xx answer from the internal weather
+ * endpoint. A 3xx is Deployment Protection (or a misconfigured base) — say
+ * so, rather than "unreachable" (issue #262).
+ */
+export function internalWeatherFailure(
+  status: number,
+  contentType: string,
+): string {
+  if (status >= 300 && status < 400) {
+    return `Internal weather endpoint redirected (${status}) — likely Deployment Protection; falling back to direct Open-Meteo`;
+  }
+  if (status >= 200 && status < 300) {
+    return `Internal weather endpoint returned non-JSON (${contentType || "no content-type"}), falling back to direct Open-Meteo`;
+  }
+  return `Internal weather endpoint returned ${status}, falling back to direct Open-Meteo`;
+}
+
 /**
  * Get weather data for a location for SSR, checking the MongoDB cache first.
  *
@@ -765,25 +792,44 @@ export async function getWeatherForLocation(
 
   // 2. Canonical fetch path — Python does the provider chain (StationKit →
   // Tomorrow.io → Open-Meteo → seasonal), writes the cache, records history.
+  // `redirect: "manual"` + the JSON content-type check (issue #262): a
+  // Deployment Protection redirect used to be followed to Vercel's 200 HTML
+  // login page, whose JSON parse failure was then logged as "unreachable".
+  const target = internalApiTarget();
+  const host = hostOf(target.base);
   try {
     const res = await fetch(
       // `location` keys the history doc under THIS page's slug, so
       // /api/py/history?location=<slug> reads what gets recorded (#245).
       // The cache row is keyed by the lat/lon cell, not the slug (#252).
-      `${internalApiBase()}/api/py/weather?lat=${lat}&lon=${lon}&location=${encodeURIComponent(slug)}`,
-      { cache: "no-store", signal: AbortSignal.timeout(15_000) },
+      `${target.base}/api/py/weather?lat=${lat}&lon=${lon}&location=${encodeURIComponent(slug)}`,
+      {
+        cache: "no-store",
+        headers: target.headers,
+        redirect: "manual",
+        signal: AbortSignal.timeout(15_000),
+      },
     );
-    if (res.ok) {
+    const contentType = res.headers.get("content-type") ?? "";
+    if (res.ok && contentType.includes("application/json")) {
       const data = (await res.json()) as WeatherData;
       return {
         data,
         source: res.headers.get("x-weather-provider") ?? "open-meteo",
       };
     }
+    // Release the socket — a redirect or HTML body is never read.
+    await res.body?.cancel().catch(() => undefined);
     logWarn({
       source: "weather-api",
       location: slug,
-      message: `Internal weather endpoint returned ${res.status}, falling back to direct Open-Meteo`,
+      message: internalWeatherFailure(res.status, contentType),
+      meta: {
+        status: res.status,
+        contentType,
+        host,
+        bypassHeader: Object.keys(target.headers).length > 0,
+      },
     });
   } catch (err) {
     logWarn({
@@ -792,6 +838,7 @@ export async function getWeatherForLocation(
       message:
         "Internal weather endpoint unreachable, falling back to direct Open-Meteo",
       error: err,
+      meta: { host },
     });
   }
 
