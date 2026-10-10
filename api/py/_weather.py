@@ -14,6 +14,7 @@ normalized WeatherData.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -23,10 +24,12 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from ._db import (
+    SLUG_RE,
     observations_collection,
     weather_cache_collection,
 )
-from ._places_resolver import find_nearest_location
+from ._places_resolver import find_location, find_nearest_location
+from ._history_store import record_weather_history
 from ._circuit_breaker import open_meteo_breaker
 from . import _enrichment as enrichment
 from . import _model_blend as blend
@@ -38,6 +41,7 @@ from ._insights import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # Module-level httpx client (reused across warm Vercel invocations)
 _http_client: Optional[httpx.Client] = None
@@ -860,42 +864,65 @@ def _set_cached_weather(slug: str, lat: float, lon: float, data: dict, provider:
     )
 
 
-def _record_weather_history(slug: str, data: dict):
-    """Record weather data point in history collection."""
-    from ._db import get_db
+def _record_weather_history(
+    slug: str,
+    data: dict,
+    provider: str = "unknown",
+    lon: float = 0.0,
+) -> bool:
+    """Upsert today's history doc for ``slug`` — one per location-local day.
 
-    current = data.get("current", {})
-    daily = data.get("daily", {})
+    Thin wrapper over :func:`_history_store.record_weather_history` (the
+    single writer, keyed on the unique ``(locationSlug, date)`` index).
+    """
+    offset = _utc_offset(data)
+    if offset is None:
+        offset = _estimate_utc_offset(lon)
+    return record_weather_history(
+        slug, data, provider=provider, utc_offset_seconds=offset
+    )
 
-    record = {
-        "locationSlug": slug,
-        "recordedAt": datetime.now(timezone.utc),
-        "current": current,
-    }
 
-    # Add first day of daily forecast
-    if daily and daily.get("time"):
-        record["daily"] = {
-            "date": daily["time"][0] if daily["time"] else None,
-            "weatherCode": daily.get("weather_code", [None])[0],
-            "tempMax": daily.get("temperature_2m_max", [None])[0],
-            "tempMin": daily.get("temperature_2m_min", [None])[0],
-            "apparentTempMax": daily.get("apparent_temperature_max", [None])[0],
-            "apparentTempMin": daily.get("apparent_temperature_min", [None])[0],
-            "precipSum": daily.get("precipitation_sum", [None])[0],
-            "precipProbMax": daily.get("precipitation_probability_max", [None])[0],
-            "windSpeedMax": daily.get("wind_speed_10m_max", [None])[0],
-            "windGustMax": daily.get("wind_gusts_10m_max", [None])[0],
-            "windDirDominant": daily.get("wind_direction_10m_dominant", [None])[0],
-            "uvIndexMax": daily.get("uv_index_max", [None])[0],
-            "sunrise": daily.get("sunrise", [None])[0],
-            "sunset": daily.get("sunset", [None])[0],
-        }
+#: A caller-supplied ``location`` hint (or the nearest known place) must be
+#: within this distance of the requested coordinates before weather for those
+#: coordinates is recorded as that location's history. Stops a caller from
+#: writing London's weather into Harare's history, and stops the 20,000 km
+#: nearest-match (used for cache keys) from filing Karachi under Bosaso.
+HISTORY_MAX_DISTANCE_KM = 25.0
 
-    if data.get("insights"):
-        record["insights"] = data["insights"]
 
-    get_db()["weather_history"].insert_one(record)
+def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    import math
+
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = p2 - p1
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(min(1.0, math.sqrt(a)))
+
+
+def _near(loc: dict | None, lat: float, lon: float) -> bool:
+    if not loc:
+        return False
+    try:
+        return (
+            _distance_km(lat, lon, float(loc["lat"]), float(loc["lon"]))
+            <= HISTORY_MAX_DISTANCE_KM
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def _resolve_location_hint(hint: str | None, lat: float, lon: float) -> dict | None:
+    """Validate a caller's ``location`` slug against the requested coords."""
+    if not hint or not SLUG_RE.match(hint):
+        return None
+    try:
+        loc = find_location(hint)
+    except Exception:
+        return None
+    return loc if _near(loc, lat, lon) else None
 
 
 def _find_nearest_location(lat: float, lon: float) -> dict | None:
@@ -925,17 +952,11 @@ PRIORITY_MAX_DISTANCE_KM = 25.0
 
 
 def _within_km(loc: dict, lat: float, lon: float, max_km: float) -> bool:
-    """Haversine distance check between ``loc`` (``lat``/``lon``) and a point."""
-    import math
-
+    """Whether ``loc`` (``lat``/``lon``) is within ``max_km`` of a point."""
     try:
-        lat2, lon2 = float(loc["lat"]), float(loc["lon"])
+        return _distance_km(lat, lon, float(loc["lat"]), float(loc["lon"])) <= max_km
     except (KeyError, TypeError, ValueError):
         return False
-    p1, p2 = math.radians(lat), math.radians(lat2)
-    dp, dl = p2 - p1, math.radians(lon2 - lon)
-    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    return 2 * 6371.0 * math.asin(min(1.0, math.sqrt(a))) <= max_km
 
 
 def _fresh_minutely(minutely: dict | None, offset_seconds: int | None) -> dict | None:
@@ -1025,10 +1046,17 @@ async def get_weather(
     lon: float = 31.05,
     models: str | None = None,
     model: str | None = None,
+    location: str | None = None,
     request: Request = None,  # type: ignore[assignment]  # injected by FastAPI
 ):
     """
-    GET /api/py/weather?lat=-17.83&lon=31.05[&model=ecmwf_ifs][&models=gfs_seamless,icon_global]
+    GET /api/py/weather?lat=-17.83&lon=31.05[&model=ecmwf_ifs][&models=gfs_seamless,icon_global][&location=harare]
+
+    ``location`` (optional) is the caller's clean slug for these coordinates
+    (SSR passes the page slug). It is honoured only when it resolves to a
+    known place within ``HISTORY_MAX_DISTANCE_KM`` of ``lat``/``lon``; it then
+    keys the history doc, so ``/api/py/history?location=`` reads exactly what
+    this endpoint records. The cache stays keyed on the nearest known place.
 
     Provider chain (issue #246 — global models are the baseline, Tomorrow.io
     only enriches):
@@ -1071,16 +1099,29 @@ async def get_weather(
     location_slug = f"{lat:.2f}_{lon:.2f}"
     known_nearby = False  # a known place actually near these coordinates
     elevation = 1200
+    # History is only recorded under a slug we're confident describes these
+    # coordinates (validated hint, or a nearby known place) — never under a
+    # raw coordinate key nobody reads, nor a place thousands of km away.
+    # The CACHE stays keyed on the nearest known place so nearby page slugs
+    # keep sharing one provider fetch (Tomorrow.io free tier: 500/day). Only
+    # the history doc takes the validated hint.
+    history_slug: str | None = None
     try:
         nearest = _find_nearest_location(lat, lon)
         if nearest and nearest.get("slug"):
             location_slug = nearest["slug"]
             elevation = nearest.get("elevation", elevation)
             # The cache-key lookup searches 20,000 km, so "has a slug" says
-            # nothing; priority budget needs the place to really be here.
+            # nothing; priority budget and history need the place to really
+            # be here.
             known_nearby = _within_km(nearest, lat, lon, PRIORITY_MAX_DISTANCE_KM)
+            if _near(nearest, lat, lon):
+                history_slug = location_slug
     except Exception:
         pass
+    hinted = _resolve_location_hint(location, lat, lon)
+    if hinted:
+        history_slug = hinted.get("slug") or location
     cache_key = location_slug if baseline_model is None else f"{location_slug}::{baseline_model}"
 
     # 0. Look for a nearby StationKit observation. Cheap (single MongoDB query)
@@ -1184,10 +1225,12 @@ async def get_weather(
         # Cache the baseline (+ enrichment). The seasonal fallback is never
         # cached so we keep retrying upstream. This is the ONLY weather_cache
         # writer (issue #101).
+        # The writes are independent: a cache failure must not cost the
+        # day's history doc (and vice versa). Neither may fail the response.
         try:
             _set_cached_weather(cache_key, lat, lon, data, source)
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("weather_cache write failed for %s: %s", cache_key, exc)
 
         # Verification capture — default blend only, at most once per 6 h.
         if raw_for_verification:
@@ -1202,13 +1245,14 @@ async def get_weather(
             except Exception:
                 pass
 
-        # History — default baseline only, so the series is one consistent
-        # source (merged insights included).
-        if baseline_model is None:
+        # History — default baseline only (one consistent source, merged
+        # insights included), and only under a slug validated against these
+        # coordinates (issue #245).
+        if baseline_model is None and history_slug:
             try:
-                _record_weather_history(location_slug, data)
-            except Exception:
-                pass
+                _record_weather_history(history_slug, data, source, lon)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("weather_history write failed for %s: %s", history_slug, exc)
 
     # Blend StationKit observation into the response: overlay the station's
     # sensor fields onto the forecast `current` (keeping forecast-only fields

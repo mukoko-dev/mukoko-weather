@@ -509,77 +509,205 @@ class TestSetCachedWeather:
 
 
 class TestRecordWeatherHistory:
-    @patch("py._db.get_db")
-    def test_records_current_data(self, mock_db):
-        mock_history = MagicMock()
-        mock_db.return_value.__getitem__ = MagicMock(return_value=mock_history)
+    """Regression guard for #245: history must UPSERT on the unique
+    (locationSlug, date) key — a bare insert_one without `date` collided on
+    (slug, null) from the second write onwards and was silently swallowed."""
 
+    def _coll(self, mock_db):
+        coll = MagicMock()
+        mock_db.return_value.__getitem__ = MagicMock(return_value=coll)
+        return coll
+
+    @patch("py._history_store.get_db")
+    def test_upserts_on_slug_and_local_date_never_inserts(self, mock_db):
+        coll = self._coll(mock_db)
         data = {
             "current": {"temperature_2m": 25, "weather_code": 0},
-            "daily": {"time": [], "weather_code": []},
+            "daily": {"time": ["2026-10-10"], "temperature_2m_max": [30]},
+            "utc_offset_seconds": 7200,
         }
-        _record_weather_history("harare", data)
-        mock_history.insert_one.assert_called_once()
-        record = mock_history.insert_one.call_args[0][0]
-        assert record["locationSlug"] == "harare"
-        assert record["current"] == data["current"]
+        assert _record_weather_history("harare", data, "open-meteo", 31.05) is True
+        coll.insert_one.assert_not_called()
+        coll.update_one.assert_called_once()
+        key, update = coll.update_one.call_args[0]
+        assert coll.update_one.call_args[1] == {"upsert": True}
+        assert set(key) == {"locationSlug", "date"}
+        assert key["locationSlug"] == "harare"
+        assert isinstance(key["date"], str) and len(key["date"]) == 10
+        assert update["$set"]["source"] == "recorded"
+        assert update["$set"]["provider"] == "open-meteo"
+        assert update["$set"]["current"] == data["current"]
 
-    @patch("py._db.get_db")
-    def test_includes_daily_when_present(self, mock_db):
-        mock_history = MagicMock()
-        mock_db.return_value.__getitem__ = MagicMock(return_value=mock_history)
+    @patch("py._history_store.get_db")
+    def test_repeated_fetches_same_day_hit_the_same_key(self, mock_db):
+        coll = self._coll(mock_db)
+        data = {"current": {"temperature_2m": 25}, "daily": {}, "utc_offset_seconds": 0}
+        _record_weather_history("harare", data, "tomorrow", 31.05)
+        _record_weather_history("harare", data, "tomorrow", 31.05)
+        keys = [c[0][0] for c in coll.update_one.call_args_list]
+        assert keys[0] == keys[1]
 
+    @patch("py._history_store.get_db")
+    def test_daily_kept_as_one_day_weatherdata_arrays(self, mock_db):
+        """The dashboard + analyzer read `daily.<field>[0]` — keep that shape."""
+        coll = self._coll(mock_db)
         data = {
             "current": {"temperature_2m": 25},
             "daily": {
-                "time": ["2025-01-01"],
-                "weather_code": [0],
-                "temperature_2m_max": [30],
-                "temperature_2m_min": [15],
-                "apparent_temperature_max": [29],
-                "apparent_temperature_min": [14],
-                "precipitation_sum": [0],
-                "precipitation_probability_max": [10],
-                "wind_speed_10m_max": [15],
-                "wind_gusts_10m_max": [25],
-                "wind_direction_10m_dominant": [180],
-                "uv_index_max": [7],
-                "sunrise": ["06:00"],
-                "sunset": ["18:00"],
+                "time": ["2026-10-10", "2026-10-11"],
+                "temperature_2m_max": [30, 31],
+                "temperature_2m_min": [15, 16],
+                "sunrise": ["2026-10-10T05:31", "2026-10-11T05:30"],
             },
+            "utc_offset_seconds": 7200,
         }
-        _record_weather_history("harare", data)
-        record = mock_history.insert_one.call_args[0][0]
-        assert "daily" in record
-        assert record["daily"]["date"] == "2025-01-01"
-        assert record["daily"]["tempMax"] == 30
+        _record_weather_history("harare", data, "open-meteo", 31.05)
+        daily = coll.update_one.call_args[0][1]["$set"]["daily"]
+        assert daily["temperature_2m_max"] == [30]
+        assert daily["temperature_2m_min"] == [15]
+        assert daily["sunrise"] == ["2026-10-10T05:31"]
 
-    @patch("py._db.get_db")
+    @patch("py._history_store.get_db")
     def test_includes_insights_when_present(self, mock_db):
-        mock_history = MagicMock()
-        mock_db.return_value.__getitem__ = MagicMock(return_value=mock_history)
+        coll = self._coll(mock_db)
+        data = {"current": {"temperature_2m": 25}, "daily": {}, "insights": {"heatStressIndex": 35}}
+        _record_weather_history("harare", data, "tomorrow", 31.05)
+        assert coll.update_one.call_args[0][1]["$set"]["insights"] == {"heatStressIndex": 35}
 
-        data = {
-            "current": {"temperature_2m": 25},
-            "daily": {"time": [], "weather_code": []},
-            "insights": {"heatStressIndex": 35},
-        }
-        _record_weather_history("harare", data)
-        record = mock_history.insert_one.call_args[0][0]
-        assert record["insights"] == {"heatStressIndex": 35}
-
-    @patch("py._db.get_db")
+    @patch("py._history_store.get_db")
     def test_omits_insights_when_not_present(self, mock_db):
-        mock_history = MagicMock()
-        mock_db.return_value.__getitem__ = MagicMock(return_value=mock_history)
+        coll = self._coll(mock_db)
+        data = {"current": {"temperature_2m": 25}, "daily": {}}
+        _record_weather_history("harare", data, "tomorrow", 31.05)
+        assert "insights" not in coll.update_one.call_args[0][1]["$set"]
 
-        data = {
-            "current": {"temperature_2m": 25},
-            "daily": {"time": [], "weather_code": []},
-        }
-        _record_weather_history("harare", data)
-        record = mock_history.insert_one.call_args[0][0]
-        assert "insights" not in record
+    @patch("py._history_store.get_db")
+    def test_write_failure_is_reported_not_raised(self, mock_db):
+        coll = self._coll(mock_db)
+        coll.update_one.side_effect = Exception("quota")
+        data = {"current": {"temperature_2m": 25}, "daily": {}}
+        assert _record_weather_history("harare", data, "tomorrow", 31.05) is False
+
+
+class TestHistoryKeying:
+    """History is recorded under the slug /api/py/history reads (#245)."""
+
+    def _fresh_fetch_patches(self):
+        return [
+            patch("py._weather._get_cached_weather", return_value=None),
+            patch("py._weather._set_cached_weather"),
+            # Tomorrow.io is enrichment-only now (#246); the module-level
+            # autouse fixture already stubs enrichment out.
+            patch("py._weather.open_meteo_breaker", MagicMock(is_allowed=True)),
+            patch(
+                "py._weather._fetch_open_meteo",
+                return_value={"current": {"temperature_2m": 24}, "hourly": {}, "daily": {}},
+            ),
+            patch("py._weather._fetch_open_meteo_extras", return_value=None),
+            patch("py._weather.nearest_station_observation", return_value=None),
+        ]
+
+    async def _call(self, record, nearest, hint_loc, **kwargs):
+        ps = self._fresh_fetch_patches()
+        ps.append(patch("py._weather._find_nearest_location", return_value=nearest))
+        ps.append(patch("py._weather.find_location", return_value=hint_loc))
+        ps.append(patch("py._weather._record_weather_history", record))
+        for p in ps:
+            p.start()
+        try:
+            return await get_weather(**kwargs)
+        finally:
+            for p in ps:
+                p.stop()
+
+    @pytest.mark.asyncio
+    async def test_valid_location_hint_keys_history(self):
+        record = MagicMock()
+        await self._call(
+            record,
+            nearest={"slug": "harare-35c223", "lat": -17.83, "lon": 31.05},
+            hint_loc={"slug": "harare", "lat": -17.8292, "lon": 31.0522, "elevation": 1490},
+            lat=-17.83, lon=31.05, location="harare",
+        )
+        record.assert_called_once()
+        assert record.call_args[0][0] == "harare"
+
+    @pytest.mark.asyncio
+    async def test_hint_keys_history_but_cache_stays_on_nearest(self):
+        """Nearby page slugs must keep sharing one cache row (Tomorrow.io
+        free-tier quota); only the history doc takes the hint."""
+        record = MagicMock()
+        set_cache = MagicMock()
+        ps = self._fresh_fetch_patches()
+        ps[1] = patch("py._weather._set_cached_weather", set_cache)
+        ps += [
+            patch("py._weather._find_nearest_location", return_value={"slug": "harare", "lat": -17.83, "lon": 31.05}),
+            patch("py._weather.find_location", return_value={"slug": "avondale--ksy4dd7", "lat": -17.80, "lon": 31.03}),
+            patch("py._weather._record_weather_history", record),
+        ]
+        for p in ps:
+            p.start()
+        try:
+            await get_weather(lat=-17.80, lon=31.03, location="avondale--ksy4dd7")
+        finally:
+            for p in ps:
+                p.stop()
+        assert set_cache.call_args[0][0] == "harare"
+        assert record.call_args[0][0] == "avondale--ksy4dd7"
+
+    @pytest.mark.asyncio
+    async def test_hint_far_from_coords_is_ignored(self):
+        """A caller can't file London's weather under Harare."""
+        record = MagicMock()
+        await self._call(
+            record,
+            nearest={"slug": "london-gb", "lat": 51.5, "lon": -0.12},
+            hint_loc={"slug": "harare", "lat": -17.83, "lon": 31.05},
+            lat=51.5, lon=-0.12, location="harare",
+        )
+        record.assert_called_once()
+        assert record.call_args[0][0] == "london-gb"
+
+    @pytest.mark.asyncio
+    async def test_invalid_hint_slug_never_resolved(self):
+        record = MagicMock()
+        with patch("py._weather.find_location") as fl:
+            await self._call(
+                record, nearest=None, hint_loc=None,
+                lat=-17.83, lon=31.05, location="../etc",
+            )
+            fl.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_far_nearest_place_records_nothing(self):
+        """The 20,000 km cache-key nearest match must not receive history
+        (prod filed Karachi's weather under boosaaso-ca70bb)."""
+        record = MagicMock()
+        await self._call(
+            record,
+            nearest={"slug": "boosaaso-ca70bb", "lat": 11.28, "lon": 49.18},
+            hint_loc=None,
+            lat=24.86, lon=67.01,
+        )
+        record.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cache_failure_does_not_skip_history(self):
+        record = MagicMock()
+        ps = self._fresh_fetch_patches()
+        ps[1] = patch("py._weather._set_cached_weather", side_effect=Exception("boom"))
+        ps += [
+            patch("py._weather._find_nearest_location", return_value={"slug": "harare", "lat": -17.83, "lon": 31.05}),
+            patch("py._weather._record_weather_history", record),
+        ]
+        for p in ps:
+            p.start()
+        try:
+            await get_weather(lat=-17.83, lon=31.05)
+        finally:
+            for p in ps:
+                p.stop()
+        record.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -632,7 +760,7 @@ class TestGetWeatherEndpoint:
     @patch("py._weather._find_nearest_location")
     async def test_blend_is_the_baseline(self, mock_nearest, mock_cache, mock_breaker, mock_blend, mock_set, mock_record):
         """Cache miss → the Africa-weighted global-model blend serves the baseline."""
-        mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1200, "lat": -17.83, "lon": 31.05}
         mock_cache.return_value = None
         mock_breaker.is_allowed = True
         mock_blend.return_value = _blend_ok()
@@ -723,7 +851,7 @@ class TestGetWeatherEndpoint:
     async def test_selected_model_is_the_baseline(self, mock_nearest, mock_cache, mock_breaker, mock_blend,
                                                   mock_single, mock_set, mock_record):
         """?model=<id> (selectedForecastModel) → that model is the baseline, own cache row, no history."""
-        mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1200, "lat": -17.83, "lon": 31.05}
         mock_cache.return_value = None
         mock_breaker.is_allowed = True
         mock_single.return_value = {"current": {"temperature_2m": 22}, "hourly": {}, "daily": {}, "insights": None}
@@ -843,7 +971,7 @@ class TestEnrichmentInEndpoint:
     @patch("py._weather._find_nearest_location")
     async def test_enrichment_merges_onto_insights_not_baseline(self, mock_nearest, mock_cache, mock_breaker,
                                                                 mock_blend, mock_set, mock_record):
-        mock_nearest.return_value = {"slug": "harare", "elevation": 1200}
+        mock_nearest.return_value = {"slug": "harare", "elevation": 1200, "lat": -17.83, "lon": 31.05}
         mock_cache.return_value = None
         mock_breaker.is_allowed = True
         mock_blend.return_value = _blend_ok(insights={"dewPoint": 12.0, "thunderstormProbability": 0})

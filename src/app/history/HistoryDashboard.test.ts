@@ -4,6 +4,8 @@ import {
   computeCategorySuitability,
   suitabilityColors,
   transformHistory,
+  historyErrorMessage,
+  countArchiveDays,
   type InsightsRecord,
 } from "./HistoryDashboard";
 import type { WeatherHistoryDoc } from "@/lib/db";
@@ -221,6 +223,87 @@ describe("transformHistory", () => {
     delete (broken as Partial<WeatherHistoryDoc>).current;
     expect(() => transformHistory([broken])).not.toThrow();
     expect(transformHistory([broken])).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// transformHistory — provenance + #245 robustness
+// ---------------------------------------------------------------------------
+
+describe("transformHistory provenance (#245)", () => {
+  it("defaults legacy docs to recorded and keeps archive provenance", () => {
+    const legacy = makeDoc("2026-01-01");
+    const archived = {
+      ...makeDoc("2026-01-02"),
+      source: "open-meteo-archive" as const,
+    };
+    const [a, b] = transformHistory([legacy, archived]);
+    expect(a.source).toBe("recorded");
+    expect(b.source).toBe("open-meteo-archive");
+    expect(countArchiveDays([a, b])).toBe(1);
+  });
+
+  it("skips docs with no date instead of crashing the sort", () => {
+    const undated = makeDoc("2026-01-01");
+    delete (undated as Partial<WeatherHistoryDoc>).date;
+    const good = makeDoc("2026-01-02");
+    expect(() => transformHistory([undated, good])).not.toThrow();
+    expect(transformHistory([undated, good]).map((r) => r.date)).toEqual([
+      "2026-01-02",
+    ]);
+  });
+
+  it("archive days without UV yield null, not NaN/0", () => {
+    const doc = makeDoc("2026-01-01");
+    doc.daily = {
+      ...doc.daily,
+      uv_index_max: [],
+    } as WeatherHistoryDoc["daily"];
+    (doc.current as unknown as { uv_index: number | null }).uv_index = null;
+    expect(transformHistory([doc])[0].uvIndex).toBeNull();
+  });
+});
+
+describe("transformHistory null archive means (#245)", () => {
+  it("keeps missing daily means as null instead of rounding them to 0", () => {
+    const doc = makeDoc("2026-01-01");
+    const cur = doc.current as unknown as Record<string, number | null>;
+    cur.surface_pressure = null;
+    cur.wind_speed_10m = null;
+    cur.relative_humidity_2m = null;
+    cur.cloud_cover = null;
+    const [r] = transformHistory([doc]);
+    expect(r.pressure).toBeNull();
+    expect(r.windSpeed).toBeNull();
+    expect(r.humidity).toBeNull();
+    expect(r.cloudCover).toBeNull();
+  });
+
+  it("the auto-select path reuses fetchHistory (one error-copy path)", async () => {
+    const fs = await import("fs");
+    const src = fs.readFileSync(
+      "src/app/history/HistoryDashboard.tsx",
+      "utf-8",
+    );
+    expect(src).toContain("void fetchHistory(loc, 30);");
+    expect(src).not.toContain("b.error ||");
+  });
+});
+
+describe("historyErrorMessage", () => {
+  it("gives a retry message for server errors without leaking detail", () => {
+    expect(historyErrorMessage(502, "Failed to fetch weather history")).toMatch(
+      /temporarily unavailable/,
+    );
+  });
+  it("explains unknown locations", () => {
+    expect(historyErrorMessage(404, "Unknown location")).toMatch(/on record/);
+  });
+  it("shows our validation detail for other client errors", () => {
+    expect(historyErrorMessage(400, "days must be between 1 and 365")).toBe(
+      "days must be between 1 and 365",
+    );
+    expect(historyErrorMessage(400)).toBe("Request failed (HTTP 400)");
   });
 });
 
