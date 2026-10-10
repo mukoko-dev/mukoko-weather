@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  SITE_URL,
-  PROTECTION_BYPASS_HEADER,
-  internalApiBase,
-  internalApiTarget,
-} from "./site";
+import { SITE_URL, PROTECTION_BYPASS_HEADER, internalApiTarget } from "./site";
 
 describe("SITE_URL", () => {
   it("is the canonical production origin with no trailing slash", () => {
@@ -30,24 +25,25 @@ describe("internalApiTarget (issue #262)", () => {
     expect(target).toEqual({ base: "https://internal.example", headers: {} });
   });
 
-  it("never uses the protected per-deployment host in production", () => {
+  it("production without a bypass secret uses the public origin, never the protected host", () => {
     const target = internalApiTarget({
       VERCEL_ENV: "production",
       VERCEL_URL: "weather-abc.vercel.app",
-      VERCEL_PROJECT_PRODUCTION_URL: "weather.mukoko.com",
     });
-    expect(target.base).toBe("https://weather.mukoko.com");
-    expect(target.base).not.toContain("weather-abc");
-    expect(target.headers).toEqual({});
+    expect(target).toEqual({ base: SITE_URL, headers: {} });
   });
 
-  it("uses SITE_URL in production when the production URL is not exposed", () => {
+  it("production with a bypass secret calls its own deployment (no version skew)", () => {
     expect(
       internalApiTarget({
         VERCEL_ENV: "production",
         VERCEL_URL: "weather-abc.vercel.app",
-      }).base,
-    ).toBe(SITE_URL);
+        VERCEL_AUTOMATION_BYPASS_SECRET: "s3cret",
+      }),
+    ).toEqual({
+      base: "https://weather-abc.vercel.app",
+      headers: { [PROTECTION_BYPASS_HEADER]: "s3cret" },
+    });
   });
 
   it("sends the protection bypass header to a preview's own host", () => {
@@ -70,14 +66,5 @@ describe("internalApiTarget (issue #262)", () => {
         VERCEL_URL: "weather-abc.vercel.app",
       }),
     ).toEqual({ base: "https://weather-abc.vercel.app", headers: {} });
-  });
-
-  it("internalApiBase is the base half of the target", () => {
-    expect(
-      internalApiBase({
-        VERCEL_ENV: "production",
-        VERCEL_PROJECT_PRODUCTION_URL: "weather.mukoko.com",
-      }),
-    ).toBe("https://weather.mukoko.com");
   });
 });

@@ -172,6 +172,21 @@ describe("logWarn", () => {
     expect(logged.stack).toBeUndefined();
   });
 
+  it("redacts secret query values and URL credentials from error text", () => {
+    logWarn({
+      source: "weather-api",
+      message: "Test",
+      error: new Error(
+        "connect failed mongodb+srv://user:hunter2@cluster.example/db?token=abc123&lat=1",
+      ),
+    });
+    const logged = JSON.parse(consoleSpy.mock.calls[0][0] as string);
+    expect(logged.errorMessage).not.toContain("hunter2");
+    expect(logged.errorMessage).not.toContain("abc123");
+    expect(logged.errorMessage).toContain("//***@cluster.example");
+    expect(logged.errorMessage).toContain("token=***&lat=1");
+  });
+
   it("stringifies a non-Error error value", () => {
     logWarn({ source: "weather-api", message: "Test", error: "boom" });
     const logged = JSON.parse(consoleSpy.mock.calls[0][0] as string);

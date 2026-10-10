@@ -56,11 +56,10 @@ export function logError(ctx: ErrorContext) {
     location: ctx.location,
     message: ctx.message,
     ...(ctx.meta ? { meta: ctx.meta } : {}),
-    ...(ctx.error instanceof Error
-      ? { errorName: ctx.error.name, stack: ctx.error.stack }
-      : ctx.error !== undefined
-        ? { errorValue: String(ctx.error) }
-        : {}),
+    ...describeError(ctx.error),
+    ...(ctx.error instanceof Error && ctx.error.stack
+      ? { stack: redactSecrets(ctx.error.stack) }
+      : {}),
   };
 
   // Structured JSON — parseable by log aggregators
@@ -80,7 +79,7 @@ function describeError(error: unknown): Record<string, string> {
   if (!(error instanceof Error)) return { errorValue: valueText(error) };
   const out: Record<string, string> = {
     errorName: error.name,
-    errorMessage: error.message,
+    errorMessage: redactSecrets(error.message),
   };
   const cause: unknown = error.cause;
   if (cause && typeof cause === "object" && "code" in cause) {
@@ -92,10 +91,23 @@ function describeError(error: unknown): Record<string, string> {
   return out;
 }
 
+const SECRET_QUERY =
+  /([?&](?:apikey|api_key|key|token|access_token|password|passkey|secret)=)[^&\s"']+/gi;
+const URL_USERINFO = /(\/\/)[^/\s:@"']+:[^/\s@"']+@/g;
+
+/**
+ * Mask credentials that error text can carry: secret query values and URL
+ * userinfo (e.g. a connection string in a driver error). Mirrors the
+ * Python `RedactSecretsFilter` in api/py/_logging.py.
+ */
+export function redactSecrets(text: string): string {
+  return text.replace(SECRET_QUERY, "$1***").replace(URL_USERINFO, "$1***@");
+}
+
 function valueText(value: unknown): string {
-  if (typeof value === "string") return value;
+  if (typeof value === "string") return redactSecrets(value);
   try {
-    return JSON.stringify(value) ?? typeof value;
+    return redactSecrets(JSON.stringify(value) ?? typeof value);
   } catch {
     return typeof value;
   }

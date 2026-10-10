@@ -40,7 +40,6 @@ const ENV_KEYS = [
   "INTERNAL_API_BASE_URL",
   "VERCEL_ENV",
   "VERCEL_URL",
-  "VERCEL_PROJECT_PRODUCTION_URL",
   "VERCEL_AUTOMATION_BYPASS_SECRET",
 ] as const;
 
@@ -72,7 +71,6 @@ describe("getWeatherForLocation self-fetch (issue #262)", () => {
   it("production calls the public origin, never the protected deployment host", async () => {
     process.env.VERCEL_ENV = "production";
     process.env.VERCEL_URL = "mukoko-weather-abc-nyuchi.vercel.app";
-    process.env.VERCEL_PROJECT_PRODUCTION_URL = "weather.mukoko.com";
     fetchMock.mockResolvedValueOnce(
       json(PY_PAYLOAD, { "x-weather-provider": "model-blend" }),
     );
@@ -87,6 +85,19 @@ describe("getWeatherForLocation self-fetch (issue #262)", () => {
     );
     expect(init.redirect).toBe("manual");
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("a malformed override still falls back to Open-Meteo instead of throwing", async () => {
+    process.env.INTERNAL_API_BASE_URL = "weather.mukoko.com";
+    fetchMock
+      .mockRejectedValueOnce(new TypeError("Failed to parse URL"))
+      .mockResolvedValueOnce(json(PY_PAYLOAD));
+
+    const result = await getWeatherForLocation("harare", -17.83, 31.05, 1490);
+
+    expect(result.source).toBe("open-meteo");
+    const logged = JSON.parse(warnSpy.mock.calls[0][0] as string);
+    expect(logged.meta.host).toBe("invalid-base-url");
   });
 
   it("a preview sends the bypass header to its own host", async () => {

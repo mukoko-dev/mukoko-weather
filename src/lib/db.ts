@@ -733,6 +733,15 @@ export interface WeatherResult {
   source: string;
 }
 
+/** Host of a base URL for logs; never throws on a malformed override. */
+function hostOf(base: string): string {
+  try {
+    return new URL(base).host;
+  } catch {
+    return "invalid-base-url";
+  }
+}
+
 /**
  * Log message for a non-JSON / non-2xx answer from the internal weather
  * endpoint. A 3xx is Deployment Protection (or a misconfigured base) — say
@@ -787,6 +796,7 @@ export async function getWeatherForLocation(
   // Deployment Protection redirect used to be followed to Vercel's 200 HTML
   // login page, whose JSON parse failure was then logged as "unreachable".
   const target = internalApiTarget();
+  const host = hostOf(target.base);
   try {
     const res = await fetch(
       // `location` keys the history doc under THIS page's slug, so
@@ -808,6 +818,8 @@ export async function getWeatherForLocation(
         source: res.headers.get("x-weather-provider") ?? "open-meteo",
       };
     }
+    // Release the socket — a redirect or HTML body is never read.
+    await res.body?.cancel().catch(() => undefined);
     logWarn({
       source: "weather-api",
       location: slug,
@@ -815,7 +827,7 @@ export async function getWeatherForLocation(
       meta: {
         status: res.status,
         contentType,
-        host: new URL(target.base).host,
+        host,
         bypassHeader: Object.keys(target.headers).length > 0,
       },
     });
@@ -826,7 +838,7 @@ export async function getWeatherForLocation(
       message:
         "Internal weather endpoint unreachable, falling back to direct Open-Meteo",
       error: err,
-      meta: { host: new URL(target.base).host },
+      meta: { host },
     });
   }
 
