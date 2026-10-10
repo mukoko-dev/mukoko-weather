@@ -133,6 +133,20 @@ export default async function LocationPage({
   // getWeatherForLocation already has a 4-stage fallback (cache -> Tomorrow.io
   // -> Open-Meteo -> seasonal estimates), but we catch any unexpected throw
   // here as a safety net so the server component never crashes.
+  // Country, season and the signed-in user don't depend on the weather, so
+  // start them now and let them run while the weather fetch is in flight
+  // (a cache miss there is the slow part of this render). They used to wait
+  // for the weather before starting.
+  const countryCode = (location.country ?? "").toUpperCase();
+  const sideData = Promise.all([
+    countryCode ? loadCountry(countryCode) : Promise.resolve(null),
+    getCachedSeason(location.country ?? "", location.lat ?? 0),
+    getCurrentUser(),
+  ]);
+  // A rejection here is awaited (and surfaces) below; mark it handled now so
+  // it isn't reported as unhandled while the weather await is pending.
+  void sideData.catch(() => {});
+
   let weather;
   let weatherSource: string;
   try {
@@ -166,12 +180,7 @@ export default async function LocationPage({
     ? Math.round(Math.max(...dailyHighs))
     : null;
   const weekLow = dailyLows.length ? Math.round(Math.min(...dailyLows)) : null;
-  const countryCode = (location.country ?? "").toUpperCase();
-  const [countryDoc, season, currentUser] = await Promise.all([
-    countryCode ? loadCountry(countryCode) : Promise.resolve(null),
-    getCachedSeason(location.country ?? "", location.lat ?? 0),
-    getCurrentUser(),
-  ]);
+  const [countryDoc, season, currentUser] = await sideData;
   const countryName = countryDoc?.name ?? countryCode;
   // Strip AuthKit-specific fields before crossing the server/client boundary.
   // AISummary/AISummaryChat only need id + email to decide signed-in vs CTA.
