@@ -37,7 +37,7 @@ Social: Twitter @mukokoafrica, Instagram @mukoko.africa
 - **Analytics:** Google Analytics 4 (GA4, measurement ID `G-4KB2ZS573N`) + Vercel Web Analytics (`@vercel/analytics` ^1.6.1)
 - **3D Animations:** Three.js (weather-aware particle loading scenes via `src/lib/weather-scenes/`)
 - **Testing:** Vitest 4.0.18 (TypeScript, `@vitest/coverage-v8` for coverage) + pytest 8.3 (Python)
-- **CI/CD:** GitHub Actions (single `ci` job: lint → typecheck → TypeScript tests → Python tests, all steps visible in one check on push/PR; CodeQL security scanning for JS/TS, Python, and Actions; Claude AI review on PRs; post-deploy DB init; `workers.yml` checks the Rust Workers; `workers-deploy.yml` deploys them by hand only, in service-binding order, behind the `workers-production` GitHub Environment; the Workers' runtime secrets are Cloudflare Secrets Store bindings, one `MUKOKO_WEATHER_*` store secret per key shared by every Worker that needs it, read via `weather_edge::secret` — see CONTRIBUTING.md "Deploying the Workers"). All workflows use `concurrency` groups with `cancel-in-progress: true` to prevent zombie runs from rapid pushes, except `workers-deploy.yml`, which never cancels a deploy in flight
+- **CI/CD:** GitHub Actions (single `ci` job: lint → typecheck → TypeScript tests → Python tests, all steps visible in one check on push/PR; CodeQL security scanning for JS/TS, Python, and Actions; Claude AI review on PRs; post-deploy DB init; `workers.yml` checks the Rust Workers; `workers-deploy.yml` deploys them by hand only, in service-binding order, behind the `workers-production` GitHub Environment; the Workers' runtime secrets are Cloudflare Secrets Store bindings, one `MUKOKO_WEATHER_*` store secret per key shared by every Worker that needs it, read via `weather_edge::secret` — see CONTRIBUTING.md "Deploying the Workers"). All workflows use `concurrency` groups with `cancel-in-progress: true` to prevent zombie runs from rapid pushes, except `workers-deploy.yml`, which never cancels a deploy in flight, and `db-init.yml`, whose job-level `db-init-production` group (`cancel-in-progress: false`) never cancels a seed in flight. `db-init.yml` runs only for the exact environment `Production – mukoko-weather` (en dash): two Vercel projects deploy from this repo, so a `Production` prefix would also seed after a `Production – mukoko-station-console` deploy
 - **Deployment:** Vercel (with `@vercel/functions` for MongoDB connection pooling)
 - **Edge layer (optional):** Cloudflare Workers with Hono (`worker/` directory)
 
@@ -442,7 +442,7 @@ mukoko-weather/
 │   └── workflows/
 │       ├── ci.yml                 # Single job: lint → typecheck → TypeScript tests → Python tests (concurrency-grouped)
 │       ├── codeql.yml             # CodeQL security scanning (JS/TS, Python, Actions; concurrency-grouped)
-│       └── db-init.yml            # Post-deploy DB seed data sync (Vercel deployment webhook)
+│       └── db-init.yml            # Post-deploy DB seed data sync (Vercel deployment webhook; exact `Production – mukoko-weather` match, serialised)
 ├── tests/
 │   └── py/                        # Python backend tests (pytest, 19 files, 587 tests)
 │       ├── conftest.py            # Shared fixtures, sys.path/module mocking
