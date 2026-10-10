@@ -1,5 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { SITE_URL, internalApiBase } from "./site";
+import { describe, it, expect } from "vitest";
+import {
+  SITE_URL,
+  PROTECTION_BYPASS_HEADER,
+  internalApiBase,
+  internalApiTarget,
+} from "./site";
 
 describe("SITE_URL", () => {
   it("is the canonical production origin with no trailing slash", () => {
@@ -7,36 +12,72 @@ describe("SITE_URL", () => {
   });
 });
 
-describe("internalApiBase", () => {
-  const saved = {
-    VERCEL_URL: process.env.VERCEL_URL,
-    INTERNAL_API_BASE_URL: process.env.INTERNAL_API_BASE_URL,
-  };
-
-  beforeEach(() => {
-    delete process.env.VERCEL_URL;
-    delete process.env.INTERNAL_API_BASE_URL;
-  });
-
-  afterEach(() => {
-    for (const [key, value] of Object.entries(saved)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-  });
-
+describe("internalApiTarget (issue #262)", () => {
   it("falls back to localhost when nothing is configured", () => {
-    expect(internalApiBase()).toBe("http://localhost:3000");
+    expect(internalApiTarget({})).toEqual({
+      base: "http://localhost:3000",
+      headers: {},
+    });
   });
 
-  it("uses INTERNAL_API_BASE_URL when set", () => {
-    process.env.INTERNAL_API_BASE_URL = "https://internal.example";
-    expect(internalApiBase()).toBe("https://internal.example");
+  it("lets INTERNAL_API_BASE_URL override everything, even on Vercel", () => {
+    const target = internalApiTarget({
+      INTERNAL_API_BASE_URL: "https://internal.example/",
+      VERCEL_ENV: "production",
+      VERCEL_URL: "weather-abc.vercel.app",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "s3cret",
+    });
+    expect(target).toEqual({ base: "https://internal.example", headers: {} });
   });
 
-  it("prefers VERCEL_URL over INTERNAL_API_BASE_URL", () => {
-    process.env.VERCEL_URL = "weather-abc.vercel.app";
-    process.env.INTERNAL_API_BASE_URL = "https://internal.example";
-    expect(internalApiBase()).toBe("https://weather-abc.vercel.app");
+  it("never uses the protected per-deployment host in production", () => {
+    const target = internalApiTarget({
+      VERCEL_ENV: "production",
+      VERCEL_URL: "weather-abc.vercel.app",
+      VERCEL_PROJECT_PRODUCTION_URL: "weather.mukoko.com",
+    });
+    expect(target.base).toBe("https://weather.mukoko.com");
+    expect(target.base).not.toContain("weather-abc");
+    expect(target.headers).toEqual({});
+  });
+
+  it("uses SITE_URL in production when the production URL is not exposed", () => {
+    expect(
+      internalApiTarget({
+        VERCEL_ENV: "production",
+        VERCEL_URL: "weather-abc.vercel.app",
+      }).base,
+    ).toBe(SITE_URL);
+  });
+
+  it("sends the protection bypass header to a preview's own host", () => {
+    const target = internalApiTarget({
+      VERCEL_ENV: "preview",
+      VERCEL_URL: "weather-abc.vercel.app",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "s3cret",
+    });
+    expect(target).toEqual({
+      base: "https://weather-abc.vercel.app",
+      headers: { [PROTECTION_BYPASS_HEADER]: "s3cret" },
+    });
+    expect(PROTECTION_BYPASS_HEADER).toBe("x-vercel-protection-bypass");
+  });
+
+  it("sends no bypass header when the project has no bypass secret", () => {
+    expect(
+      internalApiTarget({
+        VERCEL_ENV: "preview",
+        VERCEL_URL: "weather-abc.vercel.app",
+      }),
+    ).toEqual({ base: "https://weather-abc.vercel.app", headers: {} });
+  });
+
+  it("internalApiBase is the base half of the target", () => {
+    expect(
+      internalApiBase({
+        VERCEL_ENV: "production",
+        VERCEL_PROJECT_PRODUCTION_URL: "weather.mukoko.com",
+      }),
+    ).toBe("https://weather.mukoko.com");
   });
 });

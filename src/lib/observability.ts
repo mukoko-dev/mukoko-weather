@@ -71,6 +71,37 @@ export function logError(ctx: ErrorContext) {
 }
 
 /**
+ * Name, message and (for undici network errors) the cause code of an error,
+ * without the stack. Warnings used to drop the error entirely, which hid
+ * why the SSR weather self-fetch failed for months (issue #262).
+ */
+function describeError(error: unknown): Record<string, string> {
+  if (error === undefined) return {};
+  if (!(error instanceof Error)) return { errorValue: valueText(error) };
+  const out: Record<string, string> = {
+    errorName: error.name,
+    errorMessage: error.message,
+  };
+  const cause: unknown = error.cause;
+  if (cause && typeof cause === "object" && "code" in cause) {
+    const code: unknown = cause.code;
+    if (typeof code === "string" || typeof code === "number") {
+      out.errorCause = String(code);
+    }
+  }
+  return out;
+}
+
+function valueText(value: unknown): string {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value) ?? typeof value;
+  } catch {
+    return typeof value;
+  }
+}
+
+/**
  * Log a structured warning (non-fatal degradation).
  */
 export function logWarn(ctx: Omit<ErrorContext, "severity">) {
@@ -81,6 +112,7 @@ export function logWarn(ctx: Omit<ErrorContext, "severity">) {
     location: ctx.location,
     message: ctx.message,
     ...(ctx.meta ? { meta: ctx.meta } : {}),
+    ...describeError(ctx.error),
   };
 
   console.warn(JSON.stringify(entry));

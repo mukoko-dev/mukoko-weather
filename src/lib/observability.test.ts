@@ -156,6 +156,34 @@ describe("logWarn", () => {
     const logged = JSON.parse(consoleSpy.mock.calls[0][0] as string);
     expect(logged.meta).toEqual({ key: "value" });
   });
+
+  it("keeps the error name, message and network cause code (issue #262)", () => {
+    const err = new TypeError("fetch failed", {
+      cause: Object.assign(new Error("other side closed"), {
+        code: "UND_ERR_SOCKET",
+      }),
+    });
+    logWarn({ source: "weather-api", message: "Test", error: err });
+
+    const logged = JSON.parse(consoleSpy.mock.calls[0][0] as string);
+    expect(logged.errorName).toBe("TypeError");
+    expect(logged.errorMessage).toBe("fetch failed");
+    expect(logged.errorCause).toBe("UND_ERR_SOCKET");
+    expect(logged.stack).toBeUndefined();
+  });
+
+  it("stringifies a non-Error error value", () => {
+    logWarn({ source: "weather-api", message: "Test", error: "boom" });
+    const logged = JSON.parse(consoleSpy.mock.calls[0][0] as string);
+    expect(logged.errorValue).toBe("boom");
+  });
+
+  it("adds no error fields when there is no error", () => {
+    logWarn({ source: "weather-api", message: "Test" });
+    const logged = JSON.parse(consoleSpy.mock.calls[0][0] as string);
+    expect(logged.errorName).toBeUndefined();
+    expect(logged.errorValue).toBeUndefined();
+  });
 });
 
 describe("reportErrorToAnalytics", () => {

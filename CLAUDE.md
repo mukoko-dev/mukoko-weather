@@ -1477,6 +1477,7 @@ _Library tests:_
 - `src/lib/smart-slug.test.ts` — build/parse round-trip, `--` delimiter safety against every shipped seed slug (the `/gweru` → Arctic hazard), legacy-slug complement
 - `src/lib/places.test.ts` — resolver pure logic (normalizeName, inferNameFromSlug, adapters, `adaptSeedToLocationDoc`, `nearestSeedLocation`, seed-slug uniqueness)
 - `src/lib/places-resolver.test.ts` — `resolveLocationSlug` with a mocked placesGeo collection: seed fallback on no-match / DB throw, genuine unknown slugs still 404, real placesGeo docs still win, city-state country-doc acceptance, `CITY_STATE_COUNTRIES` parity with `api/py/_locations.py`
+- `src/lib/site.test.ts` + `src/lib/db-weather-self-fetch.test.ts` — SSR self-fetch target (override, production domain, preview bypass header) and `getWeatherForLocation` reaching `/api/py/weather` with `redirect: "manual"`, naming protection redirects and HTML answers, never logging the bypass secret (issue #262)
 - `src/lib/db.test.ts` — database operations (CRUD, TTL, suitability rules, Vector Search embedding guard, $facet aggregation)
 - `src/lib/suitability-cache.test.ts` — suitability cache TTL, reset, category styles
 - `src/lib/geolocation.test.ts` — browser geolocation API wrapper, auto-creation statuses
@@ -1787,7 +1788,8 @@ What exists today:
 - The model is set by the AI Worker (`AI_MODEL` in `workers/ai/wrangler.jsonc`), not by a Vercel var
 - Without the AI vars a basic weather summary fallback is generated. None of them may ever be `NEXT_PUBLIC_*` or read outside `api/py` (see "Backend-only AI")
 - `DB_INIT_SECRET` — optional, protects the `/api/db-init` endpoint in production (via `x-init-secret` header)
-- `INTERNAL_API_BASE_URL` — optional, base URL for server-to-server calls into our own `/api/py/*` functions during SSR (defaults to `https://$VERCEL_URL` on Vercel, `http://localhost:3000` otherwise)
+- `INTERNAL_API_BASE_URL` — optional, base URL for server-to-server calls into our own `/api/py/*` functions during SSR. When set it always wins. Otherwise `internalApiTarget()` (`src/lib/site.ts`) uses the production domain in production (`VERCEL_PROJECT_PRODUCTION_URL`, else `SITE_URL`), and on previews `https://$VERCEL_URL` with the `x-vercel-protection-bypass` header when Vercel injects `VERCEL_AUTOMATION_BYPASS_SECRET`, else `http://localhost:3000`. Never self-fetch the bare `VERCEL_URL` in production: it sits behind Vercel Authentication, and `fetch` used to follow the 302 to a 200 HTML login page, so every SSR cache miss silently fell back to direct Open-Meteo (issue #262)
+- `VERCEL_AUTOMATION_BYPASS_SECRET` — injected by Vercel when Protection Bypass for Automation is on (Project → Settings → Deployment Protection). It lets preview SSR reach that preview's own Python functions. Production does not need it. Never log it
 - `ALERT_WEBHOOK_URL` — optional, enables webhook alerting for high/critical severity errors (Slack incoming webhook, Discord webhook, PagerDuty, or compatible services). Used by `src/lib/observability.ts`
 - `NEXT_PUBLIC_MAPTILER_API_KEY` — MapTiler Cloud API key for OpenMapTiles base map tiles and aviation map layers (`feature/openmaptiles` branch). Set in `.env.local` (gitignored). Key stored in MapTiler Cloud account.
 
