@@ -35,8 +35,11 @@ function fmt(idx: number): string {
 export function weatherCacheKey(lat: number, lon: number): string {
   const latIdx = Math.max(-LAT_MAX_IDX, Math.min(LAT_MAX_IDX, cellIndex(lat)));
   let lonIdx = cellIndex(lon);
-  if (lonIdx >= LON_MAX_IDX)
-    lonIdx -= 2 * LON_MAX_IDX; // +180 == -180
-  else if (lonIdx < -LON_MAX_IDX) lonIdx += 2 * LON_MAX_IDX;
+  // +180 and -180 are the same meridian.
+  if (lonIdx >= LON_MAX_IDX) {
+    lonIdx -= 2 * LON_MAX_IDX;
+  } else if (lonIdx < -LON_MAX_IDX) {
+    lonIdx += 2 * LON_MAX_IDX;
+  }
   return `${WEATHER_CACHE_KEY_PREFIX}${fmt(latIdx)}_${fmt(lonIdx)}`;
 }
