@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -29,6 +30,7 @@ from ._db import (
     weather_cache_collection,
 )
 from ._places_resolver import find_location, find_nearest_location
+from ._weather_cache_key import weather_cache_key
 from ._history_store import record_weather_history
 from ._circuit_breaker import open_meteo_breaker
 from . import _enrichment as enrichment
@@ -887,7 +889,8 @@ def _record_weather_history(
 #: within this distance of the requested coordinates before weather for those
 #: coordinates is recorded as that location's history. Stops a caller from
 #: writing London's weather into Harare's history, and stops the 20,000 km
-#: nearest-match (used for cache keys) from filing Karachi under Bosaso.
+#: nearest-place search from filing Karachi under Bosaso. The same cap gates
+#: using that place's elevation.
 HISTORY_MAX_DISTANCE_KM = 25.0
 
 
@@ -934,9 +937,9 @@ def _find_nearest_location(lat: float, lon: float) -> dict | None:
     field reads keep working.
     """
     try:
-        # Wide radius — this fn is used for cache-key derivation, so we want a
-        # best-effort match anywhere on the globe rather than a tight 50 km cap.
-        return find_nearest_location(lat, lon, max_km=20_000)
+        # Only a place within HISTORY_MAX_DISTANCE_KM is ever used (history
+        # slug + elevation). It no longer feeds the cache key (#252).
+        return find_nearest_location(lat, lon, max_km=HISTORY_MAX_DISTANCE_KM)
     except Exception:
         return None
 
@@ -1056,7 +1059,8 @@ async def get_weather(
     (SSR passes the page slug). It is honoured only when it resolves to a
     known place within ``HISTORY_MAX_DISTANCE_KM`` of ``lat``/``lon``; it then
     keys the history doc, so ``/api/py/history?location=`` reads exactly what
-    this endpoint records. The cache stays keyed on the nearest known place.
+    this endpoint records. The cache is keyed by the coordinate's 0.05° grid
+    cell (``_weather_cache_key.weather_cache_key``), independent of any place.
 
     Provider chain (issue #246 — global models are the baseline, Tomorrow.io
     only enriches):
@@ -1089,40 +1093,42 @@ async def get_weather(
       * ``X-Current-Source`` — origin of the ``current`` block
         (``stationkit`` | the baseline provider | ``fallback``)
     """
-    if lat < -90 or lat > 90 or lon < -180 or lon > 180:
+    # isfinite: "nan" parses as a float and slips past the range check.
+    if not (math.isfinite(lat) and math.isfinite(lon)) or lat < -90 or lat > 90 or lon < -180 or lon > 180:
         raise HTTPException(status_code=400, detail="Invalid coordinates")
 
     requested_models = [m for m in (models or "").split(",") if m.strip()] or None
     baseline_model = _sanitize_baseline_model(model)
 
-    # Resolve to nearest known location for cache key
-    location_slug = f"{lat:.2f}_{lon:.2f}"
-    known_nearby = False  # a known place actually near these coordinates
+    # The cache is keyed by the requested coordinate on a fixed grid (#252),
+    # never by the nearest known place: that search reaches 20,000 km, so a
+    # place key let distant cities share (and overwrite) one row.
+    grid_key = weather_cache_key(lat, lon)
+    # A known place genuinely near these coordinates — drives the priority
+    # Tomorrow.io budget (seed slugs only) as well as history.
+    known_nearby = False
+    nearby_slug = ""
     elevation = 1200
     # History is only recorded under a slug we're confident describes these
     # coordinates (validated hint, or a nearby known place) — never under a
-    # raw coordinate key nobody reads, nor a place thousands of km away.
-    # The CACHE stays keyed on the nearest known place so nearby page slugs
-    # keep sharing one provider fetch (Tomorrow.io free tier: 500/day). Only
-    # the history doc takes the validated hint.
+    # place thousands of km away. The nearby place also supplies elevation
+    # for the seasonal fallback, under the same distance cap.
     history_slug: str | None = None
     try:
         nearest = _find_nearest_location(lat, lon)
-        if nearest and nearest.get("slug"):
-            location_slug = nearest["slug"]
+        if nearest and _near(nearest, lat, lon):
+            history_slug = nearest.get("slug")
+            nearby_slug = history_slug or ""
+            known_nearby = bool(nearby_slug)
             elevation = nearest.get("elevation", elevation)
-            # The cache-key lookup searches 20,000 km, so "has a slug" says
-            # nothing; priority budget and history need the place to really
-            # be here.
-            known_nearby = _within_km(nearest, lat, lon, PRIORITY_MAX_DISTANCE_KM)
-            if _near(nearest, lat, lon):
-                history_slug = location_slug
     except Exception:
         pass
     hinted = _resolve_location_hint(location, lat, lon)
     if hinted:
         history_slug = hinted.get("slug") or location
-    cache_key = location_slug if baseline_model is None else f"{location_slug}::{baseline_model}"
+        elevation = hinted.get("elevation", elevation)
+    # A user-picked model gets its own row in the same grid cell.
+    cache_key = grid_key if baseline_model is None else f"{grid_key}::{baseline_model}"
 
     # 0. Look for a nearby StationKit observation. Cheap (single MongoDB query)
     # and graceful — returns None on any error.
@@ -1210,10 +1216,10 @@ async def get_weather(
         try:
             extra, enrichment_status = await asyncio.to_thread(
                 enrichment.enrich,
-                location_slug,
+                grid_key,
                 lat,
                 lon,
-                _is_priority(request, location_slug, known_nearby),
+                _is_priority(request, nearby_slug, known_nearby),
             )
         except Exception:
             extra, enrichment_status = None, enrichment.SKIPPED_ERROR
@@ -1239,7 +1245,7 @@ async def get_weather(
                 idx = current_hour_index(data.get("hourly") or {}, (data.get("current") or {}).get("time"))
                 verification.capture(
                     verification.build_verification_doc(
-                        location_slug, lat, lon, region, used, raw, data.get("hourly") or {}, idx
+                        history_slug or grid_key, lat, lon, region, used, raw, data.get("hourly") or {}, idx
                     )
                 )
             except Exception:

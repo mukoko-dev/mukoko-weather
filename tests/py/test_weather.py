@@ -33,6 +33,9 @@ from py._weather import (
 )
 
 
+from py._weather_cache_key import weather_cache_key
+
+
 def _blend_ok(current=None, **extra):
     """A `_fetch_blend` result: (payload, raw, weights_used)."""
     payload = {
@@ -633,9 +636,9 @@ class TestHistoryKeying:
         assert record.call_args[0][0] == "harare"
 
     @pytest.mark.asyncio
-    async def test_hint_keys_history_but_cache_stays_on_nearest(self):
-        """Nearby page slugs must keep sharing one cache row (Tomorrow.io
-        free-tier quota); only the history doc takes the hint."""
+    async def test_hint_keys_history_but_cache_uses_coordinate_cell(self):
+        """The cache row is keyed by the coordinate's grid cell (#252); only
+        the history doc takes the hint."""
         record = MagicMock()
         set_cache = MagicMock()
         ps = self._fresh_fetch_patches()
@@ -652,7 +655,7 @@ class TestHistoryKeying:
         finally:
             for p in ps:
                 p.stop()
-        assert set_cache.call_args[0][0] == "harare"
+        assert set_cache.call_args[0][0] == "cell:-17.80_31.05"
         assert record.call_args[0][0] == "avondale--ksy4dd7"
 
     @pytest.mark.asyncio
@@ -772,7 +775,8 @@ class TestGetWeatherEndpoint:
         assert response.headers.get("x-enrichment") == "none"
         mock_breaker.record_success.assert_called_once()
         # Canonical single writer: cached + history recorded.
-        assert mock_set.call_args.args[0] == "harare"
+        # Cache rows are keyed by the coordinate grid cell (#252).
+        assert mock_set.call_args.args[0] == weather_cache_key(-17.83, 31.05)
         assert mock_set.call_args.args[4] == "open-meteo:blend"
         mock_record.assert_called_once()
 
@@ -859,8 +863,9 @@ class TestGetWeatherEndpoint:
         response = await get_weather(-17.83, 31.05, model="gfs_seamless")
         assert response.headers.get("x-weather-provider") == "open-meteo:gfs_seamless"
         mock_blend.assert_not_called()
-        mock_cache.assert_called_once_with("harare::gfs_seamless")
-        assert mock_set.call_args.args[0] == "harare::gfs_seamless"
+        cell = weather_cache_key(-17.83, 31.05)
+        mock_cache.assert_called_once_with(f"{cell}::gfs_seamless")
+        assert mock_set.call_args.args[0] == f"{cell}::gfs_seamless"
         mock_record.assert_not_called()
 
     @pytest.mark.asyncio

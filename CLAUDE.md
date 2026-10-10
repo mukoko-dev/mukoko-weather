@@ -326,6 +326,8 @@ mukoko-weather/
 │   │   ├── suitability-cache.test.ts # Suitability cache tests
 │   │   ├── weather.ts             # Open-Meteo client, frost detection, weather utils, synthesizeOpenMeteoInsights
 │   │   ├── weather.test.ts
+│   │   ├── weather-cache-key.ts   # weatherCacheKey(lat, lon) — SSR reads weather_cache under the writer's 0.05° grid-cell key (#252)
+│   │   ├── weather-cache-key.test.ts
 │   │   ├── hero.ts                # Pure hero helpers: eyebrow badge selection (MY LOCATION / HOME), H/L formatting
 │   ├── hero.test.ts
 │   ├── hourly-summary.ts      # Deterministic one-sentence hourly outlook (Apple-style, no AI): first condition-group change + peak gusts
@@ -406,6 +408,7 @@ mukoko-weather/
 │       ├── _enrichment.py         # Tomorrow.io enrichment: MongoDB quota budget, 3 h cache, merge
 │       ├── _verification.py       # Per-model forecast capture for future weight fitting
 │       ├── _ai_gateway.py         # Shared AI plumbing: shamwari AI Gateway URL/headers, GatewayClient singleton, breaker-guarded call_ai(), first_text(), OpenAI-style tool helpers
+│       ├── _weather_cache_key.py  # weather_cache_key(lat, lon) — 0.05° grid-cell cache key (mirror of src/lib/weather-cache-key.ts, #252)
 │       ├── _wmo.py                # WMO_LABELS — weather-code labels (mirror of weatherCodeToInfo in src/lib/weather.ts)
 │       ├── _ai.py                 # AI summary endpoint (Workers AI via the gateway, tiered TTL cache)
 │       ├── _ai_followup.py        # Inline follow-up chat endpoint (pre-seeded history)
@@ -836,12 +839,12 @@ Database seed data files are read by `/api/db-init` for one-time bootstrap:
 - **Per-variable rule:** weighted mean over the members that have a value, with weights renormalised over those present (so UV and lifted index, which only GFS publishes, come from GFS alone); wind direction is a vector mean; the WMO code is a weighted vote with ties going to the more severe code; `is_day`/sunrise/sunset take the first non-null. Precipitation probability is `0.5 × ensemble + 0.5 × agreement` when any member reports one, else agreement alone (agreement = weighted share of members with ≥ 0.1 mm/h, or ≥ 1 mm/day for daily values). Open-Meteo returns `current` only for the first-listed model, so the highest-weight member (IFS) is listed first and its nulls are filled from the blended hourly value at the current hour.
 - **One call** fetches every member plus their comparison series and the minutely nowcast (8 steps), all cached together with the baseline. Only the members' series are stored; other `?models=` ids are fetched per request by `_attach_comparison`. At serve time `_fresh_minutely` trims the nowcast to the next four 15-minute steps in location time, so a cached row never starts in the past.
 - **Breaker accounting:** only an upstream HTTP failure (`OpenMeteoUpstreamError`) or exception counts against `open_meteo_breaker`. "Too few members" or "this model has no data here" falls through to `best_match` without recording a failure — `record_success` does not clear failures while the breaker is closed, so those would otherwise open it for everyone.
-- **User model:** `?model=<id>` makes that one model the baseline (`_fetch_single_model`, which requests `<id>,best_match` and fills only the variables the model does not publish from `best_match`). It gets its own cache row `{slug}::{model}`; history is recorded from the default blend only. `WeatherDashboard` calls `fetchModelWeather()` (`src/lib/home-weather.ts`) and swaps the page onto the chosen model when the server confirms it via `X-Weather-Provider`; the frost banner is then recomputed from that model (`checkFrostRisk`) and the fallback banner cleared.
+- **User model:** `?model=<id>` makes that one model the baseline (`_fetch_single_model`, which requests `<id>,best_match` and fills only the variables the model does not publish from `best_match`). It gets its own cache row `{grid cell}::{model}`; history is recorded from the default blend only. `WeatherDashboard` calls `fetchModelWeather()` (`src/lib/home-weather.ts`) and swaps the page onto the chosen model when the server confirms it via `X-Weather-Provider`; the frost banner is then recomputed from that model (`checkFrostRisk`) and the fallback banner cleared.
 
 **Tomorrow.io = enrichment only** (`api/py/_enrichment.py`). Fetched with `timesteps=1d` for its insights fields only — `thunderstormProbability`, `heatStressIndex`, `gdd10To30`, `cloudBase`, `cloudCeiling`, `moonPhase`, `precipitationType` (`ENRICHMENT_FIELDS`) — and merged over the derived insights. Wind, visibility, dew point and `uvHealthConcern` always stay with the baseline (Tomorrow.io's `uvHealthConcernMax` is a 0–4 category, while the rules compare the field with the 0–11+ UV index), and so does `evapotranspiration` (Tomorrow.io's is an hourly average; the rules use daily ET₀ in mm/day). Enrichment runs before the cache write, so the row the TS server render reads carries it, and it runs in a worker thread (`asyncio.to_thread`) so it never blocks the event loop. It never touches current/hourly/daily and never blocks: a 4 s timeout, and on a 429, timeout, open breaker or empty budget the baseline is served without it.
 
 - **Quota guard** in MongoDB (`weather.providerBudget`, hour and day buckets reserved with an atomic guarded `$inc` upsert, the hour slot refunded if the day bucket is full; fails closed on DB errors). Hard caps **20/hour** and **400/day** (free tier: 25 and 500). Normal traffic stops at **12/hour** and **250/day**; the rest is reserved for priority requests — curated seed slugs (no `--`) whose known place is within 25 km of the request (`PRIORITY_MAX_DISTANCE_KM`; the cache-key lookup itself searches 20,000 km) and callers sending `X-Mukoko-Priority: 1` together with a valid `X-Mukoko-Internal` secret (a hook for paying users; no paid plan exists yet).
-- **Enrichment cache:** `weather.enrichmentCache`, keyed by slug, 3 h TTL, so a location costs at most 8 calls a day.
+- **Enrichment cache:** `weather.enrichmentCache`, keyed by the same 0.05° grid cell as `weather_cache` (`weather_cache_key`), 3 h TTL, so a cell costs at most 8 calls a day.
 - **Exhausted budgets are memoised** per warm instance until the hour bucket rolls over, so later requests skip the reservation write. **Skips are recorded** (once per location, hour and reason per instance) on the day's stats doc (`tomorrow:stats:YYYYMMDD`: `skippedBudget`, `skippedError`, `lastSkipReason`, `lastSkipAt`, `lastSkipSlug`) and logged.
 - `_normalize_tomorrow` / `_tomorrow_code_to_wmo` remain the canonical Tomorrow.io normalisation (issue #101); the TS client stays removed.
 
@@ -851,7 +854,8 @@ Database seed data files are read by `/api/db-init` for one-time bootstrap:
 
 **Licensing.** Open-Meteo's free API is for non-commercial use only; paid features would need its commercial plan, a self-hosted Open-Meteo, or direct ECMWF/GFS/ICON ingestion (owner decision, issue #246). Data is CC BY 4.0, so the footer credits "Weather data: ECMWF, NOAA, DWD, ECCC, Météo-France via Open-Meteo.com (CC BY 4.0); insights enrichment by Tomorrow.io".
 
-- SSR (`getWeatherForLocation` in `src/lib/db.ts`) is READ-ONLY against `weather_cache`: cache hit → serve; miss → server-to-server `GET /api/py/weather` (the single canonical fetch/cache/history writer); endpoint unreachable (e.g. plain `next dev` without Python functions) → direct Open-Meteo fetch WITHOUT caching → seasonal fallback
+- **Cache key = coordinate grid cell, never a place (issue #252).** `weather_cache.locationSlug` holds `weather_cache_key(lat, lon)` (`api/py/_weather_cache_key.py`, mirrored by `weatherCacheKey` in `src/lib/weather-cache-key.ts`): the requested coordinate rounded to a 0.05° (~5.6 km) cell, e.g. `cell:-17.85_31.05`. Keying by the nearest place (searched to 20,000 km) let Frankfurt's forecast sit under Bizerte and Karachi's under Bosaso. The cell is finer than the forecast models behind the providers, yet coarse enough that one town's page, GPS fix and client refresh share one provider fetch. Both implementations are pinned to `tests/fixtures/weather-cache-keys.json`. Readers that start from a slug (`_reports.py`, `_chat.py`, `_explore_search.py`) resolve the place first and read by `weather_cache_key_for(loc)`. The nearest-place lookup in `/api/py/weather` is capped at 25 km and feeds only the history slug and the fallback elevation
+- SSR (`getWeatherForLocation` in `src/lib/db.ts`) is READ-ONLY against `weather_cache` and reads `weatherCacheKey(lat, lon)`, the same key the writer derives from the lat/lon it sends: cache hit → serve; miss → server-to-server `GET /api/py/weather` (the single canonical fetch/cache/history writer); endpoint unreachable (e.g. plain `next dev` without Python functions) → direct Open-Meteo fetch WITHOUT caching → seasonal fallback
 
 **TS Open-Meteo client:** `src/lib/weather.ts` — direct-fetch fallback and pure utility functions:
 
@@ -877,7 +881,7 @@ Database seed data files are read by `/api/db-init` for one-time bootstrap:
 **Provider strategy (priority 0 = StationKit, then forecast chain):** The weather API route (`/api/py/weather`) consults sources in this order:
 
 0. **Nyuchi StationKit** (`api/py/_weather.py` `nearest_station_observation`) — most recent QC-validated `weather.observations` doc within **50 km** and the **last 60 minutes**. If a station is in range, its sensor data replaces the `current` block of the response while hourly/daily are still served from the commercial provider/cache below.
-1. **MongoDB cache** (`weather_cache`, 15-min TTL; one row per location, plus `{slug}::{model}` rows for user-selected models)
+1. **MongoDB cache** (`weather_cache`, 15-min TTL; one row per 0.05° grid cell, plus `{cell}::{model}` rows for user-selected models)
 2. **Open-Meteo multi-model blend** (Africa-weighted), or the user's single model
 3. **Open-Meteo `best_match`** (alternate single request)
 4. **Seasonal estimate** (never fails)
@@ -1092,7 +1096,7 @@ All AI system prompts, suggested prompt rules, and model configurations are stor
 
 **Server-side (MongoDB):**
 
-- Weather cache: 15-min TTL (auto-expires via TTL index)
+- Weather cache: 15-min TTL (auto-expires via TTL index), one row per 0.05° coordinate cell (`weather_cache_key`, #252)
 - AI summaries: tiered TTL — 30 min (major cities), 60 min (mid-tier), 120 min (small locations) for real model-generated insights. Fallback text (gateway unconfigured, open circuit breaker, or a gateway/model error) is tagged `source: "fallback"` and cached for only 60s (`TTL_FALLBACK` in `api/py/_ai.py`) regardless of location tier — otherwise a single transient failure would serve the generic fallback summary for up to 2 hours per location
 - Weather history: unlimited retention. One doc per `(locationSlug, date)` — see "Weather history store" below
 - History analysis: 1h TTL in `history_analysis` collection (keyed by location + days + data hash)
@@ -1511,6 +1515,7 @@ _Python backend tests (pytest):_
 - `tests/py/test_enrichment.py` — Tomorrow.io budget guard (normal/priority caps, hour reset, day-cap refund, fail closed), skip recording, merge rules, enrich() order, daily-only fetch
 - `tests/py/test_insights.py` — Derived insights: dew point, heat index, GDD, WMO hazards, convective proxy, moon phase, cloud base, full derivation, intermediate-field stripping
 - `tests/py/test_verification.py` — Verification capture doc shape, 6-hour buckets, first-write-wins upsert
+- `tests/py/test_weather_cache_key.py` — weather_cache grid key (#252): shared TS/Python vectors, far-apart coordinates never share a row, nearby requests in one cell do, endpoint no longer keys by the nearest place
 - `tests/py/test_geohash.py` — Python geohash mirror: published reference vectors, cross-language parity with the TS suite, slugify/delimiter safety, smart-slug determinism and collision behaviour
 - `tests/py/test_overpass.py` — Overpass naming: feature ranking, `is_in` admin extraction (incl. city-states with no admin_level 4), degrade-don't-fail on every failure path, `_reverse_geocode` Overpass-primary / Nominatim-fallback integration
 - `tests/py/test_locations.py` — Location CRUD: slug generation, geocoding, deduplication, region validation, search/filter, geo lookup, add location
