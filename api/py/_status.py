@@ -14,7 +14,7 @@ from fastapi import APIRouter
 
 from ._db import get_db, get_api_key, ttl_filter
 from ._http import get_http_client
-from ._ai_gateway import DEFAULT_GATEWAY_ID, missing_ai_config
+from ._ai_gateway import DEFAULT_GATEWAY_ID, gateway_headers, gateway_url, missing_ai_config
 from ._circuit_breaker import ai_breaker
 
 router = APIRouter()
@@ -35,6 +35,16 @@ def _failure_message(check: str, exc: Exception) -> str:
 
 #: Timeout for the live upstream probes (Tomorrow.io, Open-Meteo).
 PROBE_TIMEOUT_S = 10.0
+
+#: Timeout for the AI liveness probe. Short: it never reaches the model.
+AI_PROBE_TIMEOUT_S = 5.0
+
+#: The AI probe body. The AI Worker refuses an empty ``messages`` array with
+#: HTTP 400 ``invalid_request`` before any model call, so the probe costs no
+#: tokens. It still crosses the whole path: DNS/TLS to the internal Worker,
+#: its service-key check, the service binding to the AI Worker, and the AI
+#: Worker's guardrails load (which runs before request validation).
+AI_PROBE_BODY: dict = {"messages": []}
 
 
 def _result(name: str, status: str, start: float, message: str) -> dict:
@@ -127,12 +137,17 @@ def _check_open_meteo() -> dict:
 
 
 def _check_ai_gateway() -> dict:
-    """Check the AI gateway WITHOUT spending tokens.
+    """Probe the AI path end to end WITHOUT spending tokens.
 
-    A live chat-completions ping bills a request every time the status page is
-    polled (and anonymous users could burn credits at will). Instead we verify
-    the gateway config is present, report the gateway + model the app is
-    configured to run, and surface an open circuit breaker.
+    Sends :data:`AI_PROBE_BODY` to the chat-completions route. A healthy path
+    answers 400 ``invalid_request`` from the AI Worker's own validation, which
+    proves the internal Worker accepts our key, the service binding reaches
+    the AI Worker and its guardrails loaded. No model runs, so polling the
+    status page cannot bill anything. The model itself is covered by
+    ``ai_breaker``, which real calls trip on failure.
+
+    The probe never records into the breaker: a status poll must not flip
+    the circuit that real traffic depends on.
     """
     name = "Shamwari AI (weather AI Worker)"
     start = time.time()
@@ -148,12 +163,27 @@ def _check_ai_gateway() -> dict:
         )
 
     gateway = DEFAULT_GATEWAY_ID
+    try:
+        resp = get_http_client(AI_PROBE_TIMEOUT_S).post(
+            gateway_url(),  # type: ignore[arg-type] — set when config is complete
+            headers=gateway_headers(),
+            json=AI_PROBE_BODY,
+        )
+    except Exception as e:
+        return _result(name, "down", start, _failure_message(name, e))
+
+    code = resp.status_code
+    if code == 401:
+        return _result(name, "down", start, "AI Worker rejected the service key (HTTP 401) — fallbacks active")
+    if code == 429:
+        return _result(name, "degraded", start, "AI Worker rate limited (HTTP 429) — fallbacks active")
+    if code != 400 and not 200 <= code < 300:
+        return _result(name, "down", start, f"AI Worker unavailable (HTTP {code}) — fallbacks active")
+
     if not ai_breaker.is_allowed:
         return _result(name, "degraded", start, f"Circuit open — gateway {gateway} recovering, fallbacks active")
 
-    return _result(
-        name, "operational", start, f"AI Worker configured (gateway {gateway}, model set by the Worker)"
-    )
+    return _result(name, "operational", start, f"AI Worker reachable (gateway {gateway}, model set by the Worker)")
 
 
 def _count_active(collection: str, noun: tuple[str, str], empty_message: str, name: str) -> dict:
