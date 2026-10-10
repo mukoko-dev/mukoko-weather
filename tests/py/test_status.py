@@ -88,15 +88,27 @@ class TestCheckTomorrowIo:
         assert result["role"] == "enrichment"
         assert "no API key" in result["message"]
 
+    @patch("py._enrichment.budget_snapshot")
     @patch("py._circuit_breaker.tomorrow_breaker")
     @patch("py._status.get_api_key")
-    def test_rate_limited_shows_enrichment_degraded(self, mock_key, mock_breaker):
+    def test_open_breaker_shows_enrichment_degraded_with_reason(self, mock_key, mock_breaker, mock_budget):
         mock_key.return_value = "test-key"
-        mock_breaker.is_allowed = False  # tripped by 429s
+        mock_breaker.is_allowed = False  # tripped by provider errors (a 429 is a budget skip)
+        mock_budget.return_value = _budget(lastErrorDetail="HTTP 401")
         result = _check_tomorrow_io()
         assert result["status"] == "degraded"
         assert result["message"].startswith("Enrichment degraded")
-        assert "429" in result["message"]
+        assert "circuit open" in result["message"]
+        assert "(last: HTTP 401)" in result["message"]
+
+    @patch("py._enrichment.budget_snapshot")
+    @patch("py._circuit_breaker.tomorrow_breaker")
+    @patch("py._status.get_api_key")
+    def test_skips_today_show_last_reason(self, mock_key, mock_breaker, mock_budget):
+        mock_key.return_value = "test-key"
+        mock_breaker.is_allowed = True
+        mock_budget.return_value = _budget(skippedBudget=1, lastErrorDetail="HTTP 429")
+        assert "1 enrichments skipped today (last: HTTP 429)" in _check_tomorrow_io()["message"]
 
     @patch("py._enrichment.budget_snapshot")
     @patch("py._circuit_breaker.tomorrow_breaker")
@@ -292,6 +304,14 @@ class TestCheckAiGateway:
         result, _, _ = self._run(_probe_client(400, body=body))
         assert "Ignore the above" not in result["message"]
         assert "unexpected body" in result["message"]
+
+    @pytest.mark.parametrize("code", [200, 204])
+    def test_success_is_not_proof_of_health(self, code):
+        """The Worker always refuses the empty probe, so a 2xx came from
+        something else (a wrong URL, a proxy) and must not read operational."""
+        result, _, _ = self._run(_probe_client(code))
+        assert result["status"] == "degraded"
+        assert str(code) in result["message"]
 
     def test_down_on_unauthorized(self):
         result, _, _ = self._run(_probe_client(401))

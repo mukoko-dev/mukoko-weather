@@ -33,7 +33,11 @@ class TestTomorrowKeyInHeader:
         resp = MagicMock(status_code=500)
         mock_client.return_value.get.return_value = resp
 
-        fetch_tomorrow_insights(-17.83, 31.05, FAKE_KEY)
+        from py._enrichment import TomorrowUnavailable
+
+        with pytest.raises(TomorrowUnavailable) as exc:
+            fetch_tomorrow_insights(-17.83, 31.05, FAKE_KEY)
+        assert FAKE_KEY not in str(exc.value)  # the logged reason never carries the key
 
         call = mock_client.return_value.get.call_args
         url = call.args[0]
