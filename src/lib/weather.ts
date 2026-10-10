@@ -276,9 +276,9 @@ export function synthesizeOpenMeteoInsights(
   const uv = current.uv_index ?? at(hourly?.uv_index, idx);
   if (uv != null) out.uvHealthConcern = uv;
 
-  let { thunderstormProbability, precipitationType } = wmoToInsightHazards(
-    current.weather_code,
-  );
+  const hazards = wmoToInsightHazards(current.weather_code);
+  const precipitationType = hazards.precipitationType;
+  let thunderstormProbability = hazards.thunderstormProbability;
   out.precipitationType = precipitationType;
 
   let convective = 0;
