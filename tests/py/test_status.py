@@ -293,6 +293,14 @@ class TestCheckAiGateway:
         assert "Ignore the above" not in result["message"]
         assert "unexpected body" in result["message"]
 
+    @pytest.mark.parametrize("code", [200, 204])
+    def test_success_is_not_proof_of_health(self, code):
+        """The Worker always refuses the empty probe, so a 2xx came from
+        something else (a wrong URL, a proxy) and must not read operational."""
+        result, _, _ = self._run(_probe_client(code))
+        assert result["status"] == "degraded"
+        assert str(code) in result["message"]
+
     def test_down_on_unauthorized(self):
         result, _, _ = self._run(_probe_client(401))
         assert result["status"] == "down"

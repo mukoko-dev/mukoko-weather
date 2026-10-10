@@ -400,13 +400,31 @@ class LocationInfo(BaseModel):
     tags: list[str] = Field(default_factory=list, max_length=20)
 
 
-def _summary_cache_key(location: LocationInfo) -> str:
+#: Most of the user's activities that shape one summary (prompt + cache key).
+MAX_SUMMARY_ACTIVITIES = 3
+
+
+def _summary_activities(activities: list[str]) -> list[str]:
+    """The (already allowlist-filtered) activity ids one summary is written
+    for: de-duplicated, in the user's order, capped. The prompt and the cache
+    key both use exactly this list, so they can never disagree."""
+    return list(dict.fromkeys(activities))[:MAX_SUMMARY_ACTIVITIES]
+
+
+def _summary_cache_key(location: LocationInfo, activities: list[str] | None = None) -> str:
     """Cache key for a location: its slug when valid, else the legacy
-    name-derived key (older clients that don't send a slug)."""
+    name-derived key (older clients that don't send a slug).
+
+    A summary written for a user's activities carries an activity tip, so it
+    is keyed by that activity set too (sorted, so the same set in another
+    order shares a row). Without this, the first visitor's personalised
+    summary was served to everyone at the place, whatever they had picked.
+    """
     slug = (location.slug or "").strip().lower()
-    if SLUG_RE.match(slug):
-        return slug
-    return location.name.lower().replace(" ", "-")
+    base = slug if SLUG_RE.match(slug) else location.name.lower().replace(" ", "-")
+    if activities:
+        return f"{base}:{','.join(sorted(activities))}"
+    return base
 
 
 def _location_tags(location: LocationInfo) -> list[str]:
@@ -462,7 +480,7 @@ async def generate_summary(body: AISummaryRequest, request: Request = None):
     location = body.location
     # Validate against known activity ids before it's spliced into the
     # system prompt below (activities_line / tip).
-    user_activities = filter_known_activities(body.activities)
+    user_activities = _summary_activities(filter_known_activities(body.activities))
 
     if not weather_data or not location:
         raise HTTPException(status_code=400, detail="Missing weather data or location")
@@ -476,7 +494,7 @@ async def generate_summary(body: AISummaryRequest, request: Request = None):
 
     current_temp = weather_data.get("current", {}).get("temperature_2m", 0) or 0
     current_code = weather_data.get("current", {}).get("weather_code", 0) or 0
-    location_slug = _summary_cache_key(location)
+    location_slug = _summary_cache_key(location, user_activities)
 
     # Tags for the tiered TTL and the prompt come from the request now:
     # weather.locations (where this used to look them up) was dropped in
@@ -535,7 +553,7 @@ async def generate_summary(body: AISummaryRequest, request: Request = None):
     # each activity and what regional framing to use, so activity advice is
     # grounded instead of generic filler.
     briefs = {a.get("id"): a for a in get_activities_brief()}
-    selected = [briefs.get(a) or {"id": a, "label": a} for a in user_activities[:3]]
+    selected = [briefs.get(a) or {"id": a, "label": a} for a in user_activities]
     activity_labels = [s.get("label") or s.get("id", "") for s in selected]
     guidance_lines = [
         f"- {s.get('label') or s.get('id')}: {s['aiInstructions']}"

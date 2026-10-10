@@ -14,8 +14,18 @@ export async function LocationNotFound() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
-      <h1 className="font-heading text-4xl font-bold text-text-primary">
+    // <main id="main-content">: this is now the site-wide 404 (root
+    // not-found.tsx), so it carries the landmark and the root layout's
+    // skip-link target like every other page.
+    <main
+      id="main-content"
+      aria-labelledby="not-found-heading"
+      className="flex min-h-screen flex-col items-center justify-center bg-background px-4"
+    >
+      <h1
+        id="not-found-heading"
+        className="font-heading text-4xl font-bold text-text-primary"
+      >
         Location not found
       </h1>
       <p className="mt-4 text-text-secondary">
@@ -39,6 +49,6 @@ export async function LocationNotFound() {
           </ul>
         </div>
       )}
-    </div>
+    </main>
   );
 }
