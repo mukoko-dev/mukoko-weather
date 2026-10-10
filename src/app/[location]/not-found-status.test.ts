@@ -91,6 +91,16 @@ describe("shared per-request location loader", () => {
     expect(page).not.toMatch(/const loadLocation = cache/);
   });
 
+  it("is used by every sub-route too, so the layout's lookup is reused", () => {
+    for (const sub of ["atmosphere", "forecast", "map"]) {
+      const src = read(`[location]/${sub}/page.tsx`);
+      expect(src).toMatch(
+        /import \{ loadLocation \} from "\.\.\/load-location"/,
+      );
+      expect(src).not.toMatch(/getLocationFromDb/);
+    }
+  });
+
   it("passes the resolver result through", async () => {
     mockGetLocationFromDb.mockResolvedValue(HARARE);
     const { loadLocation } = await import("./load-location");
