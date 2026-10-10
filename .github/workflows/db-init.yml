@@ -12,10 +12,13 @@ permissions:
 jobs:
   db-init:
     name: Sync database seed data
-    # Only run when the production deployment succeeds
+    # Only run when the production deployment succeeds. Vercel names the
+    # environment "Production – <project>" (e.g. "Production – mukoko-weather"),
+    # not bare "Production", so an exact match never fired. Previews are
+    # "Preview – <project>" and never match the prefix.
     if: >-
       github.event.deployment_status.state == 'success' &&
-      github.event.deployment.environment == 'Production'
+      startsWith(github.event.deployment.environment, 'Production')
     runs-on: ubuntu-latest
     timeout-minutes: 2
 
