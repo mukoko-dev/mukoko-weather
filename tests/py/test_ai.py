@@ -1402,3 +1402,56 @@ class TestGenerateSummaryUsesRequestIdentity:
         args = mock_set.call_args.args
         assert args[0] == "phuket-th"
         assert args[3] == ["city", "tourism"]
+
+
+# ---------------------------------------------------------------------------
+# Personalised summaries are cached per activity set, not shared per place
+# ---------------------------------------------------------------------------
+
+from py._ai import _summary_activities  # noqa: E402
+
+
+class TestSummaryCacheKeyActivities:
+    def test_no_activities_keeps_the_plain_slug(self):
+        loc = LocationInfo(name="Harare", slug="harare")
+        assert _summary_cache_key(loc, []) == "harare"
+
+    def test_activity_summaries_get_their_own_row(self):
+        loc = LocationInfo(name="Harare", slug="harare")
+        generic = _summary_cache_key(loc, [])
+        farming = _summary_cache_key(loc, ["maize-farming"])
+        soccer = _summary_cache_key(loc, ["soccer"])
+        assert len({generic, farming, soccer}) == 3
+
+    def test_same_set_in_another_order_shares_a_row(self):
+        loc = LocationInfo(name="Harare", slug="harare")
+        assert _summary_cache_key(loc, ["soccer", "braai"]) == _summary_cache_key(loc, ["braai", "soccer"])
+
+    def test_summary_activities_dedupes_and_caps(self):
+        assert _summary_activities(["a", "b", "a", "c", "d"]) == ["a", "b", "c"]
+
+
+class TestGenerateSummaryKeysByActivities:
+    @pytest.fixture(autouse=True)
+    def _allow_rate_limit(self):
+        with patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 29}):
+            yield
+
+    @pytest.mark.asyncio
+    @patch("py._ai.get_known_tags", return_value=_KNOWN)
+    @patch("py._ai.filter_known_activities", side_effect=lambda a: [x for x in a if x in {"braai", "soccer"}])
+    @patch("py._ai._set_cached_summary")
+    @patch("py._ai._get_season", return_value={"name": "Dry", "localName": "Chirimo", "description": "Dry season"})
+    @patch("py._ai.call_ai", return_value=(None, "no_client"))
+    @patch("py._ai._get_cached_summary", return_value=None)
+    async def test_reads_and_writes_the_activity_row(self, mock_cache, _call, _season, mock_set, _filter, _known):
+        """A visitor who picked soccer must never be served (or overwrite) the
+        row another visitor's farming summary lives in."""
+        req = AISummaryRequest(
+            weatherData={"current": {"temperature_2m": 24, "weather_code": 1}},
+            location=LocationInfo(name="Harare", slug="harare"),
+            activities=["soccer", "unknown", "braai"],
+        )
+        await generate_summary(req)
+        mock_cache.assert_called_once_with("harare:braai,soccer")
+        assert mock_set.call_args.args[0] == "harare:braai,soccer"

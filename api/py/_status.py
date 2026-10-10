@@ -135,23 +135,28 @@ def _check_tomorrow_io() -> dict:
             "Enrichment off — no API key configured (seed apiKeys.tomorrow via db-init). Baseline + derived insights unaffected.",
         )
 
-    if not tomorrow_breaker.is_allowed:
-        return row(
-            "degraded",
-            "Enrichment degraded — circuit open after rate limiting (429) or errors; baseline unaffected",
-        )
-
     try:
         b = enrichment.budget_snapshot()
     except Exception as e:
         _failure_message("Tomorrow.io budget read", e)
+        b = None
+    # Secret-free provider reason of the last failure (e.g. "HTTP 401").
+    last = f" (last: {b['lastErrorDetail']})" if b and b.get("lastErrorDetail") else ""
+
+    if not tomorrow_breaker.is_allowed:
+        return row(
+            "degraded",
+            f"Enrichment degraded — circuit open after provider errors{last}; baseline unaffected",
+        )
+
+    if b is None:
         return row("degraded", "Enrichment degraded — budget counters unavailable")
 
     usage = f"{b['hourUsed']}/{b['hourCap']} this hour, {b['dayUsed']}/{b['dayCap']} today"
     if b["dayUsed"] >= b["dayCap"] or b["hourUsed"] >= b["hourCap"]:
         return row("degraded", f"Enrichment degraded — call budget exhausted ({usage}); baseline unaffected")
     skipped = b.get("skippedBudget", 0) + b.get("skippedError", 0)
-    note = f"; {skipped} enrichments skipped today" if skipped else ""
+    note = f"; {skipped} enrichments skipped today{last}" if skipped else ""
     return row("operational", f"Enrichment active — {usage}{note}")
 
 
@@ -232,7 +237,18 @@ def _check_ai_gateway() -> dict:
             start,
             f"AI Worker refused the probe for another reason (HTTP 400, {label}) — fallbacks may be active",
         )
-    if code != 400 and not 200 <= code < 300:
+    if 200 <= code < 300:
+        # The Worker never accepts an empty `messages` array, so a success
+        # means something other than its validation answered (a wrong
+        # WEATHER_AI_URL, a proxy, a changed contract that may have run the
+        # model). That proves nothing about the AI path.
+        return _result(
+            name,
+            "degraded",
+            start,
+            f"AI Worker accepted the empty probe (HTTP {code}) — the AI URL may not point at the Worker",
+        )
+    if code != 400:
         return _result(name, "down", start, f"AI Worker unavailable (HTTP {code}) — fallbacks active")
 
     if not ai_breaker.is_allowed:
