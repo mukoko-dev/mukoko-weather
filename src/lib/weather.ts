@@ -10,6 +10,16 @@ import {
   wallNaiveIso,
   weatherOffsetSeconds,
 } from "./location-time";
+import {
+  CONVECTIVE_WINDOW_H,
+  GDD_DEFINITIONS,
+  cloudBaseKm,
+  convectiveProxy,
+  dewPointC,
+  growingDegreeDays,
+  heatIndexC,
+  moonPhase,
+} from "./derived-insights";
 
 export interface CurrentWeather {
   temperature_2m: number;
@@ -42,6 +52,10 @@ export interface HourlyWeather {
   wind_gusts_10m: number[];
   uv_index: number[];
   is_day: number[];
+  /** Intermediate insight inputs — only on the TS direct-Open-Meteo path. */
+  dew_point_2m?: (number | null)[];
+  cape?: (number | null)[];
+  lifted_index?: (number | null)[];
 }
 
 export interface DailyWeather {
@@ -58,6 +72,8 @@ export interface DailyWeather {
   precipitation_probability_max: number[];
   wind_speed_10m_max: number[];
   wind_gusts_10m_max: number[];
+  /** FAO reference evapotranspiration (mm/day) — TS direct path only. */
+  et0_fao_evapotranspiration?: (number | null)[];
 }
 
 export interface WeatherData {
@@ -65,7 +81,12 @@ export interface WeatherData {
   hourly: HourlyWeather;
   daily: DailyWeather;
   current_units: Record<string, string>;
-  /** Activity-specific insights — only available when Tomorrow.io is the provider */
+  /**
+   * Activity-specific insights. `/api/py/weather` always derives them from the
+   * model baseline (issue #246) and merges Tomorrow.io enrichment on top when
+   * its budget allows; the TS direct-Open-Meteo path uses
+   * `synthesizeOpenMeteoInsights`.
+   */
   insights?: WeatherInsights;
   /** Next-hour precipitation nowcast (4 × 15-min steps) from Open-Meteo */
   minutely?: MinutelyData;
@@ -87,32 +108,58 @@ export interface WeatherData {
 }
 
 /**
- * Open-Meteo forecast models exposed for the Windy-style multi-model
- * comparison. `best_match` is Open-Meteo's auto-selected blend.
+ * Global forecast models (Open-Meteo ids, checked live 2026-10-10 — issue #246).
+ *
+ * `best_match` is the stored default preference and now means the server's
+ * Africa-weighted multi-model BLEND (ECMWF IFS + AIFS heaviest, then GFS,
+ * ICON, GEM, ARPEGE — `api/py/_model_blend.py`). Picking any other model
+ * makes that single model the baseline.
  */
 export enum ForecastModel {
   BestMatch = "best_match",
+  ECMWF = "ecmwf_ifs",
+  AIFS = "ecmwf_aifs025_single",
   GFS = "gfs_seamless",
-  ECMWF = "ecmwf_ifs04",
-  ICON = "icon_seamless",
+  ICON = "icon_global",
   MeteoFrance = "meteofrance_seamless",
 }
 
 /** Human-readable labels for each forecast model (short national/agency names). */
 export const FORECAST_MODEL_LABELS: Record<ForecastModel, string> = {
-  [ForecastModel.BestMatch]: "Auto (best match)",
+  [ForecastModel.BestMatch]: "Mukoko blend (recommended)",
+  [ForecastModel.ECMWF]: "ECMWF IFS (Europe)",
+  [ForecastModel.AIFS]: "ECMWF AIFS (AI model)",
   [ForecastModel.GFS]: "GFS (NOAA, USA)",
-  [ForecastModel.ECMWF]: "ECMWF (Europe)",
   [ForecastModel.ICON]: "ICON (DWD, Germany)",
   [ForecastModel.MeteoFrance]: "Météo-France",
 };
 
-/** The comparison set overlaid on the ModelComparisonChart (excludes Auto). */
+/**
+ * Retired / renamed model ids → current id. `ecmwf_ifs04` is dead upstream
+ * (all-null series); stored preferences are mapped instead of breaking.
+ */
+const LEGACY_MODEL_IDS: Record<string, ForecastModel> = {
+  ecmwf_ifs04: ForecastModel.ECMWF,
+  icon_seamless: ForecastModel.ICON,
+};
+
+/** A stored model preference in its current form (unknown → best_match). */
+export function normalizeForecastModel(
+  model: string | null | undefined,
+): ForecastModel {
+  const m = (model ?? "").trim();
+  if (m in LEGACY_MODEL_IDS) return LEGACY_MODEL_IDS[m];
+  return (Object.values(ForecastModel) as string[]).includes(m)
+    ? (m as ForecastModel)
+    : ForecastModel.BestMatch;
+}
+
+/** The comparison set overlaid on the ModelComparisonChart — the blend's core members. */
 export const COMPARISON_MODELS: ForecastModel[] = [
-  ForecastModel.GFS,
   ForecastModel.ECMWF,
+  ForecastModel.AIFS,
+  ForecastModel.GFS,
   ForecastModel.ICON,
-  ForecastModel.MeteoFrance,
 ];
 
 /** Next-hour precipitation nowcast — 15-minute steps. */
@@ -184,35 +231,94 @@ export function wmoToInsightHazards(code: number): {
 }
 
 /**
- * Synthesize weather insights from Open-Meteo data for suitability evaluation.
- * Maps available Open-Meteo fields to the WeatherInsights interface so that
- * suitability rules produce meaningful ratings on the fallback path (when
- * Tomorrow.io is unavailable). Without these mappings, all conditions fall
- * through to the "Good" default — e.g. farming shows "Good" during a storm.
+ * Derive the full WeatherInsights set from model data — no Tomorrow.io.
+ *
+ * Mirror of `derive_insights` in `api/py/_insights.py` (issue #246): wind,
+ * visibility (metres → km, the unit the suitability thresholds use), dew
+ * point (model value or Magnus), heat index, UV, precipitation type, a
+ * thunderstorm proxy (WMO codes + CAPE/lifted index over the next 6 h,
+ * halved without rain agreement), GDD from today's max/min, ET₀, moon phase
+ * and cloud base/ceiling. Fields that cannot be derived are omitted, which
+ * the rules engine already treats as "no match".
  */
 export function synthesizeOpenMeteoInsights(
   data: WeatherData,
+  now: Date = new Date(),
 ): WeatherInsights {
-  const currentUv = data.current.uv_index;
-  const weatherCode = data.current.weather_code;
-
-  const { thunderstormProbability, precipitationType } =
-    wmoToInsightHazards(weatherCode);
-
-  return {
-    windSpeed: data.current.wind_speed_10m,
-    windGust: data.current.wind_gusts_10m,
-    // The location's current hour — read in its own time zone, not the
-    // viewer's or the server's (see location-time.ts).
-    visibility:
-      data.hourly?.visibility?.[
-        currentHourIndex(data.hourly?.time, weatherOffsetSeconds(data))
-      ],
-    // Open-Meteo UV index is 0–11+; Tomorrow.io uvHealthConcern uses the same scale
-    uvHealthConcern: currentUv,
-    thunderstormProbability,
-    precipitationType,
+  const current = data.current;
+  const hourly = data.hourly;
+  // The location's current hour — read in its own time zone, not the
+  // viewer's or the server's (see location-time.ts).
+  const idx = Math.max(
+    0,
+    currentHourIndex(hourly?.time, weatherOffsetSeconds(data)),
+  );
+  const at = (arr: (number | null)[] | undefined, i: number) => {
+    const v = arr?.[i];
+    return typeof v === "number" ? v : undefined;
   };
+
+  const out: WeatherInsights = {};
+  if (current.wind_speed_10m != null) out.windSpeed = current.wind_speed_10m;
+  if (current.wind_gusts_10m != null) out.windGust = current.wind_gusts_10m;
+
+  const visM = at(hourly?.visibility, idx);
+  if (visM !== undefined) out.visibility = Math.round(visM / 10) / 100;
+
+  const dew =
+    at(hourly?.dew_point_2m, idx) ??
+    dewPointC(current.temperature_2m, current.relative_humidity_2m);
+  if (dew !== undefined) out.dewPoint = dew;
+
+  const heat = heatIndexC(current.temperature_2m, current.relative_humidity_2m);
+  if (heat !== undefined) out.heatStressIndex = heat;
+
+  const uv = current.uv_index ?? at(hourly?.uv_index, idx);
+  if (uv != null) out.uvHealthConcern = uv;
+
+  let { thunderstormProbability, precipitationType } = wmoToInsightHazards(
+    current.weather_code,
+  );
+  out.precipitationType = precipitationType;
+
+  let convective = 0;
+  let maxPp = 0;
+  const hasPp = (hourly?.precipitation_probability?.length ?? 0) > 0;
+  for (let i = idx; i < idx + CONVECTIVE_WINDOW_H; i++) {
+    convective = Math.max(
+      convective,
+      convectiveProxy(at(hourly?.cape, i), at(hourly?.lifted_index, i)),
+    );
+    const code = at(hourly?.weather_code, i);
+    if (code !== undefined) {
+      thunderstormProbability = Math.max(
+        thunderstormProbability,
+        wmoToInsightHazards(code).thunderstormProbability,
+      );
+    }
+    maxPp = Math.max(maxPp, at(hourly?.precipitation_probability, i) ?? 0);
+  }
+  if (hasPp && maxPp < 20) convective = Math.floor(convective / 2);
+  out.thunderstormProbability = Math.max(thunderstormProbability, convective);
+
+  const tmax = at(data.daily?.temperature_2m_max, 0);
+  const tmin = at(data.daily?.temperature_2m_min, 0);
+  for (const [key, base, cap] of GDD_DEFINITIONS) {
+    const gdd = growingDegreeDays(tmax, tmin, base, cap);
+    if (gdd !== undefined) out[key] = gdd;
+  }
+
+  const et0 = at(data.daily?.et0_fao_evapotranspiration, 0);
+  if (et0 !== undefined) out.evapotranspiration = et0;
+
+  out.moonPhase = moonPhase(now);
+
+  const base = cloudBaseKm(current.temperature_2m, dew, current.cloud_cover);
+  if (base !== undefined) {
+    out.cloudBase = base;
+    out.cloudCeiling = current.cloud_cover >= 50 ? base : null;
+  }
+  return out;
 }
 
 export interface FrostAlert {
@@ -253,6 +359,11 @@ const HOURLY_PARAMS = [
   "wind_gusts_10m",
   "uv_index",
   "is_day",
+  // Insight inputs (synthesizeOpenMeteoInsights). The TS path never writes
+  // the cache, so the extra arrays never reach a stored document.
+  "dew_point_2m",
+  "cape",
+  "lifted_index",
 ].join(",");
 
 const DAILY_PARAMS = [
@@ -268,6 +379,7 @@ const DAILY_PARAMS = [
   "precipitation_probability_max",
   "wind_speed_10m_max",
   "wind_gusts_10m_max",
+  "et0_fao_evapotranspiration",
 ].join(",");
 
 export async function fetchWeather(

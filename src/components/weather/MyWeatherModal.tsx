@@ -44,7 +44,11 @@ import {
 } from "@/lib/current-slug";
 import { cn } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
-import { ForecastModel, FORECAST_MODEL_LABELS } from "@/lib/weather";
+import {
+  ForecastModel,
+  FORECAST_MODEL_LABELS,
+  normalizeForecastModel,
+} from "@/lib/weather";
 import { t } from "@/lib/i18n";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -902,17 +906,21 @@ function SettingsTab() {
 
 // ── Forecast model selector ─────────────────────────────────────────────────
 
-/** Auto (best_match) first, then the individual national/agency models. */
+/** The blend (best_match) first, then the individual national/agency models. */
 const MODEL_OPTIONS: { value: ForecastModel; label: string }[] = [
   {
     value: ForecastModel.BestMatch,
     label: FORECAST_MODEL_LABELS[ForecastModel.BestMatch],
   },
-  { value: ForecastModel.GFS, label: FORECAST_MODEL_LABELS[ForecastModel.GFS] },
   {
     value: ForecastModel.ECMWF,
     label: FORECAST_MODEL_LABELS[ForecastModel.ECMWF],
   },
+  {
+    value: ForecastModel.AIFS,
+    label: FORECAST_MODEL_LABELS[ForecastModel.AIFS],
+  },
+  { value: ForecastModel.GFS, label: FORECAST_MODEL_LABELS[ForecastModel.GFS] },
   {
     value: ForecastModel.ICON,
     label: FORECAST_MODEL_LABELS[ForecastModel.ICON],
@@ -933,8 +941,8 @@ function ModelSelector() {
     <div className="mt-6">
       <h4 className="giraffe mb-1">Forecast model</h4>
       <p className="mb-3 text-base text-text-tertiary">
-        Choose which weather model to highlight. &ldquo;Auto&rdquo; blends the
-        best available model for your location.
+        Choose the model your forecast is based on. The Mukoko blend weights
+        ECMWF most heavily, then GFS and ICON, tuned for Africa.
       </p>
       <div
         className="space-y-2"
@@ -942,7 +950,8 @@ function ModelSelector() {
         aria-label="Forecast model preference"
       >
         {MODEL_OPTIONS.map((option) => {
-          const isSelected = selectedForecastModel === option.value;
+          const isSelected =
+            normalizeForecastModel(selectedForecastModel) === option.value;
           return (
             <button
               key={option.value}

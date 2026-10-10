@@ -59,10 +59,11 @@ import type {
   ModelForecast,
 } from "@/lib/weather";
 import {
-  fetchWeather,
   COMPARISON_MODELS,
+  normalizeForecastModel,
   synthesizeOpenMeteoInsights,
 } from "@/lib/weather";
+import { fetchModelWeather } from "@/lib/home-weather";
 import type { WeatherLocation } from "@/lib/locations";
 import type { AISummaryUser } from "@/components/weather/AISummary";
 import { type Activity, ACTIVITIES } from "@/lib/activities";
@@ -160,7 +161,7 @@ interface WeatherDashboardProps {
 }
 
 export function WeatherDashboard({
-  weather,
+  weather: seedWeather,
   location,
   usingFallback,
   frostAlert,
@@ -169,6 +170,11 @@ export function WeatherDashboard({
   user,
   isCurrentLocation = false,
 }: WeatherDashboardProps) {
+  // A user-picked forecast model (My Weather → Settings) becomes the
+  // baseline the whole dashboard renders (issue #246). Null = the server
+  // seed, which is the Africa-weighted multi-model blend.
+  const [modelBaseline, setModelBaseline] = useState<WeatherData | null>(null);
+  const weather = modelBaseline ?? seedWeather;
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const selectedForecastModel = useAppStore((s) => s.selectedForecastModel);
@@ -192,8 +198,8 @@ export function WeatherDashboard({
   // Swipe left/right between the visitor's locations (off while reordering).
   const swipe = useLocationSwipe({ enabled: !reordering });
   // Windy-style ADDITIONAL data — multi-model comparison + minutely nowcast.
-  // Fetched client-side from Open-Meteo (free, keyless) so it never blocks the
-  // server-rendered base forecast. Re-fetched when the user changes model.
+  // Fetched client-side after mount so it never blocks the server-rendered
+  // base forecast. Re-fetched when the user changes model.
   const [minutely, setMinutely] = useState<MinutelyData | null>(null);
   const [modelSeries, setModelSeries] = useState<ModelForecast[]>([]);
   const [modelsTime, setModelsTime] = useState<string[]>([]);
@@ -261,17 +267,19 @@ export function WeatherDashboard({
     weather.current.wind_speed_10m,
   ]);
 
-  // Fetch multi-model comparison + minutely nowcast from Open-Meteo. Best-effort
-  // — failures are swallowed so the base page is never affected. The selected
-  // model is unioned into the comparison set so the user's pick is always shown.
+  // Fetch the selected model's baseline + multi-model comparison + minutely
+  // nowcast through our own /api/py/weather (cached, single writer).
+  // Best-effort — failures are swallowed so the seeded page is never affected.
+  // The selected model is unioned into the comparison set so the user's pick
+  // is always shown.
   useEffect(() => {
     let cancelled = false;
-    const models = Array.from(
-      new Set([selectedForecastModel, ...COMPARISON_MODELS]),
-    );
-    fetchWeather(location.lat, location.lon, models)
-      .then((data) => {
+    const model = normalizeForecastModel(selectedForecastModel);
+    const models = Array.from(new Set([model, ...COMPARISON_MODELS]));
+    fetchModelWeather(location.lat, location.lon, model, models)
+      .then(({ data, baseline }) => {
         if (cancelled) return;
+        setModelBaseline(baseline);
         setMinutely(data.minutely ?? null);
         setModelSeries(data.models ?? []);
         setModelsTime(data.models_time ?? []);
