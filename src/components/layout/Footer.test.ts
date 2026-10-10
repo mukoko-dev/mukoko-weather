@@ -26,7 +26,9 @@ describe("Footer touch targets", () => {
       "Weather data: ECMWF, NOAA, DWD, ECCC, Météo-France via",
     );
     expect(source).toContain("Open-Meteo.com");
-    expect(source).toContain('href="https://creativecommons.org/licenses/by/4.0/"');
+    expect(source).toContain(
+      'href="https://creativecommons.org/licenses/by/4.0/"',
+    );
     expect(source).toContain("insights enrichment by");
   });
 

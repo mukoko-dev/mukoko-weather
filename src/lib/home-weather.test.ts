@@ -19,10 +19,12 @@ describe("fetchModelWeather (issue #246)", () => {
   it("asks our API for the selected model + comparison set", async () => {
     const fetchMock = vi.fn(async () => respond("open-meteo:gfs_seamless"));
     vi.stubGlobal("fetch", fetchMock);
-    const { baseline } = await fetchModelWeather(-17.83, 31.05, "gfs_seamless", [
+    const { baseline } = await fetchModelWeather(
+      -17.83,
+      31.05,
       "gfs_seamless",
-      "ecmwf_ifs",
-    ]);
+      ["gfs_seamless", "ecmwf_ifs"],
+    );
     const url = String((fetchMock.mock.calls[0] as unknown[])[0]);
     expect(url.startsWith("/api/py/weather?")).toBe(true);
     expect(url).toContain("model=gfs_seamless");
@@ -33,10 +35,12 @@ describe("fetchModelWeather (issue #246)", () => {
   it("the blend default never swaps the seeded baseline", async () => {
     const fetchMock = vi.fn(async () => respond("open-meteo:blend"));
     vi.stubGlobal("fetch", fetchMock);
-    const { data, baseline } = await fetchModelWeather(-17.83, 31.05, "best_match", [
+    const { data, baseline } = await fetchModelWeather(
+      -17.83,
+      31.05,
       "best_match",
-      "ecmwf_ifs",
-    ]);
+      ["best_match", "ecmwf_ifs"],
+    );
     const url = String((fetchMock.mock.calls[0] as unknown[])[0]);
     expect(url).not.toContain("model=");
     expect(url).toContain("models=ecmwf_ifs");
@@ -45,8 +49,13 @@ describe("fetchModelWeather (issue #246)", () => {
   });
 
   it("does not treat a fallen-back provider as the chosen model", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => respond("open-meteo:best_match")));
-    const { baseline } = await fetchModelWeather(-17.83, 31.05, "ecmwf_ifs", ["ecmwf_ifs"]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => respond("open-meteo:best_match")),
+    );
+    const { baseline } = await fetchModelWeather(-17.83, 31.05, "ecmwf_ifs", [
+      "ecmwf_ifs",
+    ]);
     expect(baseline).toBeNull();
   });
 });

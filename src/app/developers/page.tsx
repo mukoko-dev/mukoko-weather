@@ -126,8 +126,8 @@ curl "https://weather.mukoko.com/api/embed/current?lat=-17.83&lon=31.05"`}
             DWD ICON, ECCC GEM and Météo-France ARPEGE). Add{" "}
             <code className="termite">&amp;model=</code> (for example{" "}
             <code className="termite">ecmwf_ifs</code>) to base the forecast on
-            one model instead, and{" "}
-            <code className="termite">&amp;models=</code> (a comma list of{" "}
+            one model instead, and <code className="termite">&amp;models=</code>{" "}
+            (a comma list of{" "}
             <code className="termite">
               ecmwf_ifs,ecmwf_aifs025_single,gfs_seamless,icon_global,gem_global,meteofrance_arpege_world
             </code>
@@ -154,8 +154,7 @@ curl "https://weather.mukoko.com/api/py/weather?lat=-17.83&lon=31.05&model=ecmwf
             <code className="termite">open-meteo:best_match</code> /{" "}
             <code className="termite">fallback</code>),{" "}
             <code className="termite">X-Enrichment</code> (whether Tomorrow.io
-            insights were merged —{" "}
-            <code className="termite">tomorrow</code> /{" "}
+            insights were merged — <code className="termite">tomorrow</code> /{" "}
             <code className="termite">skipped-budget</code> /{" "}
             <code className="termite">skipped-error</code> /{" "}
             <code className="termite">none</code>) and{" "}

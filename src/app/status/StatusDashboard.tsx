@@ -169,8 +169,8 @@ export function StatusDashboard() {
           </li>
           <li>
             <strong className="text-text-primary">Open-Meteo API</strong> —
-            Forecast baseline: an Africa-weighted blend of global models
-            (ECMWF, NOAA GFS, DWD ICON, ECCC GEM, Météo-France ARPEGE)
+            Forecast baseline: an Africa-weighted blend of global models (ECMWF,
+            NOAA GFS, DWD ICON, ECCC GEM, Météo-France ARPEGE)
           </li>
           <li>
             <strong className="text-text-primary">Tomorrow.io</strong> —
