@@ -7,6 +7,7 @@ Live system health dashboard checks.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from datetime import datetime, timezone
 
@@ -45,6 +46,28 @@ AI_PROBE_TIMEOUT_S = 5.0
 #: its service-key check, the service binding to the AI Worker, and the AI
 #: Worker's guardrails load (which runs before request validation).
 AI_PROBE_BODY: dict = {"messages": []}
+
+#: The exact refusal the AI Worker sends for :data:`AI_PROBE_BODY`
+#: (``Rejected::NoMessages`` in workers/crates/weather-core/src/ai/completions.rs,
+#: wrapped in the shared ``{"error", "error_description"}`` envelope). Only
+#: this 400 proves the path is healthy. Any other 400 (a gateway guardrails
+#: block, a changed contract, a proxy in between) means something refused
+#: the probe for another reason.
+AI_PROBE_EXPECTED_ERROR = "invalid_request"
+AI_PROBE_EXPECTED_DESCRIPTION = "`messages` must be a non-empty array."
+
+
+def _is_expected_probe_refusal(resp) -> bool:
+    """True only for the Worker's own empty-``messages`` refusal."""
+    try:
+        body = resp.json()
+    except Exception:
+        return False
+    return (
+        isinstance(body, dict)
+        and body.get("error") == AI_PROBE_EXPECTED_ERROR
+        and body.get("error_description") == AI_PROBE_EXPECTED_DESCRIPTION
+    )
 
 
 def _result(name: str, status: str, start: float, message: str) -> dict:
@@ -194,6 +217,21 @@ def _check_ai_gateway() -> dict:
         return _result(name, "down", start, "AI Worker rejected the service key (HTTP 401) — fallbacks active")
     if code == 429:
         return _result(name, "degraded", start, "AI Worker rate limited (HTTP 429) — fallbacks active")
+    if code == 400 and not _is_expected_probe_refusal(resp):
+        # Error CODE only (a fixed token like "invalid_request"), never the
+        # body text, which could echo request content.
+        try:
+            raw = resp.json()
+            err = raw.get("error") if isinstance(raw, dict) else None
+        except Exception:
+            err = None
+        label = err if isinstance(err, str) and re.fullmatch(r"[a-z0-9_]{1,40}", err) else "unexpected body"
+        return _result(
+            name,
+            "degraded",
+            start,
+            f"AI Worker refused the probe for another reason (HTTP 400, {label}) — fallbacks may be active",
+        )
     if code != 400 and not 200 <= code < 300:
         return _result(name, "down", start, f"AI Worker unavailable (HTTP {code}) — fallbacks active")
 

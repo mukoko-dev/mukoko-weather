@@ -1429,7 +1429,7 @@ Users can submit real-time ground-truth weather observations, similar to Waze fo
 
 - `src/app/status/page.tsx` — server wrapper (metadata)
 - `src/app/status/StatusDashboard.tsx` — client component, calls `GET /api/py/status`
-- Checks: MongoDB connectivity, Open-Meteo availability, Tomorrow.io enrichment (key, breaker and budget counters only — no live probe; tagged `role: "enrichment"` and excluded from the overall status), AI path liveness (a probe the AI Worker refuses with 400 before any model call, so no token spend) + circuit state, weather cache health
+- Checks: MongoDB connectivity, Open-Meteo availability, Tomorrow.io enrichment (key, breaker and budget counters only — no live probe; tagged `role: "enrichment"` and excluded from the overall status), AI path liveness (an empty-`messages` probe the AI Worker refuses before any model call, so no token spend; only that exact refusal — HTTP 400 with error `invalid_request` and the Worker's empty-messages description, `AI_PROBE_EXPECTED_ERROR` / `AI_PROBE_EXPECTED_DESCRIPTION` in `api/py/_status.py` — counts as healthy, any other 400 reports degraded with its error code) + circuit state, weather cache health
 - Each service shows operational/degraded/down status with latency
 
 ## Testing
