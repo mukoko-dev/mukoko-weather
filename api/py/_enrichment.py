@@ -156,10 +156,39 @@ _exhausted: dict[bool, str] = {}
 _skips_seen: set[tuple[str, str, str]] = set()
 
 
+#: Hour bucket (``%Y%m%d%H``) in which Tomorrow.io answered 429 for the
+#: account's hourly or daily quota. Separate from ``_exhausted``, which also
+#: records our own budget caps: only a real provider 429 should stop the map
+#: tiles (``_tiles.py``), which share the key but not the budget.
+_rate_limited_hour: dict[str, str] = {}
+
+
+def current_hour_bucket(now: datetime | None = None) -> str:
+    """The memo key for the current UTC hour."""
+    return (now or datetime.now(timezone.utc)).strftime("%Y%m%d%H")
+
+
+def mark_rate_limited(now: datetime | None = None) -> None:
+    """Record a Tomorrow.io quota 429 for the rest of this hour.
+
+    Called by enrichment and by the map-tile proxy. Stops both: enrichment
+    through ``_exhausted`` (every tier), tiles through ``rate_limited_this_hour``.
+    """
+    bucket = current_hour_bucket(now)
+    _rate_limited_hour["tomorrow"] = bucket
+    _exhausted[True] = _exhausted[False] = bucket
+
+
+def rate_limited_this_hour(now: datetime | None = None) -> bool:
+    """True once Tomorrow.io has answered a quota 429 during this UTC hour."""
+    return _rate_limited_hour.get("tomorrow") == current_hour_bucket(now)
+
+
 def _reset_memos() -> None:
     """Clear the in-process memos (used by tests)."""
     _exhausted.clear()
     _skips_seen.clear()
+    _rate_limited_hour.clear()
 
 
 def record_skip(reason: str, slug: str, now: datetime | None = None, detail: str | None = None) -> None:
@@ -357,7 +386,7 @@ def enrich(slug: str, lat: float, lon: float, priority: bool = False) -> tuple[d
             # 429 = the account quota is spent (the key is shared with the
             # map-tile proxy). Not provider ill-health: don't trip the
             # breaker, stop calling for the rest of this hour instead.
-            _exhausted[True] = _exhausted[False] = hour_bucket
+            mark_rate_limited()
             record_skip(SKIPPED_BUDGET, slug, detail=detail)
             return None, SKIPPED_BUDGET
         # A real provider failure counts against the breaker. The reason

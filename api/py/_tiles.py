@@ -19,19 +19,24 @@ single map view loads ~16 overlay tiles and every pan/zoom loads more):
      edge serve identical tile URLs without re-invoking the function at all.
      The ``now`` URL carries no time, so it is edge-cached only until the UTC
      hour rolls over (``s-maxage`` = seconds left in the hour); otherwise the
-     edge would keep serving a stale "now" radar frame for a day.
+     edge would keep serving a stale "now" radar frame for a day. A future
+     forecast hour is kept an hour (it changes with each model run); only a
+     past hour takes the day-long cache.
   3. **Graceful degradation** — on a 429 (or any non-200) with no fresh cache we
      serve a stale cached tile if one exists, otherwise a 1×1 transparent PNG
      (HTTP 200) so the map simply shows no overlay for that tile instead of
      spamming the console with failures and killing the whole layer.
   4. **Shared quota memo** — the key is shared with insights enrichment
-     (``_enrichment.py``). Once either sees a 429 the account quota is spent
-     for the hour, so every later tile skips the upstream round trip (which
-     took 2–6 s just to be told 429) and the fallback is served at once, edge-
-     cached until the hour resets.
+     (``_enrichment.py``). Once either sees a quota 429 (``X-RateLimit-
+     Remaining-Hour``/``-Day`` at 0) the account is spent for the hour, so every
+     later tile skips the upstream round trip (which took 2–6 s just to be
+     told 429) and the newest cached tile or a transparent one is served at
+     once, edge-cached until the hour resets. A per-second 429 is not a quota
+     429. Enrichment's own budget caps do not stop the tiles.
   5. **Off the event loop** — the MongoDB lookups and the upstream fetch are
-     blocking calls, so they run in a worker thread; a dozen tiles arriving
-     together no longer queue behind one another on a warm instance.
+     blocking calls, so they run on a small dedicated thread pool; a dozen
+     tiles arriving together no longer queue behind one another on a warm
+     instance, and cannot starve the default executor.
 
 SSRF protections (pinned origin, layer whitelist, range-checked coords,
 validated timestamp) are unchanged.
@@ -43,7 +48,8 @@ import asyncio
 import base64
 import logging
 import re
-from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
@@ -82,6 +88,15 @@ TILE_CACHE_CONTROL = "public, max-age=3600, s-maxage=86400, stale-while-revalida
 #: error (not a quota 429), so the edge recovers quickly once Tomorrow.io does.
 FALLBACK_CACHE_CONTROL = "public, max-age=60, s-maxage=60"
 
+#: Edge cache for a future forecast hour: the image behind that hour changes
+#: with each model run, so it is kept an hour, not a day.
+FUTURE_TILE_CACHE_CONTROL = "public, max-age=1800, s-maxage=3600, stale-while-revalidate=300"
+
+#: Dedicated threads for the blocking tile work, so a burst of tiles waiting on
+#: Tomorrow.io cannot fill the shared default executor that weather enrichment
+#: and history backfill also use.
+_TILE_EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="map-tiles")
+
 #: Floor for an hour-bounded edge cache, so a tile served in the last seconds
 #: of an hour is still cacheable for a moment.
 MIN_HOUR_BOUND_S = 60
@@ -106,7 +121,7 @@ def _get_http() -> httpx.Client:
 # ---------------------------------------------------------------------------
 
 
-def _timestamp_bucket(timestamp: str) -> str:
+def _timestamp_bucket(timestamp: str, now: Optional[datetime] = None) -> str:
     """
     Snap a tile timestamp to a stable ~1h cache bucket.
 
@@ -116,7 +131,7 @@ def _timestamp_bucket(timestamp: str) -> str:
     fixed point in time, so it's used verbatim.
     """
     if timestamp == "now":
-        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
+        return (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:00:00Z")
     return timestamp
 
 
@@ -131,13 +146,18 @@ def _tile_cache_control(timestamp: str, now: Optional[datetime] = None) -> str:
     """
     ``Cache-Control`` for a real tile.
 
-    An explicit timestamp names a fixed forecast hour, so its URL is stable and
-    takes the long edge cache. ``now`` means "whatever the current hour is": the
-    URL never changes, so the edge may keep it only until the hour rolls over —
-    after that the same URL must fetch the new hour's frame.
+    ``now`` means "whatever the current hour is": the URL never changes, so the
+    edge may keep it only until the hour rolls over. A future hour's image
+    changes with each model run, so it is kept an hour. A past hour is final
+    and takes the long edge cache.
     """
+    now = now or datetime.now(timezone.utc)
     if timestamp != "now":
-        return TILE_CACHE_CONTROL
+        try:
+            when = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return FUTURE_TILE_CACHE_CONTROL
+        return TILE_CACHE_CONTROL if when < now.replace(minute=0, second=0, microsecond=0) else FUTURE_TILE_CACHE_CONTROL
     left = _seconds_left_in_hour(now)
     return f"public, max-age={min(left, 600)}, s-maxage={left}, stale-while-revalidate=60"
 
@@ -148,20 +168,32 @@ def _quota_cache_control(now: Optional[datetime] = None) -> str:
     return f"public, max-age=60, s-maxage={left}"
 
 
-def _hour_bucket(now: Optional[datetime] = None) -> str:
-    """The enrichment memo's hour key (``%Y%m%d%H``, UTC)."""
-    return (now or datetime.now(timezone.utc)).strftime("%Y%m%d%H")
-
-
 def _quota_exhausted(now: Optional[datetime] = None) -> bool:
-    """True once Tomorrow.io has answered 429 (here or in enrichment) this hour."""
-    return _enrichment._exhausted.get(True) == _hour_bucket(now)
+    """True once Tomorrow.io has answered a quota 429 (here or in enrichment) this hour."""
+    return _enrichment.rate_limited_this_hour(now)
 
 
-def _mark_quota_exhausted(now: Optional[datetime] = None) -> None:
-    """Remember a 429 for the rest of the hour, for tiles AND enrichment."""
-    bucket = _hour_bucket(now)
-    _enrichment._exhausted[True] = _enrichment._exhausted[False] = bucket
+def _is_quota_429(resp: httpx.Response) -> bool:
+    """
+    Whether a 429 means the hourly/daily account quota is spent.
+
+    Tomorrow.io also answers 429 for its per-second limit, which a burst of
+    tiles from one map view can trip. Its ``X-RateLimit-Remaining-{Hour,Day}``
+    headers tell them apart: a quota 429 has one of them at 0. Without the
+    headers we assume the quota (the conservative reading).
+    """
+    remaining = []
+    for name in ("x-ratelimit-remaining-hour", "x-ratelimit-remaining-day"):
+        value = resp.headers.get(name) if resp.headers is not None else None
+        if value is None:
+            continue
+        try:
+            remaining.append(int(str(value).strip()))
+        except ValueError:
+            continue
+    if not remaining:
+        return True
+    return min(remaining) <= 0
 
 
 def _cache_id(layer: str, z: int, x: int, y: int, bucket: str) -> str:
@@ -214,14 +246,18 @@ def _set_cached_tile(cache_id: str, layer: str, tile_bytes: bytes) -> None:
 
 
 def _tile_response(
-    content: bytes, layer: str, cache_status: str, timestamp: str = "now"
+    content: bytes,
+    layer: str,
+    cache_status: str,
+    timestamp: str = "now",
+    now: Optional[datetime] = None,
 ) -> Response:
     """A real (or cached) PNG tile with strong CDN caching."""
     return Response(
         content=content,
         media_type="image/png",
         headers={
-            "Cache-Control": _tile_cache_control(timestamp),
+            "Cache-Control": _tile_cache_control(timestamp, now),
             "X-Map-Layer": layer,
             "X-Cache": cache_status,
         },
@@ -261,12 +297,24 @@ def _transparent_tile_response(
     )
 
 
-def _quota_fallback(cache_id: str, layer: str) -> Response:
-    """Stale tile if we have one, else transparent — both cached until the hour resets."""
-    cc = _quota_cache_control()
-    stale = _get_cached_tile(cache_id, allow_stale=True)
-    if stale is not None:
-        return _stale_tile_response(stale, layer, cc)
+def _quota_fallback(
+    layer: str, z: int, x: int, y: int, timestamp: str, now: datetime
+) -> Response:
+    """
+    While the quota is spent: the newest cached tile we have, else transparent,
+    both cached until the hour resets. For ``now`` that is usually the previous
+    hour's frame (this hour's would have been a fresh hit).
+    """
+    cc = _quota_cache_control(now)
+    buckets = [_timestamp_bucket(timestamp, now)]
+    if timestamp == "now":
+        buckets.append(_timestamp_bucket("now", now - timedelta(hours=1)))
+    for bucket in buckets:
+        stale = _get_cached_tile(_cache_id(layer, z, x, y, bucket), allow_stale=True)
+        if stale is not None:
+            resp = _stale_tile_response(stale, layer, cc)
+            resp.headers["X-Map-Tile"] = "quota-stale"
+            return resp
     return _transparent_tile_response(cc, "quota")
 
 
@@ -302,7 +350,8 @@ async def proxy_map_tile(
     if not TIMESTAMP_RE.match(timestamp):
         raise HTTPException(status_code=400, detail="Invalid timestamp")
 
-    return await asyncio.to_thread(_serve_tile, z, x, y, layer, timestamp)
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_TILE_EXECUTOR, _serve_tile, z, x, y, layer, timestamp)
 
 
 def _serve_tile(z: int, x: int, y: int, layer: str, timestamp: str) -> Response:
@@ -310,18 +359,22 @@ def _serve_tile(z: int, x: int, y: int, layer: str, timestamp: str) -> Response:
     The blocking half of the proxy (MongoDB + upstream HTTP), run in a worker
     thread by :func:`proxy_map_tile`. Arguments are already validated.
     """
-    bucket = _timestamp_bucket(timestamp)
+    # One clock reading for the bucket and the cache headers, so a request
+    # straddling the hour cannot pair last hour's tile with a fresh hour of
+    # edge cache.
+    now = datetime.now(timezone.utc)
+    bucket = _timestamp_bucket(timestamp, now)
     cache_id = _cache_id(layer, z, x, y, bucket)
 
     # 1. Serve from persistent cache if we have a fresh tile — no upstream call.
     cached = _get_cached_tile(cache_id)
     if cached is not None:
-        return _tile_response(cached, layer, "HIT", timestamp)
+        return _tile_response(cached, layer, "HIT", timestamp, now)
 
     # 2. Quota already spent this hour (a 429 here or in enrichment): asking
     #    again only costs a 2–6 s round trip to be told 429 again.
-    if _quota_exhausted():
-        return _quota_fallback(cache_id, layer)
+    if _quota_exhausted(now):
+        return _quota_fallback(layer, z, x, y, timestamp, now)
 
     try:
         api_key = get_api_key("tomorrow")
@@ -339,15 +392,26 @@ def _serve_tile(z: int, x: int, y: int, layer: str, timestamp: str) -> Response:
         client = _get_http()
         resp = client.get(tile_url, headers={"apikey": api_key})
 
-        # 3. 429 = the shared account quota is spent. Remember it for the rest
-        #    of the hour (tiles and enrichment both stop asking) and serve the
-        #    fallback, edge-cached until the hour resets.
+        # 3. 429. A quota 429 (hour/day spent) is remembered for the rest of
+        #    the hour — tiles and enrichment both stop asking — and the
+        #    fallback is edge-cached until the hour resets. A per-second 429
+        #    (a burst from one map view) only gets the short error fallback.
         if resp.status_code == 429:
+            quota = _is_quota_429(resp)
             logger.warning(
-                "Tomorrow.io tile rate limited (429) for layer=%s z=%s", layer, z
+                "Tomorrow.io tile rate limited (429, %s) for layer=%s z=%s",
+                "quota" if quota else "burst", layer, z,
             )
-            _mark_quota_exhausted()
-            return _quota_fallback(cache_id, layer)
+            if quota:
+                _enrichment.mark_rate_limited(now)
+                _enrichment.record_skip(
+                    _enrichment.SKIPPED_BUDGET, "map-tiles", now=now, detail="HTTP 429 (map tiles)"
+                )
+                return _quota_fallback(layer, z, x, y, timestamp, now)
+            stale = _get_cached_tile(cache_id, allow_stale=True)
+            if stale is not None:
+                return _stale_tile_response(stale, layer)
+            return _transparent_tile_response()
 
         # 4. Any other upstream error — degrade gracefully: serve a stale cached
         #    tile if we have one, else a transparent tile, briefly cached.
@@ -363,7 +427,7 @@ def _serve_tile(z: int, x: int, y: int, layer: str, timestamp: str) -> Response:
 
         # 5. Fresh tile — persist to cache and return with strong CDN caching.
         _set_cached_tile(cache_id, layer, resp.content)
-        return _tile_response(resp.content, layer, "MISS", timestamp)
+        return _tile_response(resp.content, layer, "MISS", timestamp, now)
     except HTTPException:
         raise
     except Exception:

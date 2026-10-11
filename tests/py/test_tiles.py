@@ -7,7 +7,7 @@ from MapTiler CDN using the NEXT_PUBLIC_MAPTILER_API_KEY client-side variable.
 from __future__ import annotations
 
 import base64
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -16,6 +16,7 @@ from fastapi import HTTPException
 from py import _enrichment
 from py._tiles import (
     FALLBACK_CACHE_CONTROL,
+    FUTURE_TILE_CACHE_CONTROL,
     VALID_LAYERS,
     TIMESTAMP_RE,
     TILE_CACHE_CONTROL,
@@ -157,11 +158,11 @@ class TestProxyMapTile:
         mock_http.return_value.get.return_value = mock_response
 
         result = await proxy_map_tile(
-            z=5, x=18, y=17, layer="temperature", timestamp="2026-10-11T12:00:00Z"
+            z=5, x=18, y=17, layer="temperature", timestamp="2026-01-01T12:00:00Z"
         )
         assert result.media_type == "image/png"
         assert result.body == b"\x89PNG\r\n\x1a\n"
-        # A fixed forecast hour carries the strong CDN cache header.
+        # A past hour is final and carries the strong CDN cache header.
         assert "s-maxage=86400" in result.headers.get("cache-control", "")
         assert "stale-while-revalidate" in result.headers.get("cache-control", "")
         assert result.headers.get("x-map-layer") == "temperature"
@@ -379,8 +380,17 @@ def _at(minute: int, second: int = 0) -> datetime:
 
 
 class TestTileCacheControl:
-    def test_explicit_timestamp_keeps_long_edge_cache(self):
-        assert _tile_cache_control("2026-10-11T12:00:00Z", _at(5)) == TILE_CACHE_CONTROL
+    def test_past_hour_keeps_long_edge_cache(self):
+        assert _tile_cache_control("2026-10-11T06:00:00Z", _at(5)) == TILE_CACHE_CONTROL
+
+    def test_future_hour_is_kept_an_hour(self):
+        # The image behind a future hour changes with each model run.
+        cc = _tile_cache_control("2026-10-11T12:00:00Z", _at(5))
+        assert cc == FUTURE_TILE_CACHE_CONTROL
+        assert "s-maxage=3600" in cc and "86400" not in cc
+
+    def test_current_hour_counts_as_future(self):
+        assert _tile_cache_control("2026-10-11T07:00:00Z", _at(5)) == FUTURE_TILE_CACHE_CONTROL
 
     def test_now_is_bounded_by_the_hour(self):
         cc = _tile_cache_control("now", _at(45))
@@ -422,6 +432,7 @@ class TestQuotaMemo:
         assert result.headers.get("x-map-tile") == "quota"
         assert "s-maxage=" in result.headers["cache-control"]
         assert _quota_exhausted()
+        assert _enrichment.rate_limited_this_hour()
         # Enrichment's own memo now skips its Tomorrow.io call for the hour.
         hour = datetime.now(timezone.utc).strftime("%Y%m%d%H")
         assert _enrichment._exhausted[True] == hour
@@ -438,7 +449,7 @@ class TestQuotaMemo:
         assert http.return_value.get.call_count == 1
 
     async def test_enrichment_429_also_stops_tiles(self):
-        _enrichment._exhausted[True] = datetime.now(timezone.utc).strftime("%Y%m%d%H")
+        _enrichment.mark_rate_limited()
         with patch("py._tiles._get_cached_tile", return_value=None), \
                 patch("py._tiles.get_api_key", return_value="k") as key, \
                 patch("py._tiles._get_http") as http:
@@ -447,8 +458,68 @@ class TestQuotaMemo:
         key.assert_not_called()
         assert result.headers.get("x-map-tile") == "quota"
 
+    async def test_budget_cap_alone_does_not_stop_tiles(self):
+        """Enrichment's own budget tiers are not the account quota."""
+        hour = datetime.now(timezone.utc).strftime("%Y%m%d%H")
+        _enrichment._exhausted[True] = _enrichment._exhausted[False] = hour
+        with patch("py._tiles._get_cached_tile", return_value=None), \
+                patch("py._tiles._set_cached_tile"), \
+                patch("py._tiles.get_api_key", return_value="k"), \
+                patch("py._tiles._get_http") as http:
+            http.return_value.get.return_value = _resp(200, b"\x89PNG-fresh")
+            result = await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
+        assert result.body == b"\x89PNG-fresh"
+
+    async def test_per_second_429_is_not_the_quota(self):
+        r = _resp(429)
+        r.headers = {"x-ratelimit-remaining-hour": "20", "x-ratelimit-remaining-day": "400"}
+        with patch("py._tiles._get_cached_tile", return_value=None), \
+                patch("py._tiles.get_api_key", return_value="k"), \
+                patch("py._tiles._get_http") as http:
+            http.return_value.get.return_value = r
+            result = await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
+        assert not _quota_exhausted()
+        assert result.headers.get("x-map-tile") == "empty"
+        assert result.headers["cache-control"] == FALLBACK_CACHE_CONTROL
+
+    async def test_quota_429_by_headers(self):
+        r = _resp(429)
+        r.headers = {"x-ratelimit-remaining-hour": "0", "x-ratelimit-remaining-day": "120"}
+        with patch("py._tiles._get_cached_tile", return_value=None), \
+                patch("py._tiles.get_api_key", return_value="k"), \
+                patch("py._tiles._get_http") as http:
+            http.return_value.get.return_value = r
+            await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
+        assert _quota_exhausted()
+
+    async def test_quota_now_tile_falls_back_to_previous_hour(self):
+        _enrichment.mark_rate_limited()
+        now = datetime.now(timezone.utc)
+        prev = _timestamp_bucket("now", now - timedelta(hours=1))
+        seen = []
+
+        def fake(cache_id, *, allow_stale=False):
+            seen.append(cache_id)
+            return b"\x89PNG-prev" if cache_id.endswith(prev) and allow_stale else None
+
+        with patch("py._tiles._get_cached_tile", side_effect=fake):
+            result = await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
+        assert result.body == b"\x89PNG-prev"
+        assert result.headers.get("x-map-tile") == "quota-stale"
+        assert any(c.endswith(prev) for c in seen)
+
+    async def test_tile_429_is_recorded_for_the_status_page(self):
+        with patch("py._tiles._get_cached_tile", return_value=None), \
+                patch("py._tiles.get_api_key", return_value="k"), \
+                patch("py._tiles._enrichment.record_skip") as skip, \
+                patch("py._tiles._get_http") as http:
+            http.return_value.get.return_value = _resp(429)
+            await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
+        skip.assert_called_once()
+        assert skip.call_args.args[1] == "map-tiles"
+
     async def test_memo_from_previous_hour_is_ignored(self):
-        _enrichment._exhausted[True] = "2000010100"
+        _enrichment._rate_limited_hour["tomorrow"] = "2000010100"
         with patch("py._tiles._get_cached_tile", return_value=None), \
                 patch("py._tiles._set_cached_tile"), \
                 patch("py._tiles.get_api_key", return_value="k"), \
@@ -458,7 +529,7 @@ class TestQuotaMemo:
         assert result.body == b"\x89PNG-fresh"
 
     async def test_quota_serves_stale_tile_when_cached(self):
-        _enrichment._exhausted[True] = datetime.now(timezone.utc).strftime("%Y%m%d%H")
+        _enrichment.mark_rate_limited()
 
         def fake(cache_id, *, allow_stale=False):
             return b"\x89PNG-stale" if allow_stale else None
@@ -470,7 +541,7 @@ class TestQuotaMemo:
         assert "s-maxage=" in result.headers["cache-control"]
 
     async def test_cache_hit_still_served_while_quota_spent(self):
-        _enrichment._exhausted[True] = datetime.now(timezone.utc).strftime("%Y%m%d%H")
+        _enrichment.mark_rate_limited()
         with patch("py._tiles._get_cached_tile", return_value=b"\x89PNG-hit"):
             result = await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
         assert result.headers.get("x-cache") == "HIT"
