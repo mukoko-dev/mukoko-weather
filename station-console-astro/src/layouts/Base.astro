@@ -1,0 +1,53 @@
+---
+import "../styles/global.css";
+import MineralStrip from "../components/mzizi/site-mineral-strip.astro";
+
+interface Props {
+  title: string;
+  description?: string;
+}
+const {
+  title,
+  description = "Register community weather stations, connect station hardware, and log manual readings for the mukoko weather network.",
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" data-brand="weather">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content={description} />
+    <meta name="color-scheme" content="light dark" />
+    <title>{title}</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans:wght@400;500;600&family=Noto+Serif:wght@500;600&display=swap"
+    />
+    <script is:inline>
+      // Class-based dark mode, set before first paint. Mirrors src/lib/theme.ts.
+      (function () {
+        var dark = matchMedia("(prefers-color-scheme: dark)").matches;
+        try {
+          var t = localStorage.getItem("mws-theme");
+          dark = t === "dark" || ((t === null || t === "system") && dark);
+        } catch (e) {}
+        document.documentElement.classList.toggle("dark", dark);
+      })();
+    </script>
+  </head>
+  <body class="bg-background text-foreground font-sans antialiased">
+    <a
+      href="#main"
+      class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-card focus:px-4 focus:py-3 focus:text-foreground focus:ring-2 focus:ring-ring"
+    >
+      Skip to content
+    </a>
+    <MineralStrip />
+    <slot />
+  </body>
+</html>

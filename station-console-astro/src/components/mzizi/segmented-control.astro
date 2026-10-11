@@ -1,0 +1,40 @@
+---
+/**
+ * SegmentedControl — the registry primitive (`contracts/ui/segmented-control`),
+ * built on native radios so it needs no script: arrow keys move between segments
+ * and screen readers announce a radio group. `segmented-control.tsx` renders the
+ * same markup.
+ */
+interface Props {
+  name: string;
+  legend: string;
+  /** `[value, label]` pairs. */
+  options: [string, string][];
+  value: string;
+  hideLegend?: boolean;
+  size?: "sm" | "default";
+  class?: string;
+}
+
+const { name, legend, options, value, hideLegend = false, size = "default", class: className } = Astro.props;
+const seg = size === "sm" ? "min-h-10 px-3 text-body-sm" : "min-h-12 px-4 text-body-sm";
+---
+
+<fieldset data-slot="segmented-control" class={["min-w-0", className].filter(Boolean).join(" ")}>
+  <legend class={hideLegend ? "sr-only" : "mb-1.5 block text-body-sm font-medium text-foreground"}>{legend}</legend>
+  <div class="inline-flex max-w-full flex-wrap gap-1 rounded-full border border-border bg-muted p-1">
+    {
+      options.map(([v, label]) => (
+        <label class="relative cursor-pointer">
+          <input type="radio" name={name} value={v} checked={v === value} class="peer sr-only" />
+          <span
+            data-slot="segmented-control-segment"
+            class={`${seg} inline-flex items-center justify-center rounded-full font-medium text-foreground/80 transition-colors duration-200 ease-soft hover:text-foreground peer-checked:bg-card peer-checked:text-foreground peer-checked:shadow-sm peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background`}
+          >
+            {label}
+          </span>
+        </label>
+      ))
+    }
+  </div>
+</fieldset>

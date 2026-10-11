@@ -1,0 +1,132 @@
+---
+/**
+ * FormField — label, control, hint and error wired together: the hint and
+ * the error are announced with the field (aria-describedby), an error sets
+ * aria-invalid, and the label is always visible (never placeholder-only).
+ *
+ * The control is an input (text, email, tel, url, search, number, date,
+ * file), a textarea (`as="textarea"`) or a native select (`as="select"`
+ * with `options`), all at app density with the same wiring. `wide` spans
+ * both of FormLayout's columns.
+ */
+import type { HTMLAttributes } from "astro/types";
+
+import Input from "./app-input.astro";
+import Label from "./app-label.astro";
+import { cn } from "./ui-utils";
+import { appFileInputClasses, appInputClasses, appTextareaClasses } from "./ui-variants";
+
+export interface FieldOption {
+  value: string;
+  label: string;
+}
+interface Props {
+  name: string;
+  label: string;
+  value?: string | null;
+  type?: "text" | "email" | "tel" | "url" | "search" | "number" | "date" | "file";
+  as?: "input" | "textarea" | "select";
+  options?: FieldOption[];
+  emptyOption?: string;
+  rows?: number;
+  accept?: string;
+  multiple?: boolean;
+  min?: string | number;
+  max?: string | number;
+  step?: string | number;
+  wide?: boolean;
+  hint?: string;
+  error?: string | null;
+  required?: boolean;
+  readonly?: boolean;
+  autocomplete?: string;
+  maxlength?: number;
+  inputmode?: "text" | "tel" | "email" | "url" | "numeric" | "decimal";
+}
+const {
+  name,
+  label,
+  value,
+  type = "text",
+  as = "input",
+  options = [],
+  emptyOption,
+  rows = 5,
+  accept,
+  multiple = false,
+  min,
+  max,
+  step,
+  wide = false,
+  hint,
+  error,
+  required = false,
+  readonly = false,
+  autocomplete,
+  maxlength,
+  inputmode,
+} = Astro.props;
+const id = `field-${name}`;
+const describedBy = [hint ? `${id}-hint` : null, error ? `${id}-error` : null].filter(Boolean).join(" ") || undefined;
+const invalid = error ? "true" : undefined;
+const file = type === "file";
+---
+
+<div class={cn("grid content-start gap-1.5", wide && "@xl:col-span-2")} data-slot="form-field">
+  <Label for={id}>
+    {label}
+    {required && <span class="text-muted-foreground"> (required)</span>}
+  </Label>
+  {
+    as === "textarea" ? (
+      <textarea
+        data-slot="textarea"
+        class={cn(appTextareaClasses, readonly && "bg-muted")}
+        id={id}
+        name={name}
+        rows={rows}
+        required={required}
+        readonly={readonly}
+        maxlength={maxlength}
+        aria-describedby={describedBy}
+        aria-invalid={invalid}
+      >{value ?? ""}</textarea>
+    ) : as === "select" ? (
+      <select
+        data-slot="select"
+        class={cn(appInputClasses, readonly && "bg-muted")}
+        id={id}
+        name={name}
+        required={required}
+        disabled={readonly}
+        aria-describedby={describedBy}
+        aria-invalid={invalid}
+      >
+        {emptyOption !== undefined && <option value="" selected={!value}>{emptyOption}</option>}
+        {options.map((o) => <option value={o.value} selected={o.value === value}>{o.label}</option>)}
+      </select>
+    ) : (
+      <Input
+        id={id}
+        name={name}
+        type={type}
+        value={file ? undefined : (value ?? "")}
+        required={required}
+        readonly={readonly}
+        autocomplete={autocomplete as HTMLAttributes<"input">["autocomplete"]}
+        maxlength={maxlength}
+        inputmode={inputmode}
+        accept={accept}
+        multiple={file && multiple ? true : undefined}
+        min={min}
+        max={max}
+        step={step}
+        aria-describedby={describedBy}
+        aria-invalid={invalid}
+        class={cn(readonly && "bg-muted", file && appFileInputClasses) || undefined}
+      />
+    )
+  }
+  {hint && <p id={`${id}-hint`} class="text-body-sm text-muted-foreground">{hint}</p>}
+  {error && <p id={`${id}-error`} class="text-body-sm font-medium text-destructive">{error}</p>}
+</div>

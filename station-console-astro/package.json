@@ -1,0 +1,40 @@
+{
+  "name": "mukoko-station-console-astro",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "AUTH_MODE=mock astro dev --port 4321",
+    "dev:workos": "astro dev --port 4321",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "typecheck": "astro check",
+    "lint": "astro sync && tsc --noEmit -p tsconfig.lint.json",
+    "test": "vitest run",
+    "test:e2e": "AUTH_MODE=mock playwright test"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.3.4",
+    "@workos-inc/node": "^10.0.0",
+    "@workos/authkit-astro": "^0.2.1",
+    "astro": "^7.3.8",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "1.56.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^24.9.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "6.0.3",
+    "vitest": "^4.0.18",
+    "wrangler": "^4.149.0"
+  }
+}

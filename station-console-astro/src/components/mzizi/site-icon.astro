@@ -1,0 +1,42 @@
+---
+/**
+ * Icon — the design system's inline-SVG set, so pages and components
+ * never hand-roll `<svg>` paths. Stroke-based, 1.75 weight, inherits
+ * `currentColor` and sizes to 1em by default (override via `class`).
+ *
+ * Add a glyph by adding one entry to ICON_PATHS (`site-icons.ts`) — keep the set curated to
+ * what the sites actually use rather than pulling a whole icon font.
+ */
+import { ICON_PATHS as PATHS, type IconName } from "./site-icons";
+
+/** Every glyph name, for typed navigation data (`import type { IconName }`). */
+export type { IconName };
+
+interface Props {
+  name: IconName;
+  /** Accessible label; omitted → decorative (aria-hidden). */
+  title?: string;
+  class?: string;
+}
+
+const { name, title, class: className } = Astro.props;
+const decorative = !title;
+---
+
+<svg
+  class={["inline-block h-[1em] w-[1em]", className].filter(Boolean).join(" ")}
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.75"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  data-slot="icon"
+  data-icon={name}
+  role={decorative ? undefined : "img"}
+  aria-hidden={decorative ? "true" : undefined}
+  aria-label={decorative ? undefined : title}
+>
+  {title && <title>{title}</title>}
+  <path d={PATHS[name]} />
+</svg>

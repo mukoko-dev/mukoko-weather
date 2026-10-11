@@ -1,0 +1,62 @@
+name: Station console (Astro)
+
+# Slice 0 of the Next.js to Astro migration (mukoko-dev/mukoko-weather#293):
+# type-check, unit tests, build and the Playwright smoke for
+# station-console-astro/, against the mock backend. Path-filtered so the main
+# app's CI is unaffected.
+on:
+  push:
+    branches: [main, staging]
+    paths:
+      - "station-console-astro/**"
+      - ".github/workflows/station-console-astro.yml"
+  pull_request:
+    branches: [main, staging]
+    paths:
+      - "station-console-astro/**"
+      - ".github/workflows/station-console-astro.yml"
+
+concurrency:
+  group: station-console-astro-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  console:
+    name: Station console (Astro) - check, test, build, e2e
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: station-console-astro
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: station-console-astro/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type check (astro check)
+        run: npm run check
+
+      - name: Lint (tsc)
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build (WorkOS mode, as deployed)
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright smoke (mock backend, mock session)
+        run: npm run test:e2e

@@ -1,0 +1,60 @@
+---
+import Button from "./mzizi/app-button.astro";
+import Card from "./mzizi/app-card.astro";
+import SiteFooter from "./SiteFooter.astro";
+import { GUIDE_URL } from "../lib/links";
+---
+
+<div class="flex min-h-dvh flex-col" data-page="landing">
+  <header class="border-b border-border" role="banner">
+    <div class="container-custom flex h-14 items-center justify-between gap-3">
+      <a href="/" class="font-serif text-h5 font-semibold">mukoko weather stations</a>
+      <nav aria-label="Main" class="flex items-center gap-1">
+        <Button href={GUIDE_URL} variant="ghost">Guide</Button>
+        <Button href="/auth/signin" variant="outline">Sign in</Button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1" class="flex-1 focus:outline-none">
+    <div class="container-prose space-y-8 py-12 sm:py-16">
+      <header class="space-y-4">
+        <h1 class="font-serif text-h1 font-semibold text-balance">mukoko weather stations</h1>
+        <p class="text-body-lg text-muted-foreground">
+          Put your weather station on the map. Readings from community stations feed live current conditions on{" "}
+          <a href="https://weather.mukoko.com" rel="noopener noreferrer" class="text-primary underline underline-offset-4">weather.mukoko.com</a>{" "}
+          for everyone nearby: farmers, schools, pilots, and neighbours.
+        </p>
+        <Button href="/auth/signin" size="lg">Sign in to register your station</Button>
+      </header>
+
+      <section aria-labelledby="how-it-works" class="grid gap-4 sm:grid-cols-2">
+        <h2 id="how-it-works" class="sr-only">How it works</h2>
+        <Card padding="lg">
+          <h3 class="text-h5 font-semibold">Digital stations</h3>
+          <p class="mt-1 text-body-sm text-muted-foreground">Ecowitt, Fine Offset, Ambient-style consoles and compatibles</p>
+          <p class="mt-3 text-body-sm text-muted-foreground">
+            Point your console's "customized upload" at our servers. Wunderground and Ecowitt protocols are both supported. No
+            Weather Underground account needed: your data goes straight to the mukoko network, quality-checked on arrival.
+          </p>
+        </Card>
+        <Card padding="lg">
+          <h3 class="text-h5 font-semibold">Analog stations</h3>
+          <p class="mt-1 text-body-sm text-muted-foreground">Rain gauge and thermometer, no electronics required</p>
+          <p class="mt-3 text-body-sm text-muted-foreground">
+            Farms and schools with manual instruments can log readings right here in the console. Each entry passes the same
+            quality checks and joins the network alongside digital stations.
+          </p>
+        </Card>
+      </section>
+
+      <p class="text-body-sm text-muted-foreground">
+        Registration is free. You get a station ID and a private ingest key, shown once and stored only as a salted hash on our
+        side. Full setup instructions live in the{" "}
+        <a href={GUIDE_URL} rel="noopener noreferrer" class="text-primary underline underline-offset-4">weather stations guide</a>.
+      </p>
+    </div>
+  </main>
+
+  <SiteFooter />
+</div>

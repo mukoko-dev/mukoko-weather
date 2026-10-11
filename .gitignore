@@ -57,3 +57,9 @@ next-env.d.ts
 # station-console sub-app (own Vercel project)
 station-console/node_modules
 station-console/.next
+
+# station-console-astro sub-app (Astro; own toolchain)
+station-console-astro/node_modules
+station-console-astro/dist
+station-console-astro/.astro
+station-console-astro/.wrangler

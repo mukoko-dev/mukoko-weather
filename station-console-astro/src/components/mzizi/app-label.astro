@@ -1,0 +1,17 @@
+---
+/**
+ * Label — the Dashboard Standard label (`contracts/app/label`), pure Astro: a native
+ * <label>. Classes are `labelClasses`. Its React twin is `app-label.tsx`; the
+ * registry primitive is `./label.astro`.
+ */
+import { cn } from "./ui-utils";
+import { labelClasses } from "./ui-variants";
+
+interface Props {
+  for: string;
+  class?: string;
+}
+const { for: htmlFor, class: extra } = Astro.props;
+---
+
+<label data-slot="label" for={htmlFor} class={cn(labelClasses, extra)}><slot /></label>

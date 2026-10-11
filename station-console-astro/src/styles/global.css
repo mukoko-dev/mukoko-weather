@@ -1,0 +1,39 @@
+/* Mzizi owns the tokens: this vendored file is the upstream default
+   globals.css (21 families, surfaces, type, spacing, radius, motion).
+   Change values upstream and re-vendor; never retype a hex here. */
+@import "./mzizi-globals.css";
+
+/* The mineral strip reads --color-<mineral>; the upstream theme exposes the
+   minerals as --mineral-<name>, so alias them once for the page. */
+:root {
+  --color-cobalt: var(--mineral-cobalt);
+  --color-tanzanite: var(--mineral-tanzanite);
+  --color-malachite: var(--mineral-malachite);
+  --color-gold: var(--mineral-gold);
+  --color-terracotta: var(--mineral-terracotta);
+  --color-sodalite: var(--mineral-sodalite);
+  --color-copper: var(--mineral-copper);
+}
+
+/* LOCAL OVERRIDES — keep this block empty unless a divergence is reviewed. */
+
+@layer components {
+  /* app-card / ui-variants emit class="card"; the upstream globals do not
+     define it. Tokens only. File upstream (mzizi-registry). */
+  .card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    color: var(--card-foreground);
+  }
+  .card-hover:hover {
+    background: var(--muted);
+  }
+}
+
+/* The upstream segmented-control draws unselected segments at 80% foreground,
+   which is 4.41:1 on the dark muted surface (needs 4.5:1). Full foreground
+   until it is fixed upstream (mzizi-registry). */
+[data-slot="segmented-control-segment"] {
+  color: var(--foreground);
+}

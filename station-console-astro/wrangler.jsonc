@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mukoko-station-console",
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist",
+  },
+  "observability": { "enabled": true },
+  "vars": {
+    "STATIONS_BACKEND": "mock",
+    "PUBLIC_STATIONS_INGEST_HOST": "weather.mukoko.com",
+  },
+}

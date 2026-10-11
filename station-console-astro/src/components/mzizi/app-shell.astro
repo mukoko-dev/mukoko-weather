@@ -1,0 +1,281 @@
+---
+/**
+ * AppShell — the signed-in frame of an app or console, laid out like a
+ * product dashboard and using the whole viewport: a fixed left sidebar
+ * (16.25rem; a 3.5rem icon rail when collapsed) and a main column that
+ * fills the rest of the width. There is no centred page container; pages
+ * cap only prose line length themselves.
+ *
+ * Sidebar, top to bottom: the `workspace` slot (WorkspaceSwitcher), the
+ * `search` slot (QuickSearch), the `nav` slot (SideNav), and a footer with
+ * the collapse toggle. Main column: a thin top bar (the `brand` slot on
+ * phones, then the `actions` slot, e.g. TopBarAction, and the `account`
+ * slot, e.g. AccountMenu, right-aligned), the page (default slot) in
+ * <main id="main">, and a quiet footer (`footerLinks`, `footer` slot).
+ * Put a CommandPalette in the `overlay` slot.
+ *
+ * Below 64rem the sidebar is an off-canvas drawer: the same element, a
+ * Popover API popover opened by the top bar's menu button, so Escape and a
+ * click outside close it and it needs no script. From 64rem up it is always
+ * shown. Collapse is a real checkbox (keyboard and screen reader operable,
+ * no script); `collapsed` sets it from the server, and with `persist` the
+ * shell's one small script writes the choice to that cookie so the next
+ * page renders the same way. The script also lets Escape hide a tooltip.
+ */
+import Icon from "./site-icon.astro";
+
+export interface FooterLink {
+  label: string;
+  href: string;
+}
+interface Props {
+  /** Accessible name of the drawer button and the collapse toggle's noun. */
+  navLabel?: string;
+  /** Render with the sidebar collapsed (from the app's preference cookie). */
+  collapsed?: boolean;
+  /** Cookie the collapse choice is saved to ("collapsed" or "expanded"). */
+  persist?: string;
+  footerLinks?: FooterLink[];
+  /** Accessible name of the sidebar landmark. */
+  sidebarLabel?: string;
+  /**
+   * A mineral whose brand fill (`--color-<mineral>-brand`, with its
+   * `-on-brand` text) colours primary actions and the current item's
+   * indicator inside the shell, e.g. "gold" for Nyuchi. Text links and the
+   * focus ring keep the theme's primary and ring, which are the mineral's
+   * contrast-safe variants.
+   */
+  accent?: "cobalt" | "tanzanite" | "malachite" | "gold" | "terracotta" | "sodalite" | "copper";
+  /** Prefix for the shell's ids; unique per page. */
+  id?: string;
+}
+const { navLabel = "Navigation", sidebarLabel = "Sidebar", collapsed = false, persist, footerLinks = [], accent, id = "app" } = Astro.props;
+const drawerId = `${id}-sidebar`;
+const collapseId = `${id}-collapse`;
+const hasFooter = footerLinks.length > 0 || Astro.slots.has("footer");
+---
+
+<div data-slot="app-shell" data-persist={persist} data-accent={accent}>
+  <aside id={drawerId} popover aria-label={sidebarLabel} data-slot="app-sidebar">
+    <div class="flex items-center gap-1 px-2 pt-1.5" data-slot="sidebar-head">
+      <div class="min-w-0 flex-1"><slot name="workspace" /></div>
+      <button type="button" popovertarget={drawerId} popovertargetaction="hide" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted lg:hidden" aria-label={`Close ${navLabel.toLowerCase()}`}>
+        <Icon name="close" class="h-5 w-5" />
+      </button>
+    </div>
+    {Astro.slots.has("search") && <div class="px-2 pt-1 pb-2" data-slot="sidebar-search"><slot name="search" /></div>}
+    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pt-1 pb-4" data-slot="sidebar-body">
+      <slot name="nav" />
+    </div>
+    <div class="hidden items-center gap-1 border-t border-border px-2 py-1.5 lg:flex" data-slot="sidebar-foot">
+      <input type="checkbox" id={collapseId} data-shell-collapse checked={collapsed} class="peer sr-only" />
+      <label for={collapseId} title={`Collapse ${navLabel.toLowerCase()}`} class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-ring">
+        <Icon name="panel-left" class="h-4 w-4" />
+        <span class="sr-only">Collapse {navLabel.toLowerCase()}</span>
+      </label>
+      <div class="min-w-0 flex-1" data-nav-text><slot name="sidebar-footer" /></div>
+    </div>
+  </aside>
+
+  <div class="flex min-h-dvh min-w-0 flex-col" data-slot="app-main">
+    <header class="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-4 lg:px-6" data-slot="app-topbar">
+      <button type="button" popovertarget={drawerId} class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-sm hover:bg-muted lg:hidden" aria-label={`Open ${navLabel.toLowerCase()}`}>
+        <Icon name="menu" class="h-5 w-5" />
+      </button>
+      <div class="min-w-0 lg:hidden"><slot name="brand" /></div>
+      <div class="ml-auto flex min-w-0 items-center gap-0.5 sm:gap-1">
+        <slot name="actions" />
+        <slot name="account" />
+      </div>
+    </header>
+
+    <main id="main" tabindex="-1" class="min-w-0 flex-1 px-4 py-5 focus:outline-none sm:px-6 lg:px-8 lg:py-6">
+      <div class="grid min-w-0 gap-5">
+        <slot />
+      </div>
+    </main>
+
+    {
+      hasFooter && (
+        <footer class="border-t border-border px-4 py-3 text-caption text-muted-foreground sm:px-6 lg:px-8" data-slot="app-footer">
+          <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+            {footerLinks.length > 0 && (
+              <ul role="list" class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+                {footerLinks.map((l) => (
+                  <li>
+                    <a href={l.href} class="inline-flex min-h-8 items-center hover:text-foreground hover:underline underline-offset-4 pointer-coarse:min-h-11">
+                      {l.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <slot name="footer" />
+          </div>
+        </footer>
+      )
+    }
+  </div>
+  <slot name="overlay" />
+</div>
+
+<style is:global>
+  [data-slot="app-shell"] {
+    --app-sidebar-w: 16.25rem;
+    min-height: 100dvh;
+    background: var(--background);
+    color: var(--foreground);
+  }
+  /* The accent: a mineral's brand fill, set by data-accent rather than an
+     inline style, so a CSP needs no style-src-attr 'unsafe-inline'. */
+  [data-slot="app-shell"][data-accent="cobalt"] {
+    --app-accent: var(--color-cobalt-brand);
+    --app-accent-foreground: var(--color-cobalt-on-brand);
+  }
+  [data-slot="app-shell"][data-accent="tanzanite"] {
+    --app-accent: var(--color-tanzanite-brand);
+    --app-accent-foreground: var(--color-tanzanite-on-brand);
+  }
+  [data-slot="app-shell"][data-accent="malachite"] {
+    --app-accent: var(--color-malachite-brand);
+    --app-accent-foreground: var(--color-malachite-on-brand);
+  }
+  [data-slot="app-shell"][data-accent="gold"] {
+    --app-accent: var(--color-gold-brand);
+    --app-accent-foreground: var(--color-gold-on-brand);
+  }
+  [data-slot="app-shell"][data-accent="terracotta"] {
+    --app-accent: var(--color-terracotta-brand);
+    --app-accent-foreground: var(--color-terracotta-on-brand);
+  }
+  [data-slot="app-shell"][data-accent="sodalite"] {
+    --app-accent: var(--color-sodalite-brand);
+    --app-accent-foreground: var(--color-sodalite-on-brand);
+  }
+  [data-slot="app-shell"][data-accent="copper"] {
+    --app-accent: var(--color-copper-brand);
+    --app-accent-foreground: var(--color-copper-on-brand);
+  }
+  /* A console reads in one face: headings in the body sans, not the
+     marketing serif. (The wordmark keeps its serif; it is the logo.) */
+  [data-slot="app-shell"] :is(h1, h2, h3, h4, h5, h6) {
+    font-family: inherit;
+  }
+
+  /* Phones and tablets: the sidebar is an off-canvas drawer (a popover). */
+  [data-slot="app-sidebar"] {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(18rem, 86vw);
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-right: 1px solid var(--border);
+    background: var(--background);
+    color: var(--foreground);
+    flex-direction: column;
+    overflow: hidden;
+  }
+  [data-slot="app-sidebar"]:popover-open {
+    display: flex;
+  }
+  [data-slot="app-sidebar"]::backdrop {
+    background: color-mix(in oklab, var(--foreground) 30%, transparent);
+  }
+
+  /* From 64rem: a fixed sidebar column and a main column filling the rest. */
+  @media (min-width: 64rem) {
+    [data-slot="app-shell"] {
+      display: grid;
+      grid-template-columns: var(--app-sidebar-w) minmax(0, 1fr);
+    }
+    [data-slot="app-sidebar"] {
+      display: flex;
+      position: sticky;
+      top: 0;
+      inset: 0 auto auto 0;
+      width: auto;
+      height: 100dvh;
+      z-index: 20;
+    }
+    [data-slot="app-sidebar"]::backdrop {
+      display: none;
+    }
+
+    /* Collapsed: a 3.5rem icon rail. Labels, group names, badges and the
+       wordmark hide; tooltips show the label instead; a nested group
+       becomes one link to its first item. */
+    [data-slot="app-shell"]:has([data-shell-collapse]:checked) {
+      --app-sidebar-w: 3.5rem;
+    }
+    [data-slot="app-shell"]:has([data-shell-collapse]:checked) :is(
+        [data-nav-text],
+        [data-slot="nav-group-label"],
+        [data-slot="nav-branch"],
+        [data-ws-name],
+        [data-slot="brand-wordmark"],
+        [data-qs-text],
+        [data-qs-kbd],
+        [data-slot="workspace-switcher"] [data-icon="chevrons-up-down"]
+      ) {
+      display: none !important;
+    }
+    [data-slot="app-shell"]:has([data-shell-collapse]:checked) [data-slot="nav-rail-link"] {
+      display: flex;
+    }
+    [data-slot="app-shell"]:has([data-shell-collapse]:checked) :is([data-nav-row], [data-slot="quick-search"], [data-slot="workspace-switcher"] > summary, a[data-slot="workspace-switcher"]) {
+      justify-content: center;
+      padding-inline: 0;
+    }
+    [data-slot="app-shell"]:has([data-shell-collapse]:checked) [data-slot="nav-group"] + [data-slot="nav-group"] {
+      border-top: 1px solid var(--border);
+      padding-top: 0.5rem;
+    }
+    [data-slot="app-shell"]:has([data-shell-collapse]:checked) [data-slot="nav-tip"] [data-tip-label] {
+      display: block;
+    }
+    [data-slot="app-shell"]:has([data-shell-collapse]:checked)
+      [data-slot="nav-item"]:has(> [data-nav-row]:hover, > [data-nav-row]:focus-visible)
+      > [data-slot="nav-tip"] {
+      display: block;
+    }
+    [data-slot="app-shell"]:has([data-shell-collapse]:checked) [data-slot="sidebar-head"] {
+      padding-inline: 0.25rem;
+    }
+    [data-slot="app-shell"]:has([data-shell-collapse]:checked) [data-slot="sidebar-foot"] {
+      justify-content: center;
+    }
+    [data-slot="app-shell"]:has([data-shell-collapse]:checked) [data-slot="sidebar-foot"] [data-icon="panel-left"] {
+      transform: scaleX(-1);
+    }
+  }
+</style>
+
+<script>
+  function setup(): void {
+    for (const shell of document.querySelectorAll<HTMLElement>('[data-slot="app-shell"]')) {
+      if (shell.dataset.ready) continue;
+      shell.dataset.ready = "1";
+      const toggle = shell.querySelector<HTMLInputElement>("[data-shell-collapse]");
+      const cookie = shell.dataset.persist;
+      if (toggle && cookie && /^[\w-]+$/.test(cookie)) {
+        toggle.addEventListener("change", () => {
+          const secure = window.location.protocol === "https:" ? "; Secure" : "";
+          document.cookie = `${cookie}=${toggle.checked ? "collapsed" : "expanded"}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
+        });
+      }
+      // WCAG 1.4.13: a tooltip can be dismissed without moving the pointer
+      // or focus. Escape hides tooltips until the pointer or focus moves.
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") shell.setAttribute("data-tips-hidden", "");
+      });
+      const reset = () => shell.removeAttribute("data-tips-hidden");
+      document.addEventListener("pointerover", reset);
+      document.addEventListener("focusin", reset);
+    }
+  }
+  setup();
+  document.addEventListener("astro:page-load", setup);
+</script>
