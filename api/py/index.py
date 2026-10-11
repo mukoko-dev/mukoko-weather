@@ -50,6 +50,8 @@ from ._aq_grid import router as aq_grid_router
 from ._model_grid import router as model_grid_router
 from ._sg_air import router as sg_air_router
 from ._enso import router as enso_router
+from ._agriculture import router as agriculture_router
+from ._place_knowledge import router as place_knowledge_router
 from ._db import get_db
 
 # ---------------------------------------------------------------------------
@@ -134,6 +136,8 @@ app.include_router(aq_grid_router)
 app.include_router(model_grid_router)
 app.include_router(sg_air_router)
 app.include_router(enso_router)
+app.include_router(agriculture_router)
+app.include_router(place_knowledge_router)
 
 
 # ---------------------------------------------------------------------------

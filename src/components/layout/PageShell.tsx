@@ -32,7 +32,7 @@ export function PageShell({
       <main
         id="main-content"
         className={cn(
-          "mx-auto px-4 py-10 pb-24 sm:pb-10 sm:px-6 md:px-8",
+          "mx-auto px-4 py-10 pb-[var(--mobile-nav-clearance)] sm:pb-10 sm:px-6 md:px-8",
           WIDTH_CLASS[width],
           className,
         )}

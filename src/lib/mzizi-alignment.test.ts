@@ -39,6 +39,9 @@ export const CONTROL_CLASSES = new Set([
   "impala-plate",
   // Round icon button
   "bee",
+  // Round icon control on a card surface (nav island, map overlays)
+  "duiker",
+  "duiker-solid",
   // Pill chip / toggle chip (aria-pressed)
   "quail",
   // Inline text actions and nav links (Mzizi Button `link` variant)
@@ -60,10 +63,6 @@ const ALLOWED_EXCEPTIONS: Record<string, { count: number; reason: string }> = {
   "src/app/locations/LocationsMenu.tsx": {
     count: 2,
     reason: "dropdown menu item rows (itemClass)",
-  },
-  "src/app/[location]/map/MapDashboard.tsx": {
-    count: 2,
-    reason: "map zoom +/− segmented control (stacked square segments)",
   },
   "src/components/weather/DraggableSection.tsx": {
     count: 1,

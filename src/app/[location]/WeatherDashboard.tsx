@@ -27,6 +27,7 @@ import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";
 import { HourlyScrollCards } from "@/components/weather/HourlyScrollCards";
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { LazySection } from "@/components/weather/LazySection";
+import { PlaceKnowledgeRows } from "@/components/weather/PlaceKnowledgeRows";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { CommunityLane } from "@/components/weather/CommunityLane";
 import { CommunityLaneSkeleton } from "@/components/weather/CommunityLaneSkeleton";
@@ -40,6 +41,7 @@ import {
   MapPreviewSkeleton,
   AirQualityMapSkeleton,
   HazeSkeleton,
+  AgricultureSnapshotSkeleton,
   SupportBannerSkeleton,
   LocationInfoSkeleton,
 } from "@/components/weather/SectionSkeleton";
@@ -102,6 +104,11 @@ const MapPreview = lazy(() =>
 const AirQualityMapCard = lazy(() =>
   import("@/components/weather/AirQualityMapCard").then((m) => ({
     default: m.AirQualityMapCard,
+  })),
+);
+const AgricultureSnapshot = lazy(() =>
+  import("@/components/weather/AgricultureSnapshot").then((m) => ({
+    default: m.AgricultureSnapshot,
   })),
 );
 const HazePanel = lazy(() =>
@@ -566,6 +573,30 @@ export function WeatherDashboard({
                               </LazySection>
                             </DraggableSection>
                           );
+                        case "agriculture":
+                          return (
+                            <DraggableSection
+                              key="agriculture"
+                              id="agriculture"
+                              reordering={reordering}
+                            >
+                              <LazySection
+                                label="agriculture-snapshot"
+                                fallback={<AgricultureSnapshotSkeleton />}
+                              >
+                                <ChartErrorBoundary name="agriculture snapshot">
+                                  <Suspense
+                                    fallback={<AgricultureSnapshotSkeleton />}
+                                  >
+                                    <AgricultureSnapshot
+                                      location={location}
+                                      user={user}
+                                    />
+                                  </Suspense>
+                                </ChartErrorBoundary>
+                              </LazySection>
+                            </DraggableSection>
+                          );
                         case "aiSummary":
                           return (
                             <DraggableSection
@@ -774,6 +805,16 @@ export function WeatherDashboard({
                         value={`${season.localName} (${season.name})`}
                       />
                     </dl>
+                    <ChartErrorBoundary name="place knowledge">
+                      <PlaceKnowledgeRows
+                        key={location.slug}
+                        slug={location.slug}
+                        lat={location.lat}
+                        lon={location.lon}
+                        country={location.country}
+                        labelledBy={`about-${location.slug}`}
+                      />
+                    </ChartErrorBoundary>
                   </div>
                 </section>
               </LazySection>

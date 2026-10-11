@@ -149,6 +149,15 @@ export const FIXED_UTC_OFFSET_SECONDS: Readonly<Record<string, number>> = {
  * backend ever supplies one) → the fixed-offset country table → the longitude
  * estimate (15° per hour, rounded to the quarter hour).
  */
+/** True when the country has one UTC offset all year (no DST): exact. */
+export function hasFixedUtcOffset(countryCode?: string | null): boolean {
+  const code = (countryCode ?? "").toUpperCase();
+  return (
+    code !== "" &&
+    Object.prototype.hasOwnProperty.call(FIXED_UTC_OFFSET_SECONDS, code)
+  );
+}
+
 export function resolveUtcOffsetSeconds(
   explicit: number | null | undefined,
   lon: number,

@@ -1,86 +1,115 @@
 /**
- * Tests for Header — the mobile bottom bar (iOS Weather style: a translucent,
- * full-width, safe-area-aware bar with map / page indicator / list) and the
- * mobile "⋯" menu that holds the destinations the bar no longer shows. Desktop
- * header stays as it was. Reads source directly (no DOM renderer needed for
- * structural checks).
+ * Tests for Header — the mobile navigation island (a floating, centred pill
+ * with map / page indicator / list, matching the mukoko-news island) and the
+ * mobile "⋯" menu that holds the destinations the island does not show.
+ * Desktop header stays as it was. Reads source directly (no DOM renderer
+ * needed for structural checks).
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
 const source = readFileSync(resolve(__dirname, "Header.tsx"), "utf-8");
+const nav = readFileSync(resolve(__dirname, "MobileNav.tsx"), "utf-8");
+const css = readFileSync(resolve(__dirname, "../../app/globals.css"), "utf-8");
+/** The body of one `@layer components` rule in globals.css. */
+function rule(name: string): string {
+  const m = css.match(new RegExp(`\\.${name} \\{([^}]*)\\}`));
+  return m ? m[1] : "";
+}
 
-describe("Header — mobile bottom bar geometry", () => {
-  it("is a full-width bar pinned to the bottom edge (not a floating pill)", () => {
-    expect(source).toContain("fixed inset-x-0 bottom-0 z-40");
-    expect(source).not.toContain("left-1/2");
-    expect(source).not.toContain("-translate-x-1/2");
-    expect(source).not.toContain(
-      "rounded-full border border-text-tertiary/10 bg-surface-base/90",
-    );
-  });
-
-  it("is translucent with a top hairline, like the iOS Weather bar", () => {
-    expect(source).toContain("border-t border-text-tertiary/10");
-    expect(source).toContain("bg-surface-base/80");
-    expect(source).toContain("backdrop-blur-xl");
-  });
-
-  it("is safe-area aware at the bottom edge", () => {
+describe("Header — mounts the floating mobile navigation", () => {
+  it("renders MobileNav with the saved locations, pathname and map link", () => {
     expect(source).toContain(
-      "pb-[calc(env(safe-area-inset-bottom,0px)+0.625rem)]",
+      'import { MobileNav } from "@/components/layout/MobileNav"',
     );
-  });
-
-  it("is visible only on phones (sm:hidden) and keeps its landmark label", () => {
-    expect(source).toContain('aria-label="Mobile navigation"');
-    expect(source).toContain("sm:hidden");
-  });
-
-  it("round side buttons use the 48px touch-target token", () => {
-    expect(source).toContain(
-      "h-[var(--touch-target-min)] w-[var(--touch-target-min)]",
-    );
-    expect(source).toContain("active:scale-95");
-  });
-});
-
-describe("Header — mobile bottom bar parts", () => {
-  it("left: a Map button linking to the map of the location on screen", () => {
-    expect(source).toMatch(
-      /import \{[^}]*Map as MapIcon[^}]*\} from "lucide-react"/,
-    );
-    expect(source).toContain("<MapIcon size={22}");
-    expect(source).toContain("href={mapHref}");
-    expect(source).toContain('? "Weather map"');
-  });
-
-  it("centre: the LocationPager, fed the saved locations and the current pathname", () => {
-    expect(source).toContain(
-      'import { LocationPager } from "@/components/layout/LocationPager"',
-    );
-    expect(source).toContain("<LocationPager");
+    expect(source).toContain("<MobileNav");
     expect(source).toContain("savedLocations={savedLocations}");
     expect(source).toContain("pathname={pathname}");
+    expect(source).toContain("mapHref={mapHref}");
     expect(source).toContain(
       "const savedLocations = useAppStore((s) => s.savedLocations);",
     );
   });
 
-  it("right: a List button linking to /locations with aria-current when active", () => {
-    expect(source).toMatch(
+  it("no longer welds a full-width bar to the bottom edge", () => {
+    expect(source).not.toContain("fixed inset-x-0 bottom-0");
+    expect(nav).not.toContain("inset-x-0 bottom-0");
+    expect(nav).not.toContain("border-t");
+  });
+});
+
+describe("MobileNav — floating island geometry (.lourie)", () => {
+  it("is a centred, capped-width pill inset from both sides", () => {
+    const lourie = rule("lourie");
+    expect(nav).toContain('className="lourie sm:hidden"');
+    expect(lourie).toContain("fixed inset-x-4");
+    expect(lourie).toContain("mx-auto");
+    expect(lourie).toContain("max-w-md");
+    expect(lourie).toContain("rounded-full");
+    expect(lourie).toContain("shadow-lg");
+    expect(lourie).toContain("backdrop-blur-xl");
+  });
+
+  it("is lifted off the bottom by the safe-area inset plus the nav inset token", () => {
+    expect(rule("lourie")).toContain(
+      "bottom: calc(env(safe-area-inset-bottom, 0px) + var(--mobile-nav-inset))",
+    );
+  });
+
+  it("takes its height from the token the content clearance is computed from", () => {
+    expect(rule("lourie")).toContain("h-[var(--mobile-nav-height)]");
+    expect(css).toMatch(
+      /--mobile-nav-clearance: calc\(\s*env\(safe-area-inset-bottom, 0px\) \+ var\(--mobile-nav-inset\) \+\s*var\(--mobile-nav-height\)/,
+    );
+  });
+
+  it("is phone-only and keeps its landmark label", () => {
+    expect(nav).toContain('aria-label="Mobile navigation"');
+    expect(nav).toContain("sm:hidden");
+  });
+
+  it("end slots are .duiker round controls on the 48px touch-target token", () => {
+    const duiker = rule("duiker");
+    expect(duiker).toContain("w-[var(--touch-target-min)]");
+    expect(duiker).toContain("h-[var(--touch-target-min)]");
+    expect(duiker).toContain("aria-[current=page]:text-primary");
+    expect(duiker).toContain("focus-visible:outline-2");
+    expect(nav.match(/className="duiker"/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("MobileNav — parts", () => {
+  it("left: a Map link to the map of the location on screen", () => {
+    expect(nav).toMatch(
+      /import \{[^}]*Map as MapIcon[^}]*\} from "lucide-react"/,
+    );
+    expect(nav).toContain("<MapIcon size={NAV_ICON_SIZE}");
+    expect(nav).toContain("href={mapHref}");
+    expect(nav).toContain('? "Weather map"');
+  });
+
+  it("centre: the LocationPager inside a harness boundary with a working fallback", () => {
+    expect(nav).toContain(
+      'import { LocationPager } from "@/components/layout/LocationPager"',
+    );
+    expect(nav).toContain("<LocationPager");
+    expect(nav).toMatch(/<MziziHarness\s+name="location-pager"/);
+    expect(nav).toContain("href={MY_LOCATION_HREF}");
+  });
+
+  it("right: a List link to /locations with aria-current when active", () => {
+    expect(nav).toMatch(
       /import \{[^}]*List as ListIcon[^}]*\} from "lucide-react"/,
     );
-    expect(source).toContain("<ListIcon size={22}");
-    expect(source).toContain('href="/locations"');
-    expect(source).toContain('aria-label="All locations"');
-    expect(source).toContain(
-      'aria-current={isLocationList ? "page" : undefined}',
-    );
-    expect(source).toContain(
-      'const isLocationList = pathname === "/locations";',
-    );
+    expect(nav).toContain("<ListIcon size={NAV_ICON_SIZE}");
+    expect(nav).toContain('href="/locations"');
+    expect(nav).toContain('aria-label="All locations"');
+    expect(nav).toContain('aria-current={isLocationList ? "page" : undefined}');
+  });
+
+  it("uses one icon size for both ends", () => {
+    expect(nav).toContain("export const NAV_ICON_SIZE = 22;");
   });
 
   it("no longer renders the old five-item nav row", () => {

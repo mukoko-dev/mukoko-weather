@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  hasFixedUtcOffset,
   cardTheme,
   cardConditionLabel,
   resolveUtcOffsetSeconds,
@@ -398,5 +399,15 @@ describe("mapWithConcurrency", () => {
 
   it("defaults the card fetch concurrency to 3", () => {
     expect(CARD_FETCH_CONCURRENCY).toBe(3);
+  });
+});
+
+describe("hasFixedUtcOffset", () => {
+  it("is true only for countries in the fixed-offset table", () => {
+    expect(hasFixedUtcOffset("ZW")).toBe(true);
+    expect(hasFixedUtcOffset("zw")).toBe(true);
+    expect(hasFixedUtcOffset("ES")).toBe(false);
+    expect(hasFixedUtcOffset("")).toBe(false);
+    expect(hasFixedUtcOffset(undefined)).toBe(false);
   });
 });

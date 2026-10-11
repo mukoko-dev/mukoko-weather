@@ -16,6 +16,12 @@ Build strategy:
 * The tables are cached in ``weather.climate_normals`` under the deterministic
   ``_id`` ``{lat:.2f}_{lon:.2f}`` (the snapped cell). Normals do not change, so
   the document has no TTL.
+* The same request also carries the daily mean temperature and precipitation,
+  reduced to twelve monthly normals (mean, high, low, rainfall, rainy days
+  ≥ 1 mm) for the place-knowledge profile (``_place_knowledge.py``), plus the
+  cell's IANA time zone and model elevation. Documents cached before the
+  monthly table existed are rebuilt once, on the first profile build that
+  needs them (:func:`get_monthly_normals`).
 
 Day-of-year slots use a leap-year calendar: slot 59 is Feb 29, and every other
 date keeps its month/day position in that calendar. Feb 29 therefore averages
@@ -62,6 +68,16 @@ HALF_WINDOW_DAYS = 7
 
 #: Number of day-of-year slots in the leap-year calendar.
 SLOTS = 366
+
+#: Daily variables requested from the archive. The mean and precipitation
+#: feed the monthly normals; the max/min feed the day-of-year tables.
+DAILY_VARS = "temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum"
+
+#: A day with at least this much rain counts as a rainy day (WMO convention).
+RAINY_DAY_MM = 1.0
+
+#: A (year, month) needs this many days with data to enter the monthly normal.
+MIN_DAYS_PER_MONTH = 25
 
 #: Client-side budget for the one-off 30-year build. The breaker's own
 #: per-request timeout (8 s) is too short for this payload, so the build runs
@@ -165,6 +181,83 @@ def compute_normal_tables(daily: dict) -> tuple[list[Optional[float]], list[Opti
     return max_table, min_table
 
 
+def _mean(values: list[float]) -> Optional[float]:
+    return round(sum(values) / len(values), 1) if values else None
+
+
+def compute_monthly_normals(daily: dict) -> list[dict]:
+    """
+    Reduce an Open-Meteo daily payload to twelve monthly normals.
+
+    For each calendar month: the mean of the yearly means of the daily mean,
+    high and low temperatures, and the mean yearly monthly rainfall total and
+    rainy-day count (≥ ``RAINY_DAY_MM``). A (year, month) with fewer than
+    ``MIN_DAYS_PER_MONTH`` days of data is left out. The daily mean falls back
+    to (max + min) / 2 when the payload has no ``temperature_2m_mean``.
+    Returns twelve dicts (January first); a month with no data has ``None``
+    values.
+    """
+    times = daily.get("time") or []
+    highs = daily.get("temperature_2m_max") or []
+    lows = daily.get("temperature_2m_min") or []
+    means = daily.get("temperature_2m_mean") or []
+    precs = daily.get("precipitation_sum") or []
+
+    def at(arr, i):
+        return arr[i] if i < len(arr) else None
+
+    buckets: dict[tuple[int, int], dict] = {}
+    for i, iso in enumerate(times):
+        try:
+            d = _dt.date.fromisoformat(iso[:10])
+        except (TypeError, ValueError):
+            continue
+        b = buckets.setdefault((d.year, d.month), {"t": [], "hi": [], "lo": [], "p": [], "days": 0})
+        hi, lo, mean, pr = at(highs, i), at(lows, i), at(means, i), at(precs, i)
+        if mean is None and hi is not None and lo is not None:
+            mean = (float(hi) + float(lo)) / 2
+        if mean is None and pr is None:
+            continue
+        b["days"] += 1
+        if mean is not None:
+            b["t"].append(float(mean))
+        if hi is not None:
+            b["hi"].append(float(hi))
+        if lo is not None:
+            b["lo"].append(float(lo))
+        if pr is not None:
+            b["p"].append(float(pr))
+
+    per_month: dict[int, dict[str, list[float]]] = {
+        m: {"t": [], "hi": [], "lo": [], "p": [], "rd": []} for m in range(1, 13)
+    }
+    for (_, month), b in buckets.items():
+        if b["days"] < MIN_DAYS_PER_MONTH:
+            continue
+        acc = per_month[month]
+        if b["t"]:
+            acc["t"].append(sum(b["t"]) / len(b["t"]))
+        if b["hi"]:
+            acc["hi"].append(sum(b["hi"]) / len(b["hi"]))
+        if b["lo"]:
+            acc["lo"].append(sum(b["lo"]) / len(b["lo"]))
+        if len(b["p"]) >= MIN_DAYS_PER_MONTH:
+            acc["p"].append(sum(b["p"]))
+            acc["rd"].append(sum(1 for v in b["p"] if v >= RAINY_DAY_MM))
+
+    return [
+        {
+            "month": m,
+            "meanTempC": _mean(per_month[m]["t"]),
+            "meanHighC": _mean(per_month[m]["hi"]),
+            "meanLowC": _mean(per_month[m]["lo"]),
+            "precipMm": _mean(per_month[m]["p"]),
+            "rainyDays": _mean(per_month[m]["rd"]),
+        }
+        for m in range(1, 13)
+    ]
+
+
 def _parse_target_date(raw: Optional[str]) -> str:
     """Validate ``YYYY-MM-DD`` (defaults to today UTC). Raises HTTP 400 otherwise."""
     if raw is None or raw == "":
@@ -191,15 +284,17 @@ def _get_http() -> httpx.Client:
 
 def _fetch_archive(glat: float, glon: float) -> dict:
     """
-    Fetch the 1991–2020 daily max/min for a snapped cell. Returns the ``daily``
-    block. Raises on HTTP error (the caller records the failure).
+    Fetch the 1991–2020 daily series for a snapped cell. Returns the ``daily``
+    block, with the response's ``timezone``, ``utc_offset_seconds`` and
+    ``elevation`` under ``daily["_meta"]``. Raises on HTTP error (the caller
+    records the failure).
     """
     params = {
         "latitude": f"{glat}",
         "longitude": f"{glon}",
         "start_date": NORMALS_START,
         "end_date": NORMALS_END,
-        "daily": "temperature_2m_max,temperature_2m_min",
+        "daily": DAILY_VARS,
         "timezone": "auto",
     }
     resp = _get_http().get(ARCHIVE_URL, params=params)
@@ -208,6 +303,11 @@ def _fetch_archive(glat: float, glon: float) -> dict:
     daily = data.get("daily")
     if not isinstance(daily, dict) or not daily.get("time"):
         raise ValueError("archive response has no daily block")
+    daily["_meta"] = {
+        "timezone": data.get("timezone"),
+        "utc_offset_seconds": data.get("utc_offset_seconds"),
+        "elevation": data.get("elevation"),
+    }
     return daily
 
 
@@ -226,7 +326,10 @@ def _get_cached_tables(key: str) -> Optional[dict]:
     return doc
 
 
-def _set_cached_tables(key: str, glat: float, glon: float, max_table, min_table) -> Optional[str]:
+def _set_cached_tables(
+    key: str, glat: float, glon: float, max_table, min_table,
+    monthly: Optional[list[dict]] = None, meta: Optional[dict] = None,
+) -> Optional[str]:
     """Upsert the table doc by its deterministic ``_id``. Returns ``computedAt``."""
     now = _dt.datetime.now(_dt.timezone.utc)
     doc = {
@@ -239,6 +342,15 @@ def _set_cached_tables(key: str, glat: float, glon: float, max_table, min_table)
         "minByDay": min_table,
         "computedAt": now,
     }
+    if monthly:
+        doc["monthly"] = monthly
+    meta = meta or {}
+    if meta.get("timezone"):
+        doc["timeZone"] = meta["timezone"]
+    if meta.get("utc_offset_seconds") is not None:
+        doc["utcOffsetSeconds"] = meta["utc_offset_seconds"]
+    if meta.get("elevation") is not None:
+        doc["elevation"] = meta["elevation"]
     stamp_platform_fields(doc)
     try:
         _normals_collection().update_one({"_id": key}, {"$set": doc}, upsert=True)
@@ -311,7 +423,10 @@ async def get_normals(
 
     open_meteo_breaker.record_success()
     max_table, min_table = compute_normal_tables(daily)
-    computed_at = _set_cached_tables(key, glat, glon, max_table, min_table)
+    computed_at = _set_cached_tables(
+        key, glat, glon, max_table, min_table,
+        compute_monthly_normals(daily), daily.get("_meta"),
+    )
     return _respond(lat, lon, date_iso, slot, max_table, min_table, computed_at)
 
 
@@ -329,3 +444,62 @@ def _respond(lat, lon, date_iso, slot, max_table, min_table, computed_at) -> Nor
         normalLow=round(float(lo), 1),
         computedAt=computed_at,
     )
+
+
+# ---------------------------------------------------------------------------
+# Monthly normals for the place-knowledge profile (synchronous)
+# ---------------------------------------------------------------------------
+
+
+def _monthly_payload(key: str, doc: dict) -> Optional[dict]:
+    monthly = doc.get("monthly")
+    if not monthly or len(monthly) != 12:
+        return None
+    return {
+        "cell": key,
+        "period": doc.get("period", NORMALS_PERIOD),
+        "source": doc.get("source", NORMALS_SOURCE),
+        "monthly": monthly,
+        "timeZone": doc.get("timeZone"),
+        "utcOffsetSeconds": doc.get("utcOffsetSeconds"),
+        "elevation": doc.get("elevation"),
+    }
+
+
+def get_monthly_normals(lat: float, lon: float, *, allow_fetch: bool = True) -> Optional[dict]:
+    """
+    Twelve monthly normals for the 0.25° cell holding (lat, lon), with the
+    cell's time zone and model elevation. Used by the place-knowledge builder,
+    which runs off the request path.
+
+    Cache first (``weather.climate_normals``). A cached document from before
+    the monthly table existed is rebuilt with one archive request, which also
+    refreshes its day-of-year tables. With ``allow_fetch=False`` only the
+    cache is read. Returns ``None`` when nothing can be produced (open
+    breaker, upstream failure); never raises.
+    """
+    glat, glon = snap_to_grid(lat), snap_to_grid(lon)
+    key = cache_key(glat, glon)
+    cached = _get_cached_tables(key)
+    if cached:
+        payload = _monthly_payload(key, cached)
+        if payload:
+            return payload
+    if not allow_fetch or not open_meteo_breaker.is_allowed:
+        return None
+    try:
+        daily = _fetch_archive(glat, glon)
+    except Exception:
+        open_meteo_breaker.record_failure()
+        return None
+    open_meteo_breaker.record_success()
+    max_table, min_table = compute_normal_tables(daily)
+    monthly = compute_monthly_normals(daily)
+    meta = daily.get("_meta") or {}
+    _set_cached_tables(key, glat, glon, max_table, min_table, monthly, meta)
+    return _monthly_payload(key, {
+        "monthly": monthly,
+        "timeZone": meta.get("timezone"),
+        "utcOffsetSeconds": meta.get("utc_offset_seconds"),
+        "elevation": meta.get("elevation"),
+    })

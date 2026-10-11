@@ -40,6 +40,7 @@ from ._places_resolver import (
     search_locations_by_name,
 )
 from ._ai_prompts import get_ai_prompt
+from ._place_knowledge import PROFILE_GROUNDING_RULE, profile_block_sync
 from ._ai_gateway import ai_configured, call_ai, function_tools, tool_result_message
 from ._circuit_breaker import ai_breaker
 
@@ -275,6 +276,12 @@ def _execute_get_weather(slug: str, weather_cache: dict) -> dict:
                     "cloudBase", "cloudCeiling", "precipitationType",
                 }
             }
+
+        # Stored place knowledge (season calendar, crop stage, normals,
+        # climate zone): cache-only, never waits on an upstream (#277).
+        profile = profile_block_sync(slug=slug) if loc_doc else ""
+        if profile:
+            result["placeProfile"] = profile
 
         weather_cache[slug] = result
         return result
@@ -544,13 +551,17 @@ def _build_chat_system_prompt(user_activities: list[str]) -> str:
             .replace("{userActivitySection}", user_activity_section)
         )
 
+    # get_weather results may carry a `placeProfile`; its grounding rule
+    # applies whichever template is in use (#277).
+    profile_rule = f"\n\nPLACE PROFILES: {PROFILE_GROUNDING_RULE}"
+
     # Try database-driven prompt template first
     prompt_doc = get_ai_prompt("system:chat")
     if prompt_doc and prompt_doc.get("template"):
-        return _apply_template(prompt_doc["template"])
+        return _apply_template(prompt_doc["template"]) + profile_rule
 
     # Fallback to hardcoded template
-    return _apply_template(_FALLBACK_CHAT_PROMPT)
+    return _apply_template(_FALLBACK_CHAT_PROMPT) + profile_rule
 
 
 # ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@ export default function LocationsLoading() {
       <Header />
       <main
         id="main-content"
-        className="mx-auto max-w-3xl px-4 py-10 pb-28 sm:px-6 md:px-8"
+        className="mx-auto max-w-3xl px-4 py-10 pb-[var(--mobile-nav-clearance)] sm:px-6 md:px-8"
       >
         <div role="status" aria-label="Loading" aria-busy="true">
           <span className="sr-only">Loading your locations…</span>

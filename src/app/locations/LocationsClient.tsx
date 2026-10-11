@@ -1,5 +1,6 @@
 "use client";
 
+import { roundCoord } from "@/lib/location-privacy";
 import { useEffect, useState } from "react";
 import { LocationWeatherCard } from "@/components/weather/LocationWeatherCard";
 import { displayNameFromSlug, isLocationSlug } from "@/lib/current-slug";
@@ -97,9 +98,12 @@ async function fetchCardWeather(
   place: PlaceRef,
   signal: AbortSignal,
 ): Promise<CardWeatherInput | null> {
-  const res = await fetch(`/api/py/weather?lat=${place.lat}&lon=${place.lon}`, {
-    signal,
-  });
+  const res = await fetch(
+    `/api/py/weather?lat=${roundCoord(place.lat)}&lon=${roundCoord(place.lon)}`,
+    {
+      signal,
+    },
+  );
   if (!res.ok) return null;
   return (await res.json()) as CardWeatherInput;
 }
@@ -347,7 +351,7 @@ export function LocationsClient({ initialCurrentSlug, ipAnchor }: Props) {
         )}
       </section>
 
-      <div className="sticky bottom-[4.5rem] z-30 mt-8 sm:bottom-4">
+      <div className="sticky bottom-[var(--mobile-nav-clearance)] z-30 mt-8 sm:bottom-4">
         <LocationsSearch listed={listed} />
       </div>
     </>

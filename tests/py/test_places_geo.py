@@ -767,3 +767,45 @@ class TestUpsertJoinsByRef:
     def test_lock_falls_back_to_country_and_name(self, _coll, _nearby, _cid, mock_lock):
         pg.upsert_placesgeo_city(name="West Paddock", lat=-18.0, lon=31.0, country_iso="ZW")
         assert mock_lock.call_args[0][0] == "placesgeo:ZW:west paddock"
+
+
+class TestPlaceKnowledgeHook:
+    """Creation hook (#277): a newly inserted place gets its knowledge built in
+    the background; an existing place is left for its first load."""
+
+    @patch("py._place_knowledge.schedule_knowledge_build")
+    @patch("py._places_geo.find_nearby_placesgeo", return_value=None)
+    @patch("py._places_geo.get_country_id", return_value="zw-parent")
+    @patch("py._places_geo.places_geo_collection")
+    def test_new_place_schedules_a_build(self, _coll, _parent, _dedup, schedule):
+        result = pg.upsert_placesgeo_city(
+            name="Bindura", lat=-17.3, lon=31.33, country_iso="ZW",
+            province="Mashonaland Central", elevation=1100,
+        )
+        schedule.assert_called_once()
+        place = schedule.call_args.args[0]
+        assert place == {
+            "id": result["_id"], "collection": "placesGeo", "name": "Bindura",
+            "lat": -17.3, "lon": 31.33, "country": "ZW",
+            "admin1": "Mashonaland Central", "elevation": 1100,
+        }
+
+    @patch("py._place_knowledge.schedule_knowledge_build")
+    @patch("py._places_geo.find_nearby_placesgeo")
+    @patch("py._places_geo.get_country_id", return_value="zw-parent")
+    @patch("py._places_geo.places_geo_collection")
+    def test_existing_place_is_not_rebuilt(self, _coll, _parent, dedup, schedule):
+        dedup.return_value = {"_id": "pg-1", "name": "Bindura", "sourceProvenance": {"mukokoSlug": "bindura"}}
+        result = pg.upsert_placesgeo_city(
+            name="Bindura", lat=-17.3, lon=31.33, country_iso="ZW", mukoko_slug="bindura",
+        )
+        assert result["wasExisting"] is True
+        schedule.assert_not_called()
+
+    @patch("py._place_knowledge.schedule_knowledge_build", side_effect=RuntimeError("boom"))
+    @patch("py._places_geo.find_nearby_placesgeo", return_value=None)
+    @patch("py._places_geo.get_country_id", return_value="zw-parent")
+    @patch("py._places_geo.places_geo_collection")
+    def test_a_failing_hook_never_fails_creation(self, _coll, _parent, _dedup, _schedule):
+        result = pg.upsert_placesgeo_city(name="Bindura", lat=-17.3, lon=31.33, country_iso="ZW")
+        assert result["name"] == "Bindura"
