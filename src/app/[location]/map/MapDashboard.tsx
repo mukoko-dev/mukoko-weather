@@ -362,12 +362,25 @@ export function MapDashboard({ location }: MapDashboardProps) {
   const centerAqi = grid?.center?.aqi ?? null;
   const centerBand = centerAqi === null ? null : aqiBand(centerAqi);
 
+  // Collapsing hides the pause button, so it also clears `playing`: expanding
+  // again must not restart playback on its own.
+  const toggleSheet = useCallback(() => {
+    setSheetOpen((open) => !open);
+    setPlaying(false);
+  }, []);
+
   const handleLocate = useCallback(async () => {
     if (locating) return;
     setLocating(true);
     setLocateMessage(null);
     const result = await detectUserLocation({ autoCreate: true });
     if (result.location) {
+      if (result.location.slug === location.slug) {
+        // Already on this place: a push to the same URL would not remount.
+        setLocating(false);
+        setLocateMessage("You are already viewing your location.");
+        return;
+      }
       router.push(`/${result.location.slug}/map`);
       return;
     }
@@ -377,7 +390,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
         ? "Location access is off. Allow it in your browser settings."
         : "We could not find your location. Try again.",
     );
-  }, [locating, router]);
+  }, [locating, router, location.slug]);
 
   const chip = getMapChip(activeLayer);
   const sheetId = "map-sheet-body";
@@ -451,7 +464,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
         <div className="serval pointer-events-auto flex flex-col overflow-hidden p-0.5">
           <button
             type="button"
-            onClick={() => setSheetOpen((open) => !open)}
+            onClick={toggleSheet}
             aria-expanded={sheetOpen}
             aria-controls={sheetId}
             aria-label={sheetOpen ? "Hide map layers" : "Show map layers"}
@@ -579,7 +592,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
           </div>
           <button
             type="button"
-            onClick={() => setSheetOpen((open) => !open)}
+            onClick={toggleSheet}
             aria-expanded={sheetOpen}
             aria-controls={sheetId}
             aria-label={sheetOpen ? "Collapse map layers" : "Expand map layers"}

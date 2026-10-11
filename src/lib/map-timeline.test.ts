@@ -23,6 +23,13 @@ describe("frameInstantMs — read back from the frame's own timestamp", () => {
   });
 });
 
+describe("frameInstantMs — a Now frame is now", () => {
+  it("does not read an older grid step as the current clock", () => {
+    const f = { timestamp: "2026-10-10T06:00Z", label: "Now" };
+    expect(frameInstantMs(f, NOW)).toBe(NOW.getTime());
+  });
+});
+
 const rain = (now: Date) => forecastTimelineFrames(now);
 
 describe("frameStops — labels in the PLACE's wall clock", () => {

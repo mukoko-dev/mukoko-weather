@@ -143,6 +143,15 @@ describe("MapDashboard — bottom sheet", () => {
     expect(source).toContain("[@media(max-height:500px)]:mr-auto");
   });
 
+  it("clears playing on collapse so expanding does not restart it", () => {
+    expect(source).toMatch(/const toggleSheet = [\s\S]*?setPlaying\(false\)/);
+    expect(source).not.toContain("onClick={() => setSheetOpen");
+  });
+
+  it("does not leave the locate button stuck when GPS resolves to this place", () => {
+    expect(source).toContain("result.location.slug === location.slug");
+  });
+
   it("isolates the chips and the timeline in their own error boundaries", () => {
     expect(source).toContain('<ChartErrorBoundary name="map layers">');
     expect(source).toContain('<ChartErrorBoundary name="timeline">');

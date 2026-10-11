@@ -47,7 +47,9 @@ export interface TimelineStop {
 
 /** The instant a frame is drawn for: "now" is now, else its ISO timestamp. */
 export function frameInstantMs(frame: TimelineFrame, now: Date): number {
-  if (frame.timestamp === "now") return now.getTime();
+  // A frame labelled "Now" is now, even when its grid step began earlier
+  // (model fields keep the 3-hour step that contains the current time).
+  if (frame.timestamp === "now" || frame.label === "Now") return now.getTime();
   const t = Date.parse(frame.timestamp);
   return Number.isFinite(t) ? t : now.getTime();
 }
