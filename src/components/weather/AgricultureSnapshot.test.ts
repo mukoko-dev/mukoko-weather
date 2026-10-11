@@ -24,10 +24,15 @@ describe("AgricultureSnapshot", () => {
     expect(client).toContain('"/api/ai/agriculture"');
     expect(src).not.toContain("/api/py/ai/");
     expect(src).toContain('"snapshot"');
-    expect(src).toContain("const wantsAI = signedIn && crops.length > 0;");
+    expect(src).toContain("const wantsAI = isCard && signedIn && crops.length > 0;");
     expect(src).toContain("fetchAgriAI(aiBody)");
     // Not gated on the client data fetch — both start in parallel.
     expect(src).not.toContain("if (!ready");
+  });
+
+  it("page variant drops the AI line and the self-link", () => {
+    expect(src).toContain('variant = "card"');
+    expect(src).toContain("{isCard && (");
   });
 
   it("asks signed-in users without crops to pick them", () => {

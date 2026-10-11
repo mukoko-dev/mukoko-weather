@@ -93,6 +93,12 @@ mukoko-weather/
 │   │   │   │   ├── page.tsx             # Server wrapper (SEO, data fetch)
 │   │   │   │   ├── ForecastDashboard.tsx # Client: hourly + daily + sun times
 │   │   │   │   └── loading.tsx          # Branded skeleton
+│   │   │   ├── agriculture/             # Agriculture insights sub-route (public; AI briefing signed-in)
+│   │   │   │   ├── page.tsx             # Server wrapper (SEO, canonical, BreadcrumbList + WebPage/Place JSON-LD, user)
+│   │   │   │   ├── AgricultureDashboard.tsx # Client: snapshot (page variant), AI briefing, crop advice, 16-day charts, crop calendar, history vs normals, ENSO
+│   │   │   │   ├── loading.tsx          # Branded skeleton
+│   │   │   │   ├── error.tsx            # RouteErrorBoundary copy
+│   │   │   │   └── agriculture.test.ts
 │   │   │   └── map/                     # Full-viewport weather map sub-route
 │   │   │       ├── page.tsx             # Server wrapper (SEO, no weather fetch)
 │   │   │       ├── MapDashboard.tsx     # Client: full-viewport MapLibre map, close button, legend, bottom-sheet layer chips + timeline
@@ -262,6 +268,11 @@ mukoko-weather/
 │   │   │   │   ├── HeatStressChart.tsx     # Heat stress index
 │   │   │   │   ├── ThunderstormChart.tsx   # Thunderstorm probability
 │   │   │   │   ├── VisibilityChart.tsx     # Visibility distance
+│   │   │   │   ├── RainEtChart.tsx         # Agriculture: daily rain bars + ET₀ line (mm)
+│   │   │   │   ├── WaterBalanceChart.tsx   # Agriculture: daily rain − ET₀ bars + running balance area
+│   │   │   │   ├── SoilMoistureChart.tsx   # Agriculture: soil moisture by depth (0–81 cm, %)
+│   │   │   │   ├── SoilTemperatureChart.tsx # Agriculture: soil temperature by depth (0/6/18/54 cm)
+│   │   │   │   ├── SprayWindowChart.tsx    # Agriculture: spray-fit hours vs leaf-wet hours per day
 │   │   │   │   ├── FeasibilityChart.tsx    # 24h activity feasibility line (mineral-colored, rating-word axis)
 │   │   │   │   └── FeasibilityChart.test.ts
 │   │   │   ├── AgricultureSnapshot.tsx # Agriculture snapshot card (malachite): verdict, spray/plant/harvest/irrigate windows, rain, soil, water balance, GDD, frost/heat, one signed-in AI line, link to /[location]/agriculture
@@ -612,6 +623,17 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/[location]` — dynamic weather pages — overview: current conditions, AI summary, activity insights, atmospheric metric cards
 - `/[location]/atmosphere` — 24-hour atmospheric detail charts (humidity, wind, pressure, UV) for a location
 - `/[location]/forecast` — hourly (24h) + daily (7-day) forecast charts + sunrise/sunset for a location
+- `/[location]/agriculture` — agriculture insights. Public and indexable (in the sitemap); only the AI agronomy briefing needs sign-in. It shows:
+  - the snapshot card (`variant="page"`);
+  - Shamwari's briefing (`/api/ai/agriculture`, `mode: "briefing"`, shown as a sign-in CTA when anonymous);
+  - deterministic crop-aware advice for the user's farming activities (`cropAdvice` in `src/lib/agriculture.ts`);
+  - 16-day charts (rain vs ET₀, water balance, soil moisture and soil temperature by depth, spray hours vs leaf wetness, and GDD to date via `GDDChart`'s `seriesKeys`);
+  - the planting/harvest calendar from the location profile;
+  - the past 30 days (`/api/py/history`) against normals (`/api/py/normals`);
+  - the ENSO card.
+
+  Every section has its own `LazySection` + `ChartErrorBoundary`. The proxy and `WeatherLoadingScene` only read the first path segment, so this sub-route records its location slug as `lastLocation` (correct) and needs no `KNOWN_ROUTES` entry
+
 - `/[location]/map` — full-screen interactive weather map (no header): close button to `/{slug}` plus the shared breadcrumb as a compact overlay (`Home / {location} / Map`), legend, labelled chips for Air quality, Rain, Temperature, Wind and Cloud (default Rain, last choice remembered in localStorage), AQI bubbles for air quality, and a 3-hourly Now to +3 days timeline for rain
 - `/shamwari` — Shamwari AI chat (full-viewport, Claude app style, input above mobile nav). **Paused** — `notFound()`s while `FLAGS.shamwari_chat` is `false` (see Feature Flags section)
 - `/explore` — browse locations by category and country (ISR 1h)
@@ -1478,6 +1500,7 @@ _Library tests:_
 - `src/lib/home-weather.test.ts` — `fetchModelWeather`: model/models query, blend default never swaps, fallen-back provider is not treated as the chosen model
 - `src/lib/location-time.test.ts` — location time zone: viewer UTC+8 → Harare (UTC+2) and viewer UTC-5 → Singapore (UTC+8) with the process TZ really set; start hour + labels across hero, feasibility, lane, charts, tips, frost, sun
 - `src/lib/agriculture.test.ts` — agriculture helpers: farming-id list parity with `activities.ts`, URL builder, severity-token status classes, formatters, Python-model field parity
+- `src/app/[location]/agriculture/agriculture.test.ts` + `src/components/weather/agriculture-page.test.ts` — agriculture page: SEO/JSON-LD, public page (no `requireUser`), per-section boundaries + lazy loading, sitemap entry, first-segment cookie rule, tokens-only charts on `TimeSeriesChart`, heading-labelled sections, briefing via the proxy client, history vs normals endpoints
 - `src/lib/agriculture-client.test.ts` — signed-in agriculture AI client: stable body, 10-min in-memory cache per body, in-flight dedupe, empty/HTTP-error rejection, proxy-only URL
 - `src/lib/weather-labels.test.ts` — humidity/pressure/cloud/precipitation/feels-like label helpers
 - `src/lib/locations.test.ts` — location searching, tag filtering, nearest location

@@ -7,7 +7,11 @@
  * for 10 minutes and concurrent identical requests share one fetch.
  */
 
-import type { AgriAIMode, AgriAIResponse } from "./agriculture";
+import type {
+  AgriAIMode,
+  AgriAIResponse,
+  AgricultureResponse,
+} from "./agriculture";
 
 export const AGRI_AI_CLIENT_TTL_MS = 10 * 60 * 1000;
 const MAX_ENTRIES = 50;
@@ -90,4 +94,41 @@ export function fetchAgriAI(
 export function resetAgriAICache(): void {
   cache.clear();
   inflight.clear();
+  dataCache.clear();
+  dataInflight.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Public deterministic data (shared by the card and the insights page)
+// ---------------------------------------------------------------------------
+
+export const AGRI_DATA_CLIENT_TTL_MS = 5 * 60 * 1000;
+const dataCache = new Map<string, { value: AgricultureResponse; at: number }>();
+const dataInflight = new Map<string, Promise<AgricultureResponse>>();
+
+/** GET `/api/py/agriculture…` once per URL (5-min memory cache + dedupe). */
+export function fetchAgriculture(
+  url: string,
+  fetcher: typeof fetch = fetch,
+  now = Date.now(),
+): Promise<AgricultureResponse> {
+  const hit = dataCache.get(url);
+  if (hit && now - hit.at <= AGRI_DATA_CLIENT_TTL_MS)
+    return Promise.resolve(hit.value);
+  const pending = dataInflight.get(url);
+  if (pending) return pending;
+  const request = fetcher(url)
+    .then(async (res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const value = (await res.json()) as AgricultureResponse;
+      // Only usable answers are kept; an outage should retry next mount.
+      if (value.available) {
+        if (dataCache.size >= MAX_ENTRIES) dataCache.clear();
+        dataCache.set(url, { value, at: Date.now() });
+      }
+      return value;
+    })
+    .finally(() => dataInflight.delete(url));
+  dataInflight.set(url, request);
+  return request;
 }
