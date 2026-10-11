@@ -14,15 +14,16 @@ const ExploreChatbot = lazy(() =>
  * Full-viewport Shamwari chat page.
  *
  * Layout: fills the space between the sticky header (3.5rem) and the
- * fixed mobile bottom nav (4.5rem). On desktop (sm+) the bottom nav
- * is hidden so no bottom padding is needed.
+ * floating mobile nav island (--mobile-nav-clearance, safe area
+ * included). On desktop (sm+) the island is hidden so no bottom padding is
+ * needed.
  *
  * The chat input naturally sits at the bottom of the flex container,
  * which places it directly above the mobile navigation bar.
  */
 export function ShamwariPageClient() {
   return (
-    <main className="animate-fade-in flex flex-col h-[calc(100dvh-3.5rem)] pb-[4.5rem] sm:pb-0 overflow-hidden max-w-full">
+    <main className="animate-fade-in flex flex-col h-[calc(100dvh-3.5rem)] pb-[var(--mobile-nav-clearance)] sm:pb-0 overflow-hidden max-w-full">
       <div className="mx-auto w-full max-w-3xl flex-1 min-h-0 flex flex-col border-x border-mineral-sodalite/20 overflow-hidden">
         <ChartErrorBoundary name="Shamwari Chat">
           <Suspense fallback={<ChatSkeleton className="h-full" />}>

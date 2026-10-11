@@ -411,7 +411,7 @@ export function AviationPlanner() {
   return (
     <main
       id="main-content"
-      className="mx-auto max-w-3xl px-4 py-6 pb-24 sm:px-6 sm:pb-8 md:px-8"
+      className="mx-auto max-w-3xl px-4 py-6 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-8 md:px-8"
     >
       <h1 className="text-2xl font-semibold text-text-primary font-heading mb-1">
         Aviation Weather Briefing
