@@ -131,6 +131,13 @@ public file or static route, such as a deleted `/favicon-48.png`, is rewritten
 which returns a plain 404. Without it the request would fall through to the
 `[location]` page and get a 200 "Location not found".
 
+**Unknown slugs get a real, server-rendered 404.** The proxy
+(`src/proxy.ts`, gate in `src/lib/location-gate.ts`) looks up any slug that
+is not a shipped seed slug or a smart-slug spot and rewrites an unknown one to
+an internal path no route matches, so Next.js renders the not-found page on
+the server with a 404 status. A failed or slow lookup lets the request
+through, and a wrong-case URL such as `/Harare` gets a 308 to `/harare`.
+
 Climate normals (1991–2020, ERA5 via Open-Meteo) are served at `GET /api/py/normals`, with one cached table per 0.25° grid cell in `weather.climate_normals`.
 **Map overlays** — tile layers from Tomorrow.io (`/api/py/map-tiles`) and NASA GIBS (satellite true colour and IMERG rain, keyless, animated); `GET /api/py/model-grid?lat&lon&model` serves one global model's 72 h temperature / rain / wind grid for the per-model map layers (behind the `model_map_layers` flag). Credits for every layer come from `src/lib/map-sources.ts`.
 
