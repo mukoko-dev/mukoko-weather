@@ -13,7 +13,10 @@
  * Local changes from upstream: the motion config is read through
  * `useSyncExternalStore` so it follows a live `prefers-reduced-motion`
  * change and server and client agree on first render, and the console
- * logger carries no lint suppressions (this repo's lint allows console).
+ * logger carries no lint suppressions (this repo's lint allows console),
+ * and `debug` lines are dropped in production builds. `LiveRegion` is kept
+ * for API parity with upstream; this app announces through the shared
+ * region instead.
  */
 
 import * as React from "react";
@@ -30,10 +33,15 @@ export interface ScopedLogger {
   ) => void;
 }
 
+/** Debug lines (mount/unmount) are for development only. */
+const DEBUG = process.env.NODE_ENV !== "production";
+
 function createScopedLogger(name: string): ScopedLogger {
   const prefix = `[mzizi:${name}]`;
   return {
-    debug: (m, d) => console.debug(prefix, m, d ?? ""),
+    debug: (m, d) => {
+      if (DEBUG) console.debug(prefix, m, d ?? "");
+    },
     info: (m, d) => console.info(prefix, m, d ?? ""),
     warn: (m, d) => console.warn(prefix, m, d ?? ""),
     error: (m, e, d) => console.error(prefix, m, e ?? "", d ?? ""),

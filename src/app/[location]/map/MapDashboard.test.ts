@@ -80,7 +80,7 @@ describe("MapDashboard — timeline", () => {
   });
 
   it("steps the overlay timestamp through the MapTimeline scrubber", () => {
-    expect(source).toContain("timelineTimestamp(step, new Date())");
+    expect(source).toContain("timelineTimestamp(step, clock ?? new Date())");
     expect(source).toContain("<MapTimeline");
     expect(source).toContain("onStepChange={setStep}");
   });
@@ -88,6 +88,11 @@ describe("MapDashboard — timeline", () => {
   it("labels the timeline in the place's time zone, not the viewer's", () => {
     expect(source).toContain("resolveUtcOffsetSeconds(");
     expect(source).toContain("location.country");
+    // Exact from the fixed-offset table, else the API's DST-aware offset;
+    // an estimate is flagged as approximate.
+    expect(source).toContain("hasFixedUtcOffset(location.country)");
+    expect(source).toContain("fetchPlaceOffset(location.lat, location.lon");
+    expect(source).toContain("approximate={offsetApproximate}");
     expect(source).toContain("offsetSeconds={offsetSeconds}");
     expect(source).not.toMatch(/getHours\(|toLocaleTimeString\(/);
   });
@@ -125,6 +130,17 @@ describe("MapDashboard — bottom sheet", () => {
     expect(source).toContain("max-h-[calc(100dvh-6rem)]");
     expect(source).toContain("[@media(max-height:500px)]:mr-auto");
     expect(source).toContain("overflow-y-auto");
+  });
+
+  it("stops playback when the sheet collapses (its pause button is hidden)", () => {
+    expect(source).toContain(
+      "const isPlaying = playing && timelineOn && sheetOpen;",
+    );
+  });
+
+  it("isolates the chips and the timeline in their own error boundaries", () => {
+    expect(source).toContain('<ChartErrorBoundary name="map layers">');
+    expect(source).toContain('<ChartErrorBoundary name="forecast timeline">');
   });
 
   it("announces layer changes through the Mzizi harness", () => {

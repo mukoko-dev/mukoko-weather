@@ -19,7 +19,12 @@ import {
 } from "@/components/weather/map/WeatherLayerPanel";
 import { MapTimeline } from "@/components/weather/map/MapTimeline";
 import { useMziziHarness } from "@/lib/harness";
-import { resolveUtcOffsetSeconds } from "@/lib/location-card";
+import {
+  hasFixedUtcOffset,
+  resolveUtcOffsetSeconds,
+} from "@/lib/location-card";
+import { fetchPlaceOffset, type PlaceOffset } from "@/lib/map-timeline";
+import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { detectUserLocation } from "@/lib/geolocation";
 import {
   AQI_BAND_LABELS,
@@ -95,13 +100,37 @@ export function MapDashboard({ location }: MapDashboardProps) {
   const { announce } = useMziziHarness("map-dashboard");
   const minute = useSyncExternalStore(subscribeMinute, minuteNow, noClock);
   const clock = useMemo(() => (minute ? new Date(minute) : null), [minute]);
-  // The place's own UTC offset (fixed-offset country table, else a
-  // longitude estimate), so the timeline reads in its wall clock.
-  const offsetSeconds = resolveUtcOffsetSeconds(
+  // The place's UTC offset, so the timeline reads in its wall clock. A
+  // fixed-offset country (no DST) is exact from the table; anywhere else the
+  // longitude estimate is shown as approximate until our cached weather API
+  // returns the real, DST-aware offset.
+  const fixedOffset = hasFixedUtcOffset(location.country);
+  const estimate = resolveUtcOffsetSeconds(
     null,
     location.lon,
     location.country,
   );
+  const placeKey = `${location.lat},${location.lon}`;
+  const [fetchedOffset, setFetchedOffset] = useState<{
+    key: string;
+    offset: PlaceOffset | null;
+  } | null>(null);
+  useEffect(() => {
+    if (fixedOffset) return;
+    const controller = new AbortController();
+    void fetchPlaceOffset(location.lat, location.lon, controller.signal).then(
+      (offset) => {
+        if (!controller.signal.aborted)
+          setFetchedOffset({ key: placeKey, offset });
+      },
+    );
+    return () => controller.abort();
+  }, [fixedOffset, location.lat, location.lon, placeKey]);
+  const apiOffset =
+    fetchedOffset?.key === placeKey ? fetchedOffset.offset : null;
+  const offsetSeconds = apiOffset?.offsetSeconds ?? estimate;
+  const offsetApproximate =
+    !fixedOffset && (apiOffset === null || apiOffset.estimated);
   // The remembered layer is read from localStorage through useSyncExternalStore:
   // the server snapshot is the default, so SSR and the first client render agree
   // and the stored choice applies without a setState-in-effect.
@@ -127,8 +156,9 @@ export function MapDashboard({ location }: MapDashboardProps) {
 
   const aqOn = activeLayer === AIR_QUALITY_LAYER_ID;
   const timelineOn = layerSupportsTimeline(activeLayer);
-  // Playback only runs while a timeline layer is showing.
-  const isPlaying = playing && timelineOn;
+  // Playback only runs while a timeline layer is showing AND its controls are
+  // on screen: collapsing the sheet hides the pause button, so it stops too.
+  const isPlaying = playing && timelineOn && sheetOpen;
 
   const handleLayerChange = useCallback(
     (id: string) => {
@@ -222,7 +252,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
         interactive
         weatherLayer={aqOn ? null : activeLayer}
         weatherTimestamp={
-          timelineOn ? timelineTimestamp(step, new Date()) : "now"
+          timelineOn ? timelineTimestamp(step, clock ?? new Date()) : "now"
         }
         aqiOverlay={aqOn ? aqFill : null}
         aqiBubbles={aqOn ? bubbles : null}
@@ -389,22 +419,27 @@ export function MapDashboard({ location }: MapDashboardProps) {
 
         <div id={sheetId} hidden={!sheetOpen} className="mt-3">
           <h3 className="sr-only">Map layers and forecast time</h3>
-          <WeatherLayerPanel
-            activeLayer={activeLayer}
-            onLayerChange={handleLayerChange}
-            locationSlug={location.slug}
-          />
+          <ChartErrorBoundary name="map layers">
+            <WeatherLayerPanel
+              activeLayer={activeLayer}
+              onLayerChange={handleLayerChange}
+              locationSlug={location.slug}
+            />
+          </ChartErrorBoundary>
           {timelineOn && (
             <div className="mt-3 border-t border-border pt-2">
-              <MapTimeline
-                step={step}
-                playing={isPlaying}
-                onStepChange={setStep}
-                onPlayingChange={setPlaying}
-                offsetSeconds={offsetSeconds}
-                zoneName={location.name}
-                now={clock}
-              />
+              <ChartErrorBoundary name="forecast timeline">
+                <MapTimeline
+                  step={step}
+                  playing={isPlaying}
+                  onStepChange={setStep}
+                  onPlayingChange={setPlaying}
+                  offsetSeconds={offsetSeconds}
+                  zoneName={location.name}
+                  approximate={offsetApproximate}
+                  now={clock}
+                />
+              </ChartErrorBoundary>
             </div>
           )}
         </div>

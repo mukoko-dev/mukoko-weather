@@ -41,7 +41,6 @@ export function MobileNav({
   hasMapLocation,
 }: MobileNavProps) {
   const isLocationList = pathname === "/locations";
-  const isMap = pathname.endsWith("/map");
   return (
     <nav
       aria-label="Mobile navigation"
@@ -56,7 +55,6 @@ export function MobileNav({
             ? "Weather map"
             : "Choose a location for the weather map"
         }
-        aria-current={isMap ? "page" : undefined}
         className="duiker"
       >
         <MapIcon size={NAV_ICON_SIZE} aria-hidden="true" />

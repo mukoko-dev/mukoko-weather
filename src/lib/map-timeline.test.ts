@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { stopInstantMs, timelineStops } from "./map-timeline";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { fetchPlaceOffset, stopInstantMs, timelineStops } from "./map-timeline";
 import {
   TIMELINE_STEPS,
   TIMELINE_STEP_HOURS,
@@ -57,5 +57,58 @@ describe("timelineStops — labels in the PLACE's wall clock", () => {
     expect(stops[1].valueText).toBe("Saturday 12:00 Harare time, in 3 hours");
     expect(stops[8].valueText).toBe("Sunday 09:00 Harare time, in 1 day");
     expect(stops[9].valueText).toBe("Sunday 12:00 Harare time, in 1 day 3 h");
+  });
+
+  it("says so when the offset is only an estimate", () => {
+    const stops = timelineStops(NOW, 0, "Madrid", true);
+    expect(stops[1].valueText).toBe(
+      "Saturday 10:00 Madrid time (approximate), in 3 hours",
+    );
+  });
+});
+
+describe("fetchPlaceOffset — reads the API's offset, never throws", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  function mockFetch(body: unknown, ok = true) {
+    globalThis.fetch = vi.fn(async () => ({
+      ok,
+      json: async () => body,
+    })) as unknown as typeof fetch;
+  }
+
+  it("returns the offset and whether the API estimated it", async () => {
+    mockFetch({ utc_offset_seconds: 7200 });
+    expect(await fetchPlaceOffset(-17.8, 31.0)).toEqual({
+      offsetSeconds: 7200,
+      estimated: false,
+    });
+    mockFetch({ utc_offset_seconds: 3600, utc_offset_estimated: true });
+    expect(await fetchPlaceOffset(40.4, -3.7)).toEqual({
+      offsetSeconds: 3600,
+      estimated: true,
+    });
+  });
+
+  it("calls only our own cached API", async () => {
+    mockFetch({ utc_offset_seconds: 0 });
+    await fetchPlaceOffset(1, 2);
+    expect(vi.mocked(globalThis.fetch).mock.calls[0][0]).toBe(
+      "/api/py/weather?lat=1&lon=2",
+    );
+  });
+
+  it("returns null on errors, bad shapes and network failure", async () => {
+    mockFetch({}, false);
+    expect(await fetchPlaceOffset(0, 0)).toBeNull();
+    mockFetch({ utc_offset_seconds: "x" });
+    expect(await fetchPlaceOffset(0, 0)).toBeNull();
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error("offline");
+    }) as unknown as typeof fetch;
+    expect(await fetchPlaceOffset(0, 0)).toBeNull();
   });
 });

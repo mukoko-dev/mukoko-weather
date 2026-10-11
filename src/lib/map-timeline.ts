@@ -8,10 +8,13 @@
  * every label here is computed from the place's UTC offset with UTC getters
  * (same rule as src/lib/location-time.ts).
  */
-import { TIMELINE_STEPS, TIMELINE_STEP_HOURS } from "@/lib/map-layers";
+import {
+  TIMELINE_STEPS,
+  TIMELINE_STEP_HOURS,
+  timelineTimestamp,
+} from "@/lib/map-layers";
 import { wallClockLabel, wallDateString } from "@/lib/location-time";
 
-const HOUR_MS = 3_600_000;
 const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const LONG_DAYS = [
   "Sunday",
@@ -39,16 +42,14 @@ export interface TimelineStop {
   valueText: string;
 }
 
-/** The instant a timeline step shows: floored UTC hour + step × 3 h. */
-export function stopInstantMs(
-  step: number,
-  now: Date,
-  stepHours: number = TIMELINE_STEP_HOURS,
-): number {
+/**
+ * The instant a timeline step shows. Read back from `timelineTimestamp`, the
+ * function that builds the tile URL, so a label can never name a different
+ * frame from the one drawn.
+ */
+export function stopInstantMs(step: number, now: Date): number {
   if (step <= 0) return now.getTime();
-  const base = new Date(now.getTime());
-  base.setUTCMinutes(0, 0, 0);
-  return base.getTime() + step * stepHours * HOUR_MS;
+  return Date.parse(timelineTimestamp(step, now));
 }
 
 function inHours(hours: number): string {
@@ -62,20 +63,25 @@ function inHours(hours: number): string {
 
 /**
  * Every stop of the timeline, labelled at the place. `zoneName` is the
- * place's name for the screen-reader text ("Harare time").
+ * place's name for the screen-reader text ("Harare time"); `approximate`
+ * marks an offset that is only a longitude estimate.
  */
 export function timelineStops(
   now: Date,
   offsetSeconds: number,
   zoneName: string,
+  approximate: boolean = false,
   steps: number = TIMELINE_STEPS,
   stepHours: number = TIMELINE_STEP_HOURS,
 ): TimelineStop[] {
+  const zone = approximate
+    ? `${zoneName} time (approximate)`
+    : `${zoneName} time`;
   const offsetMs = offsetSeconds * 1000;
   const stops: TimelineStop[] = [];
   let prevDate = "";
   for (let step = 0; step < steps; step++) {
-    const wall = stopInstantMs(step, now, stepHours) + offsetMs;
+    const wall = stopInstantMs(step, now) + offsetMs;
     const date = wallDateString(wall);
     const weekday = new Date(wall).getUTCDay();
     const clock = wallClockLabel(wall);
@@ -91,9 +97,43 @@ export function timelineStops(
       dayStart,
       valueText:
         step === 0
-          ? `Now, ${LONG_DAYS[weekday]} ${clock} ${zoneName} time`
-          : `${LONG_DAYS[weekday]} ${clock} ${zoneName} time, ${inHours(hoursAhead)}`,
+          ? `Now, ${LONG_DAYS[weekday]} ${clock} ${zone}`
+          : `${LONG_DAYS[weekday]} ${clock} ${zone}, ${inHours(hoursAhead)}`,
     });
   }
   return stops;
+}
+
+/** The place's UTC offset as our weather API reports it. */
+export interface PlaceOffset {
+  offsetSeconds: number;
+  /** True when the API itself only estimated it (from longitude). */
+  estimated: boolean;
+}
+
+/**
+ * Reads the place's real (DST-aware) UTC offset from our cached
+ * `/api/py/weather` — the same row the location page already filled, so a
+ * visit from there costs a cache hit. Null on any failure; the caller keeps
+ * its estimate. Never calls a provider directly.
+ */
+export async function fetchPlaceOffset(
+  lat: number,
+  lon: number,
+  signal?: AbortSignal,
+): Promise<PlaceOffset | null> {
+  try {
+    const res = await fetch(`/api/py/weather?lat=${lat}&lon=${lon}`, {
+      signal,
+    });
+    if (!res.ok) return null;
+    const data: unknown = await res.json();
+    if (!data || typeof data !== "object") return null;
+    const { utc_offset_seconds: offset, utc_offset_estimated: estimated } =
+      data as { utc_offset_seconds?: unknown; utc_offset_estimated?: unknown };
+    if (typeof offset !== "number" || !Number.isFinite(offset)) return null;
+    return { offsetSeconds: offset, estimated: estimated === true };
+  } catch {
+    return null;
+  }
 }

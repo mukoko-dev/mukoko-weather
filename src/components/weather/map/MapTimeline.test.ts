@@ -62,10 +62,26 @@ describe("MapTimeline — scrubber", () => {
     expect(source).toContain("stop?.dayStart");
   });
 
+  it("ticks the final stop too, at the right edge", () => {
+    expect(source).toContain(
+      '<Tick stop={stops?.[last]} index={last} edge="right" />',
+    );
+  });
+
+  it("drops weekday labels that would collide with Now", () => {
+    expect(source).toContain("export const MIN_LABEL_GAP_STEPS = 4;");
+    expect(source).toContain("index >= MIN_LABEL_GAP_STEPS");
+  });
+
+  it("flags an estimated offset in the readout", () => {
+    expect(source).toContain("`≈ ${zoneName} time`");
+    expect(source).toContain(
+      "timelineStops(now, offsetSeconds, zoneName, approximate)",
+    );
+  });
+
   it("reads every label from timelineStops (place time), never the viewer's clock", () => {
-    expect(source).toContain("timelineStops(now, offsetSeconds, zoneName)");
     expect(source).not.toMatch(/getHours\(|toLocaleTimeString\(/);
-    expect(source).toContain("{zoneName} time");
   });
 
   it("does not spam the live region while playing", () => {

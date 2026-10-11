@@ -3,12 +3,61 @@
 import { useMemo } from "react";
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { TIMELINE_STEPS } from "@/lib/map-layers";
-import { timelineStops } from "@/lib/map-timeline";
+import { timelineStops, type TimelineStop } from "@/lib/map-timeline";
 import { useMziziHarness } from "@/lib/harness";
 import { cn } from "@/lib/utils";
 
 /** Icon size for every timeline control — matches the map's top controls. */
 const ICON_CLASS = "h-5 w-5";
+
+/**
+ * Stops this close to Now keep their day tick but drop the weekday label,
+ * which would otherwise collide with the "Now" label on a phone-width track
+ * (each 3-hour column is ~12px at 360px).
+ */
+export const MIN_LABEL_GAP_STEPS = 4;
+
+/** One tick (and maybe a label) on the tick row. */
+function Tick({
+  stop,
+  index,
+  edge,
+}: {
+  stop: TimelineStop | undefined;
+  index: number;
+  edge: "left" | "right";
+}) {
+  const isNow = index === 0;
+  if (!isNow && !stop?.dayStart) return null;
+  const showLabel = isNow || index >= MIN_LABEL_GAP_STEPS;
+  const anchor = edge === "left" ? "left-0" : "right-0";
+  return (
+    <>
+      <span
+        className={cn(
+          "absolute top-0 h-2 w-0.5 rounded-full",
+          anchor,
+          edge === "left" ? "-translate-x-1/2" : "translate-x-1/2",
+          isNow ? "bg-primary" : "bg-text-tertiary/50",
+        )}
+      />
+      {showLabel && (
+        <span
+          className={cn(
+            "absolute top-2 whitespace-nowrap",
+            anchor,
+            isNow && "font-semibold text-primary",
+            // Centred under its tick, except at the very ends where it
+            // would overflow the sheet: Now hangs right, the last hangs left.
+            !isNow && edge === "left" && "-translate-x-1/2",
+          )}
+        >
+          {isNow ? "Now" : stop?.day}
+        </span>
+      )}
+    </>
+  );
+}
 
 interface MapTimelineProps {
   step: number;
@@ -19,6 +68,8 @@ interface MapTimelineProps {
   offsetSeconds: number;
   /** The place's name, for "Harare time". */
   zoneName: string;
+  /** True while the offset is only a longitude estimate. */
+  approximate?: boolean;
   /** Minute-granular "now"; null until the client has a clock. */
   now: Date | null;
 }
@@ -37,12 +88,14 @@ export function MapTimeline({
   onPlayingChange,
   offsetSeconds,
   zoneName,
+  approximate = false,
   now,
 }: MapTimelineProps) {
   const { announce } = useMziziHarness("map-timeline");
   const stops = useMemo(
-    () => (now ? timelineStops(now, offsetSeconds, zoneName) : null),
-    [now, offsetSeconds, zoneName],
+    () =>
+      now ? timelineStops(now, offsetSeconds, zoneName, approximate) : null,
+    [now, offsetSeconds, zoneName, approximate],
   );
   const last = TIMELINE_STEPS - 1;
   const current = stops?.[step];
@@ -103,7 +156,7 @@ export function MapTimeline({
               : "Now"}
           </span>
           <span className="block text-sm text-text-tertiary">
-            {zoneName} time
+            {approximate ? `≈ ${zoneName} time` : `${zoneName} time`}
           </span>
         </p>
         <button
@@ -131,38 +184,21 @@ export function MapTimeline({
 
       {/* Tick row under the track. 24 columns = the 24 gaps between the 25
           stops (TIMELINE_STEPS, pinned by a test); px-3 is half the 24px
-          thumb, so a tick at a column edge sits under the thumb's centre. */}
+          thumb, so a tick at a column edge sits under the thumb's centre.
+          Column i draws stop i at its left edge; the last column also draws
+          the final stop at its right edge. */}
       <div
         aria-hidden="true"
         className="-mt-2 grid h-8 grid-cols-[repeat(24,minmax(0,1fr))] px-3 text-sm text-text-tertiary"
       >
-        {Array.from({ length: last }, (_, i) => {
-          const stop = stops?.[i];
-          const isNow = i === 0;
-          const marked = isNow || stop?.dayStart;
-          return (
-            <span key={i} className="relative">
-              {marked && (
-                <>
-                  <span
-                    className={cn(
-                      "absolute left-0 top-0 h-2 w-0.5 -translate-x-1/2 rounded-full",
-                      isNow ? "bg-primary" : "bg-text-tertiary/50",
-                    )}
-                  />
-                  <span
-                    className={cn(
-                      "absolute left-0 top-2 whitespace-nowrap",
-                      isNow ? "font-semibold text-primary" : "-translate-x-1/2",
-                    )}
-                  >
-                    {isNow ? "Now" : stop?.day}
-                  </span>
-                </>
-              )}
-            </span>
-          );
-        })}
+        {Array.from({ length: last }, (_, i) => (
+          <span key={i} className="relative">
+            <Tick stop={stops?.[i]} index={i} edge="left" />
+            {i === last - 1 && (
+              <Tick stop={stops?.[last]} index={last} edge="right" />
+            )}
+          </span>
+        ))}
       </div>
     </div>
   );
