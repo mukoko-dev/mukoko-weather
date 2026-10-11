@@ -63,12 +63,13 @@ follow-up chat, and AI explore search remain live.
 
 This repo holds three deployables, not one:
 
-| Path               | What it is                                                                                                                                                                                                                                      |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/` + `api/py/` | **The app.** Next.js 16 App Router front end; Python FastAPI backend as Vercel serverless functions under `/api/py/*`. This is what ships to `weather.mukoko.com`.                                                                              |
-| `station-console/` | **Mukoko Station Console** — a second, separate Next.js app (dev port 3001) for community weather-station operators to register stations and review ingest. Added in #120; not yet on its own public domain.                                    |
-| `scripts/`         | Build helpers. `copy-maplibre-worker.mjs` runs before every `build`/`dev` (npm `prebuild`/`predev`) and copies MapLibre v6's web worker into `public/vendor/maplibre-gl/<version>/`; without it every map renders blank.                        |
-| `worker/`          | **Legacy.** A Cloudflare Worker (`nyuchi-weather-api`) from an earlier architecture. Its `wrangler.toml` still carries `REPLACE_WITH_KV_NAMESPACE_ID` placeholders and it has not been touched since March 2026. Nothing deploys from it today. |
+| Path                | What it is                                                                                                                                                                                                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/` + `api/py/`  | **The app.** Next.js 16 App Router front end; Python FastAPI backend as Vercel serverless functions under `/api/py/*`. This is what ships to `weather.mukoko.com`.                                                                                                                   |
+| `station-console/`  | **Mukoko Station Console** — a second, separate Next.js app (dev port 3001) for community weather-station operators to register stations and review ingest. Added in #120; not yet on its own public domain.                                                                         |
+| `scripts/`          | Build helpers. `copy-maplibre-worker.mjs` runs before every `build`/`dev` (npm `prebuild`/`predev`) and copies MapLibre v6's web worker into `public/vendor/maplibre-gl/<version>/`; without it every map renders blank.                                                             |
+| `infra/open-meteo/` | **Not deployed yet.** Railway service definitions for a self-hosted Open-Meteo (EU West, Amsterdam): the unmodified upstream image with a sync loop limited to our models and variables, plus a Caddy gateway that checks a header key. Runbook, sizing and cost in its `README.md`. |
+| `worker/`           | **Legacy.** A Cloudflare Worker (`nyuchi-weather-api`) from an earlier architecture. Its `wrangler.toml` still carries `REPLACE_WITH_KV_NAMESPACE_ID` placeholders and it has not been touched since March 2026. Nothing deploys from it today.                                      |
 
 ## Stack
 
@@ -117,6 +118,9 @@ locations.
 | `WEATHER_SERVICE_API_KEY`         |    No    | Server-only. The service key `mukoko-weather-internal` checks. Vercel holds no Cloudflare AI token; the model is set by the AI Worker                                                                    |
 | `DB_INIT_SECRET`                  |    No    | Protects `/api/db-init` in production (`x-init-secret` header)                                                                                                                                           |
 | `INTERNAL_API_BASE_URL`           |    No    | Base URL for server-to-server SSR calls into `/api/py/*`. Overrides the default: the production domain in production, the protected deployment URL plus the automation bypass header on previews         |
+| `OPEN_METEO_BASE_URL`             |    No    | Server-only. Origin of a self-hosted Open-Meteo (`infra/open-meteo/`); `/v1/forecast` is appended. Unset = the public API. `https` only (plain `http` for localhost)                                     |
+| `OPEN_METEO_AQ_BASE_URL`          |    No    | Server-only. Origin of the self-hosted air-quality (CAMS) API; `/v1/air-quality` is appended. Unset = the public API. Set apart from the forecast so the two can move separately                         |
+| `OPEN_METEO_API_KEY`              |    No    | Server-only secret. Gateway key, sent in the `X-Mukoko-OM-Key` header to the self-hosted hosts above only, never to an `open-meteo.com` host and never in a URL                                          |
 
 ## Architecture
 
@@ -131,7 +135,16 @@ public file or static route, such as a deleted `/favicon-48.png`, is rewritten
 which returns a plain 404. Without it the request would fall through to the
 `[location]` page and get a 200 "Location not found".
 
+**Unknown slugs get a real, server-rendered 404.** The proxy
+(`src/proxy.ts`, gate in `src/lib/location-gate.ts`) looks up any slug that
+is not a shipped seed slug or a smart-slug spot and rewrites an unknown one to
+an internal path no route matches, so Next.js renders the not-found page on
+the server with a 404 status. A failed or slow lookup lets the request
+through, and a wrong-case URL such as `/Harare` gets a 308 to `/harare`.
+
 Climate normals (1991–2020, ERA5 via Open-Meteo) are served at `GET /api/py/normals`, with one cached table per 0.25° grid cell in `weather.climate_normals`.
+**Map overlays** — tile layers from Tomorrow.io (`/api/py/map-tiles`) and NASA GIBS (satellite true colour and IMERG rain, keyless, animated); `GET /api/py/model-grid?lat&lon&model` serves one global model's 72 h temperature / rain / wind grid for the per-model map layers (behind the `model_map_layers` flag). Credits for every layer come from `src/lib/map-sources.ts`.
+
 **Air quality map** — `GET /api/py/airquality/grid` returns current US AQI on a 7×7 grid (±40 km) from one batched Open-Meteo request, cached 30 min; the `AirQualityMapCard` paints it over a non-interactive MapLibre map.
 `GET /api/py/enso` returns the latest El Niño / La Niña phase from NOAA CPC's Oceanic Niño Index (12 h in-memory cache; `available: false` when NOAA is unreachable).
 **Agriculture** — `GET /api/py/agriculture?lat&lon[&location][&country][&crops]` (public) returns deterministic farm-weather data from one batched Open-Meteo request, cached 1 h per 0.05° grid cell: spray, plant, harvest and irrigate windows (`go` / `wait` / `avoid`); rain; soil moisture and soil temperature by depth; ET₀ against rain; GDD; frost and heat risk; and a 46-day daily series. Season and crop calendars come from the shared location profile. `POST /api/ai/agriculture` (signed in; proxied to `/api/py/ai/agriculture`) has the model explain those numbers: one line for the location-page card, or a longer briefing for `/[location]/agriculture`. Never fails: `available: false` with a `reason`. The `/[location]/agriculture` page (public; in the sitemap for farming locations) adds 16-day charts (rain vs ET₀, water balance, soil moisture and soil temperature by depth, spray hours, GDD), the crop calendar, crop-aware advice, the past 30 days against normals, and ENSO.

@@ -14,19 +14,22 @@ const panelSource = readFileSync(
 );
 
 describe("WeatherLayerPanel — labelled chips", () => {
-  it("renders chip labels from MAP_CHIPS, not icons", () => {
-    expect(panelSource).toContain("MAP_CHIPS.map");
+  it("renders chip labels from MAP_CHIPS (or the chips it is given), not icons", () => {
+    expect(panelSource).toContain("chips = MAP_CHIPS");
+    expect(panelSource).toContain("chips.map");
     expect(panelSource).toContain("{chip.label}");
     expect(panelSource).not.toContain("lucide-react");
   });
 
-  it("offers exactly the five chips the brief asks for, in order", () => {
+  it("offers the five chips the brief asks for, then the NASA satellite layers, in order", () => {
     expect(MAP_CHIPS.map((c) => c.label)).toEqual([
       "Air quality",
       "Rain",
       "Temperature",
       "Wind",
       "Cloud",
+      "Satellite",
+      "Rain (satellite)",
     ]);
     expect(MAP_CHIPS[0].id).toBe(AIR_QUALITY_LAYER_ID);
   });
@@ -50,5 +53,21 @@ describe("WeatherLayerPanel — touch targets", () => {
     expect(() =>
       readFileSync(resolve(__dirname, "MapLayerSwitcher.tsx"), "utf-8"),
     ).toThrow();
+  });
+});
+
+describe("WeatherLayerPanel — model picker", () => {
+  it("renders a labelled model row only when models are passed", () => {
+    expect(panelSource).toContain(
+      "if (!models || models.length === 0 || !onModelChange) return chipRow;",
+    );
+    expect(panelSource).toContain('aria-label="Forecast model"');
+    expect(panelSource).toContain("{model.label}");
+  });
+
+  it("reuses the chip control class for model chips (no restyle)", () => {
+    const quail =
+      panelSource.match(/"quail shrink-0 px-4 text-sm font-medium"/g) ?? [];
+    expect(quail).toHaveLength(2);
   });
 });
