@@ -69,6 +69,18 @@ class TestKoppen:
         assert pk.derive_koppen(monthly, lat) == code
         assert code in pk.KOPPEN_LABELS
 
+    def test_the_dry_summer_exception_is_only_the_equatorial_band(self):
+        assert pk.derive_koppen(NAIROBI, -1.29) == "Cfb"
+        # The same normals outside the band (at 15 S) do satisfy the literal
+        # dry-summer test.
+        assert pk.derive_koppen(NAIROBI, -15.0) == "Csb"
+        assert pk.EQUATORIAL_BAND_DEG == 10.0
+
+    def test_mediterranean_is_still_produced(self):
+        rome = _monthly([7.5, 8.5, 11, 14, 18, 22, 25, 25, 21.5, 17, 12, 8.5],
+                        [66, 65, 58, 67, 44, 25, 15, 24, 65, 99, 120, 80])
+        assert pk.derive_koppen(rome, 41.9) == "Csa"
+
     def test_needs_twelve_complete_months(self):
         assert pk.derive_koppen(LONDON[:11], 51.5) is None
         broken = [dict(m) for m in LONDON]
@@ -187,6 +199,29 @@ class TestSoil:
         assert answered is True
         assert soil.wrbClass == "Cambisols" and soil.wrbProbability is None
         assert soil.texture == "loam"
+
+    def test_a_payload_that_cannot_be_parsed_retries_tomorrow(self):
+        client = _soil_client(["not", "a", "dict"], {"properties": {"layers": []}})
+        with patch.object(pk, "_get_soil_http", return_value=client):
+            assert pk.fetch_soil_checked(2.0, 2.0) == (None, False)
+        # Not memoised, so the next request asks again.
+        client.get.side_effect = None
+        assert pk._soil_memo == {}
+
+    def test_one_bad_layer_value_keeps_the_class_and_the_other_layers(self):
+        client = _soil_client(
+            {"wrb_class_name": "Cambisols", "wrb_class_probability": [["Cambisols", float("inf")]]},
+            {"properties": {"layers": [
+                {"name": "clay", "unit_measure": {"d_factor": "ten"}, "depths": [{"label": "0-5cm", "values": {"mean": 200}}]},
+                _layer("sand", [400, 400, 400]), _layer("silt", [400, 400, 400]),
+                {"name": "bad", "depths": [{"label": "0-5cm", "values": {"mean": "n/a"}}]},
+            ]}},
+        )
+        with patch.object(pk, "_get_soil_http", return_value=client):
+            soil, answered = pk.fetch_soil_checked(3.0, 3.0)
+        assert answered is True and soil.wrbClass == "Cambisols"
+        assert soil.wrbProbability is None  # infinity is not a probability
+        assert soil.clayPct == 20.0  # a string d_factor falls back to 10
 
     @pytest.mark.parametrize("class_payload,props_payload", [
         ({"wrb_class_name": "X", "wrb_class_probability": [["X", "high"]]}, {"properties": {"layers": []}}),
@@ -424,6 +459,26 @@ class TestMergePrevious:
         # The retry date is still tomorrow, so the rebuild is tried again soon.
         assert merged["refreshAfter"]["soil"] == dt.datetime(2026, 10, 12, tzinfo=dt.timezone.utc)
 
+    def test_failed_normals_keep_the_groups_derived_from_them(self):
+        previous = _stored_doc()
+        previous["seasons"] = pk.derived_seasons(-17.8, HARARE).model_dump()
+        previous["agriculture"] = {"calendarRef": None, "crops": [], "grazing": {"dryMonths": [5], "coldMonths": [], "note": "x", "method": "derived"},
+                                   "derived": {"months": [1, 2, 3, 11, 12], "basis": "x", "method": "derived"}}
+        previous["elevationMeters"] = 1478.0
+        previous["provenance"] += [{"field": "elevationMeters", "source": "cell", "method": "modelled"},
+                                   {"field": "seasons", "source": "derived", "method": "derived"},
+                                   {"field": "agriculture.derived,agriculture.grazing", "source": "d", "method": "derived"},
+                                   {"field": "timeZone", "source": "tz", "method": "observed"}]
+        london = {**PLACE, "id": "pg-x", "country": "GB", "elevation": None}
+        new, _, _ = _build(place=london, normals=None, seasons=[])  # no calendar for GB, normals failed
+        assert new["seasons"]["source"] == "derived" and new["agriculture"] is None
+        merged = pk.merge_previous(new, previous)
+        assert merged["seasons"] == previous["seasons"]
+        assert merged["agriculture"]["derived"]["months"] == [1, 2, 3, 11, 12]
+        assert merged["elevationMeters"] == 1478.0
+        fields = {p["field"] for p in merged["provenance"]}
+        assert {"elevationMeters", "seasons", "timeZone"} <= fields  # kept values keep their provenance
+
     def test_a_fresh_value_wins_and_no_previous_is_fine(self):
         previous = _stored_doc()
         new, _, _ = _build(soil=pk.Soil(wrbClass="Acrisols"))
@@ -446,6 +501,9 @@ class TestMergePrevious:
         assert store.call_args.args[0]["soil"] == {"wrbClass": "Lixisols"}
 
 
+_REAL_WARM_ENSO = pk._warm_enso_in_background  # captured at import, before conftest's per-test stub
+
+
 class TestEnsoWarm:
     @pytest.fixture(autouse=True)
     def _reset(self):
@@ -454,13 +512,21 @@ class TestEnsoWarm:
         pk._enso_warm.update(at=0.0, running=False)
 
     def test_a_cold_cache_starts_one_background_warm_and_returns_nothing(self, monkeypatch):
-        monkeypatch.undo()  # the autouse conftest stub replaces the function under test
+        # The autouse conftest stub replaces the function under test: put back
+        # only that one, keeping every other isolation stub.
+        monkeypatch.setattr(pk, "_warm_enso_in_background", _REAL_WARM_ENSO)
         with patch("py._enso._cached", return_value=None), \
              patch.object(pk.threading, "Thread") as thread:
             assert pk._enso_now() is None
             assert pk._enso_now() is None  # within the interval: no second thread
         thread.assert_called_once()
         thread.return_value.start.assert_called_once()
+
+    def test_a_failed_thread_start_does_not_disable_warming(self, monkeypatch):
+        monkeypatch.setattr(pk, "_warm_enso_in_background", _REAL_WARM_ENSO)
+        with patch.object(pk.threading, "Thread", side_effect=RuntimeError("can't start new thread")):
+            pk._warm_enso_in_background()
+        assert pk._enso_warm["running"] is False
 
     def test_a_warm_cache_is_used_and_starts_nothing(self):
         enso = MagicMock(available=True, phase="La Niña", strength="weak", oni=-0.7, season="JAS", year=2026)
@@ -577,6 +643,21 @@ class TestRead:
         build.assert_not_called()
         assert profile.stored
 
+    def test_schedule_build_false_never_starts_a_background_build(self):
+        doc, _, _ = _build(allow_fetch=False)
+        with patch.object(pk, "resolve_place", return_value=PLACE), \
+             patch.object(pk, "read_knowledge", return_value=None), \
+             patch.object(pk, "build_knowledge", return_value=doc), \
+             patch.object(pk, "schedule_knowledge_build") as sched:
+            pk.get_location_profile(slug="harare", allow_build=False, schedule_build=False, when=WHEN)
+        sched.assert_not_called()
+        stale = _stored_doc(refreshAfter={"soil": WHEN - dt.timedelta(days=1)})
+        with patch.object(pk, "resolve_place", return_value=PLACE), \
+             patch.object(pk, "read_knowledge", return_value=stale), \
+             patch.object(pk, "schedule_knowledge_build") as sched:
+            pk.get_location_profile(slug="harare", allow_build=False, schedule_build=False, when=WHEN)
+        sched.assert_not_called()
+
     def test_missing_doc_for_ai_is_cache_only(self):
         doc, _, _ = _build(allow_fetch=False)
         with patch.object(pk, "resolve_place", return_value=PLACE), \
@@ -668,6 +749,46 @@ class TestCountryFromSlug:
              patch("py._places_geo.get_country_id", return_value="th-id"):
             assert pk.resolve_place(slug="bangkok-th", lat=13.75, lon=100.5)["country"] == "TH"
             assert pk.resolve_place(slug="bangkok-th", lat=13.75, lon=100.5, country="XX")["country"] == "XX"
+
+
+class TestCountryHintIsNeverStored:
+    def test_hints_are_marked(self):
+        with patch("py._places_resolver.find_location", return_value=None), \
+             patch("py._places_resolver.find_nearest_location", return_value=None), \
+             patch("py._places_geo.get_country_id", return_value="th-id"):
+            assert pk.resolve_place(slug="bangkok-th", lat=13.75, lon=100.5)["country_hint"] is True
+            assert pk.resolve_place(slug=None, lat=13.75, lon=100.5, country="TH")["country_hint"] is True
+
+    def test_a_country_from_the_place_record_is_not_a_hint(self):
+        loc = {"_id": "pg-1", "slug": "harare", "name": "Harare", "lat": -17.8, "lon": 31.0, "country": "ZW",
+               "province": "", "elevation": 1490}
+        with patch("py._places_resolver.find_location", return_value=loc):
+            place = pk.resolve_place(slug="harare", lat=None, lon=None, country="US")
+        assert place["country"] == "ZW" and "country_hint" not in place  # the record wins, the hint is ignored
+
+    def test_a_hinted_build_is_computed_not_stored(self):
+        hinted = {**PLACE, "country_hint": True}
+        with patch("py._places_geo._acquire_create_lock", return_value=True), \
+             patch("py._places_geo._release_create_lock"), \
+             patch.object(pk, "read_knowledge", return_value=None), \
+             patch.object(pk, "get_monthly_normals", return_value=NORMALS), \
+             patch.object(pk, "fetch_soil_checked", return_value=(None, False)), \
+             patch.object(pk, "get_db", return_value=_seasons_db(ZW_SEASONS)), \
+             patch.object(pk, "store_knowledge", return_value=True) as store:
+            doc = pk.build_and_store(hinted)
+        store.assert_not_called()
+        assert doc["_stored"] is False and doc["addressCountry"] == "ZW"
+        # The same place with a record-derived country is stored.
+        with patch("py._places_geo._acquire_create_lock", return_value=True), \
+             patch("py._places_geo._release_create_lock"), \
+             patch.object(pk, "read_knowledge", return_value=None), \
+             patch.object(pk, "get_monthly_normals", return_value=NORMALS), \
+             patch.object(pk, "fetch_soil_checked", return_value=(None, False)), \
+             patch.object(pk, "get_db", return_value=_seasons_db(ZW_SEASONS)), \
+             patch.object(pk, "store_knowledge", return_value=True) as store:
+            doc = pk.build_and_store(PLACE)
+        store.assert_called_once()
+        assert doc["_stored"] is True
 
 
 class TestResolvePlace:
@@ -779,15 +900,27 @@ class TestPromptBlock:
 
 @pytest.mark.asyncio
 class TestEndpoint:
-    async def test_is_rate_limited_per_ip(self):
+    async def test_a_build_is_rate_limited_per_ip(self):
         req = MagicMock()
+        unstored = _profile()
+        unstored.stored = False
         with patch.object(pk, "enforce_rate_limit", side_effect=HTTPException(status_code=429, detail="slow down")) as limit, \
-             patch.object(pk, "get_location_profile") as glp:
+             patch.object(pk, "get_location_profile", return_value=unstored) as glp:
             with pytest.raises(HTTPException) as exc:
                 await pk.location_profile(slug="harare", lat=None, lon=None, country=None, request=req)
         assert exc.value.status_code == 429
         limit.assert_called_once_with(req, "place-profile", 120, 3600, require_ip=False)
-        glp.assert_not_called()  # nothing is built for a limited caller
+        assert glp.call_count == 1  # only the cheap look ran; nothing was built for a limited caller
+        assert glp.call_args.kwargs["allow_build"] is False and glp.call_args.kwargs["schedule_build"] is False
+
+    async def test_a_stored_profile_is_a_cheap_read_and_is_not_counted(self):
+        stored = _profile()
+        stored.stored = True
+        with patch.object(pk, "enforce_rate_limit") as limit, \
+             patch.object(pk, "get_location_profile", return_value=stored) as glp:
+            res = await pk.location_profile(slug="harare", lat=None, lon=None, country=None, request=MagicMock())
+        limit.assert_not_called()
+        assert glp.call_count == 1 and res.stored is True
 
     async def test_needs_a_slug_or_coordinates(self):
         with pytest.raises(HTTPException) as exc:
@@ -808,9 +941,12 @@ class TestEndpoint:
 
     async def test_returns_the_profile(self):
         profile = _profile()
+        profile.stored = False
         with patch.object(pk, "get_location_profile", return_value=profile) as glp, \
+             patch.object(pk, "enforce_rate_limit") as limit, \
              patch("py._enso.get_enso", side_effect=RuntimeError("offline")):
             res = await pk.location_profile(slug="harare", lat=None, lon=None, country="zw", request=MagicMock())
         assert res.placeId == "pg-harare"
         assert glp.call_args.kwargs["country"] == "ZW"
-        assert glp.call_args.kwargs["allow_build"] is True
+        limit.assert_called_once()  # nothing stored: this request would build
+        assert glp.call_count == 2 and glp.call_args.kwargs["allow_build"] is True

@@ -288,12 +288,21 @@ class LocationProfile(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+#: Within this many degrees of the equator "summer" and "winter" half-years
+#: are not meaningful, so the dry-summer test is skipped.
+EQUATORIAL_BAND_DEG = 10.0
+
+
 def derive_koppen(monthly: Optional[list[dict]], lat: float) -> Optional[str]:
     """Köppen–Geiger class from twelve monthly normals, with the definitions
     of Beck et al. (2018, Table 1; after Peel et al. 2007): 0 °C between C
     and D, and summer = Apr–Sep in the north, Oct–Mar in the south. When a
     climate meets both the dry-summer and dry-winter tests, the drier half
-    wins. ``None`` unless every month has a mean temperature and rainfall."""
+    wins. One deliberate exception: within ``EQUATORIAL_BAND_DEG`` of the
+    equator the dry-summer test is not applied, because the north/south
+    half-year split is arbitrary there (Nairobi, bimodal rains, would read
+    as Mediterranean). ``None`` unless every month has a mean temperature and
+    rainfall."""
     if not monthly or len(monthly) != 12:
         return None
     rows = sorted(monthly, key=lambda r: r["month"])
@@ -333,11 +342,10 @@ def derive_koppen(monthly: Optional[list[dict]], lat: float) -> Optional[str]:
         return "Aw"
 
     dry_summer = p_sdry < 40 and p_sdry < p_wwet / 3
-    # Mediterranean (Cs, Ds) climates do not occur inside the tropics, and
-    # near the equator the northern/southern half-year split is arbitrary: a
+    # Near the equator the northern/southern half-year split is arbitrary: a
     # place like Nairobi (bimodal rains, Jan–Feb under 40 mm in ERA5) would
-    # otherwise read as dry-summer. There, a dry-summer test is not applied.
-    if abs(lat) < ag.TROPICS_LAT:
+    # otherwise read as dry-summer. There, the dry-summer test is not applied.
+    if abs(lat) < EQUATORIAL_BAND_DEG:
         dry_summer = False
     dry_winter = p_wdry < p_swet / 10
     if dry_summer and dry_winter:
@@ -642,12 +650,12 @@ def _fetch_soil_uncached(lat: float, lon: float) -> tuple[Optional[Soil], bool]:
     soilgrids_breaker.record_success()
     try:
         return _parse_soil(c, p), True
-    except (TypeError, ValueError, KeyError, AttributeError, IndexError) as exc:
-        # A payload shape we do not understand is a no-data answer, never a
-        # failed profile (SoilGrids returned a null class probability for
-        # London, which used to raise here).
+    except (TypeError, ValueError, KeyError, AttributeError, IndexError, OverflowError) as exc:
+        # A payload we cannot parse is an anomaly, not an answer: never a
+        # failed profile (a null class probability for London used to raise
+        # here), and retried tomorrow rather than waiting a year.
         logger.info("SoilGrids payload not understood: %s", type(exc).__name__)
-        return None, True
+        return None, False
 
 
 def _number(value) -> Optional[float]:
@@ -660,14 +668,17 @@ def _parse_soil(c: dict, p: dict) -> Optional[Soil]:
     probs = c.get("wrb_class_probability") or []
     if probs and isinstance(probs[0], list) and len(probs[0]) > 1:
         probability = _number(probs[0][1])
-        soil.wrbProbability = int(probability) if probability is not None else None
+        if probability is not None and math.isfinite(probability):
+            soil.wrbProbability = int(probability)
     fractions: dict[str, float] = {}
     weights = {"0-5cm": 5, "5-15cm": 10, "15-30cm": 15}
     for layer in (p.get("properties") or {}).get("layers") or []:
-        factor = (layer.get("unit_measure") or {}).get("d_factor") or 10
+        # A non-numeric factor or value is skipped, so one bad layer never
+        # discards a valid class or the other layers.
+        factor = _number((layer.get("unit_measure") or {}).get("d_factor")) or 10.0
         total = wsum = 0.0
         for depth in layer.get("depths") or []:
-            value = (depth.get("values") or {}).get("mean")
+            value = _number((depth.get("values") or {}).get("mean"))
             w = weights.get(depth.get("label"))
             if value is not None and w:
                 total += value / factor * w
@@ -881,7 +892,7 @@ def build_knowledge(place: dict, *, allow_fetch: bool = True,
             fetch_soil_checked(lat, lon) if allow_fetch and place.get("id") else (None, False)
         )
     except Exception as exc:  # noqa: BLE001 — soil is best effort, never the whole profile
-        logger.warning("soil lookup failed: %s", type(exc).__name__)
+        logger.warning("soil lookup failed: %s", type(exc).__name__, exc_info=True)
         soil, soil_answered = None, False
     if soil:
         provenance.append(_prov("soil", "ISRIC SoilGrids 2.0", "modelled", now, licence="CC-BY-4.0",
@@ -924,12 +935,33 @@ def merge_previous(doc: dict, previous: Optional[dict]) -> dict:
     if not previous:
         return doc
     kept: list[str] = []
+    # Decided before the loop below restores ``climate`` itself.
+    normals_failed = doc.get("climate") is None and previous.get("climate") is not None
     for group, prefix in (("soil", "soil"), ("climate", "climate")):
         if doc.get(group) is None and previous.get(group) is not None:
             doc[group] = previous[group]
             kept.append(prefix)
     if doc.get("timeZone") is None and previous.get("timeZone"):
         doc["timeZone"] = previous["timeZone"]
+        kept.append("timeZone")
+    if normals_failed:
+        # The normals failed, and the groups derived from them are degraded:
+        # keep the stored ones rather than a hemisphere default and no crop
+        # window. (A published calendar needs no normals, so only a derived
+        # one is replaced.)
+        if (doc.get("seasons") or {}).get("source") == "derived" and previous.get("seasons"):
+            doc["seasons"] = previous["seasons"]
+            kept.append("seasons")
+        new_ag, old_ag = doc.get("agriculture") or {}, previous.get("agriculture") or {}
+        if old_ag and not new_ag.get("derived") and old_ag.get("derived"):
+            doc["agriculture"] = {**new_ag, "derived": old_ag["derived"],
+                                  "grazing": new_ag.get("grazing") or old_ag.get("grazing"),
+                                  "crops": new_ag.get("crops") or old_ag.get("crops") or [],
+                                  "calendarRef": new_ag.get("calendarRef") or old_ag.get("calendarRef")}
+            kept.append("agriculture")
+        if doc.get("elevationMeters") is None and previous.get("elevationMeters") is not None:
+            doc["elevationMeters"] = previous["elevationMeters"]
+            kept.append("elevationMeters")
     if kept:
         have = {p.get("field") for p in doc["provenance"]}
         doc["provenance"] = doc["provenance"] + [
@@ -964,7 +996,8 @@ def build_and_store(place: dict) -> Optional[dict]:
     try:
         doc = merge_previous(build_knowledge(place, allow_fetch=True),
                              read_knowledge(place_id) if place_id else None)
-        doc["_stored"] = bool(place_id) and store_knowledge(_storable(doc))
+        # A profile built on a client-supplied country hint is computed, not stored.
+        doc["_stored"] = bool(place_id) and not place.get("country_hint") and store_knowledge(_storable(doc))
         return doc
     finally:
         if lock_id:
@@ -1036,6 +1069,19 @@ def country_from_slug(slug: Optional[str]) -> Optional[str]:
     return iso if known or iso in ag.GEOGLAM_COUNTRY_ISO.values() else None
 
 
+def _apply_country_hint(place: dict, country: Optional[str], slug: Optional[str]) -> None:
+    """Fill a missing country from the request's ``country`` or the slug's
+    ``-cc`` suffix. Such a value is a HINT: it is good enough to compute a
+    profile for this response, but it is client-supplied, so a profile built
+    on it is never stored (``country_hint``)."""
+    if place.get("country"):
+        return
+    hint = country or country_from_slug(slug)
+    if hint:
+        place["country"] = hint
+        place["country_hint"] = True
+
+
 def resolve_place(*, slug: Optional[str], lat: Optional[float], lon: Optional[float],
                   country: Optional[str] = None, admin1: Optional[str] = None,
                   name: Optional[str] = None) -> Optional[dict]:
@@ -1050,7 +1096,7 @@ def resolve_place(*, slug: Optional[str], lat: Optional[float], lon: Optional[fl
             loc = None
         if loc and loc.get("_id"):
             place = _place_from_location(loc, slug)
-            place["country"] = place["country"] or country or country_from_slug(slug)
+            _apply_country_hint(place, country, slug)
             place["admin1"] = place["admin1"] or admin1
             return place
     if lat is None or lon is None:
@@ -1061,10 +1107,12 @@ def resolve_place(*, slug: Optional[str], lat: Optional[float], lon: Optional[fl
         near = None
     if near and near.get("_id"):
         place = _place_from_location(near)
-        place["country"] = place["country"] or country or country_from_slug(slug)
+        _apply_country_hint(place, country, slug)
         return place
-    return {"id": None, "collection": None, "slug": slug, "name": name, "lat": lat, "lon": lon,
-            "country": country or country_from_slug(slug), "admin1": admin1, "elevation": None}
+    spot = {"id": None, "collection": None, "slug": slug, "name": name, "lat": lat, "lon": lon,
+            "country": None, "admin1": admin1, "elevation": None}
+    _apply_country_hint(spot, country, slug)
+    return spot
 
 
 def _iso(value: Any) -> Optional[str]:
@@ -1100,7 +1148,11 @@ def _warm_enso_in_background() -> None:
             with _enso_warm_lock:
                 _enso_warm["running"] = False
 
-    threading.Thread(target=_run, daemon=True).start()
+    try:
+        threading.Thread(target=_run, daemon=True).start()
+    except Exception:  # noqa: BLE001 — e.g. a thread limit: allow a later retry
+        with _enso_warm_lock:
+            _enso_warm["running"] = False
 
 
 def _enso_now() -> Optional[EnsoNow]:
@@ -1252,6 +1304,7 @@ def get_location_profile(
     admin1: Optional[str] = None,
     name: Optional[str] = None,
     allow_build: bool = False,
+    schedule_build: bool = True,
     when: Optional[_dt.datetime] = None,
 ) -> Optional[LocationProfile]:
     """The place's knowledge plus its current context, or ``None`` when the
@@ -1268,6 +1321,10 @@ def get_location_profile(
     * A bare coordinate is never stored; it reuses a neighbour's climate and
       soil (same 5-character geohash cell) when one is stored.
 
+    ``schedule_build=False`` also suppresses that background build (the
+    profile endpoint uses it for its cheap first look, so a caller cannot
+    start builds before the rate limit applies).
+
     Never raises."""
     when = when or _dt.datetime.now(_dt.timezone.utc)
     try:
@@ -1279,7 +1336,8 @@ def get_location_profile(
         if stored_doc and not is_stale(stored_doc, when):
             profile = _to_profile(stored_doc, place, stored=True)
         elif stored_doc and not allow_build:
-            schedule_knowledge_build(place)
+            if schedule_build:
+                schedule_knowledge_build(place)
             profile = _to_profile(stored_doc, place, stored=True)
         else:
             doc = build_and_store(place) if allow_build else None
@@ -1291,7 +1349,7 @@ def get_location_profile(
                 return apply_consumer_view(profile)
             if doc is None:
                 doc = build_knowledge(place, allow_fetch=False, now=when)
-                if not allow_build:
+                if not allow_build and schedule_build:
                     schedule_knowledge_build(place)
             if not place.get("id") and not doc.get("climate"):
                 neighbour = _neighbour_knowledge(doc["regionCell"])
@@ -1480,9 +1538,10 @@ def with_profile(block: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-#: The endpoint can start a build (a 30-year archive request and soil calls),
-#: so it is rate-limited like the other upstream-heavy routes. Reads of a
-#: stored profile are cheap and the client caches for 30 minutes.
+#: A request that can start a build (a 30-year archive request and soil
+#: calls) is rate-limited like the other upstream-heavy routes. Reads of a
+#: stored profile are cheap, are not counted, and the client caches for 30
+#: minutes.
 PROFILE_RATE_LIMIT = 120
 PROFILE_RATE_WINDOW_S = 3600
 
@@ -1508,12 +1567,23 @@ async def location_profile(
         raise HTTPException(status_code=400, detail="Invalid slug")
     if not slug and (lat is None or lon is None):
         raise HTTPException(status_code=400, detail="Provide slug, or lat and lon")
-    enforce_rate_limit(request, "place-profile", PROFILE_RATE_LIMIT, PROFILE_RATE_WINDOW_S, require_ip=False)
     await _warm_enso()
+    iso = country.upper() if country else None
+    # A stored profile is a cheap read and is not counted. Only a request that
+    # would start a build (nothing stored yet) is rate-limited. The limiter is
+    # a blocking database call, so it runs off the event loop.
     profile = await asyncio.to_thread(
-        get_location_profile, slug=slug, lat=lat, lon=lon,
-        country=country.upper() if country else None, allow_build=True,
+        get_location_profile, slug=slug, lat=lat, lon=lon, country=iso, allow_build=False,
+        schedule_build=False,
     )
+    if profile is None or not profile.stored:
+        await asyncio.to_thread(
+            enforce_rate_limit, request, "place-profile", PROFILE_RATE_LIMIT, PROFILE_RATE_WINDOW_S,
+            require_ip=False,
+        )
+        profile = await asyncio.to_thread(
+            get_location_profile, slug=slug, lat=lat, lon=lon, country=iso, allow_build=True,
+        )
     if profile is None:
         raise HTTPException(status_code=404, detail="Location not found")
     return profile
