@@ -57,7 +57,10 @@ export function rasterTileUrl(
   y: number,
   key: string,
 ): string {
-  return `https://api.maptiler.com/maps/${style}/${z}/${x}/${y}.png?key=${encodeURIComponent(key)}`;
+  // Trimmed: the deployed NEXT_PUBLIC_MAPTILER_API_KEY carries a trailing
+  // newline. MapLibre's style URL survives it (the URL parser drops a raw
+  // newline), but encoded as %0A it makes MapTiler answer "Invalid key".
+  return `https://api.maptiler.com/maps/${style}/${z}/${x}/${y}.png?key=${encodeURIComponent(key.trim())}`;
 }
 
 /**

@@ -91,6 +91,11 @@ describe("staticMapTiles", () => {
     expect(rows.every((r) => r >= 0 && r < 16)).toBe(true);
   });
 
+  it("drops whitespace around the key (the deployed value ends in a newline)", () => {
+    expect(rasterTileUrl("s", 1, 0, 0, "abc\n")).toMatch(/key=abc$/);
+    expect(rasterTileUrl("s", 1, 0, 0, " abc ")).toMatch(/key=abc$/);
+  });
+
   it("encodes the key", () => {
     expect(rasterTileUrl("s", 1, 0, 0, "a b")).toContain("key=a%20b");
   });
