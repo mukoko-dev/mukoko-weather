@@ -27,6 +27,7 @@ import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";
 import { HourlyScrollCards } from "@/components/weather/HourlyScrollCards";
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { LazySection } from "@/components/weather/LazySection";
+import { PlaceKnowledgeRows } from "@/components/weather/PlaceKnowledgeRows";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { CommunityLane } from "@/components/weather/CommunityLane";
 import { CommunityLaneSkeleton } from "@/components/weather/CommunityLaneSkeleton";
@@ -804,6 +805,15 @@ export function WeatherDashboard({
                         value={`${season.localName} (${season.name})`}
                       />
                     </dl>
+                    <ChartErrorBoundary name="place knowledge">
+                      <PlaceKnowledgeRows
+                        key={location.slug}
+                        slug={location.slug}
+                        lat={location.lat}
+                        lon={location.lon}
+                        labelledBy={`about-${location.slug}`}
+                      />
+                    </ChartErrorBoundary>
                   </div>
                 </section>
               </LazySection>
