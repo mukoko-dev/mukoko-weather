@@ -40,8 +40,10 @@ const FALLBACK: ShownNotification = {
 
 /** Same-origin path only: a push must never open another site. */
 export function safeTarget(url: unknown): string {
-  if (typeof url !== "string" || url.length === 0 || url.length > 300) return "/";
-  if (!url.startsWith("/") || url.startsWith("//") || url.includes("\\")) return "/";
+  if (typeof url !== "string" || url.length === 0 || url.length > 300)
+    return "/";
+  if (!url.startsWith("/") || url.startsWith("//") || url.includes("\\"))
+    return "/";
   return url;
 }
 
@@ -59,7 +61,8 @@ export function notificationFor(raw: unknown): ShownNotification {
   if (typeof raw === "string") {
     try {
       const parsed: unknown = JSON.parse(raw);
-      if (parsed && typeof parsed === "object") data = parsed as Record<string, unknown>;
+      if (parsed && typeof parsed === "object")
+        data = parsed as Record<string, unknown>;
     } catch {
       data = null;
     }
@@ -100,8 +103,12 @@ export function clickAction(
   data: unknown,
   windows: readonly WindowLike[],
   origin: string,
-): { kind: "focus"; window: WindowLike; url: string } | { kind: "open"; url: string } {
-  const target = safeTarget((data as { url?: unknown } | null | undefined)?.url);
+):
+  | { kind: "focus"; window: WindowLike; url: string }
+  | { kind: "open"; url: string } {
+  const target = safeTarget(
+    (data as { url?: unknown } | null | undefined)?.url,
+  );
   const absolute = new URL(target, origin).href;
   const existing = windows.find((w) => w.url.startsWith(origin));
   return existing

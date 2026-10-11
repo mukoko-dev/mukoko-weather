@@ -184,11 +184,17 @@ serwist.addEventListeners();
 // Web push (mukoko-dev/mukoko-weather#289). Glue only: the logic is in
 // src/lib/push/sw-logic.ts so it can move to another service-worker toolchain.
 // Delivery is best effort; a browser requires a visible notification per push.
-import { notificationFor, clickAction, type WindowLike } from "@/lib/push/sw-logic";
+import {
+  notificationFor,
+  clickAction,
+  type WindowLike,
+} from "@/lib/push/sw-logic";
 
 interface PushScope {
   addEventListener(type: string, listener: (event: any) => void): void; // eslint-disable-line @typescript-eslint/no-explicit-any
-  registration: { showNotification(title: string, options: object): Promise<void> };
+  registration: {
+    showNotification(title: string, options: object): Promise<void>;
+  };
   clients: {
     matchAll(o: object): Promise<WindowLike[]>;
     openWindow(url: string): Promise<unknown>;
@@ -211,14 +217,22 @@ pushScope.addEventListener("push", (event) => {
 pushScope.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil(
-    pushScope.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
-      const action = clickAction(event.notification.data, windows, pushScope.location.origin);
-      if (action.kind === "focus") {
-        return action.window.navigate
-          ? action.window.navigate(action.url).then(() => action.window.focus())
-          : action.window.focus();
-      }
-      return pushScope.clients.openWindow(action.url);
-    }),
+    pushScope.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((windows) => {
+        const action = clickAction(
+          event.notification.data,
+          windows,
+          pushScope.location.origin,
+        );
+        if (action.kind === "focus") {
+          return action.window.navigate
+            ? action.window
+                .navigate(action.url)
+                .then(() => action.window.focus())
+            : action.window.focus();
+        }
+        return pushScope.clients.openWindow(action.url);
+      }),
   );
 });

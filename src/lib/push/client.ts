@@ -25,7 +25,8 @@ export interface PushEnv {
 
 export function pushState(env: PushEnv): PushState {
   if (env.isIos && !env.isStandalone) return "needs-install";
-  if (!env.hasServiceWorker || !env.hasPushManager || !env.hasNotification) return "unsupported";
+  if (!env.hasServiceWorker || !env.hasPushManager || !env.hasNotification)
+    return "unsupported";
   if (env.permission === "denied") return "denied";
   if (env.permission === "granted") return "granted";
   return "available";
@@ -34,7 +35,8 @@ export function pushState(env: PushEnv): PushState {
 export function detectEnv(w: Window & typeof globalThis = window): PushEnv {
   const ua = w.navigator.userAgent;
   const isIos =
-    /iPad|iPhone|iPod/.test(ua) || (w.navigator.platform === "MacIntel" && w.navigator.maxTouchPoints > 1);
+    /iPad|iPhone|iPod/.test(ua) ||
+    (w.navigator.platform === "MacIntel" && w.navigator.maxTouchPoints > 1);
   const standalone =
     (w.navigator as Navigator & { standalone?: boolean }).standalone === true ||
     w.matchMedia?.("(display-mode: standalone)").matches === true;
@@ -65,7 +67,10 @@ export interface AlertPreferences {
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
 /** A thin client for the app's push routes (which forward to the Nyuchi API). */
-export function pushApi(base = "/api/push", fetchFn: Fetch = (i, o) => fetch(i, o)) {
+export function pushApi(
+  base = "/api/push",
+  fetchFn: Fetch = (i, o) => fetch(i, o),
+) {
   async function call<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetchFn(`${base}${path}`, {
       credentials: "same-origin",
@@ -80,19 +85,35 @@ export function pushApi(base = "/api/push", fetchFn: Fetch = (i, o) => fetch(i, 
     subscribe: (sub: PushSubscriptionJSON, platform?: string) =>
       call<{ id: string }>("/subscriptions", {
         method: "PUT",
-        body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.keys, platform }),
+        body: JSON.stringify({
+          endpoint: sub.endpoint,
+          keys: sub.keys,
+          platform,
+        }),
       }),
-    unsubscribe: (id: string) => call<void>(`/subscriptions/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    unsubscribe: (id: string) =>
+      call<void>(`/subscriptions/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      }),
     getPreferences: () => call<AlertPreferences>("/alert-preferences"),
     setPreferences: (p: AlertPreferences) =>
-      call<AlertPreferences>("/alert-preferences", { method: "PUT", body: JSON.stringify(p) }),
+      call<AlertPreferences>("/alert-preferences", {
+        method: "PUT",
+        body: JSON.stringify(p),
+      }),
   };
 }
 
 export interface RegistrationLike {
   pushManager: {
-    getSubscription(): Promise<{ toJSON(): PushSubscriptionJSON; unsubscribe(): Promise<boolean> } | null>;
-    subscribe(o: { userVisibleOnly: true; applicationServerKey: Uint8Array }): Promise<{
+    getSubscription(): Promise<{
+      toJSON(): PushSubscriptionJSON;
+      unsubscribe(): Promise<boolean>;
+    } | null>;
+    subscribe(o: {
+      userVisibleOnly: true;
+      applicationServerKey: Uint8Array;
+    }): Promise<{
       toJSON(): PushSubscriptionJSON;
     }>;
   };
@@ -112,14 +133,18 @@ export async function enablePush(deps: {
   platform?: string;
 }): Promise<EnableResult> {
   const state = pushState(deps.env);
-  if (state === "unsupported" || state === "needs-install") return "unsupported";
+  if (state === "unsupported" || state === "needs-install")
+    return "unsupported";
   if (state === "denied") return "denied";
   try {
     if (state === "available") {
       const p = await deps.requestPermission();
       if (p !== "granted") return p === "denied" ? "denied" : "error";
     }
-    const [{ vapid_public_key }, reg] = await Promise.all([deps.api.config(), deps.registration()]);
+    const [{ vapid_public_key }, reg] = await Promise.all([
+      deps.api.config(),
+      deps.registration(),
+    ]);
     const sub =
       (await reg.pushManager.getSubscription()) ??
       (await reg.pushManager.subscribe({
