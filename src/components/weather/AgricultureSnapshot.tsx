@@ -20,10 +20,10 @@ import {
   isAgricultureReady,
   riskClass,
   statusClasses,
-  type AgriAIResponse,
   type AgricultureResponse,
 } from "@/lib/agriculture";
 import type { WeatherLocation } from "@/lib/locations";
+import { agriAIBody, fetchAgriAI, peekAgriAI } from "@/lib/agriculture-client";
 import type { AISummaryUser } from "./AISummary";
 import { AgricultureSnapshotSkeleton } from "./SectionSkeleton";
 
@@ -57,6 +57,7 @@ function isAbort(err: unknown): boolean {
 
 export function AgricultureSnapshot({ location, user }: Props) {
   const selected = useAppStore((s) => s.selectedActivities);
+  const openMyWeather = useAppStore((s) => s.openMyWeather);
   const crops = useMemo(() => farmingActivities(selected), [selected]);
   const pathname = usePathname() ?? `/${location.slug}`;
   const url = agricultureUrl(location, crops);
@@ -81,60 +82,46 @@ export function AgricultureSnapshot({ location, user }: Props) {
 
   const current = result?.key === url ? result : null;
   const data = current?.ok ? current.value : null;
-  const ready = isAgricultureReady(data);
   const signedIn = user !== null;
-
+  // AI only for signed-in users who told us what they farm: an advice line
+  // for crops nobody picked would spend a model call on nothing.
+  const wantsAI = signedIn && crops.length > 0;
+  const { slug, name, country, elevation, lat, lon } = location;
   const aiBody = useMemo(
     () =>
-      JSON.stringify({
-        location: {
-          slug: location.slug,
-          name: location.name,
-          country: location.country ?? "",
-          elevation: location.elevation,
-          lat: location.lat,
-          lon: location.lon,
-        },
-        activities: crops,
-        mode: "snapshot",
-      }),
-    [
-      location.slug,
-      location.name,
-      location.country,
-      location.elevation,
-      location.lat,
-      location.lon,
-      crops,
-    ],
+      agriAIBody(
+        { slug, name, country, elevation, lat, lon },
+        crops,
+        "snapshot",
+      ),
+    [slug, name, country, elevation, lat, lon, crops],
   );
 
+  // Started in parallel with the data fetch: the server rebuilds the data
+  // itself, so waiting for the client copy would only add a round trip.
   useEffect(() => {
-    if (!ready || !signedIn) return;
-    const controller = new AbortController();
-    fetch("/api/ai/agriculture", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: controller.signal,
-      body: aiBody,
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return (await res.json()) as AgriAIResponse;
-      })
-      .then((json) => setAI({ key: aiBody, ok: true, value: json.text }))
-      .catch((err: unknown) => {
-        if (!isAbort(err)) setAI({ key: aiBody, ok: false });
-      });
-    return () => controller.abort();
-  }, [ready, signedIn, aiBody]);
+    if (!wantsAI || peekAgriAI(aiBody) !== undefined) return;
+    let live = true;
+    fetchAgriAI(aiBody)
+      .then((text) => live && setAI({ key: aiBody, ok: true, value: text }))
+      .catch(() => live && setAI({ key: aiBody, ok: false }));
+    return () => {
+      live = false;
+    };
+  }, [wantsAI, aiBody]);
 
-  const aiNow = ai?.key === aiBody ? ai : null;
+  const cachedText = wantsAI ? peekAgriAI(aiBody) : undefined;
+  const aiNow: Result<string> | null =
+    cachedText !== undefined
+      ? { key: aiBody, ok: true, value: cachedText }
+      : ai?.key === aiBody
+        ? ai
+        : null;
 
   if (!current) return <AgricultureSnapshotSkeleton />;
   if (!isAgricultureReady(data)) return null;
 
-  const verdict = data.verdict ?? "wait";
+  const verdict = data.verdict;
   const verdictTone = statusClasses(verdict);
   const { frost, heat } = data.risks ?? {};
   const risks = [frost, heat].filter((r): r is NonNullable<typeof r> =>
@@ -175,7 +162,7 @@ export function AgricultureSnapshot({ location, user }: Props) {
           const w = data.windows[key];
           const tone = statusClasses(w.status);
           return (
-            <li key={key} className="rounded-card bg-surface-dim p-3">
+            <li key={key} className="meerkat">
               <p className="dove flex items-center gap-1.5">
                 <span
                   aria-hidden="true"
@@ -218,9 +205,12 @@ export function AgricultureSnapshot({ location, user }: Props) {
           term="Spray wind"
           value={
             data.wind?.speedKmh != null
-              ? `${Math.round(data.wind.speedKmh)} km/h${data.wind.sprayable ? " · OK" : ""}`
+              ? `${Math.round(data.wind.speedKmh)} km/h · ${
+                  data.wind.sprayable ? "OK to spray" : "Not now"
+                }`
               : "—"
           }
+          tone={data.wind?.sprayable === false ? riskClass("high") : undefined}
         />
       </dl>
 
@@ -234,24 +224,36 @@ export function AgricultureSnapshot({ location, user }: Props) {
         </ul>
       )}
 
-      <div className="flex items-start gap-2" aria-live="polite">
+      <div className="flex items-start gap-2">
         <span aria-hidden="true" className="mt-1 text-mineral-malachite">
           <SparklesIcon size={14} />
         </span>
-        {signedIn ? (
-          aiNow?.ok ? (
-            <p className="gazelle">{aiNow.value}</p>
-          ) : !aiNow ? (
-            <span
-              role="status"
-              aria-label="Loading Shamwari farm advice"
-              className="mt-1 block h-4 w-3/4 animate-pulse rounded-full bg-text-tertiary/20"
-            />
-          ) : (
-            <p className="dove">
-              Shamwari&apos;s farm advice is unavailable right now.
-            </p>
-          )
+        {signedIn && crops.length === 0 ? (
+          <p className="dove">
+            <button
+              type="button"
+              onClick={() => openMyWeather("activities")}
+              className="sunbird dik-dik"
+            >
+              Pick your crops
+            </button>{" "}
+            for Shamwari&apos;s farm advice for {location.name}.
+          </p>
+        ) : signedIn ? (
+          <div role="status" aria-live="polite" className="min-w-0 flex-1">
+            {aiNow?.ok ? (
+              <p className="gazelle">{aiNow.value}</p>
+            ) : !aiNow ? (
+              <>
+                <span className="mt-1 block h-4 w-3/4 animate-pulse rounded-full bg-text-tertiary/20" />
+                <span className="sr-only">Loading Shamwari farm advice</span>
+              </>
+            ) : (
+              <p className="dove">
+                Shamwari&apos;s farm advice is unavailable right now.
+              </p>
+            )}
+          </div>
         ) : (
           <p className="dove">
             <Link href={signInHref} prefetch={false} className="sunbird">
@@ -272,11 +274,21 @@ export function AgricultureSnapshot({ location, user }: Props) {
   );
 }
 
-function Metric({ term, value }: { term: string; value: string }) {
+function Metric({
+  term,
+  value,
+  tone,
+}: {
+  term: string;
+  value: string;
+  tone?: string;
+}) {
   return (
-    <div className="rounded-card bg-surface-dim p-3">
+    <div className="meerkat">
       <dt className="dove">{term}</dt>
-      <dd className="text-base font-medium text-text-primary">{value}</dd>
+      <dd className={`text-base font-medium ${tone ?? "text-text-primary"}`}>
+        {value}
+      </dd>
     </div>
   );
 }

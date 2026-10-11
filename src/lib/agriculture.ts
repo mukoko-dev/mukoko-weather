@@ -6,6 +6,8 @@
  * lookups so Tailwind sees every class name at build time.
  */
 
+import { ACTIVITIES } from "./activities";
+
 export type WindowStatus = "go" | "wait" | "avoid";
 export type RiskLevel = "none" | "moderate" | "high";
 export type MoistureBand = "dry" | "adequate" | "moist" | "saturated";
@@ -144,21 +146,10 @@ export interface AgriAIResponse {
   generatedAt: string;
 }
 
-/** Farming activity ids (src/lib/activities.ts) sent to the backend. */
-export const FARMING_ACTIVITY_IDS: readonly string[] = [
-  "crop-farming",
-  "livestock",
-  "tobacco-farming",
-  "cotton-farming",
-  "horticulture",
-  "gardening",
-  "irrigation",
-  "planting",
-  "harvest",
-  "forestry",
-  "beekeeping",
-  "aquaculture",
-];
+/** Farming activity ids, derived from the activity catalogue (one source). */
+export const FARMING_ACTIVITY_IDS: readonly string[] = ACTIVITIES.filter(
+  (a) => a.category === "farming",
+).map((a) => a.id);
 
 /** The user's selected activities that are farming ones, in order, de-duplicated. */
 export function farmingActivities(selected: readonly string[]): string[] {
@@ -295,10 +286,18 @@ export function hhmm(iso: string): string {
 export function isAgricultureReady(
   data: AgricultureResponse | null | undefined,
 ): data is AgricultureResponse & {
+  headline: string;
+  verdict: WindowStatus;
   windows: FarmWindows;
   rain: NonNullable<AgricultureResponse["rain"]>;
 } {
-  return Boolean(data?.available && data.windows && data.rain);
+  return Boolean(
+    data?.available &&
+    data.windows &&
+    data.rain &&
+    data.headline &&
+    data.verdict,
+  );
 }
 
 /** Forecast days only (the charts' 16-day window). */

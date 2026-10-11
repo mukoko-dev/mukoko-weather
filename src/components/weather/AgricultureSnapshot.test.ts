@@ -19,11 +19,19 @@ describe("AgricultureSnapshot", () => {
     expect(src).toContain("agricultureUrl(location, crops)");
   });
 
-  it("asks AI only through the auth-gated proxy, snapshot mode, signed-in only", () => {
-    expect(src).toContain('"/api/ai/agriculture"');
+  it("asks AI through the cached, auth-gated client, snapshot mode, only for farmers", () => {
+    const client = fs.readFileSync("src/lib/agriculture-client.ts", "utf-8");
+    expect(client).toContain('"/api/ai/agriculture"');
     expect(src).not.toContain("/api/py/ai/");
-    expect(src).toContain('mode: "snapshot"');
-    expect(src).toContain("if (!ready || !signedIn) return;");
+    expect(src).toContain('"snapshot"');
+    expect(src).toContain("const wantsAI = signedIn && crops.length > 0;");
+    expect(src).toContain("fetchAgriAI(aiBody)");
+    // Not gated on the client data fetch — both start in parallel.
+    expect(src).not.toContain("if (!ready");
+  });
+
+  it("asks signed-in users without crops to pick them", () => {
+    expect(src).toContain('openMyWeather("activities")');
   });
 
   it("offers sign-in to anonymous users with a returnTo", () => {
@@ -39,6 +47,11 @@ describe("AgricultureSnapshot", () => {
     expect(src).toContain('aria-labelledby="agri-snapshot-heading"');
     expect(src).toContain('id="agri-snapshot-heading"');
     expect(src).toContain("border-l-mineral-malachite");
+  });
+
+  it("uses the shared .meerkat stat tile", () => {
+    expect(src).toContain('className="meerkat"');
+    expect(src).not.toContain("rounded-card bg-surface-dim p-3");
   });
 
   it("renders nothing on failure or unavailable data (no empty card)", () => {

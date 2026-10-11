@@ -110,8 +110,20 @@ describe("readiness + forecast slicing", () => {
         available: true,
         windows: {},
         rain: {},
+        headline: "Good day to spray.",
+        verdict: "go",
       } as unknown as AgricultureResponse),
     ).toBe(true);
+    // A missing verdict or headline is never papered over with a made-up one.
+    expect(
+      isAgricultureReady({
+        available: true,
+        windows: {},
+        rain: {},
+        headline: null,
+        verdict: "go",
+      } as unknown as AgricultureResponse),
+    ).toBe(false);
   });
 
   it("keeps forecast days only", () => {
