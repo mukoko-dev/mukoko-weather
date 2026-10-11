@@ -116,6 +116,7 @@ locations.
 | `WEATHER_AI_URL`                  |    No    | Optional AI URL override (full `…/chat/completions` URL, or a base)                                                                                                                                      |
 | `WEATHER_SERVICE_API_KEY`         |    No    | Server-only. The service key `mukoko-weather-internal` checks. Vercel holds no Cloudflare AI token; the model is set by the AI Worker                                                                    |
 | `DB_INIT_SECRET`                  |    No    | Protects `/api/db-init` in production (`x-init-secret` header)                                                                                                                                           |
+| `HISTORY_COMMERCIAL_ONLY`         |    No    | `1` keeps only archive providers usable commercially (NASA POWER; Open-Meteo only with a paid key)                                                                                                       |
 | `HISTORY_PROVIDERS`               |    No    | Archive provider order for history and normals (default `nasa-power,open-meteo-archive`). The free Open-Meteo API is non-commercial: drop it, or store an `open-meteo` key, once the product is paid     |
 | `INTERNAL_API_BASE_URL`           |    No    | Base URL for server-to-server SSR calls into `/api/py/*`. Overrides the default: the production domain in production, the protected deployment URL plus the automation bypass header on previews         |
 
@@ -132,7 +133,7 @@ public file or static route, such as a deleted `/favicon-48.png`, is rewritten
 which returns a plain 404. Without it the request would fall through to the
 `[location]` page and get a 200 "Location not found".
 
-**Weather history** — `GET /api/py/history` reads `weather.weather_history` first and pulls only the dates we don't hold from external archives: NASA POWER (free, open for commercial use, from 1981), then the Open-Meteo ERA5 archive (from 1940). We never host a reanalysis dataset. Query by `location` slug and/or `lat`+`lon` (any coordinate on Earth), with `days` (up to 3660) or `start`/`end`. Each day carries its `source`, and the response lists the attribution for every archive used (`sources`). The provider order is set by `HISTORY_PROVIDERS`.
+**Weather history** — `GET /api/py/history` reads `weather.weather_history` first and pulls only the dates we don't hold from external archives: NASA POWER (free, open for commercial use, from 1981), then the Open-Meteo ERA5 archive (from 1940). We never host a reanalysis dataset. Query by `location` slug and/or `lat`+`lon` (any coordinate on Earth; a coordinate outside the catalogue is limited to its latest year), with `days` (up to 3660) or `start`/`end`. Each day carries its `source`, and the response lists the attribution for every archive used (`sources`). The provider order is set by `HISTORY_PROVIDERS`.
 
 Climate normals (1991–2020) are served at `GET /api/py/normals` through the same provider chain, with one cached table per 0.25° grid cell in `weather.climate_normals`.
 **Air quality map** — `GET /api/py/airquality/grid` returns current US AQI on a 7×7 grid (±40 km) from one batched Open-Meteo request, cached 30 min; the `AirQualityMapCard` paints it over a non-interactive MapLibre map.

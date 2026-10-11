@@ -86,7 +86,8 @@ interface HistoryRecord {
   windDirectionLabel: string;
   sunrise: string;
   sunset: string;
-  daylightHours: number;
+  /** null when the day has no sunrise/sunset (a gap in the chart, not 0 h). */
+  daylightHours: number | null;
   weatherCode: number | null;
   condition: string;
 }
@@ -168,15 +169,24 @@ export function historyUrl(
 /** Keep only well-formed attribution entries. Exported for tests. */
 export function parseSources(raw: unknown): HistorySourceAttribution[] {
   if (!Array.isArray(raw)) return [];
-  return raw.filter(
-    (s): s is HistorySourceAttribution =>
-      s != null &&
-      typeof s.id === "string" &&
-      typeof s.name === "string" &&
-      typeof s.attribution === "string" &&
-      typeof s.url === "string" &&
-      s.url.startsWith("https://"),
-  );
+  return raw
+    .filter(
+      (s): s is HistorySourceAttribution =>
+        s != null &&
+        typeof s.id === "string" &&
+        typeof s.name === "string" &&
+        typeof s.attribution === "string" &&
+        typeof s.url === "string" &&
+        s.url.startsWith("https://"),
+    )
+    .map((s) => ({
+      ...s,
+      // Rendered as an href: only https links survive.
+      licenceUrl:
+        typeof s.licenceUrl === "string" && s.licenceUrl.startsWith("https://")
+          ? s.licenceUrl
+          : null,
+    }));
 }
 
 /** Round a value that may be null/undefined (archive daily means can be). */
@@ -242,7 +252,7 @@ export function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
           daylightHours:
             sunriseRaw && sunsetRaw
               ? daylightFromSunTimes(sunriseRaw, sunsetRaw)
-              : 0,
+              : null,
           weatherCode: Number.isFinite(current.weather_code)
             ? current.weather_code
             : null,
@@ -615,6 +625,9 @@ export function HistoryDashboard() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [fetched, setFetched] = useState(false);
   const [sources, setSources] = useState<HistorySourceAttribution[]>([]);
+  // The server clamps a bare coordinate (a place outside the catalogue) to
+  // its most recent year.
+  const [clamped, setClamped] = useState(false);
   const [visibleRowCount, setVisibleRowCount] = useState(50);
   const [activeTab, setActiveTab] = useState<ViewTab>("weather");
   const [categoryFilter, setCategoryFilter] = useState<
@@ -695,6 +708,7 @@ export function HistoryDashboard() {
         const json = await res.json();
         setRecords(transformHistory(json.data));
         setSources(parseSources(json.sources));
+        setClamped(json.clamped === true);
         setInsightsRecords(transformInsights(json.data));
         setVisibleRowCount(50);
       } catch (err) {
@@ -704,6 +718,7 @@ export function HistoryDashboard() {
         setRecords([]);
         setInsightsRecords([]);
         setSources([]);
+        setClamped(false);
       } finally {
         setLoading(false);
       }
@@ -781,13 +796,12 @@ export function HistoryDashboard() {
               r.windGusts == null ? m : Math.max(m ?? 0, r.windGusts),
             null,
           ),
-          avgDaylight: records[0]?.daylightHours
-            ? Math.round(
-                (avg(records.map((r) => Math.round(r.daylightHours * 10))) /
-                  10) *
-                  10,
-              ) / 10
-            : null,
+          avgDaylight: (() => {
+            const hours = records
+              .map((r) => r.daylightHours)
+              .filter((h): h is number => h != null && h > 0);
+            return hours.length > 0 ? avgFloat(hours) : null;
+          })(),
         }
       : null;
 
@@ -1083,6 +1097,12 @@ export function HistoryDashboard() {
                 were recorded live.
               </p>
             )}
+            {clamped && (
+              <p className="dove mt-1" role="note">
+                Showing the most recent year. Longer ranges are available for
+                places in our catalogue.
+              </p>
+            )}
             <HistoryAttribution sources={sources} />
             <h3 className="hornbill mt-4">Temperature</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -1344,7 +1364,7 @@ export function HistoryDashboard() {
             </LazySection>
 
             {/* ── Daylight ───────────────────────────────────────────────── */}
-            {records.some((r) => r.daylightHours > 0) && (
+            {records.some((r) => (r.daylightHours ?? 0) > 0) && (
               <LazySection
                 label="history-daylight"
                 fallback={<ChartSkeleton aspect="aspect-[16/4]" />}
