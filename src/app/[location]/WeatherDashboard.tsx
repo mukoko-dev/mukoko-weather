@@ -40,6 +40,7 @@ import {
   MapPreviewSkeleton,
   AirQualityMapSkeleton,
   HazeSkeleton,
+  AgricultureSnapshotSkeleton,
   SupportBannerSkeleton,
   LocationInfoSkeleton,
 } from "@/components/weather/SectionSkeleton";
@@ -102,6 +103,11 @@ const MapPreview = lazy(() =>
 const AirQualityMapCard = lazy(() =>
   import("@/components/weather/AirQualityMapCard").then((m) => ({
     default: m.AirQualityMapCard,
+  })),
+);
+const AgricultureSnapshot = lazy(() =>
+  import("@/components/weather/AgricultureSnapshot").then((m) => ({
+    default: m.AgricultureSnapshot,
   })),
 );
 const HazePanel = lazy(() =>
@@ -560,6 +566,30 @@ export function WeatherDashboard({
                                       }
                                       activities={allActivities}
                                       weather={weather}
+                                    />
+                                  </Suspense>
+                                </ChartErrorBoundary>
+                              </LazySection>
+                            </DraggableSection>
+                          );
+                        case "agriculture":
+                          return (
+                            <DraggableSection
+                              key="agriculture"
+                              id="agriculture"
+                              reordering={reordering}
+                            >
+                              <LazySection
+                                label="agriculture-snapshot"
+                                fallback={<AgricultureSnapshotSkeleton />}
+                              >
+                                <ChartErrorBoundary name="agriculture snapshot">
+                                  <Suspense
+                                    fallback={<AgricultureSnapshotSkeleton />}
+                                  >
+                                    <AgricultureSnapshot
+                                      location={location}
+                                      user={user}
                                     />
                                   </Suspense>
                                 </ChartErrorBoundary>

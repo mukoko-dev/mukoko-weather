@@ -269,6 +269,34 @@ export function HazeSkeleton() {
 }
 
 // ---------------------------------------------------------------------------
+// Agriculture snapshot skeleton
+// Matches: headline, 4 window tiles (2 → 4 cols), 6 metric tiles (2 → 3 cols), link
+// ---------------------------------------------------------------------------
+
+export function AgricultureSnapshotSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="Loading agriculture snapshot"
+      className="chameleon w-full space-y-4 p-[var(--space-card)]"
+    >
+      <div className="h-6 w-2/3 rounded-full bg-surface-dim" />
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={`w${i}`} className="h-16 rounded-card bg-surface-dim" />
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={`m${i}`} className="h-14 rounded-card bg-surface-dim" />
+        ))}
+      </div>
+      <div className="h-4 w-40 rounded-full bg-surface-dim" />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Support Banner skeleton
 // Matches: card with BMC-style layout — dot + heading, subtitle, badge
 // ---------------------------------------------------------------------------
