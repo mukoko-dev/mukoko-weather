@@ -462,13 +462,31 @@ class TestFailurePaths:
     def test_fetch_open_meteo_uses_breaker_and_both_endpoints(self):
         calls = []
 
-        async def fake_get(url, params=None, timeout=None):
-            calls.append(url)
+        async def fake_get(url, params=None, timeout=None, headers=None):
+            calls.append((url, headers))
             return {"current": {}, "hourly": {}}
 
         with patch.object(_haze, "_http_get_json", side_effect=fake_get):
             asyncio.run(_haze._fetch_open_meteo(1.0, 2.0))
-        assert calls == [_haze.OPEN_METEO_AQ_URL, _haze.OPEN_METEO_FORECAST_URL]
+        # Public API by default, and no key header goes to it.
+        assert calls == [(_haze.OPEN_METEO_AQ_URL, {}), (_haze.OPEN_METEO_FORECAST_URL, {})]
+
+    def test_fetch_open_meteo_follows_self_hosted_env(self, monkeypatch):
+        monkeypatch.setenv("OPEN_METEO_BASE_URL", "https://om.example.com")
+        monkeypatch.setenv("OPEN_METEO_AQ_BASE_URL", "https://om.example.com")
+        monkeypatch.setenv("OPEN_METEO_API_KEY", "k-test")
+        calls = []
+
+        async def fake_get(url, params=None, timeout=None, headers=None):
+            calls.append((url, headers))
+            return {"current": {}, "hourly": {}}
+
+        with patch.object(_haze, "_http_get_json", side_effect=fake_get):
+            asyncio.run(_haze._fetch_open_meteo(1.0, 2.0))
+        assert calls == [
+            ("https://om.example.com/v1/air-quality", {"X-Mukoko-OM-Key": "k-test"}),
+            ("https://om.example.com/v1/forecast", {"X-Mukoko-OM-Key": "k-test"}),
+        ]
 
 
 # ---------------------------------------------------------------------------

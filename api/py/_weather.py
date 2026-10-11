@@ -36,6 +36,7 @@ from ._circuit_breaker import open_meteo_breaker
 from . import _enrichment as enrichment
 from . import _model_blend as blend
 from . import _verification as verification
+from . import _open_meteo as om
 from ._insights import (
     current_hour_index,
     derive_insights,
@@ -453,7 +454,7 @@ def _fetch_open_meteo_extras(lat: float, lon: float, models: list[str] | None = 
     resolved_models = _sanitize_models(models)
     client = _get_http_client()
 
-    url = "https://api.open-meteo.com/v1/forecast"
+    url = om.forecast_url()
     params = {
         "latitude": str(lat),
         "longitude": str(lon),
@@ -465,7 +466,7 @@ def _fetch_open_meteo_extras(lat: float, lon: float, models: list[str] | None = 
         "forecast_days": "2",
     }
 
-    resp = client.get(url, params=params)
+    resp = client.get(url, params=params, headers=om.headers_for(url))
     if resp.status_code != 200:
         return None
 
@@ -529,7 +530,8 @@ def _open_meteo_forecast(
     }
     if models:
         params["models"] = ",".join(models)
-    resp = client.get("https://api.open-meteo.com/v1/forecast", params=params)
+    url = om.forecast_url()
+    resp = client.get(url, params=params, headers=om.headers_for(url))
     if resp.status_code != 200:
         if raise_on_error:
             raise OpenMeteoUpstreamError(f"HTTP {resp.status_code}")

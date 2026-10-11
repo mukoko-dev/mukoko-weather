@@ -36,6 +36,7 @@ from ._db import (
 )
 from ._http import get_http_client
 from ._circuit_breaker import open_meteo_breaker, CircuitOpenError
+from . import _open_meteo as om
 
 router = APIRouter()
 
@@ -44,7 +45,8 @@ router = APIRouter()
 # Constants
 # ---------------------------------------------------------------------------
 
-OPEN_METEO_AQ_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
+# Public default; the call resolves the URL per request (``om.air_quality_url``).
+OPEN_METEO_AQ_URL = om.PUBLIC_AIR_QUALITY_URL
 
 #: Cache TTL — 1 hour. Air quality changes slowly enough that hourly refreshes
 #: catch meaningful shifts while keeping API call volume small.
@@ -334,7 +336,8 @@ def _fetch_open_meteo_air_quality(lat: float, lon: float, side: Optional[dict] =
         "past_days": 1,
         "timezone": "auto",
     }
-    resp = client.get(OPEN_METEO_AQ_URL, params=params)
+    url = om.air_quality_url()
+    resp = client.get(url, params=params, headers=om.headers_for(url))
     resp.raise_for_status()
     data = resp.json()
     if side is not None:

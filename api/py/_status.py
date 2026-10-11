@@ -17,6 +17,7 @@ from ._db import get_db, get_api_key, ttl_filter
 from ._http import get_http_client
 from ._ai_gateway import DEFAULT_GATEWAY_ID, gateway_headers, gateway_url, missing_ai_config
 from ._circuit_breaker import ai_breaker
+from . import _open_meteo as om
 
 router = APIRouter()
 
@@ -161,12 +162,16 @@ def _check_tomorrow_io() -> dict:
 
 
 def _check_open_meteo() -> dict:
-    name = "Open-Meteo API"
+    url = om.forecast_url()
+    # A self-hosted instance is named as such (never by its URL); the public
+    # API keeps the original name.
+    name = "Open-Meteo API (self-hosted)" if om.is_self_hosted(url) else "Open-Meteo API"
     start = time.time()
     try:
         resp = get_http_client(PROBE_TIMEOUT_S).get(
-            "https://api.open-meteo.com/v1/forecast",
+            url,
             params={"latitude": "-17.83", "longitude": "31.05", "current": "temperature_2m"},
+            headers=om.headers_for(url),
         )
 
         if resp.status_code != 200:
