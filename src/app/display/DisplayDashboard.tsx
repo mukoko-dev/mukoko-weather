@@ -1,5 +1,6 @@
 "use client";
 
+import { roundCoord } from "@/lib/location-privacy";
 import { useEffect } from "react";
 import type { WeatherData } from "@/lib/weather";
 import type { AirQualityResponse } from "@/components/weather/AirQualityCard";
@@ -67,7 +68,7 @@ export function DisplayDashboard({
     if (theme) setTheme(theme);
   }, [theme, setTheme]);
 
-  const coords = `lat=${location.lat}&lon=${location.lon}`;
+  const coords = `lat=${roundCoord(location.lat)}&lon=${roundCoord(location.lon)}`;
   const weatherState = usePolledJson(
     `/api/py/weather?${coords}`,
     DISPLAY_REFRESH_MS.weather,

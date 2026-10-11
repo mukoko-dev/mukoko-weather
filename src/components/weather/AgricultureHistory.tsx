@@ -1,5 +1,6 @@
 "use client";
 
+import { roundCoord } from "@/lib/location-privacy";
 import { useEffect, useState } from "react";
 import {
   formatAnomaly,
@@ -68,7 +69,7 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
     // (cached afterwards), the second reads it.
     const getNormals = async (date: string): Promise<Normals> => {
       const res = await fetch(
-        `/api/py/normals?lat=${lat}&lon=${lon}&date=${date}`,
+        `/api/py/normals?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
       );
       return res.ok ? ((await res.json()) as Normals) : { available: false };
     };
