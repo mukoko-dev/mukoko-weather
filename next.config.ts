@@ -48,6 +48,20 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // The MapLibre worker copy lives in a per-version folder
+        // (scripts/copy-maplibre-worker.mjs), so a URL never changes content.
+        // Without this every map visit revalidates the worker and then the
+        // shared module it imports — two sequential round trips before the
+        // map can draw (#266).
+        source: "/vendor/maplibre-gl/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
         // Allow embed endpoints to be loaded from any origin
         source: "/embed/:path*",
         headers: [

@@ -46,8 +46,23 @@ const MapLibreMap = dynamic(
   { ssr: false, loading: () => <MapSkeleton fill className="rounded-none" /> },
 );
 
-/** Milliseconds per timeline stop while playing. */
+// Start downloading MapLibre as soon as this page's code runs, rather than
+// after hydration mounts the dynamic map component below (#266). The browser
+// guard keeps it out of the server render; the chunk is shared, so the map
+// component's own import() resolves from it.
+if (typeof window !== "undefined") {
+  import("maplibre-gl").catch(() => {
+    // The map component retries and shows its own error state.
+  });
+}
+
+/** Milliseconds each loaded timeline frame stays up while playing. */
 const TIMELINE_TICK_MS = 900;
+/**
+ * Longest a playing timeline waits for a frame's tiles before moving on
+ * anyway, so one slow or failed frame cannot stall playback.
+ */
+const TIMELINE_MAX_WAIT_MS = 8000;
 
 /** Storage handle, or null when the browser blocks localStorage (it can throw on access). */
 function getStorage(): Storage | null {
@@ -87,6 +102,11 @@ export function MapDashboard({ location }: MapDashboardProps) {
   const [sheetOpen, setSheetOpen] = useState(true);
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
+  // Set once the user plays or scrubs the timeline. Only then is the next
+  // frame preloaded: every preload spends real upstream tile requests.
+  const [timelineEngaged, setTimelineEngaged] = useState(false);
+  // Timestamp of the overlay frame that last finished loading on the map.
+  const [loadedTimestamp, setLoadedTimestamp] = useState<string | null>(null);
   // Grid result tagged with the coordinate it was fetched for. Anything tagged
   // with another coordinate counts as loading, so no state is reset in an effect.
   const [gridResult, setGridResult] = useState<{
@@ -107,14 +127,26 @@ export function MapDashboard({ location }: MapDashboardProps) {
     writeStoredMapLayer(getStorage(), id);
   }, []);
 
+  const weatherTimestamp = timelineOn
+    ? timelineTimestamp(step, new Date())
+    : "now";
+  const prefetchTimestamp =
+    timelineOn && timelineEngaged
+      ? timelineTimestamp((step + 1) % TIMELINE_STEPS, new Date())
+      : null;
+  const frameReady = loadedTimestamp === weatherTimestamp;
+
+  // Playback waits for each frame to load, then shows it for one tick. The
+  // next frame is preloaded meanwhile, so on a fast connection this is a
+  // steady tick and on a slow one it never runs ahead of the tiles.
   useEffect(() => {
     if (!isPlaying) return;
-    const id = window.setInterval(
+    const id = window.setTimeout(
       () => setStep((s) => (s + 1) % TIMELINE_STEPS),
-      TIMELINE_TICK_MS,
+      frameReady ? TIMELINE_TICK_MS : TIMELINE_MAX_WAIT_MS,
     );
-    return () => window.clearInterval(id);
-  }, [isPlaying]);
+    return () => window.clearTimeout(id);
+  }, [isPlaying, step, frameReady]);
 
   // Air quality: fetch the grid for this location while the AQ chip is active.
   const gridKey = `${location.lat},${location.lon}`;
@@ -186,9 +218,9 @@ export function MapDashboard({ location }: MapDashboardProps) {
         zoom={8}
         interactive
         weatherLayer={aqOn ? null : activeLayer}
-        weatherTimestamp={
-          timelineOn ? timelineTimestamp(step, new Date()) : "now"
-        }
+        weatherTimestamp={weatherTimestamp}
+        weatherPrefetchTimestamp={prefetchTimestamp}
+        onWeatherFrameLoaded={setLoadedTimestamp}
         aqiOverlay={aqOn ? aqFill : null}
         aqiBubbles={aqOn ? bubbles : null}
         navigationControl={false}
@@ -327,7 +359,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
               <Button
                 type="button"
                 size="icon-sm"
-                onClick={() => setPlaying((p) => !p)}
+                onClick={() => {
+                  setTimelineEngaged(true);
+                  setPlaying((p) => !p);
+                }}
                 aria-pressed={isPlaying}
                 aria-label={
                   isPlaying
@@ -350,6 +385,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
                   step={1}
                   value={step}
                   onChange={(e) => {
+                    setTimelineEngaged(true);
                     setPlaying(false);
                     setStep(Number(e.target.value));
                   }}
