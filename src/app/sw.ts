@@ -186,19 +186,24 @@ serwist.addEventListeners();
 // Delivery is best effort; a browser requires a visible notification per push.
 import {
   notificationFor,
-  clickAction,
-  type WindowLike,
+  openFromClick,
+  resubscribeAfterChange,
+  showWithFallback,
+  type ClientsLike,
 } from "@/lib/push/sw-logic";
 
 interface PushScope {
   addEventListener(type: string, listener: (event: any) => void): void; // eslint-disable-line @typescript-eslint/no-explicit-any
   registration: {
     showNotification(title: string, options: object): Promise<void>;
+    pushManager: {
+      subscribe(o: {
+        userVisibleOnly: true;
+        applicationServerKey: Uint8Array;
+      }): Promise<{ toJSON(): unknown }>;
+    };
   };
-  clients: {
-    matchAll(o: object): Promise<WindowLike[]>;
-    openWindow(url: string): Promise<unknown>;
-  };
+  clients: ClientsLike;
   location: { origin: string };
 }
 const pushScope = self as unknown as PushScope;
@@ -210,29 +215,27 @@ pushScope.addEventListener("push", (event) => {
   } catch {
     raw = undefined;
   }
-  const n = notificationFor(raw);
-  event.waitUntil(pushScope.registration.showNotification(n.title, n.options));
+  event.waitUntil(
+    showWithFallback(pushScope.registration, notificationFor(raw)),
+  );
 });
 
 pushScope.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil(
-    pushScope.clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then((windows) => {
-        const action = clickAction(
-          event.notification.data,
-          windows,
-          pushScope.location.origin,
-        );
-        if (action.kind === "focus") {
-          return action.window.navigate
-            ? action.window
-                .navigate(action.url)
-                .then(() => action.window.focus())
-            : action.window.focus();
-        }
-        return pushScope.clients.openWindow(action.url);
-      }),
+    openFromClick(
+      event.notification.data,
+      pushScope.clients,
+      pushScope.location.origin,
+    ),
+  );
+});
+
+pushScope.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    resubscribeAfterChange({
+      registration: pushScope.registration,
+      fetchFn: (i, o) => fetch(i, o),
+    }),
   );
 });

@@ -1,7 +1,8 @@
 //! Web Push alerts: the pure rules (mukoko-dev/mukoko-weather#289).
 //!
 //! Nothing here touches the network, a clock or a binding, so it tests
-//! natively. The push Worker stores and sends; the jobs Worker evaluates.
+//! natively. The Nyuchi API stores subscriptions and preferences; the jobs
+//! Worker evaluates the rules. This module (and this PR) cannot send anything.
 //! Delivery is best effort: a push service may drop, delay or never deliver
 //! a message, so nothing in this module (or the copy it produces) promises
 //! delivery. The in-app inbox is the record.
@@ -110,9 +111,21 @@ fn is_b64url(s: &str) -> bool {
 }
 
 /// `p256dh` is an uncompressed P-256 point (65 bytes, 87 base64url chars)
-/// and `auth` is 16 random bytes (22 chars), both unpadded.
+/// and `auth` is 16 random bytes (22 chars). Trailing `=` padding is
+/// tolerated (some clients send it) and ignored. An uncompressed point starts
+/// with the byte 0x04, which in base64 is `B` followed by a character in
+/// `A..=P` (the second character's top two bits are zero).
 pub fn validate_keys(p256dh: &str, auth: &str) -> Result<(), PushError> {
-    if p256dh.len() == 87 && auth.len() == 22 && is_b64url(p256dh) && is_b64url(auth) {
+    let p256dh = p256dh.trim_end_matches('=');
+    let auth = auth.trim_end_matches('=');
+    let mut chars = p256dh.chars();
+    let uncompressed = chars.next() == Some('B') && matches!(chars.next(), Some('A'..='P'));
+    if p256dh.len() == 87
+        && auth.len() == 22
+        && is_b64url(p256dh)
+        && is_b64url(auth)
+        && uncompressed
+    {
         Ok(())
     } else {
         Err(PushError::BadKey)
@@ -122,8 +135,24 @@ pub fn validate_keys(p256dh: &str, auth: &str) -> Result<(), PushError> {
 /// The stable lookup id of a subscription: SHA-256 of its endpoint, hex.
 /// The endpoint is a bearer capability (anyone holding it can push to the
 /// browser), so logs and API answers carry this hash, never the endpoint.
+///
+/// The endpoint is canonicalised first (lower-case scheme and host, default
+/// port dropped) so the same subscription never hashes two ways.
 pub fn endpoint_id(endpoint: &str) -> String {
-    hex::encode(Sha256::digest(endpoint.as_bytes()))
+    hex::encode(Sha256::digest(canonical_endpoint(endpoint).as_bytes()))
+}
+
+/// Lower-case the scheme and host and drop `:443`; the path and query keep
+/// their case (they are part of the capability). Anything that does not parse
+/// as an `https://` URL is returned unchanged.
+pub fn canonical_endpoint(endpoint: &str) -> String {
+    let Some(rest) = endpoint.strip_prefix("https://") else {
+        return endpoint.to_string();
+    };
+    let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let (authority, tail) = rest.split_at(end);
+    let host = authority.strip_suffix(":443").unwrap_or(authority);
+    format!("https://{}{}", host.to_ascii_lowercase(), tail)
 }
 
 /// A seed or community place slug (`^[a-z0-9-]{1,80}$`, as `SLUG_RE`).
@@ -148,7 +177,9 @@ pub struct AlertPrefs {
     /// 0..=23; the window may wrap midnight. Equal values mean no quiet time.
     pub quiet_start: u8,
     pub quiet_end: u8,
-    /// Place slugs followed for alerts.
+    /// Place slugs followed for alerts. The wire name matches the app's
+    /// `AlertPreferences.place_slugs`.
+    #[serde(rename = "place_slugs")]
     pub places: Vec<String>,
 }
 
@@ -240,13 +271,40 @@ fn night_of(time: &str) -> Option<String> {
     Some(d.format("%Y-%m-%d").to_string())
 }
 
+/// True for a provider whose numbers are not a forecast: the seasonal
+/// estimate served when every provider failed (`X-Weather-Provider:
+/// fallback`). Frost must never be alerted from invented data.
+pub fn is_estimate_provider(provider: &str) -> bool {
+    let p = provider.trim().to_ascii_lowercase();
+    p.is_empty() || p.contains("fallback") || p.contains("seasonal") || p.contains("estimate")
+}
+
+/// A naive local wall-clock time, exactly `YYYY-MM-DDTHH:MM`. A zoned
+/// instant (`Z`, `+02:00`) is refused: comparing it as text against a local
+/// hour would put the night in the wrong place.
+fn is_naive_local(t: &str) -> bool {
+    t.len() == 16 && chrono::NaiveDateTime::parse_from_str(t, "%Y-%m-%dT%H:%M").is_ok()
+}
+
 /// Server-side port of the app's `checkFrostRisk`: temperatures at or below
 /// 3 C between 22:00 and 08:00 local. `times` are Open-Meteo local wall-clock
 /// strings (`YYYY-MM-DDTHH:MM`), `now_local` is the place's current local
 /// time in the same format. Only the next [`FROST_LOOKAHEAD_HOURS`] values at
 /// or after `now_local` are read, and only the FIRST night found is reported
 /// so one alert covers one night.
-pub fn evaluate_frost(times: &[String], temps: &[f64], now_local: &str) -> Option<FrostAlert> {
+///
+/// Returns `None` (no alert) when `provider` is a fallback or seasonal
+/// estimate, or when `now_local` or any time read is not a naive local
+/// wall-clock string. Arrays of different lengths are read up to the shorter.
+pub fn evaluate_frost(
+    provider: &str,
+    times: &[String],
+    temps: &[f64],
+    now_local: &str,
+) -> Option<FrostAlert> {
+    if is_estimate_provider(provider) || !is_naive_local(now_local) {
+        return None;
+    }
     let start_idx = times.iter().position(|t| t.as_str() >= now_local)?;
     let end_idx = (start_idx + FROST_LOOKAHEAD_HOURS)
         .min(times.len())
@@ -255,6 +313,9 @@ pub fn evaluate_frost(times: &[String], temps: &[f64], now_local: &str) -> Optio
     let mut hits: Vec<(&String, f64)> = Vec::new();
     for i in start_idx..end_idx {
         let (t, temp) = (&times[i], temps[i]);
+        if !is_naive_local(t) {
+            return None;
+        }
         let Some(hour) = parse_hour(t) else { continue };
         if !(hour >= 22 || hour <= 8) || !temp.is_finite() || temp > 3.0 {
             continue;
@@ -302,7 +363,13 @@ pub enum Decision {
     RateLimited,
     /// The person has not turned this alert on, or does not follow the place.
     NotWanted,
+    /// The night this alert is about is over (the copy says "tonight"): drop
+    /// it, do not hold it for later.
+    Stale,
 }
+
+/// Local hour at which a frost night ends (the window is 22:00 to 08:00).
+pub const NIGHT_END_HOUR: u8 = 8;
 
 /// Everything the decision needs, gathered by the caller.
 #[derive(Debug, Clone, Copy)]
@@ -312,17 +379,30 @@ pub struct DecisionInput<'a> {
     pub risk: Risk,
     /// The place's current local hour.
     pub local_hour: u8,
+    /// The place's current local date, `YYYY-MM-DD`.
+    pub local_date: &'a str,
+    /// The local date the alert's night began on (`FrostAlert::night`).
+    pub night: &'a str,
     pub already_sent_this_night: bool,
     pub sent_today: u32,
     pub sent_kind_tonight: u32,
 }
 
-/// Apply preferences, dedupe, quiet hours and rate caps, in that order.
-/// Severe frost (0 C or below) is a safety matter for crops and bypasses
-/// quiet hours, but never the dedupe or the caps.
+/// Apply preferences, staleness, dedupe, quiet hours and rate caps, in that
+/// order. Severe frost (0 C or below) is a safety matter for crops and
+/// bypasses quiet hours, but never the dedupe or the caps.
+///
+/// An alert says "tonight", so it is `Stale` once its night is over: any time
+/// after 08:00 on a later local date, and, for non-severe frost, any time on
+/// a later local date at all (a moderate alert held by quiet hours must not
+/// arrive at 06:00 the next morning). Severe frost still under way before
+/// 08:00 is sent.
 pub fn decide(i: &DecisionInput) -> Decision {
     if !i.prefs.frost || !i.prefs.places.iter().any(|p| p == i.slug) {
         return Decision::NotWanted;
+    }
+    if i.local_date > i.night && (i.local_hour > NIGHT_END_HOUR || i.risk != Risk::Severe) {
+        return Decision::Stale;
     }
     if i.already_sent_this_night {
         return Decision::Duplicate;
@@ -377,7 +457,7 @@ pub fn frost_payload(place_name: &str, slug: &str, a: &FrostAlert) -> Payload {
 pub enum Outcome {
     /// Accepted by the push service (2xx). Not proof the device showed it.
     Accepted,
-    /// 404 or 410: the subscription is gone; deactivate it.
+    /// 404 or 410 (gone), or 403 (VAPID key mismatch): deactivate it.
     Expired,
     /// 429, 5xx, network error: try again on a later tick.
     Retry,
@@ -388,7 +468,9 @@ pub enum Outcome {
 pub fn classify_status(status: u16) -> Outcome {
     match status {
         200..=299 => Outcome::Accepted,
-        404 | 410 => Outcome::Expired,
+        // 403 from a push service means the subscription was made with a
+        // different VAPID key: it can never work again, so deactivate it.
+        403 | 404 | 410 => Outcome::Expired,
         0 | 429 | 500..=599 => Outcome::Retry,
         _ => Outcome::Failed,
     }
@@ -397,6 +479,8 @@ pub fn classify_status(status: u16) -> Outcome {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const OM: &str = "open-meteo:blend";
 
     fn hours(date: &str, from: u32, n: u32) -> Vec<String> {
         (from..from + n)
@@ -442,7 +526,7 @@ mod tests {
 
     #[test]
     fn keys_have_the_exact_encoded_length() {
-        let p = "A".repeat(87);
+        let p = format!("BA{}", "A".repeat(85));
         let a = "B".repeat(22);
         assert!(validate_keys(&p, &a).is_ok());
         assert_eq!(validate_keys(&p[..86], &a), Err(PushError::BadKey));
@@ -450,6 +534,71 @@ mod tests {
             validate_keys(&p, "B=".repeat(11).as_str()),
             Err(PushError::BadKey)
         );
+    }
+
+    #[test]
+    fn keys_tolerate_padding_and_need_an_uncompressed_point() {
+        let p = format!("BA{}", "A".repeat(85));
+        let a = "B".repeat(22);
+        // trailing '=' padding is stripped before the length check
+        assert!(validate_keys(&format!("{p}="), &format!("{a}==")).is_ok());
+        // compressed points (0x02/0x03 -> "A.."/"C..") and junk are refused
+        assert_eq!(
+            validate_keys(&format!("Ag{}", "A".repeat(85)), &a),
+            Err(PushError::BadKey)
+        );
+        assert_eq!(
+            validate_keys(&format!("AA{}", "A".repeat(85)), &a),
+            Err(PushError::BadKey)
+        );
+        // 0x04 is "BA".."BP"; "BQ" would be 0x04 with a nonzero low bit pair
+        assert!(validate_keys(&format!("BP{}", "A".repeat(85)), &a).is_ok());
+        assert_eq!(
+            validate_keys(&format!("BQ{}", "A".repeat(85)), &a),
+            Err(PushError::BadKey)
+        );
+    }
+
+    #[test]
+    fn the_endpoint_id_ignores_host_case_and_the_default_port() {
+        let e = "https://fcm.googleapis.com/fcm/send/AbC";
+        assert_eq!(
+            endpoint_id(e),
+            endpoint_id("https://FCM.Googleapis.COM/fcm/send/AbC")
+        );
+        assert_eq!(
+            endpoint_id(e),
+            endpoint_id("https://fcm.googleapis.com:443/fcm/send/AbC")
+        );
+        // the path is a secret and keeps its case
+        assert_ne!(
+            endpoint_id(e),
+            endpoint_id("https://fcm.googleapis.com/fcm/send/abc")
+        );
+        assert_eq!(canonical_endpoint("not a url"), "not a url");
+    }
+
+    #[test]
+    fn prefs_use_the_apps_wire_names() {
+        let p = AlertPrefs {
+            frost: true,
+            quiet_start: 21,
+            quiet_end: 7,
+            places: vec!["harare".into(), "bulawayo".into()],
+        };
+        let json = serde_json::to_value(&p).unwrap();
+        assert_eq!(
+            json["place_slugs"],
+            serde_json::json!(["harare", "bulawayo"])
+        );
+        assert!(json.get("places").is_none());
+        let back: AlertPrefs = serde_json::from_value(json).unwrap();
+        assert_eq!(back, p);
+        let from_app: AlertPrefs = serde_json::from_str(
+            r#"{"frost":false,"quiet_start":22,"quiet_end":6,"place_slugs":["x"]}"#,
+        )
+        .unwrap();
+        assert_eq!(from_app.places, vec!["x".to_string()]);
     }
 
     #[test]
@@ -493,7 +642,7 @@ mod tests {
         times.extend(hours("2026-07-11", 0, 10)); // 00:00..09:00
         let mut temps = vec![9.0, 7.0, 5.0, 4.0, 3.0, 2.5];
         temps.extend([2.0, 1.0, -0.5, 0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 9.0]);
-        let a = evaluate_frost(&times, &temps, "2026-07-10T18:00").unwrap();
+        let a = evaluate_frost(OM, &times, &temps, "2026-07-10T18:00").unwrap();
         assert_eq!(a.risk, Risk::Severe);
         assert_eq!(a.lowest, -0.5);
         assert_eq!(a.night, "2026-07-10");
@@ -505,7 +654,7 @@ mod tests {
     fn early_morning_hours_belong_to_the_previous_night() {
         let times = hours("2026-07-11", 0, 8);
         let temps = vec![2.5; 8];
-        let a = evaluate_frost(&times, &temps, "2026-07-11T00:00").unwrap();
+        let a = evaluate_frost(OM, &times, &temps, "2026-07-11T00:00").unwrap();
         assert_eq!(a.night, "2026-07-10");
         assert_eq!(a.risk, Risk::Moderate);
     }
@@ -513,24 +662,86 @@ mod tests {
     #[test]
     fn warm_cold_daytime_and_past_hours_are_not_frost() {
         let times = hours("2026-07-10", 10, 12);
-        assert!(evaluate_frost(&times, &[2.0; 12], "2026-07-10T10:00")
-            .is_none_or(|a| a.start.as_str() >= "2026-07-10T22:00"));
+        assert!(evaluate_frost(OM, &times, &[2.0; 12], "2026-07-10T10:00").is_none());
         // a cold day hour (12:00) alone is not frost
-        assert!(
-            evaluate_frost(&hours("2026-07-10", 10, 4), &[1.0; 4], "2026-07-10T10:00").is_none()
-        );
+        assert!(evaluate_frost(
+            OM,
+            &hours("2026-07-10", 10, 4),
+            &[1.0; 4],
+            "2026-07-10T10:00"
+        )
+        .is_none());
         // frost that already passed is not reported
         let t = hours("2026-07-11", 0, 8);
-        assert!(evaluate_frost(&t, &[1.0; 8], "2026-07-11T09:00").is_none());
+        assert!(evaluate_frost(OM, &t, &[1.0; 8], "2026-07-11T09:00").is_none());
     }
 
     #[test]
     fn only_the_first_night_is_reported() {
         let mut times = hours("2026-07-10", 22, 2);
         times.extend(hours("2026-07-11", 22, 2));
-        let a = evaluate_frost(&times, &[2.0, 2.0, -3.0, -3.0], "2026-07-10T22:00").unwrap();
+        let a = evaluate_frost(OM, &times, &[2.0, 2.0, -3.0, -3.0], "2026-07-10T22:00").unwrap();
         assert_eq!(a.night, "2026-07-10");
         assert_eq!(a.risk, Risk::High);
+    }
+
+    #[test]
+    fn estimates_and_zoned_times_never_produce_an_alert() {
+        let times = hours("2026-07-10", 22, 2);
+        let temps = [-2.0, -2.0];
+        assert!(evaluate_frost(OM, &times, &temps, "2026-07-10T22:00").is_some());
+        for p in ["fallback", "Fallback", "seasonal-estimate", "estimate", ""] {
+            assert!(evaluate_frost(p, &times, &temps, "2026-07-10T22:00").is_none());
+        }
+        assert!(
+            evaluate_frost("open-meteo:best_match", &times, &temps, "2026-07-10T22:00").is_some()
+        );
+        // zoned instants are refused, in the times and in `now`
+        let zoned: Vec<String> = vec!["2026-07-10T22:00Z".into(), "2026-07-10T23:00Z".into()];
+        assert!(evaluate_frost(OM, &zoned, &temps, "2026-07-10T22:00").is_none());
+        let offset: Vec<String> = vec!["2026-07-10T22:00+02:00".into()];
+        assert!(evaluate_frost(OM, &offset, &[-2.0], "2026-07-10T22:00").is_none());
+        assert!(evaluate_frost(OM, &times, &temps, "2026-07-10T22:00:00Z").is_none());
+        assert!(evaluate_frost(OM, &times, &temps, "garbage").is_none());
+    }
+
+    #[test]
+    fn frost_boundaries() {
+        // exactly 3.0 C is frost (moderate); just above is not
+        let t = hours("2026-07-10", 22, 1);
+        let a = evaluate_frost(OM, &t, &[3.0], "2026-07-10T22:00").unwrap();
+        assert_eq!(a.risk, Risk::Moderate);
+        assert!(evaluate_frost(OM, &t, &[3.01], "2026-07-10T22:00").is_none());
+        // 2.0 is high, 0.0 is severe
+        assert_eq!(
+            evaluate_frost(OM, &t, &[2.0], "2026-07-10T22:00")
+                .unwrap()
+                .risk,
+            Risk::High
+        );
+        assert_eq!(
+            evaluate_frost(OM, &t, &[0.0], "2026-07-10T22:00")
+                .unwrap()
+                .risk,
+            Risk::Severe
+        );
+        // 21:00 is outside the window, 22:00 inside
+        let t21 = hours("2026-07-10", 21, 1);
+        assert!(evaluate_frost(OM, &t21, &[-5.0], "2026-07-10T21:00").is_none());
+        // 08:00 is inside (night of the previous date), 09:00 outside
+        let t8 = vec!["2026-07-11T08:00".to_string()];
+        let a = evaluate_frost(OM, &t8, &[1.0], "2026-07-11T08:00").unwrap();
+        assert_eq!(a.night, "2026-07-10");
+        let t9 = vec!["2026-07-11T09:00".to_string()];
+        assert!(evaluate_frost(OM, &t9, &[1.0], "2026-07-11T09:00").is_none());
+        // NaN is skipped, not alerted on
+        assert!(evaluate_frost(OM, &t, &[f64::NAN], "2026-07-10T22:00").is_none());
+        // mismatched lengths read up to the shorter and never panic
+        let two = hours("2026-07-10", 22, 2);
+        let a = evaluate_frost(OM, &two, &[1.0], "2026-07-10T22:00").unwrap();
+        assert_eq!(a.end, "2026-07-10T22:00");
+        assert!(evaluate_frost(OM, &two, &[], "2026-07-10T22:00").is_none());
+        assert!(evaluate_frost(OM, &[], &[1.0], "2026-07-10T22:00").is_none());
     }
 
     #[test]
@@ -547,6 +758,8 @@ mod tests {
             slug: "harare",
             risk: Risk::High,
             local_hour: 12,
+            local_date: "2026-07-10",
+            night: "2026-07-10",
             already_sent_this_night: false,
             sent_today: 0,
             sent_kind_tonight: 0,
@@ -596,6 +809,36 @@ mod tests {
     }
 
     #[test]
+    fn a_held_night_alert_is_never_delivered_the_next_morning() {
+        let p = wants(); // quiet 22:00 to 06:00
+        let mut i = input(&p);
+        i.risk = Risk::Moderate;
+        // seen at 23:00 on the night's date: held by quiet hours
+        i.local_hour = 23;
+        assert_eq!(decide(&i), Decision::HoldQuiet);
+        // the same alert at 06:00 the next day is past its night: dropped
+        i.local_date = "2026-07-11";
+        i.local_hour = 6;
+        assert_eq!(decide(&i), Decision::Stale);
+        // and after 08:00, for any risk
+        i.local_hour = 9;
+        assert_eq!(decide(&i), Decision::Stale);
+        i.risk = Risk::Severe;
+        assert_eq!(decide(&i), Decision::Stale);
+        // severe frost still under way before 08:00 is sent, quiet hours or not
+        i.local_hour = 3;
+        assert_eq!(decide(&i), Decision::Send);
+        // severe at 23:00 on the night itself bypasses quiet hours
+        i.local_date = "2026-07-10";
+        i.local_hour = 23;
+        assert_eq!(decide(&i), Decision::Send);
+        // an evening alert the same date, outside quiet hours, is sent
+        i.risk = Risk::Moderate;
+        i.local_hour = 21;
+        assert_eq!(decide(&i), Decision::Send);
+    }
+
+    #[test]
     fn the_payload_has_no_personal_data_and_no_delivery_promise() {
         let a = FrostAlert {
             risk: Risk::Severe,
@@ -618,6 +861,9 @@ mod tests {
         assert_eq!(classify_status(201), Outcome::Accepted);
         assert_eq!(classify_status(404), Outcome::Expired);
         assert_eq!(classify_status(410), Outcome::Expired);
+        // a VAPID key mismatch can never succeed: deactivate, do not retry
+        assert_eq!(classify_status(403), Outcome::Expired);
+        assert_eq!(classify_status(401), Outcome::Failed);
         assert_eq!(classify_status(429), Outcome::Retry);
         assert_eq!(classify_status(503), Outcome::Retry);
         assert_eq!(classify_status(0), Outcome::Retry);

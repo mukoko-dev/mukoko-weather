@@ -52,6 +52,7 @@ export function detectEnv(w: Window & typeof globalThis = window): PushEnv {
 
 /** VAPID public keys travel as unpadded base64url. */
 export function urlBase64ToUint8Array(b64: string): Uint8Array {
+  b64 = b64.replace(/=+$/, "");
   const pad = "=".repeat((4 - (b64.length % 4)) % 4);
   const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
   return Uint8Array.from(raw, (c) => c.charCodeAt(0));
@@ -91,6 +92,7 @@ export function pushApi(
           platform,
         }),
       }),
+    /** `id` is the server's subscription id (the endpoint hash). */
     unsubscribe: (id: string) =>
       call<void>(`/subscriptions/${encodeURIComponent(id)}`, {
         method: "DELETE",
@@ -104,26 +106,40 @@ export function pushApi(
   };
 }
 
+export interface SubscriptionLike {
+  toJSON(): PushSubscriptionJSON;
+  unsubscribe(): Promise<boolean>;
+  options?: { applicationServerKey: ArrayBuffer | null };
+}
+
 export interface RegistrationLike {
   pushManager: {
-    getSubscription(): Promise<{
-      toJSON(): PushSubscriptionJSON;
-      unsubscribe(): Promise<boolean>;
-    } | null>;
+    getSubscription(): Promise<SubscriptionLike | null>;
     subscribe(o: {
       userVisibleOnly: true;
       applicationServerKey: Uint8Array;
-    }): Promise<{
-      toJSON(): PushSubscriptionJSON;
-    }>;
+    }): Promise<SubscriptionLike>;
   };
 }
 
-export type EnableResult = "enabled" | "denied" | "unsupported" | "error";
+export type EnableResult =
+  | "enabled"
+  | "denied" // the browser blocks notifications for this site
+  | "dismissed" // the prompt was closed without a choice; may ask again later
+  | "needs-install" // iOS Safari tab: add to the Home Screen first
+  | "unsupported"
+  | "error";
+
+function sameKey(a: ArrayBuffer | null | undefined, b: Uint8Array): boolean {
+  if (!a) return false;
+  const x = new Uint8Array(a);
+  return x.length === b.length && x.every((v, i) => v === b[i]);
+}
 
 /**
  * Call from a click handler. Requests permission, subscribes and registers
- * the subscription with the server. Never throws.
+ * the subscription with the server. An existing subscription made with a
+ * different VAPID key is replaced (it could never be pushed to). Never throws.
  */
 export async function enablePush(deps: {
   env: PushEnv;
@@ -133,26 +149,83 @@ export async function enablePush(deps: {
   platform?: string;
 }): Promise<EnableResult> {
   const state = pushState(deps.env);
-  if (state === "unsupported" || state === "needs-install")
-    return "unsupported";
+  if (state === "needs-install") return "needs-install";
+  if (state === "unsupported") return "unsupported";
   if (state === "denied") return "denied";
   try {
     if (state === "available") {
       const p = await deps.requestPermission();
-      if (p !== "granted") return p === "denied" ? "denied" : "error";
+      if (p === "denied") return "denied";
+      if (p !== "granted") return "dismissed";
     }
     const [{ vapid_public_key }, reg] = await Promise.all([
       deps.api.config(),
       deps.registration(),
     ]);
-    const sub =
-      (await reg.pushManager.getSubscription()) ??
-      (await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapid_public_key),
-      }));
+    const key = urlBase64ToUint8Array(vapid_public_key);
+    let sub = await reg.pushManager.getSubscription();
+    // A subscription made with another VAPID key is dead weight: the push
+    // service rejects our sends with 403. Replace it. If the browser does not
+    // expose the key, keep the subscription.
+    if (
+      sub?.options &&
+      sub.options.applicationServerKey &&
+      !sameKey(sub.options.applicationServerKey, key)
+    ) {
+      await sub.unsubscribe();
+      sub = null;
+    }
+    sub ??= await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: key,
+    });
     await deps.api.subscribe(sub.toJSON(), deps.platform);
     return "enabled";
+  } catch {
+    return "error";
+  }
+}
+
+/** The server's subscription id for an endpoint: SHA-256, hex (as the API). */
+export async function endpointId(endpoint: string): Promise<string> {
+  // Canonical form, matching weather-core's `endpoint_id`: lower-case host,
+  // default port dropped.
+  const m = /^https:\/\/([^/?#]*)([\s\S]*)$/.exec(endpoint);
+  const canonical = m
+    ? `https://${m[1].replace(/:443$/, "").toLowerCase()}${m[2]}`
+    : endpoint;
+  const d = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(canonical),
+  );
+  return Array.from(new Uint8Array(d), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+/**
+ * Turn push off for this browser: unsubscribe locally, then tell the server
+ * (DELETE) so it stops trying. The local unsubscribe happens first and counts
+ * even if the server call fails. Never throws.
+ */
+export async function disablePush(deps: {
+  registration: () => Promise<RegistrationLike>;
+  api: ReturnType<typeof pushApi>;
+}): Promise<"disabled" | "not-subscribed" | "error"> {
+  try {
+    const reg = await deps.registration();
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return "not-subscribed";
+    const endpoint = sub.toJSON().endpoint;
+    await sub.unsubscribe();
+    if (endpoint) {
+      try {
+        await deps.api.unsubscribe(await endpointId(endpoint));
+      } catch {
+        // The server drops a dead endpoint on its next send (404/410).
+      }
+    }
+    return "disabled";
   } catch {
     return "error";
   }
