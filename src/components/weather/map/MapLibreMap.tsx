@@ -5,6 +5,7 @@ import type {
   Map as MapLibreGLMap,
   Marker,
   RasterTileSource,
+  GeoJSONSource,
   ExpressionSpecification,
 } from "maplibre-gl";
 import type { FeatureCollection } from "geojson";
@@ -51,10 +52,20 @@ export function getMapTilerStyle(isDark: boolean): string {
  */
 export function classifyMapError(
   e: { error?: unknown; sourceId?: string },
-  overlayId: string,
+  overlayId: string | readonly string[],
 ): "overlay" | "base" {
-  return e?.sourceId === overlayId ? "overlay" : "base";
+  const ids = typeof overlayId === "string" ? [overlayId] : overlayId;
+  return e?.sourceId !== undefined && ids.includes(e.sourceId)
+    ? "overlay"
+    : "base";
 }
+
+/** Every source we add on top of the base style; their errors are overlay errors. */
+const OVERLAY_SOURCE_IDS = [
+  WEATHER_OVERLAY_ID,
+  AQI_OVERLAY_ID,
+  MODEL_OVERLAY_ID,
+] as const;
 
 /** Which layer each map's weather overlay source was built for. */
 const overlayLayerOf = new WeakMap<MapLibreGLMap, string>();
@@ -208,12 +219,31 @@ export interface FieldOverlay {
  * Adds (or replaces) the model-field overlay beneath the first symbol layer,
  * like the AQI grid. Idempotent; null clears it.
  */
+/** Colour tokens + credit each map's field overlay was built with. */
+const fieldStyleOf = new WeakMap<MapLibreGLMap, string>();
+
 function applyFieldOverlay(
   map: MapLibreGLMap,
   overlay: FieldOverlay | null | undefined,
 ) {
+  const style = overlay
+    ? `${overlay.tokens.join(",")}|${overlay.attribution}`
+    : "";
+  // Same palette and credit (a timeline step): swap the cells in place.
+  const existing = map.getSource(MODEL_OVERLAY_ID) as GeoJSONSource | undefined;
+  if (
+    overlay &&
+    existing &&
+    map.getLayer(MODEL_OVERLAY_ID) &&
+    fieldStyleOf.get(map) === style
+  ) {
+    existing.setData(overlay.data);
+    return;
+  }
+
   if (map.getLayer(MODEL_OVERLAY_ID)) map.removeLayer(MODEL_OVERLAY_ID);
   if (map.getSource(MODEL_OVERLAY_ID)) map.removeSource(MODEL_OVERLAY_ID);
+  fieldStyleOf.delete(map);
   if (!overlay || overlay.tokens.length === 0) return;
 
   const beforeId = map
@@ -244,6 +274,7 @@ function applyFieldOverlay(
     },
     beforeId,
   );
+  fieldStyleOf.set(map, style);
 }
 
 interface MapLibreMapProps {
@@ -440,7 +471,7 @@ export function MapLibreMap({
         // show the "Base map unavailable" notice so a blank base map is never
         // silent.
         map.on("error", (e: { error?: unknown; sourceId?: string }) => {
-          if (classifyMapError(e, WEATHER_OVERLAY_ID) === "overlay") {
+          if (classifyMapError(e, OVERLAY_SOURCE_IDS) === "overlay") {
             // Overlay tile failures (e.g. a single raster tile that can't be
             // decoded) are non-fatal — MapLibre keeps the rest of the layer, so we
             // never blank it. Fire the notice once and log at most once per layer

@@ -278,16 +278,37 @@ export function forecastTimelineFrames(now: Date): TimelineFrame[] {
   }));
 }
 
+/** "Now", "+4h", "+1d" for a whole-hour offset. */
+function hourOffsetLabel(hours: number): string {
+  if (hours <= 0) return "Now";
+  if (hours % 24 === 0) return `+${hours / 24}d`;
+  return `+${hours}h`;
+}
+
 /**
- * Model-field stops from the grid's 3-hourly times (`/api/py/model-grid`).
- * The first time is the current hour, so labels read Now, +3h, … like the
- * Tomorrow.io timeline.
+ * Model-field stops from the grid's 3-hourly UTC times (`/api/py/model-grid`).
+ * The grid is cached for up to 3 h, so its first time can be in the past:
+ * steps that ended before `now` are dropped, the step containing `now` reads
+ * "Now", and later steps are labelled by their real offset from now.
+ * `timestamp` stays the grid time, so callers find the series index with
+ * `times.indexOf(frame.timestamp)`.
  */
-export function modelTimelineFrames(times: readonly string[]): TimelineFrame[] {
-  return times.map((timestamp, step) => ({
-    timestamp,
-    label: timelineLabel(step),
-  }));
+export function modelTimelineFrames(
+  times: readonly string[],
+  now: Date,
+): TimelineFrame[] {
+  const nowMs = now.getTime();
+  const stepMs = TIMELINE_STEP_HOURS * 3_600_000;
+  const frames: TimelineFrame[] = [];
+  for (const timestamp of times) {
+    const t = Date.parse(timestamp);
+    if (!Number.isFinite(t) || t + stepMs <= nowMs) continue;
+    frames.push({
+      timestamp,
+      label: hourOffsetLabel(Math.round((t - nowMs) / 3_600_000)),
+    });
+  }
+  return frames;
 }
 
 /** Frame the timeline opens on: the newest image for observed loops, else Now. */

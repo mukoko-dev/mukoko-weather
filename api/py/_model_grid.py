@@ -31,14 +31,14 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from . import _model_blend as blend
-from ._aq_grid import build_grid, grid_cell_km, normalise_n
-from ._circuit_breaker import CircuitOpenError, open_meteo_breaker
-from ._db import ttl_find_one, ttl_upsert, weather_db
+from ._aq_grid import build_grid, grid_cell_km
+from ._circuit_breaker import open_meteo_breaker
+from ._db import check_rate_limit, get_client_ip, ttl_find_one, ttl_upsert, weather_db
 
 router = APIRouter()
 
@@ -60,12 +60,15 @@ MODEL_GRID_CACHE_TTL_SECONDS = 3 * 60 * 60
 FORECAST_HOURS = 72
 STEP_HOURS = 3
 
-#: Grid defaults: 7×7 over ±120 km → 40 km cells (coarser than the models
-#: themselves, but 49 points is already 49 Open-Meteo "calls" per fetch).
-GRID_N_DEFAULT = 7
-RADIUS_KM_DEFAULT = 120.0
-RADIUS_KM_MIN = 20.0
-RADIUS_KM_MAX = 200.0
+#: Fixed grid: 7×7 over ±120 km → 40 km cells (coarser than the models
+#: themselves, but 49 points is already 49 Open-Meteo "calls" per fetch). Not
+#: caller-configurable, so the cache key space is only model × 0.25° cell.
+GRID_N = 7
+RADIUS_KM = 120.0
+
+#: Upstream fetches (cache misses) per IP per hour. Hits are free.
+MISS_RATE_LIMIT = 30
+MISS_RATE_WINDOW_S = 3600
 
 #: Centre snap — 0.25° (≈28 km) so neighbouring pages share one cache row.
 CENTRE_SNAP_DEG = 0.25
@@ -106,12 +109,23 @@ def canonical_model(model: str | None) -> Optional[str]:
     return m if m in MAP_MODELS else None
 
 
-def clamp_model_radius(radius_km: float) -> float:
-    return min(max(float(radius_km), RADIUS_KM_MIN), RADIUS_KM_MAX)
-
-
 def snap_centre(value: float) -> float:
     return round(round(value / CENTRE_SNAP_DEG) * CENTRE_SNAP_DEG, 2)
+
+
+def valid_grid(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """
+    Keep the grid inside WGS 84: latitudes clipped to ±89.9 (a grid centred
+    near a pole would otherwise step past it) and longitudes wrapped into
+    [-180, 180) across the antimeridian. Open-Meteo rejects anything else with
+    a 400, which is our bug, not an upstream failure.
+    """
+    out = []
+    for lat, lon in points:
+        lat = max(-89.9, min(89.9, lat))
+        lon = ((lon + 180.0) % 360.0) - 180.0
+        out.append((round(lat, 6), round(lon, 6)))
+    return out
 
 
 def cache_key(model: str, lat: float, lon: float, n: int, radius_km: float) -> str:
@@ -209,10 +223,27 @@ def _get_http() -> httpx.Client:
     return _http_client
 
 
+class UpstreamError(Exception):
+    """Open-Meteo itself failed (5xx, 429, transport, bad body) — counts against the breaker."""
+
+
+class RequestRejected(Exception):
+    """Open-Meteo rejected our request (4xx other than 429) — our bug, not an outage."""
+
+
 def _fetch(points: list[tuple[float, float]], model: str) -> tuple[list[str], list[dict]]:
-    resp = _get_http().get(OPEN_METEO_FORECAST_URL, params=open_meteo_params(points, model))
-    resp.raise_for_status()
-    return parse_model_grid(resp.json(), points)
+    try:
+        resp = _get_http().get(OPEN_METEO_FORECAST_URL, params=open_meteo_params(points, model))
+    except httpx.HTTPError as exc:
+        raise UpstreamError(type(exc).__name__) from exc
+    if resp.status_code == 429 or resp.status_code >= 500:
+        raise UpstreamError(f"HTTP {resp.status_code}")
+    if resp.status_code != 200:
+        raise RequestRejected(f"HTTP {resp.status_code}")
+    try:
+        return parse_model_grid(resp.json(), points)
+    except ValueError as exc:
+        raise UpstreamError(str(exc)) from exc
 
 
 def _collection():
@@ -261,24 +292,25 @@ def _unavailable(model: str, cell_km: float, reason: str) -> JSONResponse:
 
 @router.get("/api/py/model-grid", response_model=ModelGridResponse)
 async def get_model_grid(
+    request: Request,
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
     model: str = Query(blend.ECMWF_IFS),
-    n: int = Query(GRID_N_DEFAULT),
-    radiusKm: float = Query(RADIUS_KM_DEFAULT),
 ):
     """
-    GET /api/py/model-grid?lat=&lon=&model=ecmwf_ifs&n=7&radiusKm=120
+    GET /api/py/model-grid?lat=&lon=&model=ecmwf_ifs
 
     One model's 3-hourly temperature (°C), precipitation (mm/h) and 10 m wind
-    (km/h, degrees) for 72 h on an n×n grid. ``model`` must be a blend member
-    (``ecmwf_ifs``, ``ecmwf_aifs025_single``, ``gfs_seamless``, ``icon_global``,
-    ``gem_global``, ``meteofrance_arpege_world``); anything else gets
-    ``available: false, reason: "unknown_model"``.
+    (km/h, degrees) for 72 h on a fixed 7×7 grid over ±120 km. ``model`` must
+    be a blend member (``ecmwf_ifs``, ``ecmwf_aifs025_single``,
+    ``gfs_seamless``, ``icon_global``, ``gem_global``,
+    ``meteofrance_arpege_world``); anything else gets ``available: false,
+    reason: "unknown_model"``. Cache misses are rate-limited per IP
+    (``rate_limited``); only an Open-Meteo outage counts against
+    ``open_meteo_breaker`` — a rejected request (4xx) does not, since that
+    breaker also gates the forecast baseline.
     """
-    n_c = normalise_n(n)
-    radius = clamp_model_radius(radiusKm)
-    cell_km = grid_cell_km(radius, n_c)
+    cell_km = grid_cell_km(RADIUS_KM, GRID_N)
 
     canon = canonical_model(model)
     if canon is None:
@@ -286,7 +318,7 @@ async def get_model_grid(
 
     lat_c = snap_centre(lat)
     lon_c = snap_centre(lon)
-    key = cache_key(canon, lat_c, lon_c, n_c, radius)
+    key = cache_key(canon, lat_c, lon_c, GRID_N, RADIUS_KM)
 
     cached = _get_cached(key)
     if cached:
@@ -303,16 +335,26 @@ async def get_model_grid(
     if not open_meteo_breaker.is_allowed:
         return _unavailable(canon, cell_km, "circuit_open")
 
-    coords = build_grid(lat_c, lon_c, radius, n_c, clamp=False)
-    loop = asyncio.get_running_loop()
+    client_ip = get_client_ip(request) or "unknown"
+    if not check_rate_limit(client_ip, "model-grid", MISS_RATE_LIMIT, MISS_RATE_WINDOW_S).get(
+        "allowed", True
+    ):
+        return _unavailable(canon, cell_km, "rate_limited")
+
+    coords = valid_grid(build_grid(lat_c, lon_c, RADIUS_KM, GRID_N, clamp=False))
     try:
-        times, points = await open_meteo_breaker.execute(
-            lambda: loop.run_in_executor(None, lambda: _fetch(coords, canon))
+        times, points = await asyncio.wait_for(
+            asyncio.to_thread(_fetch, coords, canon),
+            timeout=open_meteo_breaker.config.timeout_s,
         )
-    except CircuitOpenError:
-        return _unavailable(canon, cell_km, "circuit_open")
+    except RequestRejected:
+        return _unavailable(canon, cell_km, "upstream_error")
+    except (UpstreamError, asyncio.TimeoutError, TimeoutError):
+        open_meteo_breaker.record_failure()
+        return _unavailable(canon, cell_km, "upstream_error")
     except Exception:
         return _unavailable(canon, cell_km, "upstream_error")
+    open_meteo_breaker.record_success()
 
     if not has_any_value(points):
         # The model has no data here (all nulls) — not an upstream failure.

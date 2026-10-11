@@ -381,8 +381,24 @@ describe("map overlay sources (satellite, model fields, timeline)", () => {
     expect(forecast).toHaveLength(TIMELINE_STEPS);
     expect(forecast[0]).toEqual({ timestamp: "now", label: "Now" });
     expect(forecast[1].timestamp).toBe("2026-10-11T10:00:00Z");
-    const model = m.modelTimelineFrames(["a", "b", "c"]);
+    const times = [
+      "2026-10-11T06:00Z",
+      "2026-10-11T09:00Z",
+      "2026-10-11T12:00Z",
+    ];
+    const model = m.modelTimelineFrames(
+      times,
+      new Date("2026-10-11T06:20:00Z"),
+    );
     expect(model.map((f) => f.label)).toEqual(["Now", "+3h", "+6h"]);
+    // A grid cached 3 h ago: past steps drop, labels count from now.
+    const stale = m.modelTimelineFrames(
+      times,
+      new Date("2026-10-11T09:50:00Z"),
+    );
+    expect(stale.map((f) => f.timestamp)).toEqual(times.slice(1));
+    expect(stale.map((f) => f.label)).toEqual(["Now", "+2h"]);
+    expect(m.modelTimelineFrames(["junk"], new Date())).toEqual([]);
     expect(m.timelineDefaultIndex("satellite", model)).toBe(2);
     expect(m.timelineDefaultIndex("modelWind", model)).toBe(0);
     expect(m.timelineDefaultIndex("satellite", [])).toBe(0);

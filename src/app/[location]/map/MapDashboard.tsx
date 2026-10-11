@@ -59,7 +59,6 @@ import {
 } from "@/lib/model-grid";
 import { getFeatureFlag } from "@/lib/feature-flags";
 import { useAppStore } from "@/lib/store";
-import { normalizeForecastModel } from "@/lib/weather";
 import { cn } from "@/lib/utils";
 import type { WeatherLocation } from "@/lib/locations";
 import type { FieldOverlay } from "@/components/weather/map/MapLibreMap";
@@ -125,10 +124,17 @@ export function MapDashboard({ location }: MapDashboardProps) {
   // null = the layer's default frame (Now for forecasts, newest for imagery).
   const [stepChoice, setStepChoice] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
-  // Model picker: opens on the user's forecast-model preference.
+  // Model picker: opens on the user's forecast-model preference. Picking a
+  // model here only changes the map — the preference drives every location
+  // page's baseline, so comparing models on the map must not switch it.
   const preferredModel = useAppStore((s) => s.selectedForecastModel);
-  const setPreferredModel = useAppStore((s) => s.setSelectedForecastModel);
   const [chosenModel, setChosenModel] = useState<string | null>(null);
+  // Re-derive "now" for the timelines every few minutes on a long-open tab.
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setClock(Date.now()), 5 * 60_000);
+    return () => window.clearInterval(id);
+  }, []);
   const activeModel = chosenModel ?? mapModelForPreference(preferredModel);
   // GIBS time domains and model grids, each tagged with what they were fetched for.
   const [domains, setDomains] = useState<{
@@ -159,8 +165,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
     const controller = new AbortController();
     void fetchGibsDomains(gibsLayer, new Date(), controller.signal).then(
       (intervals) => {
-        if (!controller.signal.aborted)
-          setDomains({ layer: gibsLayer.chipId, intervals });
+        if (controller.signal.aborted) return;
+        setDomains({ layer: gibsLayer.chipId, intervals });
+        // The real frames replace the fixed-latency guess: reopen on the newest.
+        setStepChoice(null);
       },
     );
     return () => controller.abort();
@@ -190,7 +198,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
   const modelGridData = modelCurrent?.grid ?? null;
 
   const frames: TimelineFrame[] = useMemo(() => {
-    const now = new Date();
+    const now = new Date(clock);
     if (gibsLayer) {
       const intervals =
         domains?.layer === gibsLayer.chipId ? domains.intervals : null;
@@ -201,15 +209,16 @@ export function MapDashboard({ location }: MapDashboardProps) {
     }
     if (modelOn)
       return modelGridData?.available
-        ? modelTimelineFrames(modelGridData.times)
+        ? modelTimelineFrames(modelGridData.times, now)
         : [];
     if (layerSupportsTimeline(activeLayer)) return forecastTimelineFrames(now);
     return [];
-  }, [gibsLayer, domains, modelOn, modelGridData, activeLayer]);
+  }, [gibsLayer, domains, modelOn, modelGridData, activeLayer, clock]);
 
   const timelineOn = layerSupportsTimeline(activeLayer) && frames.length > 1;
+  const defaultStep = timelineDefaultIndex(activeLayer, frames);
   const step = Math.min(
-    stepChoice ?? timelineDefaultIndex(activeLayer, frames),
+    stepChoice ?? defaultStep,
     Math.max(frames.length - 1, 0),
   );
   const frameCount = frames.length;
@@ -223,33 +232,33 @@ export function MapDashboard({ location }: MapDashboardProps) {
     writeStoredMapLayer(getStorage(), id);
   }, []);
 
-  const handleModelChange = useCallback(
-    (id: string) => {
-      setChosenModel(id);
-      setStepChoice(null);
-      // The dashboard preference only takes the models its picker offers;
-      // GEM and ARPEGE stay a map-only choice.
-      if (normalizeForecastModel(id) === id) setPreferredModel(id);
-    },
-    [setPreferredModel],
-  );
+  const handleModelChange = useCallback((id: string) => {
+    setChosenModel(id);
+    setStepChoice(null);
+  }, []);
 
   useEffect(() => {
     if (!isPlaying || frameCount < 2) return;
     const id = window.setInterval(
       () =>
         setStepChoice((s) => {
-          const current = s ?? 0;
+          // Continue from the frame on screen (imagery opens on the newest).
+          const current = s ?? defaultStep;
           return (current + 1) % frameCount;
         }),
       TIMELINE_TICK_MS,
     );
     return () => window.clearInterval(id);
-  }, [isPlaying, frameCount]);
+  }, [isPlaying, frameCount, defaultStep]);
 
   const fieldOverlay: FieldOverlay | null = useMemo(() => {
     if (!modelOn) return null;
-    const data = modelGridToGeoJSON(modelGridData, activeLayer, step);
+    // Frames skip steps that are already past, so map the frame back to the
+    // grid's series index by its time.
+    const seriesIndex =
+      modelGridData?.times.indexOf(frames[step]?.timestamp ?? "") ?? -1;
+    if (seriesIndex < 0) return null;
+    const data = modelGridToGeoJSON(modelGridData, activeLayer, seriesIndex);
     if (!data) return null;
     return {
       data,
@@ -258,7 +267,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
         overlayAttribution(activeLayer, activeModel),
       ),
     };
-  }, [modelOn, modelGridData, activeLayer, step, activeModel]);
+  }, [modelOn, modelGridData, activeLayer, step, frames, activeModel]);
 
   const credits = attributionForLayer(activeLayer, activeModel);
 

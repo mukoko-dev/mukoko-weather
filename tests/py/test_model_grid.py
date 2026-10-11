@@ -20,12 +20,12 @@ from py._model_grid import (
     STEP_HOURS,
     cache_key,
     canonical_model,
-    clamp_model_radius,
     get_model_grid,
     has_any_value,
     open_meteo_params,
     parse_model_grid,
     snap_centre,
+    valid_grid,
 )
 
 
@@ -52,8 +52,8 @@ def _om_response(n_points: int, **kw) -> list[dict]:
 
 def _http_with(payload) -> MagicMock:
     resp = MagicMock()
+    resp.status_code = 200
     resp.json.return_value = payload
-    resp.raise_for_status.return_value = None
     client = MagicMock()
     client.get.return_value = resp
     return client
@@ -94,10 +94,11 @@ class TestPureHelpers:
         assert snap_centre(31.05) == 31.0
         assert snap_centre(31.13) == 31.25
 
-    def test_radius_clamp(self):
-        assert clamp_model_radius(5) == 20.0
-        assert clamp_model_radius(500) == 200.0
-        assert clamp_model_radius(120) == 120.0
+    def test_valid_grid_clips_poles_and_wraps_the_antimeridian(self):
+        pts = valid_grid(build_grid(89.75, 179.75, 120, 7, clamp=False))
+        assert all(-90 < lat < 90 for lat, _ in pts)
+        assert all(-180 <= lon < 180 for _, lon in pts)
+        assert valid_grid([(0.0, 181.0)]) == [(0.0, -179.0)]
 
     def test_cache_key_is_deterministic(self):
         assert cache_key("gfs_seamless", -17.75, 31.0, 7, 120) == "gfs_seamless_-17.75_31.00_7_120"
@@ -149,15 +150,33 @@ class TestPureHelpers:
         assert has_any_value([{"temperature": [None], "precipitation": [None], "windSpeed": []}]) is False
 
 
+def _status_client(status: int) -> MagicMock:
+    resp = MagicMock()
+    resp.status_code = status
+    client = MagicMock()
+    client.get.return_value = resp
+    return client
+
+
+@pytest.fixture
+def allow_rate():
+    with patch.object(_model_grid, "check_rate_limit", return_value={"allowed": True}) as m:
+        yield m
+
+
+async def _call(mock_request, model="ecmwf_ifs", lat=-17.83, lon=31.05):
+    return await get_model_grid(request=mock_request(), lat=lat, lon=lon, model=model)
+
+
 class TestEndpoint:
     @pytest.mark.asyncio
-    async def test_miss_fetches_once_and_caches(self):
+    async def test_miss_fetches_once_and_caches(self, mock_request, allow_rate):
         col = _cache_col(None)
         client = _http_with(_om_response(49))
         with patch.object(_model_grid, "_collection", return_value=col), patch.object(
             _model_grid, "_get_http", return_value=client
         ):
-            resp = await get_model_grid(lat=-17.83, lon=31.05, model="gfs_seamless", n=7, radiusKm=120)
+            resp = await _call(mock_request, model="gfs_seamless")
         body = _body(resp)
         assert body["available"] is True
         assert body["model"] == "gfs_seamless"
@@ -166,79 +185,112 @@ class TestEndpoint:
         assert client.get.call_count == 1
         col.update_one.assert_called_once()
         assert col.update_one.call_args[0][0] == {"_id": "gfs_seamless_-17.75_31.00_7_120"}
+        allow_rate.assert_called_once()
+        assert allow_rate.call_args[0][1] == "model-grid"
 
     @pytest.mark.asyncio
-    async def test_hit_never_calls_upstream(self):
+    async def test_hit_never_calls_upstream_or_the_limiter(self, mock_request, allow_rate):
         cached = {"cellKm": 40.0, "times": ["t"], "points": [{"lat": 0, "lon": 0}]}
         client = _http_with(_om_response(49))
         with patch.object(_model_grid, "_collection", return_value=_cache_col(cached)), patch.object(
             _model_grid, "_get_http", return_value=client
         ):
-            resp = await get_model_grid(lat=-17.83, lon=31.05, model="ecmwf_ifs", n=7, radiusKm=120)
+            resp = await _call(mock_request)
         assert _body(resp)["available"] is True
         assert resp.headers["X-Cache"] == "HIT"
         client.get.assert_not_called()
+        allow_rate.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_unknown_model_is_unavailable_without_a_fetch(self):
+    async def test_rate_limited_miss_does_not_fetch(self, mock_request):
+        client = _http_with(_om_response(49))
+        with patch.object(_model_grid, "_collection", return_value=_cache_col(None)), patch.object(
+            _model_grid, "_get_http", return_value=client
+        ), patch.object(_model_grid, "check_rate_limit", return_value={"allowed": False}):
+            resp = await _call(mock_request)
+        assert _body(resp)["reason"] == "rate_limited"
+        client.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_unknown_model_is_unavailable_without_a_fetch(self, mock_request, allow_rate):
         client = _http_with(_om_response(49))
         with patch.object(_model_grid, "_get_http", return_value=client):
-            resp = await get_model_grid(lat=0, lon=0, model="best_match", n=7, radiusKm=120)
+            resp = await _call(mock_request, model="best_match")
         body = _body(resp)
         assert body["available"] is False
         assert body["reason"] == "unknown_model"
         client.get.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_upstream_error_degrades_and_is_not_cached(self):
+    async def test_upstream_5xx_counts_against_the_breaker(self, mock_request, allow_rate):
         col = _cache_col(None)
-        client = MagicMock()
-        client.get.side_effect = RuntimeError("boom")
         with patch.object(_model_grid, "_collection", return_value=col), patch.object(
-            _model_grid, "_get_http", return_value=client
-        ):
-            resp = await get_model_grid(lat=0, lon=0, model="icon_global", n=7, radiusKm=120)
-        body = _body(resp)
-        assert body["available"] is False
-        assert body["reason"] == "upstream_error"
+            _model_grid, "_get_http", return_value=_status_client(503)
+        ), patch.object(open_meteo_breaker, "record_failure") as failure:
+            resp = await _call(mock_request, model="icon_global")
+        assert _body(resp)["reason"] == "upstream_error"
+        failure.assert_called_once()
         col.update_one.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_all_null_model_is_no_data_not_a_breaker_failure(self):
+    async def test_rejected_request_does_not_trip_the_shared_breaker(self, mock_request, allow_rate):
+        with patch.object(_model_grid, "_collection", return_value=_cache_col(None)), patch.object(
+            _model_grid, "_get_http", return_value=_status_client(400)
+        ), patch.object(open_meteo_breaker, "record_failure") as failure:
+            resp = await _call(mock_request)
+        assert _body(resp)["reason"] == "upstream_error"
+        failure.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_transport_error_counts_against_the_breaker(self, mock_request, allow_rate):
+        import httpx
+
+        client = MagicMock()
+        client.get.side_effect = httpx.ConnectError("boom")
+        with patch.object(_model_grid, "_collection", return_value=_cache_col(None)), patch.object(
+            _model_grid, "_get_http", return_value=client
+        ), patch.object(open_meteo_breaker, "record_failure") as failure:
+            resp = await _call(mock_request)
+        assert _body(resp)["reason"] == "upstream_error"
+        failure.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_all_null_model_is_no_data_not_a_breaker_failure(self, mock_request, allow_rate):
         hourly = _hourly()
         for key in ("temperature_2m", "precipitation", "wind_speed_10m"):
             hourly[key] = [None] * len(hourly["time"])
         col = _cache_col(None)
         client = _http_with([{"hourly": hourly}] * 49)
+        client.get.return_value.status_code = 200
         with patch.object(_model_grid, "_collection", return_value=col), patch.object(
             _model_grid, "_get_http", return_value=client
         ):
-            resp = await get_model_grid(lat=0, lon=0, model="gem_global", n=7, radiusKm=120)
+            resp = await _call(mock_request, model="gem_global")
         assert _body(resp)["reason"] == "no_data"
         assert open_meteo_breaker.is_allowed
         col.update_one.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_open_breaker_short_circuits(self):
+    async def test_open_breaker_short_circuits(self, mock_request, allow_rate):
         for _ in range(10):
             open_meteo_breaker.record_failure()
         client = _http_with(_om_response(49))
         with patch.object(_model_grid, "_collection", return_value=_cache_col(None)), patch.object(
             _model_grid, "_get_http", return_value=client
         ):
-            resp = await get_model_grid(lat=0, lon=0, model="ecmwf_ifs", n=7, radiusKm=120)
+            resp = await _call(mock_request)
         assert _body(resp)["reason"] == "circuit_open"
         client.get.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_cache_read_failure_is_a_miss(self):
+    async def test_cache_read_failure_is_a_miss(self, mock_request, allow_rate):
         col = MagicMock()
         col.find_one.side_effect = RuntimeError("db down")
         client = _http_with(_om_response(49))
         with patch.object(_model_grid, "_collection", return_value=col), patch.object(
             _model_grid, "_get_http", return_value=client
         ):
-            resp = await get_model_grid(lat=0, lon=0, model="ecmwf_ifs", n=7, radiusKm=120)
+            resp = await _call(mock_request)
         assert _body(resp)["available"] is True
 
 

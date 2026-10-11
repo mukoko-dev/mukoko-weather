@@ -121,11 +121,14 @@ describe("MapDashboard — overlay sources and credits", () => {
     expect(source).toContain("satelliteFrames(gibsLayer, intervals, now)");
   });
 
-  it("keeps model fields behind their flag and ties the picker to the preference", () => {
+  it("keeps model fields behind their flag and opens the picker on the preference", () => {
     expect(source).toContain('getFeatureFlag("model_map_layers")');
     expect(source).toContain("mapModelForPreference(preferredModel)");
+    // Read-only: comparing models on the map never switches the dashboard baseline.
+    expect(source).not.toContain("setSelectedForecastModel");
+    expect(source).toContain("const current = s ?? defaultStep;");
     expect(source).toContain(
-      "if (normalizeForecastModel(id) === id) setPreferredModel(id);",
+      "modelGridData?.times.indexOf(frames[step]?.timestamp",
     );
     expect(source).toContain("fieldOverlay={fieldOverlay}");
   });

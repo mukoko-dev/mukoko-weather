@@ -253,6 +253,21 @@ describe("weather timeline + AQI bubbles (full-screen map)", () => {
   });
 });
 
+describe("classifyMapError — every overlay source", () => {
+  it("treats AQ and model-field source errors as overlay errors, not base-map failures", async () => {
+    const { AQI_OVERLAY_ID, MODEL_OVERLAY_ID } =
+      await import("@/lib/map-layers");
+    const ids = [WEATHER_OVERLAY_ID, AQI_OVERLAY_ID, MODEL_OVERLAY_ID];
+    expect(classifyMapError({ sourceId: MODEL_OVERLAY_ID }, ids)).toBe(
+      "overlay",
+    );
+    expect(classifyMapError({ sourceId: AQI_OVERLAY_ID }, ids)).toBe("overlay");
+    expect(classifyMapError({ sourceId: "openmaptiles" }, ids)).toBe("base");
+    expect(classifyMapError({}, ids)).toBe("base");
+    expect(source).toContain("classifyMapError(e, OVERLAY_SOURCE_IDS)");
+  });
+});
+
 describe("MapLibreMap — overlay sources and attribution", () => {
   it("builds the attribution control from map-sources, not a literal string", () => {
     expect(source).toContain(
@@ -274,5 +289,10 @@ describe("MapLibreMap — overlay sources and attribution", () => {
     );
     expect(source).toContain("attribution: overlay.attribution");
     expect(source).toContain("MODEL_OVERLAY_ID");
+  });
+
+  it("swaps model cells in place on a timeline step instead of rebuilding the layer", () => {
+    expect(source).toContain("existing.setData(overlay.data)");
+    expect(source).toContain("fieldStyleOf.get(map) === style");
   });
 });
