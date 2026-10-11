@@ -155,6 +155,11 @@ class TestPlant:
         assert res.windows.plant.status == "wait"
         assert "heavy rain" in res.windows.plant.label.lower()
 
+    def test_moist_soil_without_temperature_is_not_called_dry(self):
+        res = run(make_raw(soil_temp=None, moisture=0.30))
+        assert res.windows.plant.status == "wait"
+        assert "dry" not in res.windows.plant.detail.lower()
+
     def test_missing_soil_data(self):
         res = run(make_raw(moisture=None, soil_temp=None))
         assert res.windows.plant.status == "wait"
@@ -248,6 +253,10 @@ class TestSummaries:
         assert cold.risks.frost.level == "high"
         assert cold.risks.frost.days == ["2026-10-13"]
         assert cold.verdict == "avoid"
+        # The detail names the first frost day's own low, not the week's extreme.
+        two = run(make_raw(tmin=lambda d: {T: 1.5, T + 3: -2.0}.get(d, 10.0)))
+        assert "today (low 2 °C)" in two.risks.frost.detail
+        assert two.risks.frost.extremeC == -2.0
         mild = run(make_raw(tmin=lambda d: 3.5 if d == T + 1 else 10.0))
         assert mild.risks.frost.level == "moderate"
         hot = run(make_raw(tmax=lambda d: 37.0 if d == T + 3 else 28.0))
@@ -394,15 +403,43 @@ class TestEndpoint:
         assert agri._resolve_country("zw", "") == "ZW"
         assert agri._resolve_country("", "Bad Slug!") == ""
 
-    def test_fetch_records_breaker_outcomes(self):
+    @pytest.mark.parametrize(
+        "exc,counts",
+        [
+            (agri.OpenMeteoUpstreamError("HTTP 500", status=500), True),
+            (agri.OpenMeteoUpstreamError("HTTP 429", status=429), True),
+            (agri.OpenMeteoUpstreamError("HTTP 400", status=400), False),
+            (agri.OpenMeteoUpstreamError("non-object body"), False),
+            (TimeoutError("slow"), True),
+        ],
+    )
+    def test_only_upstream_trouble_counts_against_breaker(self, exc, counts):
         import asyncio
 
-        with patch.object(agri, "_fetch_sync", side_effect=agri.OpenMeteoUpstreamError("HTTP 500")), patch.object(
+        with patch.object(agri, "_fetch_sync", side_effect=exc), patch.object(
             agri.open_meteo_breaker, "record_failure"
-        ) as fail:
-            with pytest.raises(agri.OpenMeteoUpstreamError):
+        ) as fail, patch.object(type(agri.open_meteo_breaker), "is_allowed", new=property(lambda self: True)):
+            with pytest.raises(type(exc)):
                 asyncio.run(agri.fetch_raw(1, 1))
-        fail.assert_called_once()
+        assert fail.called is counts
+
+    def test_profile_skips_country_lookup_without_helper(self):
+        with patch.object(agri, "_profile_helper_available", return_value=False), patch.object(
+            agri, "_resolve_country"
+        ) as resolve:
+            assert agri.profile_for(-17.83, 31.05, country="", location="harare") is None
+        resolve.assert_not_called()
+
+    def test_profile_is_memoised_per_cell_and_place(self):
+        agri._profile_memo.clear()
+        with patch.object(agri, "_profile_helper_available", return_value=True), patch.object(
+            agri, "load_location_profile", return_value={"koppen": "Cwb"}
+        ) as load:
+            for _ in range(3):
+                assert agri.profile_for(-17.83, 31.05, country="ZW", location="harare") == {"koppen": "Cwb"}
+            agri.profile_for(-17.83, 31.05, country="ZW", location="epworth")
+        assert load.call_count == 2
+        agri._profile_memo.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -421,12 +458,22 @@ class TestAI:
         "mode": "snapshot",
     }
 
-    def test_cache_key_is_cell_mode_and_sorted_activities(self):
-        a = agri.ai_cache_key(-17.83, 31.05, "snapshot", ["tobacco-farming", "crop-farming"])
-        b = agri.ai_cache_key(-17.83, 31.05, "snapshot", ["crop-farming", "tobacco-farming"])
-        assert a == b == "cell:-17.85_31.05:snapshot:crop-farming,tobacco-farming"
-        assert agri.ai_cache_key(-17.83, 31.05, "briefing", []) == "cell:-17.85_31.05:briefing"
-        assert agri.ai_cache_key(-17.83, 31.05, "snapshot", ["cotton-farming"]) != a
+    LOC = agri.AgriLocation(slug="harare", name="Harare", country="ZW", lat=-17.83, lon=31.05)
+
+    def test_cache_key_is_cell_place_mode_and_sorted_activities(self):
+        a = agri.ai_cache_key(self.LOC, "snapshot", ["tobacco-farming", "crop-farming"])
+        b = agri.ai_cache_key(self.LOC, "snapshot", ["crop-farming", "tobacco-farming"])
+        assert a == b == "cell:-17.85_31.05:harare:ZW:snapshot:crop-farming,tobacco-farming"
+        assert agri.ai_cache_key(self.LOC, "briefing", []) == "cell:-17.85_31.05:harare:ZW:briefing"
+        assert agri.ai_cache_key(self.LOC, "snapshot", ["cotton-farming"]) != a
+
+    def test_two_places_in_one_cell_never_share_text(self):
+        suburb = agri.AgriLocation(slug="", name="Strathaven", country="ZW", lat=-17.84, lon=31.04)
+        no_country = agri.AgriLocation(slug="harare", name="Harare", lat=-17.83, lon=31.05)
+        k = agri.ai_cache_key(self.LOC, "snapshot", [])
+        assert agri.ai_cache_key(suburb, "snapshot", []) != k
+        assert ":strathaven:" in agri.ai_cache_key(suburb, "snapshot", [])
+        assert agri.ai_cache_key(no_country, "snapshot", []) != k
 
     def test_farming_activities_filters_category(self):
         briefs = [
@@ -465,7 +512,7 @@ class TestAI:
         assert res.status_code == 200
         assert res.json()["text"] == "Spray before noon."
         assert res.json()["source"] == "ai"
-        assert put.call_args[0][0] == "cell:-17.85_31.05:snapshot:crop-farming,tobacco-farming"
+        assert put.call_args[0][0] == "cell:-17.85_31.05:harare:ZW:snapshot:crop-farming,tobacco-farming"
         assert put.call_args[0][2] == "ai"
         prompt = call.call_args.kwargs["messages"][0]["content"]
         assert "Harare, ZW" in prompt
@@ -506,6 +553,25 @@ class TestAI:
     def test_bad_mode_rejected(self, client):
         res = client.post("/api/py/ai/agriculture", json={**self.BODY, "mode": "poem"})
         assert res.status_code == 422
+
+    def test_rate_limited_ai_is_429_and_not_cached(self, client):
+        res, put, _ = self._post(client, ai=(None, "rate_limited"))
+        assert res.status_code == 429
+        put.assert_not_called()
+
+    def test_unentitled_caller_never_touches_ai_cache(self, client):
+        with patch.object(agri, "agri_ai_entitled", return_value=False), patch.object(
+            agri, "_get_cached_ai"
+        ) as get, patch.object(agri, "_set_cached_ai") as put, patch.object(
+            agri, "build_agriculture", new=AsyncMock(return_value=(_ok_data(), "HIT"))
+        ), patch.object(agri, "farming_activities", return_value=[]), patch.object(agri, "enforce_rate_limit"), patch(
+            "py._ai_gateway.call_ai"
+        ) as call:
+            res = client.post("/api/py/ai/agriculture", json=self.BODY)
+        assert res.status_code == 200 and res.json()["source"] == "fallback"
+        get.assert_not_called()
+        put.assert_not_called()
+        call.assert_not_called()
 
     def test_entitlement_hook_allows_today(self):
         assert agri.agri_ai_entitled(None) is True

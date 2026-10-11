@@ -39,11 +39,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -167,6 +168,10 @@ IRRIGATE_DEFICIT_GO_MM = 10.0
 IRRIGATE_DEFICIT_WATCH_MM = 4.0
 IRRIGATE_DRY_TOPSOIL = 0.15
 
+# Water balance over the next 7 days (rain − ET₀, mm).
+BALANCE_DEFICIT_MM = -10.0
+BALANCE_SURPLUS_MM = 10.0
+
 # Volumetric soil water (m³/m³). Approximate — texture dependent.
 MOISTURE_BANDS: tuple[tuple[float, str], ...] = (
     (0.38, "saturated"),
@@ -207,7 +212,6 @@ CALENDAR_CROPS: tuple[str, ...] = (
 )
 DEFAULT_CROP = "crop-farming"
 
-Stage = Literal["nursery", "plant", "grow", "harvest"]
 _STAGES: tuple[str, ...] = ("nursery", "plant", "grow", "harvest")
 
 
@@ -722,7 +726,10 @@ def water_balance(days: list[AgriDay], today: str) -> WaterBalance:
     bal_past = round(rain_past - et_past, 1) if et_past is not None and rain_past is not None else None
     status: Optional[str] = None
     if bal_next is not None:
-        status = "deficit" if bal_next < -10 else ("surplus" if bal_next > 10 else "balanced")
+        status = (
+            "deficit" if bal_next < BALANCE_DEFICIT_MM
+            else ("surplus" if bal_next > BALANCE_SURPLUS_MM else "balanced")
+        )
     return WaterBalance(
         et0Next7dMm=et_next,
         rainNext7dMm=rain_next,
@@ -765,6 +772,12 @@ def plant_window(soil: SoilSummary, days: list[AgriDay], today: str) -> FarmWind
             status="go",
             label="Good planting conditions",
             detail=f"Soil at seed depth {temp:.0f} °C and moisture adequate.",
+        )
+    if temp is None and moist:
+        return FarmWindow(
+            status="wait",
+            label="Moist soil, temperature unknown",
+            detail="Moisture is adequate; check the soil is warm at seed depth before planting.",
         )
     if not warm and temp is not None:
         return FarmWindow(
@@ -842,14 +855,16 @@ def frost_risk(days: list[AgriDay], today: str) -> Risk:
     if not week:
         return Risk(level="none", detail="No temperature forecast.")
     coldest = min(week, key=lambda d: d.tMin)  # type: ignore[arg-type, return-value]
-    high = [d.date for d in week if d.tMin <= FROST_HIGH_C]  # type: ignore[operator]
-    possible = [d.date for d in week if d.tMin <= FROST_POSSIBLE_C]  # type: ignore[operator]
+    high = [d for d in week if d.tMin <= FROST_HIGH_C]  # type: ignore[operator]
+    possible = [d for d in week if d.tMin <= FROST_POSSIBLE_C]  # type: ignore[operator]
     if high:
-        return Risk(level="high", days=high, extremeC=coldest.tMin,
-                    detail=f"Frost likely {_day_label(high[0], today)} (low {coldest.tMin:.0f} °C). Cover seedlings and irrigate the evening before.")
+        first = high[0]
+        return Risk(level="high", days=[d.date for d in high], extremeC=coldest.tMin,
+                    detail=f"Frost likely {_day_label(first.date, today)} (low {first.tMin:.0f} °C). Cover seedlings and irrigate the evening before.")
     if possible:
-        return Risk(level="moderate", days=possible, extremeC=coldest.tMin,
-                    detail=f"Ground frost possible in low-lying fields {_day_label(possible[0], today)}.")
+        first = possible[0]
+        return Risk(level="moderate", days=[d.date for d in possible], extremeC=coldest.tMin,
+                    detail=f"Ground frost possible in low-lying fields {_day_label(first.date, today)} (low {first.tMin:.0f} °C).")
     return Risk(level="none", extremeC=coldest.tMin, detail=f"No frost expected this week (lowest {coldest.tMin:.0f} °C).")
 
 
@@ -859,14 +874,16 @@ def heat_risk(days: list[AgriDay], today: str) -> Risk:
     if not week:
         return Risk(level="none", detail="No temperature forecast.")
     hottest = max(week, key=lambda d: d.tMax)  # type: ignore[arg-type, return-value]
-    high = [d.date for d in week if d.tMax >= HEAT_HIGH_C]  # type: ignore[operator]
-    moderate = [d.date for d in week if d.tMax >= HEAT_MODERATE_C]  # type: ignore[operator]
+    high = [d for d in week if d.tMax >= HEAT_HIGH_C]  # type: ignore[operator]
+    moderate = [d for d in week if d.tMax >= HEAT_MODERATE_C]  # type: ignore[operator]
     if high:
-        return Risk(level="high", days=high, extremeC=hottest.tMax,
-                    detail=f"Crop heat stress {_day_label(high[0], today)} (high {hottest.tMax:.0f} °C). Irrigate early and shade livestock.")
+        first = high[0]
+        return Risk(level="high", days=[d.date for d in high], extremeC=hottest.tMax,
+                    detail=f"Crop heat stress {_day_label(first.date, today)} (high {first.tMax:.0f} °C). Irrigate early and shade livestock.")
     if moderate:
-        return Risk(level="moderate", days=moderate, extremeC=hottest.tMax,
-                    detail=f"Hot spell from {_day_label(moderate[0], today)}; watch flowering crops and water stock.")
+        first = moderate[0]
+        return Risk(level="moderate", days=[d.date for d in moderate], extremeC=hottest.tMax,
+                    detail=f"Hot spell from {_day_label(first.date, today)} (high {first.tMax:.0f} °C); watch flowering crops and water stock.")
     return Risk(level="none", extremeC=hottest.tMax, detail=f"No heat stress this week (highest {hottest.tMax:.0f} °C).")
 
 
@@ -886,7 +903,6 @@ def wind_summary(hours: list[Hour], start: int) -> WindSummary:
     return WindSummary(speedKmh=h.wind, gustKmh=h.gust, sprayable=ok, detail=detail)
 
 
-_VERB = {"spray": "spray", "plant": "plant", "harvest": "harvest", "irrigate": "irrigate"}
 
 
 def headline_for(windows: FarmWindows, risks: Risks) -> tuple[str, WindowStatus]:
@@ -899,8 +915,8 @@ def headline_for(windows: FarmWindows, risks: Risks) -> tuple[str, WindowStatus]
     if windows.irrigate.status == "go":
         go.append("irrigate")
     if go:
-        jobs = ", ".join(_VERB[k] for k in go[:-1])
-        jobs = f"{jobs} and {_VERB[go[-1]]}" if jobs else _VERB[go[-1]]
+        jobs = ", ".join(go[:-1])
+        jobs = f"{jobs} and {go[-1]}" if jobs else go[-1]
         return f"Good day to {jobs}.", "go"
     if any(getattr(windows, k).status == "wait" for k in ("spray", "plant", "harvest")):
         return "Mixed day: check the windows before field work.", "wait"
@@ -1057,14 +1073,28 @@ def analyse(
 
 
 class OpenMeteoUpstreamError(Exception):
-    """Open-Meteo answered with an HTTP error (counts against the breaker)."""
+    """Open-Meteo answered with an HTTP error or an unusable body."""
+
+    def __init__(self, message: str, status: Optional[int] = None):
+        super().__init__(message)
+        self.status = status
+
+    @property
+    def counts_against_breaker(self) -> bool:
+        """Only upstream trouble (5xx, 429) opens the shared breaker.
+
+        A 4xx is our own request being refused; letting it open
+        ``open_meteo_breaker`` would also cut off the forecast, AQ and haze
+        for every user (same rule as ``_history_store``).
+        """
+        return self.status is not None and (self.status >= 500 or self.status == 429)
 
 
 def _fetch_sync(lat: float, lon: float) -> dict:
     params = {"latitude": lat, "longitude": lon, **FORECAST_PARAMS}
     resp = get_http_client(HTTP_TIMEOUT_S).get(OPEN_METEO_FORECAST_URL, params=params)
     if resp.status_code >= 400:
-        raise OpenMeteoUpstreamError(f"HTTP {resp.status_code}")
+        raise OpenMeteoUpstreamError(f"HTTP {resp.status_code}", status=resp.status_code)
     data = resp.json()
     if not isinstance(data, dict):
         raise OpenMeteoUpstreamError("non-object body")
@@ -1077,7 +1107,12 @@ async def fetch_raw(lat: float, lon: float) -> dict:
         raise CircuitOpenError(open_meteo_breaker.provider)
     try:
         data = await asyncio.wait_for(asyncio.to_thread(_fetch_sync, lat, lon), timeout=HTTP_TIMEOUT_S + 1)
+    except OpenMeteoUpstreamError as exc:
+        if exc.counts_against_breaker:
+            open_meteo_breaker.record_failure()
+        raise
     except Exception:
+        # Timeouts and transport errors are upstream trouble.
         open_meteo_breaker.record_failure()
         raise
     open_meteo_breaker.record_success()
@@ -1161,15 +1196,50 @@ def _parse_crops(crops: str) -> list[str]:
     return filter_known_activities(ids) if ids else []
 
 
+#: Per-instance memo of profiles (they change far slower than the forecast).
+PROFILE_MEMO_TTL_S = 3600
+_profile_memo: dict[str, tuple[float, Optional[dict]]] = {}
+
+
+def _profile_helper_available() -> bool:
+    try:
+        from ._location_profile import get_location_profile  # type: ignore[import-not-found]  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
+def profile_for(lat: float, lon: float, *, country: str, location: str) -> Optional[dict]:
+    """The location profile, memoised per cell + place. Blocking; run in a thread.
+
+    The country is only resolved (a placesGeo read) when the profile helper
+    exists, since nothing else needs it.
+    """
+    if not _profile_helper_available():
+        return None
+    slug = _clean_slug(location)
+    code = _resolve_country(country, slug)
+    key = f"{weather_cache_key(lat, lon)}|{slug}|{code}"
+    now = time.monotonic()
+    hit = _profile_memo.get(key)
+    if hit and now - hit[0] < PROFILE_MEMO_TTL_S:
+        return hit[1]
+    profile = load_location_profile(lat, lon, slug=slug, country=code)
+    if len(_profile_memo) > 2048:
+        _profile_memo.clear()
+    _profile_memo[key] = (now, profile)
+    return profile
+
+
 async def build_agriculture(
-    lat: float, lon: float, *, country: str, crops: list[str], slug: str = ""
+    lat: float, lon: float, *, country: str, crops: list[str], location: str = ""
 ) -> tuple[AgricultureResponse, str]:
     raw, cache_status, reason = await get_raw(lat, lon)
     now = datetime.now(timezone.utc)
     if raw is None:
         return AgricultureResponse(available=False, reason=reason, fetchedAt=now.isoformat()), cache_status
     try:
-        profile = await asyncio.to_thread(load_location_profile, lat, lon, slug=slug, country=country)
+        profile = await asyncio.to_thread(profile_for, lat, lon, country=country, location=location)
         result = analyse(raw, lat, lon, crops=crops, profile=profile, now=now)
     except Exception as exc:  # analysis bugs must degrade, not 500
         logger.warning("agriculture: analysis failed (%s)", type(exc).__name__)
@@ -1194,9 +1264,9 @@ async def get_agriculture(
     result, cache_status = await build_agriculture(
         lat,
         lon,
-        country=_resolve_country(country, location),
+        country=country,
         crops=_parse_crops(crops),
-        slug=_clean_slug(location),
+        location=location,
     )
     return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Cache": cache_status})
 
@@ -1276,8 +1346,22 @@ def farming_activities(ids: list[str]) -> list[str]:
     return list(dict.fromkeys(known))[:MAX_AI_CROPS]
 
 
-def ai_cache_key(lat: float, lon: float, mode: str, activities: list[str]) -> str:
-    base = f"{weather_cache_key(lat, lon)}:{mode}"
+def _place_id(loc: "AgriLocation") -> str:
+    """Identity of the place the text names: its slug, else its normalised name."""
+    slug = _clean_slug(loc.slug)
+    if slug:
+        return slug
+    return re.sub(r"[^a-z0-9]+", "-", (loc.name or "").lower()).strip("-")[:80] or "-"
+
+
+def ai_cache_key(loc: "AgriLocation", mode: str, activities: list[str]) -> str:
+    """Cell + place + country + mode + sorted farming ids.
+
+    The prompt names the place and its country, so two places in one cell
+    (a town and a suburb, a page slug and a GPS spot) never share text.
+    """
+    country = (loc.country or "").strip().upper()[:3] or "-"
+    base = f"{weather_cache_key(loc.lat, loc.lon)}:{_place_id(loc)}:{country}:{mode}"
     return f"{base}:{','.join(sorted(activities))}" if activities else base
 
 
@@ -1392,8 +1476,15 @@ async def agriculture_ai(body: AgriAIRequest, request: Request = None):
     loc = body.location
     mode = body.mode
     activities = farming_activities(body.activities)
-    key = ai_cache_key(loc.lat, loc.lon, mode, activities)
+    now = datetime.now(timezone.utc).isoformat()
 
+    if not agri_ai_entitled(request):
+        # Not entitled: deterministic text only. Never read or write the AI
+        # cache here, so model text is never served to an unentitled caller.
+        data, _ = await build_agriculture(loc.lat, loc.lon, country=loc.country, crops=activities, location=loc.slug)
+        return AgriAIResponse(text=fallback_text(data, mode), source="fallback", cached=False, mode=mode, generatedAt=now)
+
+    key = ai_cache_key(loc, mode, activities)
     cached = _get_cached_ai(key)
     if cached:
         generated = cached.get("generatedAt")
@@ -1405,13 +1496,10 @@ async def agriculture_ai(body: AgriAIRequest, request: Request = None):
             generatedAt=generated.isoformat() if isinstance(generated, datetime) else str(generated or ""),
         )
 
-    country = _resolve_country(loc.country, loc.slug)
-    data, _ = await build_agriculture(
-        loc.lat, loc.lon, country=country, crops=activities, slug=_clean_slug(loc.slug)
-    )
-    now = datetime.now(timezone.utc).isoformat()
+    country = _resolve_country(loc.country, "")
+    data, _ = await build_agriculture(loc.lat, loc.lon, country=country, crops=activities, location=loc.slug)
 
-    if not data.available or not agri_ai_entitled(request):
+    if not data.available:
         text = fallback_text(data, mode)
         _set_cached_ai(key, text, "fallback")
         return AgriAIResponse(text=text, source="fallback", cached=False, mode=mode, generatedAt=now)
@@ -1442,11 +1530,16 @@ async def agriculture_ai(body: AgriAIRequest, request: Request = None):
     user_content = "\n".join(parts)
 
     system, max_tokens = _system_prompt(mode)
-    response, err = call_ai(
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": user_content}],
+    response, err = await asyncio.to_thread(
+        lambda: call_ai(
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user_content}],
+        )
     )
+    if err == "rate_limited":
+        # Say "try again later" honestly rather than caching fallback text.
+        raise HTTPException(status_code=429, detail="AI is busy. Try again shortly.")
     text = first_text(response).strip() if err is None else ""
     source: Literal["ai", "fallback"] = "ai" if text else "fallback"
     if not text:
