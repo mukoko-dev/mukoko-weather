@@ -26,22 +26,25 @@ describe("MapDashboard — full-viewport layout", () => {
   });
 });
 
-describe("MapDashboard — top-left close and legend", () => {
+describe("MapDashboard — close and legend", () => {
   it("links the close button back to /{slug}", () => {
     expect(source).toContain("href={`/${location.slug}`}");
     expect(source).toContain("Close map and return to");
   });
 
-  it("renders a legend labelled by its heading", () => {
+  it("renders a legend labelled by its heading, with its unit, in the sheet", () => {
     expect(source).toContain('aria-labelledby="map-legend-title"');
     expect(source).toContain('id="map-legend-title"');
     expect(source).toContain("chip.legend.segments");
+    expect(source).toContain("{chip.legend.unit}");
+    expect(source).toMatch(/Legend, \{chip\.legend\.unit\}/);
   });
 });
 
 describe("MapDashboard — top-right controls", () => {
   it("has a layers toggle, a centre-on-my-location button and a list link", () => {
-    expect(source).toContain("Hide layer panel");
+    expect(source).toContain("Hide map layers");
+    expect(source).toContain("aria-controls={sheetId}");
     expect(source).toContain("Centre the map on my location");
     expect(source).toContain('href="/locations"');
   });
@@ -76,11 +79,68 @@ describe("MapDashboard — timeline", () => {
     expect(source).toContain("{timelineOn && (");
   });
 
-  it("steps the overlay timestamp and has a play/pause control", () => {
+  it("steps the overlay timestamp through the MapTimeline scrubber", () => {
     expect(source).toContain("timelineTimestamp(step, new Date())");
-    expect(source).toContain("aria-label={");
-    expect(source).toContain("Play forecast timeline");
-    expect(source).toContain("Pause forecast timeline");
+    expect(source).toContain("<MapTimeline");
+    expect(source).toContain("onStepChange={setStep}");
+  });
+
+  it("labels the timeline in the place's time zone, not the viewer's", () => {
+    expect(source).toContain("resolveUtcOffsetSeconds(");
+    expect(source).toContain("location.country");
+    expect(source).toContain("offsetSeconds={offsetSeconds}");
+    expect(source).not.toMatch(/getHours\(|toLocaleTimeString\(/);
+  });
+
+  it("has no clock on the server, so SSR and hydration agree", () => {
+    expect(source).toContain(
+      "useSyncExternalStore(subscribeMinute, minuteNow, noClock)",
+    );
+  });
+});
+
+describe("MapDashboard — bottom sheet", () => {
+  it("is a floating .serval card lifted off the edge by the safe area", () => {
+    expect(source).toContain('data-slot="map-sheet"');
+    expect(source).toMatch(
+      /serval absolute inset-x-3 bottom-\[calc\(env\(safe-area-inset-bottom,0px\)\+0\.75rem\)\]/,
+    );
+    expect(source).toContain("max-w-xl");
+  });
+
+  it("collapses the chips and timeline but always keeps the legend and credit", () => {
+    expect(source).toContain("hidden={!sheetOpen}");
+    expect(source).toContain(
+      'aria-label={sheetOpen ? "Collapse map layers" : "Expand map layers"}',
+    );
+    // The attribution sits outside the collapsible body.
+    const body = source.indexOf("hidden={!sheetOpen}");
+    expect(source.indexOf("OpenStreetMap", body)).toBeGreaterThan(
+      source.indexOf("</div>", source.indexOf("<MapTimeline")),
+    );
+    expect(source).not.toContain("{sheetOpen && (");
+  });
+
+  it("caps its height so a landscape phone still sees the map", () => {
+    expect(source).toContain("max-h-[calc(100dvh-6rem)]");
+    expect(source).toContain("[@media(max-height:500px)]:mr-auto");
+    expect(source).toContain("overflow-y-auto");
+  });
+
+  it("announces layer changes through the Mzizi harness", () => {
+    expect(source).toContain('useMziziHarness("map-dashboard")');
+    expect(source).toContain(
+      "announce(`${next.label} layer, ${next.legend.unit}`)",
+    );
+  });
+
+  it("uses one icon size for every control", () => {
+    expect(source).toContain('const ICON_CLASS = "h-5 w-5";');
+    expect(source).not.toMatch(/className="h-5 w-5"/);
+  });
+
+  it("keeps top controls clear of the notch", () => {
+    expect(source).toContain("top-[max(1rem,env(safe-area-inset-top))]");
   });
 });
 

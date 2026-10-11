@@ -6,7 +6,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
+import { Layers } from "lucide-react";
 import { MAP_CHIPS, AIR_QUALITY_LAYER_ID } from "@/lib/map-layers";
+import { CHIP_ICONS, chipIcon } from "./WeatherLayerPanel";
 
 const panelSource = readFileSync(
   resolve(__dirname, "WeatherLayerPanel.tsx"),
@@ -14,10 +16,25 @@ const panelSource = readFileSync(
 );
 
 describe("WeatherLayerPanel — labelled chips", () => {
-  it("renders chip labels from MAP_CHIPS, not icons", () => {
+  it("renders chip labels from MAP_CHIPS; icons are decorative, never icon-only", () => {
     expect(panelSource).toContain("MAP_CHIPS.map");
     expect(panelSource).toContain("{chip.label}");
-    expect(panelSource).not.toContain("lucide-react");
+    expect(panelSource).toContain(
+      '<LayerIcon id={chip.id} className="h-4 w-4" />',
+    );
+  });
+
+  it("has an icon for every chip, and a generic fallback for new layers", () => {
+    for (const chip of MAP_CHIPS) {
+      expect(CHIP_ICONS[chip.id]).toBeDefined();
+    }
+    expect(chipIcon("some-future-layer")).toBe(Layers);
+    expect(panelSource).toContain('"aria-hidden": true');
+  });
+
+  it("scrolls sideways with an edge fade so more layers fit", () => {
+    expect(panelSource).toContain("overflow-x-auto");
+    expect(panelSource).toContain("scroll-fade-x");
   });
 
   it("offers exactly the five chips the brief asks for, in order", () => {
@@ -39,7 +56,7 @@ describe("WeatherLayerPanel — labelled chips", () => {
 
 describe("WeatherLayerPanel — touch targets", () => {
   it("uses the shared .quail chip, which carries the 48px touch-target minimum", () => {
-    expect(panelSource).toContain('"quail shrink-0');
+    expect(panelSource).toContain('"quail inline-flex shrink-0');
   });
 
   it("uses no hardcoded sizes", () => {

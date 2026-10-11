@@ -1025,6 +1025,79 @@ body {
            transition-all;
   }
 
+  /* .duiker — round 48px icon control on a card surface (the duiker: small,
+     quick, ducks into cover). No surface of its own, so it sits inside the
+     nav island or a map overlay card. aria-current / aria-pressed light it
+     with a primary tint. */
+  .duiker {
+    @apply flex shrink-0 items-center justify-center rounded-full
+           w-[var(--touch-target-min)] h-[var(--touch-target-min)]
+           text-text-secondary transition-colors
+           hover:bg-surface-dim hover:text-text-primary active:scale-95
+           aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary
+           aria-pressed:bg-primary/10 aria-pressed:text-primary
+           focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* .duiker-solid — the one primary round control in a group (map timeline
+     play/pause). Filled with the brand colour, same 48px geometry. */
+  .duiker-solid {
+    @apply flex shrink-0 items-center justify-center rounded-full
+           w-[var(--touch-target-min)] h-[var(--touch-target-min)]
+           bg-primary text-primary-foreground shadow-sm transition-colors
+           hover:bg-primary/90 active:scale-95
+           focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
+  }
+
+  /* .lourie — the floating navigation island (the lourie: a turaco that
+     flashes its colours in flight). A centred pill lifted off the bottom edge
+     by the safe-area inset, never welded to it: a full-width bar collides with
+     the browser toolbar and the home-indicator gesture zone. Geometry comes
+     from the --mobile-nav-* tokens, so --mobile-nav-clearance always matches.
+     Same contract as the mukoko-news island (components/layout/bottom-nav.tsx).
+     surface-elevated, not surface-card: in dark mode cards are near-black, so
+     the island needs the elevated tone to lift off the cards it floats over. */
+  .lourie {
+    @apply fixed inset-x-4 z-40 mx-auto flex max-w-md items-center gap-1
+           h-[var(--mobile-nav-height)] rounded-full border border-border
+           bg-surface-elevated/95 px-2.5 shadow-lg backdrop-blur-xl;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + var(--mobile-nav-inset));
+  }
+
+  /* .serval — floating overlay card on the map (legend, layer sheet, control
+     stack). Solid card surface so it reads over tiles in light and dark. */
+  .serval {
+    @apply rounded-[var(--radius-card)] bg-surface-card text-text-primary
+           shadow-md ring-1 ring-border;
+  }
+
+  /* .springhare — the map timeline range input. Native <input type=range>
+     (keyboard, aria-valuetext and touch come free), restyled: a thin track,
+     a 24px thumb with a ring, and a full 48px hit area. */
+  .springhare {
+    @apply h-[var(--touch-target-min)] w-full cursor-pointer appearance-none bg-transparent
+           focus-visible:outline-none;
+  }
+  .springhare::-webkit-slider-runnable-track {
+    @apply h-1.5 rounded-full bg-text-tertiary/30;
+  }
+  .springhare::-moz-range-track {
+    @apply h-1.5 rounded-full bg-text-tertiary/30;
+  }
+  .springhare::-webkit-slider-thumb {
+    @apply -mt-[9px] h-6 w-6 appearance-none rounded-full border-4 border-surface-card bg-primary shadow-md;
+  }
+  .springhare::-moz-range-thumb {
+    @apply h-6 w-6 rounded-full border-4 border-surface-card bg-primary shadow-md;
+  }
+  .springhare:focus-visible::-webkit-slider-thumb {
+    @apply outline-2 outline-offset-2 outline-primary;
+  }
+  .springhare:focus-visible::-moz-range-thumb {
+    @apply outline-2 outline-offset-2 outline-primary;
+  }
+
   /* ── Surfaces ────────────────────────────────────────────────────────── */
 
   /* .herd — a vertical stack of page sections, one --space-section apart.
@@ -1342,6 +1415,19 @@ body {
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Soft fade at both ends of a sideways-scrolling row (map layer chips), so a
+   clipped chip reads as "more this way" rather than as a broken edge. The
+   mask is alpha only — no colour — so it works on any surface and theme. */
+.scroll-fade-x {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 1rem,
+    #000 calc(100% - 1.5rem),
+    transparent
+  );
 }
 
 /* ===== WCAG 3.0 APCA / AAA — Focus Management ===== */
