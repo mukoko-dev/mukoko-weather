@@ -32,7 +32,17 @@ class TestAggregateStats:
         ]
         out = _aggregate_stats(recs)
         assert "1 days recorded live" in out
-        assert "1 days from the ERA5 climate archive" in out
+        assert "1 days from a climate reanalysis archive" in out
+
+    def test_every_archive_provider_counts_as_archive(self):
+        recs = [
+            {"date": "2026-10-01", "source": "nasa-power", "current": {"temperature_2m": 20}, "daily": {}},
+            {"date": "2026-10-02", "source": "open-meteo-archive", "current": {"temperature_2m": 21}, "daily": {}},
+            {"date": "2026-10-03", "current": {"temperature_2m": 22}, "daily": {}},  # legacy: recorded
+        ]
+        out = _aggregate_stats(recs)
+        assert "1 days recorded live" in out
+        assert "2 days from a climate reanalysis archive" in out
 
     def test_no_provenance_line_when_all_recorded(self):
         recs = [{"date": "2026-10-02", "source": "recorded", "current": {"temperature_2m": 22}, "daily": {}}]

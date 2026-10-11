@@ -177,11 +177,13 @@ def _aggregate_stats(records: list[dict]) -> str:
     # Provenance (#245): archive days carry 24h DAILY MEANS for humidity,
     # wind, pressure and cloud; recorded days carry a point-in-time snapshot.
     # Tell the model so it doesn't read the mix as a trend.
-    archive_days = sum(1 for r in records if r.get("source") == "open-meteo-archive")
+    # Any source other than "recorded" (or a legacy doc with none) is an
+    # archive day: NASA POWER or Open-Meteo ERA5 (#268).
+    archive_days = sum(1 for r in records if r.get("source", "recorded") != "recorded")
     if archive_days:
         lines.append(
             f"Data sources: {len(records) - archive_days} days recorded live (point-in-time "
-            f"humidity/wind/pressure/cloud), {archive_days} days from the ERA5 climate archive "
+            f"humidity/wind/pressure/cloud), {archive_days} days from a climate reanalysis archive "
             "(24h daily means, no UV). Do not treat differences between the two as a trend."
         )
 

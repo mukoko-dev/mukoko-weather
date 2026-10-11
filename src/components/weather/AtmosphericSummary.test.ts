@@ -13,6 +13,7 @@ import {
   next24hPrecipSeries,
   localIsoDate,
   todayHighFrom,
+  normalsCredit,
 } from "./AtmosphericSummary";
 import type { DailyWeather, HourlyWeather } from "@/lib/weather";
 
@@ -240,5 +241,43 @@ describe("AtmosphericSummary source contract", () => {
     const slotPos = source.indexOf("{afterAirQuality}");
     expect(aqPos).toBeGreaterThan(-1);
     expect(slotPos).toBeGreaterThan(aqPos);
+  });
+});
+
+describe("normalsCredit (#268)", () => {
+  it("credits the provider that built the normal", () => {
+    expect(
+      normalsCredit({
+        available: true,
+        normalHigh: 25,
+        source: "NASA POWER, 1991–2020",
+        attributionUrl: "https://power.larc.nasa.gov",
+      }),
+    ).toEqual({
+      source: "NASA POWER, 1991–2020",
+      sourceUrl: "https://power.larc.nasa.gov",
+    });
+  });
+
+  it("drops non-https links and unavailable payloads", () => {
+    expect(
+      normalsCredit({
+        available: true,
+        source: "X",
+        attributionUrl: "javascript:alert(1)",
+      }),
+    ).toEqual({ source: "X", sourceUrl: null });
+    expect(normalsCredit({ available: false, source: "X" })).toEqual({
+      source: null,
+      sourceUrl: null,
+    });
+  });
+
+  it("renders the credit on the Averages card", () => {
+    const src = readFileSync(
+      resolve(__dirname, "AtmosphericSummary.tsx"),
+      "utf-8",
+    );
+    expect(src).toContain('data-testid="normals-source"');
   });
 });

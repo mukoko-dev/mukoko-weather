@@ -66,6 +66,10 @@ PROVIDER_CONFIGS: dict[str, CircuitBreakerConfig] = {
     "noaa-cpc": CircuitBreakerConfig(
         failure_threshold=3, cooldown_s=600, window_s=600, timeout_s=8,
     ),
+    # NASA POWER daily archive: the primary history/normals source (#268).
+    "nasa-power": CircuitBreakerConfig(
+        failure_threshold=3, cooldown_s=300, window_s=600, timeout_s=12,
+    ),
 }
 
 
@@ -222,3 +226,4 @@ ai_breaker = CircuitBreaker("ai-gateway")
 aviation_breaker = CircuitBreaker("aviationweather-gov")
 nea_breaker = CircuitBreaker("nea-data-gov-sg")
 noaa_breaker = CircuitBreaker("noaa-cpc")
+nasa_power_breaker = CircuitBreaker("nasa-power")

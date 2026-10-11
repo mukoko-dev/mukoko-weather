@@ -238,13 +238,39 @@ const EMPTY_DAILY: DailyWeather = {
 interface NormalsPayload {
   available: boolean;
   normalHigh?: number | null;
+  /** e.g. "NASA POWER, 1991–2020" — credited wherever the normal shows (issue 268). */
+  source?: string | null;
+  attributionUrl?: string | null;
 }
 
 type NormalState =
   | { status: "loading" }
-  | { status: "ready"; normalHigh: number | null };
+  | {
+      status: "ready";
+      normalHigh: number | null;
+      source: string | null;
+      sourceUrl: string | null;
+    };
 
-/** ERA5 1991–2020 normal high for today at this place (null if unavailable). */
+/** Credit line for a normals payload, or null when there's nothing to credit. */
+export function normalsCredit(json: NormalsPayload): {
+  source: string | null;
+  sourceUrl: string | null;
+} {
+  const source =
+    json.available && typeof json.source === "string" && json.source
+      ? json.source
+      : null;
+  const sourceUrl =
+    source &&
+    typeof json.attributionUrl === "string" &&
+    json.attributionUrl.startsWith("https://")
+      ? json.attributionUrl
+      : null;
+  return { source, sourceUrl };
+}
+
+/** 1991–2020 normal high for today at this place (null if unavailable). */
 function useNormalHigh(
   lat: number | undefined,
   lon: number | undefined,
@@ -270,11 +296,17 @@ function useNormalHigh(
             json.available && typeof json.normalHigh === "number"
               ? json.normalHigh
               : null,
+          ...normalsCredit(json),
         });
       })
       .catch(() => {
         if (!controller.signal.aborted) {
-          setState({ status: "ready", normalHigh: null });
+          setState({
+            status: "ready",
+            normalHigh: null,
+            source: null,
+            sourceUrl: null,
+          });
         }
       });
     return () => controller.abort();
@@ -414,6 +446,10 @@ export function AtmosphericSummary({
   const moon = moonPhase(now);
   const todayHigh = todayHighFrom(data.daily);
   const normalHigh = normals.status === "ready" ? normals.normalHigh : null;
+  const normalsSource =
+    normals.status === "ready" && normalHigh !== null ? normals.source : null;
+  const normalsSourceUrl =
+    normals.status === "ready" ? normals.sourceUrl : null;
   const averages =
     todayHigh !== null
       ? temperatureAverageInsight(todayHigh, normalHigh)
@@ -615,6 +651,22 @@ export function AtmosphericSummary({
                     ? `Normal high ${Math.round(normalHigh)}°`
                     : "Today's high"}
                 </p>
+                {normalsSource && (
+                  <p className="dove text-xs" data-testid="normals-source">
+                    {normalsSourceUrl ? (
+                      <a
+                        href={normalsSourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="sunbird"
+                      >
+                        {normalsSource}
+                      </a>
+                    ) : (
+                      normalsSource
+                    )}
+                  </p>
+                )}
               </div>
             </InsightCard>
           </EdgeTile>

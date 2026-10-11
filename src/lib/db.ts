@@ -87,10 +87,14 @@ export interface AISummaryDoc {
 
 /**
  * Provenance of a history doc: a fresh provider fetch recorded by
- * /api/py/weather, or a past day filled from the Open-Meteo archive (ERA5
- * reanalysis; `current` then holds daily means). Legacy docs have no source.
+ * /api/py/weather, or a past day filled from an external climate archive
+ * (`current` then holds daily means): NASA POWER or the Open-Meteo ERA5
+ * archive (#268). Legacy docs have no source.
  */
-export type WeatherHistorySource = "recorded" | "open-meteo-archive";
+export type WeatherHistorySource =
+  | "recorded"
+  | "nasa-power"
+  | "open-meteo-archive";
 
 export interface WeatherHistoryDoc {
   locationSlug: string;
