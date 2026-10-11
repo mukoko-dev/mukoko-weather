@@ -77,9 +77,16 @@ export class StationsApiError extends Error {
 }
 
 export interface StationsClient {
-  register(caller: Caller, input: RegisterInput): Promise<IssuedCredentials & { stationType: StationType }>;
+  register(
+    caller: Caller,
+    input: RegisterInput,
+  ): Promise<IssuedCredentials & { stationType: StationType }>;
   list(caller: Caller): Promise<StationSummary[]>;
-  status(caller: Caller, stationId: string, auth?: KeyAuth): Promise<StationStatus>;
+  status(
+    caller: Caller,
+    stationId: string,
+    auth?: KeyAuth,
+  ): Promise<StationStatus>;
   submitReading(
     caller: Caller,
     stationId: string,

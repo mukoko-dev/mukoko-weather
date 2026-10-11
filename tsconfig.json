@@ -30,5 +30,10 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "worker", "station-console", "station-console-astro"]
+  "exclude": [
+    "node_modules",
+    "worker",
+    "station-console",
+    "station-console-astro"
+  ]
 }

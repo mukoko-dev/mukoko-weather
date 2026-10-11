@@ -5,7 +5,8 @@ describe("theme", () => {
   it("parses unknown values as system", () => {
     expect(parseThemePreference("dark")).toBe("dark");
     expect(parseThemePreference("light")).toBe("light");
-    for (const v of [null, undefined, "", "sepia"]) expect(parseThemePreference(v)).toBe("system");
+    for (const v of [null, undefined, "", "sepia"])
+      expect(parseThemePreference(v)).toBe("system");
   });
   it("resolves dark mode from the preference and the system setting", () => {
     expect(resolveDark("dark", false)).toBe(true);

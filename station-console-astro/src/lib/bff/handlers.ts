@@ -26,7 +26,10 @@ export interface BffResponse {
   body: unknown;
 }
 
-const fail = (status: number, error: string): BffResponse => ({ status, body: { error } });
+const fail = (status: number, error: string): BffResponse => ({
+  status,
+  body: { error },
+});
 
 function keyAuth(req: BffRequest): KeyAuth | undefined {
   return req.stationKey ? { stationKey: req.stationKey } : undefined;
@@ -55,7 +58,11 @@ export function unauthenticated(): BffResponse {
   return fail(401, "Sign in to use the station console");
 }
 
-export function registerStation(client: StationsClient, caller: Caller, req: BffRequest) {
+export function registerStation(
+  client: StationsClient,
+  caller: Caller,
+  req: BffRequest,
+) {
   return guarded(async () => {
     const blocked = checkWrite(req);
     if (blocked) return blocked;
@@ -66,28 +73,49 @@ export function registerStation(client: StationsClient, caller: Caller, req: Bff
 }
 
 export function listStations(client: StationsClient, caller: Caller) {
-  return guarded(async () => ({ status: 200, body: { stations: await client.list(caller) } }));
+  return guarded(async () => ({
+    status: 200,
+    body: { stations: await client.list(caller) },
+  }));
 }
 
-export function stationStatus(client: StationsClient, caller: Caller, id: string, req: BffRequest) {
+export function stationStatus(
+  client: StationsClient,
+  caller: Caller,
+  id: string,
+  req: BffRequest,
+) {
   return guarded(async () => {
     if (!isStationId(id)) return fail(400, "Invalid station id");
     return { status: 200, body: await client.status(caller, id, keyAuth(req)) };
   });
 }
 
-export function submitReading(client: StationsClient, caller: Caller, id: string, req: BffRequest) {
+export function submitReading(
+  client: StationsClient,
+  caller: Caller,
+  id: string,
+  req: BffRequest,
+) {
   return guarded(async () => {
     const blocked = checkWrite(req);
     if (blocked) return blocked;
     if (!isStationId(id)) return fail(400, "Invalid station id");
     const parsed = parseReadingInput(await req.json().catch(() => null));
     if (!parsed.ok) return fail(400, parsed.error);
-    return { status: 200, body: await client.submitReading(caller, id, parsed.value, keyAuth(req)) };
+    return {
+      status: 200,
+      body: await client.submitReading(caller, id, parsed.value, keyAuth(req)),
+    };
   });
 }
 
-export function rotateKey(client: StationsClient, caller: Caller, id: string, req: BffRequest) {
+export function rotateKey(
+  client: StationsClient,
+  caller: Caller,
+  id: string,
+  req: BffRequest,
+) {
   return guarded(async () => {
     // Rotation needs no body, but still must be a same-origin write.
     if (req.requestOrigin !== null && req.requestOrigin !== req.origin)
