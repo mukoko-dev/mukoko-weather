@@ -1471,7 +1471,6 @@ async def agriculture_ai(body: AgriAIRequest, request: Request = None):
     from ._ai_gateway import call_ai, first_text
 
     require_internal_caller(request)
-    enforce_rate_limit(request, "ai-agriculture", 30, 3600, require_ip=False)
 
     loc = body.location
     mode = body.mode
@@ -1486,6 +1485,10 @@ async def agriculture_ai(body: AgriAIRequest, request: Request = None):
 
     key = ai_cache_key(loc, mode, activities)
     cached = _get_cached_ai(key)
+    if not cached:
+        # Only a request that may spend a model call is metered: a cache hit
+        # is a cheap read, and metering it let page remounts exhaust the limit.
+        enforce_rate_limit(request, "ai-agriculture", 30, 3600, require_ip=False)
     if cached:
         generated = cached.get("generatedAt")
         return AgriAIResponse(

@@ -519,6 +519,27 @@ class TestAI:
         assert "elevation 1490 m" in prompt
         assert "Spray:" in prompt and "Water balance" in prompt
 
+    def test_cache_hit_is_not_rate_limited(self, client):
+        cached = {"text": "cached line", "source": "ai", "generatedAt": NOW}
+        with patch.object(agri, "_get_cached_ai", return_value=cached), patch.object(
+            agri, "farming_activities", return_value=[]
+        ), patch.object(agri, "enforce_rate_limit") as limit:
+            res = client.post("/api/py/ai/agriculture", json=self.BODY)
+        assert res.status_code == 200 and res.json()["cached"] is True
+        limit.assert_not_called()
+
+    def test_cache_miss_is_rate_limited(self, client):
+        from fastapi import HTTPException
+
+        with patch.object(agri, "_get_cached_ai", return_value=None), patch.object(
+            agri, "farming_activities", return_value=[]
+        ), patch.object(agri, "enforce_rate_limit", side_effect=HTTPException(429)), patch.object(
+            agri, "build_agriculture", new=AsyncMock()
+        ) as build:
+            res = client.post("/api/py/ai/agriculture", json=self.BODY)
+        assert res.status_code == 429
+        build.assert_not_called()
+
     def test_cache_hit_returns_cached(self, client):
         cached = {"text": "cached line", "source": "ai", "generatedAt": NOW}
         res, put, call = self._post(client, _get_cached_ai=cached)

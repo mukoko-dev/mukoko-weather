@@ -565,7 +565,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/devices` (create) — 20 req/hour, only when `deviceId` is omitted/fresh (unbounded doc creation); an existing/caller-supplied `deviceId` is idempotent and skips the limiter
 - `/api/py/reports` (submit) — 5 req/hour
 - `/api/py/reports/clarify` — 10 req/hour
-- `/api/py/ai/agriculture` — 30 req/hour (bucket key `ai-agriculture`; also behind `require_internal_caller`)
+- `/api/py/ai/agriculture` — 30 req/hour (bucket key `ai-agriculture`; only AI-cache misses are metered; also behind `require_internal_caller`)
 - `/api/py/stations/register` — 3 req/hour
 - `/api/py/stations/manual` — 12 req/hour (ingest endpoints authenticate by station key instead)
 
