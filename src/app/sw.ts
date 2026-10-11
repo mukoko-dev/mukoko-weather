@@ -6,7 +6,9 @@
  *   - HTML pages: precached by Serwist; offline fallback via `fallbacks` config
  *   - Weather API: NetworkFirst (5s timeout, 15min cache)
  *   - Suitability/activities: StaleWhileRevalidate (1h cache)
- *   - Map tiles: CacheFirst (24h cache)
+ *   - Map tiles for a fixed forecast hour: CacheFirst (3h cache)
+ *   - "Now" map tiles: NetworkFirst (the same URL is a new frame every hour)
+ *   - Transparent fallback map tiles (X-Map-Tile header): never cached
  *   - AI/chat endpoints: NetworkOnly (personalized, never cached)
  */
 
@@ -19,6 +21,20 @@ import {
   ExpirationPlugin,
 } from "serwist";
 import type { PrecacheEntry } from "serwist";
+
+/**
+ * Only real overlay tiles may be stored. The proxy marks its transparent
+ * fallback (quota spent, upstream error) with an `X-Map-Tile` header; caching
+ * one CacheFirst would hide the radar on this device long after the quota
+ * reset (#266). Replacing `cacheWillUpdate` drops the default 200-only check,
+ * so it is repeated here.
+ */
+const skipFallbackTiles = {
+  cacheWillUpdate: async ({ response }: { response: Response }) =>
+    response.status === 200 && !response.headers.has("X-Map-Tile")
+      ? response
+      : null,
+};
 
 declare const self: {
   __SW_MANIFEST: Array<PrecacheEntry | string>;
@@ -114,15 +130,36 @@ const serwist = new Serwist({
       }),
     },
 
-    // Map tiles — CacheFirst (expensive, stable data)
+    // Map tiles for a fixed forecast hour — CacheFirst: the URL names the
+    // hour, so a stored tile stays right until the forecast is re-run.
     {
-      matcher: ({ url }) => url.pathname.startsWith("/api/py/map-tiles"),
+      matcher: ({ url }) =>
+        url.pathname.startsWith("/api/py/map-tiles") &&
+        url.searchParams.has("timestamp"),
       handler: new CacheFirst({
         cacheName: "map-tiles",
         plugins: [
+          skipFallbackTiles,
           new ExpirationPlugin({
             maxEntries: 500,
-            maxAgeSeconds: 24 * 60 * 60,
+            maxAgeSeconds: 3 * 60 * 60,
+          }),
+        ],
+      }),
+    },
+
+    // "Now" map tiles — NetworkFirst: the URL carries no time, so a stored
+    // copy is only an offline fallback, never served ahead of the network.
+    {
+      matcher: ({ url }) => url.pathname.startsWith("/api/py/map-tiles"),
+      handler: new NetworkFirst({
+        cacheName: "map-tiles-now",
+        networkTimeoutSeconds: 6,
+        plugins: [
+          skipFallbackTiles,
+          new ExpirationPlugin({
+            maxEntries: 200,
+            maxAgeSeconds: 60 * 60,
           }),
         ],
       }),

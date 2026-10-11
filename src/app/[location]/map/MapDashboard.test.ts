@@ -84,6 +84,39 @@ describe("MapDashboard — timeline", () => {
   });
 });
 
+describe("MapDashboard — timeline load speed (#266)", () => {
+  it("preloads the next frame only once the timeline is used", () => {
+    expect(source).toContain("timelineOn && timelineEngaged");
+    expect(source).toContain(
+      "timelineTimestamp((step + 1) % TIMELINE_STEPS, new Date())",
+    );
+    expect(source).toContain("weatherPrefetchTimestamp={prefetchTimestamp}");
+    expect(source).toContain("setTimelineEngaged(true);");
+  });
+
+  it("waits for each frame to load before advancing playback", () => {
+    expect(source).toContain("onWeatherFrameLoaded={setLoadedTimestamp}");
+    expect(source).toContain("loadedTimestamp === weatherTimestamp");
+    expect(source).toContain(
+      "frameReady ? TIMELINE_TICK_MS : TIMELINE_MAX_WAIT_MS",
+    );
+    expect(source).not.toContain("setInterval");
+  });
+
+  it("starts the MapLibre download before hydration, in the browser only", () => {
+    expect(source).toContain('if (typeof window !== "undefined") {');
+    expect(source).toContain('import("maplibre-gl").catch(');
+  });
+
+  it("preconnects to MapTiler from the server page", () => {
+    const page = readFileSync(resolve(__dirname, "page.tsx"), "utf-8");
+    expect(page).toContain('import { preconnect } from "react-dom";');
+    expect(page).toContain(
+      'preconnect("https://api.maptiler.com", { crossOrigin: "anonymous" });',
+    );
+  });
+});
+
 describe("MapDashboard — air quality", () => {
   it("fetches the grid and feeds both the fill and the bubbles", () => {
     expect(source).toContain("fetchAirQualityGrid");

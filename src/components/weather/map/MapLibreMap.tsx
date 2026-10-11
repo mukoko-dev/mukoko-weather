@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import type {
   Map as MapLibreGLMap,
   Marker,
-  RasterTileSource,
   ExpressionSpecification,
 } from "maplibre-gl";
 import type { FeatureCollection } from "geojson";
@@ -18,6 +17,11 @@ import {
   AQI_OVERLAY_ID,
   buildWeatherOverlaySource,
 } from "@/lib/map-layers";
+import {
+  OVERLAY_OPACITY,
+  overlayFrameId,
+  planOverlayFrames,
+} from "@/lib/overlay-frames";
 import {
   AQI_BANDS,
   AQI_BAND_BG_CLASS,
@@ -35,55 +39,174 @@ export function getMapTilerStyle(isDark: boolean): string {
 
 /**
  * Classifies a MapLibre `error` event as either a weather-overlay failure or a
- * base-map failure (style/base-tile/source load error). The weather overlay is
- * the only source we register under `overlayId`, so any error not tied to it —
- * including a failed style.json fetch (expired/over-quota MapTiler key → 403/429)
- * which carries no `sourceId` — is treated as a base-map failure. Exported for
- * testing.
+ * base-map failure (style/base-tile/source load error). Weather overlay frames
+ * are the only sources registered under `overlayId` (or `overlayId@…`, one per
+ * timeline frame), so any error not tied to them — including a failed
+ * style.json fetch (expired/over-quota MapTiler key → 403/429) which carries no
+ * `sourceId` — is treated as a base-map failure. Exported for testing.
  */
 export function classifyMapError(
   e: { error?: unknown; sourceId?: string },
   overlayId: string,
 ): "overlay" | "base" {
-  return e?.sourceId === overlayId ? "overlay" : "base";
+  const id = e?.sourceId;
+  return id === overlayId || (!!id && id.startsWith(`${overlayId}@`))
+    ? "overlay"
+    : "base";
+}
+
+/** Mutable frame bookkeeping for one map instance (see overlay-frames.ts). */
+interface FrameState {
+  /** Frame ids currently on the map. */
+  present: Set<string>;
+  /** Frame shown at full opacity. */
+  active: string | null;
+  /** Frame the user asked for. */
+  want: string | null;
+  /** Timestamp of each frame, for the loaded callback. */
+  timestamps: Record<string, string>;
+}
+
+function newFrameState(): FrameState {
+  return { present: new Set(), active: null, want: null, timestamps: {} };
+}
+
+function removeFrame(map: MapLibreGLMap, state: FrameState, id: string) {
+  if (map.getLayer(id)) map.removeLayer(id);
+  if (map.getSource(id)) map.removeSource(id);
+  state.present.delete(id);
+  delete state.timestamps[id];
+}
+
+/** True once every in-view tile of the frame has loaded (or errored). */
+function frameLoaded(map: MapLibreGLMap, id: string): boolean {
+  try {
+    return !!map.getSource(id) && map.isSourceLoaded(id);
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Adds (or updates) the Tomorrow.io weather overlay on a loaded map. When the
- * overlay already exists, only its tile URL changes (`setTiles`), so a layer or
- * timeline change swaps tiles without tearing the layer down. A null layer
- * clears the overlay. A style switch wipes all sources, so the restore path
- * takes the add branch. `timestamp` defaults to the current tiles ("now").
+ * Shows `state.want` if it has loaded: raises it to full opacity and removes
+ * the frame it replaces. Returns the timestamp shown, or null if still loading.
  */
-function applyWeatherOverlay(
+function swapToWantIfLoaded(
   map: MapLibreGLMap,
+  state: FrameState,
+  keep: string | null,
+): string | null {
+  const want = state.want;
+  if (!want || !state.present.has(want) || !frameLoaded(map, want)) return null;
+  if (state.active !== want) {
+    map.setPaintProperty(want, "raster-opacity", OVERLAY_OPACITY);
+    const old = state.active;
+    state.active = want;
+    if (old && old !== keep) removeFrame(map, state, old);
+    else if (old) map.setPaintProperty(old, "raster-opacity", 0);
+  }
+  return state.timestamps[want] ?? null;
+}
+
+/**
+ * Brings the weather overlay frames in line with the selection: adds the
+ * wanted frame (and an optional preload) as their own raster sources, keeps
+ * the visible frame on screen until the wanted one loads, and removes stale
+ * frames. A null layer clears the overlay. A style switch wipes every source,
+ * so the restore path starts from a fresh `FrameState`.
+ */
+function syncWeatherFrames(
+  map: MapLibreGLMap,
+  state: FrameState,
   layer: string | null,
-  timestamp: string = "now",
-) {
-  if (!layer) {
-    if (map.getLayer(WEATHER_OVERLAY_ID)) map.removeLayer(WEATHER_OVERLAY_ID);
-    if (map.getSource(WEATHER_OVERLAY_ID)) map.removeSource(WEATHER_OVERLAY_ID);
-    return;
-  }
-
-  const spec = buildWeatherOverlaySource(layer, timestamp);
-  const existing = map.getSource(WEATHER_OVERLAY_ID) as
-    | RasterTileSource
-    | undefined;
-  if (existing && map.getLayer(WEATHER_OVERLAY_ID)) {
-    existing.setTiles(spec.tiles);
-    return;
-  }
-
-  if (map.getLayer(WEATHER_OVERLAY_ID)) map.removeLayer(WEATHER_OVERLAY_ID);
-  if (map.getSource(WEATHER_OVERLAY_ID)) map.removeSource(WEATHER_OVERLAY_ID);
-  map.addSource(WEATHER_OVERLAY_ID, spec);
-  map.addLayer({
-    id: WEATHER_OVERLAY_ID,
-    type: "raster",
-    source: WEATHER_OVERLAY_ID,
-    paint: { "raster-opacity": 0.6 },
+  timestamp: string,
+  prefetchTimestamp: string | null,
+): string | null {
+  const want = layer ? overlayFrameId(layer, timestamp) : null;
+  const prefetch =
+    layer && prefetchTimestamp && prefetchTimestamp !== timestamp
+      ? overlayFrameId(layer, prefetchTimestamp)
+      : null;
+  const plan = planOverlayFrames({
+    present: [...state.present],
+    active: state.active,
+    want,
+    prefetch,
   });
+  for (const id of plan.remove) {
+    removeFrame(map, state, id);
+    if (state.active === id) state.active = null;
+  }
+  if (state.active && !state.present.has(state.active)) state.active = null;
+  state.want = want;
+  if (!layer || !want) return null;
+
+  for (const id of plan.add) {
+    const ts = id === want ? timestamp : (prefetchTimestamp ?? "now");
+    const visible = id === want && plan.showWantNow;
+    map.addSource(id, buildWeatherOverlaySource(layer, ts));
+    map.addLayer({
+      id,
+      type: "raster",
+      source: id,
+      paint: {
+        "raster-opacity": visible ? OVERLAY_OPACITY : 0,
+        "raster-opacity-transition": { duration: 0, delay: 0 },
+      },
+    });
+    state.present.add(id);
+    state.timestamps[id] = ts;
+  }
+  if (plan.showWantNow) {
+    // Nothing on screen yet: the first frame paints tile by tile.
+    map.setPaintProperty(want, "raster-opacity", OVERLAY_OPACITY);
+    state.active = want;
+  } else if (
+    prefetch &&
+    state.present.has(prefetch) &&
+    prefetch !== state.active
+  ) {
+    map.setPaintProperty(prefetch, "raster-opacity", 0);
+  }
+  return swapToWantIfLoaded(map, state, prefetch);
+}
+
+/** Overlay props as the map's event handlers see them (latest render). */
+interface OverlayProps {
+  layer: string | null;
+  timestamp: string;
+  prefetch: string | null;
+  onLoaded?: (timestamp: string) => void;
+}
+
+/** Applies the overlay props to the frames and reports a loaded frame. */
+function syncFramesFrom(
+  map: MapLibreGLMap,
+  state: FrameState,
+  props: OverlayProps,
+) {
+  const shown = syncWeatherFrames(
+    map,
+    state,
+    props.layer,
+    props.timestamp,
+    props.prefetch,
+  );
+  if (shown) props.onLoaded?.(shown);
+}
+
+/** A frame's tiles came in (or failed): swap it in if it is now complete. */
+function settleFrame(
+  map: MapLibreGLMap,
+  state: FrameState,
+  props: OverlayProps,
+) {
+  const keep =
+    props.layer && props.prefetch
+      ? overlayFrameId(props.layer, props.prefetch)
+      : null;
+  const shown = swapToWantIfLoaded(map, state, keep);
+  if (shown) props.onLoaded?.(shown);
 }
 
 /**
@@ -180,6 +303,17 @@ interface MapLibreMapProps {
    */
   weatherTimestamp?: string;
   /**
+   * A second forecast time to preload hidden (usually the next timeline stop),
+   * so stepping to it shows a frame that has already loaded. Null for none —
+   * every preload costs real tile requests against a small upstream quota.
+   */
+  weatherPrefetchTimestamp?: string | null;
+  /**
+   * Called with the timestamp of the overlay frame once all of its in-view
+   * tiles have loaded and it is on screen. Timeline playback waits for it.
+   */
+  onWeatherFrameLoaded?: (timestamp: string) => void;
+  /**
    * AQI bubbles (see aqBubbles). Rendered as HTML markers over the map. Omit
    * or pass null for none.
    */
@@ -210,6 +344,8 @@ export function MapLibreMap({
   interactive = true,
   weatherLayer = null,
   weatherTimestamp = "now",
+  weatherPrefetchTimestamp = null,
+  onWeatherFrameLoaded,
   aqiBubbles = null,
   navigationControl = true,
   attributionControl = true,
@@ -222,12 +358,26 @@ export function MapLibreMap({
   // Restores the marker + weather overlay after a style switch wipes them.
   // Set inside the mount effect (needs the async-imported Marker constructor).
   const restoreRef = useRef<(() => void) | null>(null);
-  // Keep the latest layer in a ref so async callbacks (map "load", post-setStyle
-  // restore) always apply the current selection.
-  const weatherLayerRef = useRef<string | null>(weatherLayer);
-  weatherLayerRef.current = weatherLayer;
-  const weatherTimestampRef = useRef<string>(weatherTimestamp);
-  weatherTimestampRef.current = weatherTimestamp;
+  // Latest overlay props, in a ref so async callbacks ("style.load" restore,
+  // "sourcedata") always apply the current selection (see syncFramesFrom).
+  const overlayPropsRef = useRef<OverlayProps>({
+    layer: weatherLayer,
+    timestamp: weatherTimestamp,
+    prefetch: weatherPrefetchTimestamp,
+    onLoaded: onWeatherFrameLoaded,
+  });
+  overlayPropsRef.current = {
+    layer: weatherLayer,
+    timestamp: weatherTimestamp,
+    prefetch: weatherPrefetchTimestamp,
+    onLoaded: onWeatherFrameLoaded,
+  };
+  // Timeline frames on the map (see overlay-frames.ts). Reset on style switch.
+  const framesRef = useRef<FrameState>(newFrameState());
+  // True once the current style JSON has been applied (MapLibre "style.load").
+  // Sources and layers can be added from then on; waiting for "load" or
+  // "idle" instead means waiting for every base tile, sprite and glyph.
+  const styleReadyRef = useRef(false);
   // AQI bubbles: markers are created with the Marker constructor, which is only
   // available after the async import, so it is held in a ref from mount.
   const bubbleMarkersRef = useRef<Marker[]>([]);
@@ -331,11 +481,13 @@ export function MapLibreMap({
           })
             .setLngLat([lon, lat])
             .addTo(map);
-          applyWeatherOverlay(
-            map,
-            weatherLayerRef.current,
-            weatherTimestampRef.current,
-          );
+          // A style switch removes every frame source; drop any survivor and
+          // start the frame bookkeeping from scratch.
+          styleReadyRef.current = true;
+          const previous = framesRef.current;
+          for (const id of previous.present) removeFrame(map, previous, id);
+          framesRef.current = newFrameState();
+          syncFramesFrom(map, framesRef.current, overlayPropsRef.current);
           applyAqiOverlay(map, aqiOverlayRef.current);
           bubbleMarkersRef.current.forEach((m) => m.remove());
           bubbleMarkersRef.current = aqiBubblesRef.current
@@ -344,7 +496,17 @@ export function MapLibreMap({
         };
         restoreRef.current = restore;
 
-        map.on("load", restore);
+        // "style.load" fires as soon as the style JSON is applied (and again
+        // after a theme switch), so overlay tiles are requested alongside the
+        // base tiles instead of after the first full render ("load").
+        map.on("style.load", restore);
+
+        // A frame finished loading: swap it in and tell the page (playback).
+        map.on("sourcedata", (e: { sourceId?: string }) => {
+          const state = framesRef.current;
+          if (!e?.sourceId || e.sourceId !== state.want) return;
+          settleFrame(map, state, overlayPropsRef.current);
+        });
 
         // Surface tile/style failures (missing/expired API key → 403/503, rate
         // limit → 429, upstream error) instead of showing a silent blank map.
@@ -353,6 +515,9 @@ export function MapLibreMap({
         // silent.
         map.on("error", (e: { error?: unknown; sourceId?: string }) => {
           if (classifyMapError(e, WEATHER_OVERLAY_ID) === "overlay") {
+            // An errored tile still counts as "loaded" for the frame, so a
+            // failing frame can still replace the previous one.
+            settleFrame(map, framesRef.current, overlayPropsRef.current);
             // Overlay tile failures (e.g. a single raster tile that can't be
             // decoded) are non-fatal — MapLibre keeps the rest of the layer, so we
             // never blank it. Fire the notice once and log at most once per layer
@@ -382,6 +547,8 @@ export function MapLibreMap({
       mapRef.current = null;
       markerRef.current = null;
       restoreRef.current = null;
+      styleReadyRef.current = false;
+      framesRef.current = newFrameState();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // mount-only — style + layer switches handled below
@@ -391,31 +558,27 @@ export function MapLibreMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    // restore() runs again on the new style's "style.load".
+    styleReadyRef.current = false;
     map.setStyle(getMapTilerStyle(isDark));
-    map.once("idle", () => restoreRef.current?.());
   }, [isDark]);
 
-  // Switch weather overlay when the selected layer changes. If the style isn't
-  // loaded yet (e.g. user toggles a layer before the base style finishes), defer
-  // until the map goes idle and apply then — otherwise the switch silently no-ops.
+  // Switch the weather overlay frame when the layer or forecast time changes.
+  // Before the style is ready there is nothing to do: restore() reads the
+  // latest props from refs on "style.load".
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
     setOverlayError(false);
     overlayErrorLoggedRef.current = false;
-    if (!map.isStyleLoaded()) {
-      const apply = () =>
-        applyWeatherOverlay(map, weatherLayer, weatherTimestamp);
-      map.once("idle", apply);
-      return () => {
-        map.off("idle", apply);
-      };
-    }
-    applyWeatherOverlay(map, weatherLayer, weatherTimestamp);
-  }, [weatherLayer, weatherTimestamp]);
+  }, [weatherLayer]);
 
-  // Draw AQI bubbles when the set changes. Like the fill overlay, defer to the
-  // next idle while the style is still loading.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !styleReadyRef.current) return;
+    // Reads the same props through overlayPropsRef.
+    syncFramesFrom(map, framesRef.current, overlayPropsRef.current);
+  }, [weatherLayer, weatherTimestamp, weatherPrefetchTimestamp]);
+
+  // Draw AQI bubbles when the set changes.
   useEffect(() => {
     const map = mapRef.current;
     const MarkerCtor = markerCtorRef.current;
@@ -426,27 +589,16 @@ export function MapLibreMap({
         ? renderAqiBubbles(map, MarkerCtor, aqiBubbles)
         : [];
     };
-    if (!map.isStyleLoaded()) {
-      map.once("idle", draw);
-      return () => {
-        map.off("idle", draw);
-      };
-    }
+    // Markers do not depend on the style; restore() redraws them anyway.
     draw();
   }, [aqiBubbles]);
 
-  // Switch the AQI overlay when the grid changes. Mirrors the weather-layer
-  // effect: defer to the next idle if the style is still loading.
+  // Switch the AQI overlay when the grid changes.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (!map.isStyleLoaded()) {
-      const apply = () => applyAqiOverlay(map, aqiOverlay);
-      map.once("idle", apply);
-      return () => {
-        map.off("idle", apply);
-      };
-    }
+    // Before "style.load", restore() applies the latest grid from its ref.
+    if (!styleReadyRef.current) return;
     applyAqiOverlay(map, aqiOverlay);
   }, [aqiOverlay]);
 

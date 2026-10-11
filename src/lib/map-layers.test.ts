@@ -8,6 +8,7 @@ import {
   WEATHER_OVERLAY_ID,
   WEATHER_OVERLAY_MIN_ZOOM,
   WEATHER_OVERLAY_MAX_ZOOM,
+  WEATHER_OVERLAY_TILE_SIZE,
   weatherOverlayTileUrl,
   buildWeatherOverlaySource,
   AIR_QUALITY_LAYER_ID,
@@ -141,16 +142,24 @@ describe("weatherOverlayTileUrl", () => {
 });
 
 describe("buildWeatherOverlaySource", () => {
-  it("is a 256px raster source pinned to the Tomorrow.io zoom range (1–12)", () => {
+  it("is a 512px raster source capped at z10 (#266)", () => {
     const src = buildWeatherOverlaySource("cloudCover");
     expect(src.type).toBe("raster");
-    expect(src.tileSize).toBe(256);
-    // Pinning maxzoom to 12 makes MapLibre overzoom instead of requesting
-    // z13+ tiles the proxy rejects (which would make the overlay vanish).
+    // 512 px display size: MapLibre fetches one zoom level shallower, about a
+    // quarter of the tiles per screen.
+    expect(src.tileSize).toBe(WEATHER_OVERLAY_TILE_SIZE);
+    expect(WEATHER_OVERLAY_TILE_SIZE).toBe(512);
+    // The maxzoom makes MapLibre overzoom instead of requesting deeper tiles
+    // (the proxy rejects z13+; z11–12 add no detail over the forecast grid).
     expect(src.minzoom).toBe(WEATHER_OVERLAY_MIN_ZOOM);
     expect(src.maxzoom).toBe(WEATHER_OVERLAY_MAX_ZOOM);
     expect(WEATHER_OVERLAY_MIN_ZOOM).toBe(1);
-    expect(WEATHER_OVERLAY_MAX_ZOOM).toBe(12);
+    expect(WEATHER_OVERLAY_MAX_ZOOM).toBe(10);
+  });
+
+  it("never asks for a zoom the proxy rejects", () => {
+    expect(WEATHER_OVERLAY_MAX_ZOOM).toBeLessThanOrEqual(12);
+    expect(WEATHER_OVERLAY_MIN_ZOOM).toBeGreaterThanOrEqual(1);
   });
 
   it("uses the proxied tile URL for the requested layer", () => {
