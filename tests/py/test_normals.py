@@ -8,7 +8,7 @@ Covers:
   * Leap-day handling (Feb 29 averages only leap-year observations)
   * Endpoint flow: cache hit (no upstream), cache miss (fetch + upsert),
     upstream failure, timeout, breaker open, bad input
-  * The archive request parameters (period, grid, timezone), with httpx mocked
+  * The provider chain (NASA POWER first, Open-Meteo fallback) for the build (#268)
 """
 
 from __future__ import annotations
@@ -210,33 +210,45 @@ class TestComputeNormalTables:
 
 
 class TestFetchArchive:
-    def test_requests_full_period_for_snapped_cell(self):
-        resp = MagicMock()
-        resp.json.return_value = {"daily": {"time": ["1991-01-01"], "temperature_2m_max": [1.0],
-                                            "temperature_2m_min": [0.0]}}
-        client = MagicMock()
-        client.get.return_value = resp
-        with patch("py._normals._get_http", return_value=client):
-            daily = _fetch_archive(-17.75, 31.0)
+    def test_requests_full_period_for_snapped_cell_through_chain(self):
+        daily = {"time": ["1991-01-01"], "temperature_2m_max": [1.0], "temperature_2m_min": [0.0]}
+        provider = MagicMock()
+        provider.info.id = "nasa-power"
+        with patch("py._normals.fetch_normals_series", return_value=(daily, provider, None)) as series:
+            got, pid = _fetch_archive(-17.75, 31.0)
+        assert got == daily and pid == "nasa-power"
+        args, kwargs = series.call_args
+        assert args == (-17.75, 31.0, "1991-01-01", "2020-12-31")
+        assert kwargs["timeout"] == _normals.NORMALS_HTTP_TIMEOUT_S
 
-        assert daily["time"] == ["1991-01-01"]
-        args, kwargs = client.get.call_args
-        assert args[0] == "https://archive-api.open-meteo.com/v1/archive"
-        params = kwargs["params"]
-        assert params["start_date"] == "1991-01-01"
-        assert params["end_date"] == "2020-12-31"
-        assert params["daily"] == "temperature_2m_max,temperature_2m_min"
-        assert params["timezone"] == "auto"
-        assert params["latitude"] == "-17.75"
-
-    def test_missing_daily_block_raises(self):
-        resp = MagicMock()
-        resp.json.return_value = {"error": True}
-        client = MagicMock()
-        client.get.return_value = resp
-        with patch("py._normals._get_http", return_value=client):
-            with pytest.raises(ValueError):
+    def test_no_provider_raises_with_reason(self):
+        with patch("py._normals.fetch_normals_series", return_value=(None, None, "circuit_open")):
+            with pytest.raises(_normals.NormalsUnavailable) as exc:
                 _fetch_archive(0.0, 0.0)
+        assert exc.value.reason == "circuit_open"
+
+    def test_power_payload_end_to_end(self):
+        """Real chain, POWER answers: the request goes to POWER with only the
+        two temperature parameters, and its days become the daily block."""
+        payload = {"properties": {"parameter": {
+            "T2M_MAX": {"19910101": 30.0, "19910102": 31.0},
+            "T2M_MIN": {"19910101": 15.0, "19910102": -999.0},
+        }}}
+        client = MagicMock()
+        client.get.return_value = MagicMock(status_code=200, json=MagicMock(return_value=payload))
+        with patch("py._history_store._http", return_value=client), \
+             patch("py._normals.check_rate_limit", return_value={"allowed": True}):
+            daily, pid = _fetch_archive(-17.75, 31.0)
+        assert pid == "nasa-power"
+        assert daily["time"] == ["1991-01-01"]
+        params = client.get.call_args[1]["params"]
+        assert params["parameters"] == "T2M_MAX,T2M_MIN"
+        assert params["start"] == "19910101" and params["end"] == "20201231"
+
+    def test_source_labels(self):
+        assert _normals.source_label("nasa-power") == "NASA POWER, 1991–2020"
+        assert _normals.source_label("open-meteo-archive") == NORMALS_SOURCE
+        assert _normals.source_label(None) == NORMALS_SOURCE
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +281,8 @@ class TestEndpoint:
         assert res.normalHigh == 28.4
         assert res.normalLow == 17.2
         assert res.period == NORMALS_PERIOD == "1991–2020"
-        assert res.source == NORMALS_SOURCE
+        assert res.source == NORMALS_SOURCE  # legacy cache doc: no provider field
+        assert res.provider == "open-meteo-archive"
         assert res.computedAt == "2026-01-01T00:00:00+00:00"
         assert res.date == "2026-10-08"
 
@@ -278,10 +291,13 @@ class TestEndpoint:
         coll.find_one.return_value = None
         daily = _daily_series(lambda d: 26.0, lambda d: 15.0, start="1991-01-01", end="2020-12-31")
         with patch("py._normals._normals_collection", return_value=coll), \
-             patch("py._normals._fetch_archive", return_value=daily) as fetch:
+             patch("py._normals._fetch_archive", return_value=(daily, "nasa-power")) as fetch:
             res = await get_normals(lat=1.35, lon=103.82, date="2026-03-01")
 
         fetch.assert_called_once_with(1.25, 103.75)
+        assert res.provider == "nasa-power"
+        assert res.source == "NASA POWER, 1991–2020"
+        assert "NASA" in res.attribution
         assert res.available is True
         assert res.normalHigh == 26.0
         assert res.normalLow == 15.0
@@ -292,6 +308,7 @@ class TestEndpoint:
         assert stored["_id"] == "1.25_103.75"
         assert len(stored["maxByDay"]) == SLOTS
         assert stored["period"] == NORMALS_PERIOD
+        assert stored["provider"] == "nasa-power"
         assert "expiresAt" not in stored  # normals never expire
 
     async def test_cache_read_failure_still_builds(self):
@@ -299,7 +316,7 @@ class TestEndpoint:
         coll.find_one.side_effect = RuntimeError("db down")
         daily = _daily_series(lambda d: 22.0, lambda d: 12.0)
         with patch("py._normals._normals_collection", return_value=coll), \
-             patch("py._normals._fetch_archive", return_value=daily):
+             patch("py._normals._fetch_archive", return_value=(daily, "nasa-power")):
             res = await get_normals(lat=-17.83, lon=31.05, date="2026-06-01")
         assert res.available is True
 
@@ -309,7 +326,7 @@ class TestEndpoint:
         coll.update_one.side_effect = RuntimeError("write refused")
         daily = _daily_series(lambda d: 22.0, lambda d: 12.0)
         with patch("py._normals._normals_collection", return_value=coll), \
-             patch("py._normals._fetch_archive", return_value=daily):
+             patch("py._normals._fetch_archive", return_value=(daily, "nasa-power")):
             res = await get_normals(lat=-17.83, lon=31.05, date="2026-06-01")
         assert res.available is True
         assert res.normalHigh == 22.0
@@ -318,7 +335,7 @@ class TestEndpoint:
         coll = MagicMock()
         coll.find_one.return_value = None
         with patch("py._normals._normals_collection", return_value=coll), \
-             patch("py._normals._fetch_archive", side_effect=RuntimeError("502 from upstream")):
+             patch("py._normals._fetch_archive", side_effect=_normals.NormalsUnavailable("upstream_error")):
             res = await get_normals(lat=-17.83, lon=31.05, date="2026-06-01")
         assert res.available is False
         assert res.reason == "upstream_error"
@@ -326,14 +343,41 @@ class TestEndpoint:
         coll.update_one.assert_not_called()
 
     async def test_upstream_failure_is_recorded_on_breaker(self):
-        from py._circuit_breaker import open_meteo_breaker
+        from py._circuit_breaker import nasa_power_breaker, open_meteo_breaker
         coll = MagicMock()
         coll.find_one.return_value = None
+        client = MagicMock()
+        client.get.return_value = MagicMock(status_code=503)
         with patch("py._normals._normals_collection", return_value=coll), \
-             patch("py._normals._fetch_archive", side_effect=RuntimeError("boom")), \
-             patch.object(open_meteo_breaker, "record_failure") as rec:
-            await get_normals(lat=-17.83, lon=31.05, date="2026-06-01")
-        rec.assert_called_once()
+             patch("py._history_store._http", return_value=client), \
+             patch("py._normals.check_rate_limit", return_value={"allowed": True}), \
+             patch("py._db.get_api_key", return_value=None), \
+             patch.object(nasa_power_breaker, "record_failure") as rec_power, \
+             patch.object(open_meteo_breaker, "record_failure") as rec_om:
+            res = await get_normals(lat=-17.83, lon=31.05, date="2026-06-01")
+        rec_power.assert_called_once()
+        rec_om.assert_called_once()  # fell through to the fallback, which also failed
+        assert res.available is False
+        assert res.reason == "upstream_error"
+
+    async def test_falls_back_to_open_meteo_when_power_is_down(self):
+        from py._circuit_breaker import nasa_power_breaker
+        for _ in range(10):
+            nasa_power_breaker.record_failure()
+        coll = MagicMock()
+        coll.find_one.return_value = None
+        om_payload = {"daily": {"time": ["1991-06-01"], "temperature_2m_max": [21.0], "temperature_2m_min": [9.0]}}
+        client = MagicMock()
+        client.get.return_value = MagicMock(status_code=200, json=MagicMock(return_value=om_payload))
+        with patch("py._normals._normals_collection", return_value=coll), \
+             patch("py._history_store._http", return_value=client), \
+             patch("py._normals.check_rate_limit", return_value={"allowed": True}), \
+             patch("py._db.get_api_key", return_value=None):
+            res = await get_normals(lat=-17.83, lon=31.05, date="2026-06-01")
+        assert res.available is True
+        assert res.provider == "open-meteo-archive"
+        assert res.source == NORMALS_SOURCE
+        assert "archive-api.open-meteo.com" in client.get.call_args[0][0]
 
     async def test_build_timeout_is_available_false(self):
         coll = MagicMock()
@@ -341,7 +385,7 @@ class TestEndpoint:
 
         def slow(glat, glon):
             time.sleep(0.5)
-            return {}
+            return {}, "nasa-power"
 
         with patch("py._normals._normals_collection", return_value=coll), \
              patch("py._normals._fetch_archive", side_effect=slow), \
@@ -351,17 +395,19 @@ class TestEndpoint:
         assert res.reason == "timeout"
 
     async def test_breaker_open_skips_upstream(self):
-        from py._circuit_breaker import open_meteo_breaker
+        from py._circuit_breaker import nasa_power_breaker, open_meteo_breaker
         for _ in range(10):
             open_meteo_breaker.record_failure()
+            nasa_power_breaker.record_failure()
         assert open_meteo_breaker.is_allowed is False
 
         coll = MagicMock()
         coll.find_one.return_value = None
+        client = MagicMock()
         with patch("py._normals._normals_collection", return_value=coll), \
-             patch("py._normals._fetch_archive") as fetch:
+             patch("py._history_store._http", return_value=client):
             res = await get_normals(lat=-17.83, lon=31.05, date="2026-06-01")
-        fetch.assert_not_called()
+        client.get.assert_not_called()
         assert res.available is False
         assert res.reason == "circuit_open"
 

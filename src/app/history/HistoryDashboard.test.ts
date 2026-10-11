@@ -6,6 +6,8 @@ import {
   transformHistory,
   historyErrorMessage,
   countArchiveDays,
+  historyUrl,
+  parseSources,
   type InsightsRecord,
 } from "./HistoryDashboard";
 import type { WeatherHistoryDoc } from "@/lib/db";
@@ -287,6 +289,82 @@ describe("transformHistory null archive means (#245)", () => {
     );
     expect(src).toContain("void fetchHistory(loc, 30);");
     expect(src).not.toContain("b.error ||");
+  });
+});
+
+describe("archive providers (#268)", () => {
+  it("counts every non-recorded source as archive and keeps its id", () => {
+    const power = { ...makeDoc("2026-01-03"), source: "nasa-power" as const };
+    const om = {
+      ...makeDoc("2026-01-04"),
+      source: "open-meteo-archive" as const,
+    };
+    const recs = transformHistory([makeDoc("2026-01-02"), power, om]);
+    expect(recs.map((r) => r.source)).toEqual([
+      "recorded",
+      "nasa-power",
+      "open-meteo-archive",
+    ]);
+    expect(countArchiveDays(recs)).toBe(2);
+  });
+
+  it("NASA POWER days without gusts, direction or code render as gaps, not 0", () => {
+    const doc = { ...makeDoc("2026-01-01"), source: "nasa-power" as const };
+    const cur = doc.current as unknown as Record<string, number | null>;
+    cur.wind_gusts_10m = null;
+    cur.wind_direction_10m = null;
+    cur.weather_code = null;
+    cur.apparent_temperature = null;
+    doc.daily = {
+      ...doc.daily,
+      wind_gusts_10m_max: [null as unknown as number],
+      apparent_temperature_max: [null as unknown as number],
+      apparent_temperature_min: [null as unknown as number],
+    };
+    const [r] = transformHistory([doc]);
+    expect(r.windGusts).toBeNull();
+    expect(r.windDirection).toBeNull();
+    expect(r.windDirectionLabel).toBe("—");
+    expect(r.weatherCode).toBeNull();
+    expect(r.condition).toBe("—");
+    expect(r.feelsLikeHigh).toBeNull();
+    expect(r.feelsLikeLow).toBeNull();
+  });
+
+  it("history URL carries the coordinate so uncatalogued places work", () => {
+    expect(
+      historyUrl(
+        { slug: "london-gb", name: "London", lat: 51.5, lon: -0.12 },
+        365,
+      ),
+    ).toBe("/api/py/history?location=london-gb&days=365&lat=51.5&lon=-0.12");
+    expect(historyUrl({ slug: "harare", name: "Harare" }, 30)).toBe(
+      "/api/py/history?location=harare&days=30",
+    );
+  });
+
+  it("keeps only well-formed https attribution entries", () => {
+    const good = {
+      id: "nasa-power",
+      name: "NASA POWER",
+      attribution: "credit",
+      url: "https://power.larc.nasa.gov",
+      licence: "open",
+    };
+    expect(
+      parseSources([good, { ...good, url: "javascript:alert(1)" }, null, 3]),
+    ).toEqual([good]);
+    expect(parseSources(undefined)).toEqual([]);
+  });
+
+  it("renders per-source attribution and offers multi-year ranges", async () => {
+    const fs = await import("fs");
+    const src = fs.readFileSync(
+      "src/app/history/HistoryDashboard.tsx",
+      "utf-8",
+    );
+    expect(src).toContain("<HistoryAttribution sources={sources} />");
+    expect(src).toContain('{ value: 1825, label: "5 years" }');
   });
 });
 

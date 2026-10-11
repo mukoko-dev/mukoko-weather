@@ -1,21 +1,24 @@
 """
 Climate normals — the average daily high/low for a calendar day at a place.
 
-Powers the "AVERAGES" card ("+5° above the average daily high"). Source is the
-ERA5 reanalysis served by Open-Meteo's Historical Weather API (free, no key),
-over the 1991–2020 climate period.
+Powers the "AVERAGES" card ("+5° above the average daily high") over the
+1991–2020 climate period. The data comes from the same archive provider chain
+as ``/api/py/history`` (``_history_store.provider_chain``; issue #268): NASA
+POWER first (free and open for commercial use), then Open-Meteo's ERA5 archive.
 
 Build strategy:
 
-* ERA5 is a ~0.25° grid, so coordinates are snapped to a 0.25° cell first.
+* Coordinates are snapped to a 0.25° cell first (the ERA5 grid; NASA POWER is
+  coarser, ~0.5°).
   Every request inside a cell shares one table, and the cell is the cache key.
 * One upstream request per cell covers the whole 30-year period (~11k daily
   rows, ~250 KB, ~1 s measured). The response is reduced to two 366-entry
   day-of-year tables: the mean daily maximum and mean daily minimum, each
   averaged over a ±7-day window that wraps the year end.
 * The tables are cached in ``weather.climate_normals`` under the deterministic
-  ``_id`` ``{lat:.2f}_{lon:.2f}`` (the snapped cell). Normals do not change, so
-  the document has no TTL.
+  ``_id`` ``{lat:.2f}_{lon:.2f}`` (the snapped cell), together with the
+  provider that built them (``source``, ``provider``). Normals do not change,
+  so the document has no TTL.
 
 Day-of-year slots use a leap-year calendar: slot 59 is Feb 29, and every other
 date keeps its month/day position in that calendar. Feb 29 therefore averages
@@ -33,12 +36,11 @@ import datetime as _dt
 import math
 from typing import Optional
 
-import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from ._db import stamp_platform_fields, weather_db
-from ._circuit_breaker import open_meteo_breaker
+from ._db import check_rate_limit, stamp_platform_fields, weather_db
+from ._history_store import PROVIDERS, fetch_normals_series, provider_info
 
 router = APIRouter()
 
@@ -47,12 +49,12 @@ router = APIRouter()
 # Constants
 # ---------------------------------------------------------------------------
 
-ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
-
 NORMALS_START = "1991-01-01"
 NORMALS_END = "2020-12-31"
 NORMALS_PERIOD = "1991–2020"
+#: Label for cached tables built before #268 (Open-Meteo ERA5, no provider field).
 NORMALS_SOURCE = "ERA5 via Open-Meteo, 1991–2020"
+LEGACY_PROVIDER = "open-meteo-archive"
 
 #: ERA5 grid spacing. Coordinates are snapped to this before fetch and cache.
 GRID_STEP_DEG = 0.25
@@ -63,11 +65,11 @@ HALF_WINDOW_DAYS = 7
 #: Number of day-of-year slots in the leap-year calendar.
 SLOTS = 366
 
-#: Client-side budget for the one-off 30-year build. The breaker's own
-#: per-request timeout (8 s) is too short for this payload, so the build runs
-#: with its own httpx timeout and the breaker is driven with record_* calls.
+#: Client-side budget for the one-off 30-year build. The breakers' own
+#: per-request timeouts are too short for this payload, so the build runs with
+#: its own httpx timeout and the breakers are driven with record_* calls.
 NORMALS_HTTP_TIMEOUT_S = 20.0
-NORMALS_BUILD_TIMEOUT_S = 22.0
+NORMALS_BUILD_TIMEOUT_S = 45.0
 
 
 # ---------------------------------------------------------------------------
@@ -86,6 +88,11 @@ class NormalsResponse(BaseModel):
     normalLow: Optional[float] = None
     period: str = NORMALS_PERIOD
     source: str = NORMALS_SOURCE
+    #: Archive provider id that built the tables (``nasa-power``, ``open-meteo-archive``).
+    provider: Optional[str] = None
+    #: Required credit for that provider, and where it points.
+    attribution: Optional[str] = None
+    attributionUrl: Optional[str] = None
     computedAt: Optional[str] = None
     reason: Optional[str] = None
 
@@ -179,36 +186,34 @@ def _parse_target_date(raw: Optional[str]) -> str:
 # Upstream + cache
 # ---------------------------------------------------------------------------
 
-_http_client: Optional[httpx.Client] = None
-
-
-def _get_http() -> httpx.Client:
-    global _http_client
-    if _http_client is None:
-        _http_client = httpx.Client(timeout=NORMALS_HTTP_TIMEOUT_S)
-    return _http_client
-
-
-def _fetch_archive(glat: float, glon: float) -> dict:
+def _fetch_archive(glat: float, glon: float) -> tuple[dict, str]:
     """
-    Fetch the 1991–2020 daily max/min for a snapped cell. Returns the ``daily``
-    block. Raises on HTTP error (the caller records the failure).
+    Fetch the 1991–2020 daily max/min for a snapped cell from the provider
+    chain. Returns ``(daily, provider_id)``. Raises ``NormalsUnavailable`` with
+    a reason when no provider can supply it (breakers are recorded inside).
     """
-    params = {
-        "latitude": f"{glat}",
-        "longitude": f"{glon}",
-        "start_date": NORMALS_START,
-        "end_date": NORMALS_END,
-        "daily": "temperature_2m_max,temperature_2m_min",
-        "timezone": "auto",
-    }
-    resp = _get_http().get(ARCHIVE_URL, params=params)
-    resp.raise_for_status()
-    data = resp.json()
-    daily = data.get("daily")
-    if not isinstance(daily, dict) or not daily.get("time"):
-        raise ValueError("archive response has no daily block")
-    return daily
+    daily, provider, reason = fetch_normals_series(
+        glat, glon, NORMALS_START, NORMALS_END,
+        rate_limiter=check_rate_limit,
+        timeout=NORMALS_HTTP_TIMEOUT_S,
+    )
+    if daily is None or provider is None:
+        raise NormalsUnavailable(reason or "upstream_error")
+    return daily, provider.info.id
+
+
+class NormalsUnavailable(Exception):
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def source_label(provider_id: Optional[str]) -> str:
+    """Human-readable source line, e.g. ``NASA POWER, 1991–2020``."""
+    provider = PROVIDERS.get(provider_id or "")
+    if provider is None or provider_id == LEGACY_PROVIDER:
+        return NORMALS_SOURCE
+    return f"{provider.info.name}, {NORMALS_PERIOD}"
 
 
 def _normals_collection():
@@ -226,7 +231,8 @@ def _get_cached_tables(key: str) -> Optional[dict]:
     return doc
 
 
-def _set_cached_tables(key: str, glat: float, glon: float, max_table, min_table) -> Optional[str]:
+def _set_cached_tables(key: str, glat: float, glon: float, max_table, min_table,
+                       provider_id: Optional[str] = None) -> Optional[str]:
     """Upsert the table doc by its deterministic ``_id``. Returns ``computedAt``."""
     now = _dt.datetime.now(_dt.timezone.utc)
     doc = {
@@ -234,7 +240,8 @@ def _set_cached_tables(key: str, glat: float, glon: float, max_table, min_table)
         "lat": glat,
         "lon": glon,
         "period": NORMALS_PERIOD,
-        "source": NORMALS_SOURCE,
+        "source": source_label(provider_id),
+        "provider": provider_id or LEGACY_PROVIDER,
         "maxByDay": max_table,
         "minByDay": min_table,
         "computedAt": now,
@@ -267,15 +274,16 @@ async def get_normals(
     GET /api/py/normals?lat=&lon=&date=YYYY-MM-DD
 
     Average daily high and low (°C) for that calendar day at that place,
-    1991–2020 (ERA5 via Open-Meteo). Lookup order:
+    1991–2020. Lookup order:
 
     1. MongoDB ``weather.climate_normals`` by snapped cell (instant on hit)
-    2. Open-Meteo Historical Weather API via ``open_meteo_breaker``, one
-       30-year request per cell, then cached
+    2. The archive provider chain (NASA POWER, then Open-Meteo ERA5), one
+       30-year request per cell, each guarded by its own breaker and budget,
+       then cached
 
     Returns HTTP 200 with ``available: false`` and a ``reason``
-    (``circuit_open``, ``upstream_error``, ``timeout``) when normals cannot be
-    produced. Only malformed input returns 400.
+    (``circuit_open``, ``upstream_error``, ``timeout``, ``no_data``) when
+    normals cannot be produced. Only malformed input returns 400.
     """
     if lat < -90 or lat > 90 or lon < -180 or lon > 180:
         raise HTTPException(status_code=400, detail="Invalid coordinates")
@@ -291,35 +299,33 @@ async def get_normals(
         if isinstance(cached_at, _dt.datetime):
             cached_at = cached_at.isoformat()
         return _respond(lat, lon, date_iso, slot, cached["maxByDay"], cached["minByDay"],
-                        cached_at)
-
-    if not open_meteo_breaker.is_allowed:
-        return _unavailable(lat, lon, date_iso, "circuit_open")
+                        cached_at, cached.get("provider") or LEGACY_PROVIDER)
 
     loop = asyncio.get_running_loop()
     try:
-        daily = await asyncio.wait_for(
+        daily, provider_id = await asyncio.wait_for(
             loop.run_in_executor(None, lambda: _fetch_archive(glat, glon)),
             timeout=NORMALS_BUILD_TIMEOUT_S,
         )
     except asyncio.TimeoutError:
-        open_meteo_breaker.record_failure()
         return _unavailable(lat, lon, date_iso, "timeout")
+    except NormalsUnavailable as exc:
+        return _unavailable(lat, lon, date_iso, exc.reason)
     except Exception:
-        open_meteo_breaker.record_failure()
         return _unavailable(lat, lon, date_iso, "upstream_error")
 
-    open_meteo_breaker.record_success()
     max_table, min_table = compute_normal_tables(daily)
-    computed_at = _set_cached_tables(key, glat, glon, max_table, min_table)
-    return _respond(lat, lon, date_iso, slot, max_table, min_table, computed_at)
+    computed_at = _set_cached_tables(key, glat, glon, max_table, min_table, provider_id)
+    return _respond(lat, lon, date_iso, slot, max_table, min_table, computed_at, provider_id)
 
 
-def _respond(lat, lon, date_iso, slot, max_table, min_table, computed_at) -> NormalsResponse:
+def _respond(lat, lon, date_iso, slot, max_table, min_table, computed_at,
+             provider_id: Optional[str] = None) -> NormalsResponse:
     hi = max_table[slot] if slot < len(max_table) else None
     lo = min_table[slot] if slot < len(min_table) else None
     if hi is None or lo is None:
         return _unavailable(lat, lon, date_iso, "no_data")
+    info = provider_info(provider_id or "")
     return NormalsResponse(
         available=True,
         lat=lat,
@@ -327,5 +333,9 @@ def _respond(lat, lon, date_iso, slot, max_table, min_table, computed_at) -> Nor
         date=date_iso,
         normalHigh=round(float(hi), 1),
         normalLow=round(float(lo), 1),
+        source=source_label(provider_id),
+        provider=provider_id,
+        attribution=(info or {}).get("attribution"),
+        attributionUrl=(info or {}).get("url"),
         computedAt=computed_at,
     )

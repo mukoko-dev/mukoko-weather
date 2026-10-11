@@ -18,6 +18,10 @@ import { ThunderstormChart } from "@/components/weather/charts/ThunderstormChart
 import { GDDChart } from "@/components/weather/charts/GDDChart";
 import { ChartSkeleton } from "@/components/ui/skeleton";
 import { HistoryAnalysis } from "@/components/weather/HistoryAnalysis";
+import {
+  HistoryAttribution,
+  type HistoryAttributionSource,
+} from "@/components/weather/HistoryAttribution";
 import { useAppStore } from "@/lib/store";
 import { weatherCodeToInfo, windDirection, uvLevel } from "@/lib/weather";
 import type { WeatherInsights } from "@/lib/weather";
@@ -40,7 +44,7 @@ import { DEFAULT_LOCALE, formatDate as formatLocaleDate } from "@/lib/i18n";
 // Types
 // ---------------------------------------------------------------------------
 
-type DayRange = 7 | 14 | 30 | 90 | 180 | 365;
+type DayRange = 7 | 14 | 30 | 90 | 180 | 365 | 730 | 1825;
 type ViewTab = "weather" | "insights";
 
 /** The slice of a location this dashboard needs — satisfied by both the
@@ -49,16 +53,24 @@ type SelectedHistoryLocation = {
   slug: string;
   name: string;
   province?: string;
+  /** Sent alongside the slug so any coordinate on Earth has history, even
+   *  a place that isn't in the catalogue (#268). */
+  lat?: number;
+  lon?: number;
 };
+
+/** Credit for one archive provider, as returned in `sources` by /api/py/history. */
+export type HistorySourceAttribution = HistoryAttributionSource;
 
 interface HistoryRecord {
   date: string;
-  /** Provenance — archive days are ERA5 reanalysis daily means. */
-  source: "recorded" | "open-meteo-archive";
+  /** Provenance: "recorded" live, or the id of the archive provider that
+   *  filled the day (daily means), e.g. "nasa-power", "open-meteo-archive". */
+  source: string;
   tempHigh: number;
   tempLow: number;
-  feelsLikeHigh: number;
-  feelsLikeLow: number;
+  feelsLikeHigh: number | null;
+  feelsLikeLow: number | null;
   precipitation: number;
   rainProbability: number;
   /** null when an archive day has no daily mean for the field. */
@@ -68,13 +80,14 @@ interface HistoryRecord {
   /** null for archive days — the reanalysis archive has no UV index. */
   uvIndex: number | null;
   windSpeed: number | null;
-  windGusts: number;
-  windDirection: number;
+  /** null when the archive has no gust for the day (NASA POWER). */
+  windGusts: number | null;
+  windDirection: number | null;
   windDirectionLabel: string;
   sunrise: string;
   sunset: string;
   daylightHours: number;
-  weatherCode: number;
+  weatherCode: number | null;
   condition: string;
 }
 
@@ -130,7 +143,40 @@ export function historyErrorMessage(status: number, detail?: unknown): string {
 
 /** Number of archive-filled days in a record set. Exported for tests. */
 export function countArchiveDays(records: { source: string }[]): number {
-  return records.filter((r) => r.source === "open-meteo-archive").length;
+  return records.filter((r) => r.source !== "recorded").length;
+}
+
+/**
+ * /api/py/history URL for a location and window. The coordinate is sent as
+ * well so a place the catalogue doesn't hold still gets history. Exported for tests.
+ */
+export function historyUrl(
+  location: SelectedHistoryLocation,
+  dayCount: number,
+): string {
+  const params = new URLSearchParams({
+    location: location.slug,
+    days: String(dayCount),
+  });
+  if (Number.isFinite(location.lat) && Number.isFinite(location.lon)) {
+    params.set("lat", String(location.lat));
+    params.set("lon", String(location.lon));
+  }
+  return `/api/py/history?${params.toString()}`;
+}
+
+/** Keep only well-formed attribution entries. Exported for tests. */
+export function parseSources(raw: unknown): HistorySourceAttribution[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (s): s is HistorySourceAttribution =>
+      s != null &&
+      typeof s.id === "string" &&
+      typeof s.name === "string" &&
+      typeof s.attribution === "string" &&
+      typeof s.url === "string" &&
+      s.url.startsWith("https://"),
+  );
 }
 
 /** Round a value that may be null/undefined (archive daily means can be). */
@@ -155,9 +201,7 @@ export function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
 
         return {
           date: doc.date,
-          source: (doc.source === "open-meteo-archive"
-            ? "open-meteo-archive"
-            : "recorded") as HistoryRecord["source"],
+          source: doc.source ?? "recorded",
           tempHigh:
             daily?.temperature_2m_max?.[0] != null
               ? Math.round(daily.temperature_2m_max[0])
@@ -169,11 +213,13 @@ export function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
           feelsLikeHigh:
             daily?.apparent_temperature_max?.[0] != null
               ? Math.round(daily.apparent_temperature_max[0])
-              : Math.round(current.apparent_temperature),
+              : roundOrNull(current.apparent_temperature),
           feelsLikeLow:
             daily?.apparent_temperature_min?.[0] != null
               ? Math.round(daily.apparent_temperature_min[0])
-              : Math.round(current.apparent_temperature - 5),
+              : current.apparent_temperature != null
+                ? Math.round(current.apparent_temperature - 5)
+                : null,
           precipitation: daily?.precipitation_sum?.[0] ?? current.precipitation,
           rainProbability: daily?.precipitation_probability_max?.[0] ?? 0,
           humidity: roundOrNull(current.relative_humidity_2m),
@@ -184,17 +230,25 @@ export function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
           windGusts:
             daily?.wind_gusts_10m_max?.[0] != null
               ? Math.round(daily.wind_gusts_10m_max[0])
-              : Math.round(current.wind_gusts_10m),
-          windDirection: current.wind_direction_10m,
-          windDirectionLabel: windDirection(current.wind_direction_10m),
+              : roundOrNull(current.wind_gusts_10m),
+          windDirection: Number.isFinite(current.wind_direction_10m)
+            ? current.wind_direction_10m
+            : null,
+          windDirectionLabel: Number.isFinite(current.wind_direction_10m)
+            ? windDirection(current.wind_direction_10m)
+            : "—",
           sunrise: sunriseRaw ? formatSunTime(sunriseRaw) : "--:--",
           sunset: sunsetRaw ? formatSunTime(sunsetRaw) : "--:--",
           daylightHours:
             sunriseRaw && sunsetRaw
               ? daylightFromSunTimes(sunriseRaw, sunsetRaw)
               : 0,
-          weatherCode: current.weather_code,
-          condition: weatherCodeToInfo(current.weather_code).label,
+          weatherCode: Number.isFinite(current.weather_code)
+            ? current.weather_code
+            : null,
+          condition: Number.isFinite(current.weather_code)
+            ? weatherCodeToInfo(current.weather_code).label
+            : "—",
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date))
@@ -230,6 +284,8 @@ const DAY_OPTIONS: { value: DayRange; label: string }[] = [
   { value: 90, label: "3 months" },
   { value: 180, label: "6 months" },
   { value: 365, label: "1 year" },
+  { value: 730, label: "2 years" },
+  { value: 1825, label: "5 years" },
 ];
 
 /** Category style shape */
@@ -558,6 +614,7 @@ export function HistoryDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [fetched, setFetched] = useState(false);
+  const [sources, setSources] = useState<HistorySourceAttribution[]>([]);
   const [visibleRowCount, setVisibleRowCount] = useState(50);
   const [activeTab, setActiveTab] = useState<ViewTab>("weather");
   const [categoryFilter, setCategoryFilter] = useState<
@@ -625,9 +682,7 @@ export function HistoryDashboard() {
       setError(null);
       setFetched(true);
       try {
-        const res = await fetch(
-          `/api/py/history?location=${location.slug}&days=${dayCount}`,
-        );
+        const res = await fetch(historyUrl(location, dayCount));
         if (!res.ok) {
           const body = await res
             .json()
@@ -639,6 +694,7 @@ export function HistoryDashboard() {
         }
         const json = await res.json();
         setRecords(transformHistory(json.data));
+        setSources(parseSources(json.sources));
         setInsightsRecords(transformInsights(json.data));
         setVisibleRowCount(50);
       } catch (err) {
@@ -647,6 +703,7 @@ export function HistoryDashboard() {
         );
         setRecords([]);
         setInsightsRecords([]);
+        setSources([]);
       } finally {
         setLoading(false);
       }
@@ -700,8 +757,10 @@ export function HistoryDashboard() {
           avgLow: avg(records.map((r) => r.tempLow)),
           maxTemp: records.reduce((m, r) => Math.max(m, r.tempHigh), -Infinity),
           minTemp: records.reduce((m, r) => Math.min(m, r.tempLow), Infinity),
-          avgFeelsHigh: avg(records.map((r) => r.feelsLikeHigh)),
-          avgFeelsLow: avg(records.map((r) => r.feelsLikeLow)),
+          avgFeelsHigh: avg(
+            records.map((r) => r.feelsLikeHigh).filter(defined),
+          ),
+          avgFeelsLow: avg(records.map((r) => r.feelsLikeLow).filter(defined)),
           totalRain: sum(records.map((r) => r.precipitation)),
           rainyDays: records.filter((r) => r.precipitation > 0.1).length,
           avgRainProb: avg(records.map((r) => r.rainProbability)),
@@ -717,7 +776,11 @@ export function HistoryDashboard() {
                 10
               : null,
           avgWind: avg(records.map((r) => r.windSpeed).filter(defined)),
-          maxGusts: records.reduce((m, r) => Math.max(m, r.windGusts), 0),
+          maxGusts: records.reduce(
+            (m: number | null, r) =>
+              r.windGusts == null ? m : Math.max(m ?? 0, r.windGusts),
+            null,
+          ),
           avgDaylight: records[0]?.daylightHours
             ? Math.round(
                 (avg(records.map((r) => Math.round(r.daylightHours * 10))) /
@@ -984,9 +1047,9 @@ export function HistoryDashboard() {
               last {days} days.
             </p>
             <p className="mt-2 text-base text-text-tertiary">
-              Past days are filled from the Open-Meteo climate archive, which
-              runs about two days behind, and today is recorded as weather is
-              fetched. Try a longer period, or check back shortly.
+              Past days are filled from climate archives (NASA POWER, then
+              Open-Meteo), which run a few days behind, and today is recorded as
+              weather is fetched. Try a longer period, or check back shortly.
             </p>
           </div>
         )}
@@ -1016,10 +1079,11 @@ export function HistoryDashboard() {
             {countArchiveDays(records) > 0 && (
               <p className="dove mt-1">
                 {countArchiveDays(records)} of {records.length} days come from
-                the Open-Meteo climate archive (ERA5 reanalysis, daily
-                averages). The rest were recorded live.
+                climate archives (reanalysis daily averages, no UV). The rest
+                were recorded live.
               </p>
             )}
+            <HistoryAttribution sources={sources} />
             <h3 className="hornbill mt-4">Temperature</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Avg High" value={`${stats.avgHigh}°C`} />
@@ -1071,7 +1135,10 @@ export function HistoryDashboard() {
             <h3 className="hornbill mt-4">Wind & Daylight</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Avg Wind" value={`${stats.avgWind} km/h`} />
-              <StatCard label="Max Gusts" value={`${stats.maxGusts} km/h`} />
+              <StatCard
+                label="Max Gusts"
+                value={stats.maxGusts != null ? `${stats.maxGusts} km/h` : "—"}
+              />
               {stats.avgDaylight != null && (
                 <StatCard
                   label="Avg Daylight"
@@ -1398,7 +1465,7 @@ export function HistoryDashboard() {
                             {r.tempLow}°
                           </td>
                           <td className="hidden px-3 py-2 text-right text-text-tertiary text-base sm:table-cell">
-                            {r.feelsLikeHigh}°/{r.feelsLikeLow}°
+                            {r.feelsLikeHigh ?? "—"}°/{r.feelsLikeLow ?? "—"}°
                           </td>
                           <td className="px-3 py-2 text-right text-text-secondary">
                             {r.precipitation} mm
@@ -1416,7 +1483,7 @@ export function HistoryDashboard() {
                             {r.windSpeed ?? "—"}
                           </td>
                           <td className="hidden px-3 py-2 text-right text-text-tertiary md:table-cell">
-                            {r.windGusts}
+                            {r.windGusts ?? "—"}
                           </td>
                           <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">
                             {r.windDirectionLabel}
