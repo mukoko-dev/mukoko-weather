@@ -69,6 +69,10 @@ class TestGeoglamTable:
         seasons = {c.season for c in cal.crops if c.crop == "maize"}
         assert seasons == {"Long rains", "Short rains"}
 
+    def test_a_lone_season_is_not_named(self):
+        cal = ag.GEOGLAM.calendar_for(-17.83, 31.05, "ZW")
+        assert {c.season for c in cal.crops} == {None}
+
     def test_unnamed_numbered_crops_are_labelled_by_size(self):
         cal = ag.GEOGLAM.calendar_for(-1.29, 36.82, "KE")
         rice = sorted(c.season for c in cal.crops if c.crop == "rice")

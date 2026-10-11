@@ -324,15 +324,21 @@ class GeoglamCalendarSource:
         iso = (country or "").upper()
         key = f"{region['country']}|{region['region']}"
         crops: list[CropWindow] = []
-        for row in sorted(self._calendars.get(key, []), key=lambda r: r["crop"]):
+        rows = sorted(self._calendars.get(key, []), key=lambda r: r["crop"])
+        per_crop: dict[str, int] = {}
+        for row in rows:
+            base = _crop_ids(row["crop"])[0]
+            per_crop[base] = per_crop.get(base, 0) + 1
+        for row in rows:
             p, v, h, e, o = (row["doy"] + [0, 0, 0, 0, 0])[:5]
             if not (p and v and h and e):
                 continue
             crop_id, label = _crop_ids(row["crop"])
             season = SEASON_NAMES.get(iso, {}).get(row["crop"])
             number = _CROP_RE.match(row["crop"].strip()).group("n")
-            if season is None and number:
-                # The dataset numbers seasons by size: 1 is the largest.
+            if season is None and number and per_crop[crop_id] > 1:
+                # The dataset numbers seasons by size: 1 is the largest. A
+                # lone season needs no name.
                 season = "Main season" if number == "1" else f"Season {number}"
             crops.append(CropWindow(
                 crop=crop_id,

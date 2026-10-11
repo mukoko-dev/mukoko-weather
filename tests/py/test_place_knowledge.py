@@ -106,6 +106,30 @@ def _layer(name, values):
 
 
 class TestSoil:
+    @pytest.fixture(autouse=True)
+    def _fresh_memo(self):
+        pk._soil_memo.clear()
+        yield
+        pk._soil_memo.clear()
+
+    def test_memoised_per_cell(self):
+        client = _soil_client(
+            {"wrb_class_name": "Lixisols", "wrb_class_probability": [["Lixisols", 22]]},
+            {"properties": {"layers": []}},
+        )
+        with patch.object(pk, "_get_soil_http", return_value=client):
+            first = pk.fetch_soil(-17.831, 31.049)
+            second = pk.fetch_soil(-17.833, 31.051)  # same 0.01 degree cell
+        assert first == second and client.get.call_count == 2  # one classification + one properties call
+
+    def test_failures_are_not_memoised(self):
+        client = MagicMock()
+        client.get.side_effect = RuntimeError("504")
+        with patch.object(pk, "_get_soil_http", return_value=client):
+            assert pk.fetch_soil(1.0, 1.0) is None
+            assert pk.fetch_soil(1.0, 1.0) is None
+        assert client.get.call_count == 2
+
     def test_parses_class_and_texture(self):
         client = _soil_client(
             {"wrb_class_name": "Lixisols", "wrb_class_probability": [["Lixisols", 22]]},

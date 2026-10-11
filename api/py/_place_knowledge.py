@@ -570,8 +570,30 @@ def _get_soil_http() -> httpx.Client:
     return _soil_http
 
 
+#: Soil does not change on a human timescale. Until the collection exists
+#: nothing is stored, so each build would call SoilGrids again; a bounded
+#: in-process memo (per ~1 km cell, 6 h) keeps that to one call per cell.
+SOIL_MEMO_TTL_S = 6 * 3600
+SOIL_MEMO_MAX = 512
+_soil_memo: dict[tuple[float, float], tuple[float, Optional[Soil]]] = {}
+
+
 def fetch_soil(lat: float, lon: float) -> Optional[Soil]:
-    """WRB reference soil group and 0–30 cm texture. ``None`` on any failure."""
+    """WRB reference soil group and 0–30 cm texture, memoised per cell.
+    ``None`` on any failure (failures are not memoised)."""
+    key = (round(lat, 2), round(lon, 2))
+    hit = _soil_memo.get(key)
+    if hit and time.monotonic() - hit[0] < SOIL_MEMO_TTL_S:
+        return hit[1]
+    soil = _fetch_soil_uncached(lat, lon)
+    if soil is not None:
+        if len(_soil_memo) >= SOIL_MEMO_MAX:
+            _soil_memo.clear()
+        _soil_memo[key] = (time.monotonic(), soil)
+    return soil
+
+
+def _fetch_soil_uncached(lat: float, lon: float) -> Optional[Soil]:
     if not soilgrids_breaker.is_allowed:
         return None
     try:
