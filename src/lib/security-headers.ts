@@ -16,6 +16,13 @@ const GA = [
   "https://*.analytics.google.com",
 ];
 
+/** Other hosts GA4 / Google Tag use for measurement and pixels. */
+const GA_EXTRA = [
+  "https://*.googletagmanager.com",
+  "https://*.g.doubleclick.net",
+  "https://www.google.com",
+];
+
 export const CSP_DIRECTIVES: Record<string, string[]> = {
   "default-src": ["'self'"],
   // Next.js emits inline bootstrap scripts and the theme/JSON-LD scripts; a
@@ -37,7 +44,9 @@ export const CSP_DIRECTIVES: Record<string, string[]> = {
     "https://gibs.earthdata.nasa.gov",
     "https://*.googleusercontent.com",
     "https://*.workoscdn.com",
+    "https://avatars.githubusercontent.com",
     ...GA,
+    ...GA_EXTRA,
   ],
   "connect-src": [
     "'self'",
@@ -51,6 +60,7 @@ export const CSP_DIRECTIVES: Record<string, string[]> = {
     "https://va.vercel-scripts.com",
     "https://vitals.vercel-insights.com",
     ...GA,
+    ...GA_EXTRA,
   ],
   "worker-src": ["'self'", "blob:"],
   "child-src": ["'self'", "blob:"],
@@ -69,7 +79,7 @@ export function buildCsp(reportPath: string = CSP_REPORT_PATH): string {
 }
 
 export const PERMISSIONS_POLICY =
-  "geolocation=(self), camera=(), microphone=(), payment=(), usb=(), interest-cohort=()";
+  "geolocation=(self), camera=(), microphone=(), payment=(), usb=()";
 
 /** Paths that stay frameable: the embed widget/docs and the kiosk display. */
 export const FRAMEABLE_PATHS = ["embed", "display"];
@@ -91,12 +101,28 @@ export const FIRST_PARTY_ORIGINS = [
 
 /**
  * CORS policy as data (framework-agnostic, reusable by the Astro/Workers app).
- * `open` paths answer `Access-Control-Allow-Origin: *`; everything else is
- * same-origin plus {@link FIRST_PARTY_ORIGINS}, echoed by the API layer.
+ *
+ * `open` routes are the documented public browser API (developers page) and the
+ * embed endpoints: `Access-Control-Allow-Origin: *`, never with credentials.
+ * Every other route is same-origin plus {@link FIRST_PARTY_ORIGINS}, echoed by
+ * the API layer (FastAPI CORSMiddleware).
  */
 export const CORS_POLICY = {
-  open: ["/api/embed/*", "/embed/*"],
+  open: [
+    "/api/py/weather",
+    "/api/py/geo",
+    "/api/py/search",
+    "/api/py/airquality/:path*",
+    "/api/py/airports/nearest",
+    "/api/embed/:path*",
+    "/embed/:path*",
+  ],
   allowlist: FIRST_PARTY_ORIGINS,
   /** Hardware ingest is not a browser: no CORS needed. */
   noCors: ["/api/py/stations/ingest"],
+  headers: [
+    { key: "Access-Control-Allow-Origin", value: "*" },
+    { key: "Access-Control-Allow-Methods", value: "GET, OPTIONS" },
+    { key: "Access-Control-Allow-Headers", value: "Content-Type" },
+  ],
 } as const;

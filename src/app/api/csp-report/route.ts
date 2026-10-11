@@ -1,57 +1,41 @@
 import { NextRequest } from "next/server";
 import { logWarn } from "@/lib/observability";
-import { sanitizeUrl } from "@/lib/location-privacy";
+import {
+  MAX_REPORT_BYTES,
+  createReportGate,
+  parseCspReports,
+} from "@/lib/csp-report";
 
 /**
- * CSP violation collector (report-only rollout, B05). Accepts the legacy
- * `application/csp-report` shape and the Reporting API array, keeps only
- * directive + blocked host/path + sanitised page path, logs one structured
- * line each, and always answers 204. Never stores anything.
+ * CSP violation collector (report-only rollout, B05). Checks Content-Length
+ * before reading the body, keeps only directive + blocked host + coarsened
+ * page path, drops browser-extension noise, dedupes and rate-limits per
+ * instance, and always answers 204. Stores nothing.
  */
-const MAX_BODY = 8192;
-
-function origin(u: unknown): string {
-  if (typeof u !== "string") return "";
-  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(u)) return u.slice(0, 20); // inline, eval, data, blob
-  try {
-    const url = new URL(u);
-    return `${url.origin}${url.pathname}`.slice(0, 200);
-  } catch {
-    return "";
-  }
-}
+const gate = createReportGate();
 
 export async function POST(request: NextRequest): Promise<Response> {
+  const done = () => new Response(null, { status: 204 });
   try {
+    const declared = Number(request.headers.get("content-length"));
+    if (
+      !Number.isFinite(declared) ||
+      declared <= 0 ||
+      declared > MAX_REPORT_BYTES
+    )
+      return done();
     const text = await request.text();
-    if (text.length > MAX_BODY) return new Response(null, { status: 204 });
-    const parsed: unknown = JSON.parse(text);
-    const items = Array.isArray(parsed) ? parsed : [parsed];
-    for (const item of items.slice(0, 5)) {
-      const r = (item as Record<string, unknown>) ?? {};
-      const body = (r["csp-report"] ?? r["body"] ?? r) as Record<
-        string,
-        unknown
-      >;
+    if (text.length > MAX_REPORT_BYTES) return done();
+    for (const entry of parseCspReports(JSON.parse(text))) {
+      if (!gate.allow(entry)) continue;
       logWarn({
         source: "client-render",
         message: "csp-report-only violation",
-        meta: {
-          directive: String(
-            body["effective-directive"] ??
-              body["effectiveDirective"] ??
-              body["violated-directive"] ??
-              "",
-          ).slice(0, 60),
-          blocked: origin(body["blocked-uri"] ?? body["blockedURL"]),
-          page: sanitizeUrl(
-            String(body["document-uri"] ?? body["documentURL"] ?? ""),
-          ),
-        },
+        meta: { ...entry },
       });
     }
   } catch {
     /* malformed report: ignore */
   }
-  return new Response(null, { status: 204 });
+  return done();
 }

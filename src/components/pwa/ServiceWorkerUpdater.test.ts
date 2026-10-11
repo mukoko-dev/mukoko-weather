@@ -131,7 +131,7 @@ describe("next.config.ts — /sw.js is never cached", () => {
   });
 
   it("keeps the existing embed + public embed CORS blocks intact", () => {
-    expect(nextConfigSource).toContain("/embed/:path*");
-    expect(nextConfigSource).toContain("/api/embed/:path*");
+    expect(nextConfigSource).toContain("CORS_POLICY.open");
+    expect(nextConfigSource).toContain("/embed/widget");
   });
 });

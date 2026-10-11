@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import nextConfig from "../../next.config";
-import { buildCsp, CSP_DIRECTIVES } from "./security-headers";
+import {
+  buildCsp,
+  CORS_POLICY,
+  CSP_DIRECTIVES,
+  PERMISSIONS_POLICY,
+} from "./security-headers";
 
 type Rule = { source: string; headers: { key: string; value: string }[] };
 const rules = (await (
@@ -63,6 +68,8 @@ describe("security headers (B05)", () => {
       "https://fonts.googleapis.com",
       "https://fonts.gstatic.com",
       "https://api.workos.com",
+      "https://avatars.githubusercontent.com",
+      "https://www.google.com",
     ])
       expect(csp).toContain(host);
     expect(CSP_DIRECTIVES["worker-src"]).toContain("blob:");
@@ -74,18 +81,62 @@ describe("security headers (B05)", () => {
 });
 
 describe("CORS (B06)", () => {
-  it("opens only the public embed endpoints", () => {
-    const open = rules.filter((r) =>
-      r.headers.some(
-        (h) => h.key === "Access-Control-Allow-Origin" && h.value === "*",
-      ),
-    );
-    expect(open.map((r) => r.source).sort()).toEqual([
+  const wildcard = rules.filter((r) =>
+    r.headers.some(
+      (h) => h.key === "Access-Control-Allow-Origin" && h.value === "*",
+    ),
+  );
+  const sources = wildcard.map((r) => r.source).sort();
+
+  it("keeps the documented public browser API and embeds CORS-open", () => {
+    for (const s of [
+      "/api/py/weather",
+      "/api/py/geo",
+      "/api/py/search",
+      "/api/py/airquality/:path*",
+      "/api/py/airports/nearest",
       "/api/embed/:path*",
       "/embed/:path*",
-    ]);
+    ])
+      expect(sources).toContain(s);
   });
-  it("sets no wildcard CORS on /api/py, /api/ai, /api/keys", () => {
+
+  it("never sends credentials with the wildcard", () => {
+    for (const r of wildcard)
+      expect(
+        r.headers.some((h) => h.key === "Access-Control-Allow-Credentials"),
+      ).toBe(false);
+  });
+
+  it("opens nothing else: first-party routes get no wildcard", () => {
+    expect(sources).toEqual([...CORS_POLICY.open].sort());
+    for (const closed of [
+      "/api/ai",
+      "/api/keys",
+      "/api/db-init",
+      "/api/py/devices",
+      "/api/py/chat",
+      "/api/py/stations/manual",
+      "/api/py/reports",
+    ])
+      expect(
+        sources.some((s) => closed.startsWith(s.replace(/\/:path\*$/, ""))),
+      ).toBe(false);
     expect(rules.some((r) => r.source === "/api/:path*")).toBe(false);
+  });
+
+  it("lists the first-party origins the API echoes", () => {
+    expect(CORS_POLICY.allowlist).toEqual(
+      expect.arrayContaining([
+        "https://weather.mukoko.com",
+        "https://weatherstations.nyuchi.com",
+      ]),
+    );
+  });
+});
+
+describe("Permissions-Policy", () => {
+  it("has no deprecated interest-cohort directive", () => {
+    expect(PERMISSIONS_POLICY).not.toContain("interest-cohort");
   });
 });

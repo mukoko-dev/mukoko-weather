@@ -51,15 +51,40 @@ export function sanitizePath(path: string): string {
 }
 
 /**
- * Sanitise a URL for analytics: slug coarsened, query and hash dropped
- * (they can carry `lat`/`lon`). Unparseable input becomes "".
+ * Query parameters that carry campaign attribution, not location. Everything
+ * else (`lat`, `lon`, `q`, ...) is dropped from analytics URLs.
+ */
+export const ATTRIBUTION_PARAMS: ReadonlySet<string> = new Set([
+  "gclid",
+  "gbraid",
+  "wbraid",
+  "dclid",
+  "fbclid",
+  "msclkid",
+  "ref",
+]);
+
+function isAttributionParam(name: string): boolean {
+  const n = name.toLowerCase();
+  return n.startsWith("utm_") || ATTRIBUTION_PARAMS.has(n);
+}
+
+/**
+ * Sanitise a URL for analytics: slug coarsened; hash and every query
+ * parameter dropped except campaign attribution (utm_*, gclid, ...), so
+ * acquisition reporting keeps working. Unparseable input becomes "".
  */
 export function sanitizeUrl(url: string | null | undefined): string {
   if (!url) return "";
   try {
     const u = new URL(url, "https://weather.mukoko.com");
     const origin = /^https?:\/\//i.test(url) ? u.origin : "";
-    return `${origin}${sanitizePath(u.pathname)}`;
+    const kept = new URLSearchParams();
+    for (const [k, v] of u.searchParams) {
+      if (isAttributionParam(k)) kept.append(k, v);
+    }
+    const qs = kept.toString();
+    return `${origin}${sanitizePath(u.pathname)}${qs ? `?${qs}` : ""}`;
   } catch {
     return "";
   }

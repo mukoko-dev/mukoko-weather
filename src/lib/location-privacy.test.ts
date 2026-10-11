@@ -44,6 +44,15 @@ describe("sanitizePath / sanitizeUrl", () => {
       ),
     ).toBe("https://weather.mukoko.com/spot--ksy4");
   });
+  it("keeps campaign attribution, drops everything else", () => {
+    expect(
+      sanitizeUrl(
+        "https://weather.mukoko.com/harare?utm_source=wa&UTM_Medium=x&gclid=1&fbclid=2&lat=-17.8&q=home",
+      ),
+    ).toBe(
+      "https://weather.mukoko.com/harare?utm_source=wa&UTM_Medium=x&gclid=1&fbclid=2",
+    );
+  });
   it("handles empty and invalid input", () => {
     expect(sanitizeUrl("")).toBe("");
     expect(sanitizeUrl(undefined)).toBe("");

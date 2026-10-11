@@ -7,6 +7,7 @@ import {
 
 import {
   BASELINE_HEADERS,
+  CORS_POLICY,
   FRAMEABLE_PATHS,
   FRAME_HEADER,
   buildCsp,
@@ -77,14 +78,6 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // Allow embed endpoints to be loaded from any origin
-        source: "/embed/:path*",
-        headers: [
-          { key: "Access-Control-Allow-Origin", value: "*" },
-          { key: "Access-Control-Allow-Methods", value: "GET, OPTIONS" },
-        ],
-      },
-      {
         // The iframe widget target must be embeddable on ANY third-party site.
         // The app sets no X-Frame-Options (so framing is already allowed); this
         // makes it explicit and future-proof via CSP frame-ancestors.
@@ -93,20 +86,14 @@ const nextConfig: NextConfig = {
           { key: "Content-Security-Policy", value: "frame-ancestors *" },
         ],
       },
-      {
-        // CORS (B06). Only the intentionally public embed endpoint is open.
-        // /api/py/* is answered by FastAPI's CORSMiddleware (allowlist:
-        // weather.mukoko.com, weatherstations.nyuchi.com, localhost), and the
-        // auth/key/db-init routes are same-origin only, so they get no
-        // Access-Control-* header here. Hardware ingest (WU/Ecowitt) is not
-        // a browser and needs none.
-        source: "/api/embed/:path*",
-        headers: [
-          { key: "Access-Control-Allow-Origin", value: "*" },
-          { key: "Access-Control-Allow-Methods", value: "GET, OPTIONS" },
-          { key: "Access-Control-Allow-Headers", value: "Content-Type" },
-        ],
-      },
+      // CORS (B06): `*` (no credentials) only on the documented public read
+      // API and the embed endpoints. Everything else under /api/py is
+      // answered by FastAPI's allowlist; /api/ai, /api/keys, /api/db-init are
+      // same-origin. Policy data: CORS_POLICY in src/lib/security-headers.ts.
+      ...CORS_POLICY.open.map((source) => ({
+        source,
+        headers: [...CORS_POLICY.headers],
+      })),
     ];
   },
 };
