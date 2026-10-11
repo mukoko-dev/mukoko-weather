@@ -19,8 +19,8 @@ describe("PageShell", () => {
     expect(source.match(/<main/g)?.length).toBe(1);
   });
 
-  it("clears the mobile bottom nav with pb-24 and restores at sm", () => {
-    expect(source).toContain("pb-24 sm:pb-10");
+  it("clears the mobile nav island with --mobile-nav-clearance and restores at sm", () => {
+    expect(source).toContain("pb-[var(--mobile-nav-clearance)] sm:pb-10");
   });
 
   it("supports the 3xl and 5xl reading widths", () => {

@@ -66,7 +66,7 @@ export default async function ExplorePage() {
 
       <main
         id="main-content"
-        className="animate-fade-in mx-auto max-w-5xl overflow-x-hidden px-4 py-8 pb-24 sm:px-6 sm:pb-8 md:px-8"
+        className="animate-fade-in mx-auto max-w-5xl overflow-x-hidden px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-8 md:px-8"
       >
         <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
           Explore
