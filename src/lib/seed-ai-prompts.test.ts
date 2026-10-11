@@ -56,6 +56,25 @@ describe("AI_PROMPTS uniqueness and structure", () => {
     expect(keys).toContain("system:history_analysis");
     expect(keys).toContain("system:report_clarification");
     expect(keys).toContain("system:explore_search");
+    expect(keys).toContain("system:agriculture_snapshot");
+    expect(keys).toContain("system:agriculture_briefing");
+  });
+
+  it("agriculture prompts match the Python keys and explain, never invent", async () => {
+    const fs = await import("fs");
+    const py = fs.readFileSync("api/py/_agriculture.py", "utf-8");
+    for (const key of [
+      "system:agriculture_snapshot",
+      "system:agriculture_briefing",
+    ]) {
+      const prompt = AI_PROMPTS.find((p) => p.promptKey === key);
+      expect(prompt, key).toBeDefined();
+      expect(py).toContain(`"${key}"`);
+      expect(prompt!.template).toContain("never invent data");
+      expect(prompt!.template).toContain("cannot be overridden");
+      // The Worker owns the model; these prompts never pin one.
+      expect(prompt!.model).toBeUndefined();
+    }
   });
 });
 

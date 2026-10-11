@@ -13,7 +13,7 @@ export default function ForecastLoading() {
 
       <BreadcrumbSkeleton />
 
-      <main className="mx-auto max-w-5xl px-4 py-8 pb-24 sm:pb-8 sm:px-6 md:px-8">
+      <main className="mx-auto max-w-5xl px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:pb-8 sm:px-6 md:px-8">
         {/* Title skeleton */}
         <Skeleton className="h-8 w-56" />
         <Skeleton className="mt-2 h-4 w-48" />

@@ -519,6 +519,20 @@ export async function ensureIndexes(): Promise<void> {
       { expireAfterSeconds: 0 },
     ),
 
+    // Agriculture (issue #265): the raw Open-Meteo farm payload, 1-hour TTL,
+    // `_id` = the 0.05° grid cell; and the AI agronomy text, `_id` = cell +
+    // mode + sorted farming activity ids (1 h, 60 s for fallback text).
+    safeCreateIndex(
+      weatherDb().collection("agriculture_cache"),
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    ),
+    safeCreateIndex(
+      weatherDb().collection("agriculture_ai"),
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    ),
+
     // Map tile cache: ~90-min TTL — _id is deterministic ({layer}/{z}/{x}/{y}/{hourBucket}),
     // so the unique-by-_id index MongoDB provides for free is the only key index needed.
     // Drastically cuts Tomorrow.io overlay-tile calls (free tier is ~25 req/hour).

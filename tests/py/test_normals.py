@@ -225,7 +225,7 @@ class TestFetchArchive:
         params = kwargs["params"]
         assert params["start_date"] == "1991-01-01"
         assert params["end_date"] == "2020-12-31"
-        assert params["daily"] == "temperature_2m_max,temperature_2m_min"
+        assert params["daily"] == "temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum"
         assert params["timezone"] == "auto"
         assert params["latitude"] == "-17.75"
 

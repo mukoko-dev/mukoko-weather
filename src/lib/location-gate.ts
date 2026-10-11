@@ -26,6 +26,7 @@ export const LOCATION_SLUG_RE = /^[a-z0-9-]{1,80}$/;
 
 /** Sub-routes under `/[location]` (directories in src/app/[location]). */
 export const LOCATION_SUB_ROUTES: ReadonlySet<string> = new Set([
+  "agriculture",
   "atmosphere",
   "forecast",
   "map",
@@ -70,7 +71,7 @@ function decodeSegment(segment: string): string | null {
 
 /**
  * Classify a request path. `/{segment}` and
- * `/{segment}/{atmosphere|forecast|map}` reach the `[location]` route unless
+ * `/{segment}/{agriculture|atmosphere|forecast|map}` reach the `[location]` route unless
  * the segment is another top-level route (`knownRoutes`).
  * - Only the case is wrong (`/Harare`, `/harare/Forecast`): `redirect` to the
  *   lowercase URL, the canonical one (these used to render via the
