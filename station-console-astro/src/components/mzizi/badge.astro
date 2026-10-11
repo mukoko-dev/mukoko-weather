@@ -1,0 +1,17 @@
+---
+/**
+ * Badge — a small status or category label, pure Astro. Follows the Mzizi
+ * registry's `badge` contract (`badge.tsx` / `badge.rs`): variants
+ * default, secondary, destructive, outline, ghost and link, with
+ * `data-slot="badge"` and `data-variant`.
+ */
+import { badgeClasses, type BadgeVariant } from "./ui-variants";
+
+interface Props {
+  variant?: BadgeVariant;
+  class?: string;
+}
+const { variant = "default", class: extra = "" } = Astro.props;
+---
+
+<span data-slot="badge" data-variant={variant} class={badgeClasses(variant, extra)}><slot /></span>

@@ -1,0 +1,31 @@
+---
+/**
+ * Alert — the Dashboard Standard alert (`contracts/app/alert`), pure Astro: a message
+ * with `role="alert"`. `title` is the heading line; the default slot is the
+ * description. Classes are `alertVariants`. Its React twin is `app-alert.tsx`; the
+ * registry primitive is `./alert.astro`.
+ */
+import { cn } from "./ui-utils";
+import { alertDescriptionClasses, alertTitleClasses, alertVariants } from "./ui-variants";
+
+interface Props {
+  variant?: "default" | "info" | "success" | "warning" | "destructive";
+  title?: string;
+  class?: string;
+  /** Extra data attribute, e.g. which state a StateMessage shows. */
+  state?: string;
+}
+const { variant, title, class: extra, state } = Astro.props;
+const hasBody = Astro.slots.has("default");
+---
+
+<div role="alert" data-slot="alert" data-state={state} class={cn(alertVariants({ variant }), extra)}>
+  {title && <p data-slot="alert-title" class={alertTitleClasses}>{title}</p>}
+  {
+    hasBody && (
+      <div data-slot="alert-description" class={alertDescriptionClasses}>
+        <slot />
+      </div>
+    )
+  }
+</div>

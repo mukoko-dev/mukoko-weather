@@ -1,0 +1,19 @@
+---
+import Console from "../components/Console.astro";
+import Landing from "../components/Landing.astro";
+import Base from "../layouts/Base.astro";
+import { runtime } from "../lib/runtime-config";
+
+export const prerender = false;
+
+/**
+ * "/" is public: anonymous visitors get the landing page, signed-in station
+ * owners get the console. Everything under /api/stations is session-gated.
+ */
+const user = Astro.locals.auth?.user ?? null;
+const { config } = runtime();
+---
+
+<Base title={user ? "Station console | mukoko weather stations" : "mukoko weather stations"}>
+  {user ? <Console email={user.email ?? ""} ingestHost={config.ingestHost} /> : <Landing />}
+</Base>

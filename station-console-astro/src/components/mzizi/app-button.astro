@@ -1,0 +1,39 @@
+---
+/**
+ * Button — the Dashboard Standard button (`contracts/app/button`), pure Astro;
+ * its React twin is `app-button.tsx`, the registry primitive `./button.astro`.
+ * An <a> when `href` is set, otherwise a <button>.
+ * App density (`appButtonVariants`): 36px by default (32px `sm`, 40px
+ * `lg`) with a fine pointer, 44–48px on touch, small corners.
+ * `destructive` (solid) and `destructive-outline` use only the destructive
+ * tokens, never a brand colour.
+ */
+import { cn } from "./ui-utils";
+import { appButtonVariants } from "./ui-variants";
+
+interface Props {
+  href?: string;
+  type?: "button" | "submit" | "reset";
+  variant?: "primary" | "secondary" | "outline" | "ghost" | "destructive" | "destructive-outline";
+  size?: "sm" | "md" | "lg";
+  fullWidth?: boolean;
+  disabled?: boolean;
+  name?: string;
+  value?: string;
+  class?: string;
+}
+const { href, type = "button", variant, size, fullWidth, disabled, name, value, class: extra } = Astro.props;
+const classes = cn(appButtonVariants({ variant, size, fullWidth }), extra);
+---
+
+{
+  href ? (
+    <a href={href} class={classes} data-slot="button">
+      <slot />
+    </a>
+  ) : (
+    <button type={type} class={classes} disabled={disabled} name={name} value={value} data-slot="button">
+      <slot />
+    </button>
+  )
+}

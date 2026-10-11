@@ -1,0 +1,11 @@
+{
+  "skills": {
+    "bundu-design": "1.0.0",
+    "cloudflare-worker-rust": "1.0.0",
+    "ecosystem-app-setup": "1.0.0",
+    "mcp-server-cloudflare": "1.0.0",
+    "mukoko-design": "1.0.0",
+    "nyuchi-design": "1.0.0",
+    "scaffold-component": "1.0.0"
+  }
+}

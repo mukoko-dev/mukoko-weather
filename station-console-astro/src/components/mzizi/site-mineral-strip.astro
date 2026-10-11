@@ -1,0 +1,76 @@
+---
+/**
+ * MineralStrip — the decorative seven-mineral accent bar.
+ *
+ * A full-height, ~6px bar fixed to the LEFT edge of every page,
+ * split into seven equal vertical segments coloured with the seven
+ * African-mineral tokens (top→bottom: cobalt, tanzanite, malachite,
+ * gold, terracotta, sodalite, copper).
+ *
+ * Purely decorative: aria-hidden and pointer-events:none, so it never
+ * intercepts clicks or reaches the accessibility tree. Colours come
+ * exclusively from the `--color-*` custom properties defined in each
+ * app's src/styles/global.css — no hex here.
+ *
+ * No inline `style` attributes: each segment is coloured by the scoped
+ * stylesheet below (by `data-mineral`), so a page's Content-Security-Policy can
+ * keep `style-src 'self'` with no `style-src-attr 'unsafe-inline'`.
+ */
+const minerals = [
+  "cobalt",
+  "tanzanite",
+  "malachite",
+  "gold",
+  "terracotta",
+  "sodalite",
+  "copper",
+] as const;
+---
+
+<div class="mineral-strip" aria-hidden="true" data-slot="mineral-strip">
+  {
+    minerals.map((mineral) => (
+      <span data-mineral={mineral} />
+    ))
+  }
+</div>
+
+<style>
+  .mineral-strip {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 6px;
+    height: 100dvh;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+  }
+
+  .mineral-strip span {
+    flex: 1 1 0;
+    display: block;
+  }
+  .mineral-strip [data-mineral="cobalt"] {
+    background-color: var(--color-cobalt);
+  }
+  .mineral-strip [data-mineral="tanzanite"] {
+    background-color: var(--color-tanzanite);
+  }
+  .mineral-strip [data-mineral="malachite"] {
+    background-color: var(--color-malachite);
+  }
+  .mineral-strip [data-mineral="gold"] {
+    background-color: var(--color-gold);
+  }
+  .mineral-strip [data-mineral="terracotta"] {
+    background-color: var(--color-terracotta);
+  }
+  .mineral-strip [data-mineral="sodalite"] {
+    background-color: var(--color-sodalite);
+  }
+  .mineral-strip [data-mineral="copper"] {
+    background-color: var(--color-copper);
+  }
+</style>

@@ -1,0 +1,18 @@
+---
+import Button from "../components/mzizi/app-button.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+import Base from "../layouts/Base.astro";
+
+export const prerender = false;
+---
+
+<Base title="Page not found | mukoko weather stations">
+  <div class="flex min-h-dvh flex-col">
+    <main id="main" tabindex="-1" class="container-prose flex-1 space-y-4 py-16 focus:outline-none">
+      <h1 class="font-serif text-h2 font-semibold">Page not found</h1>
+      <p class="text-body-lg text-muted-foreground">That page does not exist. Head back to the station console.</p>
+      <Button href="/">Back to the console</Button>
+    </main>
+    <SiteFooter />
+  </div>
+</Base>

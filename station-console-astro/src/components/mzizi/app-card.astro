@@ -1,0 +1,17 @@
+---
+/**
+ * Card — the Dashboard Standard card (`contracts/app/card`), pure Astro: the `.card`
+ * surface. Classes are `cardVariants`. Its React twin is `app-card.tsx`; the
+ * registry primitive is `./card.astro`.
+ */
+import { cn } from "./ui-utils";
+import { cardVariants } from "./ui-variants";
+
+interface Props {
+  padding?: "none" | "sm" | "md" | "lg";
+  class?: string;
+}
+const { padding, class: extra } = Astro.props;
+---
+
+<div class={cn(cardVariants({ padding }), extra)} data-slot="card"><slot /></div>

@@ -1,0 +1,176 @@
+---
+import AccountMenu from "./mzizi/app-account-menu.astro";
+import Alert from "./mzizi/app-alert.astro";
+import AppShell from "./mzizi/app-shell.astro";
+import Badge from "./mzizi/badge.astro";
+import Button from "./mzizi/app-button.astro";
+import Card from "./mzizi/app-card.astro";
+import EmptyState from "./mzizi/app-empty-state.astro";
+import FormField from "./mzizi/app-form-field.astro";
+import Input from "./mzizi/app-input.astro";
+import Label from "./mzizi/app-label.astro";
+import PageHeader from "./mzizi/app-page-header.astro";
+import Segmented from "./mzizi/segmented-control.astro";
+import { COMPANY_LINE, FOOTER_LINKS, GUIDE_URL } from "../lib/links";
+import { READING_FIELDS } from "../lib/stations/types";
+
+interface Props {
+  email: string;
+  ingestHost: string;
+}
+const { email, ingestHost } = Astro.props;
+
+const READING_LABELS: Record<(typeof READING_FIELDS)[number], string> = {
+  temperatureC: "Temperature (°C)",
+  rainfallMm: "Rain (mm)",
+  humidityPercent: "Humidity (%)",
+  pressureHpa: "Pressure (hPa)",
+  windKph: "Wind (km/h)",
+};
+---
+
+<AppShell
+  id="console"
+  navLabel="Console menu"
+  sidebarLabel="Console"
+  footerLinks={FOOTER_LINKS.map((l) => ({ label: l.label, href: l.href }))}
+>
+  <a slot="brand" href="/" class="font-serif text-h6 font-semibold">weather stations</a>
+  <a slot="workspace" href="/" class="flex min-h-11 items-center px-2 font-serif text-h6 font-semibold" data-slot="brand-wordmark">
+    weather stations
+  </a>
+  <nav slot="nav" aria-label="Console" class="grid gap-1 text-body-sm">
+    <a href="/" aria-current="page" class="flex min-h-11 items-center rounded-sm bg-muted px-3 font-medium">Station console</a>
+    <a href={GUIDE_URL} rel="noopener noreferrer" class="flex min-h-11 items-center rounded-sm px-3 text-muted-foreground hover:bg-muted hover:text-foreground">Guide</a>
+    <a href="https://weather.mukoko.com" rel="noopener noreferrer" class="flex min-h-11 items-center rounded-sm px-3 text-muted-foreground hover:bg-muted hover:text-foreground">weather.mukoko.com</a>
+  </nav>
+  <AccountMenu slot="account" email={email} signOutAction="/auth/signout">
+    <Segmented
+      name="theme"
+      legend="Appearance"
+      size="sm"
+      value="system"
+      options={[
+        ["system", "System"],
+        ["light", "Light"],
+        ["dark", "Dark"],
+      ]}
+    />
+  </AccountMenu>
+  <p slot="footer" class="text-caption">{COMPANY_LINE}</p>
+
+  <div id="console-root" class="container-prose grid w-full gap-6" data-ingest-host={ingestHost}>
+    <PageHeader title="Station console" description={`Signed in as ${email}`} docsHref={GUIDE_URL} docsLabel="Setup guide" />
+
+    <div id="console-error" hidden>
+      <Alert variant="destructive" title="Something went wrong"><span data-error-text></span></Alert>
+    </div>
+
+    <section id="credentials" hidden aria-labelledby="credentials-title">
+      <Card padding="lg">
+        <h2 id="credentials-title" class="text-h5 font-semibold">Save these credentials. The key is shown once.</h2>
+        <dl class="mt-3 grid gap-2 text-body-sm">
+          <div>
+            <dt class="text-muted-foreground">Station ID</dt>
+            <dd><code class="font-mono" data-cred-id></code></dd>
+          </div>
+          <div>
+            <dt class="text-muted-foreground">Ingest key</dt>
+            <dd><code class="break-all font-mono" data-cred-key></code></dd>
+          </div>
+        </dl>
+        <div class="mt-4 grid gap-1 text-body-sm text-muted-foreground">
+          <p class="font-medium text-foreground">Point your station console at:</p>
+          <p data-cred-wunderground></p>
+          <p data-cred-ecowitt></p>
+          <p>
+            Step-by-step instructions:{" "}
+            <a href={GUIDE_URL} rel="noopener noreferrer" class="text-primary underline underline-offset-4">weather stations guide</a>
+          </p>
+        </div>
+        <div class="mt-4">
+          <span data-action="dismiss-credentials" class="contents"><Button type="button" variant="secondary">I have saved them</Button></span>
+        </div>
+      </Card>
+    </section>
+
+    <section aria-labelledby="register-title">
+      <Card padding="lg">
+        <h2 id="register-title" class="text-h5 font-semibold">Register a station</h2>
+        <p class="mt-1 text-body-sm text-muted-foreground">
+          Digital consoles push readings automatically; analog stations log manual readings below.
+        </p>
+        <form id="register-form" class="mt-4 grid gap-4" novalidate>
+          <FormField name="name" label="Station name" required maxlength={80} autocomplete="off" hint="For example: Marondera High School" />
+          <div class="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+            <FormField name="lat" label="Latitude" required inputmode="decimal" autocomplete="off" hint="-90 to 90" />
+            <FormField name="lon" label="Longitude" required inputmode="decimal" autocomplete="off" hint="-180 to 180" />
+            <span data-action="use-gps" class="contents"><Button type="button" variant="outline">Use GPS</Button></span>
+          </div>
+          <Segmented
+            name="stationType"
+            legend="Station type"
+            value="digital"
+            options={[
+              ["digital", "Digital (uploads automatically)"],
+              ["manual", "Analog (manual readings)"],
+            ]}
+          />
+          <FormField name="hardware" label="Hardware (optional)" maxlength={80} autocomplete="off" hint="For example: Ecowitt WS2910" />
+          <span data-action="register" class="contents"><Button type="submit" fullWidth>Register station</Button></span>
+        </form>
+      </Card>
+    </section>
+
+    <section aria-labelledby="stations-title" class="grid gap-3">
+      <h2 id="stations-title" class="text-h5 font-semibold">My stations</h2>
+      <div id="station-empty">
+        <EmptyState title="No stations yet" message="Register a station above, or add one you already have." />
+      </div>
+      <ul id="station-list" role="list" class="grid gap-3" aria-live="polite"></ul>
+    </section>
+  </div>
+
+  <template id="station-template">
+    <li data-station>
+      <Card padding="lg">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div class="min-w-0">
+            <h3 class="text-h6 font-semibold" data-station-name></h3>
+            <p class="text-body-sm text-muted-foreground">
+              <code class="font-mono" data-station-id></code> · <span data-station-last></span>
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary"><span data-station-type></span></Badge>
+            <Badge variant="outline"><span data-station-access></span></Badge>
+          </div>
+        </div>
+        <p class="mt-2 text-body-sm text-muted-foreground" data-station-metrics></p>
+        <form class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3" data-reading-form novalidate>
+          {
+            READING_FIELDS.map((f) => (
+              <div class="grid content-start gap-1.5">
+                <Label for={f}>{READING_LABELS[f]}</Label>
+                <Input name={f} id={f} inputmode="decimal" autocomplete="off" data-reading-input />
+              </div>
+            ))
+          }
+          <div class="flex items-end">
+            <Button type="submit" fullWidth>Log reading</Button>
+          </div>
+        </form>
+        <p class="mt-2 text-body-sm text-muted-foreground" role="status" data-station-result></p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <span data-action="refresh" class="contents"><Button type="button" variant="outline" size="sm">Refresh status</Button></span>
+          <span data-action="rotate" class="contents"><Button type="button" variant="outline" size="sm">Rotate key</Button></span>
+          <span data-action="remove" class="contents"><Button type="button" variant="ghost" size="sm">Remove from this device</Button></span>
+        </div>
+      </Card>
+    </li>
+  </template>
+</AppShell>
+
+<script>
+  import "../scripts/console";
+</script>
