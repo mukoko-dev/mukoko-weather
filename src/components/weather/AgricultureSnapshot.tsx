@@ -23,7 +23,12 @@ import {
   type AgricultureResponse,
 } from "@/lib/agriculture";
 import type { WeatherLocation } from "@/lib/locations";
-import { agriAIBody, fetchAgriAI, peekAgriAI } from "@/lib/agriculture-client";
+import {
+  agriAIBody,
+  fetchAgriAI,
+  fetchAgriculture,
+  peekAgriAI,
+} from "@/lib/agriculture-client";
 import type { AISummaryUser } from "./AISummary";
 import { AgricultureSnapshotSkeleton } from "./SectionSkeleton";
 
@@ -44,6 +49,12 @@ interface Props {
     "slug" | "name" | "lat" | "lon" | "country" | "elevation"
   >;
   user: AISummaryUser | null;
+  /**
+   * "card" (location page, default): AI line + link to the insights page.
+   * "page" (top of the insights page): no AI line (the page has the
+   * briefing) and no self-link.
+   */
+  variant?: "card" | "page";
 }
 
 /** A finished request, keyed by what was asked so stale results never show. */
@@ -51,11 +62,11 @@ type Result<T> =
   | { key: string; ok: true; value: T }
   | { key: string; ok: false };
 
-function isAbort(err: unknown): boolean {
-  return (err as { name?: string } | null)?.name === "AbortError";
-}
-
-export function AgricultureSnapshot({ location, user }: Props) {
+export function AgricultureSnapshot({
+  location,
+  user,
+  variant = "card",
+}: Props) {
   const selected = useAppStore((s) => s.selectedActivities);
   const openMyWeather = useAppStore((s) => s.openMyWeather);
   const crops = useMemo(() => farmingActivities(selected), [selected]);
@@ -67,17 +78,13 @@ export function AgricultureSnapshot({ location, user }: Props) {
   const [ai, setAI] = useState<Result<string> | null>(null);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetch(url, { signal: controller.signal })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return (await res.json()) as AgricultureResponse;
-      })
-      .then((value) => setResult({ key: url, ok: true, value }))
-      .catch((err: unknown) => {
-        if (!isAbort(err)) setResult({ key: url, ok: false });
-      });
-    return () => controller.abort();
+    let live = true;
+    fetchAgriculture(url)
+      .then((value) => live && setResult({ key: url, ok: true, value }))
+      .catch(() => live && setResult({ key: url, ok: false }));
+    return () => {
+      live = false;
+    };
   }, [url]);
 
   const current = result?.key === url ? result : null;
@@ -85,7 +92,8 @@ export function AgricultureSnapshot({ location, user }: Props) {
   const signedIn = user !== null;
   // AI only for signed-in users who told us what they farm: an advice line
   // for crops nobody picked would spend a model call on nothing.
-  const wantsAI = signedIn && crops.length > 0;
+  const isCard = variant === "card";
+  const wantsAI = isCard && signedIn && crops.length > 0;
   const { slug, name, country, elevation, lat, lon } = location;
   const aiBody = useMemo(
     () =>
@@ -224,52 +232,56 @@ export function AgricultureSnapshot({ location, user }: Props) {
         </ul>
       )}
 
-      <div className="flex items-start gap-2">
-        <span aria-hidden="true" className="mt-1 text-mineral-malachite">
-          <SparklesIcon size={14} />
-        </span>
-        {signedIn && crops.length === 0 ? (
-          <p className="dove">
-            <button
-              type="button"
-              onClick={() => openMyWeather("activities")}
-              className="sunbird dik-dik"
-            >
-              Pick your crops
-            </button>{" "}
-            for Shamwari&apos;s farm advice for {location.name}.
-          </p>
-        ) : signedIn ? (
-          <div role="status" aria-live="polite" className="min-w-0 flex-1">
-            {aiNow?.ok ? (
-              <p className="gazelle">{aiNow.value}</p>
-            ) : !aiNow ? (
-              <>
-                <span className="mt-1 block h-4 w-3/4 animate-pulse rounded-full bg-text-tertiary/20" />
-                <span className="sr-only">Loading Shamwari farm advice</span>
-              </>
-            ) : (
-              <p className="dove">
-                Shamwari&apos;s farm advice is unavailable right now.
-              </p>
-            )}
-          </div>
-        ) : (
-          <p className="dove">
-            <Link href={signInHref} prefetch={false} className="sunbird">
-              Sign in
-            </Link>{" "}
-            for Shamwari&apos;s farm advice for {location.name}.
-          </p>
-        )}
-      </div>
+      {isCard && (
+        <div className="flex items-start gap-2">
+          <span aria-hidden="true" className="mt-1 text-mineral-malachite">
+            <SparklesIcon size={14} />
+          </span>
+          {signedIn && crops.length === 0 ? (
+            <p className="dove">
+              <button
+                type="button"
+                onClick={() => openMyWeather("activities")}
+                className="sunbird dik-dik"
+              >
+                Pick your crops
+              </button>{" "}
+              for Shamwari&apos;s farm advice for {location.name}.
+            </p>
+          ) : signedIn ? (
+            <div role="status" aria-live="polite" className="min-w-0 flex-1">
+              {aiNow?.ok ? (
+                <p className="gazelle">{aiNow.value}</p>
+              ) : !aiNow ? (
+                <>
+                  <span className="mt-1 block h-4 w-3/4 animate-pulse rounded-full bg-text-tertiary/20" />
+                  <span className="sr-only">Loading Shamwari farm advice</span>
+                </>
+              ) : (
+                <p className="dove">
+                  Shamwari&apos;s farm advice is unavailable right now.
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="dove">
+              <Link href={signInHref} prefetch={false} className="sunbird">
+                Sign in
+              </Link>{" "}
+              for Shamwari&apos;s farm advice for {location.name}.
+            </p>
+          )}
+        </div>
+      )}
 
-      <Link
-        href={`/${location.slug}/agriculture`}
-        className="sunbird inline-flex min-h-[var(--touch-target-min)] items-center"
-      >
-        Full agriculture insights →
-      </Link>
+      {isCard && (
+        <Link
+          href={`/${location.slug}/agriculture`}
+          className="sunbird inline-flex min-h-[var(--touch-target-min)] items-center"
+        >
+          Full agriculture insights →
+        </Link>
+      )}
     </section>
   );
 }
