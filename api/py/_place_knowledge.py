@@ -1255,7 +1255,9 @@ def get_location_profile(
         profile.current = compute_current(profile, when, utc_fallback)
         return apply_consumer_view(profile)
     except Exception as exc:  # noqa: BLE001 — a profile is context, never a failure
-        logger.warning("location profile failed: %s", type(exc).__name__)
+        # The traceback goes to the logs (secret redaction applies), so a
+        # swallowed failure can still be found.
+        logger.warning("location profile failed: %s", type(exc).__name__, exc_info=True)
         return None
 
 
