@@ -281,6 +281,7 @@ describe("JSON-LD script tags use safeJsonLd, never raw JSON.stringify", () => {
     "[location]/page.tsx",
     "[location]/atmosphere/page.tsx",
     "[location]/forecast/page.tsx",
+    "[location]/agriculture/page.tsx",
     "[location]/map/page.tsx",
   ];
 

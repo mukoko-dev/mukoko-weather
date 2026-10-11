@@ -27,6 +27,7 @@ describe("classifyLocationPath", () => {
     ["/harare", "harare"],
     ["/harare/forecast", "harare"],
     ["/harare/atmosphere", "harare"],
+    ["/harare/agriculture", "harare"],
     ["/harare/map", "harare"],
     ["/some-place--ksy4dd7", "some-place--ksy4dd7"],
   ])("%s is the location page for %s", (path, slug) => {
