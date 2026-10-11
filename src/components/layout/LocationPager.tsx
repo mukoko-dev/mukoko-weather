@@ -25,7 +25,7 @@ import { visiblePresetSlugs } from "@/lib/location-presets";
  */
 
 const PAGE_ITEM_CLASS =
-  "flex h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] shrink-0 items-center justify-center rounded-full transition-colors active:scale-95";
+  "flex h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-primary active:scale-95";
 
 interface LocationPagerProps {
   pathname: string;
@@ -79,11 +79,14 @@ export function LocationPager({
 
   return (
     <nav aria-label="Location pages" className="min-w-0 flex-1">
+      {/* No surface of its own: the dots sit directly on the nav island.
+          `w-max mx-auto` centres a short row and still scrolls a long one
+          from its first item (justify-center would clip the start). */}
       <div
         ref={scrollerRef}
-        className="scrollbar-hide relative flex h-[var(--touch-target-min)] items-center overflow-x-auto rounded-full border border-text-tertiary/10 bg-surface-card/80 px-1 shadow-sm"
+        className="scrollbar-hide relative flex h-[var(--touch-target-min)] items-center overflow-x-auto"
       >
-        <ul className="flex items-center">
+        <ul className="mx-auto flex w-max items-center">
           <li className="shrink-0">
             <Link
               href={MY_LOCATION_HREF}
@@ -97,7 +100,10 @@ export function LocationPager({
                   : "text-text-tertiary hover:text-text-secondary"
               }`}
             >
-              <NavigationIcon size={18} />
+              <NavigationIcon
+                size={18}
+                className={activeIndex === 0 ? "fill-current" : ""}
+              />
             </Link>
           </li>
           {dots.map((href) => {
@@ -119,8 +125,8 @@ export function LocationPager({
                 >
                   <span
                     aria-hidden="true"
-                    className={`block h-2 w-2 rounded-full transition-colors ${
-                      isActive ? "bg-primary" : "bg-text-tertiary/50"
+                    className={`block h-2 rounded-full transition-[width,background-color] ${
+                      isActive ? "w-5 bg-primary" : "w-2 bg-text-tertiary/50"
                     }`}
                   />
                 </Link>

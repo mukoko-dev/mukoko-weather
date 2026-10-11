@@ -347,7 +347,7 @@ export function LocationsClient({ initialCurrentSlug, ipAnchor }: Props) {
         )}
       </section>
 
-      <div className="sticky bottom-[4.5rem] z-30 mt-8 sm:bottom-4">
+      <div className="sticky bottom-[var(--mobile-nav-clearance)] z-30 mt-8 sm:bottom-4">
         <LocationsSearch listed={listed} />
       </div>
     </>

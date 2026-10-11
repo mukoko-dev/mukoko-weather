@@ -8,7 +8,7 @@ export default function AviationLoading() {
       <main
         id="main-content"
         aria-label="Loading aviation briefing"
-        className="mx-auto max-w-3xl px-4 py-6 pb-24 sm:px-6 sm:pb-8 md:px-8"
+        className="mx-auto max-w-3xl px-4 py-6 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-8 md:px-8"
       >
         <div
           role="status"

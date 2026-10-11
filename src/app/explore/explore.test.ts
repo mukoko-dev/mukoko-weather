@@ -75,8 +75,8 @@ describe("explore page — layout and navigation", () => {
     expect(exploreSource).toContain("md:px-8");
   });
 
-  it("explore page has pb-24 for mobile nav clearance", () => {
-    expect(exploreSource).toContain("pb-24");
+  it("explore page clears the mobile nav island (--mobile-nav-clearance)", () => {
+    expect(exploreSource).toContain("pb-[var(--mobile-nav-clearance)]");
   });
 
   it("explore tag page includes Header and Footer", () => {
@@ -89,8 +89,8 @@ describe("explore page — layout and navigation", () => {
     expect(exploreTagSource).toContain("md:px-8");
   });
 
-  it("explore tag page has pb-24 for mobile nav clearance", () => {
-    expect(exploreTagSource).toContain("pb-24");
+  it("explore tag page clears the mobile nav island (--mobile-nav-clearance)", () => {
+    expect(exploreTagSource).toContain("pb-[var(--mobile-nav-clearance)]");
   });
 });
 
