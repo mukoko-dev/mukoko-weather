@@ -264,6 +264,8 @@ mukoko-weather/
 │   │   │   │   ├── VisibilityChart.tsx     # Visibility distance
 │   │   │   │   ├── FeasibilityChart.tsx    # 24h activity feasibility line (mineral-colored, rating-word axis)
 │   │   │   │   └── FeasibilityChart.test.ts
+│   │   │   ├── AgricultureSnapshot.tsx # Agriculture snapshot card (malachite): verdict, spray/plant/harvest/irrigate windows, rain, soil, water balance, GDD, frost/heat, one signed-in AI line, link to /[location]/agriculture
+│   │   │   ├── AgricultureSnapshot.test.ts
 │   │   │   ├── LocationPromptCard.tsx # Home page's single, dismissible "Use my location" card (floats above the mobile nav)
 │   │   │   ├── MyWeatherModal.tsx     # Centralized preferences modal (location, activities, settings)
 │   │   │   ├── SupportBanner.tsx           # Buy Me a Coffee inline support card (BMC brand yellow)
@@ -1331,6 +1333,7 @@ All pages use a **TikTok-style sequential mounting** pattern — only ONE sectio
 - `AtmosphericSummary` → `ChartErrorBoundary` (eager — 7 gauge cards: humidity, cloud, wind, pressure, UV, feels-like, precipitation)
 - `RecentReports` → `LazySection` + `ChartErrorBoundary` + `Suspense`
 - `ActivityInsights` → `LazySection` + `ChartErrorBoundary` + `Suspense`
+- `AgricultureSnapshot` → `LazySection` (`AgricultureSnapshotSkeleton`) + `ChartErrorBoundary` + `Suspense` — its own draggable section (`agriculture`), after `activityInsights` in `DEFAULT_SECTION_ORDER`. Fetches the public `/api/py/agriculture` (with the user's farming activities as `crops`); signed-in users also get one AI line from `/api/ai/agriculture` (`mode: "snapshot"`), anonymous users a sign-in link. Renders nothing when the data is unavailable
 - `AISummary` → `LazySection` + `ChartErrorBoundary` + `Suspense`
 - `AISummaryChat` → `LazySection` + `ChartErrorBoundary` + `Suspense` (only when AI summary loaded & not fallback)
 - `MapPreview` → `LazySection` + `ChartErrorBoundary` + `Suspense`
@@ -1474,6 +1477,7 @@ _Library tests:_
 - `src/lib/derived-insights.test.ts` — derived-insight helpers (same reference vectors as `tests/py/test_insights.py`) and full derivation without Tomorrow.io
 - `src/lib/home-weather.test.ts` — `fetchModelWeather`: model/models query, blend default never swaps, fallen-back provider is not treated as the chosen model
 - `src/lib/location-time.test.ts` — location time zone: viewer UTC+8 → Harare (UTC+2) and viewer UTC-5 → Singapore (UTC+8) with the process TZ really set; start hour + labels across hero, feasibility, lane, charts, tips, frost, sun
+- `src/lib/agriculture.test.ts` — agriculture helpers: farming-id list parity with `activities.ts`, URL builder, severity-token status classes, formatters, Python-model field parity
 - `src/lib/weather-labels.test.ts` — humidity/pressure/cloud/precipitation/feels-like label helpers
 - `src/lib/locations.test.ts` — location searching, tag filtering, nearest location
 - `src/lib/activities.test.ts` — activity definitions, categories, search, filtering, category styles
