@@ -331,6 +331,12 @@ describe("archive providers (#268)", () => {
     expect(r.feelsLikeLow).toBeNull();
   });
 
+  it("a day without sun times has null daylight, not 0 hours", () => {
+    const doc = makeDoc("2026-01-01");
+    doc.daily = { ...doc.daily, sunrise: [], sunset: [] };
+    expect(transformHistory([doc])[0].daylightHours).toBeNull();
+  });
+
   it("history URL carries the coordinate so uncatalogued places work", () => {
     expect(
       historyUrl(
@@ -353,7 +359,14 @@ describe("archive providers (#268)", () => {
     };
     expect(
       parseSources([good, { ...good, url: "javascript:alert(1)" }, null, 3]),
-    ).toEqual([good]);
+    ).toEqual([{ ...good, licenceUrl: null }]);
+    expect(
+      parseSources([{ ...good, licenceUrl: "javascript:alert(1)" }])[0]
+        .licenceUrl,
+    ).toBeNull();
+    expect(
+      parseSources([{ ...good, licenceUrl: "https://x.org/l" }])[0].licenceUrl,
+    ).toBe("https://x.org/l");
     expect(parseSources(undefined)).toEqual([]);
   });
 

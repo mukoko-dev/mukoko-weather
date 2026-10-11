@@ -478,8 +478,46 @@ def apparent_temperature(temp_c: Optional[float], rh_pct: Optional[float], wind_
     return round(temp_c + 0.33 * e - 0.70 * (wind_kmh / 3.6) - 4.00, 1)
 
 
-def parse_nasa_power(payload: dict) -> list[dict]:
-    """Turn a POWER daily point payload into canonical days (oldest first)."""
+def sun_times(lat: float, lon: float, day: str, utc_offset_seconds: int) -> tuple[Optional[str], Optional[str]]:
+    """Sunrise and sunset for ``day`` as local wall-clock ``YYYY-MM-DDTHH:MM``
+    strings (the format Open-Meteo returns), from the NOAA solar equations.
+
+    POWER has no sun times; without them the dashboard's daylight chart and
+    average would read 0 h for every POWER day. Returns ``(None, None)`` in
+    polar day or night, when the sun doesn't cross the horizon.
+    """
+    import math
+
+    d = _parse(day)
+    n = d.timetuple().tm_yday
+    g = 2 * math.pi / 365 * (n - 1)
+    eqtime = 229.18 * (
+        0.000075 + 0.001868 * math.cos(g) - 0.032077 * math.sin(g)
+        - 0.014615 * math.cos(2 * g) - 0.040849 * math.sin(2 * g)
+    )
+    decl = (
+        0.006918 - 0.399912 * math.cos(g) + 0.070257 * math.sin(g)
+        - 0.006758 * math.cos(2 * g) + 0.000907 * math.sin(2 * g)
+        - 0.002697 * math.cos(3 * g) + 0.00148 * math.sin(3 * g)
+    )
+    phi = math.radians(lat)
+    arg = math.cos(math.radians(90.833)) / (math.cos(phi) * math.cos(decl)) - math.tan(phi) * math.tan(decl)
+    if not -1.0 <= arg <= 1.0:
+        return None, None
+    ha = math.degrees(math.acos(arg))
+    midnight = datetime(d.year, d.month, d.day)
+
+    def at(minutes_utc: float) -> str:
+        t = midnight + timedelta(minutes=minutes_utc, seconds=utc_offset_seconds)
+        return t.strftime("%Y-%m-%dT%H:%M")
+
+    return at(720 - 4 * (lon + ha) - eqtime), at(720 - 4 * (lon - ha) - eqtime)
+
+
+def parse_nasa_power(payload: dict, *, lat: Optional[float] = None, lon: Optional[float] = None) -> list[dict]:
+    """Turn a POWER daily point payload into canonical days (oldest first).
+
+    With ``lat``/``lon``, each day also gets computed sunrise/sunset."""
     params = ((payload or {}).get("properties") or {}).get("parameter") or {}
     if not isinstance(params, dict):
         return []
@@ -524,6 +562,10 @@ def parse_nasa_power(payload: dict) -> list[dict]:
             at = apparent_temperature(day.get(src), rh, wind)
             if at is not None:
                 day[dst] = at
+        if lat is not None and lon is not None:
+            rise, set_ = sun_times(float(lat), float(lon), day["date"], estimate_utc_offset_seconds(lon))
+            if rise and set_:
+                day["sunrise"], day["sunset"] = rise, set_
         out.append(day)
     return out
 
@@ -583,7 +625,7 @@ class NasaPowerProvider:
             payload = resp.json()
         except Exception as exc:  # noqa: BLE001
             raise ProviderError("nasa-power returned invalid JSON") from exc
-        return parse_nasa_power(payload)
+        return parse_nasa_power(payload, lat=lat, lon=lon)
 
 
 # -- Open-Meteo Historical / Archive ----------------------------------------
@@ -714,7 +756,16 @@ def provider_chain(config: Optional[str] = None) -> list[HistoryProvider]:
     chain = [PROVIDERS[i] for i in dict.fromkeys(ids) if i in PROVIDERS]
     if not chain:
         chain = [PROVIDERS[i] for i in DEFAULT_PROVIDER_CHAIN]
+    if commercial_only():
+        chain = [p for p in chain if p.commercial]
     return chain
+
+
+def commercial_only() -> bool:
+    """``HISTORY_COMMERCIAL_ONLY=1`` keeps only providers this deployment may
+    use commercially: NASA POWER always, Open-Meteo only with a paid key.
+    Turn it on when the product starts charging (#238)."""
+    return os.environ.get("HISTORY_COMMERCIAL_ONLY", "").strip().lower() in ("1", "true", "yes")
 
 
 def provider_info(source: str) -> Optional[dict]:
@@ -874,8 +925,19 @@ def _cooldown_blocks(slug: str, start: str, end: str) -> bool:
     return any(a_start <= start and end <= a_end for _, a_start, a_end in attempts)
 
 
+#: Bound on remembered cooldowns per warm instance. Coordinate requests mint
+#: a key per 0.05° cell, so the map must not grow without limit.
+MAX_COOLDOWN_KEYS = 5000
+
+
 def _note_attempt(slug: str, start: str, end: str) -> None:
-    _backfill_attempts.setdefault(slug, []).append((time.monotonic(), start, end))
+    now = time.monotonic()
+    if slug not in _backfill_attempts and len(_backfill_attempts) >= MAX_COOLDOWN_KEYS:
+        for key in [k for k, v in _backfill_attempts.items() if all(now - a[0] > BACKFILL_COOLDOWN_S for a in v)]:
+            del _backfill_attempts[key]
+        while len(_backfill_attempts) >= MAX_COOLDOWN_KEYS:
+            del _backfill_attempts[next(iter(_backfill_attempts))]  # oldest inserted
+    _backfill_attempts.setdefault(slug, []).append((now, start, end))
 
 
 def _budget_allows(provider: HistoryProvider, rate_limiter) -> bool:
@@ -903,6 +965,8 @@ def backfill_range(
     providers: Optional[Sequence[HistoryProvider]] = None,
     client_ip: Optional[str] = None,
     rate_limiter: Optional[Callable] = None,
+    ip_bucket: str = "history-backfill",
+    ip_limit: int = BACKFILL_RATE_LIMIT,
     now: Optional[datetime] = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> list[dict]:
@@ -927,14 +991,18 @@ def backfill_range(
         if not chain:
             return []
         if rate_limiter is not None and client_ip:
-            if not rate_limiter(client_ip, "history-backfill", BACKFILL_RATE_LIMIT, BACKFILL_RATE_WINDOW_S).get("allowed", True):
+            if not rate_limiter(client_ip, ip_bucket, ip_limit, BACKFILL_RATE_WINDOW_S).get("allowed", True):
                 return []
 
         started = clock()
         fetches = 0
         complete = True  # every run was tried by every provider it needed
+        persisted = True
         unusable: set[str] = set()  # providers that failed or ran out this call
         docs: list[dict] = []
+
+        def out_of_budget() -> bool:
+            return fetches >= MAX_FETCHES_PER_CALL or clock() - started > BACKFILL_TIME_BUDGET_S
 
         for run_start, run_end in reversed(group_runs(missing)):
             remaining = {d for d in missing if run_start <= d <= run_end}
@@ -950,8 +1018,7 @@ def backfill_range(
                 for c_start, c_end in split_span(lo, hi, provider.max_span_days):
                     if not any(c_start <= d <= c_end for d in remaining):
                         continue
-                    if fetches >= MAX_FETCHES_PER_CALL or clock() - started > BACKFILL_TIME_BUDGET_S:
-                        complete = False
+                    if out_of_budget():
                         break
                     if not provider.breaker.is_allowed or not _budget_allows(provider, rate_limiter):
                         unusable.add(pid)
@@ -968,18 +1035,26 @@ def backfill_range(
                         unusable.add(pid)
                         break
                     provider.breaker.record_success()
-                    for day in days:
-                        if day.get("date") in remaining:
-                            docs.append(build_history_doc(slug, day, source=pid, now=now))
-                            remaining.discard(day["date"])
-                if fetches >= MAX_FETCHES_PER_CALL:
-                    break
+                    chunk_docs = [
+                        build_history_doc(slug, day, source=pid, now=now)
+                        for day in days
+                        if day.get("date") in remaining
+                    ]
+                    for doc in chunk_docs:
+                        remaining.discard(doc["date"])
+                    # Save each chunk as it lands, so a request cut short by
+                    # the function's time limit keeps what it already fetched.
+                    if chunk_docs:
+                        persisted = _upsert_archive_docs(chunk_docs) and persisted
+                        docs.extend(chunk_docs)
+            if remaining and out_of_budget():
+                # Stopped by the per-call caps with dates still to try.
+                complete = False
 
-        persisted = _upsert_archive_docs(docs) if docs else True
-        # Cool down only after an attempt in which every provider answered and
-        # everything was saved. A transient failure, a budget cut or a failed
-        # write is retried on the next view, which then fetches only what is
-        # still missing.
+        # Cool down only after an attempt in which every provider was tried,
+        # each one answered, and everything was saved. A transient failure, a
+        # budget cut or a cap cut is retried on the next view, which then
+        # fetches only what is still missing.
         if persisted and complete:
             _note_attempt(slug, missing[0], missing[-1])
         docs.sort(key=lambda d: d["date"], reverse=True)

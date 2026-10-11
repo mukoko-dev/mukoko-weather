@@ -23,6 +23,7 @@ from ._db import (
     history_analysis_collection,
     filter_known_activities,
 )
+from ._history_store import MAX_RANGE_DAYS
 from ._places_resolver import find_location
 from ._ai_prompts import get_ai_prompt
 from ._ai_gateway import call_ai, first_text
@@ -148,8 +149,11 @@ def _aggregate_stats(records: list[dict]) -> str:
             cloud.append(current["cloud_cover"])
 
         # Weather codes
-        code = current.get("weather_code", 0)
-        weather_codes[code] = weather_codes.get(code, 0) + 1
+        # NASA POWER days can have no code (dry, cloud not yet published).
+        # Skip them rather than tell the model about "Code None".
+        code = current.get("weather_code")
+        if code is not None:
+            weather_codes[code] = weather_codes.get(code, 0) + 1
 
     # Build summary
     def _avg(arr: list) -> float:
@@ -243,7 +247,8 @@ def _aggregate_stats(records: list[dict]) -> str:
 
 class AnalyzeRequest(BaseModel):
     location: str
-    days: int = Field(ge=7, le=365, default=30)
+    #: Same ceiling as GET /api/py/history, whose ranges the dashboard offers.
+    days: int = Field(ge=7, le=MAX_RANGE_DAYS, default=30)
     activities: list[str] = Field(default_factory=list)
 
 

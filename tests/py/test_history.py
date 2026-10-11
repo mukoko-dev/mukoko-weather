@@ -8,7 +8,13 @@ from unittest.mock import patch
 import pytest
 from fastapi import HTTPException
 
-from py._history import get_history, history_slugs, resolve_range
+from py._history import (
+    COORD_BACKFILL_RATE_LIMIT,
+    COORD_MAX_RANGE_DAYS,
+    get_history,
+    history_slugs,
+    resolve_range,
+)
 from py._history_store import MAX_RANGE_DAYS, local_today
 
 HARARE = {"slug": "harare", "lat": -17.8292, "lon": 31.0522, "platformSlug": "harare-35c223"}
@@ -161,10 +167,32 @@ class TestGetHistoryLocationLookup:
         assert b_args[1] == pytest.approx(51.5072)
 
     @pytest.mark.asyncio
-    async def test_lookup_error_with_coords_still_serves(self):
-        with _Started(find_exc=Exception("DB down")):
-            result = await get_history(location="tokyo-jp", lat=35.6762, lon=139.6503, days=7)
-        assert result["location"].startswith("cell:")
+    async def test_lookup_error_with_coords_is_503_not_grid_fallback(self):
+        """A placesGeo blip must not silently swap Harare's recorded days for
+        a duplicate archive set under the grid key."""
+        with _Started(find_exc=Exception("DB down")) as m:
+            with pytest.raises(HTTPException) as exc:
+                await get_history(location="harare", lat=-17.83, lon=31.05, days=7)
+        assert exc.value.status_code == 503
+        m["backfill_range"].assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_coords_are_clamped_to_a_year_with_tighter_ip_limit(self):
+        with _Started() as m:
+            result = await get_history(lat=35.6762, lon=139.6503, days=1825)
+        assert result["clamped"] is True
+        assert result["days"] == COORD_MAX_RANGE_DAYS
+        kwargs = m["backfill_range"].call_args.kwargs
+        assert kwargs["ip_bucket"] == "history-backfill-coords"
+        assert kwargs["ip_limit"] == COORD_BACKFILL_RATE_LIMIT
+
+    @pytest.mark.asyncio
+    async def test_places_keep_the_full_range(self):
+        with _Started() as m:
+            result = await get_history(location="harare", lat=-17.83, lon=31.05, days=1825)
+        assert result["clamped"] is False
+        assert result["days"] == 1825
+        assert m["backfill_range"].call_args.kwargs["ip_bucket"] == "history-backfill"
 
     @pytest.mark.asyncio
     async def test_coords_only(self):

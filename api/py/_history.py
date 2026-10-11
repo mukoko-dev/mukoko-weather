@@ -11,13 +11,14 @@ by default) and stored insert-only, so the next request is served from the DB.
 from __future__ import annotations
 
 import asyncio
-from datetime import date as _date
+from datetime import date as _date, timedelta
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from ._db import check_rate_limit, get_client_ip
 from ._history_store import (
+    BACKFILL_RATE_LIMIT,
     EARLIEST_DATE,
     MAX_RANGE_DAYS,
     attributions_for,
@@ -31,6 +32,12 @@ from ._places_resolver import find_location
 from ._weather_cache_key import weather_cache_key
 
 router = APIRouter()
+
+#: Widest window a bare coordinate (no catalogue place) may ask for. Larger
+#: requests are clamped to the most recent year and flagged ``clamped``.
+COORD_MAX_RANGE_DAYS = 366
+#: Per-IP backfills per hour for bare coordinates (places get BACKFILL_RATE_LIMIT).
+COORD_BACKFILL_RATE_LIMIT = 10
 
 
 def history_slugs(location: str, loc: dict) -> list[str]:
@@ -97,7 +104,10 @@ async def get_history(
     Earth: they are used when there's no slug, and as a fallback when the slug
     isn't a known place. A bare coordinate is stored under its 0.05° grid key.
 
-    Returns ``{location, start, end, days, records, backfilled, sources, data}``.
+    Returns ``{location, start, end, days, records, backfilled, clamped, sources, data}``.
+    A bare coordinate is limited to its most recent ``COORD_MAX_RANGE_DAYS``
+    days (``clamped: true`` when the request was wider) and a tighter per-IP
+    backfill limit.
     ``data`` is newest first with one doc per date. Each doc carries ``source``:
     ``"recorded"`` or an archive provider id. ``sources`` holds the attribution
     for every archive provider present in ``data``.
@@ -120,12 +130,13 @@ async def get_history(
     loc: Optional[dict] = None
     if location:
         # Resolved through places.placesGeo (Phase 0G).
+        # A lookup ERROR is 503 even with coordinates: falling back to the grid
+        # key would hide the place's recorded days and backfill a duplicate
+        # set under the cell. Only a clean "not found" falls back.
         try:
             loc = find_location(location)
         except Exception:
-            if not has_coords:
-                raise HTTPException(status_code=503, detail="Location service unavailable")
-            loc = None
+            raise HTTPException(status_code=503, detail="Location service unavailable")
         if not loc and not has_coords:
             raise HTTPException(status_code=404, detail="Unknown location")
 
@@ -140,6 +151,14 @@ async def get_history(
 
     lon_f = float(p_lon if p_lon is not None else 0.0)
     range_start, range_end = resolve_range(days, start, end, lon=lon_f)
+    clamped = False
+    if not loc:
+        # Bare coordinates are anonymous and unbounded in number (one key per
+        # 0.05° cell), so each one stores at most a year: a scripted sweep of
+        # coordinates can't fill the cluster with decade-long archives.
+        earliest = (_date.fromisoformat(range_end) - timedelta(days=COORD_MAX_RANGE_DAYS - 1)).isoformat()
+        if range_start < earliest:
+            range_start, clamped = earliest, True
     span_days = (_date.fromisoformat(range_end) - _date.fromisoformat(range_start)).days + 1
 
     try:
@@ -162,6 +181,8 @@ async def get_history(
             [d["date"] for d in history if isinstance(d.get("date"), str)],
             client_ip=get_client_ip(request) if request is not None else None,
             rate_limiter=check_rate_limit,
+            ip_bucket="history-backfill" if loc else "history-backfill-coords",
+            ip_limit=BACKFILL_RATE_LIMIT if loc else COORD_BACKFILL_RATE_LIMIT,
         )
     if backfilled:
         history = merge_by_date(history + backfilled, slugs)
@@ -173,6 +194,7 @@ async def get_history(
         "days": span_days,
         "records": len(history),
         "backfilled": len(backfilled),
+        "clamped": clamped,
         "sources": attributions_for(history),
         "data": history,
     }

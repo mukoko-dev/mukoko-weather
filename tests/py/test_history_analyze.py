@@ -44,6 +44,17 @@ class TestAggregateStats:
         assert "1 days recorded live" in out
         assert "2 days from a climate reanalysis archive" in out
 
+    def test_days_with_no_weather_code_are_not_reported_as_code_none(self):
+        recs = [
+            {"date": "2026-10-01", "source": "nasa-power", "current": {"temperature_2m": 20, "weather_code": None}, "daily": {}},
+            {"date": "2026-10-02", "source": "recorded", "current": {"temperature_2m": 22, "weather_code": 1}, "daily": {}},
+        ]
+        assert "None" not in _aggregate_stats(recs)
+
+    def test_long_ranges_accepted(self):
+        from py._history_analyze import AnalyzeRequest
+        assert AnalyzeRequest(location="harare", days=1825).days == 1825
+
     def test_no_provenance_line_when_all_recorded(self):
         recs = [{"date": "2026-10-02", "source": "recorded", "current": {"temperature_2m": 22}, "daily": {}}]
         assert "Data sources" not in _aggregate_stats(recs)

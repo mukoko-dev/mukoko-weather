@@ -644,3 +644,60 @@ class TestNormalsSeries:
     def test_empty_is_no_data(self):
         a = FakeProvider(days=[])
         assert hs.fetch_normals_series(0, 0, "2020-01-01", "2020-01-03", providers=[a])[2] == "no_data"
+
+
+class TestReviewFixes:
+    def test_sun_times_harare_and_polar(self):
+        rise, set_ = hs.sun_times(-17.83, 31.05, "2026-10-07", 7200)
+        # Open-Meteo has 05:32 / 17:54 for this day (see ARCHIVE_PAYLOAD)
+        assert rise[:13] == "2026-10-07T05" and set_[:13] == "2026-10-07T17"
+        assert hs.sun_times(78.2, 15.6, "2026-12-21", 3600) == (None, None)  # polar night
+
+    def test_power_days_get_sun_times_when_coords_known(self):
+        days = hs.parse_nasa_power(POWER_PAYLOAD, lat=-17.83, lon=31.05)
+        assert days[0]["sunrise"].startswith("2026-10-06T05")
+        assert "sunrise" not in hs.parse_nasa_power(POWER_PAYLOAD)[0]
+
+    @patch("py._history_store.get_db")
+    def test_cap_reached_on_last_run_sets_no_cooldown(self, mock_db):
+        """Fetch #6 lands on the last run with dates still missing: the
+        fallback was never tried, so the range must not cool down."""
+        _coll(mock_db)
+        primary = FakeProvider("nasa-power", days=[], max_span=30)
+        fallback = FakeProvider("open-meteo-archive")
+        hs.backfill_range("harare", 0, 31.05, "2026-04-13", "2026-10-10", [], providers=[primary, fallback], now=NOW)
+        assert len(primary.calls) == hs.MAX_FETCHES_PER_CALL
+        assert fallback.calls == []
+        assert "harare" not in hs._backfill_attempts
+
+    @patch("py._history_store.get_db")
+    def test_each_chunk_is_saved_as_it_lands(self, mock_db):
+        coll = _coll(mock_db)
+        p = FakeProvider("open-meteo-archive", max_span=30)
+        hs.backfill_range("harare", 0, 31.05, "2026-08-01", "2026-10-10", [], providers=[p], now=NOW)
+        assert coll.bulk_write.call_count == len(p.calls) == 3
+
+    def test_cooldown_map_is_bounded(self, monkeypatch):
+        monkeypatch.setattr(hs, "MAX_COOLDOWN_KEYS", 3)
+        for i in range(10):
+            hs._note_attempt(f"cell:{i}", "2026-01-01", "2026-01-02")
+        assert len(hs._backfill_attempts) <= 3
+        assert "cell:9" in hs._backfill_attempts
+
+    def test_commercial_only_drops_free_open_meteo(self, monkeypatch):
+        monkeypatch.setenv("HISTORY_COMMERCIAL_ONLY", "1")
+        hs._om_key_cache.clear()
+        with patch("py._db.get_api_key", return_value=None):
+            assert [p.info.id for p in hs.provider_chain("")] == ["nasa-power"]
+        hs._om_key_cache.clear()
+        with patch("py._db.get_api_key", return_value="paid"):
+            assert [p.info.id for p in hs.provider_chain("")] == ["nasa-power", "open-meteo-archive"]
+        hs._om_key_cache.clear()
+
+    def test_custom_ip_bucket(self):
+        limiter = _limiter(False)
+        hs.backfill_range(
+            "cell:1_1", 0, 31.05, "2026-10-06", "2026-10-10", [], providers=[FakeProvider()],
+            client_ip="1.2.3.4", rate_limiter=limiter, ip_bucket="history-backfill-coords", ip_limit=10, now=NOW,
+        )
+        limiter.assert_called_once_with("1.2.3.4", "history-backfill-coords", 10, hs.BACKFILL_RATE_WINDOW_S)
