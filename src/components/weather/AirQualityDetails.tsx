@@ -1,5 +1,6 @@
 "use client";
 
+import { roundCoord } from "@/lib/location-privacy";
 import { useState, useEffect, useRef } from "react";
 import {
   formatPollutant,
@@ -68,7 +69,7 @@ export function AirQualityDetails({ lat, lon }: Props) {
 
     let cancelled = false;
 
-    fetch(`/api/py/airquality?lat=${lat}&lon=${lon}`, {
+    fetch(`/api/py/airquality?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`, {
       signal: controller.signal,
     })
       .then(async (res) => {

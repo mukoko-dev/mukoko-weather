@@ -13,6 +13,8 @@
 
 // ── Error categories ────────────────────────────────────────────────────────
 
+import { coarsenSlug } from "./location-privacy";
+
 export type ErrorSource =
   | "weather-api"
   | "ai-api"
@@ -53,8 +55,8 @@ export function logError(ctx: ErrorContext) {
     ts: new Date().toISOString(),
     source: ctx.source,
     severity: ctx.severity,
-    location: ctx.location,
-    message: ctx.message,
+    location: ctx.location ? coarsenSlug(ctx.location) : ctx.location,
+    message: redactSecrets(ctx.message),
     ...(ctx.meta ? { meta: ctx.meta } : {}),
     ...describeError(ctx.error),
     ...(ctx.error instanceof Error && ctx.error.stack
@@ -93,6 +95,9 @@ function describeError(error: unknown): Record<string, string> {
 
 const SECRET_QUERY =
   /([?&](?:apikey|api_key|key|token|access_token|password|passkey|secret)=)[^&\s"']+/gi;
+/** lat/lon values with 4+ decimals: rounded to 3 (~110 m) in log text. */
+const COORD_PARAM =
+  /((?:^|[?&;\s"'(,{]))(lat|lon|lng|latitude|longitude)(=|:\s*|":\s*)(-?\d+\.\d{4,})/gi;
 const URL_USERINFO = /(\/\/)[^/\s:@"']+:[^/\s@"']+@/g;
 
 /**
@@ -101,7 +106,14 @@ const URL_USERINFO = /(\/\/)[^/\s:@"']+:[^/\s@"']+@/g;
  * Python `RedactSecretsFilter` in api/py/_logging.py.
  */
 export function redactSecrets(text: string): string {
-  return text.replace(SECRET_QUERY, "$1***").replace(URL_USERINFO, "$1***@");
+  return text
+    .replace(
+      COORD_PARAM,
+      (_m, pre: string, name: string, sep: string, v: string) =>
+        `${pre}${name}${sep}${Number(v).toFixed(3)}`,
+    )
+    .replace(SECRET_QUERY, "$1***")
+    .replace(URL_USERINFO, "$1***@");
 }
 
 function valueText(value: unknown): string {
@@ -121,8 +133,8 @@ export function logWarn(ctx: Omit<ErrorContext, "severity">) {
     level: "warn",
     ts: new Date().toISOString(),
     source: ctx.source,
-    location: ctx.location,
-    message: ctx.message,
+    location: ctx.location ? coarsenSlug(ctx.location) : ctx.location,
+    message: redactSecrets(ctx.message),
     ...(ctx.meta ? { meta: ctx.meta } : {}),
     ...describeError(ctx.error),
   };
@@ -169,7 +181,7 @@ export function reportProviderFailure(
   location?: string,
 ) {
   reportErrorToAnalytics(
-    `${provider}:${errorType}${location ? `:${location}` : ""}`,
+    `${provider}:${errorType}${location ? `:${coarsenSlug(location)}` : ""}`,
     false,
   );
 }

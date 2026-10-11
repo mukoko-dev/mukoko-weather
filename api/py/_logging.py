@@ -53,10 +53,34 @@ _SECRET_PARAM_RE = re.compile(
 
 QUIET_LOGGERS = ("httpx", "httpcore")
 
+# Fine location in log text: lat/lon query-style values are rounded to 3 decimals
+# (~110 m). Rust-port parity: see issue #148 (backend parity requirements).
+_COORD_RE = re.compile(
+    r"(?P<prefix>(?:^|[?&;\s\"'(,{]))"
+    r"(?P<name>lat|lon|lng|latitude|longitude)"
+    r"(?P<sep>=|:\s*|\":\s*)"
+    r"(?P<value>-?\d+\.\d{4,})",
+    re.IGNORECASE,
+)
+
+
+def _round_coord(m: "re.Match[str]") -> str:
+    return f"{m.group('prefix')}{m.group('name')}{m.group('sep')}{float(m.group('value')):.3f}"
+
+
+def round_coordinates(text: str) -> str:
+    """Round lat/lon values with 4+ decimals to 3 decimals."""
+    if not text:
+        return text
+    return _COORD_RE.sub(_round_coord, text)
+
 
 def redact_secrets(text: str) -> str:
     """Mask secret query-parameter values in ``text``."""
-    if not text or "=" not in text:
+    if not text:
+        return text
+    text = round_coordinates(text)
+    if "=" not in text:
         return text
     return _SECRET_PARAM_RE.sub(
         lambda m: f"{m.group('prefix')}{m.group('name')}{m.group('eq')}{REDACTED}",

@@ -7,6 +7,7 @@ import {
   isRenderableLocation,
 } from "@/lib/location-gate";
 import { resolveLocationSlug } from "@/lib/places";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 
 /** Read by the home page (src/app/page.tsx) as its fallback location. */
 const LAST_LOCATION_COOKIE = "lastLocation";
@@ -104,7 +105,14 @@ export default async function proxy(
       redirectStatus: 308,
     });
   }
-  const unknownLocation = path.kind === "unknown" || renderable === false;
+  // A paused feature route (FLAGS.shamwari_chat) is a real 404. Its page calls
+  // notFound(), but shamwari/loading.tsx flushes a 200 shell first, so the
+  // status has to be decided here (production served 200 for a paused page).
+  const pausedRoute =
+    !isFeatureEnabled("shamwari_chat") &&
+    (pathname === "/shamwari" || pathname.startsWith("/shamwari/"));
+  const unknownLocation =
+    pausedRoute || path.kind === "unknown" || renderable === false;
 
   // ── Default response with AuthKit session cookies attached ───────────────
   const response = unknownLocation
