@@ -75,6 +75,9 @@ import { WeatherBackdrop } from "@/components/weather/WeatherBackdrop";
 import { EnsoOutlook } from "@/components/weather/EnsoOutlook";
 import { DraggableSection } from "@/components/weather/DraggableSection";
 import { cacheWeatherHint } from "@/lib/weather-scenes";
+import { rememberPlace } from "@/lib/rxdb/weather-places";
+import type { DeviceView } from "@/lib/device-weather";
+import { UpdatedAgo } from "@/components/weather/UpdatedAgo";
 import {
   backdropClock,
   type BackdropClock,
@@ -159,6 +162,12 @@ interface WeatherDashboardProps {
    * the hero, Apple Weather style.
    */
   isCurrentLocation?: boolean;
+  /**
+   * Set when this payload was painted from the device (issue #269) rather
+   * than fetched for this render: shows "Updated N min ago" and is never
+   * written back to the device store.
+   */
+  device?: Pick<DeviceView, "fetchedAt" | "freshness"> | null;
 }
 
 export function WeatherDashboard({
@@ -170,6 +179,7 @@ export function WeatherDashboard({
   countryName,
   user,
   isCurrentLocation = false,
+  device = null,
 }: WeatherDashboardProps) {
   // A user-picked forecast model (My Weather → Settings) becomes the
   // baseline the whole dashboard renders (issue #246). Null = the server
@@ -279,6 +289,42 @@ export function WeatherDashboard({
     weather.current.wind_speed_10m,
   ]);
 
+  // Keep the last good payload for this place on the device so the next
+  // visit (and the offline page) paints at once — issue #269. Only a payload
+  // fetched for this render is stored, never the seasonal fallback and never
+  // a copy that was itself read from the device.
+  const fromDevice = device !== null;
+  useEffect(() => {
+    if (fromDevice || seedUsingFallback) return;
+    const { savedLocations, homeLocation, selectedLocation } =
+      useAppStore.getState();
+    void rememberPlace(
+      {
+        location,
+        weather: seedWeather,
+        usingFallback: seedUsingFallback,
+        frostAlert: seedFrostAlert,
+        season,
+        countryName: countryName ?? "",
+      },
+      {
+        pinned: [
+          ...savedLocations,
+          ...(homeLocation ? [homeLocation] : []),
+          ...(selectedLocation ? [selectedLocation] : []),
+        ],
+      },
+    );
+  }, [
+    fromDevice,
+    location,
+    seedWeather,
+    seedUsingFallback,
+    seedFrostAlert,
+    season,
+    countryName,
+  ]);
+
   // Fetch the selected model's baseline + multi-model comparison + minutely
   // nowcast through our own /api/py/weather (cached, single writer).
   // Best-effort — failures are swallowed so the seeded page is never affected.
@@ -386,6 +432,15 @@ export function WeatherDashboard({
           <div aria-live="polite" className="sr-only">
             Weather loaded for {location.name}
           </div>
+
+          {device && (
+            <UpdatedAgo
+              fetchedAt={device.fetchedAt}
+              freshness={device.freshness}
+              weather={weather}
+              placeName={location.name}
+            />
+          )}
 
           {/* Weather unavailable banner — shown when all providers failed */}
           {usingFallback && <WeatherUnavailableBanner />}

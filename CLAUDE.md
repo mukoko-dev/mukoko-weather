@@ -226,6 +226,8 @@ mukoko-weather/
 │   │   │   ├── CurrentConditions.tsx  # Mineral sky-plate hero (`.kori` + `--plate-*` tokens, family from src/lib/hero.ts): eyebrow, place, Noto Serif temp, condition, H/L, one-sentence outlook, activities line, share, season footer slot
 │   │   │   ├── WeatherBackdrop.tsx    # Fixed full-viewport condition-aware Three.js sky behind the whole location page (Apple Weather style)
 │   │   │   ├── WeatherBackdrop.test.ts
+│   │   │   ├── DeviceSnapshot.tsx     # Place weather painted from the device (hero, hourly, days) + DeviceLocationLoading for [location]/loading.tsx (#269)
+│   │   │   ├── UpdatedAgo.tsx         # "Updated N min ago · HH:MM in {place}" line for device payloads
 │   │   │   ├── HourlyScrollCards.tsx  # Horizontal hour-by-hour strip (hours only — the one-sentence outlook lives in the hero)
 │   │   │   ├── HourlyScrollCards.test.ts
 │   │   │   ├── CommunityLane.tsx      # 24h suitability lane per selected activity with community reports pinned at their hour (logic in src/lib/community-lane.ts)
@@ -310,7 +312,7 @@ mukoko-weather/
 │   │   ├── store.ts               # Zustand app state (theme, location, activities, hasOnboarded, ShamwariContext, reportModal, RxDB init via initializeDeviceSync)
 │   │   ├── theme.ts               # Dependency-free resolveTheme (re-exported from store.ts; used by the embed widget + MapLibreMap)
 │   │   ├── store.test.ts          # Theme resolution, ShamwariContext TTL tests, RxDB init
-│   │   ├── rxdb/                  # RxDB local-first store: bridge.ts (Zustand ↔ IndexedDB preferences), replication.ts (sync to /api/py/devices), database/collections/schemas
+│   │   ├── rxdb/                  # RxDB local-first store: bridge.ts (Zustand ↔ IndexedDB preferences), replication.ts (sync to /api/py/devices), weather-places.ts (device weather store, #269), database/collections/schemas
 │   │   ├── suggested-prompts.ts   # Database-driven suggested prompt generation (fetches from /api/py/ai/prompts)
 │   │   ├── suggested-prompts.test.ts
 │   │   ├── locations.ts           # WeatherLocation type, 98 ZW seed locations, search, filtering
@@ -326,6 +328,7 @@ mukoko-weather/
 │   │   ├── suitability-cache.test.ts # Suitability cache tests
 │   │   ├── weather.ts             # Open-Meteo client, frost detection, weather utils, synthesizeOpenMeteoInsights
 │   │   ├── weather.test.ts
+│   │   ├── device-weather.ts      # Local-first device weather rules: payload slimming/validation, freshness (current ≤60 min → forecast hour → expired), rebase on the place's now, LRU eviction plan (#269)
 │   │   ├── weather-cache-key.ts   # weatherCacheKey(lat, lon) — SSR reads weather_cache under the writer's 0.05° grid-cell key (#252)
 │   │   ├── weather-cache-key.test.ts
 │   │   ├── hero.ts                # Pure hero helpers: eyebrow badge selection (MY LOCATION / HOME), H/L formatting
@@ -1106,7 +1109,7 @@ All AI system prompts, suggested prompt rules, and model configurations are stor
 
 **Client-side:**
 
-- No weather data caching — every page load fetches fresh weather data from the server
+- **Device weather (local-first, issue #269):** the last good dashboard payload per place (current location + up to 10 saved + recent, 20 places / 1 MB, LRU; pinned places never evicted for space) is kept in the RxDB `weather_places` collection (IndexedDB) by `WeatherDashboard` after every server-rendered or GPS-swapped payload — never the seasonal fallback, never a copy read back from the device. Rules live in `src/lib/device-weather.ts`, I/O in `src/lib/rxdb/weather-places.ts` (best-effort, never throws, empty on SSR / private mode / Safari's 7-day wipe). `[location]/loading.tsx` paints the stored copy (`DeviceSnapshot`: hero, hourly, days, no network sections) while the live page streams; `/` paints the last home place from the device when the server seeded nothing, then refreshes it via `fetchHomeWeather()`. Up to 60 min old the stored `current` is shown with "Updated N min ago · HH:MM in {place}" (`UpdatedAgo`); older, `current` is rebuilt from the forecast hour for "now" in the place's time zone and labelled "Forecast for this hour"; once the hourly forecast no longer covers now the entry is deleted. The server render always uses the server seed and the device copy is applied only after mount, so hydration never mismatches
 - User preferences (theme + selected activities) are persisted to localStorage via Zustand `persist` middleware under key `mukoko-weather-prefs`
 - Suitability rules: 10-min TTL cache in `src/lib/suitability-cache.ts` (fetched from `/api/py/suitability`)
 - Category styles: 10-min TTL cache in `src/lib/suitability-cache.ts`, seeded from static `CATEGORY_STYLES` for instant render
