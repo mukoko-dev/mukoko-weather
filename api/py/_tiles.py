@@ -17,10 +17,21 @@ single map view loads ~16 overlay tiles and every pan/zoom loads more):
      carry an ``expiresAt`` field with a TTL index (~90 min) for auto-cleanup.
   2. **Aggressive CDN caching** — a strong ``Cache-Control`` header lets Vercel's
      edge serve identical tile URLs without re-invoking the function at all.
+     The ``now`` URL carries no time, so it is edge-cached only until the UTC
+     hour rolls over (``s-maxage`` = seconds left in the hour); otherwise the
+     edge would keep serving a stale "now" radar frame for a day.
   3. **Graceful degradation** — on a 429 (or any non-200) with no fresh cache we
      serve a stale cached tile if one exists, otherwise a 1×1 transparent PNG
      (HTTP 200) so the map simply shows no overlay for that tile instead of
      spamming the console with failures and killing the whole layer.
+  4. **Shared quota memo** — the key is shared with insights enrichment
+     (``_enrichment.py``). Once either sees a 429 the account quota is spent
+     for the hour, so every later tile skips the upstream round trip (which
+     took 2–6 s just to be told 429) and the fallback is served at once, edge-
+     cached until the hour resets.
+  5. **Off the event loop** — the MongoDB lookups and the upstream fetch are
+     blocking calls, so they run in a worker thread; a dozen tiles arriving
+     together no longer queue behind one another on a warm instance.
 
 SSRF protections (pinned origin, layer whitelist, range-checked coords,
 validated timestamp) are unchanged.
@@ -28,6 +39,7 @@ validated timestamp) are unchanged.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import re
@@ -38,6 +50,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
+from . import _enrichment
 from ._db import get_api_key, map_tile_cache_collection, ttl_find_one, ttl_upsert
 from ._http import get_http_client
 
@@ -65,10 +78,13 @@ MAP_TILE_CACHE_TTL_SECONDS = 5400
 #: without re-invoking the function; nearby/repeat viewers never hit the origin.
 TILE_CACHE_CONTROL = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800"
 
-#: Short cache for the transparent fallback + stale tiles so the edge recovers
-#: quickly once Tomorrow.io's quota resets (rather than caching an empty tile
-#: for a day).
-FALLBACK_CACHE_CONTROL = "public, max-age=300"
+#: Short cache for the transparent fallback + stale tiles after an upstream
+#: error (not a quota 429), so the edge recovers quickly once Tomorrow.io does.
+FALLBACK_CACHE_CONTROL = "public, max-age=60, s-maxage=60"
+
+#: Floor for an hour-bounded edge cache, so a tile served in the last seconds
+#: of an hour is still cacheable for a moment.
+MIN_HOUR_BOUND_S = 60
 
 #: A 1×1 fully transparent PNG. Returned (HTTP 200) when Tomorrow.io errors and
 #: no cached tile exists, so the overlay renders "nothing here" instead of a
@@ -102,6 +118,50 @@ def _timestamp_bucket(timestamp: str) -> str:
     if timestamp == "now":
         return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
     return timestamp
+
+
+def _seconds_left_in_hour(now: Optional[datetime] = None) -> int:
+    """Seconds until the next UTC hour (at least ``MIN_HOUR_BOUND_S``)."""
+    now = now or datetime.now(timezone.utc)
+    left = 3600 - (now.minute * 60 + now.second)
+    return max(MIN_HOUR_BOUND_S, left)
+
+
+def _tile_cache_control(timestamp: str, now: Optional[datetime] = None) -> str:
+    """
+    ``Cache-Control`` for a real tile.
+
+    An explicit timestamp names a fixed forecast hour, so its URL is stable and
+    takes the long edge cache. ``now`` means "whatever the current hour is": the
+    URL never changes, so the edge may keep it only until the hour rolls over —
+    after that the same URL must fetch the new hour's frame.
+    """
+    if timestamp != "now":
+        return TILE_CACHE_CONTROL
+    left = _seconds_left_in_hour(now)
+    return f"public, max-age={min(left, 600)}, s-maxage={left}, stale-while-revalidate=60"
+
+
+def _quota_cache_control(now: Optional[datetime] = None) -> str:
+    """Fallback tiles while the quota is spent: edge-cached until the hour resets."""
+    left = _seconds_left_in_hour(now)
+    return f"public, max-age=60, s-maxage={left}"
+
+
+def _hour_bucket(now: Optional[datetime] = None) -> str:
+    """The enrichment memo's hour key (``%Y%m%d%H``, UTC)."""
+    return (now or datetime.now(timezone.utc)).strftime("%Y%m%d%H")
+
+
+def _quota_exhausted(now: Optional[datetime] = None) -> bool:
+    """True once Tomorrow.io has answered 429 (here or in enrichment) this hour."""
+    return _enrichment._exhausted.get(True) == _hour_bucket(now)
+
+
+def _mark_quota_exhausted(now: Optional[datetime] = None) -> None:
+    """Remember a 429 for the rest of the hour, for tiles AND enrichment."""
+    bucket = _hour_bucket(now)
+    _enrichment._exhausted[True] = _enrichment._exhausted[False] = bucket
 
 
 def _cache_id(layer: str, z: int, x: int, y: int, bucket: str) -> str:
@@ -153,46 +213,61 @@ def _set_cached_tile(cache_id: str, layer: str, tile_bytes: bytes) -> None:
         pass
 
 
-def _tile_response(content: bytes, layer: str, cache_status: str) -> Response:
+def _tile_response(
+    content: bytes, layer: str, cache_status: str, timestamp: str = "now"
+) -> Response:
     """A real (or cached) PNG tile with strong CDN caching."""
     return Response(
         content=content,
         media_type="image/png",
         headers={
-            "Cache-Control": TILE_CACHE_CONTROL,
+            "Cache-Control": _tile_cache_control(timestamp),
             "X-Map-Layer": layer,
             "X-Cache": cache_status,
         },
     )
 
 
-def _stale_tile_response(content: bytes, layer: str) -> Response:
+def _stale_tile_response(content: bytes, layer: str, cache_control: str = FALLBACK_CACHE_CONTROL) -> Response:
     """A stale cached PNG tile served during an upstream outage (short cache)."""
     return Response(
         content=content,
         media_type="image/png",
         headers={
-            "Cache-Control": FALLBACK_CACHE_CONTROL,
+            "Cache-Control": cache_control,
             "X-Map-Layer": layer,
             "X-Cache": "STALE",
         },
     )
 
 
-def _transparent_tile_response() -> Response:
+def _transparent_tile_response(
+    cache_control: str = FALLBACK_CACHE_CONTROL, reason: str = "empty"
+) -> Response:
     """
     A 1×1 transparent PNG (HTTP 200) served when Tomorrow.io errors and there's
     no cached tile — the map shows no overlay for this tile instead of erroring.
+    ``X-Map-Tile`` is ``empty`` after an upstream error and ``quota`` while the
+    account quota is spent.
     """
     return Response(
         content=_TRANSPARENT_PNG,
         media_type="image/png",
         headers={
-            "Cache-Control": FALLBACK_CACHE_CONTROL,
+            "Cache-Control": cache_control,
             "X-Cache": "MISS",
-            "X-Map-Tile": "empty",
+            "X-Map-Tile": reason,
         },
     )
+
+
+def _quota_fallback(cache_id: str, layer: str) -> Response:
+    """Stale tile if we have one, else transparent — both cached until the hour resets."""
+    cc = _quota_cache_control()
+    stale = _get_cached_tile(cache_id, allow_stale=True)
+    if stale is not None:
+        return _stale_tile_response(stale, layer, cc)
+    return _transparent_tile_response(cc, "quota")
 
 
 @router.get("/api/py/map-tiles")
@@ -227,13 +302,26 @@ async def proxy_map_tile(
     if not TIMESTAMP_RE.match(timestamp):
         raise HTTPException(status_code=400, detail="Invalid timestamp")
 
+    return await asyncio.to_thread(_serve_tile, z, x, y, layer, timestamp)
+
+
+def _serve_tile(z: int, x: int, y: int, layer: str, timestamp: str) -> Response:
+    """
+    The blocking half of the proxy (MongoDB + upstream HTTP), run in a worker
+    thread by :func:`proxy_map_tile`. Arguments are already validated.
+    """
     bucket = _timestamp_bucket(timestamp)
     cache_id = _cache_id(layer, z, x, y, bucket)
 
     # 1. Serve from persistent cache if we have a fresh tile — no upstream call.
     cached = _get_cached_tile(cache_id)
     if cached is not None:
-        return _tile_response(cached, layer, "HIT")
+        return _tile_response(cached, layer, "HIT", timestamp)
+
+    # 2. Quota already spent this hour (a 429 here or in enrichment): asking
+    #    again only costs a 2–6 s round trip to be told 429 again.
+    if _quota_exhausted():
+        return _quota_fallback(cache_id, layer)
 
     try:
         api_key = get_api_key("tomorrow")
@@ -251,27 +339,31 @@ async def proxy_map_tile(
         client = _get_http()
         resp = client.get(tile_url, headers={"apikey": api_key})
 
-        # 2. Upstream error (429 rate limit or anything non-200) — degrade
-        #    gracefully: serve a stale cached tile if we have one, else a
-        #    transparent tile so the console isn't flooded and the layer survives.
+        # 3. 429 = the shared account quota is spent. Remember it for the rest
+        #    of the hour (tiles and enrichment both stop asking) and serve the
+        #    fallback, edge-cached until the hour resets.
+        if resp.status_code == 429:
+            logger.warning(
+                "Tomorrow.io tile rate limited (429) for layer=%s z=%s", layer, z
+            )
+            _mark_quota_exhausted()
+            return _quota_fallback(cache_id, layer)
+
+        # 4. Any other upstream error — degrade gracefully: serve a stale cached
+        #    tile if we have one, else a transparent tile, briefly cached.
         if resp.status_code != 200:
-            if resp.status_code == 429:
-                logger.warning(
-                    "Tomorrow.io tile rate limited (429) for layer=%s z=%s", layer, z
-                )
-            else:
-                logger.warning(
-                    "Tomorrow.io tile upstream error: status=%s layer=%s z/x/y=%s/%s/%s",
-                    resp.status_code, layer, z, x, y,
-                )
+            logger.warning(
+                "Tomorrow.io tile upstream error: status=%s layer=%s z/x/y=%s/%s/%s",
+                resp.status_code, layer, z, x, y,
+            )
             stale = _get_cached_tile(cache_id, allow_stale=True)
             if stale is not None:
                 return _stale_tile_response(stale, layer)
             return _transparent_tile_response()
 
-        # 3. Fresh tile — persist to cache and return with strong CDN caching.
+        # 5. Fresh tile — persist to cache and return with strong CDN caching.
         _set_cached_tile(cache_id, layer, resp.content)
-        return _tile_response(resp.content, layer, "MISS")
+        return _tile_response(resp.content, layer, "MISS", timestamp)
     except HTTPException:
         raise
     except Exception:

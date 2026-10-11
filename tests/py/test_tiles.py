@@ -13,16 +13,30 @@ from unittest.mock import patch, MagicMock
 import pytest
 from fastapi import HTTPException
 
+from py import _enrichment
 from py._tiles import (
+    FALLBACK_CACHE_CONTROL,
     VALID_LAYERS,
     TIMESTAMP_RE,
     TILE_CACHE_CONTROL,
     MAP_TILE_CACHE_TTL_SECONDS,
     _TRANSPARENT_PNG,
     _cache_id,
+    _quota_cache_control,
+    _quota_exhausted,
+    _seconds_left_in_hour,
+    _tile_cache_control,
     _timestamp_bucket,
     proxy_map_tile,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_quota_memo():
+    """The 429 memo is module state shared with enrichment; isolate each test."""
+    _enrichment._reset_memos()
+    yield
+    _enrichment._reset_memos()
 
 
 # ---------------------------------------------------------------------------
@@ -142,10 +156,12 @@ class TestProxyMapTile:
         mock_response.content = b"\x89PNG\r\n\x1a\n"
         mock_http.return_value.get.return_value = mock_response
 
-        result = await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
+        result = await proxy_map_tile(
+            z=5, x=18, y=17, layer="temperature", timestamp="2026-10-11T12:00:00Z"
+        )
         assert result.media_type == "image/png"
         assert result.body == b"\x89PNG\r\n\x1a\n"
-        # Fresh tiles carry the strong CDN cache header, not the old max-age=300.
+        # A fixed forecast hour carries the strong CDN cache header.
         assert "s-maxage=86400" in result.headers.get("cache-control", "")
         assert "stale-while-revalidate" in result.headers.get("cache-control", "")
         assert result.headers.get("x-map-layer") == "temperature"
@@ -168,7 +184,8 @@ class TestProxyMapTile:
         assert result.status_code == 200
         assert result.media_type == "image/png"
         assert result.body == _TRANSPARENT_PNG
-        assert result.headers.get("x-map-tile") == "empty"
+        # A 429 means the shared quota is spent, not that the tile is missing.
+        assert result.headers.get("x-map-tile") == "quota"
 
     @patch("py._tiles._get_cached_tile", return_value=None)
     @patch("py._tiles._get_http")
@@ -278,7 +295,10 @@ class TestTileCache:
         assert result.status_code == 200
         assert result.body == tile_bytes
         assert result.headers.get("x-cache") == "HIT"
-        assert TILE_CACHE_CONTROL == result.headers.get("cache-control")
+        # "now" is edge-cached only until the hour rolls over.
+        cc = result.headers.get("cache-control")
+        assert "s-maxage=86400" not in cc
+        assert "s-maxage=" in cc
 
     async def test_cache_miss_fetches_and_writes(self):
         """On a miss, Tomorrow.io is fetched and the tile is written to cache."""
@@ -347,3 +367,120 @@ class TestTileCache:
 
         assert result.status_code == 200
         assert result.body == tile_bytes
+
+
+# ---------------------------------------------------------------------------
+# Cache-Control per timestamp + shared quota memo (#266)
+# ---------------------------------------------------------------------------
+
+
+def _at(minute: int, second: int = 0) -> datetime:
+    return datetime(2026, 10, 11, 7, minute, second, tzinfo=timezone.utc)
+
+
+class TestTileCacheControl:
+    def test_explicit_timestamp_keeps_long_edge_cache(self):
+        assert _tile_cache_control("2026-10-11T12:00:00Z", _at(5)) == TILE_CACHE_CONTROL
+
+    def test_now_is_bounded_by_the_hour(self):
+        cc = _tile_cache_control("now", _at(45))
+        assert "s-maxage=900" in cc  # 15 minutes left
+        assert "max-age=600" in cc  # browser capped at 10 min
+        assert "86400" not in cc and "604800" not in cc
+
+    def test_now_late_in_hour_has_a_floor(self):
+        assert "s-maxage=60" in _tile_cache_control("now", _at(59, 59))
+
+    def test_seconds_left_in_hour(self):
+        assert _seconds_left_in_hour(_at(0)) == 3600
+        assert _seconds_left_in_hour(_at(30)) == 1800
+
+    def test_quota_fallback_cached_until_hour_resets(self):
+        cc = _quota_cache_control(_at(40))
+        assert "s-maxage=1200" in cc and "max-age=60" in cc
+
+    def test_error_fallback_is_short(self):
+        assert "s-maxage=60" in FALLBACK_CACHE_CONTROL
+
+
+def _resp(status: int, content: bytes = b"") -> MagicMock:
+    r = MagicMock()
+    r.status_code = status
+    r.content = content
+    return r
+
+
+@pytest.mark.asyncio
+class TestQuotaMemo:
+    async def test_429_marks_quota_for_tiles_and_enrichment(self):
+        with patch("py._tiles._get_cached_tile", return_value=None), \
+                patch("py._tiles.get_api_key", return_value="k"), \
+                patch("py._tiles._get_http") as http:
+            http.return_value.get.return_value = _resp(429)
+            result = await proxy_map_tile(z=5, x=18, y=17, layer="precipitationIntensity")
+        assert result.body == _TRANSPARENT_PNG
+        assert result.headers.get("x-map-tile") == "quota"
+        assert "s-maxage=" in result.headers["cache-control"]
+        assert _quota_exhausted()
+        # Enrichment's own memo now skips its Tomorrow.io call for the hour.
+        hour = datetime.now(timezone.utc).strftime("%Y%m%d%H")
+        assert _enrichment._exhausted[True] == hour
+        assert _enrichment._exhausted[False] == hour
+
+    async def test_exhausted_quota_skips_upstream(self):
+        with patch("py._tiles._get_cached_tile", return_value=None), \
+                patch("py._tiles.get_api_key", return_value="k"), \
+                patch("py._tiles._get_http") as http:
+            http.return_value.get.return_value = _resp(429)
+            await proxy_map_tile(z=5, x=18, y=17, layer="precipitationIntensity")
+            await proxy_map_tile(z=5, x=19, y=17, layer="precipitationIntensity")
+            await proxy_map_tile(z=5, x=20, y=17, layer="precipitationIntensity")
+        assert http.return_value.get.call_count == 1
+
+    async def test_enrichment_429_also_stops_tiles(self):
+        _enrichment._exhausted[True] = datetime.now(timezone.utc).strftime("%Y%m%d%H")
+        with patch("py._tiles._get_cached_tile", return_value=None), \
+                patch("py._tiles.get_api_key", return_value="k") as key, \
+                patch("py._tiles._get_http") as http:
+            result = await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
+        http.assert_not_called()
+        key.assert_not_called()
+        assert result.headers.get("x-map-tile") == "quota"
+
+    async def test_memo_from_previous_hour_is_ignored(self):
+        _enrichment._exhausted[True] = "2000010100"
+        with patch("py._tiles._get_cached_tile", return_value=None), \
+                patch("py._tiles._set_cached_tile"), \
+                patch("py._tiles.get_api_key", return_value="k"), \
+                patch("py._tiles._get_http") as http:
+            http.return_value.get.return_value = _resp(200, b"\x89PNG-fresh")
+            result = await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
+        assert result.body == b"\x89PNG-fresh"
+
+    async def test_quota_serves_stale_tile_when_cached(self):
+        _enrichment._exhausted[True] = datetime.now(timezone.utc).strftime("%Y%m%d%H")
+
+        def fake(cache_id, *, allow_stale=False):
+            return b"\x89PNG-stale" if allow_stale else None
+
+        with patch("py._tiles._get_cached_tile", side_effect=fake):
+            result = await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
+        assert result.body == b"\x89PNG-stale"
+        assert result.headers.get("x-cache") == "STALE"
+        assert "s-maxage=" in result.headers["cache-control"]
+
+    async def test_cache_hit_still_served_while_quota_spent(self):
+        _enrichment._exhausted[True] = datetime.now(timezone.utc).strftime("%Y%m%d%H")
+        with patch("py._tiles._get_cached_tile", return_value=b"\x89PNG-hit"):
+            result = await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
+        assert result.headers.get("x-cache") == "HIT"
+
+    async def test_non_429_error_does_not_mark_quota(self):
+        with patch("py._tiles._get_cached_tile", return_value=None), \
+                patch("py._tiles.get_api_key", return_value="k"), \
+                patch("py._tiles._get_http") as http:
+            http.return_value.get.return_value = _resp(503)
+            result = await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
+        assert not _quota_exhausted()
+        assert result.headers.get("x-map-tile") == "empty"
+        assert result.headers["cache-control"] == FALLBACK_CACHE_CONTROL
