@@ -59,7 +59,7 @@ describe("MapDashboard — layer state", () => {
 
   it("reads the remembered layer without a hydration mismatch", () => {
     expect(source).toContain("useSyncExternalStore");
-    expect(source).toContain("readStoredMapLayer(getStorage())");
+    expect(source).toContain("readStoredMapLayer(getStorage(), chips)");
     expect(source).toContain("writeStoredMapLayer(getStorage(), id)");
   });
 
@@ -77,7 +77,8 @@ describe("MapDashboard — timeline", () => {
   });
 
   it("steps the overlay timestamp and has a play/pause control", () => {
-    expect(source).toContain("timelineTimestamp(step, new Date())");
+    expect(source).toContain("forecastTimelineFrames(now)");
+    expect(source).toContain("frames[step]?.timestamp");
     expect(source).toContain("aria-label={");
     expect(source).toContain("Play forecast timeline");
     expect(source).toContain("Pause forecast timeline");
@@ -98,5 +99,37 @@ describe("map loading skeleton", () => {
     expect(loadingSource).toContain("h-[100dvh]");
     expect(loadingSource).not.toContain("HeaderSkeleton");
     expect(loadingSource).not.toContain("BreadcrumbSkeleton");
+  });
+});
+
+describe("MapDashboard — overlay sources and credits", () => {
+  it("credits every source on screen from map-sources (one source of truth)", () => {
+    expect(source).toContain("attributionForLayer(activeLayer, activeModel)");
+    expect(source).toContain("<MapCredits credits={credits}");
+    // Credits stay visible when the bottom sheet is hidden.
+    expect(source).toContain(
+      "{!sheetOpen && <MapCredits credits={credits} />}",
+    );
+    // No hand-written MapTiler line left behind.
+    expect(source).not.toContain('href="https://www.maptiler.com/"');
+  });
+
+  it("looks up the GIBS frames that exist before animating satellite imagery", () => {
+    expect(source).toContain(
+      "fetchGibsDomains(gibsLayer, new Date(), controller.signal)",
+    );
+    expect(source).toContain("satelliteFrames(gibsLayer, intervals, now)");
+  });
+
+  it("keeps model fields behind their flag and opens the picker on the preference", () => {
+    expect(source).toContain('getFeatureFlag("model_map_layers")');
+    expect(source).toContain("mapModelForPreference(preferredModel)");
+    // Read-only: comparing models on the map never switches the dashboard baseline.
+    expect(source).not.toContain("setSelectedForecastModel");
+    expect(source).toContain("const current = s ?? defaultStep;");
+    expect(source).toContain(
+      "modelGridData?.times.indexOf(frames[step]?.timestamp",
+    );
+    expect(source).toContain("fieldOverlay={fieldOverlay}");
   });
 });
