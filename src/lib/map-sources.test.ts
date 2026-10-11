@@ -20,6 +20,7 @@ import {
   isModelLayer,
   mapModelForPreference,
   overlayAttribution,
+  withoutStyleAttributions,
   parseGibsDomains,
   satelliteFrames,
 } from "./map-sources";
@@ -379,5 +380,70 @@ describe("fetchGibsDomains", () => {
       vi.fn(async () => ({ ok: true, text: async () => "<x/>" })),
     );
     expect(await fetchGibsDomains(viirs, new Date())).toBeNull();
+  });
+});
+
+describe("withoutStyleAttributions (no duplicate base-map credits)", () => {
+  const norm = (t: string) =>
+    t
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  // What MapLibre's AttributionControl shows: the custom credits plus every
+  // source's own attribution, split into individual credits.
+  const rendered = (s: { sources: Record<string, unknown> }, custom: string) =>
+    [
+      custom,
+      ...Object.values(s.sources).map(
+        (x) => (x as { attribution?: string }).attribution ?? "",
+      ),
+    ]
+      .join("|")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&copy;/g, "©")
+      .split(/[|·]|(?=©)/)
+      .map(norm)
+      .filter(Boolean);
+  const style = {
+    version: 8,
+    sources: {
+      openmaptiles: {
+        type: "vector",
+        url: "https://api.maptiler.com/tiles/v3/tiles.json",
+        attribution:
+          '<a href="https://www.maptiler.com/copyright/">&copy; MapTiler</a> <a href="https://www.openstreetmap.org/copyright">&copy; OpenStreetMap contributors</a>',
+      },
+      plain: { type: "geojson", data: { type: "FeatureCollection" } },
+    },
+    layers: [],
+  };
+  const providers = attributionForLayer("airQuality");
+  const custom = attributionHtml(providers);
+  const count = (list: string[], needle: string) =>
+    list.filter((c) => c.includes(needle)).length;
+
+  it("the raw style plus custom credits duplicates them (the bug)", () => {
+    expect(count(rendered(style, custom), "maptiler")).toBe(2);
+  });
+
+  it("credits MapTiler and OpenStreetMap contributors exactly once", () => {
+    const list = rendered(withoutStyleAttributions(style), custom);
+    expect(count(list, "maptiler")).toBe(1);
+    expect(count(list, "openstreetmap contributors")).toBe(1);
+  });
+
+  it("keeps every overlay credit once and leaves other fields untouched", () => {
+    const out = withoutStyleAttributions(style);
+    const list = rendered(out, custom);
+    for (const p of providers)
+      expect(list.filter((c) => c === norm(p.label))).toHaveLength(1);
+    expect(out.sources.openmaptiles).toMatchObject({
+      type: "vector",
+      url: style.sources.openmaptiles.url,
+    });
+    expect("attribution" in out.sources.openmaptiles).toBe(false);
+    expect(out.sources.plain).toBe(style.sources.plain);
+    expect(style.sources.openmaptiles.attribution).toContain("MapTiler");
   });
 });
