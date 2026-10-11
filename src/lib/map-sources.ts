@@ -284,6 +284,32 @@ export function attributionHtml(providers: readonly MapProvider[]): string {
     .join(" · ");
 }
 
+/**
+ * Drops the `attribution` every source of a style JSON carries. MapTiler's
+ * styles credit "MapTiler" and "OpenStreetMap contributors" on their own vector
+ * source, and MapLibre's control renders those next to our custom attribution;
+ * the strings differ slightly, so MapLibre cannot de-duplicate them and each
+ * credit appeared twice. The base-map credits come from MAP_PROVIDERS only
+ * (BASE_MAP_PROVIDERS), so the style's own copies are removed. Pass as
+ * `transformStyle` on the Map constructor and on `setStyle`.
+ */
+export function withoutStyleAttributions<
+  S extends { sources?: Record<string, unknown> },
+>(style: S): S {
+  if (!style.sources) return style;
+  const sources: Record<string, unknown> = {};
+  for (const [id, source] of Object.entries(style.sources)) {
+    if (source && typeof source === "object" && "attribution" in source) {
+      const rest = { ...(source as Record<string, unknown>) };
+      delete rest.attribution;
+      sources[id] = rest;
+    } else {
+      sources[id] = source;
+    }
+  }
+  return { ...style, sources };
+}
+
 /* ------------------------------------------------------------------------ *
  * NASA GIBS satellite layers
  * ------------------------------------------------------------------------ */

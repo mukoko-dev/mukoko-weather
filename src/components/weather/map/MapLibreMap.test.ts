@@ -296,3 +296,10 @@ describe("MapLibreMap — overlay sources and attribution", () => {
     expect(source).toContain("fieldStyleOf.get(map) === style");
   });
 });
+
+describe("style attribution de-duplication", () => {
+  it("strips the style's own attribution on creation and on theme switch", () => {
+    expect(source).toContain("withoutStyleAttributions");
+    expect(source.match(/transformStyle:/g)).toHaveLength(2);
+  });
+});

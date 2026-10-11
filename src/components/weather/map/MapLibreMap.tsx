@@ -26,6 +26,7 @@ import {
   MAP_PROVIDERS,
   attributionHtml,
   overlayAttribution,
+  withoutStyleAttributions,
 } from "@/lib/map-sources";
 import {
   AQI_BANDS,
@@ -400,7 +401,6 @@ export function MapLibreMap({
 
         const map: MapLibreGLMap = new Map({
           container: containerRef.current,
-          style: getMapTilerStyle(isDark),
           center: [lon, lat],
           zoom,
           interactive,
@@ -408,6 +408,14 @@ export function MapLibreMap({
           // with the bottom-right overlay layer switcher. Disable it here and re-add
           // it explicitly at bottom-left below.
           attributionControl: false,
+        });
+
+        // MapOptions has no transformStyle, so the style is set right after
+        // construction (no style yet → no first-style race). Credits come from
+        // map-sources.ts only; the style's own source attribution would render
+        // a second copy of MapTiler / OSM.
+        map.setStyle(getMapTilerStyle(isDark), {
+          transformStyle: (_previous, next) => withoutStyleAttributions(next),
         });
 
         // Unmounted while the Map was constructing — tear it down immediately.
@@ -510,7 +518,9 @@ export function MapLibreMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.setStyle(getMapTilerStyle(isDark));
+    map.setStyle(getMapTilerStyle(isDark), {
+      transformStyle: (_previous, next) => withoutStyleAttributions(next),
+    });
     map.once("idle", () => restoreRef.current?.());
   }, [isDark]);
 
