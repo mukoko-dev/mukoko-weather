@@ -22,7 +22,10 @@ import {
   setupInstructions,
 } from "../lib/stations/view-model";
 import type { StationStatus, StationType } from "../lib/stations/types";
-import { parseReadingInput, parseRegisterInput } from "../lib/stations/validators";
+import {
+  parseReadingInput,
+  parseRegisterInput,
+} from "../lib/stations/validators";
 import { parseThemePreference, resolveDark, THEME_KEY } from "../lib/theme";
 
 function storage(): Storage | null {
@@ -40,7 +43,8 @@ function init(): void {
 
   const ingestHost = root.dataset.ingestHost ?? "weather.mukoko.com";
   const api = new ConsoleApi();
-  const q = <T extends HTMLElement>(sel: string, from: ParentNode = document) => from.querySelector<T>(sel);
+  const q = <T extends HTMLElement>(sel: string, from: ParentNode = document) =>
+    from.querySelector<T>(sel);
 
   const list = q<HTMLUListElement>("#station-list")!;
   const empty = q<HTMLElement>("#station-empty")!;
@@ -74,31 +78,47 @@ function init(): void {
 
   function paint(li: HTMLElement, s: ConsoleStation) {
     const status = statuses.get(s.stationId);
-    q("[data-station-last]", li)!.textContent = describeLastReading(status?.lastObservationAt ?? null);
-    q("[data-station-metrics]", li)!.textContent = formatMetrics(status?.latestMetrics ?? null);
+    q("[data-station-last]", li)!.textContent = describeLastReading(
+      status?.lastObservationAt ?? null,
+    );
+    q("[data-station-metrics]", li)!.textContent = formatMetrics(
+      status?.latestMetrics ?? null,
+    );
   }
 
   function render() {
     list.replaceChildren();
     empty.hidden = stations.length > 0;
     for (const s of stations) {
-      const li = (template.content.cloneNode(true) as DocumentFragment).querySelector<HTMLElement>("[data-station]")!;
+      const li = (
+        template.content.cloneNode(true) as DocumentFragment
+      ).querySelector<HTMLElement>("[data-station]")!;
       li.dataset.stationId = s.stationId;
       q("[data-station-name]", li)!.textContent = s.name;
       q("[data-station-id]", li)!.textContent = s.stationId;
-      q("[data-station-type]", li)!.textContent = s.stationType === "manual" ? "Analog" : "Digital";
-      q("[data-station-access]", li)!.textContent = s.access === "owner" ? "Owned by you" : "Key on this device";
+      q("[data-station-type]", li)!.textContent =
+        s.stationType === "manual" ? "Analog" : "Digital";
+      q("[data-station-access]", li)!.textContent =
+        s.access === "owner" ? "Owned by you" : "Key on this device";
       const readingForm = q<HTMLFormElement>("[data-reading-form]", li)!;
-      readingForm.setAttribute("aria-label", `Log a manual reading for ${s.name}`);
+      readingForm.setAttribute(
+        "aria-label",
+        `Log a manual reading for ${s.name}`,
+      );
       // Ids must be unique across cloned cards.
-      for (const input of readingForm.querySelectorAll<HTMLInputElement>("[data-reading-input]")) {
+      for (const input of readingForm.querySelectorAll<HTMLInputElement>(
+        "[data-reading-input]",
+      )) {
         const unique = `${s.stationId}-${input.name}`;
-        const label = readingForm.querySelector<HTMLLabelElement>(`label[for="${input.id}"]`);
+        const label = readingForm.querySelector<HTMLLabelElement>(
+          `label[for="${input.id}"]`,
+        );
         input.id = unique;
         label?.setAttribute("for", unique);
       }
       // Rotation is an owner action; a key alone cannot rotate itself.
-      if (s.access === "key") q("[data-action=rotate]", li)!.setAttribute("hidden", "");
+      if (s.access === "key")
+        q("[data-action=rotate]", li)!.setAttribute("hidden", "");
       paint(li, s);
       list.append(li);
     }
@@ -106,12 +126,18 @@ function init(): void {
 
   async function refreshStatus(s: ConsoleStation) {
     try {
-      const status = await api.status(s.stationId, s.access === "key" ? s.key : undefined);
+      const status = await api.status(
+        s.stationId,
+        s.access === "key" ? s.key : undefined,
+      );
       statuses.set(s.stationId, status);
-      const li = list.querySelector<HTMLElement>(`[data-station-id="${s.stationId}"]`);
+      const li = list.querySelector<HTMLElement>(
+        `[data-station-id="${s.stationId}"]`,
+      );
       if (li) paint(li, s);
     } catch (err) {
-      if (err instanceof ConsoleApiError && err.status === 401) handleFailure(err, "");
+      if (err instanceof ConsoleApiError && err.status === 401)
+        handleFailure(err, "");
       // A failed status read leaves the card as it was.
     }
   }
@@ -122,7 +148,9 @@ function init(): void {
       stations = mergeStations(server, local);
     } catch (err) {
       stations = mergeStations([], local);
-      showError(handleFailure(err, "Could not load your stations from the server."));
+      showError(
+        handleFailure(err, "Could not load your stations from the server."),
+      );
     }
     render();
     await Promise.all(stations.map(refreshStatus));
@@ -139,12 +167,15 @@ function init(): void {
     credsBox.querySelector<HTMLElement>("h2")?.focus();
   }
 
-  const field = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
+  const field = (name: string) =>
+    form.elements.namedItem(name) as HTMLInputElement;
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     showError(null);
-    const type = (form.querySelector<HTMLInputElement>('input[name="stationType"]:checked')?.value ?? "digital") as StationType;
+    const type = (form.querySelector<HTMLInputElement>(
+      'input[name="stationType"]:checked',
+    )?.value ?? "digital") as StationType;
     const parsed = parseRegisterInput({
       name: field("name").value,
       lat: field("lat").value,
@@ -154,12 +185,21 @@ function init(): void {
     });
     if (!parsed.ok) return showError(parsed.error);
 
-    const button = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    const button = form.querySelector<HTMLButtonElement>(
+      'button[type="submit"]',
+    )!;
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
     try {
       const issued = await api.register(parsed.value);
-      persist(addStation(local, { stationId: issued.stationId, key: issued.ingestKey, name: parsed.value.name, stationType: parsed.value.stationType }));
+      persist(
+        addStation(local, {
+          stationId: issued.stationId,
+          key: issued.ingestKey,
+          name: parsed.value.name,
+          stationType: parsed.value.stationType,
+        }),
+      );
       showCredentials(issued.stationId, issued.ingestKey);
       form.reset();
       await loadAll();
@@ -172,17 +212,22 @@ function init(): void {
   });
 
   root.addEventListener("click", async (e) => {
-    const target = (e.target as HTMLElement).closest<HTMLElement>("[data-action]");
+    const target = (e.target as HTMLElement).closest<HTMLElement>(
+      "[data-action]",
+    );
     if (!target) return;
     const action = target.dataset.action;
     const li = target.closest<HTMLElement>("[data-station]");
-    const station = li ? stations.find((s) => s.stationId === li.dataset.stationId) : undefined;
+    const station = li
+      ? stations.find((s) => s.stationId === li.dataset.stationId)
+      : undefined;
 
     if (action === "dismiss-credentials") {
       credsBox.hidden = true;
       q("[data-cred-key]", credsBox)!.textContent = "";
     } else if (action === "use-gps") {
-      if (!navigator.geolocation) return showError("GPS is not available. Enter coordinates manually.");
+      if (!navigator.geolocation)
+        return showError("GPS is not available. Enter coordinates manually.");
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           field("lat").value = pos.coords.latitude.toFixed(5);
@@ -195,22 +240,36 @@ function init(): void {
       await refreshStatus(station);
     } else if (action === "remove" && station) {
       persist(removeStation(local, station.stationId));
-      stations = stations.filter((s) => s.stationId !== station.stationId || s.access === "owner");
+      stations = stations.filter(
+        (s) => s.stationId !== station.stationId || s.access === "owner",
+      );
       const result = q("[data-station-result]", li!);
       if (station.access === "owner") {
         station.key = undefined;
-        if (result) result.textContent = "Key removed from this device. The station stays registered to you.";
+        if (result)
+          result.textContent =
+            "Key removed from this device. The station stays registered to you.";
       } else {
         render();
       }
     } else if (action === "rotate" && station && li) {
-      if (!window.confirm(`Rotate the ingest key for ${station.name}? The old key stops working.`)) return;
+      if (
+        !window.confirm(
+          `Rotate the ingest key for ${station.name}? The old key stops working.`,
+        )
+      )
+        return;
       try {
         const issued = await api.rotateKey(station.stationId);
         persist(
           local.some((s) => s.stationId === station.stationId)
             ? replaceKey(local, station.stationId, issued.ingestKey)
-            : addStation(local, { stationId: station.stationId, key: issued.ingestKey, name: station.name, stationType: station.stationType }),
+            : addStation(local, {
+                stationId: station.stationId,
+                key: issued.ingestKey,
+                name: station.name,
+                stationType: station.stationType,
+              }),
         );
         station.key = issued.ingestKey;
         showCredentials(issued.stationId, issued.ingestKey);
@@ -221,7 +280,9 @@ function init(): void {
   });
 
   list.addEventListener("submit", async (e) => {
-    const formEl = (e.target as HTMLElement).closest<HTMLFormElement>("[data-reading-form]");
+    const formEl = (e.target as HTMLElement).closest<HTMLFormElement>(
+      "[data-reading-form]",
+    );
     if (!formEl) return;
     e.preventDefault();
     const li = formEl.closest<HTMLElement>("[data-station]")!;
@@ -230,17 +291,26 @@ function init(): void {
     if (!station) return;
 
     const raw: Record<string, string> = {};
-    for (const input of formEl.querySelectorAll<HTMLInputElement>("[data-reading-input]")) raw[input.name] = input.value;
+    for (const input of formEl.querySelectorAll<HTMLInputElement>(
+      "[data-reading-input]",
+    ))
+      raw[input.name] = input.value;
     const parsed = parseReadingInput(raw);
     if (!parsed.ok) {
       result.textContent = parsed.error;
       return;
     }
-    const button = formEl.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    const button = formEl.querySelector<HTMLButtonElement>(
+      'button[type="submit"]',
+    )!;
     button.disabled = true;
     result.textContent = "Saving";
     try {
-      const res = await api.submitReading(station.stationId, parsed.value, station.access === "key" ? station.key : undefined);
+      const res = await api.submitReading(
+        station.stationId,
+        parsed.value,
+        station.access === "key" ? station.key : undefined,
+      );
       result.textContent = describeReadingResult(res);
       if (res.qcStatus === "validated") formEl.reset();
       await refreshStatus(station);
@@ -254,7 +324,9 @@ function init(): void {
   // Theme: class-based dark mode, preference kept in localStorage.
   const store = storage();
   const saved = parseThemePreference(store?.getItem(THEME_KEY));
-  const radios = document.querySelectorAll<HTMLInputElement>('input[name="theme"]');
+  const radios = document.querySelectorAll<HTMLInputElement>(
+    'input[name="theme"]',
+  );
   for (const r of radios) {
     r.checked = r.value === saved;
     r.addEventListener("change", () => {
@@ -264,7 +336,10 @@ function init(): void {
       } catch {
         // Preference just won't persist.
       }
-      document.documentElement.classList.toggle("dark", resolveDark(pref, matchMedia("(prefers-color-scheme: dark)").matches));
+      document.documentElement.classList.toggle(
+        "dark",
+        resolveDark(pref, matchMedia("(prefers-color-scheme: dark)").matches),
+      );
     });
   }
 

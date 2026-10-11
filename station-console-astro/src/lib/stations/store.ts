@@ -37,7 +37,10 @@ export function loadStations(storage: StorageLike | null): StoredStation[] {
   }
 }
 
-export function saveStations(storage: StorageLike | null, stations: StoredStation[]): boolean {
+export function saveStations(
+  storage: StorageLike | null,
+  stations: StoredStation[],
+): boolean {
   if (!storage) return false;
   try {
     storage.setItem(STORE_KEY, JSON.stringify(stations));
@@ -47,14 +50,24 @@ export function saveStations(storage: StorageLike | null, stations: StoredStatio
   }
 }
 
-export function addStation(list: StoredStation[], entry: StoredStation): StoredStation[] {
+export function addStation(
+  list: StoredStation[],
+  entry: StoredStation,
+): StoredStation[] {
   return [...list.filter((s) => s.stationId !== entry.stationId), entry];
 }
 
-export function removeStation(list: StoredStation[], stationId: string): StoredStation[] {
+export function removeStation(
+  list: StoredStation[],
+  stationId: string,
+): StoredStation[] {
   return list.filter((s) => s.stationId !== stationId);
 }
 
-export function replaceKey(list: StoredStation[], stationId: string, key: string): StoredStation[] {
+export function replaceKey(
+  list: StoredStation[],
+  stationId: string,
+  key: string,
+): StoredStation[] {
   return list.map((s) => (s.stationId === stationId ? { ...s, key } : s));
 }

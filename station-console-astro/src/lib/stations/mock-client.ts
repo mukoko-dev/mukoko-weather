@@ -53,7 +53,10 @@ function toHex(bytes: Uint8Array): string {
 }
 
 async function sha256(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(text),
+  );
   return toHex(new Uint8Array(digest));
 }
 
@@ -95,12 +98,18 @@ export class MockStationsClient implements StationsClient {
     });
   }
 
-  private async authorise(caller: Caller, stationId: string, auth?: KeyAuth): Promise<MockStation> {
+  private async authorise(
+    caller: Caller,
+    stationId: string,
+    auth?: KeyAuth,
+  ): Promise<MockStation> {
     await this.seeded;
     const station = this.stations.get(stationId);
     if (!station) throw new StationsApiError(404, "Station not found");
-    if (station.ownerId !== null && station.ownerId === caller.personId) return station;
-    if (auth?.stationKey && (await sha256(auth.stationKey)) === station.keyHash) return station;
+    if (station.ownerId !== null && station.ownerId === caller.personId)
+      return station;
+    if (auth?.stationKey && (await sha256(auth.stationKey)) === station.keyHash)
+      return station;
     // Never reveal whether the id exists to someone who cannot use it.
     throw new StationsApiError(404, "Station not found");
   }
@@ -138,7 +147,11 @@ export class MockStationsClient implements StationsClient {
       }));
   }
 
-  async status(caller: Caller, stationId: string, auth?: KeyAuth): Promise<StationStatus> {
+  async status(
+    caller: Caller,
+    stationId: string,
+    auth?: KeyAuth,
+  ): Promise<StationStatus> {
     const s = await this.authorise(caller, stationId, auth);
     return {
       stationId: s.stationId,
@@ -161,17 +174,27 @@ export class MockStationsClient implements StationsClient {
     for (const [field, value] of Object.entries(reading)) {
       const name = METRIC_NAMES[field as keyof typeof METRIC_NAMES];
       const range = name ? QC_RANGES[name] : undefined;
-      if (name && range && typeof value === "number" && value >= range[0] && value <= range[1]) {
+      if (
+        name &&
+        range &&
+        typeof value === "number" &&
+        value >= range[0] &&
+        value <= range[1]
+      ) {
         metrics[name] = value;
       }
     }
-    if (Object.keys(metrics).length === 0) return { accepted: 0, qcStatus: "rejected" };
+    if (Object.keys(metrics).length === 0)
+      return { accepted: 0, qcStatus: "rejected" };
     s.lastObservationAt = this.now().toISOString();
     s.latestMetrics = metrics;
     return { accepted: Object.keys(metrics).length, qcStatus: "validated" };
   }
 
-  async rotateKey(caller: Caller, stationId: string): Promise<IssuedCredentials> {
+  async rotateKey(
+    caller: Caller,
+    stationId: string,
+  ): Promise<IssuedCredentials> {
     // Rotation is an owner action: a station key alone cannot rotate itself.
     const s = await this.authorise(caller, stationId);
     const ingestKey = randomKey();

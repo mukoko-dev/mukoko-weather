@@ -19,7 +19,8 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 function str(v: unknown, field: string): string {
-  if (typeof v !== "string") throw new StationsApiError(502, `Nyuchi API sent no ${field}`);
+  if (typeof v !== "string")
+    throw new StationsApiError(502, `Nyuchi API sent no ${field}`);
   return v;
 }
 
@@ -28,13 +29,15 @@ function type(v: unknown): StationType {
 }
 
 function summary(v: unknown): StationSummary {
-  if (!isRecord(v)) throw new StationsApiError(502, "Nyuchi API sent an unreadable station");
+  if (!isRecord(v))
+    throw new StationsApiError(502, "Nyuchi API sent an unreadable station");
   return {
     stationId: str(v.stationId, "stationId"),
     name: typeof v.name === "string" ? v.name : "",
     stationType: type(v.stationType),
     status: typeof v.status === "string" ? v.status : "unknown",
-    lastObservationAt: typeof v.lastObservationAt === "string" ? v.lastObservationAt : null,
+    lastObservationAt:
+      typeof v.lastObservationAt === "string" ? v.lastObservationAt : null,
   };
 }
 
@@ -68,7 +71,8 @@ export class NyuchiStationsClient implements StationsClient {
     init: { method?: string; body?: unknown; auth?: KeyAuth | undefined } = {},
   ): Promise<unknown> {
     const headers: Record<string, string> = { Accept: "application/json" };
-    if (caller.accessToken) headers.Authorization = `Bearer ${caller.accessToken}`;
+    if (caller.accessToken)
+      headers.Authorization = `Bearer ${caller.accessToken}`;
     if (init.auth?.stationKey) headers["X-Station-Key"] = init.auth.stationKey;
     if (init.body !== undefined) headers["Content-Type"] = "application/json";
 
@@ -85,16 +89,26 @@ export class NyuchiStationsClient implements StationsClient {
     }
     const payload: unknown = await res.json().catch(() => null);
     if (!res.ok) {
-      const detail = isRecord(payload) && typeof payload.detail === "string" ? payload.detail : null;
+      const detail =
+        isRecord(payload) && typeof payload.detail === "string"
+          ? payload.detail
+          : null;
       // Map upstream auth failures to the caller's own 404/401 vocabulary.
-      throw new StationsApiError(res.status >= 500 ? 502 : res.status, detail ?? `Request failed (${res.status})`);
+      throw new StationsApiError(
+        res.status >= 500 ? 502 : res.status,
+        detail ?? `Request failed (${res.status})`,
+      );
     }
     return payload;
   }
 
   async register(caller: Caller, input: RegisterInput) {
-    const p = await this.call(caller, "/v1/stations", { method: "POST", body: input });
-    if (!isRecord(p)) throw new StationsApiError(502, "Nyuchi API sent an unreadable answer");
+    const p = await this.call(caller, "/v1/stations", {
+      method: "POST",
+      body: input,
+    });
+    if (!isRecord(p))
+      throw new StationsApiError(502, "Nyuchi API sent an unreadable answer");
     return {
       stationId: str(p.stationId, "stationId"),
       ingestKey: str(p.ingestKey, "ingestKey"),
@@ -104,14 +118,31 @@ export class NyuchiStationsClient implements StationsClient {
 
   async list(caller: Caller): Promise<StationSummary[]> {
     const p = await this.call(caller, "/v1/stations");
-    const items = isRecord(p) && Array.isArray(p.stations) ? p.stations : Array.isArray(p) ? p : null;
-    if (!items) throw new StationsApiError(502, "Nyuchi API sent an unreadable list");
+    const items =
+      isRecord(p) && Array.isArray(p.stations)
+        ? p.stations
+        : Array.isArray(p)
+          ? p
+          : null;
+    if (!items)
+      throw new StationsApiError(502, "Nyuchi API sent an unreadable list");
     return items.map(summary);
   }
 
-  async status(caller: Caller, stationId: string, auth?: KeyAuth): Promise<StationStatus> {
-    const p = await this.call(caller, `/v1/stations/${encodeURIComponent(stationId)}`, { auth });
-    return { ...summary(p), latestMetrics: isRecord(p) ? metrics(p.latestMetrics) : null };
+  async status(
+    caller: Caller,
+    stationId: string,
+    auth?: KeyAuth,
+  ): Promise<StationStatus> {
+    const p = await this.call(
+      caller,
+      `/v1/stations/${encodeURIComponent(stationId)}`,
+      { auth },
+    );
+    return {
+      ...summary(p),
+      latestMetrics: isRecord(p) ? metrics(p.latestMetrics) : null,
+    };
   }
 
   async submitReading(
@@ -120,23 +151,36 @@ export class NyuchiStationsClient implements StationsClient {
     reading: ReadingInput,
     auth?: KeyAuth,
   ): Promise<ReadingResult> {
-    const p = await this.call(caller, `/v1/stations/${encodeURIComponent(stationId)}/readings`, {
-      method: "POST",
-      body: reading,
-      auth,
-    });
-    if (!isRecord(p)) throw new StationsApiError(502, "Nyuchi API sent an unreadable answer");
+    const p = await this.call(
+      caller,
+      `/v1/stations/${encodeURIComponent(stationId)}/readings`,
+      {
+        method: "POST",
+        body: reading,
+        auth,
+      },
+    );
+    if (!isRecord(p))
+      throw new StationsApiError(502, "Nyuchi API sent an unreadable answer");
     return {
       accepted: typeof p.accepted === "number" ? p.accepted : 0,
       qcStatus: p.qcStatus === "validated" ? "validated" : "rejected",
     };
   }
 
-  async rotateKey(caller: Caller, stationId: string): Promise<IssuedCredentials> {
-    const p = await this.call(caller, `/v1/stations/${encodeURIComponent(stationId)}/rotate-key`, {
-      method: "POST",
-    });
-    if (!isRecord(p)) throw new StationsApiError(502, "Nyuchi API sent an unreadable answer");
+  async rotateKey(
+    caller: Caller,
+    stationId: string,
+  ): Promise<IssuedCredentials> {
+    const p = await this.call(
+      caller,
+      `/v1/stations/${encodeURIComponent(stationId)}/rotate-key`,
+      {
+        method: "POST",
+      },
+    );
+    if (!isRecord(p))
+      throw new StationsApiError(502, "Nyuchi API sent an unreadable answer");
     return { stationId, ingestKey: str(p.ingestKey, "ingestKey") };
   }
 }

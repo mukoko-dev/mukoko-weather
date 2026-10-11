@@ -22,13 +22,22 @@ export interface RawConfig {
 /** Validates the environment; a bad value fails loudly rather than silently mocking. */
 export function resolveConfig(raw: RawConfig): ConsoleConfig {
   const backend = raw.STATIONS_BACKEND === "nyuchi" ? "nyuchi" : "mock";
-  if (raw.STATIONS_BACKEND && raw.STATIONS_BACKEND !== "mock" && raw.STATIONS_BACKEND !== "nyuchi")
-    throw new Error(`STATIONS_BACKEND must be "mock" or "nyuchi", got "${raw.STATIONS_BACKEND}"`);
+  if (
+    raw.STATIONS_BACKEND &&
+    raw.STATIONS_BACKEND !== "mock" &&
+    raw.STATIONS_BACKEND !== "nyuchi"
+  )
+    throw new Error(
+      `STATIONS_BACKEND must be "mock" or "nyuchi", got "${raw.STATIONS_BACKEND}"`,
+    );
 
   let nyuchiApiUrl: string | null = null;
   if (backend === "nyuchi") {
     const url = raw.NYUCHI_API_URL?.trim();
-    if (!url) throw new Error("NYUCHI_API_URL is required when STATIONS_BACKEND=nyuchi");
+    if (!url)
+      throw new Error(
+        "NYUCHI_API_URL is required when STATIONS_BACKEND=nyuchi",
+      );
     let parsed: URL;
     try {
       parsed = new URL(url);
@@ -41,7 +50,8 @@ export function resolveConfig(raw: RawConfig): ConsoleConfig {
   }
 
   const host = raw.PUBLIC_STATIONS_INGEST_HOST?.trim() || DEFAULT_INGEST_HOST;
-  if (!HOST_RE.test(host)) throw new Error("PUBLIC_STATIONS_INGEST_HOST must be a host name");
+  if (!HOST_RE.test(host))
+    throw new Error("PUBLIC_STATIONS_INGEST_HOST must be a host name");
 
   return { backend, nyuchiApiUrl, ingestHost: host };
 }
@@ -49,7 +59,10 @@ export function resolveConfig(raw: RawConfig): ConsoleConfig {
 let mockSingleton: MockStationsClient | null = null;
 
 /** The one place that picks a client. The mock is shared so state survives requests. */
-export function createStationsClient(config: ConsoleConfig, fetchImpl: typeof fetch = fetch): StationsClient {
+export function createStationsClient(
+  config: ConsoleConfig,
+  fetchImpl: typeof fetch = fetch,
+): StationsClient {
   if (config.backend === "nyuchi" && config.nyuchiApiUrl)
     return new NyuchiStationsClient(config.nyuchiApiUrl, fetchImpl);
   mockSingleton ??= new MockStationsClient();

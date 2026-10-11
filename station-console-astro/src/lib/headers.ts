@@ -16,10 +16,14 @@ export const NO_STORE_HEADERS: Readonly<Record<string, string>> = {
 };
 
 export function applyHeaders(response: Response, pathname: string): Response {
-  const noStore = pathname.startsWith("/api/") || pathname.startsWith("/auth/") || pathname === "/";
+  const noStore =
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/auth/") ||
+    pathname === "/";
   const headers = new Headers(response.headers);
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) headers.set(k, v);
-  if (noStore) for (const [k, v] of Object.entries(NO_STORE_HEADERS)) headers.set(k, v);
+  if (noStore)
+    for (const [k, v] of Object.entries(NO_STORE_HEADERS)) headers.set(k, v);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

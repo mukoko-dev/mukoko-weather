@@ -7,14 +7,19 @@ describe("callerFrom", () => {
     expect(callerFrom({ user: null })).toBeNull();
   });
   it("maps the session user and keeps the token server-side", () => {
-    expect(callerFrom({ user: { id: "u1", email: "a@b.test" }, accessToken: "t" })).toEqual({ personId: "u1", email: "a@b.test", accessToken: "t" });
+    expect(
+      callerFrom({ user: { id: "u1", email: "a@b.test" }, accessToken: "t" }),
+    ).toEqual({ personId: "u1", email: "a@b.test", accessToken: "t" });
     expect(callerFrom({ user: { id: "u1" } })?.email).toBe("");
   });
 });
 
 describe("mock session", () => {
   it("derives stable identities and rejects odd slugs", () => {
-    expect(mockUser("alice")).toEqual({ id: "mock-alice", email: "alice@example.test" });
+    expect(mockUser("alice")).toEqual({
+      id: "mock-alice",
+      email: "alice@example.test",
+    });
     expect(mockUser("../x").id).toBe("mock-owner");
     expect(mockUser(null).id).toBe("mock-owner");
   });
