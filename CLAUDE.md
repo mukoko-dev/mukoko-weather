@@ -293,7 +293,7 @@ mukoko-weather/
 │   │   │   │   ├── RecentReports.tsx        # Recent community reports with upvoting
 │   │   │   │   └── RecentReports.test.ts
 │   │   │   └── map/                   # Interactive weather map (MapLibre GL + Tomorrow.io overlay tiles)
-│   │   │       ├── MapPreview.tsx         # Compact map card on location page (links to /[location]/map)
+│   │   │       ├── MapPreview.tsx         # Static map card on location page: 4 MapTiler raster tiles in an SVG (src/lib/static-map.ts), no MapLibre; links to /[location]/map
 │   │   │       ├── MapLibreMap.tsx        # MapLibre GL map (theme-aware MapTiler style, marker, weather overlay)
 │   │   │       ├── MapLibreMap.test.ts
 │   │   │       ├── WeatherLayerPanel.tsx  # Bottom-sheet layer chips (labelled, single-select, touch-target-min)
