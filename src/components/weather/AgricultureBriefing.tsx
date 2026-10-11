@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useAppStore } from "@/lib/store";
 import { SafeMarkdown } from "@/components/ui/safe-markdown";
 import { SparklesIcon } from "@/lib/weather-icons";
 import { agriAIBody, fetchAgriAI, peekAgriAI } from "@/lib/agriculture-client";
@@ -21,13 +22,16 @@ interface Props {
   >;
   crops: readonly string[];
   user: AISummaryUser | null;
+  /** Farm data is ready: no model call while it is unavailable. */
+  enabled: boolean;
 }
 
 type Result =
   | { key: string; ok: true; text: string }
   | { key: string; ok: false };
 
-export function AgricultureBriefing({ location, crops, user }: Props) {
+export function AgricultureBriefing({ location, crops, user, enabled }: Props) {
+  const openMyWeather = useAppStore((s) => s.openMyWeather);
   const { slug, name, country, elevation, lat, lon } = location;
   const body = useMemo(
     () =>
@@ -40,9 +44,11 @@ export function AgricultureBriefing({ location, crops, user }: Props) {
   );
   const [result, setResult] = useState<Result | null>(null);
   const signedIn = user !== null;
+  // No crops picked: no model call (same rule as the snapshot card).
+  const wantsAI = signedIn && enabled && crops.length > 0;
 
   useEffect(() => {
-    if (!signedIn || peekAgriAI(body) !== undefined) return;
+    if (!wantsAI || peekAgriAI(body) !== undefined) return;
     let live = true;
     fetchAgriAI(body)
       .then((text) => live && setResult({ key: body, ok: true, text }))
@@ -50,7 +56,7 @@ export function AgricultureBriefing({ location, crops, user }: Props) {
     return () => {
       live = false;
     };
-  }, [signedIn, body]);
+  }, [wantsAI, body]);
 
   if (!signedIn) {
     return (
@@ -61,6 +67,31 @@ export function AgricultureBriefing({ location, crops, user }: Props) {
       />
     );
   }
+
+  if (crops.length === 0) {
+    return (
+      <section
+        aria-labelledby="agri-briefing"
+        className="baobab border-l-[6px] border-l-mineral-malachite"
+      >
+        <h2 id="agri-briefing" className="giraffe">
+          Shamwari agronomy briefing
+        </h2>
+        <p className="gazelle mt-3">
+          Tell us what you farm and Shamwari will write a briefing for {name}.{" "}
+          <button
+            type="button"
+            onClick={() => openMyWeather("activities")}
+            className="sunbird dik-dik"
+          >
+            Pick your crops
+          </button>
+        </p>
+      </section>
+    );
+  }
+
+  if (!enabled) return null;
 
   const cached = peekAgriAI(body);
   const now: Result | null =

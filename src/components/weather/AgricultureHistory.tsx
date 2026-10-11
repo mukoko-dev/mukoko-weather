@@ -30,6 +30,26 @@ interface Normals {
   normalLow?: number | null;
 }
 
+const WINDOW_DAYS = 30;
+
+/** "YYYY-MM-DD" for `n` days ago (the normals API only uses month and day). */
+function isoDaysAgo(n: number): string {
+  return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
+}
+
+function averageNormals(a: Normals, b: Normals): Normals {
+  if (!a.available || !b.available) return b.available ? b : a;
+  const avg = (x?: number | null, y?: number | null) =>
+    typeof x === "number" && typeof y === "number"
+      ? Math.round(((x + y) / 2) * 10) / 10
+      : (x ?? y ?? null);
+  return {
+    available: true,
+    normalHigh: avg(a.normalHigh, b.normalHigh),
+    normalLow: avg(a.normalLow, b.normalLow),
+  };
+}
+
 export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
   const [history, setHistory] = useState<HistorySummary | null>(null);
   const [normals, setNormals] = useState<Normals | null>(null);
@@ -42,11 +62,24 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
         if (live) setHistory(summarizeHistory((json.data ?? []) as never[]));
       })
       .catch(() => live && setHistory(summarizeHistory([])));
-    fetch(`/api/py/normals?lat=${lat}&lon=${lon}`)
-      .then(async (res) =>
-        res.ok ? (res.json() as Promise<Normals>) : { available: false },
-      )
-      .then((json) => live && setNormals(json))
+    // Normals are for one calendar day, and temperatures slope across a
+    // 30-day window, so compare against the mean of the normals at both ends
+    // of it. Sequential on purpose: the first call builds the cell's table
+    // (cached afterwards), the second reads it.
+    const getNormals = async (date: string): Promise<Normals> => {
+      const res = await fetch(
+        `/api/py/normals?lat=${lat}&lon=${lon}&date=${date}`,
+      );
+      return res.ok ? ((await res.json()) as Normals) : { available: false };
+    };
+    (async () => {
+      const end = await getNormals(isoDaysAgo(0));
+      const start = end.available
+        ? await getNormals(isoDaysAgo(WINDOW_DAYS - 1))
+        : end;
+      return averageNormals(start, end);
+    })()
+      .then((n) => live && setNormals(n))
       .catch(() => live && setNormals({ available: false }));
     return () => {
       live = false;
@@ -57,7 +90,8 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
   const normalLow = normals?.available ? normals.normalLow : null;
   const highAnomaly = formatAnomaly(history?.meanHigh, normalHigh);
   const lowAnomaly = formatAnomaly(history?.meanLow, normalLow);
-  const loading = history === null || normals === null;
+  const loading = history === null;
+  const normalsPending = normals === null;
 
   return (
     <section aria-labelledby="agri-history" className="acacia space-y-3">
@@ -81,11 +115,11 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
         <>
           <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="meerkat">
-              <dt className="dove">Rain recorded</dt>
+              <dt className="dove">Rain on file</dt>
               <dd className="text-base font-medium text-text-primary">
                 {history.rainMm != null ? formatMm(history.rainMm) : "—"}
                 <span className="dove block">
-                  {history.days} days on record
+                  {history.days} days stored (forecast or archive, not a gauge)
                 </span>
               </dd>
             </div>
@@ -100,7 +134,7 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
               <dd className="text-base font-medium text-text-primary">
                 {formatTempC(history.meanHigh)}
                 <span className="dove block">
-                  Normal {formatTempC(normalHigh)}
+                  Normal {normalsPending ? "…" : formatTempC(normalHigh)}
                   {highAnomaly ? ` · ${highAnomaly}` : ""}
                 </span>
               </dd>
@@ -110,14 +144,15 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
               <dd className="text-base font-medium text-text-primary">
                 {formatTempC(history.meanLow)}
                 <span className="dove block">
-                  Normal {formatTempC(normalLow)}
+                  Normal {normalsPending ? "…" : formatTempC(normalLow)}
                   {lowAnomaly ? ` · ${lowAnomaly}` : ""}
                 </span>
               </dd>
             </div>
           </dl>
           <p className="dove">
-            Normals: 1991–2020 average for today (ERA5 via Open-Meteo).
+            Normals: 1991–2020 average over the same 30 days (ERA5 via
+            Open-Meteo).
           </p>
         </>
       )}

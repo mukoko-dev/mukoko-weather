@@ -300,12 +300,41 @@ describe("crop advice", () => {
     expect(
       advice[0].tips.some((t) => t.includes("84 growing degree days")),
     ).toBe(true);
-    expect(advice[0].tips.some((t) => t.includes("tasselling"))).toBe(true);
+    expect(
+      advice[0].tips.some((t) => t.includes("Heat stress this week")),
+    ).toBe(true);
+    expect(advice[0].tips.some((t) => t.includes("tasselling"))).toBe(false);
     expect(advice[1].tips[0]).toContain("16 leaf-wet hours");
     expect(advice[2].tips).toContain(
       "Dry week ahead: check water points and grazing reserves.",
     );
     for (const a of advice) expect(a.tips.length).toBeLessThanOrEqual(3);
+  });
+
+  it("livestock tips follow the rain data, never a default wet-weather line", () => {
+    const base = {
+      ...data,
+      waterBalance: { balanceNext7dMm: -5 },
+      rain: { rainyDaysNext7: 0 },
+    } as unknown as AgricultureResponse;
+    expect(cropAdvice(["livestock"], base)[0].tips.join(" ")).not.toContain(
+      "tick",
+    );
+    const wet = {
+      ...base,
+      rain: { rainyDaysNext7: 5 },
+    } as unknown as AgricultureResponse;
+    expect(cropAdvice(["livestock"], wet)[0].tips.join(" ")).toContain(
+      "tick pressure",
+    );
+    const nullBalance = {
+      ...base,
+      waterBalance: null,
+      rain: { rainyDaysNext7: 0 },
+    } as unknown as AgricultureResponse;
+    expect(
+      cropAdvice(["livestock"], nullBalance)[0].tips.join(" "),
+    ).not.toContain("tick");
   });
 
   it("drops crops with nothing to say and handles missing windows", () => {

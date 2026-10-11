@@ -163,6 +163,7 @@ export function AgricultureDashboard({ location, season, user }: Props) {
                   location={location}
                   crops={crops}
                   user={user}
+                  enabled={ready}
                 />
               </Suspense>
             </ChartErrorBoundary>
@@ -176,7 +177,7 @@ export function AgricultureDashboard({ location, season, user }: Props) {
               >
                 <ChartErrorBoundary name="crop advice">
                   <Suspense fallback={<SectionSkeleton />}>
-                    <AgricultureCropAdvice advice={advice} />
+                    <AgricultureCropAdvice advice={advice} crops={crops} />
                   </Suspense>
                 </ChartErrorBoundary>
               </LazySection>

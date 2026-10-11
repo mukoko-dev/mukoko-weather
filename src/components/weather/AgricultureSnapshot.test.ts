@@ -24,7 +24,9 @@ describe("AgricultureSnapshot", () => {
     expect(client).toContain('"/api/ai/agriculture"');
     expect(src).not.toContain("/api/py/ai/");
     expect(src).toContain('"snapshot"');
-    expect(src).toContain("const wantsAI = isCard && signedIn && crops.length > 0;");
+    expect(src).toContain(
+      "const wantsAI = isCard && signedIn && crops.length > 0;",
+    );
     expect(src).toContain("fetchAgriAI(aiBody)");
     // Not gated on the client data fetch — both start in parallel.
     expect(src).not.toContain("if (!ready");

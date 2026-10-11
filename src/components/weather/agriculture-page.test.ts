@@ -70,6 +70,27 @@ describe("agriculture page components", () => {
     expect(src).toContain("/api/py/normals?lat=");
   });
 
+  it("the briefing spends no model call without crops or while data is unavailable", () => {
+    const src = read("AgricultureBriefing.tsx");
+    expect(src).toContain(
+      "const wantsAI = signedIn && enabled && crops.length > 0;",
+    );
+    expect(src).toContain('openMyWeather("activities")');
+  });
+
+  it("history loads independently of normals and compares against the window mean", () => {
+    const src = read("AgricultureHistory.tsx");
+    expect(src).toContain("const loading = history === null;");
+    expect(src).toContain("averageNormals(start, end)");
+    expect(src).toContain("date=${date}");
+    expect(src).toContain("not a gauge");
+  });
+
+  it("crop advice tells apart no crops from nothing to act on", () => {
+    const src = read("AgricultureCropAdvice.tsx");
+    expect(src).toContain("crops.length > 0 && advice.length === 0");
+  });
+
   it("GDDChart can draw a subset of its series", () => {
     expect(read("charts/GDDChart.tsx")).toContain("seriesKeys");
   });

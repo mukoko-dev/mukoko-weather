@@ -10,16 +10,23 @@ import type { CropAdvice } from "@/lib/agriculture";
 
 interface Props {
   advice: readonly CropAdvice[];
+  /** Farming activities the user has selected. */
+  crops: readonly string[];
 }
 
-export function AgricultureCropAdvice({ advice }: Props) {
+export function AgricultureCropAdvice({ advice, crops }: Props) {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
   return (
     <section aria-labelledby="agri-crops" className="acacia space-y-3">
       <h2 id="agri-crops" className="giraffe">
         For your crops
       </h2>
-      {advice.length === 0 ? (
+      {crops.length > 0 && advice.length === 0 ? (
+        <p className="gazelle">
+          Nothing in this week&apos;s forecast needs special action for your
+          crops. The windows and charts on this page still apply.
+        </p>
+      ) : advice.length === 0 ? (
         <p className="gazelle">
           Tell us what you farm to see advice for your crops and livestock.{" "}
           <button

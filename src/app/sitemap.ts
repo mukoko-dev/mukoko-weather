@@ -189,6 +189,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Sub-route pages for each location (atmosphere, forecast, agriculture, map).
   // Agriculture data is public; only the AI briefing needs sign-in.
   const subRoutePages: MetadataRoute.Sitemap = locations.flatMap((loc) => [
+    // Agriculture is listed only for farming locations: its content loads
+    // client-side, so it is thin for a city centre or a mining town.
+    ...(loc.tags.includes("farming")
+      ? [
+          {
+            url: `${SITE_URL}/${loc.slug}/agriculture`,
+            lastModified: now,
+            changeFrequency: "daily" as const,
+            priority: 0.7,
+          },
+        ]
+      : []),
     {
       url: `${SITE_URL}/${loc.slug}/atmosphere`,
       lastModified: now,
@@ -200,12 +212,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: "hourly" as const,
       priority: loc.tags.includes("city") ? 0.7 : 0.5,
-    },
-    {
-      url: `${SITE_URL}/${loc.slug}/agriculture`,
-      lastModified: now,
-      changeFrequency: "hourly" as const,
-      priority: loc.tags.includes("farming") ? 0.7 : 0.5,
     },
     {
       url: `${SITE_URL}/${loc.slug}/map`,

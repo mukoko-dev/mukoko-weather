@@ -75,9 +75,10 @@ describe("/[location]/agriculture route", () => {
     expect(read("error.tsx")).toContain("RouteErrorBoundary");
   });
 
-  it("is in the sitemap (the agriculture data is public)", () => {
+  it("is in the sitemap for farming locations only (content loads client-side)", () => {
     const sitemap = readFileSync(resolve(dir, "../../sitemap.ts"), "utf-8");
     expect(sitemap).toContain("${loc.slug}/agriculture");
+    expect(sitemap).toContain('loc.tags.includes("farming")');
   });
 
   it("never becomes the lastLocation cookie: proxy and loading scene read only the first segment", () => {

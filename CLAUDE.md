@@ -623,7 +623,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/[location]` — dynamic weather pages — overview: current conditions, AI summary, activity insights, atmospheric metric cards
 - `/[location]/atmosphere` — 24-hour atmospheric detail charts (humidity, wind, pressure, UV) for a location
 - `/[location]/forecast` — hourly (24h) + daily (7-day) forecast charts + sunrise/sunset for a location
-- `/[location]/agriculture` — agriculture insights. Public and indexable (in the sitemap); only the AI agronomy briefing needs sign-in. It shows:
+- `/[location]/agriculture` — agriculture insights. Public and indexable (in the sitemap for locations tagged `farming` only, since its content loads client-side); only the AI agronomy briefing needs sign-in. It shows:
   - the snapshot card (`variant="page"`);
   - Shamwari's briefing (`/api/ai/agriculture`, `mode: "briefing"`, shown as a sign-in CTA when anonymous);
   - deterministic crop-aware advice for the user's farming activities (`cropAdvice` in `src/lib/agriculture.ts`);

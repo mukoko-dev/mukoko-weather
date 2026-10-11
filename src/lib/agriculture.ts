@@ -462,7 +462,7 @@ export function cropAdvice(
           );
         if (heatHigh)
           t.push(
-            "Heat at tasselling cuts yield: irrigate early in the day if you can.",
+            "Heat stress this week hurts crops at flowering: irrigate early in the day if you can.",
           );
         break;
       case "tobacco-farming":
@@ -494,11 +494,12 @@ export function cropAdvice(
         break;
       case "livestock":
         if (data.risks) t.push(data.risks.heat.detail);
-        t.push(
-          balance !== null && balance < -10
-            ? "Dry week ahead: check water points and grazing reserves."
-            : "Wet spells raise tick pressure: keep to the dipping schedule.",
-        );
+        if (balance !== null && balance < -10)
+          t.push("Dry week ahead: check water points and grazing reserves.");
+        else if ((data.rain?.rainyDaysNext7 ?? 0) >= 4)
+          t.push(
+            "Several wet days ahead raise tick pressure: keep to the dipping schedule.",
+          );
         break;
       case "forestry":
         if (balance !== null && balance < -10)
