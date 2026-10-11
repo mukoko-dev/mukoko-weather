@@ -668,9 +668,7 @@ export function placesCollection() {
 }
 
 /** Administrative geography — `places.placesGeo` (camelCase). */
-export function placesGeoCollection() {
-  return placesDb().collection("placesGeo");
-}
+export { placesGeoCollection } from "./places-geo-collection";
 
 // identity domain
 /** Canonical user records (OIDC-compliant) — `identity.persons`. */
