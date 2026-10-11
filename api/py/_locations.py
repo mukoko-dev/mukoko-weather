@@ -7,6 +7,7 @@ Handles location CRUD, search (text + geospatial), and geo-lookup.
 from __future__ import annotations
 
 import logging
+import math
 import re
 from typing import Optional
 
@@ -43,6 +44,7 @@ from ._places_geo import (
     find_placesgeo_by_osm_ref,
     upsert_placesgeo_city,
     get_country_id,
+    normalize_name,
     POI_MATCH_RADIUS_KM,
 )
 
@@ -163,6 +165,63 @@ async def list_locations(
 # ---------------------------------------------------------------------------
 
 
+#: Below this many catalogue matches, /api/py/search adds geocoded candidates.
+GEOCODE_TOP_UP_BELOW = 3
+
+#: A geocoded candidate within this distance of a catalogue match with the
+#: same name is the same place, and is dropped from the top-up.
+_GEOCODE_DUPLICATE_KM = 25.0
+
+
+def _geocoded_candidate(g: dict) -> dict:
+    """Shape an Open-Meteo geocoding hit as a search result.
+
+    The slug must render without a record behind it: the candidate is not in
+    placesGeo, so a ``{name}-{country}`` slug (``london-gb``) 404s, which was
+    every search hit outside the seeded geography. A spot slug carries its
+    own coordinate, so the page renders anywhere and saving it works too.
+    """
+    return {
+        "slug": (
+            build_smart_slug(g["name"], g["lat"], g["lon"])
+            or _generate_slug(g["name"], g.get("country", ""))
+        ),
+        "name": g["name"],
+        "province": g.get("admin1", ""),
+        "lat": g["lat"],
+        "lon": g["lon"],
+        "elevation": g.get("elevation", 0),
+        "tags": [],
+        "country": g.get("country", ""),
+        "source": "geocoded",
+    }
+
+
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in km (WGS 84 mean radius)."""
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp, dl = p2 - p1, math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 6371.0088 * 2 * math.asin(min(1.0, math.sqrt(a)))
+
+
+def _duplicates_any(candidate: dict, existing: list[dict]) -> bool:
+    name = normalize_name(candidate.get("name", ""))
+    for e in existing:
+        if normalize_name(e.get("name", "")) != name:
+            continue
+        try:
+            km = haversine_km(
+                float(candidate["lat"]), float(candidate["lon"]),
+                float(e.get("lat")), float(e.get("lon")),
+            )
+        except (TypeError, ValueError, KeyError):
+            continue
+        if km <= _GEOCODE_DUPLICATE_KM:
+            return True
+    return False
+
+
 @router.get("/api/py/search")
 async def search_locations(
     q: str = "",
@@ -220,26 +279,20 @@ async def search_locations(
         elif q:
             results = search_locations_by_name(q, limit=limit, skip=skip, tag=tag)
 
-        # If text search returned no results, fall back to Open-Meteo
-        # geocoding API for address-level discovery (like Apple/Google Weather).
-        # These are geocoded candidates — not yet in our DB.
-        if q and not tag and not results:
+        # Top up a thin (or empty) catalogue answer with Open-Meteo geocoding
+        # for address-level discovery anywhere on Earth (like Apple/Google
+        # Weather). The platform geography is still mostly African, so a
+        # search for "Victoria" must not stop at the one we hold when the
+        # visitor means Victoria, BC. These candidates are not in our DB yet.
+        if q and not tag and skip == 0 and len(results) < GEOCODE_TOP_UP_BELOW:
             geocoded = _forward_geocode(q, count=limit)
-            results = [
-                {
-                    "slug": _generate_slug(g["name"], g.get("country", "")),
-                    "name": g["name"],
-                    "province": g.get("admin1", ""),
-                    "lat": g["lat"],
-                    "lon": g["lon"],
-                    "elevation": g.get("elevation", 0),
-                    "tags": [],
-                    "country": g.get("country", ""),
-                    "source": "geocoded",
-                }
-                for g in geocoded
-            ]
-            source = "geocoded"
+            extra = [
+                c for c in (_geocoded_candidate(g) for g in geocoded)
+                if not _duplicates_any(c, results)
+            ][: max(0, limit - len(results))]
+            if extra:
+                source = "geocoded" if not results else "mixed"
+                results = results + extra
 
         return {"locations": results, "total": len(results), "source": source}
     except HTTPException:

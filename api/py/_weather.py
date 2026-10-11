@@ -482,6 +482,8 @@ def _fetch_open_meteo_extras(lat: float, lon: float, models: list[str] | None = 
     }
     if (offset := _utc_offset(data)) is not None:
         result["utc_offset_seconds"] = offset
+    if zone := _zone(data):
+        result["timezone"] = zone
     return result
 
 
@@ -630,7 +632,15 @@ def _fetch_open_meteo(lat: float, lon: float) -> dict | None:
     result["minutely"] = _parse_minutely(data)
     if (offset := _utc_offset(data)) is not None:
         result["utc_offset_seconds"] = offset
+    if zone := _zone(data):
+        result["timezone"] = zone
     return result
+
+
+def _zone(data: dict) -> str | None:
+    """The IANA ``timezone`` Open-Meteo reports for ``timezone=auto``, if any."""
+    zone = data.get("timezone")
+    return zone if isinstance(zone, str) and zone else None
 
 
 def _create_fallback_weather(lat: float, lon: float, elevation: int) -> dict:
@@ -1040,6 +1050,8 @@ def _attach_comparison(data: dict, lat: float, lon: float, requested: list[str] 
     # resolves it for the same point.
     if data.get("utc_offset_seconds") is None and extras.get("utc_offset_seconds") is not None:
         data["utc_offset_seconds"] = extras["utc_offset_seconds"]
+    if not data.get("timezone") and extras.get("timezone"):
+        data["timezone"] = extras["timezone"]
     return data
 
 

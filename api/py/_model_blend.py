@@ -68,22 +68,43 @@ BLEND_WEIGHTS: dict[str, dict[str, float]] = {
     "west-africa-sahel": dict(_ECMWF_HEAVY),
     "central-africa": dict(_ECMWF_HEAVY),
     "north-africa": dict(_ECMWF_HEAVY),
+    # Rest of the world (owner decision: scope the data infrastructure for the
+    # world, so a traveller or an investor abroad gets a named blend region
+    # too). Same ECMWF-heavy start; each can be tuned via modelBlendConfig.
+    "europe": dict(_ECMWF_HEAVY),
+    "middle-east": dict(_ECMWF_HEAVY),
+    "south-asia": dict(_ECMWF_HEAVY),
+    "southeast-asia": dict(_ECMWF_HEAVY),
+    "east-asia": dict(_ECMWF_HEAVY),
+    "oceania": dict(_ECMWF_HEAVY),
+    "north-america": dict(_ECMWF_HEAVY),
+    "south-america": dict(_ECMWF_HEAVY),
     "default": dict(_ECMWF_HEAVY),
 }
 
 #: Region bounding boxes (lat_min, lat_max, lon_min, lon_max). First match
-#: wins, so the order matters where boxes touch.
+#: wins, so the order matters where boxes touch. The African boxes come first
+#: so every African coordinate keeps the region it had before the world boxes
+#: were added; the world boxes only claim what used to fall to ``default``.
 REGION_BOXES: tuple[tuple[str, tuple[float, float, float, float]], ...] = (
     ("north-africa", (19.0, 38.0, -18.0, 37.0)),
     ("west-africa-sahel", (3.0, 19.0, -18.0, 16.0)),
     ("east-africa", (-12.0, 19.0, 28.0, 52.0)),
     ("central-africa", (-12.0, 12.0, 8.0, 31.0)),
     ("southern-africa", (-35.5, -12.0, 10.0, 52.0)),
+    ("europe", (34.0, 72.0, -32.0, 45.0)),
+    ("middle-east", (12.0, 42.0, 34.0, 63.0)),
+    ("south-asia", (5.0, 38.0, 60.0, 92.0)),
+    ("southeast-asia", (-11.0, 23.5, 92.0, 141.0)),
+    ("east-asia", (18.0, 55.0, 92.0, 150.0)),
+    ("oceania", (-50.0, 0.0, 110.0, 180.0)),
+    ("north-america", (7.0, 84.0, -170.0, -50.0)),
+    ("south-america", (-56.0, 13.0, -82.0, -34.0)),
 )
 
 
 def region_for(lat: float, lon: float) -> str:
-    """Blend-weight region key for a coordinate (``default`` outside Africa)."""
+    """Blend-weight region key for a coordinate (``default`` where no box matches)."""
     for key, (lat_min, lat_max, lon_min, lon_max) in REGION_BOXES:
         if lat_min <= lat <= lat_max and lon_min <= lon <= lon_max:
             return key
@@ -327,6 +348,12 @@ def blend_payload(raw: dict, weights: dict[str, float], *, single: bool = False)
     offset = raw.get("utc_offset_seconds")
     if isinstance(offset, (int, float)) and not isinstance(offset, bool):
         out["utc_offset_seconds"] = int(offset)
+    # The IANA zone names the country for any point on Earth (zone.tab), which
+    # is how a page for a place the platform geography has never stored still
+    # gets a correct country — see src/lib/timezone-country.ts.
+    zone = raw.get("timezone")
+    if isinstance(zone, str) and zone:
+        out["timezone"] = zone
     return out
 
 

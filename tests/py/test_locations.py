@@ -569,8 +569,9 @@ class TestSearchLocations:
     """Phase 0G: search queries placesGeo (regex on name/slug + mukokoSlug)."""
 
     @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode", return_value=[])
     @patch("py._places_resolver.places_geo_collection")
-    async def test_text_search(self, mock_coll):
+    async def test_text_search(self, mock_coll, _mock_geo):
         # placesGeo doc shape — adapter converts to legacy LocationDoc shape.
         # Query now runs inside search_locations_by_name (py._places_resolver),
         # shared with the Shamwari chat tool's search_locations.
@@ -630,6 +631,60 @@ class TestSearchLocations:
         ]
         result = await search_locations(mode="tags")
         assert "tags" in result
+
+
+class TestSearchGeocodedTopUp:
+    """Search hits outside the seeded geography must render (global scope)."""
+
+    LONDON = {
+        "name": "London", "country": "GB", "countryName": "United Kingdom",
+        "admin1": "England", "lat": 51.50853, "lon": -0.12574, "elevation": 25,
+    }
+
+    @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name", return_value=[])
+    async def test_geocoded_candidates_get_spot_slugs(self, _mock_db, mock_geo):
+        mock_geo.return_value = [self.LONDON]
+        result = await search_locations(q="london")
+        assert result["source"] == "geocoded"
+        loc = result["locations"][0]
+        # A `{name}-{country}` slug (london-gb) 404s: nothing backs it. The
+        # spot slug carries its coordinate, so the page always renders.
+        assert loc["slug"].startswith("london--")
+        assert loc["slug"] != "london-gb"
+        assert loc["country"] == "GB"
+        assert loc["province"] == "England"
+
+    @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name")
+    async def test_thin_catalogue_answer_is_topped_up(self, mock_db, mock_geo):
+        mock_db.return_value = [
+            {"slug": "victoria-sc", "name": "Victoria", "lat": -4.62, "lon": 55.45},
+        ]
+        mock_geo.return_value = [
+            {"name": "Victoria", "country": "SC", "admin1": "", "lat": -4.62, "lon": 55.455},
+            {"name": "Victoria", "country": "CA", "admin1": "British Columbia",
+             "lat": 48.43, "lon": -123.37},
+        ]
+        result = await search_locations(q="victoria")
+        slugs = [r["slug"] for r in result["locations"]]
+        assert result["source"] == "mixed"
+        assert slugs[0] == "victoria-sc"  # catalogue match stays first
+        assert len(slugs) == 2  # the Seychelles geocode duplicate is dropped
+        assert result["locations"][1]["country"] == "CA"
+
+    @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name")
+    async def test_full_catalogue_answer_skips_geocoding(self, mock_db, mock_geo):
+        mock_db.return_value = [
+            {"slug": f"harare-{i}", "name": "Harare", "lat": -17.8, "lon": 31.0}
+            for i in range(3)
+        ]
+        await search_locations(q="harare")
+        mock_geo.assert_not_called()
 
 
 class TestSearchLocationsByName:

@@ -47,6 +47,7 @@ import unicodedata
 from typing import Optional
 
 from ._db import places_geo_collection
+from ._geohash import parse_spot_slug
 from ._places_geo import normalize_name
 
 logger = logging.getLogger(__name__)
@@ -281,11 +282,33 @@ def resolve_location_slug(slug: str) -> Optional[dict]:
 
 
 def find_location(slug: str) -> Optional[dict]:
-    """Resolve and adapt in one call — clean slug → legacy LocationDoc dict."""
+    """Resolve and adapt in one call — clean slug → legacy LocationDoc dict.
+
+    A spot slug (``{name}--{geohash}``) that no placesGeo doc is stamped with
+    still resolves: its coordinate is in the slug. This is what lets a place
+    found by search anywhere on Earth (see ``/api/py/search``'s geocoded
+    candidates) work in history, reports and chat, not only on its page.
+    The synthesized location carries no country — the backend does not guess
+    one from a coordinate.
+    """
     doc = resolve_location_slug(slug)
-    if not doc:
+    if doc:
+        return adapt_placesgeo_to_location(doc, slug_hint=slug)
+    spot = parse_spot_slug(slug)
+    if not spot:
         return None
-    return adapt_placesgeo_to_location(doc, slug_hint=slug)
+    return {
+        "slug": slug,
+        "name": spot["name"] or "Selected location",
+        "province": "",
+        "lat": spot["lat"],
+        "lon": spot["lon"],
+        "elevation": 0,
+        "tags": ["city"],
+        "_id": f"geo:{spot['geohash']}",
+        "geo": {"type": "Point", "coordinates": [spot["lon"], spot["lat"]]},
+        "source": "geolocation",
+    }
 
 
 def find_locations_by_tag(tag: str, *, limit: int = 200) -> list[dict]:

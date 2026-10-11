@@ -22,7 +22,7 @@ describe("LocationPage — parallel SSR lookups", () => {
     expect(weather).toBeGreaterThan(-1);
     expect(started).toBeLessThan(weather);
     const group = body.slice(started, body.indexOf("]);", started));
-    expect(group).toContain("loadCountry(countryCode)");
+    expect(group).toContain("loadCountry(storedCountry)");
     expect(group).toContain("getCachedSeason(");
     expect(group).toContain("getCurrentUser()");
   });
@@ -30,6 +30,15 @@ describe("LocationPage — parallel SSR lookups", () => {
   it("awaits the started group instead of a second Promise.all", () => {
     expect(body).toContain("await sideData;");
     expect(body.match(/Promise\.all\(/g)).toHaveLength(1);
+  });
+
+  it("re-reads country and season only when the forecast's zone changed the country", () => {
+    expect(body).toContain(
+      "const countryChanged = countryCode !== storedCountry;",
+    );
+    expect(body).toMatch(
+      /countryChanged\s*\?\s*await getCachedSeason\(countryCode/,
+    );
   });
 
   it("marks the early group handled so a rejection isn't reported as unhandled", () => {

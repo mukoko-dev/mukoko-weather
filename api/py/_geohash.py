@@ -163,3 +163,68 @@ def build_place_slug(name: str, osm_ref: str) -> str:
         return ""
     prefix = slugify_name(name) or "place"
     return f"{prefix}{SMART_SLUG_DELIMITER}{OSM_REF_PREFIX}{canonical}"
+
+
+# ---------------------------------------------------------------------------
+# Decoding — spot slugs resolved on the backend
+# ---------------------------------------------------------------------------
+
+#: Mirrors MAX_GEOHASH_LENGTH in src/lib/geohash.ts.
+MAX_GEOHASH_LENGTH = 12
+
+_GEOHASH_RE = re.compile(f"^[{_BASE32}]{{1,{MAX_GEOHASH_LENGTH}}}$")
+
+
+def decode_geohash(geohash: str) -> Optional[tuple[float, float]]:
+    """Decode a geohash to the centre of its cell, ``(lat, lon)``, else None.
+
+    Mirrors ``decodeGeohash`` in src/lib/geohash.ts (centre of the box). Used
+    so a spot slug (``{name}--{geohash}``) resolves on the backend the same way
+    it renders on the front end: the coordinate is in the slug, so no record
+    has to exist for history, reports or chat to know where it is.
+    """
+    if not geohash:
+        return None
+    gh = geohash.strip().lower()
+    if not _GEOHASH_RE.match(gh):
+        return None
+    lat_min, lat_max = -90.0, 90.0
+    lon_min, lon_max = -180.0, 180.0
+    is_lon = True
+    for ch in gh:
+        value = _BASE32.index(ch)
+        for shift in range(4, -1, -1):
+            bit = (value >> shift) & 1
+            if is_lon:
+                mid = (lon_min + lon_max) / 2
+                if bit:
+                    lon_min = mid
+                else:
+                    lon_max = mid
+            else:
+                mid = (lat_min + lat_max) / 2
+                if bit:
+                    lat_min = mid
+                else:
+                    lat_max = mid
+            is_lon = not is_lon
+    return ((lat_min + lat_max) / 2, (lon_min + lon_max) / 2)
+
+
+def parse_spot_slug(slug: str) -> Optional[dict]:
+    """Parse a spot slug into ``{name, lat, lon, geohash}``, else None.
+
+    Only spots: a place slug (``--osm-{ref}``) carries no coordinate, and an
+    ``osm-`` segment can never be read as a geohash (the alphabet has no
+    ``o``). Splits on the LAST delimiter, like ``parseSmartSlug``.
+    """
+    if not slug or SMART_SLUG_DELIMITER not in slug:
+        return None
+    idx = slug.rfind(SMART_SLUG_DELIMITER)
+    name_slug = slug[:idx]
+    segment = slug[idx + len(SMART_SLUG_DELIMITER):].lower()
+    decoded = decode_geohash(segment)
+    if decoded is None:
+        return None
+    name = " ".join(p[:1].upper() + p[1:] for p in name_slug.split("-") if p)
+    return {"name": name, "lat": decoded[0], "lon": decoded[1], "geohash": segment}

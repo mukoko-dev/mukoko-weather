@@ -54,9 +54,16 @@ MAX_HISTORY = 10
 #: validators accept ``v3.1`` and ``v3.2``; we use ``v3.1`` as the default.
 PLATFORM_SCHEMA_VERSION = "v3.1"
 
-#: Default country code used by the Bundu/Ubuntu sub-document when none is
-#: supplied. Mukoko's home market is Zimbabwe.
+#: Mukoko's home market. Kept for callers that mean Zimbabwe explicitly; it is
+#: NOT a default for a document whose country is unknown — the app is global,
+#: and a London cache row stamped "ZW" is wrong data.
 DEFAULT_COUNTRY_CODE = "ZW"
+
+#: ``bundu.countryCode`` when the caller does not know the country (coordinate
+#: caches, a station registered without one). ``ZZ`` is the ISO 3166-1
+#: user-assigned code CLDR uses for "unknown region": it passes the platform's
+#: ``^[A-Z]{2}$`` CountryCode pattern without claiming a real country.
+UNKNOWN_COUNTRY_CODE = "ZZ"
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +341,7 @@ def provider_configurations_collection():
 
 def stamp_platform_fields(
     doc: dict,
-    country_code: str = DEFAULT_COUNTRY_CODE,
+    country_code: str = UNKNOWN_COUNTRY_CODE,
     province_slug: Optional[str] = None,
 ) -> dict:
     """
@@ -397,7 +404,7 @@ def ttl_upsert(
     fields: dict,
     ttl_seconds: int,
     stamp: bool = False,
-    country_code: str = DEFAULT_COUNTRY_CODE,
+    country_code: str = UNKNOWN_COUNTRY_CODE,
 ) -> None:
     """
     Upsert a TTL cache doc: ``fields`` plus ``fetchedAt`` / ``expiresAt``.
