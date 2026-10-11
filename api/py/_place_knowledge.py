@@ -48,12 +48,12 @@ from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from . import _ag_calendar as ag
 from ._circuit_breaker import soilgrids_breaker
-from ._db import SLUG_RE, get_db, places_db
+from ._db import SLUG_RE, enforce_rate_limit, get_db, places_db
 from ._geohash import encode_geohash
 from ._insights import moon_phase
 from ._normals import NORMALS_PERIOD, NORMALS_SOURCE, get_monthly_normals
@@ -76,7 +76,7 @@ REFRESH_DAYS = {"normals": 365, "soil": 365, "seasons": 30, "agriculture": 180}
 #: When a group could not be built (upstream down), retry sooner.
 RETRY_DAYS = 1
 #: AI-generated seasons can be replaced by verified seed data at any time.
-AI_SEASONS_REFRESH_DAYS = 1
+AI_SEASONS_REFRESH_DAYS = 7
 
 #: How long the "collection exists" answer is trusted.
 COLLECTION_CHECK_TTL_S = 300
@@ -578,24 +578,32 @@ SOIL_MEMO_MAX = 512
 _soil_memo: dict[tuple[float, float], tuple[float, Optional[Soil]]] = {}
 
 
-def fetch_soil(lat: float, lon: float) -> Optional[Soil]:
-    """WRB reference soil group and 0–30 cm texture, memoised per cell.
-    ``None`` on any failure (failures are not memoised)."""
+def fetch_soil_checked(lat: float, lon: float) -> tuple[Optional[Soil], bool]:
+    """(soil, answered), memoised per cell. ``answered`` is True when SoilGrids
+    gave a definitive answer, including "no data here" (an ocean or an
+    unmapped point), so the caller can wait a year before asking again. A
+    failure (timeout, 5xx, 429, open breaker) is ``(None, False)``, is not
+    memoised and is retried tomorrow."""
     key = (round(lat, 2), round(lon, 2))
     hit = _soil_memo.get(key)
     if hit and time.monotonic() - hit[0] < SOIL_MEMO_TTL_S:
-        return hit[1]
-    soil = _fetch_soil_uncached(lat, lon)
-    if soil is not None:
+        return hit[1], True
+    soil, answered = _fetch_soil_uncached(lat, lon)
+    if answered:
         if len(_soil_memo) >= SOIL_MEMO_MAX:
             _soil_memo.clear()
         _soil_memo[key] = (time.monotonic(), soil)
-    return soil
+    return soil, answered
 
 
-def _fetch_soil_uncached(lat: float, lon: float) -> Optional[Soil]:
+def fetch_soil(lat: float, lon: float) -> Optional[Soil]:
+    """Just the soil (``None`` for no data or a failure)."""
+    return fetch_soil_checked(lat, lon)[0]
+
+
+def _fetch_soil_uncached(lat: float, lon: float) -> tuple[Optional[Soil], bool]:
     if not soilgrids_breaker.is_allowed:
-        return None
+        return None, False
     try:
         http = _get_soil_http()
         cls = http.get(f"{SOILGRIDS_URL}/classification/query",
@@ -609,10 +617,21 @@ def _fetch_soil_uncached(lat: float, lon: float) -> Optional[Soil]:
         ])
         props.raise_for_status()
         p = props.json()
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        if 400 <= status < 500 and status != 429:
+            # Our request, or no data for this point: not the service's fault,
+            # so it must not open the breaker (same rule as the archive
+            # backfill). The answer is definitive.
+            soilgrids_breaker.record_success()
+            return None, True
+        soilgrids_breaker.record_failure()
+        logger.info("SoilGrids unavailable: HTTP %s", status)
+        return None, False
     except Exception as exc:  # noqa: BLE001
         soilgrids_breaker.record_failure()
         logger.info("SoilGrids unavailable: %s", type(exc).__name__)
-        return None
+        return None, False
     soilgrids_breaker.record_success()
     soil = Soil(wrbClass=c.get("wrb_class_name") or None)
     probs = c.get("wrb_class_probability") or []
@@ -636,8 +655,8 @@ def _fetch_soil_uncached(lat: float, lon: float) -> Optional[Soil]:
         soil.texture = texture_class(soil.sandPct, soil.siltPct, soil.clayPct)
         soil.depth = "0-30cm"
     if not soil.wrbClass and not soil.texture:
-        return None
-    return soil
+        return None, True
+    return soil, True
 
 
 # ---------------------------------------------------------------------------
@@ -833,12 +852,14 @@ def build_knowledge(place: dict, *, allow_fetch: bool = True,
     due("agriculture", bool(cal))
 
     # Soil (best-effort; only for a real place, never on a cache-only build).
-    soil = fetch_soil(lat, lon) if allow_fetch and place.get("id") else None
+    soil, soil_answered = (
+        fetch_soil_checked(lat, lon) if allow_fetch and place.get("id") else (None, False)
+    )
     if soil:
         provenance.append(_prov("soil", "ISRIC SoilGrids 2.0", "modelled", now, licence="CC-BY-4.0",
                                 attribution="Poggio et al. (2021), SOIL 7, 217–240, doi:10.5194/soil-7-217-2021",
                                 url="https://soilgrids.org"))
-    due("soil", soil is not None)
+    due("soil", soil_answered)
 
     return {
         "_id": place.get("id"),
@@ -861,6 +882,33 @@ def build_knowledge(place: dict, *, allow_fetch: bool = True,
         "refreshAfter": refresh,
         "_utcOffsetSeconds": (normals or {}).get("utcOffsetSeconds"),
     }
+
+
+def merge_previous(doc: dict, previous: Optional[dict]) -> dict:
+    """Keep what the last build knew when this one could not learn it.
+
+    A rebuild that hits a transient failure (SoilGrids down, the archive
+    rate limited) must not erase a group that was built a year ago and is
+    only refreshed yearly. For soil, climate and time zone, a missing new
+    value keeps the stored one, with its provenance entries; the group's
+    ``refreshAfter`` stays the short retry date so the rebuild is tried
+    again soon."""
+    if not previous:
+        return doc
+    kept: list[str] = []
+    for group, prefix in (("soil", "soil"), ("climate", "climate")):
+        if doc.get(group) is None and previous.get(group) is not None:
+            doc[group] = previous[group]
+            kept.append(prefix)
+    if doc.get("timeZone") is None and previous.get("timeZone"):
+        doc["timeZone"] = previous["timeZone"]
+    if kept:
+        have = {p.get("field") for p in doc["provenance"]}
+        doc["provenance"] = doc["provenance"] + [
+            p for p in previous.get("provenance") or []
+            if p.get("field", "").startswith(tuple(kept)) and p.get("field") not in have
+        ]
+    return doc
 
 
 def _storable(doc: dict) -> dict:
@@ -886,7 +934,8 @@ def build_and_store(place: dict) -> Optional[dict]:
     if lock_id and not _acquire_create_lock(lock_id):
         return None
     try:
-        doc = build_knowledge(place, allow_fetch=True)
+        doc = merge_previous(build_knowledge(place, allow_fetch=True),
+                             read_knowledge(place_id) if place_id else None)
         doc["_stored"] = bool(place_id) and store_knowledge(_storable(doc))
         return doc
     finally:
@@ -1151,6 +1200,12 @@ def get_location_profile(
             profile = _to_profile(stored_doc, place, stored=True)
         else:
             doc = build_and_store(place) if allow_build else None
+            if doc is None and stored_doc and allow_build:
+                # Another instance is rebuilding this place right now: serve
+                # what is stored rather than a degraded cache-only build.
+                profile = _to_profile(stored_doc, place, stored=True)
+                profile.current = compute_current(profile, when, None)
+                return apply_consumer_view(profile)
             if doc is None:
                 doc = build_knowledge(place, allow_fetch=False, now=when)
                 if not allow_build:
@@ -1183,11 +1238,33 @@ def get_location_profile(
 PROMPT_BLOCK_MAX_CHARS = 1000
 
 
+def _month_runs(months: list[int]) -> list[list[int]]:
+    """Contiguous runs of months over a circular year, e.g. [3,4,5,10,11,12]
+    → [[3,4,5],[10,11,12]] and [11,12,1,2,3] → [[11,12,1,2,3]]."""
+    present = set(months)
+    if not present:
+        return []
+    if len(present) == 12:
+        return [list(range(1, 13))]
+    starts = [m for m in sorted(present) if ((m - 2) % 12) + 1 not in present]
+    runs = []
+    for start in starts:
+        run, m = [start], start
+        while (m % 12) + 1 in present:
+            m = (m % 12) + 1
+            run.append(m)
+        runs.append(run)
+    return runs
+
+
 def _month_list(months: list[int]) -> str:
-    if not months:
-        return ""
-    ordered = sorted(months, key=lambda m: (m - _season_start_month(months)) % 12)
-    return f"{_MONTHS[ordered[0] - 1]}–{_MONTHS[ordered[-1] - 1]}" if len(ordered) > 1 else _MONTHS[ordered[0] - 1]
+    """"May–Oct", or "Mar–May, Oct–Dec" for a window with a gap: a dry gap
+    between two rainy seasons is never reported as growing season."""
+    parts = []
+    for run in _month_runs(months):
+        a, b = _MONTHS[run[0] - 1], _MONTHS[run[-1] - 1]
+        parts.append(a if len(run) == 1 else f"{a}–{b}")
+    return ", ".join(parts)
 
 
 def _short_date(iso: str) -> str:
@@ -1218,10 +1295,13 @@ def profile_prompt_block(profile: Optional[LocationProfile]) -> str:
         k = profile.climate.koppen
         lines.append(f"- ~Climate zone {k.code} ({k.label})")
     n = cur.normalsThisMonth
-    if n and n.meanHighC is not None:
+    if n and (n.meanHighC is not None or n.meanLowC is not None):
+        temps = ", ".join(
+            f"{label} {round(v)}°C"
+            for label, v in (("high", n.meanHighC), ("low", n.meanLowC)) if v is not None
+        )
         rain = f", rain {round(n.precipMm)} mm on {round(n.rainyDays or 0)} days" if n.precipMm is not None else ""
-        lines.append(f"- {_MONTHS[cur.month - 1]} normals (ERA5 1991–2020): high {round(n.meanHighC)}°C, "
-                     f"low {round(n.meanLowC)}°C{rain}")
+        lines.append(f"- {_MONTHS[cur.month - 1]} normals (ERA5 1991–2020): {temps}{rain}")
     if cur.season:
         mark = "" if cur.season.verified else "~"
         local = f" ({cur.season.localName})" if cur.season.localName and cur.season.localName != cur.season.name else ""
@@ -1281,9 +1361,22 @@ def profile_block_sync(**kwargs) -> str:
         return ""
 
 
+async def _warm_enso() -> None:
+    """Fill the global ENSO cache (12 h, one NOAA file) so every prompt on
+    every instance carries the same ENSO line, not only the instances that
+    happened to serve the profile endpoint. Bounded, and a miss is fine."""
+    try:
+        from ._enso import get_enso  # noqa: PLC0415
+
+        await asyncio.wait_for(get_enso(), timeout=2)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 async def profile_block_for(**kwargs) -> str:
     """Async form of :func:`profile_block_sync`, bounded by
     ``PROMPT_PROFILE_TIMEOUT_S`` and run off the event loop."""
+    await _warm_enso()
     try:
         return await asyncio.wait_for(
             asyncio.to_thread(profile_block_sync, **kwargs), timeout=PROMPT_PROFILE_TIMEOUT_S,
@@ -1302,8 +1395,16 @@ def with_profile(block: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+#: The endpoint can start a build (a 30-year archive request and soil calls),
+#: so it is rate-limited like the other upstream-heavy routes. Reads of a
+#: stored profile are cheap and the client caches for 30 minutes.
+PROFILE_RATE_LIMIT = 120
+PROFILE_RATE_WINDOW_S = 3600
+
+
 @router.get("/api/py/locations/profile", response_model=LocationProfile)
 async def location_profile(
+    request: Request,
     slug: Optional[str] = Query(default=None, max_length=120),
     lat: Optional[float] = Query(default=None, ge=-90, le=90),
     lon: Optional[float] = Query(default=None, ge=-180, le=180),
@@ -1322,12 +1423,8 @@ async def location_profile(
         raise HTTPException(status_code=400, detail="Invalid slug")
     if not slug and (lat is None or lon is None):
         raise HTTPException(status_code=400, detail="Provide slug, or lat and lon")
-    try:
-        from ._enso import get_enso  # noqa: PLC0415 — warms the global ENSO cache
-
-        await asyncio.wait_for(get_enso(), timeout=6)
-    except Exception:  # noqa: BLE001
-        pass
+    enforce_rate_limit(request, "place-profile", PROFILE_RATE_LIMIT, PROFILE_RATE_WINDOW_S, require_ip=False)
+    await _warm_enso()
     profile = await asyncio.to_thread(
         get_location_profile, slug=slug, lat=lat, lon=lon,
         country=country.upper() if country else None, allow_build=True,

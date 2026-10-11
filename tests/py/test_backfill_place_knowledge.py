@@ -34,11 +34,23 @@ def _coll(docs):
 
 def test_candidates_shape_and_filter():
     coll = _coll([_doc(1), {"_id": "bad", "geo": {}}])
-    with patch.object(bf, "places_geo_collection", return_value=coll):
+    with patch.object(bf, "places_geo_collection", return_value=coll), \
+         patch.object(bf, "get_country_id", return_value="zw-parent"):
         places = list(bf.candidates("zw"))
     assert places == [{"id": "pg-1", "collection": "placesGeo", "name": "Town 1", "lat": -17.0,
                        "lon": 32.0, "country": "ZW", "admin1": "Harare", "elevation": 1400}]
-    assert coll.find.call_args.args[0]["isoCode"] == "ZW"
+    # Platform-seeded places have no isoCode: their country is the parent document.
+    assert coll.find.call_args.args[0]["$or"] == [{"isoCode": "ZW"}, {"parentPlaceId": "zw-parent"}]
+
+
+def test_country_comes_from_the_parent_place_when_isocode_is_missing():
+    seeded = _doc(7, country=None)
+    seeded["parentPlaceId"] = "zw-parent"
+    with patch.object(bf, "places_geo_collection", return_value=_coll([seeded])), \
+         patch.object(bf, "get_country_iso", return_value="zw") as iso:
+        places = list(bf.candidates())
+    iso.assert_called_once_with("zw-parent")
+    assert places[0]["country"] == "ZW"
 
 
 def test_plan_builds_nothing():

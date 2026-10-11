@@ -111,16 +111,17 @@ export function peekPlaceProfile(
 export function fetchPlaceProfile(
   slug: string,
   fetcher: typeof fetch = fetch,
-  signal?: AbortSignal,
   coords?: { lat: number; lon: number },
 ): Promise<PlaceProfile> {
   const cached = peekPlaceProfile(slug);
   if (cached) return Promise.resolve(cached);
   const pending = inflight.get(slug);
   if (pending) return pending;
-  const request = fetcher(placeProfileUrl(slug, coords?.lat, coords?.lon), {
-    signal,
-  })
+  // No AbortSignal here: the request is shared, so one caller going away
+  // (a LazySection unmount, React StrictMode's effect cleanup) must not
+  // abort it for the next caller. Callers ignore a result they no longer
+  // want instead.
+  const request = fetcher(placeProfileUrl(slug, coords?.lat, coords?.lon))
     .then(async (res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as PlaceProfile;
@@ -153,16 +154,26 @@ function capitalise(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-function monthRange(months: number[]): string {
-  if (months.length === 0) return "";
-  const set = new Set(months);
-  // First month of the (possibly year-wrapping) run: the one whose
-  // predecessor is not in the set.
-  const first =
-    [...set].find((m) => !set.has(((m + 10) % 12) + 1)) ?? Math.min(...set);
-  const last = ((first - 1 + set.size - 1) % 12) + 1;
+/**
+ * "May–Oct", or "Mar–May, Oct–Dec" when the window has a gap: a dry gap
+ * between two rainy seasons is never reported as growing season. Runs wrap
+ * the year end ("Nov–Mar").
+ */
+export function monthRange(months: number[]): string {
+  const present = new Set(months.filter((m) => m >= 1 && m <= 12));
+  if (present.size === 0) return "";
   const short = (m: number) => MONTHS[m - 1].slice(0, 3);
-  return set.size === 1 ? short(first) : `${short(first)}–${short(last)}`;
+  if (present.size === 12) return `${short(1)}–${short(12)}`;
+  const starts = [...present]
+    .sort((a, b) => a - b)
+    .filter((m) => !present.has(((m + 10) % 12) + 1));
+  return starts
+    .map((start) => {
+      let last = start;
+      while (present.has((last % 12) + 1)) last = (last % 12) + 1;
+      return last === start ? short(start) : `${short(start)}–${short(last)}`;
+    })
+    .join(", ");
 }
 
 /**

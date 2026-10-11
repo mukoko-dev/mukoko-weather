@@ -339,7 +339,9 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
 
     # Stored place knowledge: normals let the model compare the period with
     # what is usual here; seasons and crop stage give it timing (#277).
-    profile_block = with_profile(await profile_block_for(slug=location_slug))
+    profile_block = with_profile(await profile_block_for(
+        slug=location_slug, lat=loc_lat, lon=loc_lon, country=country or None, name=location_name,
+    ))
 
     user_content = f"""Analyze this weather history for {location_name} (elevation: {elevation}m).
 Season: {season['localName']} ({season['name']}) — {season['description']}

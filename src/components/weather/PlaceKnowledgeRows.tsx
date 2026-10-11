@@ -30,13 +30,19 @@ export function PlaceKnowledgeRows({ slug, lat, lon, labelledBy }: Props) {
   );
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchPlaceProfile(slug, fetch, controller.signal, { lat, lon })
-      .then((profile) => setRows(profileRows(profile)))
+    // The request is shared and cached, so it is never aborted; a result for
+    // a place the card has moved on from is simply ignored.
+    let current = true;
+    fetchPlaceProfile(slug, fetch, { lat, lon })
+      .then((profile) => {
+        if (current) setRows(profileRows(profile));
+      })
       .catch(() => {
-        // Optional context: a failed or aborted fetch shows nothing.
+        // Optional context: a failed fetch shows nothing.
       });
-    return () => controller.abort();
+    return () => {
+      current = false;
+    };
   }, [slug, lat, lon]);
 
   if (rows.length === 0) return null;

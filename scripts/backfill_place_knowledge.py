@@ -31,6 +31,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "api"))
 
 from py import _place_knowledge as pk  # noqa: E402
 from py._db import places_geo_collection  # noqa: E402
+from py._places_geo import get_country_id  # noqa: E402
+from py._places_resolver import get_country_iso  # noqa: E402
 
 GEO_TYPES = ["city", "town", "village"]
 
@@ -39,7 +41,12 @@ def candidates(country: Optional[str] = None) -> Iterator[dict]:
     """Place dicts (the builder's input) for every placesGeo place."""
     query: dict = {"geoType": {"$in": GEO_TYPES}}
     if country:
-        query["isoCode"] = country.upper()
+        # `isoCode` is a denormalised convenience that platform-seeded places
+        # may lack; their country is the `parentPlaceId` document, which is
+        # also how the resolver finds it.
+        iso = country.upper()
+        parent = get_country_id(iso)
+        query["$or"] = [{"isoCode": iso}] + ([{"parentPlaceId": parent}] if parent else [])
     for doc in places_geo_collection().find(query):
         coords = (doc.get("geo") or {}).get("coordinates") or []
         if len(coords) < 2:
@@ -51,7 +58,7 @@ def candidates(country: Optional[str] = None) -> Iterator[dict]:
             "name": doc.get("name"),
             "lat": coords[1],
             "lon": coords[0],
-            "country": doc.get("isoCode"),
+            "country": (doc.get("isoCode") or get_country_iso(doc.get("parentPlaceId")) or "").upper() or None,
             "admin1": prov.get("mukokoProvince"),
             "elevation": prov.get("mukokoElevation"),
         }

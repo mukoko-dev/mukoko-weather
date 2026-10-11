@@ -122,6 +122,33 @@ class TestSoil:
             second = pk.fetch_soil(-17.833, 31.051)  # same 0.01 degree cell
         assert first == second and client.get.call_count == 2  # one classification + one properties call
 
+    @staticmethod
+    def _http_error(status):
+        import httpx
+
+        resp = MagicMock()
+        resp.status_code = status
+        return httpx.HTTPStatusError("err", request=MagicMock(), response=resp)
+
+    def test_a_4xx_is_a_definitive_no_data_not_a_breaker_failure(self):
+        client = MagicMock()
+        client.get.return_value.raise_for_status.side_effect = self._http_error(404)
+        with patch.object(pk, "_get_soil_http", return_value=client), \
+             patch.object(pk.soilgrids_breaker, "record_failure") as failed:
+            assert pk.fetch_soil_checked(0.0, 0.0) == (None, True)
+            assert pk.fetch_soil_checked(0.0, 0.0) == (None, True)  # memoised: no second call
+        failed.assert_not_called()
+        assert client.get.call_count == 1
+
+    @pytest.mark.parametrize("status", [429, 500, 503])
+    def test_429_and_5xx_are_failures(self, status):
+        client = MagicMock()
+        client.get.return_value.raise_for_status.side_effect = self._http_error(status)
+        with patch.object(pk, "_get_soil_http", return_value=client), \
+             patch.object(pk.soilgrids_breaker, "record_failure") as failed:
+            assert pk.fetch_soil_checked(5.0, 5.0) == (None, False)
+        failed.assert_called_once()
+
     def test_failures_are_not_memoised(self):
         client = MagicMock()
         client.get.side_effect = RuntimeError("504")
@@ -257,9 +284,10 @@ NORMALS = {"cell": "-17.75_31.00", "period": "1991–2020", "source": "ERA5 via 
            "monthly": HARARE, "timeZone": "Africa/Harare", "utcOffsetSeconds": 7200, "elevation": 1478.0}
 
 
-def _build(place=PLACE, normals=NORMALS, soil=None, seasons=ZW_SEASONS, allow_fetch=True):
+def _build(place=PLACE, normals=NORMALS, soil=None, seasons=ZW_SEASONS, allow_fetch=True, soil_answered=None):
+    answered = (soil is not None) if soil_answered is None else soil_answered
     with patch.object(pk, "get_monthly_normals", return_value=normals) as gm, \
-         patch.object(pk, "fetch_soil", return_value=soil) as fs, \
+         patch.object(pk, "fetch_soil_checked", return_value=(soil, answered)) as fs, \
          patch.object(pk, "get_db", return_value=_seasons_db(seasons)):
         doc = pk.build_knowledge(place, allow_fetch=allow_fetch, now=dt.datetime(2026, 10, 11, tzinfo=dt.timezone.utc))
     return doc, gm, fs
@@ -311,7 +339,15 @@ class TestBuild:
         doc, _, _ = _build(seasons=[dict(d, source="ai", verified=False) for d in ZW_SEASONS])
         assert doc["seasons"]["source"] == "ai"
         start = dt.datetime(2026, 10, 11, tzinfo=dt.timezone.utc)
-        assert doc["refreshAfter"]["seasons"] == start + dt.timedelta(days=1)
+        assert doc["refreshAfter"]["seasons"] == start + dt.timedelta(days=7)
+
+    def test_no_soil_data_waits_a_year_but_a_failure_retries_tomorrow(self):
+        start = dt.datetime(2026, 10, 11, tzinfo=dt.timezone.utc)
+        doc, _, _ = _build(soil=None, soil_answered=True)
+        assert doc["refreshAfter"]["soil"] == start + dt.timedelta(days=365)
+        assert doc["soil"] is None and not any(p["field"] == "soil" for p in doc["provenance"])
+        doc, _, _ = _build(soil=None, soil_answered=False)
+        assert doc["refreshAfter"]["soil"] == start + dt.timedelta(days=1)
 
     def test_cache_only_build_makes_no_upstream_call(self):
         _, gm, fs = _build(allow_fetch=False)
@@ -331,6 +367,43 @@ class TestBuild:
         assert doc["agriculture"]["derived"]["method"] == "derived"
         assert doc["seasons"]["source"] == "derived"
         assert doc["climate"]["koppen"]["code"] == "Cfb"
+
+
+class TestMergePrevious:
+    def test_a_failed_group_keeps_the_stored_one_with_its_provenance(self):
+        previous = _stored_doc()
+        previous["soil"] = {"wrbClass": "Lixisols"}
+        previous["provenance"].append({"field": "soil", "source": "ISRIC SoilGrids 2.0", "method": "modelled"})
+        new, _, _ = _build(soil=None, normals=None)
+        merged = pk.merge_previous(new, previous)
+        assert merged["soil"] == {"wrbClass": "Lixisols"}
+        assert merged["climate"] == previous["climate"]
+        assert any(p["field"] == "soil" for p in merged["provenance"])
+        assert any(p["field"] == "climate.normals" for p in merged["provenance"])
+        assert merged["timeZone"] == "Africa/Harare"
+        # The retry date is still tomorrow, so the rebuild is tried again soon.
+        assert merged["refreshAfter"]["soil"] == dt.datetime(2026, 10, 12, tzinfo=dt.timezone.utc)
+
+    def test_a_fresh_value_wins_and_no_previous_is_fine(self):
+        previous = _stored_doc()
+        new, _, _ = _build(soil=pk.Soil(wrbClass="Acrisols"))
+        merged = pk.merge_previous(new, previous)
+        assert merged["soil"]["wrbClass"] == "Acrisols"
+        assert pk.merge_previous(new, None) is new
+
+    def test_build_and_store_merges_the_stored_document(self):
+        previous = _stored_doc()
+        previous["soil"] = {"wrbClass": "Lixisols"}
+        with patch("py._places_geo._acquire_create_lock", return_value=True), \
+             patch("py._places_geo._release_create_lock"), \
+             patch.object(pk, "read_knowledge", return_value=previous), \
+             patch.object(pk, "get_monthly_normals", return_value=None), \
+             patch.object(pk, "fetch_soil_checked", return_value=(None, False)), \
+             patch.object(pk, "get_db", return_value=_seasons_db(ZW_SEASONS)), \
+             patch.object(pk, "store_knowledge", return_value=True) as store:
+            doc = pk.build_and_store(PLACE)
+        assert doc["soil"] == {"wrbClass": "Lixisols"}
+        assert store.call_args.args[0]["soil"] == {"wrbClass": "Lixisols"}
 
 
 class TestStorage:
@@ -475,6 +548,16 @@ class TestRead:
         assert profile.climate.koppen.code == "Cwb"
         assert any("(nearby place)" in p.field for p in profile.provenance)
 
+    def test_a_held_build_serves_the_stored_stale_document(self):
+        stale = _stored_doc(refreshAfter={"soil": WHEN - dt.timedelta(days=1)})
+        with patch.object(pk, "resolve_place", return_value=PLACE), \
+             patch.object(pk, "read_knowledge", return_value=stale), \
+             patch.object(pk, "build_and_store", return_value=None), \
+             patch.object(pk, "build_knowledge") as degraded:
+            profile = pk.get_location_profile(slug="harare", allow_build=True, when=WHEN)
+        degraded.assert_not_called()  # not replaced by a cache-only build
+        assert profile.stored and profile.soil.wrbClass == "Lixisols"
+
     def test_nothing_to_resolve(self):
         with patch.object(pk, "resolve_place", return_value=None):
             assert pk.get_location_profile(slug="nowhere") is None
@@ -547,6 +630,35 @@ class TestPromptBlock:
         assert "~Likely growing window May–Oct" in block
         assert "No local crop calendar on file" in block
 
+    def test_a_missing_low_does_not_drop_the_whole_block(self):
+        monthly = [dict(m) for m in HARARE]
+        monthly[9]["meanLowC"] = None  # October
+        climate = {"koppen": {"code": "Cwb", "label": "x", "method": "derived"},
+                   "normals": {"monthly": monthly, "period": "1991–2020"}}
+        block = pk.profile_prompt_block(_profile(climate=climate))
+        assert "Oct normals (ERA5 1991–2020): high 26°C" in block
+        assert "low" not in block.split("Oct normals")[1].split("\n")[0]
+        assert "Crop calendar" in block  # the rest of the block survived
+
+    def test_a_two_season_window_is_not_one_range(self):
+        bimodal = {"calendarRef": None, "crops": [], "grazing": None,
+                   "derived": {"months": [3, 4, 5, 10, 11, 12], "basis": "x", "method": "derived"}}
+        block = pk.profile_prompt_block(_profile(agriculture=bimodal))
+        assert "Mar–May, Oct–Dec" in block
+        assert "Mar–Dec" not in block
+
+    @pytest.mark.parametrize("months,expected", [
+        ([5, 6, 7, 8, 9, 10], "May–Oct"),
+        ([11, 12, 1, 2, 3], "Nov–Mar"),
+        ([3, 4, 5, 10, 11, 12], "Mar–May, Oct–Dec"),
+        ([2], "Feb"),
+        ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], "Jan–Dec"),
+        ([12, 1, 6], "Jun, Dec–Jan"),
+        ([], ""),
+    ])
+    def test_month_list(self, months, expected):
+        assert pk._month_list(months) == expected
+
     def test_empty_without_a_profile(self):
         assert pk.profile_prompt_block(None) == ""
 
@@ -560,31 +672,49 @@ class TestPromptBlock:
         with patch.object(pk, "get_location_profile", side_effect=RuntimeError("boom")):
             assert await pk.profile_block_for(slug="harare") == ""
 
+    @pytest.mark.asyncio
+    async def test_async_helper_warms_enso_so_every_prompt_carries_it(self):
+        with patch("py._enso.get_enso") as get_enso, \
+             patch.object(pk, "get_location_profile", return_value=None):
+            get_enso.return_value = None
+            await pk.profile_block_for(slug="harare")
+        get_enso.assert_called_once()
+
 
 @pytest.mark.asyncio
 class TestEndpoint:
+    async def test_is_rate_limited_per_ip(self):
+        req = MagicMock()
+        with patch.object(pk, "enforce_rate_limit", side_effect=HTTPException(status_code=429, detail="slow down")) as limit, \
+             patch.object(pk, "get_location_profile") as glp:
+            with pytest.raises(HTTPException) as exc:
+                await pk.location_profile(slug="harare", lat=None, lon=None, country=None, request=req)
+        assert exc.value.status_code == 429
+        limit.assert_called_once_with(req, "place-profile", 120, 3600, require_ip=False)
+        glp.assert_not_called()  # nothing is built for a limited caller
+
     async def test_needs_a_slug_or_coordinates(self):
         with pytest.raises(HTTPException) as exc:
-            await pk.location_profile(slug=None, lat=1.0, lon=None, country=None)
+            await pk.location_profile(slug=None, lat=1.0, lon=None, country=None, request=MagicMock())
         assert exc.value.status_code == 400
 
     async def test_rejects_a_bad_slug(self):
         with pytest.raises(HTTPException) as exc:
-            await pk.location_profile(slug="Bad Slug!", lat=None, lon=None, country=None)
+            await pk.location_profile(slug="Bad Slug!", lat=None, lon=None, country=None, request=MagicMock())
         assert exc.value.status_code == 400
 
     async def test_404_when_nothing_resolves(self):
         with patch.object(pk, "get_location_profile", return_value=None), \
              patch("py._enso.get_enso", side_effect=RuntimeError("offline")):
             with pytest.raises(HTTPException) as exc:
-                await pk.location_profile(slug="nowhere", lat=None, lon=None, country=None)
+                await pk.location_profile(slug="nowhere", lat=None, lon=None, country=None, request=MagicMock())
         assert exc.value.status_code == 404
 
     async def test_returns_the_profile(self):
         profile = _profile()
         with patch.object(pk, "get_location_profile", return_value=profile) as glp, \
              patch("py._enso.get_enso", side_effect=RuntimeError("offline")):
-            res = await pk.location_profile(slug="harare", lat=None, lon=None, country="zw")
+            res = await pk.location_profile(slug="harare", lat=None, lon=None, country="zw", request=MagicMock())
         assert res.placeId == "pg-harare"
         assert glp.call_args.kwargs["country"] == "ZW"
         assert glp.call_args.kwargs["allow_build"] is True

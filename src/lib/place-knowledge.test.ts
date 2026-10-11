@@ -4,6 +4,7 @@ import fs from "fs";
 import {
   PLACE_PROFILE_TTL_MS,
   fetchPlaceProfile,
+  monthRange,
   peekPlaceProfile,
   placeProfileUrl,
   profileRows,
@@ -61,6 +62,34 @@ describe("placeProfileUrl", () => {
     );
     expect(placeProfileUrl("a b", -17.83123, 31.05)).toBe(
       "/api/py/locations/profile?slug=a+b&lat=-17.8312&lon=31.0500",
+    );
+  });
+});
+
+describe("monthRange", () => {
+  it("renders runs, wrapping the year end and never bridging a gap", () => {
+    expect(monthRange([5, 6, 7, 8, 9, 10])).toBe("May–Oct");
+    expect(monthRange([11, 12, 1, 2, 3])).toBe("Nov–Mar");
+    expect(monthRange([3, 4, 5, 10, 11, 12])).toBe("Mar–May, Oct–Dec");
+    expect(monthRange([2])).toBe("Feb");
+    expect(monthRange([12, 1, 6])).toBe("Jun, Dec–Jan");
+    expect(monthRange([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])).toBe("Jan–Dec");
+    expect(monthRange([])).toBe("");
+    expect(monthRange([0, 13, 4])).toBe("Apr");
+  });
+
+  it("shows a two-season window as two ranges in the row", () => {
+    const rows = profileRows({
+      ...HARARE,
+      agriculture: { derived: { months: [3, 4, 5, 10, 11, 12], basis: "x" } },
+      current: {
+        ...HARARE.current!,
+        cropPhases: [],
+        inDerivedGrowingWindow: false,
+      },
+    });
+    expect(rows.find((r) => r.label === "Growing window")!.value).toBe(
+      "Mar–May, Oct–Dec, now outside it, estimated",
     );
   });
 });
@@ -189,6 +218,15 @@ describe("fetchPlaceProfile", () => {
     expect(peekPlaceProfile("harare")).toEqual(HARARE);
   });
 
+  it("never ties the shared request to one caller's abort signal", async () => {
+    const fetcher = vi.fn().mockResolvedValue(okResponse(HARARE));
+    await fetchPlaceProfile("harare", fetcher, { lat: -17.83, lon: 31.05 });
+    // One argument only: no init object, so no AbortSignal rides on the shared promise.
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/py/locations/profile?slug=harare&lat=-17.8300&lon=31.0500",
+    );
+  });
+
   it("expires after the TTL", async () => {
     vi.useFakeTimers();
     const fetcher = vi.fn().mockResolvedValue(okResponse(HARARE));
@@ -231,10 +269,12 @@ describe("PlaceKnowledgeRows wiring", () => {
     expect(component).not.toMatch(/["'`]#[0-9a-fA-F]{3,8}["'`]/);
   });
 
-  it("is a labelled description list built on InfoRow, aborting on unmount", () => {
+  it("is a labelled description list built on InfoRow, ignoring stale results", () => {
     expect(component).toContain("aria-labelledby={labelledBy}");
     expect(component).toContain("<InfoRow");
-    expect(component).toContain("controller.abort()");
+    expect(component).not.toContain("AbortController");
+    expect(component).toContain("if (current) setRows(");
+    expect(component).toContain("current = false;");
   });
 
   it("sits inside the About card, in an error boundary, keyed by slug", () => {
