@@ -130,3 +130,22 @@ class TestHttpLoggersQuiet:
         for name in QUIET_LOGGERS:
             assert logging.getLogger(name).getEffectiveLevel() >= logging.WARNING
         assert logging.getLogger("httpx").isEnabledFor(logging.INFO) is False
+
+
+class TestCoordinateRounding:
+    def test_rounds_query_style_coordinates(self):
+        out = redact_secrets("GET /api/py/geo?lat=-17.8312345&lon=31.0498765&autoCreate=true")
+        assert "lat=-17.831&" in out and "lon=31.050&" in out
+
+    def test_rounds_json_and_kv_styles(self):
+        assert "lat: 1.235" in redact_secrets("lat: 1.23456")
+        assert '"lon": 31.050' in redact_secrets('{"lon": 31.04987}')
+
+    def test_leaves_short_precision_and_lookalikes(self):
+        assert redact_secrets("lat=-17.83&lon=31.05") == "lat=-17.83&lon=31.05"
+        assert redact_secrets("slat=1.234567") == "slat=1.234567"
+
+    def test_record_factory_rounds(self):
+        rec = logging.LogRecord("x", logging.INFO, "f", 1, "at lat=%s lon=%s", ("-17.123456", "31.654321"), None)
+        from py._logging import _redact_record
+        assert "lat=-17.123 lon=31.654" in _redact_record(rec).getMessage()

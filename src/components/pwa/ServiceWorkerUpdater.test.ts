@@ -130,8 +130,8 @@ describe("next.config.ts — /sw.js is never cached", () => {
     expect(nextConfigSource).toContain("Service-Worker-Allowed");
   });
 
-  it("keeps the existing embed + API header blocks intact", () => {
+  it("keeps the existing embed + public embed CORS blocks intact", () => {
     expect(nextConfigSource).toContain("/embed/:path*");
-    expect(nextConfigSource).toContain("/api/:path*");
+    expect(nextConfigSource).toContain("/api/embed/:path*");
   });
 });

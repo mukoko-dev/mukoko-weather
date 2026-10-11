@@ -1,5 +1,6 @@
 "use client";
 
+import { roundCoord } from "@/lib/location-privacy";
 import type { WeatherLocation } from "./locations";
 import { haversineKm } from "./geo";
 
@@ -72,7 +73,7 @@ export function detectUserLocation({
         );
         try {
           const res = await fetch(
-            `/api/py/geo?lat=${latitude}&lon=${longitude}${autoCreate ? "&autoCreate=true" : ""}`,
+            `/api/py/geo?lat=${roundCoord(latitude)}&lon=${roundCoord(longitude)}${autoCreate ? "&autoCreate=true" : ""}`,
             { signal: controller.signal },
           );
           if (!res.ok) {

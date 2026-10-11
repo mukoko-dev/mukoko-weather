@@ -743,6 +743,16 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 
 **Principle:** A component failure should never crash the app. Only the failing section shows an error. The rest of the page remains fully functional.
 
+### Security headers and CORS
+
+Policy lives as data in `src/lib/security-headers.ts` (framework-agnostic, so the Astro/Workers port reuses the same table); `next.config.ts` only imports it. Pinned by `src/lib/security-headers.test.ts`.
+
+- Every path: `Referrer-Policy: strict-origin-when-cross-origin`, `X-Content-Type-Options: nosniff`, `Permissions-Policy` (`geolocation=(self)`; camera, microphone, payment, usb off). `X-Frame-Options: SAMEORIGIN` everywhere except `/embed/*` and `/display` (frameable by design; `/embed/widget` also sends `frame-ancestors *`).
+- **CSP ships as `Content-Security-Policy-Report-Only`** (page paths only). Violations POST to `/api/csp-report` (logs directive, blocked origin, sanitised page; always 204; stores nothing). Allowlist: self, GA4/gtag, Vercel analytics, MapTiler, Open-Meteo, Tomorrow.io, NASA GIBS, Google Fonts, WorkOS, `blob:` workers, `data:`/`blob:` images.
+- **Enforce plan:** soak report-only a week on production; fix or allowlist every first-party report; replace `'unsafe-inline'` scripts with a nonce; add `frame-ancestors 'self'` (non-embed paths) and `form-action 'self'`; then switch the header name to `Content-Security-Policy`. Do not enforce before the logs are clean.
+- **CORS:** `Access-Control-Allow-Origin: *` only on `/api/embed/*` and `/embed/*`. `/api/py/*` is answered by FastAPI's `CORSMiddleware` (weather.mukoko.com, weatherstations.nyuchi.com, localhost dev). `/api/ai`, `/api/keys`, `/api/db-init` are same-origin only. WU/Ecowitt ingest is hardware, not browsers, so unaffected.
+- **Paused routes:** `/shamwari` returned 200 in production because `shamwari/loading.tsx` flushes a 200 shell before the page's `notFound()` runs. The proxy now rewrites a paused route (`FLAGS.shamwari_chat` false) to the server-rendered 404 path.
+
 ### Observability
 
 `src/lib/observability.ts` provides structured error logging and client-side error reporting.
@@ -1195,6 +1205,8 @@ All AI system prompts, suggested prompt rules, and model configurations are stor
 - No personally identifiable information is collected — only anonymised page views, visitor counts, navigation patterns, and interaction events
 
 **Custom event tracking:** `src/lib/analytics.ts` — centralized utility that fires events to both GA4 and Vercel Analytics via a single `trackEvent(name, properties)` call. Type-safe event names and property shapes. No-ops on server, silently swallows errors so tracking never breaks the app.
+
+**Location privacy (analytics and logs):** `src/lib/location-privacy.ts` coarsens what leaves the browser. Smart-slug spots become `spot--<4-char geohash>`, OSM places become `place`, legacy slugs are unchanged. GA4 `page_view` is sent manually with a sanitised `page_path`/`page_location`/`page_title`/`page_referrer` (`send_page_view: false`; owner step: switch off GA4 Enhanced measurement "Page changes based on browser history events"). Vercel Analytics runs through `beforeSend` (`VercelAnalytics.tsx`). `trackEvent` coarsens `location`/`from`/`to`/`slug`. Client fetches to `/api/py/{geo,weather,airquality,haze,normals}` round `lat`/`lon` to 3 decimals (`roundCoord`, ~110 m), which also keeps raw GPS out of the service-worker cache and Vercel request logs; server cache keys are unchanged (`weather_cache_key` stays the 0.05 degree cell). Log text (TS `redactSecrets`, Python `_logging.py`) rounds `lat`/`lon` values with 4+ decimals to 3, and server logs coarsen `location`. The page URL itself is untouched: it is the shareable identity.
 
 **Tracked events:**
 

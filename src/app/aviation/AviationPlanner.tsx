@@ -1,5 +1,6 @@
 "use client";
 
+import { roundCoord } from "@/lib/location-privacy";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 import { getIcaoForSlug, getAirportByIcao } from "@/lib/icao-codes";
@@ -318,7 +319,9 @@ export function AviationPlanner() {
     const [metarRes, wxRes] = await Promise.allSettled([
       fetch(`/api/py/metar?icao=${icao}`),
       airport
-        ? fetch(`/api/py/weather?lat=${airport.lat}&lon=${airport.lon}`)
+        ? fetch(
+            `/api/py/weather?lat=${roundCoord(airport.lat)}&lon=${roundCoord(airport.lon)}`,
+          )
         : Promise.reject(new Error(`No coordinates for ${icao}`)),
     ]);
 

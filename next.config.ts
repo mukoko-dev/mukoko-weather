@@ -5,6 +5,13 @@ import {
   MISSING_ASSET_SOURCE,
 } from "./src/lib/missing-asset";
 
+import {
+  BASELINE_HEADERS,
+  FRAMEABLE_PATHS,
+  FRAME_HEADER,
+  buildCsp,
+} from "./src/lib/security-headers";
+
 const withSerwist = withSerwistInit({
   swSrc: "src/app/sw.ts",
   swDest: "public/sw.js",
@@ -34,6 +41,28 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      {
+        // Baseline security headers on every response (B05).
+        source: "/:path*",
+        headers: BASELINE_HEADERS,
+      },
+      {
+        // Frame policy: same-origin only, except the embeddable widget/docs
+        // and the kiosk display (their own rules follow).
+        source: `/((?!${FRAMEABLE_PATHS.join("|")}).*)`,
+        headers: [FRAME_HEADER],
+      },
+      {
+        // CSP in REPORT-ONLY mode: nothing is blocked; violations go to
+        // /api/csp-report. Skips static assets and API responses.
+        source: "/((?!_next/|api/).*)",
+        headers: [
+          {
+            key: "Content-Security-Policy-Report-Only",
+            value: buildCsp(),
+          },
+        ],
+      },
       {
         // The service worker script must never be served stale — always
         // revalidate so a new deploy's /sw.js is fetched, letting the
@@ -65,11 +94,16 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // API CORS headers
-        source: "/api/:path*",
+        // CORS (B06). Only the intentionally public embed endpoint is open.
+        // /api/py/* is answered by FastAPI's CORSMiddleware (allowlist:
+        // weather.mukoko.com, weatherstations.nyuchi.com, localhost), and the
+        // auth/key/db-init routes are same-origin only, so they get no
+        // Access-Control-* header here. Hardware ingest (WU/Ecowitt) is not
+        // a browser and needs none.
+        source: "/api/embed/:path*",
         headers: [
           { key: "Access-Control-Allow-Origin", value: "*" },
-          { key: "Access-Control-Allow-Methods", value: "GET, POST, OPTIONS" },
+          { key: "Access-Control-Allow-Methods", value: "GET, OPTIONS" },
           { key: "Access-Control-Allow-Headers", value: "Content-Type" },
         ],
       },
