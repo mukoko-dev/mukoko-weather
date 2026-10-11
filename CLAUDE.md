@@ -326,6 +326,7 @@ mukoko-weather/
 │   │   ├── theme.ts               # Dependency-free resolveTheme (re-exported from store.ts; used by the embed widget + MapLibreMap)
 │   │   ├── store.test.ts          # Theme resolution, ShamwariContext TTL tests, RxDB init
 │   │   ├── rxdb/                  # RxDB local-first store: bridge.ts (Zustand ↔ IndexedDB preferences), replication.ts (sync to /api/py/devices), database/collections/schemas
+│   │   ├── push/                  # Web push (#289), framework-agnostic and injected so it tests in node: client.ts (support/permission state, enablePush/disablePush, VAPID key check, /api/push client), sw-logic.ts (service-worker side: payload → notification with FALLBACK, same-origin safeTarget, click handling, pushsubscriptionchange resubscribe), push.test.ts. src/app/sw.ts only wires these to the push / notificationclick / pushsubscriptionchange events. Nothing in the app sends a push; the Rust rules live in workers/crates/weather-core/src/push.rs
 │   │   ├── suggested-prompts.ts   # Database-driven suggested prompt generation (fetches from /api/py/ai/prompts)
 │   │   ├── suggested-prompts.test.ts
 │   │   ├── locations.ts           # WeatherLocation type, 98 ZW seed locations, search, filtering
