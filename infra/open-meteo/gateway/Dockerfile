@@ -10,5 +10,13 @@ RUN OM_GATEWAY_KEY=build-time-validation-key-0000000000 \
     OM_UPSTREAM=127.0.0.1:8080 \
     caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
+# Run unprivileged. Port 8080 needs no root, and Caddy's state lives under
+# XDG_DATA_HOME / XDG_CONFIG_HOME (/data, /config in this image).
+RUN addgroup -S omgateway \
+    && adduser -S -D -H -G omgateway omgateway \
+    && mkdir -p /data/caddy /config/caddy \
+    && chown -R omgateway:omgateway /data /config
+USER omgateway:omgateway
+
 EXPOSE 8080
 CMD ["/usr/local/bin/start.sh"]

@@ -28,4 +28,9 @@ ENV DATA_DIRECTORY=/app/data \
 
 EXPOSE 8080
 
+# The upstream image already runs as this unprivileged user; stated here so
+# the final user is explicit. On Railway, RAILWAY_RUN_UID=0 is needed only
+# because its volumes mount root-owned (README "Provisioning").
+USER openmeteo:openmeteo
+
 ENTRYPOINT ["/app/entrypoint.sh"]
