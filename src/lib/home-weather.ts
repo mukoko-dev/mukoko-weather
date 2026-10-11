@@ -1,3 +1,4 @@
+import { roundCoord } from "@/lib/location-privacy";
 import type { WeatherData } from "./weather";
 import { fetchWeather } from "./weather";
 
@@ -35,9 +36,12 @@ export async function fetchHomeWeather(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), HOME_WEATHER_TIMEOUT_MS);
   try {
-    const res = await fetch(`/api/py/weather?lat=${lat}&lon=${lon}`, {
-      signal: controller.signal,
-    });
+    const res = await fetch(
+      `/api/py/weather?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`,
+      {
+        signal: controller.signal,
+      },
+    );
     if (res.ok) {
       const data: unknown = await res.json();
       if (isRenderableWeather(data)) {
@@ -77,8 +81,8 @@ export async function fetchModelWeather(
   models: string[],
 ): Promise<{ data: WeatherData; baseline: WeatherData | null }> {
   const params = new URLSearchParams({
-    lat: String(lat),
-    lon: String(lon),
+    lat: String(roundCoord(lat)),
+    lon: String(roundCoord(lon)),
     models: models.filter((m) => m && m !== "best_match").join(","),
   });
   if (model && model !== "best_match") params.set("model", model);
