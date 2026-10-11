@@ -4,7 +4,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { TIMELINE_STEPS } from "@/lib/map-layers";
 
 const source = readFileSync(resolve(__dirname, "MapTimeline.tsx"), "utf-8");
 const css = readFileSync(
@@ -16,8 +15,8 @@ describe("MapTimeline — controls", () => {
   it("has play/pause, earlier and later controls with accessible names", () => {
     expect(source).toContain("Play forecast timeline");
     expect(source).toContain("Pause forecast timeline");
-    expect(source).toContain('aria-label="Earlier forecast time"');
-    expect(source).toContain('aria-label="Later forecast time"');
+    expect(source).toContain('aria-label="Earlier time"');
+    expect(source).toContain('aria-label="Later time"');
   });
 
   it("disables stepping past either end", () => {
@@ -38,8 +37,8 @@ describe("MapTimeline — controls", () => {
 describe("MapTimeline — scrubber", () => {
   it("is a native range input: keyboard operable with aria-valuetext", () => {
     expect(source).toContain('type="range"');
-    expect(source).toContain('aria-label="Forecast time"');
-    expect(source).toContain('aria-valuetext={current?.valueText ?? "Now"}');
+    expect(source).toContain("aria-label={inputLabel}");
+    expect(source).toContain("aria-valuetext={valueText}");
     expect(source).toContain('className="springhare"');
     expect(css).toContain(".springhare::-webkit-slider-thumb");
     expect(css).toContain(".springhare::-moz-range-thumb");
@@ -50,38 +49,40 @@ describe("MapTimeline — scrubber", () => {
     expect(css).toMatch(/\.springhare \{[^}]*h-\[var\(--touch-target-min\)\]/);
   });
 
-  it("tick grid has one column per gap between stops", () => {
-    // grid-cols must be a literal for Tailwind; pin it to TIMELINE_STEPS.
-    expect(source).toContain(
-      `grid-cols-[repeat(${TIMELINE_STEPS - 1},minmax(0,1fr))]`,
-    );
+  it("works for any frame count: one equal flex column per gap, no fixed grid", () => {
+    expect(source).toContain("Array.from({ length: last }");
+    expect(source).toContain('className="relative flex-1"');
+    expect(source).not.toContain("grid-cols-");
   });
 
-  it("marks the current time and labels new local days", () => {
-    expect(source).toContain('{isNow ? "Now" : stop?.day}');
-    expect(source).toContain("stop?.dayStart");
+  it("marks the first stop and, on a forward timeline, each new local day", () => {
+    expect(source).toContain('{ label: "Now", primary: true }');
+    expect(source).toContain("stops[i]?.dayStart");
   });
 
-  it("ticks the final stop too, at the right edge", () => {
-    expect(source).toContain(
-      '<Tick stop={stops?.[last]} index={last} edge="right" />',
-    );
+  it("ticks the final frame too, at the right edge", () => {
+    expect(source).toContain('edge="right"');
+    expect(source).toContain("i === last - 1 && endTick");
   });
 
-  it("drops weekday labels that would collide with Now", () => {
+  it("drops weekday labels that would collide with the first", () => {
     expect(source).toContain("export const MIN_LABEL_GAP_STEPS = 4;");
     expect(source).toContain("index >= MIN_LABEL_GAP_STEPS");
   });
 
-  it("flags an estimated offset in the readout", () => {
-    expect(source).toContain("`≈ ${zoneName} time`");
-    expect(source).toContain(
-      "timelineStops(now, offsetSeconds, zoneName, approximate)",
-    );
+  it("observed loops keep the frames' own labels at the ends, with no zone line", () => {
+    expect(source).toContain("frames[0]?.label");
+    expect(source).toContain("frames[last].label");
+    expect(source).toContain(": null;");
   });
 
-  it("reads every label from timelineStops (place time), never the viewer's clock", () => {
+  it("reads every forward label from frameStops (place time), never the viewer's clock", () => {
+    expect(source).toContain("frameStops(");
     expect(source).not.toMatch(/getHours\(|toLocaleTimeString\(/);
+  });
+
+  it("flags an estimated offset in the readout", () => {
+    expect(source).toContain("`≈ ${zone.zoneName} time`");
   });
 
   it("does not spam the live region while playing", () => {

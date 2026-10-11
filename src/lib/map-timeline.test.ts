@@ -1,9 +1,10 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { fetchPlaceOffset, stopInstantMs, timelineStops } from "./map-timeline";
+import { fetchPlaceOffset, frameInstantMs, frameStops } from "./map-timeline";
 import {
   TIMELINE_STEPS,
   TIMELINE_STEP_HOURS,
-  timelineTimestamp,
+  forecastTimelineFrames,
+  modelTimelineFrames,
 } from "./map-layers";
 
 // Saturday 2026-10-10 07:40 UTC.
@@ -12,23 +13,27 @@ const HARARE = 2 * 3600;
 const SINGAPORE = 8 * 3600;
 const TORONTO = -4 * 3600;
 
-describe("stopInstantMs — matches the tile timestamps", () => {
-  it("step 0 is now; step n is the floored UTC hour + n × 3 h", () => {
-    expect(stopInstantMs(0, NOW)).toBe(NOW.getTime());
-    for (const step of [1, 2, 8, TIMELINE_STEPS - 1]) {
-      const iso = timelineTimestamp(step, NOW);
-      expect(new Date(iso).getTime()).toBe(stopInstantMs(step, NOW));
-    }
+describe("frameInstantMs — read back from the frame's own timestamp", () => {
+  it("'now' is now; a timestamp is that instant", () => {
+    expect(frameInstantMs({ timestamp: "now", label: "Now" }, NOW)).toBe(
+      NOW.getTime(),
+    );
+    const f = forecastTimelineFrames(NOW)[3];
+    expect(frameInstantMs(f, NOW)).toBe(Date.parse(f.timestamp));
   });
 });
 
-describe("timelineStops — labels in the PLACE's wall clock", () => {
-  it("has one stop per timeline step", () => {
-    expect(timelineStops(NOW, HARARE, "Harare")).toHaveLength(TIMELINE_STEPS);
+const rain = (now: Date) => forecastTimelineFrames(now);
+
+describe("frameStops — labels in the PLACE's wall clock", () => {
+  it("has one stop per frame", () => {
+    expect(frameStops(rain(NOW), NOW, HARARE, "Harare")).toHaveLength(
+      TIMELINE_STEPS,
+    );
   });
 
-  it("labels step 0 Now and later steps HH:MM at the place", () => {
-    const stops = timelineStops(NOW, HARARE, "Harare");
+  it("labels the Now frame Now and later frames HH:MM at the place", () => {
+    const stops = frameStops(rain(NOW), NOW, HARARE, "Harare");
     expect(stops[0].time).toBe("Now");
     expect(stops[0].clock).toBe("09:40");
     // 07:00 UTC + 3 h = 10:00 UTC = 12:00 Harare.
@@ -37,12 +42,16 @@ describe("timelineStops — labels in the PLACE's wall clock", () => {
   });
 
   it("gives the same instant different labels in different places", () => {
-    expect(timelineStops(NOW, SINGAPORE, "Singapore")[1].time).toBe("18:00");
-    expect(timelineStops(NOW, TORONTO, "Toronto")[1].time).toBe("06:00");
+    expect(frameStops(rain(NOW), NOW, SINGAPORE, "Singapore")[1].time).toBe(
+      "18:00",
+    );
+    expect(frameStops(rain(NOW), NOW, TORONTO, "Toronto")[1].time).toBe(
+      "06:00",
+    );
   });
 
   it("marks the first stop of each new local day with its weekday", () => {
-    const stops = timelineStops(NOW, HARARE, "Harare");
+    const stops = frameStops(rain(NOW), NOW, HARARE, "Harare");
     const starts = stops.filter((s) => s.dayStart);
     expect(starts.map((s) => s.day)).toEqual(["Sun", "Mon", "Tue"]);
     // Harare midnight Sunday = 22:00 UTC Saturday: step 5 (07 + 15 h).
@@ -52,7 +61,7 @@ describe("timelineStops — labels in the PLACE's wall clock", () => {
   });
 
   it("writes screen-reader text with the zone and how far ahead", () => {
-    const stops = timelineStops(NOW, HARARE, "Harare");
+    const stops = frameStops(rain(NOW), NOW, HARARE, "Harare");
     expect(stops[0].valueText).toBe("Now, Saturday 09:40 Harare time");
     expect(stops[1].valueText).toBe("Saturday 12:00 Harare time, in 3 hours");
     expect(stops[8].valueText).toBe("Sunday 09:00 Harare time, in 1 day");
@@ -60,10 +69,24 @@ describe("timelineStops — labels in the PLACE's wall clock", () => {
   });
 
   it("says so when the offset is only an estimate", () => {
-    const stops = timelineStops(NOW, 0, "Madrid", true);
+    const stops = frameStops(rain(NOW), NOW, 0, "Madrid", true);
     expect(stops[1].valueText).toBe(
       "Saturday 10:00 Madrid time (approximate), in 3 hours",
     );
+  });
+
+  it("works for model frames, which start at a real grid time", () => {
+    const times = [
+      "2026-10-10T06:00Z",
+      "2026-10-10T09:00Z",
+      "2026-10-10T12:00Z",
+    ];
+    const frames = modelTimelineFrames(times, NOW);
+    const stops = frameStops(frames, NOW, HARARE, "Harare");
+    // The 06:00Z step still contains 07:40Z, so it reads Now.
+    expect(frames[0].label).toBe("Now");
+    expect(stops[1].clock).toBe("11:00");
+    expect(stops[1].hoursAhead).toBe(2);
   });
 });
 

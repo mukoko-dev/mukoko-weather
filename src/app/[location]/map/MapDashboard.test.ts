@@ -38,13 +38,13 @@ describe("MapDashboard — close and legend", () => {
     expect(source).toContain("chip.legend.segments");
     expect(source).toContain("{chip.legend.unit}");
     expect(source).toMatch(/Legend, \{chip\.legend\.unit\}/);
+    expect(source).toContain("chip?.legend.note");
   });
 });
 
 describe("MapDashboard — top-right controls", () => {
   it("has a layers toggle, a centre-on-my-location button and a list link", () => {
     expect(source).toContain("Hide map layers");
-    expect(source).toContain("aria-controls={sheetId}");
     expect(source).toContain("Centre the map on my location");
     expect(source).toContain('href="/locations"');
   });
@@ -62,7 +62,7 @@ describe("MapDashboard — layer state", () => {
 
   it("reads the remembered layer without a hydration mismatch", () => {
     expect(source).toContain("useSyncExternalStore");
-    expect(source).toContain("readStoredMapLayer(getStorage())");
+    expect(source).toContain("readStoredMapLayer(getStorage(), chips)");
     expect(source).toContain("writeStoredMapLayer(getStorage(), id)");
   });
 
@@ -80,26 +80,37 @@ describe("MapDashboard — timeline", () => {
   });
 
   it("steps the overlay timestamp through the MapTimeline scrubber", () => {
-    expect(source).toContain("timelineTimestamp(step, clock ?? new Date())");
+    expect(source).toContain("forecastTimelineFrames(now)");
+    expect(source).toContain("frames[step]?.timestamp");
     expect(source).toContain("<MapTimeline");
-    expect(source).toContain("onStepChange={setStep}");
+    expect(source).toContain("onStepChange={setStepChoice}");
   });
 
-  it("labels the timeline in the place's time zone, not the viewer's", () => {
+  it("labels forward timelines in the place's time zone, not the viewer's", () => {
     expect(source).toContain("resolveUtcOffsetSeconds(");
     expect(source).toContain("location.country");
     // Exact from the fixed-offset table, else the API's DST-aware offset;
     // an estimate is flagged as approximate.
     expect(source).toContain("hasFixedUtcOffset(location.country)");
     expect(source).toContain("fetchPlaceOffset(location.lat, location.lon");
-    expect(source).toContain("approximate={offsetApproximate}");
-    expect(source).toContain("offsetSeconds={offsetSeconds}");
+    expect(source).toContain("approximate: offsetApproximate");
     expect(source).not.toMatch(/getHours\(|toLocaleTimeString\(/);
   });
 
-  it("has no clock on the server, so SSR and hydration agree", () => {
+  it("keeps observed satellite loops on their own relative labels", () => {
+    expect(source).toMatch(/gibsLayer\s*\?\s*null/);
     expect(source).toContain(
-      "useSyncExternalStore(subscribeMinute, minuteNow, noClock)",
+      'inputLabel={gibsLayer ? "Observation time" : "Forecast time"}',
+    );
+  });
+
+  it("waits for hydration before showing clock-dependent labels", () => {
+    expect(source).toContain("hydrated ? new Date(clock) : null");
+  });
+
+  it("stops playback when the sheet collapses (its pause button is hidden)", () => {
+    expect(source).toContain(
+      "const isPlaying = playing && timelineOn && sheetOpen;",
     );
   });
 });
@@ -113,34 +124,28 @@ describe("MapDashboard — bottom sheet", () => {
     expect(source).toContain("max-w-xl");
   });
 
-  it("collapses the chips and timeline but always keeps the legend and credit", () => {
+  it("collapses chips, model picker and timeline but always keeps the legend and credits", () => {
     expect(source).toContain("hidden={!sheetOpen}");
-    expect(source).toContain(
-      'aria-label={sheetOpen ? "Collapse map layers" : "Expand map layers"}',
+    expect(source).toMatch(
+      /aria-label=\{\s*sheetOpen \? "Collapse map layers" : "Expand map layers"/,
     );
-    // The attribution sits outside the collapsible body.
+    // The credits sit outside the collapsible body.
     const body = source.indexOf("hidden={!sheetOpen}");
-    expect(source.indexOf("OpenStreetMap", body)).toBeGreaterThan(
-      source.indexOf("</div>", source.indexOf("<MapTimeline")),
+    expect(source.indexOf("<MapCredits", body)).toBeGreaterThan(
+      source.indexOf("<MapTimeline", body),
     );
     expect(source).not.toContain("{sheetOpen && (");
   });
 
   it("caps its height so a landscape phone still sees the map", () => {
     expect(source).toContain("max-h-[calc(100dvh-6rem)]");
-    expect(source).toContain("[@media(max-height:500px)]:mr-auto");
     expect(source).toContain("overflow-y-auto");
-  });
-
-  it("stops playback when the sheet collapses (its pause button is hidden)", () => {
-    expect(source).toContain(
-      "const isPlaying = playing && timelineOn && sheetOpen;",
-    );
+    expect(source).toContain("[@media(max-height:500px)]:mr-auto");
   });
 
   it("isolates the chips and the timeline in their own error boundaries", () => {
     expect(source).toContain('<ChartErrorBoundary name="map layers">');
-    expect(source).toContain('<ChartErrorBoundary name="forecast timeline">');
+    expect(source).toContain('<ChartErrorBoundary name="timeline">');
   });
 
   it("announces layer changes through the Mzizi harness", () => {
@@ -150,12 +155,9 @@ describe("MapDashboard — bottom sheet", () => {
     );
   });
 
-  it("uses one icon size for every control", () => {
+  it("uses one icon size for every control, and keeps top controls clear of the notch", () => {
     expect(source).toContain('const ICON_CLASS = "h-5 w-5";');
     expect(source).not.toMatch(/className="h-5 w-5"/);
-  });
-
-  it("keeps top controls clear of the notch", () => {
     expect(source).toContain("top-[max(1rem,env(safe-area-inset-top))]");
   });
 });
@@ -174,5 +176,37 @@ describe("map loading skeleton", () => {
     expect(loadingSource).toContain("h-[100dvh]");
     expect(loadingSource).not.toContain("HeaderSkeleton");
     expect(loadingSource).not.toContain("BreadcrumbSkeleton");
+  });
+});
+
+describe("MapDashboard — overlay sources and credits", () => {
+  it("credits every source on screen from map-sources (one source of truth)", () => {
+    expect(source).toContain("attributionForLayer(activeLayer, activeModel)");
+    expect(source).toContain("<MapCredits credits={credits}");
+    // Credits sit outside the collapsible body, so they are never hidden.
+    expect(source).toContain(
+      '<MapCredits credits={credits} className="text-center" />',
+    );
+    // No hand-written MapTiler line left behind.
+    expect(source).not.toContain('href="https://www.maptiler.com/"');
+  });
+
+  it("looks up the GIBS frames that exist before animating satellite imagery", () => {
+    expect(source).toContain(
+      "fetchGibsDomains(gibsLayer, new Date(), controller.signal)",
+    );
+    expect(source).toContain("satelliteFrames(gibsLayer, intervals, now)");
+  });
+
+  it("keeps model fields behind their flag and opens the picker on the preference", () => {
+    expect(source).toContain('getFeatureFlag("model_map_layers")');
+    expect(source).toContain("mapModelForPreference(preferredModel)");
+    // Read-only: comparing models on the map never switches the dashboard baseline.
+    expect(source).not.toContain("setSelectedForecastModel");
+    expect(source).toContain("const current = s ?? defaultStep;");
+    expect(source).toContain(
+      "modelGridData?.times.indexOf(frames[step]?.timestamp",
+    );
+    expect(source).toContain("fieldOverlay={fieldOverlay}");
   });
 });

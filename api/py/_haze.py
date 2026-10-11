@@ -49,6 +49,7 @@ from pydantic import BaseModel
 
 from ._circuit_breaker import CircuitOpenError, open_meteo_breaker
 from ._db import stamp_platform_fields, weather_db
+from . import _open_meteo as om
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -58,8 +59,6 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-OPEN_METEO_AQ_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
-OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 AQ_PARAMS: dict[str, Any] = {
     "current": "pm2_5,pm10,dust,aerosol_optical_depth,us_aqi",
     "hourly": "pm2_5,dust,aerosol_optical_depth,us_aqi",
@@ -597,9 +596,14 @@ def analyse(
 # ---------------------------------------------------------------------------
 
 
-async def _http_get_json(url: str, params: Optional[dict] = None, timeout: float = HTTP_TIMEOUT_S) -> Any:
+async def _http_get_json(
+    url: str,
+    params: Optional[dict] = None,
+    timeout: float = HTTP_TIMEOUT_S,
+    headers: Optional[dict] = None,
+) -> Any:
     async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.get(url, params=params)
+        resp = await client.get(url, params=params, headers=headers)
         resp.raise_for_status()
         return resp.json()
 
@@ -612,8 +616,9 @@ async def _fetch_open_meteo(lat: float, lon: float) -> tuple[dict, dict]:
     fc_params = {"latitude": lat, "longitude": lon, **FORECAST_PARAMS}
     # Sequential on purpose: Open-Meteo's free tier answers bursts of parallel
     # requests from one client with 429, and each 429 counts against the breaker.
-    aq = await open_meteo_breaker.execute(lambda: _http_get_json(OPEN_METEO_AQ_URL, aq_params))
-    fc = await open_meteo_breaker.execute(lambda: _http_get_json(OPEN_METEO_FORECAST_URL, fc_params))
+    (aq_url, aq_headers), (fc_url, fc_headers) = om.air_quality(), om.forecast()
+    aq = await open_meteo_breaker.execute(lambda: _http_get_json(aq_url, aq_params, headers=aq_headers))
+    fc = await open_meteo_breaker.execute(lambda: _http_get_json(fc_url, fc_params, headers=fc_headers))
     return aq, fc
 
 

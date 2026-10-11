@@ -1373,6 +1373,11 @@ body {
   /* ── Loading / Skeleton ──────────────────────────────────────────────── */
 
   /* .chameleon — skeleton placeholder (changes/loads, blends with background) */
+  /* Inset stat tile inside a card (label + value), e.g. haze and agriculture. */
+  .meerkat {
+    @apply rounded-[var(--radius-card)] bg-surface-dim p-3;
+  }
+
   .chameleon {
     @apply animate-pulse rounded-[var(--radius-card)]
            border border-surface-dim bg-surface-card shadow-sm;
