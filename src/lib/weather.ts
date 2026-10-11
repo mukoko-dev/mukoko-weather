@@ -20,6 +20,7 @@ import {
   heatIndexC,
   moonPhase,
 } from "./derived-insights";
+import { openMeteoForecastUrl, openMeteoHeaders } from "./open-meteo-endpoint";
 
 export interface CurrentWeather {
   temperature_2m: number;
@@ -409,7 +410,10 @@ export async function fetchWeather(
     params.set("models", requestedModels.join(","));
   }
 
-  const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, {
+  // Public API by default; the self-hosted instance when the server env sets it.
+  const url = openMeteoForecastUrl();
+  const res = await fetch(`${url}?${params}`, {
+    headers: openMeteoHeaders(url),
     next: { revalidate: 900 }, // cache for 15 minutes
     signal: AbortSignal.timeout(10_000), // 10s timeout
   });

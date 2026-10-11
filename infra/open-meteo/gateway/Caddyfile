@@ -1,0 +1,52 @@
+# Authenticated edge for the self-hosted Open-Meteo API.
+#
+# The API service has NO public domain; this gateway is the only way in. It
+# answers only the two endpoints mukoko weather calls, only to callers that
+# send the shared key header, and strips the key before proxying over
+# Railway private networking. start.sh refuses to start without a strong key.
+{
+	admin off
+	auto_https off
+}
+
+:{$PORT:8080} {
+	# Liveness for Railway's healthcheck: no key, no upstream call, no data.
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	# OM_GATEWAY_KEY is the current key; OM_GATEWAY_KEY_NEXT lets a new key go
+	# live before the old one is retired (README "Rotating the key"). Values of
+	# the same header field are OR'ed.
+	@authorised {
+		path /v1/forecast /v1/air-quality
+		method GET HEAD
+		header X-Mukoko-OM-Key {$OM_GATEWAY_KEY}
+		header X-Mukoko-OM-Key {$OM_GATEWAY_KEY_NEXT}
+	}
+
+	handle @authorised {
+		request_header -X-Mukoko-OM-Key
+		reverse_proxy {$OM_UPSTREAM} {
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 30s
+			}
+		}
+	}
+
+	# Everything else: unknown path, wrong method, missing or wrong key.
+	handle {
+		header Cache-Control "no-store"
+		respond "unauthorised" 401
+	}
+
+	log {
+		output stdout
+		# The key header never reaches a log line.
+		format filter {
+			wrap json
+			request>headers>X-Mukoko-Om-Key delete
+		}
+	}
+}

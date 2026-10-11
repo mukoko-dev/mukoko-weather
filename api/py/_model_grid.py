@@ -36,13 +36,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from . import _model_blend as blend
+from . import _open_meteo as om
 from ._aq_grid import build_grid, grid_cell_km
 from ._circuit_breaker import open_meteo_breaker
 from ._db import check_rate_limit, get_client_ip, ttl_find_one, ttl_upsert, weather_db
 
 router = APIRouter()
-
-OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 
 #: The blend members, in the order the map lists them.
 MAP_MODELS: tuple[str, ...] = (
@@ -233,7 +232,8 @@ class RequestRejected(Exception):
 
 def _fetch(points: list[tuple[float, float]], model: str) -> tuple[list[str], list[dict]]:
     try:
-        resp = _get_http().get(OPEN_METEO_FORECAST_URL, params=open_meteo_params(points, model))
+        url, headers = om.forecast()
+        resp = _get_http().get(url, params=open_meteo_params(points, model), headers=headers)
     except httpx.HTTPError as exc:
         raise UpstreamError(type(exc).__name__) from exc
     if resp.status_code == 429 or resp.status_code >= 500:
