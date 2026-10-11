@@ -49,6 +49,7 @@ from ._normals import router as normals_router
 from ._aq_grid import router as aq_grid_router
 from ._sg_air import router as sg_air_router
 from ._enso import router as enso_router
+from ._agriculture import router as agriculture_router
 from ._db import get_db
 
 # ---------------------------------------------------------------------------
@@ -132,6 +133,7 @@ app.include_router(normals_router)
 app.include_router(aq_grid_router)
 app.include_router(sg_air_router)
 app.include_router(enso_router)
+app.include_router(agriculture_router)
 
 
 # ---------------------------------------------------------------------------
