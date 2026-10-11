@@ -264,6 +264,8 @@ mukoko-weather/
 │   │   │   │   ├── VisibilityChart.tsx     # Visibility distance
 │   │   │   │   ├── FeasibilityChart.tsx    # 24h activity feasibility line (mineral-colored, rating-word axis)
 │   │   │   │   └── FeasibilityChart.test.ts
+│   │   │   ├── AgricultureSnapshot.tsx # Agriculture snapshot card (malachite): verdict, spray/plant/harvest/irrigate windows, rain, soil, water balance, GDD, frost/heat, one signed-in AI line, link to /[location]/agriculture
+│   │   │   ├── AgricultureSnapshot.test.ts
 │   │   │   ├── LocationPromptCard.tsx # Home page's single, dismissible "Use my location" card (floats above the mobile nav)
 │   │   │   ├── MyWeatherModal.tsx     # Centralized preferences modal (location, activities, settings)
 │   │   │   ├── SupportBanner.tsx           # Buy Me a Coffee inline support card (BMC brand yellow)
@@ -1344,6 +1346,7 @@ All pages use a **TikTok-style sequential mounting** pattern — only ONE sectio
 - `AtmosphericSummary` → `ChartErrorBoundary` (eager — 7 gauge cards: humidity, cloud, wind, pressure, UV, feels-like, precipitation)
 - `RecentReports` → `LazySection` + `ChartErrorBoundary` + `Suspense`
 - `ActivityInsights` → `LazySection` + `ChartErrorBoundary` + `Suspense`
+- `AgricultureSnapshot` → `LazySection` (`AgricultureSnapshotSkeleton`) + `ChartErrorBoundary` + `Suspense` — its own draggable section (`agriculture`), after `activityInsights` in `DEFAULT_SECTION_ORDER`. Fetches the public `/api/py/agriculture` (with the user's farming activities as `crops`); signed-in users also get one AI line from `/api/ai/agriculture` (`mode: "snapshot"`), anonymous users a sign-in link, signed-in users with no farming activity a "Pick your crops" button (no model call). AI text goes through `src/lib/agriculture-client.ts` (10-min in-memory cache per request body + in-flight dedupe, so LazySection remounts and swipes don't burn the per-IP AI limit). Renders nothing when the data is unavailable
 - `AISummary` → `LazySection` + `ChartErrorBoundary` + `Suspense`
 - `AISummaryChat` → `LazySection` + `ChartErrorBoundary` + `Suspense` (only when AI summary loaded & not fallback)
 - `MapPreview` → `LazySection` + `ChartErrorBoundary` + `Suspense`
@@ -1488,6 +1491,8 @@ _Library tests:_
 - `src/lib/open-meteo-endpoint.test.ts` — TS fallback host: public default, server-only env (ignored in a browser so the key never ships), key header only to the self-hosted host, `fetchWeather` wiring
 - `src/lib/home-weather.test.ts` — `fetchModelWeather`: model/models query, blend default never swaps, fallen-back provider is not treated as the chosen model
 - `src/lib/location-time.test.ts` — location time zone: viewer UTC+8 → Harare (UTC+2) and viewer UTC-5 → Singapore (UTC+8) with the process TZ really set; start hour + labels across hero, feasibility, lane, charts, tips, frost, sun
+- `src/lib/agriculture.test.ts` — agriculture helpers: farming-id list parity with `activities.ts`, URL builder, severity-token status classes, formatters, Python-model field parity
+- `src/lib/agriculture-client.test.ts` — signed-in agriculture AI client: stable body, 10-min in-memory cache per body, in-flight dedupe, empty/HTTP-error rejection, proxy-only URL
 - `src/lib/weather-labels.test.ts` — humidity/pressure/cloud/precipitation/feels-like label helpers
 - `src/lib/locations.test.ts` — location searching, tag filtering, nearest location
 - `src/lib/activities.test.ts` — activity definitions, categories, search, filtering, category styles
@@ -1680,6 +1685,7 @@ Repeated Tailwind chains (3+ uses) are extracted into named component classes in
 | `.dove`          | Muted secondary text                           | `text-sm text-text-tertiary`                                                                                                                         |
 | `.weaver`        | Primary nav link                               | `inline-flex items-center text-base font-medium text-text-secondary hover:...`                                                                       |
 | `.weaver-active` | Active nav link (cobalt + underline)           | active variant of `.weaver`                                                                                                                          |
+| `.meerkat`       | Inset stat tile inside a card (label + value)  | `rounded-card bg-surface-dim p-3` (haze + agriculture tiles)                                                                                         |
 | `.chameleon`     | Skeleton placeholder                           | `animate-pulse rounded-card border border-surface-dim bg-surface-card shadow-sm`                                                                     |
 | `.guineafowl`    | Grouped list card (profile/settings sections)  | `mb-6 overflow-hidden rounded-card border border-border bg-surface-card` (+ `.guineafowl-heading` uppercase label, `.guineafowl-row` full-width row) |
 | `.termite`       | Inline code chip (mono text in a surface nest) | `rounded-badge bg-surface-base px-1.5 py-0.5 font-mono text-base` (was `rounded bg-surface-base ...`)                                                |

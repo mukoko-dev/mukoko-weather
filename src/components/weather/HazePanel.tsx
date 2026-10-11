@@ -154,20 +154,20 @@ export function HazePanel({ lat, lon }: Props) {
       </div>
 
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <div className="rounded-card bg-surface-dim p-3">
+        <div className="meerkat">
           <dt className="dove">Visibility</dt>
           <dd className="text-base font-medium text-text-primary">
             {formatVisibility(data.visibilityKm)}
           </dd>
         </div>
-        <div className="rounded-card bg-surface-dim p-3">
+        <div className="meerkat">
           <dt className="dove">PM2.5</dt>
           <dd className="text-base font-medium text-text-primary">
             {formatMicrograms(data.pm25)}
           </dd>
         </div>
         {showDust && (
-          <div className="rounded-card bg-surface-dim p-3">
+          <div className="meerkat">
             <dt className="dove">Dust</dt>
             <dd className="text-base font-medium text-text-primary">
               {formatMicrograms(data.dust)}
