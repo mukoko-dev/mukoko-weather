@@ -644,7 +644,11 @@ def _fetch_soil_uncached(lat: float, lon: float) -> Optional[Soil]:
 # Storage
 # ---------------------------------------------------------------------------
 
-_collection_state = {"ready": False, "checked": 0.0}
+#: ``checked`` is ``None`` until the first check. It must not default to a
+#: number: ``time.monotonic()`` counts from an arbitrary origin (host uptime
+#: on Linux), so a fresh serverless instance can have a clock under the TTL
+#: and a numeric "never" would read as a recent check.
+_collection_state: dict = {"ready": False, "checked": None}
 
 
 def _collection():
@@ -657,7 +661,8 @@ def collection_ready() -> bool:
     The collection and its validator are created by the owner through the
     api-gateway script. Until then this module never writes."""
     now = time.monotonic()
-    if now - _collection_state["checked"] < COLLECTION_CHECK_TTL_S:
+    checked = _collection_state["checked"]
+    if checked is not None and now - checked < COLLECTION_CHECK_TTL_S:
         return _collection_state["ready"]
     try:
         ready = COLLECTION in places_db().list_collection_names(filter={"name": COLLECTION})

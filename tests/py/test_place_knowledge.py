@@ -368,11 +368,36 @@ class TestStorage:
     def test_collection_check_is_cached(self):
         db = MagicMock()
         db.list_collection_names.return_value = ["placeKnowledge"]
-        pk._collection_state.update(ready=False, checked=0.0)
+        pk._collection_state.update(ready=False, checked=None)
         with patch.object(pk, "places_db", return_value=db):
             assert pk.collection_ready() is True
             assert pk.collection_ready() is True
         assert db.list_collection_names.call_count == 1
+
+    @pytest.mark.parametrize("uptime_s", [0.0, 1.0, 100.0, 299.0])
+    def test_first_check_runs_on_a_freshly_booted_host(self, uptime_s):
+        # time.monotonic() counts from host boot on Linux, so a fresh serverless
+        # instance has a clock below the cache TTL. "Never checked" must still
+        # query the database (this failed on CI runners, and would have treated an
+        # existing collection as missing for the first five minutes of uptime).
+        db = MagicMock()
+        db.list_collection_names.return_value = ["placeKnowledge"]
+        pk._collection_state.update(ready=False, checked=None)
+        with patch.object(pk, "places_db", return_value=db), \
+             patch("py._place_knowledge.time.monotonic", return_value=uptime_s):
+            assert pk.collection_ready() is True
+        assert db.list_collection_names.call_count == 1
+
+    def test_cached_answer_expires_after_the_ttl(self):
+        db = MagicMock()
+        db.list_collection_names.return_value = ["placeKnowledge"]
+        pk._collection_state.update(ready=False, checked=None)
+        clock = iter([1000.0, 1000.0 + pk.COLLECTION_CHECK_TTL_S + 1])
+        with patch.object(pk, "places_db", return_value=db), \
+             patch("py._place_knowledge.time.monotonic", side_effect=lambda: next(clock)):
+            assert pk.collection_ready() is True
+            assert pk.collection_ready() is True
+        assert db.list_collection_names.call_count == 2
 
     def test_staleness(self):
         now = dt.datetime(2026, 10, 11, tzinfo=dt.timezone.utc)
