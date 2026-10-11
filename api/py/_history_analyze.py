@@ -24,6 +24,7 @@ from ._db import (
     filter_known_activities,
 )
 from ._places_resolver import find_location
+from ._place_knowledge import profile_block_for, with_profile
 from ._ai_prompts import get_ai_prompt
 from ._ai_gateway import call_ai, first_text
 from ._wmo import WMO_LABELS
@@ -336,9 +337,13 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
         else ""
     )
 
+    # Stored place knowledge: normals let the model compare the period with
+    # what is usual here; seasons and crop stage give it timing (#277).
+    profile_block = with_profile(await profile_block_for(slug=location_slug))
+
     user_content = f"""Analyze this weather history for {location_name} (elevation: {elevation}m).
 Season: {season['localName']} ({season['name']}) — {season['description']}
-{activities_note}
+{activities_note}{profile_block}
 
 Statistical summary:
 {stats_summary}"""
