@@ -14,6 +14,8 @@ interface Props {
   slug: string;
   lat: number;
   lon: number;
+  /** ISO 3166-1 alpha-2, when the location knows it. */
+  country?: string;
   /** Labels the list for assistive technology (the card's heading id). */
   labelledBy: string;
 }
@@ -24,7 +26,13 @@ interface Props {
  * (#277). Renders nothing while loading and when the profile is unavailable,
  * so the card never shows a gap or an error for optional context.
  */
-export function PlaceKnowledgeRows({ slug, lat, lon, labelledBy }: Props) {
+export function PlaceKnowledgeRows({
+  slug,
+  lat,
+  lon,
+  country,
+  labelledBy,
+}: Props) {
   const [rows, setRows] = useState<ProfileRow[]>(() =>
     profileRows(peekPlaceProfile(slug) ?? null),
   );
@@ -33,7 +41,7 @@ export function PlaceKnowledgeRows({ slug, lat, lon, labelledBy }: Props) {
     // The request is shared and cached, so it is never aborted; a result for
     // a place the card has moved on from is simply ignored.
     let current = true;
-    fetchPlaceProfile(slug, fetch, { lat, lon })
+    fetchPlaceProfile(slug, fetch, { lat, lon, country })
       .then((profile) => {
         if (current) setRows(profileRows(profile));
       })
@@ -43,7 +51,7 @@ export function PlaceKnowledgeRows({ slug, lat, lon, labelledBy }: Props) {
     return () => {
       current = false;
     };
-  }, [slug, lat, lon]);
+  }, [slug, lat, lon, country]);
 
   if (rows.length === 0) return null;
   return (

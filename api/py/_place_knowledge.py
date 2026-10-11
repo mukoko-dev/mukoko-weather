@@ -42,6 +42,7 @@ import asyncio
 import datetime as _dt
 import logging
 import math
+import re
 import threading
 import time
 from typing import Any, Optional
@@ -332,6 +333,12 @@ def derive_koppen(monthly: Optional[list[dict]], lat: float) -> Optional[str]:
         return "Aw"
 
     dry_summer = p_sdry < 40 and p_sdry < p_wwet / 3
+    # Mediterranean (Cs, Ds) climates do not occur inside the tropics, and
+    # near the equator the northern/southern half-year split is arbitrary: a
+    # place like Nairobi (bimodal rains, Jan–Feb under 40 mm in ERA5) would
+    # otherwise read as dry-summer. There, a dry-summer test is not applied.
+    if abs(lat) < ag.TROPICS_LAT:
+        dry_summer = False
     dry_winter = p_wdry < p_swet / 10
     if dry_summer and dry_winter:
         second = "s" if ps < pw else "w"
@@ -988,6 +995,26 @@ def _place_from_location(loc: dict, slug: Optional[str] = None) -> dict:
     }
 
 
+_SLUG_COUNTRY_RE = re.compile(r"-([a-z]{2})$")
+
+
+def country_from_slug(slug: Optional[str]) -> Optional[str]:
+    """The ISO code in a ``{city}-{cc}`` slug (the convention for global and
+    community locations), accepted only when it is a country we know: one with
+    a placesGeo country document or a published crop calendar."""
+    m = _SLUG_COUNTRY_RE.search((slug or "").lower())
+    if not m:
+        return None
+    iso = m.group(1).upper()
+    try:
+        from ._places_geo import get_country_id  # noqa: PLC0415 — import cycle
+
+        known = bool(get_country_id(iso))
+    except Exception:  # noqa: BLE001
+        known = False
+    return iso if known or iso in ag.GEOGLAM_COUNTRY_ISO.values() else None
+
+
 def resolve_place(*, slug: Optional[str], lat: Optional[float], lon: Optional[float],
                   country: Optional[str] = None, admin1: Optional[str] = None,
                   name: Optional[str] = None) -> Optional[dict]:
@@ -1002,7 +1029,7 @@ def resolve_place(*, slug: Optional[str], lat: Optional[float], lon: Optional[fl
             loc = None
         if loc and loc.get("_id"):
             place = _place_from_location(loc, slug)
-            place["country"] = place["country"] or country
+            place["country"] = place["country"] or country or country_from_slug(slug)
             place["admin1"] = place["admin1"] or admin1
             return place
     if lat is None or lon is None:
@@ -1012,9 +1039,11 @@ def resolve_place(*, slug: Optional[str], lat: Optional[float], lon: Optional[fl
     except Exception:  # noqa: BLE001
         near = None
     if near and near.get("_id"):
-        return _place_from_location(near)
+        place = _place_from_location(near)
+        place["country"] = place["country"] or country or country_from_slug(slug)
+        return place
     return {"id": None, "collection": None, "slug": slug, "name": name, "lat": lat, "lon": lon,
-            "country": country, "admin1": admin1, "elevation": None}
+            "country": country or country_from_slug(slug), "admin1": admin1, "elevation": None}
 
 
 def _iso(value: Any) -> Optional[str]:

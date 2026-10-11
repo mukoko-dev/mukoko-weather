@@ -46,6 +46,10 @@ MOSCOW = _monthly([-6.5, -6.7, -1, 6, 13, 17, 19, 17, 11, 5, -1, -5],
                   [52, 41, 35, 37, 49, 80, 85, 82, 67, 64, 51, 51])
 SINGAPORE = _monthly([26.5, 27.1, 27.5, 28, 28.3, 28.3, 27.9, 27.9, 27.6, 27.6, 27, 26.4],
                      [234, 115, 170, 154, 171, 130, 157, 172, 131, 159, 250, 274])
+# ERA5 normals of the Nairobi cell: Jan–Feb under 40 mm made the literal
+# dry-summer test read Csb until it was disabled inside the tropics.
+NAIROBI = _monthly([18.4, 19.3, 19.3, 18.2, 17.5, 16.6, 15.8, 16.1, 17.2, 18.0, 17.2, 17.5],
+                   [39.1, 35.5, 61.8, 121.6, 95.2, 40.8, 15.1, 22.8, 20.0, 54.4, 95.7, 52.6])
 TUNDRA = _monthly([-28, -27, -25, -17, -6, 2, 7, 6, 0, -9, -19, -25],
                   [10, 10, 10, 10, 10, 15, 25, 25, 20, 15, 10, 10])
 
@@ -58,6 +62,7 @@ class TestKoppen:
         (CAIRO, 30.0, "BWh"),
         (MOSCOW, 55.75, "Dfb"),
         (SINGAPORE, 1.35, "Af"),
+        (NAIROBI, -1.29, "Cfb"),
         (TUNDRA, 70.0, "ET"),
     ])
     def test_reference_climates(self, monthly, lat, code):
@@ -572,6 +577,37 @@ class TestRead:
              patch.object(pk, "read_knowledge", return_value=_stored_doc()):
             profile = pk.get_location_profile(slug="harare", when=late)
         assert profile.current.date == "2026-10-12"
+
+
+class TestCountryFromSlug:
+    @pytest.mark.parametrize("slug,iso", [
+        ("nairobi-ke", "KE"), ("bangkok-th", "TH"), ("Lagos-NG", "NG"),
+        ("harare", None), ("a-b-c", None), ("x--ksy4dd7", None), ("", None), (None, None),
+    ])
+    def test_known_suffixes_only(self, slug, iso):
+        with patch("py._places_geo.get_country_id", return_value=None):
+            assert pk.country_from_slug(slug) == iso  # KE, TH and NG have published calendars
+
+    def test_a_country_document_makes_any_suffix_known(self):
+        with patch("py._places_geo.get_country_id", return_value="gb-id"):
+            assert pk.country_from_slug("london-gb") == "GB"
+        with patch("py._places_geo.get_country_id", return_value=None):
+            assert pk.country_from_slug("london-gb") is None
+
+    def test_a_resolved_place_without_a_country_takes_it_from_the_slug(self):
+        loc = {"_id": "pg-n", "slug": "nairobi-ke", "name": "Nairobi", "lat": -1.28, "lon": 36.81,
+               "country": None, "province": "", "elevation": 0}
+        with patch("py._places_resolver.find_location", return_value=loc), \
+             patch("py._places_geo.get_country_id", return_value="ke-id"):
+            place = pk.resolve_place(slug="nairobi-ke", lat=None, lon=None)
+        assert place["country"] == "KE"
+
+    def test_an_explicit_country_wins_and_a_spot_gets_one_too(self):
+        with patch("py._places_resolver.find_location", return_value=None), \
+             patch("py._places_resolver.find_nearest_location", return_value=None), \
+             patch("py._places_geo.get_country_id", return_value="th-id"):
+            assert pk.resolve_place(slug="bangkok-th", lat=13.75, lon=100.5)["country"] == "TH"
+            assert pk.resolve_place(slug="bangkok-th", lat=13.75, lon=100.5, country="XX")["country"] == "XX"
 
 
 class TestResolvePlace:

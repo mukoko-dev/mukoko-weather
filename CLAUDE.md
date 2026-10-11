@@ -823,6 +823,8 @@ Whenever a place is created or first loads, we store what we know about it that 
 
 **A rebuild never erases a group it could not rebuild.** `merge_previous` keeps the stored soil, climate and time zone (with their provenance) when a transient failure (SoilGrids down, the archive rate limited) leaves them empty; their `refreshAfter` stays the 1-day retry. A SoilGrids 4xx (no data for the point) is a definitive answer and never opens `soilgrids_breaker`; 429 and 5xx do. The time zone and model elevation are those of the 0.25° cell centre, and an elevation of 0 on a place record is treated as unknown (the resolver defaults a missing elevation to 0).
 
+**Köppen inside the tropics.** The dry-summer test is not applied within 23.44° of the equator: Mediterranean classes do not occur there and the north/south half-year split is arbitrary (Nairobi, with Jan–Feb ERA5 rain under 40 mm, would otherwise read as Csb instead of Cfb). **Country when the place record has none:** the explicit `country` query parameter (the location page sends it), else the `{city}-{cc}` slug suffix when it is a known country (`country_from_slug`); without a country a place gets derived seasons and no crop calendar.
+
 **Computed at read time, never stored:** the current and next season with its start date, each crop's current phase and next phase date, this month's normals, the moon phase (`_insights.moon_phase`), ENSO (a global value with its own cache in `_enso.py`), day length, its 7-day trend and sunrise/sunset (all in the place's time zone).
 
 **Sources and licences** (checked 2026-10-11):

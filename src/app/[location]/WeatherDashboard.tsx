@@ -811,6 +811,7 @@ export function WeatherDashboard({
                         slug={location.slug}
                         lat={location.lat}
                         lon={location.lon}
+                        country={location.country}
                         labelledBy={`about-${location.slug}`}
                       />
                     </ChartErrorBoundary>

@@ -63,6 +63,11 @@ describe("placeProfileUrl", () => {
     expect(placeProfileUrl("a b", -17.83123, 31.05)).toBe(
       "/api/py/locations/profile?slug=a+b&lat=-17.8312&lon=31.0500",
     );
+    expect(placeProfileUrl("nairobi-ke", -1.28, 36.81, "KE")).toBe(
+      "/api/py/locations/profile?slug=nairobi-ke&lat=-1.2800&lon=36.8100&country=KE",
+    );
+    // Only a two-letter code is sent.
+    expect(placeProfileUrl("x", 1, 2, "Kenya")).not.toContain("country");
   });
 });
 
@@ -284,6 +289,7 @@ describe("PlaceKnowledgeRows wiring", () => {
     expect(about).toContain('<ChartErrorBoundary name="place knowledge">');
     expect(about).toContain("<PlaceKnowledgeRows");
     expect(about).toContain("key={location.slug}");
+    expect(about).toContain("country={location.country}");
     expect(about).toContain("labelledBy={`about-${location.slug}`}");
   });
 

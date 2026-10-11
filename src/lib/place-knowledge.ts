@@ -78,12 +78,14 @@ export function placeProfileUrl(
   slug: string,
   lat?: number,
   lon?: number,
+  country?: string,
 ): string {
   const params = new URLSearchParams({ slug });
   if (typeof lat === "number" && typeof lon === "number") {
     params.set("lat", lat.toFixed(4));
     params.set("lon", lon.toFixed(4));
   }
+  if (country && /^[A-Za-z]{2}$/.test(country)) params.set("country", country);
   return `/api/py/locations/profile?${params.toString()}`;
 }
 
@@ -111,7 +113,7 @@ export function peekPlaceProfile(
 export function fetchPlaceProfile(
   slug: string,
   fetcher: typeof fetch = fetch,
-  coords?: { lat: number; lon: number },
+  coords?: { lat: number; lon: number; country?: string },
 ): Promise<PlaceProfile> {
   const cached = peekPlaceProfile(slug);
   if (cached) return Promise.resolve(cached);
@@ -121,7 +123,9 @@ export function fetchPlaceProfile(
   // (a LazySection unmount, React StrictMode's effect cleanup) must not
   // abort it for the next caller. Callers ignore a result they no longer
   // want instead.
-  const request = fetcher(placeProfileUrl(slug, coords?.lat, coords?.lon))
+  const request = fetcher(
+    placeProfileUrl(slug, coords?.lat, coords?.lon, coords?.country),
+  )
     .then(async (res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as PlaceProfile;
