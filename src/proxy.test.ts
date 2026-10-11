@@ -263,3 +263,24 @@ describe("proxy — unknown location slugs get a server-rendered 404 (#263)", ()
     expect(first).not.toBe("explore");
   });
 });
+
+describe("proxy — paused /shamwari is a real 404 (production drift)", () => {
+  it.each(["/shamwari", "/shamwari/anything"])(
+    "rewrites %s to the not-found path while FLAGS.shamwari_chat is off",
+    async (path) => {
+      const res = await proxy(
+        new NextRequest(`https://weather.mukoko.com${path}`),
+      );
+      expect(res.headers.get("x-middleware-rewrite")).toContain(
+        "/__mukoko/location/not-found",
+      );
+    },
+  );
+
+  it("does not rewrite other routes", async () => {
+    const res = await proxy(
+      new NextRequest("https://weather.mukoko.com/about"),
+    );
+    expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+  });
+});

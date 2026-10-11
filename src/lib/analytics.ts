@@ -14,6 +14,7 @@
  */
 
 import { track } from "@vercel/analytics";
+import { sanitizeEventProps } from "./location-privacy";
 
 // ── Type-safe event definitions ─────────────────────────────────────────────
 
@@ -77,6 +78,8 @@ export function trackEvent<K extends keyof AnalyticsEvents>(
   properties: AnalyticsEvents[K],
 ): void {
   if (typeof window === "undefined") return;
+  // Fine locations (smart-slug spots) never leave the browser: see location-privacy.ts
+  properties = sanitizeEventProps(properties);
 
   // Vercel Analytics — track() is safe to call even if the script hasn't loaded
   try {
