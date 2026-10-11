@@ -57,9 +57,8 @@ export function rasterTileUrl(
   y: number,
   key: string,
 ): string {
-  // Trimmed: the deployed NEXT_PUBLIC_MAPTILER_API_KEY carries a trailing
-  // newline. MapLibre's style URL survives it (the URL parser drops a raw
-  // newline), but encoded as %0A it makes MapTiler answer "Invalid key".
+  // Trimmed here too (MAPTILER_KEY already is): an encoded stray newline
+  // (%0A) makes MapTiler answer "Invalid key".
   return `https://api.maptiler.com/maps/${style}/${z}/${x}/${y}.png?key=${encodeURIComponent(key.trim())}`;
 }
 
@@ -83,7 +82,13 @@ export function staticMapTiles(opts: {
   const { x: cx, y: cy } = worldPixel(lat, lon, z);
   const tx = Math.floor(cx / STATIC_TILE_SIZE);
   const ty = Math.floor(cy / STATIC_TILE_SIZE);
-  const x0 = cx - tx * STATIC_TILE_SIZE < STATIC_TILE_SIZE / 2 ? tx - 1 : tx;
+  // A single-tile world (z0) has no neighbour to start from.
+  const x0 =
+    n === 1
+      ? 0
+      : cx - tx * STATIC_TILE_SIZE < STATIC_TILE_SIZE / 2
+        ? tx - 1
+        : tx;
   const yNear = cy - ty * STATIC_TILE_SIZE < STATIC_TILE_SIZE / 2 ? ty - 1 : ty;
   const y0 = Math.max(0, Math.min(Math.max(0, n - 2), yNear));
 

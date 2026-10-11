@@ -301,3 +301,18 @@ describe("remembered map layer (localStorage)", () => {
     expect(() => writeStoredMapLayer(null, "windSpeed")).not.toThrow();
   });
 });
+
+describe("MapTiler key and style ids (#266)", () => {
+  it("trims the key and builds both style URLs from the shared ids", async () => {
+    const m = await import("./map-layers");
+    expect(m.MAPTILER_KEY).toBe(m.MAPTILER_KEY.trim());
+    expect(m.maptilerStyleId(false)).toBe(m.MAPTILER_STYLE_ID_LIGHT);
+    expect(m.maptilerStyleId(true)).toBe(m.MAPTILER_STYLE_ID_DARK);
+    expect(m.MAPTILER_STYLE_LIGHT).toContain(
+      `/maps/${m.MAPTILER_STYLE_ID_LIGHT}/`,
+    );
+    expect(m.MAPTILER_STYLE_DARK).toContain(
+      `/maps/${m.MAPTILER_STYLE_ID_DARK}/`,
+    );
+  });
+});

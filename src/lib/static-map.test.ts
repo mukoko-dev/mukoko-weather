@@ -96,12 +96,36 @@ describe("staticMapTiles", () => {
     expect(rasterTileUrl("s", 1, 0, 0, " abc ")).toMatch(/key=abc$/);
   });
 
+  it("covers the view with the only tile at zoom 0", () => {
+    const m = staticMapTiles({
+      lat: 0,
+      lon: -170,
+      zoom: 0,
+      style: "s",
+      apiKey: "k",
+    });
+    expect(m.tiles).toHaveLength(1);
+    expect(m.tiles[0].x).toBe(0);
+    expect(m.cx).toBeGreaterThanOrEqual(0);
+    expect(m.cx).toBeLessThan(STATIC_TILE_SIZE);
+  });
+
   it("encodes the key", () => {
     expect(rasterTileUrl("s", 1, 0, 0, "a b")).toContain("key=a%20b");
   });
 });
 
 describe("MapPreview (#266)", () => {
+  it("falls back to text when a tile fails and hides tile seams", () => {
+    const src = readFileSync(
+      resolve(__dirname, "../components/weather/map/MapPreview.tsx"),
+      "utf-8",
+    );
+    expect(src).toContain("onError={() => setFailed(true)}");
+    expect(src).toContain("MAPTILER_KEY && !failed");
+    expect(src).toContain("width={STATIC_TILE_SIZE + 1}");
+  });
+
   const source = readFileSync(
     resolve(__dirname, "../components/weather/map/MapPreview.tsx"),
     "utf-8",
@@ -115,8 +139,15 @@ describe("MapPreview (#266)", () => {
   });
 
   it("follows the theme and keeps the attribution", () => {
-    expect(source).toContain('isDark ? "streets-v2-dark" : "streets-v2"');
-    expect(source).toContain("© MapTiler © OpenStreetMap");
+    // Theme follows OS changes through the shared hook; style ids and the
+    // trimmed key come from map-layers.ts like the interactive map's.
+    expect(source).toContain("useMapIsDark()");
+    expect(source).toContain("maptilerStyleId(isDark)");
+    expect(source).toContain(
+      'import { MAPTILER_KEY, maptilerStyleId } from "@/lib/map-layers";',
+    );
+    expect(source).not.toContain("process.env");
+    expect(source).toContain("© MapTiler © OpenStreetMap contributors");
   });
 
   it("stays a link to the full map with an accessible name", () => {

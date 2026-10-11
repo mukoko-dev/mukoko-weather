@@ -361,8 +361,10 @@ mukoko-weather/
 │   │   ├── use-display-runtime.ts # useWakeLock, usePeriodicReload, usePolledJson (keeps last good data)
 │   │   ├── i18n.ts                # Lightweight i18n (en complete, sn/nd ready)
 │   │   ├── i18n.test.ts
-│   │   ├── map-layers.ts          # Map layer config (Tomorrow.io tile layers, mineral color styles)
+│   │   ├── map-layers.ts          # Map layer config (Tomorrow.io tile layers, mineral color styles), trimmed MAPTILER_KEY + style ids
 │   │   ├── map-layers.test.ts
+│   │   ├── static-map.ts          # Static map preview geometry: 2×2 MapTiler raster tiles + SVG viewBox around a coordinate
+│   │   ├── static-map.test.ts
 │   │   ├── error-retry.ts         # Error retry logic with sessionStorage tracking (max 3 retries)
 │   │   ├── safe-storage.ts        # SSR-safe, never-throwing localStorage/sessionStorage wrappers — use instead of raw Storage access
 │   │   ├── safe-storage.test.ts
@@ -1470,7 +1472,8 @@ _Library tests:_
 - `src/lib/store.test.ts` — theme resolution (light/dark/system), SSR fallback, ShamwariContext set/clear/expiry, savedLocations CRUD/cap/persistence
 - `src/lib/suggested-prompts.test.ts` — suggested prompt generation, weather condition matching, max 3 cap
 - `src/lib/rxdb/bridge.test.ts` — RxDB bridge: device ID, legacy localStorage migration, preference hydration, writes, retry, reset
-- `src/lib/map-layers.test.ts` — map layer config, default layer, getMapLayerById
+- `src/lib/map-layers.test.ts` — map layer config, default layer, getMapLayerById, trimmed MapTiler key + shared style ids
+- `src/lib/static-map.test.ts` — static preview tile geometry (slippy-map indices, coverage, antimeridian wrap, z0, key trimming) + MapPreview structure
 - `src/lib/utils.test.ts` — Tailwind class merging (cn utility), getScrollBehavior reduced-motion detection
 - `src/lib/i18n.test.ts` — translations, formatting, interpolation
 - `src/lib/geohash.test.ts` — geohash encode/decode against published reference vectors, determinism, precision/error bounds, neighbours (interior, pole, antimeridian), case-insensitivity

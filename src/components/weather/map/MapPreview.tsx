@@ -1,12 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import type { WeatherLocation } from "@/lib/locations";
-import { useAppStore } from "@/lib/store";
-import { resolveTheme } from "@/lib/theme";
+import { MAPTILER_KEY, maptilerStyleId } from "@/lib/map-layers";
 import { staticMapTiles, STATIC_TILE_SIZE } from "@/lib/static-map";
-
-const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
+import { useMapIsDark } from "./use-map-style";
 
 /** Same framing as the old interactive preview. */
 const PREVIEW_ZOOM = 10;
@@ -22,17 +21,20 @@ interface MapPreviewProps {
  * library, worker, style, sprites or glyphs (#266).
  */
 export function MapPreview({ location }: MapPreviewProps) {
-  const theme = useAppStore((s) => s.theme);
-  const isDark = resolveTheme(theme) === "dark";
-  const map = MAPTILER_KEY
-    ? staticMapTiles({
-        lat: location.lat,
-        lon: location.lon,
-        zoom: PREVIEW_ZOOM,
-        style: isDark ? "streets-v2-dark" : "streets-v2",
-        apiKey: MAPTILER_KEY,
-      })
-    : null;
+  const isDark = useMapIsDark();
+  // A tile that fails (bad key, quota, offline) swaps the picture for the
+  // text fallback rather than leaving a bare square with a dot.
+  const [failed, setFailed] = useState(false);
+  const map =
+    MAPTILER_KEY && !failed
+      ? staticMapTiles({
+          lat: location.lat,
+          lon: location.lon,
+          zoom: PREVIEW_ZOOM,
+          style: maptilerStyleId(isDark),
+          apiKey: MAPTILER_KEY,
+        })
+      : null;
 
   return (
     <section aria-labelledby="map-preview-heading">
@@ -67,9 +69,12 @@ export function MapPreview({ location }: MapPreviewProps) {
                   href={t.href}
                   x={t.x}
                   y={t.y}
-                  width={STATIC_TILE_SIZE}
-                  height={STATIC_TILE_SIZE}
+                  // One extra pixel overlaps the neighbour, hiding the hairline
+                  // seam that anti-aliasing leaves at fractional scales.
+                  width={STATIC_TILE_SIZE + 1}
+                  height={STATIC_TILE_SIZE + 1}
                   preserveAspectRatio="none"
+                  onError={() => setFailed(true)}
                 />
               ))}
               {/* Location marker, coloured from the primary token. */}
@@ -93,7 +98,7 @@ export function MapPreview({ location }: MapPreviewProps) {
           />
           {map && (
             <span className="absolute bottom-1 right-2 text-xs text-text-secondary">
-              © MapTiler © OpenStreetMap
+              © MapTiler © OpenStreetMap contributors
             </span>
           )}
         </Link>
