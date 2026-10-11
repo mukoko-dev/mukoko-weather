@@ -132,6 +132,8 @@ which returns a plain 404. Without it the request would fall through to the
 `[location]` page and get a 200 "Location not found".
 
 Climate normals (1991–2020, ERA5 via Open-Meteo) are served at `GET /api/py/normals`, with one cached table per 0.25° grid cell in `weather.climate_normals`.
+**Map overlays** — tile layers from Tomorrow.io (`/api/py/map-tiles`) and NASA GIBS (satellite true colour and IMERG rain, keyless, animated); `GET /api/py/model-grid?lat&lon&model` serves one global model's 72 h temperature / rain / wind grid for the per-model map layers (behind the `model_map_layers` flag). Credits for every layer come from `src/lib/map-sources.ts`.
+
 **Air quality map** — `GET /api/py/airquality/grid` returns current US AQI on a 7×7 grid (±40 km) from one batched Open-Meteo request, cached 30 min; the `AirQualityMapCard` paints it over a non-interactive MapLibre map.
 `GET /api/py/enso` returns the latest El Niño / La Niña phase from NOAA CPC's Oceanic Niño Index (12 h in-memory cache; `available: false` when NOAA is unreachable).
 

@@ -1,11 +1,23 @@
 /**
- * Map layer configuration for Tomorrow.io weather tile overlays.
- * Each layer maps to a Tomorrow.io tile API layer name and has
- * mineral-color styles following the CATEGORY_STYLES pattern.
+ * Map layer configuration: Tomorrow.io tile overlays, NASA GIBS satellite
+ * layers, the AQ grid and (behind a flag) per-model forecast fields.
+ * Each Tomorrow.io layer maps to a tile API layer name and has
+ * mineral-color styles following the CATEGORY_STYLES pattern. Where each
+ * layer's data comes from and the credit it needs live in map-sources.ts.
  *
  * Base map tiles are served directly from MapTiler CDN (no proxy):
  * MAPTILER_STYLE_LIGHT / MAPTILER_STYLE_DARK
  */
+
+import {
+  attributionHtml,
+  buildGibsSource,
+  getGibsLayer,
+  isGibsLayer,
+  isModelLayer,
+  overlayAttribution,
+  satelliteFrames,
+} from "./map-sources";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
 
@@ -152,13 +164,30 @@ export function weatherOverlayTileUrl(
  * (via overzoom) at high map zooms instead of silently disappearing.
  */
 export function buildWeatherOverlaySource(layerId: string, timestamp?: string) {
+  const gibs = getGibsLayer(layerId);
+  if (gibs) {
+    // NASA GIBS: keyless public tiles straight from NASA (CORS-enabled), so no
+    // proxy and no quota. `timestamp` is the GIBS time of the frame; "now" or
+    // a missing value falls back to the newest frame by fixed latency.
+    const time =
+      timestamp && timestamp !== "now"
+        ? timestamp
+        : satelliteFrames(gibs, null, new Date()).at(-1)!.time;
+    return buildGibsSource(gibs, time);
+  }
   return {
     type: "raster" as const,
     tiles: [weatherOverlayTileUrl(layerId, timestamp)],
     tileSize: 256,
     minzoom: WEATHER_OVERLAY_MIN_ZOOM,
     maxzoom: WEATHER_OVERLAY_MAX_ZOOM,
+    attribution: attributionHtml(overlayAttribution(layerId)),
   };
+}
+
+/** Raster opacity for a tile overlay: GIBS layers carry their own, Tomorrow.io 0.6. */
+export function weatherOverlayOpacity(layerId: string): number {
+  return getGibsLayer(layerId)?.opacity ?? 0.6;
 }
 
 /**
@@ -167,6 +196,9 @@ export function buildWeatherOverlaySource(layerId: string, timestamp?: string) {
  * one clearing the other.
  */
 export const AQI_OVERLAY_ID = "aqi-overlay";
+
+/** Source/layer id for the per-model forecast field (model chips). */
+export const MODEL_OVERLAY_ID = "model-overlay";
 
 /* ------------------------------------------------------------------------ *
  * Full-screen map: chips, legends, timeline
@@ -180,12 +212,22 @@ export interface LegendSegment {
   className: string;
   /** Value where this segment starts (the first label reads "0" or "Now"-style text). */
   label: string;
+  /**
+   * For layers we paint ourselves (model fields): the CSS custom property the
+   * map resolves for this band (MapLibre paint cannot read var()), and the
+   * value the band starts at. Must name the same colour as `className`.
+   */
+  token?: string;
+  from?: number;
 }
 
 export interface LayerLegend {
   /** Unit shown next to the scale title, e.g. "mm/h". */
   unit: string;
+  /** Empty for imagery with no value scale (true-colour satellite). */
   segments: LegendSegment[];
+  /** One line under the scale, e.g. how old the imagery is. */
+  note?: string;
 }
 
 /** A labelled chip in the bottom sheet. */
@@ -209,8 +251,66 @@ export const TIMELINE_STEP_HOURS = 3;
 /** Stops from Now (0) through +72h inclusive: 0, 3, …, 72. */
 export const TIMELINE_STEPS = 25;
 
+/**
+ * Whether the timeline is offered: Tomorrow.io rain (forecast), the GIBS
+ * satellite layers (an observed loop of past frames) and the model fields
+ * (the chosen model's forecast playing forward).
+ */
 export function layerSupportsTimeline(layerId: string): boolean {
-  return TIMELINE_LAYER_IDS.includes(layerId);
+  return (
+    TIMELINE_LAYER_IDS.includes(layerId) ||
+    isGibsLayer(layerId) ||
+    isModelLayer(layerId)
+  );
+}
+
+/** One stop on the map timeline. `timestamp` is what the layer is drawn for. */
+export interface TimelineFrame {
+  timestamp: string;
+  label: string;
+}
+
+/** Tomorrow.io forecast stops: Now, +3h … +3d (TIMELINE_STEPS). */
+export function forecastTimelineFrames(now: Date): TimelineFrame[] {
+  return Array.from({ length: TIMELINE_STEPS }, (_, step) => ({
+    timestamp: timelineTimestamp(step, now),
+    label: timelineLabel(step),
+  }));
+}
+
+/**
+ * Model-field stops from the grid's 3-hourly times (`/api/py/model-grid`).
+ * The first time is the current hour, so labels read Now, +3h, … like the
+ * Tomorrow.io timeline.
+ */
+export function modelTimelineFrames(times: readonly string[]): TimelineFrame[] {
+  return times.map((timestamp, step) => ({
+    timestamp,
+    label: timelineLabel(step),
+  }));
+}
+
+/** Frame the timeline opens on: the newest image for observed loops, else Now. */
+export function timelineDefaultIndex(
+  layerId: string,
+  frames: readonly TimelineFrame[],
+): number {
+  if (frames.length === 0) return 0;
+  return isGibsLayer(layerId) ? frames.length - 1 : 0;
+}
+
+/** Up to `count` evenly spaced labels for under the slider (first and last included). */
+export function timelineAxisLabels(
+  frames: readonly TimelineFrame[],
+  count = 4,
+): string[] {
+  if (frames.length === 0) return [];
+  if (frames.length <= count) return frames.map((f) => f.label);
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    out.push(frames[Math.round((i * (frames.length - 1)) / (count - 1))].label);
+  }
+  return out;
 }
 
 /**
@@ -309,10 +409,186 @@ export const MAP_CHIPS: readonly MapChip[] = [
       ],
     },
   },
+  {
+    id: "satellite",
+    label: "Satellite",
+    legend: {
+      unit: "true colour",
+      segments: [],
+      note: "NOAA-20 VIIRS, one pass a day",
+    },
+  },
+  {
+    id: "satelliteRain",
+    label: "Rain (satellite)",
+    legend: {
+      unit: "mm/h",
+      segments: [],
+      note: "NASA IMERG, about 4–6 hours behind",
+    },
+  },
 ];
 
+/**
+ * Per-model forecast fields (one blend member at a time, see MAP_MODELS).
+ * Painted by MapLibreMap from /api/py/model-grid cells; `token`/`from` drive
+ * the fill colour. Kept out of MAP_CHIPS: the layer sits behind the
+ * `model_map_layers` flag until the owner settles Open-Meteo's commercial
+ * terms (the free API is non-commercial).
+ */
+export const MODEL_CHIPS: readonly MapChip[] = [
+  {
+    id: "modelTemperature",
+    label: "Model temp",
+    legend: {
+      unit: "°C",
+      segments: [
+        {
+          className: "bg-mineral-cobalt",
+          token: "--color-mineral-cobalt",
+          from: -Infinity,
+          label: "<10",
+        },
+        {
+          className: "bg-mineral-sodalite",
+          token: "--color-mineral-sodalite",
+          from: 10,
+          label: "10",
+        },
+        {
+          className: "bg-mineral-malachite",
+          token: "--color-mineral-malachite",
+          from: 15,
+          label: "15",
+        },
+        {
+          className: "bg-mineral-gold",
+          token: "--color-mineral-gold",
+          from: 22,
+          label: "22",
+        },
+        {
+          className: "bg-mineral-copper",
+          token: "--color-mineral-copper",
+          from: 30,
+          label: "30",
+        },
+        {
+          className: "bg-mineral-terracotta",
+          token: "--color-mineral-terracotta",
+          from: 38,
+          label: "38+",
+        },
+      ],
+    },
+  },
+  {
+    id: "modelPrecipitation",
+    label: "Model rain",
+    legend: {
+      unit: "mm/h",
+      segments: [
+        {
+          className: "bg-mineral-cobalt",
+          token: "--color-mineral-cobalt",
+          from: 0.1,
+          label: "0.1",
+        },
+        {
+          className: "bg-mineral-sodalite",
+          token: "--color-mineral-sodalite",
+          from: 1,
+          label: "1",
+        },
+        {
+          className: "bg-mineral-tanzanite",
+          token: "--color-mineral-tanzanite",
+          from: 4,
+          label: "4",
+        },
+        {
+          className: "bg-mineral-terracotta",
+          token: "--color-mineral-terracotta",
+          from: 10,
+          label: "10+",
+        },
+      ],
+      note: "Below 0.1 mm/h is left clear",
+    },
+  },
+  {
+    id: "modelWind",
+    label: "Model wind",
+    legend: {
+      unit: "km/h",
+      segments: [
+        {
+          className: "bg-mineral-cobalt",
+          token: "--color-mineral-cobalt",
+          from: -Infinity,
+          label: "0",
+        },
+        {
+          className: "bg-mineral-malachite",
+          token: "--color-mineral-malachite",
+          from: 10,
+          label: "10",
+        },
+        {
+          className: "bg-mineral-gold",
+          token: "--color-mineral-gold",
+          from: 25,
+          label: "25",
+        },
+        {
+          className: "bg-mineral-copper",
+          token: "--color-mineral-copper",
+          from: 40,
+          label: "40",
+        },
+        {
+          className: "bg-mineral-terracotta",
+          token: "--color-mineral-terracotta",
+          from: 60,
+          label: "60+",
+        },
+      ],
+    },
+  },
+];
+
+/** Every chip, including the flagged model chips (legend lookup, storage). */
+const ALL_CHIPS: readonly MapChip[] = [...MAP_CHIPS, ...MODEL_CHIPS];
+
+/** The chips to offer: the model-field chips only when their flag is on. */
+export function mapChipsFor(opts: {
+  modelLayers: boolean;
+}): readonly MapChip[] {
+  return opts.modelLayers ? ALL_CHIPS : MAP_CHIPS;
+}
+
+/**
+ * Index of the legend band a value falls in (segments sorted by `from`), or
+ * -1 for a value below the first band, a null value or a legend without
+ * numeric bands. Pure; drives the model-field fill colour.
+ */
+export function legendBandIndex(
+  legend: LayerLegend,
+  value: number | null | undefined,
+): number {
+  if (value === null || value === undefined || !Number.isFinite(value))
+    return -1;
+  let index = -1;
+  legend.segments.forEach((seg, i) => {
+    if (seg.from !== undefined && value >= seg.from) index = i;
+  });
+  return index;
+}
+
+export { isModelLayer };
+
 export function getMapChip(id: string): MapChip | undefined {
-  return MAP_CHIPS.find((c) => c.id === id);
+  return ALL_CHIPS.find((c) => c.id === id);
 }
 
 /** localStorage key for the last chosen layer. */
@@ -320,15 +596,17 @@ export const MAP_LAYER_STORAGE_KEY = "mukoko-map-layer";
 
 /**
  * Reads the remembered layer. Returns null for a missing, unknown or
- * unreadable value (private windows and blocked storage throw). Callers fall
- * back to DEFAULT_LAYER.
+ * unreadable value (private windows and blocked storage throw), or for a layer
+ * that is not in `chips` (e.g. a model chip whose flag has since been turned
+ * off). Callers fall back to DEFAULT_LAYER.
  */
 export function readStoredMapLayer(
   storage: Pick<Storage, "getItem"> | null | undefined,
+  chips: readonly MapChip[] = MAP_CHIPS,
 ): string | null {
   try {
     const value = storage?.getItem(MAP_LAYER_STORAGE_KEY);
-    return value && getMapChip(value) ? value : null;
+    return value && chips.some((c) => c.id === value) ? value : null;
   } catch {
     return null;
   }
