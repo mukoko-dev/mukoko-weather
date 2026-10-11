@@ -13,10 +13,10 @@ Metal, Amsterdam** (`europe-west4-drams3a`), so both services are pinned to it.
 
 The instance serves exactly what the app sends to Open-Meteo for forecasts:
 
-| Endpoint          | Used by                                                                                                                                          |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/v1/forecast`    | `/api/py/weather` (blend, single model, `best_match`, nowcast, model comparison), `/api/py/haze`, `/api/py/status`, the TS direct-fetch fallback |
-| `/v1/air-quality` | `/api/py/airquality`, `/api/py/airquality/grid`, `/api/py/haze` (CAMS)                                                                           |
+| Endpoint          | Used by                                                                                                                                                                                            |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/v1/forecast`    | `/api/py/weather` (blend, single model, `best_match`, nowcast, model comparison), `/api/py/model-grid` (per-model map layer, #272), `/api/py/haze`, `/api/py/status`, the TS direct-fetch fallback |
+| `/v1/air-quality` | `/api/py/airquality`, `/api/py/airquality/grid`, `/api/py/haze` (CAMS)                                                                                                                             |
 
 Out of scope:
 
