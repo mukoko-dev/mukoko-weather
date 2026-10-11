@@ -111,6 +111,7 @@ def _no_place_knowledge_side_effects(monkeypatch):
 
     monkeypatch.setattr(pk, "_get_soil_http", _soil_unavailable)
     monkeypatch.setattr(pk, "schedule_knowledge_build", lambda place: False)
+    monkeypatch.setattr(pk, "_warm_enso_in_background", lambda: None)
     monkeypatch.setitem(pk._collection_state, "ready", False)
     monkeypatch.setitem(pk._collection_state, "checked", float("inf"))
 

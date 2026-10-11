@@ -1073,6 +1073,36 @@ def _iso(value: Any) -> Optional[str]:
     return value if isinstance(value, str) else None
 
 
+_enso_warm = {"at": 0.0, "running": False}
+_enso_warm_lock = threading.Lock()
+ENSO_WARM_MIN_INTERVAL_S = 300.0
+
+
+def _warm_enso_in_background() -> None:
+    """Fill the global ENSO cache without making the caller wait: a profile
+    read that finds it cold (the agriculture endpoints never warm it) starts
+    one fetch on a daemon thread, at most once every 5 minutes, so the next
+    read carries ENSO."""
+    now = time.monotonic()
+    with _enso_warm_lock:
+        if _enso_warm["running"] or (_enso_warm["at"] and now - _enso_warm["at"] < ENSO_WARM_MIN_INTERVAL_S):
+            return
+        _enso_warm.update(running=True, at=now)
+
+    def _run() -> None:
+        try:
+            from ._enso import get_enso  # noqa: PLC0415
+
+            asyncio.run(asyncio.wait_for(get_enso(), timeout=6))
+        except Exception:  # noqa: BLE001
+            pass
+        finally:
+            with _enso_warm_lock:
+                _enso_warm["running"] = False
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def _enso_now() -> Optional[EnsoNow]:
     try:
         from ._enso import _cached  # noqa: PLC0415
@@ -1080,7 +1110,10 @@ def _enso_now() -> Optional[EnsoNow]:
         cached = _cached()
     except Exception:  # noqa: BLE001
         return None
-    if not cached or not cached.available or not cached.phase:
+    if cached is None:
+        _warm_enso_in_background()
+        return None
+    if not cached.available or not cached.phase:
         return None
     return EnsoNow(phase=cached.phase, strength=cached.strength, oni=cached.oni,
                    season=f"{cached.season} {cached.year}" if cached.season else None)

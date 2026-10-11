@@ -446,6 +446,31 @@ class TestMergePrevious:
         assert store.call_args.args[0]["soil"] == {"wrbClass": "Lixisols"}
 
 
+class TestEnsoWarm:
+    @pytest.fixture(autouse=True)
+    def _reset(self):
+        pk._enso_warm.update(at=0.0, running=False)
+        yield
+        pk._enso_warm.update(at=0.0, running=False)
+
+    def test_a_cold_cache_starts_one_background_warm_and_returns_nothing(self, monkeypatch):
+        monkeypatch.undo()  # the autouse conftest stub replaces the function under test
+        with patch("py._enso._cached", return_value=None), \
+             patch.object(pk.threading, "Thread") as thread:
+            assert pk._enso_now() is None
+            assert pk._enso_now() is None  # within the interval: no second thread
+        thread.assert_called_once()
+        thread.return_value.start.assert_called_once()
+
+    def test_a_warm_cache_is_used_and_starts_nothing(self):
+        enso = MagicMock(available=True, phase="La Niña", strength="weak", oni=-0.7, season="JAS", year=2026)
+        with patch("py._enso._cached", return_value=enso), \
+             patch.object(pk.threading, "Thread") as thread:
+            now = pk._enso_now()
+        assert now.phase == "La Niña" and now.oni == -0.7
+        thread.assert_not_called()
+
+
 class TestStorage:
     def test_no_write_until_the_collection_exists(self):
         with patch.object(pk, "collection_ready", return_value=False), \
