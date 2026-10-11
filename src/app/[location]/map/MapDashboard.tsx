@@ -27,16 +27,41 @@ import {
 import {
   AIR_QUALITY_LAYER_ID,
   DEFAULT_LAYER,
-  TIMELINE_STEPS,
+  forecastTimelineFrames,
   getMapChip,
+  isModelLayer,
   layerSupportsTimeline,
+  mapChipsFor,
+  modelTimelineFrames,
   readStoredMapLayer,
-  timelineLabel,
-  timelineTimestamp,
+  timelineAxisLabels,
+  timelineDefaultIndex,
   writeStoredMapLayer,
+  type TimelineFrame,
 } from "@/lib/map-layers";
+import {
+  MAP_MODELS,
+  attributionForLayer,
+  attributionHtml,
+  fetchGibsDomains,
+  getGibsLayer,
+  getMapModel,
+  mapModelForPreference,
+  overlayAttribution,
+  satelliteFrames,
+  type TimeInterval,
+} from "@/lib/map-sources";
+import {
+  fetchModelGrid,
+  modelGridToGeoJSON,
+  modelLegendTokens,
+  type ModelGridResponse,
+} from "@/lib/model-grid";
+import { getFeatureFlag } from "@/lib/feature-flags";
+import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import type { WeatherLocation } from "@/lib/locations";
+import type { FieldOverlay } from "@/components/weather/map/MapLibreMap";
 
 const MapLibreMap = dynamic(
   () =>
@@ -73,20 +98,53 @@ interface MapDashboardProps {
 
 export function MapDashboard({ location }: MapDashboardProps) {
   const router = useRouter();
+  // Model-field chips sit behind a flag (Open-Meteo's free API is
+  // non-commercial). Read like the stored layer so SSR renders the default.
+  const modelLayersOn = useSyncExternalStore(
+    subscribeNoop,
+    () => getFeatureFlag("model_map_layers"),
+    () => false,
+  );
+  const chips = useMemo(
+    () => mapChipsFor({ modelLayers: modelLayersOn }),
+    [modelLayersOn],
+  );
   // The remembered layer is read from localStorage through useSyncExternalStore:
   // the server snapshot is the default, so SSR and the first client render agree
   // and the stored choice applies without a setState-in-effect.
   const storedLayer = useSyncExternalStore(
     subscribeNoop,
-    () => readStoredMapLayer(getStorage()) ?? DEFAULT_LAYER,
+    () => readStoredMapLayer(getStorage(), chips) ?? DEFAULT_LAYER,
     () => DEFAULT_LAYER,
   );
   // A choice made in this visit overrides the stored value.
   const [chosenLayer, setChosenLayer] = useState<string | null>(null);
   const activeLayer = chosenLayer ?? storedLayer;
   const [sheetOpen, setSheetOpen] = useState(true);
-  const [step, setStep] = useState(0);
+  // null = the layer's default frame (Now for forecasts, newest for imagery).
+  const [stepChoice, setStepChoice] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  // Model picker: opens on the user's forecast-model preference. Picking a
+  // model here only changes the map — the preference drives every location
+  // page's baseline, so comparing models on the map must not switch it.
+  const preferredModel = useAppStore((s) => s.selectedForecastModel);
+  const [chosenModel, setChosenModel] = useState<string | null>(null);
+  // Re-derive "now" for the timelines every few minutes on a long-open tab.
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setClock(Date.now()), 5 * 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const activeModel = chosenModel ?? mapModelForPreference(preferredModel);
+  // GIBS time domains and model grids, each tagged with what they were fetched for.
+  const [domains, setDomains] = useState<{
+    layer: string;
+    intervals: TimeInterval[] | null;
+  } | null>(null);
+  const [modelGrid, setModelGrid] = useState<{
+    key: string;
+    grid: ModelGridResponse | null;
+  } | null>(null);
   // Grid result tagged with the coordinate it was fetched for. Anything tagged
   // with another coordinate counts as loading, so no state is reset in an effect.
   const [gridResult, setGridResult] = useState<{
@@ -97,24 +155,121 @@ export function MapDashboard({ location }: MapDashboardProps) {
   const [locateMessage, setLocateMessage] = useState<string | null>(null);
 
   const aqOn = activeLayer === AIR_QUALITY_LAYER_ID;
-  const timelineOn = layerSupportsTimeline(activeLayer);
+  const gibsLayer = getGibsLayer(activeLayer);
+  const modelOn = isModelLayer(activeLayer);
+
+  // NASA GIBS: look up which frames exist (DescribeDomains) while a satellite
+  // layer is active. Until it answers, frames come from a fixed latency.
+  useEffect(() => {
+    if (!gibsLayer) return;
+    const controller = new AbortController();
+    void fetchGibsDomains(gibsLayer, new Date(), controller.signal).then(
+      (intervals) => {
+        if (controller.signal.aborted) return;
+        setDomains({ layer: gibsLayer.chipId, intervals });
+        // The real frames replace the fixed-latency guess: reopen on the newest.
+        setStepChoice(null);
+      },
+    );
+    return () => controller.abort();
+  }, [gibsLayer]);
+
+  // Model fields: one grid per (model, location) while a model chip is active.
+  const modelKey = `${activeModel}:${location.lat},${location.lon}`;
+  useEffect(() => {
+    if (!modelOn) return;
+    const controller = new AbortController();
+    fetchModelGrid({
+      lat: location.lat,
+      lon: location.lon,
+      model: activeModel,
+      signal: controller.signal,
+    })
+      .then((grid) => {
+        if (!controller.signal.aborted) setModelGrid({ key: modelKey, grid });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted)
+          setModelGrid({ key: modelKey, grid: null });
+      });
+    return () => controller.abort();
+  }, [modelOn, activeModel, location.lat, location.lon, modelKey]);
+  const modelCurrent = modelGrid?.key === modelKey ? modelGrid : null;
+  const modelGridData = modelCurrent?.grid ?? null;
+
+  const frames: TimelineFrame[] = useMemo(() => {
+    const now = new Date(clock);
+    if (gibsLayer) {
+      const intervals =
+        domains?.layer === gibsLayer.chipId ? domains.intervals : null;
+      return satelliteFrames(gibsLayer, intervals, now).map((f) => ({
+        timestamp: f.time,
+        label: f.label,
+      }));
+    }
+    if (modelOn)
+      return modelGridData?.available
+        ? modelTimelineFrames(modelGridData.times, now)
+        : [];
+    if (layerSupportsTimeline(activeLayer)) return forecastTimelineFrames(now);
+    return [];
+  }, [gibsLayer, domains, modelOn, modelGridData, activeLayer, clock]);
+
+  const timelineOn = layerSupportsTimeline(activeLayer) && frames.length > 1;
+  const defaultStep = timelineDefaultIndex(activeLayer, frames);
+  const step = Math.min(
+    stepChoice ?? defaultStep,
+    Math.max(frames.length - 1, 0),
+  );
+  const frameCount = frames.length;
   // Playback only runs while a timeline layer is showing.
   const isPlaying = playing && timelineOn;
 
   const handleLayerChange = useCallback((id: string) => {
     setChosenLayer(id);
     setPlaying(false);
+    setStepChoice(null);
     writeStoredMapLayer(getStorage(), id);
   }, []);
 
+  const handleModelChange = useCallback((id: string) => {
+    setChosenModel(id);
+    setStepChoice(null);
+  }, []);
+
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying || frameCount < 2) return;
     const id = window.setInterval(
-      () => setStep((s) => (s + 1) % TIMELINE_STEPS),
+      () =>
+        setStepChoice((s) => {
+          // Continue from the frame on screen (imagery opens on the newest).
+          const current = s ?? defaultStep;
+          return (current + 1) % frameCount;
+        }),
       TIMELINE_TICK_MS,
     );
     return () => window.clearInterval(id);
-  }, [isPlaying]);
+  }, [isPlaying, frameCount, defaultStep]);
+
+  const fieldOverlay: FieldOverlay | null = useMemo(() => {
+    if (!modelOn) return null;
+    // Frames skip steps that are already past, so map the frame back to the
+    // grid's series index by its time.
+    const seriesIndex =
+      modelGridData?.times.indexOf(frames[step]?.timestamp ?? "") ?? -1;
+    if (seriesIndex < 0) return null;
+    const data = modelGridToGeoJSON(modelGridData, activeLayer, seriesIndex);
+    if (!data) return null;
+    return {
+      data,
+      tokens: modelLegendTokens(getMapChip(activeLayer)?.legend),
+      attribution: attributionHtml(
+        overlayAttribution(activeLayer, activeModel),
+      ),
+    };
+  }, [modelOn, modelGridData, activeLayer, step, frames, activeModel]);
+
+  const credits = attributionForLayer(activeLayer, activeModel);
 
   // Air quality: fetch the grid for this location while the AQ chip is active.
   const gridKey = `${location.lat},${location.lon}`;
@@ -185,11 +340,12 @@ export function MapDashboard({ location }: MapDashboardProps) {
         lon={location.lon}
         zoom={8}
         interactive
-        weatherLayer={aqOn ? null : activeLayer}
+        weatherLayer={aqOn || modelOn ? null : activeLayer}
         weatherTimestamp={
-          timelineOn ? timelineTimestamp(step, new Date()) : "now"
+          timelineOn && !modelOn ? (frames[step]?.timestamp ?? "now") : "now"
         }
         aqiOverlay={aqOn ? aqFill : null}
+        fieldOverlay={fieldOverlay}
         aqiBubbles={aqOn ? bubbles : null}
         navigationControl={false}
         attributionControl={false}
@@ -230,22 +386,46 @@ export function MapDashboard({ location }: MapDashboardProps) {
             >
               {chip.label} · {chip.legend.unit}
             </h2>
-            <div
-              className="mt-2 flex h-2 gap-px overflow-hidden rounded-full"
-              aria-hidden="true"
-            >
-              {chip.legend.segments.map((seg) => (
-                <span key={seg.label} className={cn("flex-1", seg.className)} />
-              ))}
-            </div>
-            <div
-              className="mt-1 flex justify-between text-xs text-text-tertiary"
-              aria-hidden="true"
-            >
-              {chip.legend.segments.map((seg) => (
-                <span key={seg.label}>{seg.label}</span>
-              ))}
-            </div>
+            {chip.legend.segments.length > 0 && (
+              <>
+                <div
+                  className="mt-2 flex h-2 gap-px overflow-hidden rounded-full"
+                  aria-hidden="true"
+                >
+                  {chip.legend.segments.map((seg) => (
+                    <span
+                      key={seg.label}
+                      className={cn("flex-1", seg.className)}
+                    />
+                  ))}
+                </div>
+                <div
+                  className="mt-1 flex justify-between text-xs text-text-tertiary"
+                  aria-hidden="true"
+                >
+                  {chip.legend.segments.map((seg) => (
+                    <span key={seg.label}>{seg.label}</span>
+                  ))}
+                </div>
+              </>
+            )}
+            {chip.legend.note && (
+              <p className="mt-1 text-xs text-text-tertiary">
+                {chip.legend.note}
+              </p>
+            )}
+            {modelOn && (
+              <p className="mt-2 text-sm text-text-secondary" role="status">
+                {!modelCurrent && "Loading model forecast…"}
+                {modelCurrent &&
+                  !modelGridData?.available &&
+                  "This model's forecast is unavailable right now."}
+                {modelCurrent &&
+                  modelGridData?.available &&
+                  `${getMapModel(activeModel)?.label ?? activeModel} · ${frames[step]?.label ?? "Now"}`}
+              </p>
+            )}
+            {!sheetOpen && <MapCredits credits={credits} />}
             {aqOn && (
               <p className="mt-2 text-sm text-text-secondary" role="status">
                 {gridState === "loading" && "Loading air quality…"}
@@ -320,6 +500,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
             activeLayer={activeLayer}
             onLayerChange={handleLayerChange}
             locationSlug={location.slug}
+            chips={chips}
+            models={modelOn ? MAP_MODELS : undefined}
+            activeModel={activeModel}
+            onModelChange={handleModelChange}
           />
 
           {timelineOn && (
@@ -346,53 +530,70 @@ export function MapDashboard({ location }: MapDashboardProps) {
                 <input
                   type="range"
                   min={0}
-                  max={TIMELINE_STEPS - 1}
+                  max={frames.length - 1}
                   step={1}
                   value={step}
                   onChange={(e) => {
                     setPlaying(false);
-                    setStep(Number(e.target.value));
+                    setStepChoice(Number(e.target.value));
                   }}
-                  aria-label="Forecast time"
-                  aria-valuetext={timelineLabel(step)}
+                  aria-label={gibsLayer ? "Observation time" : "Forecast time"}
+                  aria-valuetext={frames[step]?.label ?? ""}
                   className="h-[var(--touch-target-min)] w-full accent-primary"
                 />
                 <div
                   className="flex justify-between text-xs text-text-tertiary"
                   aria-hidden="true"
                 >
-                  <span>Now</span>
-                  <span>+1d</span>
-                  <span>+2d</span>
-                  <span>+3d</span>
+                  {timelineAxisLabels(frames).map((label, i) => (
+                    <span key={`${label}-${i}`}>{label}</span>
+                  ))}
                 </div>
               </div>
               <span
                 className="w-12 shrink-0 text-right font-mono text-sm text-text-primary"
                 aria-live="polite"
               >
-                {timelineLabel(step)}
+                {frames[step]?.label ?? ""}
               </span>
             </div>
           )}
-          <p className="mt-2 text-center text-xs text-text-tertiary">
-            Map ©{" "}
-            <a
-              href="https://www.maptiler.com/"
-              className="underline underline-offset-2"
-            >
-              MapTiler
-            </a>{" "}
-            ©{" "}
-            <a
-              href="https://www.openstreetmap.org/copyright"
-              className="underline underline-offset-2"
-            >
-              OpenStreetMap
-            </a>
-          </p>
+          <MapCredits credits={credits} className="text-center" />
         </section>
       )}
     </main>
+  );
+}
+
+/**
+ * The map's credits for the active layer, generated from map-sources.ts so
+ * every provider whose data is on screen is named. Shown in the bottom sheet,
+ * and in the legend card while the sheet is hidden, so the map is never
+ * without its attribution.
+ */
+function MapCredits({
+  credits,
+  className,
+}: {
+  credits: ReturnType<typeof attributionForLayer>;
+  className?: string;
+}) {
+  return (
+    <p className={cn("mt-2 text-xs text-text-tertiary", className)}>
+      <span className="sr-only">Map and data sources: </span>
+      {credits.map((p, i) => (
+        <span key={p.id}>
+          {i > 0 && " · "}
+          <a
+            href={p.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2"
+          >
+            {p.label}
+          </a>
+        </span>
+      ))}
+    </p>
   );
 }
