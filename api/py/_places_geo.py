@@ -500,7 +500,7 @@ def upsert_placesgeo_city(
         time.sleep(0.3)
 
     try:
-        return _dedup_or_insert(
+        result = _dedup_or_insert(
             name=name,
             lat=lat,
             lon=lon,
@@ -521,6 +521,41 @@ def upsert_placesgeo_city(
     finally:
         if got_lock:
             _release_create_lock(lock_id)
+
+    if not result.get("wasExisting"):
+        _schedule_place_knowledge(result, name, lat, lon, country_iso, province, elevation)
+    return result
+
+
+def _schedule_place_knowledge(
+    doc: dict,
+    name: str,
+    lat: float,
+    lon: float,
+    country_iso: str,
+    province: Optional[str],
+    elevation: Optional[float],
+) -> None:
+    """Creation hook: build the new place's knowledge profile (seasons, crop
+    calendar, climate, soil; mukoko-dev/mukoko-weather#277) off the request
+    path. Fire-and-forget on a daemon thread; never blocks or fails creation.
+    A place that already existed is not rebuilt here: it gets its profile on
+    its first load. Other place writers (Fundi seeding) need the same call."""
+    try:
+        from ._place_knowledge import schedule_knowledge_build  # noqa: PLC0415 — import cycle
+
+        schedule_knowledge_build({
+            "id": doc.get("_id"),
+            "collection": "placesGeo",
+            "name": name,
+            "lat": lat,
+            "lon": lon,
+            "country": country_iso,
+            "admin1": province,
+            "elevation": elevation,
+        })
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("place knowledge hook skipped: %s", type(exc).__name__)
 
 
 def _dedup_or_insert(
