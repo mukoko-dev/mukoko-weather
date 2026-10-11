@@ -281,6 +281,19 @@ def resolve_location_slug(slug: str) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 
+#: ``_id`` prefix of a location synthesized from a spot slug (no record).
+SPOT_ID_PREFIX = "geo:"
+
+
+def is_synthesized_spot(loc: Optional[dict]) -> bool:
+    """True for a location built from a spot slug alone, with no record.
+
+    Anyone can spell such a slug, so callers that key durable data by slug
+    (weather history) must not treat it as a known place.
+    """
+    return bool(loc) and str(loc.get("_id") or "").startswith(SPOT_ID_PREFIX)
+
+
 def find_location(slug: str) -> Optional[dict]:
     """Resolve and adapt in one call — clean slug → legacy LocationDoc dict.
 
@@ -305,7 +318,7 @@ def find_location(slug: str) -> Optional[dict]:
         "lon": spot["lon"],
         "elevation": 0,
         "tags": ["city"],
-        "_id": f"geo:{spot['geohash']}",
+        "_id": f"{SPOT_ID_PREFIX}{spot['geohash']}",
         "geo": {"type": "Point", "coordinates": [spot["lon"], spot["lat"]]},
         "source": "geolocation",
     }

@@ -60,7 +60,7 @@ PLATFORM_SCHEMA_VERSION = "v3.1"
 DEFAULT_COUNTRY_CODE = "ZW"
 
 #: ``bundu.countryCode`` when the caller does not know the country (coordinate
-#: caches, a station registered without one). ``ZZ`` is the ISO 3166-1
+#: caches such as air quality, normals, haze, tiles). ``ZZ`` is the ISO 3166-1
 #: user-assigned code CLDR uses for "unknown region": it passes the platform's
 #: ``^[A-Z]{2}$`` CountryCode pattern without claiming a real country.
 UNKNOWN_COUNTRY_CODE = "ZZ"

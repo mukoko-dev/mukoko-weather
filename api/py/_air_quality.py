@@ -29,6 +29,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from ._db import (
+    UNKNOWN_COUNTRY_CODE,
     air_quality_cache_collection,
     is_valid_coords,
     ttl_find_one,
@@ -404,7 +405,7 @@ def _set_cached(lat: float, lon: float, payload: dict, country_code: Optional[st
             fields,
             AIR_QUALITY_CACHE_TTL_SECONDS,
             stamp=True,
-            country_code=country_code or "ZW",
+            country_code=country_code or UNKNOWN_COUNTRY_CODE,
         )
     except Exception:
         # Cache write failure must not break the response — log silently.

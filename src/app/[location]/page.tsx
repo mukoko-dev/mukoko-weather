@@ -45,8 +45,13 @@ export async function generateMetadata({
   params: Promise<{ location: string }>;
 }): Promise<Metadata> {
   const { location: slug } = await params;
-  const loc = await loadLocation(slug);
-  if (!loc) return { title: "Location not found" };
+  const stored = await loadLocation(slug);
+  if (!stored) return { title: "Location not found" };
+  // Metadata has no forecast to reconcile against, so a region borrowed from
+  // a seed (possibly across a border) is left out rather than indexed.
+  const loc = stored.regionApproximate
+    ? { ...stored, country: "", province: "" }
+    : stored;
 
   const countryCode = loc.country ?? "";
   const country = countryCode ? await loadCountry(countryCode) : null;
@@ -196,14 +201,12 @@ export default async function LocationPage({
   const weekLow = dailyLows.length ? Math.round(Math.min(...dailyLows)) : null;
   const [storedCountryDoc, storedSeason, currentUser] = await sideData;
   const countryChanged = countryCode !== storedCountry;
-  const countryDoc = countryChanged
-    ? countryCode
-      ? await loadCountry(countryCode)
-      : null
-    : storedCountryDoc;
-  const season = countryChanged
-    ? await getCachedSeason(countryCode, location.lat ?? 0)
-    : storedSeason;
+  const [countryDoc, season] = countryChanged
+    ? await Promise.all([
+        countryCode ? loadCountry(countryCode) : Promise.resolve(null),
+        getCachedSeason(countryCode, location.lat ?? 0),
+      ])
+    : [storedCountryDoc, storedSeason];
   const countryName = countryDoc?.name ?? countryDisplayName(countryCode);
   // Strip AuthKit-specific fields before crossing the server/client boundary.
   // AISummary/AISummaryChat only need id + email to decide signed-in vs CTA.

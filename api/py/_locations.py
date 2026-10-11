@@ -6,6 +6,7 @@ Handles location CRUD, search (text + geospatial), and geo-lookup.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import re
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 from ._http import get_http_client
+from ._circuit_breaker import open_meteo_breaker
 from ._geohash import build_place_slug, build_smart_slug, normalise_osm_ref
 from ._db import (
     get_db,
@@ -284,8 +286,17 @@ async def search_locations(
         # Weather). The platform geography is still mostly African, so a
         # search for "Victoria" must not stop at the one we hold when the
         # visitor means Victoria, BC. These candidates are not in our DB yet.
-        if q and not tag and skip == 0 and len(results) < GEOCODE_TOP_UP_BELOW:
-            geocoded = _forward_geocode(q, count=limit)
+        if (
+            q and not tag and skip == 0
+            and len(results) < GEOCODE_TOP_UP_BELOW
+            # Same upstream as the forecast: skip while its breaker is open.
+            # Failures are not recorded here — a geocoding hiccup must never
+            # open the breaker that gates the forecast.
+            and open_meteo_breaker.is_allowed
+        ):
+            # Off the event loop: this runs on most quick-search keystrokes
+            # outside the stored geography, and httpx here is synchronous.
+            geocoded = await asyncio.to_thread(_forward_geocode, q, limit)
             extra = [
                 c for c in (_geocoded_candidate(g) for g in geocoded)
                 if not _duplicates_any(c, results)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock, AsyncMock, PropertyMock
 
 import pytest
 from fastapi import HTTPException
@@ -674,6 +674,17 @@ class TestSearchGeocodedTopUp:
         assert slugs[0] == "victoria-sc"  # catalogue match stays first
         assert len(slugs) == 2  # the Seychelles geocode duplicate is dropped
         assert result["locations"][1]["country"] == "CA"
+
+    @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name", return_value=[])
+    async def test_open_breaker_skips_geocoding(self, _mock_db, mock_geo):
+        from py._circuit_breaker import open_meteo_breaker
+
+        with patch.object(type(open_meteo_breaker), "is_allowed", new_callable=PropertyMock, return_value=False):
+            result = await search_locations(q="london")
+        mock_geo.assert_not_called()
+        assert result["locations"] == []
 
     @pytest.mark.asyncio
     @patch("py._locations._forward_geocode")

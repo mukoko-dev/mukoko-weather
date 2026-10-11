@@ -87,11 +87,30 @@ BLEND_WEIGHTS: dict[str, dict[str, float]] = {
 #: so every African coordinate keeps the region it had before the world boxes
 #: were added; the world boxes only claim what used to fall to ``default``.
 REGION_BOXES: tuple[tuple[str, tuple[float, float, float, float]], ...] = (
+    # Carve-outs: the north- and east-Africa boxes overlap Southern Europe,
+    # the Levant and Arabia. Each box below holds no African land (checked
+    # against the nearest African coast: Tangier 35.8°N, Cap Blanc 37.3°N at
+    # 9.9°E, the Libyan/Egyptian coast below 33.2°N, Sinai east to 34.9°E and
+    # north to 31.3°N, the Dahlak islands to 40.4°E, Djibouti to 43.4°E at
+    # 12.7°N, Somalia below 12°N), so no African point changes region.
+    ("europe", (36.0, 44.0, -10.0, -1.0)),  # southern Iberia, Gibraltar
+    ("europe", (36.5, 38.5, 12.0, 16.0)),  # Sicily
+    ("europe", (35.7, 36.2, 14.0, 14.7)),  # Malta
+    ("europe", (34.5, 38.0, 19.0, 34.2)),  # Greece, Crete, south Turkey
+    ("middle-east", (34.5, 38.0, 34.2, 37.0)),  # Cyprus east, Hatay, Syria coast
+    ("middle-east", (31.3, 34.5, 34.2, 37.0)),  # Israel, Lebanon, Jordan
+    ("middle-east", (29.4, 31.3, 34.9, 37.0)),  # Negev, Eilat, Aqaba
+    ("middle-east", (15.5, 19.0, 40.5, 52.0)),  # SW Saudi Arabia, north Yemen
+    ("middle-east", (13.0, 15.5, 42.8, 52.0)),  # Yemen (Sana'a)
+    ("middle-east", (12.5, 13.0, 44.0, 52.0)),  # Aden
     ("north-africa", (19.0, 38.0, -18.0, 37.0)),
     ("west-africa-sahel", (3.0, 19.0, -18.0, 16.0)),
     ("east-africa", (-12.0, 19.0, 28.0, 52.0)),
     ("central-africa", (-12.0, 12.0, 8.0, 31.0)),
     ("southern-africa", (-35.5, -12.0, 10.0, 52.0)),
+    # Sudan's Red Sea coast (Port Sudan) fell between the African boxes; claim
+    # it before the middle-east box can. Saudi Arabia starts east of 38.9°E.
+    ("east-africa", (19.0, 23.0, 36.5, 38.9)),
     ("europe", (34.0, 72.0, -32.0, 45.0)),
     ("middle-east", (12.0, 42.0, 34.0, 63.0)),
     ("south-asia", (5.0, 38.0, 60.0, 92.0)),

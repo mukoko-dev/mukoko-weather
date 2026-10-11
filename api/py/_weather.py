@@ -29,7 +29,7 @@ from ._db import (
     observations_collection,
     weather_cache_collection,
 )
-from ._places_resolver import find_location, find_nearest_location
+from ._places_resolver import find_location, find_nearest_location, is_synthesized_spot
 from ._weather_cache_key import weather_cache_key
 from ._history_store import record_weather_history
 from ._circuit_breaker import open_meteo_breaker
@@ -934,6 +934,11 @@ def _resolve_location_hint(hint: str | None, lat: float, lon: float) -> dict | N
     try:
         loc = find_location(hint)
     except Exception:
+        return None
+    # A spot slug with no record behind it is just a name + coordinate anyone
+    # can spell: keying history by it would split one cell's history across
+    # made-up names, and its elevation (0) is not a measurement.
+    if is_synthesized_spot(loc):
         return None
     return loc if _near(loc, lat, lon) else None
 

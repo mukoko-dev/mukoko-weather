@@ -55,6 +55,30 @@ class TestRegions:
             (43.65, -79.38, "north-america"),  # Toronto
             (-23.55, -46.63, "south-america"),  # Sao Paulo
             (-30.0, -140.0, "default"),  # open Pacific
+            # Overlap carve-outs: these used to report an African region.
+            (37.39, -5.98, "europe"),  # Seville
+            (36.14, -5.35, "europe"),  # Gibraltar
+            (37.98, 23.73, "europe"),  # Athens
+            (35.34, 25.14, "europe"),  # Heraklion, Crete
+            (38.12, 13.36, "europe"),  # Palermo
+            (35.9, 14.51, "europe"),  # Valletta
+            (31.78, 35.22, "middle-east"),  # Jerusalem
+            (33.89, 35.5, "middle-east"),  # Beirut
+            (32.08, 34.78, "middle-east"),  # Tel Aviv
+            (15.35, 44.21, "middle-east"),  # Sana'a
+            (12.79, 45.02, "middle-east"),  # Aden
+            # ...and their African neighbours did not move.
+            (35.77, -5.8, "north-africa"),  # Tangier
+            (36.75, 3.06, "north-africa"),  # Algiers
+            (37.27, 9.87, "north-africa"),  # Bizerte
+            (31.2, 29.92, "north-africa"),  # Alexandria
+            (31.13, 33.8, "north-africa"),  # El Arish, Sinai
+            (29.5, 34.89, "north-africa"),  # Taba
+            (15.33, 38.93, "east-africa"),  # Asmara
+            (11.59, 43.15, "east-africa"),  # Djibouti
+            (11.28, 49.18, "east-africa"),  # Bosaso
+            (19.62, 37.22, "east-africa"),  # Port Sudan (was `default`)
+            (21.49, 39.19, "middle-east"),  # Jeddah
         ],
     )
     def test_region_for(self, lat, lon, region):
