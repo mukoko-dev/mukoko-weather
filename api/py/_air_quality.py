@@ -45,8 +45,6 @@ router = APIRouter()
 # Constants
 # ---------------------------------------------------------------------------
 
-# Public default; the call resolves the URL per request (``om.air_quality_url``).
-OPEN_METEO_AQ_URL = om.PUBLIC_AIR_QUALITY_URL
 
 #: Cache TTL — 1 hour. Air quality changes slowly enough that hourly refreshes
 #: catch meaningful shifts while keeping API call volume small.
@@ -336,8 +334,8 @@ def _fetch_open_meteo_air_quality(lat: float, lon: float, side: Optional[dict] =
         "past_days": 1,
         "timezone": "auto",
     }
-    url = om.air_quality_url()
-    resp = client.get(url, params=params, headers=om.headers_for(url))
+    url, headers = om.air_quality()
+    resp = client.get(url, params=params, headers=headers)
     resp.raise_for_status()
     data = resp.json()
     if side is not None:

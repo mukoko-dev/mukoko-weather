@@ -4,17 +4,19 @@
  *
  * Default: the public API. On the SERVER only, `OPEN_METEO_BASE_URL` points
  * the call at our self-hosted Open-Meteo (`infra/open-meteo/`), with the
- * gateway key from `OPEN_METEO_API_KEY` in the `OPEN_METEO_API_KEY_HEADER`
- * header (default `X-Mukoko-OM-Key`). These are deliberately NOT
+ * gateway key from `OPEN_METEO_API_KEY` in the `X-Mukoko-OM-Key` header (fixed:
+ * the gateway's matcher and log redaction use this exact name). The key is
+ * never sent to an `open-meteo.com` host. These are deliberately NOT
  * `NEXT_PUBLIC_*`: the browser never sees the key, so a client-side fallback
  * always uses the public API.
  */
 
 export const PUBLIC_FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 export const FORECAST_PATH = "/v1/forecast";
-export const DEFAULT_KEY_HEADER = "X-Mukoko-OM-Key";
+/** Must match `infra/open-meteo/gateway/Caddyfile` and `api/py/_open_meteo.py`. */
+export const KEY_HEADER = "X-Mukoko-OM-Key";
 
-const HEADER_NAME_RE = /^[A-Za-z0-9-]{1,64}$/;
+const PUBLIC_DOMAIN = "open-meteo.com";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 type Env = Record<string, string | undefined>;
@@ -52,18 +54,23 @@ export function openMeteoForecastUrl(env: Env | null = serverEnv()): string {
   return base.endsWith(FORECAST_PATH) ? base : base + FORECAST_PATH;
 }
 
-/** Headers for a call to `url` — empty for the public API. */
+/** True unless `url` points at an Open-Meteo-run host (decided by hostname). */
+export function isSelfHosted(url: string): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return !(host === PUBLIC_DOMAIN || host.endsWith(`.${PUBLIC_DOMAIN}`));
+}
+
+/** Headers for a call to `url`: empty for any Open-Meteo host. */
 export function openMeteoHeaders(
   url: string,
   env: Env | null = serverEnv(),
 ): Record<string, string> {
-  if (url === PUBLIC_FORECAST_URL) return {};
+  if (!isSelfHosted(url)) return {};
   const key = env?.OPEN_METEO_API_KEY?.trim();
-  if (!key) return {};
-  const configured = env?.OPEN_METEO_API_KEY_HEADER?.trim();
-  const name =
-    configured && HEADER_NAME_RE.test(configured)
-      ? configured
-      : DEFAULT_KEY_HEADER;
-  return { [name]: key };
+  return key ? { [KEY_HEADER]: key } : {};
 }

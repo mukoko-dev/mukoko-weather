@@ -9,12 +9,13 @@ Setting the env vars below points the calls at our own self-hosted Open-Meteo
 - ``OPEN_METEO_AQ_BASE_URL`` — origin of the self-hosted air-quality API
   (CAMS). ``/v1/air-quality`` is appended. It is set on its own so the
   forecast can move first while air quality stays on the public API.
-- ``OPEN_METEO_API_KEY`` — the key the self-hosted gateway checks.
-- ``OPEN_METEO_API_KEY_HEADER`` — the header that carries it
-  (default ``X-Mukoko-OM-Key``).
+- ``OPEN_METEO_API_KEY`` — the key the self-hosted gateway checks, sent in
+  the :data:`KEY_HEADER` header. The header name is fixed because the
+  gateway's matcher and its log redaction are written for exactly this name.
 
-The key is only ever sent to a host we configured, never to the public API,
-and travels in a header, never in the URL (so it cannot reach a log line).
+The key is only ever sent to a host we run (never to an ``open-meteo.com``
+host) and travels in a header, never in the URL, so it cannot reach a log
+line.
 
 The ERA5 archive (history backfill, climate normals), geocoding and the
 elevation lookup are deliberately NOT covered here: the self-hosted instance
@@ -28,7 +29,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
@@ -39,8 +39,11 @@ PUBLIC_AIR_QUALITY_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 FORECAST_PATH = "/v1/forecast"
 AIR_QUALITY_PATH = "/v1/air-quality"
 
-DEFAULT_KEY_HEADER = "X-Mukoko-OM-Key"
-_HEADER_NAME_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
+#: Must match ``infra/open-meteo/gateway/Caddyfile``.
+KEY_HEADER = "X-Mukoko-OM-Key"
+
+_PUBLIC_DOMAIN = "open-meteo.com"
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 _warned: set[str] = set()
 
@@ -69,8 +72,7 @@ def _configured_base(var: str) -> str | None:
         _warn_once(var, "not a URL")
         return None
     host = parts.hostname or ""
-    local = host in {"localhost", "127.0.0.1", "::1"}
-    if parts.scheme != "https" and not (parts.scheme == "http" and local):
+    if parts.scheme != "https" and not (parts.scheme == "http" and host in _LOCAL_HOSTS):
         _warn_once(var, "must be https")
         return None
     if not host or parts.query or parts.fragment or parts.username or parts.password:
@@ -98,28 +100,42 @@ def air_quality_url() -> str:
 
 
 def is_self_hosted(url: str) -> bool:
-    """True when ``url`` is one of our configured self-hosted endpoints."""
-    return url not in (PUBLIC_FORECAST_URL, PUBLIC_AIR_QUALITY_URL)
+    """True unless ``url`` points at an Open-Meteo-run host.
+
+    Decided by hostname, not string equality, so a differently cased or
+    differently spelled public URL can never be mistaken for ours.
+    """
+    host = (urlsplit(url).hostname or "").lower()
+    return not (host == _PUBLIC_DOMAIN or host.endswith("." + _PUBLIC_DOMAIN))
 
 
 def headers_for(url: str) -> dict[str, str]:
     """Request headers for a call to ``url``.
 
-    Empty for the public API, so the key never leaves for a host we do not
-    run. For a self-hosted URL it carries the gateway key when one is set.
+    Empty for any Open-Meteo host, so the key never leaves for a host we do
+    not run. For a self-hosted URL it carries the gateway key when one is set.
     """
     if not is_self_hosted(url):
         return {}
     key = (os.environ.get("OPEN_METEO_API_KEY") or "").strip()
-    if not key:
-        return {}
-    name = (os.environ.get("OPEN_METEO_API_KEY_HEADER") or "").strip() or DEFAULT_KEY_HEADER
-    if not _HEADER_NAME_RE.match(name):
-        _warn_once("OPEN_METEO_API_KEY_HEADER", "not a valid header name")
-        name = DEFAULT_KEY_HEADER
-    return {name: key}
+    return {KEY_HEADER: key} if key else {}
 
 
-def source_label(url: str) -> str:
-    """``self-hosted`` or ``public`` — for the status page, never the URL."""
-    return "self-hosted" if is_self_hosted(url) else "public"
+def forecast() -> tuple[str, dict[str, str]]:
+    """``(url, headers)`` for one forecast call."""
+    url = forecast_url()
+    return url, headers_for(url)
+
+
+def air_quality() -> tuple[str, dict[str, str]]:
+    """``(url, headers)`` for one air-quality call."""
+    url = air_quality_url()
+    return url, headers_for(url)
+
+
+def forecast_is_self_hosted() -> bool:
+    return is_self_hosted(forecast_url())
+
+
+def air_quality_is_self_hosted() -> bool:
+    return is_self_hosted(air_quality_url())

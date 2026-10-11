@@ -17,7 +17,6 @@ ENV = (
     "OPEN_METEO_BASE_URL",
     "OPEN_METEO_AQ_BASE_URL",
     "OPEN_METEO_API_KEY",
-    "OPEN_METEO_API_KEY_HEADER",
 )
 
 
@@ -60,9 +59,6 @@ class TestDefaults:
         assert om.headers_for(om.forecast_url()) == {}
         assert om.headers_for(om.air_quality_url()) == {}
 
-    def test_source_label_public(self):
-        assert om.source_label(om.forecast_url()) == "public"
-
     def test_blank_values_are_unset(self, monkeypatch):
         monkeypatch.setenv("OPEN_METEO_BASE_URL", "   ")
         assert om.forecast_url() == om.PUBLIC_FORECAST_URL
@@ -92,23 +88,44 @@ class TestSelfHosted:
         assert om.headers_for(om.forecast_url()) == {"X-Mukoko-OM-Key": "k-test"}
         assert om.headers_for(om.air_quality_url()) == {"X-Mukoko-OM-Key": "k-test"}
 
-    def test_key_header_custom_name(self, monkeypatch):
-        _self_hosted(monkeypatch)
-        monkeypatch.setenv("OPEN_METEO_API_KEY_HEADER", "X-Weather-Key")
-        assert om.headers_for(om.forecast_url()) == {"X-Weather-Key": "k-test"}
+    def test_key_header_name_matches_the_gateway(self):
+        from pathlib import Path
 
-    def test_invalid_header_name_falls_back_to_default(self, monkeypatch):
+        caddyfile = (
+            Path(__file__).resolve().parents[2] / "infra/open-meteo/gateway/Caddyfile"
+        ).read_text()
+        assert f"header {om.KEY_HEADER} " in caddyfile
+        assert f"request_header -{om.KEY_HEADER}" in caddyfile
+
+    def test_endpoint_helpers_return_url_and_headers(self, monkeypatch):
         _self_hosted(monkeypatch)
-        monkeypatch.setenv("OPEN_METEO_API_KEY_HEADER", "bad header:\r\n")
-        assert om.headers_for(om.forecast_url()) == {"X-Mukoko-OM-Key": "k-test"}
+        assert om.forecast() == ("https://om.example.com/v1/forecast", {"X-Mukoko-OM-Key": "k-test"})
+        assert om.air_quality() == ("https://aq.example.com/v1/air-quality", {"X-Mukoko-OM-Key": "k-test"})
+        assert om.forecast_is_self_hosted() and om.air_quality_is_self_hosted()
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "https://API.open-meteo.com",
+            "https://customer-api.open-meteo.com",
+            "https://open-meteo.com",
+        ],
+    )
+    def test_key_never_sent_to_any_open_meteo_host(self, monkeypatch, value):
+        monkeypatch.setenv("OPEN_METEO_BASE_URL", value)
+        monkeypatch.setenv("OPEN_METEO_API_KEY", "k-test")
+        url = om.forecast_url()
+        assert url.lower().startswith(value.lower())
+        assert om.is_self_hosted(url) is False
+        assert om.headers_for(url) == {}
+
+    def test_lookalike_host_is_self_hosted(self):
+        assert om.is_self_hosted("https://open-meteo.com.evil.example/v1/forecast") is True
+        assert om.is_self_hosted("https://notopen-meteo.com/v1/forecast") is True
 
     def test_self_hosted_without_key_sends_no_header(self, monkeypatch):
         _self_hosted(monkeypatch, key=None)
         assert om.headers_for(om.forecast_url()) == {}
-
-    def test_source_label_self_hosted(self, monkeypatch):
-        _self_hosted(monkeypatch)
-        assert om.source_label(om.forecast_url()) == "self-hosted"
 
     def test_http_allowed_for_localhost_only(self, monkeypatch):
         monkeypatch.setenv("OPEN_METEO_BASE_URL", "http://localhost:8081")
@@ -227,6 +244,44 @@ class TestCallSites:
             result = _status._check_open_meteo()
         assert result["name"] == "Open-Meteo API"
 
+    def test_status_adds_aq_row_only_when_self_hosted(self, monkeypatch):
+        from py import _status
+
+        def names():
+            stub = {"name": "x", "status": "operational"}
+            with (
+                patch.multiple(
+                    _status,
+                    _check_mongodb=lambda: stub,
+                    _check_tomorrow_io=lambda: stub,
+                    _check_open_meteo=lambda: stub,
+                    _check_ai_gateway=lambda: stub,
+                    _check_weather_cache=lambda: stub,
+                    _check_ai_cache=lambda: stub,
+                    _check_open_meteo_air_quality=lambda: {"name": "aq", "status": "operational"},
+                ),
+                patch.dict(_status._status_cache, {"data": None, "ts": 0}),
+            ):
+                import asyncio
+
+                return [c["name"] for c in asyncio.run(_status.system_status())["checks"]]
+
+        assert "aq" not in names()
+        monkeypatch.setenv("OPEN_METEO_AQ_BASE_URL", "https://aq.example.com")
+        assert "aq" in names()
+
+    def test_aq_status_probe(self, monkeypatch):
+        from py import _status
+
+        _self_hosted(monkeypatch)
+        client = _ok_client({"current": {"pm2_5": 4.0}})
+        with patch("py._status.get_http_client", return_value=client):
+            result = _status._check_open_meteo_air_quality()
+        args, kwargs = client.get.call_args
+        assert args[0] == "https://aq.example.com/v1/air-quality"
+        assert kwargs["headers"] == {"X-Mukoko-OM-Key": "k-test"}
+        assert result["status"] == "operational"
+
     def test_archive_stays_on_the_public_api(self, monkeypatch):
         """History/normals are out of scope for the self-hosted instance."""
         from py import _history_store, _normals
@@ -234,3 +289,57 @@ class TestCallSites:
         _self_hosted(monkeypatch)
         assert _history_store.ARCHIVE_URL.startswith("https://archive-api.open-meteo.com/")
         assert _normals.ARCHIVE_URL.startswith("https://archive-api.open-meteo.com/")
+
+
+
+class TestBestMatchGuard:
+    """A self-hosted best_match full of nulls is never served as weather."""
+
+    NULLS = {"current": {"temperature_2m": None}, "hourly": {"temperature_2m": [None, None]}, "daily": {}}
+    REAL = {"current": {"temperature_2m": 24}, "hourly": {"temperature_2m": [24.0]}, "daily": {}}
+
+    async def _call(self, payload):
+        from py import _weather
+
+        with (
+            patch("py._weather._find_nearest_location", return_value={"slug": "harare", "elevation": 1200}),
+            patch("py._weather._get_cached_weather", return_value=None),
+            patch("py._weather.open_meteo_breaker") as breaker,
+            patch("py._weather._fetch_blend", return_value=None),
+            patch("py._weather._fetch_open_meteo", return_value=payload),
+            patch("py._weather._fetch_single_model", return_value=None),
+            patch("py._weather._fetch_open_meteo_extras", return_value=None),
+            patch("py._weather.enrichment.enrich", return_value=(None, "none")),
+            patch("py._weather._set_cached_weather") as cache_set,
+            patch("py._weather._record_weather_history") as history,
+        ):
+            breaker.is_allowed = True
+            response = await _weather.get_weather(-17.83, 31.05)
+        return response, breaker, cache_set, history
+
+    def test_has_forecast_values(self):
+        from py import _weather
+
+        assert _weather._has_forecast_values({"hourly": {"temperature_2m": [None, 12.0]}})
+        assert not _weather._has_forecast_values({"hourly": {"temperature_2m": [None, None]}})
+        assert not _weather._has_forecast_values({})
+
+    @pytest.mark.asyncio
+    async def test_null_best_match_falls_to_seasonal_when_self_hosted(self, monkeypatch):
+        _self_hosted(monkeypatch)
+        response, breaker, _, history = await self._call(self.NULLS)
+        assert response.headers.get("x-weather-provider") == "fallback"
+        breaker.record_failure.assert_not_called()  # missing domain, not an outage
+        history.assert_not_called()  # never recorded as real weather
+
+    @pytest.mark.asyncio
+    async def test_real_best_match_served_when_self_hosted(self, monkeypatch):
+        _self_hosted(monkeypatch)
+        response, breaker, _, _ = await self._call(self.REAL)
+        assert response.headers.get("x-weather-provider") == "open-meteo:best_match"
+        breaker.record_success.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_public_api_behaviour_unchanged(self):
+        response, _, _, _ = await self._call(self.NULLS)
+        assert response.headers.get("x-weather-provider") == "open-meteo:best_match"

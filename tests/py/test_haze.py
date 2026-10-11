@@ -469,7 +469,7 @@ class TestFailurePaths:
         with patch.object(_haze, "_http_get_json", side_effect=fake_get):
             asyncio.run(_haze._fetch_open_meteo(1.0, 2.0))
         # Public API by default, and no key header goes to it.
-        assert calls == [(_haze.OPEN_METEO_AQ_URL, {}), (_haze.OPEN_METEO_FORECAST_URL, {})]
+        assert calls == [(_haze.om.PUBLIC_AIR_QUALITY_URL, {}), (_haze.om.PUBLIC_FORECAST_URL, {})]
 
     def test_fetch_open_meteo_follows_self_hosted_env(self, monkeypatch):
         monkeypatch.setenv("OPEN_METEO_BASE_URL", "https://om.example.com")

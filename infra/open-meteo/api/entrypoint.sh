@@ -14,29 +14,52 @@ export DATA_DIRECTORY="$DATA_DIR"
 
 mkdir -p "$DATA_DIR"
 
+READY_MARKER="$DATA_DIR/.mukoko-initial-sync-complete"
+
+# One `sync` per domain so each gets only its own variables. Returns non-zero
+# if any domain failed (the others still run).
 sync_once() {
-  # One `sync` per domain so each gets only its own variables.
-  grep -v '^[[:space:]]*#' "$SYNC_CONF" | while read -r domain variables; do
+  status=0
+  domains="$(grep -v '^[[:space:]]*#' "$SYNC_CONF" | grep -v '^[[:space:]]*$' || true)"
+  # A here-doc keeps the loop in this shell, so `status` survives it.
+  while read -r domain variables; do
     [ -n "${domain:-}" ] || continue
     echo "sync: $domain"
-    ./openmeteo-api sync "$domain" "$variables" --past-days "$SYNC_PAST_DAYS" \
-      || echo "sync: $domain failed; retrying next round" >&2
-  done
+    if ! ./openmeteo-api sync "$domain" "$variables" --past-days "$SYNC_PAST_DAYS" </dev/null; then
+      echo "sync: $domain failed; retrying next round" >&2
+      status=1
+    fi
+  done <<DOMAINS
+$domains
+DOMAINS
+  return "$status"
 }
 
 sync_loop() {
   while :; do
-    sync_once
+    sleep "$((SYNC_INTERVAL_MINUTES * 60))"
+    sync_once || true
     if [ "${SYNC_PRUNE:-true}" = "true" ]; then
       # Drop rolling-timeseries chunks older than the window (upstream's own
       # cleanup recipe, docs/sync-command.md). Static files are kept.
       find "$DATA_DIR" -type f -name 'chunk_*' -mtime +"$((SYNC_PAST_DAYS + 3))" -delete || true
     fi
-    sleep "$((SYNC_INTERVAL_MINUTES * 60))"
   done
 }
 
 if [ "${SYNC_ENABLED:-true}" = "true" ]; then
+  # Readiness: on a new (or re-created) volume, do not serve until one full
+  # sync has succeeded. Otherwise the API would answer 200 with null series
+  # for hours, and callers would cache them. While this runs the gateway
+  # returns 502, the app's breaker opens and pages show seasonal estimates.
+  until [ -f "$READY_MARKER" ]; do
+    if sync_once; then
+      touch "$READY_MARKER"
+    else
+      echo "sync: initial sync incomplete; retrying in 60 s" >&2
+      sleep 60
+    fi
+  done
   sync_loop &
 fi
 

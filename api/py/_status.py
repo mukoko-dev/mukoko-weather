@@ -162,7 +162,7 @@ def _check_tomorrow_io() -> dict:
 
 
 def _check_open_meteo() -> dict:
-    url = om.forecast_url()
+    url, headers = om.forecast()
     # A self-hosted instance is named as such (never by its URL); the public
     # API keeps the original name.
     name = "Open-Meteo API (self-hosted)" if om.is_self_hosted(url) else "Open-Meteo API"
@@ -171,7 +171,7 @@ def _check_open_meteo() -> dict:
         resp = get_http_client(PROBE_TIMEOUT_S).get(
             url,
             params={"latitude": "-17.83", "longitude": "31.05", "current": "temperature_2m"},
-            headers=om.headers_for(url),
+            headers=headers,
         )
 
         if resp.status_code != 200:
@@ -181,6 +181,26 @@ def _check_open_meteo() -> dict:
         if data.get("current", {}).get("temperature_2m") is None:
             return _result(name, "degraded", start, "Response received but missing expected data")
 
+        return _result(name, "operational", start, "Responding normally")
+    except Exception as e:
+        return _result(name, "down", start, _failure_message(name, e))
+
+
+def _check_open_meteo_air_quality() -> dict:
+    """Probe the self-hosted CAMS air-quality endpoint (only listed when set)."""
+    name = "Open-Meteo Air Quality (self-hosted)"
+    url, headers = om.air_quality()
+    start = time.time()
+    try:
+        resp = get_http_client(PROBE_TIMEOUT_S).get(
+            url,
+            params={"latitude": "-17.83", "longitude": "31.05", "current": "pm2_5"},
+            headers=headers,
+        )
+        if resp.status_code != 200:
+            return _result(name, "down", start, f"HTTP {resp.status_code}: {resp.reason_phrase}")
+        if resp.json().get("current", {}).get("pm2_5") is None:
+            return _result(name, "degraded", start, "Response received but missing expected data")
         return _result(name, "operational", start, "Responding normally")
     except Exception as e:
         return _result(name, "down", start, _failure_message(name, e))
@@ -320,6 +340,11 @@ async def system_status():
         _check_weather_cache(),
         _check_ai_cache(),
     ]
+    # A self-hosted air-quality host is a separate service with its own sync,
+    # so it gets its own row. On the public API (the default) the list is
+    # unchanged.
+    if om.air_quality_is_self_hosted():
+        checks.insert(3, _check_open_meteo_air_quality())
 
     # Enrichment-only providers (Tomorrow.io) never degrade the overall status:
     # the baseline forecast does not depend on them.

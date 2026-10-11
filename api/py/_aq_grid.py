@@ -41,8 +41,6 @@ router = APIRouter()
 # Constants
 # ---------------------------------------------------------------------------
 
-# Public default; the call resolves the URL per request (``om.air_quality_url``).
-OPEN_METEO_AQ_URL = om.PUBLIC_AIR_QUALITY_URL
 
 #: Cache TTL — 30 min. Grid readings move slowly; the request fans out to n²
 #: points, so caching is the main protection for the upstream quota.
@@ -202,8 +200,8 @@ def _get_http() -> httpx.Client:
 
 def _fetch_grid(points: list[tuple[float, float]]) -> list[tuple[Optional[int], Optional[float]]]:
     """Blocking single batched call. Raises on HTTP / contract errors."""
-    url = om.air_quality_url()
-    resp = _get_http().get(url, params=_open_meteo_params(points), headers=om.headers_for(url))
+    url, headers = om.air_quality()
+    resp = _get_http().get(url, params=_open_meteo_params(points), headers=headers)
     resp.raise_for_status()
     return parse_grid_response(resp.json(), points)
 

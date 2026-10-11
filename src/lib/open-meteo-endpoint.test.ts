@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  DEFAULT_KEY_HEADER,
+  KEY_HEADER,
+  isSelfHosted,
   PUBLIC_FORECAST_URL,
   configuredForecastBase,
   openMeteoForecastUrl,
@@ -68,28 +69,25 @@ describe("openMeteoHeaders", () => {
   it("sends the key in the default header to the self-hosted instance", () => {
     const url = openMeteoForecastUrl(SELF);
     expect(openMeteoHeaders(url, SELF)).toEqual({
-      [DEFAULT_KEY_HEADER]: "k-test",
+      [KEY_HEADER]: "k-test",
     });
   });
 
-  it("honours a custom header name and rejects an invalid one", () => {
-    const url = openMeteoForecastUrl(SELF);
+  it.each([
+    "https://API.open-meteo.com",
+    "https://customer-api.open-meteo.com",
+  ])("never sends the key to an Open-Meteo host (%s)", (base) => {
+    const env = { OPEN_METEO_BASE_URL: base, OPEN_METEO_API_KEY: "k-test" };
+    const url = openMeteoForecastUrl(env);
+    expect(isSelfHosted(url)).toBe(false);
+    expect(openMeteoHeaders(url, env)).toEqual({});
+  });
+
+  it("treats look-alike hosts as ours, not Open-Meteo's", () => {
     expect(
-      openMeteoHeaders(url, {
-        ...SELF,
-        OPEN_METEO_API_KEY_HEADER: "X-Weather-Key",
-      }),
-    ).toEqual({
-      "X-Weather-Key": "k-test",
-    });
-    expect(
-      openMeteoHeaders(url, {
-        ...SELF,
-        OPEN_METEO_API_KEY_HEADER: "bad header:",
-      }),
-    ).toEqual({
-      [DEFAULT_KEY_HEADER]: "k-test",
-    });
+      isSelfHosted("https://open-meteo.com.evil.example/v1/forecast"),
+    ).toBe(true);
+    expect(isSelfHosted("https://notopen-meteo.com/v1/forecast")).toBe(true);
   });
 
   it("sends nothing when no key is set", () => {
@@ -153,6 +151,6 @@ describe("fetchWeather wiring", () => {
     vi.stubEnv("OPEN_METEO_API_KEY", "k-test");
     const { url, init } = await capture();
     expect(url.startsWith("https://om.example.com/v1/forecast?")).toBe(true);
-    expect(init.headers).toEqual({ [DEFAULT_KEY_HEADER]: "k-test" });
+    expect(init.headers).toEqual({ [KEY_HEADER]: "k-test" });
   });
 });

@@ -59,9 +59,6 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-# Public defaults; the calls resolve the URLs per request (``_open_meteo``).
-OPEN_METEO_AQ_URL = om.PUBLIC_AIR_QUALITY_URL
-OPEN_METEO_FORECAST_URL = om.PUBLIC_FORECAST_URL
 AQ_PARAMS: dict[str, Any] = {
     "current": "pm2_5,pm10,dust,aerosol_optical_depth,us_aqi",
     "hourly": "pm2_5,dust,aerosol_optical_depth,us_aqi",
@@ -619,13 +616,9 @@ async def _fetch_open_meteo(lat: float, lon: float) -> tuple[dict, dict]:
     fc_params = {"latitude": lat, "longitude": lon, **FORECAST_PARAMS}
     # Sequential on purpose: Open-Meteo's free tier answers bursts of parallel
     # requests from one client with 429, and each 429 counts against the breaker.
-    aq_url, fc_url = om.air_quality_url(), om.forecast_url()
-    aq = await open_meteo_breaker.execute(
-        lambda: _http_get_json(aq_url, aq_params, headers=om.headers_for(aq_url))
-    )
-    fc = await open_meteo_breaker.execute(
-        lambda: _http_get_json(fc_url, fc_params, headers=om.headers_for(fc_url))
-    )
+    (aq_url, aq_headers), (fc_url, fc_headers) = om.air_quality(), om.forecast()
+    aq = await open_meteo_breaker.execute(lambda: _http_get_json(aq_url, aq_params, headers=aq_headers))
+    fc = await open_meteo_breaker.execute(lambda: _http_get_json(fc_url, fc_params, headers=fc_headers))
     return aq, fc
 
 

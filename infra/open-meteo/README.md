@@ -66,18 +66,19 @@ The service **must** be named `open-meteo`. The gateway reaches it at
 variables our requests need. Sizes were measured against the open-data
 bucket on 2026-10-11 with `--past-days 7`:
 
-| Domain                                                  | Blend member / use                | Disk       | Runs/day |
-| ------------------------------------------------------- | --------------------------------- | ---------- | -------- |
-| `ecmwf_ifs`                                             | `ecmwf_ifs` (IFS HRES 9 km)       | 32.2 GB    | 4        |
-| `ecmwf_aifs025_single`                                  | `ecmwf_aifs025_single`            | 0.6 GB     | 4        |
-| `ncep_gfs013` + `ncep_gfs025`                           | `gfs_seamless` (UV, lifted index) | 15.7 GB    | 4        |
-| `dwd_icon`                                              | `icon_global`                     | 8.7 GB     | 4        |
-| `cmc_gem_gdps_15km`                                     | `gem_global`                      | 6.6 GB     | 2        |
-| `meteofrance_arpege_world025`                           | `meteofrance_arpege_world`        | 1.6 GB     | 4        |
-| `ncep_gefs025`, `ecmwf_ifs025_ensemble`, `dwd_icon_eps` | precipitation probability         | 1.1 GB     | 2–4      |
-| `cams_global`                                           | `/v1/air-quality`                 | 0.5 GB     | 2        |
-| `copernicus_dem90`                                      | 90 m terrain downscaling (static) | 10.5 GB    | —        |
-| **Total**                                               |                                   | **~78 GB** |          |
+| Domain                                                     | Blend member / use                                                               | Disk       | Runs/day |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------- | ---------- | -------- |
+| `ecmwf_ifs`                                                | `ecmwf_ifs` (IFS HRES 9 km)                                                      | 32.2 GB    | 4        |
+| `ecmwf_aifs025_single`                                     | `ecmwf_aifs025_single`                                                           | 0.6 GB     | 4        |
+| `ncep_gfs013` + `ncep_gfs025`                              | `gfs_seamless` (UV, lifted index)                                                | 15.7 GB    | 4        |
+| `dwd_icon`                                                 | `icon_global`                                                                    | 8.7 GB     | 4        |
+| `cmc_gem_gdps_15km`                                        | `gem_global`                                                                     | 6.6 GB     | 2        |
+| `meteofrance_arpege_world025`                              | `meteofrance_arpege_world`                                                       | 1.6 GB     | 4        |
+| `ncep_gefs025`, `ecmwf_ifs025_ensemble`, `dwd_icon_eps`    | precipitation probability                                                        | 1.1 GB     | 2–4      |
+| `ecmwf_ifs025`, `dwd_icon_eu`, `meteofrance_arpege_europe` | user-selectable models (`ecmwf_ifs025`, `icon_seamless`, `meteofrance_seamless`) | 4.5 GB     | 4–8      |
+| `cams_global`, `cams_europe`                               | `/v1/air-quality` (Europe picks `cams_europe`, the only NH3 source)              | 0.9 GB     | 1–2      |
+| `copernicus_dem90`                                         | 90 m terrain downscaling (static)                                                | 10.5 GB    | —        |
+| **Total**                                                  |                                                                                  | **~83 GB** |          |
 
 Notes:
 
@@ -87,10 +88,21 @@ Notes:
 - `sync` takes the domain and the variable list as positional arguments
   (there is no `--only-variables` flag). `--past-days` bounds the window, and
   the loop prunes chunks older than the window plus 3 days.
-- Sync traffic is at most ~226 GB a day, if every changed chunk is fetched
-  again on each run (~6.8 TB a month). It is **inbound**, which Railway does
+- Sync traffic is at most ~242 GB a day, if every changed chunk is fetched
+  again on each run (~7.3 TB a month). It is **inbound**, which Railway does
   not bill, and the AWS open-data programme pays for it at the source.
 - No ensemble members, ERA5 or pressure levels are synced.
+- **Regional nests are not synced** (ICON-D2, AROME, HRRR, UKMO 2 km …).
+  `best_match`, the app's single-request fallback, picks those for some
+  European and North American points. With the forecast self-hosted, a
+  `best_match` answer without temperatures is not cached or recorded: the app
+  serves its seasonal estimate and records no breaker failure. The blend,
+  the primary path everywhere, only uses the global members. `smoke.sh`
+  reports those points as warnings.
+- **Readiness:** on a new or re-created volume, `entrypoint.sh` finishes one
+  complete sync before it starts serving (marker file
+  `.mukoko-initial-sync-complete`). Until then the gateway answers 502 and the
+  app degrades, rather than caching empty forecasts.
 
 ## Sizing and cost
 
@@ -99,18 +111,18 @@ volume $0.15/GB/month (used space), egress $0.05/GB, inbound free, private
 networking free. Volumes over 5 GB need the **Pro plan** ($20/month, counted
 against usage). Volumes give 3,000 read IOPS.
 
-| Monthly (USD)                   | (a) Minimum: 6 blend members + CAMS |                    (b) Fuller set |
+| Monthly (USD)                   | (a) Minimum: `sync.conf` as shipped |                    (b) Fuller set |
 | ------------------------------- | ----------------------------------: | --------------------------------: |
 | API compute (RAM)               |                     $40–80 (4–8 GB) |                      $160 (16 GB) |
 | API compute (CPU)               |                      $10 (0.5 vCPU) |                      $20 (1 vCPU) |
 | Gateway                         |                                 ~$2 |                               ~$2 |
-| Volume (used GB)                |    $12 (~80 GB, 100 GB provisioned) | $26 (~175 GB, 250 GB provisioned) |
+| Volume (used GB)                |    $13 (~85 GB, 100 GB provisioned) | $26 (~175 GB, 250 GB provisioned) |
 | Egress (responses to Vercel/CF) |                     ~$2.50 (~50 GB) |                     ~$5 (~100 GB) |
-| Sync bandwidth (inbound)        |                      $0 (≤ ~6.8 TB) |                      $0 (≤ ~8 TB) |
+| Sync bandwidth (inbound)        |                      $0 (≤ ~7.3 TB) |                      $0 (≤ ~8 TB) |
 | **Total** (Pro $20 included)    |                        **~$65–105** |                         **~$215** |
 
-The fuller set adds `ecmwf_ifs025`, `dwd_icon_eu`, `meteofrance_arpege_europe`,
-`ukmo_global_deterministic_10km` and `cams_europe` with `--past-days 31`.
+The fuller set adds `ukmo_global_deterministic_10km` and the regional nests
+`best_match` uses in Europe and North America, with `--past-days 31`.
 Upstream asks for 8 GB RAM minimum (16 GB recommended); start the minimum set
 at 8 GB and right-size from Railway's metrics after a week.
 
@@ -181,7 +193,8 @@ once approved):
      `SYNC_INTERVAL_MINUTES`.
    - Do **not** generate a public domain.
    - Watch the logs for `sync: <domain>` lines. The first full sync
-     (~80 GB) takes roughly 1–3 hours.
+     (~85 GB) takes roughly 1–3 hours, and the API only starts serving
+     after it completes.
 4. **`om-gateway` service.**
    - Same repo and branch. Config path: `infra/open-meteo/gateway/railway.json`.
    - Variable `OM_GATEWAY_KEY` = a new random key (`openssl rand -hex 32`).
@@ -196,8 +209,8 @@ once approved):
    - `OPEN_METEO_BASE_URL=https://<gateway-domain>`
    - `OPEN_METEO_AQ_BASE_URL=https://<gateway-domain>`
    - `OPEN_METEO_API_KEY=<key>` (sensitive)
-   - Optionally `OPEN_METEO_API_KEY_HEADER` (default `X-Mukoko-OM-Key`)
-   - Redeploy. `/status` then shows **Open-Meteo API (self-hosted)**. Check
+   - Redeploy. `/status` then shows **Open-Meteo API (self-hosted)** and an
+     **Open-Meteo Air Quality (self-hosted)** row. Check
      that `/api/py/weather` still answers `X-Weather-Provider: open-meteo:blend`.
 7. **Watch for a week.** Check Railway memory and CPU, `/status`, and the
    `open_meteo_breaker` state. Then right-size RAM.

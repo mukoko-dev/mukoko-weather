@@ -120,8 +120,7 @@ locations.
 | `INTERNAL_API_BASE_URL`           |    No    | Base URL for server-to-server SSR calls into `/api/py/*`. Overrides the default: the production domain in production, the protected deployment URL plus the automation bypass header on previews         |
 | `OPEN_METEO_BASE_URL`             |    No    | Server-only. Origin of a self-hosted Open-Meteo (`infra/open-meteo/`); `/v1/forecast` is appended. Unset = the public API. `https` only (plain `http` for localhost)                                     |
 | `OPEN_METEO_AQ_BASE_URL`          |    No    | Server-only. Origin of the self-hosted air-quality (CAMS) API; `/v1/air-quality` is appended. Unset = the public API. Set apart from the forecast so the two can move separately                         |
-| `OPEN_METEO_API_KEY`              |    No    | Server-only secret. Gateway key sent to the self-hosted hosts above, in a header, never to the public API and never in a URL                                                                             |
-| `OPEN_METEO_API_KEY_HEADER`       |    No    | Header that carries the key (default `X-Mukoko-OM-Key`)                                                                                                                                                  |
+| `OPEN_METEO_API_KEY`              |    No    | Server-only secret. Gateway key, sent in the `X-Mukoko-OM-Key` header to the self-hosted hosts above only, never to an `open-meteo.com` host and never in a URL                                          |
 
 ## Architecture
 
