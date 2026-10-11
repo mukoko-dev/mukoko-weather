@@ -64,6 +64,7 @@ describe("feature-flags", () => {
         "shamwari_chat",
         "map_layers",
         "premium_maps",
+        "model_map_layers",
         "vector_search",
         "multi_language",
       ];
