@@ -420,11 +420,14 @@ class TestCheckAiCache:
         assert "10" in result["message"]
 
     @patch("py._status.get_db")
-    def test_degraded_when_empty(self, mock_db):
+    def test_empty_is_informational_not_degraded(self, mock_db):
+        """Summaries are on-demand and expire within 2 h, so an empty cache is
+        normal whenever nobody has asked recently (#263)."""
         mock_db.return_value.__getitem__.return_value.count_documents.return_value = 0
         result = _check_ai_cache()
-        assert result["status"] == "degraded"
-        assert "empty" in result["message"]
+        assert result["status"] == "operational"
+        assert "No summaries cached right now" in result["message"]
+        assert "normal" in result["message"]
 
     @patch("py._status.get_db")
     def test_down_on_error(self, mock_db):
@@ -447,6 +450,49 @@ class TestCheckAiCache:
 # ---------------------------------------------------------------------------
 # system_status endpoint (overall)
 # ---------------------------------------------------------------------------
+
+
+class TestEmptyAiCacheKeepsOverallOperational:
+    """End to end through system_status: every service healthy and an empty
+    AI summary cache must read "operational" overall (#263)."""
+
+    @patch("py._status.get_db")
+    @patch("py._status._check_weather_cache")
+    @patch("py._status._check_ai_gateway")
+    @patch("py._status._check_open_meteo")
+    @patch("py._status._check_tomorrow_io")
+    @patch("py._status._check_mongodb")
+    @pytest.mark.asyncio
+    async def test_overall_operational_with_empty_ai_cache(
+        self, mock_mongo, mock_tomorrow, mock_meteo, mock_ai_gw, mock_weather, mock_db
+    ):
+        ok = {"name": "test", "status": "operational", "latencyMs": 1, "message": "ok"}
+        for m in [mock_mongo, mock_tomorrow, mock_meteo, mock_ai_gw, mock_weather]:
+            m.return_value = dict(ok)
+        mock_db.return_value.__getitem__.return_value.count_documents.return_value = 0
+
+        result = await system_status()
+        ai_row = next(c for c in result["checks"] if c["name"] == "AI Summary Cache")
+        assert ai_row["status"] == "operational"
+        assert result["status"] == "operational"
+
+    @patch("py._status.get_db")
+    @patch("py._status._check_weather_cache")
+    @patch("py._status._check_ai_gateway")
+    @patch("py._status._check_open_meteo")
+    @patch("py._status._check_tomorrow_io")
+    @patch("py._status._check_mongodb")
+    @pytest.mark.asyncio
+    async def test_a_failed_ai_cache_count_still_degrades(
+        self, mock_mongo, mock_tomorrow, mock_meteo, mock_ai_gw, mock_weather, mock_db
+    ):
+        ok = {"name": "test", "status": "operational", "latencyMs": 1, "message": "ok"}
+        for m in [mock_mongo, mock_tomorrow, mock_meteo, mock_ai_gw, mock_weather]:
+            m.return_value = dict(ok)
+        mock_db.return_value.__getitem__.return_value.count_documents.side_effect = Exception("boom")
+
+        result = await system_status()
+        assert result["status"] == "degraded"
 
 
 class TestSystemStatus:

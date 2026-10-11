@@ -282,15 +282,25 @@ def _check_ai_gateway() -> dict:
     return _result(name, "operational", start, f"AI Worker reachable (gateway {gateway}, model set by the Worker)")
 
 
-def _count_active(collection: str, noun: tuple[str, str], empty_message: str, name: str) -> dict:
-    """Shared body for the cache-population checks (count of unexpired docs)."""
+def _count_active(
+    collection: str,
+    noun: tuple[str, str],
+    empty_message: str,
+    name: str,
+    empty_status: str = "degraded",
+) -> dict:
+    """Shared body for the cache-population checks (count of unexpired docs).
+
+    ``empty_status`` is the row status when nothing is cached. A failed count
+    is always ``down``: that is a real fault, unlike an empty cache.
+    """
     start = time.time()
     try:
         count = get_db()[collection].count_documents(ttl_filter({}))
         singular, plural = noun
         return _result(
             name,
-            "operational" if count > 0 else "degraded",
+            "operational" if count > 0 else empty_status,
             start,
             f"{count} active cached {singular if count == 1 else plural}" if count > 0 else empty_message,
         )
@@ -308,11 +318,20 @@ def _check_weather_cache() -> dict:
 
 
 def _check_ai_cache() -> dict:
+    """An empty AI summary cache is informational, never a degradation (#263).
+
+    Summaries are generated on demand for signed-in visitors and expire after
+    30–120 minutes, so the collection is legitimately empty whenever nobody
+    has asked for one recently. Reporting that as degraded made the whole
+    status page read "degraded" with every service healthy.
+    """
     return _count_active(
         "ai_summaries",
         ("summary", "summaries"),
-        "Cache is empty — next requests will generate fresh summaries",
+        "No summaries cached right now — normal when nobody has asked for one "
+        "recently; the next request generates a fresh one",
         "AI Summary Cache",
+        empty_status="operational",
     )
 
 
