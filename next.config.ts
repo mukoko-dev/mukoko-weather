@@ -49,7 +49,7 @@ const nextConfig: NextConfig = {
       {
         // Frame policy: same-origin only, except the embeddable widget/docs
         // and the kiosk display (their own rules follow).
-        source: `/((?!${FRAMEABLE_PATHS.join("|")}).*)`,
+        source: `/((?!(?:${FRAMEABLE_PATHS.join("|")})(?:/|$)).*)`,
         headers: [FRAME_HEADER],
       },
       {

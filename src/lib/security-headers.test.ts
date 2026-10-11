@@ -30,6 +30,7 @@ describe("security headers (B05)", () => {
     expect(re.test("/harare")).toBe(true);
     expect(re.test("/embed/widget")).toBe(false);
     expect(re.test("/display")).toBe(false);
+    expect(re.test("/displaced-farm--ksy4dd7")).toBe(true);
   });
 
   it("keeps the embed widget frameable anywhere", () => {
