@@ -640,10 +640,27 @@ def _fetch_soil_uncached(lat: float, lon: float) -> tuple[Optional[Soil], bool]:
         logger.info("SoilGrids unavailable: %s", type(exc).__name__)
         return None, False
     soilgrids_breaker.record_success()
+    try:
+        return _parse_soil(c, p), True
+    except (TypeError, ValueError, KeyError, AttributeError, IndexError) as exc:
+        # A payload shape we do not understand is a no-data answer, never a
+        # failed profile (SoilGrids returned a null class probability for
+        # London, which used to raise here).
+        logger.info("SoilGrids payload not understood: %s", type(exc).__name__)
+        return None, True
+
+
+def _number(value) -> Optional[float]:
+    """A real number, or ``None`` (never a bool, a string or ``None``)."""
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def _parse_soil(c: dict, p: dict) -> Optional[Soil]:
     soil = Soil(wrbClass=c.get("wrb_class_name") or None)
     probs = c.get("wrb_class_probability") or []
     if probs and isinstance(probs[0], list) and len(probs[0]) > 1:
-        soil.wrbProbability = int(probs[0][1])
+        probability = _number(probs[0][1])
+        soil.wrbProbability = int(probability) if probability is not None else None
     fractions: dict[str, float] = {}
     weights = {"0-5cm": 5, "5-15cm": 10, "15-30cm": 15}
     for layer in (p.get("properties") or {}).get("layers") or []:
@@ -662,8 +679,8 @@ def _fetch_soil_uncached(lat: float, lon: float) -> tuple[Optional[Soil], bool]:
         soil.texture = texture_class(soil.sandPct, soil.siltPct, soil.clayPct)
         soil.depth = "0-30cm"
     if not soil.wrbClass and not soil.texture:
-        return None, True
-    return soil, True
+        return None
+    return soil
 
 
 # ---------------------------------------------------------------------------
@@ -859,9 +876,13 @@ def build_knowledge(place: dict, *, allow_fetch: bool = True,
     due("agriculture", bool(cal))
 
     # Soil (best-effort; only for a real place, never on a cache-only build).
-    soil, soil_answered = (
-        fetch_soil_checked(lat, lon) if allow_fetch and place.get("id") else (None, False)
-    )
+    try:
+        soil, soil_answered = (
+            fetch_soil_checked(lat, lon) if allow_fetch and place.get("id") else (None, False)
+        )
+    except Exception as exc:  # noqa: BLE001 — soil is best effort, never the whole profile
+        logger.warning("soil lookup failed: %s", type(exc).__name__)
+        soil, soil_answered = None, False
     if soil:
         provenance.append(_prov("soil", "ISRIC SoilGrids 2.0", "modelled", now, licence="CC-BY-4.0",
                                 attribution="Poggio et al. (2021), SOIL 7, 217–240, doi:10.5194/soil-7-217-2021",

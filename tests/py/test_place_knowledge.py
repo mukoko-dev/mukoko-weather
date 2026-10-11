@@ -174,6 +174,33 @@ class TestSoil:
         assert soil.texture == "sandy clay loam"
         assert soil.depth == "0-30cm"
 
+    def test_a_null_class_probability_is_not_a_failure(self):
+        # SoilGrids returned [["Cambisols", null]] for London on the preview,
+        # and int(None) used to take the whole profile down with a TypeError.
+        client = _soil_client(
+            {"wrb_class_name": "Cambisols", "wrb_class_probability": [["Cambisols", None]]},
+            {"properties": {"layers": [_layer("clay", [200, 200, 200]), _layer("sand", [400, 400, 400]),
+                                       _layer("silt", [400, 400, 400])]}},
+        )
+        with patch.object(pk, "_get_soil_http", return_value=client):
+            soil, answered = pk.fetch_soil_checked(51.5, -0.13)
+        assert answered is True
+        assert soil.wrbClass == "Cambisols" and soil.wrbProbability is None
+        assert soil.texture == "loam"
+
+    @pytest.mark.parametrize("class_payload,props_payload", [
+        ({"wrb_class_name": "X", "wrb_class_probability": [["X", "high"]]}, {"properties": {"layers": []}}),
+        ({"wrb_class_name": "X", "wrb_class_probability": "none"}, {"properties": {"layers": []}}),
+        ({"wrb_class_name": "X"}, {"properties": {"layers": [{"name": "clay", "depths": [{"label": "0-5cm", "values": {"mean": "n/a"}}]}]}}),
+        ({"wrb_class_name": None}, {"properties": None}),
+    ])
+    def test_a_payload_we_do_not_understand_never_raises(self, class_payload, props_payload):
+        client = _soil_client(class_payload, props_payload)
+        with patch.object(pk, "_get_soil_http", return_value=client):
+            soil, answered = pk.fetch_soil_checked(1.0, 1.0)
+        assert answered is True  # an answer, even if only "no data"
+        assert soil is None or isinstance(soil, pk.Soil)
+
     def test_null_fractions_keep_the_class(self):
         client = _soil_client(
             {"wrb_class_name": "Cambisols", "wrb_class_probability": [["Cambisols", 18]]},
@@ -353,6 +380,14 @@ class TestBuild:
         assert doc["soil"] is None and not any(p["field"] == "soil" for p in doc["provenance"])
         doc, _, _ = _build(soil=None, soil_answered=False)
         assert doc["refreshAfter"]["soil"] == start + dt.timedelta(days=1)
+
+    def test_a_soil_failure_never_fails_the_build(self):
+        with patch.object(pk, "get_monthly_normals", return_value=NORMALS), \
+             patch.object(pk, "fetch_soil_checked", side_effect=TypeError("boom")), \
+             patch.object(pk, "get_db", return_value=_seasons_db(ZW_SEASONS)):
+            doc = pk.build_knowledge(PLACE, allow_fetch=True, now=dt.datetime(2026, 10, 11, tzinfo=dt.timezone.utc))
+        assert doc["soil"] is None and doc["climate"]["koppen"]["code"] == "Cwb"
+        assert doc["refreshAfter"]["soil"] == dt.datetime(2026, 10, 12, tzinfo=dt.timezone.utc)
 
     def test_cache_only_build_makes_no_upstream_call(self):
         _, gm, fs = _build(allow_fetch=False)
