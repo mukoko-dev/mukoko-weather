@@ -23,6 +23,7 @@ from ._db import (
     MAX_MESSAGE_LEN,
 )
 from ._ai_prompts import get_ai_prompt
+from ._place_knowledge import profile_block_for, with_profile
 from ._ai_gateway import call_ai, first_text
 
 router = APIRouter()
@@ -150,6 +151,9 @@ async def followup_chat(body: FollowupRequest, request: Request):
         filter_known_activities(body.activities),
         body.season,
     )
+
+    # Stored place knowledge for this location (cache-only, #277).
+    system_prompt += with_profile(await profile_block_for(slug=body.locationSlug.strip().lower()))
 
     # Get model config from database
     prompt_doc = get_ai_prompt("system:followup")

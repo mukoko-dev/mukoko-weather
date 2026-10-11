@@ -92,6 +92,30 @@ def _no_overpass_network(monkeypatch):
     monkeypatch.setattr(_overpass, "_get_http", _unavailable)
 
 
+@pytest.fixture(autouse=True)
+def _no_place_knowledge_side_effects(monkeypatch):
+    """Keep place-knowledge lookups off the network and off background threads.
+
+    The AI endpoints now ask `_place_knowledge.profile_block_for` for a profile
+    block (#277). Against the mocked pymongo that lookup must never reach
+    SoilGrids or the Open-Meteo archive, and must never start a background
+    build thread. Tests of the module itself override these patches.
+    """
+    try:
+        from py import _place_knowledge as pk
+    except Exception:  # pragma: no cover - module always importable in practice
+        return
+
+    def _soil_unavailable():
+        raise RuntimeError("SoilGrids disabled in tests")
+
+    monkeypatch.setattr(pk, "_get_soil_http", _soil_unavailable)
+    monkeypatch.setattr(pk, "schedule_knowledge_build", lambda place: False)
+    monkeypatch.setattr(pk, "_warm_enso_in_background", lambda: None)
+    monkeypatch.setitem(pk._collection_state, "ready", False)
+    monkeypatch.setitem(pk._collection_state, "checked", float("inf"))
+
+
 @pytest.fixture
 def mock_request():
     """Create a mock FastAPI Request with configurable headers and client."""
