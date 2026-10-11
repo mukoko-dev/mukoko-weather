@@ -88,16 +88,27 @@ function frameLoaded(map: MapLibreGLMap, id: string): boolean {
 }
 
 /**
- * Shows `state.want` if it has loaded: raises it to full opacity and removes
- * the frame it replaces. Returns the timestamp shown, or null if still loading.
+ * How long a new timeline frame may load hidden before it is shown anyway,
+ * tile by tile. Past this the visible frame would no longer match the
+ * timeline label, which is worse than a frame that is still filling in.
+ */
+const FRAME_SWAP_TIMEOUT_MS = 2500;
+
+/**
+ * Shows `state.want` if it has loaded (or `force` is set): raises it to full
+ * opacity and removes the frame it replaces. Returns the timestamp shown once
+ * the frame is complete, or null while it is still loading.
  */
 function swapToWantIfLoaded(
   map: MapLibreGLMap,
   state: FrameState,
   keep: string | null,
+  force = false,
 ): string | null {
   const want = state.want;
-  if (!want || !state.present.has(want) || !frameLoaded(map, want)) return null;
+  if (!want || !state.present.has(want)) return null;
+  const loaded = frameLoaded(map, want);
+  if (!loaded && !force) return null;
   if (state.active !== want) {
     map.setPaintProperty(want, "raster-opacity", OVERLAY_OPACITY);
     const old = state.active;
@@ -105,7 +116,7 @@ function swapToWantIfLoaded(
     if (old && old !== keep) removeFrame(map, state, old);
     else if (old) map.setPaintProperty(old, "raster-opacity", 0);
   }
-  return state.timestamps[want] ?? null;
+  return loaded ? (state.timestamps[want] ?? null) : null;
 }
 
 /**
@@ -195,17 +206,22 @@ function syncFramesFrom(
   if (shown) props.onLoaded?.(shown);
 }
 
-/** A frame's tiles came in (or failed): swap it in if it is now complete. */
+/**
+ * A frame's tiles came in (or failed), the map went idle, or the swap timeout
+ * passed (`force`): swap the wanted frame in if it is complete, or regardless
+ * when forced, and report it once complete.
+ */
 function settleFrame(
   map: MapLibreGLMap,
   state: FrameState,
   props: OverlayProps,
+  force = false,
 ) {
   const keep =
     props.layer && props.prefetch
       ? overlayFrameId(props.layer, props.prefetch)
       : null;
-  const shown = swapToWantIfLoaded(map, state, keep);
+  const shown = swapToWantIfLoaded(map, state, keep, force);
   if (shown) props.onLoaded?.(shown);
 }
 
@@ -507,6 +523,11 @@ export function MapLibreMap({
           if (!e?.sourceId || e.sourceId !== state.want) return;
           settleFrame(map, state, overlayPropsRef.current);
         });
+        // A frame that needs no tiles (or whose last tile fails without an
+        // event) completes with no "sourcedata" for it; "idle" catches that.
+        map.on("idle", () => {
+          settleFrame(map, framesRef.current, overlayPropsRef.current);
+        });
 
         // Surface tile/style failures (missing/expired API key → 403/503, rate
         // limit → 429, upstream error) instead of showing a silent blank map.
@@ -515,9 +536,15 @@ export function MapLibreMap({
         // silent.
         map.on("error", (e: { error?: unknown; sourceId?: string }) => {
           if (classifyMapError(e, WEATHER_OVERLAY_ID) === "overlay") {
+            const state = framesRef.current;
             // An errored tile still counts as "loaded" for the frame, so a
             // failing frame can still replace the previous one.
-            settleFrame(map, framesRef.current, overlayPropsRef.current);
+            settleFrame(map, state, overlayPropsRef.current);
+            // A failure in the hidden preload frame is not something the user
+            // is looking at; it will be reported if that frame is shown.
+            if (e.sourceId !== state.want && e.sourceId !== state.active) {
+              return;
+            }
             // Overlay tile failures (e.g. a single raster tile that can't be
             // decoded) are non-fatal — MapLibre keeps the rest of the layer, so we
             // never blank it. Fire the notice once and log at most once per layer
@@ -553,13 +580,13 @@ export function MapLibreMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // mount-only — style + layer switches handled below
 
-  // Switch style when theme changes. setStyle wipes all sources/layers/markers,
-  // so restore the marker + overlay once the new style settles (single-shot).
+  // Switch style when theme changes. The diffed setStyle drops our sources and
+  // fires "style.load" again, where restore() re-adds the marker and overlays.
+  // styleReadyRef stays true: a diff with nothing to change fires no
+  // "style.load", and the overlays are then still in place.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    // restore() runs again on the new style's "style.load".
-    styleReadyRef.current = false;
     map.setStyle(getMapTilerStyle(isDark));
   }, [isDark]);
 
@@ -569,13 +596,26 @@ export function MapLibreMap({
   useEffect(() => {
     setOverlayError(false);
     overlayErrorLoggedRef.current = false;
-  }, [weatherLayer]);
+  }, [weatherLayer, weatherTimestamp]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !styleReadyRef.current) return;
-    // Reads the same props through overlayPropsRef.
-    syncFramesFrom(map, framesRef.current, overlayPropsRef.current);
+    try {
+      // Reads the same props through overlayPropsRef.
+      syncFramesFrom(map, framesRef.current, overlayPropsRef.current);
+    } catch {
+      // The style is being replaced (a non-diff setStyle); restore() applies
+      // the latest props on its "style.load".
+      return;
+    }
+    // Show the new frame after a short wait even if some tiles are slow, so
+    // the radar never lags the timeline label for long.
+    const id = window.setTimeout(() => {
+      if (mapRef.current !== map) return;
+      settleFrame(map, framesRef.current, overlayPropsRef.current, true);
+    }, FRAME_SWAP_TIMEOUT_MS);
+    return () => window.clearTimeout(id);
   }, [weatherLayer, weatherTimestamp, weatherPrefetchTimestamp]);
 
   // Draw AQI bubbles when the set changes.
@@ -599,7 +639,11 @@ export function MapLibreMap({
     if (!map) return;
     // Before "style.load", restore() applies the latest grid from its ref.
     if (!styleReadyRef.current) return;
-    applyAqiOverlay(map, aqiOverlay);
+    try {
+      applyAqiOverlay(map, aqiOverlay);
+    } catch {
+      // Style being replaced; restore() applies the latest grid.
+    }
   }, [aqiOverlay]);
 
   return (

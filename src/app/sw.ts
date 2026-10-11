@@ -23,15 +23,18 @@ import {
 import type { PrecacheEntry } from "serwist";
 
 /**
- * Only real overlay tiles may be stored. The proxy marks its transparent
- * fallback (quota spent, upstream error) with an `X-Map-Tile` header; caching
+ * Only fresh overlay tiles may be stored. The proxy marks its transparent
+ * fallback (quota spent, upstream error) with an `X-Map-Tile` header and an
+ * outdated tile served during an outage with `X-Cache: STALE`; caching
  * one CacheFirst would hide the radar on this device long after the quota
  * reset (#266). Replacing `cacheWillUpdate` drops the default 200-only check,
  * so it is repeated here.
  */
 const skipFallbackTiles = {
   cacheWillUpdate: async ({ response }: { response: Response }) =>
-    response.status === 200 && !response.headers.has("X-Map-Tile")
+    response.status === 200 &&
+    !response.headers.has("X-Map-Tile") &&
+    response.headers.get("X-Cache") !== "STALE"
       ? response
       : null,
 };

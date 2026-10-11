@@ -15,6 +15,8 @@ describe("service worker map-tile caching", () => {
   it("never stores the proxy's transparent fallback tiles", () => {
     expect(sw).toContain('!response.headers.has("X-Map-Tile")');
     expect(sw).toContain("response.status === 200");
+    // Nor an outdated tile served during an upstream outage.
+    expect(sw).toContain('response.headers.get("X-Cache") !== "STALE"');
   });
 
   it("caches fixed-hour tiles CacheFirst but 'now' tiles NetworkFirst", () => {

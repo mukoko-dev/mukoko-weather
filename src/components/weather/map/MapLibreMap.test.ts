@@ -280,6 +280,32 @@ describe("weather timeline + AQI bubbles (full-screen map)", () => {
     expect(source).toContain("styleReadyRef.current = true;");
   });
 
+  it("never leaves a slow frame hidden behind the previous one", () => {
+    // After FRAME_SWAP_TIMEOUT_MS the wanted frame is shown even while some
+    // tiles are loading, and "idle" settles frames that fire no sourcedata.
+    expect(source).toContain("const FRAME_SWAP_TIMEOUT_MS = 2500;");
+    expect(source).toContain(
+      "settleFrame(map, framesRef.current, overlayPropsRef.current, true);",
+    );
+    expect(source).toContain('map.on("idle", () => {');
+  });
+
+  it("keeps overlays working when a theme diff changes nothing", () => {
+    // A zero-op diff fires no "style.load"; the ready flag must not drop.
+    const themeEffect = source.slice(
+      source.indexOf("// Switch style when theme changes."),
+      source.indexOf("}, [isDark]);"),
+    );
+    expect(themeEffect).not.toContain("styleReadyRef.current = false");
+  });
+
+  it("ignores errors from the hidden preload frame and resets per step", () => {
+    expect(source).toContain(
+      "if (e.sourceId !== state.want && e.sourceId !== state.active) {",
+    );
+    expect(source).toContain("}, [weatherLayer, weatherTimestamp]);");
+  });
+
   it("renders AQI bubbles as HTML markers coloured from the severity classes", () => {
     expect(source).toContain("aqiBubbles?: readonly AqBubble[] | null;");
     expect(source).toContain("new MarkerCtor({ element: el })");
