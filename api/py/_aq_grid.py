@@ -115,7 +115,14 @@ def grid_cell_km(radius_km: float, n: int) -> float:
     return (2.0 * radius_km) / (n - 1)
 
 
-def build_grid(lat: float, lon: float, radius_km: float, n: int) -> list[tuple[float, float]]:
+def build_grid(
+    lat: float,
+    lon: float,
+    radius_km: float,
+    n: int,
+    *,
+    clamp: bool = True,
+) -> list[tuple[float, float]]:
     """
     Return the n×n (lat, lon) grid, row-major from north-west to south-east.
 
@@ -123,9 +130,13 @@ def build_grid(lat: float, lon: float, radius_km: float, n: int) -> list[tuple[f
     point is exactly (lat, lon) and the outer points sit ``radius_km`` away
     (north/south via latitude, east/west via longitude corrected for the
     cosine of latitude so the spacing is metric in both directions).
+
+    ``clamp=False`` lets a caller with its own radius bounds (the model grid)
+    skip the AQ grid's 5–100 km clamp.
     """
     n = normalise_n(n)
-    radius_km = clamp_radius(radius_km)
+    if clamp:
+        radius_km = clamp_radius(radius_km)
     lat_rad = math.radians(max(-89.0, min(89.0, lat)))
     km_per_deg_lon = _KM_PER_DEG * math.cos(lat_rad)
     half = (n - 1) / 2.0
