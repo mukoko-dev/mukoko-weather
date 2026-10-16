@@ -5,6 +5,7 @@ import type {
   Map as MapLibreGLMap,
   Marker,
   RasterTileSource,
+  GeoJSONSource,
   ExpressionSpecification,
 } from "maplibre-gl";
 import type { FeatureCollection } from "geojson";
@@ -18,8 +19,17 @@ import {
   maplibreWorkerUrl,
   WEATHER_OVERLAY_ID,
   AQI_OVERLAY_ID,
+  MODEL_OVERLAY_ID,
   buildWeatherOverlaySource,
+  weatherOverlayOpacity,
 } from "@/lib/map-layers";
+import {
+  BASE_MAP_PROVIDERS,
+  MAP_PROVIDERS,
+  attributionHtml,
+  overlayAttribution,
+  withoutStyleAttributions,
+} from "@/lib/map-sources";
 import {
   AQI_BANDS,
   AQI_BAND_BG_CLASS,
@@ -43,26 +53,45 @@ export function getMapTilerStyle(isDark: boolean): string {
  */
 export function classifyMapError(
   e: { error?: unknown; sourceId?: string },
-  overlayId: string,
+  overlayId: string | readonly string[],
 ): "overlay" | "base" {
-  return e?.sourceId === overlayId ? "overlay" : "base";
+  const ids = typeof overlayId === "string" ? [overlayId] : overlayId;
+  return e?.sourceId !== undefined && ids.includes(e.sourceId)
+    ? "overlay"
+    : "base";
 }
 
+/** Every source we add on top of the base style; their errors are overlay errors. */
+const OVERLAY_SOURCE_IDS = [
+  WEATHER_OVERLAY_ID,
+  AQI_OVERLAY_ID,
+  MODEL_OVERLAY_ID,
+] as const;
+
+/** Which layer each map's weather overlay source was built for. */
+const overlayLayerOf = new WeakMap<MapLibreGLMap, string>();
+
 /**
- * Adds (or updates) the Tomorrow.io weather overlay on a loaded map. When the
- * overlay already exists, only its tile URL changes (`setTiles`), so a layer or
- * timeline change swaps tiles without tearing the layer down. A null layer
- * clears the overlay. A style switch wipes all sources, so the restore path
- * takes the add branch. `timestamp` defaults to the current tiles ("now").
+ * Adds (or updates) the tile weather overlay (Tomorrow.io or NASA GIBS) on a
+ * loaded map. When the overlay already exists for the same layer, only its
+ * tile URL changes (`setTiles`), so a timeline step swaps tiles without
+ * tearing the layer down. A different layer rebuilds the source: providers
+ * differ in zoom range, opacity and attribution. A null layer clears the
+ * overlay. A style switch wipes all sources, so the restore path takes the
+ * add branch. `timestamp` defaults to the current tiles ("now").
  */
 function applyWeatherOverlay(
   map: MapLibreGLMap,
   layer: string | null,
   timestamp: string = "now",
 ) {
-  if (!layer) {
+  const clear = () => {
     if (map.getLayer(WEATHER_OVERLAY_ID)) map.removeLayer(WEATHER_OVERLAY_ID);
     if (map.getSource(WEATHER_OVERLAY_ID)) map.removeSource(WEATHER_OVERLAY_ID);
+    overlayLayerOf.delete(map);
+  };
+  if (!layer) {
+    clear();
     return;
   }
 
@@ -70,20 +99,24 @@ function applyWeatherOverlay(
   const existing = map.getSource(WEATHER_OVERLAY_ID) as
     | RasterTileSource
     | undefined;
-  if (existing && map.getLayer(WEATHER_OVERLAY_ID)) {
+  if (
+    existing &&
+    map.getLayer(WEATHER_OVERLAY_ID) &&
+    overlayLayerOf.get(map) === layer
+  ) {
     existing.setTiles(spec.tiles);
     return;
   }
 
-  if (map.getLayer(WEATHER_OVERLAY_ID)) map.removeLayer(WEATHER_OVERLAY_ID);
-  if (map.getSource(WEATHER_OVERLAY_ID)) map.removeSource(WEATHER_OVERLAY_ID);
+  clear();
   map.addSource(WEATHER_OVERLAY_ID, spec);
   map.addLayer({
     id: WEATHER_OVERLAY_ID,
     type: "raster",
     source: WEATHER_OVERLAY_ID,
-    paint: { "raster-opacity": 0.6 },
+    paint: { "raster-opacity": weatherOverlayOpacity(layer) },
   });
+  overlayLayerOf.set(map, layer);
 }
 
 /**
@@ -153,7 +186,11 @@ function applyAqiOverlay(
     .getStyle()
     ?.layers?.find((layer) => layer.type === "symbol")?.id;
 
-  map.addSource(AQI_OVERLAY_ID, { type: "geojson", data });
+  map.addSource(AQI_OVERLAY_ID, {
+    type: "geojson",
+    data,
+    attribution: attributionHtml(overlayAttribution("airQuality")),
+  });
   map.addLayer(
     {
       id: AQI_OVERLAY_ID,
@@ -166,6 +203,79 @@ function applyAqiOverlay(
     },
     beforeId,
   );
+}
+
+/**
+ * A forecast field painted from grid cells (model layers): each feature
+ * carries a `band` index into `tokens` (CSS custom properties, resolved here
+ * because paint values cannot read var()). `attribution` credits the model.
+ */
+export interface FieldOverlay {
+  data: FeatureCollection;
+  tokens: readonly string[];
+  attribution: string;
+}
+
+/**
+ * Adds (or replaces) the model-field overlay beneath the first symbol layer,
+ * like the AQI grid. Idempotent; null clears it.
+ */
+/** Colour tokens + credit each map's field overlay was built with. */
+const fieldStyleOf = new WeakMap<MapLibreGLMap, string>();
+
+function applyFieldOverlay(
+  map: MapLibreGLMap,
+  overlay: FieldOverlay | null | undefined,
+) {
+  const style = overlay
+    ? `${overlay.tokens.join(",")}|${overlay.attribution}`
+    : "";
+  // Same palette and credit (a timeline step): swap the cells in place.
+  const existing = map.getSource(MODEL_OVERLAY_ID) as GeoJSONSource | undefined;
+  if (
+    overlay &&
+    existing &&
+    map.getLayer(MODEL_OVERLAY_ID) &&
+    fieldStyleOf.get(map) === style
+  ) {
+    existing.setData(overlay.data);
+    return;
+  }
+
+  if (map.getLayer(MODEL_OVERLAY_ID)) map.removeLayer(MODEL_OVERLAY_ID);
+  if (map.getSource(MODEL_OVERLAY_ID)) map.removeSource(MODEL_OVERLAY_ID);
+  fieldStyleOf.delete(map);
+  if (!overlay || overlay.tokens.length === 0) return;
+
+  const beforeId = map
+    .getStyle()
+    ?.layers?.find((layer) => layer.type === "symbol")?.id;
+  const pairs: (number | string)[] = [];
+  overlay.tokens.forEach((token, i) => {
+    pairs.push(i, resolveColor(`var(${token})`));
+  });
+  const fillColor = [
+    "match",
+    ["get", "band"],
+    ...pairs,
+    resolveColor("var(--color-text-tertiary)"),
+  ] as unknown as ExpressionSpecification;
+
+  map.addSource(MODEL_OVERLAY_ID, {
+    type: "geojson",
+    data: overlay.data,
+    attribution: overlay.attribution,
+  });
+  map.addLayer(
+    {
+      id: MODEL_OVERLAY_ID,
+      type: "fill",
+      source: MODEL_OVERLAY_ID,
+      paint: { "fill-color": fillColor, "fill-opacity": 0.5 },
+    },
+    beforeId,
+  );
+  fieldStyleOf.set(map, style);
 }
 
 interface MapLibreMapProps {
@@ -200,6 +310,8 @@ interface MapLibreMapProps {
    * Rendered as a fill layer beneath map labels. Omit for no overlay.
    */
   aqiOverlay?: FeatureCollection | null;
+  /** Optional model forecast field (see FieldOverlay). Omit for none. */
+  fieldOverlay?: FieldOverlay | null;
   className?: string;
 }
 
@@ -214,6 +326,7 @@ export function MapLibreMap({
   navigationControl = true,
   attributionControl = true,
   aqiOverlay = null,
+  fieldOverlay = null,
   className = "h-full w-full",
 }: MapLibreMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -237,6 +350,8 @@ export function MapLibreMap({
   // Same pattern for the AQI overlay: restore() reads the latest collection.
   const aqiOverlayRef = useRef<FeatureCollection | null>(aqiOverlay);
   aqiOverlayRef.current = aqiOverlay;
+  const fieldOverlayRef = useRef<FieldOverlay | null>(fieldOverlay);
+  fieldOverlayRef.current = fieldOverlay;
   const [overlayError, setOverlayError] = useState(false);
   // Dedupes overlay tile-load logging. A single map view fires one `error` event
   // per failed raster tile (≈10 per pan/zoom), so without this guard a transient
@@ -286,7 +401,6 @@ export function MapLibreMap({
 
         const map: MapLibreGLMap = new Map({
           container: containerRef.current,
-          style: getMapTilerStyle(isDark),
           center: [lon, lat],
           zoom,
           interactive,
@@ -294,6 +408,14 @@ export function MapLibreMap({
           // with the bottom-right overlay layer switcher. Disable it here and re-add
           // it explicitly at bottom-left below.
           attributionControl: false,
+        });
+
+        // MapOptions has no transformStyle, so the style is set right after
+        // construction (no style yet → no first-style race). Credits come from
+        // map-sources.ts only; the style's own source attribution would render
+        // a second copy of MapTiler / OSM.
+        map.setStyle(getMapTilerStyle(isDark), {
+          transformStyle: (_previous, next) => withoutStyleAttributions(next),
         });
 
         // Unmounted while the Map was constructing — tear it down immediately.
@@ -307,9 +429,13 @@ export function MapLibreMap({
 
         if (attributionControl) {
           map.addControl(
+            // Base-map credits here; each overlay source carries its own
+            // `attribution` (map-sources.ts), which the control adds while
+            // that overlay is on the map.
             new AttributionControl({
-              customAttribution:
-                '© <a href="https://www.maptiler.com/">MapTiler</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+              customAttribution: attributionHtml(
+                BASE_MAP_PROVIDERS.map((id) => MAP_PROVIDERS[id]),
+              ),
             }),
             "bottom-left",
           );
@@ -337,6 +463,7 @@ export function MapLibreMap({
             weatherTimestampRef.current,
           );
           applyAqiOverlay(map, aqiOverlayRef.current);
+          applyFieldOverlay(map, fieldOverlayRef.current);
           bubbleMarkersRef.current.forEach((m) => m.remove());
           bubbleMarkersRef.current = aqiBubblesRef.current
             ? renderAqiBubbles(map, MLMarker, aqiBubblesRef.current)
@@ -352,7 +479,7 @@ export function MapLibreMap({
         // show the "Base map unavailable" notice so a blank base map is never
         // silent.
         map.on("error", (e: { error?: unknown; sourceId?: string }) => {
-          if (classifyMapError(e, WEATHER_OVERLAY_ID) === "overlay") {
+          if (classifyMapError(e, OVERLAY_SOURCE_IDS) === "overlay") {
             // Overlay tile failures (e.g. a single raster tile that can't be
             // decoded) are non-fatal — MapLibre keeps the rest of the layer, so we
             // never blank it. Fire the notice once and log at most once per layer
@@ -391,7 +518,9 @@ export function MapLibreMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.setStyle(getMapTilerStyle(isDark));
+    map.setStyle(getMapTilerStyle(isDark), {
+      transformStyle: (_previous, next) => withoutStyleAttributions(next),
+    });
     map.once("idle", () => restoreRef.current?.());
   }, [isDark]);
 
@@ -449,6 +578,20 @@ export function MapLibreMap({
     }
     applyAqiOverlay(map, aqiOverlay);
   }, [aqiOverlay]);
+
+  // Switch the model-field overlay when the field or step changes.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!map.isStyleLoaded()) {
+      const apply = () => applyFieldOverlay(map, fieldOverlay);
+      map.once("idle", apply);
+      return () => {
+        map.off("idle", apply);
+      };
+    }
+    applyFieldOverlay(map, fieldOverlay);
+  }, [fieldOverlay]);
 
   return (
     <div className={cn("relative", className)}>

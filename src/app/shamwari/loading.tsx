@@ -7,7 +7,7 @@ export default function ShamwariLoading() {
       <Header />
       <main
         aria-label="Loading Shamwari"
-        className="flex flex-col h-[calc(100dvh-3.5rem)] pb-[4.5rem] sm:pb-0"
+        className="flex flex-col h-[calc(100dvh-3.5rem)] pb-[var(--mobile-nav-clearance)] sm:pb-0"
       >
         <div
           className="mx-auto w-full max-w-3xl flex-1 min-h-0"

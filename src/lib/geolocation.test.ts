@@ -64,6 +64,9 @@ describe("geolocation source structure", () => {
 
   it("uses the /api/py/geo endpoint for nearest location lookup", () => {
     expect(source).toContain("/api/py/geo?lat=");
+    // GPS fixes reach /api/py/geo exactly: exact-place naming and OSM-ref identity depend on them
+    expect(source).toContain("lat=${latitude}&lon=${longitude}");
+    expect(source).not.toContain("roundCoord");
   });
 
   it("defaults to a 10 second timeout for geolocation", () => {

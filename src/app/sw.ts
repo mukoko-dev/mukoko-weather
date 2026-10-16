@@ -180,3 +180,62 @@ const serwist = new Serwist({
 });
 
 serwist.addEventListeners();
+
+// Web push (mukoko-dev/mukoko-weather#289). Glue only: the logic is in
+// src/lib/push/sw-logic.ts so it can move to another service-worker toolchain.
+// Delivery is best effort; a browser requires a visible notification per push.
+import {
+  notificationFor,
+  openFromClick,
+  resubscribeAfterChange,
+  showWithFallback,
+  type ClientsLike,
+} from "@/lib/push/sw-logic";
+
+interface PushScope {
+  addEventListener(type: string, listener: (event: any) => void): void; // eslint-disable-line @typescript-eslint/no-explicit-any
+  registration: {
+    showNotification(title: string, options: object): Promise<void>;
+    pushManager: {
+      subscribe(o: {
+        userVisibleOnly: true;
+        applicationServerKey: Uint8Array;
+      }): Promise<{ toJSON(): unknown }>;
+    };
+  };
+  clients: ClientsLike;
+  location: { origin: string };
+}
+const pushScope = self as unknown as PushScope;
+
+pushScope.addEventListener("push", (event) => {
+  let raw: unknown;
+  try {
+    raw = event.data?.text();
+  } catch {
+    raw = undefined;
+  }
+  event.waitUntil(
+    showWithFallback(pushScope.registration, notificationFor(raw)),
+  );
+});
+
+pushScope.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    openFromClick(
+      event.notification.data,
+      pushScope.clients,
+      pushScope.location.origin,
+    ),
+  );
+});
+
+pushScope.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    resubscribeAfterChange({
+      registration: pushScope.registration,
+      fetchFn: (i, o) => fetch(i, o),
+    }),
+  );
+});

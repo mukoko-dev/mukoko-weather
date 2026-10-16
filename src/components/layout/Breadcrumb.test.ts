@@ -54,6 +54,7 @@ describe("Breadcrumb usage sites", () => {
   const usageFiles = [
     "../../app/[location]/atmosphere/AtmosphereDashboard.tsx",
     "../../app/[location]/forecast/ForecastDashboard.tsx",
+    "../../app/[location]/agriculture/AgricultureDashboard.tsx",
   ];
 
   it("is imported by the atmosphere and forecast sub-route dashboards", () => {
@@ -131,6 +132,7 @@ describe("BreadcrumbSkeleton (issue #104)", () => {
     for (const file of [
       "../../app/[location]/atmosphere/loading.tsx",
       "../../app/[location]/forecast/loading.tsx",
+      "../../app/[location]/agriculture/loading.tsx",
     ]) {
       const loadingSource = readFileSync(resolve(__dirname, file), "utf-8");
       expect(loadingSource).toContain("<BreadcrumbSkeleton");

@@ -1,5 +1,6 @@
 "use client";
 
+import { roundCoord } from "@/lib/location-privacy";
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type {
@@ -256,9 +257,12 @@ function useNormalHigh(
     if (typeof lat !== "number" || typeof lon !== "number") return;
     const controller = new AbortController();
     const date = localIsoDate(new Date(), offsetSeconds);
-    fetch(`/api/py/normals?lat=${lat}&lon=${lon}&date=${date}`, {
-      signal: controller.signal,
-    })
+    fetch(
+      `/api/py/normals?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
+      {
+        signal: controller.signal,
+      },
+    )
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return (await res.json()) as NormalsPayload;
@@ -298,7 +302,7 @@ function useAirQuality(lat: number | undefined, lon: number | undefined) {
   useEffect(() => {
     if (typeof lat !== "number" || typeof lon !== "number") return;
     const controller = new AbortController();
-    fetch(`/api/py/airquality?lat=${lat}&lon=${lon}`, {
+    fetch(`/api/py/airquality?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`, {
       signal: controller.signal,
     })
       .then(async (res) => {
