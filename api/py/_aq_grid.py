@@ -32,6 +32,7 @@ from pydantic import BaseModel
 
 from ._db import UNKNOWN_COUNTRY_CODE, stamp_platform_fields, weather_db
 from ._circuit_breaker import open_meteo_breaker, CircuitOpenError
+from . import _open_meteo as om
 
 router = APIRouter()
 
@@ -40,7 +41,6 @@ router = APIRouter()
 # Constants
 # ---------------------------------------------------------------------------
 
-OPEN_METEO_AQ_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 
 #: Cache TTL — 30 min. Grid readings move slowly; the request fans out to n²
 #: points, so caching is the main protection for the upstream quota.
@@ -115,7 +115,14 @@ def grid_cell_km(radius_km: float, n: int) -> float:
     return (2.0 * radius_km) / (n - 1)
 
 
-def build_grid(lat: float, lon: float, radius_km: float, n: int) -> list[tuple[float, float]]:
+def build_grid(
+    lat: float,
+    lon: float,
+    radius_km: float,
+    n: int,
+    *,
+    clamp: bool = True,
+) -> list[tuple[float, float]]:
     """
     Return the n×n (lat, lon) grid, row-major from north-west to south-east.
 
@@ -123,9 +130,13 @@ def build_grid(lat: float, lon: float, radius_km: float, n: int) -> list[tuple[f
     point is exactly (lat, lon) and the outer points sit ``radius_km`` away
     (north/south via latitude, east/west via longitude corrected for the
     cosine of latitude so the spacing is metric in both directions).
+
+    ``clamp=False`` lets a caller with its own radius bounds (the model grid)
+    skip the AQ grid's 5–100 km clamp.
     """
     n = normalise_n(n)
-    radius_km = clamp_radius(radius_km)
+    if clamp:
+        radius_km = clamp_radius(radius_km)
     lat_rad = math.radians(max(-89.0, min(89.0, lat)))
     km_per_deg_lon = _KM_PER_DEG * math.cos(lat_rad)
     half = (n - 1) / 2.0
@@ -200,7 +211,8 @@ def _get_http() -> httpx.Client:
 
 def _fetch_grid(points: list[tuple[float, float]]) -> list[tuple[Optional[int], Optional[float]]]:
     """Blocking single batched call. Raises on HTTP / contract errors."""
-    resp = _get_http().get(OPEN_METEO_AQ_URL, params=_open_meteo_params(points))
+    url, headers = om.air_quality()
+    resp = _get_http().get(url, params=_open_meteo_params(points), headers=headers)
     resp.raise_for_status()
     return parse_grid_response(resp.json(), points)
 

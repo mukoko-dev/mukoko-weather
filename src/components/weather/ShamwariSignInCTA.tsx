@@ -17,6 +17,11 @@ const ACCENTS = {
     icon: "text-tanzanite",
     surface: "border-tanzanite/25 border-l-tanzanite",
   },
+  // Farming (agriculture page).
+  malachite: {
+    icon: "text-mineral-malachite",
+    surface: "border-mineral-malachite/25 border-l-mineral-malachite",
+  },
 } as const;
 
 interface ShamwariSignInCTAProps {

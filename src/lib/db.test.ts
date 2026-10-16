@@ -832,3 +832,18 @@ describe("db-init indexes for the model baseline (issue #246)", () => {
     }
   });
 });
+
+describe("db-init indexes for agriculture (issue #265)", () => {
+  it("TTL-indexes both agriculture caches the Python module writes", async () => {
+    const fs = await import("fs");
+    const source = fs.readFileSync("src/lib/db.ts", "utf-8");
+    const py = fs.readFileSync("api/py/_agriculture.py", "utf-8");
+    for (const name of ["agriculture_cache", "agriculture_ai"]) {
+      expect(
+        source.indexOf(`collection("${name}"),\n      { expiresAt: 1 }`),
+        name,
+      ).toBeGreaterThan(-1);
+      expect(py).toContain(`weather_db()["${name}"]`);
+    }
+  });
+});

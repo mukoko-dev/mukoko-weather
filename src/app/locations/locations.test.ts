@@ -119,7 +119,9 @@ describe("locations list — client", () => {
 
   it("pins the search bar to the bottom and reuses the shared quick search", () => {
     expect(clientSource).toContain("<LocationsSearch");
-    expect(clientSource).toContain("sticky bottom-[4.5rem]");
+    expect(clientSource).toContain(
+      "sticky bottom-[var(--mobile-nav-clearance)]",
+    );
     expect(searchSource).toContain("useLocationQuickSearch({ limit: 8 })");
     expect(searchSource).toContain("saveLocation(slug)");
     expect(searchSource).toContain("Search for a city or airport");

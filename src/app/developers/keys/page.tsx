@@ -33,7 +33,7 @@ export default async function ApiKeysPage() {
       <Header />
       <main
         id="main-content"
-        className="animate-fade-in mx-auto max-w-3xl px-4 py-8 pb-24 sm:px-6 sm:pb-8 md:px-8"
+        className="animate-fade-in mx-auto max-w-3xl px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-8 md:px-8"
       >
         <h1 className="elephant">API Keys</h1>
         <p className="gazelle mt-3">
