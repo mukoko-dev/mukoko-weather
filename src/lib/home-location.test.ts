@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ipFallbackLocation } from "./home-location";
+import { ipFallbackLocation, snapIpCoord } from "./home-location";
 import { parseSmartSlug } from "./smart-slug";
 
 describe("ipFallbackLocation — home seed for visitors outside the stored geography", () => {
@@ -33,5 +33,15 @@ describe("ipFallbackLocation — home seed for visitors outside the stored geogr
   it("names an unnamed position generically and rejects junk", () => {
     expect(ipFallbackLocation(-30, -140, null, null)!.name).toBe("My location");
     expect(ipFallbackLocation(Number.NaN, 0, "GB", "x")).toBeNull();
+  });
+
+  it("snaps the IP position to a 0.1° grid so one city gives one slug", () => {
+    const a = ipFallbackLocation(51.5074, -0.1278, "GB", "London")!;
+    const b = ipFallbackLocation(51.4921, -0.1102, "GB", "London")!;
+    expect(a.slug).toBe(b.slug);
+    expect(a.lat).toBe(51.5);
+    expect(a.lon).toBe(-0.1);
+    expect(snapIpCoord(-23.56)).toBe(-23.6);
+    expect(snapIpCoord(0.04)).toBe(0);
   });
 });

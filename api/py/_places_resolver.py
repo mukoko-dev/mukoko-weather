@@ -47,7 +47,7 @@ import unicodedata
 from typing import Optional
 
 from ._db import places_geo_collection
-from ._geohash import parse_spot_slug
+from ._geohash import DEFAULT_PRECISION, parse_spot_slug
 from ._places_geo import normalize_name
 
 logger = logging.getLogger(__name__)
@@ -289,9 +289,34 @@ def is_synthesized_spot(loc: Optional[dict]) -> bool:
     """True for a location built from a spot slug alone, with no record.
 
     Anyone can spell such a slug, so callers that key durable data by slug
-    (weather history) must not treat it as a known place.
+    (weather history, reports, history analysis) must not treat it as a known
+    place: they key by :func:`storage_slug` instead.
     """
     return bool(loc) and str(loc.get("_id") or "").startswith(SPOT_ID_PREFIX)
+
+
+def spot_storage_key(slug: str) -> Optional[str]:
+    """``geo:<geohash>`` for a valid spot slug (see :func:`storage_slug`),
+    else None. Pure: parses the slug, never reads the DB."""
+    spot = parse_spot_slug(slug)
+    if not spot:
+        return None
+    return f"{SPOT_ID_PREFIX}{spot['geohash'][:DEFAULT_PRECISION]}"
+
+
+def storage_slug(slug: str, loc: Optional[dict]) -> str:
+    """The key durable data for ``loc`` is stored under.
+
+    A catalogue place keeps its slug. A synthesized spot is a coordinate, not
+    a place, so it is keyed by its cell — ``geo:<geohash>`` at the precision
+    the app mints (7 characters, ~153 m) — never by the name half of the
+    slug. ``harare-cbd--ksy4dd7`` and ``anything-else--ksy4dd7`` therefore
+    share one history/report key, and a made-up name cannot split a cell's
+    data or create a new storage key per spelling.
+    """
+    if is_synthesized_spot(loc):
+        return str(loc["_id"])
+    return slug
 
 
 def find_location(slug: str) -> Optional[dict]:
@@ -302,7 +327,10 @@ def find_location(slug: str) -> Optional[dict]:
     found by search anywhere on Earth (see ``/api/py/search``'s geocoded
     candidates) work in history, reports and chat, not only on its page.
     The synthesized location carries no country — the backend does not guess
-    one from a coordinate.
+    one from a coordinate — and no elevation (``None``: nothing measured it).
+    Junk is refused by :func:`parse_spot_slug` (``SLUG_RE`` + a 5-character
+    geohash floor), and callers that persist data key it by
+    :func:`storage_slug`, never by the raw string.
     """
     doc = resolve_location_slug(slug)
     if doc:
@@ -316,9 +344,9 @@ def find_location(slug: str) -> Optional[dict]:
         "province": "",
         "lat": spot["lat"],
         "lon": spot["lon"],
-        "elevation": 0,
-        "tags": ["city"],
-        "_id": f"{SPOT_ID_PREFIX}{spot['geohash']}",
+        "elevation": None,
+        "tags": [],
+        "_id": spot_storage_key(slug),
         "geo": {"type": "Point", "coordinates": [spot["lon"], spot["lat"]]},
         "source": "geolocation",
     }

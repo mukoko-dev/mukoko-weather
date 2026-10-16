@@ -10,6 +10,7 @@ import asyncio
 import logging
 import math
 import re
+import time
 from typing import Optional
 
 import httpx
@@ -37,6 +38,7 @@ from ._places_resolver import (
     find_locations_in_country,
     find_nearest_location,
     find_nearest_locations,
+    is_synthesized_spot,
     search_locations_by_name,
 )
 from ._places_geo import (
@@ -101,6 +103,10 @@ async def list_locations(
             loc = find_location(slug)
             if not loc:
                 raise HTTPException(status_code=404, detail="Location not found")
+            # A spot slug with no record behind it is a coordinate, not a
+            # catalogue place: say so, so callers never treat it as one.
+            if is_synthesized_spot(loc):
+                loc["synthesized"] = True
             # Strip internal _id so the response shape matches the legacy
             # `_id: 0` projection callers were getting before.
             loc.pop("_id", None)
@@ -207,6 +213,53 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 6371.0088 * 2 * math.asin(min(1.0, math.sqrt(a)))
 
 
+#: Longest query the search endpoint accepts. Longer input is not a place
+#: name, and the geocoder top-up would forward it to a third party.
+MAX_SEARCH_QUERY_LENGTH = 100
+
+#: Per-IP budget for the geocoder top-up (a third-party request per miss).
+#: Cache hits are free. Over budget, search still answers from the
+#: catalogue — the top-up is skipped, the request never fails.
+GEOCODE_TOP_UP_RATE_LIMIT = 120
+GEOCODE_TOP_UP_RATE_WINDOW_S = 3600
+
+#: Per-instance cache of geocoder answers, keyed by normalised query + count.
+GEOCODE_CACHE_TTL_S = 3600
+GEOCODE_CACHE_MAX = 512
+_geocode_cache: dict[tuple[str, int], tuple[float, list[dict]]] = {}
+
+
+def _normalise_query(q: str) -> str:
+    return " ".join((q or "").lower().split())
+
+
+def _cached_forward_geocode(q: str, count: int, request: Request | None) -> list[dict]:
+    """Forward-geocode ``q`` through the per-instance cache and the per-IP
+    ``search-geocode`` budget. Returns [] when over budget (never raises)."""
+    key = (_normalise_query(q), count)
+    now = time.monotonic()
+    hit = _geocode_cache.get(key)
+    if hit and hit[0] > now:
+        return hit[1]
+    try:
+        enforce_rate_limit(
+            request, "search-geocode",
+            GEOCODE_TOP_UP_RATE_LIMIT, GEOCODE_TOP_UP_RATE_WINDOW_S,
+            require_ip=False,
+        )
+    except HTTPException:
+        return []
+    geocoded = _forward_geocode(q, count)
+    if len(_geocode_cache) >= GEOCODE_CACHE_MAX:
+        # Drop expired entries first, then the oldest insert.
+        for k in [k for k, (exp, _) in _geocode_cache.items() if exp <= now]:
+            _geocode_cache.pop(k, None)
+        if len(_geocode_cache) >= GEOCODE_CACHE_MAX:
+            _geocode_cache.pop(next(iter(_geocode_cache)), None)
+    _geocode_cache[key] = (now + GEOCODE_CACHE_TTL_S, geocoded)
+    return geocoded
+
+
 def _duplicates_any(candidate: dict, existing: list[dict]) -> bool:
     name = normalize_name(candidate.get("name", ""))
     for e in existing:
@@ -233,6 +286,7 @@ async def search_locations(
     mode: str | None = None,
     limit: int = 20,
     skip: int = 0,
+    request: Request = None,
 ):
     """
     GET /api/py/search?q=harare
@@ -240,7 +294,14 @@ async def search_locations(
     GET /api/py/search?lat=-17.83&lon=31.05
     GET /api/py/search?mode=tags
     """
-    limit = min(limit, 50)
+    limit = max(1, min(limit, 50))
+    skip = max(0, skip)
+    q = (q or "").strip()
+    if len(q) > MAX_SEARCH_QUERY_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"q too long (max {MAX_SEARCH_QUERY_LENGTH} characters)",
+        )
 
     try:
         # Tag counts mode — aggregated from placesGeo mukokoTags (Phase 0G).
@@ -296,11 +357,16 @@ async def search_locations(
         ):
             # Off the event loop: this runs on most quick-search keystrokes
             # outside the stored geography, and httpx here is synchronous.
-            geocoded = await asyncio.to_thread(_forward_geocode, q, limit)
-            extra = [
-                c for c in (_geocoded_candidate(g) for g in geocoded)
-                if not _duplicates_any(c, results)
-            ][: max(0, limit - len(results))]
+            # Cached per instance and budgeted per IP (``search-geocode``):
+            # each miss is a request to a third-party geocoder.
+            geocoded = await asyncio.to_thread(_cached_forward_geocode, q, limit, request)
+            extra: list[dict] = []
+            for c in (_geocoded_candidate(g) for g in geocoded):
+                # Against the catalogue AND the candidates already kept: the
+                # geocoder can return one town twice (two admin entries).
+                if not _duplicates_any(c, results + extra):
+                    extra.append(c)
+            extra = extra[: max(0, limit - len(results))]
             if extra:
                 source = "geocoded" if not results else "mixed"
                 results = results + extra

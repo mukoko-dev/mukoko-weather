@@ -13,7 +13,22 @@ import { buildSmartSlug } from "./smart-slug";
  *    slug carries its coordinate, so the page and its links render anywhere.
  *    The country comes from Vercel's header; the forecast's time zone
  *    confirms or fills it later (reconcileCountry).
+ *
+ * IP geolocation is city-level at best, so the spot is snapped to a
+ * {@link IP_SPOT_GRID_DEG} grid before its slug is minted: encoding the raw
+ * IP point at 153 m would claim a precision it does not have, give every
+ * ISP block in one city a different slug, and miss the shared weather cache.
  */
+/** Grid (degrees, ~11 km) an IP position is snapped to before minting a slug. */
+export const IP_SPOT_GRID_DEG = 0.1;
+
+/** Snap an IP-derived coordinate to the {@link IP_SPOT_GRID_DEG} grid. */
+export function snapIpCoord(value: number): number {
+  return Number(
+    (Math.round(value / IP_SPOT_GRID_DEG) * IP_SPOT_GRID_DEG).toFixed(1),
+  );
+}
+
 export function ipFallbackLocation(
   lat: number,
   lon: number,
@@ -33,14 +48,16 @@ export function ipFallbackLocation(
     city = "";
   }
   const name = city || "My location";
-  const slug = buildSmartSlug(name, lat, lon);
+  const spotLat = snapIpCoord(lat);
+  const spotLon = snapIpCoord(lon);
+  const slug = buildSmartSlug(name, spotLat, spotLon);
   if (!slug) return null;
   return {
     slug,
     name,
     province: "",
-    lat,
-    lon,
+    lat: spotLat,
+    lon: spotLon,
     elevation: 0,
     tags: ["city"],
     country: /^[A-Z]{2}$/.test(country) ? country : undefined,

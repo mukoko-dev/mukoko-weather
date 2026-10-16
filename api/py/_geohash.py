@@ -211,18 +211,38 @@ def decode_geohash(geohash: str) -> Optional[tuple[float, float]]:
     return ((lat_min + lat_max) / 2, (lon_min + lon_max) / 2)
 
 
+#: Mirrors ``SLUG_RE`` in api/py/_db.py (kept local so this pure module never
+#: imports the DB layer). A spot slug must be a valid slug as a whole.
+_SPOT_SLUG_RE = re.compile(r"^[a-z0-9-]{1,80}$")
+
+#: Shortest geohash the BACKEND accepts in a spot slug: 5 characters is a
+#: ~4.9 km x 4.9 km cell. Anything coarser is not a "spot" (a 1-character
+#: geohash is a 5,000 km box), so ``foo--k`` must not resolve to a location
+#: that history, reports or chat would key data by. The front end
+#: (``parseSmartSlug`` in src/lib/smart-slug.ts) still renders any valid
+#: geohash length, because rendering stores nothing; only persistence needs
+#: the floor. Every spot the app mints uses DEFAULT_PRECISION (7).
+MIN_SPOT_GEOHASH_LENGTH = 5
+
+
 def parse_spot_slug(slug: str) -> Optional[dict]:
     """Parse a spot slug into ``{name, lat, lon, geohash}``, else None.
 
     Only spots: a place slug (``--osm-{ref}``) carries no coordinate, and an
     ``osm-`` segment can never be read as a geohash (the alphabet has no
     ``o``). Splits on the LAST delimiter, like ``parseSmartSlug``.
+
+    Rejected (None): anything that fails ``SLUG_RE`` (``^[a-z0-9-]{1,80}$``,
+    so no upper case, spaces or punctuation) and a geohash shorter than
+    :data:`MIN_SPOT_GEOHASH_LENGTH`.
     """
-    if not slug or SMART_SLUG_DELIMITER not in slug:
+    if not slug or not _SPOT_SLUG_RE.match(slug) or SMART_SLUG_DELIMITER not in slug:
         return None
     idx = slug.rfind(SMART_SLUG_DELIMITER)
     name_slug = slug[:idx]
-    segment = slug[idx + len(SMART_SLUG_DELIMITER):].lower()
+    segment = slug[idx + len(SMART_SLUG_DELIMITER):]
+    if len(segment) < MIN_SPOT_GEOHASH_LENGTH:
+        return None
     decoded = decode_geohash(segment)
     if decoded is None:
         return None

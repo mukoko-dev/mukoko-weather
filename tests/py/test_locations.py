@@ -636,6 +636,15 @@ class TestSearchLocations:
 class TestSearchGeocodedTopUp:
     """Search hits outside the seeded geography must render (global scope)."""
 
+    @pytest.fixture(autouse=True)
+    def _isolate_geocode_cache_and_budget(self):
+        from py import _locations
+
+        _locations._geocode_cache.clear()
+        with patch("py._locations.enforce_rate_limit", return_value="1.2.3.4"):
+            yield
+        _locations._geocode_cache.clear()
+
     LONDON = {
         "name": "London", "country": "GB", "countryName": "United Kingdom",
         "admin1": "England", "lat": 51.50853, "lon": -0.12574, "elevation": 25,
@@ -2263,3 +2272,69 @@ class TestGeoLookupPoiRefinement:
         assert result["nearest"]["name"] == "Fourth Street"
         assert "poiType" not in result["nearest"]
         assert mock_upsert.call_args.kwargs["mukoko_poi_type"] is None
+
+
+class TestSearchInputBoundsAndGeocodeBudget:
+    """Review: /api/py/search caps q, clamps limit, caches and budgets the
+    third-party geocoder top-up, and dedupes candidates against each other."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        from py import _locations
+
+        _locations._geocode_cache.clear()
+        yield
+        _locations._geocode_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_overlong_query_is_400(self):
+        with pytest.raises(HTTPException) as exc:
+            await search_locations(q="x" * 101)
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode", return_value=[])
+    @patch("py._locations.search_locations_by_name", return_value=[])
+    async def test_limit_is_clamped_to_one_through_fifty(self, mock_db, _geo):
+        await search_locations(q="harare", limit=0)
+        assert mock_db.call_args.kwargs["limit"] == 1
+        await search_locations(q="harare", limit=500)
+        assert mock_db.call_args.kwargs["limit"] == 50
+        await search_locations(q="harare", limit=-3, skip=-9)
+        assert mock_db.call_args.kwargs["skip"] == 0
+
+    @pytest.mark.asyncio
+    @patch("py._locations.enforce_rate_limit", return_value="1.2.3.4")
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name", return_value=[])
+    async def test_repeat_query_is_served_from_cache(self, _db, mock_geo, mock_rate):
+        mock_geo.return_value = [TestSearchGeocodedTopUp.LONDON]
+        await search_locations(q="London")
+        await search_locations(q="  london ")
+        assert mock_geo.call_count == 1
+        assert mock_rate.call_count == 1  # cache hits are not metered
+        assert mock_rate.call_args[0][1] == "search-geocode"
+        assert mock_rate.call_args.kwargs["require_ip"] is False
+
+    @pytest.mark.asyncio
+    @patch("py._locations.enforce_rate_limit", side_effect=HTTPException(status_code=429))
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name")
+    async def test_over_budget_skips_top_up_but_still_answers(self, mock_db, mock_geo, _rate):
+        mock_db.return_value = [{"slug": "victoria-sc", "name": "Victoria", "lat": -4.6, "lon": 55.4}]
+        result = await search_locations(q="victoria")
+        mock_geo.assert_not_called()
+        assert [r["slug"] for r in result["locations"]] == ["victoria-sc"]
+
+    @pytest.mark.asyncio
+    @patch("py._locations.enforce_rate_limit", return_value="1.2.3.4")
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name", return_value=[])
+    async def test_geocoded_candidates_dedupe_against_each_other(self, _db, mock_geo, _rate):
+        mock_geo.return_value = [
+            {"name": "Springfield", "country": "US", "admin1": "Illinois", "lat": 39.80, "lon": -89.64},
+            {"name": "Springfield", "country": "US", "admin1": "Illinois", "lat": 39.81, "lon": -89.65},
+            {"name": "Springfield", "country": "US", "admin1": "Missouri", "lat": 37.21, "lon": -93.29},
+        ]
+        result = await search_locations(q="springfield")
+        assert [r["province"] for r in result["locations"]] == ["Illinois", "Missouri"]

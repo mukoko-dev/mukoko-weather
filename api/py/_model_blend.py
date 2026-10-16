@@ -93,6 +93,13 @@ REGION_BOXES: tuple[tuple[str, tuple[float, float, float, float]], ...] = (
     # 9.9°E, the Libyan/Egyptian coast below 33.2°N, Sinai east to 34.9°E and
     # north to 31.3°N, the Dahlak islands to 40.4°E, Djibouti to 43.4°E at
     # 12.7°N, Somalia below 12°N), so no African point changes region.
+    # Edges are inclusive and the margins are thin on purpose, so re-check
+    # these before moving a box: Taba (Egypt, 29.49°N 34.89°E) sits about
+    # 0.01° west of the Negev box's 34.9°E edge; the Eritrean coast stays west
+    # of the Yemen boxes by ~0.1° (Dahlak 40.4°E vs 40.5°E, Assab 42.74°E vs
+    # 42.8°E), and Ras Doumeira (Eritrea/Djibouti, 12.7°N 43.1°E) is west of
+    # the Aden box's 44.0°E edge. A point exactly on a shared edge takes the
+    # first box listed.
     ("europe", (36.0, 44.0, -10.0, -1.0)),  # southern Iberia, Gibraltar
     ("europe", (36.5, 38.5, 12.0, 16.0)),  # Sicily
     ("europe", (35.7, 36.2, 14.0, 14.7)),  # Malta

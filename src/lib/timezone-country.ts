@@ -12,6 +12,16 @@
  *
  * Regenerate from a current tzdata `zone.tab` when the IANA database adds a
  * zone; a missing zone only means "country unknown", never a wrong one.
+ *
+ * Disputed places: this table reports what `zone.tab` says, which is a
+ * timekeeping attribution, not a statement on sovereignty — and mukoko weather
+ * takes no position. It is only a FALLBACK: a stored country (placesGeo, a
+ * seed, the visitor's IP country) always wins, so it labels only places we hold
+ * no country for. Known cases: Kosovo has no zone of its own and is read as
+ * `Europe/Belgrade` → RS; Western Sahara is `Africa/El_Aaiun` → EH; Hebron and
+ * Gaza are `Asia/Hebron` / `Asia/Gaza` → PS; East Jerusalem is
+ * `Asia/Jerusalem` → IL. Overriding any of these (e.g. showing no country) is
+ * an owner decision; do not hand-edit the table to do it.
  */
 export const ZONE_COUNTRY: Readonly<Record<string, string>> = {
   "Africa/Abidjan": "CI",
