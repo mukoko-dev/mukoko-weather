@@ -31,12 +31,22 @@ single map view loads ~16 overlay tiles and every pan/zoom loads more):
      Remaining-Hour``/``-Day`` at 0) the account is spent for the hour, so every
      later tile skips the upstream round trip (which took 2–6 s just to be
      told 429) and the newest cached tile or a transparent one is served at
-     once, edge-cached until the hour resets. A per-second 429 is not a quota
-     429. Enrichment's own budget caps do not stop the tiles.
-  5. **Off the event loop** — the MongoDB lookups and the upstream fetch are
-     blocking calls, so they run on a small dedicated thread pool; a dozen
-     tiles arriving together no longer queue behind one another on a warm
-     instance, and cannot starve the default executor.
+     once. The in-process memo lasts the hour, but the edge and browser keep
+     the fallback tile only ``QUOTA_EDGE_CACHE_MAX_S`` (5 min), so the overlay
+     comes back soon after the quota resets. A per-second 429 is not a quota
+     429 (remaining-count headers decide, see ``_enrichment.classify_429``); a
+     429 with no header is remembered for about a minute. Enrichment's own
+     budget caps do not stop the tiles.
+  5. **Off the event loop, two pools** — the MongoDB lookups and the upstream
+     fetch are blocking calls. Cache reads (fast) run on their own small pool
+     and are answered before anything is queued for the upstream pool (slow,
+     up to 8 s), so cache hits never wait behind Tomorrow.io calls and neither
+     pool can starve the default executor. The quota memo is re-checked inside
+     the upstream worker right before the HTTP call, so tiles queued before the
+     first 429 landed do not each spend a round trip.
+  6. **Circuit breaker** — the upstream call is guarded by ``tomorrow_breaker``
+     (shared with enrichment): 5xx and transport failures count, 429s and 4xx
+     do not. While it is open tiles come from cache or are transparent.
 
 SSRF protections (pinned origin, layer whitelist, range-checked coords,
 validated timestamp) are unchanged.
@@ -57,6 +67,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 from . import _enrichment
+from ._circuit_breaker import tomorrow_breaker
 from ._db import get_api_key, map_tile_cache_collection, ttl_find_one, ttl_upsert
 from ._http import get_http_client
 
@@ -92,10 +103,18 @@ FALLBACK_CACHE_CONTROL = "public, max-age=60, s-maxage=60"
 #: with each model run, so it is kept an hour, not a day.
 FUTURE_TILE_CACHE_CONTROL = "public, max-age=1800, s-maxage=3600, stale-while-revalidate=300"
 
+#: Ceiling on how long the edge/browser may keep the transparent or stale tile
+#: served while the quota is spent. The in-process memo (which stops upstream
+#: calls) lasts the hour; this keeps a fallback from outliving the quota reset
+#: by much, or a previous-hour frame from standing in for "now" for long.
+QUOTA_EDGE_CACHE_MAX_S = 300
+
 #: Dedicated threads for the blocking tile work, so a burst of tiles waiting on
 #: Tomorrow.io cannot fill the shared default executor that weather enrichment
-#: and history backfill also use.
-_TILE_EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="map-tiles")
+#: and history backfill also use. Cache reads and upstream calls get separate
+#: pools so a cache hit never queues behind a slow upstream call.
+_CACHE_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="map-tile-cache")
+_UPSTREAM_EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="map-tile-upstream")
 
 #: Floor for an hour-bounded edge cache, so a tile served in the last seconds
 #: of an hour is still cacheable for a moment.
@@ -163,37 +182,18 @@ def _tile_cache_control(timestamp: str, now: Optional[datetime] = None) -> str:
 
 
 def _quota_cache_control(now: Optional[datetime] = None) -> str:
-    """Fallback tiles while the quota is spent: edge-cached until the hour resets."""
-    left = _seconds_left_in_hour(now)
+    """
+    Fallback tiles while the quota is spent: edge-cached for at most
+    ``QUOTA_EDGE_CACHE_MAX_S`` (and never past the hour). The long window stays
+    with the in-process memo, which is what stops the upstream calls.
+    """
+    left = min(_seconds_left_in_hour(now), QUOTA_EDGE_CACHE_MAX_S)
     return f"public, max-age=60, s-maxage={left}"
 
 
 def _quota_exhausted(now: Optional[datetime] = None) -> bool:
     """True once Tomorrow.io has answered a quota 429 (here or in enrichment) this hour."""
     return _enrichment.rate_limited_this_hour(now)
-
-
-def _is_quota_429(resp: httpx.Response) -> bool:
-    """
-    Whether a 429 means the hourly/daily account quota is spent.
-
-    Tomorrow.io also answers 429 for its per-second limit, which a burst of
-    tiles from one map view can trip. Its ``X-RateLimit-Remaining-{Hour,Day}``
-    headers tell them apart: a quota 429 has one of them at 0. Without the
-    headers we assume the quota (the conservative reading).
-    """
-    remaining = []
-    for name in ("x-ratelimit-remaining-hour", "x-ratelimit-remaining-day"):
-        value = resp.headers.get(name) if resp.headers is not None else None
-        if value is None:
-            continue
-        try:
-            remaining.append(int(str(value).strip()))
-        except ValueError:
-            continue
-    if not remaining:
-        return True
-    return min(remaining) <= 0
 
 
 def _cache_id(layer: str, z: int, x: int, y: int, bucket: str) -> str:
@@ -351,29 +351,54 @@ async def proxy_map_tile(
         raise HTTPException(status_code=400, detail="Invalid timestamp")
 
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(_TILE_EXECUTOR, _serve_tile, z, x, y, layer, timestamp)
-
-
-def _serve_tile(z: int, x: int, y: int, layer: str, timestamp: str) -> Response:
-    """
-    The blocking half of the proxy (MongoDB + upstream HTTP), run in a worker
-    thread by :func:`proxy_map_tile`. Arguments are already validated.
-    """
     # One clock reading for the bucket and the cache headers, so a request
     # straddling the hour cannot pair last hour's tile with a fresh hour of
     # edge cache.
     now = datetime.now(timezone.utc)
-    bucket = _timestamp_bucket(timestamp, now)
-    cache_id = _cache_id(layer, z, x, y, bucket)
+    cache_id = _cache_id(layer, z, x, y, _timestamp_bucket(timestamp, now))
 
-    # 1. Serve from persistent cache if we have a fresh tile — no upstream call.
-    cached = _get_cached_tile(cache_id)
+    # 1. A fresh cached tile is answered from the cache pool, before anything
+    #    is queued for the (slow) upstream pool — no upstream call, no waiting
+    #    behind Tomorrow.io round trips.
+    cached = await loop.run_in_executor(_CACHE_EXECUTOR, _get_cached_tile, cache_id)
     if cached is not None:
         return _tile_response(cached, layer, "HIT", timestamp, now)
 
-    # 2. Quota already spent this hour (a 429 here or in enrichment): asking
-    #    again only costs a 2–6 s round trip to be told 429 again.
+    # 2. Quota already spent (a 429 here or in enrichment) or the breaker is
+    #    open: asking again only costs a 2–8 s round trip. Cached tile or
+    #    transparent.
     if _quota_exhausted(now):
+        return await loop.run_in_executor(
+            _CACHE_EXECUTOR, _quota_fallback, layer, z, x, y, timestamp, now
+        )
+    if not tomorrow_breaker.is_allowed:
+        return await loop.run_in_executor(_CACHE_EXECUTOR, _error_fallback, cache_id)
+
+    return await loop.run_in_executor(
+        _UPSTREAM_EXECUTOR, _fetch_upstream, z, x, y, layer, timestamp, now, cache_id
+    )
+
+
+def _error_fallback(cache_id: str) -> Response:
+    """After an upstream failure: a stale cached tile if any, else transparent."""
+    stale = _get_cached_tile(cache_id, allow_stale=True)
+    if stale is not None:
+        return _stale_tile_response(stale, cache_id.split("/", 1)[0])
+    return _transparent_tile_response()
+
+
+def _fetch_upstream(
+    z: int, x: int, y: int, layer: str, timestamp: str, now: datetime, cache_id: str
+) -> Response:
+    """
+    The upstream half of the proxy (blocking HTTP), run in a worker thread of
+    the upstream pool by :func:`proxy_map_tile`. Arguments are already validated
+    and the cache already missed.
+    """
+    # Re-check the memo here: on a cold instance a burst passes the check in
+    # ``proxy_map_tile`` together, then queues for the pool; once the first
+    # worker has seen the quota 429 the rest must not each pay a round trip.
+    if _quota_exhausted():
         return _quota_fallback(layer, z, x, y, timestamp, now)
 
     try:
@@ -392,49 +417,48 @@ def _serve_tile(z: int, x: int, y: int, layer: str, timestamp: str) -> Response:
         client = _get_http()
         resp = client.get(tile_url, headers={"apikey": api_key})
 
-        # 3. 429. A quota 429 (hour/day spent) is remembered for the rest of
-        #    the hour — tiles and enrichment both stop asking — and the
-        #    fallback is edge-cached until the hour resets. A per-second 429
-        #    (a burst from one map view) only gets the short error fallback.
+        # 3. 429. The shared rule (``_enrichment.classify_429``): a remaining
+        #    count at 0 means the quota is spent for the hour; headers showing
+        #    quota left mean a per-second burst (nothing remembered); no header
+        #    at all is remembered for about a minute. Not a provider failure,
+        #    so the breaker is untouched. The tile path does not call
+        #    ``record_skip``: that would overwrite enrichment's last-error
+        #    detail and inflate its skippedBudget counter.
         if resp.status_code == 429:
-            quota = _is_quota_429(resp)
+            quota = _enrichment.classify_429(resp.headers)
             logger.warning(
                 "Tomorrow.io tile rate limited (429, %s) for layer=%s z=%s",
-                "quota" if quota else "burst", layer, z,
+                {True: "quota", False: "burst", None: "unclear"}[quota], layer, z,
             )
-            if quota:
+            if quota is False:
+                return _error_fallback(cache_id)
+            if quota is True:
                 _enrichment.mark_rate_limited(now)
-                _enrichment.record_skip(
-                    _enrichment.SKIPPED_BUDGET, "map-tiles", now=now, detail="HTTP 429 (map tiles)"
-                )
-                return _quota_fallback(layer, z, x, y, timestamp, now)
-            stale = _get_cached_tile(cache_id, allow_stale=True)
-            if stale is not None:
-                return _stale_tile_response(stale, layer)
-            return _transparent_tile_response()
+            else:
+                _enrichment.mark_rate_limited(now, ttl_s=_enrichment.UNCLEAR_429_MEMO_S)
+            return _quota_fallback(layer, z, x, y, timestamp, now)
 
-        # 4. Any other upstream error — degrade gracefully: serve a stale cached
-        #    tile if we have one, else a transparent tile, briefly cached.
+        # 4. Any other upstream error — degrade gracefully: a stale cached tile
+        #    if we have one, else a transparent tile, briefly cached. Only
+        #    server-side failures count against the breaker.
         if resp.status_code != 200:
             logger.warning(
                 "Tomorrow.io tile upstream error: status=%s layer=%s z/x/y=%s/%s/%s",
                 resp.status_code, layer, z, x, y,
             )
-            stale = _get_cached_tile(cache_id, allow_stale=True)
-            if stale is not None:
-                return _stale_tile_response(stale, layer)
-            return _transparent_tile_response()
+            if resp.status_code >= 500:
+                tomorrow_breaker.record_failure()
+            return _error_fallback(cache_id)
 
         # 5. Fresh tile — persist to cache and return with strong CDN caching.
+        tomorrow_breaker.record_success()
         _set_cached_tile(cache_id, layer, resp.content)
         return _tile_response(resp.content, layer, "MISS", timestamp, now)
     except HTTPException:
         raise
     except Exception:
         logger.exception("Tomorrow.io tile proxy failed for layer=%s z/x/y=%s/%s/%s", layer, z, x, y)
-        # Network/unexpected failure — serve a stale tile if we have one so the
-        # overlay survives a transient blip, otherwise a transparent tile.
-        stale = _get_cached_tile(cache_id, allow_stale=True)
-        if stale is not None:
-            return _stale_tile_response(stale, layer)
-        return _transparent_tile_response()
+        # Network/unexpected failure — counts against the breaker; serve a
+        # stale tile if we have one so the overlay survives a transient blip.
+        tomorrow_breaker.record_failure()
+        return _error_fallback(cache_id)

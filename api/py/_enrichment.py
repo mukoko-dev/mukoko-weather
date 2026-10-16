@@ -162,26 +162,70 @@ _skips_seen: set[tuple[str, str, str]] = set()
 #: tiles (``_tiles.py``), which share the key but not the budget.
 _rate_limited_hour: dict[str, str] = {}
 
+#: A 429 with no ``X-RateLimit-Remaining-*`` header cannot be told apart from a
+#: per-second burst limit, so it is remembered only briefly instead of for the
+#: rest of the hour (``_rate_limited_until``, UTC).
+UNCLEAR_429_MEMO_S = 60
+_rate_limited_until: dict[str, datetime] = {}
+
+#: Header names Tomorrow.io uses to report what is left of each quota window.
+_REMAINING_HEADERS = ("x-ratelimit-remaining-hour", "x-ratelimit-remaining-day")
+
 
 def current_hour_bucket(now: datetime | None = None) -> str:
     """The memo key for the current UTC hour."""
     return (now or datetime.now(timezone.utc)).strftime("%Y%m%d%H")
 
 
-def mark_rate_limited(now: datetime | None = None) -> None:
-    """Record a Tomorrow.io quota 429 for the rest of this hour.
+def classify_429(headers) -> bool | None:
+    """Read a Tomorrow.io 429's rate-limit headers.
 
-    Called by enrichment and by the map-tile proxy. Stops both: enrichment
-    through ``_exhausted`` (every tier), tiles through ``rate_limited_this_hour``.
+    ``True``: a remaining-count header is 0, the hourly/daily quota is spent.
+    ``False``: the headers show quota left, so this was a per-second burst.
+    ``None``: no readable header, cannot tell. Tiles and enrichment share this
+    one rule so they cannot disagree about what a 429 means.
     """
+    remaining: list[int] = []
+    for name in _REMAINING_HEADERS:
+        try:
+            value = headers.get(name) if headers is not None else None
+        except Exception:
+            value = None
+        if value is None:
+            continue
+        try:
+            remaining.append(int(str(value).strip()))
+        except ValueError:
+            continue
+    if not remaining:
+        return None
+    return min(remaining) <= 0
+
+
+def mark_rate_limited(now: datetime | None = None, ttl_s: int | None = None) -> None:
+    """Record a Tomorrow.io 429 so tiles and enrichment stop asking.
+
+    With no ``ttl_s`` the quota is spent for the rest of this hour (enrichment
+    stops through ``_exhausted`` for every tier, tiles through
+    ``rate_limited_this_hour``). With ``ttl_s`` only a short pause is recorded,
+    for a 429 that might be a per-second burst.
+    """
+    now = now or datetime.now(timezone.utc)
+    if ttl_s is not None:
+        _rate_limited_until["tomorrow"] = now + timedelta(seconds=ttl_s)
+        return
     bucket = current_hour_bucket(now)
     _rate_limited_hour["tomorrow"] = bucket
     _exhausted[True] = _exhausted[False] = bucket
 
 
 def rate_limited_this_hour(now: datetime | None = None) -> bool:
-    """True once Tomorrow.io has answered a quota 429 during this UTC hour."""
-    return _rate_limited_hour.get("tomorrow") == current_hour_bucket(now)
+    """True while a Tomorrow.io 429 is remembered (the hour, or a short pause)."""
+    now = now or datetime.now(timezone.utc)
+    if _rate_limited_hour.get("tomorrow") == current_hour_bucket(now):
+        return True
+    until = _rate_limited_until.get("tomorrow")
+    return until is not None and now < until
 
 
 def _reset_memos() -> None:
@@ -189,6 +233,7 @@ def _reset_memos() -> None:
     _exhausted.clear()
     _skips_seen.clear()
     _rate_limited_hour.clear()
+    _rate_limited_until.clear()
 
 
 def record_skip(reason: str, slug: str, now: datetime | None = None, detail: str | None = None) -> None:
@@ -294,12 +339,15 @@ class TomorrowUnavailable(Exception):
     """Tomorrow.io did not answer usefully (non-200, timeout, bad JSON).
 
     Carries a short, secret-free reason for the log line. ``rate_limited``
-    marks a 429: quota exhaustion, not provider ill-health.
+    marks a 429, which is not provider ill-health; ``headers`` are that
+    response's headers so the caller can tell a spent quota from a burst
+    (:func:`classify_429`).
     """
 
-    def __init__(self, reason: str, rate_limited: bool = False):
+    def __init__(self, reason: str, rate_limited: bool = False, headers=None):
         super().__init__(reason)
         self.rate_limited = rate_limited
+        self.headers = headers
 
 
 def fetch_tomorrow_insights(lat: float, lon: float, api_key: str) -> dict:
@@ -323,7 +371,11 @@ def fetch_tomorrow_insights(lat: float, lon: float, api_key: str) -> dict:
     except Exception as e:  # timeout / transport
         raise TomorrowUnavailable(type(e).__name__) from e
     if resp.status_code != 200:
-        raise TomorrowUnavailable(f"HTTP {resp.status_code}", rate_limited=resp.status_code == 429)
+        raise TomorrowUnavailable(
+            f"HTTP {resp.status_code}",
+            rate_limited=resp.status_code == 429,
+            headers=resp.headers if resp.status_code == 429 else None,
+        )
     try:
         raw = resp.json()
     except Exception as e:
@@ -372,6 +424,11 @@ def enrich(slug: str, lat: float, lon: float, priority: bool = False) -> tuple[d
     if not api_key:
         return None, NONE
 
+    if rate_limited_this_hour():
+        # A 429 (here or from the map tiles) is still remembered.
+        record_skip(SKIPPED_BUDGET, slug)
+        return None, SKIPPED_BUDGET
+
     hour_bucket = datetime.now(timezone.utc).strftime("%Y%m%d%H")
     if _exhausted.get(priority) == hour_bucket or not reserve_call(priority=priority):
         _exhausted[priority] = hour_bucket
@@ -383,10 +440,16 @@ def enrich(slug: str, lat: float, lon: float, priority: bool = False) -> tuple[d
     except Exception as e:
         detail = str(e) if isinstance(e, TomorrowUnavailable) else type(e).__name__
         if getattr(e, "rate_limited", False):
-            # 429 = the account quota is spent (the key is shared with the
-            # map-tile proxy). Not provider ill-health: don't trip the
-            # breaker, stop calling for the rest of this hour instead.
-            mark_rate_limited()
+            # 429 is not provider ill-health: don't trip the breaker. Same
+            # rule as the map tiles: a remaining-count header at 0 means the
+            # quota is spent, so stop for the rest of the hour; headers that
+            # show quota left mean a per-second burst, so remember nothing;
+            # no header at all gets a short pause.
+            quota = classify_429(getattr(e, "headers", None))
+            if quota is True:
+                mark_rate_limited()
+            elif quota is None:
+                mark_rate_limited(ttl_s=UNCLEAR_429_MEMO_S)
             record_skip(SKIPPED_BUDGET, slug, detail=detail)
             return None, SKIPPED_BUDGET
         # A real provider failure counts against the breaker. The reason
