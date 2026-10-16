@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
-import { resolve } from "path";
 import {
   STATIC_TILE_SIZE,
   STATIC_VIEW_SIZE,
+  allTilesFailed,
   rasterTileUrl,
   staticMapTiles,
+  wantsRetinaTiles,
   worldPixel,
 } from "./static-map";
 
@@ -115,52 +115,101 @@ describe("staticMapTiles", () => {
   });
 });
 
-describe("MapPreview (#266)", () => {
-  it("falls back to text when a tile fails and hides tile seams", () => {
-    const src = readFileSync(
-      resolve(__dirname, "../components/weather/map/MapPreview.tsx"),
-      "utf-8",
+describe("retina tiles", () => {
+  it("adds the @2x suffix without changing the geometry", () => {
+    const base = { ...harare, zoom: 10, style: "streets-v2", apiKey: "k" };
+    const one = staticMapTiles(base);
+    const two = staticMapTiles({ ...base, retina: true });
+    expect(two.viewBox).toBe(one.viewBox);
+    expect(two.tiles.map((t) => [t.x, t.y])).toEqual(
+      one.tiles.map((t) => [t.x, t.y]),
     );
-    expect(src).toContain("onError={() => setFailed(true)}");
-    expect(src).toContain("MAPTILER_KEY && !failed");
-    expect(src).toContain("width={STATIC_TILE_SIZE + 1}");
+    for (const t of two.tiles) expect(t.href).toMatch(/\d+@2x\.png\?key=k$/);
+    for (const t of one.tiles) expect(t.href).not.toContain("@2x");
   });
 
-  const source = readFileSync(
-    resolve(__dirname, "../components/weather/map/MapPreview.tsx"),
-    "utf-8",
-  );
+  it("asks for them only on dense screens", () => {
+    expect(wantsRetinaTiles(1)).toBe(false);
+    expect(wantsRetinaTiles(undefined)).toBe(false);
+    expect(wantsRetinaTiles(1.5)).toBe(true);
+    expect(wantsRetinaTiles(3)).toBe(true);
+  });
+});
 
-  it("draws a static tile picture instead of mounting MapLibre", () => {
-    expect(source).not.toContain("MapLibreMap");
-    expect(source).not.toContain("maplibre-gl");
-    expect(source).toContain("staticMapTiles(");
-    expect(source).toContain("<image");
+describe("allTilesFailed", () => {
+  const map = staticMapTiles({ ...harare, zoom: 10, style: "s", apiKey: "k" });
+
+  it("is false until every tile has failed", () => {
+    expect(allTilesFailed(map, new Set())).toBe(false);
+    const hrefs = map.tiles.map((t) => t.href);
+    expect(allTilesFailed(map, new Set(hrefs.slice(0, 3)))).toBe(false);
+    expect(allTilesFailed(map, new Set(hrefs))).toBe(true);
   });
 
-  it("follows the theme and keeps the attribution", () => {
-    // Theme follows OS changes through the shared hook; style ids and the
-    // trimmed key come from map-layers.ts like the interactive map's.
-    expect(source).toContain("useMapIsDark()");
-    expect(source).toContain("maptilerStyleId(isDark)");
-    expect(source).toContain(
-      'import { MAPTILER_KEY, maptilerStyleId } from "@/lib/map-layers";',
+  it("ignores failures of tiles from another style or density", () => {
+    const dark = staticMapTiles({
+      ...harare,
+      zoom: 10,
+      style: "d",
+      apiKey: "k",
+    });
+    expect(allTilesFailed(map, new Set(dark.tiles.map((t) => t.href)))).toBe(
+      false,
     );
-    expect(source).not.toContain("process.env");
-    expect(source).toContain("© MapTiler © OpenStreetMap contributors");
+  });
+});
+
+describe("coverage near the poles", () => {
+  /** The view square must lie inside the block of tiles that is drawn. */
+  function covered(lat: number, lon: number, zoom: number) {
+    const m = staticMapTiles({ lat, lon, zoom, style: "s", apiKey: "k" });
+    const [vx, vy, w, h] = m.viewBox.split(" ").map(Number);
+    const minX = Math.min(...m.tiles.map((t) => t.x));
+    const minY = Math.min(...m.tiles.map((t) => t.y));
+    const maxX = Math.max(...m.tiles.map((t) => t.x)) + STATIC_TILE_SIZE;
+    const maxY = Math.max(...m.tiles.map((t) => t.y)) + STATIC_TILE_SIZE;
+    const world = STATIC_TILE_SIZE * 2 ** Math.round(zoom);
+    return {
+      m,
+      inside: vx >= minX && vy >= minY && vx + w <= maxX && vy + h <= maxY,
+      withinWorld: vy >= 0 && vy + h <= world,
+    };
+  }
+
+  it("covers the view at lat 85, z10", () => {
+    const { inside, withinWorld } = covered(85, 0, 10);
+    expect(inside).toBe(true);
+    expect(withinWorld).toBe(true);
   });
 
-  it("stays a link to the full map with an accessible name", () => {
-    expect(source).toContain("href={`/${location.slug}/map`}");
-    expect(source).toContain(
-      "aria-label={`Open weather map for ${location.name}`}",
-    );
-    expect(source).toContain('aria-hidden="true"');
+  it("keeps the view inside the world at the Mercator limit and beyond", () => {
+    for (const lat of [85.05, 89, 90, -85, -85.05, -89, -90]) {
+      const { inside, withinWorld } = covered(lat, 12.3, 10);
+      expect(withinWorld).toBe(true);
+      expect(inside).toBe(true);
+    }
   });
 
-  it("uses tokens, not hardcoded colours or inline styles", () => {
-    expect(source).not.toMatch(/["']#[0-9a-fA-F]{3,8}["']/);
-    expect(source).not.toContain("style={{");
-    expect(source).toContain("fill-primary");
+  it("keeps the marker on the real position when the view had to shift", () => {
+    const { m } = covered(85.05, 0, 10);
+    const [, vy, , h] = m.viewBox.split(" ").map(Number);
+    // The marker sits near the top edge, inside the (shifted) view.
+    expect(m.cy).toBeGreaterThanOrEqual(vy);
+    expect(m.cy).toBeLessThanOrEqual(vy + h);
+    expect(m.cy).toBeLessThan(STATIC_VIEW_SIZE / 2);
+  });
+
+  it("covers the view everywhere on a coarse sweep of lat/lon/zoom", () => {
+    // From z1: the single tile of z0 cannot repeat to cover a view that
+    // straddles the antimeridian (the preview uses z10).
+    for (let zoom = 1; zoom <= 14; zoom += 1) {
+      for (let lat = -90; lat <= 90; lat += 15) {
+        for (let lon = -180; lon <= 180; lon += 45) {
+          const { inside, withinWorld } = covered(lat, lon, zoom);
+          expect(inside, `${lat},${lon} z${zoom}`).toBe(true);
+          expect(withinWorld, `${lat},${lon} z${zoom}`).toBe(true);
+        }
+      }
+    }
   });
 });

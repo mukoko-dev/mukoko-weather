@@ -307,7 +307,9 @@ mukoko-weather/
 │   │   │   │   ├── RecentReports.tsx        # Recent community reports with upvoting
 │   │   │   │   └── RecentReports.test.ts
 │   │   │   └── map/                   # Interactive weather map (MapLibre GL + Tomorrow.io overlay tiles)
-│   │   │       ├── MapPreview.tsx         # Static map card on location page: 4 MapTiler raster tiles in an SVG (src/lib/static-map.ts), no MapLibre; links to /[location]/map
+│   │   │       ├── MapPreview.tsx         # Static map card on location page: 4 MapTiler raster tiles in an SVG (src/lib/static-map.ts; @2x tiles on high-DPI screens, per-tile failure tracking), no MapLibre; credits from attributionForLayer(null) via MapCredits, outside the link; links to /[location]/map
+│   │   │       ├── MapPreview.test.ts     # Renders MapPreview (react-dom/server): tiles, theme, credits from map-sources, no nested anchors, no-key fallback
+│   │   │       ├── MapCredits.tsx         # Shared credit list rendered from attributionForLayer() (MapDashboard sheet/legend + MapPreview)
 │   │   │       ├── MapLibreMap.tsx        # MapLibre GL map (theme-aware MapTiler style, marker, weather overlay)
 │   │   │       ├── MapLibreMap.test.ts
 │   │   │       ├── WeatherLayerPanel.tsx  # Bottom-sheet layer chips (icon + label, single-select, touch-target-min, CHIP_ICONS by layer id)
@@ -1590,7 +1592,8 @@ _Library tests:_
 - `src/lib/rxdb/bridge.test.ts` — RxDB bridge: device ID, legacy localStorage migration, preference hydration, writes, retry, reset
 - `src/lib/map-layers.test.ts` — map layer config, default layer, getMapLayerById, satellite/model chips, legend bands, timeline frames, trimmed MapTiler key + shared style ids
 - `src/lib/map-sources.test.ts` — per-layer attribution, provider licences, GIBS tile/DescribeDomains URLs, frame selection (never a future frame, partial-day rule, gaps)
-- `src/lib/static-map.test.ts` — static preview tile geometry (slippy-map indices, coverage, antimeridian wrap, z0, key trimming) + MapPreview structure
+- `src/lib/static-map.test.ts` — static preview tile geometry (slippy-map indices, coverage incl. a lat/lon/zoom sweep and the poles, antimeridian wrap, z0, @2x, key trimming, all-tiles-failed rule)
+- `src/components/weather/map/MapPreview.test.ts` — MapPreview rendered for real: tiles + trimmed key, theme, credits generated from `attributionForLayer(null)`, credit links outside the map link, no-key fallback, tokens only
 - `src/lib/model-grid.test.ts` — model-field cells by legend band, nulls and sub-threshold values left clear, fetch contract
 - `src/lib/utils.test.ts` — Tailwind class merging (cn utility), getScrollBehavior reduced-motion detection
 - `src/lib/i18n.test.ts` — translations, formatting, interpolation

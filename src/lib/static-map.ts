@@ -27,9 +27,12 @@ export interface StaticTile {
 }
 
 export interface StaticMap {
-  /** SVG viewBox ("minX minY width height") centred on the location. */
+  /**
+   * SVG viewBox ("minX minY width height") centred on the location, shifted
+   * only as far as needed to stay inside the world (near the poles).
+   */
   viewBox: string;
-  /** Centre in world pixels (where the marker goes). */
+  /** The location in world pixels (where the marker goes). */
   cx: number;
   cy: number;
   tiles: StaticTile[];
@@ -50,16 +53,41 @@ export function worldPixel(
   return { x, y };
 }
 
+/**
+ * MapTiler raster tile URL. `retina` adds the documented `@2x` suffix: the same
+ * area and content as the plain tile with twice the pixels in each direction,
+ * so the SVG geometry does not change.
+ */
 export function rasterTileUrl(
   style: string,
   z: number,
   x: number,
   y: number,
   key: string,
+  retina = false,
 ): string {
   // Trimmed here too (MAPTILER_KEY already is): an encoded stray newline
   // (%0A) makes MapTiler answer "Invalid key".
-  return `https://api.maptiler.com/maps/${style}/${z}/${x}/${y}.png?key=${encodeURIComponent(key.trim())}`;
+  return `https://api.maptiler.com/maps/${style}/${z}/${x}/${y}${retina ? "@2x" : ""}.png?key=${encodeURIComponent(key.trim())}`;
+}
+
+/** Whether a screen is dense enough that the plain tiles look soft. */
+export function wantsRetinaTiles(
+  devicePixelRatio: number | undefined,
+): boolean {
+  return (devicePixelRatio ?? 1) >= 1.5;
+}
+
+/**
+ * True only when every tile of the picture has failed. One bad tile (a blip,
+ * a tile outside coverage) must not wipe the whole map: the others still draw
+ * and the failed one shows the card background.
+ */
+export function allTilesFailed(
+  map: StaticMap,
+  failed: ReadonlySet<string>,
+): boolean {
+  return map.tiles.length > 0 && map.tiles.every((t) => failed.has(t.href));
 }
 
 /**
@@ -74,14 +102,24 @@ export function staticMapTiles(opts: {
   style: string;
   apiKey: string;
   viewSize?: number;
+  /** Request `@2x` tiles (same geometry, sharper on high-DPI screens). */
+  retina?: boolean;
 }): StaticMap {
   const { lat, lon, zoom, style, apiKey } = opts;
   const view = opts.viewSize ?? STATIC_VIEW_SIZE;
   const z = Math.max(0, Math.round(zoom));
   const n = 2 ** z;
+  const world = n * STATIC_TILE_SIZE;
+  const half = view / 2;
   const { x: cx, y: cy } = worldPixel(lat, lon, z);
+  // The view is centred on the location, but near the poles that would reach
+  // past the top or bottom of the world, where there is no tile: keep the whole
+  // square inside it (the marker stays on the real position). Columns wrap, so
+  // x needs no clamp.
+  const vy =
+    world <= view ? world / 2 : Math.max(half, Math.min(world - half, cy));
   const tx = Math.floor(cx / STATIC_TILE_SIZE);
-  const ty = Math.floor(cy / STATIC_TILE_SIZE);
+  const ty = Math.floor(vy / STATIC_TILE_SIZE);
   // A single-tile world (z0) has no neighbour to start from.
   const x0 =
     n === 1
@@ -89,7 +127,7 @@ export function staticMapTiles(opts: {
       : cx - tx * STATIC_TILE_SIZE < STATIC_TILE_SIZE / 2
         ? tx - 1
         : tx;
-  const yNear = cy - ty * STATIC_TILE_SIZE < STATIC_TILE_SIZE / 2 ? ty - 1 : ty;
+  const yNear = vy - ty * STATIC_TILE_SIZE < STATIC_TILE_SIZE / 2 ? ty - 1 : ty;
   const y0 = Math.max(0, Math.min(Math.max(0, n - 2), yNear));
 
   const tiles: StaticTile[] = [];
@@ -99,15 +137,14 @@ export function staticMapTiles(opts: {
       const row = y0 + dy;
       const wrapped = ((col % n) + n) % n;
       tiles.push({
-        href: rasterTileUrl(style, z, wrapped, row, apiKey),
+        href: rasterTileUrl(style, z, wrapped, row, apiKey, opts.retina),
         x: col * STATIC_TILE_SIZE,
         y: row * STATIC_TILE_SIZE,
       });
     }
   }
-  const half = view / 2;
   return {
-    viewBox: `${cx - half} ${cy - half} ${view} ${view}`,
+    viewBox: `${cx - half} ${vy - half} ${view} ${view}`,
     cx,
     cy,
     tiles,

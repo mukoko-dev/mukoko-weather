@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   MAP_LAYERS,
   DEFAULT_LAYER,
@@ -309,21 +309,6 @@ describe("remembered map layer (localStorage)", () => {
   });
 });
 
-describe("MapTiler key and style ids (#266)", () => {
-  it("trims the key and builds both style URLs from the shared ids", async () => {
-    const m = await import("./map-layers");
-    expect(m.MAPTILER_KEY).toBe(m.MAPTILER_KEY.trim());
-    expect(m.maptilerStyleId(false)).toBe(m.MAPTILER_STYLE_ID_LIGHT);
-    expect(m.maptilerStyleId(true)).toBe(m.MAPTILER_STYLE_ID_DARK);
-    expect(m.MAPTILER_STYLE_LIGHT).toContain(
-      `/maps/${m.MAPTILER_STYLE_ID_LIGHT}/`,
-    );
-    expect(m.MAPTILER_STYLE_DARK).toContain(
-      `/maps/${m.MAPTILER_STYLE_ID_DARK}/`,
-    );
-  });
-});
-
 describe("map overlay sources (satellite, model fields, timeline)", () => {
   it("builds GIBS sources for satellite chips and Tomorrow.io sources otherwise", async () => {
     const { buildWeatherOverlaySource, weatherOverlayOpacity } =
@@ -434,5 +419,36 @@ describe("map overlay sources (satellite, model fields, timeline)", () => {
     expect(
       readStoredMapLayer(storage, mapChipsFor({ modelLayers: true })),
     ).toBe(MODEL_CHIPS[0].id);
+  });
+});
+
+// Last in the file on purpose: vi.resetModules() hands later dynamic imports a
+// fresh module instance, which would break the identity checks above.
+describe("MapTiler key and style ids (#266)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("trims a key that ends in a newline (the deployed value does)", async () => {
+    vi.resetModules();
+    vi.stubEnv("NEXT_PUBLIC_MAPTILER_API_KEY", " abc123\n");
+    const m = await import("./map-layers");
+    expect(m.MAPTILER_KEY).toBe("abc123");
+    expect(m.MAPTILER_STYLE_LIGHT).toMatch(/\?key=abc123$/);
+    expect(m.MAPTILER_STYLE_DARK).toMatch(/\?key=abc123$/);
+  });
+
+  it("builds both style URLs from the shared ids", async () => {
+    vi.resetModules();
+    vi.stubEnv("NEXT_PUBLIC_MAPTILER_API_KEY", "k");
+    const m = await import("./map-layers");
+    expect(m.maptilerStyleId(false)).toBe(m.MAPTILER_STYLE_ID_LIGHT);
+    expect(m.maptilerStyleId(true)).toBe(m.MAPTILER_STYLE_ID_DARK);
+    expect(m.MAPTILER_STYLE_LIGHT).toContain(
+      `/maps/${m.MAPTILER_STYLE_ID_LIGHT}/`,
+    );
+    expect(m.MAPTILER_STYLE_DARK).toContain(
+      `/maps/${m.MAPTILER_STYLE_ID_DARK}/`,
+    );
   });
 });
