@@ -63,6 +63,7 @@ export const DEFAULT_SECTION_ORDER = [
   "atmospheric",
   "reports",
   "activityInsights",
+  "agriculture",
   "aiSummary",
   "aiChat",
   "enso",

@@ -6,7 +6,7 @@ import { ThemeProvider } from "@/components/brand/ThemeProvider";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { PWAInstallPrompt } from "@/components/weather/PWAInstallPrompt";
 import { ServiceWorkerUpdater } from "@/components/pwa/ServiceWorkerUpdater";
-import { Analytics } from "@vercel/analytics/next";
+import { VercelAnalytics } from "@/components/analytics/VercelAnalytics";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import "./globals.css";
 import { SITE_URL } from "@/lib/site";
@@ -376,7 +376,7 @@ export default async function RootLayout({
           </ThemeProvider>
         </AuthKitProvider>
         <ServiceWorkerUpdater />
-        <Analytics />
+        <VercelAnalytics />
       </body>
     </html>
   );

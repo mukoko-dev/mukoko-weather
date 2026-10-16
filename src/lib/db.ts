@@ -519,11 +519,33 @@ export async function ensureIndexes(): Promise<void> {
       { expireAfterSeconds: 0 },
     ),
 
+    // Agriculture (issue #265): the raw Open-Meteo farm payload, 1-hour TTL,
+    // `_id` = the 0.05° grid cell; and the AI agronomy text, `_id` = cell +
+    // mode + sorted farming activity ids (1 h, 60 s for fallback text).
+    safeCreateIndex(
+      weatherDb().collection("agriculture_cache"),
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    ),
+    safeCreateIndex(
+      weatherDb().collection("agriculture_ai"),
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    ),
+
     // Map tile cache: ~90-min TTL — _id is deterministic ({layer}/{z}/{x}/{y}/{hourBucket}),
     // so the unique-by-_id index MongoDB provides for free is the only key index needed.
     // Drastically cuts Tomorrow.io overlay-tile calls (free tier is ~25 req/hour).
     safeCreateIndex(
       weatherDb().collection("map_tile_cache"),
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    ),
+
+    // Per-model forecast grids for the map (/api/py/model-grid): 3-hour TTL,
+    // deterministic _id ({model}_{lat}_{lon}_{n}_{radius}).
+    safeCreateIndex(
+      weatherDb().collection("model_grid_cache"),
       { expiresAt: 1 },
       { expireAfterSeconds: 0 },
     ),
@@ -660,9 +682,7 @@ export function placesCollection() {
 }
 
 /** Administrative geography — `places.placesGeo` (camelCase). */
-export function placesGeoCollection() {
-  return placesDb().collection("placesGeo");
-}
+export { placesGeoCollection } from "./places-geo-collection";
 
 // identity domain
 /** Canonical user records (OIDC-compliant) — `identity.persons`. */

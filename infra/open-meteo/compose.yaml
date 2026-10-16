@@ -1,0 +1,35 @@
+# Local test of the two Railway services (not used by Railway itself).
+#
+#   cd infra/open-meteo
+#   OM_GATEWAY_KEY=$(openssl rand -hex 32) docker compose up --build
+#   OM_URL=http://localhost:8081 OM_KEY=$OM_GATEWAY_KEY sh smoke.sh
+#
+# The first sync downloads ~80 GB; set SYNC_ENABLED=false and use
+# REMOTE_DATA_DIRECTORY (lazy reads from S3) for a quick look instead.
+volumes:
+  open-meteo-data:
+
+services:
+  open-meteo:
+    build:
+      context: ../..
+      dockerfile: infra/open-meteo/api/Dockerfile
+    volumes:
+      - open-meteo-data:/app/data
+    environment:
+      SYNC_ENABLED: ${SYNC_ENABLED:-true}
+      SYNC_PAST_DAYS: ${SYNC_PAST_DAYS:-7}
+      REMOTE_DATA_DIRECTORY: ${REMOTE_DATA_DIRECTORY:-}
+    # No published port: only the gateway can reach it, as on Railway.
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: infra/open-meteo/gateway/Dockerfile
+    environment:
+      OM_GATEWAY_KEY: ${OM_GATEWAY_KEY:?set OM_GATEWAY_KEY (32+ chars of A-Za-z0-9_-)}
+      OM_UPSTREAM: open-meteo:8080
+    ports:
+      - "127.0.0.1:8081:8080"
+    depends_on:
+      - open-meteo
