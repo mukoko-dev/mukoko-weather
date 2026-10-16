@@ -19,10 +19,25 @@ import {
   satelliteFrames,
 } from "./map-sources";
 
-const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
+/**
+ * The MapTiler key, read once and trimmed: the deployed value ends in a
+ * newline. A raw newline in a URL is dropped by the URL parser, but once
+ * encoded (%0A) MapTiler answers "Invalid key" (#266).
+ */
+export const MAPTILER_KEY = (
+  process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? ""
+).trim();
 
-export const MAPTILER_STYLE_LIGHT = `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_KEY}`;
-export const MAPTILER_STYLE_DARK = `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${MAPTILER_KEY}`;
+/** MapTiler base-map style ids, shared by the interactive map and the preview. */
+export const MAPTILER_STYLE_ID_LIGHT = "streets-v2";
+export const MAPTILER_STYLE_ID_DARK = "streets-v2-dark";
+
+export function maptilerStyleId(isDark: boolean): string {
+  return isDark ? MAPTILER_STYLE_ID_DARK : MAPTILER_STYLE_ID_LIGHT;
+}
+
+export const MAPTILER_STYLE_LIGHT = `https://api.maptiler.com/maps/${MAPTILER_STYLE_ID_LIGHT}/style.json?key=${MAPTILER_KEY}`;
+export const MAPTILER_STYLE_DARK = `https://api.maptiler.com/maps/${MAPTILER_STYLE_ID_DARK}/style.json?key=${MAPTILER_KEY}`;
 
 export interface MapLayer {
   id: string;

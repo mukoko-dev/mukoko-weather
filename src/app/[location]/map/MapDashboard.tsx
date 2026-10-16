@@ -70,6 +70,7 @@ import {
 import { getFeatureFlag } from "@/lib/feature-flags";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { MapCredits } from "@/components/weather/map/MapCredits";
 import type { WeatherLocation } from "@/lib/locations";
 import type { FieldOverlay } from "@/components/weather/map/MapLibreMap";
 
@@ -642,38 +643,5 @@ export function MapDashboard({ location }: MapDashboardProps) {
         <MapCredits credits={credits} className="text-center" />
       </section>
     </main>
-  );
-}
-
-/**
- * The map's credits for the active layer, generated from map-sources.ts so
- * every provider whose data is on screen is named. Shown in the bottom sheet,
- * and in the legend card while the sheet is hidden, so the map is never
- * without its attribution.
- */
-function MapCredits({
-  credits,
-  className,
-}: {
-  credits: ReturnType<typeof attributionForLayer>;
-  className?: string;
-}) {
-  return (
-    <p className={cn("mt-1 text-sm text-text-tertiary", className)}>
-      <span className="sr-only">Map and data sources: </span>
-      {credits.map((p, i) => (
-        <span key={p.id}>
-          {i > 0 && " · "}
-          <a
-            href={p.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline underline-offset-2"
-          >
-            {p.label}
-          </a>
-        </span>
-      ))}
-    </p>
   );
 }
