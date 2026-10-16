@@ -307,7 +307,9 @@ mukoko-weather/
 │   │   │   │   ├── RecentReports.tsx        # Recent community reports with upvoting
 │   │   │   │   └── RecentReports.test.ts
 │   │   │   └── map/                   # Interactive weather map (MapLibre GL + Tomorrow.io overlay tiles)
-│   │   │       ├── MapPreview.tsx         # Compact map card on location page (links to /[location]/map)
+│   │   │       ├── MapPreview.tsx         # Static map card on location page: 4 MapTiler raster tiles in an SVG (src/lib/static-map.ts; @2x tiles on high-DPI screens, per-tile failure tracking), no MapLibre; credits from attributionForLayer(null) via MapCredits, outside the link; links to /[location]/map
+│   │   │       ├── MapPreview.test.ts     # Renders MapPreview (react-dom/server): tiles, theme, credits from map-sources, no nested anchors, no-key fallback
+│   │   │       ├── MapCredits.tsx         # Shared credit list rendered from attributionForLayer() (MapDashboard sheet/legend + MapPreview)
 │   │   │       ├── MapLibreMap.tsx        # MapLibre GL map (theme-aware MapTiler style, marker, weather overlay)
 │   │   │       ├── MapLibreMap.test.ts
 │   │   │       ├── WeatherLayerPanel.tsx  # Bottom-sheet layer chips (icon + label, single-select, touch-target-min, CHIP_ICONS by layer id)
@@ -380,12 +382,14 @@ mukoko-weather/
 │   │   ├── use-display-runtime.ts # useWakeLock, usePeriodicReload, usePolledJson (keeps last good data)
 │   │   ├── i18n.ts                # Lightweight i18n (en complete, sn/nd ready)
 │   │   ├── i18n.test.ts
-│   │   ├── map-layers.ts          # Map layer config (Tomorrow.io tile layers, mineral color styles)
+│   │   ├── map-layers.ts          # Map layer config (Tomorrow.io tile layers, mineral color styles), trimmed MAPTILER_KEY + style ids
 │   │   ├── map-timeline.ts        # Forward-timeline stops labelled in the PLACE's time zone (frameStops) + fetchPlaceOffset (DST-aware offset from /api/py/weather)
 │   │   ├── harness/               # Mzizi component harness, vendored from the registry (useMziziHarness: log, motion, announce; MziziHarness boundary)
 │   │   ├── map-layers.test.ts
 │   │   ├── map-sources.ts         # Map overlay provenance: MAP_PROVIDERS credits (one source of truth), NASA GIBS layers + DescribeDomains frames, MAP_MODELS
 │   │   ├── map-sources.test.ts
+│   │   ├── static-map.ts          # Static map preview geometry: 2×2 MapTiler raster tiles + SVG viewBox around a coordinate
+│   │   ├── static-map.test.ts
 │   │   ├── model-grid.ts          # Per-model forecast cells for the map (/api/py/model-grid → GeoJSON by legend band)
 │   │   ├── model-grid.test.ts
 │   │   ├── error-retry.ts         # Error retry logic with sessionStorage tracking (max 3 retries)
@@ -1586,8 +1590,10 @@ _Library tests:_
 - `src/lib/store.test.ts` — theme resolution (light/dark/system), SSR fallback, ShamwariContext set/clear/expiry, savedLocations CRUD/cap/persistence
 - `src/lib/suggested-prompts.test.ts` — suggested prompt generation, weather condition matching, max 3 cap
 - `src/lib/rxdb/bridge.test.ts` — RxDB bridge: device ID, legacy localStorage migration, preference hydration, writes, retry, reset
-- `src/lib/map-layers.test.ts` — map layer config, default layer, getMapLayerById, satellite/model chips, legend bands, timeline frames
+- `src/lib/map-layers.test.ts` — map layer config, default layer, getMapLayerById, satellite/model chips, legend bands, timeline frames, trimmed MapTiler key + shared style ids
 - `src/lib/map-sources.test.ts` — per-layer attribution, provider licences, GIBS tile/DescribeDomains URLs, frame selection (never a future frame, partial-day rule, gaps)
+- `src/lib/static-map.test.ts` — static preview tile geometry (slippy-map indices, coverage incl. a lat/lon/zoom sweep and the poles, antimeridian wrap, z0, @2x, key trimming, all-tiles-failed rule)
+- `src/components/weather/map/MapPreview.test.ts` — MapPreview rendered for real: tiles + trimmed key, theme, credits generated from `attributionForLayer(null)`, credit links outside the map link, no-key fallback, tokens only
 - `src/lib/model-grid.test.ts` — model-field cells by legend band, nulls and sub-threshold values left clear, fetch contract
 - `src/lib/utils.test.ts` — Tailwind class merging (cn utility), getScrollBehavior reduced-motion detection
 - `src/lib/i18n.test.ts` — translations, formatting, interpolation
