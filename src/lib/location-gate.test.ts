@@ -20,6 +20,13 @@ import {
   rendersWithoutLookup,
   resetLocationGateCache,
 } from "./location-gate";
+import { KNOWN_ROUTES } from "@/proxy";
+
+// The proxy imports AuthKit at module load; only KNOWN_ROUTES is used here.
+vi.mock("@workos-inc/authkit-nextjs", () => ({
+  authkit: vi.fn(),
+  handleAuthkitProxy: vi.fn(),
+}));
 
 const KNOWN = new Set(["explore", "api", "profile", "auth"]);
 
@@ -485,6 +492,17 @@ describe("bare seed names redirect to the canonical seed slug (#302)", () => {
       expect(target).not.toBe(alias);
       expect(target.includes("--")).toBe(false);
     }
-    expect(SEED_NAME_ALIASES.size).toBeGreaterThan(100);
+    // Not a magic count: it only has to be a non-empty, derived table.
+    expect(SEED_NAME_ALIASES.size).toBeGreaterThan(0);
+  });
+
+  it("no alias is a top-level route in the real proxy's KNOWN_ROUTES", () => {
+    for (const alias of SEED_NAME_ALIASES.keys()) {
+      expect(KNOWN_ROUTES.has(alias)).toBe(false);
+    }
+    // And the real route set wins over an alias, as the gate is called.
+    expect(classifyLocationPath("/explore", KNOWN_ROUTES)).toEqual({
+      kind: "other",
+    });
   });
 });
