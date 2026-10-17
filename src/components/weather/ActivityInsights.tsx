@@ -85,7 +85,6 @@ export function uvConcernLabel(concern: number): {
 const DEFAULT_STYLE: CategoryStyle = {
   bg: "bg-primary/10",
   border: "border-primary",
-  borderAccent: "border-l-primary",
   text: "text-primary",
   badge: "bg-primary text-primary-foreground",
 };

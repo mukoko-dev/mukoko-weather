@@ -120,7 +120,7 @@ describe("locations list — client", () => {
   it("pins the search bar to the bottom and reuses the shared quick search", () => {
     expect(clientSource).toContain("<LocationsSearch");
     expect(clientSource).toContain(
-      "sticky bottom-[var(--mobile-nav-clearance)]",
+      "sticky bottom-[calc(var(--mobile-nav-clearance)+0.25rem)]",
     );
     expect(searchSource).toContain("useLocationQuickSearch({ limit: 8 })");
     expect(searchSource).toContain("saveLocation(slug)");
@@ -252,5 +252,20 @@ describe("oryx sky tokens", () => {
   it("defines the shared .oryx card surface and its text token", () => {
     expect(css).toContain("  .oryx {");
     expect(root).toContain("--color-oryx-fg: #ffffff;");
+  });
+});
+
+describe("legacy {name}-{cc} saved slugs", () => {
+  it("falls back to a catalogue search instead of 'Weather unavailable'", () => {
+    expect(clientSource).toContain("resolveLegacySlug");
+    expect(clientSource).toContain("legacySlugQuery");
+    expect(clientSource).toContain("/api/py/search?q=");
+  });
+
+  it("the search pill sticks above the floating nav stack via the clearance token", () => {
+    expect(clientSource).toContain(
+      "sticky bottom-[calc(var(--mobile-nav-clearance)+0.25rem)]",
+    );
+    expect(searchSource).toContain("border-[length:var(--border-width-rest)]");
   });
 });

@@ -57,24 +57,39 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
     );
   });
 
-  it("keeps the registry geometry: fixed, full width, bottom edge, above content", () => {
-    expect(bottomNav).toContain("fixed inset-x-0 bottom-0 z-50");
-    expect(bottomNav).toContain("pb-[env(safe-area-inset-bottom)]");
+  it("floats like mukoko-news's island: inset from the edges, lifted, max-w-md, pill, token border, shadow, blur", () => {
+    expect(bottomNav).toContain("fixed inset-x-4");
+    expect(bottomNav).toContain(
+      "bottom-[calc(env(safe-area-inset-bottom,0px)+var(--mobile-nav-inset))]",
+    );
+    expect(bottomNav).toContain("z-50 mx-auto");
+    expect(bottomNav).toContain("max-w-md");
+    // Never docked: no full-width edge-to-edge bar, no top-border-only bar.
+    const code = bottomNav.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(code).not.toContain("inset-x-0 bottom-0");
+    expect(code).not.toMatch(/\bborder-t\b/);
+    expect(bottomNav).toContain("rounded-full");
+    expect(bottomNav).toContain("border-[length:var(--border-width-rest)]");
+    expect(bottomNav).toContain("shadow-lg");
+    expect(bottomNav).toContain("backdrop-blur-xl");
   });
 
-  it("is 5rem plus the safe area tall; --mobile-nav-height is that 5rem plus the pager row", () => {
-    expect(bottomNav).toContain(
-      "h-[calc(5rem+env(safe-area-inset-bottom,0px))]",
-    );
-    expect(bottomNav).toContain(
-      "absolute inset-x-0 bottom-full flex h-[var(--touch-target-min)]",
-    );
-    expect(css).toContain(
-      "--mobile-nav-height: calc(5rem + var(--touch-target-min));",
+  it("is 4rem tall; --mobile-nav-height is bar + gap + the pager pill; clearance adds the lift and safe area", () => {
+    expect(bottomNav).toContain("h-[var(--mobile-nav-bar-height)]");
+    expect(bottomNav).toContain("h-[var(--touch-target-min)] max-w-full");
+    expect(css).toContain("--mobile-nav-bar-height: 4rem;");
+    expect(css).toContain("--mobile-nav-inset: 0.75rem;");
+    expect(css).toMatch(
+      /--mobile-nav-height: calc\(\s*var\(--mobile-nav-bar-height\) \+ var\(--mobile-nav-gap\) \+\s*var\(--touch-target-min\)\s*\);/,
     );
     expect(css).toMatch(
       /--mobile-nav-clearance: calc\(\s*env\(safe-area-inset-bottom, 0px\) \+ var\(--mobile-nav-inset\) \+\s*var\(--mobile-nav-height\)/,
     );
+  });
+
+  it("the nav wrapper lets taps through; only the pills catch them", () => {
+    expect(bottomNav).toContain("pointer-events-none fixed");
+    expect(bottomNav).toContain("pointer-events-auto rounded-full");
   });
 
   it("items are next/link with aria-current and the 48px touch-target floor", () => {

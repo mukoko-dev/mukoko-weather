@@ -375,8 +375,8 @@ function SavedTab({
                       onSelectLocation(loc.slug, "search");
                     }}
                     aria-pressed={isSelected}
-                    className={`flex min-h-[var(--touch-target-min)] min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-left text-base text-text-primary transition-colors ${
-                      isSelected ? "bg-primary/10" : "hover:bg-surface-base"
+                    className={`bushbuck min-w-0 flex-1 gap-3 ${
+                      isSelected ? "" : "hover:bg-surface-base"
                     }`}
                   >
                     <MapPinIcon
@@ -455,10 +455,8 @@ function SavedTab({
             type="button"
             onClick={() => onSelectLocation(currentSlug)}
             aria-pressed={pendingSlug === currentSlug}
-            className={`flex min-h-[var(--touch-target-min)] w-full items-center gap-3 rounded-[var(--radius-card)] px-3 py-2 text-left text-base text-text-primary transition-colors ${
-              pendingSlug === currentSlug
-                ? "bg-primary/10"
-                : "hover:bg-surface-base"
+            className={`bushbuck w-full gap-3 ${
+              pendingSlug === currentSlug ? "" : "hover:bg-surface-base"
             }`}
           >
             <MapPinIcon
@@ -510,9 +508,9 @@ function SavedTab({
             return (
               <li key={slug} className="group">
                 <div
-                  className={`flex items-center gap-2 rounded-[var(--radius-card)] px-3 py-2 min-h-[var(--touch-target-min)] transition-colors ${
-                    isSelected ? "bg-primary/10" : "hover:bg-surface-base"
-                  }`}
+                  data-card-interactive=""
+                  data-active={isSelected ? "true" : undefined}
+                  className={`bushbuck ${isSelected ? "" : "hover:bg-surface-base"}`}
                 >
                   <button
                     onClick={() => onSelectLocation(slug)}

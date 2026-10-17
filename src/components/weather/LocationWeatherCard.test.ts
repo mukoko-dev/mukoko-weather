@@ -22,9 +22,10 @@ describe("LocationWeatherCard — structure", () => {
     expect(source).toMatch(/<Link\s[^>]*aria-label=\{accessibleName\}/);
   });
 
-  it("paints a mineral plate from the condition and day/night, with a 4px mineral edge", () => {
+  it("paints a mineral plate from the condition and day/night, with a mineral border on all four sides", () => {
     expect(source).toContain("plateClassesFor(summary.sky, summary.isDay)");
-    expect(source).toContain("border-l-4");
+    expect(source).toContain("nyala");
+    expect(source).not.toContain("border-l-");
     expect(source).toContain("${plate.edge}");
     expect(source).toContain("${plate.plate}");
   });

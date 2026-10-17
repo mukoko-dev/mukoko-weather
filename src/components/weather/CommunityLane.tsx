@@ -246,7 +246,7 @@ export function CommunityLane({
       </div>
 
       {/* Pins, panel and axis share the lanes' left inset so all 24 columns line up. */}
-      <div className="space-y-1 border-l-4 border-transparent pl-3">
+      <div className="space-y-1 pl-4">
         {/* Report pins, one per hour, staggered into tiers so none overlap. */}
         {tierCount > 0 && (
           <div className="space-y-0" aria-label="Community reports by hour">
@@ -385,13 +385,17 @@ export function CommunityLane({
               role="group"
               aria-labelledby={labelId}
               aria-describedby={summaryId}
-              className={`space-y-2 border-l-4 pl-3 ${style.borderAccent ?? ""}`}
+              className={`space-y-2 pl-4`}
             >
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                 <h3
                   id={labelId}
-                  className="text-base font-semibold text-text-primary"
+                  className="flex items-center gap-2 text-base font-semibold text-text-primary"
                 >
+                  <span
+                    aria-hidden="true"
+                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${style.badge}`}
+                  />
                   {lane.activity.label}
                 </h3>
                 <p
@@ -423,7 +427,7 @@ export function CommunityLane({
                 ).map((cell) => (
                   <div
                     key={cell.index}
-                    className={`flex h-full items-end ${cell.index === LANE_PAST_HOURS ? "border-l-2 border-text-primary" : ""} ${cell.isPast ? "opacity-60" : ""}`}
+                    className={`flex h-full items-end ${cell.index === LANE_PAST_HOURS ? "shadow-[inset_2px_0_0_var(--color-text-primary)]" : ""} ${cell.isPast ? "opacity-60" : ""}`}
                   >
                     <span
                       className={`w-full rounded-sm ${
