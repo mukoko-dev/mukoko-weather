@@ -29,6 +29,7 @@ pub mod push;
 pub mod query;
 pub mod resolve;
 pub mod secrets;
+pub mod slug_migration;
 pub mod station;
 pub mod tiles;
 pub mod wmo;

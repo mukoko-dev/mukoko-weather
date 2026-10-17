@@ -1,0 +1,1058 @@
+[
+  {
+    "legacy": "harare",
+    "canonical": "harare--ksy4dd1"
+  },
+  {
+    "legacy": "bulawayo",
+    "canonical": "bulawayo--kskm67g"
+  },
+  {
+    "legacy": "mutare",
+    "canonical": "mutare--ksxhp6t"
+  },
+  {
+    "legacy": "gweru",
+    "canonical": "gweru--kst1qe4"
+  },
+  {
+    "legacy": "masvingo",
+    "canonical": "masvingo--ksmvvd3"
+  },
+  {
+    "legacy": "kwekwe",
+    "canonical": "kwekwe--ksthq9f"
+  },
+  {
+    "legacy": "kadoma",
+    "canonical": "kadoma--kstr8g7"
+  },
+  {
+    "legacy": "marondera",
+    "canonical": "marondera--ksy2tbw"
+  },
+  {
+    "legacy": "chinhoyi",
+    "canonical": "chinhoyi--ksvmpjy"
+  },
+  {
+    "legacy": "victoria-falls",
+    "canonical": "victoria-falls--ksf3upz"
+  },
+  {
+    "legacy": "chitungwiza",
+    "canonical": "chitungwiza--ksy1ejp"
+  },
+  {
+    "legacy": "bindura",
+    "canonical": "bindura--ksym8ft"
+  },
+  {
+    "legacy": "zvishavane",
+    "canonical": "zvishavane--ksmkk70"
+  },
+  {
+    "legacy": "kariba",
+    "canonical": "kariba--kth6p2e"
+  },
+  {
+    "legacy": "hwange",
+    "canonical": "hwange--ksdz7pb"
+  },
+  {
+    "legacy": "chiredzi",
+    "canonical": "chiredzi--ksq80xv"
+  },
+  {
+    "legacy": "chipinge",
+    "canonical": "chipinge--ksrjns8"
+  },
+  {
+    "legacy": "rusape",
+    "canonical": "rusape--kswye4s"
+  },
+  {
+    "legacy": "beitbridge",
+    "canonical": "beitbridge--ksj3ddv"
+  },
+  {
+    "legacy": "plumtree",
+    "canonical": "plumtree--ks7g3p9"
+  },
+  {
+    "legacy": "norton",
+    "canonical": "norton--ksvf695"
+  },
+  {
+    "legacy": "ruwa",
+    "canonical": "ruwa--ksy4pp5"
+  },
+  {
+    "legacy": "epworth",
+    "canonical": "epworth--ksy4hz4"
+  },
+  {
+    "legacy": "redcliff",
+    "canonical": "redcliff--kst5txt"
+  },
+  {
+    "legacy": "shurugwi",
+    "canonical": "shurugwi--kst247n"
+  },
+  {
+    "legacy": "chegutu",
+    "canonical": "chegutu--ksv2y5d"
+  },
+  {
+    "legacy": "mazowe",
+    "canonical": "mazowe--ksyh2dx"
+  },
+  {
+    "legacy": "shamva",
+    "canonical": "shamva--ksymw2u"
+  },
+  {
+    "legacy": "concession",
+    "canonical": "concession--ksyj0k1"
+  },
+  {
+    "legacy": "headlands",
+    "canonical": "headlands--ksyb124"
+  },
+  {
+    "legacy": "odzi",
+    "canonical": "odzi--ksxh0de"
+  },
+  {
+    "legacy": "penhalonga",
+    "canonical": "penhalonga--ksxk2p7"
+  },
+  {
+    "legacy": "nyanga",
+    "canonical": "nyanga--ksz235p"
+  },
+  {
+    "legacy": "chimanimani",
+    "canonical": "chimanimani--ksrr7gx"
+  },
+  {
+    "legacy": "triangle",
+    "canonical": "triangle--ksq2mj2"
+  },
+  {
+    "legacy": "hippo-valley",
+    "canonical": "hippo-valley--ksq2p4d"
+  },
+  {
+    "legacy": "selous",
+    "canonical": "selous--ksv9s5p"
+  },
+  {
+    "legacy": "mvurwi",
+    "canonical": "mvurwi--ksvzn1b"
+  },
+  {
+    "legacy": "glendale",
+    "canonical": "glendale--ksyj5px"
+  },
+  {
+    "legacy": "centenary",
+    "canonical": "centenary--ktn0u4k"
+  },
+  {
+    "legacy": "banket",
+    "canonical": "banket--ksvt5u0"
+  },
+  {
+    "legacy": "karoi",
+    "canonical": "karoi--ktj07eg"
+  },
+  {
+    "legacy": "guruve",
+    "canonical": "guruve--ktjc4t7"
+  },
+  {
+    "legacy": "muzarabani",
+    "canonical": "muzarabani--ktn55en"
+  },
+  {
+    "legacy": "mount-darwin",
+    "canonical": "mount-darwin--ktn2we5"
+  },
+  {
+    "legacy": "lupane",
+    "canonical": "lupane--kseu29g"
+  },
+  {
+    "legacy": "gokwe",
+    "canonical": "gokwe--ksu8674"
+  },
+  {
+    "legacy": "nkayi",
+    "canonical": "nkayi--kssecth"
+  },
+  {
+    "legacy": "gutu",
+    "canonical": "gutu--ksqn97v"
+  },
+  {
+    "legacy": "zaka",
+    "canonical": "zaka--ksqkk55"
+  },
+  {
+    "legacy": "bikita",
+    "canonical": "bikita--ksqmxhf"
+  },
+  {
+    "legacy": "mberengwa",
+    "canonical": "mberengwa--ksm7f4w"
+  },
+  {
+    "legacy": "hwange-colliery",
+    "canonical": "hwange-colliery--ksdzd9d"
+  },
+  {
+    "legacy": "renco-mine",
+    "canonical": "renco-mine--ksq7mmz"
+  },
+  {
+    "legacy": "bikita-minerals",
+    "canonical": "bikita-minerals--ksqmy2s"
+  },
+  {
+    "legacy": "kamativi",
+    "canonical": "kamativi--ksepg2y"
+  },
+  {
+    "legacy": "mutorashanga",
+    "canonical": "mutorashanga--ksvte6d"
+  },
+  {
+    "legacy": "mashava",
+    "canonical": "mashava--ksmtvq5"
+  },
+  {
+    "legacy": "trojan-mine",
+    "canonical": "trojan-mine--ksym3mh"
+  },
+  {
+    "legacy": "mimosa-mine",
+    "canonical": "mimosa-mine--ksmkhzq"
+  },
+  {
+    "legacy": "unki-mine",
+    "canonical": "unki-mine--kst25c3"
+  },
+  {
+    "legacy": "zimplats",
+    "canonical": "zimplats-ngezi--ksv39gp"
+  },
+  {
+    "legacy": "murowa-diamond",
+    "canonical": "murowa-diamond--ksmqhgq"
+  },
+  {
+    "legacy": "marange",
+    "canonical": "marange--ksx1ssq"
+  },
+  {
+    "legacy": "matopos",
+    "canonical": "matopos--ksk72s1"
+  },
+  {
+    "legacy": "great-zimbabwe",
+    "canonical": "great-zimbabwe--ksmuxvf"
+  },
+  {
+    "legacy": "hwange-national-park",
+    "canonical": "hwange-national-park--ksdv748"
+  },
+  {
+    "legacy": "mana-pools",
+    "canonical": "mana-pools--kthymhb"
+  },
+  {
+    "legacy": "gonarezhou",
+    "canonical": "gonarezhou--ksns62x"
+  },
+  {
+    "legacy": "lake-kariba",
+    "canonical": "lake-kariba--kth28wc"
+  },
+  {
+    "legacy": "nyanga-national-park",
+    "canonical": "nyanga-national-park--ksxrchx"
+  },
+  {
+    "legacy": "chimanimani-national-park",
+    "canonical": "chimanimani-national-park--ksrrkxj"
+  },
+  {
+    "legacy": "matusadona",
+    "canonical": "matusadona--kth2v46"
+  },
+  {
+    "legacy": "chizarira",
+    "canonical": "chizarira--ksgffvh"
+  },
+  {
+    "legacy": "zambezi-national-park",
+    "canonical": "zambezi-national-park--ksf4rdv"
+  },
+  {
+    "legacy": "zvimba",
+    "canonical": "zvimba--ksvkp9m"
+  },
+  {
+    "legacy": "lower-gweru",
+    "canonical": "lower-gweru--ksmpctd"
+  },
+  {
+    "legacy": "gokomere",
+    "canonical": "gokomere--ksmv4nk"
+  },
+  {
+    "legacy": "kutama",
+    "canonical": "kutama--ksvkn16"
+  },
+  {
+    "legacy": "driefontein",
+    "canonical": "driefontein--ksmzkge"
+  },
+  {
+    "legacy": "dadaya",
+    "canonical": "dadaya--ksmhuzp"
+  },
+  {
+    "legacy": "chirundu",
+    "canonical": "chirundu--kthx22p"
+  },
+  {
+    "legacy": "forbes-border",
+    "canonical": "forbes-mutare--ksxk5fx"
+  },
+  {
+    "legacy": "nyamapanda",
+    "canonical": "nyamapanda--ktngrh2"
+  },
+  {
+    "legacy": "kazungula",
+    "canonical": "kazungula--kscfz51"
+  },
+  {
+    "legacy": "kanyemba",
+    "canonical": "kanyemba--ktjxh4x"
+  },
+  {
+    "legacy": "chivhu",
+    "canonical": "chivhu--kstgz1s"
+  },
+  {
+    "legacy": "mvuma",
+    "canonical": "mvuma--kstdqdp"
+  },
+  {
+    "legacy": "ngundu",
+    "canonical": "ngundu--ksq02ex"
+  },
+  {
+    "legacy": "west-nicholson",
+    "canonical": "west-nicholson--kskbhrf"
+  },
+  {
+    "legacy": "gwanda",
+    "canonical": "gwanda--ksk8umg"
+  },
+  {
+    "legacy": "filabusi",
+    "canonical": "filabusi--kskg4wx"
+  },
+  {
+    "legacy": "mashingo-junction",
+    "canonical": "skyline-junction--ksxj43t"
+  },
+  {
+    "legacy": "christmas-pass",
+    "canonical": "christmas-pass--ksxhjy6"
+  },
+  {
+    "legacy": "chinotimba",
+    "canonical": "chinotimba--ksf3gu2"
+  },
+  {
+    "legacy": "makuti",
+    "canonical": "makuti--kthg2bt"
+  },
+  {
+    "legacy": "lion-den",
+    "canonical": "lion-s-den--ksvpdty"
+  },
+  {
+    "legacy": "nairobi-ke",
+    "canonical": "nairobi--kzf0tv5"
+  },
+  {
+    "legacy": "mombasa-ke",
+    "canonical": "mombasa--kzk0yww"
+  },
+  {
+    "legacy": "kisumu-ke",
+    "canonical": "kisumu--kzbxqvb"
+  },
+  {
+    "legacy": "nakuru-ke",
+    "canonical": "nakuru--kzcwkv1"
+  },
+  {
+    "legacy": "eldoret-ke",
+    "canonical": "eldoret--sb14fwd"
+  },
+  {
+    "legacy": "dar-es-salaam-tz",
+    "canonical": "dar-es-salaam--kygck5z"
+  },
+  {
+    "legacy": "dodoma-tz",
+    "canonical": "dodoma--kyckvkc"
+  },
+  {
+    "legacy": "mwanza-tz",
+    "canonical": "mwanza--kxx3stj"
+  },
+  {
+    "legacy": "arusha-tz",
+    "canonical": "arusha--kz6hfdt"
+  },
+  {
+    "legacy": "zanzibar-tz",
+    "canonical": "zanzibar-city--kygugy9"
+  },
+  {
+    "legacy": "kampala-ug",
+    "canonical": "kampala--s8p1v6k"
+  },
+  {
+    "legacy": "entebbe-ug",
+    "canonical": "entebbe--s8p069h"
+  },
+  {
+    "legacy": "gulu-ug",
+    "canonical": "gulu--s8qzz0r"
+  },
+  {
+    "legacy": "jinja-ug",
+    "canonical": "jinja--s8pde3z"
+  },
+  {
+    "legacy": "addis-ababa-et",
+    "canonical": "addis-ababa--scee3ec"
+  },
+  {
+    "legacy": "dire-dawa-et",
+    "canonical": "dire-dawa--scty8cb"
+  },
+  {
+    "legacy": "mekelle-et",
+    "canonical": "mekelle--sfkhf1t"
+  },
+  {
+    "legacy": "hawassa-et",
+    "canonical": "hawassa--sc725th"
+  },
+  {
+    "legacy": "kigali-rw",
+    "canonical": "kigali--kxtkunc"
+  },
+  {
+    "legacy": "butare-rw",
+    "canonical": "huye-butare--kxt1hy8"
+  },
+  {
+    "legacy": "gisenyi-rw",
+    "canonical": "rubavu-gisenyi--kxsy3fd"
+  },
+  {
+    "legacy": "lusaka-zm",
+    "canonical": "lusaka--ktk078b"
+  },
+  {
+    "legacy": "ndola-zm",
+    "canonical": "ndola--ktsq5wz"
+  },
+  {
+    "legacy": "kitwe-zm",
+    "canonical": "kitwe--ktsp1fj"
+  },
+  {
+    "legacy": "livingstone-zm",
+    "canonical": "livingstone--ksf6kqw"
+  },
+  {
+    "legacy": "chipata-zm",
+    "canonical": "chipata--ktx4qgp"
+  },
+  {
+    "legacy": "maputo-mz",
+    "canonical": "maputo--kerhm87"
+  },
+  {
+    "legacy": "beira-mz",
+    "canonical": "beira--ku2z0u1"
+  },
+  {
+    "legacy": "nampula-mz",
+    "canonical": "nampula--kv7cvx7"
+  },
+  {
+    "legacy": "quelimane-mz",
+    "canonical": "quelimane--kuf4r3n"
+  },
+  {
+    "legacy": "johannesburg-za",
+    "canonical": "johannesburg--ke7fyn6"
+  },
+  {
+    "legacy": "cape-town-za",
+    "canonical": "cape-town--k3vngpj"
+  },
+  {
+    "legacy": "durban-za",
+    "canonical": "durban--kdwn1uh"
+  },
+  {
+    "legacy": "pretoria-za",
+    "canonical": "pretoria-tshwane--kekj92r"
+  },
+  {
+    "legacy": "port-elizabeth-za",
+    "canonical": "gqeberha-port-elizabeth--k9fnycz"
+  },
+  {
+    "legacy": "polokwane-za",
+    "canonical": "polokwane--keubn1h"
+  },
+  {
+    "legacy": "gaborone-bw",
+    "canonical": "gaborone--ked7v8e"
+  },
+  {
+    "legacy": "francistown-bw",
+    "canonical": "francistown--ks5xd40"
+  },
+  {
+    "legacy": "maun-bw",
+    "canonical": "maun--ks2wkfv"
+  },
+  {
+    "legacy": "windhoek-na",
+    "canonical": "windhoek--k7upstj"
+  },
+  {
+    "legacy": "walvis-bay-na",
+    "canonical": "walvis-bay--k7fm6hm"
+  },
+  {
+    "legacy": "oshakati-na",
+    "canonical": "oshakati--kkg4v13"
+  },
+  {
+    "legacy": "luanda-ao",
+    "canonical": "luanda--kq3mtn9"
+  },
+  {
+    "legacy": "huambo-ao",
+    "canonical": "huambo--kmepq5m"
+  },
+  {
+    "legacy": "benguela-ao",
+    "canonical": "benguela--kmc83ju"
+  },
+  {
+    "legacy": "lilongwe-mw",
+    "canonical": "lilongwe--kv808bv"
+  },
+  {
+    "legacy": "blantyre-mw",
+    "canonical": "blantyre--kv0yhmw"
+  },
+  {
+    "legacy": "mzuzu-mw",
+    "canonical": "mzuzu--kvbnwpu"
+  },
+  {
+    "legacy": "mbabane-sz",
+    "canonical": "mbabane--keq4k8e"
+  },
+  {
+    "legacy": "manzini-sz",
+    "canonical": "manzini--keq31zf"
+  },
+  {
+    "legacy": "maseru-ls",
+    "canonical": "maseru--kdg9326"
+  },
+  {
+    "legacy": "accra-gh",
+    "canonical": "accra--ebzzekn"
+  },
+  {
+    "legacy": "kumasi-gh",
+    "canonical": "kumasi--ecny51u"
+  },
+  {
+    "legacy": "tamale-gh",
+    "canonical": "tamale--ecxmkzh"
+  },
+  {
+    "legacy": "takoradi-gh",
+    "canonical": "takoradi--ebygbhj"
+  },
+  {
+    "legacy": "lagos-ng",
+    "canonical": "lagos--s14ktq5"
+  },
+  {
+    "legacy": "abuja-ng",
+    "canonical": "abuja--s1t787h"
+  },
+  {
+    "legacy": "kano-ng",
+    "canonical": "kano--s4nh3bs"
+  },
+  {
+    "legacy": "port-harcourt-ng",
+    "canonical": "port-harcourt--s0ugps2"
+  },
+  {
+    "legacy": "ibadan-ng",
+    "canonical": "ibadan--s16f11q"
+  },
+  {
+    "legacy": "dakar-sn",
+    "canonical": "dakar--edeedfj"
+  },
+  {
+    "legacy": "thies-sn",
+    "canonical": "thies--edeunw2"
+  },
+  {
+    "legacy": "saint-louis-sn",
+    "canonical": "saint-louis--edu70u2"
+  },
+  {
+    "legacy": "abidjan-ci",
+    "canonical": "abidjan--ebvnkk1"
+  },
+  {
+    "legacy": "yamoussoukro-ci",
+    "canonical": "yamoussoukro--echqb1d"
+  },
+  {
+    "legacy": "bouake-ci",
+    "canonical": "bouake--eck7txc"
+  },
+  {
+    "legacy": "yaounde-cm",
+    "canonical": "yaounde--s28nn0s"
+  },
+  {
+    "legacy": "douala-cm",
+    "canonical": "douala--s0wzh9r"
+  },
+  {
+    "legacy": "garoua-cm",
+    "canonical": "garoua--s39sbvj"
+  },
+  {
+    "legacy": "kinshasa-cd",
+    "canonical": "kinshasa--kr4zkte"
+  },
+  {
+    "legacy": "lubumbashi-cd",
+    "canonical": "lubumbashi--ktgt95e"
+  },
+  {
+    "legacy": "goma-cd",
+    "canonical": "goma--kxsy2yj"
+  },
+  {
+    "legacy": "mbuji-mayi-cd",
+    "canonical": "mbuji-mayi--kwbv102"
+  },
+  {
+    "legacy": "cairo-eg",
+    "canonical": "cairo--stq5p07"
+  },
+  {
+    "legacy": "alexandria-eg",
+    "canonical": "alexandria--stt32zg"
+  },
+  {
+    "legacy": "giza-eg",
+    "canonical": "giza--stq4wpn"
+  },
+  {
+    "legacy": "luxor-eg",
+    "canonical": "luxor--ssx4nux"
+  },
+  {
+    "legacy": "aswan-eg",
+    "canonical": "aswan--ssr3h9m"
+  },
+  {
+    "legacy": "casablanca-ma",
+    "canonical": "casablanca--evfx4dg"
+  },
+  {
+    "legacy": "rabat-ma",
+    "canonical": "rabat--ey51k5e"
+  },
+  {
+    "legacy": "marrakech-ma",
+    "canonical": "marrakech--evd7cyn"
+  },
+  {
+    "legacy": "fes-ma",
+    "canonical": "fes--eyh3w4z"
+  },
+  {
+    "legacy": "tangier-ma",
+    "canonical": "tangier--ey7gkp8"
+  },
+  {
+    "legacy": "tunis-tn",
+    "canonical": "tunis--snx1rqv"
+  },
+  {
+    "legacy": "sfax-tn",
+    "canonical": "sfax--snptsu5"
+  },
+  {
+    "legacy": "sousse-tn",
+    "canonical": "sousse--snref4e"
+  },
+  {
+    "legacy": "algiers-dz",
+    "canonical": "algiers--snd1j8k"
+  },
+  {
+    "legacy": "oran-dz",
+    "canonical": "oran--eyre19j"
+  },
+  {
+    "legacy": "constantine-dz",
+    "canonical": "constantine--snkwykv"
+  },
+  {
+    "legacy": "khartoum-sd",
+    "canonical": "khartoum--sdz0knz"
+  },
+  {
+    "legacy": "omdurman-sd",
+    "canonical": "omdurman--sdz0g1e"
+  },
+  {
+    "legacy": "port-sudan-sd",
+    "canonical": "port-sudan--sg6rwgw"
+  },
+  {
+    "legacy": "juba-ss",
+    "canonical": "juba--s8y7wks"
+  },
+  {
+    "legacy": "mogadishu-so",
+    "canonical": "mogadishu--t025xtp"
+  },
+  {
+    "legacy": "hargeisa-so",
+    "canonical": "hargeisa--scxq6u6"
+  },
+  {
+    "legacy": "djibouti-city-dj",
+    "canonical": "djibouti-city--sfn9vvu"
+  },
+  {
+    "legacy": "asmara-er",
+    "canonical": "asmara--sfexmbe"
+  },
+  {
+    "legacy": "bujumbura-bi",
+    "canonical": "bujumbura--kxkuu0e"
+  },
+  {
+    "legacy": "gitega-bi",
+    "canonical": "gitega--kxmk2ze"
+  },
+  {
+    "legacy": "moroni-km",
+    "canonical": "moroni--kvyv2qh"
+  },
+  {
+    "legacy": "antananarivo-mg",
+    "canonical": "antananarivo--mh9u3v9"
+  },
+  {
+    "legacy": "toamasina-mg",
+    "canonical": "toamasina--mhg0sn5"
+  },
+  {
+    "legacy": "port-louis-mu",
+    "canonical": "port-louis--mk2vk3y"
+  },
+  {
+    "legacy": "victoria-sc",
+    "canonical": "victoria--mppmtyc"
+  },
+  {
+    "legacy": "ouagadougou-bf",
+    "canonical": "ouagadougou--efnym4j"
+  },
+  {
+    "legacy": "bobo-dioulasso-bf",
+    "canonical": "bobo-dioulasso--ecuzw5k"
+  },
+  {
+    "legacy": "bamako-ml",
+    "canonical": "bamako--ef4rcyy"
+  },
+  {
+    "legacy": "timbuktu-ml",
+    "canonical": "timbuktu--efvz7sb"
+  },
+  {
+    "legacy": "niamey-ne",
+    "canonical": "niamey--s43sb5r"
+  },
+  {
+    "legacy": "zinder-ne",
+    "canonical": "zinder--s4qqsd4"
+  },
+  {
+    "legacy": "cotonou-bj",
+    "canonical": "cotonou--s11sppd"
+  },
+  {
+    "legacy": "porto-novo-bj",
+    "canonical": "porto-novo--s11u5rs"
+  },
+  {
+    "legacy": "lome-tg",
+    "canonical": "lome--s10fgvb"
+  },
+  {
+    "legacy": "sokode-tg",
+    "canonical": "sokode--s18g1dy"
+  },
+  {
+    "legacy": "monrovia-lr",
+    "canonical": "monrovia--ec07fcj"
+  },
+  {
+    "legacy": "freetown-sl",
+    "canonical": "freetown--e9w86cw"
+  },
+  {
+    "legacy": "conakry-gn",
+    "canonical": "conakry--e9wq28w"
+  },
+  {
+    "legacy": "bissau-gw",
+    "canonical": "bissau--edhgmp0"
+  },
+  {
+    "legacy": "banjul-gm",
+    "canonical": "banjul--edkhw8q"
+  },
+  {
+    "legacy": "nouakchott-mr",
+    "canonical": "nouakchott--eehwue7"
+  },
+  {
+    "legacy": "nouadhibou-mr",
+    "canonical": "nouadhibou--eeezh4p"
+  },
+  {
+    "legacy": "praia-cv",
+    "canonical": "praia--e6xkbvc"
+  },
+  {
+    "legacy": "libreville-ga",
+    "canonical": "libreville--s0ndpnc"
+  },
+  {
+    "legacy": "port-gentil-ga",
+    "canonical": "port-gentil--kpy5zuc"
+  },
+  {
+    "legacy": "brazzaville-cg",
+    "canonical": "brazzaville--kr4zeqx"
+  },
+  {
+    "legacy": "pointe-noire-cg",
+    "canonical": "pointe-noire--kr0kvcu"
+  },
+  {
+    "legacy": "bangui-cf",
+    "canonical": "bangui--s2v0y3d"
+  },
+  {
+    "legacy": "ndjamena-td",
+    "canonical": "n-djamena--s64sykx"
+  },
+  {
+    "legacy": "moundou-td",
+    "canonical": "moundou--s3e2vbj"
+  },
+  {
+    "legacy": "malabo-gq",
+    "canonical": "malabo--s0wjrf9"
+  },
+  {
+    "legacy": "sao-tome-st",
+    "canonical": "sao-tome--s0hccju"
+  },
+  {
+    "legacy": "tripoli-ly",
+    "canonical": "tripoli--smc75vm"
+  },
+  {
+    "legacy": "benghazi-ly",
+    "canonical": "benghazi--smwq8xq"
+  },
+  {
+    "legacy": "saint-denis-re",
+    "canonical": "saint-denis--mhr3jyc"
+  },
+  {
+    "legacy": "mamoudzou-yt",
+    "canonical": "mamoudzou--mj8pm1r"
+  },
+  {
+    "legacy": "bangkok-th",
+    "canonical": "bangkok--w4rqprh"
+  },
+  {
+    "legacy": "chiang-mai-th",
+    "canonical": "chiang-mai--w5q6uke"
+  },
+  {
+    "legacy": "phuket-th",
+    "canonical": "phuket--w1muz4s"
+  },
+  {
+    "legacy": "pattaya-th",
+    "canonical": "pattaya--w4r9x9f"
+  },
+  {
+    "legacy": "hat-yai-th",
+    "canonical": "hat-yai--w1prykp"
+  },
+  {
+    "legacy": "kuala-lumpur-my",
+    "canonical": "kuala-lumpur--w283f58"
+  },
+  {
+    "legacy": "george-town-my",
+    "canonical": "george-town-penang--w0zqg2c"
+  },
+  {
+    "legacy": "johor-bahru-my",
+    "canonical": "johor-bahru--w23b31g"
+  },
+  {
+    "legacy": "kota-kinabalu-my",
+    "canonical": "kota-kinabalu--w94d10x"
+  },
+  {
+    "legacy": "jakarta-id",
+    "canonical": "jakarta--qqguxmt"
+  },
+  {
+    "legacy": "surabaya-id",
+    "canonical": "surabaya--qw8nv8n"
+  },
+  {
+    "legacy": "bandung-id",
+    "canonical": "bandung--qqu88sr"
+  },
+  {
+    "legacy": "bali-denpasar-id",
+    "canonical": "denpasar-bali--qw3yvck"
+  },
+  {
+    "legacy": "medan-id",
+    "canonical": "medan--w0whmm9"
+  },
+  {
+    "legacy": "manila-ph",
+    "canonical": "manila--wdw50cy"
+  },
+  {
+    "legacy": "cebu-city-ph",
+    "canonical": "cebu-city--wcb4eqt"
+  },
+  {
+    "legacy": "davao-city-ph",
+    "canonical": "davao-city--wc324r4"
+  },
+  {
+    "legacy": "quezon-city-ph",
+    "canonical": "quezon-city--wdw5d26"
+  },
+  {
+    "legacy": "hanoi-vn",
+    "canonical": "hanoi--w7er8sm"
+  },
+  {
+    "legacy": "ho-chi-minh-city-vn",
+    "canonical": "ho-chi-minh-city--w3gvd3t"
+  },
+  {
+    "legacy": "da-nang-vn",
+    "canonical": "da-nang--w6ugq9g"
+  },
+  {
+    "legacy": "hoi-an-vn",
+    "canonical": "hoi-an--w6v434g"
+  },
+  {
+    "legacy": "singapore-sg",
+    "canonical": "singapore--w21zdmz"
+  },
+  {
+    "legacy": "yangon-mm",
+    "canonical": "yangon--w4urvp4"
+  },
+  {
+    "legacy": "mandalay-mm",
+    "canonical": "mandalay--w5ukfre"
+  },
+  {
+    "legacy": "naypyidaw-mm",
+    "canonical": "naypyidaw--w5s273x"
+  },
+  {
+    "legacy": "phnom-penh-kh",
+    "canonical": "phnom-penh--w649g82"
+  },
+  {
+    "legacy": "siem-reap-kh",
+    "canonical": "siem-reap--w63u52h"
+  },
+  {
+    "legacy": "vientiane-la",
+    "canonical": "vientiane--w70ynxr"
+  },
+  {
+    "legacy": "luang-prabang-la",
+    "canonical": "luang-prabang--w789hhb"
+  },
+  {
+    "legacy": "bandar-seri-begawan-bn",
+    "canonical": "bandar-seri-begawan--w8cspg2"
+  },
+  {
+    "legacy": "dili-tl",
+    "canonical": "dili--qy3r39s"
+  }
+]

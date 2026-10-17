@@ -90,15 +90,17 @@ pub fn slugify(text: &str) -> String {
     out
 }
 
-/// Resolve a slug or a name against the seed locations: an exact slug first,
-/// then a case-insensitive name, then the slug of the name.
+/// Resolve a slug or a name against the seed locations: an exact slug (legacy
+/// or canonical) first, then a case-insensitive name, then the slug of the name.
 pub fn resolve_seed(query: &str) -> Option<&'static Place> {
     let q = query.trim();
     if q.is_empty() {
         return None;
     }
     let places = seed();
-    if let Some(p) = places.iter().find(|p| p.slug == q) {
+    // Either spelling of a seed: legacy `harare` or canonical `harare--ksy4dd1`.
+    let key = crate::slug_migration::storage_key_slug(q);
+    if let Some(p) = places.iter().find(|p| p.slug == key) {
         return Some(p);
     }
     let lower = q.to_lowercase();

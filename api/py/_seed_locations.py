@@ -46,6 +46,14 @@ def _as_location(seed: dict) -> dict:
     }
 
 
+def seed_by_slug(slug: str) -> dict | None:
+    """The seed place whose LEGACY slug is ``slug`` (``harare``), else None."""
+    for s in load_seed():
+        if s.get("slug") == slug:
+            return _as_location(s)
+    return None
+
+
 def seed_in_country(iso: str, *, limit: int = 200) -> list[dict]:
     """Seed places in ``iso``, cities first, then by name."""
     code = (iso or "").strip().upper()

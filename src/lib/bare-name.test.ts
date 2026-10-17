@@ -12,6 +12,7 @@ import {
   resolveBareName,
 } from "./bare-name";
 import { buildSmartSlug } from "./smart-slug";
+import { canonicalSlug } from "./slug-migration";
 
 const SAMUI = buildSmartSlug("Ko Samui", 9.51201, 100.01361);
 const ENV = { NEXT_PUBLIC_WEATHER_API_URL: "https://weather-api.test" };
@@ -129,7 +130,7 @@ describe("resolveBareName", () => {
         fetcher: ok("phuket-th"),
         env: ENV,
       }),
-    ).toBe("phuket-th");
+    ).toBe(canonicalSlug("phuket-th"));
   });
 
   it.each(["community-record-a1b2c3", "evil//host", "koh-samui", ""])(

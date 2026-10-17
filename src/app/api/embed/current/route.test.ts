@@ -8,6 +8,7 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { weatherCodeToInfo, windDirection } from "@/lib/weather";
 import { shapeEmbedResponse } from "./shape";
+import { canonicalSlug } from "@/lib/slug-migration";
 
 const source = readFileSync(resolve(__dirname, "route.ts"), "utf-8");
 
@@ -110,7 +111,9 @@ describe("shapeEmbedResponse", () => {
       "slug",
       "https://example.com",
     );
-    expect(out.attribution.url).toBe("https://example.com/harare");
+    expect(out.attribution.url).toBe(
+      `https://example.com/${canonicalSlug("harare")}`,
+    );
     expect(out.attribution.name).toBe("mukoko weather");
   });
 

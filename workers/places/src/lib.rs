@@ -32,6 +32,7 @@ use weather_core::budget::Action;
 use weather_core::geo::valid_coordinates;
 use weather_core::locations::{self, LocationDoc};
 use weather_core::resolve::{self, Naming, PointAnswer, SpotKind};
+use weather_core::slug_migration;
 use weather_edge::{error, json, now_ms, query_pairs};
 use worker::{event, Context, Env, Method, Request, Response, Result};
 
@@ -99,7 +100,11 @@ fn page<T: Clone>(items: &[T], skip: usize, limit: usize) -> Vec<T> {
 /// earlier reverse geocode when there is one), then the Nyuchi API.
 async fn find_location(env: &Env, slug: &str) -> std::result::Result<Option<LocationDoc>, ()> {
     if let Some(l) = locations::find_seed(slug) {
-        return Ok(Some(l.clone()));
+        // Either spelling finds the seed; the answer carries the canonical
+        // slug (#317). Durable data stays keyed by the legacy one.
+        let mut seed = l.clone();
+        seed.slug = slug_migration::canonical_slug(&seed.slug).to_owned();
+        return Ok(Some(seed));
     }
     if let Some(spot) = LocationDoc::spot(slug) {
         let named = sources::reverse_cached(env, spot.lat, spot.lon)
@@ -447,7 +452,8 @@ async fn history_route(env: &Env, q: &Query) -> Result<Response> {
         _ => return error(400, "invalid_request", "days must be between 1 and 365"),
     };
     let slug = match find_location(env, location).await {
-        Ok(Some(loc)) => loc.slug,
+        // The D1 history is keyed by a seed's LEGACY slug (#317).
+        Ok(Some(loc)) => slug_migration::storage_key_slug(&loc.slug).to_owned(),
         Ok(None) => return error(404, "not_found", "Unknown location"),
         Err(()) => return error(503, "places_unavailable", "Location service unavailable"),
     };

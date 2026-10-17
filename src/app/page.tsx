@@ -21,6 +21,7 @@ import { SITE_URL } from "@/lib/site";
 import { fetchPlaces } from "@/lib/weather-api";
 import { usableIpGeo } from "@/lib/location-choice";
 import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
+import { canonicalSlug } from "@/lib/slug-migration";
 
 // Stable base for the server-to-self geo lookup. The per-deployment Vercel
 // hostname env var points at a protected preview origin that 401s the self-fetch
@@ -135,7 +136,11 @@ async function HomeContent() {
           // A coordinate label is not a name for the visitor's place: the
           // IP-city fallback below names it better (`usableIpGeo`).
           if (usableIpGeo(data?.nearest)) {
-            detectedLocation = data.nearest as WeatherLocation;
+            const nearest = data.nearest as WeatherLocation;
+            detectedLocation = {
+              ...nearest,
+              slug: canonicalSlug(nearest.slug),
+            };
           }
         }
       } catch {

@@ -6,6 +6,8 @@ import { beforeEach, describe, it, expect, vi } from "vitest";
 import { readdirSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { NextRequest, NextResponse } from "next/server";
+import { canonicalSlug } from "@/lib/slug-migration";
+import { SEED_SLUG_TABLE } from "@/lib/slug-migration-data";
 
 vi.mock("@workos-inc/authkit-nextjs", () => ({
   authkit: vi.fn(async () => ({ headers: new Headers() })),
@@ -32,6 +34,8 @@ vi.mock("@workos-inc/authkit-nextjs", () => ({
 const mockResolve = vi.fn(
   async (slug: string, _opts?: { strict?: boolean }) => {
     if (slug === "community-place-a1b2c3") return { slug };
+    // A platform slug resolves to a place whose canonical slug differs.
+    if (slug === "old-town-a1b2c3") return { slug: "old-town--ksy4dd7" };
     if (slug === "db-down") throw new Error("mongo down");
     return null;
   },
@@ -101,11 +105,19 @@ describe("proxy — lastLocation cookie", () => {
   );
 
   it("sets lastLocation for a location slug", async () => {
-    expect(await lastLocationFor("/harare")).toBe("harare");
+    expect(await lastLocationFor("/some-place--ksy4dd7")).toBe(
+      "some-place--ksy4dd7",
+    );
+    // A canonical seed slug is a plain location page.
+    expect(await lastLocationFor(`/${canonicalSlug("harare")}`)).toBe(
+      canonicalSlug("harare"),
+    );
   });
 
   it("uses the first segment of a location sub-route", async () => {
-    expect(await lastLocationFor("/harare/forecast")).toBe("harare");
+    expect(await lastLocationFor("/some-place--ksy4dd7/forecast")).toBe(
+      "some-place--ksy4dd7",
+    );
   });
 
   it("does not set lastLocation on the home page", async () => {
@@ -156,13 +168,116 @@ describe("proxy — unknown location slugs get a server-rendered 404 (#263)", ()
   );
 
   it.each([
-    "/harare",
-    "/harare/forecast",
-    "/nairobi-ke",
+    `/${canonicalSlug("harare")}`,
+    `/${canonicalSlug("harare")}/forecast`,
+    `/${canonicalSlug("nairobi-ke")}`,
     "/some-place--ksy4dd7",
     "/community-place-a1b2c3",
   ])("lets the renderable location %s through", async (path) => {
     expect(await rewriteFor(path)).toBeNull();
+    const res = await proxy(
+      new NextRequest(`https://weather.mukoko.com${path}`),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  describe("canonical slugs (#317)", () => {
+    const go = (path: string) =>
+      proxy(new NextRequest(`https://weather.mukoko.com${path}`));
+    const to = (res: Response) => {
+      const loc = new URL(res.headers.get("location") ?? "");
+      return loc.pathname + loc.search;
+    };
+
+    it("308s a legacy seed slug to its canonical slug with no lookup", async () => {
+      mockResolve.mockClear();
+      const res = await go("/nairobi-ke");
+      expect(res.status).toBe(308);
+      expect(to(res)).toBe(`/${canonicalSlug("nairobi-ke")}`);
+      expect(mockResolve).not.toHaveBeenCalled();
+    });
+
+    it("308s EVERY shipped legacy slug in one hop, and the target renders (no loop)", async () => {
+      mockResolve.mockClear();
+      for (const [legacy, canonical] of SEED_SLUG_TABLE) {
+        const res = await go(`/${legacy}`);
+        expect(res.status, legacy).toBe(308);
+        expect(to(res)).toBe(`/${canonical}`);
+        const landed = await go(to(res));
+        expect(landed.status, canonical).toBe(200);
+        expect(landed.headers.get("location")).toBeNull();
+      }
+      // The whole table is answered with no lookup.
+      expect(mockResolve).not.toHaveBeenCalled();
+    });
+
+    it("keeps every sub-route and the query string for every legacy slug", async () => {
+      for (const [legacy, canonical] of SEED_SLUG_TABLE) {
+        for (const sub of ["forecast", "atmosphere", "map", "agriculture"]) {
+          const res = await go(`/${legacy}/${sub}?a=1&b=two`);
+          expect(res.status).toBe(308);
+          expect(to(res)).toBe(`/${canonical}/${sub}?a=1&b=two`);
+        }
+      }
+    });
+
+    it("keeps the sub-route and the query string", async () => {
+      const res = await go("/harare/atmosphere?units=imperial&x=1");
+      expect(res.status).toBe(308);
+      expect(to(res)).toBe(
+        `/${canonicalSlug("harare")}/atmosphere?units=imperial&x=1`,
+      );
+    });
+
+    it("does not set lastLocation on the redirect (the canonical URL does)", async () => {
+      const res = await go("/harare");
+      expect(
+        res.headers.getSetCookie().some((c) => c.startsWith("lastLocation=")),
+      ).toBe(false);
+    });
+
+    it("308s a platform slug to the canonical slug its place resolves to", async () => {
+      resetLocationGateCache();
+      const res = await go("/old-town-a1b2c3/forecast?x=1");
+      expect(res.status).toBe(308);
+      expect(to(res)).toBe("/old-town--ksy4dd7/forecast?x=1");
+      // Cached: the second request redirects without another lookup.
+      mockResolve.mockClear();
+      const again = await go("/old-town-a1b2c3");
+      expect(again.status).toBe(308);
+      expect(to(again)).toBe("/old-town--ksy4dd7");
+      expect(mockResolve).not.toHaveBeenCalled();
+    });
+
+    it("never redirects a slug that is already canonical (no loop)", async () => {
+      const res = await go("/old-town--ksy4dd7");
+      expect(res.status).toBe(200);
+      const community = await go("/community-place-a1b2c3");
+      expect(community.status).toBe(200);
+    });
+
+    it("tidies a legacy lastLocation cookie on the home page, once", async () => {
+      const req = new NextRequest("https://weather.mukoko.com/", {
+        headers: { cookie: "lastLocation=harare" },
+      });
+      const res = await proxy(req);
+      const set = res.headers
+        .getSetCookie()
+        .find((c) => c.startsWith("lastLocation="));
+      expect(set?.split(";")[0]).toBe(
+        `lastLocation=${canonicalSlug("harare")}`,
+      );
+      const canonical = await proxy(
+        new NextRequest("https://weather.mukoko.com/", {
+          headers: { cookie: `lastLocation=${canonicalSlug("harare")}` },
+        }),
+      );
+      expect(
+        canonical.headers
+          .getSetCookie()
+          .some((c) => c.startsWith("lastLocation=")),
+      ).toBe(false);
+    });
   });
 
   it("never looks up seed slugs or smart-slug spots", async () => {
@@ -182,11 +297,17 @@ describe("proxy — unknown location slugs get a server-rendered 404 (#263)", ()
   });
 
   it.each([
-    ["/Harare", "/harare"],
-    ["/Nairobi-KE/forecast?x=1", "/nairobi-ke/forecast?x=1"],
-    ["/harare/Forecast", "/harare/forecast"],
+    ["/Some-Place--ksy4dd7", "/some-place--ksy4dd7"],
+    ["/Some-Place--ksy4dd7/Forecast?x=1", "/some-place--ksy4dd7/forecast?x=1"],
+    // A legacy seed slug in the wrong case: one hop, straight to canonical.
+    ["/Harare", `/${canonicalSlug("harare")}`],
+    [
+      "/Nairobi-KE/forecast?x=1",
+      `/${canonicalSlug("nairobi-ke")}/forecast?x=1`,
+    ],
+    ["/harare/Forecast", `/${canonicalSlug("harare")}/forecast`],
   ])(
-    "redirects %s to its lowercase URL %s with a 308",
+    "redirects %s to its canonical URL %s with a 308",
     async (path, target) => {
       const res = await proxy(
         new NextRequest(`https://weather.mukoko.com${path}`),
@@ -264,13 +385,13 @@ describe("proxy — unknown location slugs get a server-rendered 404 (#263)", ()
     headers.append("set-cookie", "wos-session=fresh; Path=/");
     vi.mocked(authkit).mockResolvedValueOnce({ headers } as never);
     const res = await proxy(
-      new NextRequest("https://weather.mukoko.com/harare"),
+      new NextRequest("https://weather.mukoko.com/some-place--ksy4dd7"),
     );
     const cookies = res.headers.getSetCookie();
     expect(cookies).toContain("wos-session=fresh; Path=/");
-    expect(cookies.some((c) => c.startsWith("lastLocation=harare;"))).toBe(
-      true,
-    );
+    expect(
+      cookies.some((c) => c.startsWith("lastLocation=some-place--ksy4dd7;")),
+    ).toBe(true);
   });
 
   it("rewrites to a path no app route matches", () => {
@@ -421,11 +542,11 @@ describe("proxy — bare place names resolve instead of 404 (#317)", () => {
   it("keeps the case redirect and the seed-alias redirect as they were", async () => {
     const upper = await run("/Harare");
     expect(new URL(upper.headers.get("location") ?? "").pathname).toBe(
-      "/harare",
+      `/${canonicalSlug("harare")}`,
     );
     const alias = await run("/phuket");
     expect(new URL(alias.headers.get("location") ?? "").pathname).toBe(
-      "/phuket-th",
+      `/${canonicalSlug("phuket-th")}`,
     );
     expect(mockResolveFetch).not.toHaveBeenCalled();
   });

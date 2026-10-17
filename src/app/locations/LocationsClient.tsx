@@ -32,6 +32,7 @@ import { MAX_SAVED_LOCATIONS, useAppStore } from "@/lib/store";
 import { useStoreHydrated } from "@/lib/use-hydrated";
 import { LocationsMenu } from "./LocationsMenu";
 import { LocationsSearch } from "./LocationsSearch";
+import { storageKeySlug } from "@/lib/slug-migration";
 
 interface Props {
   /** `lastLocation` cookie read on the server, if it names a real location. */
@@ -69,7 +70,9 @@ async function resolvePlace(
   slug: string,
   signal: AbortSignal,
 ): Promise<PlaceRef | null> {
-  const seed = LOCATIONS.find((loc) => loc.slug === slug);
+  // Saved slugs are canonical; the seed list keys on the legacy slug.
+  const catalogueSlug = storageKeySlug(slug);
+  const seed = LOCATIONS.find((loc) => loc.slug === catalogueSlug);
   if (seed) {
     return {
       name: seed.name,

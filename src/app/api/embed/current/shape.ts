@@ -7,6 +7,7 @@
 
 import { weatherCodeToInfo, windDirection } from "@/lib/weather";
 import { SITE_URL } from "@/lib/site";
+import { canonicalSlug } from "@/lib/slug-migration";
 
 export const DEFAULT_SITE = SITE_URL;
 
@@ -130,7 +131,7 @@ export function shapeEmbedResponse(
     source,
     attribution: {
       name: "mukoko weather",
-      url: location.slug ? `${site}/${location.slug}` : site,
+      url: location.slug ? `${site}/${canonicalSlug(location.slug)}` : site,
     },
   };
 }
