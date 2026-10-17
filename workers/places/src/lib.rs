@@ -222,20 +222,31 @@ async fn search_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
                 merge(&mut found, canonical);
             }
         }
-        // Nothing on record: offer geocoded candidates, as the app expects
-        // (address-level discovery). They are not records yet.
-        if found.is_empty() {
+        // A thin catalogue answer is topped up from the geocoder, so nothing
+        // a person types is a dead end: places first, then the best cities of
+        // a country the query named, and last the area itself (a country,
+        // province or continent) as a spot at its centre. A shipped city is
+        // always its canonical slug, and nothing is listed twice.
+        if skip == 0 && found.len() < resolve::TOP_UP_BELOW {
             let caller = budget::Caller::from_request(req);
-            match sources::geocode(env, text, limit, Action::Search, &caller).await {
+            let count = resolve::geocode_count(limit);
+            match sources::geocode(env, text, count, Action::Search, &caller).await {
                 Ok(geocoded) => {
-                    found = geocoded;
-                    source = "geocoded";
+                    let catalogue_empty = found.is_empty();
+                    found = resolve::compose_search(found, &geocoded, limit);
+                    if found.iter().any(|l| l.source == "geocoded") {
+                        source = if catalogue_empty { "geocoded" } else { "mixed" };
+                    }
                 }
-                // Over budget: answer from the catalogue (empty), never cached.
+                // Over budget: the catalogue answer stands (an empty one is
+                // still an answer), and nothing downstream may cache it.
                 Err(sources::GeoErr::Budget) => degraded = true,
-                Err(sources::GeoErr::Upstream) => {
-                    return error(503, "search_unavailable", "Search unavailable")
+                // A hard failure is an error only when there is nothing else
+                // to show; otherwise the catalogue answer stands, uncached.
+                Err(sources::GeoErr::Upstream) if found.is_empty() => {
+                    return error(503, "search_unavailable", "Search unavailable");
                 }
+                Err(sources::GeoErr::Upstream) => degraded = true,
             }
         }
     }
