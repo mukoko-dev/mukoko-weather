@@ -850,9 +850,8 @@ describe("db-init indexes for agriculture (issue #265)", () => {
 
 describe("syncAirports keeps airports fetched on demand (#302)", () => {
   it("prunes only seed docs that left the catalogue", async () => {
-    const { airportPruneFilter, DISCOVERED_AIRPORT_SOURCE } = await import(
-      "./db"
-    );
+    const { airportPruneFilter, DISCOVERED_AIRPORT_SOURCE } =
+      await import("./db");
     expect(airportPruneFilter(["FVRG", "FAOR"])).toEqual({
       _id: { $nin: ["FVRG", "FAOR"] },
       source: { $ne: DISCOVERED_AIRPORT_SOURCE },
