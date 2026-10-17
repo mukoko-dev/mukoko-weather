@@ -399,11 +399,12 @@ describe("releases/ — the shipped notes", () => {
     expect(releases.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("starts the public history at v0.10.0 and includes v0.11.0", () => {
+  it("starts the public history at v0.10.0 and includes v0.11.0 and v0.12.0", () => {
     const versions = releases.map((r) => r.version);
     expect(versions).toContain("0.10.0");
     expect(versions).toContain("0.11.0");
-    expect(versions[0]).toBe("0.11.0");
+    expect(versions).toContain("0.11.0");
+    expect(versions[0]).toBe("0.12.0");
   });
 
   it("links v0.10.0 to its published GitHub release", () => {
