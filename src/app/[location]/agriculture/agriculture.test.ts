@@ -77,7 +77,7 @@ describe("/[location]/agriculture route", () => {
 
   it("is in the sitemap for farming locations only (content loads client-side)", () => {
     const sitemap = readFileSync(resolve(dir, "../../sitemap.ts"), "utf-8");
-    expect(sitemap).toContain("${loc.slug}/agriculture");
+    expect(sitemap).toContain("${canonicalSlug(loc.slug)}/agriculture");
     expect(sitemap).toContain('loc.tags.includes("farming")');
   });
 

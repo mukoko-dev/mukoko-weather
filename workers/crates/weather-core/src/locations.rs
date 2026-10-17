@@ -92,9 +92,11 @@ pub fn seed_locations() -> &'static [LocationDoc] {
     })
 }
 
-/// A seed location by exact slug.
+/// A seed location by exact slug, under either spelling: its legacy slug
+/// (`harare`) or its canonical one (`harare--ksy4dd1`, #317).
 pub fn find_seed(slug: &str) -> Option<&'static LocationDoc> {
-    seed_locations().iter().find(|l| l.slug == slug)
+    let key = crate::slug_migration::storage_key_slug(slug);
+    seed_locations().iter().find(|l| l.slug == key)
 }
 
 /// Seed locations matching `q` (name, slug or province, case-insensitive),

@@ -266,7 +266,9 @@ describe("buildLocationList", () => {
 describe("cardHref", () => {
   it("links the current location to / and saved places to /{slug}", () => {
     expect(cardHref({ slug: "harare", isCurrent: true })).toBe("/");
-    expect(cardHref({ slug: "bulawayo", isCurrent: false })).toBe("/bulawayo");
+    expect(cardHref({ slug: "bulawayo", isCurrent: false })).toBe(
+      `/${canonicalSlug("bulawayo")}`,
+    );
   });
 });
 
@@ -285,6 +287,7 @@ import {
   plateConditionFor,
   plateName,
 } from "./location-card";
+import { canonicalSlug } from "./slug-migration";
 
 describe("plate names and minerals", () => {
   it("names plates plate-<condition>-<day|night>", () => {

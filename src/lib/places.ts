@@ -48,11 +48,18 @@ import {
 import {
   coordinateLabel,
   isCoordinateNameSlug,
+  buildSmartSlug,
   nameFromSlugSegment,
   parseSmartSlug,
+  slugifyName,
   type ParsedSmartSlug,
 } from "./smart-slug";
-import { nearestWithin } from "./geo";
+import { haversineKm, nearestWithin } from "./geo";
+import {
+  CANONICAL_TO_LEGACY,
+  LEGACY_TO_CANONICAL,
+  canonicalSlug,
+} from "./slug-migration";
 import type { PlaceRef, SpotRef } from "./place-ref";
 
 // ---------------------------------------------------------------------------
@@ -307,6 +314,9 @@ export async function adaptPlacesGeoToLocationDoc(
 export function adaptSeedToLocationDoc(seed: WeatherLocation): AdaptedLocation {
   return {
     ...seed,
+    // The page and every link carry the canonical slug; `_id` keeps the
+    // legacy one (it is the durable-data identity, never shown).
+    slug: canonicalSlug(seed.slug),
     _id: `seed:${seed.slug}`,
     source: seed.source ?? "seed",
     updatedAt: new Date(),
@@ -568,11 +578,82 @@ async function resolveSpotSlug(
 /** placesGeo platform slugs: `<slugified-name>-<6 hex>` (see upsert_placesgeo_city). */
 export const PLATFORM_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*-[0-9a-f]{6}$/;
 
+/** A place's seed twin must be this close (km) and share its name. */
+const SEED_TWIN_MAX_KM = 25;
+
+/**
+ * The canonical slug for a resolved place (never a database lookup):
+ *
+ * 1. a shipped seed's legacy slug → the pinned canonical slug;
+ * 2. a slug that is already `{name}--{ref}` → itself;
+ * 3. a platform or community place that is a shipped seed (same slugified
+ *    name within {@link SEED_TWIN_MAX_KM}: `harare-35c223`) → that seed's
+ *    canonical slug, so one city has one URL;
+ * 4. anything else with a coordinate → `{name}--{geohash7}` of it;
+ * 5. no usable coordinate → the slug unchanged (never invent a URL).
+ *
+ * Idempotent, and a canonical slug is its own fixed point, so redirecting to
+ * it can never loop.
+ */
+export function canonicalSlugForPlace(place: {
+  slug: string;
+  name?: string;
+  lat?: number;
+  lon?: number;
+}): string {
+  const mapped = LEGACY_TO_CANONICAL.get(place.slug);
+  if (mapped) return mapped;
+  if (parseSmartSlug(place.slug)) return place.slug;
+  const { name, lat, lon } = place;
+  if (
+    !name ||
+    typeof lat !== "number" ||
+    typeof lon !== "number" ||
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lon) ||
+    (lat === 0 && lon === 0)
+  ) {
+    return place.slug;
+  }
+  const key = slugifyName(name);
+  const twin = LOCATIONS.find(
+    (seed) =>
+      slugifyName(seed.name) === key &&
+      haversineKm(seed.lat, seed.lon, lat, lon) <= SEED_TWIN_MAX_KM,
+  );
+  if (twin) return canonicalSlug(twin.slug);
+  return buildSmartSlug(name, lat, lon) || place.slug;
+}
+
+/** `loc` with its `slug` replaced by the canonical one (no other change). */
+function withCanonicalSlug(loc: AdaptedLocation): AdaptedLocation {
+  const slug = canonicalSlugForPlace(loc);
+  return slug === loc.slug ? loc : { ...loc, slug };
+}
+
+/**
+ * Resolve any slug (a legacy seed slug, a platform slug, a canonical slug, a
+ * spot, an OSM place) to a renderable location whose `slug` is the CANONICAL
+ * one. The requested slug may differ from the returned one: that is the
+ * signal to redirect (the proxy does it, 308).
+ */
 export async function resolveLocationSlug(
   slug: string,
   options: ResolveOptions = {},
 ): Promise<AdaptedLocation | null> {
   if (!slug) return null;
+  // A canonical seed slug is a spot by grammar, but it names a shipped seed:
+  // resolve it as the seed (its own name, province, tags, elevation) rather
+  // than as a bare coordinate, then hand back the canonical slug.
+  const legacy = CANONICAL_TO_LEGACY.get(slug);
+  const found = await resolveLocationSlugAsRequested(legacy ?? slug, options);
+  return found ? withCanonicalSlug(found) : null;
+}
+
+async function resolveLocationSlugAsRequested(
+  slug: string,
+  options: ResolveOptions,
+): Promise<AdaptedLocation | null> {
   const { strict = false } = options;
 
   // A smart slug carries its own coordinate, so it resolves without the

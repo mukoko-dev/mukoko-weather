@@ -31,7 +31,8 @@ vi.mock("./places-geo-collection", () => ({
   placesCollection: () => ({}),
 }));
 
-const { resolveLocationSlug } = await import("./places");
+const { resolveLocationSlug, canonicalSlugForPlace } = await import("./places");
+const { canonicalSlug } = await import("./slug-migration");
 
 describe("resolveLocationSlug — seed fallback", () => {
   beforeEach(() => {
@@ -43,7 +44,8 @@ describe("resolveLocationSlug — seed fallback", () => {
     const loc = await resolveLocationSlug("singapore-sg");
     expect(loc).not.toBeNull();
     expect(loc?.name).toBe("Singapore");
-    expect(loc?.slug).toBe("singapore-sg");
+    // The legacy slug resolves, and comes back as the canonical one.
+    expect(loc?.slug).toBe(canonicalSlug("singapore-sg"));
     // Real coordinates, so the weather fetch downstream actually works.
     expect(loc?.lat).toBeCloseTo(1.35, 1);
     expect(loc?.lon).toBeCloseTo(103.82, 1);
@@ -453,7 +455,10 @@ describe("resolveLocationSlug — platform slugs from search", () => {
     };
     const loc = await resolveLocationSlug("bulawayo-e7b1f4");
     expect(loc?.name).toBe("Bulawayo");
-    expect(loc?.slug).toBe("bulawayo-e7b1f4");
+    // A platform slug for a shipped city is that city's canonical slug, so
+    // the proxy can 308 it and one city has one URL.
+    expect(loc?.slug).toBe(canonicalSlug("bulawayo"));
+    expect(loc?.platformSlug).toBe("bulawayo-e7b1f4");
     expect(loc?.lat).toBeCloseTo(-20.15, 1);
   });
 
@@ -506,5 +511,117 @@ describe("resolveLocationSlug — strict mode (#263)", () => {
       throw new Error("mongo down");
     };
     await expect(resolveLocationSlug("zzzz-not-a-place")).resolves.toBeNull();
+  });
+});
+
+describe("resolveLocationSlug — canonical slugs (#317)", () => {
+  beforeEach(() => {
+    findOneImpl = async () => null;
+    findArrayImpl = async () => [];
+  });
+
+  it("resolves a canonical seed slug as the seed itself, not as a bare spot", async () => {
+    const loc = await resolveLocationSlug(canonicalSlug("bulawayo"));
+    expect(loc?.slug).toBe(canonicalSlug("bulawayo"));
+    expect(loc?._id).toBe("seed:bulawayo");
+    // The seed's own province, tags and elevation, not a neighbour's.
+    expect(loc?.province).toBe("Bulawayo");
+    expect(loc?.tags).toContain("city");
+    expect(loc?.elevationApproximate).toBeUndefined();
+    expect(loc?.regionApproximate).toBeUndefined();
+  });
+
+  it("resolves the legacy and the canonical slug to the same place", async () => {
+    const legacy = await resolveLocationSlug("nairobi-ke");
+    const canonical = await resolveLocationSlug(canonicalSlug("nairobi-ke"));
+    expect(legacy).toEqual({ ...canonical, updatedAt: legacy?.updatedAt });
+    expect(legacy?.slug).toBe(canonicalSlug("nairobi-ke"));
+  });
+
+  it("leaves a spot and its own slug alone (a fixed point)", async () => {
+    const loc = await resolveLocationSlug("west-paddock--ksy4dd7");
+    expect(loc?.slug).toBe("west-paddock--ksy4dd7");
+  });
+
+  it("names the canonical slug of an old community slug from its coordinate", async () => {
+    findOneImpl = async (filter) => {
+      const f = filter as Record<string, unknown>;
+      if (f["sourceProvenance.mukokoSlug"] === "mbare-musika-zw") {
+        return {
+          _id: "pg-mbare",
+          name: "Mbare Musika",
+          slug: "mbare-musika-9f8e7d",
+          geoType: "town",
+          isoCode: "ZW",
+          geo: { type: "Point", coordinates: [31.0397, -17.8559] },
+        };
+      }
+      return null;
+    };
+    const loc = await resolveLocationSlug("mbare-musika-zw");
+    expect(loc?.slug).toMatch(/^mbare-musika--[0-9b-hjkmnp-z]{7}$/);
+    expect(canonicalSlugForPlace({ ...loc! })).toBe(loc?.slug);
+  });
+});
+
+describe("canonicalSlugForPlace (#317)", () => {
+  it("maps a legacy seed slug through the pinned table", () => {
+    expect(
+      canonicalSlugForPlace({ slug: "harare", name: "Harare", lat: 0, lon: 0 }),
+    ).toBe(canonicalSlug("harare"));
+  });
+
+  it("keeps a slug that is already {name}--{ref}", () => {
+    expect(canonicalSlugForPlace({ slug: "x--ksy4dd7" })).toBe("x--ksy4dd7");
+    expect(canonicalSlugForPlace({ slug: "x--osm-w1" })).toBe("x--osm-w1");
+  });
+
+  it("gives a seed's twin (same name within 25 km) the seed's slug", () => {
+    expect(
+      canonicalSlugForPlace({
+        slug: "harare-35c223",
+        name: "Harare",
+        lat: -17.84,
+        lon: 31.04,
+      }),
+    ).toBe(canonicalSlug("harare"));
+  });
+
+  it("does not adopt a same-named place far from the seed", () => {
+    const slug = canonicalSlugForPlace({
+      slug: "harare-aaaaaa",
+      name: "Harare",
+      lat: 51.5,
+      lon: -0.12,
+    });
+    expect(slug).not.toBe(canonicalSlug("harare"));
+    expect(slug.startsWith("harare--")).toBe(true);
+  });
+
+  it("never invents a URL without a coordinate or a name", () => {
+    expect(canonicalSlugForPlace({ slug: "foo-ke" })).toBe("foo-ke");
+    expect(
+      canonicalSlugForPlace({ slug: "foo-ke", name: "Foo", lat: 0, lon: 0 }),
+    ).toBe("foo-ke");
+    expect(
+      canonicalSlugForPlace({
+        slug: "foo-ke",
+        name: "Foo",
+        lat: Number.NaN,
+        lon: 3,
+      }),
+    ).toBe("foo-ke");
+  });
+
+  it("is idempotent", () => {
+    const once = canonicalSlugForPlace({
+      slug: "zed-123abc",
+      name: "Zed",
+      lat: 10,
+      lon: 20,
+    });
+    expect(
+      canonicalSlugForPlace({ slug: once, name: "Zed", lat: 10, lon: 20 }),
+    ).toBe(once);
   });
 });

@@ -15,7 +15,8 @@ from fastapi import APIRouter, HTTPException, Request
 from ._circuit_breaker import open_meteo_breaker
 from ._db import check_rate_limit, get_client_ip
 from ._history_store import backfill_history, merge_by_date, read_history
-from ._places_resolver import find_location, storage_slug
+from ._places_resolver import find_location, spot_storage_key, storage_slug
+from ._slug_migration import is_canonical_seed_slug
 
 router = APIRouter()
 
@@ -38,6 +39,12 @@ def history_slugs(location: str, loc: dict) -> list[str]:
     platform = loc.get("platformSlug")
     if platform and platform != location:
         slugs.append(platform)
+    # A canonical seed slug (``harare--ksy4dd1``) is also a spot, so a visitor
+    # who opened that URL before the slug move left records under its cell
+    # key. Read them too (never write there): nothing is lost (#317).
+    cell = spot_storage_key(location) if is_canonical_seed_slug(location) else None
+    if cell and cell not in slugs:
+        slugs.append(cell)
     return slugs
 
 

@@ -61,6 +61,7 @@ from ._db import (
 from ._http import get_http_client
 from ._insights import growing_degree_days
 from ._weather_cache_key import weather_cache_key
+from ._slug_migration import storage_key_slug
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -1187,7 +1188,8 @@ def _resolve_country(country: str, location: str) -> str:
 
 
 def _clean_slug(slug: str) -> str:
-    s = (slug or "").strip().lower()
+    # A canonical seed slug keys the same cache rows as its legacy slug (#317).
+    s = storage_key_slug((slug or "").strip().lower())
     return s if SLUG_RE.match(s) else ""
 
 

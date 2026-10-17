@@ -11,6 +11,7 @@ import {
   getProvinceBySlug,
 } from "@/lib/db";
 import { getFlagEmoji, PROVINCES } from "@/lib/countries";
+import { locationPath } from "@/lib/slug-migration";
 
 export const revalidate = 3600;
 
@@ -115,7 +116,7 @@ export default async function ProvinceDetailPage({ params }: Props) {
           {locations.map((loc) => (
             <Link
               key={loc.slug}
-              href={`/${loc.slug}`}
+              href={locationPath(loc.slug)}
               className="group card-interactive pangolin"
             >
               <h2 className="font-medium text-text-primary group-hover:text-primary transition-colors">

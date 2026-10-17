@@ -65,7 +65,30 @@ const airports = AIRPORTS.map((a) => ({
   lon: a.lon,
 }));
 
+// The pinned legacy → canonical slug table (src/lib/slug-migration-data.ts),
+// for the Python backend and the Rust Workers: both accept the legacy and the
+// canonical slug of a seed and key durable data by the legacy one.
+const { SEED_SLUG_TABLE } = await import(
+  pathToFileURL(resolve(root, "src/lib/slug-migration-data.ts")).href
+);
+const slugMigration =
+  JSON.stringify(
+    SEED_SLUG_TABLE.map(([legacy, canonical]) => ({ legacy, canonical })),
+    null,
+    2,
+  ) + "\n";
+
 const outputs = [
+  [
+    resolve(root, "workers/crates/weather-core/data/slug-migration.json"),
+    slugMigration,
+    `${SEED_SLUG_TABLE.length} slug pairs (Rust)`,
+  ],
+  [
+    resolve(root, "api/py/data/slug_migration.json"),
+    slugMigration,
+    `${SEED_SLUG_TABLE.length} slug pairs (Python)`,
+  ],
   [out, json, `${rows.length} locations`],
   [
     airportsOut,
@@ -77,7 +100,12 @@ const outputs = [
 if (process.argv.includes("--check")) {
   let stale = false;
   for (const [file, json, what] of outputs) {
-    const current = readFileSync(file, "utf8");
+    let current = "";
+    try {
+      current = readFileSync(file, "utf8");
+    } catch {
+      // A missing file is stale.
+    }
     if (current !== json) {
       console.error(
         `${relative(root, file)} is stale: run node --experimental-strip-types workers/scripts/gen-seed-locations.mjs`,

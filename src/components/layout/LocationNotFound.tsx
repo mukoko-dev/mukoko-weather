@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { getLocationsForContext } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
+import { locationPath } from "@/lib/slug-migration";
 
 export async function LocationNotFound() {
   let locations: { slug: string; name: string }[] = [];
@@ -39,7 +40,7 @@ export async function LocationNotFound() {
           <ul className="mt-3 flex flex-wrap gap-2">
             {locations.map((loc) => (
               <li key={loc.slug}>
-                <Link href={`/${loc.slug}`}>
+                <Link href={locationPath(loc.slug)}>
                   <Badge className="hover:bg-primary/20 transition-colors">
                     {loc.name}
                   </Badge>

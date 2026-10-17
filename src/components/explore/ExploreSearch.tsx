@@ -10,6 +10,7 @@ import { trackEvent } from "@/lib/analytics";
 import { ShamwariCTA } from "@/components/weather/ShamwariCTA";
 import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 import { Spinner } from "@/components/ui/spinner";
+import { locationPath } from "@/lib/slug-migration";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -183,7 +184,7 @@ export function ExploreSearch() {
           {quickResults.map((loc) => (
             <li key={loc.slug}>
               <Link
-                href={`/${loc.slug}`}
+                href={locationPath(loc.slug)}
                 className="flex min-h-[var(--touch-target-min)] items-center gap-3 rounded-[var(--radius-input)] px-3 py-2 text-base text-text-primary hover:bg-surface-card transition-colors"
               >
                 <MapPinIcon size={14} className="text-text-tertiary" />
@@ -219,7 +220,7 @@ export function ExploreSearch() {
           {results.map((loc) => (
             <Link
               key={loc.slug}
-              href={`/${loc.slug}`}
+              href={locationPath(loc.slug)}
               className="group card-interactive flex items-start gap-3.5 baobab p-5 focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)]"
             >
               <div className="hoopoe-lg transition-colors group-hover:bg-primary/20">
