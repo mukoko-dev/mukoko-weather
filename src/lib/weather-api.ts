@@ -50,8 +50,9 @@ export function workerPlacesUrl(
 export function legacyPlacesUrl(
   resource: "search" | "geo" | "locations",
   query: string,
+  base = "",
 ): string {
-  return `/api/py/${resource}?${query}`;
+  return `${base}/api/py/${resource}?${query}`;
 }
 
 /**
@@ -65,6 +66,9 @@ export async function fetchPlaces(
   init: RequestInit = {},
   env: Env = process.env,
   fetcher: typeof fetch = fetch,
+  /** Origin for the `/api/py` fallback; empty in the browser, the site's
+   * own origin when called from a server component. */
+  legacyBase = "",
 ): Promise<Response> {
   const worker = workerPlacesUrl(resource, query, env);
   if (worker) {
@@ -75,5 +79,5 @@ export async function fetchPlaces(
       if (init.signal?.aborted) throw err;
     }
   }
-  return fetcher(legacyPlacesUrl(resource, query), init);
+  return fetcher(legacyPlacesUrl(resource, query, legacyBase), init);
 }

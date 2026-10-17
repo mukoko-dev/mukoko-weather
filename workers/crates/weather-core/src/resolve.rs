@@ -5,12 +5,16 @@
 //! (the Worker fetches, this decides):
 //!
 //! - [`bare_query`] and [`pick_resolution`]: a bare name from a URL
-//!   (`/koh-samui`) becomes the best geocoder hit, as a spot slug.
+//!   (`/koh-samui`) becomes the best geocoder hit, as a spot slug;
+//! - [`coordinate_spot`]: a point nothing names (open water, polar ice, empty
+//!   desert) becomes a spot labelled by its coordinates.
 //!
 //! Nothing here stores anything: every answer is a name and a coordinate.
 
 use crate::geo::valid_coordinates;
-use crate::locations::{nearest_seeds, LocationDoc};
+use crate::locations::{
+    build_smart_slug, encode_geohash, nearest_seeds, LocationDoc, GEOHASH_PRECISION,
+};
 use crate::places::slugify;
 
 /// `country` for a GeoNames political entity (`PCL*`), `region` for another
@@ -177,6 +181,216 @@ pub fn pick_resolution(hits: &[LocationDoc], query: &str) -> Option<LocationDoc>
     Some(best)
 }
 
+// --- Unnamed points ---------------------------------------------------------
+
+/// Find-only answers are snapped to this grid (about 1.1 km): the answer
+/// stands for "around here", one cell has one URL and one upstream lookup, and
+/// an exact position never leaves the request.
+pub const SNAP_DEG: f64 = 0.01;
+
+/// A coordinate snapped to the [`SNAP_DEG`] grid.
+pub fn snap(v: f64) -> f64 {
+    let r = ((v / SNAP_DEG).round() * SNAP_DEG * 100.0).round() / 100.0;
+    if r == 0.0 {
+        0.0
+    } else {
+        r
+    }
+}
+
+fn coordinate_parts(lat: f64, lon: f64) -> (String, char, String, char) {
+    let (la, lo) = ((lat * 100.0).round() / 100.0, (lon * 100.0).round() / 100.0);
+    (
+        format!("{:.2}", la.abs()),
+        if la >= 0.0 { 'N' } else { 'S' },
+        format!("{:.2}", lo.abs()),
+        if lo >= 0.0 { 'E' } else { 'W' },
+    )
+}
+
+/// Plain label for an unnamed point: `12.35°N 45.62°E`. Mirrors
+/// `coordinateLabel` in `src/lib/smart-slug.ts`.
+pub fn coordinate_label(lat: f64, lon: f64) -> String {
+    let (la, ns, lo, ew) = coordinate_parts(lat, lon);
+    format!("{la}°{ns} {lo}°{ew}")
+}
+
+/// The name half of a coordinate spot's slug: `12-35n-45-62e`. Mirrors
+/// `COORDINATE_NAME_RE` in `src/lib/smart-slug.ts`.
+pub fn coordinate_slug_name(lat: f64, lon: f64) -> String {
+    let (la, ns, lo, ew) = coordinate_parts(lat, lon);
+    format!(
+        "{}{}-{}{}",
+        la.replace('.', "-"),
+        ns.to_ascii_lowercase(),
+        lo.replace('.', "-"),
+        ew.to_ascii_lowercase()
+    )
+}
+
+/// A spot for a point nothing names: any valid coordinate renders weather.
+/// The name is the coordinate label, the slug `{12-35n-45-62e}--{geohash}`;
+/// nothing is stored. `None` only for an invalid coordinate.
+pub fn coordinate_spot(lat: f64, lon: f64) -> Option<LocationDoc> {
+    if !valid_coordinates(lat, lon) {
+        return None;
+    }
+    let (la, lo) = (snap(lat), snap(lon));
+    let hash = encode_geohash(la, lo, GEOHASH_PRECISION);
+    if hash.is_empty() {
+        return None;
+    }
+    Some(LocationDoc {
+        slug: format!("{}--{hash}", coordinate_slug_name(la, lo)),
+        name: coordinate_label(la, lo),
+        province: String::new(),
+        lat: la,
+        lon: lo,
+        elevation: 0.0,
+        tags: vec![],
+        country: None,
+        source: "geolocation".into(),
+        province_slug: None,
+        nominatim_address: None,
+        area: None,
+    })
+}
+
+/// A named spot for the snapped cell around a point, from a city-level
+/// reverse geocode's name and region. Same slug form as any smart slug.
+pub fn named_cell_spot(
+    name: &str,
+    province: &str,
+    country: Option<String>,
+    lat: f64,
+    lon: f64,
+) -> Option<LocationDoc> {
+    let name = name.trim();
+    if name.is_empty() || name.eq_ignore_ascii_case("unknown") {
+        return None;
+    }
+    let (la, lo) = (snap(lat), snap(lon));
+    let slug = build_smart_slug(name, la, lo);
+    if slug.is_empty() {
+        return None;
+    }
+    Some(LocationDoc {
+        slug,
+        name: name.to_owned(),
+        province: province.to_owned(),
+        lat: la,
+        lon: lo,
+        elevation: 0.0,
+        tags: vec![],
+        country,
+        source: "geolocation".into(),
+        province_slug: None,
+        nominatim_address: None,
+        area: None,
+    })
+}
+
+// --- What a point answers: naming outcomes ---------------------------------
+
+/// A seed this close to a point is "the same area" when naming is skipped
+/// (budget or outage), so a skipped naming never shows a coordinate label
+/// where a real place was available.
+pub const SEED_NEAR_KM: f64 = 50.0;
+
+/// What naming a point came back with.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Naming {
+    /// A name (city level for find-only, exact for GPS create).
+    Named(Box<LocationDoc>),
+    /// A definitive "nothing here": open water, polar ice, empty desert.
+    NothingHere,
+    /// Not asked or not answered: over budget, the geocoder is down or timed
+    /// out, or the caller asked not to spend a lookup. NOT a statement about
+    /// the point.
+    Skipped,
+}
+
+/// How a spot answer came about; the JSON flags follow it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpotKind {
+    /// Named by the geocoder.
+    Named,
+    /// Definitive nothing: `named: false`.
+    NothingHere,
+    /// Naming skipped: `namingSkipped: true`, and NOT `named: false`.
+    NamingSkipped,
+}
+
+/// The answer for a point with no stored place near it.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PointAnswer {
+    /// A stored seed place (not a synthesized spot).
+    Seed(LocationDoc),
+    /// A newly named place (GPS create): the caller treats it as new.
+    Created(LocationDoc),
+    /// A spot that renders from its slug alone; nothing is stored.
+    Spot { spot: LocationDoc, kind: SpotKind },
+}
+
+fn spot_for(lat: f64, lon: f64, naming: &Naming) -> Option<PointAnswer> {
+    if let Naming::Named(doc) = naming {
+        if let Some(spot) = named_cell_spot(&doc.name, &doc.province, doc.country.clone(), lat, lon)
+        {
+            return Some(PointAnswer::Spot {
+                spot,
+                kind: SpotKind::Named,
+            });
+        }
+    }
+    let kind = match naming {
+        // A "name" that is empty or `Unknown` is the geocoder naming nothing.
+        Naming::Named(_) | Naming::NothingHere => SpotKind::NothingHere,
+        Naming::Skipped => SpotKind::NamingSkipped,
+    };
+    coordinate_spot(lat, lon).map(|spot| PointAnswer::Spot { spot, kind })
+}
+
+/// Find-only (an IP position, or a GPS fix before it is stored): a seed within
+/// 150 km, else the point's named cell, else a coordinate spot. `None` only
+/// for an invalid coordinate. A skipped naming is `NamingSkipped`, never the
+/// definitive `NothingHere`.
+pub fn find_only_answer(lat: f64, lon: f64, naming: &Naming) -> Option<PointAnswer> {
+    if !valid_coordinates(lat, lon) {
+        return None;
+    }
+    if let Some(seed) = nearest_seeds(lat, lon, 150.0, 1).first() {
+        return Some(PointAnswer::Seed((*seed).clone()));
+    }
+    spot_for(lat, lon, naming)
+}
+
+/// GPS create: the exact name when there is one (a seed of the same name
+/// within 1 km is that seed, not a new place); a definitive nothing is a
+/// coordinate spot; a skipped naming returns a seed within [`SEED_NEAR_KM`]
+/// when there is one (never a coordinate label over a real place) and else a
+/// coordinate spot flagged `NamingSkipped`.
+pub fn create_answer(lat: f64, lon: f64, naming: &Naming) -> Option<PointAnswer> {
+    if !valid_coordinates(lat, lon) {
+        return None;
+    }
+    match naming {
+        Naming::Named(doc) => {
+            let existing = nearest_seeds(lat, lon, 1.0, 1)
+                .into_iter()
+                .find(|s| s.name.eq_ignore_ascii_case(&doc.name));
+            Some(match existing {
+                Some(seed) => PointAnswer::Seed(seed.clone()),
+                None => PointAnswer::Created((**doc).clone()),
+            })
+        }
+        Naming::NothingHere => spot_for(lat, lon, naming),
+        Naming::Skipped => match nearest_seeds(lat, lon, SEED_NEAR_KM, 1).first() {
+            Some(seed) => Some(PointAnswer::Seed((*seed).clone())),
+            None => spot_for(lat, lon, naming),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,6 +495,66 @@ mod tests {
     }
 
     #[test]
+    fn labels_and_slug_names_match_the_front_end() {
+        for (lat, lon, label, slug) in [
+            (12.3456, 45.6789, "12.35°N 45.68°E", "12-35n-45-68e"),
+            (-40.0, -20.0, "40.00°S 20.00°W", "40-00s-20-00w"),
+            (0.0, 0.0, "0.00°N 0.00°E", "0-00n-0-00e"),
+            (-0.004, 0.004, "0.00°N 0.00°E", "0-00n-0-00e"),
+            (90.0, 180.0, "90.00°N 180.00°E", "90-00n-180-00e"),
+            (-90.0, -180.0, "90.00°S 180.00°W", "90-00s-180-00w"),
+        ] {
+            assert_eq!(coordinate_label(lat, lon), label);
+            assert_eq!(coordinate_slug_name(lat, lon), slug);
+        }
+    }
+
+    #[test]
+    fn every_valid_coordinate_is_a_spot() {
+        let s = coordinate_spot(12.3456, 45.6789).unwrap();
+        assert_eq!(s.name, "12.35°N 45.68°E");
+        assert!(s.slug.starts_with("12-35n-45-68e--"));
+        assert_eq!((s.lat, s.lon), (12.35, 45.68));
+        assert_eq!(s.source, "geolocation");
+        // One cell, one slug.
+        assert_eq!(
+            coordinate_spot(12.3401, 45.6701).unwrap().slug,
+            coordinate_spot(12.3449, 45.6749).unwrap().slug
+        );
+        for (lat, lon) in [
+            (89.999, 179.999),
+            (-89.999, -179.999),
+            (0.0, 0.0),
+            (-77.85, 166.67),
+        ] {
+            let s = coordinate_spot(lat, lon).unwrap();
+            assert!(s
+                .slug
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'));
+            assert!(crate::locations::parse_spot_slug(&s.slug).is_some());
+        }
+        for (lat, lon) in [(91.0, 0.0), (0.0, 181.0), (f64::NAN, 0.0)] {
+            assert!(coordinate_spot(lat, lon).is_none());
+        }
+    }
+
+    #[test]
+    fn a_named_cell_spot_needs_a_real_name() {
+        let s = named_cell_spot("Ténéré", "Agadez", Some("NE".into()), 17.0, 10.0).unwrap();
+        assert!(s.slug.starts_with("tenere--"));
+        assert!(named_cell_spot("  ", "", None, 1.0, 1.0).is_none());
+        assert!(named_cell_spot("Unknown", "", None, 1.0, 1.0).is_none());
+    }
+
+    #[test]
+    fn snapping_is_stable() {
+        assert_eq!(snap(12.3449), 12.34);
+        assert_eq!(snap(-0.004), 0.0);
+        assert_eq!(snap(179.996), 180.0);
+    }
+
+    #[test]
     fn short_names_need_an_exact_match() {
         assert_eq!(required_similarity("abc"), 1.0);
         assert_eq!(required_similarity("harar"), 1.0);
@@ -324,5 +598,113 @@ mod tests {
             pick_resolution(&hits, "chiang rai").unwrap().name,
             "Chiang Rai"
         );
+    }
+
+    fn spot_kind(a: Option<PointAnswer>) -> SpotKind {
+        match a {
+            Some(PointAnswer::Spot { kind, .. }) => kind,
+            other => panic!("expected a spot, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_definitive_nothing_is_named_false_and_a_skip_is_not() {
+        // Mid-Atlantic, no seed within 150 km.
+        let (lat, lon) = (0.0, -30.0);
+        assert_eq!(
+            spot_kind(find_only_answer(lat, lon, &Naming::NothingHere)),
+            SpotKind::NothingHere
+        );
+        assert_eq!(
+            spot_kind(find_only_answer(lat, lon, &Naming::Skipped)),
+            SpotKind::NamingSkipped
+        );
+        assert_eq!(
+            spot_kind(create_answer(lat, lon, &Naming::NothingHere)),
+            SpotKind::NothingHere
+        );
+        assert_eq!(
+            spot_kind(create_answer(lat, lon, &Naming::Skipped)),
+            SpotKind::NamingSkipped
+        );
+    }
+
+    #[test]
+    fn find_only_prefers_a_seed_within_150_km() {
+        let a = find_only_answer(-17.83, 31.05, &Naming::Skipped);
+        assert!(matches!(a, Some(PointAnswer::Seed(s)) if s.slug == "harare"));
+    }
+
+    #[test]
+    fn a_skipped_create_returns_the_seed_within_50_km_never_a_label() {
+        // 10 km from Harare: naming failed, but a real place is right there.
+        let a = create_answer(-17.9, 31.05, &Naming::Skipped);
+        assert!(matches!(a, Some(PointAnswer::Seed(s)) if s.slug == "harare"));
+        // No seed within 50 km (mid-Atlantic): a skipped spot, not named:false.
+        let far = create_answer(0.0, -30.0, &Naming::Skipped);
+        assert_eq!(spot_kind(far), SpotKind::NamingSkipped);
+    }
+
+    #[test]
+    fn a_definitive_nothing_is_not_rewritten_to_a_seed_on_create() {
+        // The geocoder answered: nothing here. That is a statement about the
+        // point, so it stays a coordinate spot even beside a seed.
+        let a = create_answer(-17.9, 31.05, &Naming::NothingHere);
+        assert_eq!(spot_kind(a), SpotKind::NothingHere);
+    }
+
+    #[test]
+    fn a_named_point_is_created_or_is_the_seed_of_the_same_name() {
+        let named = LocationDoc::from_nominatim(
+            &serde_json::json!({"name": "Mbare Musika", "lat": "-17.8578", "lon": "31.0389",
+                "address": {"suburb": "Mbare", "country": "Zimbabwe", "country_code": "zw"}}),
+            -17.8578,
+            31.0389,
+        )
+        .unwrap();
+        assert!(matches!(
+            create_answer(-17.8578, 31.0389, &Naming::Named(Box::new(named))),
+            Some(PointAnswer::Created(d)) if d.name == "Mbare Musika"
+        ));
+        let harare = find_seed_doc("harare");
+        let a = create_answer(
+            harare.lat,
+            harare.lon,
+            &Naming::Named(Box::new(harare.clone())),
+        );
+        assert!(matches!(a, Some(PointAnswer::Seed(s)) if s.slug == "harare"));
+    }
+
+    fn find_seed_doc(slug: &str) -> LocationDoc {
+        crate::locations::find_seed(slug).unwrap().clone()
+    }
+
+    #[test]
+    fn a_blank_or_unknown_name_is_nothing_here() {
+        let mut named = find_seed_doc("harare");
+        named.name = "Unknown".into();
+        let (lat, lon) = (0.0, -30.0);
+        assert_eq!(
+            spot_kind(find_only_answer(lat, lon, &Naming::Named(Box::new(named)))),
+            SpotKind::NothingHere
+        );
+    }
+
+    #[test]
+    fn a_named_cell_is_a_named_spot() {
+        let mut named = find_seed_doc("harare");
+        named.name = "Ténéré".into();
+        named.province = "Agadez".into();
+        let a = find_only_answer(17.0, 10.0, &Naming::Named(Box::new(named)));
+        assert!(
+            matches!(&a, Some(PointAnswer::Spot { spot, kind: SpotKind::Named })
+            if spot.slug.starts_with("tenere--"))
+        );
+    }
+
+    #[test]
+    fn invalid_coordinates_answer_nothing() {
+        assert!(find_only_answer(91.0, 0.0, &Naming::Skipped).is_none());
+        assert!(create_answer(0.0, 181.0, &Naming::Skipped).is_none());
     }
 }
