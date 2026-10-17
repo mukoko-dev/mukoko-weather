@@ -4,6 +4,8 @@
 import { readdirSync } from "fs";
 import { resolve as resolvePath } from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { LOCATIONS } from "./locations";
+import { slugifyName } from "./smart-slug";
 import {
   DEGRADED_BACKOFF_MS,
   TIMEOUTS_BEFORE_BACKOFF,
@@ -11,6 +13,7 @@ import {
   LOCATION_SUB_ROUTES,
   MAX_KNOWN,
   MAX_UNKNOWN,
+  SEED_NAME_ALIASES,
   UNKNOWN_TTL_MS,
   classifyLocationPath,
   isRenderableLocation,
@@ -429,5 +432,60 @@ describe("isRenderableLocation", () => {
     resolve.mockClear();
     await isRenderableLocation("p-1", resolve, { now: 5 });
     expect(resolve).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("bare seed names redirect to the canonical seed slug (#302)", () => {
+  it.each([
+    ["/phuket", "/phuket-th"],
+    ["/Phuket", "/phuket-th"],
+    ["/phuket/forecast", "/phuket-th/forecast"],
+    ["/Phuket/Map", "/phuket-th/map"],
+    ["/nairobi", "/nairobi-ke"],
+    ["/bangkok", "/bangkok-th"],
+  ])("%s redirects to %s", (path, location) => {
+    expect(classifyLocationPath(path, KNOWN)).toEqual({
+      kind: "redirect",
+      location,
+    });
+  });
+
+  it("never shadows a seed slug or a known route", () => {
+    expect(classifyLocationPath("/harare", KNOWN)).toEqual({
+      kind: "slug",
+      slug: "harare",
+    });
+    const seedSlugs = new Set(LOCATIONS.map((l) => l.slug));
+    for (const [alias, target] of SEED_NAME_ALIASES) {
+      expect(seedSlugs.has(alias)).toBe(false);
+      expect(seedSlugs.has(target)).toBe(true);
+      expect(KNOWN.has(alias)).toBe(false);
+    }
+    const withRoute = new Set([...KNOWN, "phuket"]);
+    expect(classifyLocationPath("/phuket", withRoute)).toEqual({
+      kind: "other",
+    });
+  });
+
+  it("only aliases a name exactly one seed carries", () => {
+    const counts = new Map<string, number>();
+    for (const l of LOCATIONS) {
+      const k = slugifyName(l.name);
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    for (const alias of SEED_NAME_ALIASES.keys()) {
+      expect(counts.get(alias)).toBe(1);
+    }
+    const shared = [...counts].filter(([, n]) => n > 1).map(([k]) => k);
+    for (const name of shared) expect(SEED_NAME_ALIASES.has(name)).toBe(false);
+  });
+
+  it("aliases only redirect seeds whose slug differs from the bare name", () => {
+    for (const [alias, target] of SEED_NAME_ALIASES) {
+      expect(target).not.toBe(alias);
+      expect(target.includes("--")).toBe(false);
+    }
+    expect(SEED_NAME_ALIASES.size).toBeGreaterThan(100);
   });
 });
