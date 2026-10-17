@@ -24,18 +24,19 @@
 //! yet). History is read from D1 `place_daily`, written by
 //! `mukoko-weather-jobs`.
 
+mod budget;
 mod sources;
 
 use serde_json::{json, Value};
+use weather_core::budget::Action;
 use weather_core::geo::valid_coordinates;
 use weather_core::locations::{self, LocationDoc};
+use weather_core::resolve;
 use weather_edge::{error, json, now_ms, query_pairs};
 use worker::{event, Context, Env, Method, Request, Response, Result};
 
 const DB: &str = "WEATHER_DB";
 const GEOCODE_LIMITER: &str = "GEOCODE_LIMITER";
-/// Set by mukoko-weather-api to the caller's IP, for the geocoding limit.
-const CLIENT_IP_HEADER: &str = "X-Mukoko-Client-IP";
 
 struct Query(Vec<(String, String)>);
 
@@ -68,7 +69,7 @@ pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             &json!({"service": "mukoko-weather-places", "status": "ok"}),
         ),
         "/locations" => locations_route(&env, &q).await,
-        "/search" => search_route(&env, &q).await,
+        "/search" => search_route(&req, &env, &q).await,
         "/geo" => geo_route(&req, &env, &q).await,
         "/history" => history_route(&env, &q).await,
         _ => error(404, "not_found", "No such route."),
@@ -79,6 +80,14 @@ fn cached_json(body: &Value, max_age: u32) -> Result<Response> {
     let resp = json(200, body)?;
     resp.headers()
         .set("Cache-Control", &format!("public, max-age={max_age}"))?;
+    Ok(resp)
+}
+
+/// A degraded answer (a budget, an outage, a failed lookup produced it) must
+/// not be cached anywhere: the next call may well succeed.
+fn uncached_json(body: &Value) -> Result<Response> {
+    let resp = json(200, body)?;
+    resp.headers().set("Cache-Control", "no-store")?;
     Ok(resp)
 }
 
@@ -151,7 +160,7 @@ fn merge(into: &mut Vec<LocationDoc>, extra: Vec<LocationDoc>) {
     }
 }
 
-async fn search_route(env: &Env, q: &Query) -> Result<Response> {
+async fn search_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
     let (Ok(limit), Ok(skip)) = (q.int("limit", 20), q.int("skip", 0)) else {
         return error(
             422,
@@ -164,6 +173,9 @@ async fn search_route(env: &Env, q: &Query) -> Result<Response> {
 
     if q.get("mode") == Some("tags") {
         return cached_json(&json!({"tags": locations::tag_counts()}), 3_600);
+    }
+    if q.get("mode") == Some("resolve") {
+        return resolve_route(req, env, q).await;
     }
 
     // Nearest to a point: a discovery action, so a 100 km radius.
@@ -202,6 +214,7 @@ async fn search_route(env: &Env, q: &Query) -> Result<Response> {
         .cloned()
         .collect();
     let mut source = "places";
+    let mut degraded = false;
     if let (Some(text), None) = (text, tag) {
         if found.len() < skip + limit {
             if let Ok(canonical) = sources::nyuchi_search(env, text, limit).await {
@@ -211,21 +224,64 @@ async fn search_route(env: &Env, q: &Query) -> Result<Response> {
         // Nothing on record: offer geocoded candidates, as the app expects
         // (address-level discovery). They are not records yet.
         if found.is_empty() {
-            match sources::geocode(env, text, limit).await {
+            let caller = budget::Caller::from_request(req);
+            match sources::geocode(env, text, limit, Action::Search, &caller).await {
                 Ok(geocoded) => {
                     found = geocoded;
                     source = "geocoded";
                 }
-                Err(()) => return error(503, "search_unavailable", "Search unavailable"),
+                // Over budget: answer from the catalogue (empty), never cached.
+                Err(sources::GeoErr::Budget) => degraded = true,
+                Err(sources::GeoErr::Upstream) => {
+                    return error(503, "search_unavailable", "Search unavailable")
+                }
             }
         }
     }
     let results = page(&found, skip, limit);
     let total = results.len();
-    cached_json(
-        &json!({"locations": results, "total": total, "source": source}),
-        300,
-    )
+    let body = json!({"locations": results, "total": total, "source": source});
+    if degraded {
+        uncached_json(&body)
+    } else {
+        cached_json(&body, 300)
+    }
+}
+
+/// `GET /search?q=<name>&mode=resolve`: the one best place for a bare name in
+/// a URL (`/koh-samui`), for the app's proxy to redirect to as a spot slug.
+///
+/// Reuses the forward geocode behind `/search` (its KV cache and budgets);
+/// stores nothing. Always 200: `resolve` is `ok`, `no_match`, `over_budget`
+/// or `unavailable`, and only the first two are final.
+async fn resolve_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
+    let answer = |status: &str, found: Option<LocationDoc>| {
+        let body = json!({
+            "locations": found.iter().collect::<Vec<_>>(),
+            "total": usize::from(found.is_some()),
+            "source": if found.is_some() { "geocoded" } else { "none" },
+            "resolve": status,
+        });
+        // Only a final answer may be cached downstream; over budget and
+        // unavailable are `no-store`.
+        if matches!(status, "ok" | "no_match") {
+            cached_json(&body, 300)
+        } else {
+            uncached_json(&body)
+        }
+    };
+    let Some(name) = q.get("q").and_then(resolve::bare_query) else {
+        return answer("no_match", None);
+    };
+    let caller = budget::Caller::from_request(req);
+    match sources::geocode(env, &name, 10, Action::Resolve, &caller).await {
+        Ok(hits) => match resolve::pick_resolution(&hits, &name) {
+            Some(place) => answer("ok", Some(place)),
+            None => answer("no_match", None),
+        },
+        Err(sources::GeoErr::Budget) => answer("over_budget", None),
+        Err(sources::GeoErr::Upstream) => answer("unavailable", None),
+    }
 }
 
 async fn geo_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
@@ -260,11 +316,7 @@ async fn geo_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
 
     // "Use my location" resolves to the exact place, never the nearest city.
     if let Ok(limiter) = env.rate_limiter(GEOCODE_LIMITER) {
-        let ip = req
-            .headers()
-            .get(CLIENT_IP_HEADER)?
-            .or(req.headers().get("CF-Connecting-IP")?)
-            .unwrap_or_else(|| "unknown".into());
+        let ip = budget::Caller::from_request(req).ip;
         if let Ok(outcome) = limiter.limit(ip).await {
             if !outcome.success {
                 return error(429, "rate_limited", "Rate limit exceeded. Try again later.");
