@@ -825,18 +825,96 @@ export async function getWeatherForLocation(
 ): Promise<WeatherResult> {
   // 1. MongoDB cache — fast path, no HTTP hop. Written only by Python, under
   // the same coordinate-cell key it derives from the lat/lon sent below.
+  // Bounded: a cold Atlas connection must not hold the first paint.
   try {
-    const cached = await getCachedWeather(weatherCacheKey(lat, lon));
+    const cached = await withTimeout(
+      getCachedWeather(weatherCacheKey(lat, lon)),
+      SSR_CACHE_READ_TIMEOUT_MS,
+    );
     if (cached) return { data: cached, source: "cache" };
   } catch {
-    // DB unavailable — proceed to the endpoint
+    // DB unavailable or slow — proceed to the endpoint
   }
 
-  // 2. Canonical fetch path — Python does the provider chain (StationKit →
-  // Tomorrow.io → Open-Meteo → seasonal), writes the cache, records history.
-  // `redirect: "manual"` + the JSON content-type check (issue #262): a
-  // Deployment Protection redirect used to be followed to Vercel's 200 HTML
-  // login page, whose JSON parse failure was then logged as "unreachable".
+  // 2 + 3. The canonical endpoint, hedged by a direct Open-Meteo read. A cold
+  // Python function used to hold the page for the full 15 s self-fetch timeout
+  // (and then the direct fetch after it): an installed iOS app sat on its
+  // loading screen for ~20 s. Now the direct read starts if the endpoint has
+  // not answered within SSR_HEDGE_AFTER_MS, and whichever answers first wins.
+  const viaEndpoint = fetchViaInternalEndpoint(slug, lat, lon);
+  const hedge = delay(SSR_HEDGE_AFTER_MS);
+  const early = await Promise.race([viaEndpoint, hedge.promise]);
+  let result: WeatherResult | null;
+  if (early === HEDGE_ELAPSED) {
+    result = await firstNonNull([viaEndpoint, fetchDirect(slug, lat, lon)]);
+  } else {
+    hedge.cancel();
+    result = early ?? (await fetchDirect(slug, lat, lon));
+  }
+  if (result) return result;
+
+  // 4. Seasonal fallback — guarantees the page always renders
+  return {
+    data: createFallbackWeather(lat, lon, elevation),
+    source: "fallback",
+  };
+}
+
+/** Longest the SSR cache read may take before it is treated as a miss. */
+export const SSR_CACHE_READ_TIMEOUT_MS = 2_500;
+/** Self-fetch budget for /api/py/weather (was 15 s). */
+export const SSR_SELF_FETCH_TIMEOUT_MS = 4_000;
+/** Start the direct Open-Meteo read when the endpoint is still silent. */
+export const SSR_HEDGE_AFTER_MS = 1_500;
+/** Direct Open-Meteo budget during SSR (the client default is 10 s). */
+export const SSR_DIRECT_TIMEOUT_MS = 3_500;
+
+const HEDGE_ELAPSED = Symbol("hedge-elapsed");
+
+function delay(ms: number): {
+  promise: Promise<typeof HEDGE_ELAPSED>;
+  cancel: () => void;
+} {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const promise = new Promise<typeof HEDGE_ELAPSED>((resolve) => {
+    timer = setTimeout(() => resolve(HEDGE_ELAPSED), ms);
+  });
+  return { promise, cancel: () => clearTimeout(timer) };
+}
+
+/** Rejects when `p` has not settled within `ms`. */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("timeout")), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
+}
+
+/** Resolves with the first non-null answer, or null once every one is null. */
+function firstNonNull<T>(promises: Promise<T | null>[]): Promise<T | null> {
+  return new Promise((resolve) => {
+    let pending = promises.length;
+    for (const p of promises) {
+      p.then((v) => {
+        if (v) resolve(v);
+        else if (--pending === 0) resolve(null);
+      });
+    }
+  });
+}
+
+/**
+ * `GET /api/py/weather` — `redirect: "manual"` + the JSON content-type check
+ * (issue #262): a Deployment Protection redirect used to be followed to
+ * Vercel's 200 HTML login page, whose JSON parse failure was then logged as
+ * "unreachable". Never rejects; null means "use the next source".
+ */
+async function fetchViaInternalEndpoint(
+  slug: string,
+  lat: number,
+  lon: number,
+): Promise<WeatherResult | null> {
   const target = internalApiTarget();
   const host = hostOf(target.base);
   try {
@@ -849,7 +927,7 @@ export async function getWeatherForLocation(
         cache: "no-store",
         headers: target.headers,
         redirect: "manual",
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.timeout(SSR_SELF_FETCH_TIMEOUT_MS),
       },
     );
     const contentType = res.headers.get("content-type") ?? "";
@@ -883,12 +961,21 @@ export async function getWeatherForLocation(
       meta: { host },
     });
   }
+  return null;
+}
 
-  // 3. Direct Open-Meteo (read-only — no cache write, so this can never
-  // reintroduce a second writer). Keeps local `next dev` working without
-  // the Python functions.
+/**
+ * Direct Open-Meteo (read-only — no cache write, so this can never
+ * reintroduce a second writer). Keeps local `next dev` working without the
+ * Python functions. Never rejects.
+ */
+async function fetchDirect(
+  slug: string,
+  lat: number,
+  lon: number,
+): Promise<WeatherResult | null> {
   try {
-    const data = await fetchWeather(lat, lon);
+    const data = await fetchWeather(lat, lon, undefined, SSR_DIRECT_TIMEOUT_MS);
     if (data && !data.insights && data.current) {
       data.insights = synthesizeOpenMeteoInsights(data);
     }
@@ -901,13 +988,8 @@ export async function getWeatherForLocation(
       message: "Open-Meteo fetch failed",
       error: err,
     });
+    return null;
   }
-
-  // 4. Seasonal fallback — guarantees the page always renders
-  return {
-    data: createFallbackWeather(lat, lon, elevation),
-    source: "fallback",
-  };
 }
 
 // ---------------------------------------------------------------------------
