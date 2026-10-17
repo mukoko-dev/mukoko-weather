@@ -11,6 +11,7 @@ import {
   writeLastLocationCookie,
 } from "@/lib/current-slug";
 import { detectUserLocation } from "@/lib/geolocation";
+import { chooseResolved, shouldCreate } from "@/lib/location-choice";
 import { useAppStore } from "@/lib/store";
 import {
   decideLocationAsk,
@@ -174,13 +175,12 @@ export function CurrentLocationHome({ initial, user }: Props) {
       return "no-location";
     }
 
-    let resolved = result.location;
-    // A spot named on demand (nothing stored near the fix, #302) is not a
-    // stored place yet: create the real one, exactly as for a far match.
-    const far =
-      result.synthesized === true ||
-      (result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM);
-    if (far) {
+    let resolved: WeatherLocation = result.location;
+    // A spot named on demand, or a stored place kilometres away, is not the
+    // real place yet: create it. Never for a placeholder spot (open water,
+    // or naming skipped): nothing better exists and asking again would only
+    // spend the geocoder budget (`shouldCreate`).
+    if (shouldCreate(result, FAR_NEAREST_KM)) {
       // The fix is fresh, so this second read comes from the browser's
       // cache — a network hop to create the real place, not another wait.
       const precise = await detectUserLocation({
@@ -188,16 +188,16 @@ export function CurrentLocationHome({ initial, user }: Props) {
         maximumAgeMs: GPS_MAX_AGE_MS,
       });
       if (opts.isDisposed()) return null;
-      if (
+      const usable =
         (precise.status === "success" || precise.status === "created") &&
-        precise.location
-      ) {
-        resolved = precise.location;
-      } else if (view) {
+        precise.location;
+      if (!usable && view) {
         // Couldn't pin down the exact spot: keep what's on screen rather
         // than relabel a place kilometres away as MY LOCATION.
         return "no-location";
       }
+      // A placeholder answer never replaces a real place that was near.
+      resolved = chooseResolved(result, precise);
     }
 
     if (resolved.slug === view?.location.slug) {
