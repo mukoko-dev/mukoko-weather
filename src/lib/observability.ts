@@ -25,6 +25,7 @@ export type ErrorSource =
   | "tomorrow-io"
   | "open-meteo"
   | "ai-gateway"
+  | "nyuchi-gateway"
   | "client-render"
   | "client-fetch"
   | "unhandled";
