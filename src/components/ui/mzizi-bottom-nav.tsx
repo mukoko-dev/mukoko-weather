@@ -20,9 +20,9 @@
  * 4. The bar is `5rem` PLUS the safe-area inset tall. Upstream is `h-20`
  *    with `pb-[env(safe-area-inset-bottom)]` inside it, so on an iPhone
  *    (34px inset) only 46px is left for the 48px items.
- * 5. An optional `label` (the landmark's aria-label) and `indicator` (a
- *    decorative row painted along the bottom edge of the bar, above the
- *    safe area — this app uses it for the location page dots).
+ * 5. An optional `label` (the landmark's aria-label) and `indicator`: a row
+ *    one touch target tall directly above the items, on the bar's own
+ *    surface (this app puts the location pager there — tappable dots).
  * 6. Icons come from lucide-react (this app has no `@/lib/icons` shim). The
  *    upstream literal colour fallbacks (a hex blue and an rgba glow) are dropped for
  *    the `--color-primary` token and `shadow-md`, since this repo forbids
@@ -30,8 +30,12 @@
  * 7. Hidden from `md` up as upstream; this app also passes `sm:hidden`,
  *    because its desktop header nav takes over from `sm`.
  *
- * `--mobile-nav-height` in globals.css is this bar's height without the
- * safe area (5rem), so `--mobile-nav-clearance` always matches it.
+ * 8. Labels use this repo's `--text-nav-label` token (1rem). Upstream's
+ *    10px label size is under this app's hard 16px minimum font size.
+ *
+ * `--mobile-nav-height` in globals.css is this bar (5rem) plus the indicator
+ * row (one touch target), without the safe area, so
+ * `--mobile-nav-clearance` always matches it.
  */
 
 import * as React from "react";
@@ -135,7 +139,7 @@ export function MziziBottomNav({
             aria-label={item.ariaLabel}
             className={cn(
               "relative flex min-h-[var(--touch-target-min)] min-w-[56px] flex-col items-center justify-center gap-[3px] py-1",
-              "text-[10px] font-medium transition-colors",
+              "text-[length:var(--text-nav-label)] font-medium transition-colors",
               active
                 ? "text-[var(--brand-accent,var(--color-primary))]"
                 : "text-muted-foreground",
@@ -159,7 +163,10 @@ export function MziziBottomNav({
         );
       })}
       {indicator && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+0.375rem)] flex justify-center">
+        <div
+          data-slot="mzizi-bottom-nav-indicator"
+          className="absolute inset-x-0 bottom-full flex h-[var(--touch-target-min)] items-center border-t border-border bg-card/90 px-2 backdrop-blur-xl"
+        >
           {indicator}
         </div>
       )}

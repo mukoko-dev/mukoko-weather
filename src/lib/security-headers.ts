@@ -33,8 +33,10 @@ export const CSP_DIRECTIVES: Record<string, string[]> = {
     "https://va.vercel-scripts.com",
     GA[0],
   ],
-  "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-  "font-src": ["'self'", "data:", "https://fonts.gstatic.com"],
+  // Fonts are self-hosted through next/font (src/app/layout.tsx): no Google
+  // Fonts origin is needed.
+  "style-src": ["'self'", "'unsafe-inline'"],
+  "font-src": ["'self'", "data:"],
   "img-src": [
     "'self'",
     "data:",

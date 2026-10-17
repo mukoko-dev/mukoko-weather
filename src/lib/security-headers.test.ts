@@ -65,8 +65,6 @@ describe("security headers (B05)", () => {
       "https://va.vercel-scripts.com",
       "https://api.maptiler.com",
       "https://api.open-meteo.com",
-      "https://fonts.googleapis.com",
-      "https://fonts.gstatic.com",
       "https://api.workos.com",
       "https://avatars.githubusercontent.com",
       "https://www.google.com",
@@ -77,6 +75,12 @@ describe("security headers (B05)", () => {
       expect.arrayContaining(["data:", "blob:"]),
     );
     expect(CSP_DIRECTIVES["object-src"]).toEqual(["'none'"]);
+  });
+
+  it("allows no Google Fonts origin (fonts are self-hosted via next/font)", () => {
+    const csp = buildCsp();
+    expect(csp).not.toContain("fonts.googleapis.com");
+    expect(csp).not.toContain("fonts.gstatic.com");
   });
 });
 

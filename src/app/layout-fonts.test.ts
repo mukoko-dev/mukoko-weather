@@ -57,3 +57,21 @@ describe("root layout fonts are self-hosted (no edge-rewritable <link>)", () => 
     );
   });
 });
+
+describe("only fonts the page uses are preloaded", () => {
+  it("Noto Serif loads the normal style only (no italic preload)", () => {
+    const serif = layout.slice(
+      layout.indexOf("Noto_Serif({"),
+      layout.indexOf("});", layout.indexOf("Noto_Serif({")),
+    );
+    expect(serif).not.toContain("italic");
+  });
+
+  it("JetBrains Mono is not preloaded (rare, below the fold)", () => {
+    const mono = layout.slice(
+      layout.indexOf("JetBrains_Mono({"),
+      layout.indexOf("});", layout.indexOf("JetBrains_Mono({")),
+    );
+    expect(mono).toContain("preload: false");
+  });
+});

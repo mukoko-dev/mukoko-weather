@@ -24,9 +24,10 @@ const notoSans = Noto_Sans({
   display: "swap",
   variable: "--font-noto-sans",
 });
+// Normal style only: the app's italic text is Noto Sans (the footer motto),
+// so a Noto Serif italic file would be a preload nobody uses.
 const notoSerif = Noto_Serif({
   subsets: ["latin"],
-  style: ["normal", "italic"],
   display: "swap",
   variable: "--font-noto-serif",
 });

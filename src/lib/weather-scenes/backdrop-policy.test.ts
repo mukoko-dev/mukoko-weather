@@ -10,14 +10,13 @@ describe("shouldAnimateBackdrop", () => {
   const capable = {
     reducedMotion: false,
     deviceMemory: 8,
-    hardwareConcurrency: 8,
   };
 
   it("animates on a capable device", () => {
     expect(shouldAnimateBackdrop(capable)).toBe(true);
   });
 
-  it("animates when the browser hides memory and cores", () => {
+  it("animates when the browser does not report memory", () => {
     expect(shouldAnimateBackdrop({ reducedMotion: false })).toBe(true);
   });
 
@@ -31,12 +30,17 @@ describe("shouldAnimateBackdrop", () => {
     expect(shouldAnimateBackdrop({ ...capable, saveData: true })).toBe(false);
   });
 
-  it("keeps the static sky on ≤ 2 GB devices and ≤ 2 cores", () => {
+  it("keeps the static sky on ≤ 2 GB devices", () => {
     expect(shouldAnimateBackdrop({ ...capable, deviceMemory: 2 })).toBe(false);
     expect(shouldAnimateBackdrop({ ...capable, deviceMemory: 1 })).toBe(false);
-    expect(shouldAnimateBackdrop({ ...capable, hardwareConcurrency: 2 })).toBe(
-      false,
-    );
+  });
+
+  it("does not treat a reported core count of 2 as low-end (older iOS, Firefox RFP)", () => {
+    const iphone = {
+      reducedMotion: false,
+      hardwareConcurrency: 2,
+    } as Parameters<typeof shouldAnimateBackdrop>[0];
+    expect(shouldAnimateBackdrop(iphone)).toBe(true);
   });
 
   it("is static on the server (no window)", () => {

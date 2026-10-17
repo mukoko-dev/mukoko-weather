@@ -4,8 +4,11 @@
  *
  * The look on capable devices is unchanged: same scene, same pixel ratio
  * cap (1). What changes is who pays for it:
- * - Reduced motion, Save-Data, ≤ 2 GB RAM or ≤ 2 CPU cores get the static
- *   sky gradient (the same palette, built from tokens) and no WebGL context.
+ * - Reduced motion, Save-Data or ≤ 2 GB RAM (where the browser reports it)
+ *   get the static sky gradient (the same palette, built from tokens) and no
+ *   WebGL context. CPU core count is not used: WebKit capped
+ *   navigator.hardwareConcurrency at 2 on iPhones and Firefox's
+ *   resistFingerprinting reports 2, so it misreads capable devices.
  * - The loop idles while the reader is scrolling and while the sky region is
  *   scrolled away (the cards cover the backdrop further down the page), so
  *   the GPU is not competing with scrolling on mid-range phones.
@@ -16,8 +19,6 @@ export interface BackdropDeviceHints {
   saveData?: boolean;
   /** navigator.deviceMemory in GB (Chromium only). */
   deviceMemory?: number;
-  /** navigator.hardwareConcurrency. */
-  hardwareConcurrency?: number;
 }
 
 /** Whether to create the Three.js layer at all. */
@@ -25,8 +26,6 @@ export function shouldAnimateBackdrop(h: BackdropDeviceHints): boolean {
   if (h.reducedMotion) return false;
   if (h.saveData) return false;
   if (typeof h.deviceMemory === "number" && h.deviceMemory <= 2) return false;
-  if (typeof h.hardwareConcurrency === "number" && h.hardwareConcurrency <= 2)
-    return false;
   return true;
 }
 
@@ -74,6 +73,5 @@ export function readBackdropHints(): BackdropDeviceHints {
     reducedMotion,
     saveData: nav.connection?.saveData === true,
     deviceMemory: nav.deviceMemory,
-    hardwareConcurrency: nav.hardwareConcurrency,
   };
 }

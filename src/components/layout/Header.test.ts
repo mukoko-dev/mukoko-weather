@@ -18,6 +18,7 @@ function rule(name: string): string {
   return m ? m[1] : "";
 }
 
+const pager = readFileSync(resolve(__dirname, "LocationPager.tsx"), "utf-8");
 const bottomNav = readFileSync(
   resolve(__dirname, "../ui/mzizi-bottom-nav.tsx"),
   "utf-8",
@@ -61,11 +62,16 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
     expect(bottomNav).toContain("pb-[env(safe-area-inset-bottom)]");
   });
 
-  it("is 5rem plus the safe area tall, and --mobile-nav-height is that 5rem", () => {
+  it("is 5rem plus the safe area tall; --mobile-nav-height is that 5rem plus the pager row", () => {
     expect(bottomNav).toContain(
       "h-[calc(5rem+env(safe-area-inset-bottom,0px))]",
     );
-    expect(css).toContain("--mobile-nav-height: 5rem;");
+    expect(bottomNav).toContain(
+      "absolute inset-x-0 bottom-full flex h-[var(--touch-target-min)]",
+    );
+    expect(css).toContain(
+      "--mobile-nav-height: calc(5rem + var(--touch-target-min));",
+    );
     expect(css).toMatch(
       /--mobile-nav-clearance: calc\(\s*env\(safe-area-inset-bottom, 0px\) \+ var\(--mobile-nav-inset\) \+\s*var\(--mobile-nav-height\)/,
     );
@@ -109,10 +115,31 @@ describe("MobileNav — items and page dots", () => {
     expect(nav).toContain('return "none";');
   });
 
-  it("shows the place sequence as dots inside the bar, behind a harness boundary", () => {
+  it("shows the place sequence as tappable LocationPager dots above the items, behind a harness boundary", () => {
     expect(nav).toContain("indicator={");
-    expect(nav).toContain("<LocationPageDots");
-    expect(nav).toMatch(/<MziziHarness name="location-page-dots"/);
+    expect(nav).toContain("<LocationPager");
+    expect(nav).toMatch(/<MziziHarness\s+name="location-pager"/);
+    expect(pager).toContain("<Link");
+    expect(pager).toContain('aria-current={isActive ? "page" : undefined}');
+    expect(pager).toContain("aria-label={name}");
+    expect(pager).toContain(
+      "h-[var(--touch-target-min)] min-w-[var(--touch-target-min)]",
+    );
+    expect(pager).toContain('method: "saved"');
+  });
+
+  it("labels use the 16px --text-nav-label token, not upstream's 10px", () => {
+    expect(bottomNav).toContain("text-[length:var(--text-nav-label)]");
+    expect(bottomNav).not.toContain("text-[10px]");
+  });
+
+  it("uses only token radii (the alignment guard skips src/components/ui/)", () => {
+    // mzizi-alignment.test.ts exempts ui/ primitives; the vendored nav is
+    // held to the same radius rule here instead.
+    expect(bottomNav).not.toMatch(
+      /\brounded(-(sm|md|lg|xl|2xl|3xl))?(?=[\s"`])/,
+    );
+    expect(bottomNav).not.toMatch(/rounded-\[\d/);
   });
 
   it("no longer renders the old five-item nav row", () => {

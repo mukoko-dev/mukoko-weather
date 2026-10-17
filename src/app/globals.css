@@ -126,14 +126,15 @@
 
   /* Mobile bottom nav geometry — the Mzizi registry bottom nav
      (src/components/ui/mzizi-bottom-nav.tsx: fixed inset-x-0 bottom-0, 5rem
-     tall plus the safe-area inset, sm:hidden). --mobile-nav-height is the
-     bar's height WITHOUT the safe area; --mobile-nav-clearance is the space
-     page content must leave at the bottom so nothing sits under the bar,
-     including the iOS home-indicator safe area. Floating controls above the
-     nav (e.g. reorder "Done") use it too. Header.test.ts keeps the two in
-     step with the component. */
+     tall plus the safe-area inset, sm:hidden) with the location pager row
+     (one touch target) above its items. --mobile-nav-height is bar + row
+     WITHOUT the safe area; --mobile-nav-clearance is the space page content
+     must leave at the bottom so nothing sits under the nav, including the
+     iOS home-indicator safe area. Floating controls above the nav (e.g.
+     reorder "Done") use it too. Header.test.ts keeps these in step with the
+     component. */
   --mobile-nav-inset: 0rem;
-  --mobile-nav-height: 5rem;
+  --mobile-nav-height: calc(5rem + var(--touch-target-min));
   --mobile-nav-clearance: calc(
     env(safe-area-inset-bottom, 0px) + var(--mobile-nav-inset) +
       var(--mobile-nav-height) + 0.5rem
@@ -652,12 +653,16 @@
   }
 }
 
-/* overflow-x: clip, never hidden, on html and body. `hidden` turns the
-   element into a scroll container: the sticky header then sticks to body
+/* overflow-x: clip on html and body. `hidden` on body (or on any wrapper)
+   turns it into a scroll container: the sticky header then sticks to it
    instead of the viewport, and iOS Safari detaches or jitters the fixed
-   bottom nav. `clip` cuts horizontal overflow without either side effect.
-   viewport-layout.test.ts guards this. */
+   bottom nav. `clip` cuts horizontal overflow without that side effect.
+   html alone keeps `hidden` as a fallback for browsers without `clip`
+   (Safari < 16): overflow on the root element is applied to the viewport,
+   so it never makes html a scroll container. Browsers with `clip` use the
+   second declaration. viewport-layout.test.ts guards this. */
 html {
+  overflow-x: hidden;
   overflow-x: clip;
 }
 

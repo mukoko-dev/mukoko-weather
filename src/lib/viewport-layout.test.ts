@@ -25,12 +25,6 @@ const layout = read("app/layout.tsx");
 const dashboard = read("app/[location]/WeatherDashboard.tsx");
 const header = read("components/layout/Header.tsx");
 
-/** All declarations of a top-level rule (`html {`, `body {`). */
-function topLevelRules(selector: string): string[] {
-  const re = new RegExp(`(^|\\n)${selector} \\{([^}]*)\\}`, "g");
-  return [...css.matchAll(re)].map((m) => m[2]);
-}
-
 /** className strings of every element, in source order. */
 function classNames(src: string): string[] {
   return [...src.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)].map(
@@ -41,20 +35,107 @@ function classNames(src: string): string[] {
 const CONTAINING_BLOCK =
   /\b(transform|translate-|scale-|rotate-|skew-|filter|blur-|backdrop-|perspective|contain-|will-change|animate-fade-in-up|animate-scale-in|animate-slide)/;
 
-describe("html and body never become scroll containers", () => {
-  it("html uses overflow-x: clip, not hidden", () => {
-    const rules = topLevelRules("html");
-    expect(rules.length).toBeGreaterThan(0);
-    for (const r of rules) expect(r).not.toMatch(/overflow(-x|-y)?:\s*hidden/);
-    expect(rules.join("")).toContain("overflow-x: clip");
+/**
+ * Every rule, at any nesting depth (inside @media, @supports, @layer…),
+ * that targets html / :root / body itself, with its declarations. Works on
+ * innermost blocks, so a nested override cannot hide from it.
+ */
+export function rootElementRules(
+  source: string,
+): { element: "html" | "body"; selector: string; body: string }[] {
+  const out: { element: "html" | "body"; selector: string; body: string }[] =
+    [];
+  const noComments = source.replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const m of noComments.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    for (const raw of m[1].split(",")) {
+      const sel = raw.trim();
+      const hit = sel.match(
+        /^(html|body|:root)((\[[^\]]*\])|(:[\w-]+(\([^)]*\))?))*$/,
+      );
+      if (!hit) continue;
+      out.push({
+        element: hit[1] === "body" ? "body" : "html",
+        selector: sel,
+        body: m[2],
+      });
+    }
+  }
+  return out;
+}
+
+const SCROLL_CONTAINER = /overflow(-x|-y)?\s*:\s*(hidden|auto|scroll)/;
+/** The one allowed html pattern: a `hidden` fallback immediately overridden by `clip`. */
+const HTML_FALLBACK = /overflow-x\s*:\s*hidden\s*;\s*overflow-x\s*:\s*clip/;
+
+/** Rules that would make html or body a scroll container (or hide that). */
+export function overflowViolations(source: string): string[] {
+  const bad: string[] = [];
+  for (const r of rootElementRules(source)) {
+    if (!SCROLL_CONTAINER.test(r.body)) continue;
+    if (r.element === "html") {
+      const rest = r.body.replace(HTML_FALLBACK, "");
+      if (!SCROLL_CONTAINER.test(rest)) continue;
+    }
+    bad.push(`${r.selector} { ${r.body.trim()} }`);
+  }
+  return bad;
+}
+
+describe("overflowViolations (the guard itself)", () => {
+  it("catches body hidden at the top level and inside nested at-rules", () => {
+    expect(overflowViolations("body { overflow-x: hidden; }")).toHaveLength(1);
+    expect(
+      overflowViolations(
+        "@media (max-width: 600px) { @supports (display:grid) { body { overflow-x: hidden } } }",
+      ),
+    ).toHaveLength(1);
+    expect(overflowViolations("html, body { overflow: hidden; }")).toHaveLength(
+      2,
+    );
+    expect(
+      overflowViolations(':root[data-theme="dark"] { overflow-y: auto; }'),
+    ).toHaveLength(1);
   });
 
-  it("body uses overflow-x: clip, not hidden, and keeps overscroll-behavior-x", () => {
-    const rules = topLevelRules("body");
-    expect(rules.length).toBeGreaterThan(0);
-    for (const r of rules) expect(r).not.toMatch(/overflow(-x|-y)?:\s*hidden/);
-    expect(rules.join("")).toContain("overflow-x: clip");
-    expect(rules.join("")).toContain("overscroll-behavior-x: none");
+  it("allows only the html hidden-then-clip fallback, never on body", () => {
+    expect(
+      overflowViolations("html { overflow-x: hidden; overflow-x: clip; }"),
+    ).toEqual([]);
+    expect(
+      overflowViolations("body { overflow-x: hidden; overflow-x: clip; }"),
+    ).toHaveLength(1);
+    expect(
+      overflowViolations("html { overflow-x: clip; overflow-x: hidden; }"),
+    ).toHaveLength(1);
+  });
+
+  it("ignores other selectors and comments", () => {
+    expect(
+      overflowViolations(
+        "/* body { overflow-x: hidden } */ .card body-copy { overflow: hidden } main { overflow-x: hidden }",
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("html and body never become scroll containers", () => {
+  it("no rule anywhere in globals.css (nested @media included) breaks it", () => {
+    expect(overflowViolations(css)).toEqual([]);
+  });
+
+  it("html clips, with the hidden fallback for browsers without clip", () => {
+    const html = rootElementRules(css).filter((r) => r.selector === "html");
+    expect(html.some((r) => HTML_FALLBACK.test(r.body))).toBe(true);
+  });
+
+  it("body clips (no fallback) and keeps overscroll-behavior-x", () => {
+    const body = rootElementRules(css)
+      .filter((r) => r.selector === "body")
+      .map((r) => r.body)
+      .join("");
+    expect(body).toContain("overflow-x: clip");
+    expect(body).not.toMatch(/overflow-x:\s*hidden/);
+    expect(body).toContain("overscroll-behavior-x: none");
   });
 });
 

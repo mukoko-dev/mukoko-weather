@@ -81,28 +81,3 @@ export function neighbour(
 export function pagerDots(sequence: readonly string[]): string[] {
   return sequence.slice(1, MAX_PAGER_DOTS + 1);
 }
-
-/**
- * The bottom nav's page dots: the pages shown (My Location + up to
- * MAX_PAGER_DOTS places) and which one is current (-1 when the page on
- * screen is not one of them, e.g. /locations or a browsed place).
- */
-export function pageDotsState(
-  pathname: string | null | undefined,
-  sequence: readonly string[],
-): { pages: string[]; active: number } {
-  const pages = [MY_LOCATION_HREF, ...pagerDots(sequence)];
-  const index = pagerIndex(pathname, sequence);
-  const href = index >= 0 ? sequence[index] : null;
-  return { pages, active: href ? pages.indexOf(href) : -1 };
-}
-
-/** Screen-reader sentence for the page dots. */
-export function pageDotsLabel(state: {
-  pages: string[];
-  active: number;
-}): string {
-  return state.active >= 0
-    ? `Place ${state.active + 1} of ${state.pages.length}`
-    : `${state.pages.length} places`;
-}

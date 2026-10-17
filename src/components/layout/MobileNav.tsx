@@ -1,7 +1,7 @@
 "use client";
 
 import { List as ListIcon, Map as MapIcon } from "lucide-react";
-import { LocationPageDots } from "@/components/layout/LocationPager";
+import { LocationPager } from "@/components/layout/LocationPager";
 import {
   MziziBottomNav,
   type BottomNavItem,
@@ -70,14 +70,18 @@ export function mobileNavActiveId(pathname: string): string {
 /**
  * Phone navigation: the Mzizi registry bottom nav (`MziziBottomNav`,
  * vendored in src/components/ui/mzizi-bottom-nav.tsx) with Map, My Location
- * and Locations. Where you are in your places is shown by the page dots
- * along the bottom edge of the bar (`indicator`); moving between places is
- * the left/right swipe on the dashboard (useLocationSwipe) or the
- * Locations list.
+ * and Locations. Where you are in your places is the LocationPager row in
+ * the bar's `indicator` slot, directly above the items: a My Location
+ * glyph and one dot per place, each a real link (48px target, the place's
+ * name as its label, `aria-current` on the current one, `location_changed`
+ * method "saved" on tap), so keyboard and switch users can reach every
+ * place. Swiping left/right on the dashboard (useLocationSwipe) still
+ * moves between the same places. With one page the row is not rendered.
  *
  * Page content leaves `--mobile-nav-clearance` at the bottom so nothing sits
  * under the bar; that token is computed from `--mobile-nav-height`, which
- * is the bar's height (5rem) without the safe area.
+ * is the bar (5rem) plus the page row (one touch target), without the safe
+ * area.
  */
 export function MobileNav({
   pathname,
@@ -93,10 +97,14 @@ export function MobileNav({
       activeId={mobileNavActiveId(pathname)}
       items={mobileNavItems(mapHref, hasMapLocation)}
       indicator={
-        // The dots are the only part with real logic; if they ever throw,
-        // the bar keeps working without them.
-        <MziziHarness name="location-page-dots" fallback={<span />}>
-          <LocationPageDots
+        // The pager is the only part with real logic; if it ever throws,
+        // the bar keeps working without it.
+        <MziziHarness
+          name="location-pager"
+          className="flex min-w-0 flex-1 justify-center"
+          fallback={<span />}
+        >
+          <LocationPager
             pathname={pathname}
             savedLocations={savedLocations}
             selectedLocation={selectedLocation}

@@ -74,19 +74,16 @@ describe("mount schedule", () => {
   const phone: DeviceHints = {
     viewportWidth: 412,
     viewportHeight: 915,
-    hardwareConcurrency: 8,
     deviceMemory: 4,
   };
   const desktop: DeviceHints = {
     viewportWidth: 1440,
     viewportHeight: 900,
-    hardwareConcurrency: 8,
     deviceMemory: 8,
   };
   const lowEnd: DeviceHints = {
     viewportWidth: 360,
     viewportHeight: 740,
-    hardwareConcurrency: 2,
     deviceMemory: 2,
   };
 
@@ -130,18 +127,25 @@ describe("mount schedule", () => {
     expect(maxConcurrentMounts({ ...phone, saveData: true })).toBe(1);
   });
 
-  it("treats unknown memory/cores as capable", () => {
+  it("treats unknown memory as capable", () => {
     expect(
       isConstrainedDevice({ viewportWidth: 412, viewportHeight: 915 }),
     ).toBe(false);
   });
 
-  it("flags Save-Data, ≤2 GB memory and ≤2 cores as constrained", () => {
+  it("flags Save-Data and ≤2 GB memory as constrained", () => {
     expect(isConstrainedDevice({ ...phone, saveData: true })).toBe(true);
     expect(isConstrainedDevice({ ...phone, deviceMemory: 2 })).toBe(true);
-    expect(isConstrainedDevice({ ...phone, hardwareConcurrency: 2 })).toBe(
-      true,
-    );
+  });
+
+  it("never uses the core count (iOS WebKit and Firefox RFP report 2)", () => {
+    const iphone = {
+      viewportWidth: 390,
+      viewportHeight: 844,
+      hardwareConcurrency: 2,
+    } as DeviceHints;
+    expect(isConstrainedDevice(iphone)).toBe(false);
+    expect(maxConcurrentMounts(iphone)).toBe(2);
   });
 
   it("settles a frame or two between mounts, longer on constrained devices", () => {

@@ -12,6 +12,7 @@ import {
   unloadMarginPx,
 } from "@/lib/lazy-visibility";
 import { cn } from "@/lib/utils";
+import { createMountQueue } from "@/lib/mount-queue";
 import {
   useRef,
   useState,
@@ -48,42 +49,21 @@ const DEFAULT_FALLBACK = <SectionSkeleton className="h-48" />;
 // of all in one task. The schedule (slots, delay, how far ahead to start)
 // lives in src/lib/lazy-visibility.ts, where it is unit tested.
 
-type QueueEntry = {
-  mount: () => void;
-  cancelled: boolean;
-};
-
-const mountQueue: QueueEntry[] = [];
-let activeMounts = 0;
-
-function processQueue(): void {
-  const hints = readDeviceHints();
-  const slots = maxConcurrentMounts(hints);
-  while (activeMounts < slots && mountQueue.length > 0) {
-    const next = mountQueue.shift()!;
-    if (next.cancelled) continue;
-
-    activeMounts += 1;
-    next.mount();
-
-    // Hold the slot until the mount has painted (rAF) and the device has had
-    // a moment to settle, then release it and start the next one.
+// The queue itself is src/lib/mount-queue.ts (behaviour-tested there).
+const mountQueue = createMountQueue({
+  getSlots: () => maxConcurrentMounts(readDeviceHints()),
+  // Hold the slot until the mount has painted (rAF) and the device has had
+  // a moment to settle, then release it so the next one starts.
+  holdSlot: (release) => {
+    const delay = settleDelayMs(readDeviceHints());
     requestAnimationFrame(() => {
-      setTimeout(() => {
-        activeMounts = Math.max(0, activeMounts - 1);
-        processQueue();
-      }, settleDelayMs(hints));
+      setTimeout(release, delay);
     });
-  }
-}
+  },
+});
 
 function enqueueMount(mountFn: () => void): () => void {
-  const entry: QueueEntry = { mount: mountFn, cancelled: false };
-  mountQueue.push(entry);
-  processQueue();
-  return () => {
-    entry.cancelled = true;
-  };
+  return mountQueue.enqueue(mountFn);
 }
 
 // ── Bidirectional visibility (TikTok-style unmount off-screen) ──────────────

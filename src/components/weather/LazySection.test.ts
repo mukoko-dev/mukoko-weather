@@ -18,14 +18,16 @@ const skeletonSource = readFileSync(
 );
 
 describe("LazySection — sequential mount queue", () => {
-  it("defines a global mountQueue as a QueueEntry array", () => {
-    expect(source).toContain("mountQueue: QueueEntry[]");
-    expect(source).toContain("const mountQueue");
+  it("defines one global mountQueue from createMountQueue", () => {
+    expect(source).toContain("const mountQueue = createMountQueue(");
   });
 
   it("bounds concurrent mounts with an activeMounts counter and maxConcurrentMounts", () => {
-    expect(source).toContain("activeMounts");
-    expect(source).toContain("maxConcurrentMounts(hints)");
+    // The queue's behaviour is tested in src/lib/mount-queue.test.ts.
+    expect(source).toContain("createMountQueue({");
+    expect(source).toContain(
+      "getSlots: () => maxConcurrentMounts(readDeviceHints())",
+    );
   });
 
   it("exports the LazySection component", () => {
@@ -34,7 +36,7 @@ describe("LazySection — sequential mount queue", () => {
 
   it("enqueues mounts one at a time via enqueueMount", () => {
     expect(source).toContain("enqueueMount");
-    expect(source).toContain("entry.cancelled");
+    expect(source).toContain("mountQueue.enqueue(mountFn)");
   });
 
   it("uses requestAnimationFrame + setTimeout for paint-safe mounting", () => {
@@ -43,13 +45,16 @@ describe("LazySection — sequential mount queue", () => {
   });
 
   it("cancels pending queue entries on cleanup", () => {
-    expect(source).toContain("cancelled = true");
+    expect(source).toContain("cancelRef.current?.()");
+    expect(
+      readFileSync(resolve(__dirname, "../../lib/mount-queue.ts"), "utf-8"),
+    ).toContain("entry.cancelled = true");
   });
 });
 
 describe("LazySection — adaptive settle delay", () => {
   it("takes its settle delay from settleDelayMs (unit tested in lazy-visibility)", () => {
-    expect(source).toContain("settleDelayMs(hints)");
+    expect(source).toContain("settleDelayMs(readDeviceHints())");
     expect(source).toContain("readDeviceHints()");
   });
 

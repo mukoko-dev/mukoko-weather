@@ -3,8 +3,6 @@ import {
   MAX_PAGER_DOTS,
   MY_LOCATION_HREF,
   neighbour,
-  pageDotsLabel,
-  pageDotsState,
   pagerDots,
   pagerIndex,
   pagerSequence,
@@ -185,43 +183,5 @@ describe("pagerSequence with suggested places", () => {
     const presets = ["harare", "bulawayo", "a-1", "a-2", "a-3", "a-4"];
     const dots = pagerDots(pagerSequence(saved, presets));
     expect(dots).toHaveLength(saved.length + presets.length);
-  });
-});
-
-describe("pageDotsState / pageDotsLabel (bottom nav page dots)", () => {
-  const seq = pagerSequence(["harare", "nairobi-ke", "bulawayo"]);
-
-  it("lists My Location plus the places, and marks the current one", () => {
-    expect(pageDotsState("/nairobi-ke", seq)).toEqual({
-      pages: ["/", "/harare", "/nairobi-ke", "/bulawayo"],
-      active: 2,
-    });
-    expect(pageDotsState("/", seq).active).toBe(0);
-  });
-
-  it("marks a sub-route by its location", () => {
-    expect(pageDotsState("/harare/forecast", seq).active).toBe(1);
-  });
-
-  it("has no current dot off the sequence", () => {
-    expect(pageDotsState("/locations", seq).active).toBe(-1);
-    expect(pageDotsState("/gweru", seq).active).toBe(-1);
-  });
-
-  it("caps the dots and never points past them", () => {
-    const many = pagerSequence(
-      Array.from({ length: MAX_PAGER_DOTS + 4 }, (_, i) => `place-${i}`),
-    );
-    const last = many[many.length - 1];
-    const state = pageDotsState(last, many);
-    expect(state.pages.length).toBe(MAX_PAGER_DOTS + 1);
-    expect(state.active).toBe(-1);
-  });
-
-  it("speaks one sentence", () => {
-    expect(pageDotsLabel(pageDotsState("/nairobi-ke", seq))).toBe(
-      "Place 3 of 4",
-    );
-    expect(pageDotsLabel(pageDotsState("/locations", seq))).toBe("4 places");
   });
 });

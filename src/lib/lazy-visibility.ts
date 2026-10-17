@@ -58,15 +58,17 @@ export function reservedHeightPx(measured: number): number | null {
 // (100 px ahead on phones, one mount at a time, 150 ms apart) meant a reader
 // scrolling at a normal pace overtook the queue and saw a run of skeletons.
 // Sections now start loading 1.5 viewports ahead, capable devices mount two
-// at a time, and the settle gap is a frame or two. Low-end devices (≤ 2 GB
-// RAM, ≤ 2 cores, or Save-Data on) keep the old one-at-a-time protection.
+// at a time, and the settle gap is a frame or two. Constrained devices
+// (Save-Data on, or ≤ 2 GB RAM where the browser reports it) keep the old
+// one-at-a-time protection. CPU core count is deliberately NOT a signal:
+// WebKit long capped navigator.hardwareConcurrency at 2 on iPhones and
+// Firefox's resistFingerprinting reports 2, so "≤ 2 cores" would brand
+// capable phones as low-end.
 
 /** What LazySection reads from the browser to pick its schedule. */
 export interface DeviceHints {
   viewportWidth: number;
   viewportHeight: number;
-  /** navigator.hardwareConcurrency (undefined when the browser hides it). */
-  hardwareConcurrency?: number;
   /** navigator.deviceMemory in GB (Chromium only). */
   deviceMemory?: number;
   /** navigator.connection.saveData. */
@@ -82,8 +84,6 @@ export const MIN_UNLOAD_MARGIN_PX = 1500;
 export function isConstrainedDevice(h: DeviceHints): boolean {
   if (h.saveData) return true;
   if (typeof h.deviceMemory === "number" && h.deviceMemory <= 2) return true;
-  if (typeof h.hardwareConcurrency === "number" && h.hardwareConcurrency <= 2)
-    return true;
   return false;
 }
 
@@ -131,7 +131,6 @@ export function readDeviceHints(): DeviceHints {
   return {
     viewportWidth: window.innerWidth,
     viewportHeight: window.innerHeight,
-    hardwareConcurrency: nav.hardwareConcurrency,
     deviceMemory: nav.deviceMemory,
     saveData: nav.connection?.saveData === true,
   };

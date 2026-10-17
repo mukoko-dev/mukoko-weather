@@ -49,7 +49,7 @@ interface Props {
  *   when none of those hold (shouldRunBackdrop). (No IntersectionObserver: a
  *   fixed, viewport-filling element is always "on-screen".)
  * - Everything is disposed on unmount, and the WebGL context is released.
- * - `prefers-reduced-motion`, Save-Data, ≤ 2 GB RAM or ≤ 2 cores skip
+ * - `prefers-reduced-motion`, Save-Data or ≤ 2 GB RAM skip
  *   Three.js entirely and show only the static sky gradient
  *   (shouldAnimateBackdrop).
  *
