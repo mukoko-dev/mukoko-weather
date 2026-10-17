@@ -168,8 +168,10 @@ export function CurrentLocationHome({ initial, user }: Props) {
     let resolved = result.location;
     // A spot named on demand (nothing stored near the fix, #302) is not a
     // stored place yet: create the real one, exactly as for a far match.
+    // A point nothing names (open water, polar ice, empty desert) has no
+    // better place to create: keep the coordinate spot and render it.
     const far =
-      result.synthesized === true ||
+      (result.synthesized === true && result.unnamed !== true) ||
       (result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM);
     if (far) {
       // The fix is fresh, so this second read comes from the browser's

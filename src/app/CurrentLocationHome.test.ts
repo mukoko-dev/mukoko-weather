@@ -61,7 +61,15 @@ describe("CurrentLocationHome — silent-URL model", () => {
   it("stores the real place when the find-only lookup only named a spot (#302)", () => {
     // /api/py/geo find-only answers `synthesized: true` outside the stored
     // geography; that spot must escalate to create-on-demand like a far match.
-    expect(source).toContain("result.synthesized === true ||");
+    expect(source).toContain(
+      "(result.synthesized === true && result.unnamed !== true) ||",
+    );
+  });
+
+  it("keeps a coordinate-label spot instead of trying to create a place there", () => {
+    // Open water, polar ice, empty desert: nothing to create, so the spot
+    // renders as is (the owner rule: any valid coordinate renders weather).
+    expect(source).toContain("result.unnamed !== true");
   });
 
   it("keeps the seeded place rather than relabelling a far one as MY LOCATION", () => {
@@ -178,6 +186,11 @@ describe("page.tsx — server seeding", () => {
   it("only trusts a lastLocation cookie that actually resolves", () => {
     expect(pageSource).toContain("getLocationFromDb(lastLocation)");
     expect(pageSource).toContain("if (resolved)");
+  });
+
+  it("ignores a coordinate-label answer on the IP path so the IP-city header names it", () => {
+    expect(pageSource).toContain("data.nearest.named !== false");
+    expect(pageSource).toContain("fetchPlaces(");
   });
 
   it("uses autoCreate=false on the server IP-geo path (find-only, no junk locations)", () => {

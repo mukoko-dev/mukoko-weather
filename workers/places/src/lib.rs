@@ -276,6 +276,46 @@ async fn resolve_route(req: &Request, env: &Env, q: &Query) -> Result<Response> 
     }
 }
 
+/// A spot as `/geo` answers it: the document plus what a caller needs to know
+/// that nothing measured it (`elevationApproximate`), and `named: false` for a
+/// coordinate label (a caller with a better name of its own, such as the home
+/// page's IP-city header, uses that).
+fn spot_json(spot: &LocationDoc, named: bool) -> Value {
+    let mut doc = serde_json::to_value(spot).unwrap_or(Value::Null);
+    if let Some(obj) = doc.as_object_mut() {
+        obj.insert("elevationApproximate".into(), true.into());
+        if !named {
+            obj.insert("named".into(), false.into());
+        }
+    }
+    doc
+}
+
+fn synthesized(spot: &LocationDoc, named: bool) -> Result<Response> {
+    json(
+        200,
+        &json!({
+            "nearest": spot_json(spot, named),
+            "redirectTo": format!("/{}", spot.slug),
+            "isNew": false,
+            "synthesized": true,
+        }),
+    )
+}
+
+/// Spend one point from the per-IP Nominatim budget (about a request a second
+/// is Nominatim's policy). Unbound (local dev) always has budget.
+async fn reverse_budget(req: &Request, env: &Env) -> bool {
+    let Ok(limiter) = env.rate_limiter(GEOCODE_LIMITER) else {
+        return true;
+    };
+    limiter
+        .limit(client_ip(req))
+        .await
+        .map(|outcome| outcome.success)
+        .unwrap_or(true)
+}
+
 async fn geo_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
     let (Some(lat), Some(lon)) = (q.num("lat"), q.num("lon")) else {
         return error(422, "invalid_request", "Give both `lat` and `lon`.");
@@ -294,35 +334,60 @@ async fn geo_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
     };
 
     if !auto_create {
-        // IP-based points can be off by a couple of hundred km: past 150 km,
-        // say so rather than send the person to the wrong city.
-        return match locations::nearest_seeds(lat, lon, 150.0, 1).first() {
-            Some(loc) => found(loc, false),
-            None => error(
-                404,
-                "not_found",
-                "No nearby location found. Use autoCreate=true to add one.",
-            ),
+        // IP-based points can be off by a couple of hundred km: past 150 km a
+        // seed city is not "here". A stored place wins; otherwise the point is
+        // named on demand (one city-level reverse geocode of its ~1 km cell,
+        // cached and budgeted), and where nothing names it (open water, polar
+        // ice, empty desert, or the geocoder is over budget or down) it is a
+        // coordinate label. Every valid coordinate renders weather, and
+        // nothing is stored (place creation is the Nyuchi API's).
+        if let Some(loc) = locations::nearest_seeds(lat, lon, 150.0, 1).first() {
+            return found(loc, false);
+        }
+        let (cell_lat, cell_lon) = (resolve::snap(lat), resolve::snap(lon));
+        // A cached cell costs no budget; only a fresh lookup spends it.
+        let name = match sources::reverse_cell_cached(env, cell_lat, cell_lon).await {
+            Some(hit) => hit,
+            None if reverse_budget(req, env).await => {
+                sources::reverse_cell(env, cell_lat, cell_lon)
+                    .await
+                    .ok()
+                    .flatten()
+            }
+            None => None,
+        };
+        if let Some(named) = name {
+            if let Some(spot) = resolve::named_cell_spot(
+                &named.name,
+                &named.province,
+                named.country.clone(),
+                lat,
+                lon,
+            ) {
+                return synthesized(&spot, true);
+            }
+        }
+        return match resolve::coordinate_spot(lat, lon) {
+            Some(spot) => synthesized(&spot, false),
+            None => error(400, "invalid_request", "Invalid coordinates"),
         };
     }
 
     // "Use my location" resolves to the exact place, never the nearest city.
-    if let Ok(limiter) = env.rate_limiter(GEOCODE_LIMITER) {
-        let ip = req
-            .headers()
-            .get(CLIENT_IP_HEADER)?
-            .or(req.headers().get("CF-Connecting-IP")?)
-            .unwrap_or_else(|| "unknown".into());
-        if let Ok(outcome) = limiter.limit(ip).await {
-            if !outcome.success {
-                return error(429, "rate_limited", "Rate limit exceeded. Try again later.");
-            }
-        }
+    if !reverse_budget(req, env).await {
+        return error(429, "rate_limited", "Rate limit exceeded. Try again later.");
     }
+    // Nothing names the point (open water, polar ice, empty desert) or the
+    // geocoder is down: GPS there must still render weather, so answer an
+    // unstored coordinate spot instead of an error.
     let named = match sources::reverse(env, lat, lon).await {
         Ok(Some(l)) => l,
-        Ok(None) => return error(422, "unnamed", "Could not determine location name"),
-        Err(()) => return error(503, "geocoding_unavailable", "Location service unavailable"),
+        Ok(None) | Err(()) => {
+            return match resolve::coordinate_spot(lat, lon) {
+                Some(spot) => synthesized(&spot, false),
+                None => error(400, "invalid_request", "Invalid coordinates"),
+            }
+        }
     };
     // The same place already on the seed list (1 km, same name) is not new.
     let existing = locations::nearest_seeds(lat, lon, 1.0, 1)

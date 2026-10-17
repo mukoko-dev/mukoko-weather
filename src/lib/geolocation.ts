@@ -2,6 +2,7 @@
 
 import type { WeatherLocation } from "./locations";
 import { haversineKm } from "./geo";
+import { fetchPlaces } from "./weather-api";
 
 export interface GeoResult {
   status: "success" | "created" | "denied" | "unavailable" | "error";
@@ -16,6 +17,12 @@ export interface GeoResult {
    * #302). A GPS caller then asks again with `autoCreate` to store the place.
    */
   synthesized?: boolean;
+  /**
+   * True when nothing on Earth names the point (open water, polar ice, empty
+   * desert): the location is a coordinate label, a spot that renders weather.
+   * There is no better place to create, so the caller keeps it as is.
+   */
+  unnamed?: boolean;
 }
 
 /** Default GPS timeout — used for user-initiated lookups (first-visit auto-prompt, explicit "Use my current location"). */
@@ -77,8 +84,11 @@ export function detectUserLocation({
           autoCreate ? GEO_CREATE_TIMEOUT_MS : GEO_LOOKUP_TIMEOUT_MS,
         );
         try {
-          const res = await fetch(
-            `/api/py/geo?lat=${latitude}&lon=${longitude}${autoCreate ? "&autoCreate=true" : ""}`,
+          // The Rust Worker when NEXT_PUBLIC_WEATHER_API_URL is set (falling
+          // back to /api/py on a 5xx), else /api/py as before.
+          const res = await fetchPlaces(
+            "geo",
+            `lat=${latitude}&lon=${longitude}${autoCreate ? "&autoCreate=true" : ""}`,
             { signal: controller.signal },
           );
           if (!res.ok) {
@@ -95,6 +105,7 @@ export function detectUserLocation({
           const nearest: WeatherLocation = data.nearest;
           const isNew: boolean = data.isNew ?? false;
           const synthesized = data.synthesized === true;
+          const unnamed = data.nearest?.named === false;
 
           // Distance to the nearest location, for display
           const distanceKm = haversineKm(
@@ -111,6 +122,7 @@ export function detectUserLocation({
             distanceKm: Math.round(distanceKm),
             isNew,
             synthesized,
+            unnamed,
           });
         } catch {
           resolve({

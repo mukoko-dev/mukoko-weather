@@ -49,6 +49,11 @@ describe("geolocation source structure", () => {
     expect(source).toContain("autoCreate=true");
   });
 
+  it("passes the unnamed (coordinate label) flag through", () => {
+    expect(source).toContain("unnamed?: boolean;");
+    expect(source).toContain("const unnamed = data.nearest?.named === false;");
+  });
+
   it("passes the find-only synthesized flag through (#302)", () => {
     expect(source).toContain("synthesized?: boolean;");
     expect(source).toContain("const synthesized = data.synthesized === true;");
@@ -67,8 +72,8 @@ describe("geolocation source structure", () => {
     expect(source).toContain("Math.round(distanceKm)");
   });
 
-  it("uses the /api/py/geo endpoint for nearest location lookup", () => {
-    expect(source).toContain("/api/py/geo?lat=");
+  it("asks the geo endpoint (Worker first, /api/py fallback) for the nearest location", () => {
+    expect(source).toContain('fetchPlaces(\n            "geo",');
     // GPS fixes reach /api/py/geo exactly: exact-place naming and OSM-ref identity depend on them
     expect(source).toContain("lat=${latitude}&lon=${longitude}");
     expect(source).not.toContain("roundCoord");

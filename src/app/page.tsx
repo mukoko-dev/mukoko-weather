@@ -18,6 +18,7 @@ import { ipFallbackLocation } from "@/lib/home-location";
 import { countryDisplayName, reconcileCountry } from "@/lib/location-country";
 import { reconcileElevation } from "@/lib/location-elevation";
 import { SITE_URL } from "@/lib/site";
+import { fetchPlaces } from "@/lib/weather-api";
 import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
 
 // Stable base for the server-to-self geo lookup. The per-deployment Vercel
@@ -117,13 +118,19 @@ async function HomeContent() {
         // coarse ISP/datacentre-centroid position, so creating a location from them
         // would seed inaccurate, fine-grained entries. Auto-creation only happens on
         // explicit user GPS (CurrentLocationHome's detectUserLocation flows).
-        const res = await fetch(
-          `${APP_URL}/api/py/geo?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&autoCreate=false`,
+        const res = await fetchPlaces(
+          "geo",
+          `lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&autoCreate=false`,
           { cache: "no-store", signal: controller.signal },
+          process.env,
+          fetch,
+          APP_URL,
         );
         if (res.ok) {
           const data = await res.json();
-          if (data?.nearest) {
+          // A coordinate label (`named: false`, open water and the like) is
+          // not a name: the IP-city fallback below names it better.
+          if (data?.nearest && data.nearest.named !== false) {
             detectedLocation = data.nearest as WeatherLocation;
           }
         }
