@@ -23,6 +23,12 @@ export interface GeoResult {
    * There is no better place to create, so the caller keeps it as is.
    */
   unnamed?: boolean;
+  /**
+   * True when naming the point was skipped (over budget, the geocoder down):
+   * the location is a coordinate label, but that says nothing about the
+   * point, unlike `unnamed`. See `src/lib/location-choice.ts`.
+   */
+  namingSkipped?: boolean;
 }
 
 /** Default GPS timeout — used for user-initiated lookups (first-visit auto-prompt, explicit "Use my current location"). */
@@ -106,6 +112,7 @@ export function detectUserLocation({
           const isNew: boolean = data.isNew ?? false;
           const synthesized = data.synthesized === true;
           const unnamed = data.nearest?.named === false;
+          const namingSkipped = data.nearest?.namingSkipped === true;
 
           // Distance to the nearest location, for display
           const distanceKm = haversineKm(
@@ -123,6 +130,7 @@ export function detectUserLocation({
             isNew,
             synthesized,
             unnamed,
+            namingSkipped,
           });
         } catch {
           resolve({

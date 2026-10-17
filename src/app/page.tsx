@@ -19,6 +19,7 @@ import { countryDisplayName, reconcileCountry } from "@/lib/location-country";
 import { reconcileElevation } from "@/lib/location-elevation";
 import { SITE_URL } from "@/lib/site";
 import { fetchPlaces } from "@/lib/weather-api";
+import { usableIpGeo } from "@/lib/location-choice";
 import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
 
 // Stable base for the server-to-self geo lookup. The per-deployment Vercel
@@ -120,7 +121,10 @@ async function HomeContent() {
         // explicit user GPS (CurrentLocationHome's detectUserLocation flows).
         const res = await fetchPlaces(
           "geo",
-          `lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&autoCreate=false`,
+          // noName: this server shares one egress address with every visitor,
+          // so it never spends a geocoder lookup; the IP-city header below
+          // names an IP position better anyway.
+          `lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&autoCreate=false&noName=1`,
           { cache: "no-store", signal: controller.signal },
           process.env,
           fetch,
@@ -128,9 +132,9 @@ async function HomeContent() {
         );
         if (res.ok) {
           const data = await res.json();
-          // A coordinate label (`named: false`, open water and the like) is
-          // not a name: the IP-city fallback below names it better.
-          if (data?.nearest && data.nearest.named !== false) {
+          // A coordinate label is not a name for the visitor's place: the
+          // IP-city fallback below names it better (`usableIpGeo`).
+          if (usableIpGeo(data?.nearest)) {
             detectedLocation = data.nearest as WeatherLocation;
           }
         }
