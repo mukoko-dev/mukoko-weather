@@ -178,12 +178,12 @@ describe("schema.org JSON-LD", () => {
       geolocation: { state: "granted", changedAt: "2026-10-01T00:00:00.000Z" },
       notifications: { state: "prompt", changedAt: "2026-10-01T00:00:00.000Z" },
     },
-  }) as { "@context": string; "@graph": Record<string, any>[] };
+  }) as { "@context": string; "@graph": Record<string, unknown>[] };
   const [person, action] = ld["@graph"];
   it("maps to Person.owns a WebApplication with schema.org properties", () => {
     expect(ld["@context"]).toBe("https://schema.org");
     expect(person).toMatchObject({ "@type": "Person", identifier: "person-1" });
-    expect(person.owns).toMatchObject({
+    expect((person as { owns: unknown }).owns).toMatchObject({
       "@type": "WebApplication",
       identifier: base.deviceId,
       name: "Safari on iOS",
