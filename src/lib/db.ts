@@ -24,6 +24,7 @@ import type {
   Document,
   IndexSpecification,
   CreateIndexesOptions,
+  Filter,
 } from "mongodb";
 import {
   weatherDb,
@@ -263,7 +264,28 @@ export interface AirportDoc {
   lon: number;
   /** GeoJSON Point `[lon, lat]` for the 2dsphere index. */
   location: { type: "Point"; coordinates: [number, number] };
+  /**
+   * Absent for the static seed. `"awc-stationinfo"` for an airport the
+   * nearest-METAR search fetched on demand from the Aviation Weather Center
+   * (`api/py/_metar.py` `discover_airports`, #302).
+   */
+  source?: typeof DISCOVERED_AIRPORT_SOURCE;
   updatedAt: Date;
+}
+
+/** `source` of a fetched-on-demand airport — mirrors `DISCOVERED_SOURCE` in api/py/_airports.py. */
+export const DISCOVERED_AIRPORT_SOURCE = "awc-stationinfo";
+
+/**
+ * Which `weather.airports` docs a seed sync deletes: seed docs whose code
+ * left the catalogue (retired or renamed stations). Airports fetched on
+ * demand are not part of the catalogue and are never pruned by it.
+ */
+export function airportPruneFilter(codes: string[]): Filter<AirportDoc> {
+  return {
+    _id: { $nin: codes },
+    source: { $ne: DISCOVERED_AIRPORT_SOURCE },
+  };
 }
 
 function airportsCollection() {
@@ -1458,11 +1480,12 @@ export async function syncAirports(
   });
   if (bulkOps.length > 0) {
     await airportsCollection().bulkWrite(bulkOps);
-    // The catalogue is the full reference set: drop stations that were renamed
+    // The catalogue is the full seed set: drop seed stations that were renamed
     // or removed (e.g. retired FVHA / FAJS), or the nearest lookup keeps
-    // returning codes the Aviation Weather Center no longer serves.
+    // returning codes the Aviation Weather Center no longer serves. Airports
+    // fetched on demand (#302) are left alone.
     const codes = airports.map((a) => a.icao.toUpperCase());
-    await airportsCollection().deleteMany({ _id: { $nin: codes } });
+    await airportsCollection().deleteMany(airportPruneFilter(codes));
   }
 }
 

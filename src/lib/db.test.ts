@@ -847,3 +847,30 @@ describe("db-init indexes for agriculture (issue #265)", () => {
     }
   });
 });
+
+describe("syncAirports keeps airports fetched on demand (#302)", () => {
+  it("prunes only seed docs that left the catalogue", async () => {
+    const { airportPruneFilter, DISCOVERED_AIRPORT_SOURCE } =
+      await import("./db");
+    expect(airportPruneFilter(["FVRG", "FAOR"])).toEqual({
+      _id: { $nin: ["FVRG", "FAOR"] },
+      source: { $ne: DISCOVERED_AIRPORT_SOURCE },
+    });
+  });
+
+  it("uses the same source tag as the Python writer", async () => {
+    const { DISCOVERED_AIRPORT_SOURCE } = await import("./db");
+    const py = readFileSync(
+      resolve(__dirname, "../../api/py/_airports.py"),
+      "utf-8",
+    );
+    expect(py).toContain(`DISCOVERED_SOURCE = "${DISCOVERED_AIRPORT_SOURCE}"`);
+  });
+
+  it("syncAirports deletes through the prune filter", () => {
+    const source = readFileSync(resolve(__dirname, "db.ts"), "utf-8");
+    expect(source).toContain(
+      "await airportsCollection().deleteMany(airportPruneFilter(codes));",
+    );
+  });
+});
