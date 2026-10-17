@@ -149,24 +149,33 @@ describe("isRenderableLocation", () => {
       throw new Error("down");
     });
     const t0 = 1_000;
-    expect(
-      await isRenderableLocation("harare-a1b2c3", resolve, { now: t0 }),
-    ).toBeNull();
-    // Inside the backoff: no second lookup on a struggling cluster.
-    expect(
-      await isRenderableLocation("other-a1b2c3", resolve, {
-        now: t0 + DEGRADED_BACKOFF_MS - 1,
-      }),
-    ).toBeNull();
-    expect(resolve).toHaveBeenCalledTimes(1);
-    // After it: the failure wasn't cached, so the slug is looked up again.
-    resolve.mockImplementation(async () => ({}) as never);
-    expect(
-      await isRenderableLocation("harare-a1b2c3", resolve, {
-        now: t0 + DEGRADED_BACKOFF_MS + 1,
-      }),
-    ).toBe(true);
-    expect(resolve).toHaveBeenCalledTimes(2);
+    // The gate adds the lookup's real elapsed time to the injected clock, so
+    // freeze the real clock too: on a slow CI runner a 2 ms gap otherwise
+    // pushed the backoff past the test's t0 + backoff + 1.
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    try {
+      expect(
+        await isRenderableLocation("harare-a1b2c3", resolve, { now: t0 }),
+      ).toBeNull();
+      // Inside the backoff: no second lookup on a struggling cluster.
+      expect(
+        await isRenderableLocation("other-a1b2c3", resolve, {
+          now: t0 + DEGRADED_BACKOFF_MS - 1,
+        }),
+      ).toBeNull();
+      expect(resolve).toHaveBeenCalledTimes(1);
+      // After it: the failure wasn't cached, so the slug is looked up again.
+      resolve.mockImplementation(async () => ({}) as never);
+      expect(
+        await isRenderableLocation("harare-a1b2c3", resolve, {
+          now: t0 + DEGRADED_BACKOFF_MS + 1,
+        }),
+      ).toBe(true);
+      expect(resolve).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shares one lookup between concurrent requests for a slug", async () => {
