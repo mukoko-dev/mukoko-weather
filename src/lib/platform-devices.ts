@@ -130,8 +130,9 @@ export function sanitizeRegistration(raw: unknown): DeviceRegistration | null {
   }
   const name =
     typeof b.name === "string"
-      ? b.name
-          .replace(/[\u0000-\u001f\u007f]/g, "")
+      ? Array.from(b.name)
+          .filter((ch) => ch.charCodeAt(0) > 0x1f && ch.charCodeAt(0) !== 0x7f)
+          .join("")
           .trim()
           .slice(0, 60)
       : "";
