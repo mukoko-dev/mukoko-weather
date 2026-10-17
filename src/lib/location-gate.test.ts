@@ -435,7 +435,6 @@ describe("isRenderableLocation", () => {
   });
 });
 
-
 describe("bare seed names redirect to the canonical seed slug (#302)", () => {
   it.each([
     ["/phuket", "/phuket-th"],
