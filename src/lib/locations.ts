@@ -33,6 +33,14 @@ export interface WeatherLocation {
   provinceSlug?: string;
   /** Structured address from Nominatim — stored for community/geolocation locations */
   nominatimAddress?: NominatimAddress;
+  /**
+   * True when `country`/`province` were borrowed from a nearby shipped seed
+   * rather than known for this exact spot (a spot slug far from any stored
+   * place). A seed up to 250 km away can sit across a border — Tangier for a
+   * spot in Málaga — so `reconcileCountry()` lets the forecast's time zone
+   * overrule it.
+   */
+  regionApproximate?: boolean;
 }
 
 /**

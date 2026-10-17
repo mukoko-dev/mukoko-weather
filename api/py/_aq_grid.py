@@ -30,7 +30,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from ._db import stamp_platform_fields, weather_db
+from ._db import UNKNOWN_COUNTRY_CODE, stamp_platform_fields, weather_db
 from ._circuit_breaker import open_meteo_breaker, CircuitOpenError
 from . import _open_meteo as om
 
@@ -255,7 +255,7 @@ def _get_cached(key: str) -> Optional[dict]:
         return None
 
 
-def _set_cached(key: str, payload: dict, country_code: str = "ZW") -> None:
+def _set_cached(key: str, payload: dict, country_code: str = UNKNOWN_COUNTRY_CODE) -> None:
     now = datetime.now(timezone.utc)
     doc = {
         "_id": key,
