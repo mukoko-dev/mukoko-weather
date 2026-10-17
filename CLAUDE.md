@@ -167,7 +167,7 @@ mukoko-weather/
 │   │   ├── auth/                     # signin/ + signout/ server redirect routes (WorkOS AuthKit)
 │   │   ├── callback/route.ts         # OAuth callback (handleAuth + identity.persons upsert)
 │   │   ├── offline/page.tsx          # PWA offline fallback page
-│   │   ├── sw.ts                     # Service worker source (serwist)
+│   │   ├── sw.ts                     # Service worker source (serwist); precaches only stylesheets + public icons (`src/lib/sw-precache.ts`), JS chunks and fonts are cached on first use
 │   │   └── api/                      # Remaining TypeScript API routes (most migrated to Python)
 │   │       ├── og/                   # Dynamic OG image generation (Edge runtime, Satori)
 │   │       │   ├── route.tsx         # GET — generates 1200×630 OG images with brand templates
@@ -985,6 +985,7 @@ Database seed data files are read by `/api/db-init` for one-time bootstrap:
 
 - **Cache key = coordinate grid cell, never a place (issue #252).** `weather_cache.locationSlug` holds `weather_cache_key(lat, lon)` (`api/py/_weather_cache_key.py`, mirrored by `weatherCacheKey` in `src/lib/weather-cache-key.ts`): the requested coordinate rounded to a 0.05° (~5.6 km) cell, e.g. `cell:-17.85_31.05`. Keying by the nearest place (searched to 20,000 km) let Frankfurt's forecast sit under Bizerte and Karachi's under Bosaso. The cell is finer than the forecast models behind the providers, yet coarse enough that one town's page, GPS fix and client refresh share one provider fetch. Both implementations are pinned to `tests/fixtures/weather-cache-keys.json`. Readers that start from a slug (`_reports.py`, `_chat.py`, `_explore_search.py`) resolve the place first and read by `weather_cache_key_for(loc)`. The nearest-place lookup in `/api/py/weather` is capped at 25 km and feeds only the history slug and the fallback elevation
 - SSR (`getWeatherForLocation` in `src/lib/db.ts`) is READ-ONLY against `weather_cache` and reads `weatherCacheKey(lat, lon)`, the same key the writer derives from the lat/lon it sends: cache hit → serve; miss → server-to-server `GET /api/py/weather` (the single canonical fetch/cache/history writer); endpoint unreachable (e.g. plain `next dev` without Python functions) → direct Open-Meteo fetch WITHOUT caching → seasonal fallback
+- **SSR latency budget (installed iOS app sat on its loading screen ~20 s):** every step of `getWeatherForLocation` is bounded: the cache read 2.5 s (`SSR_CACHE_READ_TIMEOUT_MS`), the endpoint self-fetch 4 s (`SSR_SELF_FETCH_TIMEOUT_MS`, was 15 s), and a direct Open-Meteo read (3.5 s, `SSR_DIRECT_TIMEOUT_MS`) is HEDGED: it starts when the endpoint is still silent after 1.5 s (`SSR_HEDGE_AFTER_MS`) and the first answer wins, so a cold Python function no longer holds the page. Worst case is the seasonal estimate at ~4 s. Never raise these back to sequential fallbacks
 
 **TS Open-Meteo client:** `src/lib/weather.ts` — direct-fetch fallback and pure utility functions:
 
