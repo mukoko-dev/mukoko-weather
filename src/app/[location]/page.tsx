@@ -21,6 +21,7 @@ import {
   placeLine,
   reconcileCountry,
 } from "@/lib/location-country";
+import { reconcileElevation } from "@/lib/location-elevation";
 
 // Location lookups go through the shared loadLocation (./load-location) so the
 // layout, generateMetadata and the page share one DB round-trip per request.
@@ -183,7 +184,10 @@ export default async function LocationPage({
   // A place outside the stored geography can arrive with no country (or one
   // borrowed from a seed across a border). The forecast's time zone names
   // the real one — see src/lib/location-country.ts.
-  const location = reconcileCountry(storedLocation, weather.timezone);
+  const location = reconcileElevation(
+    reconcileCountry(storedLocation, weather.timezone),
+    weather.elevation,
+  );
   const countryCode = (location.country ?? "").toUpperCase();
 
   const usingFallback = weatherSource === "fallback";

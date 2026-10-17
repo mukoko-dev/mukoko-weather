@@ -471,6 +471,7 @@ async function resolveSpotSlug(
     lat: ref.lat,
     lon: ref.lon,
     elevation: 0,
+    elevationApproximate: true,
     tags: ["city"],
     source: "geolocation",
     updatedAt: new Date(),
@@ -508,6 +509,8 @@ async function resolveSpotSlug(
         lat: ref.lat,
         lon: ref.lon,
         name: parsed.name || adapted.name,
+        // A neighbour's height, not this point's.
+        elevationApproximate: true,
       };
     }
   } catch {
