@@ -233,10 +233,8 @@ pub fn reverse_key(lat: f64, lon: f64) -> String {
 }
 
 /// A reverse geocode cached earlier for this cell, if any.
-pub async fn reverse_cached(env: &Env, lat: f64, lon: f64) -> Option<LocationDoc> {
-    cached_slot::<LocationDoc>(env, &reverse_key(lat, lon))
-        .await
-        .flatten()
+pub async fn reverse_cached(env: &Env, lat: f64, lon: f64) -> Option<Option<LocationDoc>> {
+    cached_slot::<LocationDoc>(env, &reverse_key(lat, lon)).await
 }
 
 /// Nominatim reverse geocoding: name the point. `Ok(None)` when Nominatim has
@@ -266,5 +264,55 @@ pub async fn reverse(env: &Env, lat: f64, lon: f64) -> Result<Option<LocationDoc
         _ => return Err(()),
     };
     store_slot(env, &key, &found, 30 * DAY).await;
+    Ok(found)
+}
+
+/// A reverse geocode cached for a snapped cell: the document, or `None` when
+/// Nominatim named nothing there.
+type CellName = Option<LocationDoc>;
+
+fn cell_key(lat: f64, lon: f64) -> String {
+    format!("revcell:v2:{lat:.2}_{lon:.2}")
+}
+
+/// The cached answer for a cell, if any (`Some(None)` is a cached "nothing
+/// here"), so a cache hit never spends the per-IP budget.
+pub async fn reverse_cell_cached(env: &Env, lat: f64, lon: f64) -> Option<CellName> {
+    cached_slot::<LocationDoc>(env, &cell_key(lat, lon)).await
+}
+
+/// A city-level (zoom 10) Nominatim name for a snapped ~1 km cell, for the
+/// find-only path: the answer stands for "around here", never an address, and
+/// one cell shares one lookup. `Ok(None)` when Nominatim names nothing (open
+/// water, polar ice, empty desert); `Err` when it did not answer (never
+/// cached). Hits are kept 6 hours, "nothing here" 10 minutes.
+pub async fn reverse_cell(env: &Env, lat: f64, lon: f64) -> Result<CellName, ()> {
+    let key = cell_key(lat, lon);
+    if let Some(hit) = cached_slot::<LocationDoc>(env, &key).await {
+        return Ok(hit);
+    }
+    let url = with_query(
+        "https://nominatim.openstreetmap.org/reverse",
+        &[
+            ("lat", &lat.to_string()),
+            ("lon", &lon.to_string()),
+            ("format", "jsonv2"),
+            ("zoom", "10"),
+            ("accept-language", "en"),
+        ],
+    );
+    let headers = Headers::new();
+    headers.set("User-Agent", USER_AGENT).map_err(|_| ())?;
+    let found = match get_with_timeout(&url, Some(headers), TIMEOUT).await {
+        Ok(mut r) if r.status_code() == 200 => {
+            let body = r.json::<Value>().await.map_err(|_| ())?;
+            LocationDoc::from_nominatim(&body, lat, lon)
+        }
+        // "Unable to geocode" is a 200 with an error body: nothing here.
+        Ok(r) if r.status_code() == 404 => None,
+        _ => return Err(()),
+    };
+    let ttl = if found.is_some() { 6 * 3_600 } else { 600 };
+    store_slot(env, &key, &found, ttl).await;
     Ok(found)
 }

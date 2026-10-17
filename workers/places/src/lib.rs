@@ -31,7 +31,7 @@ use serde_json::{json, Value};
 use weather_core::budget::Action;
 use weather_core::geo::valid_coordinates;
 use weather_core::locations::{self, LocationDoc};
-use weather_core::resolve;
+use weather_core::resolve::{self, Naming, PointAnswer, SpotKind};
 use weather_edge::{error, json, now_ms, query_pairs};
 use worker::{event, Context, Env, Method, Request, Response, Result};
 
@@ -104,6 +104,7 @@ async fn find_location(env: &Env, slug: &str) -> std::result::Result<Option<Loca
     if let Some(spot) = LocationDoc::spot(slug) {
         let named = sources::reverse_cached(env, spot.lat, spot.lon)
             .await
+            .flatten()
             .filter(|l| l.slug == slug);
         return Ok(Some(named.unwrap_or(spot)));
     }
@@ -284,6 +285,91 @@ async fn resolve_route(req: &Request, env: &Env, q: &Query) -> Result<Response> 
     }
 }
 
+/// A spot as `/geo` answers it: the document plus what a caller needs to
+/// know. `elevationApproximate`: nothing measured the height. `named: false`
+/// only for a DEFINITIVE "nothing here" (open water, polar ice, empty desert);
+/// `namingSkipped: true` when naming was skipped (over budget, the geocoder
+/// down, or the caller asked not to spend a lookup), which says nothing about
+/// the point and must not be read as `named: false`.
+fn spot_json(spot: &LocationDoc, kind: SpotKind) -> Value {
+    let mut doc = serde_json::to_value(spot).unwrap_or(Value::Null);
+    if let Some(obj) = doc.as_object_mut() {
+        obj.insert("elevationApproximate".into(), true.into());
+        match kind {
+            SpotKind::Named => {}
+            SpotKind::NothingHere => {
+                obj.insert("named".into(), false.into());
+            }
+            SpotKind::NamingSkipped => {
+                obj.insert("namingSkipped".into(), true.into());
+            }
+        }
+    }
+    doc
+}
+
+/// The `/geo` response for a [`PointAnswer`].
+fn point_response(answer: PointAnswer) -> Result<Response> {
+    let (nearest, is_new, synthesized, slug) = match answer {
+        PointAnswer::Seed(loc) => (json!(loc), false, false, loc.slug),
+        PointAnswer::Created(loc) => (json!(loc), true, false, loc.slug),
+        PointAnswer::Spot { spot, kind } => {
+            (spot_json(&spot, kind), false, true, spot.slug.clone())
+        }
+    };
+    let mut body = json!({"nearest": nearest, "redirectTo": format!("/{slug}"), "isNew": is_new});
+    if synthesized {
+        body["synthesized"] = true.into();
+    }
+    json(200, &body)
+}
+
+/// Name a point for find-only: the cached ~1 km cell, else (when allowed and
+/// within the hourly Nominatim budget) one city-level lookup. Anything that
+/// is not a real answer is `Skipped`, never a claim about the point.
+async fn name_cell(req: &Request, env: &Env, lat: f64, lon: f64, spend: bool) -> Naming {
+    let (cell_lat, cell_lon) = (resolve::snap(lat), resolve::snap(lon));
+    // A cached cell costs no budget, so it is read even when spending is off.
+    if let Some(hit) = sources::reverse_cell_cached(env, cell_lat, cell_lon).await {
+        return hit.map_or(Naming::NothingHere, |d| Naming::Named(Box::new(d)));
+    }
+    if !spend || !nominatim_budget(req, env).await {
+        return Naming::Skipped;
+    }
+    match sources::reverse_cell(env, cell_lat, cell_lon).await {
+        Ok(Some(doc)) => Naming::Named(Box::new(doc)),
+        Ok(None) => Naming::NothingHere,
+        Err(()) => Naming::Skipped,
+    }
+}
+
+/// May this call go to Nominatim? A per-minute burst limit per client, then
+/// the hourly per-client and service-wide budgets (`weather_core::budget`;
+/// Nominatim's policy is about one request a second for the whole app).
+async fn nominatim_budget(req: &Request, env: &Env) -> bool {
+    let caller = budget::Caller::from_request(req);
+    if let Ok(limiter) = env.rate_limiter(GEOCODE_LIMITER) {
+        if let Ok(outcome) = limiter.limit(caller.ip.clone()).await {
+            if !outcome.success {
+                return false;
+            }
+        }
+    }
+    budget::take(env, Action::Nominatim, &caller)
+        .await
+        .allowed()
+}
+
+/// A skipped or failed naming is a flag, not a verdict: the answer is never
+/// cached publicly, because the next call may name the point.
+fn no_store(resp: Result<Response>, degraded: bool) -> Result<Response> {
+    let resp = resp?;
+    if degraded {
+        resp.headers().set("Cache-Control", "no-store")?;
+    }
+    Ok(resp)
+}
+
 async fn geo_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
     let (Some(lat), Some(lon)) = (q.num("lat"), q.num("lon")) else {
         return error(422, "invalid_request", "Give both `lat` and `lon`.");
@@ -292,49 +378,52 @@ async fn geo_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
         return error(400, "invalid_request", "Invalid coordinates");
     }
     let auto_create = matches!(q.get("autoCreate"), Some("true" | "1"));
+    // A server-side caller (the home page's IP lookup) shares one egress
+    // address with every visitor, so it asks not to spend a lookup: a seed or
+    // a coordinate spot, and the caller names an IP position from its own
+    // headers.
+    let spend = !matches!(q.get("noName"), Some("true" | "1"));
 
-    let found = |loc: &LocationDoc, is_new: bool| {
-        let resp = json(
-            200,
-            &json!({"nearest": loc, "redirectTo": format!("/{}", loc.slug), "isNew": is_new}),
-        )?;
-        Ok::<_, worker::Error>(resp)
-    };
-
-    if !auto_create {
-        // IP-based points can be off by a couple of hundred km: past 150 km,
-        // say so rather than send the person to the wrong city.
-        return match locations::nearest_seeds(lat, lon, 150.0, 1).first() {
-            Some(loc) => found(loc, false),
-            None => error(
-                404,
-                "not_found",
-                "No nearby location found. Use autoCreate=true to add one.",
-            ),
-        };
-    }
-
-    // "Use my location" resolves to the exact place, never the nearest city.
-    if let Ok(limiter) = env.rate_limiter(GEOCODE_LIMITER) {
-        let ip = budget::Caller::from_request(req).ip;
-        if let Ok(outcome) = limiter.limit(ip).await {
-            if !outcome.success {
-                return error(429, "rate_limited", "Rate limit exceeded. Try again later.");
+    let answer = if auto_create {
+        // "Use my location" resolves to the exact place, never the nearest
+        // city. A failure to name it is `Skipped`, which returns a seed within
+        // 50 km, else a spot flagged `namingSkipped`.
+        let cached = sources::reverse_cached(env, lat, lon).await;
+        let naming = if let Some(hit) = cached {
+            // A cached answer costs no budget.
+            hit.map_or(Naming::NothingHere, |d| Naming::Named(Box::new(d)))
+        } else if !spend || !nominatim_budget(req, env).await {
+            Naming::Skipped
+        } else {
+            match sources::reverse(env, lat, lon).await {
+                Ok(Some(l)) => Naming::Named(Box::new(l)),
+                Ok(None) => Naming::NothingHere,
+                Err(()) => Naming::Skipped,
             }
-        }
-    }
-    let named = match sources::reverse(env, lat, lon).await {
-        Ok(Some(l)) => l,
-        Ok(None) => return error(422, "unnamed", "Could not determine location name"),
-        Err(()) => return error(503, "geocoding_unavailable", "Location service unavailable"),
+        };
+        resolve::create_answer(lat, lon, &naming)
+    } else {
+        // A seed within 150 km wins without any lookup; only past that is the
+        // point named (its cell, cached and budgeted).
+        let naming = if locations::nearest_seeds(lat, lon, 150.0, 1).is_empty() {
+            name_cell(req, env, lat, lon, spend).await
+        } else {
+            Naming::Skipped
+        };
+        resolve::find_only_answer(lat, lon, &naming)
     };
-    // The same place already on the seed list (1 km, same name) is not new.
-    let existing = locations::nearest_seeds(lat, lon, 1.0, 1)
-        .into_iter()
-        .find(|s| s.name.eq_ignore_ascii_case(&named.name));
-    match existing {
-        Some(seed) => found(seed, false),
-        None => found(&named, true),
+    match answer {
+        Some(answer) => {
+            let degraded = matches!(
+                answer,
+                PointAnswer::Spot {
+                    kind: SpotKind::NamingSkipped,
+                    ..
+                }
+            );
+            no_store(point_response(answer), degraded)
+        }
+        None => error(400, "invalid_request", "Invalid coordinates"),
     }
 }
 
