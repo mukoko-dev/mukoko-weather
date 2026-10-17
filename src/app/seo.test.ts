@@ -182,6 +182,7 @@ describe("canonical URLs — every page sets its own canonical", () => {
     ["status/page.tsx", "/status"],
     ["embed/page.tsx", "/embed"],
     ["developers/page.tsx", "/developers"],
+    ["releases/page.tsx", "/releases"],
   ];
 
   for (const [file, expectedFragment] of pagesWithCanonicals) {

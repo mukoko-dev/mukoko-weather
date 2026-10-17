@@ -28,6 +28,11 @@ const nextConfig: NextConfig = {
   // A missing top-level file (`/favicon-48.png`, `/old-logo.svg`, ...) goes
   // to a plain 404 instead of the `[location]` route's streamed 200. The
   // pattern and the reasoning are in src/lib/missing-asset.ts.
+  // The sitemap is dynamic and reads releases/*.md for /releases' lastModified
+  // (src/lib/release-notes-source.ts); nothing else traces that folder in.
+  outputFileTracingIncludes: {
+    "/sitemap.xml": ["./releases/*.md"],
+  },
   async rewrites() {
     return {
       beforeFiles: [],

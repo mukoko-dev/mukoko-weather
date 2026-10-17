@@ -17,6 +17,7 @@ import {
   FileText,
   HelpCircle,
   Info,
+  Megaphone,
   KeyRound,
   MapPin,
   Plane,
@@ -97,6 +98,13 @@ export const PROFILE_DESTINATIONS: ProfileDestination[] = [
     label: "Help Center",
     description: "Answers to common questions",
     icon: HelpCircle,
+    group: "about",
+  },
+  {
+    href: "/releases",
+    label: "Release notes",
+    description: "What's new in each release",
+    icon: Megaphone,
     group: "about",
   },
   {

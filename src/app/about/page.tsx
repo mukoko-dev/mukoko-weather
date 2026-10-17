@@ -107,6 +107,13 @@ export default function AboutPage() {
               </li>
             ))}
           </ul>
+          <p className="gazelle mt-4">
+            See what changed lately in our{" "}
+            <Link href="/releases" className="sunbird">
+              release notes
+            </Link>
+            .
+          </p>
         </section>
 
         <section className="mt-10">
