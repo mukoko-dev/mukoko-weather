@@ -85,7 +85,7 @@ export function HistoryAnalysis({
   return (
     <section
       aria-labelledby="history-analysis-heading"
-      className="rounded-[var(--radius-card)] border-l-4 border-mineral-tanzanite bg-surface-card p-4 shadow-sm"
+      className="baobab border-mineral-tanzanite/40"
     >
       <div className="flex items-center gap-2">
         <div className="hoopoe">

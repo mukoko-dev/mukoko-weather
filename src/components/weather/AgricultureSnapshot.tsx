@@ -140,7 +140,7 @@ export function AgricultureSnapshot({
   return (
     <section
       aria-labelledby="agri-snapshot-heading"
-      className="baobab w-full space-y-4 border-l-[6px] border-l-mineral-malachite"
+      className="baobab w-full space-y-4 border-mineral-malachite/40"
     >
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
