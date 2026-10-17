@@ -21,7 +21,7 @@ const strictResolve = (slug: string) =>
  * src/app (other than [location]) must be listed — src/proxy.test.ts fails
  * when one is missing. WeatherLoadingScene keeps the page-route subset.
  */
-const KNOWN_ROUTES = new Set([
+export const KNOWN_ROUTES = new Set([
   "explore",
   "locations",
   "shamwari",

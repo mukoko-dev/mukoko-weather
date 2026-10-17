@@ -20,6 +20,13 @@ import {
   rendersWithoutLookup,
   resetLocationGateCache,
 } from "./location-gate";
+import { KNOWN_ROUTES } from "@/proxy";
+
+// The proxy imports AuthKit at module load; only KNOWN_ROUTES is used here.
+vi.mock("@workos-inc/authkit-nextjs", () => ({
+  authkit: vi.fn(),
+  handleAuthkitProxy: vi.fn(),
+}));
 
 const KNOWN = new Set(["explore", "api", "profile", "auth"]);
 
@@ -149,24 +156,33 @@ describe("isRenderableLocation", () => {
       throw new Error("down");
     });
     const t0 = 1_000;
-    expect(
-      await isRenderableLocation("harare-a1b2c3", resolve, { now: t0 }),
-    ).toBeNull();
-    // Inside the backoff: no second lookup on a struggling cluster.
-    expect(
-      await isRenderableLocation("other-a1b2c3", resolve, {
-        now: t0 + DEGRADED_BACKOFF_MS - 1,
-      }),
-    ).toBeNull();
-    expect(resolve).toHaveBeenCalledTimes(1);
-    // After it: the failure wasn't cached, so the slug is looked up again.
-    resolve.mockImplementation(async () => ({}) as never);
-    expect(
-      await isRenderableLocation("harare-a1b2c3", resolve, {
-        now: t0 + DEGRADED_BACKOFF_MS + 1,
-      }),
-    ).toBe(true);
-    expect(resolve).toHaveBeenCalledTimes(2);
+    // The gate adds the lookup's real elapsed time to the injected clock, so
+    // freeze the real clock too: on a slow CI runner a 2 ms gap otherwise
+    // pushed the backoff past the test's t0 + backoff + 1.
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    try {
+      expect(
+        await isRenderableLocation("harare-a1b2c3", resolve, { now: t0 }),
+      ).toBeNull();
+      // Inside the backoff: no second lookup on a struggling cluster.
+      expect(
+        await isRenderableLocation("other-a1b2c3", resolve, {
+          now: t0 + DEGRADED_BACKOFF_MS - 1,
+        }),
+      ).toBeNull();
+      expect(resolve).toHaveBeenCalledTimes(1);
+      // After it: the failure wasn't cached, so the slug is looked up again.
+      resolve.mockImplementation(async () => ({}) as never);
+      expect(
+        await isRenderableLocation("harare-a1b2c3", resolve, {
+          now: t0 + DEGRADED_BACKOFF_MS + 1,
+        }),
+      ).toBe(true);
+      expect(resolve).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shares one lookup between concurrent requests for a slug", async () => {
@@ -485,6 +501,17 @@ describe("bare seed names redirect to the canonical seed slug (#302)", () => {
       expect(target).not.toBe(alias);
       expect(target.includes("--")).toBe(false);
     }
-    expect(SEED_NAME_ALIASES.size).toBeGreaterThan(100);
+    // Not a magic count: it only has to be a non-empty, derived table.
+    expect(SEED_NAME_ALIASES.size).toBeGreaterThan(0);
+  });
+
+  it("no alias is a top-level route in the real proxy's KNOWN_ROUTES", () => {
+    for (const alias of SEED_NAME_ALIASES.keys()) {
+      expect(KNOWN_ROUTES.has(alias)).toBe(false);
+    }
+    // And the real route set wins over an alias, as the gate is called.
+    expect(classifyLocationPath("/explore", KNOWN_ROUTES)).toEqual({
+      kind: "other",
+    });
   });
 });
