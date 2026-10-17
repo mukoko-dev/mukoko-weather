@@ -304,7 +304,7 @@ pub const SEED_NEAR_KM: f64 = 50.0;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Naming {
     /// A name (city level for find-only, exact for GPS create).
-    Named(LocationDoc),
+    Named(Box<LocationDoc>),
     /// A definitive "nothing here": open water, polar ice, empty desert.
     NothingHere,
     /// Not asked or not answered: over budget, the geocoder is down or timed
@@ -383,7 +383,7 @@ pub fn create_answer(lat: f64, lon: f64, naming: &Naming) -> Option<PointAnswer>
                 .find(|s| s.name.eq_ignore_ascii_case(&doc.name));
             Some(match existing {
                 Some(seed) => PointAnswer::Seed(seed.clone()),
-                None => PointAnswer::Created(doc.clone()),
+                None => PointAnswer::Created((**doc).clone()),
             })
         }
         Naming::NothingHere => spot_for(lat, lon, naming),
@@ -751,11 +751,15 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(
-            create_answer(-17.8578, 31.0389, &Naming::Named(named)),
+            create_answer(-17.8578, 31.0389, &Naming::Named(Box::new(named))),
             Some(PointAnswer::Created(d)) if d.name == "Mbare Musika"
         ));
         let harare = find_seed_doc("harare");
-        let a = create_answer(harare.lat, harare.lon, &Naming::Named(harare.clone()));
+        let a = create_answer(
+            harare.lat,
+            harare.lon,
+            &Naming::Named(Box::new(harare.clone())),
+        );
         assert!(matches!(a, Some(PointAnswer::Seed(s)) if s.slug == "harare"));
     }
 
@@ -769,7 +773,7 @@ mod tests {
         named.name = "Unknown".into();
         let (lat, lon) = (0.0, -30.0);
         assert_eq!(
-            spot_kind(find_only_answer(lat, lon, &Naming::Named(named))),
+            spot_kind(find_only_answer(lat, lon, &Naming::Named(Box::new(named)))),
             SpotKind::NothingHere
         );
     }
@@ -779,7 +783,7 @@ mod tests {
         let mut named = find_seed_doc("harare");
         named.name = "Ténéré".into();
         named.province = "Agadez".into();
-        let a = find_only_answer(17.0, 10.0, &Naming::Named(named));
+        let a = find_only_answer(17.0, 10.0, &Naming::Named(Box::new(named)));
         assert!(
             matches!(&a, Some(PointAnswer::Spot { spot, kind: SpotKind::Named })
             if spot.slug.starts_with("tenere--"))
