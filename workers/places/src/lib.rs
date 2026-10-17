@@ -222,15 +222,29 @@ async fn search_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
                 merge(&mut found, canonical);
             }
         }
-        // Nothing on record: offer geocoded candidates, as the app expects
-        // (address-level discovery). They are not records yet.
-        if found.is_empty() {
-            match sources::geocode(env, text, limit, &client_ip(req)).await {
+        // A thin catalogue answer is topped up from the geocoder, so nothing
+        // a person types is a dead end: places first, then the best cities of
+        // a country the query named, and last the area itself (a country,
+        // province or continent) as a spot at its centre. A shipped city is
+        // always its canonical slug, and nothing is listed twice.
+        if skip == 0 && found.len() < resolve::TOP_UP_BELOW {
+            match sources::geocode(env, text, resolve::geocode_count(limit), &client_ip(req)).await
+            {
                 Ok(geocoded) => {
-                    found = geocoded;
-                    source = "geocoded";
+                    let catalogue_empty = found.is_empty();
+                    found = resolve::compose_search(found, &geocoded, limit);
+                    if found.iter().any(|l| l.source == "geocoded") {
+                        source = if catalogue_empty { "geocoded" } else { "mixed" };
+                    }
                 }
-                Err(_) => return error(503, "search_unavailable", "Search unavailable"),
+                // Over budget: the catalogue answer stands (an empty one is
+                // still an answer); only a hard failure with nothing to show
+                // is an error.
+                Err(sources::GeoErr::Budget) => {}
+                Err(sources::GeoErr::Upstream) if found.is_empty() => {
+                    return error(503, "search_unavailable", "Search unavailable");
+                }
+                Err(sources::GeoErr::Upstream) => {}
             }
         }
     }

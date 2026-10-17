@@ -2,18 +2,22 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useDebounce } from "./use-debounce";
+import { fetchPlaces } from "./weather-api";
 
 export interface QuickSearchLocation {
   slug: string;
   name: string;
   province?: string;
   country?: string;
+  /** `country` or `region` when the result is an area offered as a spot at
+   * its centre (the Worker lists it after the places). */
+  area?: string;
 }
 
 export interface UseLocationQuickSearchOptions {
   /** Debounce delay in ms before firing the request. Default 300. */
   debounceMs?: number;
-  /** Max results requested from /api/py/search. Default 10. */
+  /** Max results requested from /v1/search (or /api/py/search). Default 10. */
   limit?: number;
   /** Minimum trimmed query length before a request fires. Default 1. */
   minLength?: number;
@@ -83,7 +87,9 @@ export function useLocationQuickSearch({
     const raf = requestAnimationFrame(() => {
       if (disposed) return;
       setLoading(true);
-      fetch(`/api/py/search?q=${encodeURIComponent(q)}&limit=${limit}`, {
+      // The Rust Worker when NEXT_PUBLIC_WEATHER_API_URL is set (it also
+      // offers a country or region itself as a last result), else /api/py.
+      fetchPlaces("search", `q=${encodeURIComponent(q)}&limit=${limit}`, {
         signal: controller.signal,
       })
         .then(async (res) => {
