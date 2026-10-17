@@ -516,3 +516,169 @@ class TestFindNearestReport:
             resp = await find_nearest_report(0, 0, radius_km=150.0, max_age_min=180)
         assert resp.searchRadiusKm == 150.0
         assert resp.maxAgeMinutes == 180
+
+
+# ---------------------------------------------------------------------------
+# Airport discovery — fetch on demand (#302)
+# ---------------------------------------------------------------------------
+
+from fastapi import HTTPException  # noqa: E402
+
+from py._circuit_breaker import _get_state  # noqa: E402
+
+from py._metar import (  # noqa: E402
+    AWC_STATIONINFO_URL,
+    DISCOVERY_EMPTY_TTL,
+    DISCOVERY_FOUND_TTL,
+    discover_airports,
+    discovery_bbox,
+    discovery_cell,
+    fetch_awc_stations,
+)
+
+PHUKET = (7.89059, 98.3981)
+VTSP_ROW = {"icaoId": "VTSP", "site": "Phuket Intl", "lat": 8.105, "lon": 98.308,
+            "country": "TH", "iataId": "HKT", "siteType": ["METAR", "TAF"]}
+VTSG_ROW = {"icaoId": "VTSG", "site": "Krabi Arpt", "lat": 8.099, "lon": 98.986,
+            "country": "TH", "iataId": "KBV", "siteType": ["METAR", "TAF"]}
+PHUKET_AIRPORTS = [
+    NearbyAirport(icao="VTSP", name="Phuket Intl", distanceKm=25.0),
+    NearbyAirport(icao="VTSG", name="Krabi Arpt", distanceKm=66.9),
+]
+
+
+class TestDiscoveryGeometry:
+    def test_cell_is_half_degree(self):
+        assert discovery_cell(*PHUKET) == (7.75, 98.25)
+        assert discovery_cell(-17.85, 31.05) == (-17.75, 31.25)
+
+    def test_bbox_covers_radius_from_every_point_of_the_cell(self):
+        min_lat, min_lon, max_lat, max_lon = discovery_bbox(*PHUKET, 150.0)
+        # Cell spans 7.5–8.0 / 98.0–98.5; 150 km ≈ 1.35° latitude.
+        assert min_lat <= 7.5 - 1.35 and max_lat >= 8.0 + 1.35
+        assert min_lon <= 98.0 - 1.35 and max_lon >= 98.5 + 1.35
+
+    def test_bbox_is_clamped(self):
+        min_lat, min_lon, max_lat, max_lon = discovery_bbox(89.9, 179.9, 150.0)
+        assert max_lat == 90.0 and max_lon == 180.0
+        assert -90 <= min_lat and -180 <= min_lon
+
+
+class TestFetchAwcStations:
+    def test_queries_stationinfo_by_bbox_and_validates(self):
+        with patch.object(_metar, "_awc_get", return_value=[VTSP_ROW, {"icaoId": "BAD"}]) as get:
+            stations = fetch_awc_stations((6.0, 97.0, 9.0, 100.0))
+        url, params = get.call_args.args
+        assert url == AWC_STATIONINFO_URL
+        assert params == {"bbox": "6,97,9,100", "format": "json"}
+        assert [s["icao"] for s in stations] == ["VTSP"]
+
+
+def _no_cache():
+    return patch.object(_metar, "_cache_get", return_value=None)
+
+
+class TestDiscoverAirports:
+    async def test_fetches_stores_and_returns_db_view(self):
+        put = MagicMock()
+        with _no_cache(), patch.object(_metar, "_cache_put", put), \
+             patch.object(_metar, "enforce_rate_limit"), \
+             patch.object(_metar, "_awc_get", return_value=[VTSP_ROW, VTSG_ROW]), \
+             patch.object(_metar, "upsert_discovered_airports", return_value=2) as upsert, \
+             patch.object(_metar, "nearest_airports", return_value=PHUKET_AIRPORTS):
+            result = await discover_airports(*PHUKET, radius_km=150, count=5)
+        assert [a.icao for a in result] == ["VTSP", "VTSG"]
+        assert [s["icao"] for s in upsert.call_args.args[0]] == ["VTSP", "VTSG"]
+        key, kind, data, ttl = put.call_args.args
+        assert key == "bbox:7.75_98.25_150" and kind == "stationinfo"
+        assert ttl == DISCOVERY_FOUND_TTL and data == {"count": 2}
+
+    async def test_ranks_in_memory_when_db_cannot_answer(self):
+        with _no_cache(), patch.object(_metar, "_cache_put"), \
+             patch.object(_metar, "enforce_rate_limit"), \
+             patch.object(_metar, "_awc_get", return_value=[VTSG_ROW, VTSP_ROW]), \
+             patch.object(_metar, "upsert_discovered_airports", return_value=0), \
+             patch.object(_metar, "nearest_airports", return_value=[]):
+            result = await discover_airports(*PHUKET, radius_km=150, count=5)
+        assert [a.icao for a in result] == ["VTSP", "VTSG"]
+
+    async def test_surveyed_cell_is_not_fetched_again(self):
+        get = MagicMock()
+        with patch.object(_metar, "_cache_get", return_value={"data": {"count": 0}}), \
+             patch.object(_metar, "_awc_get", get):
+            assert await discover_airports(*PHUKET, radius_km=150, count=5) == []
+        get.assert_not_called()
+
+    async def test_empty_area_is_remembered_briefly(self):
+        put = MagicMock()
+        with _no_cache(), patch.object(_metar, "_cache_put", put), \
+             patch.object(_metar, "enforce_rate_limit"), \
+             patch.object(_metar, "_awc_get", return_value=[]):
+            assert await discover_airports(-40.0, -20.0, radius_km=150, count=5) == []
+        assert put.call_args.args[3] == DISCOVERY_EMPTY_TTL
+
+    async def test_failure_is_not_cached_and_counts_against_breaker(self):
+        put = MagicMock()
+        with _no_cache(), patch.object(_metar, "_cache_put", put), \
+             patch.object(_metar, "enforce_rate_limit"), \
+             patch.object(_metar, "_awc_get", side_effect=RuntimeError("AWC down")):
+            assert await discover_airports(*PHUKET, radius_km=150, count=5) == []
+        put.assert_not_called()
+        assert len(_get_state("aviationweather-gov").failures) == 1
+
+    async def test_over_budget_is_skipped_not_429(self):
+        get = MagicMock()
+        with _no_cache(), \
+             patch.object(_metar, "enforce_rate_limit", side_effect=HTTPException(429)), \
+             patch.object(_metar, "_awc_get", get):
+            assert await discover_airports(*PHUKET, radius_km=150, count=5) == []
+        get.assert_not_called()
+
+    async def test_open_breaker_skips(self):
+        get = MagicMock()
+        for _ in range(5):
+            aviation_breaker.record_failure()
+        with _no_cache(), patch.object(_metar, "enforce_rate_limit"), \
+             patch.object(_metar, "_awc_get", get):
+            assert await discover_airports(*PHUKET, radius_km=150, count=5) == []
+        get.assert_not_called()
+
+
+class TestFindNearestReportDiscovery:
+    async def test_phuket_is_found_through_discovery(self):
+        """The production gap: no stored airport near Phuket, VTSP 25 km away."""
+        reports = {"VTSP": [_obs_ago(20)], "VTSG": [_obs_ago(20)]}
+        with patch.object(_metar, "nearest_airports", return_value=[]), \
+             patch.object(_metar, "discover_airports", AsyncMock(return_value=PHUKET_AIRPORTS)), \
+             patch.object(_metar, "_metar_for_stations", AsyncMock(return_value=reports)), \
+             patch.object(_metar, "_taf_for", AsyncMock(return_value=None)):
+            resp = await find_nearest_report(*PHUKET)
+        assert resp.status == "ok"
+        assert resp.icao == "VTSP"
+
+    async def test_discovery_tops_up_a_thin_catalogue_without_duplicates(self):
+        stored = [NearbyAirport(icao="VTSG", name="Krabi (seed)", distanceKm=66.9)]
+        reports = {"VTSP": [_obs_ago(20)], "VTSG": [_obs_ago(20)]}
+        with patch.object(_metar, "nearest_airports", return_value=stored), \
+             patch.object(_metar, "discover_airports", AsyncMock(return_value=PHUKET_AIRPORTS)), \
+             patch.object(_metar, "_metar_for_stations", AsyncMock(return_value=reports)), \
+             patch.object(_metar, "_taf_for", AsyncMock(return_value=None)):
+            resp = await find_nearest_report(*PHUKET)
+        assert [c.icao for c in resp.candidates] == ["VTSP", "VTSG"]
+        assert resp.candidates[1].name == "Krabi (seed)"  # stored name wins
+
+    async def test_full_catalogue_skips_discovery(self):
+        discover = AsyncMock(return_value=[])
+        reports = {c.icao: [_obs_ago(5)] for c in HARARE_CANDIDATES}
+        with patch.object(_metar, "nearest_airports", return_value=HARARE_CANDIDATES), \
+             patch.object(_metar, "discover_airports", discover), \
+             patch.object(_metar, "_metar_for_stations", AsyncMock(return_value=reports)), \
+             patch.object(_metar, "_taf_for", AsyncMock(return_value=None)):
+            await find_nearest_report(-17.85, 31.05, count=3)
+        discover.assert_not_called()
+
+    async def test_discovery_finding_nothing_keeps_no_airports_message(self):
+        with patch.object(_metar, "nearest_airports", return_value=[]), \
+             patch.object(_metar, "discover_airports", AsyncMock(return_value=[])):
+            resp = await find_nearest_report(-40.0, -20.0)
+        assert resp.status == "no_airports"

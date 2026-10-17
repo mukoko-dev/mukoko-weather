@@ -16,6 +16,15 @@ from the TypeScript db-init flow. A plain reference collection keyed by ICAO
 code (its natural `_id`) with a 2dsphere index is the right fit, mirroring the
 existing `metar_cache` / `air_quality_cache` reference collections.
 
+Fetch on demand (mukoko-dev/mukoko-weather#302): the static catalog is only a
+seed. When the nearest-METAR search finds fewer stored airports than it wants,
+``_metar.discover_airports`` asks the Aviation Weather Center's
+``stationinfo?bbox=`` endpoint (the same keyless host as the METAR feed) for
+the METAR stations around the point, and :func:`upsert_discovered_airports`
+stores them here with ``source: "awc-stationinfo"``. The next visitor near
+that airport is served from the DB. ``syncAirports`` (db-init) prunes only
+seed docs, so it never deletes a discovered airport.
+
 Resilience: any DB error (missing 2dsphere index, unseeded collection, etc.)
 returns an empty list rather than raising — the TypeScript client
 (`fetchNearestAirports`) then falls back to its static haversine scan, so the
@@ -24,6 +33,9 @@ aviation UI never breaks.
 
 from __future__ import annotations
 
+import math
+import re
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -114,6 +126,129 @@ def nearest_airports(
         except Exception:
             pass
         return []
+
+
+# ---------------------------------------------------------------------------
+# Fetch-on-demand storage
+# ---------------------------------------------------------------------------
+
+#: ``source`` of an airport stored from AWC station info (not the seed).
+DISCOVERED_SOURCE = "awc-stationinfo"
+
+#: Most stations one discovery may store (nearest first).
+MAX_DISCOVERED_PER_REQUEST = 25
+
+_ICAO_RE = re.compile(r"^[A-Z]{4}$")
+
+
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in km (WGS 84 mean radius)."""
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp, dl = p2 - p1, math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 6371.0088 * 2 * math.asin(min(1.0, math.sqrt(a)))
+
+
+def _finite(value) -> Optional[float]:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    f = float(value)
+    return f if math.isfinite(f) else None
+
+
+def parse_awc_stations(raw: list) -> list[dict]:
+    """Validated METAR stations from an AWC ``stationinfo`` payload.
+
+    A station is kept only when its ICAO id is four letters (the same rule as
+    ``/api/py/metar``), its coordinates are finite WGS 84 values, and AWC says
+    it issues METARs (``siteType`` contains ``"METAR"``): a station without a
+    METAR feed is no use to the aviation card. Duplicates keep the first row.
+    """
+    seen: set[str] = set()
+    stations: list[dict] = []
+    for row in raw if isinstance(raw, list) else []:
+        if not isinstance(row, dict):
+            continue
+        icao = str(row.get("icaoId") or "").strip().upper()
+        if not _ICAO_RE.match(icao) or icao in seen:
+            continue
+        site_type = row.get("siteType")
+        if not isinstance(site_type, list) or "METAR" not in site_type:
+            continue
+        lat, lon = _finite(row.get("lat")), _finite(row.get("lon"))
+        if lat is None or lon is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            continue
+        name = str(row.get("site") or "").strip()[:120] or icao
+        country = str(row.get("country") or "").strip().upper()
+        iata = str(row.get("iataId") or "").strip().upper()
+        seen.add(icao)
+        stations.append({
+            "icao": icao,
+            "name": name,
+            "lat": lat,
+            "lon": lon,
+            "country": country if re.match(r"^[A-Z]{2}$", country) else None,
+            "iata": iata if re.match(r"^[A-Z0-9]{3}$", iata) else None,
+        })
+    return stations
+
+
+def nearest_of(
+    stations: list[dict], lat: float, lon: float, *, count: int, max_distance_km: float,
+) -> list[NearbyAirport]:
+    """The ``count`` stations nearest (lat, lon) within ``max_distance_km``,
+    computed in memory (used when the DB cannot answer after a discovery)."""
+    ranked = sorted(
+        ((haversine_km(lat, lon, s["lat"], s["lon"]), s) for s in stations),
+        key=lambda pair: pair[0],
+    )
+    return [
+        NearbyAirport(icao=s["icao"], name=s["name"], distanceKm=round(d, 1))
+        for d, s in ranked
+        if d <= max_distance_km
+    ][: max(0, count)]
+
+
+def upsert_discovered_airports(stations: list[dict], lat: float, lon: float) -> int:
+    """Store discovered stations in ``weather.airports``; returns how many
+    were written (0 on a DB error — never raises).
+
+    Insert-only (``$setOnInsert``): a seeded airport keeps its curated name
+    and coordinates, and a second discovery of the same station is a no-op.
+    At most :data:`MAX_DISCOVERED_PER_REQUEST` stations, nearest first.
+    """
+    if not stations:
+        return 0
+    ranked = sorted(stations, key=lambda s: haversine_km(lat, lon, s["lat"], s["lon"]))
+    ranked = ranked[:MAX_DISCOVERED_PER_REQUEST]
+    now = datetime.now(timezone.utc)
+    written = 0
+    try:
+        coll = _airports_collection()
+        for s in ranked:
+            doc = {
+                "icao": s["icao"],
+                "name": s["name"],
+                "lat": s["lat"],
+                "lon": s["lon"],
+                "location": {"type": "Point", "coordinates": [s["lon"], s["lat"]]},
+                "source": DISCOVERED_SOURCE,
+                "createdAt": now,
+                "updatedAt": now,
+            }
+            if s.get("country"):
+                doc["country"] = s["country"]
+            if s.get("iata"):
+                doc["iata"] = s["iata"]
+            result = coll.update_one({"_id": s["icao"]}, {"$setOnInsert": doc}, upsert=True)
+            if getattr(result, "upserted_id", None) is not None:
+                written += 1
+    except Exception as e:  # noqa: BLE001 — storage is best-effort
+        try:
+            print(f"[airports] upsert_discovered_airports failed: {type(e).__name__}")
+        except Exception:
+            pass
+    return written
 
 
 # ---------------------------------------------------------------------------
