@@ -46,10 +46,10 @@ from ._airports import (
     nearest_airports,
     nearest_of,
     parse_awc_stations,
-    upsert_discovered_airports,
+    store_discovered_airports,
 )
 from ._circuit_breaker import CircuitOpenError, aviation_breaker
-from ._db import enforce_rate_limit, get_api_key, get_db
+from ._db import check_rate_limit, enforce_rate_limit, get_api_key, get_db
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -88,6 +88,11 @@ DISCOVERY_EMPTY_TTL = 6 * 3600
 #: from what is stored (skipped, never a 429).
 DISCOVERY_RATE_LIMIT = 30
 DISCOVERY_RATE_WINDOW_S = 3600
+#: Service-wide survey budget (one AWC request per survey), all callers.
+DISCOVERY_GLOBAL_RATE_LIMIT = 300
+#: Radii are rounded UP to one of these, so a survey covers the request and
+#: the cache key has a handful of values instead of one per integer radius.
+DISCOVERY_RADIUS_BUCKETS_KM = (25.0, 50.0, 100.0, 150.0, 250.0, 500.0)
 
 ICAO_RE = re.compile(r"^[A-Z]{4}$")
 _NUMERIC_RE = re.compile(r"^[+-]?\d+(\.\d+)?$")
@@ -512,12 +517,20 @@ def _fetch_awc_taf(icao: str) -> Optional[str]:
     return None
 
 
-async def _awc_call(fn: Callable[[], T]) -> T:
-    """Run a blocking AWC call behind the aviationweather.gov circuit breaker."""
+async def _awc_call(fn: Callable[[], T], *, ignore_4xx: bool = False) -> T:
+    """Run a blocking AWC call behind the aviationweather.gov circuit breaker.
+
+    ``ignore_4xx``: an HTTP 4xx answer is our request (a bad bbox, a rate
+    limit on us), not an outage, so it is raised without a breaker failure.
+    """
     if not aviation_breaker.is_allowed:
         raise CircuitOpenError("aviationweather-gov")
     try:
         result = await asyncio.to_thread(fn)
+    except httpx.HTTPStatusError as exc:
+        if not (ignore_4xx and 400 <= exc.response.status_code < 500):
+            aviation_breaker.record_failure()
+        raise
     except Exception:
         aviation_breaker.record_failure()
         raise
@@ -599,9 +612,25 @@ def discovery_bbox(lat: float, lon: float, radius_km: float) -> tuple[float, flo
     )
 
 
+def discovery_radius(radius_km: float) -> float:
+    """The survey radius for a request: ``radius_km`` rounded up to a bucket
+    (never above the largest). NaN, inf and non-positive values take the
+    smallest bucket."""
+    try:
+        r = float(radius_km)
+    except (TypeError, ValueError):
+        return DISCOVERY_RADIUS_BUCKETS_KM[0]
+    if not math.isfinite(r) or r <= 0:
+        return DISCOVERY_RADIUS_BUCKETS_KM[0]
+    for bucket in DISCOVERY_RADIUS_BUCKETS_KM:
+        if r <= bucket:
+            return bucket
+    return DISCOVERY_RADIUS_BUCKETS_KM[-1]
+
+
 def _discovery_key(lat: float, lon: float, radius_km: float) -> str:
     clat, clon = discovery_cell(lat, lon)
-    return f"bbox:{clat:.2f}_{clon:.2f}_{int(radius_km)}"
+    return f"bbox:{clat:.2f}_{clon:.2f}_{int(discovery_radius(radius_km))}"
 
 
 def fetch_awc_stations(bbox: tuple[float, float, float, float]) -> list[dict]:
@@ -631,7 +660,8 @@ async def discover_airports(
     ``weather.airports`` (``source: "awc-stationinfo"``), then the nearest are
     read back from the DB; if the DB cannot answer, they are ranked in memory.
     """
-    key = _discovery_key(lat, lon, radius_km)
+    survey_km = discovery_radius(radius_km)
+    key = _discovery_key(lat, lon, survey_km)
     if await asyncio.to_thread(_cache_get, key, "stationinfo") is not None:
         return []
     try:
@@ -639,21 +669,34 @@ async def discover_airports(
             enforce_rate_limit, request, "airport-discovery",
             DISCOVERY_RATE_LIMIT, DISCOVERY_RATE_WINDOW_S, require_ip=False,
         )
+        # Service-wide: per-IP limits do not bound many distinct callers.
+        glob = await asyncio.to_thread(
+            check_rate_limit, "all", "airport-discovery-global",
+            DISCOVERY_GLOBAL_RATE_LIMIT, DISCOVERY_RATE_WINDOW_S,
+        )
+        if not glob.get("allowed", True):
+            return []
     except HTTPException:
         return []
-    bbox = discovery_bbox(lat, lon, radius_km)
+    bbox = discovery_bbox(lat, lon, survey_km)
     try:
-        stations = await _awc_call(lambda: fetch_awc_stations(bbox))
+        stations = await _awc_call(lambda: fetch_awc_stations(bbox), ignore_4xx=True)
     except Exception as exc:  # noqa: BLE001 — never fail the card
         logger.warning("airport discovery failed: %s", type(exc).__name__)
         return []
-    ttl = DISCOVERY_FOUND_TTL if stations else DISCOVERY_EMPTY_TTL
-    await asyncio.to_thread(_cache_put, key, "stationinfo", {"count": len(stations)}, ttl)
+    written = held = 0
+    if stations:
+        written, held = await asyncio.to_thread(store_discovered_airports, stations, lat, lon)
+        if written:
+            logger.info("airport discovery stored %d station(s) for %s", written, key)
+    # Mark the cell surveyed only when the catalogue now holds its stations
+    # (inserted, or already there), or when the area genuinely has none. If
+    # storage failed, the next request retries (bounded by the budgets).
+    if not stations or written or held:
+        ttl = DISCOVERY_FOUND_TTL if stations else DISCOVERY_EMPTY_TTL
+        await asyncio.to_thread(_cache_put, key, "stationinfo", {"count": len(stations)}, ttl)
     if not stations:
         return []
-    written = await asyncio.to_thread(upsert_discovered_airports, stations, lat, lon)
-    if written:
-        logger.info("airport discovery stored %d station(s) for %s", written, key)
     stored = await asyncio.to_thread(nearest_airports, lat, lon, count, radius_km)
     return stored or nearest_of(stations, lat, lon, count=count, max_distance_km=radius_km)
 

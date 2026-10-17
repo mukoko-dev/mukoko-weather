@@ -209,20 +209,25 @@ def nearest_of(
     ][: max(0, count)]
 
 
-def upsert_discovered_airports(stations: list[dict], lat: float, lon: float) -> int:
-    """Store discovered stations in ``weather.airports``; returns how many
-    were written (0 on a DB error — never raises).
+def store_discovered_airports(stations: list[dict], lat: float, lon: float) -> tuple[int, int]:
+    """Store discovered stations in ``weather.airports``.
+
+    Returns ``(written, held)``: how many were inserted, and how many were
+    already in the collection (seeded or found earlier). ``(0, 0)`` on a DB
+    error, so a caller can tell "the catalogue now holds these stations" from
+    "storage failed". Never raises.
 
     Insert-only (``$setOnInsert``): a seeded airport keeps its curated name
     and coordinates, and a second discovery of the same station is a no-op.
     At most :data:`MAX_DISCOVERED_PER_REQUEST` stations, nearest first.
     """
     if not stations:
-        return 0
+        return 0, 0
     ranked = sorted(stations, key=lambda s: haversine_km(lat, lon, s["lat"], s["lon"]))
     ranked = ranked[:MAX_DISCOVERED_PER_REQUEST]
     now = datetime.now(timezone.utc)
     written = 0
+    held = 0
     try:
         coll = _airports_collection()
         for s in ranked:
@@ -243,12 +248,20 @@ def upsert_discovered_airports(stations: list[dict], lat: float, lon: float) -> 
             result = coll.update_one({"_id": s["icao"]}, {"$setOnInsert": doc}, upsert=True)
             if getattr(result, "upserted_id", None) is not None:
                 written += 1
+            elif getattr(result, "matched_count", 0) == 1:
+                held += 1
     except Exception as e:  # noqa: BLE001 — storage is best-effort
         try:
-            print(f"[airports] upsert_discovered_airports failed: {type(e).__name__}")
+            print(f"[airports] store_discovered_airports failed: {type(e).__name__}")
         except Exception:
             pass
-    return written
+        return 0, 0
+    return written, held
+
+
+def upsert_discovered_airports(stations: list[dict], lat: float, lon: float) -> int:
+    """Number of stations written (see :func:`store_discovered_airports`)."""
+    return store_discovered_airports(stations, lat, lon)[0]
 
 
 # ---------------------------------------------------------------------------

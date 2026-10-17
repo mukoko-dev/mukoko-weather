@@ -564,6 +564,21 @@ class TestDiscoveryGeometry:
         assert -90 <= min_lat and -180 <= min_lon
 
 
+class TestDiscoveryRadius:
+    @pytest.mark.parametrize("raw,bucket", [
+        (1, 25.0), (25, 25.0), (26, 50.0), (150, 150.0), (151, 250.0),
+        (500, 500.0), (5000, 500.0), (0, 25.0), (-3, 25.0),
+        (float("nan"), 25.0), (float("inf"), 25.0), ("x", 25.0),
+    ])
+    def test_rounds_up_to_a_bucket_and_clamps(self, raw, bucket):
+        from py._metar import discovery_radius
+        assert discovery_radius(raw) == bucket
+
+    def test_bbox_uses_the_bucketed_radius_in_discovery(self):
+        from py._metar import discovery_radius
+        assert discovery_bbox(*PHUKET, discovery_radius(101)) == discovery_bbox(*PHUKET, 150.0)
+
+
 class TestFetchAwcStations:
     def test_queries_stationinfo_by_bbox_and_validates(self):
         with patch.object(_metar, "_awc_get", return_value=[VTSP_ROW, {"icaoId": "BAD"}]) as get:
@@ -579,12 +594,17 @@ def _no_cache():
 
 
 class TestDiscoverAirports:
+    @pytest.fixture(autouse=True)
+    def _global_budget_open(self):
+        with patch.object(_metar, "check_rate_limit", return_value={"allowed": True, "remaining": 9}):
+            yield
+
     async def test_fetches_stores_and_returns_db_view(self):
         put = MagicMock()
         with _no_cache(), patch.object(_metar, "_cache_put", put), \
              patch.object(_metar, "enforce_rate_limit"), \
              patch.object(_metar, "_awc_get", return_value=[VTSP_ROW, VTSG_ROW]), \
-             patch.object(_metar, "upsert_discovered_airports", return_value=2) as upsert, \
+             patch.object(_metar, "store_discovered_airports", return_value=(2, 0)) as upsert, \
              patch.object(_metar, "nearest_airports", return_value=PHUKET_AIRPORTS):
             result = await discover_airports(*PHUKET, radius_km=150, count=5)
         assert [a.icao for a in result] == ["VTSP", "VTSG"]
@@ -594,13 +614,25 @@ class TestDiscoverAirports:
         assert ttl == DISCOVERY_FOUND_TTL and data == {"count": 2}
 
     async def test_ranks_in_memory_when_db_cannot_answer(self):
-        with _no_cache(), patch.object(_metar, "_cache_put"), \
+        with _no_cache(), patch.object(_metar, "_cache_put") as put, \
              patch.object(_metar, "enforce_rate_limit"), \
              patch.object(_metar, "_awc_get", return_value=[VTSG_ROW, VTSP_ROW]), \
-             patch.object(_metar, "upsert_discovered_airports", return_value=0), \
+             patch.object(_metar, "store_discovered_airports", return_value=(0, 0)), \
              patch.object(_metar, "nearest_airports", return_value=[]):
             result = await discover_airports(*PHUKET, radius_km=150, count=5)
         assert [a.icao for a in result] == ["VTSP", "VTSG"]
+        # Storage failed: the cell is NOT marked surveyed, so it is retried.
+        put.assert_not_called()
+
+    async def test_cell_is_surveyed_when_stations_were_already_held(self):
+        put = MagicMock()
+        with _no_cache(), patch.object(_metar, "_cache_put", put), \
+             patch.object(_metar, "enforce_rate_limit"), \
+             patch.object(_metar, "_awc_get", return_value=[VTSP_ROW]), \
+             patch.object(_metar, "store_discovered_airports", return_value=(0, 1)), \
+             patch.object(_metar, "nearest_airports", return_value=PHUKET_AIRPORTS):
+            await discover_airports(*PHUKET, radius_km=150, count=5)
+        assert put.call_args.args[3] == DISCOVERY_FOUND_TTL
 
     async def test_surveyed_cell_is_not_fetched_again(self):
         get = MagicMock()
@@ -625,6 +657,46 @@ class TestDiscoverAirports:
             assert await discover_airports(*PHUKET, radius_km=150, count=5) == []
         put.assert_not_called()
         assert len(_get_state("aviationweather-gov").failures) == 1
+
+    async def test_4xx_does_not_count_against_the_breaker(self):
+        import httpx
+
+        resp = httpx.Response(400, request=httpx.Request("GET", AWC_STATIONINFO_URL))
+        put = MagicMock()
+        with _no_cache(), patch.object(_metar, "_cache_put", put), \
+             patch.object(_metar, "enforce_rate_limit"), \
+             patch.object(_metar, "_awc_get",
+                          side_effect=httpx.HTTPStatusError("bad", request=resp.request, response=resp)):
+            assert await discover_airports(*PHUKET, radius_km=150, count=5) == []
+        assert len(_get_state("aviationweather-gov").failures) == 0
+        put.assert_not_called()
+
+    async def test_5xx_counts_against_the_breaker(self):
+        import httpx
+
+        resp = httpx.Response(503, request=httpx.Request("GET", AWC_STATIONINFO_URL))
+        with _no_cache(), patch.object(_metar, "_cache_put"), \
+             patch.object(_metar, "enforce_rate_limit"), \
+             patch.object(_metar, "_awc_get",
+                          side_effect=httpx.HTTPStatusError("down", request=resp.request, response=resp)):
+            assert await discover_airports(*PHUKET, radius_km=150, count=5) == []
+        assert len(_get_state("aviationweather-gov").failures) == 1
+
+    async def test_global_budget_skips_the_survey(self):
+        get = MagicMock()
+        with _no_cache(), patch.object(_metar, "enforce_rate_limit"), \
+             patch.object(_metar, "check_rate_limit", return_value={"allowed": False, "remaining": 0}) as rl, \
+             patch.object(_metar, "_awc_get", get):
+            assert await discover_airports(*PHUKET, radius_km=150, count=5) == []
+        get.assert_not_called()
+        assert rl.call_args.args[:2] == ("all", "airport-discovery-global")
+
+    async def test_nearby_radii_share_one_cache_key_and_bbox(self):
+        keys = []
+        with patch.object(_metar, "_cache_get", side_effect=lambda k, kind: keys.append(k) or {"data": {}}):
+            for r in (101, 120, 150):
+                await discover_airports(*PHUKET, radius_km=r, count=5)
+        assert keys == ["bbox:7.75_98.25_150"] * 3
 
     async def test_over_budget_is_skipped_not_429(self):
         get = MagicMock()

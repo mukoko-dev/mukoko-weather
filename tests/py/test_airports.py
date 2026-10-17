@@ -241,3 +241,24 @@ class TestUpsertDiscoveredAirports:
 
     def test_empty_is_noop(self):
         assert upsert_discovered_airports([], 0, 0) == 0
+
+
+class TestStoreDiscoveredAirports:
+    def test_reports_written_and_already_held(self):
+        from py._airports import store_discovered_airports
+
+        stations = parse_awc_stations(PHUKET_STATIONINFO)
+        coll = MagicMock()
+        coll.update_one.side_effect = [
+            MagicMock(upserted_id="VTSP", matched_count=0),
+            MagicMock(upserted_id=None, matched_count=1),
+        ] + [MagicMock(upserted_id=None, matched_count=1)] * 10
+        with patch("py._airports._airports_collection", return_value=coll):
+            written, held = store_discovered_airports(stations, 7.89, 98.40)
+        assert written == 1 and held == len(stations) - 1
+
+    def test_db_error_is_zero_zero(self):
+        from py._airports import store_discovered_airports
+
+        with patch("py._airports._airports_collection", side_effect=RuntimeError("down")):
+            assert store_discovered_airports(parse_awc_stations(PHUKET_STATIONINFO), 8, 98) == (0, 0)
