@@ -13,6 +13,7 @@ import {
 import { detectUserLocation } from "@/lib/geolocation";
 import { useAppStore } from "@/lib/store";
 import { countryDisplayName, reconcileCountry } from "@/lib/location-country";
+import { reconcileElevation } from "@/lib/location-elevation";
 import { trackEvent } from "@/lib/analytics";
 import { SearchIcon, NavigationIcon } from "@/lib/weather-icons";
 import { Spinner } from "@/components/ui/spinner";
@@ -109,7 +110,10 @@ export function CurrentLocationHome({ initial, user }: Props) {
       found.lon,
     );
     // Fill a missing country from the forecast's time zone (any place on Earth).
-    const location = reconcileCountry(found, weather.timezone);
+    const location = reconcileElevation(
+      reconcileCountry(found, weather.timezone),
+      weather.elevation,
+    );
     setView({
       location,
       weather,
@@ -162,7 +166,11 @@ export function CurrentLocationHome({ initial, user }: Props) {
     }
 
     let resolved = result.location;
-    const far = result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM;
+    // A spot named on demand (nothing stored near the fix, #302) is not a
+    // stored place yet: create the real one, exactly as for a far match.
+    const far =
+      result.synthesized === true ||
+      (result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM);
     if (far) {
       // The fix is fresh, so this second read comes from the browser's
       // cache — a network hop to create the real place, not another wait.

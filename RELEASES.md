@@ -1,5 +1,29 @@
 # Releases
 
+## v0.12.0 — staging → main (worldwide search, location and airports)
+
+**Date:** 2026-10-17 · **Replaces:** v0.11.0 on production · **PRs:** #311, #313, #310, #309, #312, #306, #305 · **Tracking:** #302
+
+### Features
+
+- **Search lists a country's places** (#310). A geocoder hit that names an area (`PCL*` countries, `TERR`, `CONT`, `OCN`, `SEA`, `RGN`, `RGNE`, `PRSH`, `ADM1`/`ADM2`) is never offered; a country hit is replaced by the places placesGeo holds in it, or by the static seed catalogue when placesGeo holds none (generated `api/py/data/seed_locations.json`, pinned to `src/lib/locations.ts` by a parity test). The geocoder is over-fetched 3x so dropped areas never eat a slot. A hit for a shipped seed city is offered as its canonical slug.
+- **Find-only geo works anywhere** (#309). With nothing stored within 150 km, `/api/py/geo` answers with the nearest seed city within 50 km, else names the snapped point on demand (city-level Nominatim, `nominatim_breaker`, per-IP and global budgets) as a `synthesized` spot with no measured elevation. GPS escalates to `autoCreate` and stores the exact place.
+- **Bare seed names redirect** (#311, #313). `/phuket` goes to `/phuket-th` with a 308, before any lookup. `KNOWN_ROUTES` is exported from the proxy and the alias test checks it.
+- **Spot elevation from the forecast** (#312). `/api/py/weather` passes Open-Meteo's terrain height through; `reconcileElevation()` fills elevations flagged `elevationApproximate`. Stored elevations are never changed.
+- **Airports are discovered on demand** (#306). When the DB holds fewer than `count` airports in range, AWC `stationinfo?bbox=` is surveyed once per 0.5° cell and radius bucket and the stations are inserted into `weather.airports` (insert-only, `source: "awc-stationinfo"`). Per-IP and global budgets; an AWC 4xx never counts against `aviation_breaker`.
+- **World country coverage in places data.** 230 world country documents were added to `places.placesGeo` (data change, not in this repo's code).
+- **Gateway person-token groundwork** (#305): `/api/app-keys` and its helpers for upcoming developer API keys. Not live: it needs the owner steps in the PR (gateway release, WorkOS client switch, env); until then it answers 503 and sends nothing.
+
+### Fixes
+
+- A flaky timing assertion in `location-gate.test.ts` is made deterministic (#310).
+
+### Operations and risk
+
+- Python backend changes: search, geo, weather and METAR/airports. New `nominatim_breaker`; new rate-limit buckets `geo-find-geocode`, `geo-find-geocode-global`, `airport-discovery` and `airport-discovery-global`. The privacy page notes that coordinates rounded to about 1 km can reach Nominatim to name an area.
+- No new environment variable for the public features; #305 adds server-only gateway variables that are inert until set.
+- Rollback: redeploy the previous production deployment in Vercel (v0.11.0), or `git revert` the release squash commit. Discovered airports are extra insert-only `weather.airports` documents and are harmless to leave.
+
 ## v0.11.0 — staging → main (fixes the slow, black-screen load on iOS)
 
 **Date:** 2026-10-17 · **Replaces:** v0.10.0 on production · **PRs:** #300, #299, #296, #276, #274, #267

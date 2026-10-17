@@ -485,6 +485,8 @@ def _fetch_open_meteo_extras(lat: float, lon: float, models: list[str] | None = 
         result["utc_offset_seconds"] = offset
     if zone := _zone(data):
         result["timezone"] = zone
+    if (elevation := blend.forecast_elevation(data)) is not None:
+        result["elevation"] = elevation
     return result
 
 
@@ -636,6 +638,8 @@ def _fetch_open_meteo(lat: float, lon: float) -> dict | None:
         result["utc_offset_seconds"] = offset
     if zone := _zone(data):
         result["timezone"] = zone
+    if (elevation := blend.forecast_elevation(data)) is not None:
+        result["elevation"] = elevation
     return result
 
 
@@ -1065,6 +1069,8 @@ def _attach_comparison(data: dict, lat: float, lon: float, requested: list[str] 
         data["utc_offset_seconds"] = extras["utc_offset_seconds"]
     if not data.get("timezone") and extras.get("timezone"):
         data["timezone"] = extras["timezone"]
+    if data.get("elevation") is None and extras.get("elevation") is not None:
+        data["elevation"] = extras["elevation"]
     return data
 
 

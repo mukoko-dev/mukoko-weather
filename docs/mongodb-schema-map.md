@@ -293,8 +293,8 @@ platform slugs (`/harare-35c223`). The resolver in `src/lib/places.ts`
 
 1. **Stamped lookup**: `placesGeo.sourceProvenance.mukokoSlug = "harare"` (exact match)
 2. **Name lookup via static seed**: clean slug `→ LOCATIONS[slug].name → placesGeo` by
-   normalised name (case-insensitive, diacritic-stripped), preferring `geoType:
-city > town > village`
+   normalised name (case-insensitive, diacritic-stripped), preferring
+   `geoType: city > town > village`
 3. **Name lookup via slug inference**: `"nairobi-ke" → "Nairobi"` (strips trailing
    2-letter country code, title-cases) → same name lookup
 

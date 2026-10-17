@@ -115,6 +115,12 @@ export interface WeatherData {
    * never stored still gets a correct country. `Etc/GMT±N` over open ocean.
    */
   timezone?: string;
+  /**
+   * Terrain height (metres) Open-Meteo used for the point (its 90 m DEM).
+   * Fills the elevation of a place we hold no measurement for — see
+   * `reconcileElevation()` in `src/lib/location-elevation.ts` (#302).
+   */
+  elevation?: number;
 }
 
 /**
