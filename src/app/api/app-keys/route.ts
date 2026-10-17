@@ -45,8 +45,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ? (body as { label?: unknown }).label
       : "";
   const label = sanitizeLabel(raw);
+  // Validated before the sign-in gate, the rate limit and the exchange, so a
+  // malformed request costs nothing.
+  if (!label) return errorResponse(400, "invalid_label");
   return withPersonToken("create", async (personToken) => {
-    if (!label) return errorResponse(400, "invalid_label");
     const key = await appKeys.create(personToken, label);
     return NextResponse.json({ key }, { status: 201, headers: NO_STORE });
   });

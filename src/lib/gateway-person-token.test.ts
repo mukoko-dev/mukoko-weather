@@ -17,6 +17,7 @@ import {
   PersonTokenError,
   REQUESTED_SCOPE,
   SAFETY_MARGIN_MS,
+  REAUTH_MEMORY_MS,
   TOKEN_EXCHANGE_GRANT,
   ACCESS_TOKEN_TYPE,
 } from "./gateway-person-token";
@@ -144,10 +145,61 @@ describe("Console client only", () => {
     expect(transport).not.toHaveBeenCalled();
   });
 
-  it("accepts the Console client from aud when there is no client_id", () => {
+  it("reads the issuing client exactly like the gateway's _issuing_client", () => {
+    // token_exchange.py l.303-313: non-empty client_id, else non-empty
+    // string aud, else a one-element aud list. Nothing else.
+    expect(issuingClient({ client_id: CONSOLE })).toBe(CONSOLE);
+    expect(issuingClient({ client_id: CONSOLE, aud: "x" })).toBe(CONSOLE);
+    expect(issuingClient({ client_id: "", aud: CONSOLE })).toBe(CONSOLE);
     expect(issuingClient({ aud: CONSOLE })).toBe(CONSOLE);
+    expect(issuingClient({ aud: "" })).toBeNull();
     expect(issuingClient({ aud: [CONSOLE] })).toBe(CONSOLE);
     expect(issuingClient({ aud: [CONSOLE, "other"] })).toBeNull();
+    expect(issuingClient({ aud: [] })).toBeNull();
+    expect(issuingClient({ client_id: 7, aud: [3] })).toBeNull();
+  });
+
+  it("never reads the client from iss (the gateway does not either)", () => {
+    // accepted_issuers (token_exchange.py l.215-239): iss may name the
+    // environment's default application whichever app signed in, so it
+    // cannot say which client issued the token.
+    expect(
+      issuingClient({
+        iss: `https://api.workos.com/user_management/${CONSOLE}`,
+      }),
+    ).toBeNull();
+  });
+
+  it("sends a User Management-shaped token whose client_id is the Console's", async () => {
+    const ex = make();
+    // The claims the gateway requires (exp, iat, iss, sub — l.337), an
+    // issuer of the form it accepts (l.236-238, naming the environment's
+    // default application) and the issuing client in client_id.
+    const token = jwt({
+      iss: "https://api.workos.com/user_management/client_environment_default",
+      sub: "user_01EXAMPLE",
+      sid: "session_01EXAMPLE",
+      client_id: CONSOLE,
+      iat: T0 / 1000 - 10,
+      exp: T0 / 1000 + 300,
+    });
+    await ex.getPersonToken("user_01EXAMPLE", token);
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not send an iss-only token, which the gateway would refuse", async () => {
+    const ex = make();
+    const token = jwt({
+      iss: `https://api.workos.com/user_management/${CONSOLE}`,
+      sub: "user_01EXAMPLE",
+      sid: "session_01EXAMPLE",
+      iat: T0 / 1000 - 10,
+      exp: T0 / 1000 + 300,
+    });
+    await expect(
+      ex.getPersonToken("user_01EXAMPLE", token),
+    ).rejects.toMatchObject({ code: "wrong_workos_client" });
+    expect(transport).not.toHaveBeenCalled();
   });
 
   it("refuses a missing or unparseable access token without a call", async () => {
@@ -338,6 +390,41 @@ describe("error mapping (fails closed, no fallback)", () => {
       "account_pending_deletion",
       403,
     ],
+    // What the gateway really answers for a pending-deletion person:
+    // scope `identity` only, plus account_state (auth.py l.391-394, 442).
+    [
+      ok({
+        access_token: PERSON_JWT,
+        issued_token_type: "urn:ietf:params:oauth:token-type:jwt",
+        token_type: "Bearer",
+        scope: "identity",
+        expires_in: 300,
+        account_state: "pending_deletion",
+      }),
+      "account_pending_deletion",
+      403,
+    ],
+    // The gateway's other wire codes (detail.error; the reason is never sent).
+    [fail(400, "invalid_request"), "gateway_unconfigured", 503],
+    [fail(400, "temporarily_unavailable"), "gateway_unconfigured", 503],
+    [fail(503, "temporarily_unavailable"), "gateway_unavailable", 503],
+    [
+      new Response(JSON.stringify({ detail: "MongoDB is not configured" }), {
+        status: 503,
+      }),
+      "gateway_unavailable",
+      503,
+    ],
+    [
+      new Response(
+        JSON.stringify({ detail: [{ loc: ["body", "client_id"] }] }),
+        {
+          status: 422,
+        },
+      ),
+      "gateway_unconfigured",
+      503,
+    ],
   ];
   for (const [answer, code, status] of cases) {
     it(`${answer instanceof Error ? "transport error" : answer.status} → ${code}`, async () => {
@@ -368,25 +455,71 @@ describe("error mapping (fails closed, no fallback)", () => {
   });
 });
 
-describe("invalid_grant: sign in again once per session, then operator error", () => {
-  it("does not loop a session on 'sign in again'", async () => {
+describe("invalid_grant: sign in again, but never in a loop", () => {
+  const session = (sid: string, iatOffsetS: number) =>
+    subject({ exp: T0 / 1000 + 7200, sid, iat: T0 / 1000 + iatOffsetS });
+
+  it("the same session refused again is still 'sign in again'", async () => {
     const ex = make();
-    const token = subject({ exp: T0 / 1000 + 3600, sid: "sess_1" });
     transport.mockImplementation(async () => fail(400, "invalid_grant"));
-    const first = await ex.getPersonToken("user_1", token).catch((e) => e);
-    expect(first).toMatchObject({ code: "reauth_required", status: 401 });
+    const token = session("sess_1", -60);
+    await expect(ex.getPersonToken("user_1", token)).rejects.toMatchObject({
+      code: "reauth_required",
+      status: 401,
+    });
     clock = T0 + 31_000; // past the negative cache
-    const second = await ex.getPersonToken("user_1", token).catch((e) => e);
-    expect(second).toMatchObject({ code: "exchange_refused", status: 503 });
-    const logged = JSON.stringify(warn.mock.calls);
-    expect(logged).toContain(CONSOLE);
-    expect(logged).not.toContain(token);
-    // A new session (signed in again) gets one more "sign in again".
-    clock = T0 + 62_000;
-    const fresh = subject({ exp: T0 / 1000 + 3600, sid: "sess_2" });
-    await expect(ex.getPersonToken("user_1", fresh)).rejects.toMatchObject({
+    await expect(ex.getPersonToken("user_1", token)).rejects.toMatchObject({
       code: "reauth_required",
     });
+  });
+
+  it("a session issued after the prompt and refused too is an operator error", async () => {
+    const ex = make();
+    transport.mockImplementation(async () => fail(400, "invalid_grant"));
+    await expect(
+      ex.getPersonToken("user_1", session("sess_1", -60)),
+    ).rejects.toMatchObject({ code: "reauth_required" });
+    // The person signs in again: a new session, issued after the prompt.
+    clock = T0 + 120_000;
+    const fresh = session("sess_2", 100);
+    const err = await ex.getPersonToken("user_1", fresh).catch((e) => e);
+    expect(err).toMatchObject({ code: "exchange_refused", status: 503 });
+    // And again with yet another new session: still not a loop.
+    clock = T0 + 240_000;
+    await expect(
+      ex.getPersonToken("user_1", session("sess_3", 200)),
+    ).rejects.toMatchObject({ code: "exchange_refused" });
+    const logged = JSON.stringify(warn.mock.calls);
+    expect(logged).toContain(CONSOLE);
+    expect(logged).not.toContain(fresh);
+    expect(logged).not.toContain("user_1");
+  });
+
+  it("an older session (issued before the prompt) is just 'sign in again'", async () => {
+    const ex = make();
+    transport.mockImplementation(async () => fail(400, "invalid_grant"));
+    await ex.getPersonToken("user_1", session("sess_new", -10)).catch(() => {});
+    clock = T0 + 31_000;
+    await expect(
+      ex.getPersonToken("user_1", session("sess_old", -3600)),
+    ).rejects.toMatchObject({ code: "reauth_required" });
+  });
+
+  it("forgets the prompt after REAUTH_MEMORY_MS", async () => {
+    const ex = make();
+    transport.mockImplementation(async () => fail(400, "invalid_grant"));
+    await ex.getPersonToken("user_1", session("sess_1", -60)).catch(() => {});
+    clock = T0 + REAUTH_MEMORY_MS + 1;
+    await expect(
+      ex.getPersonToken(
+        "user_1",
+        subject({
+          exp: (T0 + REAUTH_MEMORY_MS) / 1000 + 7200,
+          sid: "sess_2",
+          iat: (T0 + REAUTH_MEMORY_MS) / 1000,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "reauth_required" });
   });
 });
 

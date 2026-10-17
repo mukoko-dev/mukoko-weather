@@ -143,10 +143,13 @@ describe("signed-in", () => {
     expect((await res.json()).key.apiKey).toBe("nyk_k2.nys_s");
   });
 
-  it("POST rejects an empty label", async () => {
+  it("POST rejects an empty label before auth, the limit or an exchange", async () => {
     const { POST } = await import("./route");
     const res = await POST(post({ label: "   " }));
     expect(res.status).toBe(400);
+    expect(withAuthMock).not.toHaveBeenCalled();
+    expect(rateLimitMock).not.toHaveBeenCalled();
+    expect(getPersonTokenMock).not.toHaveBeenCalled();
     expect(createMock).not.toHaveBeenCalled();
   });
 
@@ -154,6 +157,8 @@ describe("signed-in", () => {
     revokeMock.mockResolvedValue(undefined);
     const { DELETE } = await import("./[id]/route");
     expect((await DELETE(del(), params("bad/id"))).status).toBe(400);
+    expect(withAuthMock).not.toHaveBeenCalled();
+    expect(rateLimitMock).not.toHaveBeenCalled();
     const res = await DELETE(del(), params("k_1"));
     expect(res.status).toBe(200);
     expect(revokeMock).toHaveBeenCalledWith(PERSON, "k_1");
@@ -197,20 +202,36 @@ describe("CSRF guard on state-changing calls", () => {
     });
   }
 
-  it("accepts a first-party origin and a charset parameter", async () => {
+  it("accepts same-origin with a charset parameter", async () => {
     createMock.mockResolvedValue({ id: "k2", apiKey: "nyk_k2.nys_s" });
     const { POST } = await import("./route");
     const res = await POST(
       post(
         { label: "x" },
-        {
-          "content-type": "application/json; charset=utf-8",
-          origin: "https://weatherstations.nyuchi.com",
-        },
+        { "content-type": "application/json; charset=utf-8", origin: SITE },
       ),
     );
     expect(res.status).toBe(201);
   });
+
+  for (const other of [
+    "https://weatherstations.nyuchi.com",
+    "http://localhost:3000",
+    "https://weather.mukoko.com.evil.example",
+    "http://weather.mukoko.com",
+  ]) {
+    it(`refuses the other origin ${other} (same-origin only)`, async () => {
+      const { POST } = await import("./route");
+      const res = await POST(
+        post(
+          { label: "x" },
+          { "content-type": "application/json", origin: other },
+        ),
+      );
+      expect(res.status).toBe(403);
+      expect(createMock).not.toHaveBeenCalled();
+    });
+  }
 
   it("stays out of the open CORS list", async () => {
     const { CORS_POLICY } = await import("@/lib/security-headers");

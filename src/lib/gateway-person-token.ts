@@ -15,12 +15,29 @@
  * token from any other client is refused HERE, before it leaves the server:
  * it would be refused by the gateway anyway, and it must not be sent.
  *
+ * Mirrors the gateway exactly (nyuchi/api-gateway staging @ 582f8b7):
+ *   - issuing client: `gateway/lib/token_exchange.py` `_issuing_client`
+ *     (l.303-313) — `client_id`, else `aud` (a string, or a one-element
+ *     list). `iss` is never read for the client: it may name the
+ *     environment's default application whichever app signed the person in
+ *     (`accepted_issuers`, l.215-239).
+ *   - scope: requested ∩ key scopes ∩ person scopes (`grant_scopes`,
+ *     l.505-532); a pending-deletion person gets `identity` only, with
+ *     `account_state` (`gateway/routers/auth.py` l.391-394, 442).
+ *   - key pair also as X-Client-Id/X-Client-Secret (`auth.py`
+ *     `_key_checked_by_middleware`, l.246-265).
+ *   - errors on the wire: `{"detail": {"error", "error_description"}}`
+ *     (`auth.py` `_oauth_error`, l.91-97); the refusal *reason* is only
+ *     audited, never returned (`refuse`, l.288-290).
+ *
  * The person token is cached in this process only, keyed by the WorkOS user
  * id plus a SHA-256 of the access token, for at most
  * min(expires_in, subject exp) − 30 s and never more than 5 minutes.
- * Concurrent requests for one key share one exchange. Errors are never
- * cached. The token never reaches the browser, a cookie, storage or a log,
- * and there is no fallback to a shared token: every failure fails closed.
+ * Concurrent requests for one key share one exchange. A failed exchange is
+ * remembered briefly (`NEGATIVE_TTL_MS`) so a stuck user cannot re-exchange
+ * on every request. The token never reaches the browser, a cookie, storage
+ * or a log, and there is no fallback to a shared token: every failure fails
+ * closed.
  */
 
 import { createHash } from "node:crypto";
@@ -58,7 +75,7 @@ export const NEGATIVE_TTL_MS: Partial<Record<PersonTokenErrorCode, number>> = {
   gateway_unavailable: 10_000,
   rate_limited: 30_000,
 };
-/** A session that already got one "sign in again" is not told twice. */
+/** How long a user's last "sign in again" is remembered (per user). */
 export const REAUTH_MEMORY_MS = 60 * 60_000;
 
 export type PersonTokenErrorCode =
@@ -128,12 +145,19 @@ export function peekClaims(token: string): Record<string, unknown> | null {
   }
 }
 
-/** The WorkOS client a token says it was issued to, if any. */
+/**
+ * The WorkOS client a token says it was issued to, exactly as the gateway
+ * decides it (`_issuing_client`, token_exchange.py l.303-313): a non-empty
+ * `client_id`; else a non-empty string `aud`; else a one-element `aud` list.
+ * `iss` is deliberately not consulted (see the module header).
+ */
 export function issuingClient(claims: Record<string, unknown>): string | null {
-  if (typeof claims.client_id === "string") return claims.client_id;
-  if (typeof claims.aud === "string") return claims.aud;
-  if (Array.isArray(claims.aud) && typeof claims.aud[0] === "string") {
-    return claims.aud.length === 1 ? claims.aud[0] : null;
+  const clientId = claims.client_id;
+  if (typeof clientId === "string" && clientId) return clientId;
+  const aud = claims.aud;
+  if (typeof aud === "string" && aud) return aud;
+  if (Array.isArray(aud) && aud.length === 1 && typeof aud[0] === "string") {
+    return aud[0];
   }
   return null;
 }
@@ -151,7 +175,11 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
     string,
     { error: PersonTokenError; until: number }
   >();
-  const reauthShown = new Map<string, number>();
+  /** Per user: the last session told "sign in again", and when. */
+  const reauthShown = new Map<
+    string,
+    { sid: string | null; atMs: number; untilMs: number }
+  >();
 
   function boundedSet<V>(map: Map<string, V>, key: string, value: V): void {
     if (map.size >= MAX_ENTRIES) {
@@ -171,26 +199,45 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
   }
 
   /**
-   * invalid_grant: the first time for a WorkOS session it is "sign in
-   * again". The same session refused again means the session is not the
-   * problem (most likely NYUCHI_CONSOLE_WORKOS_CLIENT_ID or the gateway's
-   * Console client id is wrong), so it becomes an operator error instead of
-   * a sign-in loop. Logged without any token.
+   * invalid_grant (the gateway returns it for every subject-token refusal,
+   * the reason is not on the wire). Remembered per user:
+   *   - the same session refused again: still "sign in again" (the person
+   *     has not signed in again yet);
+   *   - a session issued AFTER we last said "sign in again" (`iat` later)
+   *     refused too: signing in again did not help, so the session is not
+   *     the problem (most likely the Console client id configuration). An
+   *     operator error, never a sign-in loop.
+   * Logged without any token.
    */
-  function invalidGrant(userId: string, sid: string | null): PersonTokenError {
-    const sessionKey = `${userId}:${sid ?? "-"}`;
+  function invalidGrant(
+    userId: string,
+    sid: string | null,
+    iatMs: number | null,
+  ): PersonTokenError {
     const t = now();
-    const seen = reauthShown.get(sessionKey);
-    const repeat = seen !== undefined && seen > t;
+    const last = reauthShown.get(userId);
+    const live = last !== undefined && last.untilMs > t;
+    const signedInAgain =
+      live && last.sid !== sid && iatMs !== null && iatMs > last.atMs;
     logWarn({
       source: "nyuchi-gateway",
-      message: repeat
-        ? "Token exchange refused the same WorkOS session again; check the Console client id configuration"
+      message: signedInAgain
+        ? "Token exchange refused a session issued after the last sign-in prompt; check the Console client id configuration"
         : "Token exchange refused the WorkOS session (invalid_grant)",
-      meta: { consoleClientId: options.consoleClientId(), repeat },
+      meta: {
+        consoleClientId: options.consoleClientId(),
+        repeat: signedInAgain,
+      },
     });
-    if (repeat) return new PersonTokenError("exchange_refused");
-    boundedSet(reauthShown, sessionKey, t + REAUTH_MEMORY_MS);
+    if (signedInAgain) return new PersonTokenError("exchange_refused");
+    if (!(live && last.sid === sid)) {
+      reauthShown.delete(userId);
+      boundedSet(reauthShown, userId, {
+        sid,
+        atMs: t,
+        untilMs: t + REAUTH_MEMORY_MS,
+      });
+    }
     return new PersonTokenError("reauth_required");
   }
 
@@ -210,6 +257,7 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
     subjectExpMs: number | null,
     userId: string,
     sid: string | null,
+    iatMs: number | null,
   ): Promise<{ value: PersonToken; cacheUntilMs: number }> {
     const body = new URLSearchParams({
       grant_type: TOKEN_EXCHANGE_GRANT,
@@ -243,7 +291,7 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
     if (response.status !== 200) {
       const code = await gatewayErrorCode(response);
       if (response.status === 400 && code === "invalid_grant") {
-        throw invalidGrant(userId, sid);
+        throw invalidGrant(userId, sid, iatMs);
       }
       throw mapExchangeFailure(response, code);
     }
@@ -253,6 +301,12 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
       data = (await response.json()) as Record<string, unknown>;
     } catch {
       throw new PersonTokenError("gateway_unavailable");
+    }
+    // A pending-deletion person is granted `identity` only, with
+    // `account_state` (auth.py l.391-394, 442), so this comes before the scope
+    // check: it is that person's state, not a bad answer.
+    if (data.account_state) {
+      throw new PersonTokenError("account_pending_deletion");
     }
     const token = data.access_token;
     const scope = typeof data.scope === "string" ? data.scope.trim() : "";
@@ -270,9 +324,6 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
         message: "Token exchange answered an unusable token; refused",
       });
       throw new PersonTokenError("gateway_unavailable");
-    }
-    if (data.account_state) {
-      throw new PersonTokenError("account_pending_deletion");
     }
     const t = now();
     const expiresAtMs = Math.min(
@@ -335,7 +386,8 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
     if (pending) return pending;
 
     const sid = typeof claims.sid === "string" ? claims.sid : null;
-    const promise = exchange(config, accessToken, exp, userId, sid)
+    const iatMs = typeof claims.iat === "number" ? claims.iat * 1000 : null;
+    const promise = exchange(config, accessToken, exp, userId, sid, iatMs)
       .then(({ value, cacheUntilMs }) => {
         if (cacheUntilMs > now()) {
           prune();
@@ -383,8 +435,12 @@ function mapExchangeFailure(
     return new PersonTokenError("person_not_provisioned");
   }
   if (status >= 400 && status < 500) {
-    // invalid_client, unauthorized_client, invalid_scope: our key is wrong
-    // or under-scoped. Operator problem; fail closed.
+    // 401 invalid_client (auth.py l.298-302), 400 unauthorized_client
+    // (l.306-317), invalid_request (l.319-337), invalid_scope
+    // (token_exchange.py l.525-531), 422 a malformed form: our key or
+    // request is wrong or under-scoped. Operator problem; fail closed.
+    // 503 temporarily_unavailable (token_exchange.py l.148-149) and any 5xx
+    // fall through to gateway_unavailable.
     logWarn({
       source: "nyuchi-gateway",
       message: "Token exchange refused this app's key",

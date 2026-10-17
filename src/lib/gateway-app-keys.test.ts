@@ -5,6 +5,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   AppKeysError,
+  clampPassthroughStatus,
   createAppKeysClient,
   maskAppKey,
 } from "./gateway-app-keys";
@@ -14,6 +15,7 @@ import {
   gatewayCredentials,
   gatewayOrigin,
   gatewayRequest,
+  MAX_GATEWAY_BODY_BYTES,
   serviceBindingTransport,
   type GatewayConfig,
 } from "./nyuchi-gateway";
@@ -86,6 +88,67 @@ describe("gateway config (server env, fail closed)", () => {
     expect(init.redirect).toBe("manual");
     expect(init.cache).toBe("no-store");
     expect(init.body).toBeUndefined();
+  });
+
+  it("fetch transport buffers the body within the timeout", async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const t = fetchTransport(
+      "https://api.nyuchi.com",
+      fetchImpl as unknown as typeof fetch,
+    );
+    const res = await t(gatewayRequest("/v1/x", { method: "GET" }));
+    expect(await res.json()).toEqual({ ok: true });
+  });
+
+  it("fetch transport aborts a body that never finishes (fake clock)", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn(
+        async (_url: unknown, init?: RequestInit) =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.enqueue(new TextEncoder().encode("{"));
+                init?.signal?.addEventListener("abort", () =>
+                  controller.error(new Error("aborted")),
+                );
+              },
+            }),
+            { status: 200 },
+          ),
+      );
+      const t = fetchTransport(
+        "https://api.nyuchi.com",
+        fetchImpl as unknown as typeof fetch,
+        1_000,
+      );
+      const pending = t(gatewayRequest("/v1/x", { method: "GET" }));
+      const settled = pending.then(
+        () => "resolved",
+        () => "rejected",
+      );
+      await vi.advanceTimersByTimeAsync(1_001);
+      expect(await settled).toBe("rejected");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fetch transport refuses an oversized answer", async () => {
+    const big = "x".repeat(MAX_GATEWAY_BODY_BYTES + 1);
+    const t = fetchTransport(
+      "https://api.nyuchi.com",
+      (async () => new Response(big)) as unknown as typeof fetch,
+    );
+    await expect(t(gatewayRequest("/v1/x", { method: "GET" }))).rejects.toThrow(
+      /too large/,
+    );
   });
 
   it("a service binding plugs into the same interface", async () => {
@@ -235,6 +298,24 @@ describe("app-keys error mapping", () => {
     await expect(api.list(PERSON)).rejects.toMatchObject({
       status: 503,
       code: "gateway_unconfigured",
+    });
+  });
+
+  it("passed-through statuses are clamped to 4xx or 503", () => {
+    expect(clampPassthroughStatus(409)).toBe(409);
+    expect(clampPassthroughStatus(403)).toBe(403);
+    expect(clampPassthroughStatus(500)).toBe(503);
+    expect(clampPassthroughStatus(302)).toBe(503);
+    expect(clampPassthroughStatus(200)).toBe(503);
+  });
+
+  it("a passthrough code on a 3xx answer is still a 503", async () => {
+    const { api } = client(() =>
+      json(302, { detail: { error: "key_limit_reached" } }),
+    );
+    await expect(api.list(PERSON)).rejects.toMatchObject({
+      status: 503,
+      code: "key_limit_reached",
     });
   });
 

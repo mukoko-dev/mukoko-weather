@@ -75,7 +75,15 @@ export function gatewayCredentials(
   return match ? { clientId: match[1], clientSecret: match[2] } : null;
 }
 
-/** `fetch` to `origin`: no redirects followed, no caching, a timeout. */
+/** Largest gateway answer read into memory (token and key JSON are tiny). */
+export const MAX_GATEWAY_BODY_BYTES = 256 * 1024;
+const NULL_BODY_STATUS = new Set([101, 204, 205, 304]);
+
+/**
+ * `fetch` to `origin`: no redirects followed, no caching, and one timeout
+ * that covers the whole exchange, headers AND body (the body is read inside
+ * it and handed back buffered, at most `MAX_GATEWAY_BODY_BYTES`).
+ */
 export function fetchTransport(
   origin: string,
   fetchImpl: typeof fetch = fetch,
@@ -88,13 +96,31 @@ export function fetchTransport(
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const hasBody = request.method !== "GET" && request.method !== "HEAD";
     try {
-      return await fetchImpl(target, {
+      const response = await fetchImpl(target, {
         method: request.method,
         headers: request.headers,
         body: hasBody ? await request.text() : undefined,
         redirect: "manual",
         cache: "no-store",
         signal: controller.signal,
+      });
+      if (NULL_BODY_STATUS.has(response.status)) {
+        return new Response(null, {
+          status: response.status,
+          headers: response.headers,
+        });
+      }
+      const declared = Number(response.headers.get("content-length"));
+      if (declared > MAX_GATEWAY_BODY_BYTES) {
+        throw new Error("gateway answer too large");
+      }
+      const body = await response.arrayBuffer();
+      if (body.byteLength > MAX_GATEWAY_BODY_BYTES) {
+        throw new Error("gateway answer too large");
+      }
+      return new Response(body, {
+        status: response.status,
+        headers: response.headers,
       });
     } finally {
       clearTimeout(timer);

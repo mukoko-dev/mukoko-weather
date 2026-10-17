@@ -89,6 +89,11 @@ export function maskAppKey(raw: Record<string, unknown>): MaskedAppKey {
   };
 }
 
+/** A passed-through gateway status is a 4xx or 503, never anything else. */
+export function clampPassthroughStatus(status: number): number {
+  return status >= 400 && status < 500 ? status : 503;
+}
+
 async function failure(response: Response): Promise<AppKeysError> {
   const code = await gatewayErrorCode(response);
   const s = response.status;
@@ -110,7 +115,7 @@ async function failure(response: Response): Promise<AppKeysError> {
     return new AppKeysError(409, "person_not_provisioned");
   }
   if (code && PASSTHROUGH_CODES.has(code)) {
-    return new AppKeysError(s >= 500 ? 503 : s, code);
+    return new AppKeysError(clampPassthroughStatus(s), code);
   }
   if (s === 404) return new AppKeysError(404, "key_not_found");
   if (s === 409) return new AppKeysError(409, "conflict");

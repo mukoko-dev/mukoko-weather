@@ -13,7 +13,6 @@ import {
   PersonTokenError,
 } from "@/lib/gateway-person-token";
 import { AppKeysError } from "@/lib/gateway-app-keys";
-import { FIRST_PARTY_ORIGINS } from "@/lib/security-headers";
 import { checkUserRateLimit } from "@/lib/user-rate-limit";
 import { logWarn } from "@/lib/observability";
 
@@ -73,8 +72,10 @@ export function errorResponse(
 /**
  * CSRF guard for state-changing calls: `Content-Type: application/json`
  * (a cross-site form cannot send it without a CORS preflight, which this
- * route never answers) and an `Origin` that is this site or a first-party
- * origin. A missing Origin is refused. Returns null when the request passes.
+ * route never answers) and an `Origin` equal to this site's own origin.
+ * Same-origin only: no localhost, station-console or other first-party
+ * origin, since nothing but this site's own pages manages these keys. A
+ * missing or `null` Origin is refused. Returns null when the request passes.
  */
 export function rejectCrossSite(req: Request): NextResponse | null {
   const type = (req.headers.get("content-type") ?? "")
@@ -91,11 +92,7 @@ export function rejectCrossSite(req: Request): NextResponse | null {
   } catch {
     self = null;
   }
-  const allowed =
-    !!origin &&
-    origin !== "null" &&
-    (origin === self ||
-      (FIRST_PARTY_ORIGINS as readonly string[]).includes(origin));
+  const allowed = !!origin && origin !== "null" && !!self && origin === self;
   return allowed ? null : errorResponse(403, "forbidden_origin");
 }
 

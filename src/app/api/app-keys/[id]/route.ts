@@ -26,8 +26,9 @@ export async function DELETE(
   const crossSite = rejectCrossSite(req);
   if (crossSite) return crossSite;
   const { id } = await params;
+  // Validated before the sign-in gate, the rate limit and the exchange.
+  if (!id || !APP_KEY_ID_RE.test(id)) return errorResponse(400, "invalid_id");
   return withPersonToken("revoke", async (personToken) => {
-    if (!id || !APP_KEY_ID_RE.test(id)) return errorResponse(400, "invalid_id");
     await appKeys.revoke(personToken, id);
     return NextResponse.json({ revoked: true }, { headers: NO_STORE });
   });
