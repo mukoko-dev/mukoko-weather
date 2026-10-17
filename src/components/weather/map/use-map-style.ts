@@ -10,6 +10,15 @@ import { MAPTILER_STYLE_LIGHT, MAPTILER_STYLE_DARK } from "@/lib/map-layers";
  * Used by MapLibreMap for theme-aware base map rendering.
  */
 export function useMapStyle(): string {
+  return useMapIsDark() ? MAPTILER_STYLE_DARK : MAPTILER_STYLE_LIGHT;
+}
+
+/**
+ * Whether the map should use its dark style: the theme preference, following
+ * OS `prefers-color-scheme` changes while it is `"system"`. Shared by
+ * useMapStyle and the static MapPreview.
+ */
+export function useMapIsDark(): boolean {
   const theme = useAppStore((s) => s.theme);
   const [osDark, setOsDark] = useState(
     () =>
@@ -25,6 +34,5 @@ export function useMapStyle(): string {
     return () => mq.removeEventListener("change", handler);
   }, [theme]);
 
-  const isDark = theme === "dark" || (theme === "system" && osDark);
-  return isDark ? MAPTILER_STYLE_DARK : MAPTILER_STYLE_LIGHT;
+  return theme === "dark" || (theme === "system" && osDark);
 }

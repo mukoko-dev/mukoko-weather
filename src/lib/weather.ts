@@ -23,6 +23,8 @@ import {
 import { openMeteoForecastUrl, openMeteoHeaders } from "./open-meteo-endpoint";
 
 export interface CurrentWeather {
+  /** Observation time (Open-Meteo `current.time`, location wall clock). */
+  time?: string;
   temperature_2m: number;
   relative_humidity_2m: number;
   apparent_temperature: number;
@@ -106,6 +108,13 @@ export interface WeatherData {
   utc_offset_seconds?: number;
   /** True when `utc_offset_seconds` is a longitude estimate, not a tz lookup. */
   utc_offset_estimated?: boolean;
+  /**
+   * The location's IANA time zone (Open-Meteo `timezone`, e.g. `Europe/London`).
+   * Names the country for any point on Earth — `countryForTimezone()` in
+   * `src/lib/timezone-country.ts` — so a place the platform geography has
+   * never stored still gets a correct country. `Etc/GMT±N` over open ocean.
+   */
+  timezone?: string;
 }
 
 /**

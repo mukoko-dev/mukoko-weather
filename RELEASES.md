@@ -1,5 +1,37 @@
 # Releases
 
+## v0.11.0 — staging → main (fixes the slow, black-screen load on iOS)
+
+**Date:** 2026-10-17 · **Replaces:** v0.10.0 on production · **PRs:** #300, #299, #296, #276, #274, #267
+
+### Fixes
+
+- **Pages hydrate again** (#300). Cloudflare Fonts rewrote the Google Fonts `<link>` into an inline `<style>`, so React threw error #418 on every page and re-rendered the whole page on the client. Fonts are now self-hosted through `next/font`, so there is nothing to rewrite and no render-blocking cross-origin CSS. The moon disc no longer reads the clock during render.
+- **The header stays at the top and the bottom nav stays at the bottom** (#300). `overflow-x: hidden` on `html`, `body` and every page wrapper made each one a scroll container. They are now `overflow-x: clip`.
+- **Sections appear before you reach them** (#300). Two sections mount at a time (one on Save-Data or 2 GB-or-less devices), with a 1.5-viewport load margin.
+- **Lighter first load** (#300). The weather backdrop shows a static sky on reduced motion, Save-Data and low-memory devices, pauses while you scroll and uses a low-power WebGL context. Model comparison, climate normals and route prefetches no longer fire on load.
+- **Even spacing** (#300). Empty sections no longer leave doubled gaps. Card padding and heading margins follow the shared tokens.
+- **MapTiler and OpenStreetMap are credited once** (#296).
+
+### Features and performance
+
+- **Phone navigation uses the Mzizi bottom nav** (#300): Map, My Location and Locations, with the saved-place pager row above it. Swipe between places is unchanged.
+- **The map card on the location page is a static raster-tile image** (#276), not a MapLibre map. About 535 KB of requests and a full map library no longer load on the location page.
+- **Radar tiles answer at once when the Tomorrow.io quota is spent** (#267). The tile proxy no longer waits for a 429, and "now" tiles are edge-cached only until the UTC hour ends.
+- **The location pipeline works worldwide** (#274). Search results outside Africa open real pages, home no longer shows an empty chooser, country names replace codes, and the blend region and cache country are right outside Africa. African places and slugs are unchanged.
+
+### Security and privacy
+
+- The report-only CSP no longer lists `fonts.googleapis.com` or `fonts.gstatic.com` (#300).
+- Typed search text can reach Open-Meteo's geocoder; `/privacy` says so (#274).
+
+### Operations and risk
+
+- Python backend changes: tile proxy (#267), locations, weather and model blend (#274). No database migration, no new environment variable, no db-init seed change, no feature-flag change.
+- New third-party host use: MapTiler raster tiles on the location page (#276). The MapTiler key's allowed HTTP origins must cover `weather.mukoko.com`, or the card falls back to text.
+- Held back and not in this release: #271, #279, #285.
+- Rollback: redeploy the previous production deployment in Vercel (v0.10.0). The release is one squash commit on `main`, so `git revert` of it also works. Nothing needs undoing in the database.
+
 ## PR #28 — Explore chatbot, activities expansion, and suitability rules
 
 **Date:** 2026-02-21

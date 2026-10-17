@@ -135,3 +135,50 @@ class TestBuildSmartSlug:
         # longer has to be smuggled into the name.
         assert build_smart_slug("Nairobi", -1.2921, 36.8219).count("--") == 1
         assert not build_smart_slug("Nairobi", -1.2921, 36.8219).endswith("-ke")
+
+
+class TestDecodeGeohash:
+    @pytest.mark.parametrize("lat,lon,precision,expected", PUBLISHED_VECTORS)
+    def test_decodes_reference_vectors_back_into_their_cell(self, lat, lon, precision, expected):
+        from py._geohash import decode_geohash
+
+        dlat, dlon = decode_geohash(expected)
+        # The centre of the cell re-encodes to the same cell.
+        assert encode_geohash(dlat, dlon, precision) == expected
+        assert abs(dlat - lat) < 1.0 and abs(dlon - lon) < 1.0
+
+    @pytest.mark.parametrize("bad", ["", "ab", "osm-w1", "ilo", "0123456789bcd"])
+    def test_rejects_non_geohash(self, bad):
+        from py._geohash import decode_geohash
+
+        assert decode_geohash(bad) is None
+
+    @pytest.mark.parametrize(
+        "lat,lon",
+        [(51.5074, -0.1278), (35.6762, 139.6503), (-33.8688, 151.2093),
+         (64.1466, -21.9426), (-30.0, -140.0), (-17.8292, 31.0522)],
+    )
+    def test_round_trips_anywhere_on_earth(self, lat, lon):
+        from py._geohash import decode_geohash
+
+        dlat, dlon = decode_geohash(encode_geohash(lat, lon, 7))
+        assert abs(dlat - lat) < 0.002 and abs(dlon - lon) < 0.002
+
+
+class TestParseSpotSlug:
+    def test_parses_a_spot_slug(self):
+        from py._geohash import parse_spot_slug
+
+        slug = build_smart_slug("New York", 40.7128, -74.006)
+        spot = parse_spot_slug(slug)
+        assert spot["name"] == "New York"
+        assert abs(spot["lat"] - 40.7128) < 0.002
+        assert abs(spot["lon"] + 74.006) < 0.002
+
+    @pytest.mark.parametrize(
+        "slug", ["harare", "nairobi-ke", "gweru", "canberra--osm-w890123", "x--"],
+    )
+    def test_ignores_non_spot_slugs(self, slug):
+        from py._geohash import parse_spot_slug
+
+        assert parse_spot_slug(slug) is None

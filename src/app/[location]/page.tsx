@@ -16,6 +16,11 @@ import { safeJsonLd } from "@/lib/json-ld";
 import { WeatherDashboard } from "./WeatherDashboard";
 import { loadLocation } from "./load-location";
 import { SITE_URL } from "@/lib/site";
+import {
+  countryDisplayName,
+  placeLine,
+  reconcileCountry,
+} from "@/lib/location-country";
 
 // Location lookups go through the shared loadLocation (./load-location) so the
 // layout, generateMetadata and the page share one DB round-trip per request.
@@ -40,15 +45,20 @@ export async function generateMetadata({
   params: Promise<{ location: string }>;
 }): Promise<Metadata> {
   const { location: slug } = await params;
-  const loc = await loadLocation(slug);
-  if (!loc) return { title: "Location not found" };
+  const stored = await loadLocation(slug);
+  if (!stored) return { title: "Location not found" };
+  // Metadata has no forecast to reconcile against, so a region borrowed from
+  // a seed (possibly across a border) is left out rather than indexed.
+  const loc = stored.regionApproximate
+    ? { ...stored, country: "", province: "" }
+    : stored;
 
   const countryCode = loc.country ?? "";
   const country = countryCode ? await loadCountry(countryCode) : null;
-  const countryName = country?.name ?? countryCode;
+  const countryName = country?.name ?? countryDisplayName(countryCode);
 
   const title = `${loc.name} Weather Today — Forecast & Conditions`;
-  const description = `Current weather conditions, 7-day forecast, and hourly predictions for ${loc.name}, ${loc.province}, ${countryName}. AI-powered weather intelligence with frost alerts, farming insights, and accurate temperature data from mukoko weather.`;
+  const description = `Current weather conditions, 7-day forecast, and hourly predictions for ${placeLine(loc.name, loc.province, countryName)}. AI-powered weather intelligence with frost alerts, farming insights, and accurate temperature data from mukoko weather.`;
 
   // Build dynamic OG image URL with location-specific season from database.
   // Note: the OG route accepts `temp` and `condition` params, but we
@@ -65,7 +75,7 @@ export async function generateMetadata({
   }
   const ogParams = new URLSearchParams({
     title: `${loc.name} Weather`,
-    subtitle: `Live forecast for ${loc.province}, ${countryName}`,
+    subtitle: `Live forecast for ${placeLine(loc.province, countryName) || loc.name}`,
     location: loc.name,
     province: loc.province,
     ...(seasonName && { season: seasonName }),
@@ -87,13 +97,15 @@ export async function generateMetadata({
       `${loc.name} rain forecast`,
       `${countryName} weather`,
       "mukoko weather",
-    ],
+    ]
+      .map((k) => k.trim())
+      .filter((k) => k && k !== "weather"),
     alternates: {
       canonical: `${SITE_URL}/${loc.slug}`,
     },
     openGraph: {
       title: `${loc.name} Weather | mukoko weather`,
-      description: `Live weather forecast for ${loc.name}, ${loc.province}, ${countryName}. Current conditions, 7-day outlook, and AI-powered insights.`,
+      description: `Live weather forecast for ${placeLine(loc.name, loc.province, countryName)}. Current conditions, 7-day outlook, and AI-powered insights.`,
       url: `${SITE_URL}/${loc.slug}`,
       type: "website",
       locale: "en",
@@ -125,9 +137,10 @@ export default async function LocationPage({
   const rawLocation = await loadLocation(slug);
   if (!rawLocation) notFound();
   // Strip MongoDB _id (ObjectId with .toJSON()) before passing to Client Components
-  const { _id: _removed, ...location } = rawLocation as typeof rawLocation & {
-    _id?: unknown;
-  };
+  const { _id: _removed, ...storedLocation } =
+    rawLocation as typeof rawLocation & {
+      _id?: unknown;
+    };
 
   // Fetch weather — double-caught so the page shell ALWAYS renders.
   // getWeatherForLocation already has a 4-stage fallback (cache -> Tomorrow.io
@@ -137,10 +150,10 @@ export default async function LocationPage({
   // start them now and let them run while the weather fetch is in flight
   // (a cache miss there is the slow part of this render). They used to wait
   // for the weather before starting.
-  const countryCode = (location.country ?? "").toUpperCase();
+  const storedCountry = (storedLocation.country ?? "").toUpperCase();
   const sideData = Promise.all([
-    countryCode ? loadCountry(countryCode) : Promise.resolve(null),
-    getCachedSeason(location.country ?? "", location.lat ?? 0),
+    storedCountry ? loadCountry(storedCountry) : Promise.resolve(null),
+    getCachedSeason(storedCountry, storedLocation.lat ?? 0),
     getCurrentUser(),
   ]);
   // A rejection here is awaited (and surfaces) below; mark it handled now so
@@ -151,21 +164,27 @@ export default async function LocationPage({
   let weatherSource: string;
   try {
     const result = await getWeatherForLocation(
-      location.slug,
-      location.lat,
-      location.lon,
-      location.elevation,
+      storedLocation.slug,
+      storedLocation.lat,
+      storedLocation.lon,
+      storedLocation.elevation,
     );
     weather = result.data;
     weatherSource = result.source;
   } catch {
     weather = createFallbackWeather(
-      location.lat,
-      location.lon,
-      location.elevation,
+      storedLocation.lat,
+      storedLocation.lon,
+      storedLocation.elevation,
     );
     weatherSource = "fallback";
   }
+
+  // A place outside the stored geography can arrive with no country (or one
+  // borrowed from a seed across a border). The forecast's time zone names
+  // the real one — see src/lib/location-country.ts.
+  const location = reconcileCountry(storedLocation, weather.timezone);
+  const countryCode = (location.country ?? "").toUpperCase();
 
   const usingFallback = weatherSource === "fallback";
   const frostAlert = usingFallback
@@ -180,8 +199,15 @@ export default async function LocationPage({
     ? Math.round(Math.max(...dailyHighs))
     : null;
   const weekLow = dailyLows.length ? Math.round(Math.min(...dailyLows)) : null;
-  const [countryDoc, season, currentUser] = await sideData;
-  const countryName = countryDoc?.name ?? countryCode;
+  const [storedCountryDoc, storedSeason, currentUser] = await sideData;
+  const countryChanged = countryCode !== storedCountry;
+  const [countryDoc, season] = countryChanged
+    ? await Promise.all([
+        countryCode ? loadCountry(countryCode) : Promise.resolve(null),
+        getCachedSeason(countryCode, location.lat ?? 0),
+      ])
+    : [storedCountryDoc, storedSeason];
+  const countryName = countryDoc?.name ?? countryDisplayName(countryCode);
   // Strip AuthKit-specific fields before crossing the server/client boundary.
   // AISummary/AISummaryChat only need id + email to decide signed-in vs CTA.
   const aiUser = currentUser
@@ -195,7 +221,7 @@ export default async function LocationPage({
     "@type": "WebPage",
     "@id": `${SITE_URL}/${location.slug}`,
     name: `${location.name} Weather Forecast`,
-    description: `Current weather and 7-day forecast for ${location.name}, ${location.province}, ${countryName}`,
+    description: `Current weather and 7-day forecast for ${placeLine(location.name, location.province, countryName)}`,
     url: `${SITE_URL}/${location.slug}`,
     datePublished: now,
     dateModified: now,
@@ -219,14 +245,20 @@ export default async function LocationPage({
       },
       address: {
         "@type": "PostalAddress",
-        addressRegion: location.province,
-        addressCountry: countryCode,
+        ...(location.province ? { addressRegion: location.province } : {}),
+        // An open-ocean spot has no country: omit the property rather than
+        // publish an empty ISO 3166-1 code.
+        ...(countryCode ? { addressCountry: countryCode } : {}),
       },
-      containedInPlace: {
-        "@type": "Country",
-        name: countryName,
-        identifier: countryCode,
-      },
+      ...(countryCode
+        ? {
+            containedInPlace: {
+              "@type": "Country",
+              name: countryName,
+              identifier: countryCode,
+            },
+          }
+        : {}),
     },
     about: {
       "@type": "Observation",
@@ -352,7 +384,7 @@ export default async function LocationPage({
         name: `What province is ${location.name} in?`,
         acceptedAnswer: {
           "@type": "Answer",
-          text: `${location.name} is located in ${location.province} province, ${countryName}, at an elevation of ${location.elevation} metres above sea level.`,
+          text: `${location.name} is located in ${placeLine(location.province && `${location.province} province`, countryName) || "an unmapped area"}, at an elevation of ${location.elevation} metres above sea level.`,
         },
       },
     ],

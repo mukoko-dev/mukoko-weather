@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock, AsyncMock, PropertyMock
 
 import pytest
 from fastapi import HTTPException
@@ -401,6 +401,25 @@ class TestForwardGeocode:
         assert results[0]["elevation"] == 1490
 
     @patch("py._locations._get_http")
+    def test_no_data_elevation_placeholder_is_unknown(self, mock_http):
+        """Open-Meteo sends -9999 when it has no elevation: never a measurement."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"results": [
+            {"name": "London", "country_code": "GQ", "latitude": 2.27, "longitude": 9.79,
+             "elevation": -9999.0},
+            {"name": "Jericho", "country_code": "PS", "latitude": 31.86, "longitude": 35.46,
+             "elevation": -258.0},
+            {"name": "Nowhere", "country_code": "XX", "latitude": 0, "longitude": 0},
+        ]}
+        mock_http.return_value.get.return_value = mock_resp
+
+        results = _forward_geocode("london")
+        assert results[0]["elevation"] is None
+        assert results[1]["elevation"] == -258.0  # real below-sea-level land is kept
+        assert results[2]["elevation"] is None
+
+    @patch("py._locations._get_http")
     def test_returns_empty_on_error(self, mock_http):
         mock_http.return_value.get.side_effect = Exception("Network error")
         results = _forward_geocode("Harare")
@@ -569,8 +588,9 @@ class TestSearchLocations:
     """Phase 0G: search queries placesGeo (regex on name/slug + mukokoSlug)."""
 
     @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode", return_value=[])
     @patch("py._places_resolver.places_geo_collection")
-    async def test_text_search(self, mock_coll):
+    async def test_text_search(self, mock_coll, _mock_geo):
         # placesGeo doc shape — adapter converts to legacy LocationDoc shape.
         # Query now runs inside search_locations_by_name (py._places_resolver),
         # shared with the Shamwari chat tool's search_locations.
@@ -630,6 +650,88 @@ class TestSearchLocations:
         ]
         result = await search_locations(mode="tags")
         assert "tags" in result
+
+
+class TestSearchGeocodedTopUp:
+    """Search hits outside the seeded geography must render (global scope)."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_geocode_cache_and_budget(self):
+        from py import _locations
+
+        _locations._geocode_cache.clear()
+        with patch("py._locations.enforce_rate_limit", return_value="1.2.3.4"):
+            yield
+        _locations._geocode_cache.clear()
+
+    LONDON = {
+        "name": "London", "country": "GB", "countryName": "United Kingdom",
+        "admin1": "England", "lat": 51.50853, "lon": -0.12574, "elevation": 25,
+    }
+
+    @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name", return_value=[])
+    async def test_geocoded_candidates_get_spot_slugs(self, _mock_db, mock_geo):
+        mock_geo.return_value = [self.LONDON]
+        result = await search_locations(q="london")
+        assert result["source"] == "geocoded"
+        loc = result["locations"][0]
+        # A `{name}-{country}` slug (london-gb) 404s: nothing backs it. The
+        # spot slug carries its coordinate, so the page always renders.
+        assert loc["slug"].startswith("london--")
+        assert loc["slug"] != "london-gb"
+        assert loc["country"] == "GB"
+        assert loc["province"] == "England"
+
+    @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name")
+    async def test_thin_catalogue_answer_is_topped_up(self, mock_db, mock_geo):
+        mock_db.return_value = [
+            {"slug": "victoria-sc", "name": "Victoria", "lat": -4.62, "lon": 55.45},
+        ]
+        mock_geo.return_value = [
+            {"name": "Victoria", "country": "SC", "admin1": "", "lat": -4.62, "lon": 55.455},
+            {"name": "Victoria", "country": "CA", "admin1": "British Columbia",
+             "lat": 48.43, "lon": -123.37},
+        ]
+        result = await search_locations(q="victoria")
+        slugs = [r["slug"] for r in result["locations"]]
+        assert result["source"] == "mixed"
+        assert slugs[0] == "victoria-sc"  # catalogue match stays first
+        assert len(slugs) == 2  # the Seychelles geocode duplicate is dropped
+        assert result["locations"][1]["country"] == "CA"
+
+    @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name", return_value=[])
+    async def test_placeholder_elevation_never_reaches_a_candidate(self, _mock_db, mock_geo):
+        mock_geo.return_value = [{**self.LONDON, "elevation": -9999.0}]
+        result = await search_locations(q="london")
+        assert result["locations"][0]["elevation"] is None
+
+    @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name", return_value=[])
+    async def test_open_breaker_skips_geocoding(self, _mock_db, mock_geo):
+        from py._circuit_breaker import open_meteo_breaker
+
+        with patch.object(type(open_meteo_breaker), "is_allowed", new_callable=PropertyMock, return_value=False):
+            result = await search_locations(q="london")
+        mock_geo.assert_not_called()
+        assert result["locations"] == []
+
+    @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name")
+    async def test_full_catalogue_answer_skips_geocoding(self, mock_db, mock_geo):
+        mock_db.return_value = [
+            {"slug": f"harare-{i}", "name": "Harare", "lat": -17.8, "lon": 31.0}
+            for i in range(3)
+        ]
+        await search_locations(q="harare")
+        mock_geo.assert_not_called()
 
 
 class TestSearchLocationsByName:
@@ -2197,3 +2299,69 @@ class TestGeoLookupPoiRefinement:
         assert result["nearest"]["name"] == "Fourth Street"
         assert "poiType" not in result["nearest"]
         assert mock_upsert.call_args.kwargs["mukoko_poi_type"] is None
+
+
+class TestSearchInputBoundsAndGeocodeBudget:
+    """Review: /api/py/search caps q, clamps limit, caches and budgets the
+    third-party geocoder top-up, and dedupes candidates against each other."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        from py import _locations
+
+        _locations._geocode_cache.clear()
+        yield
+        _locations._geocode_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_overlong_query_is_400(self):
+        with pytest.raises(HTTPException) as exc:
+            await search_locations(q="x" * 101)
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode", return_value=[])
+    @patch("py._locations.search_locations_by_name", return_value=[])
+    async def test_limit_is_clamped_to_one_through_fifty(self, mock_db, _geo):
+        await search_locations(q="harare", limit=0)
+        assert mock_db.call_args.kwargs["limit"] == 1
+        await search_locations(q="harare", limit=500)
+        assert mock_db.call_args.kwargs["limit"] == 50
+        await search_locations(q="harare", limit=-3, skip=-9)
+        assert mock_db.call_args.kwargs["skip"] == 0
+
+    @pytest.mark.asyncio
+    @patch("py._locations.enforce_rate_limit", return_value="1.2.3.4")
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name", return_value=[])
+    async def test_repeat_query_is_served_from_cache(self, _db, mock_geo, mock_rate):
+        mock_geo.return_value = [TestSearchGeocodedTopUp.LONDON]
+        await search_locations(q="London")
+        await search_locations(q="  london ")
+        assert mock_geo.call_count == 1
+        assert mock_rate.call_count == 1  # cache hits are not metered
+        assert mock_rate.call_args[0][1] == "search-geocode"
+        assert mock_rate.call_args.kwargs["require_ip"] is False
+
+    @pytest.mark.asyncio
+    @patch("py._locations.enforce_rate_limit", side_effect=HTTPException(status_code=429))
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name")
+    async def test_over_budget_skips_top_up_but_still_answers(self, mock_db, mock_geo, _rate):
+        mock_db.return_value = [{"slug": "victoria-sc", "name": "Victoria", "lat": -4.6, "lon": 55.4}]
+        result = await search_locations(q="victoria")
+        mock_geo.assert_not_called()
+        assert [r["slug"] for r in result["locations"]] == ["victoria-sc"]
+
+    @pytest.mark.asyncio
+    @patch("py._locations.enforce_rate_limit", return_value="1.2.3.4")
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name", return_value=[])
+    async def test_geocoded_candidates_dedupe_against_each_other(self, _db, mock_geo, _rate):
+        mock_geo.return_value = [
+            {"name": "Springfield", "country": "US", "admin1": "Illinois", "lat": 39.80, "lon": -89.64},
+            {"name": "Springfield", "country": "US", "admin1": "Illinois", "lat": 39.81, "lon": -89.65},
+            {"name": "Springfield", "country": "US", "admin1": "Missouri", "lat": 37.21, "lon": -93.29},
+        ]
+        result = await search_locations(q="springfield")
+        assert [r["province"] for r in result["locations"]] == ["Illinois", "Missouri"]

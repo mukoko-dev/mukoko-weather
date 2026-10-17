@@ -3,10 +3,16 @@
 import { SectionSkeleton } from "@/components/weather/SectionSkeleton";
 import {
   hasLayoutBox,
+  loadMarginPx,
+  maxConcurrentMounts,
+  readDeviceHints,
   reservedHeightPx,
+  settleDelayMs,
   shouldUnloadSection,
+  unloadMarginPx,
 } from "@/lib/lazy-visibility";
 import { cn } from "@/lib/utils";
+import { createMountQueue } from "@/lib/mount-queue";
 import {
   useRef,
   useState,
@@ -29,66 +35,35 @@ interface LazySectionProps {
 
 const DEFAULT_FALLBACK = <SectionSkeleton className="h-48" />;
 
-// ── TikTok-style sequential mount queue ─────────────────────────────────────
+// ── Bounded mount queue ─────────────────────────────────────────────────────
 //
 // Problem: When multiple IntersectionObservers fire simultaneously (user scrolls
 // fast, or data appears on a page), all triggered sections try to mount at once.
 // This causes a DOM/Canvas surge that can OOM-kill mobile browser tabs before
 // any JS error handler fires.
 //
-// Solution: A global FIFO queue that mounts ONE component at a time. Each mount
-// is separated by a paint frame (rAF) + a configurable settle delay, giving the
-// browser time to layout, paint, and GC before the next heavy component appears.
-//
-// This mirrors how TikTok/Instagram handle infinite scroll: only the visible
-// item gets "active" treatment, everything else is deferred.
-//
-// On desktop (>= 768px), sections ALSO go through the queue but with a shorter
-// settle delay (50ms vs 150ms on mobile), since desktop has more headroom.
+// Solution: a global FIFO queue with a small number of mount slots (two on
+// capable devices, one on constrained ones — see maxConcurrentMounts). Each
+// mount holds its slot until the browser has painted it (rAF) plus a short
+// settle delay, so heavy sections still arrive a frame or two apart instead
+// of all in one task. The schedule (slots, delay, how far ahead to start)
+// lives in src/lib/lazy-visibility.ts, where it is unit tested.
 
-type QueueEntry = {
-  mount: () => void;
-  cancelled: boolean;
-};
-
-const mountQueue: QueueEntry[] = [];
-let isProcessing = false;
-
-function getSettleDelay(): number {
-  if (typeof window === "undefined") return 100;
-  return window.innerWidth < 768 ? 150 : 50;
-}
-
-function processQueue(): void {
-  // Find the next non-cancelled entry
-  while (mountQueue.length > 0) {
-    const next = mountQueue.shift()!;
-    if (next.cancelled) continue;
-
-    isProcessing = true;
-    next.mount();
-
-    // Wait for paint + settle before mounting the next section.
-    // rAF ensures the browser has painted the current mount.
-    // setTimeout gives the GC headroom on memory-constrained devices.
+// The queue itself is src/lib/mount-queue.ts (behaviour-tested there).
+const mountQueue = createMountQueue({
+  getSlots: () => maxConcurrentMounts(readDeviceHints()),
+  // Hold the slot until the mount has painted (rAF) and the device has had
+  // a moment to settle, then release it so the next one starts.
+  holdSlot: (release) => {
+    const delay = settleDelayMs(readDeviceHints());
     requestAnimationFrame(() => {
-      setTimeout(() => {
-        isProcessing = false;
-        processQueue();
-      }, getSettleDelay());
+      setTimeout(release, delay);
     });
-    return;
-  }
-  isProcessing = false;
-}
+  },
+});
 
 function enqueueMount(mountFn: () => void): () => void {
-  const entry: QueueEntry = { mount: mountFn, cancelled: false };
-  mountQueue.push(entry);
-  if (!isProcessing) processQueue();
-  return () => {
-    entry.cancelled = true;
-  };
+  return mountQueue.enqueue(mountFn);
 }
 
 // ── Bidirectional visibility (TikTok-style unmount off-screen) ──────────────
@@ -103,8 +78,8 @@ function enqueueMount(mountFn: () => void): () => void {
 // At any time, only ~2-3 sections near the viewport are fully rendered.
 // The rest show a lightweight placeholder.
 //
-// The unload margin is much larger than the load margin (1500px vs 300px)
-// to prevent flickering on normal scroll speed. A section must scroll well
+// The unload margin is at least twice the load margin (and never under
+// 1500px) to prevent flickering on normal scroll speed. A section must scroll well
 // past the viewport before being reclaimed.
 //
 // Two further guards keep the mount/unmount cycle from feeding itself:
@@ -117,20 +92,26 @@ function enqueueMount(mountFn: () => void): () => void {
 // - While unmounted, the wrapper keeps the height the content had, so the
 //   shorter skeleton never shifts the sections below it.
 
-const UNLOAD_MARGIN = "1500px";
-
+/** Load margin for this device, as an IntersectionObserver rootMargin. */
 function getLoadMargin(): string {
-  if (typeof window === "undefined") return "300px";
-  return window.innerWidth < 768 ? "100px" : "300px";
+  return `${loadMarginPx(readDeviceHints())}px`;
+}
+
+/** Unload margin, always well beyond the load margin (see unloadMarginPx). */
+function getUnloadMargin(loadMargin: string): string {
+  const load = Number.parseFloat(loadMargin);
+  return `${unloadMarginPx(Number.isFinite(load) ? load : 0)}px`;
 }
 
 /**
  * Progressive lazy section with TikTok-style sequential mounting.
  *
  * Key differences from a naive IntersectionObserver:
- * 1. **Sequential mounting** — only ONE section mounts at a time (global queue)
+ * 1. **Bounded mounting** — at most two sections mount at once (one on
+ *    constrained devices), through a global queue
  * 2. **Bidirectional** — sections unmount when far off-screen to reclaim memory
- * 3. **Adaptive timing** — mobile gets longer settle delays than desktop
+ * 3. **Adaptive timing** — starts 1.5 viewports ahead; constrained devices
+ *    get one slot, a smaller margin and a longer settle delay
  * 4. **Canvas-optimised** — Chart.js instances are destroyed on unmount automatically
  */
 export function LazySection({
@@ -215,12 +196,12 @@ export function LazySection({
           setVisible(false);
         }
       },
-      { rootMargin: UNLOAD_MARGIN },
+      { rootMargin: getUnloadMargin(loadMargin) },
     );
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, [visible]);
+  }, [visible, loadMargin]);
 
   // Maintain a persistent ref div that the observer can track even after unmount
   return (
