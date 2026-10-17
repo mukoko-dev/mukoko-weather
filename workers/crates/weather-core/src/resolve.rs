@@ -7,13 +7,16 @@
 //! - [`bare_query`] and [`pick_resolution`]: a bare name from a URL
 //!   (`/koh-samui`) becomes the best geocoder hit, as a spot slug;
 //! - [`coordinate_spot`]: a point nothing names (open water, polar ice, empty
-//!   desert) becomes a spot labelled by its coordinates.
+//!   desert) becomes a spot labelled by its coordinates;
+//! - [`compose_search`]: a country, region or continent query still lists the
+//!   best cities, and also offers the area itself as the last results.
 //!
 //! Nothing here stores anything: every answer is a name and a coordinate.
 
-use crate::geo::valid_coordinates;
+use crate::geo::{haversine_km, valid_coordinates};
 use crate::locations::{
-    build_smart_slug, encode_geohash, nearest_seeds, LocationDoc, GEOHASH_PRECISION,
+    build_smart_slug, encode_geohash, nearest_seeds, seed_in_country, LocationDoc,
+    GEOHASH_PRECISION,
 };
 use crate::places::slugify;
 
@@ -391,6 +394,91 @@ pub fn create_answer(lat: f64, lon: f64, naming: &Naming) -> Option<PointAnswer>
     }
 }
 
+// --- Search -----------------------------------------------------------------
+
+/// Below this many catalogue matches, search tops up from the geocoder.
+pub const TOP_UP_BELOW: usize = 3;
+const OVERFETCH: usize = 3;
+const MAX_COUNT: usize = 100;
+
+/// How many geocoder results to ask for: area hits are not dropped any more,
+/// but a country query lists its cities too, so ask for a margin.
+pub fn geocode_count(wanted: usize) -> usize {
+    (wanted * OVERFETCH).clamp(10, MAX_COUNT)
+}
+
+fn same_place(a: &LocationDoc, b: &LocationDoc) -> bool {
+    a.slug == b.slug
+        || (slugify(&a.name) == slugify(&b.name)
+            && haversine_km(a.lat, a.lon, b.lat, b.lon) <= SEED_DUPLICATE_KM)
+}
+
+fn push_new(into: &mut Vec<LocationDoc>, doc: LocationDoc) {
+    if !into.iter().any(|x| same_place(x, &doc)) {
+        into.push(doc);
+    }
+}
+
+/// The search answer: the catalogue's matches first, then (when there are
+/// fewer than [`TOP_UP_BELOW`]) the best cities of any country the query
+/// named, then the geocoder's places, then the areas themselves as spots at
+/// their centres. So nothing a person types is a dead end, while a shipped
+/// city is always its canonical slug (`phuket-th`, not a spot beside it) and
+/// nothing appears twice (same slug, or same name within 25 km).
+pub fn compose_search(
+    catalogue: Vec<LocationDoc>,
+    geocoded: &[LocationDoc],
+    limit: usize,
+) -> Vec<LocationDoc> {
+    let mut out: Vec<LocationDoc> = Vec::new();
+    for c in catalogue {
+        push_new(&mut out, c);
+    }
+    // A country is also its best cities.
+    for country in geocoded
+        .iter()
+        .filter(|g| g.area.as_deref() == Some("country"))
+    {
+        let Some(cc) = country.country.as_deref() else {
+            continue;
+        };
+        let mut cities: Vec<&LocationDoc> = seed_in_country(cc);
+        cities.sort_by_key(|l| !l.tags.iter().any(|t| t == "city"));
+        for city in cities {
+            push_new(&mut out, city.clone());
+        }
+    }
+    for g in geocoded.iter().filter(|g| g.area.is_none()) {
+        let doc =
+            seed_matching(&g.name, g.lat, g.lon, SEED_DUPLICATE_KM).unwrap_or_else(|| g.clone());
+        push_new(&mut out, doc);
+    }
+    // The areas come last, but a country with many seeds (Zimbabwe has 98)
+    // must not push the country itself past the limit: reserve its slot.
+    let mut areas: Vec<LocationDoc> = Vec::new();
+    for g in geocoded.iter().filter(|g| g.area.is_some()) {
+        push_new(&mut areas, g.clone());
+    }
+    out.truncate(limit.saturating_sub(reserve_area_slots(limit, areas.len())));
+    for area in areas {
+        if out.len() >= limit {
+            break;
+        }
+        push_new(&mut out, area);
+    }
+    out
+}
+
+/// How many of `limit` slots the areas keep, however many places there are:
+/// none for a one-result answer, one up to nine, two from ten.
+pub fn reserve_area_slots(limit: usize, areas: usize) -> usize {
+    if limit < 2 {
+        0
+    } else {
+        areas.min(if limit >= 10 { 2 } else { 1 })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -706,5 +794,91 @@ mod tests {
     fn invalid_coordinates_answer_nothing() {
         assert!(find_only_answer(91.0, 0.0, &Naming::Skipped).is_none());
         assert!(create_answer(0.0, 181.0, &Naming::Skipped).is_none());
+    }
+
+    #[test]
+    fn a_country_query_lists_its_cities_then_the_country_itself() {
+        let thailand = hit("Thailand", 15.5, 101.0, "PCLI", "TH");
+        let got = compose_search(vec![], &[thailand], 50);
+        let slugs: Vec<&str> = got.iter().map(|l| l.slug.as_str()).collect();
+        assert!(slugs.contains(&"bangkok-th") && slugs.contains(&"phuket-th"));
+        let last = got.last().unwrap();
+        assert_eq!(last.area.as_deref(), Some("country"));
+        assert!(last.slug.starts_with("thailand--"));
+        // Cities first: every place precedes the area.
+        assert!(got[..got.len() - 1].iter().all(|l| l.area.is_none()));
+        assert_eq!(slugs.iter().filter(|s| **s == "phuket-th").count(), 1);
+    }
+
+    #[test]
+    fn a_region_is_offered_after_places_and_never_twice() {
+        let province = hit("Phuket", 7.95, 98.35, "ADM1", "TH");
+        let city = hit("Phuket", 7.89059, 98.3981, "PPLA", "TH");
+        let got = compose_search(vec![], &[province, city], 20);
+        // The province centre is the same name within 25 km of the seed city.
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].slug, "phuket-th");
+
+        let krabi = hit("Krabi Province", 8.1, 98.9, "ADM1", "TH");
+        let got = compose_search(vec![], &[krabi], 20);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].area.as_deref(), Some("region"));
+    }
+
+    #[test]
+    fn a_continent_is_offered_as_a_spot() {
+        let europe = hit("Europe", 48.7, 9.1, "CONT", "");
+        let got = compose_search(vec![], &[europe], 20);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].area.as_deref(), Some("region"));
+    }
+
+    #[test]
+    fn the_catalogue_stays_first_and_the_limit_holds() {
+        let harare = crate::locations::find_seed("harare").unwrap().clone();
+        let thailand = hit("Thailand", 15.5, 101.0, "PCLI", "TH");
+        let got = compose_search(vec![harare], &[thailand], 3);
+        assert_eq!(got.len(), 3);
+        assert_eq!(got[0].slug, "harare");
+    }
+
+    #[test]
+    fn geocode_count_has_a_floor_and_a_ceiling() {
+        assert_eq!(geocode_count(1), 10);
+        assert_eq!(geocode_count(20), 60);
+        assert_eq!(geocode_count(50), 100);
+    }
+
+    #[test]
+    fn a_country_with_many_seeds_still_shows_the_country_within_the_limit() {
+        // Zimbabwe ships 98 seed places: at limit 10 the cities used to fill
+        // every slot and the country itself never appeared.
+        assert!(seed_in_country("ZW").len() > 50);
+        let zimbabwe = hit("Zimbabwe", -19.0, 29.15, "PCLI", "ZW");
+        for limit in [2usize, 5, 10, 20, 50] {
+            let got = compose_search(vec![], std::slice::from_ref(&zimbabwe), limit);
+            assert_eq!(got.len(), limit, "limit {limit}");
+            let areas = got.iter().filter(|l| l.area.is_some()).count();
+            assert_eq!(areas, 1, "limit {limit} keeps the country spot");
+            assert!(got.last().unwrap().area.is_some(), "and it is last");
+            assert!(got[..got.len() - 1].iter().all(|l| l.area.is_none()));
+        }
+    }
+
+    #[test]
+    fn slots_reserved_for_areas() {
+        assert_eq!(reserve_area_slots(1, 3), 0);
+        assert_eq!(reserve_area_slots(5, 3), 1);
+        assert_eq!(reserve_area_slots(10, 3), 2);
+        assert_eq!(reserve_area_slots(10, 1), 1);
+        assert_eq!(reserve_area_slots(10, 0), 0);
+    }
+
+    #[test]
+    fn a_limit_of_one_stays_a_place() {
+        let zimbabwe = hit("Zimbabwe", -19.0, 29.15, "PCLI", "ZW");
+        let got = compose_search(vec![], &[zimbabwe], 1);
+        assert_eq!(got.len(), 1);
+        assert!(got[0].area.is_none());
     }
 }
