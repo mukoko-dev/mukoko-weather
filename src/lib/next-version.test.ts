@@ -7,7 +7,9 @@ import { describe, expect, it } from "vitest";
 const SCRIPT = path.resolve(process.cwd(), ".github/scripts/next-version.sh");
 
 function run(base: string, bump: string, version = "") {
-  const r = spawnSync("bash", [SCRIPT, base, bump, version], { encoding: "utf8" });
+  const r = spawnSync("bash", [SCRIPT, base, bump, version], {
+    encoding: "utf8",
+  });
   return { code: r.status, out: r.stdout.trim(), err: r.stderr.trim() };
 }
 
@@ -57,7 +59,10 @@ describe("next-version.sh explicit version", () => {
     ["v0.11.5", "v1.0.0"],
     ["v0.11.5", "v0.999.99"],
   ])("accepts %s -> %s", (base, version) => {
-    expect(run(base, "patch", version)).toMatchObject({ code: 0, out: version });
+    expect(run(base, "patch", version)).toMatchObject({
+      code: 0,
+      out: version,
+    });
   });
 
   it.each([
