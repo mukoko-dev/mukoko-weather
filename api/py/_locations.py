@@ -181,6 +181,31 @@ GEOCODE_TOP_UP_BELOW = 3
 _GEOCODE_DUPLICATE_KM = 25.0
 
 
+#: GeoNames feature codes (Open-Meteo's geocoder reports them) for areas, not
+#: places: countries and other political entities (``PCL*``), territories,
+#: continents, oceans, seas and regions. Their coordinate is a centroid, so a
+#: forecast there describes nowhere anyone is (searching "Thailand" offered a
+#: page for 15.5°N 101°E). Search never offers them as places (#302).
+_AREA_FEATURE_CODES = frozenset({"TERR", "CONT", "OCN", "SEA", "RGN", "RGNE"})
+
+
+def is_area_feature(feature_code: str | None) -> bool:
+    """True for a geocoder hit that names an area, not a place."""
+    code = (feature_code or "").strip().upper()
+    return code.startswith("PCL") or code in _AREA_FEATURE_CODES
+
+
+def _country_hit_codes(geocoded: list[dict]) -> list[str]:
+    """ISO codes of the countries a geocoder answer named (``PCL*`` hits)."""
+    codes: list[str] = []
+    for g in geocoded:
+        code = str(g.get("featureCode") or "").upper()
+        cc = str(g.get("country") or "").upper()
+        if code.startswith("PCL") and re.match(r"^[A-Z]{2}$", cc) and cc not in codes:
+            codes.append(cc)
+    return codes
+
+
 def _geocoded_candidate(g: dict) -> dict:
     """Shape an Open-Meteo geocoding hit as a search result.
 
@@ -361,15 +386,27 @@ async def search_locations(
             # each miss is a request to a third-party geocoder.
             geocoded = await asyncio.to_thread(_cached_forward_geocode, q, limit, request)
             extra: list[dict] = []
-            for c in (_geocoded_candidate(g) for g in geocoded):
+            # A country is not a place: offer the places we hold in it
+            # (cities first) instead of its centroid.
+            for cc in _country_hit_codes(geocoded):
+                in_country = await asyncio.to_thread(
+                    find_locations_in_country, cc, limit=limit,
+                )
+                in_country.sort(key=lambda loc: "city" not in (loc.get("tags") or []))
+                for loc in in_country:
+                    loc.pop("_id", None)
+                    if not any(r.get("slug") == loc.get("slug") for r in results + extra):
+                        extra.append(loc)
+            places = [g for g in geocoded if not is_area_feature(g.get("featureCode"))]
+            for c in (_geocoded_candidate(g) for g in places):
                 # Against the catalogue AND the candidates already kept: the
                 # geocoder can return one town twice (two admin entries).
                 if not _duplicates_any(c, results + extra):
                     extra.append(c)
             extra = extra[: max(0, limit - len(results))]
-            if extra:
+            if any(e.get("source") == "geocoded" for e in extra):
                 source = "geocoded" if not results else "mixed"
-                results = results + extra
+            results = results + extra
 
         return {"locations": results, "total": len(results), "source": source}
     except HTTPException:
@@ -599,6 +636,7 @@ def _forward_geocode(query: str, count: int = 5) -> list[dict]:
                 "lat": r.get("latitude", 0),
                 "lon": r.get("longitude", 0),
                 "elevation": _clean_elevation(r.get("elevation")),
+                "featureCode": r.get("feature_code", ""),
             }
             for r in results
         ]
@@ -1102,6 +1140,8 @@ async def add_location(request: Request):
                         "elevation": _clean_elevation(r.get("elevation")),
                     }
                     for r in results
+                    # A country/region centroid is not a place to add.
+                    if not is_area_feature(r.get("featureCode"))
                 ],
             }
 
