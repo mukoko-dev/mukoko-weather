@@ -41,11 +41,54 @@ class TestRegions:
             (14.7, -17.45, "west-africa-sahel"),  # Dakar
             (-4.32, 15.31, "central-africa"),  # Kinshasa
             (30.04, 31.24, "north-africa"),  # Cairo
-            (1.35, 103.8, "default"),  # Singapore
+            (36.8, 10.18, "north-africa"),  # Tunis (stays African, not Europe)
+            (1.35, 103.8, "southeast-asia"),  # Singapore
+            (51.51, -0.13, "europe"),  # London
+            (48.86, 2.35, "europe"),  # Paris
+            (64.15, -21.94, "europe"),  # Reykjavik
+            (25.2, 55.27, "middle-east"),  # Dubai
+            (19.08, 72.88, "south-asia"),  # Mumbai
+            (35.68, 139.69, "east-asia"),  # Tokyo
+            (-33.87, 151.21, "oceania"),  # Sydney
+            (-36.85, 174.76, "oceania"),  # Auckland
+            (40.71, -74.0, "north-america"),  # New York
+            (43.65, -79.38, "north-america"),  # Toronto
+            (-23.55, -46.63, "south-america"),  # Sao Paulo
+            (-30.0, -140.0, "default"),  # open Pacific
+            # Overlap carve-outs: these used to report an African region.
+            (37.39, -5.98, "europe"),  # Seville
+            (36.14, -5.35, "europe"),  # Gibraltar
+            (37.98, 23.73, "europe"),  # Athens
+            (35.34, 25.14, "europe"),  # Heraklion, Crete
+            (38.12, 13.36, "europe"),  # Palermo
+            (35.9, 14.51, "europe"),  # Valletta
+            (31.78, 35.22, "middle-east"),  # Jerusalem
+            (33.89, 35.5, "middle-east"),  # Beirut
+            (32.08, 34.78, "middle-east"),  # Tel Aviv
+            (15.35, 44.21, "middle-east"),  # Sana'a
+            (12.79, 45.02, "middle-east"),  # Aden
+            # ...and their African neighbours did not move.
+            (35.77, -5.8, "north-africa"),  # Tangier
+            (36.75, 3.06, "north-africa"),  # Algiers
+            (37.27, 9.87, "north-africa"),  # Bizerte
+            (31.2, 29.92, "north-africa"),  # Alexandria
+            (31.13, 33.8, "north-africa"),  # El Arish, Sinai
+            (29.5, 34.89, "north-africa"),  # Taba
+            (15.33, 38.93, "east-africa"),  # Asmara
+            (11.59, 43.15, "east-africa"),  # Djibouti
+            (11.28, 49.18, "east-africa"),  # Bosaso
+            (19.62, 37.22, "east-africa"),  # Port Sudan (was `default`)
+            (21.49, 39.19, "middle-east"),  # Jeddah
         ],
     )
     def test_region_for(self, lat, lon, region):
         assert region_for(lat, lon) == region
+
+    def test_every_region_has_weights(self):
+        from py._model_blend import REGION_BOXES
+
+        for key, _box in REGION_BOXES:
+            assert key in BLEND_WEIGHTS
 
 
 class TestWeights:
@@ -159,6 +202,12 @@ class TestBlendPayload:
         assert out["daily"]["temperature_2m_max"] == [28.2]
         # daily agreement threshold is 1 mm
         assert out["daily"]["precipitation_probability_max"] == [60]
+
+    def test_timezone_passes_through(self):
+        """The IANA zone names the country for an unmapped place (global scope)."""
+        raw = {**self._raw(), "timezone": "Europe/London"}
+        assert blend_payload(raw, W)["timezone"] == "Europe/London"
+        assert "timezone" not in blend_payload(self._raw(), W)
 
     def test_current_nulls_filled_from_blended_hour(self):
         out = blend_payload(self._raw(), W)

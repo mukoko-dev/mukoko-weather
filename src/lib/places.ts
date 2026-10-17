@@ -523,6 +523,8 @@ async function resolveSpotSlug(
       country: seedNear.country,
       elevation: seedNear.elevation,
       tags: seedNear.tags,
+      // Borrowed from a seed up to 250 km away — possibly across a border.
+      regionApproximate: true,
     };
   }
 

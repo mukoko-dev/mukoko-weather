@@ -278,7 +278,7 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
         raise HTTPException(status_code=404, detail="Unknown location")
 
     location_name = loc.get("name", location_slug)
-    elevation = loc.get("elevation", 0)
+    elevation = loc.get("elevation")
     country = loc.get("country", "")
     loc_lat = loc.get("lat", 0.0)
     loc_lon = loc.get("lon", 0.0)
@@ -289,8 +289,9 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
     from ._history import history_slugs
     from ._history_store import read_history
 
+    slugs = history_slugs(location_slug, loc)
     history = list(
-        reversed(read_history(history_slugs(location_slug, loc), body.days, lon=float(loc_lon or 0.0)))
+        reversed(read_history(slugs, body.days, lon=float(loc_lon or 0.0)))
     )
 
     if not history:
@@ -305,7 +306,9 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
     ).hexdigest()[:12]
 
     # Check cache
-    cache_key = f"{location_slug}:{body.days}:{data_hash}"
+    # Keyed by the storage key (a synthesized spot's cell, never its raw
+    # slug) plus the name, because the analysis text names the place.
+    cache_key = f"{slugs[0]}:{location_name}:{body.days}:{data_hash}"
     try:
         cached = history_analysis_collection().find_one(
             {"cacheKey": cache_key, "expiresAt": {"$gt": datetime.now(timezone.utc)}},
@@ -343,7 +346,8 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
         slug=location_slug, lat=loc_lat, lon=loc_lon, country=country or None, name=location_name,
     ))
 
-    user_content = f"""Analyze this weather history for {location_name} (elevation: {elevation}m).
+    elevation_note = f" (elevation: {elevation}m)" if elevation is not None else ""
+    user_content = f"""Analyze this weather history for {location_name}{elevation_note}.
 Season: {season['localName']} ({season['name']}) — {season['description']}
 {activities_note}{profile_block}
 

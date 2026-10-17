@@ -14,6 +14,8 @@ import { resolveTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { resolveColor } from "@/components/ui/chart";
 import {
+  MAPTILER_KEY,
+  maptilerStyleId,
   maplibreWorkerUrl,
   WEATHER_OVERLAY_ID,
   AQI_OVERLAY_ID,
@@ -36,10 +38,8 @@ import {
   type AqBubble,
 } from "@/lib/aq-grid";
 
-const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
-
 export function getMapTilerStyle(isDark: boolean): string {
-  const style = isDark ? "streets-v2-dark" : "streets-v2";
+  const style = maptilerStyleId(isDark);
   return `https://api.maptiler.com/maps/${style}/style.json?key=${MAPTILER_KEY}`;
 }
 
