@@ -29,6 +29,7 @@ mod sources;
 use serde_json::{json, Value};
 use weather_core::geo::valid_coordinates;
 use weather_core::locations::{self, LocationDoc};
+use weather_core::resolve;
 use weather_edge::{error, json, now_ms, query_pairs};
 use worker::{event, Context, Env, Method, Request, Response, Result};
 
@@ -36,6 +37,16 @@ const DB: &str = "WEATHER_DB";
 const GEOCODE_LIMITER: &str = "GEOCODE_LIMITER";
 /// Set by mukoko-weather-api to the caller's IP, for the geocoding limit.
 const CLIENT_IP_HEADER: &str = "X-Mukoko-Client-IP";
+
+/// The caller's address as mukoko-weather-api passed it on.
+fn client_ip(req: &Request) -> String {
+    req.headers()
+        .get(CLIENT_IP_HEADER)
+        .ok()
+        .flatten()
+        .or_else(|| req.headers().get("CF-Connecting-IP").ok().flatten())
+        .unwrap_or_else(|| "unknown".into())
+}
 
 struct Query(Vec<(String, String)>);
 
@@ -68,7 +79,7 @@ pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             &json!({"service": "mukoko-weather-places", "status": "ok"}),
         ),
         "/locations" => locations_route(&env, &q).await,
-        "/search" => search_route(&env, &q).await,
+        "/search" => search_route(&req, &env, &q).await,
         "/geo" => geo_route(&req, &env, &q).await,
         "/history" => history_route(&env, &q).await,
         _ => error(404, "not_found", "No such route."),
@@ -151,7 +162,7 @@ fn merge(into: &mut Vec<LocationDoc>, extra: Vec<LocationDoc>) {
     }
 }
 
-async fn search_route(env: &Env, q: &Query) -> Result<Response> {
+async fn search_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
     let (Ok(limit), Ok(skip)) = (q.int("limit", 20), q.int("skip", 0)) else {
         return error(
             422,
@@ -164,6 +175,9 @@ async fn search_route(env: &Env, q: &Query) -> Result<Response> {
 
     if q.get("mode") == Some("tags") {
         return cached_json(&json!({"tags": locations::tag_counts()}), 3_600);
+    }
+    if q.get("mode") == Some("resolve") {
+        return resolve_route(req, env, q).await;
     }
 
     // Nearest to a point: a discovery action, so a 100 km radius.
@@ -211,12 +225,12 @@ async fn search_route(env: &Env, q: &Query) -> Result<Response> {
         // Nothing on record: offer geocoded candidates, as the app expects
         // (address-level discovery). They are not records yet.
         if found.is_empty() {
-            match sources::geocode(env, text, limit).await {
+            match sources::geocode(env, text, limit, &client_ip(req)).await {
                 Ok(geocoded) => {
                     found = geocoded;
                     source = "geocoded";
                 }
-                Err(()) => return error(503, "search_unavailable", "Search unavailable"),
+                Err(_) => return error(503, "search_unavailable", "Search unavailable"),
             }
         }
     }
@@ -226,6 +240,40 @@ async fn search_route(env: &Env, q: &Query) -> Result<Response> {
         &json!({"locations": results, "total": total, "source": source}),
         300,
     )
+}
+
+/// `GET /search?q=<name>&mode=resolve`: the one best place for a bare name in
+/// a URL (`/koh-samui`), for the app's proxy to redirect to as a spot slug.
+///
+/// Reuses the forward geocode behind `/search` (its KV cache and budgets);
+/// stores nothing. Always 200: `resolve` is `ok`, `no_match`, `over_budget`
+/// or `unavailable`, and only the first two are final.
+async fn resolve_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
+    let answer = |status: &str, found: Option<LocationDoc>| {
+        let body = json!({
+            "locations": found.iter().collect::<Vec<_>>(),
+            "total": usize::from(found.is_some()),
+            "source": if found.is_some() { "geocoded" } else { "none" },
+            "resolve": status,
+        });
+        // Only a final answer may be cached downstream.
+        if matches!(status, "ok" | "no_match") {
+            cached_json(&body, 300)
+        } else {
+            json(200, &body)
+        }
+    };
+    let Some(name) = q.get("q").and_then(resolve::bare_query) else {
+        return answer("no_match", None);
+    };
+    match sources::geocode(env, &name, 10, &client_ip(req)).await {
+        Ok(hits) => match resolve::pick_resolution(&hits, &name) {
+            Some(place) => answer("ok", Some(place)),
+            None => answer("no_match", None),
+        },
+        Err(sources::GeoErr::Budget) => answer("over_budget", None),
+        Err(sources::GeoErr::Upstream) => answer("unavailable", None),
+    }
 }
 
 async fn geo_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {

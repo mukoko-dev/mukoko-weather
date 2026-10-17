@@ -25,6 +25,7 @@ pub mod normalize;
 pub mod places;
 pub mod push;
 pub mod query;
+pub mod resolve;
 pub mod secrets;
 pub mod station;
 pub mod tiles;

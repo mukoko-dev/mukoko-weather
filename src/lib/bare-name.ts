@@ -3,11 +3,16 @@
  * `/koh-samui` or `/lake-kariba` is a place name, not a 404.
  *
  * The coordinate is the identity and the name in a URL is cosmetic, so the
- * proxy asks `GET /api/py/search?mode=resolve` (the existing Open-Meteo
- * geocoder behind its own breaker, cache and budgets, in Python) for the best
- * match and 308-redirects to the canonical smart slug
- * `{name}--{geohash7}`. Only when nothing is found, or the geocoder is over
- * budget or unavailable, does the visitor get the server-rendered 404.
+ * proxy asks the Rust weather Worker (`GET /v1/search?mode=resolve` at
+ * `weather-api.mukoko.com`: Open-Meteo forward geocoding behind its KV cache,
+ * negative cache and rate limits) for the best match and 308-redirects to
+ * the canonical smart slug `{name}--{geohash7}`. Only when nothing is found,
+ * or the geocoder is over budget or unavailable, does the visitor get the
+ * server-rendered 404.
+ *
+ * Vercel is frontend only and `api/py` is frozen, so the resolve exists only
+ * in the Worker: with `NEXT_PUBLIC_WEATHER_API_URL` unset the feature is off
+ * and every unknown slug 404s exactly as before (`src/lib/weather-api.ts`).
  *
  * Render-only: nothing is stored. The redirect target is a spot (or a
  * shipped seed), which renders from its slug alone.
@@ -17,7 +22,7 @@
  * a time, a per-visitor cap and a backoff after any upstream trouble.
  */
 import { LOCATION_SLUG_RE, rendersWithoutLookup } from "./location-gate";
-import { internalApiTarget } from "./site";
+import { weatherApiBase } from "./weather-api";
 
 /** Shortest and longest name worth a geocoder request. */
 export const BARE_NAME_MIN = 3;
@@ -164,15 +169,15 @@ async function lookup(
   env: Record<string, string | undefined> | undefined,
   timeoutMs: number,
 ): Promise<string | null> {
-  const { base, headers } = internalApiTarget(env);
-  const url = `${base}/api/py/search?mode=resolve&q=${encodeURIComponent(bareNameQuery(slug))}`;
+  const base = weatherApiBase(env);
+  if (!base) return null;
+  const url = `${base}/v1/search?mode=resolve&q=${encodeURIComponent(bareNameQuery(slug))}`;
   const controller = new AbortController();
   // The lookup has its own ceiling, longer than the proxy's wait, so a slow
   // answer still gets cached for the next request.
   const abort = setTimeout(() => controller.abort(), timeoutMs * 4);
   try {
     const res = await fetcher(url, {
-      headers,
       cache: "no-store",
       redirect: "manual",
       signal: controller.signal,
@@ -218,6 +223,8 @@ export async function resolveBareName(
   }: BareNameOptions = {},
 ): Promise<string | null> {
   if (!isBareNameCandidate(slug)) return null;
+  // Off until the Worker is configured: nothing to ask, nothing to cache.
+  if (!weatherApiBase(env)) return null;
   const hit = hits.get(slug);
   if (hit && hit.expires > now) return hit.target;
   const missExpires = misses.get(slug);

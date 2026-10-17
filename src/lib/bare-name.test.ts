@@ -12,7 +12,7 @@ import {
 import { buildSmartSlug } from "./smart-slug";
 
 const SAMUI = buildSmartSlug("Ko Samui", 9.51201, 100.01361);
-const ENV = { INTERNAL_API_BASE_URL: "https://internal.test" };
+const ENV = { NEXT_PUBLIC_WEATHER_API_URL: "https://weather-api.test" };
 
 function reply(body: unknown, status = 200) {
   return vi.fn(async () =>
@@ -57,7 +57,7 @@ describe("isBareNameCandidate", () => {
 });
 
 describe("resolveBareName", () => {
-  it("returns the canonical spot slug and asks the internal API", async () => {
+  it("returns the canonical spot slug and asks the Rust Worker", async () => {
     const fetcher = ok();
     expect(await resolveBareName("koh-samui", { fetcher, env: ENV })).toBe(
       SAMUI,
@@ -67,10 +67,21 @@ describe("resolveBareName", () => {
       RequestInit,
     ];
     expect(url).toBe(
-      "https://internal.test/api/py/search?mode=resolve&q=koh%20samui",
+      "https://weather-api.test/v1/search?mode=resolve&q=koh%20samui",
     );
     expect(init.redirect).toBe("manual");
     expect(init.cache).toBe("no-store");
+  });
+
+  it("is off until the Worker is configured: no call, no cache", async () => {
+    const fetcher = ok();
+    for (const env of [
+      {},
+      { NEXT_PUBLIC_WEATHER_API_URL: "http://evil.test" },
+    ]) {
+      expect(await resolveBareName("koh-samui", { fetcher, env })).toBeNull();
+    }
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it("accepts a shipped seed slug as the target", async () => {

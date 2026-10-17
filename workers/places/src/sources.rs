@@ -13,6 +13,9 @@ use weather_edge::{config, get_with_timeout, secret};
 use worker::{Env, Headers, Url};
 
 const CACHE: &str = "CACHE";
+/// Per-IP and service-wide limits on uncached forward geocodes.
+const GEOCODE_FWD_LIMITER: &str = "GEOCODE_FWD_LIMITER";
+const GEOCODE_FWD_GLOBAL: &str = "GEOCODE_FWD_GLOBAL";
 const TIMEOUT: Duration = Duration::from_secs(5);
 const DAY: u64 = 86_400;
 /// The Python backend's Nominatim identity.
@@ -143,15 +146,57 @@ pub async fn nyuchi_nearby(
     Ok(found)
 }
 
-/// Open-Meteo forward geocoding: candidates for a name.
-pub async fn geocode(env: &Env, q: &str, count: usize) -> Result<Vec<LocationDoc>, ()> {
+/// Why a forward geocode gave no answer.
+#[derive(Debug, PartialEq, Eq)]
+pub enum GeoErr {
+    /// Over the per-IP or the service-wide budget: no upstream call was made.
+    Budget,
+    /// Open-Meteo did not answer, or answered badly.
+    Upstream,
+}
+
+/// A forward-geocode answer is kept a day; an empty one (no such name) only
+/// ten minutes, since empty can also be a hiccup.
+const GEOCODE_HIT_TTL: u64 = DAY;
+const GEOCODE_MISS_TTL: u64 = 600;
+
+/// Per-IP and service-wide limits on UNCACHED forward geocodes (Open-Meteo's
+/// free geocoder is for light, non-commercial use). The Rate Limiting binding
+/// counts per Cloudflare location, so the global key is a per-location
+/// ceiling, not a worldwide one; the KV cache and the app's own caches carry
+/// the rest. An unbound limiter (local dev) allows the call.
+async fn within_geocode_budget(env: &Env, ip: &str) -> bool {
+    for (binding, key) in [(GEOCODE_FWD_LIMITER, ip), (GEOCODE_FWD_GLOBAL, "all")] {
+        if let Ok(limiter) = env.rate_limiter(binding) {
+            if let Ok(outcome) = limiter.limit(key.to_owned()).await {
+                if !outcome.success {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+/// Open-Meteo forward geocoding: candidates for a name. Cached in KV (hits a
+/// day, misses ten minutes); an upstream failure is never cached.
+pub async fn geocode(
+    env: &Env,
+    q: &str,
+    count: usize,
+    ip: &str,
+) -> Result<Vec<LocationDoc>, GeoErr> {
     let norm = slugify(q);
     if norm.is_empty() {
         return Ok(vec![]);
     }
-    let key = format!("geocode:v1:{norm}:{count}");
+    // v2: hits carry spot slugs and the `area` flag (v1 held `london-gb`).
+    let key = format!("geocode:v2:{norm}:{count}");
     if let Some(hit) = cached(env, &key).await {
         return Ok(hit);
+    }
+    if !within_geocode_budget(env, ip).await {
+        return Err(GeoErr::Budget);
     }
     let url = with_query(
         "https://geocoding-api.open-meteo.com/v1/search",
@@ -165,14 +210,19 @@ pub async fn geocode(env: &Env, q: &str, count: usize) -> Result<Vec<LocationDoc
         Ok(mut r) if r.status_code() == 200 => r
             .json::<Value>()
             .await
-            .map_err(|_| ())?
+            .map_err(|_| GeoErr::Upstream)?
             .get("results")
             .and_then(Value::as_array)
             .map(|rs| rs.iter().filter_map(LocationDoc::from_open_meteo).collect())
             .unwrap_or_default(),
-        _ => return Err(()),
+        _ => return Err(GeoErr::Upstream),
     };
-    store(env, &key, &found, DAY).await;
+    let ttl = if found.is_empty() {
+        GEOCODE_MISS_TTL
+    } else {
+        GEOCODE_HIT_TTL
+    };
+    store(env, &key, &found, ttl).await;
     Ok(found)
 }
 

@@ -64,5 +64,19 @@
       "namespace_id": "1483",
       "simple": { "limit": 10, "period": 60 },
     },
+    // UNCACHED forward geocodes (Open-Meteo's free geocoder is for light,
+    // non-commercial use): per IP, and one key for the whole location. The
+    // binding counts per Cloudflare location, so the second is a per-location
+    // ceiling. OWNER: confirm these namespace ids are unused in the account.
+    {
+      "name": "GEOCODE_FWD_LIMITER",
+      "namespace_id": "1484",
+      "simple": { "limit": 6, "period": 60 },
+    },
+    {
+      "name": "GEOCODE_FWD_GLOBAL",
+      "namespace_id": "1485",
+      "simple": { "limit": 20, "period": 60 },
+    },
   ],
 }

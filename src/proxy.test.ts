@@ -59,6 +59,7 @@ const mockResolveFetch = vi.fn(async (_url: string, _init?: RequestInit) =>
 );
 beforeEach(() => {
   mockResolveFetch.mockClear();
+  vi.stubEnv("NEXT_PUBLIC_WEATHER_API_URL", "https://weather-api.test");
   vi.stubGlobal("fetch", mockResolveFetch);
   resetBareNameCache();
 });
@@ -328,11 +329,12 @@ describe("proxy — bare place names resolve instead of 404 (#317)", () => {
     expect(res.headers.get("x-middleware-rewrite")).toBeNull();
   });
 
-  it("asks the existing search endpoint in resolve mode with the spaced name", async () => {
+  it("asks the Worker's search in resolve mode with the spaced name", async () => {
     found();
     await run("/koh-samui");
     const url = new URL(mockResolveFetch.mock.calls[0][0]);
-    expect(url.pathname).toBe("/api/py/search");
+    expect(url.origin).toBe("https://weather-api.test");
+    expect(url.pathname).toBe("/v1/search");
     expect(url.searchParams.get("mode")).toBe("resolve");
     expect(url.searchParams.get("q")).toBe("koh samui");
   });
@@ -406,6 +408,13 @@ describe("proxy — bare place names resolve instead of 404 (#317)", () => {
     await run("/some-place--ksy4dd7");
     await run("/community-place-a1b2c3");
     await run("/db-down");
+    expect(mockResolveFetch).not.toHaveBeenCalled();
+  });
+
+  it("is off (a plain 404) while the Worker is not configured", async () => {
+    vi.stubEnv("NEXT_PUBLIC_WEATHER_API_URL", "");
+    const res = await run("/koh-samui");
+    expect(res.headers.get("x-middleware-rewrite")).toContain("not-found");
     expect(mockResolveFetch).not.toHaveBeenCalled();
   });
 
