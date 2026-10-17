@@ -331,13 +331,13 @@ async fn name_cell(req: &Request, env: &Env, lat: f64, lon: f64, spend: bool) ->
     let (cell_lat, cell_lon) = (resolve::snap(lat), resolve::snap(lon));
     // A cached cell costs no budget, so it is read even when spending is off.
     if let Some(hit) = sources::reverse_cell_cached(env, cell_lat, cell_lon).await {
-        return hit.map_or(Naming::NothingHere, Naming::Named);
+        return hit.map_or(Naming::NothingHere, |d| Naming::Named(Box::new(d)));
     }
     if !spend || !nominatim_budget(req, env).await {
         return Naming::Skipped;
     }
     match sources::reverse_cell(env, cell_lat, cell_lon).await {
-        Ok(Some(doc)) => Naming::Named(doc),
+        Ok(Some(doc)) => Naming::Named(Box::new(doc)),
         Ok(None) => Naming::NothingHere,
         Err(()) => Naming::Skipped,
     }
@@ -391,12 +391,12 @@ async fn geo_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
         let cached = sources::reverse_cached(env, lat, lon).await;
         let naming = if let Some(hit) = cached {
             // A cached answer costs no budget.
-            hit.map_or(Naming::NothingHere, Naming::Named)
+            hit.map_or(Naming::NothingHere, |d| Naming::Named(Box::new(d)))
         } else if !spend || !nominatim_budget(req, env).await {
             Naming::Skipped
         } else {
             match sources::reverse(env, lat, lon).await {
-                Ok(Some(l)) => Naming::Named(l),
+                Ok(Some(l)) => Naming::Named(Box::new(l)),
                 Ok(None) => Naming::NothingHere,
                 Err(()) => Naming::Skipped,
             }
