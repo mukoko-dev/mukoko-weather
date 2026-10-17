@@ -2531,11 +2531,11 @@ PHUKET_HIT = {
 class TestAreaFeatures:
     @pytest.mark.parametrize("code", ["PCLI", "PCLD", "PCLF", "PCLS", "PCLIX", "PCLH", "PCL",
                                       "TERR", "CONT", "OCN", "SEA", "RGN", "rgn",
-                                      "ADM1", "ADM2", "ADM3", "ADM1H", "ADM2H", "ADMD", "PRSH"])
+                                      "ADM1", "ADM2", "ADM1H", "ADM2H", "PRSH"])
     def test_areas(self, code):
         assert is_area_feature(code)
 
-    @pytest.mark.parametrize("code", ["PPL", "PPLA", "PPLC", "PPLX", "ISL", "AIRP", "", None])
+    @pytest.mark.parametrize("code", ["PPL", "PPLA", "PPLC", "PPLX", "ISL", "AIRP", "ADM3", "ADM4", "ADMD", "", None])
     def test_places(self, code):
         assert not is_area_feature(code)
 
@@ -2609,7 +2609,8 @@ class TestSearchCountryQuery:
         result = await search_locations(q="Phuket")
         names = [r["name"] for r in result["locations"]]
         assert names == ["Phuket"]
-        assert result["locations"][0]["slug"].startswith("phuket--")
+        # A shipped seed city: its canonical slug, not a spot beside it.
+        assert result["locations"][0]["slug"] == "phuket-th"
 
     @pytest.mark.asyncio
     @patch("py._locations.find_locations_in_country")
@@ -2623,11 +2624,11 @@ class TestSearchCountryQuery:
         result = await search_locations(q="Thailand")
         slugs = [r["slug"] for r in result["locations"]]
         assert slugs[:2] == ["bangkok-th", "krabi-th"]
-        assert slugs[2].startswith("phuket--")
+        assert slugs[2] == "phuket-th"  # seed city, not a spot slug
         assert not any(s.startswith("thailand") for s in slugs)
         assert all("_id" not in r for r in result["locations"])
         mock_cc.assert_called_once_with("TH", limit=20)
-        assert result["source"] == "geocoded"
+        assert result["source"] == "mongodb"  # no geocoded candidate survived
 
     @pytest.mark.asyncio
     @patch("py._locations._forward_geocode",

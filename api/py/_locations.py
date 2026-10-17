@@ -31,7 +31,7 @@ from ._db import (
     is_valid_coords,
     SLUG_RE,
 )
-from ._seed_locations import nearest_seed, seed_in_country
+from ._seed_locations import nearest_seed, seed_in_country, seed_matching
 from ._places_resolver import (
     adapt_placesgeo_to_location,
     count_all_locations,
@@ -199,20 +199,22 @@ _GEOCODE_DUPLICATE_KM = 25.0
 #: continents, oceans, seas and regions. Their coordinate is a centroid, so a
 #: forecast there describes nowhere anyone is (searching "Thailand" offered a
 #: page for 15.5°N 101°E). Search never offers them as places (#302).
-_AREA_FEATURE_CODES = frozenset({"TERR", "CONT", "OCN", "SEA", "RGN", "RGNE", "PRSH"})
+_AREA_FEATURE_CODES = frozenset({
+    "TERR", "CONT", "OCN", "SEA", "RGN", "RGNE", "PRSH",
+    "ADM1", "ADM2", "ADM1H", "ADM2H",
+})
 
 
 def is_area_feature(feature_code: str | None) -> bool:
     """True for a geocoder hit that names an area, not a place.
 
-    Besides countries (``PCL*``), this covers administrative divisions
-    (``ADM1``, ``ADM2``, ``ADM1H`` ... — "Phuket Province" is a centroid too)
-    and parishes (``PRSH``).
+    Besides countries (``PCL*``), this covers first- and second-order
+    administrative divisions (``ADM1``, ``ADM2`` and their historical ``H``
+    forms: "Phuket Province" is a centroid too) and parishes (``PRSH``).
+    Lower orders (``ADM3``, ``ADM4``, ``ADMD``) are often real towns and stay.
     """
     code = (feature_code or "").strip().upper()
-    return (
-        code.startswith("PCL") or code.startswith("ADM") or code in _AREA_FEATURE_CODES
-    )
+    return code.startswith("PCL") or code in _AREA_FEATURE_CODES
 
 
 def _country_hit_codes(geocoded: list[dict]) -> list[str]:
@@ -425,8 +427,15 @@ async def search_locations(
                         extra.append(loc)
             places = [g for g in geocoded if not is_area_feature(g.get("featureCode"))]
             for c in (_geocoded_candidate(g) for g in places):
+                # A shipped seed city is the same place: offer its canonical
+                # slug (phuket-th), not a spot beside it.
+                seed = seed_matching(c["name"], c["lat"], c["lon"], max_km=_GEOCODE_DUPLICATE_KM)
+                if seed:
+                    c = seed
                 # Against the catalogue AND the candidates already kept: the
                 # geocoder can return one town twice (two admin entries).
+                if any(r.get("slug") == c.get("slug") for r in results + extra):
+                    continue
                 if not _duplicates_any(c, results + extra):
                     extra.append(c)
             extra = extra[: max(0, limit - len(results))]
