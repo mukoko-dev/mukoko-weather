@@ -2386,11 +2386,12 @@ PHUKET_HIT = {
 
 class TestAreaFeatures:
     @pytest.mark.parametrize("code", ["PCLI", "PCLD", "PCLF", "PCLS", "PCLIX", "PCLH", "PCL",
-                                      "TERR", "CONT", "OCN", "SEA", "RGN", "rgn"])
+                                      "TERR", "CONT", "OCN", "SEA", "RGN", "rgn",
+                                      "ADM1", "ADM2", "ADM3", "ADM1H", "ADM2H", "ADMD", "PRSH"])
     def test_areas(self, code):
         assert is_area_feature(code)
 
-    @pytest.mark.parametrize("code", ["PPL", "PPLA", "PPLC", "PPLX", "ISL", "AIRP", "ADM1", "", None])
+    @pytest.mark.parametrize("code", ["PPL", "PPLA", "PPLC", "PPLX", "ISL", "AIRP", "", None])
     def test_places(self, code):
         assert not is_area_feature(code)
 
@@ -2419,11 +2420,52 @@ class TestSearchCountryQuery:
     @patch("py._locations.find_locations_in_country", return_value=[])
     @patch("py._locations._forward_geocode", return_value=[THAILAND_HIT])
     @patch("py._locations.search_locations_by_name", return_value=[])
-    async def test_country_centroid_is_not_offered(self, _db, _geo, _cc):
-        """The production gap: "Thailand" offered thailand-th, a 404."""
+    async def test_empty_country_falls_back_to_the_seed_catalogue(self, _db, _geo, _cc):
+        """The real empty case: placesGeo holds nothing for Thailand, so the
+        static seed lists Bangkok, Phuket ... and never the centroid."""
         result = await search_locations(q="Thailand")
-        assert result["locations"] == []
+        slugs = [r["slug"] for r in result["locations"]]
+        assert "bangkok-th" in slugs and "phuket-th" in slugs
+        assert not any(s.startswith("thailand") for s in slugs)
+        assert all(r["country"] == "TH" for r in result["locations"])
+        assert result["locations"][0]["tags"] and "city" in result["locations"][0]["tags"]
         assert result["source"] == "mongodb"
+
+    @pytest.mark.asyncio
+    @patch("py._locations.find_locations_in_country", return_value=[])
+    @patch("py._locations._forward_geocode",
+           return_value=[{**THAILAND_HIT, "name": "Atlantis", "country": "XX"}])
+    @patch("py._locations.search_locations_by_name", return_value=[])
+    async def test_country_with_no_stored_and_no_seed_places_is_empty(self, _db, _geo, _cc):
+        result = await search_locations(q="Atlantis")
+        assert result["locations"] == []
+
+    @pytest.mark.asyncio
+    @patch("py._locations.find_locations_in_country", return_value=[])
+    @patch("py._locations._forward_geocode", return_value=[])
+    @patch("py._locations.search_locations_by_name", return_value=[])
+    async def test_geocoder_is_over_fetched(self, _db, mock_geo, _cc):
+        """Area hits are dropped after the fetch, so ask for more than wanted."""
+        await search_locations(q="Thailand", limit=20)
+        assert mock_geo.call_args.args[1] == 60
+        mock_geo.reset_mock()
+        from py import _locations
+        _locations._geocode_cache.clear()
+        await search_locations(q="Thailand", limit=3)
+        assert mock_geo.call_args.args[1] == 10
+
+    @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode", return_value=[
+        {**THAILAND_HIT, "name": "Phuket Province", "featureCode": "ADM1"},
+        {**THAILAND_HIT, "name": "Phuket", "featureCode": "ADM2"},
+        PHUKET_HIT,
+    ])
+    @patch("py._locations.search_locations_by_name", return_value=[])
+    async def test_admin_area_centroids_are_dropped(self, _db, _geo):
+        result = await search_locations(q="Phuket")
+        names = [r["name"] for r in result["locations"]]
+        assert names == ["Phuket"]
+        assert result["locations"][0]["slug"].startswith("phuket--")
 
     @pytest.mark.asyncio
     @patch("py._locations.find_locations_in_country")
@@ -2459,4 +2501,16 @@ class TestSearchCountryQuery:
         req = MagicMock()
         req.json = AsyncMock(return_value={"query": "thailand"})
         result = await add_location(req)
+        assert [r["name"] for r in result["results"]] == ["Phuket"]
+
+    @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode")
+    async def test_add_location_candidates_overfetch_past_areas(self, mock_geo):
+        from py._locations import add_location
+
+        mock_geo.return_value = [THAILAND_HIT] * 4 + [PHUKET_HIT]
+        req = MagicMock()
+        req.json = AsyncMock(return_value={"query": "thailand"})
+        result = await add_location(req)
+        assert mock_geo.call_args.kwargs["count"] == 15
         assert [r["name"] for r in result["results"]] == ["Phuket"]
