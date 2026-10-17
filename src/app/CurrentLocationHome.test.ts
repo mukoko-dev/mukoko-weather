@@ -88,16 +88,27 @@ describe("CurrentLocationHome — silent-URL model", () => {
   });
 
   it("refreshes silently only when permission is already granted — never prompts on load", () => {
-    expect(source).toMatch(
-      /navigator\.permissions\?\.query\(\{\s*name: "geolocation",?\s*\}\)/,
-    );
-    expect(source).toContain('if (state !== "granted") {');
+    expect(source).toContain('readBrowserPermission("geolocation")');
+    expect(source).toContain("decideLocationAsk(");
+    expect(source).toContain('if (ask !== "refresh-silently") {');
     // The old once-ever auto-prompt is gone: the prompt only follows a tap.
     expect(source).not.toContain("GPS_AUTOPROMPT_KEY");
   });
 
+  it("remembers the outcome per device and never re-asks after a block", () => {
+    expect(source).toContain('recordPermission("geolocation", "denied")');
+    expect(source).toContain('recordPermission("geolocation", "granted")');
+    // "Not now" is not a block; it is its own state with a retry window.
+    expect(source).toContain('recordPermission("geolocation", "dismissed")');
+    expect(source).toContain('if (ask !== "show-prompt") setDismissed(true);');
+    expect(source).toContain("LEGACY_LOCATION_CARD_DISMISSED_KEY");
+  });
+
+  it("reports a signed-in device to the account without blocking", () => {
+    expect(source).toContain("useDeviceHeartbeat(Boolean(user))");
+  });
+
   it("explains a blocked permission instead of failing silently", () => {
-    expect(source).toContain('if (state === "denied") setMessage("denied");');
     expect(source).toContain("Location is blocked in your browser settings.");
   });
 
@@ -106,7 +117,6 @@ describe("CurrentLocationHome — silent-URL model", () => {
     expect(source).toContain(
       "const showCard = promptReady && !gpsConfirmed && !dismissed;",
     );
-    expect(source).toContain("LOCATION_CARD_DISMISSED_KEY");
   });
 
   it("tells a weather failure apart from a location failure", () => {
