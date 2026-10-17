@@ -9,6 +9,7 @@
 //! ```text
 //! GET /locations?slug= | tag= | country= | mode=tags|stats  [&limit=1..200&skip=]
 //! GET /search?q= | tag= | lat=&lon= | mode=tags              [&limit=1..50&skip=]
+//! GET /search?q=<name>&mode=resolve                          one best place for a URL (always 200)
 //! GET /geo?lat=&lon=[&autoCreate=true]
 //! GET /history?location=&days=1..365
 //! GET /health
@@ -16,26 +17,37 @@
 //!
 //! The Python backend read `places.placesGeo` in MongoDB. This Worker reads no
 //! database for places: the seed locations are compiled in, a
-//! `{name}--{geohash}` slug carries its own point, canonical places come from
-//! the Nyuchi API, and geocoding from Open-Meteo and Nominatim
-//! (`weather_core::locations`). `geo?autoCreate=true` names the point and
-//! answers its `{name}--{geohash}` slug, which needs no record to resolve; it
-//! does not write a canonical place (the Nyuchi API has no endpoint for that
-//! yet). History is read from D1 `place_daily`, written by
-//! `mukoko-weather-jobs`.
+//! `{name}--{geohash}` slug carries its own point, community places come from
+//! the Nyuchi API, and geocoding from Open-Meteo and Nominatim. The Nyuchi API
+//! does not expose `placesGeo` yet (mukoko-weather#148, platform ask 1), so a
+//! seed in the countries the platform geography covers stands for "stored" in
+//! the find-only lookup (`weather_core::place_search`). The decisions
+//! (area filter, top-up, resolve, find-only order) are pure and pinned to
+//! `tests/fixtures/places-contract.json`, shared with the Python tests.
+//!
+//! No route needs a sign-in: places are public reads, limited per client IP
+//! (the hourly budgets are in D1 `rate_events`, the per-minute reverse
+//! geocode limit is the `GEOCODE_LIMITER` binding). `geo?autoCreate=true`
+//! names the point and answers its `{name}--{geohash}` slug, but writes no
+//! canonical place (the Nyuchi API has no endpoint for that yet). History is
+//! read from D1 `place_daily`, which `mukoko-weather-jobs` writes.
 
+mod limits;
 mod sources;
 
 use serde_json::{json, Value};
 use weather_core::geo::valid_coordinates;
 use weather_core::locations::{self, LocationDoc};
+use weather_core::place_search::{self as ps, ResolveStatus};
 use weather_edge::{error, json, now_ms, query_pairs};
 use worker::{event, Context, Env, Method, Request, Response, Result};
 
 const DB: &str = "WEATHER_DB";
 const GEOCODE_LIMITER: &str = "GEOCODE_LIMITER";
-/// Set by mukoko-weather-api to the caller's IP, for the geocoding limit.
+/// Set by mukoko-weather-api to the caller's IP, for the budgets.
 const CLIENT_IP_HEADER: &str = "X-Mukoko-Client-IP";
+/// Location creations an hour per client (`location-create`).
+const CREATE_PER_IP: u32 = 5;
 
 struct Query(Vec<(String, String)>);
 
@@ -56,6 +68,15 @@ impl Query {
     }
 }
 
+fn client_ip(req: &Request) -> String {
+    req.headers()
+        .get(CLIENT_IP_HEADER)
+        .ok()
+        .flatten()
+        .or_else(|| req.headers().get("CF-Connecting-IP").ok().flatten())
+        .unwrap_or_else(|| "unknown".into())
+}
+
 #[event(fetch)]
 pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     if req.method() != Method::Get {
@@ -68,7 +89,7 @@ pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             &json!({"service": "mukoko-weather-places", "status": "ok"}),
         ),
         "/locations" => locations_route(&env, &q).await,
-        "/search" => search_route(&env, &q).await,
+        "/search" => search_route(&req, &env, &q).await,
         "/geo" => geo_route(&req, &env, &q).await,
         "/history" => history_route(&env, &q).await,
         _ => error(404, "not_found", "No such route."),
@@ -87,7 +108,8 @@ fn page<T: Clone>(items: &[T], skip: usize, limit: usize) -> Vec<T> {
 }
 
 /// A location by slug: seed, then a `{name}--{geohash}` spot (named by an
-/// earlier reverse geocode when there is one), then the Nyuchi API.
+/// earlier reverse geocode when there is one), then the Nyuchi API. A spot
+/// is a coordinate, not a stored place, and says so (`synthesized`).
 async fn find_location(env: &Env, slug: &str) -> std::result::Result<Option<LocationDoc>, ()> {
     if let Some(l) = locations::find_seed(slug) {
         return Ok(Some(l.clone()));
@@ -95,7 +117,11 @@ async fn find_location(env: &Env, slug: &str) -> std::result::Result<Option<Loca
     if let Some(spot) = LocationDoc::spot(slug) {
         let named = sources::reverse_cached(env, spot.lat, spot.lon)
             .await
-            .filter(|l| l.slug == slug);
+            .filter(|l| l.slug == slug)
+            .map(|mut l| {
+                l.synthesized = Some(true);
+                l
+            });
         return Ok(Some(named.unwrap_or(spot)));
     }
     sources::nyuchi_place(env, slug).await
@@ -142,16 +168,64 @@ async fn locations_route(env: &Env, q: &Query) -> Result<Response> {
     )
 }
 
-/// Add `extra` locations whose slug is not already listed.
-fn merge(into: &mut Vec<LocationDoc>, extra: Vec<LocationDoc>) {
-    for l in extra {
-        if !into.iter().any(|x| x.slug == l.slug) {
-            into.push(l);
+/// `GET /search?q=<name>&mode=resolve`: the one best place for a bare name in
+/// a URL (mukoko-weather#318). Always 200; `resolve` is `ok`, `no_match`,
+/// `over_budget` or `unavailable`. Only `ok` and `no_match` are cached.
+/// Nothing is stored.
+async fn resolve_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
+    let Some(raw) = q.get("q") else {
+        return error(400, "invalid_request", "Provide q (the place name)");
+    };
+    let answer = |status: ResolveStatus, found: Option<LocationDoc>| {
+        let source = if found.is_some() { "geocoded" } else { "none" };
+        let body = json!({
+            "locations": found.iter().collect::<Vec<_>>(),
+            "total": usize::from(found.is_some()),
+            "source": source,
+            "resolve": status.as_str(),
+        });
+        // A definitive answer may be cached by the edge for a short while;
+        // a budget or availability answer must not be pinned.
+        match status {
+            ResolveStatus::Ok | ResolveStatus::NoMatch => cached_json(&body, 600),
+            _ => json(200, &body),
         }
+    };
+    let Some(name) = ps::resolve_name(raw) else {
+        return answer(ResolveStatus::NoMatch, None);
+    };
+    if let Some(hit) = sources::resolve_cached(env, &name).await {
+        let status = if hit.is_some() {
+            ResolveStatus::Ok
+        } else {
+            ResolveStatus::NoMatch
+        };
+        return answer(status, hit);
     }
+    if !sources::open_meteo_allowed() {
+        return answer(ResolveStatus::Unavailable, None);
+    }
+    let ip = client_ip(req);
+    if !limits::within(env, &ip, "slug-geocode", ps::RESOLVE_PER_IP).await
+        || !limits::within(env, "all", "slug-geocode-global", ps::RESOLVE_GLOBAL).await
+    {
+        return answer(ResolveStatus::OverBudget, None);
+    }
+    // The resolve budgets above replace the search top-up budget.
+    let Ok(hits) = sources::geocode_hits(env, &name, ps::RESOLVE_GEOCODE_COUNT, None).await else {
+        return answer(ResolveStatus::Unavailable, None);
+    };
+    let found = ps::pick_resolve(&name, &hits);
+    sources::resolve_store(env, &name, found.as_ref()).await;
+    let status = if found.is_some() {
+        ResolveStatus::Ok
+    } else {
+        ResolveStatus::NoMatch
+    };
+    answer(status, found)
 }
 
-async fn search_route(env: &Env, q: &Query) -> Result<Response> {
+async fn search_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
     let (Ok(limit), Ok(skip)) = (q.int("limit", 20), q.int("skip", 0)) else {
         return error(
             422,
@@ -162,6 +236,21 @@ async fn search_route(env: &Env, q: &Query) -> Result<Response> {
     let limit = limit.clamp(1, 50) as usize;
     let skip = skip.max(0) as usize;
 
+    if q.get("q")
+        .is_some_and(|t| t.chars().count() > ps::MAX_SEARCH_QUERY_LENGTH)
+    {
+        return error(
+            400,
+            "invalid_request",
+            &format!(
+                "q too long (max {} characters)",
+                ps::MAX_SEARCH_QUERY_LENGTH
+            ),
+        );
+    }
+    if q.get("mode") == Some("resolve") {
+        return resolve_route(req, env, q).await;
+    }
     if q.get("mode") == Some("tags") {
         return cached_json(&json!({"tags": locations::tag_counts()}), 3_600);
     }
@@ -171,16 +260,10 @@ async fn search_route(env: &Env, q: &Query) -> Result<Response> {
         if !valid_coordinates(lat, lon) {
             return error(400, "invalid_request", "Invalid coordinates");
         }
-        let mut found: Vec<LocationDoc> = locations::nearest_seeds(lat, lon, 100.0, limit)
+        let found: Vec<LocationDoc> = locations::nearest_seeds(lat, lon, 100.0, limit)
             .into_iter()
             .cloned()
             .collect();
-        if found.len() < limit {
-            if let Ok(near) = sources::nyuchi_nearby(env, lat, lon, 100.0, limit).await {
-                merge(&mut found, near);
-            }
-        }
-        found.truncate(limit);
         let total = found.len();
         return cached_json(
             &json!({"locations": found, "total": total, "source": "places"}),
@@ -197,30 +280,26 @@ async fn search_route(env: &Env, q: &Query) -> Result<Response> {
             "Provide q (search query) or tag (filter)",
         );
     }
-    let mut found: Vec<LocationDoc> = locations::search_seed(text.unwrap_or(""), tag)
+    let found: Vec<LocationDoc> = locations::search_seed(text.unwrap_or(""), tag)
         .into_iter()
         .cloned()
         .collect();
+    let mut results = page(&found, skip, limit);
     let mut source = "places";
+    // A thin catalogue answer is topped up with geocoded candidates: the
+    // places of a named country, then each non-area hit (a seed where one
+    // matches, else a spot slug that renders without a record).
     if let (Some(text), None) = (text, tag) {
-        if found.len() < skip + limit {
-            if let Ok(canonical) = sources::nyuchi_search(env, text, limit).await {
-                merge(&mut found, canonical);
-            }
-        }
-        // Nothing on record: offer geocoded candidates, as the app expects
-        // (address-level discovery). They are not records yet.
-        if found.is_empty() {
-            match sources::geocode(env, text, limit).await {
-                Ok(geocoded) => {
-                    found = geocoded;
-                    source = "geocoded";
-                }
-                Err(()) => return error(503, "search_unavailable", "Search unavailable"),
-            }
+        if skip == 0 && results.len() < ps::GEOCODE_TOP_UP_BELOW && sources::open_meteo_allowed() {
+            let ip = client_ip(req);
+            let hits = sources::geocode_hits(env, text, ps::geocode_fetch_count(limit), Some(&ip))
+                .await
+                .unwrap_or_default();
+            let (extra, top_source) = ps::top_up(&results, &hits, limit);
+            source = top_source;
+            results.extend(extra);
         }
     }
-    let results = page(&found, skip, limit);
     let total = results.len();
     cached_json(
         &json!({"locations": results, "total": total, "source": source}),
@@ -237,19 +316,24 @@ async fn geo_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
     }
     let auto_create = matches!(q.get("autoCreate"), Some("true" | "1"));
 
-    let found = |loc: &LocationDoc, is_new: bool| {
-        let resp = json(
-            200,
-            &json!({"nearest": loc, "redirectTo": format!("/{}", loc.slug), "isNew": is_new}),
-        )?;
-        Ok::<_, worker::Error>(resp)
+    let found = |loc: &LocationDoc, is_new: bool, synthesized: bool| {
+        let mut body =
+            json!({"nearest": loc, "redirectTo": format!("/{}", loc.slug), "isNew": is_new});
+        if synthesized {
+            body["synthesized"] = json!(true);
+        }
+        json(200, &body)
     };
 
     if !auto_create {
-        // IP-based points can be off by a couple of hundred km: past 150 km,
-        // say so rather than send the person to the wrong city.
-        return match locations::nearest_seeds(lat, lon, 150.0, 1).first() {
-            Some(loc) => found(loc, false),
+        // Nothing is created. A stored place within 150 km answers (IP
+        // points can be off by a couple of hundred km), else a shipped seed
+        // city within 50 km, else the point is named on demand as a spot.
+        if let Some(loc) = ps::find_only_known(lat, lon) {
+            return found(&loc, false, false);
+        }
+        return match sources::find_only_spot(env, lat, lon, &client_ip(req)).await {
+            Some(spot) => found(&spot, false, true),
             None => error(
                 404,
                 "not_found",
@@ -259,17 +343,16 @@ async fn geo_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
     }
 
     // "Use my location" resolves to the exact place, never the nearest city.
+    let ip = client_ip(req);
     if let Ok(limiter) = env.rate_limiter(GEOCODE_LIMITER) {
-        let ip = req
-            .headers()
-            .get(CLIENT_IP_HEADER)?
-            .or(req.headers().get("CF-Connecting-IP")?)
-            .unwrap_or_else(|| "unknown".into());
-        if let Ok(outcome) = limiter.limit(ip).await {
+        if let Ok(outcome) = limiter.limit(ip.clone()).await {
             if !outcome.success {
                 return error(429, "rate_limited", "Rate limit exceeded. Try again later.");
             }
         }
+    }
+    if !limits::within(env, &ip, "location-create", CREATE_PER_IP).await {
+        return error(429, "rate_limited", "Rate limit exceeded. Try again later.");
     }
     let named = match sources::reverse(env, lat, lon).await {
         Ok(Some(l)) => l,
@@ -281,8 +364,8 @@ async fn geo_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
         .into_iter()
         .find(|s| s.name.eq_ignore_ascii_case(&named.name));
     match existing {
-        Some(seed) => found(seed, false),
-        None => found(&named, true),
+        Some(seed) => found(seed, false, false),
+        None => found(&named, true, false),
     }
 }
 

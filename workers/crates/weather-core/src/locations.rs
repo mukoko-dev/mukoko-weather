@@ -23,7 +23,7 @@ use crate::geo::{haversine_km, valid_coordinates};
 use crate::places::{slugify, Place};
 
 /// One location, in the app's `LocationDoc` shape.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocationDoc {
     pub slug: String,
@@ -31,7 +31,10 @@ pub struct LocationDoc {
     pub province: String,
     pub lat: f64,
     pub lon: f64,
-    pub elevation: f64,
+    /// Metres. `None` (serialised `null`, never a made-up 0) when nothing
+    /// measured it: a synthesized spot, or a geocoder that had no height.
+    #[serde(default)]
+    pub elevation: Option<f64>,
     #[serde(default)]
     pub tags: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -42,6 +45,21 @@ pub struct LocationDoc {
     pub province_slug: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nominatim_address: Option<Value>,
+    /// The elevation is a placeholder (the forecast carries the model's own
+    /// terrain height), as the app's `elevationApproximate`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elevation_approximate: Option<bool>,
+    /// A coordinate named on the fly, not a stored place: nothing was
+    /// written (`src/lib/locations.ts`, `synthesized`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synthesized: Option<bool>,
+    /// A geocoder hit that names an area (a province centre), offered only
+    /// because the visitor typed that name as a URL.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area: Option<bool>,
+    /// Distance from the asked point, for nearest-seed answers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distance_km: Option<f64>,
 }
 
 #[derive(Deserialize)]
@@ -76,11 +94,11 @@ pub fn seed_locations() -> &'static [LocationDoc] {
                 province: r.province,
                 lat: r.lat,
                 lon: r.lon,
-                elevation: r.elevation,
+                elevation: Some(r.elevation),
                 tags: r.tags,
                 country: r.country,
                 source: "seed".into(),
-                nominatim_address: None,
+                ..Default::default()
             })
             .collect()
     })
@@ -289,9 +307,40 @@ pub fn parse_spot_slug(slug: &str) -> Option<(String, f64, f64)> {
     Some((name, lat, lon))
 }
 
+/// Fewest geohash characters a spot slug may carry (~4.9 km), as
+/// `MIN_SPOT_GEOHASH_LENGTH` in `api/py/_geohash.py`.
+pub const MIN_SPOT_GEOHASH_LENGTH: usize = 5;
+
+/// `^[a-z0-9-]{1,80}$`, the backend's `SLUG_RE`.
+fn slug_is_plain(slug: &str) -> bool {
+    (1..=80).contains(&slug.len())
+        && slug
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// The geohash segment of a `{name}--{geohash}` slug.
+fn spot_hash(slug: &str) -> Option<&str> {
+    let idx = slug.rfind(SMART_SLUG_DELIMITER)?;
+    Some(&slug[idx + SMART_SLUG_DELIMITER.len()..])
+}
+
+/// A geocoder elevation in metres, or `None` when it is missing, not finite
+/// or Open-Meteo's `-9999` "no data" placeholder (anything at or below
+/// -1000 m: the lowest land, the Dead Sea shore, is about -430 m).
+pub fn clean_elevation(value: Option<f64>) -> Option<f64> {
+    value.filter(|v| v.is_finite() && *v > -1000.0)
+}
+
 impl LocationDoc {
     /// A spot named only by its slug (no reverse geocode to hand).
     pub fn spot(slug: &str) -> Option<LocationDoc> {
+        // The Python backend refuses a geohash under 5 characters (~4.9 km)
+        // and anything that is not a plain slug; the page still renders it.
+        if !slug_is_plain(slug) || spot_hash(slug).is_none_or(|h| h.len() < MIN_SPOT_GEOHASH_LENGTH)
+        {
+            return None;
+        }
         let (name, lat, lon) = parse_spot_slug(slug)?;
         Some(LocationDoc {
             slug: slug.to_owned(),
@@ -303,12 +352,13 @@ impl LocationDoc {
             province: String::new(),
             lat,
             lon,
-            elevation: 0.0,
+            elevation: None,
             tags: vec![],
             country: None,
             source: "geolocation".into(),
-            province_slug: None,
-            nominatim_address: None,
+            elevation_approximate: Some(true),
+            synthesized: Some(true),
+            ..Default::default()
         })
     }
 
@@ -330,11 +380,11 @@ impl LocationDoc {
             slug: place.slug,
             lat: place.lat,
             lon: place.lon,
-            elevation: place.elevation.unwrap_or(0.0),
+            elevation: place.elevation,
             tags: vec![],
             country,
             source: "places".into(),
-            nominatim_address: None,
+            ..Default::default()
         })
     }
 
@@ -351,8 +401,14 @@ impl LocationDoc {
             .and_then(Value::as_str)
             .unwrap_or("")
             .to_uppercase();
+        // A spot slug renders with no record behind it (`london-gb` would
+        // 404 for every place the catalogue does not hold).
+        let slug = match build_smart_slug(name, lat, lon) {
+            s if s.is_empty() => generate_slug(name, &country),
+            s => s,
+        };
         Some(LocationDoc {
-            slug: generate_slug(name, &country),
+            slug,
             name: name.to_owned(),
             province: r
                 .get("admin1")
@@ -361,12 +417,11 @@ impl LocationDoc {
                 .to_owned(),
             lat,
             lon,
-            elevation: r.get("elevation").and_then(Value::as_f64).unwrap_or(0.0),
+            elevation: clean_elevation(r.get("elevation").and_then(Value::as_f64)),
             tags: vec![],
             country: (!country.is_empty()).then_some(country),
             source: "geocoded".into(),
-            province_slug: None,
-            nominatim_address: None,
+            ..Default::default()
         })
     }
 
@@ -425,11 +480,13 @@ impl LocationDoc {
             province: admin1,
             lat: num("lat", lat),
             lon: num("lon", lon),
-            elevation: 0.0,
+            elevation: None,
+            elevation_approximate: Some(true),
             tags: vec!["city".into()],
             country: (!country.is_empty()).then_some(country),
             source: "geolocation".into(),
             nominatim_address: Some(Value::Object(nominatim)),
+            ..Default::default()
         })
     }
 }
@@ -440,7 +497,11 @@ const CITY_STATES: [&str; 13] = [
 ];
 
 /// `_extract_location_name`: a POI, then a suburb, then a road, then the city.
-fn location_name(data: &Value, address: &Map<String, Value>, country_name: &str) -> String {
+pub(crate) fn location_name(
+    data: &Value,
+    address: &Map<String, Value>,
+    country_name: &str,
+) -> String {
     let a = |k: &str| address.get(k).and_then(Value::as_str).unwrap_or("");
     let city = if a("city").is_empty() {
         a("town")
@@ -470,7 +531,11 @@ fn location_name(data: &Value, address: &Map<String, Value>, country_name: &str)
 }
 
 /// `_normalize_admin1`: a usable province, never a postal code.
-fn normalize_admin1(address: &Map<String, Value>, country: &str, country_name: &str) -> String {
+pub(crate) fn normalize_admin1(
+    address: &Map<String, Value>,
+    country: &str,
+    country_name: &str,
+) -> String {
     let a = |k: &str| address.get(k).and_then(Value::as_str).unwrap_or("");
     let first = |keys: &[&str]| {
         keys.iter()
@@ -605,11 +670,17 @@ mod tests {
         let r = json!({"name": "Nairobi", "latitude": -1.28, "longitude": 36.82,
             "elevation": 1661.0, "country_code": "KE", "admin1": "Nairobi Area"});
         let l = LocationDoc::from_open_meteo(&r).unwrap();
-        assert_eq!(
-            (l.slug.as_str(), l.source.as_str()),
-            ("nairobi-ke", "geocoded")
-        );
+        // The slug is a spot, which renders with no record behind it.
+        assert!(l.slug.starts_with("nairobi--"), "{}", l.slug);
+        assert_eq!(l.source, "geocoded");
+        assert_eq!(l.elevation, Some(1661.0));
         assert_eq!(l.country.as_deref(), Some("KE"));
+        let no_height = json!({"name": "London", "latitude": 51.5, "longitude": -0.12,
+            "elevation": -9999.0, "country_code": "GB"});
+        assert_eq!(
+            LocationDoc::from_open_meteo(&no_height).unwrap().elevation,
+            None
+        );
         assert!(LocationDoc::from_open_meteo(&json!({"name": "x"})).is_none());
     }
 

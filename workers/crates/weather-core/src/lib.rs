@@ -22,6 +22,7 @@ pub mod geo;
 pub mod jobs;
 pub mod locations;
 pub mod normalize;
+pub mod place_search;
 pub mod places;
 pub mod push;
 pub mod query;
