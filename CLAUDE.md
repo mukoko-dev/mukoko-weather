@@ -134,6 +134,7 @@ mukoko-weather/
 │   │   │   ├── page.tsx              # Status page (metadata, layout)
 │   │   │   └── StatusDashboard.tsx   # Client: live health checks for all services
 │   │   ├── about/page.tsx            # About page
+│   │   ├── releases/                 # Public release notes (static) — page.tsx, feed.xml/route.ts (Atom), loading.tsx, error.tsx (RouteErrorBoundary), releases.test.ts
 │   │   ├── help/
 │   │   │   ├── page.tsx              # Help/FAQ page (server, metadata, JSON-LD)
 │   │   │   └── FAQ.tsx               # Client: Accordion-based FAQ section
@@ -381,6 +382,9 @@ mukoko-weather/
 │   │   ├── display.test.ts
 │   │   ├── use-display-runtime.ts # useWakeLock, usePeriodicReload, usePolledJson (keeps last good data)
 │   │   ├── i18n.ts                # Lightweight i18n (en complete, sn/nd ready)
+│   │   ├── release-notes.ts       # Release-notes parser (strict front matter + 5 sections), ordering, JSON-LD, Atom feed builder (pure)
+│   │   ├── release-notes-source.ts # Build-time loader for releases/*.md (fs; static routes only)
+│   │   ├── release-notes.test.ts  # Parser/ordering/grouping/feed/JSON-LD tests (fixtures in __fixtures__/release-notes/)
 │   │   ├── i18n.test.ts
 │   │   ├── map-layers.ts          # Map layer config (Tomorrow.io tile layers, mineral color styles), trimmed MAPTILER_KEY + style ids
 │   │   ├── map-timeline.ts        # Forward-timeline stops labelled in the PLACE's time zone (frameStops) + fetchPlaceOffset (DST-aware offset from /api/py/weather)
@@ -672,6 +676,8 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/explore/country/[code]/[province]` — browse locations in a specific province
 - `/status` — system health dashboard (live checks: MongoDB, Open-Meteo, Shamwari AI gateway, cache; Tomorrow.io as an enrichment-only row that never degrades the overall status)
 - `/about` — about page (company info, contact details)
+- `/releases` — public release notes (static, indexable, in the sitemap, linked from the Footer, About and `/profile` navigation). Built at build time from the curated files in `releases/` (one `v<version>.md` per production release; format in `src/lib/release-notes.ts` and CONTRIBUTING.md → Release notes) — never from the GitHub API and never on the request path. `releases` is in the `KNOWN_ROUTES` sets (`src/proxy.ts`, `WeatherLoadingScene.tsx`) and `NON_LOCATION_ROUTES`
+- `/releases/feed.xml` — Atom 1.0 feed of the same notes (static; `updated` is the newest release date, never the clock), advertised as the page's `application/atom+xml` alternate
 - `/privacy` — privacy policy
 - `/terms` — terms of service
 - `/help` — user help/FAQ
@@ -826,7 +832,7 @@ Policy lives as data in `src/lib/security-headers.ts` (framework-agnostic, so th
 
 **Country for any place on Earth:** `places.placesGeo` stores 54 African countries, so a place outside them (London, Tokyo, a spot in the ocean) can reach the page with no country. `/api/py/weather` passes Open-Meteo's IANA `timezone` through, and `reconcileCountry()` (`src/lib/location-country.ts`) fills a missing country from it via `ZONE_COUNTRY` (`src/lib/timezone-country.ts`, generated from tzdata `zone.tab`, public domain); `Etc/GMT±N` names no country, so ocean spots stay countryless. A country borrowed from a seed across a border (`regionApproximate`) is corrected, and its province dropped; a known country is never overruled. `countryDisplayName()` names any ISO code (curated `COUNTRIES` first, then `Intl.DisplayNames`), so breadcrumbs say "United Kingdom", not "GB". Home with no seed nearby seeds a spot at the IP position named from `x-vercel-ip-city` (`ipFallbackLocation`, `src/lib/home-location.ts`), and only borrows a seed in the visitor's own `x-vercel-ip-country`. Python's `find_location()` resolves an unstamped spot slug from its geohash (`parse_spot_slug` in `api/py/_geohash.py`), so history, reports and chat work for searched places too. The backend only accepts a spot slug that matches `SLUG_RE` and carries a geohash of at least 5 characters (`MIN_SPOT_GEOHASH_LENGTH`, ~4.9 km; the front end's `parseSmartSlug` still renders any length because rendering stores nothing). A synthesized spot (`is_synthesized_spot`, `_id` `geo:<geohash>`) has no elevation (`None`), no tags and no country, and is a coordinate, not a catalogue place: every caller that persists data by slug keys it by `storage_slug()` (`geo:<7-char geohash>`, so the name half of the URL never becomes a storage key) — history reads/backfill, report submit/list, the history-analysis cache — `/api/py/weather` ignores it as a history hint, `_place_knowledge.resolve_place` never labels it `placesGeo`, and `/api/py/locations?slug=` returns it with `synthesized: true`. The IP fallback snaps the IP position to a 0.1° grid (`snapIpCoord`) before minting the slug, so one city gives one slug and one weather-cache cell.
 
-**Disputed places (country labels):** the time-zone country is a fallback only — a stored country (placesGeo, seed, IP header) always wins — and it reports what tzdata `zone.tab` says, which is a timekeeping attribution, not a sovereignty statement; mukoko weather takes no position. Known cases: Kosovo → `Europe/Belgrade` → RS, Western Sahara → `Africa/El_Aaiun` → EH, Hebron/Gaza → PS, East Jerusalem → `Asia/Jerusalem` → IL. Overriding any of these is an owner decision; never hand-edit `ZONE_COUNTRY` to do it.
+**Time-zone country (fallback only):** a stored country (placesGeo, seed, IP header) always wins, and the time-zone country only labels a place we hold no country for. It is read straight from tzdata `zone.tab`, never adjusted by hand: a zone that names no country (`Etc/GMT±N`) leaves the place countryless, and `ZONE_COUNTRY` is regenerated from a current `zone.tab`, not edited per place. There is no special handling or labelling for any place; every place is treated the same way.
 
 **Geocoding:** Handled server-side in Python (`api/py/_locations.py`) — Nominatim for reverse geocoding (coords → name, zoom=14 default for GPS auto-creation, zoom=18 for explicit add), Open-Meteo for forward geocoding (name → candidates), Open-Meteo for elevation lookup. Slug generation creates URL-safe slugs (appends country code for non-ZW locations).
 
@@ -1605,6 +1611,7 @@ _Library tests:_
 - `src/lib/model-grid.test.ts` — model-field cells by legend band, nulls and sub-threshold values left clear, fetch contract
 - `src/lib/utils.test.ts` — Tailwind class merging (cn utility), getScrollBehavior reduced-motion detection
 - `src/lib/i18n.test.ts` — translations, formatting, interpolation
+- `src/lib/release-notes.test.ts` + `src/app/releases/releases.test.ts` — release-notes parser (front matter, sections, empty-section dropping, rejects), semver ordering, Atom feed validity, JSON-LD, the shipped `releases/` files (no PR numbers, code or model names), rendered entry structure (article/h2/h3/`<time>`), route registration (KNOWN_ROUTES, sitemap, footer, profile, about). No clock reads
 - `src/lib/geohash.test.ts` — geohash encode/decode against published reference vectors, determinism, precision/error bounds, neighbours (interior, pole, antimeridian), case-insensitivity
 - `src/lib/smart-slug.test.ts` — build/parse round-trip, `--` delimiter safety against every shipped seed slug (the `/gweru` → Arctic hazard), legacy-slug complement
 - `src/lib/places.test.ts` — resolver pure logic (normalizeName, inferNameFromSlug, adapters, `adaptSeedToLocationDoc`, `nearestSeedLocation`, seed-slug uniqueness)
@@ -1866,6 +1873,19 @@ Every data entity MUST map to a schema.org type. The JSON-LD structured data in 
 | Wind direction | `PropertyValue`     | `DD`     | °        | UN/CEFACT Rec 20 |
 | Elevation      | `QuantitativeValue` | `MTR`    | metres   | UN/CEFACT Rec 20 |
 | UV index       | `PropertyValue`     | —        | —        | WHO UV Index     |
+
+**Release notes → `schema.org/CollectionPage` + `ItemList` of `SoftwareApplication`** (`releasesJsonLd` in `src/lib/release-notes.ts`, rendered on `/releases` with a `BreadcrumbList`):
+
+| `ReleaseNote` field | schema.org property                                      | Standard                   |
+| ------------------- | -------------------------------------------------------- | -------------------------- |
+| `version`           | `SoftwareApplication.softwareVersion`                    | SemVer 2.0 (no `v`)        |
+| `date`              | `SoftwareApplication.datePublished`, page `dateModified` | ISO 8601 calendar date     |
+| `title`             | `SoftwareApplication.headline`                           | —                          |
+| entry anchor        | `SoftwareApplication.releaseNotes` (`/releases#v0-11-0`) | URL                        |
+| `githubUrl`         | `SoftwareApplication.sameAs`                             | URL (this repo's tag only) |
+| order               | `ItemList.itemListOrder` = `ItemListOrderDescending`     | newest first               |
+
+`SoftwareApplication` (not `Article`) because each entry describes a version of the app; `name`, `applicationCategory` and `operatingSystem` match the root layout's `WebApplication`.
 
 **Other entities already mapped:**
 
@@ -2190,6 +2210,7 @@ Tests must not reach Overpass: `tests/py/conftest.py` has an autouse fixture mak
 
 **Server-rendered 404 for unknown slugs (#263).** A `notFound()` thrown while the HTML shell renders makes Next 16 fall back to an empty `<html id="__next_error__">` document. The status is 404, but the page only appears after hydration, so visitors and crawlers without JavaScript saw a blank page. This holds for every `notFound()` in the app; the fix below covers `[location]` only, so `explore/country/[code]`, `explore/country/[code]/[province]` and the paused `/shamwari` still serve that blank 404. An unmatched URL (`/a/b/c`), by contrast, does server-render the root not-found page. So `src/proxy.ts` classifies `/{segment}` and `/{segment}/{atmosphere|forecast|map}` with `classifyLocationPath` (`src/lib/location-gate.ts`):
 
+- A bare seed name whose canonical slug carries a country suffix (`/phuket`, `/Phuket/forecast`) gets a 308 redirect to the seed URL (`/phuket-th`, `/phuket-th/forecast`) in one hop (#302). `SEED_NAME_ALIASES` holds only names exactly one seed carries, never shadows a seed slug or a known route, and is built from `LOCATIONS` at module load (no lookup). The legacy Zimbabwe seeds already use the bare name, so the same URL shape now works for every seed.
 - A segment or sub-route that is only in the wrong case (`/Harare`, `/harare/Forecast`, `/Explore`) gets a 308 redirect to its lowercase, canonical URL. Such URLs used to render through the resolver's case-insensitive name lookup.
 - Framework and tooling paths (`_next`, `~offline`) and invalid percent-encoding are left alone. Every other segment, including ones a slug never has (`/x_y`, `/z%C3%BCrich`), is decoded the way the page receives its param and looked up, because the page's name lookup can resolve those.
 - Seed slugs and smart-slug spots pass with no lookup.

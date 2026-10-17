@@ -41,6 +41,7 @@ const KNOWN_ROUTES = new Set([
   "offline",
   "profile",
   "developers",
+  "releases",
 ]);
 
 /** Delay before the loading scene creates its Three.js layer (ms). */
