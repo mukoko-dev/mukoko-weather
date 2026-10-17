@@ -37,6 +37,7 @@ const KNOWN_ROUTES = new Set([
   "offline",
   "profile",
   "developers",
+  "releases",
   "api",
   // WorkOS AuthKit routes — never confuse with location slugs
   "auth",

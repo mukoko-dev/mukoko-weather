@@ -134,6 +134,7 @@ mukoko-weather/
 │   │   │   ├── page.tsx              # Status page (metadata, layout)
 │   │   │   └── StatusDashboard.tsx   # Client: live health checks for all services
 │   │   ├── about/page.tsx            # About page
+│   │   ├── releases/                 # Public release notes (static) — page.tsx, feed.xml/route.ts (Atom), releases.test.ts
 │   │   ├── help/
 │   │   │   ├── page.tsx              # Help/FAQ page (server, metadata, JSON-LD)
 │   │   │   └── FAQ.tsx               # Client: Accordion-based FAQ section
@@ -381,6 +382,9 @@ mukoko-weather/
 │   │   ├── display.test.ts
 │   │   ├── use-display-runtime.ts # useWakeLock, usePeriodicReload, usePolledJson (keeps last good data)
 │   │   ├── i18n.ts                # Lightweight i18n (en complete, sn/nd ready)
+│   │   ├── release-notes.ts       # Release-notes parser (strict front matter + 5 sections), ordering, JSON-LD, Atom feed builder (pure)
+│   │   ├── release-notes-source.ts # Build-time loader for releases/*.md (fs; static routes only)
+│   │   ├── release-notes.test.ts  # Parser/ordering/grouping/feed/JSON-LD tests (fixtures in __fixtures__/release-notes/)
 │   │   ├── i18n.test.ts
 │   │   ├── map-layers.ts          # Map layer config (Tomorrow.io tile layers, mineral color styles), trimmed MAPTILER_KEY + style ids
 │   │   ├── map-timeline.ts        # Forward-timeline stops labelled in the PLACE's time zone (frameStops) + fetchPlaceOffset (DST-aware offset from /api/py/weather)
@@ -671,6 +675,8 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/explore/country/[code]/[province]` — browse locations in a specific province
 - `/status` — system health dashboard (live checks: MongoDB, Open-Meteo, Shamwari AI gateway, cache; Tomorrow.io as an enrichment-only row that never degrades the overall status)
 - `/about` — about page (company info, contact details)
+- `/releases` — public release notes (static, indexable, in the sitemap, linked from the Footer, About and `/profile` navigation). Built at build time from the curated files in `releases/` (one `v<version>.md` per production release; format in `src/lib/release-notes.ts` and CONTRIBUTING.md → Release notes) — never from the GitHub API and never on the request path. `releases` is in the `KNOWN_ROUTES` sets (`src/proxy.ts`, `WeatherLoadingScene.tsx`) and `NON_LOCATION_ROUTES`
+- `/releases/feed.xml` — Atom 1.0 feed of the same notes (static; `updated` is the newest release date, never the clock), advertised as the page's `application/atom+xml` alternate
 - `/privacy` — privacy policy
 - `/terms` — terms of service
 - `/help` — user help/FAQ
@@ -1604,6 +1610,7 @@ _Library tests:_
 - `src/lib/model-grid.test.ts` — model-field cells by legend band, nulls and sub-threshold values left clear, fetch contract
 - `src/lib/utils.test.ts` — Tailwind class merging (cn utility), getScrollBehavior reduced-motion detection
 - `src/lib/i18n.test.ts` — translations, formatting, interpolation
+- `src/lib/release-notes.test.ts` + `src/app/releases/releases.test.ts` — release-notes parser (front matter, sections, empty-section dropping, rejects), semver ordering, Atom feed validity, JSON-LD, the shipped `releases/` files (no PR numbers, code or model names), rendered entry structure (article/h2/h3/`<time>`), route registration (KNOWN_ROUTES, sitemap, footer, profile, about). No clock reads
 - `src/lib/geohash.test.ts` — geohash encode/decode against published reference vectors, determinism, precision/error bounds, neighbours (interior, pole, antimeridian), case-insensitivity
 - `src/lib/smart-slug.test.ts` — build/parse round-trip, `--` delimiter safety against every shipped seed slug (the `/gweru` → Arctic hazard), legacy-slug complement
 - `src/lib/places.test.ts` — resolver pure logic (normalizeName, inferNameFromSlug, adapters, `adaptSeedToLocationDoc`, `nearestSeedLocation`, seed-slug uniqueness)
@@ -1865,6 +1872,19 @@ Every data entity MUST map to a schema.org type. The JSON-LD structured data in 
 | Wind direction | `PropertyValue`     | `DD`     | °        | UN/CEFACT Rec 20 |
 | Elevation      | `QuantitativeValue` | `MTR`    | metres   | UN/CEFACT Rec 20 |
 | UV index       | `PropertyValue`     | —        | —        | WHO UV Index     |
+
+**Release notes → `schema.org/CollectionPage` + `ItemList` of `SoftwareApplication`** (`releasesJsonLd` in `src/lib/release-notes.ts`, rendered on `/releases` with a `BreadcrumbList`):
+
+| `ReleaseNote` field | schema.org property                                      | Standard                   |
+| ------------------- | -------------------------------------------------------- | -------------------------- |
+| `version`           | `SoftwareApplication.softwareVersion`                    | SemVer 2.0 (no `v`)        |
+| `date`              | `SoftwareApplication.datePublished`, page `dateModified` | ISO 8601 calendar date     |
+| `title`             | `SoftwareApplication.headline`                           | —                          |
+| entry anchor        | `SoftwareApplication.releaseNotes` (`/releases#v0-11-0`) | URL                        |
+| `githubUrl`         | `SoftwareApplication.sameAs`                             | URL (this repo's tag only) |
+| order               | `ItemList.itemListOrder` = `ItemListOrderDescending`     | newest first               |
+
+`SoftwareApplication` (not `Article`) because each entry describes a version of the app; `name`, `applicationCategory` and `operatingSystem` match the root layout's `WebApplication`.
 
 **Other entities already mapped:**
 
