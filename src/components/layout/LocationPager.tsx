@@ -44,21 +44,7 @@ export function LocationPager({
   selectedLocation,
 }: LocationPagerProps) {
   const from = currentLocationSlug(pathname, selectedLocation) ?? "";
-  const hiddenPresetSlugs = useAppStore((s) => s.hiddenPresetSlugs);
-  const presetAnchor = useAppStore((s) => s.presetAnchor);
-  const sequence = useMemo(
-    () =>
-      pagerSequence(
-        savedLocations,
-        visiblePresetSlugs({
-          anchor: presetAnchor,
-          hidden: hiddenPresetSlugs,
-          saved: savedLocations,
-          current: selectedLocation,
-        }),
-      ),
-    [savedLocations, hiddenPresetSlugs, presetAnchor, selectedLocation],
-  );
+  const sequence = usePagerSequence(savedLocations, selectedLocation);
   const activeIndex = pagerIndex(pathname, sequence);
   const dots = pagerDots(sequence);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -76,6 +62,9 @@ export function LocationPager({
       behavior: getScrollBehavior(),
     });
   }, [activeIndex]);
+
+  // One page (My Location only): nothing to page between, so no row.
+  if (dots.length === 0) return null;
 
   return (
     <nav aria-label="Location pages" className="min-w-0 flex-1">
@@ -185,4 +174,26 @@ export function useLocationSwipe({
     onSwipeLeft: () => step(1),
     onSwipeRight: () => step(-1),
   });
+}
+
+/** The page sequence the pager, the dots and the swipe all walk. */
+function usePagerSequence(
+  savedLocations: readonly string[],
+  selectedLocation: string,
+): string[] {
+  const hiddenPresetSlugs = useAppStore((s) => s.hiddenPresetSlugs);
+  const presetAnchor = useAppStore((s) => s.presetAnchor);
+  return useMemo(
+    () =>
+      pagerSequence(
+        savedLocations,
+        visiblePresetSlugs({
+          anchor: presetAnchor,
+          hidden: hiddenPresetSlugs,
+          saved: savedLocations,
+          current: selectedLocation,
+        }),
+      ),
+    [savedLocations, hiddenPresetSlugs, presetAnchor, selectedLocation],
+  );
 }

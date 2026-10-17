@@ -196,8 +196,11 @@ export function Header() {
           {/* Brand mark — left-aligned at every breakpoint (the parent nav's
               justify-between keeps the action pill on the right) */}
           <div className="flex min-w-0 items-center">
+            {/* No viewport prefetch: "/" is a full server-rendered dashboard,
+                and every page load was fetching it in the background. */}
             <Link
               href="/"
+              prefetch={false}
               aria-label="mukoko weather — return to home page"
               className="flex items-center"
             >

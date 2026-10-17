@@ -41,6 +41,7 @@ export function DraggableSection({ id, reordering, children }: Props) {
   return (
     <div
       ref={setNodeRef}
+      data-herd-item={id}
       style={style}
       className={reordering ? "relative" : undefined}
     >

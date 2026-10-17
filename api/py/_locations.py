@@ -6,8 +6,11 @@ Handles location CRUD, search (text + geospatial), and geo-lookup.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import math
 import re
+import time
 from typing import Optional
 
 import httpx
@@ -17,6 +20,7 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 from ._http import get_http_client
+from ._circuit_breaker import open_meteo_breaker
 from ._geohash import build_place_slug, build_smart_slug, normalise_osm_ref
 from ._db import (
     get_db,
@@ -34,6 +38,7 @@ from ._places_resolver import (
     find_locations_in_country,
     find_nearest_location,
     find_nearest_locations,
+    is_synthesized_spot,
     search_locations_by_name,
 )
 from ._places_geo import (
@@ -43,6 +48,7 @@ from ._places_geo import (
     find_placesgeo_by_osm_ref,
     upsert_placesgeo_city,
     get_country_id,
+    normalize_name,
     POI_MATCH_RADIUS_KM,
 )
 
@@ -97,6 +103,10 @@ async def list_locations(
             loc = find_location(slug)
             if not loc:
                 raise HTTPException(status_code=404, detail="Location not found")
+            # A spot slug with no record behind it is a coordinate, not a
+            # catalogue place: say so, so callers never treat it as one.
+            if is_synthesized_spot(loc):
+                loc["synthesized"] = True
             # Strip internal _id so the response shape matches the legacy
             # `_id: 0` projection callers were getting before.
             loc.pop("_id", None)
@@ -163,6 +173,110 @@ async def list_locations(
 # ---------------------------------------------------------------------------
 
 
+#: Below this many catalogue matches, /api/py/search adds geocoded candidates.
+GEOCODE_TOP_UP_BELOW = 3
+
+#: A geocoded candidate within this distance of a catalogue match with the
+#: same name is the same place, and is dropped from the top-up.
+_GEOCODE_DUPLICATE_KM = 25.0
+
+
+def _geocoded_candidate(g: dict) -> dict:
+    """Shape an Open-Meteo geocoding hit as a search result.
+
+    The slug must render without a record behind it: the candidate is not in
+    placesGeo, so a ``{name}-{country}`` slug (``london-gb``) 404s, which was
+    every search hit outside the seeded geography. A spot slug carries its
+    own coordinate, so the page renders anywhere and saving it works too.
+    """
+    return {
+        "slug": (
+            build_smart_slug(g["name"], g["lat"], g["lon"])
+            or _generate_slug(g["name"], g.get("country", ""))
+        ),
+        "name": g["name"],
+        "province": g.get("admin1", ""),
+        "lat": g["lat"],
+        "lon": g["lon"],
+        "elevation": _clean_elevation(g.get("elevation")),
+        "tags": [],
+        "country": g.get("country", ""),
+        "source": "geocoded",
+    }
+
+
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in km (WGS 84 mean radius)."""
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp, dl = p2 - p1, math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 6371.0088 * 2 * math.asin(min(1.0, math.sqrt(a)))
+
+
+#: Longest query the search endpoint accepts. Longer input is not a place
+#: name, and the geocoder top-up would forward it to a third party.
+MAX_SEARCH_QUERY_LENGTH = 100
+
+#: Per-IP budget for the geocoder top-up (a third-party request per miss).
+#: Cache hits are free. Over budget, search still answers from the
+#: catalogue — the top-up is skipped, the request never fails.
+GEOCODE_TOP_UP_RATE_LIMIT = 120
+GEOCODE_TOP_UP_RATE_WINDOW_S = 3600
+
+#: Per-instance cache of geocoder answers, keyed by normalised query + count.
+GEOCODE_CACHE_TTL_S = 3600
+GEOCODE_CACHE_MAX = 512
+_geocode_cache: dict[tuple[str, int], tuple[float, list[dict]]] = {}
+
+
+def _normalise_query(q: str) -> str:
+    return " ".join((q or "").lower().split())
+
+
+def _cached_forward_geocode(q: str, count: int, request: Request | None) -> list[dict]:
+    """Forward-geocode ``q`` through the per-instance cache and the per-IP
+    ``search-geocode`` budget. Returns [] when over budget (never raises)."""
+    key = (_normalise_query(q), count)
+    now = time.monotonic()
+    hit = _geocode_cache.get(key)
+    if hit and hit[0] > now:
+        return hit[1]
+    try:
+        enforce_rate_limit(
+            request, "search-geocode",
+            GEOCODE_TOP_UP_RATE_LIMIT, GEOCODE_TOP_UP_RATE_WINDOW_S,
+            require_ip=False,
+        )
+    except HTTPException:
+        return []
+    geocoded = _forward_geocode(q, count)
+    if len(_geocode_cache) >= GEOCODE_CACHE_MAX:
+        # Drop expired entries first, then the oldest insert.
+        for k in [k for k, (exp, _) in _geocode_cache.items() if exp <= now]:
+            _geocode_cache.pop(k, None)
+        if len(_geocode_cache) >= GEOCODE_CACHE_MAX:
+            _geocode_cache.pop(next(iter(_geocode_cache)), None)
+    _geocode_cache[key] = (now + GEOCODE_CACHE_TTL_S, geocoded)
+    return geocoded
+
+
+def _duplicates_any(candidate: dict, existing: list[dict]) -> bool:
+    name = normalize_name(candidate.get("name", ""))
+    for e in existing:
+        if normalize_name(e.get("name", "")) != name:
+            continue
+        try:
+            km = haversine_km(
+                float(candidate["lat"]), float(candidate["lon"]),
+                float(e.get("lat")), float(e.get("lon")),
+            )
+        except (TypeError, ValueError, KeyError):
+            continue
+        if km <= _GEOCODE_DUPLICATE_KM:
+            return True
+    return False
+
+
 @router.get("/api/py/search")
 async def search_locations(
     q: str = "",
@@ -172,6 +286,7 @@ async def search_locations(
     mode: str | None = None,
     limit: int = 20,
     skip: int = 0,
+    request: Request = None,
 ):
     """
     GET /api/py/search?q=harare
@@ -179,7 +294,14 @@ async def search_locations(
     GET /api/py/search?lat=-17.83&lon=31.05
     GET /api/py/search?mode=tags
     """
-    limit = min(limit, 50)
+    limit = max(1, min(limit, 50))
+    skip = max(0, skip)
+    q = (q or "").strip()
+    if len(q) > MAX_SEARCH_QUERY_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"q too long (max {MAX_SEARCH_QUERY_LENGTH} characters)",
+        )
 
     try:
         # Tag counts mode — aggregated from placesGeo mukokoTags (Phase 0G).
@@ -220,26 +342,34 @@ async def search_locations(
         elif q:
             results = search_locations_by_name(q, limit=limit, skip=skip, tag=tag)
 
-        # If text search returned no results, fall back to Open-Meteo
-        # geocoding API for address-level discovery (like Apple/Google Weather).
-        # These are geocoded candidates — not yet in our DB.
-        if q and not tag and not results:
-            geocoded = _forward_geocode(q, count=limit)
-            results = [
-                {
-                    "slug": _generate_slug(g["name"], g.get("country", "")),
-                    "name": g["name"],
-                    "province": g.get("admin1", ""),
-                    "lat": g["lat"],
-                    "lon": g["lon"],
-                    "elevation": g.get("elevation", 0),
-                    "tags": [],
-                    "country": g.get("country", ""),
-                    "source": "geocoded",
-                }
-                for g in geocoded
-            ]
-            source = "geocoded"
+        # Top up a thin (or empty) catalogue answer with Open-Meteo geocoding
+        # for address-level discovery anywhere on Earth (like Apple/Google
+        # Weather). The platform geography is still mostly African, so a
+        # search for "Victoria" must not stop at the one we hold when the
+        # visitor means Victoria, BC. These candidates are not in our DB yet.
+        if (
+            q and not tag and skip == 0
+            and len(results) < GEOCODE_TOP_UP_BELOW
+            # Same upstream as the forecast: skip while its breaker is open.
+            # Failures are not recorded here — a geocoding hiccup must never
+            # open the breaker that gates the forecast.
+            and open_meteo_breaker.is_allowed
+        ):
+            # Off the event loop: this runs on most quick-search keystrokes
+            # outside the stored geography, and httpx here is synchronous.
+            # Cached per instance and budgeted per IP (``search-geocode``):
+            # each miss is a request to a third-party geocoder.
+            geocoded = await asyncio.to_thread(_cached_forward_geocode, q, limit, request)
+            extra: list[dict] = []
+            for c in (_geocoded_candidate(g) for g in geocoded):
+                # Against the catalogue AND the candidates already kept: the
+                # geocoder can return one town twice (two admin entries).
+                if not _duplicates_any(c, results + extra):
+                    extra.append(c)
+            extra = extra[: max(0, limit - len(results))]
+            if extra:
+                source = "geocoded" if not results else "mixed"
+                results = results + extra
 
         return {"locations": results, "total": len(results), "source": source}
     except HTTPException:
@@ -435,6 +565,18 @@ def _reverse_geocode_nominatim(lat: float, lon: float, *, zoom: int = 14) -> dic
         return None
 
 
+def _clean_elevation(value) -> float | None:
+    """A geocoder elevation in metres, or None when it is missing or
+    Open-Meteo's ``-9999`` "no data" placeholder (seen on London, Equatorial
+    Guinea) (anything at or below -1000 m: the lowest
+    land on Earth, the Dead Sea shore, is about -430 m)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if value != value or value <= -1000:  # NaN or the placeholder
+        return None
+    return value
+
+
 def _forward_geocode(query: str, count: int = 5) -> list[dict]:
     """Forward geocode using Open-Meteo geocoding API."""
     client = _get_http()
@@ -456,7 +598,7 @@ def _forward_geocode(query: str, count: int = 5) -> list[dict]:
                 "admin1": r.get("admin1", ""),
                 "lat": r.get("latitude", 0),
                 "lon": r.get("longitude", 0),
-                "elevation": r.get("elevation", 0),
+                "elevation": _clean_elevation(r.get("elevation")),
             }
             for r in results
         ]
@@ -957,7 +1099,7 @@ async def add_location(request: Request):
                         "admin1": r["admin1"],
                         "lat": r["lat"],
                         "lon": r["lon"],
-                        "elevation": r.get("elevation", 0),
+                        "elevation": _clean_elevation(r.get("elevation")),
                     }
                     for r in results
                 ],

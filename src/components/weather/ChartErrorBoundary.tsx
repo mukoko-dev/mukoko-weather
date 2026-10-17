@@ -45,7 +45,7 @@ export class ChartErrorBoundary extends Component<Props, State> {
       return (
         <div
           role="alert"
-          className="rounded-[var(--radius-card)] bg-surface-card p-4 text-center text-base text-text-tertiary"
+          className="rounded-[var(--radius-card)] bg-surface-card p-[var(--space-card)] text-center text-base text-text-tertiary"
         >
           <p>Unable to display {this.props.name}.</p>
           <button

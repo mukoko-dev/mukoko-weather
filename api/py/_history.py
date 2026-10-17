@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Request
 from ._circuit_breaker import open_meteo_breaker
 from ._db import check_rate_limit, get_client_ip
 from ._history_store import backfill_history, merge_by_date, read_history
-from ._places_resolver import find_location
+from ._places_resolver import find_location, storage_slug
 
 router = APIRouter()
 
@@ -28,8 +28,13 @@ def _get_http_client():
 
 
 def history_slugs(location: str, loc: dict) -> list[str]:
-    """Canonical slug first, then the platform hash slug older writes used."""
-    slugs = [location]
+    """Canonical slug first, then the platform hash slug older writes used.
+
+    A synthesized spot (a ``{name}--{geohash}`` slug with no record) is a
+    coordinate path: its history is keyed by its cell (``storage_slug``), so
+    the name half of the URL never becomes a storage key.
+    """
+    slugs = [storage_slug(location, loc)]
     platform = loc.get("platformSlug")
     if platform and platform != location:
         slugs.append(platform)
@@ -76,7 +81,7 @@ async def get_history(location: str, days: int = 30, request: Request = None):
         # archive response never stalls other requests on this instance.
         backfilled = await asyncio.to_thread(
             backfill_history,
-            location,
+            slugs[0],
             float(lat),
             lon,
             days,

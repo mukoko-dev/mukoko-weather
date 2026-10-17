@@ -152,7 +152,7 @@ export function LocationWeatherCard({
           role="status"
           aria-label="Loading"
           aria-busy="true"
-          className={`chameleon min-h-44 border-l-4 p-5 ${leadPad}`}
+          className={`chameleon min-h-44 border-l-4 p-[var(--space-card)] ${leadPad}`}
         >
           <span className="sr-only">Loading {name} weather</span>
           <p className="text-xl font-semibold text-text-primary">{name}</p>
@@ -171,7 +171,7 @@ export function LocationWeatherCard({
           <div
             role="group"
             aria-label={accessibleName}
-            className={`acacia block min-h-44 border-l-4 border-l-border p-5 text-text-primary ${leadPad}`}
+            className={`acacia block min-h-44 border-l-4 border-l-border p-[var(--space-card)] text-text-primary ${leadPad}`}
           >
             {removeButton}
             <p className="pr-12 text-xl font-semibold">{name}</p>
@@ -186,7 +186,7 @@ export function LocationWeatherCard({
           <Link
             href={href}
             aria-label={accessibleName}
-            className="acacia block min-h-44 border-l-4 border-l-border p-5 text-text-primary"
+            className="acacia block min-h-44 border-l-4 border-l-border p-[var(--space-card)] text-text-primary"
           >
             <p className="pr-12 text-xl font-semibold">{name}</p>
             <p className="mt-1 font-mono text-xs uppercase tracking-wide text-text-secondary">
@@ -203,7 +203,7 @@ export function LocationWeatherCard({
   }
 
   const plate = plateClassesFor(summary.sky, summary.isDay);
-  const tileClass = `block min-h-44 rounded-card border border-border border-l-4 p-5 pb-4 text-text-primary ${plate.plate} ${plate.edge} ${leadPad}`;
+  const tileClass = `block min-h-44 rounded-card border border-border border-l-4 p-[var(--space-card)] text-text-primary ${plate.plate} ${plate.edge} ${leadPad}`;
 
   const body = (
     <>

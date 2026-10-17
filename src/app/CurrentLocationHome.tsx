@@ -12,7 +12,7 @@ import {
 } from "@/lib/current-slug";
 import { detectUserLocation } from "@/lib/geolocation";
 import { useAppStore } from "@/lib/store";
-import { COUNTRIES } from "@/lib/countries";
+import { countryDisplayName, reconcileCountry } from "@/lib/location-country";
 import { trackEvent } from "@/lib/analytics";
 import { SearchIcon, NavigationIcon } from "@/lib/weather-icons";
 import { Spinner } from "@/components/ui/spinner";
@@ -57,8 +57,7 @@ const GPS_MAX_AGE_MS = 300000;
 const FAR_NEAREST_KM = 3;
 
 function countryNameFor(code?: string): string {
-  const cc = (code ?? "").toUpperCase();
-  return COUNTRIES.find((c) => c.code === cc)?.name ?? cc;
+  return countryDisplayName(code);
 }
 
 /** Why the last attempt didn't land, in words a visitor can act on. */
@@ -104,11 +103,13 @@ export function CurrentLocationHome({ initial, user }: Props) {
   // Build the full dashboard payload for a GPS-resolved location. Weather
   // goes through our own API (same chain as the server render) — see
   // fetchHomeWeather. Throws when no weather could be loaded at all.
-  async function swapTo(location: WeatherLocation, previousSlug?: string) {
+  async function swapTo(found: WeatherLocation, previousSlug?: string) {
     const { weather, usingFallback } = await fetchHomeWeather(
-      location.lat,
-      location.lon,
+      found.lat,
+      found.lon,
     );
+    // Fill a missing country from the forecast's time zone (any place on Earth).
+    const location = reconcileCountry(found, weather.timezone);
     setView({
       location,
       weather,
