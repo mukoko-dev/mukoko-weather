@@ -1,14 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { List as ListIcon, Map as MapIcon } from "lucide-react";
-import { LocationPager } from "@/components/layout/LocationPager";
+import { LocationPageDots } from "@/components/layout/LocationPager";
+import {
+  MziziBottomNav,
+  type BottomNavItem,
+} from "@/components/ui/mzizi-bottom-nav";
 import { NavigationIcon } from "@/lib/weather-icons";
 import { MziziHarness } from "@/lib/harness";
 import { MY_LOCATION_HREF } from "@/lib/location-pager";
-
-/** Icon size for the island's end slots — one size and weight everywhere. */
-export const NAV_ICON_SIZE = 22;
 
 interface MobileNavProps {
   pathname: string;
@@ -20,18 +20,64 @@ interface MobileNavProps {
   hasMapLocation: boolean;
 }
 
+/** Lucide-shaped wrapper so the weather NavigationIcon fits a nav item. */
+function MyLocationIcon({ className }: { className?: string }) {
+  return <NavigationIcon size={21} className={className} />;
+}
+
+/** The three phone destinations, in bar order. */
+export function mobileNavItems(
+  mapHref: string,
+  hasMapLocation: boolean,
+): BottomNavItem[] {
+  return [
+    {
+      id: "map",
+      label: "Map",
+      href: mapHref,
+      icon: MapIcon,
+      ariaLabel: hasMapLocation
+        ? "Weather map"
+        : "Choose a location for the weather map",
+    },
+    {
+      id: "my-location",
+      label: "My Location",
+      href: MY_LOCATION_HREF,
+      icon: MyLocationIcon,
+    },
+    {
+      id: "locations",
+      label: "Locations",
+      href: "/locations",
+      icon: ListIcon,
+      ariaLabel: "All locations",
+    },
+  ];
+}
+
 /**
- * The floating navigation island on phones: `[ Map | page dots | List ]`.
- *
- * Same shape as the mukoko-news island — a centred pill lifted off the edge
- * by the safe-area inset (`.lourie`), fixed ends and a contextual middle —
- * rather than a bar welded to the bottom of the browser viewport. The ends
- * never move between pages; the middle is the location pager. One surface:
- * the slots carry no borders or backgrounds of their own, so the island
- * reads as a single object, not three pills inside a bar.
+ * Which bar item is the current page. Explicit, so the Map item (which
+ * points at /explore while no location is on screen) never lights up on
+ * Explore; "none" matches no item.
+ */
+export function mobileNavActiveId(pathname: string): string {
+  if (pathname === MY_LOCATION_HREF) return "my-location";
+  if (pathname === "/locations") return "locations";
+  return "none";
+}
+
+/**
+ * Phone navigation: the Mzizi registry bottom nav (`MziziBottomNav`,
+ * vendored in src/components/ui/mzizi-bottom-nav.tsx) with Map, My Location
+ * and Locations. Where you are in your places is shown by the page dots
+ * along the bottom edge of the bar (`indicator`); moving between places is
+ * the left/right swipe on the dashboard (useLocationSwipe) or the
+ * Locations list.
  *
  * Page content leaves `--mobile-nav-clearance` at the bottom so nothing sits
- * under it; that token is computed from the same `--mobile-nav-*` geometry.
+ * under the bar; that token is computed from `--mobile-nav-height`, which
+ * is the bar's height (5rem) without the safe area.
  */
 export function MobileNav({
   pathname,
@@ -40,58 +86,23 @@ export function MobileNav({
   mapHref,
   hasMapLocation,
 }: MobileNavProps) {
-  const isLocationList = pathname === "/locations";
   return (
-    <nav
-      aria-label="Mobile navigation"
-      data-slot="mobile-nav"
-      className="lourie sm:hidden"
-    >
-      <Link
-        href={mapHref}
-        prefetch={false}
-        aria-label={
-          hasMapLocation
-            ? "Weather map"
-            : "Choose a location for the weather map"
-        }
-        className="duiker"
-      >
-        <MapIcon size={NAV_ICON_SIZE} aria-hidden="true" />
-      </Link>
-      <span aria-hidden="true" className="h-6 w-px shrink-0 bg-border" />
-      {/* The pager is the only part with real logic; if it ever throws,
-            the island keeps a working My Location link instead of a hole. */}
-      <MziziHarness
-        name="location-pager"
-        className="flex min-w-0 flex-1 justify-center"
-        fallback={
-          <Link
-            href={MY_LOCATION_HREF}
-            prefetch={false}
-            aria-label="My Location"
-            className="duiker"
-          >
-            <NavigationIcon size={NAV_ICON_SIZE - 4} />
-          </Link>
-        }
-      >
-        <LocationPager
-          pathname={pathname}
-          savedLocations={savedLocations}
-          selectedLocation={selectedLocation}
-        />
-      </MziziHarness>
-      <span aria-hidden="true" className="h-6 w-px shrink-0 bg-border" />
-      <Link
-        href="/locations"
-        prefetch={false}
-        aria-label="All locations"
-        aria-current={isLocationList ? "page" : undefined}
-        className="duiker"
-      >
-        <ListIcon size={NAV_ICON_SIZE} aria-hidden="true" />
-      </Link>
-    </nav>
+    <MziziBottomNav
+      label="Mobile navigation"
+      className="sm:hidden"
+      activeId={mobileNavActiveId(pathname)}
+      items={mobileNavItems(mapHref, hasMapLocation)}
+      indicator={
+        // The dots are the only part with real logic; if they ever throw,
+        // the bar keeps working without them.
+        <MziziHarness name="location-page-dots" fallback={<span />}>
+          <LocationPageDots
+            pathname={pathname}
+            savedLocations={savedLocations}
+            selectedLocation={selectedLocation}
+          />
+        </MziziHarness>
+      }
+    />
   );
 }

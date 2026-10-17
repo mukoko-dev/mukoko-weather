@@ -11,6 +11,8 @@ import { getScrollBehavior } from "@/lib/utils";
 import {
   MY_LOCATION_HREF,
   neighbour,
+  pageDotsLabel,
+  pageDotsState,
   pagerDots,
   pagerIndex,
   pagerSequence,
@@ -44,21 +46,7 @@ export function LocationPager({
   selectedLocation,
 }: LocationPagerProps) {
   const from = currentLocationSlug(pathname, selectedLocation) ?? "";
-  const hiddenPresetSlugs = useAppStore((s) => s.hiddenPresetSlugs);
-  const presetAnchor = useAppStore((s) => s.presetAnchor);
-  const sequence = useMemo(
-    () =>
-      pagerSequence(
-        savedLocations,
-        visiblePresetSlugs({
-          anchor: presetAnchor,
-          hidden: hiddenPresetSlugs,
-          saved: savedLocations,
-          current: selectedLocation,
-        }),
-      ),
-    [savedLocations, hiddenPresetSlugs, presetAnchor, selectedLocation],
-  );
+  const sequence = usePagerSequence(savedLocations, selectedLocation);
   const activeIndex = pagerIndex(pathname, sequence);
   const dots = pagerDots(sequence);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -185,4 +173,60 @@ export function useLocationSwipe({
     onSwipeLeft: () => step(1),
     onSwipeRight: () => step(-1),
   });
+}
+
+/** The page sequence the pager, the dots and the swipe all walk. */
+function usePagerSequence(
+  savedLocations: readonly string[],
+  selectedLocation: string,
+): string[] {
+  const hiddenPresetSlugs = useAppStore((s) => s.hiddenPresetSlugs);
+  const presetAnchor = useAppStore((s) => s.presetAnchor);
+  return useMemo(
+    () =>
+      pagerSequence(
+        savedLocations,
+        visiblePresetSlugs({
+          anchor: presetAnchor,
+          hidden: hiddenPresetSlugs,
+          saved: savedLocations,
+          current: selectedLocation,
+        }),
+      ),
+    [savedLocations, hiddenPresetSlugs, presetAnchor, selectedLocation],
+  );
+}
+
+/**
+ * "Where am I in my places" for the Mzizi bottom nav: one dot per page of
+ * the swipe sequence (My Location first), the current one widened. Shown
+ * inside the bar along its bottom edge (MziziBottomNav `indicator`), so the
+ * registry bar keeps its own items and no extra row is added.
+ *
+ * Decorative for pointer users (navigation is the bar's items and the
+ * left/right swipe); screen readers get one sentence instead of N dots.
+ * Renders nothing with a single page.
+ */
+export function LocationPageDots({
+  pathname,
+  savedLocations,
+  selectedLocation,
+}: LocationPagerProps) {
+  const sequence = usePagerSequence(savedLocations, selectedLocation);
+  const state = pageDotsState(pathname, sequence);
+  if (state.pages.length < 2) return null;
+  return (
+    <div data-slot="location-page-dots" className="flex items-center gap-1.5">
+      <span className="sr-only">{pageDotsLabel(state)}</span>
+      {state.pages.map((href, i) => (
+        <span
+          key={href}
+          aria-hidden="true"
+          className={`block h-1.5 rounded-full transition-[width,background-color] ${
+            i === state.active ? "w-4 bg-primary" : "w-1.5 bg-text-tertiary/50"
+          }`}
+        />
+      ))}
+    </div>
+  );
 }

@@ -9,6 +9,12 @@ import {
   type WeatherSceneConfig,
   type WeatherSceneHandle,
 } from "@/lib/weather-scenes";
+import {
+  readBackdropHints,
+  SCROLL_IDLE_MS,
+  shouldAnimateBackdrop,
+  shouldRunBackdrop,
+} from "@/lib/weather-scenes/backdrop-policy";
 
 interface Props {
   /** WMO weather code for the CURRENT conditions (drives the scene). */
@@ -37,13 +43,15 @@ interface Props {
  *
  * Performance discipline (the backdrop stays mounted for the whole page life):
  * - Three.js renderer pixel ratio is capped at 1 (`maxPixelRatio`).
- * - The animation loop is PAUSED when the tab is hidden (`visibilitychange`)
- *   and resumed when it returns — so the GPU idles in background tabs. (No
- *   IntersectionObserver: a fixed, viewport-filling element is always
- *   on-screen while the page is visible.)
- * - Everything is disposed on unmount.
- * - `prefers-reduced-motion` skips Three.js entirely and shows only the static
- *   sky gradient.
+ * - The animation loop is PAUSED when the tab is hidden (`visibilitychange`),
+ *   while the reader is scrolling, and once the page is scrolled more than a
+ *   viewport down (the hero is gone and cards cover the sky), and resumed
+ *   when none of those hold (shouldRunBackdrop). (No IntersectionObserver: a
+ *   fixed, viewport-filling element is always "on-screen".)
+ * - Everything is disposed on unmount, and the WebGL context is released.
+ * - `prefers-reduced-motion`, Save-Data, ≤ 2 GB RAM or ≤ 2 cores skip
+ *   Three.js entirely and show only the static sky gradient
+ *   (shouldAnimateBackdrop).
  *
  * Colour: every sky, cloud, particle and light colour is the real colour of
  * that weather at that time of day (src/lib/weather-scenes/palette.ts). The
@@ -76,9 +84,9 @@ export function WeatherBackdrop({
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       try {
-        setAnimate(
-          !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-        );
+        // prefers-reduced-motion: reduce, Save-Data and low-end devices
+        // keep the static sky (see backdrop-policy.ts).
+        setAnimate(shouldAnimateBackdrop(readBackdropHints()));
         setIsMobile(
           window.matchMedia("(hover: none), (pointer: coarse)").matches,
         );
@@ -103,16 +111,36 @@ export function WeatherBackdrop({
     const isVisible = () =>
       typeof document === "undefined" || document.visibilityState === "visible";
 
-    // A fixed, viewport-filling backdrop is always on-screen — the only
-    // pause signal that matters is tab visibility.
+    // Run only while the tab is visible, the reader is not scrolling and
+    // the sky region is still on screen (shouldRunBackdrop).
+    let scrolling = false;
+    let scrollTimer: number | undefined;
     const syncPlayback = () => {
       if (!handle) return;
-      if (isVisible()) handle.resume();
+      const run = shouldRunBackdrop({
+        tabVisible: isVisible(),
+        scrolling,
+        scrollY: window.scrollY,
+        viewportHeight: window.innerHeight,
+      });
+      if (run) handle.resume();
       else handle.pause();
     };
 
     const handleVisibility = () => syncPlayback();
+    const handleScroll = () => {
+      if (!scrolling) {
+        scrolling = true;
+        syncPlayback();
+      }
+      window.clearTimeout(scrollTimer);
+      scrollTimer = window.setTimeout(() => {
+        scrolling = false;
+        syncPlayback();
+      }, SCROLL_IDLE_MS);
+    };
     document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("scroll", handleScroll, { passive: true });
 
     const config: WeatherSceneConfig = {
       type: sceneType,
@@ -140,6 +168,8 @@ export function WeatherBackdrop({
     return () => {
       disposed = true;
       document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("scroll", handleScroll);
+      window.clearTimeout(scrollTimer);
       handle?.dispose();
     };
   }, [animate, isMobile, isDay, phase, sceneType, windSpeed]);

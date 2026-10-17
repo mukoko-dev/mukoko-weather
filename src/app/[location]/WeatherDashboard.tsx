@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -67,6 +67,11 @@ import {
   synthesizeOpenMeteoInsights,
 } from "@/lib/weather";
 import { fetchModelWeather } from "@/lib/home-weather";
+import { useNearViewport } from "@/lib/use-near-viewport";
+import {
+  MODEL_EXTRAS_ROOT_MARGIN,
+  shouldFetchModelExtras,
+} from "@/lib/dashboard-fetch-policy";
 import type { WeatherLocation } from "@/lib/locations";
 import type { AISummaryUser } from "@/components/weather/AISummary";
 import { type Activity, ACTIVITIES } from "@/lib/activities";
@@ -291,9 +296,22 @@ export function WeatherDashboard({
   // Best-effort — failures are swallowed so the seeded page is never affected.
   // The selected model is unioned into the comparison set so the user's pick
   // is always shown.
+  //
+  // With the default blend this fetch only feeds the nowcast and the model
+  // comparison at the END of the main column, and the comparison series is
+  // the heaviest payload on the page, so it waits until the end of the main
+  // column is near the viewport. A picked model swaps the whole dashboard,
+  // so it is fetched straight away (shouldFetchModelExtras).
+  const model = normalizeForecastModel(selectedForecastModel);
+  const extrasSentinelRef = useRef<HTMLDivElement>(null);
+  const extrasNear = useNearViewport(
+    extrasSentinelRef,
+    MODEL_EXTRAS_ROOT_MARGIN,
+  );
+  const fetchExtras = shouldFetchModelExtras(model, extrasNear);
   useEffect(() => {
+    if (!fetchExtras) return;
     let cancelled = false;
-    const model = normalizeForecastModel(selectedForecastModel);
     const models = Array.from(new Set([model, ...COMPARISON_MODELS]));
     fetchModelWeather(location.lat, location.lon, model, models)
       .then(({ data, baseline }) => {
@@ -309,7 +327,7 @@ export function WeatherDashboard({
     return () => {
       cancelled = true;
     };
-  }, [location.lat, location.lon, selectedForecastModel]);
+  }, [location.lat, location.lon, model, fetchExtras]);
 
   return (
     <>
@@ -379,7 +397,7 @@ export function WeatherDashboard({
           safe-area inset); sm:pb-6 restores normal padding where the nav is hidden. */}
         <main
           id="main-content"
-          className="animate-fade-in mx-auto max-w-7xl overflow-x-hidden px-4 pt-[var(--space-section)] pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-6 md:px-8"
+          className="animate-fade-in mx-auto max-w-7xl overflow-x-clip px-4 pt-[var(--space-section)] pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-6 md:px-8"
           aria-label={`Weather dashboard for ${location.name}`}
           {...swipe}
         >
@@ -402,8 +420,16 @@ export function WeatherDashboard({
 
           {/* Main grid: mobile = 1 col, lg = 3 col (2+1), xl = 4 col (3+1) */}
           <div className="grid gap-[var(--space-section)] lg:grid-cols-3 xl:grid-cols-4">
-            {/* Primary content — lg:col-span-2, xl:col-span-3, DnD sortable */}
-            <div className={MAIN_COLUMN_CLASS}>
+            {/* Primary content — lg:col-span-2, xl:col-span-3, DnD sortable.
+                `relative` anchors the out-of-flow sentinel at its end. */}
+            <div className={`relative ${MAIN_COLUMN_CLASS}`}>
+              {/* End-of-column sentinel for the deferred model/nowcast fetch.
+                  Absolutely positioned, so it never adds a .herd gap. */}
+              <div
+                ref={extrasSentinelRef}
+                aria-hidden="true"
+                className="pointer-events-none absolute bottom-0 left-0 h-px w-px"
+              />
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}

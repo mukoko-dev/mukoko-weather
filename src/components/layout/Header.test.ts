@@ -18,7 +18,12 @@ function rule(name: string): string {
   return m ? m[1] : "";
 }
 
-describe("Header — mounts the floating mobile navigation", () => {
+const bottomNav = readFileSync(
+  resolve(__dirname, "../ui/mzizi-bottom-nav.tsx"),
+  "utf-8",
+);
+
+describe("Header — mounts the mobile navigation", () => {
   it("renders MobileNav with the saved locations, pathname and map link", () => {
     expect(source).toContain(
       'import { MobileNav } from "@/components/layout/MobileNav"',
@@ -32,84 +37,82 @@ describe("Header — mounts the floating mobile navigation", () => {
     );
   });
 
-  it("no longer welds a full-width bar to the bottom edge", () => {
-    expect(source).not.toContain("fixed inset-x-0 bottom-0");
-    expect(nav).not.toContain("inset-x-0 bottom-0");
-    expect(nav).not.toContain("border-t");
+  it("is a sibling of <header>, never inside it (a backdrop-filter header would capture a fixed child)", () => {
+    const headerClose = source.indexOf("</header>");
+    expect(headerClose).toBeGreaterThan(0);
+    expect(source.indexOf("<MobileNav")).toBeGreaterThan(headerClose);
   });
 });
 
-describe("MobileNav — floating island geometry (.lourie)", () => {
-  it("is a centred, capped-width pill inset from both sides", () => {
-    const lourie = rule("lourie");
-    expect(nav).toContain('className="lourie sm:hidden"');
-    expect(lourie).toContain("fixed inset-x-4");
-    expect(lourie).toContain("mx-auto");
-    expect(lourie).toContain("max-w-md");
-    expect(lourie).toContain("rounded-full");
-    expect(lourie).toContain("shadow-lg");
-    expect(lourie).toContain("backdrop-blur-xl");
-  });
-
-  it("is lifted off the bottom by the safe-area inset plus the nav inset token", () => {
-    expect(rule("lourie")).toContain(
-      "bottom: calc(env(safe-area-inset-bottom, 0px) + var(--mobile-nav-inset))",
+describe("MobileNav — the Mzizi registry bottom nav", () => {
+  it("uses the vendored registry MziziBottomNav, not a hand-rolled island", () => {
+    expect(nav).toContain('from "@/components/ui/mzizi-bottom-nav"');
+    expect(nav).toContain("<MziziBottomNav");
+    expect(nav).not.toContain("lourie");
+    expect(css).not.toContain(".lourie {");
+    expect(bottomNav).toContain('data-slot="mzizi-bottom-nav"');
+    expect(bottomNav).toContain(
+      'data-portal="https://mzizi.dev/components/mzizi-bottom-nav"',
     );
   });
 
-  it("takes its height from the token the content clearance is computed from", () => {
-    expect(rule("lourie")).toContain("h-[var(--mobile-nav-height)]");
+  it("keeps the registry geometry: fixed, full width, bottom edge, above content", () => {
+    expect(bottomNav).toContain("fixed inset-x-0 bottom-0 z-50");
+    expect(bottomNav).toContain("pb-[env(safe-area-inset-bottom)]");
+  });
+
+  it("is 5rem plus the safe area tall, and --mobile-nav-height is that 5rem", () => {
+    expect(bottomNav).toContain(
+      "h-[calc(5rem+env(safe-area-inset-bottom,0px))]",
+    );
+    expect(css).toContain("--mobile-nav-height: 5rem;");
     expect(css).toMatch(
       /--mobile-nav-clearance: calc\(\s*env\(safe-area-inset-bottom, 0px\) \+ var\(--mobile-nav-inset\) \+\s*var\(--mobile-nav-height\)/,
     );
   });
 
-  it("is phone-only and keeps its landmark label", () => {
-    expect(nav).toContain('aria-label="Mobile navigation"');
-    expect(nav).toContain("sm:hidden");
+  it("items are next/link with aria-current and the 48px touch-target floor", () => {
+    expect(bottomNav).toContain('import Link from "next/link"');
+    expect(bottomNav).not.toMatch(/<a\s/);
+    expect(bottomNav).toContain('aria-current={active ? "page" : undefined}');
+    expect(bottomNav).toContain("min-h-[var(--touch-target-min)]");
   });
 
-  it("end slots are .duiker round controls on the 48px touch-target token", () => {
-    const duiker = rule("duiker");
-    expect(duiker).toContain("w-[var(--touch-target-min)]");
-    expect(duiker).toContain("h-[var(--touch-target-min)]");
-    expect(duiker).toContain("aria-[current=page]:text-primary");
-    expect(duiker).toContain("focus-visible:outline-2");
-    expect(nav.match(/className="duiker"/g)?.length).toBeGreaterThanOrEqual(2);
+  it("uses tokens, not the upstream hex/rgba fallbacks", () => {
+    expect(bottomNav).not.toMatch(/#[0-9A-Fa-f]{3,6}\b/);
+    expect(bottomNav).not.toContain("rgba(");
+  });
+
+  it("is phone-only and keeps its landmark label", () => {
+    expect(nav).toContain('label="Mobile navigation"');
+    expect(nav).toContain('className="sm:hidden"');
+    expect(bottomNav).toContain("aria-label={label}");
   });
 });
 
-describe("MobileNav — parts", () => {
-  it("left: a Map link to the map of the location on screen", () => {
-    expect(nav).toMatch(
-      /import \{[^}]*Map as MapIcon[^}]*\} from "lucide-react"/,
+describe("MobileNav — items and page dots", () => {
+  it("has Map, My Location and Locations, in that order", () => {
+    const order = ['id: "map"', 'id: "my-location"', 'id: "locations"'].map(
+      (k) => nav.indexOf(k),
     );
-    expect(nav).toContain("<MapIcon size={NAV_ICON_SIZE}");
-    expect(nav).toContain("href={mapHref}");
+    expect(order.every((i) => i > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(nav).toContain("href: mapHref");
+    expect(nav).toContain("href: MY_LOCATION_HREF");
+    expect(nav).toContain('href: "/locations"');
     expect(nav).toContain('? "Weather map"');
+    expect(nav).toContain('ariaLabel: "All locations"');
   });
 
-  it("centre: the LocationPager inside a harness boundary with a working fallback", () => {
-    expect(nav).toContain(
-      'import { LocationPager } from "@/components/layout/LocationPager"',
-    );
-    expect(nav).toContain("<LocationPager");
-    expect(nav).toMatch(/<MziziHarness\s+name="location-pager"/);
-    expect(nav).toContain("href={MY_LOCATION_HREF}");
+  it("marks the current page explicitly (Map never lights up on /explore)", () => {
+    expect(nav).toContain("activeId={mobileNavActiveId(pathname)}");
+    expect(nav).toContain('return "none";');
   });
 
-  it("right: a List link to /locations with aria-current when active", () => {
-    expect(nav).toMatch(
-      /import \{[^}]*List as ListIcon[^}]*\} from "lucide-react"/,
-    );
-    expect(nav).toContain("<ListIcon size={NAV_ICON_SIZE}");
-    expect(nav).toContain('href="/locations"');
-    expect(nav).toContain('aria-label="All locations"');
-    expect(nav).toContain('aria-current={isLocationList ? "page" : undefined}');
-  });
-
-  it("uses one icon size for both ends", () => {
-    expect(nav).toContain("export const NAV_ICON_SIZE = 22;");
+  it("shows the place sequence as dots inside the bar, behind a harness boundary", () => {
+    expect(nav).toContain("indicator={");
+    expect(nav).toContain("<LocationPageDots");
+    expect(nav).toMatch(/<MziziHarness name="location-page-dots"/);
   });
 
   it("no longer renders the old five-item nav row", () => {
