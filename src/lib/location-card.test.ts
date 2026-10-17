@@ -329,7 +329,8 @@ describe("plate names and minerals", () => {
     expect(classes).toBe(PLATE_CLASSES.malachite);
     expect(classes.plate).toContain("color-mix(");
     expect(classes.plate).toContain("var(--mineral-malachite)");
-    expect(classes.edge).toBe("border-l-[var(--mineral-malachite)]");
+    expect(classes.edge).toBe("border-[var(--mineral-malachite)]");
+    expect(classes.edge).not.toContain("border-l-");
   });
 
   it("uses no hardcoded hex or rgba in plate classes", () => {
