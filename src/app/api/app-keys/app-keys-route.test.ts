@@ -20,6 +20,15 @@ vi.mock("@/lib/gateway-person-token", async () => {
   };
 });
 
+const rateLimitMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/user-rate-limit", () => ({ checkUserRateLimit: rateLimitMock }));
+
+const warnMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/observability", () => ({
+  logWarn: warnMock,
+  logError: vi.fn(),
+}));
+
 const listMock = vi.hoisted(() => vi.fn());
 const createMock = vi.hoisted(() => vi.fn());
 const revokeMock = vi.hoisted(() => vi.fn());
@@ -47,8 +56,11 @@ beforeEach(() => {
     listMock,
     createMock,
     revokeMock,
+    rateLimitMock,
+    warnMock,
   ])
     m.mockReset();
+  rateLimitMock.mockResolvedValue({ allowed: true });
   withAuthMock.mockResolvedValue({
     user: { id: "user_1" },
     accessToken: ACCESS,
@@ -56,11 +68,28 @@ beforeEach(() => {
   getPersonTokenMock.mockResolvedValue({ token: PERSON, scope: "app-keys" });
 });
 
-const post = (body: unknown) =>
-  new Request("https://weather.mukoko.com/api/app-keys", {
+const SITE = "https://weather.mukoko.com";
+const post = (
+  body: unknown,
+  headers: Record<string, string> = {
+    "content-type": "application/json",
+    origin: SITE,
+  },
+) =>
+  new Request(`${SITE}/api/app-keys`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify(body),
+  }) as never;
+const del = (
+  headers: Record<string, string> = {
+    "content-type": "application/json",
+    origin: SITE,
+  },
+) =>
+  new Request(`${SITE}/api/app-keys/k_1`, {
+    method: "DELETE",
+    headers,
   }) as never;
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
@@ -87,7 +116,7 @@ describe("anonymous callers get 401 and nothing is exchanged", () => {
   });
   it("DELETE", async () => {
     const { DELETE } = await import("./[id]/route");
-    expect((await DELETE({} as never, params("k1"))).status).toBe(401);
+    expect((await DELETE(del(), params("k1"))).status).toBe(401);
     expect(revokeMock).not.toHaveBeenCalled();
   });
 });
@@ -124,14 +153,120 @@ describe("signed-in", () => {
   it("DELETE validates the id and revokes", async () => {
     revokeMock.mockResolvedValue(undefined);
     const { DELETE } = await import("./[id]/route");
-    expect((await DELETE({} as never, params("bad/id"))).status).toBe(400);
-    const res = await DELETE({} as never, params("k_1"));
+    expect((await DELETE(del(), params("bad/id"))).status).toBe(400);
+    const res = await DELETE(del(), params("k_1"));
     expect(res.status).toBe(200);
     expect(revokeMock).toHaveBeenCalledWith(PERSON, "k_1");
   });
 });
 
+describe("CSRF guard on state-changing calls", () => {
+  const bad: [string, Record<string, string>, number][] = [
+    ["no Origin", { "content-type": "application/json" }, 403],
+    [
+      "foreign Origin",
+      { "content-type": "application/json", origin: "https://evil.example" },
+      403,
+    ],
+    [
+      "null Origin",
+      { "content-type": "application/json", origin: "null" },
+      403,
+    ],
+    [
+      "form content type",
+      { "content-type": "application/x-www-form-urlencoded", origin: SITE },
+      415,
+    ],
+    ["text/plain", { "content-type": "text/plain", origin: SITE }, 415],
+    ["no content type", { origin: SITE }, 415],
+  ];
+  for (const [name, headers, status] of bad) {
+    it(`POST with ${name} → ${status}, before auth`, async () => {
+      const { POST } = await import("./route");
+      const res = await POST(post({ label: "x" }, headers));
+      expect(res.status).toBe(status);
+      expect(withAuthMock).not.toHaveBeenCalled();
+      expect(createMock).not.toHaveBeenCalled();
+    });
+    it(`DELETE with ${name} → ${status}`, async () => {
+      const { DELETE } = await import("./[id]/route");
+      const res = await DELETE(del(headers), params("k_1"));
+      expect(res.status).toBe(status);
+      expect(revokeMock).not.toHaveBeenCalled();
+    });
+  }
+
+  it("accepts a first-party origin and a charset parameter", async () => {
+    createMock.mockResolvedValue({ id: "k2", apiKey: "nyk_k2.nys_s" });
+    const { POST } = await import("./route");
+    const res = await POST(
+      post(
+        { label: "x" },
+        {
+          "content-type": "application/json; charset=utf-8",
+          origin: "https://weatherstations.nyuchi.com",
+        },
+      ),
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("stays out of the open CORS list", async () => {
+    const { CORS_POLICY } = await import("@/lib/security-headers");
+    expect(CORS_POLICY.open.some((p) => p.includes("app-keys"))).toBe(false);
+  });
+});
+
+describe("per-user rate limits", () => {
+  it("uses the documented limits, keyed on the user id", async () => {
+    const { APP_KEYS_LIMITS } = await import("./shared");
+    expect(APP_KEYS_LIMITS).toEqual({
+      list: [10, 60],
+      create: [5, 3600],
+      revoke: [20, 3600],
+    });
+    listMock.mockResolvedValue([]);
+    const { GET } = await import("./route");
+    await GET();
+    expect(rateLimitMock).toHaveBeenCalledWith(
+      "app-keys-list",
+      "user_1",
+      10,
+      60,
+    );
+  });
+
+  it("429 with Retry-After, before any exchange", async () => {
+    rateLimitMock.mockResolvedValue({ allowed: false, retryAfterSeconds: 42 });
+    const { POST } = await import("./route");
+    const res = await POST(post({ label: "x" }));
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("42");
+    expect(getPersonTokenMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("failures map to token-free answers", () => {
+  it("a withAuth() failure is a 401, not a 500", async () => {
+    withAuthMock.mockRejectedValueOnce(new Error("no authkit headers"));
+    const { GET } = await import("./route");
+    const res = await GET();
+    expect(res.status).toBe(401);
+    expect(getPersonTokenMock).not.toHaveBeenCalled();
+  });
+
+  it("logs unexpected errors with ids only", async () => {
+    listMock.mockRejectedValueOnce(new TypeError(`bad ${PERSON}`));
+    const { GET } = await import("./route");
+    const res = await GET();
+    expect(res.status).toBe(503);
+    const logged = JSON.stringify(warnMock.mock.calls);
+    expect(logged).toContain("TypeError");
+    expect(logged).not.toContain(PERSON);
+    expect(logged).not.toContain(ACCESS);
+  });
+
   const cases: [Error, number, string][] = [
     [
       new PersonTokenError("person_not_provisioned"),
@@ -158,11 +293,14 @@ describe("failures map to token-free answers", () => {
     });
   }
 
-  it("a gateway 401 on app-keys drops the cached person token", async () => {
-    listMock.mockRejectedValueOnce(new AppKeysError(401, "reauth_required"));
+  it("a gateway 401 on app-keys is an operator error and drops the cached token", async () => {
+    listMock.mockRejectedValueOnce(
+      new AppKeysError(503, "person_token_rejected"),
+    );
     const { GET } = await import("./route");
     const res = await GET();
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toBe("person_token_rejected");
     expect(forgetMock).toHaveBeenCalledWith("user_1");
   });
 

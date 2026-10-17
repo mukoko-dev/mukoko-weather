@@ -15,18 +15,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { appKeys } from "@/lib/gateway-app-keys";
 import { sanitizeLabel } from "@/lib/api-keys";
-import { errorResponse, NO_STORE, withPersonToken } from "./shared";
+import {
+  errorResponse,
+  NO_STORE,
+  rejectCrossSite,
+  withPersonToken,
+} from "./shared";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<NextResponse> {
-  return withPersonToken(async (personToken) => {
+  return withPersonToken("list", async (personToken) => {
     const keys = await appKeys.list(personToken);
     return NextResponse.json({ keys }, { headers: NO_STORE });
   });
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const crossSite = rejectCrossSite(req);
+  if (crossSite) return crossSite;
   let body: unknown = {};
   try {
     body = await req.json();
@@ -38,7 +45,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ? (body as { label?: unknown }).label
       : "";
   const label = sanitizeLabel(raw);
-  return withPersonToken(async (personToken) => {
+  return withPersonToken("create", async (personToken) => {
     if (!label) return errorResponse(400, "invalid_label");
     const key = await appKeys.create(personToken, label);
     return NextResponse.json({ key }, { status: 201, headers: NO_STORE });

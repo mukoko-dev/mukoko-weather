@@ -175,7 +175,10 @@ describe("app-keys calls carry the app key AND the person's own token", () => {
 
 describe("app-keys error mapping", () => {
   const cases: [number, string, number, string][] = [
-    [401, "invalid_token", 401, "reauth_required"],
+    [401, "person_token_required", 503, "person_token_rejected"],
+    [401, "invalid_token", 503, "person_token_rejected"],
+    [403, "account_pending_deletion", 403, "account_pending_deletion"],
+    [404, "person_not_found", 409, "person_not_provisioned"],
     [403, "person_mismatch", 503, "gateway_unconfigured"],
     [403, "app_not_on_free_tier", 403, "app_not_on_free_tier"],
     [409, "key_limit_reached", 409, "key_limit_reached"],
@@ -198,6 +201,25 @@ describe("app-keys error mapping", () => {
       expect(err.code).toBe(wantCode);
     });
   }
+
+  it("caps Retry-After to a whole number of seconds ≤ 3600", async () => {
+    for (const [raw, want] of [
+      ["7", 7],
+      ["99999", 3600],
+      ["Infinity", undefined],
+      ["1.5", undefined],
+      ["-3", undefined],
+      ["Wed, 21 Oct 2026 07:28:00 GMT", undefined],
+    ] as const) {
+      const { api } = client(
+        () =>
+          new Response("{}", { status: 429, headers: { "retry-after": raw } }),
+      );
+      const err = await api.list(PERSON).catch((e) => e);
+      expect(err.code).toBe("rate_limited");
+      expect(err.retryAfterSeconds).toBe(want);
+    }
+  });
 
   it("a transport failure or bad body fails closed", async () => {
     const { api } = client(() => {

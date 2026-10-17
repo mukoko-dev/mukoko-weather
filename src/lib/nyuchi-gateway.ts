@@ -128,6 +128,13 @@ export function gatewayConfig(env: Env = process.env): GatewayConfig | null {
   return { transport: fetchTransport(origin), credentials };
 }
 
+/** A `Retry-After` in whole seconds, 1–3600; anything else is ignored. */
+export function parseRetryAfter(raw: string | null): number | undefined {
+  if (!raw || !/^\d{1,10}$/.test(raw.trim())) return undefined;
+  const n = Number(raw.trim());
+  return n > 0 ? Math.min(n, 3600) : undefined;
+}
+
 /** Read the gateway's `{detail: {error, error_description}}` code, safely. */
 export async function gatewayErrorCode(
   response: Response,

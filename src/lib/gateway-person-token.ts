@@ -28,6 +28,7 @@ import {
   gatewayConfig,
   gatewayErrorCode,
   gatewayRequest,
+  parseRetryAfter,
   type GatewayConfig,
 } from "./nyuchi-gateway";
 import { logWarn } from "./observability";
@@ -43,11 +44,28 @@ export const DEFAULT_CONSOLE_CLIENT_ID = "client_01KV2G518HGXVMTAFQDKSVNXCW";
 export const SAFETY_MARGIN_MS = 30_000;
 export const MAX_CACHE_MS = 5 * 60_000;
 const MAX_ENTRIES = 1_000;
+/**
+ * How long a failed exchange is remembered per user + token, so a stuck
+ * user cannot re-exchange on every request. Successes follow the TTL rules
+ * above, never these.
+ */
+export const NEGATIVE_TTL_MS: Partial<Record<PersonTokenErrorCode, number>> = {
+  reauth_required: 30_000,
+  person_not_provisioned: 30_000,
+  account_pending_deletion: 30_000,
+  exchange_refused: 30_000,
+  gateway_unconfigured: 30_000,
+  gateway_unavailable: 10_000,
+  rate_limited: 30_000,
+};
+/** A session that already got one "sign in again" is not told twice. */
+export const REAUTH_MEMORY_MS = 60 * 60_000;
 
 export type PersonTokenErrorCode =
   | "gateway_unconfigured" // env missing or malformed — 503
   | "wrong_workos_client" // signed in through a client other than the Console's — 503
   | "reauth_required" // WorkOS session ended / token refused — 401
+  | "exchange_refused" // the same session refused again: likely config — 503
   | "person_not_provisioned" // no identity.persons record for this user — 409
   | "account_pending_deletion" // 403
   | "rate_limited" // 429
@@ -57,6 +75,7 @@ const STATUS: Record<PersonTokenErrorCode, number> = {
   gateway_unconfigured: 503,
   wrong_workos_client: 503,
   reauth_required: 401,
+  exchange_refused: 503,
   person_not_provisioned: 409,
   account_pending_deletion: 403,
   rate_limited: 429,
@@ -124,15 +143,56 @@ function cacheKey(userId: string, accessToken: string): string {
   return `${userId}:${digest}`;
 }
 
-function retryAfter(response: Response): number | undefined {
-  const raw = Number(response.headers.get("retry-after"));
-  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 3600) : undefined;
-}
-
 export function createPersonTokenExchanger(options: ExchangerOptions) {
   const now = options.now ?? Date.now;
   const cache = new Map<string, Entry>();
   const inFlight = new Map<string, Promise<PersonToken>>();
+  const failures = new Map<
+    string,
+    { error: PersonTokenError; until: number }
+  >();
+  const reauthShown = new Map<string, number>();
+
+  function boundedSet<V>(map: Map<string, V>, key: string, value: V): void {
+    if (map.size >= MAX_ENTRIES) {
+      const oldest = map.keys().next().value;
+      if (oldest !== undefined) map.delete(oldest);
+    }
+    map.set(key, value);
+  }
+
+  function remember(key: string, error: PersonTokenError): void {
+    let ttl = NEGATIVE_TTL_MS[error.code];
+    if (!ttl) return;
+    if (error.retryAfterSeconds) {
+      ttl = Math.min(ttl, error.retryAfterSeconds * 1000);
+    }
+    boundedSet(failures, key, { error, until: now() + ttl });
+  }
+
+  /**
+   * invalid_grant: the first time for a WorkOS session it is "sign in
+   * again". The same session refused again means the session is not the
+   * problem (most likely NYUCHI_CONSOLE_WORKOS_CLIENT_ID or the gateway's
+   * Console client id is wrong), so it becomes an operator error instead of
+   * a sign-in loop. Logged without any token.
+   */
+  function invalidGrant(userId: string, sid: string | null): PersonTokenError {
+    const sessionKey = `${userId}:${sid ?? "-"}`;
+    const t = now();
+    const seen = reauthShown.get(sessionKey);
+    const repeat = seen !== undefined && seen > t;
+    logWarn({
+      source: "nyuchi-gateway",
+      message: repeat
+        ? "Token exchange refused the same WorkOS session again; check the Console client id configuration"
+        : "Token exchange refused the WorkOS session (invalid_grant)",
+      meta: { consoleClientId: options.consoleClientId(), repeat },
+    });
+    if (repeat) return new PersonTokenError("exchange_refused");
+    boundedSet(reauthShown, sessionKey, t + REAUTH_MEMORY_MS);
+    return new PersonTokenError("reauth_required");
+  }
 
   function prune(): void {
     const t = now();
@@ -148,6 +208,8 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
     config: GatewayConfig,
     accessToken: string,
     subjectExpMs: number | null,
+    userId: string,
+    sid: string | null,
   ): Promise<{ value: PersonToken; cacheUntilMs: number }> {
     const body = new URLSearchParams({
       grant_type: TOKEN_EXCHANGE_GRANT,
@@ -165,6 +227,11 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
           headers: {
             "content-type": "application/x-www-form-urlencoded",
             accept: "application/json",
+            // The same pair as the form, so the gateway's middleware
+            // authenticates the key and counts the call against the key's
+            // own limit, not the shared Vercel egress IP.
+            "x-client-id": config.credentials.clientId,
+            "x-client-secret": config.credentials.clientSecret,
           },
           body: body.toString(),
         }),
@@ -175,6 +242,9 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
 
     if (response.status !== 200) {
       const code = await gatewayErrorCode(response);
+      if (response.status === 400 && code === "invalid_grant") {
+        throw invalidGrant(userId, sid);
+      }
       throw mapExchangeFailure(response, code);
     }
 
@@ -251,16 +321,31 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
     if (hit && hit.cacheUntilMs > now()) return hit.value;
     if (hit) cache.delete(key);
 
+    const failed = failures.get(key);
+    if (failed && failed.until > now()) {
+      const left = Math.max(1, Math.ceil((failed.until - now()) / 1000));
+      throw new PersonTokenError(
+        failed.error.code,
+        failed.error.code === "rate_limited" ? left : undefined,
+      );
+    }
+    if (failed) failures.delete(key);
+
     const pending = inFlight.get(key);
     if (pending) return pending;
 
-    const promise = exchange(config, accessToken, exp)
+    const sid = typeof claims.sid === "string" ? claims.sid : null;
+    const promise = exchange(config, accessToken, exp, userId, sid)
       .then(({ value, cacheUntilMs }) => {
         if (cacheUntilMs > now()) {
           prune();
           cache.set(key, { value, cacheUntilMs });
         }
         return value;
+      })
+      .catch((err: unknown) => {
+        if (err instanceof PersonTokenError) remember(key, err);
+        throw err;
       })
       .finally(() => inFlight.delete(key));
     inFlight.set(key, promise);
@@ -271,6 +356,9 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
   function forget(userId: string): void {
     for (const k of cache.keys()) {
       if (k.startsWith(`${userId}:`)) cache.delete(k);
+    }
+    for (const k of failures.keys()) {
+      if (k.startsWith(`${userId}:`)) failures.delete(k);
     }
   }
 
@@ -283,21 +371,16 @@ function mapExchangeFailure(
 ): PersonTokenError {
   const status = response.status;
   if (status === 429) {
-    return new PersonTokenError("rate_limited", retryAfter(response));
+    return new PersonTokenError(
+      "rate_limited",
+      parseRetryAfter(response.headers.get("retry-after")),
+    );
   }
   if (status === 404 && code === "person_not_found") {
     // `/v1/identity/persons/ensure` stays Console-backend-only (design
     // decision 3, open): weather does not provision people at the gateway.
     // The person is mirrored by our own /callback; signing in again retries.
     return new PersonTokenError("person_not_provisioned");
-  }
-  if (status === 400 && code === "client_not_allowed") {
-    return new PersonTokenError("wrong_workos_client");
-  }
-  if (status === 400 && code === "invalid_grant") {
-    // Expired, signed-out or revoked WorkOS session (the issuing client was
-    // already checked locally).
-    return new PersonTokenError("reauth_required");
   }
   if (status >= 400 && status < 500) {
     // invalid_client, unauthorized_client, invalid_scope: our key is wrong

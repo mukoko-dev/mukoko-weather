@@ -18,6 +18,7 @@ import {
   gatewayConfig,
   gatewayErrorCode,
   gatewayRequest,
+  parseRetryAfter,
   type GatewayConfig,
 } from "./nyuchi-gateway";
 
@@ -46,7 +47,9 @@ export interface CreatedAppKey extends MaskedAppKey {
 }
 
 /** Codes the gateway answers that the UI may act on. */
-const PASSTHROUGH_CODES = new Set([
+export const PASSTHROUGH_CODES = new Set([
+  "account_pending_deletion",
+  "person_not_found",
   "key_limit_reached",
   "free_tier_key_limit",
   "app_not_on_free_tier",
@@ -89,10 +92,22 @@ export function maskAppKey(raw: Record<string, unknown>): MaskedAppKey {
 async function failure(response: Response): Promise<AppKeysError> {
   const code = await gatewayErrorCode(response);
   const s = response.status;
-  if (s === 401) return new AppKeysError(401, "reauth_required");
+  if (s === 401) {
+    // The bearer was a freshly exchanged person token, so a 401 here
+    // (person_token_required and the like) is not the user's session: it is
+    // configuration (key, JWT secret, scope). A distinct operator error, so
+    // the UI never loops on "sign in again".
+    return new AppKeysError(503, "person_token_rejected");
+  }
   if (s === 429) {
-    const ra = Number(response.headers.get("retry-after"));
-    return new AppKeysError(429, "rate_limited", ra > 0 ? ra : undefined);
+    return new AppKeysError(
+      429,
+      "rate_limited",
+      parseRetryAfter(response.headers.get("retry-after")),
+    );
+  }
+  if (code === "person_not_found") {
+    return new AppKeysError(409, "person_not_provisioned");
   }
   if (code && PASSTHROUGH_CODES.has(code)) {
     return new AppKeysError(s >= 500 ? 503 : s, code);

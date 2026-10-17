@@ -103,6 +103,10 @@ describe("exchange request shape", () => {
     expect(REQUESTED_SCOPE).toBe("app-keys");
     expect(form.get("client_id")).toBe("nyk_weatherkey01");
     expect(form.get("client_secret")).toBe(SECRET);
+    // The pair also travels as headers, so the gateway counts the exchange
+    // against this key rather than the shared egress IP.
+    expect(req.headers.get("x-client-id")).toBe("nyk_weatherkey01");
+    expect(req.headers.get("x-client-secret")).toBe(SECRET);
     // No other grant parameters (no actor token, no audience widening).
     expect([...form.keys()].sort()).toEqual(
       [
@@ -239,13 +243,59 @@ describe("caching, dedupe and expiry", () => {
     expect(ex.cacheSize()).toBe(1);
   });
 
-  it("never caches a failure", async () => {
+  it("negative-caches a failure briefly, then exchanges again", async () => {
     const ex = make();
+    const token = subject({ exp: T0 / 1000 + 3600 });
+    transport.mockImplementationOnce(async () => fail(404, "person_not_found"));
+    for (let i = 0; i < 3; i++) {
+      await expect(ex.getPersonToken("user_1", token)).rejects.toMatchObject({
+        code: "person_not_provisioned",
+      });
+    }
+    expect(transport).toHaveBeenCalledTimes(1);
+    clock = T0 + 30_000;
+    const got = await ex.getPersonToken("user_1", token);
+    expect(got.token).toBe(PERSON_JWT);
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+
+  it("a transient 503 is remembered for 10 s only", async () => {
+    const ex = make();
+    const token = subject({ exp: T0 / 1000 + 3600 });
     transport.mockImplementationOnce(async () => fail(503, "x"));
-    await expect(ex.getPersonToken("user_1", subject())).rejects.toBeInstanceOf(
+    await expect(ex.getPersonToken("user_1", token)).rejects.toBeInstanceOf(
       PersonTokenError,
     );
-    await ex.getPersonToken("user_1", subject());
+    clock = T0 + 9_999;
+    await expect(ex.getPersonToken("user_1", token)).rejects.toMatchObject({
+      code: "gateway_unavailable",
+    });
+    clock = T0 + 10_000;
+    await ex.getPersonToken("user_1", token);
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+
+  it("a cached 429 keeps a shrinking Retry-After", async () => {
+    const ex = make();
+    const token = subject({ exp: T0 / 1000 + 3600 });
+    transport.mockImplementationOnce(async () =>
+      fail(429, "slow_down", { "retry-after": "20" }),
+    );
+    await ex.getPersonToken("user_1", token).catch(() => {});
+    clock = T0 + 5_000;
+    const err = await ex.getPersonToken("user_1", token).catch((e) => e);
+    expect(err.code).toBe("rate_limited");
+    expect(err.retryAfterSeconds).toBe(15);
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it("forget() clears the negative cache too", async () => {
+    const ex = make();
+    const token = subject();
+    transport.mockImplementationOnce(async () => fail(503, "x"));
+    await ex.getPersonToken("user_1", token).catch(() => {});
+    ex.forget("user_1");
+    await ex.getPersonToken("user_1", token);
     expect(transport).toHaveBeenCalledTimes(2);
   });
 });
@@ -253,7 +303,7 @@ describe("caching, dedupe and expiry", () => {
 describe("error mapping (fails closed, no fallback)", () => {
   const cases: [Response | Error, string, number][] = [
     [fail(400, "invalid_grant"), "reauth_required", 401],
-    [fail(400, "client_not_allowed"), "wrong_workos_client", 503],
+    [fail(400, "client_not_allowed"), "gateway_unconfigured", 503],
     [fail(404, "person_not_found"), "person_not_provisioned", 409],
     [fail(400, "invalid_scope"), "gateway_unconfigured", 503],
     [fail(400, "unauthorized_client"), "gateway_unconfigured", 503],
@@ -314,6 +364,28 @@ describe("error mapping (fails closed, no fallback)", () => {
     await expect(ex.getPersonToken("user_1", subject())).rejects.toMatchObject({
       code: "gateway_unconfigured",
       status: 503,
+    });
+  });
+});
+
+describe("invalid_grant: sign in again once per session, then operator error", () => {
+  it("does not loop a session on 'sign in again'", async () => {
+    const ex = make();
+    const token = subject({ exp: T0 / 1000 + 3600, sid: "sess_1" });
+    transport.mockImplementation(async () => fail(400, "invalid_grant"));
+    const first = await ex.getPersonToken("user_1", token).catch((e) => e);
+    expect(first).toMatchObject({ code: "reauth_required", status: 401 });
+    clock = T0 + 31_000; // past the negative cache
+    const second = await ex.getPersonToken("user_1", token).catch((e) => e);
+    expect(second).toMatchObject({ code: "exchange_refused", status: 503 });
+    const logged = JSON.stringify(warn.mock.calls);
+    expect(logged).toContain(CONSOLE);
+    expect(logged).not.toContain(token);
+    // A new session (signed in again) gets one more "sign in again".
+    clock = T0 + 62_000;
+    const fresh = subject({ exp: T0 / 1000 + 3600, sid: "sess_2" });
+    await expect(ex.getPersonToken("user_1", fresh)).rejects.toMatchObject({
+      code: "reauth_required",
     });
   });
 });

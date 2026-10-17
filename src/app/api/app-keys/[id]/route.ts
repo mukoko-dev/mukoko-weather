@@ -6,7 +6,12 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { appKeys, APP_KEY_ID_RE } from "@/lib/gateway-app-keys";
-import { errorResponse, NO_STORE, withPersonToken } from "../shared";
+import {
+  errorResponse,
+  NO_STORE,
+  rejectCrossSite,
+  withPersonToken,
+} from "../shared";
 
 export const dynamic = "force-dynamic";
 
@@ -15,11 +20,13 @@ interface RouteParams {
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: RouteParams,
 ): Promise<NextResponse> {
+  const crossSite = rejectCrossSite(req);
+  if (crossSite) return crossSite;
   const { id } = await params;
-  return withPersonToken(async (personToken) => {
+  return withPersonToken("revoke", async (personToken) => {
     if (!id || !APP_KEY_ID_RE.test(id)) return errorResponse(400, "invalid_id");
     await appKeys.revoke(personToken, id);
     return NextResponse.json({ revoked: true }, { headers: NO_STORE });
