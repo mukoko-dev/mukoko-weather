@@ -38,8 +38,47 @@ from py._tiles import (
 )
 
 
+#: The default wall clock for every test in this file: 07:20 UTC, i.e. well
+#: inside an hour. Tile cache headers depend on the seconds left in the UTC
+#: hour, so a test reading the real clock fails in the last minutes of every hour.
+FROZEN = datetime(2026, 10, 11, 7, 20, 0, tzinfo=timezone.utc)
+
+_clock = {"now": FROZEN}
+
+
+class _FrozenDatetime(datetime):
+    """``datetime`` whose ``now()`` reads the clock the ``frozen_clock`` fixture holds."""
+
+    @classmethod
+    def now(cls, tz=None):
+        now = _clock["now"]
+        return now.astimezone(tz) if tz is not None else now.replace(tzinfo=None)
+
+
 @pytest.fixture(autouse=True)
-def _clear_quota_memo():
+def frozen_clock():
+    """
+    Freeze ``datetime.now`` for the tiles module, the enrichment module (which
+    owns the quota memo the tiles read) and this test module, at ``FROZEN``.
+
+    Autouse, so no test depends on the wall clock, the hour boundary or the
+    seconds left in the hour. A test that needs another instant requests the
+    fixture and calls it: ``frozen_clock(_at(56))``.
+    """
+    _clock["now"] = FROZEN
+    with patch("py._tiles.datetime", _FrozenDatetime), \
+            patch("py._enrichment.datetime", _FrozenDatetime), \
+            patch(f"{__name__}.datetime", _FrozenDatetime):
+
+        def set_now(when: datetime) -> None:
+            _clock["now"] = when
+
+        yield set_now
+    _clock["now"] = FROZEN
+
+
+@pytest.fixture(autouse=True)
+def _clear_quota_memo(frozen_clock):
     """The 429 memo is module state shared with enrichment; isolate each test."""
     _enrichment._reset_memos()
     tomorrow_breaker.reset()
@@ -423,6 +462,18 @@ class TestTileCacheControl:
     def test_quota_fallback_never_outlives_the_hour(self):
         assert "s-maxage=120" in _quota_cache_control(_at(58))
 
+    def test_quota_fallback_normal_case_is_the_cap(self):
+        assert _quota_cache_control(_at(20)) == "public, max-age=60, s-maxage=300"
+
+    def test_quota_fallback_last_minutes_use_the_seconds_left(self):
+        # 4 minutes left: below the 5-minute cap, so the hour bound wins.
+        assert _quota_cache_control(_at(56)) == "public, max-age=60, s-maxage=240"
+        assert _quota_cache_control(_at(58, 30)) == "public, max-age=60, s-maxage=90"
+
+    def test_quota_fallback_last_seconds_are_floored_at_a_minute(self):
+        assert _quota_cache_control(_at(59, 30)) == "public, max-age=60, s-maxage=60"
+        assert _quota_cache_control(_at(59, 59)) == "public, max-age=60, s-maxage=60"
+
     def test_error_fallback_is_short(self):
         assert "s-maxage=60" in FALLBACK_CACHE_CONTROL
 
@@ -439,15 +490,6 @@ def _resp(status: int, content: bytes = b"", headers: dict | None = None) -> Mag
     # code really reads the headers.
     r.headers = {} if headers is None else headers
     return r
-
-
-FROZEN = datetime(2026, 10, 11, 7, 20, 0, tzinfo=timezone.utc)
-
-
-class _FrozenDatetime(datetime):
-    @classmethod
-    def now(cls, tz=None):
-        return FROZEN
 
 
 @pytest.mark.asyncio
@@ -530,9 +572,7 @@ class TestQuotaMemo:
             seen.append(cache_id)
             return b"\x89PNG-prev" if cache_id.endswith(prev) and allow_stale else None
 
-        with patch("py._tiles.datetime", _FrozenDatetime), \
-                patch("py._enrichment.datetime", _FrozenDatetime), \
-                patch("py._tiles._get_cached_tile", side_effect=fake):
+        with patch("py._tiles._get_cached_tile", side_effect=fake):
             result = await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
         assert result.body == b"\x89PNG-prev"
         assert result.headers.get("x-map-tile") == "quota-stale"
@@ -608,8 +648,31 @@ class TestQuotaMemo:
             result = await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
         assert result.body == b"\x89PNG-stale"
         assert result.headers.get("x-cache") == "STALE"
-        assert "s-maxage=" in result.headers["cache-control"]
-        assert result.headers["cache-control"] == f"public, max-age=60, s-maxage={QUOTA_EDGE_CACHE_MAX_S}"
+        # Normal case (07:20, 40 min left): the 5-minute cap applies.
+        assert result.headers["cache-control"] == "public, max-age=60, s-maxage=300"
+        assert QUOTA_EDGE_CACHE_MAX_S == 300
+
+    @pytest.mark.parametrize(
+        ("minute", "second", "s_maxage"),
+        [
+            (55, 0, 300),  # exactly the cap: 300 s left
+            (56, 0, 240),  # last minutes: the seconds left, below the cap
+            (58, 30, 90),
+            (59, 30, 60),  # 30 s left: floored at MIN_HOUR_BOUND_S
+            (59, 59, 60),
+        ],
+    )
+    async def test_quota_stale_tile_never_outlives_the_hour(self, frozen_clock, minute, second, s_maxage):
+        frozen_clock(_at(minute, second))
+        _enrichment.mark_rate_limited()
+
+        def fake(cache_id, *, allow_stale=False):
+            return b"\x89PNG-stale" if allow_stale else None
+
+        with patch("py._tiles._get_cached_tile", side_effect=fake):
+            result = await proxy_map_tile(z=5, x=18, y=17, layer="temperature")
+        assert result.headers.get("x-cache") == "STALE"
+        assert result.headers["cache-control"] == f"public, max-age=60, s-maxage={s_maxage}"
 
     async def test_cache_hit_still_served_while_quota_spent(self):
         _enrichment.mark_rate_limited()
