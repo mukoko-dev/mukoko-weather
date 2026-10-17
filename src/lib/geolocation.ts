@@ -2,6 +2,7 @@
 
 import type { WeatherLocation } from "./locations";
 import { haversineKm } from "./geo";
+import { weatherApiUrl } from "./worker-routes";
 
 export interface GeoResult {
   status: "success" | "created" | "denied" | "unavailable" | "error";
@@ -78,7 +79,9 @@ export function detectUserLocation({
         );
         try {
           const res = await fetch(
-            `/api/py/geo?lat=${latitude}&lon=${longitude}${autoCreate ? "&autoCreate=true" : ""}`,
+            weatherApiUrl(
+              `/api/py/geo?lat=${latitude}&lon=${longitude}${autoCreate ? "&autoCreate=true" : ""}`,
+            ),
             { signal: controller.signal },
           );
           if (!res.ok) {

@@ -1,0 +1,238 @@
+{
+  "_comment": "Decision vectors shared by tests/py/test_places_contract.py and workers/crates/weather-core/src/place_search.rs. Change one side, change both.",
+  "area_features": [
+    {
+      "code": "PCLI",
+      "area": true
+    },
+    {
+      "code": "PCLD",
+      "area": true
+    },
+    {
+      "code": "pcli",
+      "area": true
+    },
+    {
+      "code": "TERR",
+      "area": true
+    },
+    {
+      "code": "ADM1",
+      "area": true
+    },
+    {
+      "code": "adm2",
+      "area": true
+    },
+    {
+      "code": "ADM1H",
+      "area": true
+    },
+    {
+      "code": "PRSH",
+      "area": true
+    },
+    {
+      "code": "OCN",
+      "area": true
+    },
+    {
+      "code": "ADM3",
+      "area": false
+    },
+    {
+      "code": "ADM4",
+      "area": false
+    },
+    {
+      "code": "PPL",
+      "area": false
+    },
+    {
+      "code": "PPLC",
+      "area": false
+    },
+    {
+      "code": "",
+      "area": false
+    },
+    {
+      "code": " ADM1 ",
+      "area": true
+    }
+  ],
+  "geocode_fetch_count": [
+    {
+      "wanted": 1,
+      "count": 10
+    },
+    {
+      "wanted": 3,
+      "count": 10
+    },
+    {
+      "wanted": 5,
+      "count": 15
+    },
+    {
+      "wanted": 20,
+      "count": 60
+    },
+    {
+      "wanted": 40,
+      "count": 100
+    },
+    {
+      "wanted": 100,
+      "count": 100
+    }
+  ],
+  "similarity": [
+    {
+      "a": "harare",
+      "b": "harare",
+      "ratio": 1.0
+    },
+    {
+      "a": "koh-samui",
+      "b": "koh-samui",
+      "ratio": 1.0
+    },
+    {
+      "a": "abcd",
+      "b": "bcde",
+      "ratio": 0.75
+    },
+    {
+      "a": "admin",
+      "b": "adamu",
+      "ratio": 0.6
+    },
+    {
+      "a": "chiang-rai",
+      "b": "chiang-rai-province",
+      "ratio": 0.6896551724137931
+    },
+    {
+      "a": "kohsamui",
+      "b": "koh-samui",
+      "ratio": 0.9411764705882353
+    },
+    {
+      "a": "zurich",
+      "b": "zuerich",
+      "ratio": 0.9230769230769231
+    },
+    {
+      "a": "lake-kariba",
+      "b": "kariba",
+      "ratio": 0.7058823529411765
+    },
+    {
+      "a": "a",
+      "b": "b",
+      "ratio": 0.0
+    }
+  ],
+  "resolve_names": [
+    {
+      "q": "koh-samui",
+      "name": "koh samui"
+    },
+    {
+      "q": "  Chiang   Rai ",
+      "name": "chiang rai"
+    },
+    {
+      "q": "lake-kariba",
+      "name": "lake kariba"
+    },
+    {
+      "q": "admin",
+      "name": "admin"
+    },
+    {
+      "q": "ab",
+      "name": null
+    },
+    {
+      "q": "12345",
+      "name": null
+    },
+    {
+      "q": "zürich",
+      "name": null
+    },
+    {
+      "q": "-x",
+      "name": null
+    },
+    {
+      "q": "",
+      "name": null
+    },
+    {
+      "q": "st john's",
+      "name": "st john's"
+    }
+  ],
+  "seed_matching": [
+    {
+      "name": "Harare",
+      "lat": -17.83,
+      "lon": 31.05,
+      "slug": "harare"
+    },
+    {
+      "name": "  harare ",
+      "lat": -17.9,
+      "lon": 31.1,
+      "slug": "harare"
+    },
+    {
+      "name": "Harare",
+      "lat": 0.0,
+      "lon": 0.0,
+      "slug": null
+    },
+    {
+      "name": "Phuket",
+      "lat": 7.9,
+      "lon": 98.4,
+      "slug": "phuket-th"
+    },
+    {
+      "name": "Nowhereville",
+      "lat": 7.9,
+      "lon": 98.4,
+      "slug": null
+    }
+  ],
+  "nearest_seed": [
+    {
+      "lat": 7.9,
+      "lon": 98.4,
+      "max_km": 50,
+      "slug": "phuket-th"
+    },
+    {
+      "lat": 8.9,
+      "lon": 98.4,
+      "max_km": 50,
+      "slug": null
+    },
+    {
+      "lat": -17.84,
+      "lon": 31.04,
+      "max_km": 50,
+      "slug": "harare"
+    },
+    {
+      "lat": -45.0,
+      "lon": -120.0,
+      "max_km": 150,
+      "slug": null
+    }
+  ]
+}

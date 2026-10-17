@@ -1,22 +1,64 @@
-//! Where locations come from beyond the seed list: the Nyuchi API's canonical
-//! places, Open-Meteo forward geocoding and Nominatim reverse geocoding. Every
-//! answer is cached in KV; a failure is `None`/`Err` and never cached.
+//! Where locations come from beyond the seed list: the Nyuchi API's
+//! community places, Open-Meteo forward geocoding and Nominatim reverse
+//! geocoding. Every answer is cached in KV; a failure is `Err` and never
+//! cached. Only an outage (5xx, transport error, timeout) counts against a
+//! provider's circuit breaker, never a 4xx or an empty answer, as in the
+//! Python backend.
 
+use std::cell::RefCell;
 use std::time::Duration;
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
+use weather_core::breaker::{self, Breaker};
 use weather_core::locations::{encode_geohash, LocationDoc, GEOHASH_PRECISION};
+use weather_core::place_search::{self as ps, GeocodeHit};
 use weather_core::places::slugify;
 use weather_core::secrets;
-use weather_edge::{config, get_with_timeout, secret};
+use weather_edge::{config, get_with_timeout, now_ms, secret, FetchError};
 use worker::{Env, Headers, Url};
+
+use crate::limits;
 
 const CACHE: &str = "CACHE";
 const TIMEOUT: Duration = Duration::from_secs(5);
 const DAY: u64 = 86_400;
 /// The Python backend's Nominatim identity.
 const USER_AGENT: &str = "mukoko-weather/2.0 (support@mukoko.com)";
+/// Geocoder answers are kept an hour (the Python per-instance cache).
+const GEOCODE_TTL: u64 = 3_600;
+
+thread_local! {
+    static OPEN_METEO: RefCell<Breaker> = const { RefCell::new(Breaker::new(breaker::OPEN_METEO)) };
+    static NOMINATIM: RefCell<Breaker> = const { RefCell::new(Breaker::new(breaker::NOMINATIM)) };
+}
+
+/// Whether the Open-Meteo (geocoder) breaker lets a call through now.
+pub fn open_meteo_allowed() -> bool {
+    OPEN_METEO.with(|b| b.borrow_mut().allow(now_ms()))
+}
+
+fn nominatim_allowed() -> bool {
+    NOMINATIM.with(|b| b.borrow_mut().allow(now_ms()))
+}
+
+fn record(breaker: &'static std::thread::LocalKey<RefCell<Breaker>>, ok: bool) {
+    breaker.with(|b| {
+        let mut b = b.borrow_mut();
+        if ok {
+            b.record_success();
+        } else {
+            b.record_failure(now_ms());
+        }
+    });
+}
+
+/// A cached value that may itself be "nothing": KV cannot tell a stored JSON
+/// `null` from a missing key, so negative answers are wrapped.
+#[derive(Serialize, Deserialize)]
+struct Slot<T> {
+    v: Option<T>,
+}
 
 async fn cached<T: DeserializeOwned>(env: &Env, key: &str) -> Option<T> {
     env.kv(CACHE)
@@ -33,8 +75,17 @@ async fn store<T: Serialize>(env: &Env, key: &str, value: &T, ttl: u64) {
         return;
     };
     if let Ok(put) = kv.put(key, body) {
-        let _ = put.expiration_ttl(ttl).execute().await;
+        let _ = put.expiration_ttl(ttl.max(60)).execute().await;
     }
+}
+
+/// `Some(answer)` when a slot is cached (the answer may be `None`).
+async fn cached_slot<T: DeserializeOwned>(env: &Env, key: &str) -> Option<Option<T>> {
+    cached::<Slot<T>>(env, key).await.map(|s| s.v)
+}
+
+async fn store_slot<T: Serialize>(env: &Env, key: &str, value: Option<&T>, ttl: u64) {
+    store(env, key, &Slot { v: value }, ttl).await;
 }
 
 /// `(base URL, machine key)` when the Nyuchi API is configured.
@@ -61,26 +112,14 @@ async fn nyuchi_get(env: &Env, path_and_query: &str) -> Result<Option<Value>, ()
     }
 }
 
-fn docs(list: &Value) -> Vec<LocationDoc> {
-    list.get("data")
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(LocationDoc::from_nyuchi_place)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 fn with_query(base: &str, pairs: &[(&str, &str)]) -> String {
     let mut url = Url::parse(base).expect("static base URL");
     url.query_pairs_mut().extend_pairs(pairs);
     url.to_string()
 }
 
-/// A canonical place by slug (`GET /v1/places/{slug}`). `Err` when the API
-/// did not answer.
+/// A community place by slug (`GET /v1/places/{slug}`: `places.places`, the
+/// place refs `{name}--osm-…`). `Err` when the API did not answer.
 pub async fn nyuchi_place(env: &Env, slug: &str) -> Result<Option<LocationDoc>, ()> {
     let slug = slugify(slug);
     if slug.is_empty() {
@@ -98,60 +137,31 @@ pub async fn nyuchi_place(env: &Env, slug: &str) -> Result<Option<LocationDoc>, 
     Ok(found)
 }
 
-/// Canonical places whose name matches `q`.
-pub async fn nyuchi_search(env: &Env, q: &str, limit: usize) -> Result<Vec<LocationDoc>, ()> {
-    let norm = slugify(q);
-    if norm.is_empty() {
-        return Ok(vec![]);
-    }
-    let key = format!("psearch:v1:{norm}:{limit}");
-    if let Some(hit) = cached(env, &key).await {
-        return Ok(hit);
-    }
-    let mut url = Url::parse("https://nyuchi.invalid/v1/places").expect("static URL");
-    url.query_pairs_mut()
-        .append_pair("q", q.trim())
-        .append_pair("limit", &limit.to_string());
-    let path = format!("{}?{}", url.path(), url.query().unwrap_or(""));
-    let found = nyuchi_get(env, &path)
-        .await?
-        .map(|b| docs(&b))
-        .unwrap_or_default();
-    store(env, &key, &found, 3_600).await;
-    Ok(found)
-}
-
-/// Canonical places near a point, nearest first.
-pub async fn nyuchi_nearby(
+/// Open-Meteo forward geocoding. `budget_ip` is the client to charge a miss
+/// to (`search-geocode`, 120 an hour): over budget the answer is empty and
+/// not cached, never an error. Cached answers are free. `Err` when the
+/// breaker is open or Open-Meteo is down.
+pub async fn geocode_hits(
     env: &Env,
-    lat: f64,
-    lon: f64,
-    radius_km: f64,
-    limit: usize,
-) -> Result<Vec<LocationDoc>, ()> {
-    let path =
-        format!("/v1/places/nearby?lat={lat:.4}&lng={lon:.4}&radius_km={radius_km}&limit={limit}");
-    let key = format!("pnear:v1:{lat:.2}_{lon:.2}:{radius_km}:{limit}");
-    if let Some(hit) = cached(env, &key).await {
-        return Ok(hit);
-    }
-    let found = nyuchi_get(env, &path)
-        .await?
-        .map(|b| docs(&b))
-        .unwrap_or_default();
-    store(env, &key, &found, 3_600).await;
-    Ok(found)
-}
-
-/// Open-Meteo forward geocoding: candidates for a name.
-pub async fn geocode(env: &Env, q: &str, count: usize) -> Result<Vec<LocationDoc>, ()> {
-    let norm = slugify(q);
+    q: &str,
+    count: usize,
+    budget_ip: Option<&str>,
+) -> Result<Vec<GeocodeHit>, ()> {
+    let norm = ps::normalise_query(q);
     if norm.is_empty() {
         return Ok(vec![]);
     }
-    let key = format!("geocode:v1:{norm}:{count}");
-    if let Some(hit) = cached(env, &key).await {
+    let key = format!("geocode:v2:{}:{count}", slugify(&norm));
+    if let Some(hit) = cached::<Vec<GeocodeHit>>(env, &key).await {
         return Ok(hit);
+    }
+    if !open_meteo_allowed() {
+        return Err(());
+    }
+    if let Some(ip) = budget_ip {
+        if !limits::within(env, ip, "search-geocode", ps::GEOCODE_TOP_UP_PER_IP).await {
+            return Ok(vec![]);
+        }
     }
     let url = with_query(
         "https://geocoding-api.open-meteo.com/v1/search",
@@ -161,19 +171,39 @@ pub async fn geocode(env: &Env, q: &str, count: usize) -> Result<Vec<LocationDoc
             ("language", "en"),
         ],
     );
-    let found: Vec<LocationDoc> = match get_with_timeout(&url, None, TIMEOUT).await {
-        Ok(mut r) if r.status_code() == 200 => r
-            .json::<Value>()
-            .await
-            .map_err(|_| ())?
-            .get("results")
-            .and_then(Value::as_array)
-            .map(|rs| rs.iter().filter_map(LocationDoc::from_open_meteo).collect())
-            .unwrap_or_default(),
-        _ => return Err(()),
+    let hits: Vec<GeocodeHit> = match get_with_timeout(&url, None, TIMEOUT).await {
+        Ok(mut r) if r.status_code() == 200 => {
+            let body = r.json::<Value>().await.map_err(|_| ());
+            record(&OPEN_METEO, body.is_ok());
+            body?
+                .get("results")
+                .and_then(Value::as_array)
+                .map(|rs| rs.iter().filter_map(GeocodeHit::from_open_meteo).collect())
+                .unwrap_or_default()
+        }
+        // Our own request was refused: not an outage, nothing to cache.
+        Ok(r) if r.status_code() < 500 => return Ok(vec![]),
+        Ok(_) | Err(FetchError::Timeout) | Err(FetchError::Network(_)) => {
+            record(&OPEN_METEO, false);
+            return Err(());
+        }
     };
-    store(env, &key, &found, DAY).await;
-    Ok(found)
+    store(env, &key, &hits, GEOCODE_TTL).await;
+    Ok(hits)
+}
+
+/// A bare name from a URL, resolved: the cached answer, if any.
+pub async fn resolve_cached(env: &Env, name: &str) -> Option<Option<LocationDoc>> {
+    cached_slot(env, &format!("resolve:v1:{}", slugify(name))).await
+}
+
+pub async fn resolve_store(env: &Env, name: &str, found: Option<&LocationDoc>) {
+    let ttl = if found.is_some() {
+        ps::RESOLVE_CACHE_TTL_S
+    } else {
+        ps::RESOLVE_MISS_TTL_S
+    };
+    store_slot(env, &format!("resolve:v1:{}", slugify(name)), found, ttl).await;
 }
 
 /// The cache key of a reverse geocode: the point's 153 m geohash cell.
@@ -188,32 +218,107 @@ pub async fn reverse_cached(env: &Env, lat: f64, lon: f64) -> Option<LocationDoc
         .flatten()
 }
 
-/// Nominatim reverse geocoding: name the point. `Ok(None)` when Nominatim has
-/// no name for it.
-pub async fn reverse(env: &Env, lat: f64, lon: f64) -> Result<Option<LocationDoc>, ()> {
-    let key = reverse_key(lat, lon);
-    if let Some(hit) = cached::<Option<LocationDoc>>(env, &key).await {
-        return Ok(hit);
-    }
+/// How a Nominatim call ended.
+enum Reverse {
+    Body(Value),
+    /// 4xx, or an unreadable body: not an outage.
+    Refused,
+    Outage,
+}
+
+async fn nominatim(lat: f64, lon: f64, zoom: u8) -> Reverse {
     let url = with_query(
         "https://nominatim.openstreetmap.org/reverse",
         &[
             ("lat", &lat.to_string()),
             ("lon", &lon.to_string()),
             ("format", "jsonv2"),
-            ("zoom", "18"),
+            ("zoom", &zoom.to_string()),
             ("accept-language", "en"),
         ],
     );
     let headers = Headers::new();
-    headers.set("User-Agent", USER_AGENT).map_err(|_| ())?;
-    let found = match get_with_timeout(&url, Some(headers), TIMEOUT).await {
-        Ok(mut r) if r.status_code() == 200 => {
-            let body = r.json::<Value>().await.map_err(|_| ())?;
-            LocationDoc::from_nominatim(&body, lat, lon)
+    if headers.set("User-Agent", USER_AGENT).is_err() {
+        return Reverse::Refused;
+    }
+    match get_with_timeout(&url, Some(headers), TIMEOUT).await {
+        Ok(mut r) if r.status_code() == 200 => match r.json::<Value>().await {
+            Ok(body) => {
+                record(&NOMINATIM, true);
+                Reverse::Body(body)
+            }
+            Err(_) => {
+                record(&NOMINATIM, false);
+                Reverse::Outage
+            }
+        },
+        Ok(r) if r.status_code() < 500 => Reverse::Refused,
+        Ok(_) | Err(FetchError::Timeout) | Err(FetchError::Network(_)) => {
+            record(&NOMINATIM, false);
+            Reverse::Outage
         }
-        _ => return Err(()),
+    }
+}
+
+/// Nominatim reverse geocoding at building level: name the exact point.
+/// `Ok(None)` when Nominatim has no name for it.
+pub async fn reverse(env: &Env, lat: f64, lon: f64) -> Result<Option<LocationDoc>, ()> {
+    let key = reverse_key(lat, lon);
+    if let Some(hit) = cached::<Option<LocationDoc>>(env, &key).await {
+        return Ok(hit);
+    }
+    if !nominatim_allowed() {
+        return Err(());
+    }
+    let found = match nominatim(lat, lon, 18).await {
+        Reverse::Body(body) => LocationDoc::from_nominatim(&body, lat, lon),
+        Reverse::Refused | Reverse::Outage => return Err(()),
     };
     store(env, &key, &found, 30 * DAY).await;
     Ok(found)
+}
+
+/// Find-only naming of a point no stored place is near: one city-level
+/// reverse geocode of the coordinate snapped to 0.01 degrees, cached per
+/// cell (6 h; a miss 10 min), within 30 an hour per client and 900 an hour
+/// service-wide, behind the Nominatim breaker. Any skip or failure is
+/// `None`; nothing is stored and the exact position never leaves the request.
+pub async fn find_only_spot(env: &Env, lat: f64, lon: f64, client: &str) -> Option<LocationDoc> {
+    let (slat, slon) = (ps::snap(lat), ps::snap(lon));
+    let key = format!("fo:v1:{slat}_{slon}");
+    if let Some(answer) = cached_slot::<LocationDoc>(env, &key).await {
+        return answer;
+    }
+    if !nominatim_allowed() {
+        return None;
+    }
+    if !limits::within(
+        env,
+        client,
+        "geo-find-geocode",
+        ps::FIND_ONLY_GEOCODE_PER_IP,
+    )
+    .await
+        || !limits::within(
+            env,
+            "all",
+            "geo-find-geocode-global",
+            ps::FIND_ONLY_GEOCODE_GLOBAL,
+        )
+        .await
+    {
+        return None;
+    }
+    let spot = match nominatim(slat, slon, ps::FIND_ONLY_ZOOM).await {
+        Reverse::Body(body) => ps::spot_from_nominatim(&body, slat, slon),
+        Reverse::Refused => None,
+        Reverse::Outage => return None,
+    };
+    let ttl = if spot.is_some() {
+        ps::FIND_ONLY_CACHE_TTL_S
+    } else {
+        ps::FIND_ONLY_MISS_TTL_S
+    };
+    store_slot(env, &key, spot.as_ref(), ttl).await;
+    spot
 }
