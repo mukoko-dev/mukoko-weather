@@ -162,7 +162,11 @@ export function CurrentLocationHome({ initial, user }: Props) {
     }
 
     let resolved = result.location;
-    const far = result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM;
+    // A spot named on demand (nothing stored near the fix, #302) is not a
+    // stored place yet: create the real one, exactly as for a far match.
+    const far =
+      result.synthesized === true ||
+      (result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM);
     if (far) {
       // The fix is fresh, so this second read comes from the browser's
       // cache — a network hop to create the real place, not another wait.

@@ -265,9 +265,11 @@ export default function PrivacyPage() {
                   OpenStreetMap / Nominatim
                 </dt>
                 <dd className="mt-1">
-                  Reverse geocoding used when creating new locations. We send
-                  geographic coordinates to determine place names. No personal
-                  data is transmitted. See their{" "}
+                  Reverse geocoding used when creating new locations, and to
+                  name your area when we hold no place near you. We send
+                  geographic coordinates (rounded to about 1 km when only
+                  naming your area) to determine place names. No personal data
+                  is transmitted. See their{" "}
                   <a
                     href="https://osmfoundation.org/wiki/Privacy_Policy"
                     className="sunbird"

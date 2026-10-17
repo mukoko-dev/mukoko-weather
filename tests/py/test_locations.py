@@ -853,7 +853,8 @@ class TestGeoLookup:
         detected location. A tight cap makes a genuinely-far match fall
         through to the 404 (retry with autoCreate=true) instead."""
         mock_nearest.return_value = None
-        with pytest.raises(HTTPException):
+        with patch("py._locations._find_only_spot", return_value=None), \
+             pytest.raises(HTTPException):
             await geo_lookup(-17.83, 31.05)
 
         assert mock_nearest.call_args.kwargs["max_km"] <= 200
@@ -943,8 +944,10 @@ class TestGeoLookup:
             "name": "New York", "admin1": "New York",
             "lat": 40.71, "lon": -74.01, "elevation": 10,
         }
-        # With autoCreate=false, should raise 404 (no nearby location, not region error)
-        with pytest.raises(HTTPException) as exc_info:
+        # With autoCreate=false and the on-demand naming unavailable, should
+        # raise 404 (no nearby location, not a region error).
+        with patch("py._locations._find_only_spot", return_value=None), \
+             pytest.raises(HTTPException) as exc_info:
             await geo_lookup(40.71, -74.01)
         assert exc_info.value.status_code == 404
         assert "autoCreate" in exc_info.value.detail
@@ -2365,3 +2368,133 @@ class TestSearchInputBoundsAndGeocodeBudget:
         ]
         result = await search_locations(q="springfield")
         assert [r["province"] for r in result["locations"]] == ["Illinois", "Missouri"]
+
+
+# ---------------------------------------------------------------------------
+# /api/py/geo find-only fallback — name the spot on demand (#302)
+# ---------------------------------------------------------------------------
+
+from py import _locations as _locs  # noqa: E402
+from py._circuit_breaker import nominatim_breaker  # noqa: E402
+
+PHUKET_NOMINATIM = {
+    "name": "Phuket", "country": "TH", "countryName": "Thailand",
+    "admin1": "Phuket Province", "nominatimAddress": {},
+    "lat": 7.89, "lon": 98.40, "elevation": 0,
+}
+
+
+class TestFindOnlySpot:
+    @pytest.fixture(autouse=True)
+    def _clean(self):
+        _locs._find_only_cache.clear()
+        nominatim_breaker.reset()
+        with patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9}):
+            yield
+        _locs._find_only_cache.clear()
+        nominatim_breaker.reset()
+
+    @pytest.mark.asyncio
+    @patch("py._locations._reverse_geocode_nominatim", return_value=PHUKET_NOMINATIM)
+    @patch("py._locations.find_nearest_location", return_value=None)
+    async def test_phuket_find_only_returns_a_spot_not_404(self, _nearest, mock_rev):
+        """The production gap: find-only 404'd at Phuket's own coordinates."""
+        result = await geo_lookup(7.89059, 98.3981)
+        spot = result["nearest"]
+        assert result["synthesized"] is True and result["isNew"] is False
+        assert spot["name"] == "Phuket" and spot["country"] == "TH"
+        assert spot["province"] == "Phuket Province"
+        assert spot["slug"].startswith("phuket--")
+        assert result["redirectTo"] == f"/{spot['slug']}"
+        # Snapped to the ~1 km grid; city-level reverse geocode only.
+        assert (spot["lat"], spot["lon"]) == (7.89, 98.4)
+        mock_rev.assert_called_once_with(7.89, 98.4, zoom=10)
+
+    @pytest.mark.asyncio
+    @patch("py._locations._reverse_geocode_nominatim", return_value=PHUKET_NOMINATIM)
+    @patch("py._locations.find_nearest_location", return_value=None)
+    async def test_cell_is_cached(self, _nearest, mock_rev):
+        await geo_lookup(7.89059, 98.3981)
+        await geo_lookup(7.8912, 98.3990)
+        assert mock_rev.call_count == 1
+
+    @pytest.mark.asyncio
+    @patch("py._locations._reverse_geocode_nominatim")
+    @patch("py._locations.find_nearest_location")
+    async def test_stored_place_wins_without_upstream(self, mock_nearest, mock_rev):
+        mock_nearest.return_value = {"slug": "harare", "name": "Harare"}
+        result = await geo_lookup(-17.83, 31.05)
+        assert result["nearest"]["slug"] == "harare"
+        assert "synthesized" not in result
+        mock_rev.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("py._locations._reverse_geocode_nominatim", return_value=None)
+    @patch("py._locations.find_nearest_location", return_value=None)
+    async def test_upstream_failure_is_404_and_counts_against_breaker(self, _n, _r):
+        with pytest.raises(HTTPException) as exc:
+            await geo_lookup(7.89059, 98.3981)
+        assert exc.value.status_code == 404
+        from py._circuit_breaker import _get_state
+        assert len(_get_state("nominatim-osm").failures) == 1
+
+    @pytest.mark.asyncio
+    @patch("py._locations._reverse_geocode_nominatim")
+    @patch("py._locations.find_nearest_location", return_value=None)
+    async def test_over_per_ip_budget_is_404_not_429(self, _n, mock_rev):
+        with patch("py._db.check_rate_limit", return_value={"allowed": False, "remaining": 0}):
+            with pytest.raises(HTTPException) as exc:
+                await geo_lookup(7.89059, 98.3981)
+        assert exc.value.status_code == 404
+        mock_rev.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("py._locations._reverse_geocode_nominatim")
+    @patch("py._locations.find_nearest_location", return_value=None)
+    async def test_global_budget_is_checked(self, _n, mock_rev):
+        calls = []
+
+        def rate(ip, action, limit, window):
+            calls.append((ip, action, limit))
+            return {"allowed": action != "geo-find-geocode-global", "remaining": 0}
+
+        with patch("py._db.check_rate_limit", side_effect=rate), \
+             patch("py._locations.check_rate_limit", side_effect=rate):
+            with pytest.raises(HTTPException):
+                await geo_lookup(7.89059, 98.3981)
+        assert ("all", "geo-find-geocode-global", _locs.FIND_ONLY_GEOCODE_GLOBAL) in calls
+        mock_rev.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("py._locations._reverse_geocode_nominatim")
+    @patch("py._locations.find_nearest_location", return_value=None)
+    async def test_open_breaker_skips_upstream(self, _n, mock_rev):
+        for _ in range(5):
+            nominatim_breaker.record_failure()
+        with pytest.raises(HTTPException):
+            await geo_lookup(7.89059, 98.3981)
+        mock_rev.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("py._locations._reverse_geocode_nominatim", return_value={**PHUKET_NOMINATIM, "name": ""})
+    @patch("py._locations.find_nearest_location", return_value=None)
+    async def test_unnamed_point_is_404(self, _n, _r):
+        with pytest.raises(HTTPException) as exc:
+            await geo_lookup(-40.0, -20.0)
+        assert exc.value.status_code == 404
+
+    @pytest.mark.asyncio
+    @patch("py._locations._find_only_spot")
+    @patch("py._locations._create_location_from_coords")
+    @patch("py._locations.find_nearest_location", return_value=None)
+    async def test_autocreate_never_uses_the_find_only_spot(self, _n, mock_create, mock_spot):
+        mock_create.return_value = {"status": "created", "location": {"slug": "x--osm-n1"}}
+        result = await geo_lookup(7.89, 98.39, autoCreate=True)
+        assert result["isNew"] is True
+        mock_spot.assert_not_called()
+
+    def test_find_only_never_writes(self):
+        """A coarse IP position must never create a record."""
+        import inspect
+        src = inspect.getsource(_locs._find_only_spot)
+        assert "upsert" not in src and "insert" not in src and "_create_location" not in src

@@ -598,7 +598,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/history/analyze` — 10 req/hour
 - `/api/py/history` archive backfill — 30 attempts/hour (bucket key `history-backfill`; only gates the Open-Meteo archive gap-fill, never the read itself)
 - `/api/py/locations/add` — 5 req/hour
-- `/api/py/geo?autoCreate=true` — 5 req/hour (bucket key `location-create`, shared with `/api/py/locations/add`'s coordinates mode — same expensive reverse-geocode + DB-write cost). The find-only path (`autoCreate=false`) stays unlimited since it's a cheap read
+- `/api/py/geo?autoCreate=true` — 5 req/hour (bucket key `location-create`, shared with `/api/py/locations/add`'s coordinates mode — same expensive reverse-geocode + DB-write cost). The find-only path (`autoCreate=false`) stays unlimited while it is a cheap read; only its on-demand naming fallback (below) is budgeted: 30/hour per IP (bucket `geo-find-geocode`) and 900/hour service-wide (`geo-find-geocode-global`), skipped (404 as before), never a 429
 - `/api/py/devices` (create) — 20 req/hour, only when `deviceId` is omitted/fresh (unbounded doc creation); an existing/caller-supplied `deviceId` is idempotent and skips the limiter
 - `/api/py/reports` (submit) — 5 req/hour
 - `/api/py/reports/clarify` — 10 req/hour
@@ -626,6 +626,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `tomorrow_breaker` — Tomorrow.io API (3 failures / 2min cooldown / 5min window / 5s timeout)
 - `open_meteo_breaker` — Open-Meteo API (5 failures / 5min cooldown / 5min window / 8s timeout)
 - `ai_breaker` — Cloudflare AI Gateway / Workers AI (provider key `ai-gateway`; 3 failures / 5min cooldown / 10min window / 15s timeout)
+- `nominatim_breaker` — Nominatim reverse geocoding for the `/api/py/geo` find-only fallback (provider key `nominatim-osm`; 3 failures / 5min cooldown / 5min window / 5s timeout)
 
 **Key classes:**
 
@@ -694,7 +695,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/ai/prompts` — GET, database-driven AI prompt library. Returns system prompts and suggested prompt rules
 - `/api/py/ai/suggested-rules` — GET, dynamic suggested prompt rules for contextual prompts
 - `/api/py/search` — GET, location search (text search, tag filter, geospatial nearest, pagination). Text search delegates to `search_locations_by_name()` in `api/py/_places_resolver.py` — the same helper the Shamwari chat tool's `search_locations` uses, so the two can't drift apart. When the catalogue returns fewer than 3 matches (`GEOCODE_TOP_UP_BELOW`), Open-Meteo geocoding candidates are appended (same name within 25 km of a catalogue match dropped; `source` `geocoded` or `mixed`). Geocoded candidates carry a spot slug (`{name}--{geohash}`), never `{name}-{country}`: nothing backs those, so `london-gb` used to 404 for every search hit outside the stored geography
-- `/api/py/geo` — GET, nearest location lookup (query: `lat`, `lon`, optional `autoCreate=true` for auto-creating community locations)
+- `/api/py/geo` — GET, nearest location lookup (query: `lat`, `lon`, optional `autoCreate=true` for auto-creating community locations). Find-only with nothing stored within 150 km (#302) names the point on demand instead of 404ing: one city-level (zoom 10) Nominatim reverse geocode of the coordinate snapped to 0.01°, returned as a spot (`{name}--{geohash}`, renders from its slug) with `synthesized: true`. Nothing is written (an IP position is too coarse to store); the browser GPS flow sees `synthesized` and escalates to `autoCreate=true`, which stores the exact place. Per-instance cell cache (6 h, misses 10 min), the budgets above and `nominatim_breaker`; any skip or failure is the old 404
 - `/api/py/locations` — GET, list/filter locations from MongoDB (by slug, tag, or all; includes stats mode)
 - `/api/py/locations/add` — POST, add locations via search (`{ query }`) or coordinates (`{ lat, lon }`). Rate-limited to 5 creations/hour/IP
 - `/api/py/activities` — GET, activities (by id, category, search query, labels, or categories mode)
@@ -811,7 +812,7 @@ Policy lives as data in `src/lib/security-headers.ts` (framework-agnostic, so th
 - **All locations**: require `slug`, `name`, `province`, `lat`, `lon`, `elevation`, `tags`, and `country` (ISO 3166-1 alpha-2). New locations use `{city}-{country_lowercase}` slug format (e.g., `nairobi-ke`, `bangkok-th`); legacy ZW seed locations use short slugs (e.g., `harare`). Coordinates validated within global bounds (-90/90 lat, -180/180 lon).
 - **Source field:** `"seed"` for curated data, `"community"` for user-submitted, `"geolocation"` for auto-detected.
 
-**Community locations:** Dynamically created via geolocation auto-detection or `/api/locations/add`. Stored in MongoDB alongside seed locations. Reverse-geocoded via Nominatim at zoom=18 (building/POI level) for both GPS auto-creation and explicit coordinate submissions, so GPS resolves to the user's exact place (road, shop, address, suburb) like top weather apps — never snapping to a distant city. `GET /api/py/geo?autoCreate=true` does **no** distance-based nearest-snap; it always reverse-geocodes and creates the fine-grained entry, guarded only by the tight 1km same-name dedup below. The find-only path (`autoCreate=false`, e.g. IP-geo) returns the nearest existing entry.
+**Community locations:** Dynamically created via geolocation auto-detection or `/api/locations/add`. Stored in MongoDB alongside seed locations. Reverse-geocoded via Nominatim at zoom=18 (building/POI level) for both GPS auto-creation and explicit coordinate submissions, so GPS resolves to the user's exact place (road, shop, address, suburb) like top weather apps — never snapping to a distant city. `GET /api/py/geo?autoCreate=true` does **no** distance-based nearest-snap; it always reverse-geocodes and creates the fine-grained entry, guarded only by the tight 1km same-name dedup below. The find-only path (`autoCreate=false`, e.g. IP-geo) returns the nearest existing entry within 150 km, else an on-demand named spot with `synthesized: true` (never stored; see the `/api/py/geo` route entry).
 
 **Structured address storage:** Community/geolocation locations store a `nominatimAddress` object with formal address fields from Nominatim: `road`, `suburb`, `cityDistrict`, `city`, `state`, `stateDistrict`, `county`, `postcode`, `country`, `countryCode`, `displayName`. This enables three-layer breadcrumbs (Country / Province / Location) and contextual display in cards and info panels. TypeScript type: `NominatimAddress` in `src/lib/locations.ts`.
 

@@ -141,3 +141,17 @@ def mock_request():
         return req
 
     return _make
+
+
+@pytest.fixture(autouse=True)
+def _fresh_find_only_cache():
+    """The /api/py/geo find-only fallback keeps a per-instance cell cache
+    (#302); clear it so one test's spot never answers another's lookup."""
+    try:
+        from py import _locations
+    except Exception:  # pragma: no cover
+        yield
+        return
+    _locations._find_only_cache.clear()
+    yield
+    _locations._find_only_cache.clear()
