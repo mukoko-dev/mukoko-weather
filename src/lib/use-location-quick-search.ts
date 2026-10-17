@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useDebounce } from "./use-debounce";
+import { weatherApiUrl } from "./worker-routes";
 
 export interface QuickSearchLocation {
   slug: string;
@@ -83,7 +84,7 @@ export function useLocationQuickSearch({
     const raf = requestAnimationFrame(() => {
       if (disposed) return;
       setLoading(true);
-      fetch(`/api/py/search?q=${encodeURIComponent(q)}&limit=${limit}`, {
+      fetch(weatherApiUrl(`/api/py/search?q=${encodeURIComponent(q)}&limit=${limit}`), {
         signal: controller.signal,
       })
         .then(async (res) => {

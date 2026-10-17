@@ -1962,6 +1962,7 @@ What exists today:
 - `NYUCHI_API_URL` — optional, server-only. Nyuchi API gateway origin for `/api/app-keys` (bare `https` origin; anything else and the route answers 503)
 - `NYUCHI_APP_KEYS_API_KEY` — optional, server-only secret. This app's own internal gateway key (`nyk_….nys_…`), scoped `identity app-keys weather` only — a dedicated key, separate from the Workers' `NYUCHI_API_KEY`. Never `NEXT_PUBLIC_*`, never logged
 - `NYUCHI_CONSOLE_WORKOS_CLIENT_ID` — optional. The Console WorkOS client id the person-token exchange accepts (default `client_01KV2G518HGXVMTAFQDKSVNXCW`, "Mukoko Account"). `WORKOS_CLIENT_ID` must be this client for `/api/app-keys` to work
+- `NEXT_PUBLIC_WEATHER_API_BASE` + `NEXT_PUBLIC_WEATHER_WORKER_ROUTES` — optional, both unset by default. Switch single routes (`search`, `geo`, `locations`) from `/api/py/*` to the Rust places Worker (`src/lib/worker-routes.ts`, `weatherApiUrl()`); the browser calls the Worker directly. Unset to roll back. See `workers/README.md`, "Cutting the app over"
 - `ALERT_WEBHOOK_URL` — optional, enables webhook alerting for high/critical severity errors (Slack incoming webhook, Discord webhook, PagerDuty, or compatible services). Used by `src/lib/observability.ts`
 - `NEXT_PUBLIC_MAPTILER_API_KEY` — MapTiler Cloud API key for OpenMapTiles base map tiles and aviation map layers (`feature/openmaptiles` branch). Set in `.env.local` (gitignored). Key stored in MapTiler Cloud account.
 

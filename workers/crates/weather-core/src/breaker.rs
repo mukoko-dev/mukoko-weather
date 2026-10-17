@@ -36,6 +36,13 @@ pub const OPEN_METEO: Config = Config {
     window_ms: 5 * 60_000,
 };
 
+/// Nominatim reverse geocoding: 3 failures in 5 min open it for 5 min.
+pub const NOMINATIM: Config = Config {
+    failure_threshold: 3,
+    cooldown_ms: 5 * 60_000,
+    window_ms: 5 * 60_000,
+};
+
 #[derive(Debug, Clone)]
 pub struct Breaker {
     config: Config,
