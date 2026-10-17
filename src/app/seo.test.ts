@@ -232,6 +232,16 @@ describe("country-aware metadata in [location]/page.tsx", () => {
     expect(pageSource).toContain("addressCountry");
   });
 
+  it("omits addressCountry and containedInPlace when the place has no country (open ocean)", () => {
+    expect(pageSource).toContain(
+      "...(countryCode ? { addressCountry: countryCode } : {})",
+    );
+    expect(pageSource).toMatch(
+      /\.\.\.\(countryCode\s*\?\s*\{\s*containedInPlace:/,
+    );
+    expect(pageSource).not.toMatch(/addressCountry: countryCode,\n/);
+  });
+
   it("uses countryCode for addressCountry in JSON-LD", () => {
     // addressCountry should use the actual ISO code, not hardcoded "ZW"
     const addressCountrySection = pageSource.slice(

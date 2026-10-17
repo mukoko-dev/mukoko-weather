@@ -29,7 +29,7 @@ from ._db import (
     observations_collection,
     weather_cache_collection,
 )
-from ._places_resolver import find_location, find_nearest_location
+from ._places_resolver import find_location, find_nearest_location, is_synthesized_spot
 from ._weather_cache_key import weather_cache_key
 from ._history_store import record_weather_history
 from ._circuit_breaker import open_meteo_breaker
@@ -483,6 +483,8 @@ def _fetch_open_meteo_extras(lat: float, lon: float, models: list[str] | None = 
     }
     if (offset := _utc_offset(data)) is not None:
         result["utc_offset_seconds"] = offset
+    if zone := _zone(data):
+        result["timezone"] = zone
     return result
 
 
@@ -632,7 +634,15 @@ def _fetch_open_meteo(lat: float, lon: float) -> dict | None:
     result["minutely"] = _parse_minutely(data)
     if (offset := _utc_offset(data)) is not None:
         result["utc_offset_seconds"] = offset
+    if zone := _zone(data):
+        result["timezone"] = zone
     return result
+
+
+def _zone(data: dict) -> str | None:
+    """The IANA ``timezone`` Open-Meteo reports for ``timezone=auto``, if any."""
+    zone = data.get("timezone")
+    return zone if isinstance(zone, str) and zone else None
 
 
 def _has_forecast_values(data: dict) -> bool:
@@ -933,6 +943,11 @@ def _resolve_location_hint(hint: str | None, lat: float, lon: float) -> dict | N
         loc = find_location(hint)
     except Exception:
         return None
+    # A spot slug with no record behind it is just a name + coordinate anyone
+    # can spell: keying history by it would split one cell's history across
+    # made-up names, and its elevation (0) is not a measurement.
+    if is_synthesized_spot(loc):
+        return None
     return loc if _near(loc, lat, lon) else None
 
 
@@ -1048,6 +1063,8 @@ def _attach_comparison(data: dict, lat: float, lon: float, requested: list[str] 
     # resolves it for the same point.
     if data.get("utc_offset_seconds") is None and extras.get("utc_offset_seconds") is not None:
         data["utc_offset_seconds"] = extras["utc_offset_seconds"]
+    if not data.get("timezone") and extras.get("timezone"):
+        data["timezone"] = extras["timezone"]
     return data
 
 

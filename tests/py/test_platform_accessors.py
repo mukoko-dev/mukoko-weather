@@ -266,11 +266,12 @@ class TestStampPlatformFields:
         assert result["_schemaVersion"] == "v3.1"
         assert isinstance(result["createdAt"], datetime)
         assert isinstance(result["updatedAt"], datetime)
-        assert result["bundu"] == {"countryCode": "ZW"}
+        assert result["bundu"] == {"countryCode": "ZZ"}
 
-    def test_default_country_code_is_zw(self):
+    def test_default_country_code_is_unknown_not_zw(self):
+        """No country given → ZZ (unknown), never a silent Zimbabwe."""
         result = db.stamp_platform_fields({})
-        assert result["bundu"]["countryCode"] == "ZW"
+        assert result["bundu"]["countryCode"] == db.UNKNOWN_COUNTRY_CODE == "ZZ"
 
     def test_respects_country_code_opt(self):
         result = db.stamp_platform_fields({}, country_code="KE")

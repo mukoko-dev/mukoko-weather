@@ -1087,14 +1087,25 @@ def resolve_place(*, slug: Optional[str], lat: Optional[float], lon: Optional[fl
                   name: Optional[str] = None) -> Optional[dict]:
     """The place a request is about: a known placesGeo place by slug, else
     the known place within 3 km of the coordinate, else a bare spot."""
-    from ._places_resolver import find_location, find_nearest_location  # noqa: PLC0415
+    from ._places_resolver import (  # noqa: PLC0415
+        find_location,
+        find_nearest_location,
+        is_synthesized_spot,
+    )
 
     if slug and SLUG_RE.match(slug):
         try:
             loc = find_location(slug)
         except Exception:  # noqa: BLE001
             loc = None
-        if loc and loc.get("_id"):
+        if is_synthesized_spot(loc):
+            # A spot slug with no record is a coordinate, never a placesGeo
+            # place: fall through to the nearest-place / bare-spot path with
+            # the slug's own coordinate and name.
+            if lat is None or lon is None:
+                lat, lon = loc.get("lat"), loc.get("lon")
+            name = name or loc.get("name")
+        elif loc and loc.get("_id"):
             place = _place_from_location(loc, slug)
             _apply_country_hint(place, country, slug)
             place["admin1"] = place["admin1"] or admin1

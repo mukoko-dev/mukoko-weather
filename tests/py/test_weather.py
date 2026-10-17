@@ -1883,6 +1883,21 @@ class TestUtcOffsetSeconds:
         assert result["utc_offset_seconds"] == 7200
 
     @patch("py._weather._get_http_client")
+    def test_open_meteo_forecast_carries_timezone(self, mock_client):
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = _om_payload(utc_offset_seconds=32400, timezone="Asia/Tokyo")
+        mock_client.return_value.get.return_value = resp
+        result = _fetch_open_meteo(35.68, 139.69)
+        assert result["timezone"] == "Asia/Tokyo"
+
+    @patch("py._weather._get_http_client")
+    def test_extras_carry_timezone(self, mock_client):
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {"hourly": {}, "utc_offset_seconds": 0, "timezone": "Atlantic/Reykjavik"}
+        mock_client.return_value.get.return_value = resp
+        assert _fetch_open_meteo_extras(64.15, -21.94)["timezone"] == "Atlantic/Reykjavik"
+
+    @patch("py._weather._get_http_client")
     def test_open_meteo_forecast_omits_offset_when_absent(self, mock_client):
         resp = MagicMock(status_code=200)
         resp.json.return_value = _om_payload()

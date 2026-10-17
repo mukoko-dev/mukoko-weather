@@ -17,7 +17,7 @@ export default function PrivacyPage() {
       <PageShell>
         <h1 className="elephant">Privacy Policy</h1>
         <p className="mt-2 text-base text-text-tertiary">
-          Last updated: June 2026
+          Last updated: October 2026
         </p>
 
         <div className="mt-8 space-y-8 text-text-secondary leading-relaxed">
@@ -188,9 +188,14 @@ export default function PrivacyPage() {
               <div>
                 <dt className="font-semibold text-text-primary">Open-Meteo</dt>
                 <dd className="mt-1">
-                  Weather data API. We send geographic coordinates of supported
-                  locations to retrieve weather forecasts. No personal data is
-                  transmitted. See their{" "}
+                  Weather data and geocoding API. We send geographic coordinates
+                  to retrieve weather forecasts. When a location search finds
+                  few matches in our own catalogue, the text you typed is sent
+                  from our servers to Open-Meteo&apos;s geocoding service to
+                  find matching places worldwide; your IP address is not
+                  forwarded with it. Avoid typing personal details, such as a
+                  home address, into the search box if you do not want them
+                  shared. See their{" "}
                   <a
                     href="https://open-meteo.com/en/terms"
                     className="sunbird"
