@@ -192,10 +192,12 @@ export default function PrivacyPage() {
                   to retrieve weather forecasts. When a location search finds
                   few matches in our own catalogue, the text you typed is sent
                   from our servers to Open-Meteo&apos;s geocoding service to
-                  find matching places worldwide; your IP address is not
-                  forwarded with it. Avoid typing personal details, such as a
-                  home address, into the search box if you do not want them
-                  shared. See their{" "}
+                  find matching places worldwide. The same happens when you open
+                  a web address that names a place we do not hold, such as
+                  /koh-samui: the name in the address is looked up so we can
+                  take you to that place. Your IP address is not forwarded with
+                  either. Avoid typing personal details, such as a home address,
+                  into the search box if you do not want them shared. See their{" "}
                   <a
                     href="https://open-meteo.com/en/terms"
                     className="sunbird"

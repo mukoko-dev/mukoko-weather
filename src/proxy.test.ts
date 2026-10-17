@@ -44,6 +44,24 @@ vi.mock("@/lib/places", () => ({
 const { default: proxy } = await import("./proxy");
 const { authkit } = await import("@workos-inc/authkit-nextjs");
 const { resetLocationGateCache } = await import("@/lib/location-gate");
+const { resetBareNameCache } = await import("@/lib/bare-name");
+const { buildSmartSlug } = await import("@/lib/smart-slug");
+
+/** The geocoder behind /api/py/search?mode=resolve, stubbed (#315). Every
+ * test starts with "nothing found", so the 404 tests below are unaffected. */
+const mockResolveFetch = vi.fn(async (_url: string, _init?: RequestInit) =>
+  Response.json({
+    locations: [],
+    total: 0,
+    source: "none",
+    resolve: "no_match",
+  }),
+);
+beforeEach(() => {
+  mockResolveFetch.mockClear();
+  vi.stubGlobal("fetch", mockResolveFetch);
+  resetBareNameCache();
+});
 
 const APP_DIR = resolve(__dirname, "app");
 
@@ -282,5 +300,151 @@ describe("proxy — paused /shamwari is a real 404 (production drift)", () => {
       new NextRequest("https://weather.mukoko.com/about"),
     );
     expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+  });
+});
+
+describe("proxy — bare place names resolve instead of 404 (#315)", () => {
+  const SAMUI = buildSmartSlug("Ko Samui", 9.51201, 100.01361);
+
+  beforeEach(() => resetLocationGateCache());
+
+  function found(slug: string = SAMUI) {
+    mockResolveFetch.mockResolvedValueOnce(
+      Response.json({ locations: [{ slug }], total: 1, resolve: "ok" }),
+    );
+  }
+
+  async function run(path: string) {
+    return proxy(new NextRequest(`https://weather.mukoko.com${path}`));
+  }
+
+  it("308-redirects an unknown bare name to its canonical spot slug", async () => {
+    found();
+    const res = await run("/koh-samui");
+    expect(res.status).toBe(308);
+    expect(new URL(res.headers.get("location") ?? "").pathname).toBe(
+      `/${SAMUI}`,
+    );
+    expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+  });
+
+  it("asks the existing search endpoint in resolve mode with the spaced name", async () => {
+    found();
+    await run("/koh-samui");
+    const url = new URL(mockResolveFetch.mock.calls[0][0]);
+    expect(url.pathname).toBe("/api/py/search");
+    expect(url.searchParams.get("mode")).toBe("resolve");
+    expect(url.searchParams.get("q")).toBe("koh samui");
+  });
+
+  it("keeps the sub-route and the query string", async () => {
+    found();
+    const res = await run("/koh-samui/forecast?units=imperial");
+    const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.pathname + loc.search).toBe(`/${SAMUI}/forecast?units=imperial`);
+  });
+
+  it("sets no lastLocation cookie on the redirect, and caches it privately", async () => {
+    found();
+    const res = await run("/koh-samui");
+    expect(
+      res.headers.getSetCookie().some((c) => c.startsWith("lastLocation=")),
+    ).toBe(false);
+    expect(res.headers.get("cache-control")).toBe("private, max-age=600");
+  });
+
+  it("serves the second request from the per-instance cache", async () => {
+    found();
+    await run("/koh-samui");
+    resetLocationGateCache();
+    const again = await run("/koh-samui");
+    expect(again.status).toBe(308);
+    expect(mockResolveFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the server-rendered 404 when nothing is found", async () => {
+    const res = await run("/chiang-rai-zzz");
+    expect(res.headers.get("x-middleware-rewrite")).toContain(
+      "/__mukoko/location/not-found",
+    );
+    expect(res.status).not.toBe(308);
+  });
+
+  it("falls back to the 404 when the geocoder is over budget, then backs off", async () => {
+    mockResolveFetch.mockResolvedValueOnce(
+      Response.json({ locations: [], resolve: "over_budget" }),
+    );
+    const res = await run("/lake-kariba-zzz");
+    expect(res.headers.get("x-middleware-rewrite")).toContain("not-found");
+    await run("/another-name-zzz");
+    expect(mockResolveFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the 404 when the lookup fails", async () => {
+    mockResolveFetch.mockRejectedValueOnce(new Error("network"));
+    const res = await run("/lake-kariba-zzz");
+    expect(res.headers.get("x-middleware-rewrite")).toContain("not-found");
+  });
+
+  it("never follows a redirect target that is not a seed or a spot", async () => {
+    found("some-community-record");
+    const res = await run("/koh-samui");
+    expect(res.status).not.toBe(308);
+    expect(res.headers.get("x-middleware-rewrite")).toContain("not-found");
+  });
+
+  it.each(["/admin", "/wp-login", "/12345", "/pricing/map"])(
+    "never geocodes %s",
+    async (path) => {
+      await run(path);
+      expect(mockResolveFetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("never geocodes seeds, spots, known places or a failed lookup", async () => {
+    await run("/harare");
+    await run("/some-place--ksy4dd7");
+    await run("/community-place-a1b2c3");
+    await run("/db-down");
+    expect(mockResolveFetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps the case redirect and the seed-alias redirect as they were", async () => {
+    const upper = await run("/Harare");
+    expect(new URL(upper.headers.get("location") ?? "").pathname).toBe(
+      "/harare",
+    );
+    const alias = await run("/phuket");
+    expect(new URL(alias.headers.get("location") ?? "").pathname).toBe(
+      "/phuket-th",
+    );
+    expect(mockResolveFetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps the session cookie AuthKit refreshed on the redirect", async () => {
+    const headers = new Headers();
+    headers.append("set-cookie", "wos-session=fresh; Path=/");
+    vi.mocked(authkit).mockResolvedValueOnce({ headers } as never);
+    found();
+    const res = await run("/koh-samui");
+    expect(res.headers.getSetCookie()).toContain("wos-session=fresh; Path=/");
+  });
+
+  it("hands a slow geocoder to event.waitUntil and still 404s", async () => {
+    vi.useFakeTimers();
+    try {
+      mockResolveFetch.mockImplementationOnce(() => new Promise(() => {}));
+      const waitUntil = vi.fn();
+      const pending = proxy(
+        new NextRequest("https://weather.mukoko.com/slow-name-zzz"),
+        { waitUntil } as never,
+      );
+      await vi.advanceTimersByTimeAsync(5000);
+      const res = await pending;
+      expect(res.headers.get("x-middleware-rewrite")).toContain("not-found");
+      expect(waitUntil).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

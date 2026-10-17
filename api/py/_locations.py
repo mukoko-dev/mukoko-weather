@@ -7,6 +7,7 @@ Handles location CRUD, search (text + geospatial), and geo-lookup.
 from __future__ import annotations
 
 import asyncio
+import difflib
 import logging
 import math
 import re
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 from ._http import get_http_client
 from ._circuit_breaker import nominatim_breaker, open_meteo_breaker
-from ._geohash import build_place_slug, build_smart_slug, normalise_osm_ref
+from ._geohash import build_place_slug, build_smart_slug, normalise_osm_ref, slugify_name
 from ._db import (
     get_db,
     check_rate_limit,
@@ -324,6 +325,121 @@ def _duplicates_any(candidate: dict, existing: list[dict]) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# /api/py/search?mode=resolve — a bare place name in a URL (/koh-samui)
+# ---------------------------------------------------------------------------
+
+#: A URL naming a place we hold no record of (``/koh-samui``) is resolved
+#: here to the best geocoder hit, which the proxy then redirects to as a spot
+#: slug. It reuses the search top-up's upstream (Open-Meteo geocoding), its
+#: breaker gate and its answer shape; only the budgets are its own, and
+#: tighter, because bots probe URLs far more than people type searches.
+#: Nothing is stored: the answer is a coordinate and a name.
+RESOLVE_GEOCODE_COUNT = 10
+RESOLVE_PER_IP = 15
+#: Service-wide ceiling per hour on uncached resolves (the proxy is the
+#: caller, so its per-IP bucket is its own egress IP; the proxy also meters
+#: per visitor). Open-Meteo's free geocoder is for light, non-commercial use.
+RESOLVE_GLOBAL = 300
+RESOLVE_WINDOW_S = 3600
+RESOLVE_CACHE_TTL_S = 6 * 3600
+#: A miss is kept briefly: an empty answer can also be a geocoder hiccup.
+RESOLVE_MISS_TTL_S = 600
+RESOLVE_CACHE_MAX = 512
+#: The best hit must resemble the name that was typed. The geocoder matches
+#: loosely, and ``/admin`` must not become a village called Adamu.
+RESOLVE_MIN_SIMILARITY = 0.6
+RESOLVE_MIN_LENGTH = 3
+RESOLVE_MAX_LENGTH = 60
+_RESOLVE_QUERY_RE = re.compile(r"^[a-z0-9][a-z0-9 '\-]*$")
+
+_resolve_cache: dict[str, tuple[float, str, Optional[dict]]] = {}
+_resolve_lock = threading.Lock()
+
+
+def _name_similarity(a: str, b: str) -> float:
+    """0..1 similarity of two names after slugifying (case, accents, spacing)."""
+    sa, sb = slugify_name(a), slugify_name(b)
+    if not sa or not sb:
+        return 0.0
+    return difflib.SequenceMatcher(None, sa, sb).ratio()
+
+
+def _remember_resolve(key: str, status: str, location: Optional[dict], ttl: float) -> None:
+    now = time.monotonic()
+    with _resolve_lock:
+        if len(_resolve_cache) >= RESOLVE_CACHE_MAX:
+            for k in [k for k, v in list(_resolve_cache.items()) if v[0] <= now]:
+                _resolve_cache.pop(k, None)
+            if len(_resolve_cache) >= RESOLVE_CACHE_MAX:
+                try:
+                    _resolve_cache.pop(next(iter(_resolve_cache)), None)
+                except StopIteration:
+                    pass
+        _resolve_cache[key] = (now + ttl, status, location)
+
+
+def resolve_bare_name(q: str, request: Request | None) -> dict:
+    """Best place for a bare name, as ``{"status", "location"}``.
+
+    ``status`` is ``ok`` (``location`` is a search-result shaped dict),
+    ``no_match`` (a definitive "nothing by that name"), ``over_budget`` or
+    ``unavailable`` (breaker open). Only ``ok`` and ``no_match`` are cached.
+    Never raises; synchronous (it runs on a worker thread).
+    """
+    name = _normalise_query(q).replace("-", " ")
+    if (
+        not name
+        or not (RESOLVE_MIN_LENGTH <= len(name) <= RESOLVE_MAX_LENGTH)
+        or not _RESOLVE_QUERY_RE.match(name.replace(" ", ""))
+        or name.replace(" ", "").isdigit()
+    ):
+        return {"status": "no_match", "location": None}
+    key = name
+    now = time.monotonic()
+    with _resolve_lock:
+        hit = _resolve_cache.get(key)
+    if hit and hit[0] > now:
+        return {"status": hit[1], "location": dict(hit[2]) if hit[2] else None}
+    if not open_meteo_breaker.is_allowed:
+        return {"status": "unavailable", "location": None}
+    try:
+        enforce_rate_limit(
+            request, "slug-geocode", RESOLVE_PER_IP, RESOLVE_WINDOW_S,
+            require_ip=False,
+        )
+        if not check_rate_limit(
+            "all", "slug-geocode-global", RESOLVE_GLOBAL, RESOLVE_WINDOW_S,
+        )["allowed"]:
+            return {"status": "over_budget", "location": None}
+    except HTTPException:
+        return {"status": "over_budget", "location": None}
+
+    geocoded = _forward_geocode(name, RESOLVE_GEOCODE_COUNT)
+    usable = [
+        g for g in geocoded
+        if g.get("name") and _name_similarity(name, g["name"]) >= RESOLVE_MIN_SIMILARITY
+        and is_valid_coords(g.get("lat", 0), g.get("lon", 0))
+    ]
+    # A place beats an area (a province or country centroid), but an area is
+    # still better than nothing: any name on the map renders weather.
+    usable.sort(key=lambda g: is_area_feature(g.get("featureCode")))
+    if not usable:
+        _remember_resolve(key, "no_match", None, RESOLVE_MISS_TTL_S)
+        return {"status": "no_match", "location": None}
+    best = usable[0]
+    cand = _geocoded_candidate(best)
+    if is_area_feature(best.get("featureCode")):
+        cand["area"] = True
+    else:
+        # A shipped seed city is the same place: its canonical slug.
+        seed = seed_matching(cand["name"], cand["lat"], cand["lon"], max_km=_GEOCODE_DUPLICATE_KM)
+        if seed:
+            cand = seed
+    _remember_resolve(key, "ok", cand, RESOLVE_CACHE_TTL_S)
+    return {"status": "ok", "location": dict(cand)}
+
+
 @router.get("/api/py/search")
 async def search_locations(
     q: str = "",
@@ -340,6 +456,7 @@ async def search_locations(
     GET /api/py/search?tag=farming
     GET /api/py/search?lat=-17.83&lon=31.05
     GET /api/py/search?mode=tags
+    GET /api/py/search?q=koh-samui&mode=resolve   (one best place, for URLs)
     """
     limit = max(1, min(limit, 50))
     skip = max(0, skip)
@@ -351,6 +468,20 @@ async def search_locations(
         )
 
     try:
+        # Bare place name from a URL (/koh-samui): the best geocoder hit, for
+        # the proxy to redirect to. Off the event loop (sync httpx). Always 200.
+        if mode == "resolve":
+            if not q:
+                raise HTTPException(status_code=400, detail="Provide q (the place name)")
+            answer = await asyncio.to_thread(resolve_bare_name, q, request)
+            found = answer["location"]
+            return {
+                "locations": [found] if found else [],
+                "total": 1 if found else 0,
+                "source": "geocoded" if found else "none",
+                "resolve": answer["status"],
+            }
+
         # Tag counts mode — aggregated from placesGeo mukokoTags (Phase 0G).
         if mode == "tags":
             pipeline = [
