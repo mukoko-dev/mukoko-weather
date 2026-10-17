@@ -41,6 +41,13 @@ export interface WeatherLocation {
    * overrule it.
    */
   regionApproximate?: boolean;
+  /**
+   * True when `elevation` is a placeholder (0) or borrowed from a nearby
+   * place rather than known for this exact point (spot slugs, the IP
+   * fallback). `reconcileElevation()` replaces it with the forecast's own
+   * terrain height.
+   */
+  elevationApproximate?: boolean;
 }
 
 /**
