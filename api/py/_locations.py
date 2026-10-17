@@ -30,6 +30,7 @@ from ._db import (
     is_valid_coords,
     SLUG_RE,
 )
+from ._seed_locations import seed_in_country
 from ._places_resolver import (
     adapt_placesgeo_to_location,
     count_all_locations,
@@ -177,9 +178,51 @@ async def list_locations(
 #: Below this many catalogue matches, /api/py/search adds geocoded candidates.
 GEOCODE_TOP_UP_BELOW = 3
 
+#: The geocoder is asked for this many times the wanted results, because area
+#: hits (a country, a province) are dropped afterwards and must not eat a slot.
+GEOCODE_OVERFETCH = 3
+GEOCODE_MAX_COUNT = 100
+
+
+def _geocode_fetch_count(wanted: int) -> int:
+    return max(1, min(GEOCODE_MAX_COUNT, max(10, wanted * GEOCODE_OVERFETCH)))
+
+
 #: A geocoded candidate within this distance of a catalogue match with the
 #: same name is the same place, and is dropped from the top-up.
 _GEOCODE_DUPLICATE_KM = 25.0
+
+
+#: GeoNames feature codes (Open-Meteo's geocoder reports them) for areas, not
+#: places: countries and other political entities (``PCL*``), territories,
+#: continents, oceans, seas and regions. Their coordinate is a centroid, so a
+#: forecast there describes nowhere anyone is (searching "Thailand" offered a
+#: page for 15.5°N 101°E). Search never offers them as places (#302).
+_AREA_FEATURE_CODES = frozenset({"TERR", "CONT", "OCN", "SEA", "RGN", "RGNE", "PRSH"})
+
+
+def is_area_feature(feature_code: str | None) -> bool:
+    """True for a geocoder hit that names an area, not a place.
+
+    Besides countries (``PCL*``), this covers administrative divisions
+    (``ADM1``, ``ADM2``, ``ADM1H`` ... — "Phuket Province" is a centroid too)
+    and parishes (``PRSH``).
+    """
+    code = (feature_code or "").strip().upper()
+    return (
+        code.startswith("PCL") or code.startswith("ADM") or code in _AREA_FEATURE_CODES
+    )
+
+
+def _country_hit_codes(geocoded: list[dict]) -> list[str]:
+    """ISO codes of the countries a geocoder answer named (``PCL*`` hits)."""
+    codes: list[str] = []
+    for g in geocoded:
+        code = str(g.get("featureCode") or "").upper()
+        cc = str(g.get("country") or "").upper()
+        if code.startswith("PCL") and re.match(r"^[A-Z]{2}$", cc) and cc not in codes:
+            codes.append(cc)
+    return codes
 
 
 def _geocoded_candidate(g: dict) -> dict:
@@ -360,17 +403,35 @@ async def search_locations(
             # outside the stored geography, and httpx here is synchronous.
             # Cached per instance and budgeted per IP (``search-geocode``):
             # each miss is a request to a third-party geocoder.
-            geocoded = await asyncio.to_thread(_cached_forward_geocode, q, limit, request)
+            geocoded = await asyncio.to_thread(
+                _cached_forward_geocode, q, _geocode_fetch_count(limit), request,
+            )
             extra: list[dict] = []
-            for c in (_geocoded_candidate(g) for g in geocoded):
+            # A country is not a place: offer the places we hold in it
+            # (cities first) instead of its centroid.
+            for cc in _country_hit_codes(geocoded):
+                in_country = await asyncio.to_thread(
+                    find_locations_in_country, cc, limit=limit,
+                )
+                if not in_country:
+                    # placesGeo holds no places for this country (it mostly
+                    # covers Africa): the static seed catalogue does.
+                    in_country = seed_in_country(cc, limit=limit)
+                in_country.sort(key=lambda loc: "city" not in (loc.get("tags") or []))
+                for loc in in_country:
+                    loc.pop("_id", None)
+                    if not any(r.get("slug") == loc.get("slug") for r in results + extra):
+                        extra.append(loc)
+            places = [g for g in geocoded if not is_area_feature(g.get("featureCode"))]
+            for c in (_geocoded_candidate(g) for g in places):
                 # Against the catalogue AND the candidates already kept: the
                 # geocoder can return one town twice (two admin entries).
                 if not _duplicates_any(c, results + extra):
                     extra.append(c)
             extra = extra[: max(0, limit - len(results))]
-            if extra:
+            if any(e.get("source") == "geocoded" for e in extra):
                 source = "geocoded" if not results else "mixed"
-                results = results + extra
+            results = results + extra
 
         return {"locations": results, "total": len(results), "source": source}
     except HTTPException:
@@ -600,6 +661,7 @@ def _forward_geocode(query: str, count: int = 5) -> list[dict]:
                 "lat": r.get("latitude", 0),
                 "lon": r.get("longitude", 0),
                 "elevation": _clean_elevation(r.get("elevation")),
+                "featureCode": r.get("feature_code", ""),
             }
             for r in results
         ]
@@ -1201,7 +1263,11 @@ async def add_location(request: Request):
             if not query:
                 raise HTTPException(status_code=400, detail="Empty query")
 
-            results = _forward_geocode(query, count=5)
+            # Over-fetch: area hits are dropped below and must not eat a slot.
+            results = [
+                r for r in _forward_geocode(query, count=_geocode_fetch_count(5))
+                if not is_area_feature(r.get("featureCode"))
+            ][:5]
 
             return {
                 "mode": "candidates",
