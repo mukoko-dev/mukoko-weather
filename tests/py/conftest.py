@@ -141,3 +141,18 @@ def mock_request():
         return req
 
     return _make
+
+
+@pytest.fixture(autouse=True)
+def _reset_shared_breakers():
+    """Breakers are process-wide singletons: a test that opens one (the
+    aviation breaker in the METAR and airport-discovery tests) must never leak
+    an open circuit into a later test."""
+    from py import _circuit_breaker as cb
+
+    names = ("aviation_breaker", "nominatim_breaker")
+    for name in names:
+        getattr(cb, name, None) and getattr(cb, name).reset()
+    yield
+    for name in names:
+        getattr(cb, name, None) and getattr(cb, name).reset()
