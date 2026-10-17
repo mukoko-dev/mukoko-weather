@@ -856,7 +856,7 @@ mod tests {
         assert!(seed_in_country("ZW").len() > 50);
         let zimbabwe = hit("Zimbabwe", -19.0, 29.15, "PCLI", "ZW");
         for limit in [2usize, 5, 10, 20, 50] {
-            let got = compose_search(vec![], &[zimbabwe.clone()], limit);
+            let got = compose_search(vec![], std::slice::from_ref(&zimbabwe), limit);
             assert_eq!(got.len(), limit, "limit {limit}");
             let areas = got.iter().filter(|l| l.area.is_some()).count();
             assert_eq!(areas, 1, "limit {limit} keeps the country spot");
