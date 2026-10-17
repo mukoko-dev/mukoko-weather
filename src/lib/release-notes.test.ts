@@ -13,6 +13,7 @@ import {
   buildReleasesAtomFeed,
   escapeXml,
   formatReleaseDate,
+  releaseDate,
   githubReleaseUrl,
   isIsoDate,
   parseInline,
@@ -277,6 +278,12 @@ describe("inline text and formatting helpers", () => {
   it("formats the calendar day in UTC, so it never shifts a day", () => {
     expect(formatReleaseDate("2026-10-17")).toBe("17 October 2026");
     expect(formatReleaseDate("2026-01-01")).toBe("1 January 2026");
+  });
+
+  it("turns a release date into UTC midnight", () => {
+    expect(releaseDate("2026-10-17").toISOString()).toBe(
+      "2026-10-17T00:00:00.000Z",
+    );
   });
 
   it("builds stable anchors", () => {

@@ -299,6 +299,12 @@ export function plainText(text: string): string {
     .join("");
 }
 
+/** A release date (YYYY-MM-DD) as a UTC-midnight Date. */
+export function releaseDate(date: string): Date {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
 /** "17 October 2026" — formatted in UTC so the calendar day never shifts. */
 export function formatReleaseDate(date: string): string {
   const [y, m, d] = date.split("-").map(Number);

@@ -10,6 +10,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ReleaseEntry } from "@/components/releases/ReleaseEntry";
 import { loadReleaseNotes } from "@/lib/release-notes-source";
+import { releaseDate } from "@/lib/release-notes";
 import { NON_LOCATION_ROUTES } from "@/lib/current-slug";
 import { PROFILE_DESTINATIONS } from "@/components/profile/ProfileNavigation";
 import sitemap from "../sitemap";
@@ -154,6 +155,15 @@ describe("/releases — route registration", () => {
     );
     expect(hit).toBeDefined();
     expect(hit!.changeFrequency).toBe("weekly");
+    // lastModified is the newest release's date, not the request time.
+    const [newest] = loadReleaseNotes();
+    expect(hit!.lastModified).toEqual(releaseDate(newest.date));
+  });
+
+  it("traces releases/ into the dynamic sitemap function", () => {
+    expect(read("../../../next.config.ts")).toMatch(
+      /outputFileTracingIncludes:\s*\{\s*"\/sitemap\.xml":\s*\["\.\/releases\/\*\.md"\]/,
+    );
   });
 
   it("is linked from the footer, the about page and profile navigation", () => {
@@ -162,5 +172,33 @@ describe("/releases — route registration", () => {
     );
     expect(read("../about/page.tsx")).toContain('href="/releases"');
     expect(PROFILE_DESTINATIONS.some((d) => d.href === "/releases")).toBe(true);
+  });
+});
+
+describe("/releases — page tier files and markup details", () => {
+  it("has a loading skeleton with a status role", () => {
+    const loading = read("loading.tsx");
+    expect(loading).toContain('role="status"');
+    expect(loading).toContain('aria-label="Loading"');
+    expect(loading).toContain("BreadcrumbSkeleton");
+  });
+
+  it("has an error boundary built on RouteErrorBoundary", () => {
+    const error = read("error.tsx");
+    expect(error).toContain('"use client"');
+    expect(error).toContain("<RouteErrorBoundary");
+    expect(error).toContain('source="releases"');
+  });
+
+  it("keys list items by position, never by their text", () => {
+    expect(entry).not.toMatch(/key=\{(item|p)\}/);
+  });
+
+  it("gives every inline link a full touch target (.dik-dik)", () => {
+    for (const src of [page, entry]) {
+      for (const m of src.matchAll(/className="sunbird[^"]*"/g)) {
+        expect(m[0]).toContain("dik-dik");
+      }
+    }
   });
 });

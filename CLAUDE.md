@@ -134,7 +134,7 @@ mukoko-weather/
 │   │   │   ├── page.tsx              # Status page (metadata, layout)
 │   │   │   └── StatusDashboard.tsx   # Client: live health checks for all services
 │   │   ├── about/page.tsx            # About page
-│   │   ├── releases/                 # Public release notes (static) — page.tsx, feed.xml/route.ts (Atom), releases.test.ts
+│   │   ├── releases/                 # Public release notes (static) — page.tsx, feed.xml/route.ts (Atom), loading.tsx, error.tsx (RouteErrorBoundary), releases.test.ts
 │   │   ├── help/
 │   │   │   ├── page.tsx              # Help/FAQ page (server, metadata, JSON-LD)
 │   │   │   └── FAQ.tsx               # Client: Accordion-based FAQ section

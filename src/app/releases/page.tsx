@@ -36,6 +36,8 @@ export const metadata: Metadata = {
   },
 };
 
+// Not PageShell: the breadcrumb sits between the Header and <main> (as on the
+// explore pages), and PageShell has no slot outside its <main>.
 export default function ReleasesPage() {
   const releases = loadReleaseNotes();
 
@@ -62,13 +64,13 @@ export default function ReleasesPage() {
           What changed in each release of mukoko weather, newest first.
         </p>
         <p className="dove mt-2">
-          <a href="/releases/feed.xml" className="sunbird">
+          <a href="/releases/feed.xml" className="sunbird dik-dik">
             Follow updates with the feed
           </a>
           {" · "}
           <a
             href={GITHUB_RELEASES_URL}
-            className="sunbird"
+            className="sunbird dik-dik"
             target="_blank"
             rel="noopener noreferrer"
           >

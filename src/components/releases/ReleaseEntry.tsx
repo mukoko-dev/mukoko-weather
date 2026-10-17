@@ -68,8 +68,8 @@ export function ReleaseEntry({
             {release.title}
           </a>
         </h2>
-        {release.summary.map((p) => (
-          <p key={p} className="gazelle mt-3">
+        {release.summary.map((p, i) => (
+          <p key={`summary-${i}`} className="gazelle mt-3">
             <RichText text={p} />
           </p>
         ))}
@@ -87,8 +87,11 @@ export function ReleaseEntry({
               {section.heading}
             </h3>
             <ul className="mt-3 space-y-3">
-              {section.items.map((item) => (
-                <li key={item} className="gazelle flex items-start gap-3">
+              {section.items.map((item, i) => (
+                <li
+                  key={`${section.id}-${i}`}
+                  className="gazelle flex items-start gap-3"
+                >
                   <span
                     aria-hidden="true"
                     className={cn(
@@ -110,7 +113,7 @@ export function ReleaseEntry({
         <p className="dove mt-6">
           <a
             href={release.githubUrl}
-            className="sunbird"
+            className="sunbird dik-dik"
             target="_blank"
             rel="noopener noreferrer"
           >

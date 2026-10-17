@@ -9,9 +9,31 @@ import { TAGS } from "@/lib/seed-tags";
 import { logError } from "@/lib/observability";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { SITE_URL } from "@/lib/site";
+import { loadReleaseNotes } from "@/lib/release-notes-source";
+import { releaseDate } from "@/lib/release-notes";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 3600;
+
+/**
+ * Newest release date for /releases. The sitemap is dynamic, so releases/ is
+ * read at runtime (traced in via outputFileTracingIncludes in next.config.ts);
+ * if it is missing anyway, fall back to `now` rather than fail the sitemap.
+ */
+function latestReleaseDate(now: Date): Date {
+  try {
+    const [latest] = loadReleaseNotes();
+    return latest ? releaseDate(latest.date) : now;
+  } catch (err) {
+    logError({
+      source: "unhandled",
+      severity: "low",
+      message: "Failed to read release notes for sitemap",
+      error: err,
+    });
+    return now;
+  }
+}
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
@@ -72,7 +94,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
     {
       url: `${SITE_URL}/releases`,
-      lastModified: now,
+      lastModified: latestReleaseDate(now),
       changeFrequency: "weekly",
       priority: 0.6,
     },
