@@ -49,6 +49,11 @@ describe("geolocation source structure", () => {
     expect(source).toContain("autoCreate=true");
   });
 
+  it("passes the find-only synthesized flag through (#302)", () => {
+    expect(source).toContain("synthesized?: boolean;");
+    expect(source).toContain("const synthesized = data.synthesized === true;");
+  });
+
   it("includes isNew flag in result", () => {
     expect(source).toContain("isNew");
   });

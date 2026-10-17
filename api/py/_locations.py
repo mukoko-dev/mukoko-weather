@@ -10,6 +10,7 @@ import asyncio
 import logging
 import math
 import re
+import threading
 import time
 from typing import Optional
 
@@ -20,16 +21,17 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 from ._http import get_http_client
-from ._circuit_breaker import open_meteo_breaker
+from ._circuit_breaker import nominatim_breaker, open_meteo_breaker
 from ._geohash import build_place_slug, build_smart_slug, normalise_osm_ref
 from ._db import (
     get_db,
+    check_rate_limit,
     enforce_rate_limit,
     places_geo_collection,
     is_valid_coords,
     SLUG_RE,
 )
-from ._seed_locations import seed_in_country
+from ._seed_locations import nearest_seed, seed_in_country, seed_matching
 from ._places_resolver import (
     adapt_placesgeo_to_location,
     count_all_locations,
@@ -197,20 +199,22 @@ _GEOCODE_DUPLICATE_KM = 25.0
 #: continents, oceans, seas and regions. Their coordinate is a centroid, so a
 #: forecast there describes nowhere anyone is (searching "Thailand" offered a
 #: page for 15.5°N 101°E). Search never offers them as places (#302).
-_AREA_FEATURE_CODES = frozenset({"TERR", "CONT", "OCN", "SEA", "RGN", "RGNE", "PRSH"})
+_AREA_FEATURE_CODES = frozenset({
+    "TERR", "CONT", "OCN", "SEA", "RGN", "RGNE", "PRSH",
+    "ADM1", "ADM2", "ADM1H", "ADM2H",
+})
 
 
 def is_area_feature(feature_code: str | None) -> bool:
     """True for a geocoder hit that names an area, not a place.
 
-    Besides countries (``PCL*``), this covers administrative divisions
-    (``ADM1``, ``ADM2``, ``ADM1H`` ... — "Phuket Province" is a centroid too)
-    and parishes (``PRSH``).
+    Besides countries (``PCL*``), this covers first- and second-order
+    administrative divisions (``ADM1``, ``ADM2`` and their historical ``H``
+    forms: "Phuket Province" is a centroid too) and parishes (``PRSH``).
+    Lower orders (``ADM3``, ``ADM4``, ``ADMD``) are often real towns and stay.
     """
     code = (feature_code or "").strip().upper()
-    return (
-        code.startswith("PCL") or code.startswith("ADM") or code in _AREA_FEATURE_CODES
-    )
+    return code.startswith("PCL") or code in _AREA_FEATURE_CODES
 
 
 def _country_hit_codes(geocoded: list[dict]) -> list[str]:
@@ -423,8 +427,15 @@ async def search_locations(
                         extra.append(loc)
             places = [g for g in geocoded if not is_area_feature(g.get("featureCode"))]
             for c in (_geocoded_candidate(g) for g in places):
+                # A shipped seed city is the same place: offer its canonical
+                # slug (phuket-th), not a spot beside it.
+                seed = seed_matching(c["name"], c["lat"], c["lon"], max_km=_GEOCODE_DUPLICATE_KM)
+                if seed:
+                    c = seed
                 # Against the catalogue AND the candidates already kept: the
                 # geocoder can return one town twice (two admin entries).
+                if any(r.get("slug") == c.get("slug") for r in results + extra):
+                    continue
                 if not _duplicates_any(c, results + extra):
                     extra.append(c)
             extra = extra[: max(0, limit - len(results))]
@@ -574,8 +585,24 @@ def _reverse_geocode(lat: float, lon: float, *, zoom: int = 14) -> dict | None:
     return _reverse_geocode_nominatim(lat, lon, zoom=zoom)
 
 
-def _reverse_geocode_nominatim(lat: float, lon: float, *, zoom: int = 14) -> dict | None:
+#: ``report["kind"]`` outcomes of ``_reverse_geocode_nominatim``. Only
+#: ``upstream`` (5xx, transport errors, timeouts) is an outage; a 4xx
+#: is our request and ``nothing_here`` is a healthy "no address" answer.
+NOMINATIM_OK = "ok"
+NOMINATIM_UPSTREAM = "upstream"
+NOMINATIM_CLIENT_ERROR = "client_error"
+NOMINATIM_NOTHING_HERE = "nothing_here"
+
+
+def _reverse_geocode_nominatim(
+    lat: float, lon: float, *, zoom: int = 14, report: dict | None = None,
+) -> dict | None:
     """Reverse geocode using Nominatim.
+
+    A body with an ``error`` (Nominatim's "Unable to geocode") or no
+    ``address`` names nothing and returns None. When ``report`` is given it
+    receives ``kind`` (``NOMINATIM_*``) so a caller can tell an outage (which
+    belongs to a circuit breaker) from a 4xx or an empty answer (which does not).
 
     Args:
         zoom: Nominatim zoom level (10=city, 14=suburb, 18=building/POI).
@@ -598,10 +625,21 @@ def _reverse_geocode_nominatim(lat: float, lon: float, *, zoom: int = 14) -> dic
             headers={"User-Agent": "mukoko-weather/2.0 (support@mukoko.com)"},
         )
         if resp.status_code != 200:
+            if report is not None:
+                # 5xx is an outage; 4xx (incl. 429, our own rate) is not.
+                report["kind"] = (
+                    NOMINATIM_UPSTREAM if resp.status_code >= 500 else NOMINATIM_CLIENT_ERROR
+                )
             return None
 
         data = resp.json()
-        address = data.get("address", {})
+        address = data.get("address") if isinstance(data, dict) else None
+        if not isinstance(data, dict) or data.get("error") or not address:
+            if report is not None:
+                report["kind"] = NOMINATIM_NOTHING_HERE
+            return None
+        if report is not None:
+            report["kind"] = NOMINATIM_OK
 
         country_code = address.get("country_code", "").upper()
         country_name = address.get("country", "")
@@ -623,6 +661,9 @@ def _reverse_geocode_nominatim(lat: float, lon: float, *, zoom: int = 14) -> dic
             "elevation": 0,
         }
     except Exception:
+        # Transport error, timeout or an unparseable body.
+        if report is not None and report.get("kind") != NOMINATIM_OK:
+            report["kind"] = NOMINATIM_UPSTREAM
         return None
 
 
@@ -1009,6 +1050,128 @@ def _create_location_from_coords(lat: float, lon: float, *, source: str) -> dict
     }
 
 
+# ---------------------------------------------------------------------------
+# /api/py/geo find-only fallback — name the spot on demand (#302)
+# ---------------------------------------------------------------------------
+
+#: Find-only answers are snapped to this grid (~1.1 km) before naming: the
+#: answer stands for "around here", one cell shares one upstream lookup, and
+#: an exact position never leaves the request.
+FIND_ONLY_SNAP_DEG = 0.01
+
+#: Per-IP and service-wide budgets for the find-only reverse geocode. Over
+#: either, the endpoint answers 404 as it did before (never a 429).
+FIND_ONLY_GEOCODE_PER_IP = 30
+FIND_ONLY_GEOCODE_GLOBAL = 900  # ≈ one request per 4 s, inside OSM's policy
+FIND_ONLY_GEOCODE_WINDOW_S = 3600
+
+#: Per-instance cache of find-only names, keyed by the snapped cell. Misses
+#: (no name) are kept for a shorter time than hits.
+FIND_ONLY_CACHE_TTL_S = 6 * 3600
+FIND_ONLY_MISS_TTL_S = 600
+FIND_ONLY_CACHE_MAX = 1024
+_find_only_cache: dict[tuple[float, float], tuple[float, Optional[dict]]] = {}
+#: ``_find_only_spot`` runs on worker threads (``asyncio.to_thread``), so the
+#: cache is read and mutated under a lock.
+_find_only_lock = threading.Lock()
+
+#: A seed place this close to the point is "the same city": find-only answers
+#: with it, so one city has one URL (``phuket-th``, not a spot beside it).
+FIND_ONLY_SEED_KM = 50.0
+
+
+def _snap(value: float) -> float:
+    return round(round(value / FIND_ONLY_SNAP_DEG) * FIND_ONLY_SNAP_DEG, 2)
+
+
+def _find_only_spot(lat: float, lon: float, request: Request | None) -> Optional[dict]:
+    """A named spot near (lat, lon) when no stored place is near, or None.
+
+    The find-only path must answer for any coordinate on Earth (the owner
+    rule: what is not stored is fetched), but it must stay cheap and must not
+    create records from a coarse IP position. So it names the snapped cell
+    with one city-level (zoom 10) Nominatim reverse geocode and returns a
+    spot (``{name}--{geohash}``), which renders from its slug alone. Nothing
+    is written: a GPS caller is told ``synthesized: true`` and escalates to
+    ``autoCreate=true``, which stores the exact place.
+
+    Bounded by a per-instance cell cache, a per-IP and a service-wide budget
+    and ``nominatim_breaker``. Never raises.
+    """
+    cell = (_snap(lat), _snap(lon))
+    now = time.monotonic()
+    with _find_only_lock:
+        hit = _find_only_cache.get(cell)
+    if hit and hit[0] > now:
+        return dict(hit[1]) if hit[1] else None
+    if not nominatim_breaker.is_allowed:
+        return None
+    try:
+        enforce_rate_limit(
+            request, "geo-find-geocode",
+            FIND_ONLY_GEOCODE_PER_IP, FIND_ONLY_GEOCODE_WINDOW_S,
+            require_ip=False,
+        )
+        if not check_rate_limit(
+            "all", "geo-find-geocode-global",
+            FIND_ONLY_GEOCODE_GLOBAL, FIND_ONLY_GEOCODE_WINDOW_S,
+        )["allowed"]:
+            return None
+    except HTTPException:
+        return None
+
+    report: dict = {}
+    named = _reverse_geocode_nominatim(cell[0], cell[1], zoom=10, report=report)
+    kind = report.get("kind")
+    if kind == NOMINATIM_UPSTREAM:
+        # Only an outage (5xx, transport error, timeout) opens the breaker;
+        # a 4xx (including our own 429) or a "nothing here" answer does not.
+        nominatim_breaker.record_failure()
+    elif kind in (NOMINATIM_OK, NOMINATIM_NOTHING_HERE):
+        nominatim_breaker.record_success()
+    if named is None:
+        _remember_find_only(cell, None, FIND_ONLY_MISS_TTL_S)
+        return None
+    name = (named.get("name") or "").strip()
+    if name.lower() == "unknown":
+        name = ""  # the extractor's last-resort placeholder, not a place name
+    slug = build_smart_slug(name, cell[0], cell[1]) if name else ""
+    if not slug:
+        _remember_find_only(cell, None, FIND_ONLY_MISS_TTL_S)
+        return None
+    spot = {
+        "slug": slug,
+        "name": name,
+        "province": named.get("admin1") or "",
+        "country": named.get("country") or "",
+        "lat": cell[0],
+        "lon": cell[1],
+        # Nothing measured it: None (never a fake 0 m), flagged approximate.
+        # The forecast carries the model's own terrain height.
+        "elevation": None,
+        "elevationApproximate": True,
+        "tags": [],
+        "source": "geolocation",
+        "synthesized": True,
+    }
+    _remember_find_only(cell, spot, FIND_ONLY_CACHE_TTL_S)
+    return dict(spot)
+
+
+def _remember_find_only(cell: tuple[float, float], spot: Optional[dict], ttl: float) -> None:
+    now = time.monotonic()
+    with _find_only_lock:
+        if len(_find_only_cache) >= FIND_ONLY_CACHE_MAX:
+            for k in [k for k, (exp, _) in list(_find_only_cache.items()) if exp <= now]:
+                _find_only_cache.pop(k, None)
+            if len(_find_only_cache) >= FIND_ONLY_CACHE_MAX:
+                try:
+                    _find_only_cache.pop(next(iter(_find_only_cache)), None)
+                except StopIteration:
+                    pass
+        _find_only_cache[cell] = (now + ttl, spot)
+
+
 @router.get("/api/py/geo")
 async def geo_lookup(
     lat: float,
@@ -1054,6 +1217,26 @@ async def geo_lookup(
                     "redirectTo": f"/{nearest['slug']}",
                     "isNew": False,
                 }
+            # Nothing stored within 150 km (most of the world outside the
+            # platform geography). A shipped seed city nearby is the same
+            # city, so one city has one URL (Phuket is /phuket-th).
+            seed = nearest_seed(lat, lon, max_km=FIND_ONLY_SEED_KM) if is_valid_coords(lat, lon) else None
+            if seed:
+                return {
+                    "nearest": seed,
+                    "redirectTo": f"/{seed['slug']}",
+                    "isNew": False,
+                }
+            # Otherwise name the spot on demand instead of a 404.
+            if is_valid_coords(lat, lon):
+                spot = await asyncio.to_thread(_find_only_spot, lat, lon, request)
+                if spot:
+                    return {
+                        "nearest": spot,
+                        "redirectTo": f"/{spot['slug']}",
+                        "isNew": False,
+                        "synthesized": True,
+                    }
 
         # Auto-create if requested — only NOW do we call external APIs.
         # The full reverse-geocode → dedupe → create sequence is shared with

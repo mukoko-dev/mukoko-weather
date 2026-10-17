@@ -81,3 +81,22 @@ def nearest_seed(lat: float, lon: float, *, max_km: float = 50.0) -> dict | None
     loc = _as_location(best[1])
     loc["distanceKm"] = round(best[0], 1)
     return loc
+
+
+def seed_matching(name: str, lat: float, lon: float, *, max_km: float = 25.0) -> dict | None:
+    """The seed place with this name (case-insensitive) within ``max_km`` of
+    the point, else None: a geocoder hit for a shipped city is that city."""
+    wanted = " ".join((name or "").lower().split())
+    if not wanted:
+        return None
+    best: tuple[float, dict] | None = None
+    for s in load_seed():
+        if " ".join(str(s.get("name", "")).lower().split()) != wanted:
+            continue
+        try:
+            km = _haversine_km(float(lat), float(lon), float(s["lat"]), float(s["lon"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if km <= max_km and (best is None or km < best[0]):
+            best = (km, s)
+    return _as_location(best[1]) if best else None
