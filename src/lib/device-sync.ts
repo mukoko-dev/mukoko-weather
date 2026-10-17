@@ -16,10 +16,15 @@ import type { DeviceState } from "./device-state";
 import {
   deviceLabel,
   parseUserAgent,
-  webPlatform,
-  type DeviceFormFactor,
-  type WebPlatform,
+  type ClientHints,
+  type DisplayMode,
 } from "./device-info";
+import {
+  toPermissionReport,
+  toUaChFormFactor,
+  type PermissionReport,
+  type StandardDevice,
+} from "./device-standards";
 
 export const DEVICE_SYNC_AT_KEY = "mukoko-device-synced-at";
 /** One report per device per hour; a heartbeat, not a stream. */
@@ -45,7 +50,10 @@ export interface DeviceSyncDeps {
   now: () => number;
   deviceId: () => string;
   userAgent: string;
-  standalone: boolean;
+  displayMode: DisplayMode;
+  locale: string;
+  timeZone: string;
+  clientHints?: ClientHints;
   state: () => DeviceState;
   preferences: () => DevicePreferencesSnapshot;
   readSyncedAt: () => number | null;
@@ -53,15 +61,10 @@ export interface DeviceSyncDeps {
   fetch: (url: string, init: RequestInit) => Promise<Response>;
 }
 
-export interface DeviceReport {
-  deviceId: string;
-  name: string;
-  platform: WebPlatform;
-  formFactor: DeviceFormFactor;
-  standalone: boolean;
+export interface DeviceReport extends StandardDevice {
   permissions: {
-    geolocation: DeviceState["geolocation"];
-    notifications: DeviceState["notifications"];
+    geolocation: PermissionReport | null;
+    notifications: PermissionReport | null;
   };
   preferences: {
     theme: string;
@@ -72,20 +75,26 @@ export interface DeviceReport {
   };
 }
 
-/** What this device reports. No position, no user agent string, no IP. */
+/**
+ * What this device reports, in standard names (see `device-standards.ts`).
+ * No position, no user agent string, no IP.
+ */
 export function buildDeviceReport(deps: DeviceSyncDeps): DeviceReport {
-  const parsed = parseUserAgent(deps.userAgent);
+  const parsed = parseUserAgent(deps.userAgent, deps.clientHints);
   const state = deps.state();
   const prefs = deps.preferences();
   return {
     deviceId: deps.deviceId(),
     name: deviceLabel(parsed),
-    platform: webPlatform(parsed),
-    formFactor: parsed.formFactor,
-    standalone: deps.standalone,
+    platform: parsed.os,
+    browser: parsed.browser,
+    formFactor: toUaChFormFactor(parsed.formFactor),
+    displayMode: deps.displayMode,
+    locale: deps.locale,
+    timeZone: deps.timeZone,
     permissions: {
-      geolocation: state.geolocation,
-      notifications: state.notifications,
+      geolocation: toPermissionReport(state.geolocation),
+      notifications: toPermissionReport(state.notifications),
     },
     preferences: {
       theme: prefs.theme,

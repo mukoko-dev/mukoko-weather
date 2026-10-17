@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { getDeviceId } from "@/lib/rxdb/bridge";
-import { isStandalone } from "@/lib/device-info";
+import { displayMode, readClientHints } from "@/lib/device-info";
 import { readDeviceState } from "@/lib/device-state";
 import {
   DEVICE_SYNC_AT_KEY,
@@ -17,7 +17,10 @@ function browserDeps(): DeviceSyncDeps {
     now: () => Date.now(),
     deviceId: getDeviceId,
     userAgent: navigator.userAgent,
-    standalone: isStandalone(),
+    displayMode: displayMode(),
+    locale: navigator.language || "en",
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    clientHints: readClientHints(),
     state: readDeviceState,
     preferences: () => {
       const s = useAppStore.getState();

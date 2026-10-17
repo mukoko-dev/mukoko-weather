@@ -34,28 +34,44 @@ describe("sanitizeRegistration", () => {
     const out = sanitizeRegistration({
       deviceId: ID.toUpperCase(),
       name: "  My\u0000 phone  ",
-      platform: "web_safari",
-      formFactor: "phone",
-      standalone: true,
+      platform: "iOS",
+      browser: "Safari",
+      formFactor: "Mobile",
+      displayMode: "standalone",
+      locale: "en-ZW",
+      timeZone: "Africa/Harare",
       ip: "203.0.113.9",
       userAgent: "Mozilla/5.0",
       lat: -17.8,
       lon: 31.05,
       sessionId: "forged",
       permissions: {
-        geolocation: { state: "granted", changedAt: 5, lat: 1 },
-        notifications: { state: "bogus", changedAt: 5 },
+        geolocation: {
+          state: "granted",
+          changedAt: "2026-10-17T12:00:00.000Z",
+          lat: 1,
+        },
+        notifications: {
+          state: "dismissed",
+          changedAt: "2026-10-17T12:00:00Z",
+        },
       },
       preferences: { theme: "dark", presetAnchor: { lat: 1, lon: 2 } },
     });
     expect(out).toEqual({
       deviceId: ID,
       name: "My phone",
-      platform: "web_safari",
-      formFactor: "phone",
-      standalone: true,
+      platform: "iOS",
+      browser: "Safari",
+      formFactor: "Mobile",
+      displayMode: "standalone",
+      locale: "en-ZW",
+      timeZone: "Africa/Harare",
       permissions: {
-        geolocation: { state: "granted", changedAt: 5 },
+        geolocation: {
+          state: "granted",
+          changedAt: "2026-10-17T12:00:00.000Z",
+        },
         notifications: null,
       },
       preferences: {
@@ -120,9 +136,12 @@ describe("sanitizeRegistration", () => {
     });
     expect(out).toMatchObject({
       name: "This device",
-      platform: "web_other",
-      formFactor: "desktop",
-      standalone: false,
+      platform: "Unknown",
+      browser: "Other",
+      formFactor: "Desktop",
+      displayMode: "browser",
+      locale: "en",
+      timeZone: "UTC",
     });
   });
 });
@@ -136,7 +155,11 @@ function fakeConfig(respond: (req: Request) => Response | Promise<Response>) {
   return { config, calls };
 }
 
-const REG = sanitizeRegistration({ deviceId: ID, platform: "web_safari" })!;
+const REG = sanitizeRegistration({
+  deviceId: ID,
+  platform: "iOS",
+  browser: "Safari",
+})!;
 
 describe("platform client (against a fake transport)", () => {
   it("PUTs the registration with the person token and the session id", async () => {
@@ -157,7 +180,11 @@ describe("platform client (against a fake transport)", () => {
       false,
     );
     const body = await req.json();
-    expect(body.sessionId).toBe("sess_1");
+    // The platform record's own names, via the mapper.
+    expect(body.currentSessionId).toBe("sess_1");
+    expect(body.platformIdentifier).toBe("web_safari");
+    expect(body.formFactor).toBe("browser_persistent");
+    expect(body.sessionId).toBeUndefined();
     expect(body.deviceId).toBe(ID);
   });
 

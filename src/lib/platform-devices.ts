@@ -28,9 +28,17 @@ import {
   type GatewayTransport,
   parseRetryAfter,
 } from "./nyuchi-gateway";
-import type { DeviceFormFactor, WebPlatform } from "./device-info";
+import type { DeviceBrowser, DeviceOs, DisplayMode } from "./device-info";
+import {
+  DISPLAY_MODE_VALUES,
+  UA_CH_PLATFORMS,
+  toPlatformRecord,
+  type PermissionReport,
+  type PermissionStateW3C,
+  type StandardDevice,
+  type UaChFormFactor,
+} from "./device-standards";
 import { coarsenSlug } from "./location-privacy";
-import type { StoredPermissionState } from "./device-state";
 
 /** The Nyuchi API. No key, no secret: the caller's own token is the credential. */
 export const NYUCHI_API_ORIGIN = "https://api.nyuchi.com";
@@ -42,40 +50,38 @@ const DEVICE_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 const ID_RE = /^[a-z0-9_-]{1,48}$/;
-const PLATFORMS: ReadonlySet<string> = new Set([
-  "web_chrome",
-  "web_firefox",
-  "web_safari",
-  "web_other",
+const PLATFORMS: ReadonlySet<string> = new Set(UA_CH_PLATFORMS);
+const BROWSERS: ReadonlySet<string> = new Set([
+  "Safari",
+  "Chrome",
+  "Firefox",
+  "Edge",
+  "Opera",
+  "Samsung Internet",
+  "Other",
 ]);
 const FORM_FACTORS: ReadonlySet<string> = new Set([
-  "phone",
-  "tablet",
-  "desktop",
+  "Desktop",
+  "Mobile",
+  "Tablet",
 ]);
+const DISPLAY_MODES: ReadonlySet<string> = new Set(DISPLAY_MODE_VALUES);
 const PERMISSION_STATES: ReadonlySet<string> = new Set([
   "granted",
   "denied",
   "prompt",
-  "dismissed",
-  "unsupported",
 ]);
+const LOCALE_RE = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$/;
+const TIME_ZONE_RE = /^[A-Za-z0-9_+-]+(\/[A-Za-z0-9_+-]+){0,2}$/;
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 const THEMES: ReadonlySet<string> = new Set(["light", "dark", "system"]);
 const MAX_ACTIVITIES = 30;
 const MAX_SAVED = 10;
 
-export interface PermissionSnapshot {
-  state: StoredPermissionState;
-  changedAt: number;
-}
+export type PermissionSnapshot = PermissionReport;
 
-export interface DeviceRegistration {
-  /** The install's own UUID (`mukoko-device-id`). */
-  deviceId: string;
-  name: string;
-  platform: WebPlatform;
-  formFactor: DeviceFormFactor;
-  standalone: boolean;
+export interface DeviceRegistration extends StandardDevice {
+  /** Keyed by W3C Permissions API name; absent = never decided or unsupported. */
   permissions: {
     geolocation: PermissionSnapshot | null;
     notifications: PermissionSnapshot | null;
@@ -101,12 +107,28 @@ export class DevicesError extends Error {
   }
 }
 
+function isoDate(v: unknown): string | null {
+  if (typeof v !== "string" || !ISO_RE.test(v)) return null;
+  return Number.isNaN(Date.parse(v)) ? null : v;
+}
+
 function snapshot(value: unknown): PermissionSnapshot | null {
   if (!value || typeof value !== "object") return null;
-  const { state, changedAt } = value as Record<string, unknown>;
+  const { state, changedAt, promptDismissedAt } = value as Record<
+    string,
+    unknown
+  >;
   if (typeof state !== "string" || !PERMISSION_STATES.has(state)) return null;
-  if (typeof changedAt !== "number" || !Number.isFinite(changedAt)) return null;
-  return { state: state as StoredPermissionState, changedAt };
+  const at = isoDate(changedAt);
+  if (!at) return null;
+  const dismissed = isoDate(promptDismissedAt);
+  return {
+    state: state as PermissionStateW3C,
+    changedAt: at,
+    ...(dismissed && state === "prompt"
+      ? { promptDismissedAt: dismissed }
+      : {}),
+  };
 }
 
 function slugList(value: unknown, max: number): string[] {
@@ -146,12 +168,25 @@ export function sanitizeRegistration(raw: unknown): DeviceRegistration | null {
     deviceId: b.deviceId.toLowerCase(),
     name: name || "This device",
     platform: PLATFORMS.has(String(b.platform))
-      ? (b.platform as WebPlatform)
-      : "web_other",
+      ? (b.platform as DeviceOs)
+      : "Unknown",
+    browser: BROWSERS.has(String(b.browser))
+      ? (b.browser as DeviceBrowser)
+      : "Other",
     formFactor: FORM_FACTORS.has(String(b.formFactor))
-      ? (b.formFactor as DeviceFormFactor)
-      : "desktop",
-    standalone: b.standalone === true,
+      ? (b.formFactor as UaChFormFactor)
+      : "Desktop",
+    displayMode: DISPLAY_MODES.has(String(b.displayMode))
+      ? (b.displayMode as DisplayMode)
+      : "browser",
+    locale:
+      typeof b.locale === "string" && LOCALE_RE.test(b.locale)
+        ? b.locale
+        : "en",
+    timeZone:
+      typeof b.timeZone === "string" && TIME_ZONE_RE.test(b.timeZone)
+        ? b.timeZone
+        : "UTC",
     permissions: {
       geolocation: snapshot(perms.geolocation),
       notifications: snapshot(perms.notifications),
@@ -177,7 +212,7 @@ export function sanitizeRegistration(raw: unknown): DeviceRegistration | null {
 /**
  * Register or refresh the caller's own device on the platform
  * (`PUT /v1/devices/mine/{deviceId}`, proposed ask 1). `sessionId` is the
- * caller's own WorkOS session, filled in by the route from the AuthKit
+ * caller's own WorkOS session (its OIDC `sid`), filled in by the route from the AuthKit
  * session so that revoking the device can end it.
  */
 export function createPlatformDevicesClient(
@@ -203,7 +238,12 @@ export function createPlatformDevicesClient(
                 "content-type": "application/json",
                 authorization: `Bearer ${personToken}`,
               },
-              body: JSON.stringify({ ...registration, sessionId }),
+              body: JSON.stringify({
+                ...toPlatformRecord(registration, sessionId),
+                deviceId: registration.deviceId,
+                permissions: registration.permissions,
+                preferences: registration.preferences,
+              }),
             },
           ),
         );

@@ -6,7 +6,10 @@
  * The raw user agent string is never stored or returned, and an IP address is
  * never read here at all.
  *
- * The platform names follow the `device.devices` validator enum
+ * Names follow the standards: `DeviceOs` values are the platform names the
+ * User-Agent Client Hints spec recommends for `Sec-CH-UA-Platform` ("iOS",
+ * "Chrome OS", ...), and `DisplayMode` is the W3C Web App Manifest display
+ * mode list. The platform names below follow the `device.devices` validator enum
  * (`bundu.userDevice.platformIdentifier`: ios, android, macos, windows,
  * linux, web_chrome, web_firefox, web_safari, web_other) so a platform
  * registration can reuse them unchanged.
@@ -18,7 +21,7 @@ export type DeviceOs =
   | "macOS"
   | "Windows"
   | "Linux"
-  | "ChromeOS"
+  | "Chrome OS"
   | "Unknown";
 
 export type DeviceBrowser =
@@ -46,10 +49,20 @@ export type WebPlatform =
 
 const MAX_UA = 512;
 
+/** `Sec-CH-UA-Platform` values the spec recommends, as our `DeviceOs`. */
+const HINT_PLATFORMS: Record<string, DeviceOs | undefined> = {
+  Android: "Android",
+  "Chrome OS": "Chrome OS",
+  iOS: "iOS",
+  Linux: "Linux",
+  macOS: "macOS",
+  Windows: "Windows",
+};
+
 function parseOs(ua: string): DeviceOs {
   if (/iPhone|iPad|iPod/i.test(ua)) return "iOS";
   if (/Android/i.test(ua)) return "Android";
-  if (/CrOS/i.test(ua)) return "ChromeOS";
+  if (/CrOS/i.test(ua)) return "Chrome OS";
   if (/Windows/i.test(ua)) return "Windows";
   // iPadOS 13+ reports a Mac; it cannot be told apart from the user agent.
   if (/Macintosh|Mac OS X/i.test(ua)) return "macOS";
@@ -78,10 +91,15 @@ function parseFormFactor(ua: string, os: DeviceOs): DeviceFormFactor {
 /** A coarse description of a user agent. Unknown input never throws. */
 export function parseUserAgent(
   userAgent: string | null | undefined,
+  hints?: ClientHints,
 ): ParsedDevice {
   const ua = (userAgent ?? "").slice(0, MAX_UA);
-  const os = parseOs(ua);
-  return { os, browser: parseBrowser(ua), formFactor: parseFormFactor(ua, os) };
+  const hinted = hints?.platform ? HINT_PLATFORMS[hints.platform] : undefined;
+  const os = hinted ?? parseOs(ua);
+  let formFactor = parseFormFactor(ua, os);
+  // Sec-CH-UA-Mobile is authoritative for "phone"; it cannot say "tablet".
+  if (hints?.mobile === true && !/iPad|Tablet/i.test(ua)) formFactor = "phone";
+  return { os, browser: parseBrowser(ua), formFactor };
 }
 
 /** "Safari on iOS", or just the browser when the system is unknown. */
@@ -107,27 +125,70 @@ export function webPlatform(device: ParsedDevice): WebPlatform {
   }
 }
 
+/** W3C Web App Manifest display modes (the `display-mode` media feature). */
+export type DisplayMode =
+  | "fullscreen"
+  | "standalone"
+  | "minimal-ui"
+  | "browser";
+
+const DISPLAY_MODES: readonly DisplayMode[] = [
+  "fullscreen",
+  "standalone",
+  "minimal-ui",
+];
+
+interface DisplayWindow {
+  navigator?: object;
+  matchMedia?: (query: string) => { matches: boolean };
+}
+
 /**
- * True when the page runs as an installed app (home-screen web app). iOS
- * reports it through `navigator.standalone`, everything else through the
- * display-mode media query.
+ * The applied display mode. iOS home-screen apps report it through
+ * `navigator.standalone` (no media query before iOS 11.3); everything else
+ * through `(display-mode: ...)`. `browser` is the spec default.
  */
-export function isStandalone(
-  win: {
-    navigator?: object;
-    matchMedia?: (query: string) => { matches: boolean };
-  } | null = typeof window === "undefined" ? null : window,
-): boolean {
-  if (!win) return false;
+export function displayMode(
+  win: DisplayWindow | null = typeof window === "undefined" ? null : window,
+): DisplayMode {
+  if (!win) return "browser";
   try {
     if (
       (win.navigator as { standalone?: boolean } | undefined)?.standalone ===
       true
     ) {
-      return true;
+      return "standalone";
     }
-    return win.matchMedia?.("(display-mode: standalone)").matches === true;
+    for (const mode of DISPLAY_MODES) {
+      if (win.matchMedia?.(`(display-mode: ${mode})`).matches === true) {
+        return mode;
+      }
+    }
   } catch {
-    return false;
+    /* fall through */
   }
+  return "browser";
+}
+
+/** True when running as an installed app (standalone or fullscreen). */
+export function isStandalone(win?: DisplayWindow | null): boolean {
+  const mode = displayMode(win);
+  return mode === "standalone" || mode === "fullscreen";
+}
+
+/** Low-entropy User-Agent Client Hints (`navigator.userAgentData`). */
+export interface ClientHints {
+  platform?: string;
+  mobile?: boolean;
+}
+
+export function readClientHints(
+  nav: object | null = typeof navigator === "undefined" ? null : navigator,
+): ClientHints | undefined {
+  const d = (nav as { userAgentData?: ClientHints } | null)?.userAgentData;
+  if (!d) return undefined;
+  return {
+    platform: typeof d.platform === "string" ? d.platform : undefined,
+    mobile: typeof d.mobile === "boolean" ? d.mobile : undefined,
+  };
 }

@@ -17,7 +17,9 @@ function deps(over: Partial<DeviceSyncDeps> = {}): DeviceSyncDeps & {
     now: () => 10 * DEVICE_SYNC_INTERVAL_MS,
     deviceId: () => "11111111-2222-4333-8444-555555555555",
     userAgent: IPHONE,
-    standalone: true,
+    displayMode: "standalone" as const,
+    locale: "en-ZW",
+    timeZone: "Africa/Harare",
     state: () => ({
       v: 1,
       geolocation: { state: "granted", changedAt: 5 },
@@ -42,11 +44,17 @@ describe("buildDeviceReport", () => {
     const report = buildDeviceReport(deps());
     expect(report).toMatchObject({
       name: "Safari on iOS",
-      platform: "web_safari",
-      formFactor: "phone",
-      standalone: true,
+      platform: "iOS",
+      browser: "Safari",
+      formFactor: "Mobile",
+      displayMode: "standalone",
+      locale: "en-ZW",
+      timeZone: "Africa/Harare",
       permissions: {
-        geolocation: { state: "granted", changedAt: 5 },
+        geolocation: {
+          state: "granted",
+          changedAt: "1970-01-01T00:00:00.005Z",
+        },
         notifications: null,
       },
       preferences: { theme: "dark", forecastModel: "best_match" },
