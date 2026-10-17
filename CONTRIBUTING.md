@@ -212,6 +212,41 @@ Once the release is on `main`, tag it with the `tag-release` workflow (Actions �
 
 The release PR is opened with `RELEASE_BUMP_TOKEN` (an org secret), so CI runs on it like any other PR. The workflow fails before it touches git if that secret is missing. A PR opened with `GITHUB_TOKEN` does not start CI.
 
+### Release notes (public)
+
+Every production release gets a public entry on [weather.mukoko.com/releases](https://weather.mukoko.com/releases) and in its Atom feed (`/releases/feed.xml`). The source is one Markdown file per release in `releases/`, named `v<version>.md`. The page is built from these files when the app builds; nothing is fetched from GitHub. `RELEASES.md` stays the technical, operator-facing history, and the automatic `vX.Y.Z (beta)` pre-releases on GitHub are never shown on the page.
+
+Add the file in the release PR (or in a PR to `staging` just before it), so the notes ship with the release they describe:
+
+```md
+---
+version: 0.12.0
+date: 2026-11-02
+title: A short headline people will understand
+---
+
+One or two optional sentences on what this release is about.
+
+## New
+
+- **Lead phrase.** One plain-language sentence on what changed for the person using the app.
+
+## Improved
+
+## Fixed
+
+## Security
+
+## Known issues
+```
+
+- `version` is the tag without the `v`, and must match the file name. `date` is the day it reached production (`YYYY-MM-DD`).
+- Only those five headings are allowed, each once, in any order (the page always shows them in the order above). A heading with no bullets is left out, so you can keep the empty template headings.
+- Bullets are one item each; an indented next line continues the item. `**bold**` is the only markup.
+- Write for farmers, travellers and everyday users. No PR or issue numbers, file names, code, environment variables, model names, or security detail someone could misuse. Say what got better, not how.
+- After `tag-release` publishes the GitHub release, add `github: https://github.com/mukoko-dev/mukoko-weather/releases/tag/v<version>` to the front matter. Any other URL fails the build.
+- A malformed file fails `npm test` and `npm run build` with the file name and the problem, so it can never ship a broken page.
+
 ## Deploying the Workers
 
 The Rust Workers in `workers/` deploy by hand only, from **Actions → Workers deploy → Run workflow** (`.github/workflows/workers-deploy.yml`). Production deploys `main` only: dispatch the run on `main` (a guard job fails it on any other ref), and it deploys exactly the commit it was dispatched on. There is no `ref` input, so the job holding the Cloudflare secrets never checks out a caller-chosen ref. Inputs:

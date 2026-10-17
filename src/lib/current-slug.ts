@@ -32,6 +32,7 @@ export const NON_LOCATION_ROUTES: ReadonlySet<string> = new Set([
   // Account and app surfaces that are not weather pages
   "profile",
   "developers",
+  "releases",
   "login",
   "signage",
   "display",
