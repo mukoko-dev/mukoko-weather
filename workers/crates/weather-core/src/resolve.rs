@@ -46,7 +46,23 @@ pub const BARE_MIN: usize = 3;
 pub const BARE_MAX: usize = 60;
 /// The best hit must resemble the name that was typed: the geocoder matches
 /// loosely, and `/admin` must not become a village called Adamu.
-pub const MIN_SIMILARITY: f64 = 0.6;
+pub const MIN_SIMILARITY: f64 = 0.85;
+/// Score of a name whose words all appear in the other (`lake kariba` vs
+/// `Kariba`): a qualifier, not a different place.
+const CONTAINED_SIMILARITY: f64 = 0.9;
+/// A typed name this short (after slugifying) must match EXACTLY: with so few
+/// letters, one edit is a different word (`abc`/`Abu` 0.67, `home`/`hope`
+/// 0.75, `blog`/`blob` 0.75).
+pub const SHORT_NAME_LEN: usize = 5;
+
+/// The similarity a hit needs for this typed name.
+pub fn required_similarity(query: &str) -> f64 {
+    if slugify(query).chars().count() <= SHORT_NAME_LEN {
+        1.0
+    } else {
+        MIN_SIMILARITY
+    }
+}
 /// A geocoder hit for a shipped city within this distance is that city.
 pub const SEED_DUPLICATE_KM: f64 = 25.0;
 
@@ -80,7 +96,7 @@ fn levenshtein(a: &[char], b: &[char]) -> usize {
 }
 
 /// 0..=1 similarity of two names after slugifying (case, accents, spacing):
-/// edit-distance ratio, or 0.8 when every word of the shorter name is a word
+/// edit-distance ratio, or 0.9 when every word of the shorter name is a word
 /// of the longer one (`lake kariba` vs `Kariba`).
 pub fn name_similarity(a: &str, b: &str) -> f64 {
     let (sa, sb) = (slugify(a), slugify(b));
@@ -98,7 +114,7 @@ pub fn name_similarity(a: &str, b: &str) -> f64 {
     };
     let contained = short.iter().all(|w| long.contains(w));
     if contained {
-        ratio.max(0.8)
+        ratio.max(CONTAINED_SIMILARITY)
     } else {
         ratio
     }
@@ -132,13 +148,27 @@ pub fn seed_matching(name: &str, lat: f64, lon: f64, max_km: f64) -> Option<Loca
 /// that resembles `query`, a place before an area (an area's centre still
 /// beats a 404), and a shipped seed's own slug when the hit is that city.
 pub fn pick_resolution(hits: &[LocationDoc], query: &str) -> Option<LocationDoc> {
-    let mut usable: Vec<&LocationDoc> = hits
-        .iter()
-        .filter(|h| valid_coordinates(h.lat, h.lon))
-        .filter(|h| name_similarity(query, &h.name) >= MIN_SIMILARITY)
-        .collect();
-    usable.sort_by_key(|h| h.area.is_some()); // stable: a place first
-    let best = (*usable.first()?).clone();
+    let need = required_similarity(query);
+    // The most similar hit, not the first usable one; at equal similarity a
+    // place before an area, then the geocoder's own order.
+    let mut best: Option<(f64, &LocationDoc)> = None;
+    for h in hits.iter().filter(|h| valid_coordinates(h.lat, h.lon)) {
+        let sim = name_similarity(query, &h.name);
+        if sim < need {
+            continue;
+        }
+        let better = match best {
+            None => true,
+            Some((bs, bh)) => {
+                sim > bs + f64::EPSILON
+                    || ((sim - bs).abs() <= f64::EPSILON && bh.area.is_some() && h.area.is_none())
+            }
+        };
+        if better {
+            best = Some((sim, h));
+        }
+    }
+    let best = best?.1.clone();
     if best.area.is_none() {
         if let Some(seed) = seed_matching(&best.name, best.lat, best.lon, SEED_DUPLICATE_KM) {
             return Some(seed);
@@ -203,6 +233,10 @@ mod tests {
         assert!(name_similarity("lake kariba", "Kariba") >= MIN_SIMILARITY);
         assert!(name_similarity("chiang rai", "Chiang Rai") > 0.99);
         assert!(name_similarity("sandwich", "Kariba") < MIN_SIMILARITY);
+        // The review's near misses: each is below the bar.
+        assert!(name_similarity("abc", "Abu") < 1.0);
+        assert!(name_similarity("home", "Hope") < 1.0);
+        assert!(name_similarity("blog", "Blob") < 1.0);
         assert!(name_similarity("admin", "Adamu") < MIN_SIMILARITY);
         assert_eq!(name_similarity("", "x"), 0.0);
     }
@@ -244,5 +278,51 @@ mod tests {
             .unwrap()
             .slug
             .starts_with("phuket--"));
+    }
+
+    #[test]
+    fn short_names_need_an_exact_match() {
+        assert_eq!(required_similarity("abc"), 1.0);
+        assert_eq!(required_similarity("harar"), 1.0);
+        assert_eq!(required_similarity("koh samui"), MIN_SIMILARITY);
+        for (q, near) in [
+            ("abc", "Abu"),
+            ("home", "Hope"),
+            ("blog", "Blob"),
+            ("news", "Nevis"),
+        ] {
+            let hits = [hit(near, 1.0, 2.0, "PPL", "XX")];
+            assert!(
+                pick_resolution(&hits, q).is_none(),
+                "{q} must not become {near}"
+            );
+        }
+        // Exact still resolves, in any case or spacing.
+        let hits = [hit("Kano", 12.0, 8.5, "PPLA", "NG")];
+        assert!(pick_resolution(&hits, "KANO").is_some());
+    }
+
+    #[test]
+    fn the_most_similar_hit_wins_not_the_first_usable() {
+        let hits = [
+            hit("Samui Town", 9.0, 100.0, "PPL", "TH"),
+            hit("Ko Samui", 9.5, 100.0, "PPLA", "TH"),
+        ];
+        let got = pick_resolution(&hits, "koh samui").unwrap();
+        assert_eq!(got.name, "Ko Samui");
+    }
+
+    #[test]
+    fn the_exact_name_beats_a_near_neighbour() {
+        // One edit apart (0.9): edit distance alone cannot tell them apart, so
+        // the highest similarity must win whatever order the geocoder used.
+        let hits = [
+            hit("Chiang Mai", 18.8, 98.98, "PPLA", "TH"),
+            hit("Chiang Rai", 19.9, 99.8, "PPLA", "TH"),
+        ];
+        assert_eq!(
+            pick_resolution(&hits, "chiang rai").unwrap().name,
+            "Chiang Rai"
+        );
     }
 }

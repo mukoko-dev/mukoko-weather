@@ -1,3 +1,5 @@
+import { readdirSync } from "fs";
+import { resolve } from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BARE_BACKOFF_MS,
@@ -50,6 +52,43 @@ describe("isBareNameCandidate", () => {
     "cgi-bin",
     "pricing",
   ])("rejects %s", (slug) => expect(isBareNameCandidate(slug)).toBe(false));
+
+  it.each([
+    "settings",
+    "contact",
+    "home",
+    "blog",
+    "news",
+    "docs",
+    "weather",
+    "forecast",
+    "search",
+    "map",
+    "app",
+    "user",
+    "shop",
+    "feed",
+    "rss",
+    "login",
+    "signin",
+    "signup",
+    "logout",
+    "about",
+  ])("never geocodes the site word %s", (word) => {
+    expect(isBareNameCandidate(word)).toBe(false);
+  });
+
+  it("covers every real top-level route directory under src/app", () => {
+    const appDir = resolve(__dirname, "../app");
+    const routes = readdirSync(appDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name)
+      .filter((n) => !/^[[(_@]/.test(n));
+    expect(routes.length).toBeGreaterThan(10);
+    for (const route of routes) {
+      expect(isBareNameCandidate(route), route).toBe(false);
+    }
+  });
 
   it("spaces the name for the geocoder", () => {
     expect(bareNameQuery("koh-samui")).toBe("koh samui");
