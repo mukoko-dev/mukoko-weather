@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -362,6 +362,31 @@ class TestEnrichThroughRealFetch:
         # The rest of the hour skips the call (and its reservation) entirely.
         assert enrichment.enrich("cell:b", 0, 0) == (None, "skipped-budget")
         assert client.return_value.get.call_count == 1
+
+    @pytest.mark.parametrize(
+        "headers, hour_memo, short_memo",
+        [
+            ({"x-ratelimit-remaining-hour": "0", "x-ratelimit-remaining-day": "120"}, True, False),
+            ({"x-ratelimit-remaining-hour": "9", "x-ratelimit-remaining-day": "0"}, True, False),
+            # Quota left: a per-second burst, remember nothing.
+            ({"x-ratelimit-remaining-hour": "20", "x-ratelimit-remaining-day": "400"}, False, False),
+            # No header at all (a real, empty header map): a short pause only.
+            ({}, False, True),
+        ],
+    )
+    @patch("py._enrichment.tomorrow_breaker")
+    @patch("py._http.get_http_client")
+    def test_429_memo_follows_the_rate_limit_headers(self, client, breaker, headers, hour_memo, short_memo):
+        breaker.is_allowed = True
+        client.return_value.get.return_value = MagicMock(status_code=429, headers=headers)
+        assert enrichment.enrich("cell:a", 0, 0) == (None, "skipped-budget")
+        breaker.record_failure.assert_not_called()
+        assert (enrichment._rate_limited_hour.get("tomorrow") is not None) is hour_memo
+        assert (enrichment._rate_limited_until.get("tomorrow") is not None) is short_memo
+        assert enrichment.rate_limited_this_hour() is (hour_memo or short_memo)
+        if short_memo:  # the short pause ends after about a minute
+            later = datetime.now(timezone.utc) + timedelta(seconds=enrichment.UNCLEAR_429_MEMO_S + 5)
+            assert enrichment.rate_limited_this_hour(later) is False
 
     @patch("py._enrichment.tomorrow_breaker")
     @patch("py._http.get_http_client")
