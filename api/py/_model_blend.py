@@ -380,7 +380,25 @@ def blend_payload(raw: dict, weights: dict[str, float], *, single: bool = False)
     zone = raw.get("timezone")
     if isinstance(zone, str) and zone:
         out["timezone"] = zone
+    # Terrain height Open-Meteo used for the point (its 90 m DEM). A place
+    # with no stored elevation (a spot slug) takes it from here (#302).
+    elevation = forecast_elevation(raw)
+    if elevation is not None:
+        out["elevation"] = elevation
     return out
+
+
+def forecast_elevation(raw: dict) -> float | None:
+    """Open-Meteo's top-level ``elevation`` (metres) when it is a real value.
+
+    ``None`` for a missing, non-numeric, NaN or out-of-range value (Open-Meteo
+    uses ``-9999`` for "no data"; real land spans about -430 m to 8 849 m)."""
+    value = raw.get("elevation") if isinstance(raw, dict) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if value != value or not (-1000 < value < 9000):
+        return None
+    return float(value)
 
 
 def members_with_data(raw: dict, models: Iterable[str]) -> list[str]:

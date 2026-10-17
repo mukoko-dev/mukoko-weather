@@ -59,6 +59,7 @@ export function ipFallbackLocation(
     lat: spotLat,
     lon: spotLon,
     elevation: 0,
+    elevationApproximate: true,
     tags: ["city"],
     country: /^[A-Z]{2}$/.test(country) ? country : undefined,
     source: "geolocation",
