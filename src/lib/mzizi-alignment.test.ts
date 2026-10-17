@@ -15,8 +15,12 @@
  *      still fails.
  *   2. It never uses a hardcoded Tailwind radius (`rounded`, `rounded-md`,
  *      `rounded-lg`, `rounded-[6px]`, …). Radii come from tokens:
- *      rounded-full / rounded-none / rounded-button / rounded-card or
- *      rounded-[var(--radius-*)]. This rule has no exceptions.
+ *      rounded-full / rounded-none or rounded-[var(--radius-*)]. The
+ *      shorthands rounded-button / rounded-card / rounded-badge are refused
+ *      too: --radius-card & co. are :root variables, never registered in
+ *      @theme, so Tailwind generates NOTHING for them and the element
+ *      renders with square corners (the MY LOCATION card bug). This rule
+ *      has no exceptions.
  *
  * `<Button` (the primitive) is never matched — JSX is case-sensitive.
  */
@@ -197,7 +201,7 @@ function baseUtility(token: string): string {
 }
 
 const ALLOWED_RADIUS =
-  /^rounded(?:-[a-z]{1,2})?-(?:full|none|button|card|badge|\[var\(--radius-[a-z-]+\)\])$/;
+  /^rounded(?:-[a-z]{1,2})?-(?:full|none|\[var\(--radius-[a-z-]+\)\])$/;
 
 /** True when the token is a hardcoded (non-token) Tailwind radius. */
 export function isHardcodedRadius(token: string): boolean {
@@ -266,14 +270,15 @@ describe("Mzizi alignment guard — helpers", () => {
       "hover:rounded-xl",
       "rounded-[6px]",
       "rounded-t-lg",
+      "rounded-card",
+      "rounded-button",
+      "rounded-badge",
     ]) {
       expect(isHardcodedRadius(bad)).toBe(true);
     }
     for (const ok of [
       "rounded-full",
       "rounded-none",
-      "rounded-button",
-      "rounded-card",
       "rounded-[var(--radius-button)]",
       "rounded-[var(--radius-input)]",
       "sm:rounded-full",

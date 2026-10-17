@@ -10,6 +10,7 @@ import {
   NON_LOCATION_ROUTES,
   currentLocationSlug,
   displayNameFromSlug,
+  legacySlugQuery,
   isLocationSlug,
 } from "./current-slug";
 
@@ -125,7 +126,24 @@ describe("displayNameFromSlug", () => {
 
   it("leaves plain legacy slugs readable", () => {
     expect(displayNameFromSlug("harare")).toBe("Harare");
-    expect(displayNameFromSlug("nairobi-ke")).toBe("Nairobi KE");
+    expect(displayNameFromSlug("nairobi-ke")).toBe("Nairobi");
+  });
+
+  it("drops a trailing country suffix from the name", () => {
+    expect(displayNameFromSlug("phuket-island-th")).toBe("Phuket Island");
+    expect(displayNameFromSlug("phuket-international-airport-th")).toBe(
+      "Phuket International Airport",
+    );
+  });
+
+  it("legacySlugQuery names the search for a {name}-{cc} slug only", () => {
+    expect(legacySlugQuery("phuket-island-th")).toEqual({
+      query: "Phuket Island",
+      country: "TH",
+    });
+    expect(legacySlugQuery("harare")).toBeNull();
+    expect(legacySlugQuery("harare--ksy4dd7")).toBeNull();
+    expect(legacySlugQuery("bulawayo-e7b1f4")).toBeNull();
   });
 
   it("does not strip non-hex suffixes", () => {
