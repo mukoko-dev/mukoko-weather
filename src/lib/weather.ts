@@ -402,6 +402,7 @@ export async function fetchWeather(
   lat: number,
   lon: number,
   models?: string[],
+  timeoutMs = 10_000,
 ): Promise<WeatherData> {
   // Only forward real model ids to Open-Meteo — `best_match` is the unsuffixed
   // baseline the API always returns, so it isn't sent as an explicit model.
@@ -430,7 +431,7 @@ export async function fetchWeather(
   const res = await fetch(`${url}?${params}`, {
     headers: openMeteoHeaders(url),
     next: { revalidate: 900 }, // cache for 15 minutes
-    signal: AbortSignal.timeout(10_000), // 10s timeout
+    signal: AbortSignal.timeout(timeoutMs), // 10s unless a caller is on a tighter budget
   });
 
   if (!res.ok) {
