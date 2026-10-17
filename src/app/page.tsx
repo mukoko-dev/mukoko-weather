@@ -16,6 +16,7 @@ import { checkFrostRisk, createFallbackWeather } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
 import { ipFallbackLocation } from "@/lib/home-location";
 import { countryDisplayName, reconcileCountry } from "@/lib/location-country";
+import { reconcileElevation } from "@/lib/location-elevation";
 import { SITE_URL } from "@/lib/site";
 import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
 
@@ -187,7 +188,10 @@ async function HomeContent() {
     weatherSource = "fallback";
   }
   const usingFallback = weatherSource === "fallback";
-  const location = reconcileCountry(seededLocation, weather.timezone);
+  const location = reconcileElevation(
+    reconcileCountry(seededLocation, weather.timezone),
+    weather.elevation,
+  );
 
   const countryCode = (location.country ?? "").toUpperCase();
   const [countryDoc, season] = await Promise.all([

@@ -19,7 +19,7 @@
  *   platform slugs, OSM place refs)
  */
 import { LOCATIONS } from "./locations";
-import { parseSmartSlug } from "./smart-slug";
+import { parseSmartSlug, slugifyName } from "./smart-slug";
 
 /** Same pattern the proxy and the Python backend use for slugs. */
 export const LOCATION_SLUG_RE = /^[a-z0-9-]{1,80}$/;
@@ -40,6 +40,31 @@ export const LOCATION_SUB_ROUTES: ReadonlySet<string> = new Set([
 export const LOCATION_NOT_FOUND_REWRITE = "/__mukoko/location/not-found";
 
 const SEED_SLUGS: ReadonlySet<string> = new Set(LOCATIONS.map((l) => l.slug));
+
+/**
+ * Bare-name aliases for seed places whose canonical slug carries a country
+ * suffix: `phuket` → `phuket-th`, `nairobi` → `nairobi-ke` (#302). The 98
+ * legacy Zimbabwe seeds already use the bare name as their slug, so a visitor
+ * (or an old link) typing `/phuket` expects the same to work abroad; it used
+ * to 404. Only an UNAMBIGUOUS name gets an alias: a name two seeds share
+ * (several Victorias) maps to nothing, and an alias never shadows a seed slug.
+ * Community and platform slugs always carry a suffix (`{name}-{cc}`, a
+ * geohash, an OSM ref or a 6-hex platform id), so a bare name is never one.
+ */
+export const SEED_NAME_ALIASES: ReadonlyMap<string, string> = (() => {
+  const byName = new Map<string, string[]>();
+  for (const loc of LOCATIONS) {
+    const key = slugifyName(loc.name);
+    if (!key) continue;
+    byName.set(key, [...(byName.get(key) ?? []), loc.slug]);
+  }
+  const aliases = new Map<string, string>();
+  for (const [key, slugs] of byName) {
+    if (slugs.length !== 1 || slugs[0] === key || SEED_SLUGS.has(key)) continue;
+    aliases.set(key, slugs[0]);
+  }
+  return aliases;
+})();
 
 /**
  * Longest segment the gate looks up. Longer than {@link LOCATION_SLUG_RE}
@@ -73,6 +98,8 @@ function decodeSegment(segment: string): string | null {
  * Classify a request path. `/{segment}` and
  * `/{segment}/{agriculture|atmosphere|forecast|map}` reach the `[location]` route unless
  * the segment is another top-level route (`knownRoutes`).
+ * - A bare seed name with an unambiguous canonical slug (`/phuket`):
+ *   `redirect` to it (`/phuket-th`), see {@link SEED_NAME_ALIASES}.
  * - Only the case is wrong (`/Harare`, `/harare/Forecast`): `redirect` to the
  *   lowercase URL, the canonical one (these used to render via the
  *   resolver's case-insensitive name lookup, so they must keep working).
@@ -100,6 +127,14 @@ export function classifyLocationPath(
   if (!slug) return { kind: "other" };
   if (slug.length > MAX_GATED_SEGMENT) return { kind: "unknown" };
   const lower = slug.toLowerCase();
+  const alias = SEED_NAME_ALIASES.get(lower);
+  if (alias && !knownRoutes.has(lower)) {
+    // `/phuket` (or `/Phuket/forecast`) → the canonical seed URL in one hop.
+    return {
+      kind: "redirect",
+      location: "/" + [alias, lowerSub].filter(Boolean).join("/"),
+    };
+  }
   if (knownRoutes.has(lower)) {
     // `/Explore` → `/explore`; `/%65xplore` already IS the explore route.
     return lower !== slug && sub === undefined

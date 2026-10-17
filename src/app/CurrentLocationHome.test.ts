@@ -58,6 +58,12 @@ describe("CurrentLocationHome — silent-URL model", () => {
     expect(source).toMatch(/detectUserLocation\(\{\s*autoCreate: true/);
   });
 
+  it("stores the real place when the find-only lookup only named a spot (#302)", () => {
+    // /api/py/geo find-only answers `synthesized: true` outside the stored
+    // geography; that spot must escalate to create-on-demand like a far match.
+    expect(source).toContain("result.synthesized === true ||");
+  });
+
   it("keeps the seeded place rather than relabelling a far one as MY LOCATION", () => {
     // Singapore audit: a POI ~9 km away was shown as MY LOCATION.
     expect(source).toMatch(/const FAR_NEAREST_KM = [1-5];/);

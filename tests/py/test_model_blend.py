@@ -209,6 +209,20 @@ class TestBlendPayload:
         assert blend_payload(raw, W)["timezone"] == "Europe/London"
         assert "timezone" not in blend_payload(self._raw(), W)
 
+    def test_elevation_passes_through(self):
+        """A spot slug has no stored elevation: the forecast's DEM height fills it (#302)."""
+        assert blend_payload({**self._raw(), "elevation": 6.0}, W)["elevation"] == 6.0
+        assert "elevation" not in blend_payload(self._raw(), W)
+        assert "elevation" not in blend_payload({**self._raw(), "elevation": -9999.0}, W)
+
+    @pytest.mark.parametrize("value,expected", [
+        (6.0, 6.0), (1490, 1490.0), (-258.0, -258.0),
+        (-9999.0, None), (float("nan"), None), (9500, None), (True, None), ("6", None), (None, None),
+    ])
+    def test_forecast_elevation(self, value, expected):
+        assert blend.forecast_elevation({"elevation": value}) == expected
+        assert blend.forecast_elevation("not a dict") is None
+
     def test_current_nulls_filled_from_blended_hour(self):
         out = blend_payload(self._raw(), W)
         assert out["current"]["temperature_2m"] == 24.7  # top member's 15-min value kept
