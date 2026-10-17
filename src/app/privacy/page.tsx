@@ -191,11 +191,17 @@ export default function PrivacyPage() {
                   Weather data and geocoding API. We send geographic coordinates
                   to retrieve weather forecasts. When a location search finds
                   few matches in our own catalogue, the text you typed is sent
-                  from our servers to Open-Meteo&apos;s geocoding service to
-                  find matching places worldwide; your IP address is not
-                  forwarded with it. Avoid typing personal details, such as a
-                  home address, into the search box if you do not want them
-                  shared. See their{" "}
+                  to our own weather service (weather-api.mukoko.com, run by us
+                  on Cloudflare) and from there to Open-Meteo&apos;s geocoding
+                  service to find matching places worldwide. The same happens
+                  when you open a web address that names a place we do not hold,
+                  such as /koh-samui: the name in the address is looked up so we
+                  can take you to that place. Your IP address is not forwarded
+                  to Open-Meteo. Our weather service counts lookups per hour to
+                  stay within the provider&apos;s limits, keyed by a one-way
+                  hash of your address (never the address itself). Avoid typing
+                  personal details, such as a home address, into the search box
+                  if you do not want them shared. See their{" "}
                   <a
                     href="https://open-meteo.com/en/terms"
                     className="sunbird"
@@ -266,10 +272,14 @@ export default function PrivacyPage() {
                 </dt>
                 <dd className="mt-1">
                   Reverse geocoding used when creating new locations, and to
-                  name your area when we hold no place near you. We send
-                  geographic coordinates (rounded to about 1 km when only naming
-                  your area) to determine place names. No personal data is
-                  transmitted. See their{" "}
+                  name your area when we hold no place near you. When you use
+                  your device location, your exact position goes from your
+                  browser to our weather service (weather-api.mukoko.com), which
+                  asks Nominatim to name it: a position rounded to about 1 km
+                  when only naming your area, the exact position only when you
+                  ask us to use your current location and create the place. No
+                  personal data other than the coordinates is transmitted. See
+                  their{" "}
                   <a
                     href="https://osmfoundation.org/wiki/Privacy_Policy"
                     className="sunbird"

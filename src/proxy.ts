@@ -6,6 +6,7 @@ import {
   classifyLocationPath,
   isRenderableLocation,
 } from "@/lib/location-gate";
+import { isBareNameCandidate, resolveBareName } from "@/lib/bare-name";
 import { resolveLocationSlug } from "@/lib/places";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 
@@ -105,6 +106,40 @@ export default async function proxy(
       redirect: new URL(path.location + request.nextUrl.search, request.url),
       redirectStatus: 308,
     });
+  }
+  // ── Bare place name (/koh-samui) → the canonical spot URL (#317) ────────
+  // The coordinate is the identity and the name in a URL is cosmetic, so a
+  // single-segment slug we hold nothing for is forward-geocoded by the Rust
+  // places Worker (Open-Meteo, with its KV cache and hourly D1 budgets) and
+  // redirected to `{name}--{geohash}`, which renders from its slug alone.
+  // The Worker sees this server's address, not the visitor's, so each visitor
+  // is also capped here (see bare-name.ts). Render-only: nothing is stored. When nothing is found, or the geocoder is
+  // over budget, slow or down, the 404 below is exactly what it was. No
+  // lastLocation cookie rides on the redirect (the spot URL sets its own).
+  if (
+    path.kind === "slug" &&
+    renderable === false &&
+    isBareNameCandidate(path.slug)
+  ) {
+    const target = await resolveBareName(path.slug, {
+      visitor:
+        request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+        "unknown",
+      keepAlive: (pending) => event?.waitUntil(pending),
+    });
+    if (target) {
+      const sub = pathname.split("/").filter(Boolean)[1];
+      const redirect = handleAuthkitProxy(request, headers, {
+        redirect: new URL(
+          `/${target}${sub ? `/${sub}` : ""}${request.nextUrl.search}`,
+          request.url,
+        ),
+        redirectStatus: 308,
+      });
+      // A geocoder answer can improve; browsers must not pin it for good.
+      redirect.headers.set("cache-control", "private, max-age=600");
+      return redirect;
+    }
   }
   // A paused feature route (FLAGS.shamwari_chat) is a real 404. Its page calls
   // notFound(), but shamwari/loading.tsx flushes a 200 shell first, so the
