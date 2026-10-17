@@ -10,6 +10,12 @@ export interface GeoResult {
   distanceKm: number | null;
   /** True when the location was just auto-created via reverse geocoding */
   isNew?: boolean;
+  /**
+   * True when nothing is stored near the fix and the find-only lookup named
+   * the spot on demand without storing it (`/api/py/geo` `synthesized`,
+   * #302). A GPS caller then asks again with `autoCreate` to store the place.
+   */
+  synthesized?: boolean;
 }
 
 /** Default GPS timeout — used for user-initiated lookups (first-visit auto-prompt, explicit "Use my current location"). */
@@ -88,6 +94,7 @@ export function detectUserLocation({
           const data = await res.json();
           const nearest: WeatherLocation = data.nearest;
           const isNew: boolean = data.isNew ?? false;
+          const synthesized = data.synthesized === true;
 
           // Distance to the nearest location, for display
           const distanceKm = haversineKm(
@@ -103,6 +110,7 @@ export function detectUserLocation({
             coords: { lat: latitude, lon: longitude },
             distanceKm: Math.round(distanceKm),
             isNew,
+            synthesized,
           });
         } catch {
           resolve({
