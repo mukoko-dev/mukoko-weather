@@ -24,7 +24,7 @@ export function ExploreLoadingShell({
       <BreadcrumbSkeleton />
       <main
         aria-label={mainLabel}
-        className="mx-auto max-w-5xl overflow-x-hidden px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-8 md:px-8"
+        className="mx-auto max-w-5xl overflow-x-clip px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-8 md:px-8"
       >
         <div role="status" aria-label="Loading" aria-busy="true">
           <span className="sr-only">{srText}</span>

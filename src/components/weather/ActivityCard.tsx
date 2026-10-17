@@ -78,7 +78,7 @@ export function ActivityCard({
 
   return (
     <div
-      className={`baobab p-3.5 border-l-[6px] ${borderAccent}`}
+      className={`baobab border-l-[6px] ${borderAccent}`}
       role="group"
       aria-labelledby={headingId}
     >

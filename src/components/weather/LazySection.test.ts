@@ -7,6 +7,10 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
+const lazyVisibility = readFileSync(
+  resolve(__dirname, "../../lib/lazy-visibility.ts"),
+  "utf-8",
+);
 const source = readFileSync(resolve(__dirname, "LazySection.tsx"), "utf-8");
 const skeletonSource = readFileSync(
   resolve(__dirname, "SectionSkeleton.tsx"),
@@ -14,13 +18,16 @@ const skeletonSource = readFileSync(
 );
 
 describe("LazySection — sequential mount queue", () => {
-  it("defines a global mountQueue as a QueueEntry array", () => {
-    expect(source).toContain("mountQueue: QueueEntry[]");
-    expect(source).toContain("const mountQueue");
+  it("defines one global mountQueue from createMountQueue", () => {
+    expect(source).toContain("const mountQueue = createMountQueue(");
   });
 
-  it("tracks queue processing with isProcessing flag", () => {
-    expect(source).toContain("isProcessing");
+  it("bounds concurrent mounts with an activeMounts counter and maxConcurrentMounts", () => {
+    // The queue's behaviour is tested in src/lib/mount-queue.test.ts.
+    expect(source).toContain("createMountQueue({");
+    expect(source).toContain(
+      "getSlots: () => maxConcurrentMounts(readDeviceHints())",
+    );
   });
 
   it("exports the LazySection component", () => {
@@ -29,7 +36,7 @@ describe("LazySection — sequential mount queue", () => {
 
   it("enqueues mounts one at a time via enqueueMount", () => {
     expect(source).toContain("enqueueMount");
-    expect(source).toContain("entry.cancelled");
+    expect(source).toContain("mountQueue.enqueue(mountFn)");
   });
 
   it("uses requestAnimationFrame + setTimeout for paint-safe mounting", () => {
@@ -38,34 +45,29 @@ describe("LazySection — sequential mount queue", () => {
   });
 
   it("cancels pending queue entries on cleanup", () => {
-    expect(source).toContain("cancelled = true");
+    expect(source).toContain("cancelRef.current?.()");
+    expect(
+      readFileSync(resolve(__dirname, "../../lib/mount-queue.ts"), "utf-8"),
+    ).toContain("entry.cancelled = true");
   });
 });
 
 describe("LazySection — adaptive settle delay", () => {
-  it("returns 150ms settle delay for mobile (< 768px)", () => {
-    expect(source).toContain("150");
-    expect(source).toContain("768");
-  });
-
-  it("returns 50ms settle delay for desktop (>= 768px)", () => {
-    expect(source).toContain("50");
-  });
-
-  it("getSettleDelay uses window.innerWidth for detection", () => {
-    expect(source).toContain("window.innerWidth");
-    expect(source).toContain("getSettleDelay");
+  it("takes its settle delay from settleDelayMs (unit tested in lazy-visibility)", () => {
+    expect(source).toContain("settleDelayMs(readDeviceHints())");
+    expect(source).toContain("readDeviceHints()");
   });
 
   it("handles SSR by returning a safe default when window is undefined", () => {
-    // Should guard against typeof window === "undefined"
-    expect(source).toContain("typeof window");
+    // readDeviceHints guards against typeof window === "undefined"
+    expect(lazyVisibility).toContain('typeof window === "undefined"');
   });
 });
 
 describe("LazySection — bidirectional visibility", () => {
-  it("defines UNLOAD_MARGIN of 1500px for off-screen reclamation", () => {
-    expect(source).toContain('UNLOAD_MARGIN = "1500px"');
+  it("derives the unload margin from the load margin (never under 1500px)", () => {
+    expect(source).toContain("unloadMarginPx(");
+    expect(lazyVisibility).toContain("MIN_UNLOAD_MARGIN_PX = 1500");
   });
 
   it("uses a separate unload observer after initial mount", () => {
@@ -89,9 +91,8 @@ describe("LazySection — bidirectional visibility", () => {
     expect(source).toContain('animate ? "animate-fade-in-up" : undefined');
   });
 
-  it("load margin is larger on desktop than mobile", () => {
-    expect(source).toContain("100px"); // mobile load margin
-    expect(source).toContain("300px"); // desktop load margin
+  it("takes the load margin from loadMarginPx (viewport-relative)", () => {
+    expect(source).toContain("loadMarginPx(readDeviceHints())");
   });
 });
 
