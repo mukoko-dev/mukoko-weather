@@ -93,7 +93,12 @@ export async function createWeatherScene(
 
   let renderer: InstanceType<typeof THREE.WebGLRenderer>;
   try {
-    renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
+    renderer = new THREE.WebGLRenderer({
+      antialias: false,
+      alpha: true,
+      // A decorative background: let mobile GPUs pick the power-saving path.
+      powerPreference: "low-power",
+    });
   } catch {
     return noop; // WebGL unavailable
   }
@@ -165,6 +170,13 @@ export async function createWeatherScene(
       window.removeEventListener("resize", handleResize);
       elements.dispose();
       renderer.dispose();
+      // Release the WebGL context now rather than at GC time, so a page
+      // never holds two (loading scene + backdrop) at once.
+      try {
+        renderer.forceContextLoss();
+      } catch {
+        // Already lost — nothing to free.
+      }
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }

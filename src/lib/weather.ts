@@ -23,6 +23,8 @@ import {
 import { openMeteoForecastUrl, openMeteoHeaders } from "./open-meteo-endpoint";
 
 export interface CurrentWeather {
+  /** Observation time (Open-Meteo `current.time`, location wall clock). */
+  time?: string;
   temperature_2m: number;
   relative_humidity_2m: number;
   apparent_temperature: number;

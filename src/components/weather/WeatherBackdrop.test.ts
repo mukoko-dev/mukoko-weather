@@ -137,3 +137,34 @@ describe("WeatherBackdrop — subdued behind the sky plate", () => {
     expect(source).not.toMatch(/className=\{?[`"][^`"]*\bkori\b/);
   });
 });
+
+describe("WeatherBackdrop — device and scroll policy (v0.10.0 perf)", () => {
+  it("decides whether to animate via shouldAnimateBackdrop (reduced motion, Save-Data, low-end)", () => {
+    expect(source).toContain("shouldAnimateBackdrop(readBackdropHints())");
+  });
+
+  it("idles the loop while scrolling and when the sky has scrolled away", () => {
+    expect(source).toContain('addEventListener("scroll", handleScroll');
+    expect(source).toContain("passive: true");
+    expect(source).toContain("shouldRunBackdrop({");
+    expect(source).toContain('removeEventListener("scroll", handleScroll)');
+  });
+
+  it("releases the WebGL context on dispose (one context per page)", () => {
+    const scene = readFileSync(
+      resolve(__dirname, "../../lib/weather-scenes/create-scene.ts"),
+      "utf-8",
+    );
+    expect(scene).toContain("renderer.forceContextLoss()");
+    expect(scene).toContain('powerPreference: "low-power"');
+  });
+
+  it("the loading scene delays Three.js so quick loads never open a second context", () => {
+    const loading = readFileSync(
+      resolve(__dirname, "WeatherLoadingScene.tsx"),
+      "utf-8",
+    );
+    expect(loading).toContain("LOADING_SCENE_3D_DELAY_MS");
+    expect(loading).toContain("window.clearTimeout(startTimer)");
+  });
+});

@@ -8,8 +8,35 @@ import { PWAInstallPrompt } from "@/components/weather/PWAInstallPrompt";
 import { ServiceWorkerUpdater } from "@/components/pwa/ServiceWorkerUpdater";
 import { VercelAnalytics } from "@/components/analytics/VercelAnalytics";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { Noto_Sans, Noto_Serif, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { SITE_URL } from "@/lib/site";
+
+// Brand typography, self-hosted through next/font (served from /_next/static,
+// no request to Google at runtime). Never put a fonts.googleapis.com
+// <link rel="stylesheet"> in <head>: Cloudflare Fonts rewrites it into an
+// inline <style> before the HTML reaches the browser, the <head> React
+// hydrates then no longer matches the server's, and every page throws
+// React error #418 and re-renders from scratch on the client (the
+// v0.10.0 "black screen"). layout-fonts.test.ts guards this.
+const notoSans = Noto_Sans({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-noto-sans",
+});
+// Normal style only: the app's italic text is Noto Sans (the footer motto),
+// so a Noto Serif italic file would be a preload nobody uses.
+const notoSerif = Noto_Serif({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-noto-serif",
+});
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-jetbrains-mono",
+  preload: false,
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -305,6 +332,7 @@ export default async function RootLayout({
       lang="en"
       dir="ltr"
       data-brand="mukoko-weather"
+      className={`${notoSans.variable} ${notoSerif.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
       <head>
@@ -333,17 +361,6 @@ export default async function RootLayout({
         <meta name="format-detection" content="telephone=no" />
         <link rel="manifest" href="/manifest.json" />
         {/* Favicons come from `metadata.icons` above, which is the mukoko-news set. */}
-        {/* Brand typography — Noto Serif (display/headings) · Noto Sans (UI/body) · JetBrains Mono (data/code) */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,600;0,700;1,400&family=Noto+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
-          rel="stylesheet"
-        />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -369,7 +386,7 @@ export default async function RootLayout({
         <AuthKitProvider initialAuth={initialAuth}>
           <ThemeProvider>
             <MineralsStripe />
-            <div className="overflow-x-hidden pl-0 min-[480px]:pl-2">
+            <div className="overflow-x-clip pl-0 min-[480px]:pl-2">
               {children}
             </div>
             <PWAInstallPrompt />
