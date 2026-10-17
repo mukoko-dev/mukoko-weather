@@ -50,7 +50,23 @@ pub const BARE_MIN: usize = 3;
 pub const BARE_MAX: usize = 60;
 /// The best hit must resemble the name that was typed: the geocoder matches
 /// loosely, and `/admin` must not become a village called Adamu.
-pub const MIN_SIMILARITY: f64 = 0.6;
+pub const MIN_SIMILARITY: f64 = 0.85;
+/// Score of a name whose words all appear in the other (`lake kariba` vs
+/// `Kariba`): a qualifier, not a different place.
+const CONTAINED_SIMILARITY: f64 = 0.9;
+/// A typed name this short (after slugifying) must match EXACTLY: with so few
+/// letters, one edit is a different word (`abc`/`Abu` 0.67, `home`/`hope`
+/// 0.75, `blog`/`blob` 0.75).
+pub const SHORT_NAME_LEN: usize = 5;
+
+/// The similarity a hit needs for this typed name.
+pub fn required_similarity(query: &str) -> f64 {
+    if slugify(query).chars().count() <= SHORT_NAME_LEN {
+        1.0
+    } else {
+        MIN_SIMILARITY
+    }
+}
 /// A geocoder hit for a shipped city within this distance is that city.
 pub const SEED_DUPLICATE_KM: f64 = 25.0;
 
@@ -84,7 +100,7 @@ fn levenshtein(a: &[char], b: &[char]) -> usize {
 }
 
 /// 0..=1 similarity of two names after slugifying (case, accents, spacing):
-/// edit-distance ratio, or 0.8 when every word of the shorter name is a word
+/// edit-distance ratio, or 0.9 when every word of the shorter name is a word
 /// of the longer one (`lake kariba` vs `Kariba`).
 pub fn name_similarity(a: &str, b: &str) -> f64 {
     let (sa, sb) = (slugify(a), slugify(b));
@@ -102,7 +118,7 @@ pub fn name_similarity(a: &str, b: &str) -> f64 {
     };
     let contained = short.iter().all(|w| long.contains(w));
     if contained {
-        ratio.max(0.8)
+        ratio.max(CONTAINED_SIMILARITY)
     } else {
         ratio
     }
@@ -136,13 +152,27 @@ pub fn seed_matching(name: &str, lat: f64, lon: f64, max_km: f64) -> Option<Loca
 /// that resembles `query`, a place before an area (an area's centre still
 /// beats a 404), and a shipped seed's own slug when the hit is that city.
 pub fn pick_resolution(hits: &[LocationDoc], query: &str) -> Option<LocationDoc> {
-    let mut usable: Vec<&LocationDoc> = hits
-        .iter()
-        .filter(|h| valid_coordinates(h.lat, h.lon))
-        .filter(|h| name_similarity(query, &h.name) >= MIN_SIMILARITY)
-        .collect();
-    usable.sort_by_key(|h| h.area.is_some()); // stable: a place first
-    let best = (*usable.first()?).clone();
+    let need = required_similarity(query);
+    // The most similar hit, not the first usable one; at equal similarity a
+    // place before an area, then the geocoder's own order.
+    let mut best: Option<(f64, &LocationDoc)> = None;
+    for h in hits.iter().filter(|h| valid_coordinates(h.lat, h.lon)) {
+        let sim = name_similarity(query, &h.name);
+        if sim < need {
+            continue;
+        }
+        let better = match best {
+            None => true,
+            Some((bs, bh)) => {
+                sim > bs + f64::EPSILON
+                    || ((sim - bs).abs() <= f64::EPSILON && bh.area.is_some() && h.area.is_none())
+            }
+        };
+        if better {
+            best = Some((sim, h));
+        }
+    }
+    let best = best?.1.clone();
     if best.area.is_none() {
         if let Some(seed) = seed_matching(&best.name, best.lat, best.lon, SEED_DUPLICATE_KM) {
             return Some(seed);
@@ -260,6 +290,107 @@ pub fn named_cell_spot(
     })
 }
 
+// --- What a point answers: naming outcomes ---------------------------------
+
+/// A seed this close to a point is "the same area" when naming is skipped
+/// (budget or outage), so a skipped naming never shows a coordinate label
+/// where a real place was available.
+pub const SEED_NEAR_KM: f64 = 50.0;
+
+/// What naming a point came back with.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Naming {
+    /// A name (city level for find-only, exact for GPS create).
+    Named(LocationDoc),
+    /// A definitive "nothing here": open water, polar ice, empty desert.
+    NothingHere,
+    /// Not asked or not answered: over budget, the geocoder is down or timed
+    /// out, or the caller asked not to spend a lookup. NOT a statement about
+    /// the point.
+    Skipped,
+}
+
+/// How a spot answer came about; the JSON flags follow it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpotKind {
+    /// Named by the geocoder.
+    Named,
+    /// Definitive nothing: `named: false`.
+    NothingHere,
+    /// Naming skipped: `namingSkipped: true`, and NOT `named: false`.
+    NamingSkipped,
+}
+
+/// The answer for a point with no stored place near it.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PointAnswer {
+    /// A stored seed place (not a synthesized spot).
+    Seed(LocationDoc),
+    /// A newly named place (GPS create): the caller treats it as new.
+    Created(LocationDoc),
+    /// A spot that renders from its slug alone; nothing is stored.
+    Spot { spot: LocationDoc, kind: SpotKind },
+}
+
+fn spot_for(lat: f64, lon: f64, naming: &Naming) -> Option<PointAnswer> {
+    if let Naming::Named(doc) = naming {
+        if let Some(spot) = named_cell_spot(&doc.name, &doc.province, doc.country.clone(), lat, lon)
+        {
+            return Some(PointAnswer::Spot {
+                spot,
+                kind: SpotKind::Named,
+            });
+        }
+    }
+    let kind = match naming {
+        // A "name" that is empty or `Unknown` is the geocoder naming nothing.
+        Naming::Named(_) | Naming::NothingHere => SpotKind::NothingHere,
+        Naming::Skipped => SpotKind::NamingSkipped,
+    };
+    coordinate_spot(lat, lon).map(|spot| PointAnswer::Spot { spot, kind })
+}
+
+/// Find-only (an IP position, or a GPS fix before it is stored): a seed within
+/// 150 km, else the point's named cell, else a coordinate spot. `None` only
+/// for an invalid coordinate. A skipped naming is `NamingSkipped`, never the
+/// definitive `NothingHere`.
+pub fn find_only_answer(lat: f64, lon: f64, naming: &Naming) -> Option<PointAnswer> {
+    if !valid_coordinates(lat, lon) {
+        return None;
+    }
+    if let Some(seed) = nearest_seeds(lat, lon, 150.0, 1).first() {
+        return Some(PointAnswer::Seed((*seed).clone()));
+    }
+    spot_for(lat, lon, naming)
+}
+
+/// GPS create: the exact name when there is one (a seed of the same name
+/// within 1 km is that seed, not a new place); a definitive nothing is a
+/// coordinate spot; a skipped naming returns a seed within [`SEED_NEAR_KM`]
+/// when there is one (never a coordinate label over a real place) and else a
+/// coordinate spot flagged `NamingSkipped`.
+pub fn create_answer(lat: f64, lon: f64, naming: &Naming) -> Option<PointAnswer> {
+    if !valid_coordinates(lat, lon) {
+        return None;
+    }
+    match naming {
+        Naming::Named(doc) => {
+            let existing = nearest_seeds(lat, lon, 1.0, 1)
+                .into_iter()
+                .find(|s| s.name.eq_ignore_ascii_case(&doc.name));
+            Some(match existing {
+                Some(seed) => PointAnswer::Seed(seed.clone()),
+                None => PointAnswer::Created(doc.clone()),
+            })
+        }
+        Naming::NothingHere => spot_for(lat, lon, naming),
+        Naming::Skipped => match nearest_seeds(lat, lon, SEED_NEAR_KM, 1).first() {
+            Some(seed) => Some(PointAnswer::Seed((*seed).clone())),
+            None => spot_for(lat, lon, naming),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -316,6 +447,10 @@ mod tests {
         assert!(name_similarity("lake kariba", "Kariba") >= MIN_SIMILARITY);
         assert!(name_similarity("chiang rai", "Chiang Rai") > 0.99);
         assert!(name_similarity("sandwich", "Kariba") < MIN_SIMILARITY);
+        // The review's near misses: each is below the bar.
+        assert!(name_similarity("abc", "Abu") < 1.0);
+        assert!(name_similarity("home", "Hope") < 1.0);
+        assert!(name_similarity("blog", "Blob") < 1.0);
         assert!(name_similarity("admin", "Adamu") < MIN_SIMILARITY);
         assert_eq!(name_similarity("", "x"), 0.0);
     }
@@ -417,5 +552,155 @@ mod tests {
         assert_eq!(snap(12.3449), 12.34);
         assert_eq!(snap(-0.004), 0.0);
         assert_eq!(snap(179.996), 180.0);
+    }
+
+    #[test]
+    fn short_names_need_an_exact_match() {
+        assert_eq!(required_similarity("abc"), 1.0);
+        assert_eq!(required_similarity("harar"), 1.0);
+        assert_eq!(required_similarity("koh samui"), MIN_SIMILARITY);
+        for (q, near) in [
+            ("abc", "Abu"),
+            ("home", "Hope"),
+            ("blog", "Blob"),
+            ("news", "Nevis"),
+        ] {
+            let hits = [hit(near, 1.0, 2.0, "PPL", "XX")];
+            assert!(
+                pick_resolution(&hits, q).is_none(),
+                "{q} must not become {near}"
+            );
+        }
+        // Exact still resolves, in any case or spacing.
+        let hits = [hit("Kano", 12.0, 8.5, "PPLA", "NG")];
+        assert!(pick_resolution(&hits, "KANO").is_some());
+    }
+
+    #[test]
+    fn the_most_similar_hit_wins_not_the_first_usable() {
+        let hits = [
+            hit("Samui Town", 9.0, 100.0, "PPL", "TH"),
+            hit("Ko Samui", 9.5, 100.0, "PPLA", "TH"),
+        ];
+        let got = pick_resolution(&hits, "koh samui").unwrap();
+        assert_eq!(got.name, "Ko Samui");
+    }
+
+    #[test]
+    fn the_exact_name_beats_a_near_neighbour() {
+        // One edit apart (0.9): edit distance alone cannot tell them apart, so
+        // the highest similarity must win whatever order the geocoder used.
+        let hits = [
+            hit("Chiang Mai", 18.8, 98.98, "PPLA", "TH"),
+            hit("Chiang Rai", 19.9, 99.8, "PPLA", "TH"),
+        ];
+        assert_eq!(
+            pick_resolution(&hits, "chiang rai").unwrap().name,
+            "Chiang Rai"
+        );
+    }
+
+    fn spot_kind(a: Option<PointAnswer>) -> SpotKind {
+        match a {
+            Some(PointAnswer::Spot { kind, .. }) => kind,
+            other => panic!("expected a spot, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_definitive_nothing_is_named_false_and_a_skip_is_not() {
+        // Mid-Atlantic, no seed within 150 km.
+        let (lat, lon) = (0.0, -30.0);
+        assert_eq!(
+            spot_kind(find_only_answer(lat, lon, &Naming::NothingHere)),
+            SpotKind::NothingHere
+        );
+        assert_eq!(
+            spot_kind(find_only_answer(lat, lon, &Naming::Skipped)),
+            SpotKind::NamingSkipped
+        );
+        assert_eq!(
+            spot_kind(create_answer(lat, lon, &Naming::NothingHere)),
+            SpotKind::NothingHere
+        );
+        assert_eq!(
+            spot_kind(create_answer(lat, lon, &Naming::Skipped)),
+            SpotKind::NamingSkipped
+        );
+    }
+
+    #[test]
+    fn find_only_prefers_a_seed_within_150_km() {
+        let a = find_only_answer(-17.83, 31.05, &Naming::Skipped);
+        assert!(matches!(a, Some(PointAnswer::Seed(s)) if s.slug == "harare"));
+    }
+
+    #[test]
+    fn a_skipped_create_returns_the_seed_within_50_km_never_a_label() {
+        // 10 km from Harare: naming failed, but a real place is right there.
+        let a = create_answer(-17.9, 31.05, &Naming::Skipped);
+        assert!(matches!(a, Some(PointAnswer::Seed(s)) if s.slug == "harare"));
+        // No seed within 50 km (mid-Atlantic): a skipped spot, not named:false.
+        let far = create_answer(0.0, -30.0, &Naming::Skipped);
+        assert_eq!(spot_kind(far), SpotKind::NamingSkipped);
+    }
+
+    #[test]
+    fn a_definitive_nothing_is_not_rewritten_to_a_seed_on_create() {
+        // The geocoder answered: nothing here. That is a statement about the
+        // point, so it stays a coordinate spot even beside a seed.
+        let a = create_answer(-17.9, 31.05, &Naming::NothingHere);
+        assert_eq!(spot_kind(a), SpotKind::NothingHere);
+    }
+
+    #[test]
+    fn a_named_point_is_created_or_is_the_seed_of_the_same_name() {
+        let named = LocationDoc::from_nominatim(
+            &serde_json::json!({"name": "Mbare Musika", "lat": "-17.8578", "lon": "31.0389",
+                "address": {"suburb": "Mbare", "country": "Zimbabwe", "country_code": "zw"}}),
+            -17.8578,
+            31.0389,
+        )
+        .unwrap();
+        assert!(matches!(
+            create_answer(-17.8578, 31.0389, &Naming::Named(named)),
+            Some(PointAnswer::Created(d)) if d.name == "Mbare Musika"
+        ));
+        let harare = find_seed_doc("harare");
+        let a = create_answer(harare.lat, harare.lon, &Naming::Named(harare.clone()));
+        assert!(matches!(a, Some(PointAnswer::Seed(s)) if s.slug == "harare"));
+    }
+
+    fn find_seed_doc(slug: &str) -> LocationDoc {
+        crate::locations::find_seed(slug).unwrap().clone()
+    }
+
+    #[test]
+    fn a_blank_or_unknown_name_is_nothing_here() {
+        let mut named = find_seed_doc("harare");
+        named.name = "Unknown".into();
+        let (lat, lon) = (0.0, -30.0);
+        assert_eq!(
+            spot_kind(find_only_answer(lat, lon, &Naming::Named(named))),
+            SpotKind::NothingHere
+        );
+    }
+
+    #[test]
+    fn a_named_cell_is_a_named_spot() {
+        let mut named = find_seed_doc("harare");
+        named.name = "Ténéré".into();
+        named.province = "Agadez".into();
+        let a = find_only_answer(17.0, 10.0, &Naming::Named(named));
+        assert!(
+            matches!(&a, Some(PointAnswer::Spot { spot, kind: SpotKind::Named })
+            if spot.slug.starts_with("tenere--"))
+        );
+    }
+
+    #[test]
+    fn invalid_coordinates_answer_nothing() {
+        assert!(find_only_answer(91.0, 0.0, &Naming::Skipped).is_none());
+        assert!(create_answer(0.0, 181.0, &Naming::Skipped).is_none());
     }
 }

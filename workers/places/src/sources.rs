@@ -6,6 +6,8 @@ use std::time::Duration;
 
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
+use weather_core::budget::Action;
+use weather_core::cache::Slot;
 use weather_core::locations::{encode_geohash, LocationDoc, GEOHASH_PRECISION};
 use weather_core::places::slugify;
 use weather_core::secrets;
@@ -13,9 +15,6 @@ use weather_edge::{config, get_with_timeout, secret};
 use worker::{Env, Headers, Url};
 
 const CACHE: &str = "CACHE";
-/// Per-IP and service-wide limits on uncached forward geocodes.
-const GEOCODE_FWD_LIMITER: &str = "GEOCODE_FWD_LIMITER";
-const GEOCODE_FWD_GLOBAL: &str = "GEOCODE_FWD_GLOBAL";
 const TIMEOUT: Duration = Duration::from_secs(5);
 const DAY: u64 = 86_400;
 /// The Python backend's Nominatim identity.
@@ -38,6 +37,22 @@ async fn store<T: Serialize>(env: &Env, key: &str, value: &T, ttl: u64) {
     if let Ok(put) = kv.put(key, body) {
         let _ = put.expiration_ttl(ttl).execute().await;
     }
+}
+
+/// A cached lookup that may be a cached "nothing here" (`Some(None)`); `None`
+/// is a real miss. Stored as a [`Slot`] because KV reads a bare JSON `null`
+/// back as a miss.
+async fn cached_slot<T: DeserializeOwned>(env: &Env, key: &str) -> Option<Option<T>> {
+    cached::<Slot<T>>(env, key).await.map(|slot| slot.found)
+}
+
+async fn store_slot<T: Serialize>(env: &Env, key: &str, found: &Option<T>, ttl: u64) {
+    // Slot owns its value, so serialise a borrowed view.
+    #[derive(Serialize)]
+    struct Borrowed<'a, T> {
+        found: &'a Option<T>,
+    }
+    store(env, key, &Borrowed { found }, ttl).await;
 }
 
 /// `(base URL, machine key)` when the Nyuchi API is configured.
@@ -89,15 +104,15 @@ pub async fn nyuchi_place(env: &Env, slug: &str) -> Result<Option<LocationDoc>, 
     if slug.is_empty() {
         return Ok(None);
     }
-    let key = format!("ploc:v1:{slug}");
-    if let Some(hit) = cached::<Option<LocationDoc>>(env, &key).await {
+    let key = format!("ploc:v2:{slug}");
+    if let Some(hit) = cached_slot::<LocationDoc>(env, &key).await {
         return Ok(hit);
     }
     // `slug` is [a-z0-9-] only, so it is safe in a path.
     let found = nyuchi_get(env, &format!("/v1/places/{slug}"))
         .await?
         .and_then(|b| LocationDoc::from_nyuchi_place(&b));
-    store(env, &key, &found, if found.is_some() { DAY } else { 3_600 }).await;
+    store_slot(env, &key, &found, if found.is_some() { DAY } else { 3_600 }).await;
     Ok(found)
 }
 
@@ -149,7 +164,8 @@ pub async fn nyuchi_nearby(
 /// Why a forward geocode gave no answer.
 #[derive(Debug, PartialEq, Eq)]
 pub enum GeoErr {
-    /// Over the per-IP or the service-wide budget: no upstream call was made.
+    /// Over the hourly per-client or service-wide budget (or the budget store
+    /// could not be read: it fails closed): no upstream call was made.
     Budget,
     /// Open-Meteo did not answer, or answered badly.
     Upstream,
@@ -160,31 +176,14 @@ pub enum GeoErr {
 const GEOCODE_HIT_TTL: u64 = DAY;
 const GEOCODE_MISS_TTL: u64 = 600;
 
-/// Per-IP and service-wide limits on UNCACHED forward geocodes (Open-Meteo's
-/// free geocoder is for light, non-commercial use). The Rate Limiting binding
-/// counts per Cloudflare location, so the global key is a per-location
-/// ceiling, not a worldwide one; the KV cache and the app's own caches carry
-/// the rest. An unbound limiter (local dev) allows the call.
-async fn within_geocode_budget(env: &Env, ip: &str) -> bool {
-    for (binding, key) in [(GEOCODE_FWD_LIMITER, ip), (GEOCODE_FWD_GLOBAL, "all")] {
-        if let Ok(limiter) = env.rate_limiter(binding) {
-            if let Ok(outcome) = limiter.limit(key.to_owned()).await {
-                if !outcome.success {
-                    return false;
-                }
-            }
-        }
-    }
-    true
-}
-
 /// Open-Meteo forward geocoding: candidates for a name. Cached in KV (hits a
 /// day, misses ten minutes); an upstream failure is never cached.
 pub async fn geocode(
     env: &Env,
     q: &str,
     count: usize,
-    ip: &str,
+    action: Action,
+    caller: &crate::budget::Caller,
 ) -> Result<Vec<LocationDoc>, GeoErr> {
     let norm = slugify(q);
     if norm.is_empty() {
@@ -195,7 +194,9 @@ pub async fn geocode(
     if let Some(hit) = cached(env, &key).await {
         return Ok(hit);
     }
-    if !within_geocode_budget(env, ip).await {
+    // Only an uncached call goes upstream, so only it spends the budget.
+    // `action` keeps resolve and search budgets apart.
+    if !crate::budget::take(env, action, caller).await.allowed() {
         return Err(GeoErr::Budget);
     }
     let url = with_query(
@@ -228,21 +229,19 @@ pub async fn geocode(
 
 /// The cache key of a reverse geocode: the point's 153 m geohash cell.
 pub fn reverse_key(lat: f64, lon: f64) -> String {
-    format!("rev:v1:{}", encode_geohash(lat, lon, GEOHASH_PRECISION))
+    format!("rev:v2:{}", encode_geohash(lat, lon, GEOHASH_PRECISION))
 }
 
 /// A reverse geocode cached earlier for this cell, if any.
-pub async fn reverse_cached(env: &Env, lat: f64, lon: f64) -> Option<LocationDoc> {
-    cached::<Option<LocationDoc>>(env, &reverse_key(lat, lon))
-        .await
-        .flatten()
+pub async fn reverse_cached(env: &Env, lat: f64, lon: f64) -> Option<Option<LocationDoc>> {
+    cached_slot::<LocationDoc>(env, &reverse_key(lat, lon)).await
 }
 
 /// Nominatim reverse geocoding: name the point. `Ok(None)` when Nominatim has
 /// no name for it.
 pub async fn reverse(env: &Env, lat: f64, lon: f64) -> Result<Option<LocationDoc>, ()> {
     let key = reverse_key(lat, lon);
-    if let Some(hit) = cached::<Option<LocationDoc>>(env, &key).await {
+    if let Some(hit) = cached_slot::<LocationDoc>(env, &key).await {
         return Ok(hit);
     }
     let url = with_query(
@@ -264,7 +263,7 @@ pub async fn reverse(env: &Env, lat: f64, lon: f64) -> Result<Option<LocationDoc
         }
         _ => return Err(()),
     };
-    store(env, &key, &found, 30 * DAY).await;
+    store_slot(env, &key, &found, 30 * DAY).await;
     Ok(found)
 }
 
@@ -273,13 +272,13 @@ pub async fn reverse(env: &Env, lat: f64, lon: f64) -> Result<Option<LocationDoc
 type CellName = Option<LocationDoc>;
 
 fn cell_key(lat: f64, lon: f64) -> String {
-    format!("revcell:v1:{lat:.2}_{lon:.2}")
+    format!("revcell:v2:{lat:.2}_{lon:.2}")
 }
 
 /// The cached answer for a cell, if any (`Some(None)` is a cached "nothing
 /// here"), so a cache hit never spends the per-IP budget.
 pub async fn reverse_cell_cached(env: &Env, lat: f64, lon: f64) -> Option<CellName> {
-    cached::<CellName>(env, &cell_key(lat, lon)).await
+    cached_slot::<LocationDoc>(env, &cell_key(lat, lon)).await
 }
 
 /// A city-level (zoom 10) Nominatim name for a snapped ~1 km cell, for the
@@ -289,7 +288,7 @@ pub async fn reverse_cell_cached(env: &Env, lat: f64, lon: f64) -> Option<CellNa
 /// cached). Hits are kept 6 hours, "nothing here" 10 minutes.
 pub async fn reverse_cell(env: &Env, lat: f64, lon: f64) -> Result<CellName, ()> {
     let key = cell_key(lat, lon);
-    if let Some(hit) = cached::<CellName>(env, &key).await {
+    if let Some(hit) = cached_slot::<LocationDoc>(env, &key).await {
         return Ok(hit);
     }
     let url = with_query(
@@ -314,6 +313,6 @@ pub async fn reverse_cell(env: &Env, lat: f64, lon: f64) -> Result<CellName, ()>
         _ => return Err(()),
     };
     let ttl = if found.is_some() { 6 * 3_600 } else { 600 };
-    store(env, &key, &found, ttl).await;
+    store_slot(env, &key, &found, ttl).await;
     Ok(found)
 }

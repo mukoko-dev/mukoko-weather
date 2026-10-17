@@ -15,6 +15,8 @@ pub mod air_quality;
 pub mod auth;
 pub mod aviation;
 pub mod breaker;
+pub mod budget;
+pub mod cache;
 pub mod cors;
 pub mod devkey;
 pub mod forecast;
