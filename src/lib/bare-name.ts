@@ -1,5 +1,5 @@
 /**
- * Bare-name fallback (#315): an unknown single-segment URL such as
+ * Bare-name fallback (#317): an unknown single-segment URL such as
  * `/koh-samui` or `/lake-kariba` is a place name, not a 404.
  *
  * The coordinate is the identity and the name in a URL is cosmetic, so the

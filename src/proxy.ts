@@ -107,7 +107,7 @@ export default async function proxy(
       redirectStatus: 308,
     });
   }
-  // ── Bare place name (/koh-samui) → the canonical spot URL (#315) ────────
+  // ── Bare place name (/koh-samui) → the canonical spot URL (#317) ────────
   // The coordinate is the identity and the name in a URL is cosmetic, so a
   // single-segment slug we hold nothing for is forward-geocoded (Python, the
   // existing Open-Meteo geocoder with its own cache, breaker and budgets) and

@@ -47,7 +47,7 @@ const { resetLocationGateCache } = await import("@/lib/location-gate");
 const { resetBareNameCache } = await import("@/lib/bare-name");
 const { buildSmartSlug } = await import("@/lib/smart-slug");
 
-/** The geocoder behind /api/py/search?mode=resolve, stubbed (#315). Every
+/** The geocoder behind /api/py/search?mode=resolve, stubbed (#317). Every
  * test starts with "nothing found", so the 404 tests below are unaffected. */
 const mockResolveFetch = vi.fn(async (_url: string, _init?: RequestInit) =>
   Response.json({
@@ -303,7 +303,7 @@ describe("proxy — paused /shamwari is a real 404 (production drift)", () => {
   });
 });
 
-describe("proxy — bare place names resolve instead of 404 (#315)", () => {
+describe("proxy — bare place names resolve instead of 404 (#317)", () => {
   const SAMUI = buildSmartSlug("Ko Samui", 9.51201, 100.01361);
 
   beforeEach(() => resetLocationGateCache());
