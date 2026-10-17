@@ -245,14 +245,20 @@ export default async function LocationPage({
       },
       address: {
         "@type": "PostalAddress",
-        addressRegion: location.province,
-        addressCountry: countryCode,
+        ...(location.province ? { addressRegion: location.province } : {}),
+        // An open-ocean spot has no country: omit the property rather than
+        // publish an empty ISO 3166-1 code.
+        ...(countryCode ? { addressCountry: countryCode } : {}),
       },
-      containedInPlace: {
-        "@type": "Country",
-        name: countryName,
-        identifier: countryCode,
-      },
+      ...(countryCode
+        ? {
+            containedInPlace: {
+              "@type": "Country",
+              name: countryName,
+              identifier: countryCode,
+            },
+          }
+        : {}),
     },
     about: {
       "@type": "Observation",

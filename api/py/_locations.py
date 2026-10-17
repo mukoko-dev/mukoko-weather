@@ -198,7 +198,7 @@ def _geocoded_candidate(g: dict) -> dict:
         "province": g.get("admin1", ""),
         "lat": g["lat"],
         "lon": g["lon"],
-        "elevation": g.get("elevation", 0),
+        "elevation": _clean_elevation(g.get("elevation")),
         "tags": [],
         "country": g.get("country", ""),
         "source": "geocoded",
@@ -565,6 +565,18 @@ def _reverse_geocode_nominatim(lat: float, lon: float, *, zoom: int = 14) -> dic
         return None
 
 
+def _clean_elevation(value) -> float | None:
+    """A geocoder elevation in metres, or None when it is missing or
+    Open-Meteo's ``-9999`` "no data" placeholder (seen on London, Equatorial
+    Guinea) (anything at or below -1000 m: the lowest
+    land on Earth, the Dead Sea shore, is about -430 m)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if value != value or value <= -1000:  # NaN or the placeholder
+        return None
+    return value
+
+
 def _forward_geocode(query: str, count: int = 5) -> list[dict]:
     """Forward geocode using Open-Meteo geocoding API."""
     client = _get_http()
@@ -586,7 +598,7 @@ def _forward_geocode(query: str, count: int = 5) -> list[dict]:
                 "admin1": r.get("admin1", ""),
                 "lat": r.get("latitude", 0),
                 "lon": r.get("longitude", 0),
-                "elevation": r.get("elevation", 0),
+                "elevation": _clean_elevation(r.get("elevation")),
             }
             for r in results
         ]
@@ -1087,7 +1099,7 @@ async def add_location(request: Request):
                         "admin1": r["admin1"],
                         "lat": r["lat"],
                         "lon": r["lon"],
-                        "elevation": r.get("elevation", 0),
+                        "elevation": _clean_elevation(r.get("elevation")),
                     }
                     for r in results
                 ],

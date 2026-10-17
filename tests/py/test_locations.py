@@ -401,6 +401,25 @@ class TestForwardGeocode:
         assert results[0]["elevation"] == 1490
 
     @patch("py._locations._get_http")
+    def test_no_data_elevation_placeholder_is_unknown(self, mock_http):
+        """Open-Meteo sends -9999 when it has no elevation: never a measurement."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"results": [
+            {"name": "London", "country_code": "GQ", "latitude": 2.27, "longitude": 9.79,
+             "elevation": -9999.0},
+            {"name": "Jericho", "country_code": "PS", "latitude": 31.86, "longitude": 35.46,
+             "elevation": -258.0},
+            {"name": "Nowhere", "country_code": "XX", "latitude": 0, "longitude": 0},
+        ]}
+        mock_http.return_value.get.return_value = mock_resp
+
+        results = _forward_geocode("london")
+        assert results[0]["elevation"] is None
+        assert results[1]["elevation"] == -258.0  # real below-sea-level land is kept
+        assert results[2]["elevation"] is None
+
+    @patch("py._locations._get_http")
     def test_returns_empty_on_error(self, mock_http):
         mock_http.return_value.get.side_effect = Exception("Network error")
         results = _forward_geocode("Harare")
@@ -683,6 +702,14 @@ class TestSearchGeocodedTopUp:
         assert slugs[0] == "victoria-sc"  # catalogue match stays first
         assert len(slugs) == 2  # the Seychelles geocode duplicate is dropped
         assert result["locations"][1]["country"] == "CA"
+
+    @pytest.mark.asyncio
+    @patch("py._locations._forward_geocode")
+    @patch("py._locations.search_locations_by_name", return_value=[])
+    async def test_placeholder_elevation_never_reaches_a_candidate(self, _mock_db, mock_geo):
+        mock_geo.return_value = [{**self.LONDON, "elevation": -9999.0}]
+        result = await search_locations(q="london")
+        assert result["locations"][0]["elevation"] is None
 
     @pytest.mark.asyncio
     @patch("py._locations._forward_geocode")
