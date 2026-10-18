@@ -51,6 +51,7 @@ import {
 } from "@/lib/weather";
 import { t } from "@/lib/i18n";
 import { Spinner } from "@/components/ui/spinner";
+import { workerUrl } from "@/lib/worker-url";
 
 /** Default category style for unknown categories */
 const DEFAULT_CATEGORY_STYLE = {
@@ -138,13 +139,13 @@ export function MyWeatherModal() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/py/activities")
+      fetch(workerUrl("/v1/activities"))
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data?.activities?.length) setAllActivities(data.activities);
         })
         .catch(() => {}),
-      fetch("/api/py/activities?mode=categories")
+      fetch(workerUrl("/v1/activities?mode=categories"))
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data?.categories?.length) setActivityCategories(data.categories);
