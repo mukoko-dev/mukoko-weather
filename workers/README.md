@@ -9,6 +9,7 @@ workers/
   crates/weather-core/   pure Rust, tested natively: provider normalisation, the forecast
                          contract, places, station QC and ingest keys, circuit breaker
   crates/weather-edge/   Worker helpers: JSON errors, bearer auth, timeouts
+  crates/weather-mongo/  a minimal read-only MongoDB client (OP_MSG over a TLS socket, SCRAM-SHA-256, BSON)
   forecast/              mukoko-weather-forecast   provider aggregation (service binding only)
   internal-api/          mukoko-weather-internal   GET /internal/forecast for the Nyuchi API; POST /internal/ai/chat/completions
                                                    for the app's Python backend
@@ -163,12 +164,13 @@ Creating Cloudflare resources and deploying are owner actions. Run these from `w
    npx wrangler secrets-store secret create 56f84bfa8a564c54a95dbf4f4b4281b4 --name MUKOKO_WEATHER_CHECKWX_API_KEY --scopes workers --remote  # optional
    ```
 
-   | Store secret                      | Bound by (`workers/<dir>`) | Required | Value                                                                                         |
-   | --------------------------------- | -------------------------- | -------- | --------------------------------------------------------------------------------------------- |
-   | `MUKOKO_WEATHER_TOMORROW_API_KEY` | `forecast`, `tiles`        | Required | Tomorrow.io key (today in Mongo `weather.api_keys` "tomorrow")                                |
-   | `MUKOKO_WEATHER_NYUCHI_API_KEY`   | `forecast`, `places`, `ai` | Required | This app's internal Nyuchi API key: places read, plus the `ai` scope for the guardrails read  |
-   | `MUKOKO_WEATHER_SERVICE_API_KEY`  | `internal-api`             | Required | The bearer key nyuchi-api presents as `WEATHER_SERVICE_API_KEY` (e.g. `openssl rand -hex 32`) |
-   | `MUKOKO_WEATHER_CHECKWX_API_KEY`  | `aviation`                 | Optional | CheckWX key, the METAR fallback (today in Mongo `weather.api_keys` "checkwx")                 |
+   | Store secret                      | Bound by (`workers/<dir>`)                | Required | Value                                                                                                   |
+   | --------------------------------- | ----------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------- |
+   | `MUKOKO_WEATHER_TOMORROW_API_KEY` | `forecast`, `tiles`                       | Required | Tomorrow.io key (today in Mongo `weather.api_keys` "tomorrow")                                          |
+   | `MUKOKO_WEATHER_NYUCHI_API_KEY`   | `forecast`, `places`, `ai`                | Required | This app's internal Nyuchi API key: places read, plus the `ai` scope for the guardrails read            |
+   | `MUKOKO_WEATHER_SERVICE_API_KEY`  | `internal-api`                            | Required | The bearer key nyuchi-api presents as `WEATHER_SERVICE_API_KEY` (e.g. `openssl rand -hex 32`)           |
+   | `MUKOKO_WEATHER_MONGODB_URI`      | none yet (plain `MONGODB_URI` until then) | Optional | MongoDB seed-list connection string for `weather-mongo` (a read-only user; see "MongoDB from a Worker") |
+   | `MUKOKO_WEATHER_CHECKWX_API_KEY`  | `aviation`                                | Optional | CheckWX key, the METAR fallback (today in Mongo `weather.api_keys` "checkwx")                           |
 
    The code asks for each secret by its plain name (`TOMORROW_API_KEY`, ...) through `weather_edge::secret`, which reads the store binding and keeps the value for the isolate (`crates/weather-core/src/secrets.rs`). Transition: until every value is confirmed in the store, it falls back to a plain `wrangler secret put` secret of the plain name, logging a warning once per isolate (name and reason, never the value). Once confirmed, remove the fallback and delete the plain secrets (`npx wrangler secret delete <NAME>` in each Worker). Deploying a Worker that binds a store secret needs a token with Account → Secrets Store → Edit.
 
@@ -209,9 +211,21 @@ Creating Cloudflare resources and deploying are owner actions. Run these from `w
      "https://weather-internal.mukoko.com/internal/forecast?location=harare&days=3"
    ```
 
+## MongoDB from a Worker
+
+Workers cannot use the `mongodb` crate, and the Atlas Data API was shut down on 30 September 2025, so `crates/weather-mongo` speaks the wire protocol itself over `worker::Socket` (outbound TLS): `OP_MSG`, SCRAM-SHA-256 and a small BSON codec. The logic is tested natively (the BSON specification examples, the RFC 7677 SCRAM vector, and a scripted server that runs the whole login), but it has not yet been run against a live cluster: use the probe below as the first check.
+
+Owner steps:
+
+1. **Atlas network access.** A Worker has no fixed address, so the Atlas project's IP access list must allow `0.0.0.0/0` (Atlas, Network Access). Protect the cluster with a dedicated database user instead: a **read-only** user (`read` on `weather` and `places`) named for this backend, with a long generated ASCII password (SCRAM-SHA-256; a non-ASCII password is refused).
+2. **The connection string, as a seed list.** A Worker cannot resolve `mongodb+srv://`. In Atlas, "Connect" then "Drivers", choose an older driver version to show the `mongodb://` form that lists every shard host, and keep `authSource=admin`:
+   `mongodb://USER:PASSWORD@ac-xxxx-shard-00-00.xxxx.mongodb.net:27017,ac-xxxx-shard-00-01.xxxx.mongodb.net:27017,ac-xxxx-shard-00-02.xxxx.mongodb.net:27017/weather?replicaSet=atlas-xxxx-shard-0&authSource=admin&tls=true`
+3. **The secret.** Create it in the Secrets Store as `MUKOKO_WEATHER_MONGODB_URI` (scope `workers`), then add the `secrets_store_secrets` binding to each Worker that reads MongoDB and list that Worker in `weather_core::secrets::ALL`. Until then, set the plain secret on that Worker: `npx wrangler secret put MONGODB_URI -c <worker>/wrangler.jsonc`. (Do not add the binding before the store secret exists: Cloudflare refuses the deploy, error 10182.)
+4. **Check it.** `GET` the forecast Worker's `/health?probe=mongo` (through a service binding, or `wrangler dev`) answers `mongo_probe: {"ok": true}` once the network path, the string and the login all work; on failure it names the problem (never the string).
+
 ## Rules
 
 - **Cloudflare only.** Work that does not fit a Worker goes to Queues, Cron Triggers, Durable Objects, Workflows or Containers, never another host.
-- **No database outside the API.** The Workers keep weather data in their own D1, KV and R2. Canonical records (persons, places) go through the Nyuchi API. Nothing here connects to MongoDB (#150).
+- **MongoDB, read-only, through `weather-mongo`.** The Workers keep weather data in their own D1, KV and R2, and may read the shared MongoDB (`places`, `weather` reference data) with `weather_edge::mongo(env)`: `find`, `find_one` and `aggregate` only (no `$out` or `$merge`), read preference secondary-preferred, a server-side time limit and a cap on the documents returned. It needs the connection-string secret and the owner steps below. Canonical records are still written only through the Nyuchi API (#150).
 - **Keep each Worker small.** Budget its CPU, memory, bundle size and subrequests. Split a Worker, or fan out over a Queue, rather than grow one.
 - **Observability.** Traces and invocation logs are on, with query strings redacted. The code never logs payloads, coordinates or keys.

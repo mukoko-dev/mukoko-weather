@@ -16,3 +16,6 @@ futures.workspace = true
 js-sys.workspace = true
 weather-core.workspace = true
 chrono.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+weather-mongo.workspace = true

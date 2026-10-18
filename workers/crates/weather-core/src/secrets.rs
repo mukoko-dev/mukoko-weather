@@ -49,6 +49,14 @@ pub const WEATHER_SERVICE_API_KEY: &str = "WEATHER_SERVICE_API_KEY";
 /// CheckWX API key: the METAR fallback when the Aviation Weather Center fails.
 pub const CHECKWX_API_KEY: &str = "CHECKWX_API_KEY";
 
+/// The MongoDB seed-list connection string (`mongodb://user:pass@host,host/db`)
+/// the read-only Mongo client (`weather-mongo`) uses. Not bound by any Worker
+/// yet: a binding to a store secret that does not exist fails the deploy, so
+/// until the owner creates `MUKOKO_WEATHER_MONGODB_URI` the Workers read the
+/// plain wrangler secret `MONGODB_URI`; then the binding is added to each
+/// Worker that reads MongoDB and listed in `workers` below.
+pub const MONGODB_URI: &str = "MONGODB_URI";
+
 /// A secret: its plain name (what the code asks for, and the transition
 /// fallback), its one store secret name (also the binding name), and the
 /// Workers (by directory under `workers/`) that bind it.
@@ -61,7 +69,7 @@ pub struct SecretSpec {
 }
 
 /// Every secret the Workers read.
-pub const ALL: [SecretSpec; 4] = [
+pub const ALL: [SecretSpec; 5] = [
     SecretSpec {
         name: TOMORROW_API_KEY,
         store: "MUKOKO_WEATHER_TOMORROW_API_KEY",
@@ -85,6 +93,12 @@ pub const ALL: [SecretSpec; 4] = [
         store: "MUKOKO_WEATHER_CHECKWX_API_KEY",
         required: false,
         workers: &["aviation"],
+    },
+    SecretSpec {
+        name: MONGODB_URI,
+        store: "MUKOKO_WEATHER_MONGODB_URI",
+        required: false,
+        workers: &[],
     },
 ];
 
