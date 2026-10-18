@@ -563,14 +563,6 @@ export async function ensureIndexes(): Promise<void> {
       { expireAfterSeconds: 0 },
     ),
 
-    // Per-model forecast grids for the map (/api/py/model-grid): 3-hour TTL,
-    // deterministic _id ({model}_{lat}_{lon}_{n}_{radius}).
-    safeCreateIndex(
-      weatherDb().collection("model_grid_cache"),
-      { expiresAt: 1 },
-      { expireAfterSeconds: 0 },
-    ),
-
     // Global-model baseline + Tomorrow.io enrichment (issue #246). All three
     // rely on `expiresAt` for cleanup: budget buckets (hour/day/stats docs),
     // the 3-hour enrichment cache, and the 180-day verification capture.
