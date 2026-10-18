@@ -28,26 +28,22 @@ date keeps its month/day position in that calendar. Feb 29 therefore averages
 only leap-year observations (plus its ±7-day neighbours), and non-leap years
 never shift into the wrong slot.
 
-Graceful degradation: every failure path returns HTTP 200 with
-``available: false`` and a ``reason``. Only malformed input is a 400.
+The route itself (``GET /api/py/normals``) now lives in the Rust Workers
+(``GET /v1/normals``, ``workers/forecast/src/normals.rs``,
+``weather_core::normals``). This module stays only because the place-knowledge
+builder reads the monthly normals through :func:`get_monthly_normals`; it goes
+with that port (#333).
 """
 
 from __future__ import annotations
 
-import asyncio
 import datetime as _dt
 import math
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
-
 from ._db import stamp_platform_fields, weather_db
 from ._circuit_breaker import open_meteo_breaker
-
-router = APIRouter()
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -84,26 +80,6 @@ MIN_DAYS_PER_MONTH = 25
 #: with its own httpx timeout and the breaker is driven with record_* calls.
 NORMALS_HTTP_TIMEOUT_S = 20.0
 NORMALS_BUILD_TIMEOUT_S = 22.0
-
-
-# ---------------------------------------------------------------------------
-# Response model
-# ---------------------------------------------------------------------------
-
-
-class NormalsResponse(BaseModel):
-    """Average daily high/low for one calendar day at one place (°C)."""
-
-    available: bool
-    lat: float
-    lon: float
-    date: str
-    normalHigh: Optional[float] = None
-    normalLow: Optional[float] = None
-    period: str = NORMALS_PERIOD
-    source: str = NORMALS_SOURCE
-    computedAt: Optional[str] = None
-    reason: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -258,16 +234,6 @@ def compute_monthly_normals(daily: dict) -> list[dict]:
     ]
 
 
-def _parse_target_date(raw: Optional[str]) -> str:
-    """Validate ``YYYY-MM-DD`` (defaults to today UTC). Raises HTTP 400 otherwise."""
-    if raw is None or raw == "":
-        return _dt.datetime.now(_dt.timezone.utc).date().isoformat()
-    try:
-        return _dt.date.fromisoformat(raw).isoformat()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
-
-
 # ---------------------------------------------------------------------------
 # Upstream + cache
 # ---------------------------------------------------------------------------
@@ -358,92 +324,6 @@ def _set_cached_tables(
         # A failed cache write must not fail the response.
         pass
     return now.isoformat()
-
-
-# ---------------------------------------------------------------------------
-# Endpoint
-# ---------------------------------------------------------------------------
-
-
-def _unavailable(lat: float, lon: float, date_iso: str, reason: str) -> NormalsResponse:
-    return NormalsResponse(available=False, lat=lat, lon=lon, date=date_iso, reason=reason)
-
-
-@router.get("/api/py/normals", response_model=NormalsResponse)
-async def get_normals(
-    lat: float,
-    lon: float,
-    date: Optional[str] = Query(default=None, description="YYYY-MM-DD; defaults to today UTC"),
-):
-    """
-    GET /api/py/normals?lat=&lon=&date=YYYY-MM-DD
-
-    Average daily high and low (°C) for that calendar day at that place,
-    1991–2020 (ERA5 via Open-Meteo). Lookup order:
-
-    1. MongoDB ``weather.climate_normals`` by snapped cell (instant on hit)
-    2. Open-Meteo Historical Weather API via ``open_meteo_breaker``, one
-       30-year request per cell, then cached
-
-    Returns HTTP 200 with ``available: false`` and a ``reason``
-    (``circuit_open``, ``upstream_error``, ``timeout``) when normals cannot be
-    produced. Only malformed input returns 400.
-    """
-    if lat < -90 or lat > 90 or lon < -180 or lon > 180:
-        raise HTTPException(status_code=400, detail="Invalid coordinates")
-    date_iso = _parse_target_date(date)
-    slot = _slot_for_iso(date_iso)
-
-    glat, glon = snap_to_grid(lat), snap_to_grid(lon)
-    key = cache_key(glat, glon)
-
-    cached = _get_cached_tables(key)
-    if cached:
-        cached_at = cached.get("computedAt")
-        if isinstance(cached_at, _dt.datetime):
-            cached_at = cached_at.isoformat()
-        return _respond(lat, lon, date_iso, slot, cached["maxByDay"], cached["minByDay"],
-                        cached_at)
-
-    if not open_meteo_breaker.is_allowed:
-        return _unavailable(lat, lon, date_iso, "circuit_open")
-
-    loop = asyncio.get_running_loop()
-    try:
-        daily = await asyncio.wait_for(
-            loop.run_in_executor(None, lambda: _fetch_archive(glat, glon)),
-            timeout=NORMALS_BUILD_TIMEOUT_S,
-        )
-    except asyncio.TimeoutError:
-        open_meteo_breaker.record_failure()
-        return _unavailable(lat, lon, date_iso, "timeout")
-    except Exception:
-        open_meteo_breaker.record_failure()
-        return _unavailable(lat, lon, date_iso, "upstream_error")
-
-    open_meteo_breaker.record_success()
-    max_table, min_table = compute_normal_tables(daily)
-    computed_at = _set_cached_tables(
-        key, glat, glon, max_table, min_table,
-        compute_monthly_normals(daily), daily.get("_meta"),
-    )
-    return _respond(lat, lon, date_iso, slot, max_table, min_table, computed_at)
-
-
-def _respond(lat, lon, date_iso, slot, max_table, min_table, computed_at) -> NormalsResponse:
-    hi = max_table[slot] if slot < len(max_table) else None
-    lo = min_table[slot] if slot < len(min_table) else None
-    if hi is None or lo is None:
-        return _unavailable(lat, lon, date_iso, "no_data")
-    return NormalsResponse(
-        available=True,
-        lat=lat,
-        lon=lon,
-        date=date_iso,
-        normalHigh=round(float(hi), 1),
-        normalLow=round(float(lo), 1),
-        computedAt=computed_at,
-    )
 
 
 # ---------------------------------------------------------------------------
