@@ -7,6 +7,13 @@
 # vX.Y.Z that is greater than the latest. It refuses to reuse a tag or to
 # tag a commit that already carries a v* tag.
 #
+# Versions are strict vMAJOR.MINOR.PATCH with no suffixes. PATCH runs 0-99
+# and then rolls over to the next MINOR (v0.11.99 + patch -> v0.12.0); MINOR
+# runs 0-999. A MAJOR is only ever made by hand: bump=major or an explicit
+# version. A bump that would push MINOR past 999 fails and says a manual
+# major is needed. The rules live in .github/scripts/next-version.sh and are
+# tested by src/lib/next-version.test.ts.
+#
 # Run it from the Actions tab after the release PR is squash-merged into
 # main. Patch tags on staging come from staging-version.yml, not from here.
 
@@ -16,12 +23,12 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        description: Which part of the latest v* tag to bump.
+        description: Which part of the latest v* tag to bump (patch rolls into the next minor after 99).
         type: choice
         options: [patch, minor, major]
         default: patch
       version:
-        description: Exact version to tag (vX.Y.Z). Overrides bump.
+        description: Exact version to tag (vX.Y.Z, PATCH 0-99, MINOR 0-999). Overrides bump.
         required: false
         type: string
       ref:
@@ -101,30 +108,10 @@ jobs:
           SEMVER='^v[0-9]+\.[0-9]+\.[0-9]+$'
           # Latest stable v* tag; prereleases (v1.2.3-rc.1) are ignored.
           PREV=$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -E "$SEMVER" | head -n 1 || true)
-          BASE="${PREV:-v0.0.0}"
-          IFS=. read -r MAJOR MINOR PATCH <<< "${BASE#v}"
-          if [ -n "$INPUT_VERSION" ]; then
-            if ! [[ "$INPUT_VERSION" =~ $SEMVER ]]; then
-              echo "::error::version must match vX.Y.Z, got '$INPUT_VERSION'."
-              exit 1
-            fi
-            TAG="$INPUT_VERSION"
-            HIGHEST=$(printf '%s\n%s\n' "$BASE" "$TAG" | sort -V | tail -n 1)
-            if [ "$TAG" = "$BASE" ] || [ "$HIGHEST" != "$TAG" ]; then
-              echo "::error::$TAG must be greater than the latest tag $BASE."
-              exit 1
-            fi
-          else
-            case "$BUMP" in
-              major) TAG="v$((MAJOR + 1)).0.0" ;;
-              minor) TAG="v$MAJOR.$((MINOR + 1)).0" ;;
-              patch) TAG="v$MAJOR.$MINOR.$((PATCH + 1))" ;;
-              *)
-                echo "::error::bump must be patch, minor or major, got '$BUMP'."
-                exit 1
-                ;;
-            esac
-          fi
+          # Rollover rules (PATCH 0-99, MINOR 0-999, major by hand only) and
+          # input validation live in the script; it prints the tag, or a
+          # ::error:: line and a non-zero exit.
+          TAG=$(bash .github/scripts/next-version.sh "${PREV:-v0.0.0}" "$BUMP" "$INPUT_VERSION")
           if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null \
             || git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
             echo "::error::Tag $TAG already exists."

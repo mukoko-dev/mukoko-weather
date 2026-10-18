@@ -42,7 +42,7 @@ export interface LocationWeatherCardProps {
 
 /**
  * One place in the Locations list, styled as a weather card: a tall rounded
- * tile on a mineral-tinted plate with a 4px mineral edge on the leading side.
+ * tile on a mineral-tinted plate with a solid mineral border on all four sides (0.5px, 1px on hover).
  * One number (the temperature, in Noto Serif), one mono label, one sentence
  * of meaning (the condition with its high and low).
  *
@@ -104,7 +104,7 @@ export function LocationWeatherCard({
             id={menuId}
             role="menu"
             aria-label={`Options for ${name}`}
-            className="absolute right-0 top-full z-20 mt-1 min-w-52 rounded-card border border-border bg-surface-card p-1 text-left text-sm shadow-lg"
+            className="absolute right-0 top-full z-20 mt-1 min-w-52 rounded-[var(--radius-card)] border border-border bg-surface-card p-1 text-left text-sm shadow-lg"
           >
             {menu!.map((item) => (
               <li key={item.label} role="none">
@@ -115,7 +115,7 @@ export function LocationWeatherCard({
                     setMenuOpen(false);
                     item.onSelect();
                   }}
-                  className={`press-scale flex w-full items-center rounded-button px-3 py-3 min-h-[var(--touch-target-min)] hover:bg-surface-dim ${
+                  className={`press-scale flex w-full items-center rounded-[var(--radius-sm)] px-3 py-3 min-h-[var(--touch-target-min)] hover:bg-surface-dim ${
                     item.tone === "danger"
                       ? "text-severity-severe"
                       : "text-text-primary"
@@ -152,13 +152,13 @@ export function LocationWeatherCard({
           role="status"
           aria-label="Loading"
           aria-busy="true"
-          className={`chameleon min-h-44 border-l-4 p-5 ${leadPad}`}
+          className={`chameleon min-h-44 p-[var(--space-card)] ${leadPad}`}
         >
           <span className="sr-only">Loading {name} weather</span>
           <p className="text-xl font-semibold text-text-primary">{name}</p>
-          <p className="mt-2 h-4 w-24 animate-pulse rounded-badge bg-surface-dim" />
-          <p className="mt-10 h-12 w-24 animate-pulse rounded-badge bg-surface-dim" />
-          <p className="mt-3 h-4 w-40 animate-pulse rounded-badge bg-surface-dim" />
+          <p className="mt-2 h-4 w-24 animate-pulse rounded-[var(--radius-badge)] bg-surface-dim" />
+          <p className="mt-10 h-12 w-24 animate-pulse rounded-[var(--radius-badge)] bg-surface-dim" />
+          <p className="mt-3 h-4 w-40 animate-pulse rounded-[var(--radius-badge)] bg-surface-dim" />
         </div>
       </div>
     );
@@ -171,7 +171,7 @@ export function LocationWeatherCard({
           <div
             role="group"
             aria-label={accessibleName}
-            className={`acacia block min-h-44 border-l-4 border-l-border p-5 text-text-primary ${leadPad}`}
+            className={`acacia block min-h-44 p-[var(--space-card)] text-text-primary ${leadPad}`}
           >
             {removeButton}
             <p className="pr-12 text-xl font-semibold">{name}</p>
@@ -186,7 +186,7 @@ export function LocationWeatherCard({
           <Link
             href={href}
             aria-label={accessibleName}
-            className="acacia block min-h-44 border-l-4 border-l-border p-5 text-text-primary"
+            className="acacia block min-h-44 p-[var(--space-card)] text-text-primary"
           >
             <p className="pr-12 text-xl font-semibold">{name}</p>
             <p className="mt-1 font-mono text-xs uppercase tracking-wide text-text-secondary">
@@ -203,7 +203,7 @@ export function LocationWeatherCard({
   }
 
   const plate = plateClassesFor(summary.sky, summary.isDay);
-  const tileClass = `block min-h-44 rounded-card border border-border border-l-4 p-5 pb-4 text-text-primary ${plate.plate} ${plate.edge} ${leadPad}`;
+  const tileClass = `nyala ${plate.plate} ${plate.edge} ${leadPad}`;
 
   const body = (
     <>

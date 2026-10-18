@@ -678,6 +678,12 @@ def parse_open_meteo_daily(payload: dict) -> list[dict]:
     return out
 
 
+class _DaysWithMeta(list):
+    """Canonical days plus the response's cell metadata (``.meta``)."""
+
+    meta: dict
+
+
 class OpenMeteoArchiveProvider:
     """Open-Meteo Historical Weather API (ERA5 0.25° from 1940, best-match blend).
 
@@ -733,7 +739,13 @@ class OpenMeteoArchiveProvider:
             payload = resp.json()
         except Exception as exc:  # noqa: BLE001
             raise ProviderError("open-meteo-archive returned invalid JSON") from exc
-        return parse_open_meteo_daily(payload)
+        days = _DaysWithMeta(parse_open_meteo_daily(payload))
+        days.meta = {
+            "timezone": payload.get("timezone"),
+            "utc_offset_seconds": payload.get("utc_offset_seconds"),
+            "elevation": payload.get("elevation"),
+        }
+        return days
 
 
 PROVIDERS: dict[str, HistoryProvider] = {
@@ -1119,12 +1131,15 @@ def fetch_normals_series(
     providers: Optional[Sequence[HistoryProvider]] = None,
     rate_limiter: Optional[Callable] = None,
     timeout: float = 20.0,
+    variables: Sequence[str] = ("temperature_2m_max", "temperature_2m_min"),
 ) -> tuple[Optional[dict], Optional[HistoryProvider], Optional[str]]:
-    """Daily max/min for ``start..end`` from the first provider that answers.
+    """Daily series for ``start..end`` from the first provider that answers.
 
     Returns ``(daily, provider, reason)``. ``daily`` is an Open-Meteo-shaped
-    ``{"time": [...], "temperature_2m_max": [...], "temperature_2m_min": [...]}``,
-    or None with ``reason`` = ``circuit_open`` | ``upstream_error`` | ``no_data``.
+    ``{"time": [...], "<variable>": [...], ...}`` (max/min always, plus any
+    other ``variables`` asked for; an optional ``_meta`` carries the cell's
+    ``timezone``/``utc_offset_seconds``/``elevation`` when the provider reports
+    them), or None with ``reason`` = ``circuit_open`` | ``upstream_error`` | ``no_data``.
     The span is fetched in one call per provider (normals need it whole).
     """
     chain = list(providers) if providers is not None else provider_chain()
@@ -1137,7 +1152,7 @@ def fetch_normals_series(
         try:
             days = provider.fetch_daily_range(
                 lat, lon, start, end,
-                variables=("temperature_2m_max", "temperature_2m_min"),
+                variables=variables,
                 timeout=timeout,
             )
         except ProviderError as exc:
@@ -1150,13 +1165,13 @@ def fetch_normals_series(
         if not days:
             reason = "no_data"
             continue
-        return (
-            {
-                "time": [d["date"] for d in days],
-                "temperature_2m_max": [d.get("temperature_2m_max") for d in days],
-                "temperature_2m_min": [d.get("temperature_2m_min") for d in days],
-            },
-            provider,
-            None,
-        )
+        fields = ["temperature_2m_max", "temperature_2m_min"]
+        fields += [v for v in variables if v not in fields]
+        daily: dict = {"time": [d["date"] for d in days]}
+        for field in fields:
+            daily[field] = [d.get(field) for d in days]
+        meta = getattr(days, "meta", None)
+        if meta:
+            daily["_meta"] = meta
+        return daily, provider, None
     return None, None, reason

@@ -1883,6 +1883,43 @@ class TestUtcOffsetSeconds:
         assert result["utc_offset_seconds"] == 7200
 
     @patch("py._weather._get_http_client")
+    def test_open_meteo_forecast_carries_timezone(self, mock_client):
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = _om_payload(utc_offset_seconds=32400, timezone="Asia/Tokyo")
+        mock_client.return_value.get.return_value = resp
+        result = _fetch_open_meteo(35.68, 139.69)
+        assert result["timezone"] == "Asia/Tokyo"
+
+    @patch("py._weather._get_http_client")
+    def test_extras_carry_timezone(self, mock_client):
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {"hourly": {}, "utc_offset_seconds": 0, "timezone": "Atlantic/Reykjavik"}
+        mock_client.return_value.get.return_value = resp
+        assert _fetch_open_meteo_extras(64.15, -21.94)["timezone"] == "Atlantic/Reykjavik"
+
+    @patch("py._weather._get_http_client")
+    def test_open_meteo_forecast_carries_elevation(self, mock_client):
+        """#302: a spot with no stored elevation takes the forecast's DEM height."""
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {**_om_payload(), "elevation": 6.0}
+        mock_client.return_value.get.return_value = resp
+        assert _fetch_open_meteo(7.89, 98.39)["elevation"] == 6.0
+
+    @patch("py._weather._get_http_client")
+    def test_extras_carry_elevation(self, mock_client):
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {"hourly": {}, "elevation": 1490.0}
+        mock_client.return_value.get.return_value = resp
+        assert _fetch_open_meteo_extras(-17.83, 31.05)["elevation"] == 1490.0
+
+    @patch("py._weather._get_http_client")
+    def test_placeholder_elevation_is_dropped(self, mock_client):
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {**_om_payload(), "elevation": -9999.0}
+        mock_client.return_value.get.return_value = resp
+        assert "elevation" not in _fetch_open_meteo(0.0, 0.0)
+
+    @patch("py._weather._get_http_client")
     def test_open_meteo_forecast_omits_offset_when_absent(self, mock_client):
         resp = MagicMock(status_code=200)
         resp.json.return_value = _om_payload()

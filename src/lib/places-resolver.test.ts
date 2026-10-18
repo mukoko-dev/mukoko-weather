@@ -19,7 +19,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 let findOneImpl: (filter: unknown) => Promise<unknown>;
 let findArrayImpl: () => Promise<unknown[]>;
 
-vi.mock("./db", () => ({
+vi.mock("./places-geo-collection", () => ({
   placesGeoCollection: () => ({
     findOne: (filter: unknown) => findOneImpl(filter),
     find: () => ({
@@ -282,6 +282,46 @@ describe("resolvePlaceSlug — identity from the map", () => {
     expect(loc?.province).toBe("Sembawang");
   });
 
+  it("never runs the name-guess query for an OSM place slug we don't hold", async () => {
+    // The name-guess path would alias `canberra-plaza--osm-w1` onto any
+    // same-named record; an unheld ref must simply miss.
+    findOneImpl = async () => null;
+    let nameQueries = 0;
+    findArrayImpl = async () => {
+      nameQueries += 1;
+      return [
+        {
+          _id: "some-other-plaza",
+          name: "Canberra Plaza Osm W1",
+          geoType: "city",
+          geo: { type: "Point", coordinates: [0, 0] },
+        },
+      ];
+    };
+    expect(await resolveLocationSlug("canberra-plaza--osm-w1")).toBeNull();
+    expect(nameQueries).toBe(0);
+  });
+
+  it("still finds a ref-less record stamped with the place slug", async () => {
+    // Refs are adopted, not migrated: an older record may carry only the
+    // stamped mukokoSlug.
+    findOneImpl = async (filter: unknown) => {
+      const f = filter as Record<string, unknown>;
+      return f["sourceProvenance.mukokoSlug"] === "old-plaza--osm-w77"
+        ? {
+            _id: "old-plaza",
+            name: "Old Plaza",
+            geoType: "city",
+            geo: { type: "Point", coordinates: [31, -17.8] },
+            sourceProvenance: { mukokoSlug: "old-plaza--osm-w77" },
+          }
+        : null;
+    };
+    expect((await resolveLocationSlug("old-plaza--osm-w77"))?._id).toBe(
+      "old-plaza",
+    );
+  });
+
   it("does NOT return a neighbour's record for a different ref", async () => {
     // The join must be exact. Returning the nearest record here is what
     // collapsed Canberra Residences and Visionaire into one place.
@@ -357,6 +397,17 @@ describe("resolvePlaceSlug — identity from the map", () => {
     expect(loc?.lat).toBeCloseTo(-17.83, 1);
   });
 
+  it("a coordinate spot (open water, polar ice, empty desert) reads as its coordinates", async () => {
+    // Nothing names the point, so the slug's name half is its coordinates
+    // (minted by the Worker's coordinate_spot); never "40 00s 20 00w".
+    const loc = await resolveLocationSlug("40-00s-20-00w--78cu2yh");
+    expect(loc?.name).toBe("40.00\u00b0S 20.00\u00b0W");
+    expect(loc?.lat).toBeCloseTo(-40.0, 1);
+    expect(loc?.lon).toBeCloseTo(-20.0, 1);
+    const bare = await resolveLocationSlug("place--78cu2yh");
+    expect(bare?.name).toBe("40.00\u00b0S 20.00\u00b0W");
+  });
+
   it("a spot near a known place borrows its context but not its identity", async () => {
     findOneImpl = async (filter: unknown) => {
       const f = filter as Record<string, unknown>;
@@ -417,5 +468,43 @@ describe("resolveLocationSlug — platform slugs from search", () => {
           }
         : null;
     expect(await resolveLocationSlug("narnia-abcdef")).toBeNull();
+  });
+});
+
+describe("resolveLocationSlug — strict mode (#263)", () => {
+  beforeEach(() => {
+    findOneImpl = async () => null;
+    findArrayImpl = async () => [];
+  });
+
+  it("rethrows a database error instead of answering not found", async () => {
+    findOneImpl = async () => {
+      throw new Error("mongo down");
+    };
+    await expect(
+      resolveLocationSlug("zzzz-not-a-place", { strict: true }),
+    ).rejects.toThrow("mongo down");
+  });
+
+  it("rethrows on an OSM place ref too", async () => {
+    findOneImpl = async () => {
+      throw new Error("mongo down");
+    };
+    await expect(
+      resolveLocationSlug("canberra-residences--osm-w890123", { strict: true }),
+    ).rejects.toThrow("mongo down");
+  });
+
+  it("still answers null for a genuinely unknown slug", async () => {
+    await expect(
+      resolveLocationSlug("zzzz-not-a-place", { strict: true }),
+    ).resolves.toBeNull();
+  });
+
+  it("the default (render) mode still degrades instead of throwing", async () => {
+    findOneImpl = async () => {
+      throw new Error("mongo down");
+    };
+    await expect(resolveLocationSlug("zzzz-not-a-place")).resolves.toBeNull();
   });
 });

@@ -70,6 +70,16 @@ PROVIDER_CONFIGS: dict[str, CircuitBreakerConfig] = {
     "nasa-power": CircuitBreakerConfig(
         failure_threshold=3, cooldown_s=300, window_s=600, timeout_s=12,
     ),
+    # Nominatim reverse geocoding for the /api/py/geo find-only fallback.
+    # OSM's public instance asks for light use, so back off quickly.
+    "nominatim-osm": CircuitBreakerConfig(
+        failure_threshold=3, cooldown_s=300, window_s=300, timeout_s=5,
+    ),
+    # ISRIC SoilGrids (place-knowledge soil facts). Best-effort and built off
+    # the request path, so a slow or failing service backs off for longer.
+    "isric-soilgrids": CircuitBreakerConfig(
+        failure_threshold=3, cooldown_s=900, window_s=600, timeout_s=10,
+    ),
 }
 
 
@@ -227,3 +237,5 @@ aviation_breaker = CircuitBreaker("aviationweather-gov")
 nea_breaker = CircuitBreaker("nea-data-gov-sg")
 noaa_breaker = CircuitBreaker("noaa-cpc")
 nasa_power_breaker = CircuitBreaker("nasa-power")
+soilgrids_breaker = CircuitBreaker("isric-soilgrids")
+nominatim_breaker = CircuitBreaker("nominatim-osm")

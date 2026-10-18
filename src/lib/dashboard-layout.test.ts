@@ -92,9 +92,8 @@ describe("one spacing scale", () => {
       "gap-[var(--space-section)]",
     );
     // An empty lazy slot (card rendered nothing) can't leave a doubled gap.
-    expect(css).toContain(
-      '.herd > [data-lazy-section]:not(:has(section, [role="status"]))',
-    );
+    expect(css).toContain("[data-lazy-section], [data-herd-item]");
+    expect(css).toContain(':has(section, [role="status"], [role="alert"])');
     expect(MAIN_COLUMN_CLASS).toContain(SECTION_STACK_CLASS);
     expect(SIDEBAR_COLUMN_CLASS).toContain(SECTION_STACK_CLASS);
     expect(dashboard).toContain(

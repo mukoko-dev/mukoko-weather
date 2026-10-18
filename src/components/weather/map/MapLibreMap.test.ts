@@ -195,7 +195,7 @@ describe("AQI grid overlay (Air Quality Map card)", () => {
   it("renders the overlay as a semi-transparent fill layer", () => {
     expect(source).toContain('type: "fill"');
     expect(source).toContain('"fill-opacity": 0.55');
-    expect(source).toContain('type: "geojson", data');
+    expect(source).toMatch(/type: "geojson",\s+data,/);
     expect(source).toContain("AQI_OVERLAY_ID");
   });
 
@@ -250,5 +250,56 @@ describe("weather timeline + AQI bubbles (full-screen map)", () => {
   it("makes the zoom control optional so the full-screen map can keep its top-right corner", () => {
     expect(source).toContain("navigationControl = true,");
     expect(source).toContain("if (interactive && navigationControl)");
+  });
+});
+
+describe("classifyMapError — every overlay source", () => {
+  it("treats AQ and model-field source errors as overlay errors, not base-map failures", async () => {
+    const { AQI_OVERLAY_ID, MODEL_OVERLAY_ID } =
+      await import("@/lib/map-layers");
+    const ids = [WEATHER_OVERLAY_ID, AQI_OVERLAY_ID, MODEL_OVERLAY_ID];
+    expect(classifyMapError({ sourceId: MODEL_OVERLAY_ID }, ids)).toBe(
+      "overlay",
+    );
+    expect(classifyMapError({ sourceId: AQI_OVERLAY_ID }, ids)).toBe("overlay");
+    expect(classifyMapError({ sourceId: "openmaptiles" }, ids)).toBe("base");
+    expect(classifyMapError({}, ids)).toBe("base");
+    expect(source).toContain("classifyMapError(e, OVERLAY_SOURCE_IDS)");
+  });
+});
+
+describe("MapLibreMap — overlay sources and attribution", () => {
+  it("builds the attribution control from map-sources, not a literal string", () => {
+    expect(source).toContain(
+      "BASE_MAP_PROVIDERS.map((id) => MAP_PROVIDERS[id])",
+    );
+    expect(source).not.toContain(
+      '© <a href="https://www.maptiler.com/">MapTiler</a>',
+    );
+  });
+
+  it("rebuilds the overlay source when the layer (and so the provider) changes", () => {
+    expect(source).toContain("overlayLayerOf.get(map) === layer");
+    expect(source).toContain('"raster-opacity": weatherOverlayOpacity(layer)');
+  });
+
+  it("credits the AQ grid and model fields on their GeoJSON sources", () => {
+    expect(source).toContain(
+      'attribution: attributionHtml(overlayAttribution("airQuality"))',
+    );
+    expect(source).toContain("attribution: overlay.attribution");
+    expect(source).toContain("MODEL_OVERLAY_ID");
+  });
+
+  it("swaps model cells in place on a timeline step instead of rebuilding the layer", () => {
+    expect(source).toContain("existing.setData(overlay.data)");
+    expect(source).toContain("fieldStyleOf.get(map) === style");
+  });
+});
+
+describe("style attribution de-duplication", () => {
+  it("strips the style's own attribution on creation and on theme switch", () => {
+    expect(source).toContain("withoutStyleAttributions");
+    expect(source.match(/transformStyle:/g)).toHaveLength(2);
   });
 });

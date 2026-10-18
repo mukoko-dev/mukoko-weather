@@ -41,7 +41,7 @@ export function LocationsMenu({
   }, [open]);
 
   const itemClass =
-    "press-scale flex w-full items-center rounded-button px-3 py-3 min-h-[var(--touch-target-min)] text-left text-text-primary hover:bg-surface-dim";
+    "press-scale flex w-full items-center rounded-[var(--radius-sm)] px-3 py-3 min-h-[var(--touch-target-min)] text-left text-text-primary hover:bg-surface-dim";
 
   return (
     <div ref={wrapRef} className="relative">
@@ -73,7 +73,7 @@ export function LocationsMenu({
           id={menuId}
           role="menu"
           aria-label="Weather menu"
-          className="absolute right-0 top-full z-30 mt-2 w-56 rounded-card border border-border bg-surface-card p-1 text-sm shadow-lg"
+          className="absolute right-0 top-full z-30 mt-2 w-56 rounded-[var(--radius-card)] border border-border bg-surface-card p-1 text-sm shadow-lg"
         >
           <li role="none">
             <button

@@ -26,6 +26,7 @@ from ._db import (
 )
 from ._ai_gateway import call_ai, first_text
 from ._ai_prompts import get_ai_prompt
+from ._place_knowledge import profile_block_for, with_profile
 
 logger = logging.getLogger(__name__)
 
@@ -578,6 +579,13 @@ async def generate_summary(body: AISummaryRequest, request: Request = None):
     # never generic global filler.
     country_part = f", {location.country}" if location.country else ""
 
+    # Stored place knowledge (season calendar, crop stage, normals, climate
+    # zone, soil): cache-only here, never waits on an upstream (#277).
+    profile_block = with_profile(await profile_block_for(
+        slug=location.slug or None, lat=location.lat, lon=location.lon,
+        country=country or None, name=location.name,
+    ))
+
     user_content = f"""Generate a weather briefing for {location.name}{country_part} (lat {location.lat}, lon {location.lon}; elevation: {location.elevation}m).
 The country and specific location matter: ground every recommendation in this place — its crops, seasons, transport routes and daily life — not generic global advice.
 {tags_line}
@@ -585,7 +593,7 @@ The country and specific location matter: ground every recommendation in this pl
 
 Current conditions: {current_data}
 3-day forecast summary: max temps {max_temps}, min temps {min_temps}, weather codes {codes}{insights_prompt}
-Season: {season['localName']} ({season['name']})
+Season: {season['localName']} ({season['name']}){profile_block}
 
 Provide:
 1. A 2-sentence general summary

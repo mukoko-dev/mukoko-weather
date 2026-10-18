@@ -50,3 +50,88 @@ export function reservedHeightPx(measured: number): number | null {
   if (!Number.isFinite(measured) || measured <= 0) return null;
   return Math.ceil(measured);
 }
+
+// ── Mount scheduling ────────────────────────────────────────────────────────
+//
+// How far ahead a section starts loading, how many sections may mount at
+// once, and how long the queue waits between mounts. The v0.10.0 values
+// (100 px ahead on phones, one mount at a time, 150 ms apart) meant a reader
+// scrolling at a normal pace overtook the queue and saw a run of skeletons.
+// Sections now start loading 1.5 viewports ahead, capable devices mount two
+// at a time, and the settle gap is a frame or two. Constrained devices
+// (Save-Data on, or ≤ 2 GB RAM where the browser reports it) keep the old
+// one-at-a-time protection. CPU core count is deliberately NOT a signal:
+// WebKit long capped navigator.hardwareConcurrency at 2 on iPhones and
+// Firefox's resistFingerprinting reports 2, so "≤ 2 cores" would brand
+// capable phones as low-end.
+
+/** What LazySection reads from the browser to pick its schedule. */
+export interface DeviceHints {
+  viewportWidth: number;
+  viewportHeight: number;
+  /** navigator.deviceMemory in GB (Chromium only). */
+  deviceMemory?: number;
+  /** navigator.connection.saveData. */
+  saveData?: boolean;
+}
+
+/** Below this width a viewport counts as a phone (matches Tailwind `md`). */
+export const MOBILE_MAX_WIDTH = 768;
+/** The unload margin never drops below this (px). */
+export const MIN_UNLOAD_MARGIN_PX = 1500;
+
+/** True for devices that should keep the conservative schedule. */
+export function isConstrainedDevice(h: DeviceHints): boolean {
+  if (h.saveData) return true;
+  if (typeof h.deviceMemory === "number" && h.deviceMemory <= 2) return true;
+  return false;
+}
+
+/**
+ * How far below the viewport (px) a section starts loading: 1.5 viewport
+ * heights on capable devices (1 on constrained ones), at least 400 px and
+ * at most 1600 px.
+ */
+export function loadMarginPx(h: DeviceHints): number {
+  const factor = isConstrainedDevice(h) ? 1 : 1.5;
+  const height = Number.isFinite(h.viewportHeight) ? h.viewportHeight : 800;
+  return Math.round(Math.min(1600, Math.max(400, height * factor)));
+}
+
+/**
+ * How far off-screen (px) a mounted section must be before it is unmounted.
+ * Always at least twice the load margin, so a section that has just loaded
+ * at the edge of the load margin is never immediately judged "far away"
+ * (which would loop mount → unmount → mount).
+ */
+export function unloadMarginPx(loadMargin: number): number {
+  return Math.max(MIN_UNLOAD_MARGIN_PX, Math.round(loadMargin * 2));
+}
+
+/** How many sections may be mounting at the same time. */
+export function maxConcurrentMounts(h: DeviceHints): number {
+  return isConstrainedDevice(h) ? 1 : 2;
+}
+
+/** Pause (ms) after a mount's first paint before the next one starts. */
+export function settleDelayMs(h: DeviceHints): number {
+  if (isConstrainedDevice(h)) return 120;
+  return h.viewportWidth < MOBILE_MAX_WIDTH ? 32 : 16;
+}
+
+/** Read the device hints from the browser (safe defaults on the server). */
+export function readDeviceHints(): DeviceHints {
+  if (typeof window === "undefined") {
+    return { viewportWidth: 1024, viewportHeight: 800 };
+  }
+  const nav = navigator as Navigator & {
+    deviceMemory?: number;
+    connection?: { saveData?: boolean };
+  };
+  return {
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    deviceMemory: nav.deviceMemory,
+    saveData: nav.connection?.saveData === true,
+  };
+}

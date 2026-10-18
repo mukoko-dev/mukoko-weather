@@ -701,3 +701,39 @@ class TestReviewFixes:
             client_ip="1.2.3.4", rate_limiter=limiter, ip_bucket="history-backfill-coords", ip_limit=10, now=NOW,
         )
         limiter.assert_called_once_with("1.2.3.4", "history-backfill-coords", 10, hs.BACKFILL_RATE_WINDOW_S)
+
+
+class TestOpenMeteoCellMeta:
+    def test_open_meteo_days_carry_the_cells_timezone_and_elevation(self):
+        from py import _history_store as hs
+
+        payload = {
+            "timezone": "Africa/Harare",
+            "utc_offset_seconds": 7200,
+            "elevation": 1490.0,
+            "daily": {"time": ["2020-01-01"], "temperature_2m_max": [30.0], "temperature_2m_min": [15.0]},
+        }
+        client = MagicMock()
+        client.get.return_value = MagicMock(status_code=200, json=MagicMock(return_value=payload))
+        with patch("py._history_store._http", return_value=client), \
+             patch("py._history_store._open_meteo_key", return_value=None):
+            days = hs.OpenMeteoArchiveProvider().fetch_daily_range(-17.8, 31.0, "2020-01-01", "2020-01-01")
+        assert days[0]["date"] == "2020-01-01"
+        assert days.meta == {"timezone": "Africa/Harare", "utc_offset_seconds": 7200, "elevation": 1490.0}
+
+    def test_normals_series_passes_variables_and_meta_through(self):
+        from py import _history_store as hs
+
+        days = hs._DaysWithMeta([{"date": "2020-01-01", "temperature_2m_max": 30.0,
+                                  "temperature_2m_min": 15.0, "precipitation_sum": 1.5}])
+        days.meta = {"timezone": "Africa/Harare"}
+        provider = MagicMock(earliest="1981-01-01")
+        provider.breaker.is_allowed = True
+        provider.fetch_daily_range.return_value = days
+        daily, got, reason = hs.fetch_normals_series(
+            0, 0, "2020-01-01", "2020-01-01", providers=[provider],
+            variables=("temperature_2m_max", "temperature_2m_min", "precipitation_sum"),
+        )
+        assert provider.fetch_daily_range.call_args[1]["variables"][-1] == "precipitation_sum"
+        assert daily["precipitation_sum"] == [1.5] and daily["_meta"] == {"timezone": "Africa/Harare"}
+        assert got is provider and reason is None

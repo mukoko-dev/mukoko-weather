@@ -2,6 +2,7 @@
 
 import type { WeatherLocation } from "./locations";
 import { haversineKm } from "./geo";
+import { fetchPlaces } from "./weather-api";
 
 export interface GeoResult {
   status: "success" | "created" | "denied" | "unavailable" | "error";
@@ -10,6 +11,24 @@ export interface GeoResult {
   distanceKm: number | null;
   /** True when the location was just auto-created via reverse geocoding */
   isNew?: boolean;
+  /**
+   * True when nothing is stored near the fix and the find-only lookup named
+   * the spot on demand without storing it (`/api/py/geo` `synthesized`,
+   * #302). A GPS caller then asks again with `autoCreate` to store the place.
+   */
+  synthesized?: boolean;
+  /**
+   * True when nothing on Earth names the point (open water, polar ice, empty
+   * desert): the location is a coordinate label, a spot that renders weather.
+   * There is no better place to create, so the caller keeps it as is.
+   */
+  unnamed?: boolean;
+  /**
+   * True when naming the point was skipped (over budget, the geocoder down):
+   * the location is a coordinate label, but that says nothing about the
+   * point, unlike `unnamed`. See `src/lib/location-choice.ts`.
+   */
+  namingSkipped?: boolean;
 }
 
 /** Default GPS timeout — used for user-initiated lookups (first-visit auto-prompt, explicit "Use my current location"). */
@@ -71,8 +90,11 @@ export function detectUserLocation({
           autoCreate ? GEO_CREATE_TIMEOUT_MS : GEO_LOOKUP_TIMEOUT_MS,
         );
         try {
-          const res = await fetch(
-            `/api/py/geo?lat=${latitude}&lon=${longitude}${autoCreate ? "&autoCreate=true" : ""}`,
+          // The Rust Worker when NEXT_PUBLIC_WEATHER_API_URL is set (falling
+          // back to /api/py on a 5xx), else /api/py as before.
+          const res = await fetchPlaces(
+            "geo",
+            `lat=${latitude}&lon=${longitude}${autoCreate ? "&autoCreate=true" : ""}`,
             { signal: controller.signal },
           );
           if (!res.ok) {
@@ -88,6 +110,9 @@ export function detectUserLocation({
           const data = await res.json();
           const nearest: WeatherLocation = data.nearest;
           const isNew: boolean = data.isNew ?? false;
+          const synthesized = data.synthesized === true;
+          const unnamed = data.nearest?.named === false;
+          const namingSkipped = data.nearest?.namingSkipped === true;
 
           // Distance to the nearest location, for display
           const distanceKm = haversineKm(
@@ -103,6 +128,9 @@ export function detectUserLocation({
             coords: { lat: latitude, lon: longitude },
             distanceKm: Math.round(distanceKm),
             isNew,
+            synthesized,
+            unnamed,
+            namingSkipped,
           });
         } catch {
           resolve({

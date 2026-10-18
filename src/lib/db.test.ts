@@ -790,7 +790,9 @@ describe("getWeatherForLocation — read-only SSR path (issue #101)", () => {
     // under the slug /api/py/history?location= reads.
     expect(source).toContain("&location=${encodeURIComponent(slug)}");
     // Direct Open-Meteo remains ONLY as a read-only local-dev fallback.
-    expect(source).toContain("fetchWeather(lat, lon)");
+    expect(source).toContain(
+      "fetchWeather(lat, lon, undefined, SSR_DIRECT_TIMEOUT_MS)",
+    );
   });
 
   it("the TS Tomorrow.io client is gone", async () => {
@@ -830,5 +832,47 @@ describe("db-init indexes for the model baseline (issue #246)", () => {
     ]) {
       expect(py).toContain(`weather_db()["${name}"]`);
     }
+  });
+});
+
+describe("db-init indexes for agriculture (issue #265)", () => {
+  it("TTL-indexes both agriculture caches the Python module writes", async () => {
+    const fs = await import("fs");
+    const source = fs.readFileSync("src/lib/db.ts", "utf-8");
+    const py = fs.readFileSync("api/py/_agriculture.py", "utf-8");
+    for (const name of ["agriculture_cache", "agriculture_ai"]) {
+      expect(
+        source.indexOf(`collection("${name}"),\n      { expiresAt: 1 }`),
+        name,
+      ).toBeGreaterThan(-1);
+      expect(py).toContain(`weather_db()["${name}"]`);
+    }
+  });
+});
+
+describe("syncAirports keeps airports fetched on demand (#302)", () => {
+  it("prunes only seed docs that left the catalogue", async () => {
+    const { airportPruneFilter, DISCOVERED_AIRPORT_SOURCE } =
+      await import("./db");
+    expect(airportPruneFilter(["FVRG", "FAOR"])).toEqual({
+      _id: { $nin: ["FVRG", "FAOR"] },
+      source: { $ne: DISCOVERED_AIRPORT_SOURCE },
+    });
+  });
+
+  it("uses the same source tag as the Python writer", async () => {
+    const { DISCOVERED_AIRPORT_SOURCE } = await import("./db");
+    const py = readFileSync(
+      resolve(__dirname, "../../api/py/_airports.py"),
+      "utf-8",
+    );
+    expect(py).toContain(`DISCOVERED_SOURCE = "${DISCOVERED_AIRPORT_SOURCE}"`);
+  });
+
+  it("syncAirports deletes through the prune filter", () => {
+    const source = readFileSync(resolve(__dirname, "db.ts"), "utf-8");
+    expect(source).toContain(
+      "await airportsCollection().deleteMany(airportPruneFilter(codes));",
+    );
   });
 });

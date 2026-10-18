@@ -34,7 +34,7 @@ export default async function ProfilePage() {
       <Header />
       <main
         id="main-content"
-        className="animate-fade-in mx-auto w-full max-w-2xl px-4 py-8 pb-24 sm:pb-8 sm:px-6 md:px-8"
+        className="animate-fade-in mx-auto w-full max-w-2xl px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:pb-8 sm:px-6 md:px-8"
       >
         <ProfileClient
           user={{

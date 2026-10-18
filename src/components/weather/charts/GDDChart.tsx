@@ -11,6 +11,8 @@ interface GDDChartProps {
   tooltipTitle?: (label: string) => string;
   xTickFormat?: (label: string, index: number) => string;
   maxTicksLimit?: number;
+  /** Only draw these series keys (default: all three crop bases). */
+  seriesKeys?: readonly ("gddMaize" | "gddSorghum" | "gddPotato")[];
 }
 
 const SERIES: SeriesConfig[] = [
@@ -51,12 +53,16 @@ export function GDDChart({
   tooltipTitle,
   xTickFormat,
   maxTicksLimit = 10,
+  seriesKeys,
 }: GDDChartProps) {
+  const series = seriesKeys
+    ? SERIES.filter((s) => (seriesKeys as readonly string[]).includes(s.key))
+    : SERIES;
   return (
     <TimeSeriesChart
       data={data}
       labelKey={labelKey}
-      series={SERIES}
+      series={series}
       yAxes={Y_AXES}
       tooltipLabel={(label, value) => `${label}: ${value.toFixed(1)}`}
       tooltipTitle={tooltipTitle}

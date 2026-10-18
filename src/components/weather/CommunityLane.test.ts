@@ -90,7 +90,8 @@ describe("CommunityLane visual rules", () => {
 
   it("takes each lane's mineral from its category, never a dynamic class", () => {
     expect(source).toContain("CATEGORY_STYLES");
-    expect(source).toContain("borderAccent");
+    expect(source).not.toContain("borderAccent");
+    expect(source).not.toContain("border-l-");
     for (const mineral of [
       "malachite",
       "terracotta",
