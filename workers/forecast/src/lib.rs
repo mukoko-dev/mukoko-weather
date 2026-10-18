@@ -7,6 +7,9 @@
 //! GET /weather?lat=&lon=[&models=a,b][&extras=1][&refresh=1]   full WeatherData (the app's shape)
 //! GET /daily?location=|lat=&lon=[&days=1..7]       the daily forecast contract
 //! GET /air-quality?lat=&lon=                       the EPA AQI (Open-Meteo air quality)
+//! GET /air-quality/grid?lat=&lon=[&radiusKm=][&n=] US AQI on an n x n grid (one batched call)
+//! GET /enso                                        El Nino / La Nina phase (NOAA CPC ONI)
+//! GET /sg-air[?lat=&lon=]                          official Singapore NEA PSI and PM2.5
 //! GET /model-grid?lat=&lon=[&model=]               one model's 3-hourly forecast on a 7×7 grid
 //! GET /health                                      which bindings are configured
 //! ```
@@ -22,10 +25,13 @@
 //! query strings, so outside callers cannot force provider calls.
 
 mod air;
+mod aq_grid;
 mod chain;
+mod enso;
 mod limit;
 mod model_grid;
 mod places;
+mod sg_air;
 mod stations;
 
 use serde_json::json;
@@ -43,6 +49,9 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
         "/weather" => weather(&req, &env, &ctx).await,
         "/daily" => daily(&req, &env, &ctx).await,
         "/air-quality" => air::air_quality(&req, &env, &ctx).await,
+        "/air-quality/grid" => aq_grid::air_quality_grid(&req, &env, &ctx).await,
+        "/enso" => enso::enso(&env, &ctx).await,
+        "/sg-air" => sg_air::sg_air(&req, &env, &ctx).await,
         "/model-grid" => model_grid::model_grid(&req, &env, &ctx).await,
         "/health" => health(&env).await,
         _ => error(404, "not_found", "No such route."),

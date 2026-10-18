@@ -209,20 +209,6 @@ class TestCallSites:
         assert args[0] == "https://aq.example.com/v1/air-quality"
         assert kwargs["headers"] == {"X-Mukoko-OM-Key": "k-test"}
 
-    def test_air_quality_grid_call(self, monkeypatch):
-        from py import _aq_grid
-
-        _self_hosted(monkeypatch)
-        client = _ok_client()
-        with (
-            patch("py._aq_grid._get_http", return_value=client),
-            patch("py._aq_grid.parse_grid_response", return_value=[]),
-        ):
-            _aq_grid._fetch_grid([(0.0, 0.0)])
-        args, kwargs = client.get.call_args
-        assert args[0] == "https://aq.example.com/v1/air-quality"
-        assert kwargs["headers"] == {"X-Mukoko-OM-Key": "k-test"}
-
     def test_status_probe_names_the_instance_not_the_url(self, monkeypatch):
         from py import _status
 

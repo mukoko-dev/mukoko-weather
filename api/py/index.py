@@ -43,9 +43,6 @@ from ._air_quality import router as air_quality_router
 from ._haze import router as haze_router
 from ._airports import router as airports_router
 from ._normals import router as normals_router
-from ._aq_grid import router as aq_grid_router
-from ._sg_air import router as sg_air_router
-from ._enso import router as enso_router
 from ._agriculture import router as agriculture_router
 from ._place_knowledge import router as place_knowledge_router
 from ._db import get_db
@@ -125,9 +122,6 @@ app.include_router(air_quality_router)
 app.include_router(haze_router)
 app.include_router(airports_router)
 app.include_router(normals_router)
-app.include_router(aq_grid_router)
-app.include_router(sg_air_router)
-app.include_router(enso_router)
 app.include_router(agriculture_router)
 app.include_router(place_knowledge_router)
 
