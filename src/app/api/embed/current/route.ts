@@ -17,7 +17,6 @@
  */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { SITE_URL } from "@/lib/site";
 import {
   DEFAULT_SITE,
   shapeEmbedResponse,
@@ -26,21 +25,13 @@ import {
   type WeatherResponse,
 } from "./shape";
 import { fetchJson } from "@/lib/fetch-json";
+import { workerUrl } from "@/lib/weather-api";
 
 export const runtime = "edge";
 
 // Harare — used as a last-resort default when no location can be derived.
 const DEFAULT_LAT = -17.83;
 const DEFAULT_LON = 31.05;
-
-// Trusted base URL for internal API calls. A FIXED value — never derived from
-// the incoming request (`req.url`/Host is attacker-controllable, which would
-// make the internal fetches an SSRF sink). In production this is the canonical
-// public domain (reachable from the Edge runtime; VERCEL_URL is a per-deploy
-// host that isn't reliably reachable here). Falls back to localhost in dev.
-const INTERNAL_BASE =
-  process.env.NEXT_PUBLIC_APP_URL ??
-  (process.env.NODE_ENV === "production" ? SITE_URL : "http://localhost:3000");
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -84,7 +75,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       | Record<string, unknown>
       | Record<string, unknown>[]
       | { location?: Record<string, unknown> }
-    >(`${INTERNAL_BASE}/api/py/locations?slug=${encodeURIComponent(slug)}`);
+    >(workerUrl("locations", `slug=${encodeURIComponent(slug)}`));
     const doc = Array.isArray(loc)
       ? loc[0]
       : ((loc as { location?: Record<string, unknown> } | null)?.location ??
@@ -125,13 +116,13 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   // Fetch weather (resilient — the internal route never fails, but guard anyway).
   const weather = await fetchJson<WeatherResponse>(
-    `${INTERNAL_BASE}/api/py/weather?lat=${lat}&lon=${lon}`,
+    workerUrl("weather", `lat=${lat}&lon=${lon}`),
   );
 
   // Resolve a display name if we don't already have one (coords / ip paths).
   if (!meta) {
     const geo = await fetchJson<{ nearest?: Record<string, unknown> }>(
-      `${INTERNAL_BASE}/api/py/geo?lat=${lat}&lon=${lon}`,
+      workerUrl("geo", `lat=${lat}&lon=${lon}`),
     );
     const near = geo?.nearest;
     meta = {
