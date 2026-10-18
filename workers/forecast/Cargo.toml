@@ -14,6 +14,8 @@ crate-type = ["cdylib"]
 [dependencies]
 weather-core.workspace = true
 weather-edge.workspace = true
+weather-mongo.workspace = true
+js-sys.workspace = true
 worker.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -469,10 +469,12 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "futures",
+ "js-sys",
  "serde",
  "serde_json",
  "weather-core",
  "weather-edge",
+ "weather-mongo",
  "worker",
 ]
 

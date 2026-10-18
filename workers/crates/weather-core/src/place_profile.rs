@@ -1398,6 +1398,183 @@ pub fn country_from_slug(slug: &str, is_known: impl Fn(&str) -> bool) -> Option<
 }
 
 // ---------------------------------------------------------------------------
+// Time zones and neighbours
+// ---------------------------------------------------------------------------
+
+/// The UTC offset in seconds from an `Intl` `timeZoneName` label: `GMT`,
+/// `GMT+2`, `GMT+02:00`, `GMT-05:30`, `UTC`.
+pub fn parse_offset_label(label: &str) -> Option<i64> {
+    let rest = label
+        .trim()
+        .strip_prefix("GMT")
+        .or_else(|| label.trim().strip_prefix("UTC"))?;
+    if rest.is_empty() {
+        return Some(0);
+    }
+    let (sign, body) = match rest.chars().next()? {
+        '+' => (1, &rest[1..]),
+        '-' | '\u{2212}' => (-1, &rest[rest.chars().next()?.len_utf8()..]),
+        _ => return None,
+    };
+    let (h, m) = body.split_once(':').unwrap_or((body, "0"));
+    let (h, m): (i64, i64) = (h.parse().ok()?, m.parse().ok()?);
+    ((0..=18).contains(&h) && (0..60).contains(&m)).then_some(sign * (h * 3600 + m * 60))
+}
+
+/// The offset a profile's local date is read at: the zone's own offset at
+/// that instant when the caller could resolve it, else the cell's archive
+/// offset, else the longitude's nominal hour.
+pub fn utc_offset_seconds(zone_offset: Option<i64>, fallback: Option<i64>, lon: f64) -> i64 {
+    zone_offset
+        .or(fallback)
+        .unwrap_or_else(|| (lon / 15.0).round_ties_even() as i64 * 3600)
+}
+
+/// A stored neighbour's climate, soil and zone for a bare spot with none of
+/// its own (the same 5-character geohash cell). The provenance entries it
+/// brings are labelled "(nearby place)".
+pub fn merge_neighbour(doc: &mut Knowledge, neighbour: &Value) {
+    if let Some(c) = neighbour
+        .get("climate")
+        .and_then(|c| serde_json::from_value::<Climate>(c.clone()).ok())
+    {
+        doc.climate = Some(c);
+    }
+    if doc.soil.is_none() {
+        doc.soil = neighbour
+            .get("soil")
+            .and_then(|s| serde_json::from_value::<Soil>(s.clone()).ok());
+    }
+    if doc.time_zone.is_none() {
+        doc.time_zone = neighbour
+            .get("timeZone")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+    }
+    for p in neighbour
+        .get("provenance")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let field = p.get("field").and_then(Value::as_str).unwrap_or("");
+        if !(field.starts_with("climate") || field.starts_with("soil")) {
+            continue;
+        }
+        let text = |k: &str| p.get(k).and_then(Value::as_str).map(str::to_owned);
+        doc.provenance.push(ProvenanceEntry {
+            field: format!("{field} (nearby place)"),
+            source: text("source").unwrap_or_default(),
+            licence: text("licence"),
+            attribution: text("attribution"),
+            url: text("url"),
+            method: text("method").unwrap_or_default(),
+            // A stored date arrives as extended JSON; only a string is kept.
+            retrieved_at: text("retrievedAt"),
+        });
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Resolving the place a request is about
+// ---------------------------------------------------------------------------
+
+/// Slugs the endpoint accepts (`SLUG_RE` in the Python backend).
+pub fn valid_slug(slug: &str) -> bool {
+    (1..=80).contains(&slug.len())
+        && slug
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// Is `iso` a country this backend has facts for: a season calendar, a crop
+/// calendar or a seed place?
+pub fn known_country(iso: &str) -> bool {
+    let iso = iso.to_uppercase();
+    season_seed_has(&iso)
+        || ag::geoglam_iso_codes().any(|c| c == iso)
+        || crate::locations::seed_locations()
+            .iter()
+            .any(|l| l.country.as_deref() == Some(iso.as_str()))
+}
+
+/// A seed (catalogue) place as the profile's place.
+pub fn place_from_seed(doc: &crate::locations::LocationDoc) -> PlaceIn {
+    PlaceIn {
+        id: Some(format!("seed:{}", doc.slug)),
+        collection: Some("seed".to_owned()),
+        slug: Some(doc.slug.clone()),
+        name: Some(doc.name.clone()),
+        lat: doc.lat,
+        lon: doc.lon,
+        country: doc.country.clone().filter(|c| !c.is_empty()),
+        admin1: Some(doc.province.clone()).filter(|p| !p.is_empty()),
+        elevation: Some(doc.elevation).filter(|e| *e != 0.0),
+        country_hint: false,
+    }
+}
+
+/// Fill a missing country from the request's `country` or the slug's `-cc`
+/// suffix. Such a value is a hint: good enough to compute this response, never
+/// stored.
+pub fn apply_country_hint(place: &mut PlaceIn, country: Option<&str>, slug: Option<&str>) {
+    if place.country.is_some() {
+        return;
+    }
+    let hint = country
+        .map(str::to_uppercase)
+        .or_else(|| slug.and_then(|s| country_from_slug(s, known_country)));
+    if let Some(h) = hint {
+        place.country = Some(h);
+        place.country_hint = true;
+    }
+}
+
+/// What the slug alone settles.
+pub enum FromSlug {
+    /// A catalogue place.
+    Place(Box<PlaceIn>),
+    /// A smart-slug spot: its own point (and name) stand in for a missing
+    /// coordinate, and the coordinate is then matched to a nearby place.
+    Spot {
+        name: Option<String>,
+        lat: f64,
+        lon: f64,
+    },
+    /// Not ours to say: the canonical place directory may know it.
+    Unknown,
+}
+
+pub fn from_slug(slug: &str) -> FromSlug {
+    if let Some(doc) = crate::locations::find_seed(slug) {
+        return FromSlug::Place(Box::new(place_from_seed(doc)));
+    }
+    if let Some((name, lat, lon)) = crate::locations::parse_spot_slug(slug) {
+        return FromSlug::Spot {
+            name: Some(name).filter(|n| !n.is_empty()),
+            lat,
+            lon,
+        };
+    }
+    FromSlug::Unknown
+}
+
+/// The known place within [`NEAREST_PLACE_KM`] of a coordinate, else a bare
+/// spot (never stored, no id).
+pub fn place_near(lat: f64, lon: f64, slug: Option<&str>, name: Option<String>) -> PlaceIn {
+    match crate::locations::nearest_seeds(lat, lon, NEAREST_PLACE_KM, 1).first() {
+        Some(doc) => place_from_seed(doc),
+        None => PlaceIn {
+            slug: slug.map(str::to_owned),
+            name,
+            lat,
+            lon,
+            ..PlaceIn::default()
+        },
+    }
+}
+
+// ---------------------------------------------------------------------------
 // AI prompt block
 // ---------------------------------------------------------------------------
 
@@ -2000,5 +2177,177 @@ mod tests {
         let block = profile_prompt_block(&profile);
         assert!(block.chars().count() <= PROMPT_BLOCK_MAX_CHARS);
         assert!(block.starts_with("Place profile"));
+    }
+
+    #[test]
+    fn slugs_are_validated_like_the_python() {
+        assert!(valid_slug("harare") && valid_slug("a-b-c1") && valid_slug(&"a".repeat(80)));
+        assert!(
+            !valid_slug("")
+                && !valid_slug("Harare")
+                && !valid_slug("a_b")
+                && !valid_slug(&"a".repeat(81))
+        );
+        assert!(!valid_slug("a b"));
+    }
+
+    #[test]
+    fn a_seed_slug_is_a_catalogue_place_and_a_smart_slug_is_a_spot() {
+        let FromSlug::Place(p) = from_slug("harare") else {
+            panic!("a catalogue place");
+        };
+        assert_eq!(p.id.as_deref(), Some("seed:harare"));
+        assert_eq!(p.country.as_deref(), Some("ZW"));
+        assert!(p.admin1.is_some() && p.elevation.is_some());
+        let FromSlug::Spot { name, lat, lon } = from_slug("west-paddock--ksy4dd7") else {
+            panic!("a spot");
+        };
+        assert_eq!(name.as_deref(), Some("West Paddock"));
+        assert!((lat + 17.8).abs() < 1.0 && (lon - 31.0).abs() < 1.0);
+        assert!(matches!(
+            from_slug("canberra-residences-ab12cd"),
+            FromSlug::Unknown
+        ));
+    }
+
+    #[test]
+    fn a_coordinate_joins_a_place_within_three_km_else_stays_bare() {
+        let h = crate::locations::find_seed("harare").unwrap();
+        let near = place_near(h.lat + 0.01, h.lon, Some("x--ksy4dd7"), None);
+        assert_eq!(near.id.as_deref(), Some("seed:harare"));
+        let bare = place_near(24.0, 10.0, Some("x--ezs42"), Some("Spot".into()));
+        assert_eq!(bare.id, None);
+        assert_eq!(bare.name.as_deref(), Some("Spot"));
+        assert_eq!(bare.slug.as_deref(), Some("x--ezs42"));
+    }
+
+    #[test]
+    fn a_country_hint_fills_only_a_missing_country() {
+        let mut bare = PlaceIn {
+            lat: 1.0,
+            lon: 1.0,
+            ..PlaceIn::default()
+        };
+        apply_country_hint(&mut bare, Some("ke"), None);
+        assert_eq!(
+            (bare.country.as_deref(), bare.country_hint),
+            (Some("KE"), true)
+        );
+        let mut from_slug_hint = PlaceIn {
+            lat: 1.0,
+            lon: 1.0,
+            ..PlaceIn::default()
+        };
+        apply_country_hint(&mut from_slug_hint, None, Some("somewhere-th"));
+        assert_eq!(from_slug_hint.country.as_deref(), Some("TH"));
+        let mut unknown = PlaceIn {
+            lat: 1.0,
+            lon: 1.0,
+            ..PlaceIn::default()
+        };
+        apply_country_hint(&mut unknown, None, Some("somewhere-xx"));
+        assert_eq!(unknown.country, None);
+        let mut known = PlaceIn {
+            country: Some("ZW".into()),
+            lat: 1.0,
+            lon: 1.0,
+            ..PlaceIn::default()
+        };
+        apply_country_hint(&mut known, Some("KE"), None);
+        assert_eq!(
+            (known.country.as_deref(), known.country_hint),
+            (Some("ZW"), false)
+        );
+        assert!(known_country("zw") && known_country("TH") && !known_country("XX"));
+    }
+
+    #[test]
+    fn offset_labels_parse() {
+        assert_eq!(parse_offset_label("GMT"), Some(0));
+        assert_eq!(parse_offset_label("GMT+02:00"), Some(7200));
+        assert_eq!(parse_offset_label("GMT+2"), Some(7200));
+        assert_eq!(parse_offset_label("GMT-05:30"), Some(-19_800));
+        assert_eq!(parse_offset_label("GMT\u{2212}03:00"), Some(-10_800));
+        assert_eq!(parse_offset_label("UTC+05:45"), Some(20_700));
+        assert_eq!(parse_offset_label("CET"), None);
+        assert_eq!(parse_offset_label("GMT+99:00"), None);
+        assert_eq!(parse_offset_label("GMT+x"), None);
+    }
+
+    #[test]
+    fn the_offset_falls_back_zone_then_archive_then_longitude() {
+        assert_eq!(utc_offset_seconds(Some(7200), Some(3600), 31.0), 7200);
+        assert_eq!(utc_offset_seconds(None, Some(3600), 31.0), 3600);
+        assert_eq!(utc_offset_seconds(None, None, 31.0), 2 * 3600);
+        assert_eq!(utc_offset_seconds(None, None, -37.5), -2 * 3600);
+        // Python rounds half to even: 22.5 / 15 = 1.5 -> 2.
+        assert_eq!(utc_offset_seconds(None, None, 22.5), 2 * 3600);
+    }
+
+    #[test]
+    fn a_neighbours_climate_fills_a_bare_spot_and_is_labelled() {
+        let now = when("2026-10-18T12:00:00+00:00");
+        let place = PlaceIn {
+            lat: 24.0,
+            lon: 10.0,
+            ..PlaceIn::default()
+        };
+        let mut doc = build_knowledge(&place, None, None, (None, false), now);
+        assert!(doc.climate.is_none());
+        let sahara = fx()["koppen"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == "sahara")
+            .unwrap()["monthly"]
+            .clone();
+        merge_neighbour(
+            &mut doc,
+            &json!({
+                "climate": {"koppen": {"code": "BWh", "label": "hot desert", "method": "derived"},
+                             "normals": {"period": "1991–2020", "cell": "c", "monthly": sahara}},
+                "soil": {"wrbClass": "Arenosols"},
+                "timeZone": "Africa/Tripoli",
+                "provenance": [
+                    {"field": "climate.normals", "source": "ERA5", "method": "modelled", "retrievedAt": {"$date": 1}},
+                    {"field": "elevationMeters", "source": "x", "method": "observed"},
+                    {"field": "soil", "source": "SoilGrids", "method": "modelled", "retrievedAt": "2026-01-01T00:00:00+00:00"}
+                ]
+            }),
+        );
+        assert_eq!(
+            doc.climate.as_ref().unwrap().koppen.as_ref().unwrap().code,
+            "BWh"
+        );
+        assert_eq!(
+            doc.soil.as_ref().unwrap().wrb_class.as_deref(),
+            Some("Arenosols")
+        );
+        assert_eq!(doc.time_zone.as_deref(), Some("Africa/Tripoli"));
+        let fields: Vec<&str> = doc.provenance.iter().map(|p| p.field.as_str()).collect();
+        assert!(fields.contains(&"climate.normals (nearby place)"));
+        assert!(fields.contains(&"soil (nearby place)"));
+        assert!(!fields.iter().any(|f| f.starts_with("elevationMeters (")));
+        // Its own zone and soil are kept.
+        let mut own = build_knowledge(
+            &place,
+            None,
+            None,
+            (
+                Some(Soil {
+                    wrb_class: Some("Mine".into()),
+                    ..Soil::default()
+                }),
+                true,
+            ),
+            now,
+        );
+        own.time_zone = Some("Own/Zone".into());
+        merge_neighbour(
+            &mut own,
+            &json!({"soil": {"wrbClass": "Theirs"}, "timeZone": "Other/Zone"}),
+        );
+        assert_eq!(own.soil.unwrap().wrb_class.as_deref(), Some("Mine"));
+        assert_eq!(own.time_zone.as_deref(), Some("Own/Zone"));
     }
 }

@@ -8,6 +8,7 @@
 //! GET /daily?location=|lat=&lon=[&days=1..7]       the daily forecast contract
 //! GET /air-quality?lat=&lon=                       the EPA AQI (Open-Meteo air quality)
 //! GET /model-grid?lat=&lon=[&model=]               one model's 3-hourly forecast on a 7×7 grid
+//! GET /profile?slug=|lat=&lon=[&country=]          a place's knowledge and current context
 //! GET /health                                      which bindings are configured
 //! ```
 //!
@@ -26,6 +27,7 @@ mod chain;
 mod limit;
 mod model_grid;
 mod places;
+mod profile;
 mod stations;
 
 use serde_json::json;
@@ -44,6 +46,7 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
         "/daily" => daily(&req, &env, &ctx).await,
         "/air-quality" => air::air_quality(&req, &env, &ctx).await,
         "/model-grid" => model_grid::model_grid(&req, &env, &ctx).await,
+        "/profile" => profile::profile(&req, &env, &ctx).await,
         "/health" => health(&req, &env).await,
         _ => error(404, "not_found", "No such route."),
     }
