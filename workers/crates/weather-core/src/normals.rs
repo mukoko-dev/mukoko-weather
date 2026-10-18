@@ -25,7 +25,8 @@ pub const NORMALS_SOURCE: &str = "ERA5 via Open-Meteo, 1991–2020";
 pub const GRID_STEP_DEG: f64 = 0.25;
 pub const HALF_WINDOW_DAYS: i64 = 7;
 pub const SLOTS: usize = 366;
-const DAILY_VARS: &str = "temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum";
+const DAILY_VARS: &str =
+    "temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum";
 /// A day with at least this much rain counts as a rainy day (WMO convention).
 pub const RAINY_DAY_MM: f64 = 1.0;
 /// A (year, month) needs this many days with data to enter the monthly normal.
@@ -53,8 +54,12 @@ const LEAP_DAYS: [usize; 12] = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 /// 0-based slot of a calendar month/day in the leap-year calendar.
 pub fn day_slot(month: u32, day: u32) -> Option<usize> {
-    let m = usize::try_from(month).ok().filter(|m| (1..=12).contains(m))?;
-    let d = usize::try_from(day).ok().filter(|d| *d >= 1 && *d <= LEAP_DAYS[m - 1])?;
+    let m = usize::try_from(month)
+        .ok()
+        .filter(|m| (1..=12).contains(m))?;
+    let d = usize::try_from(day)
+        .ok()
+        .filter(|d| *d >= 1 && *d <= LEAP_DAYS[m - 1])?;
     Some(LEAP_OFFSETS[m - 1] + d - 1)
 }
 
@@ -131,7 +136,10 @@ pub fn parse_archive(data: &Value) -> Option<(Daily, ArchiveMeta)> {
             precip: get("precipitation_sum"),
         },
         ArchiveMeta {
-            timezone: data.get("timezone").and_then(Value::as_str).map(str::to_owned),
+            timezone: data
+                .get("timezone")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
             utc_offset_seconds: data.get("utc_offset_seconds").and_then(Value::as_i64),
             elevation: data.get("elevation").and_then(Value::as_f64),
         },
@@ -330,7 +338,10 @@ mod tests {
     #[test]
     fn slots_use_the_leap_year_calendar() {
         for c in fx()["slots"].as_array().unwrap() {
-            let slot = day_slot(c["m"].as_u64().unwrap() as u32, c["d"].as_u64().unwrap() as u32);
+            let slot = day_slot(
+                c["m"].as_u64().unwrap() as u32,
+                c["d"].as_u64().unwrap() as u32,
+            );
             assert_eq!(slot, Some(c["slot"].as_u64().unwrap() as usize), "{c}");
         }
         assert_eq!(day_slot(2, 30), None);

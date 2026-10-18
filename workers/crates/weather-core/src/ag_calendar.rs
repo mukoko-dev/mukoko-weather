@@ -369,7 +369,11 @@ fn geoglam_calendar(lat: f64, lon: f64, country: Option<&str>) -> Option<AgCalen
 // Derived default
 // ---------------------------------------------------------------------------
 
-fn months_where(monthly: &[MonthlyNormal], value: fn(&MonthlyNormal) -> Option<f64>, test: impl Fn(f64) -> bool) -> Vec<u32> {
+fn months_where(
+    monthly: &[MonthlyNormal],
+    value: fn(&MonthlyNormal) -> Option<f64>,
+    test: impl Fn(f64) -> bool,
+) -> Vec<u32> {
     monthly
         .iter()
         .filter(|r| value(r).is_some_and(&test))
@@ -436,7 +440,11 @@ pub fn grazing_notes(monthly: &[MonthlyNormal]) -> Option<GrazingNotes> {
     })
 }
 
-fn derived_calendar(lat: f64, country: Option<&str>, monthly: &[MonthlyNormal]) -> Option<AgCalendar> {
+fn derived_calendar(
+    lat: f64,
+    country: Option<&str>,
+    monthly: &[MonthlyNormal],
+) -> Option<AgCalendar> {
     let window = derived_growing_window(lat, monthly)?;
     let iso = country.unwrap_or("").to_uppercase();
     Some(AgCalendar {
@@ -460,7 +468,8 @@ pub fn calendar_for(
     country: Option<&str>,
     monthly: &[MonthlyNormal],
 ) -> Option<AgCalendar> {
-    let mut cal = geoglam_calendar(lat, lon, country).or_else(|| derived_calendar(lat, country, monthly))?;
+    let mut cal =
+        geoglam_calendar(lat, lon, country).or_else(|| derived_calendar(lat, country, monthly))?;
     if cal.derived.is_none() {
         cal.derived = derived_growing_window(lat, monthly);
     }
@@ -554,7 +563,11 @@ mod tests {
 
     fn monthly(v: &Value) -> Vec<MonthlyNormal> {
         v.as_array()
-            .map(|a| a.iter().map(|m| serde_json::from_value(m.clone()).unwrap()).collect())
+            .map(|a| {
+                a.iter()
+                    .map(|m| serde_json::from_value(m.clone()).unwrap())
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -595,11 +608,21 @@ mod tests {
         let x = fx();
         for c in x["grazing"].as_array().unwrap() {
             let got = grazing_notes(&monthly(&c["monthly"]));
-            assert_eq!(serde_json::to_value(&got).unwrap(), c["out"], "{}", c["name"]);
+            assert_eq!(
+                serde_json::to_value(&got).unwrap(),
+                c["out"],
+                "{}",
+                c["name"]
+            );
         }
         for c in x["growing"].as_array().unwrap() {
             let got = derived_growing_window(c["lat"].as_f64().unwrap(), &monthly(&c["monthly"]));
-            assert_eq!(serde_json::to_value(&got).unwrap(), c["out"], "{}", c["name"]);
+            assert_eq!(
+                serde_json::to_value(&got).unwrap(),
+                c["out"],
+                "{}",
+                c["name"]
+            );
         }
         assert!(grazing_notes(&[]).is_none());
         assert!(derived_growing_window(0.0, &[]).is_none());
@@ -612,13 +635,20 @@ mod tests {
         for c in cases {
             let window: CropWindow = serde_json::from_value(c["window"].clone()).unwrap();
             let day = NaiveDate::parse_from_str(c["day"].as_str().unwrap(), "%Y-%m-%d").unwrap();
-            assert_eq!(serde_json::to_value(crop_phase(&window, day)).unwrap(), c["out"], "{c}");
+            assert_eq!(
+                serde_json::to_value(crop_phase(&window, day)).unwrap(),
+                c["out"],
+                "{c}"
+            );
         }
     }
 
     #[test]
     fn crop_names_split_like_the_python_regex() {
-        assert_eq!(crop_ids("Maize 1"), ("maize".to_owned(), "Maize".to_owned()));
+        assert_eq!(
+            crop_ids("Maize 1"),
+            ("maize".to_owned(), "Maize".to_owned())
+        );
         assert_eq!(
             crop_ids("Winter Wheat"),
             ("winter-wheat".to_owned(), "Winter wheat".to_owned())

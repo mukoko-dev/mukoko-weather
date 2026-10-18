@@ -28,6 +28,7 @@ pub mod locations;
 pub mod model_grid;
 pub mod normalize;
 pub mod normals;
+pub mod place_profile;
 pub mod places;
 pub mod push;
 pub mod query;

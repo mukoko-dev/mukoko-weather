@@ -92,182 +92,194 @@ pub const COUNTRY_ISO: &[(&str, &str)] = &[
 
 /// Season names for numbered crops: (ISO, [(GEOGLAM crop, name)]).
 pub const SEASON_NAMES: &[(&str, &[(&str, &str)])] = &[
-    ("AF", &[
-        ("Wheat 1", "Winter-planted"),
-        ("Wheat 2", "Spring-planted"),
-    ]),
-    ("BD", &[
-        ("Maize 1", "Winter (Kharif)"),
-        ("Maize 2", "Summer (Rabi)"),
-        ("Rice 1", "Boro"),
-        ("Rice 2", "Aman"),
-        ("Rice 3", "Aus"),
-    ]),
-    ("BJ", &[
-        ("Maize 1", "Main season"),
-        ("Maize 2", "Second season"),
-    ]),
-    ("BI", &[
-        ("Maize 1", "Season B"),
-        ("Maize 2", "Season A"),
-        ("Rice 1", "Season B"),
-    ]),
-    ("KH", &[
-        ("Rice 1", "Wet season"),
-        ("Rice 2", "Dry season"),
-    ]),
-    ("CM", &[
-        ("Maize 1", "Main season"),
-        ("Maize 2", "Second season"),
-    ]),
-    ("CI", &[
-        ("Maize 1", "Main season"),
-        ("Maize 2", "Second season"),
-    ]),
-    ("CD", &[
-        ("Maize 1", "Main season"),
-        ("Maize 2", "Second season"),
-    ]),
-    ("EG", &[
-        ("Rice 1", "Summer-planted"),
-        ("Rice 2", "Nili season (Nile flood)"),
-    ]),
-    ("SV", &[
-        ("Beans 1", "Primera"),
-        ("Beans 2", "Postrera"),
-        ("Maize 1", "Primera"),
-        ("Maize 2", "Segunda"),
-    ]),
-    ("ET", &[
-        ("Maize 1", "Meher"),
-        ("Maize 2", "Belg"),
-    ]),
-    ("GH", &[
-        ("Maize 1", "Main season"),
-        ("Maize 2", "Second season"),
-    ]),
-    ("GT", &[
-        ("Beans 1", "Primera"),
-        ("Beans 2", "Postrera"),
-        ("Beans 3", "Apante"),
-        ("Maize 1", "Primera"),
-        ("Maize 2", "Segunda"),
-    ]),
-    ("HT", &[
-        ("Beans 1", "Printemps"),
-        ("Beans 2", "Été"),
-        ("Beans 3", "Hiver"),
-        ("Maize 1", "Printemps"),
-        ("Maize 2", "Été"),
-    ]),
-    ("HN", &[
-        ("Beans 1", "Primera"),
-        ("Beans 2", "Postrera"),
-        ("Maize 1", "Primera"),
-        ("Maize 2", "Segunda"),
-    ]),
-    ("ID", &[
-        ("Rice 1", "Wet season"),
-        ("Rice 2", "Dry season"),
-    ]),
-    ("KZ", &[
-        ("Wheat 1", "Winter-planted"),
-        ("Wheat 2", "Spring-planted"),
-    ]),
-    ("KE", &[
-        ("Maize 1", "Long rains"),
-        ("Maize 2", "Short rains"),
-    ]),
-    ("KG", &[
-        ("Wheat 1", "Winter-planted"),
-        ("Wheat 2", "Spring-planted"),
-    ]),
-    ("LA", &[
-        ("Rice 1", "Wet season"),
-        ("Rice 2", "Dry season"),
-    ]),
-    ("MR", &[
-        ("Rice 1", "Main season"),
-        ("Rice 2", "Off-season"),
-    ]),
-    ("MZ", &[
-        ("Maize 1", "Main season"),
-        ("Maize 2", "Second season"),
-    ]),
-    ("MM", &[
-        ("Rice 1", "Wet season"),
-        ("Rice 2", "Dry season"),
-    ]),
-    ("NI", &[
-        ("Beans 1", "Primera"),
-        ("Beans 2", "Postrera"),
-        ("Beans 3", "Apante"),
-        ("Maize 1", "Primera"),
-        ("Maize 2", "Segunda"),
-    ]),
-    ("NG", &[
-        ("Maize 1", "Main season"),
-        ("Maize 2", "Short season"),
-        ("Rice 1", "Main season"),
-        ("Rice 2", "Off-season"),
-    ]),
-    ("PK", &[
-        ("Rice 1", "Kharif (summer)"),
-        ("Wheat 1", "Rabi"),
-    ]),
-    ("PH", &[
-        ("Rice 1", "Wet season"),
-        ("Rice 2", "Dry season"),
-    ]),
-    ("RW", &[
-        ("Maize 1", "Season B"),
-        ("Maize 2", "Season A"),
-    ]),
-    ("SO", &[
-        ("Maize 1", "Gu"),
-        ("Maize 2", "Deyr"),
-        ("Sorghum 1", "Gu"),
-        ("Sorghum 2", "Deyr"),
-    ]),
-    ("SS", &[
-        ("Maize 1", "First season"),
-        ("Millet 1", "First season"),
-        ("Sorghum 1", "First season"),
-    ]),
-    ("LK", &[
-        ("Maize 1", "Maha"),
-        ("Maize 2", "Yala"),
-        ("Rice 1", "Maha"),
-        ("Rice 2", "Yala"),
-    ]),
-    ("TJ", &[
-        ("Wheat 1", "Winter-planted"),
-        ("Wheat 2", "Spring-planted"),
-    ]),
-    ("TH", &[
-        ("Rice 1", "Wet season"),
-        ("Rice 2", "Dry season"),
-    ]),
-    ("TG", &[
-        ("Maize 1", "Main season"),
-        ("Maize 2", "Second season"),
-    ]),
-    ("UG", &[
-        ("Maize 1", "First season"),
-        ("Maize 2", "Second season"),
-    ]),
-    ("TZ", &[
-        ("Maize 1", "Masika / Msimu"),
-        ("Maize 2", "Vuli"),
-        ("Millet 1", "Masika / Msimu"),
-        ("Rice 1", "Masika / Msimu"),
-        ("Sorghum 1", "Masika / Msimu"),
-        ("Sorghum 2", "Vuli"),
-        ("Wheat 1", "Masika / Msimu"),
-    ]),
-    ("VN", &[
-        ("Rice 1", "Other wet season"),
-        ("Rice 2", "Dry season (winter-spring)"),
-        ("Rice 3", "Main wet season"),
-    ]),
+    (
+        "AF",
+        &[("Wheat 1", "Winter-planted"), ("Wheat 2", "Spring-planted")],
+    ),
+    (
+        "BD",
+        &[
+            ("Maize 1", "Winter (Kharif)"),
+            ("Maize 2", "Summer (Rabi)"),
+            ("Rice 1", "Boro"),
+            ("Rice 2", "Aman"),
+            ("Rice 3", "Aus"),
+        ],
+    ),
+    (
+        "BJ",
+        &[("Maize 1", "Main season"), ("Maize 2", "Second season")],
+    ),
+    (
+        "BI",
+        &[
+            ("Maize 1", "Season B"),
+            ("Maize 2", "Season A"),
+            ("Rice 1", "Season B"),
+        ],
+    ),
+    ("KH", &[("Rice 1", "Wet season"), ("Rice 2", "Dry season")]),
+    (
+        "CM",
+        &[("Maize 1", "Main season"), ("Maize 2", "Second season")],
+    ),
+    (
+        "CI",
+        &[("Maize 1", "Main season"), ("Maize 2", "Second season")],
+    ),
+    (
+        "CD",
+        &[("Maize 1", "Main season"), ("Maize 2", "Second season")],
+    ),
+    (
+        "EG",
+        &[
+            ("Rice 1", "Summer-planted"),
+            ("Rice 2", "Nili season (Nile flood)"),
+        ],
+    ),
+    (
+        "SV",
+        &[
+            ("Beans 1", "Primera"),
+            ("Beans 2", "Postrera"),
+            ("Maize 1", "Primera"),
+            ("Maize 2", "Segunda"),
+        ],
+    ),
+    ("ET", &[("Maize 1", "Meher"), ("Maize 2", "Belg")]),
+    (
+        "GH",
+        &[("Maize 1", "Main season"), ("Maize 2", "Second season")],
+    ),
+    (
+        "GT",
+        &[
+            ("Beans 1", "Primera"),
+            ("Beans 2", "Postrera"),
+            ("Beans 3", "Apante"),
+            ("Maize 1", "Primera"),
+            ("Maize 2", "Segunda"),
+        ],
+    ),
+    (
+        "HT",
+        &[
+            ("Beans 1", "Printemps"),
+            ("Beans 2", "Été"),
+            ("Beans 3", "Hiver"),
+            ("Maize 1", "Printemps"),
+            ("Maize 2", "Été"),
+        ],
+    ),
+    (
+        "HN",
+        &[
+            ("Beans 1", "Primera"),
+            ("Beans 2", "Postrera"),
+            ("Maize 1", "Primera"),
+            ("Maize 2", "Segunda"),
+        ],
+    ),
+    ("ID", &[("Rice 1", "Wet season"), ("Rice 2", "Dry season")]),
+    (
+        "KZ",
+        &[("Wheat 1", "Winter-planted"), ("Wheat 2", "Spring-planted")],
+    ),
+    (
+        "KE",
+        &[("Maize 1", "Long rains"), ("Maize 2", "Short rains")],
+    ),
+    (
+        "KG",
+        &[("Wheat 1", "Winter-planted"), ("Wheat 2", "Spring-planted")],
+    ),
+    ("LA", &[("Rice 1", "Wet season"), ("Rice 2", "Dry season")]),
+    ("MR", &[("Rice 1", "Main season"), ("Rice 2", "Off-season")]),
+    (
+        "MZ",
+        &[("Maize 1", "Main season"), ("Maize 2", "Second season")],
+    ),
+    ("MM", &[("Rice 1", "Wet season"), ("Rice 2", "Dry season")]),
+    (
+        "NI",
+        &[
+            ("Beans 1", "Primera"),
+            ("Beans 2", "Postrera"),
+            ("Beans 3", "Apante"),
+            ("Maize 1", "Primera"),
+            ("Maize 2", "Segunda"),
+        ],
+    ),
+    (
+        "NG",
+        &[
+            ("Maize 1", "Main season"),
+            ("Maize 2", "Short season"),
+            ("Rice 1", "Main season"),
+            ("Rice 2", "Off-season"),
+        ],
+    ),
+    ("PK", &[("Rice 1", "Kharif (summer)"), ("Wheat 1", "Rabi")]),
+    ("PH", &[("Rice 1", "Wet season"), ("Rice 2", "Dry season")]),
+    ("RW", &[("Maize 1", "Season B"), ("Maize 2", "Season A")]),
+    (
+        "SO",
+        &[
+            ("Maize 1", "Gu"),
+            ("Maize 2", "Deyr"),
+            ("Sorghum 1", "Gu"),
+            ("Sorghum 2", "Deyr"),
+        ],
+    ),
+    (
+        "SS",
+        &[
+            ("Maize 1", "First season"),
+            ("Millet 1", "First season"),
+            ("Sorghum 1", "First season"),
+        ],
+    ),
+    (
+        "LK",
+        &[
+            ("Maize 1", "Maha"),
+            ("Maize 2", "Yala"),
+            ("Rice 1", "Maha"),
+            ("Rice 2", "Yala"),
+        ],
+    ),
+    (
+        "TJ",
+        &[("Wheat 1", "Winter-planted"), ("Wheat 2", "Spring-planted")],
+    ),
+    ("TH", &[("Rice 1", "Wet season"), ("Rice 2", "Dry season")]),
+    (
+        "TG",
+        &[("Maize 1", "Main season"), ("Maize 2", "Second season")],
+    ),
+    (
+        "UG",
+        &[("Maize 1", "First season"), ("Maize 2", "Second season")],
+    ),
+    (
+        "TZ",
+        &[
+            ("Maize 1", "Masika / Msimu"),
+            ("Maize 2", "Vuli"),
+            ("Millet 1", "Masika / Msimu"),
+            ("Rice 1", "Masika / Msimu"),
+            ("Sorghum 1", "Masika / Msimu"),
+            ("Sorghum 2", "Vuli"),
+            ("Wheat 1", "Masika / Msimu"),
+        ],
+    ),
+    (
+        "VN",
+        &[
+            ("Rice 1", "Other wet season"),
+            ("Rice 2", "Dry season (winter-spring)"),
+            ("Rice 3", "Main wet season"),
+        ],
+    ),
 ];
