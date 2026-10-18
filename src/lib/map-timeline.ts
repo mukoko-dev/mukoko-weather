@@ -15,6 +15,7 @@
  */
 import type { TimelineFrame } from "@/lib/map-layers";
 import { wallClockLabel, wallDateString } from "@/lib/location-time";
+import { fetchWorker } from "./weather-api";
 
 const HOUR_MS = 3_600_000;
 const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -128,7 +129,7 @@ export async function fetchPlaceOffset(
   signal?: AbortSignal,
 ): Promise<PlaceOffset | null> {
   try {
-    const res = await fetch(`/api/py/weather?lat=${lat}&lon=${lon}`, {
+    const res = await fetchWorker("weather", `lat=${lat}&lon=${lon}`, {
       signal,
     });
     if (!res.ok) return null;

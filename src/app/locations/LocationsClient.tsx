@@ -32,6 +32,7 @@ import { MAX_SAVED_LOCATIONS, useAppStore } from "@/lib/store";
 import { useStoreHydrated } from "@/lib/use-hydrated";
 import { LocationsMenu } from "./LocationsMenu";
 import { LocationsSearch } from "./LocationsSearch";
+import { fetchWorker } from "@/lib/weather-api";
 
 interface Props {
   /** `lastLocation` cookie read on the server, if it names a real location. */
@@ -78,8 +79,9 @@ async function resolvePlace(
       country: seed.country ?? null,
     };
   }
-  const res = await fetch(
-    `/api/py/locations?slug=${encodeURIComponent(slug)}`,
+  const res = await fetchWorker(
+    "locations",
+    `slug=${encodeURIComponent(slug)}`,
     { signal },
   );
   if (res.ok) {
@@ -116,8 +118,9 @@ async function resolveLegacySlug(
 ): Promise<PlaceRef | null> {
   const legacy = legacySlugQuery(slug);
   if (!legacy) return null;
-  const res = await fetch(
-    `/api/py/search?q=${encodeURIComponent(legacy.query)}&limit=5`,
+  const res = await fetchWorker(
+    "search",
+    `q=${encodeURIComponent(legacy.query)}&limit=5`,
     { signal },
   );
   if (!res.ok) return null;
@@ -148,11 +151,10 @@ async function fetchCardWeather(
   place: PlaceRef,
   signal: AbortSignal,
 ): Promise<CardWeatherInput | null> {
-  const res = await fetch(
-    `/api/py/weather?lat=${roundCoord(place.lat)}&lon=${roundCoord(place.lon)}`,
-    {
-      signal,
-    },
+  const res = await fetchWorker(
+    "weather",
+    `lat=${roundCoord(place.lat)}&lon=${roundCoord(place.lon)}`,
+    { signal },
   );
   if (!res.ok) return null;
   return (await res.json()) as CardWeatherInput;
