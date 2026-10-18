@@ -52,6 +52,7 @@ export type WorkerRoute =
   | "geo"
   | "locations"
   | "history"
+  | "locations/profile"
   | "metar"
   | "airports/nearest";
 
