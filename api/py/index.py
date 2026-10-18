@@ -42,7 +42,6 @@ from ._history_analyze import router as history_analyze_router
 from ._explore_search import router as explore_search_router
 from ._reports import router as reports_router
 from ._air_quality import router as air_quality_router
-from ._model_grid import router as model_grid_router
 from ._agriculture import router as agriculture_router
 from ._place_knowledge import router as place_knowledge_router
 from ._db import get_db
@@ -121,7 +120,6 @@ app.include_router(history_analyze_router)
 app.include_router(explore_search_router)
 app.include_router(reports_router)
 app.include_router(air_quality_router)
-app.include_router(model_grid_router)
 app.include_router(agriculture_router)
 app.include_router(place_knowledge_router)
 

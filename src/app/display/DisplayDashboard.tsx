@@ -5,7 +5,6 @@ import { useEffect } from "react";
 import type { WeatherData } from "@/lib/weather";
 import type { AirQualityResponse } from "@/components/weather/AirQualityCard";
 import { isSgAir, type SgAirResponse } from "@/lib/sg-air";
-import { workerApiUrl } from "@/lib/weather-api";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import {
   DisplayAirQuality,
@@ -31,6 +30,7 @@ import {
 import { formatTime } from "@/lib/i18n";
 import { useAppStore } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
+import { workerUrl } from "@/lib/weather-api";
 
 export interface DisplayLocation {
   slug: string;
@@ -71,13 +71,13 @@ export function DisplayDashboard({
 
   const coords = `lat=${roundCoord(location.lat)}&lon=${roundCoord(location.lon)}`;
   const weatherState = usePolledJson(
-    `/api/py/weather?${coords}`,
+    workerUrl("weather", coords),
     DISPLAY_REFRESH_MS.weather,
     isDisplayWeather,
     initialWeather ?? undefined,
   );
   const airState = usePolledJson<AirQualityResponse>(
-    `/api/py/airquality?${coords}`,
+    workerUrl("air-quality", coords),
     DISPLAY_REFRESH_MS.airQuality,
     isAirQuality,
   );
@@ -89,7 +89,7 @@ export function DisplayDashboard({
   // The NEA reading is official only for Singapore; nothing is fetched elsewhere.
   const isSingapore = location.country === "SG";
   const sgState = usePolledJson<SgAirResponse>(
-    isSingapore ? workerApiUrl("sg-air", coords) : null,
+    isSingapore ? workerUrl("sg-air", coords) : null,
     DISPLAY_REFRESH_MS.sgAir,
     isSgAir,
   );

@@ -1,7 +1,6 @@
 "use client";
 
 import { roundCoord } from "@/lib/location-privacy";
-import { workerApiUrl } from "@/lib/weather-api";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 import { getIcaoForSlug, getAirportByIcao } from "@/lib/icao-codes";
@@ -13,6 +12,7 @@ import type {
   BriefingData,
   MetarObs,
 } from "./AviationBriefingPDF";
+import { fetchWorker } from "@/lib/weather-api";
 
 function FlightCategoryBadge({ fc }: { fc: string }) {
   return (
@@ -313,15 +313,16 @@ export function AviationPlanner() {
     name: string,
     icao: string,
   ): Promise<AirportBriefing> => {
-    // `/api/py/weather` takes lat/lon ONLY — it ignores any `location`/`slug`
+    // The Worker `/v1/weather` takes lat/lon ONLY — it ignores any `location`/`slug`
     // param and defaults to Harare. Resolve the airport's own coordinates from
     // the ICAO record so each airport gets its real weather (sunrise/sunset).
     const airport = getAirportByIcao(icao);
     const [metarRes, wxRes] = await Promise.allSettled([
-      fetch(workerApiUrl("metar", `icao=${icao}`)),
+      fetchWorker("metar", `icao=${icao}`),
       airport
-        ? fetch(
-            `/api/py/weather?lat=${roundCoord(airport.lat)}&lon=${roundCoord(airport.lon)}`,
+        ? fetchWorker(
+            "weather",
+            `lat=${roundCoord(airport.lat)}&lon=${roundCoord(airport.lon)}`,
           )
         : Promise.reject(new Error(`No coordinates for ${icao}`)),
     ]);
@@ -338,7 +339,7 @@ export function AviationPlanner() {
     let sunset: string | undefined;
     if (wxRes.status === "fulfilled" && wxRes.value.ok) {
       const d = await wxRes.value.json();
-      // `/api/py/weather` returns `daily` at the TOP LEVEL (not under `weather`).
+      // `/v1/weather` returns `daily` at the TOP LEVEL (not under `weather`).
       const daily = d.daily;
       if (daily?.sunrise?.[0]) {
         // Local time at the station, not the pilot's own clock.

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getFlightCategoryClass } from "@/lib/flight-category-styles";
-import { workerApiUrl } from "@/lib/weather-api";
+import { fetchWorker } from "@/lib/weather-api";
 
 interface CloudLayer {
   cover: string;
@@ -244,14 +244,13 @@ export function AviationWeather({ slug, lat, lon }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    const url = pickedIcao
-      ? workerApiUrl("metar", `icao=${encodeURIComponent(pickedIcao)}`)
-      : workerApiUrl(
+    (pickedIcao
+      ? fetchWorker("metar", `icao=${encodeURIComponent(pickedIcao)}`)
+      : fetchWorker(
           "aviation/nearest-metar",
           `lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`,
-        );
-
-    fetch(url)
+        )
+    )
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();

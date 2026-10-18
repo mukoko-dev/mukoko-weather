@@ -184,7 +184,7 @@ describe("AviationWeather — nearest-report wiring", () => {
   });
 
   it("still supports picking a specific station via /api/py/metar", () => {
-    expect(src).toContain('workerApiUrl("metar"');
+    expect(src).toContain('fetchWorker("metar"');
     expect(src).not.toContain("/api/py/metar");
   });
 

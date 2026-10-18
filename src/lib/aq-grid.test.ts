@@ -198,7 +198,9 @@ describe("fetchAirQualityGrid", () => {
 
     expect(body.available).toBe(true);
     const url = String(fetchMock.mock.calls[0][0]);
-    expect(url.startsWith("https://weather-api.mukoko.com/v1/air-quality/grid?")).toBe(true);
+    expect(
+      url.startsWith("https://weather-api.mukoko.com/v1/air-quality/grid?"),
+    ).toBe(true);
     const params = new URL(url, "http://x").searchParams;
     expect(params.get("lat")).toBe("1.3512");
     expect(params.get("lon")).toBe("103.8249");
@@ -223,7 +225,11 @@ describe("fetchAirQualityGrid", () => {
     vi.stubGlobal("fetch", fetchMock);
     const controller = new AbortController();
     await fetchAirQualityGrid({ lat: 0, lon: 0, signal: controller.signal });
-    expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal);
+    // The Worker helper combines the caller's signal with its own timeout.
+    const sent = fetchMock.mock.calls[0][1].signal as AbortSignal;
+    expect(sent.aborted).toBe(false);
+    controller.abort();
+    expect(sent.aborted).toBe(true);
   });
 });
 

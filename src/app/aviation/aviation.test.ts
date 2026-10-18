@@ -42,8 +42,7 @@ describe("AviationPlanner", () => {
     expect(plannerSrc).toContain("@/lib/flight-category-styles");
   });
   it("fetches METAR from API", () => {
-    expect(plannerSrc).toContain('workerApiUrl("metar"');
-    expect(plannerSrc).not.toContain("/api/py/metar");
+    expect(plannerSrc).toContain('fetchWorker("metar"');
   });
   it("has accessibility main landmark", () => {
     expect(plannerSrc).toContain('id="main-content"');
@@ -59,8 +58,8 @@ describe("AviationPlanner — Harare-bug fixes", () => {
     expect(plannerSrc).toContain("getAirportByIcao");
     // The weather endpoint takes lat/lon ONLY — a `location=` param is ignored
     // and silently defaults to Harare, so it must never be used here.
-    expect(plannerSrc).toContain("/api/py/weather?lat=");
-    expect(plannerSrc).not.toContain("/api/py/weather?location=");
+    expect(plannerSrc).toContain("`lat=${roundCoord(airport.lat)}");
+    expect(plannerSrc).not.toContain("location=");
   });
 
   it("reads daily from the top level of the weather response, not d.weather.daily", () => {

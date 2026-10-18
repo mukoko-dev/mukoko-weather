@@ -26,6 +26,7 @@ pub mod geo;
 pub mod haze;
 pub mod jobs;
 pub mod locations;
+pub mod model_grid;
 pub mod normalize;
 pub mod normals;
 pub mod places;

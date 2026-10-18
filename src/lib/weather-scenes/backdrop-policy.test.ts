@@ -78,3 +78,34 @@ describe("shouldRunBackdrop", () => {
     expect(shouldRunBackdrop({ ...base, scrollY: 900 })).toBe(true);
   });
 });
+
+describe("iOS keeps the static sky (blank-launch guard)", () => {
+  it("detects iPhone, iPad and iPadOS-as-Mac, not desktop Macs", async () => {
+    const { isIosWebKit } = await import("./backdrop-policy");
+    expect(
+      isIosWebKit("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)", "iPhone", 5),
+    ).toBe(true);
+    expect(isIosWebKit("Mozilla/5.0 (iPad; CPU OS 18_0)", "iPad", 5)).toBe(
+      true,
+    );
+    expect(
+      isIosWebKit("Mozilla/5.0 (Macintosh; Intel Mac OS X)", "MacIntel", 5),
+    ).toBe(true);
+    expect(
+      isIosWebKit("Mozilla/5.0 (Macintosh; Intel Mac OS X)", "MacIntel", 0),
+    ).toBe(false);
+    expect(
+      isIosWebKit("Mozilla/5.0 (Linux; Android 14)", "Linux armv8l", 5),
+    ).toBe(false);
+  });
+
+  it("never creates the WebGL layer on iOS", async () => {
+    const { shouldAnimateBackdrop } = await import("./backdrop-policy");
+    expect(shouldAnimateBackdrop({ reducedMotion: false, ios: true })).toBe(
+      false,
+    );
+    expect(shouldAnimateBackdrop({ reducedMotion: false, ios: false })).toBe(
+      true,
+    );
+  });
+});

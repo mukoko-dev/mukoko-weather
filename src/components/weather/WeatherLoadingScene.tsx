@@ -8,6 +8,7 @@ import {
   getCachedWeatherHint,
   skyClassName,
 } from "@/lib/weather-scenes";
+import { isIosWebKit } from "@/lib/weather-scenes/backdrop-policy";
 import type {
   CachedWeatherHint,
   WeatherSceneConfig,
@@ -80,8 +81,14 @@ export function WeatherLoadingScene({ slug, statusText, action }: Props) {
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       try {
+        // iOS keeps the static sky: no WebGL context while the app boots.
         setUse3D(
-          !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+          !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
+            !isIosWebKit(
+              navigator.userAgent,
+              navigator.platform,
+              navigator.maxTouchPoints ?? 0,
+            ),
         );
         setIsMobile(
           window.matchMedia("(hover: none), (pointer: coarse)").matches,
