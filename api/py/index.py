@@ -24,7 +24,6 @@ from ._logging import configure_logging
 
 configure_logging()
 
-from ._devices import router as devices_router
 from ._chat import router as chat_router
 from ._embeddings import router as embeddings_router
 from ._weather import router as weather_router
@@ -98,7 +97,6 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 app.include_router(stations_router)
-app.include_router(devices_router)
 app.include_router(chat_router)
 app.include_router(embeddings_router)
 app.include_router(weather_router)

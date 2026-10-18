@@ -174,3 +174,27 @@ describe("no /api/py for the routes the Worker serves", () => {
     expect(source).not.toMatch(served);
   });
 });
+
+describe("devices route", () => {
+  it("is addressed on the Worker with the device id in the path", () => {
+    expect(workerUrl("devices", "", {})).toBe(
+      "https://weather-api.mukoko.com/v1/devices",
+    );
+    expect(workerUrl("devices/abc", "", {})).toBe(
+      "https://weather-api.mukoko.com/v1/devices/abc",
+    );
+  });
+
+  it("uses a configured safe origin, ignores an unsafe one", () => {
+    expect(
+      workerUrl("devices/abc", "", {
+        NEXT_PUBLIC_WEATHER_API_URL: "https://worker.example.test/",
+      }),
+    ).toBe("https://worker.example.test/v1/devices/abc");
+    expect(
+      workerUrl("devices", "", {
+        NEXT_PUBLIC_WEATHER_API_URL: "http://evil.example.test",
+      }),
+    ).toBe("https://weather-api.mukoko.com/v1/devices");
+  });
+});

@@ -178,7 +178,7 @@ const serwist = new Serwist({
 
     // Device sync — NetworkOnly
     {
-      matcher: ({ url }) => url.pathname.startsWith("/api/py/devices"),
+      matcher: ({ url }) => url.pathname.startsWith("/v1/devices"),
       handler: new NetworkOnly(),
     },
   ],
