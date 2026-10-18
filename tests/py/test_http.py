@@ -79,11 +79,3 @@ class TestModuleTimeouts:
             _air_quality._fetch_open_meteo_air_quality(-17.8, 31.0)
         get.assert_called_once_with(10.0)
 
-    def test_status_probes_share_one_client_with_10s_timeout(self):
-        from py import _status
-
-        with patch("py._status.get_http_client") as get:
-            get.return_value.get.return_value.status_code = 200
-            get.return_value.get.return_value.json.return_value = {"current": {"temperature_2m": 25}}
-            _status._check_open_meteo()
-        get.assert_called_once_with(10.0)

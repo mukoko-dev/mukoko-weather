@@ -31,7 +31,6 @@ from ._weather import router as weather_router
 from ._ai import router as ai_router
 from ._locations import router as locations_router
 from ._history import router as history_router
-from ._status import router as status_router
 from ._tiles import router as tiles_router
 from ._stations import router as stations_router
 from ._ai_followup import router as ai_followup_router
@@ -109,7 +108,6 @@ app.include_router(weather_router)
 app.include_router(ai_router)
 app.include_router(locations_router)
 app.include_router(history_router)
-app.include_router(status_router)
 app.include_router(tiles_router)
 app.include_router(ai_followup_router)
 app.include_router(history_analyze_router)
