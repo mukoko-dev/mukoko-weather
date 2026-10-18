@@ -44,16 +44,34 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
         "/daily" => daily(&req, &env, &ctx).await,
         "/air-quality" => air::air_quality(&req, &env, &ctx).await,
         "/model-grid" => model_grid::model_grid(&req, &env, &ctx).await,
-        "/health" => health(&env).await,
+        "/health" => health(&req, &env).await,
         _ => error(404, "not_found", "No such route."),
     }
 }
 
-async fn health(env: &Env) -> Result<Response> {
+async fn health(req: &Request, env: &Env) -> Result<Response> {
     let tomorrow = weather_edge::secret(env, weather_core::secrets::TOMORROW_API_KEY)
         .await
         .is_some();
     let nyuchi_api = places::nyuchi_api(env).await.is_some();
+    let mongo = weather_edge::mongo(env).await;
+    // `?probe=mongo` really connects and logs in (the first live check after
+    // the connection string is set); the error names the problem, never the
+    // string.
+    let probe = if query_pairs(req)?
+        .iter()
+        .any(|(k, v)| k == "probe" && v == "mongo")
+    {
+        Some(match &mongo {
+            None => json!({"ok": false, "error": "not configured"}),
+            Some(m) => match m.ping("admin").await {
+                Ok(()) => json!({"ok": true}),
+                Err(e) => json!({"ok": false, "error": e.to_string()}),
+            },
+        })
+    } else {
+        None
+    };
     json(
         200,
         &json!({
@@ -64,7 +82,9 @@ async fn health(env: &Env) -> Result<Response> {
                 "stations_db": env.d1(stations::DB_BINDING).is_ok(),
                 "tomorrow": tomorrow,
                 "nyuchi_api": nyuchi_api,
-            }
+                "mongo": mongo.is_some(),
+            },
+            "mongo_probe": probe,
         }),
     )
 }
