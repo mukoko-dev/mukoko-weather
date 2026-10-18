@@ -34,7 +34,6 @@ from ._locations import router as locations_router
 from ._data import router as data_router
 from ._history import router as history_router
 from ._status import router as status_router
-from ._tiles import router as tiles_router
 from ._stations import router as stations_router
 from ._ai_prompts import router as ai_prompts_router
 from ._ai_followup import router as ai_followup_router
@@ -120,7 +119,6 @@ app.include_router(locations_router)
 app.include_router(data_router)
 app.include_router(history_router)
 app.include_router(status_router)
-app.include_router(tiles_router)
 app.include_router(ai_prompts_router)
 app.include_router(ai_followup_router)
 app.include_router(history_analyze_router)
