@@ -69,6 +69,10 @@ jobs:
         working-directory: .
         run: node --experimental-strip-types workers/scripts/gen-seed-locations.mjs --check
 
+      - name: Reference data is current
+        working-directory: .
+        run: node --experimental-strip-types workers/scripts/gen-reference-data.mjs --check
+
       - name: Format
         run: cargo fmt --all -- --check
 
