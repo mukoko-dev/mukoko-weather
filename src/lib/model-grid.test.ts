@@ -112,7 +112,7 @@ describe("fetchModelGrid", () => {
     expect(out.available).toBe(true);
     const url = String((fetchMock.mock.calls[0] as unknown[])[0]);
     expect(url).toBe(
-      "/api/py/model-grid?lat=-17.8292&lon=31.0522&model=gfs_seamless",
+      "https://weather-api.mukoko.com/v1/model-grid?lat=-17.8292&lon=31.0522&model=gfs_seamless",
     );
   });
 

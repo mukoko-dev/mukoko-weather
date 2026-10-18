@@ -566,3 +566,22 @@ class TestForecastModelValidation:
         with pytest.raises(HTTPException) as exc_info:
             await create_device(body)
         assert exc_info.value.status_code == 400
+
+
+class TestDevicesAcceptMapModels:
+    """The per-model map layers (served by the Rust Workers, `/v1/model-grid`)
+    offer these ids; a device must be able to store each as its preference.
+    The list is the Rust tests' source of truth: tests/fixtures/model-grid.json."""
+
+    def test_every_map_model_is_a_valid_device_preference(self):
+        import json
+        from pathlib import Path
+
+        from py._devices import VALID_FORECAST_MODELS
+
+        fixture = Path(__file__).resolve().parents[1] / "fixtures" / "model-grid.json"
+        for model in json.loads(fixture.read_text())["maxModels"]:
+            assert model in VALID_FORECAST_MODELS
+        # Legacy ids keep working for older devices.
+        assert "ecmwf_ifs04" in VALID_FORECAST_MODELS
+        assert "icon_seamless" in VALID_FORECAST_MODELS

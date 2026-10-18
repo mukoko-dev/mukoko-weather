@@ -1,6 +1,7 @@
 import { roundCoord } from "@/lib/location-privacy";
 import type { WeatherData } from "./weather";
 import { fetchWeather } from "./weather";
+import { fetchWorker } from "./weather-api";
 
 /** How long the home page waits on our own weather API before falling back. */
 export const HOME_WEATHER_TIMEOUT_MS = 8000;
@@ -22,12 +23,11 @@ export function isRenderableWeather(data: unknown): data is WeatherData {
 /**
  * Weather for a GPS-resolved spot on the home page.
  *
- * Goes through our own `/api/py/weather` first — the same cached
- * StationKit → Tomorrow.io → Open-Meteo → seasonal chain the server render
- * uses — so a GPS swap shows the same numbers as the `/{slug}` page and isn't
- * at the mercy of the browser's own Open-Meteo quota (a 429 there used to
- * surface as "Could not detect location"). Only if our API is unreachable
- * does it call Open-Meteo directly.
+ * Goes through the Rust Worker (`GET /v1/weather`) first, the same answer the
+ * server render uses, so a GPS swap shows the same numbers as the `/{slug}`
+ * page and isn't at the mercy of the browser's own Open-Meteo quota (a 429
+ * there used to surface as "Could not detect location"). Only if the Worker
+ * is unreachable does it call Open-Meteo directly.
  */
 export async function fetchHomeWeather(
   lat: number,
@@ -36,11 +36,10 @@ export async function fetchHomeWeather(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), HOME_WEATHER_TIMEOUT_MS);
   try {
-    const res = await fetch(
-      `/api/py/weather?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`,
-      {
-        signal: controller.signal,
-      },
+    const res = await fetchWorker(
+      "weather",
+      `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`,
+      { signal: controller.signal },
     );
     if (res.ok) {
       const data: unknown = await res.json();
@@ -65,11 +64,12 @@ export const MODEL_WEATHER_TIMEOUT_MS = 10_000;
 /**
  * Forecast for a user-selected model plus the comparison series (issue #246).
  *
- * Goes through our own `/api/py/weather` — the canonical, cached chain — with
- * `?model=` (the `selectedForecastModel` preference; `best_match` means the
- * server's Africa-weighted blend) and `?models=` (comparison series). Only
- * when our API is unreachable does it fall back to a direct Open-Meteo call,
- * which still yields comparison series but cannot serve as a model baseline.
+ * Goes through the Rust Worker (`GET /v1/weather`) with `?models=`
+ * (comparison series) and `?model=` (the `selectedForecastModel` preference;
+ * `best_match` means the Africa-weighted blend). The Worker does not serve a
+ * single-model baseline yet, so a picked model comes back as the blend and
+ * `baseline` stays null. Only when the Worker is unreachable does it fall back
+ * to a direct Open-Meteo call, which still yields comparison series.
  *
  * `baseline` is set only when a specific model was picked AND our API served
  * it, so the caller can swap the dashboard onto that model.
@@ -90,7 +90,7 @@ export async function fetchModelWeather(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), MODEL_WEATHER_TIMEOUT_MS);
   try {
-    const res = await fetch(`/api/py/weather?${params}`, {
+    const res = await fetchWorker("weather", params.toString(), {
       signal: controller.signal,
     });
     if (res.ok) {

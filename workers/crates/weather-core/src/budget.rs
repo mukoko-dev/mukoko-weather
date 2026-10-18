@@ -30,6 +30,9 @@ pub enum Action {
     /// Nominatim reverse geocode (policy: about one request a second for the
     /// whole app).
     Nominatim,
+    /// Open-Meteo model-grid fetch (a cache miss of `/v1/model-grid`: one
+    /// request carries 49 locations, and the free API allows about 10,000 a day).
+    ModelGrid,
 }
 
 /// Hourly limits for one action.
@@ -46,6 +49,7 @@ impl Action {
             Action::Resolve => "geocode-resolve",
             Action::Search => "geocode-search",
             Action::Nominatim => "nominatim",
+            Action::ModelGrid => "model-grid",
         }
     }
 
@@ -69,6 +73,13 @@ impl Action {
             Action::Nominatim => Limits {
                 per_client: 60,
                 global: 3_000,
+            },
+            // 30 misses an hour per client, as in the Python backend; the
+            // service-wide cap keeps 49 locations a miss under the free API's
+            // daily allowance (100 an hour is at most 4,900 locations an hour).
+            Action::ModelGrid => Limits {
+                per_client: 30,
+                global: 100,
             },
         }
     }

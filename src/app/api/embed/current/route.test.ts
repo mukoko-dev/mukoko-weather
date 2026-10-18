@@ -165,7 +165,7 @@ describe("route structure", () => {
   });
 
   it("resolves weather by the resolved lat/lon (never a hardcoded default)", () => {
-    expect(source).toContain("/api/py/weather?lat=${lat}&lon=${lon}");
+    expect(source).toContain('workerUrl("weather", `lat=${lat}&lon=${lon}`)');
   });
 
   it("does not shared-cache IP-derived responses", () => {

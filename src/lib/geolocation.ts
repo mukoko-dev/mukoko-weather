@@ -90,8 +90,7 @@ export function detectUserLocation({
           autoCreate ? GEO_CREATE_TIMEOUT_MS : GEO_LOOKUP_TIMEOUT_MS,
         );
         try {
-          // The Rust Worker when NEXT_PUBLIC_WEATHER_API_URL is set (falling
-          // back to /api/py on a 5xx), else /api/py as before.
+          // The Rust Worker (weather-api.mukoko.com), one retry on a 5xx.
           const res = await fetchPlaces(
             "geo",
             `lat=${latitude}&lon=${longitude}${autoCreate ? "&autoCreate=true" : ""}`,

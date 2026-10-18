@@ -16,6 +16,11 @@ use worker::{Env, Headers, Url};
 
 const CACHE: &str = "CACHE";
 const TIMEOUT: Duration = Duration::from_secs(5);
+/// The canonical-places lookup behind `/search` only enriches the answer, so
+/// it gets a short leash: a slow upstream must not slow every search.
+const SEARCH_ENRICH_TIMEOUT: Duration = Duration::from_millis(1_500);
+/// KV marker: the canonical-places search failed lately, skip it for a while.
+const SEARCH_DOWN_KEY: &str = "psearch:v1:down";
 const DAY: u64 = 86_400;
 /// The Python backend's Nominatim identity.
 const USER_AGENT: &str = "mukoko-weather/2.0 (support@mukoko.com)";
@@ -66,13 +71,21 @@ async fn nyuchi_api(env: &Env) -> Option<(String, String)> {
 }
 
 async fn nyuchi_get(env: &Env, path_and_query: &str) -> Result<Option<Value>, ()> {
+    nyuchi_get_within(env, path_and_query, TIMEOUT).await
+}
+
+async fn nyuchi_get_within(
+    env: &Env,
+    path_and_query: &str,
+    timeout: Duration,
+) -> Result<Option<Value>, ()> {
     let Some((base, key)) = nyuchi_api(env).await else {
         return Ok(None);
     };
     let headers = Headers::new();
     headers.set("X-API-Key", &key).map_err(|_| ())?;
     headers.set("Accept", "application/json").map_err(|_| ())?;
-    match get_with_timeout(&format!("{base}{path_and_query}"), Some(headers), TIMEOUT).await {
+    match get_with_timeout(&format!("{base}{path_and_query}"), Some(headers), timeout).await {
         Ok(mut r) if r.status_code() == 200 => r.json::<Value>().await.map(Some).map_err(|_| ()),
         Ok(r) if r.status_code() == 404 => Ok(None),
         _ => Err(()),
@@ -131,10 +144,24 @@ pub async fn nyuchi_search(env: &Env, q: &str, limit: usize) -> Result<Vec<Locat
         .append_pair("q", q.trim())
         .append_pair("limit", &limit.to_string());
     let path = format!("{}?{}", url.path(), url.query().unwrap_or(""));
-    let found = nyuchi_get(env, &path)
-        .await?
-        .map(|b| docs(&b))
-        .unwrap_or_default();
+    let down = cached::<bool>(env, SEARCH_DOWN_KEY).await.is_some();
+    if !weather_core::cache::should_call_upstream(down) {
+        return Err(());
+    }
+    let body = match nyuchi_get_within(env, &path, SEARCH_ENRICH_TIMEOUT).await {
+        Ok(body) => body,
+        Err(()) => {
+            store(
+                env,
+                SEARCH_DOWN_KEY,
+                &true,
+                weather_core::cache::marker_ttl_on_failure(),
+            )
+            .await;
+            return Err(());
+        }
+    };
+    let found = body.map(|b| docs(&b)).unwrap_or_default();
     store(env, &key, &found, 3_600).await;
     Ok(found)
 }

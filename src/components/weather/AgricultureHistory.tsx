@@ -9,6 +9,7 @@ import {
   summarizeHistory,
   type HistorySummary,
 } from "@/lib/agriculture";
+import { fetchWorker } from "@/lib/weather-api";
 
 /**
  * The past 30 days against climate normals: recorded rain and mean
@@ -57,7 +58,7 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
 
   useEffect(() => {
     let live = true;
-    fetch(`/api/py/history?location=${encodeURIComponent(slug)}&days=30`)
+    fetchWorker("history", `location=${encodeURIComponent(slug)}&days=30`)
       .then(async (res) => (res.ok ? res.json() : { data: [] }))
       .then((json: { data?: unknown[] }) => {
         if (live) setHistory(summarizeHistory((json.data ?? []) as never[]));

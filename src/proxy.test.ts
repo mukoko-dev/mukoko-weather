@@ -411,11 +411,12 @@ describe("proxy — bare place names resolve instead of 404 (#317)", () => {
     expect(mockResolveFetch).not.toHaveBeenCalled();
   });
 
-  it("is off (a plain 404) while the Worker is not configured", async () => {
+  it("asks the production Worker when no override is configured", async () => {
     vi.stubEnv("NEXT_PUBLIC_WEATHER_API_URL", "");
-    const res = await run("/koh-samui");
-    expect(res.headers.get("x-middleware-rewrite")).toContain("not-found");
-    expect(mockResolveFetch).not.toHaveBeenCalled();
+    await run("/koh-samui");
+    expect(String(mockResolveFetch.mock.calls[0]?.[0])).toContain(
+      "https://weather-api.mukoko.com/v1/search?mode=resolve",
+    );
   });
 
   it("keeps the case redirect and the seed-alias redirect as they were", async () => {

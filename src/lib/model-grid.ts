@@ -1,7 +1,7 @@
 /**
  * Per-model forecast fields for the full-screen map.
  *
- * `/api/py/model-grid` returns one model's 3-hourly temperature, precipitation
+ * The Rust Worker's `/v1/model-grid` returns one model's 3-hourly temperature, precipitation
  * and wind on an n×n grid. This module types that response, turns one variable
  * at one step into coloured square cells (reusing the AQ grid's cell geometry)
  * and fetches it. Everything but `fetchModelGrid` is pure and unit-tested.
@@ -11,6 +11,10 @@ import type { FeatureCollection, Polygon } from "geojson";
 import { gridToGeoJSON } from "./aq-grid";
 import { getMapChip, legendBandIndex, type LayerLegend } from "./map-layers";
 import { MODEL_LAYER_VARIABLES, type ModelVariable } from "./map-sources";
+import { weatherApiBase } from "./weather-api";
+
+/** The Rust weather backend, used when no override is configured. */
+const WORKER_ORIGIN = "https://weather-api.mukoko.com";
 
 export interface ModelGridPoint {
   lat: number;
@@ -108,7 +112,8 @@ export async function fetchModelGrid(options: {
     lon: options.lon.toFixed(4),
     model: options.model,
   });
-  const res = await fetch(`/api/py/model-grid?${params.toString()}`, {
+  const base = weatherApiBase() ?? WORKER_ORIGIN;
+  const res = await fetch(`${base}/v1/model-grid?${params.toString()}`, {
     signal: options.signal,
     headers: { Accept: "application/json" },
   });
