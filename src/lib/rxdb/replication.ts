@@ -2,7 +2,7 @@
  * RxDB replication to the Python backend.
  *
  * Preferences: bidirectional (push to PATCH /api/py/devices, pull from GET /api/py/devices)
- * Suitability rules: pull-only (GET /api/py/suitability every 10 min)
+ * Suitability rules: pull-only (GET /v1/suitability on the Worker, every 10 min)
  *
  * Uses leader election — only the leader tab replicates to avoid conflicts.
  */

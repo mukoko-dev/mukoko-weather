@@ -149,6 +149,7 @@ const ModelComparisonChart = lazy(() =>
 );
 
 import { formatCoords } from "@/lib/utils";
+import { workerUrl } from "@/lib/worker-url";
 
 const BASE_URL = "https://weather.mukoko.com";
 
@@ -264,7 +265,7 @@ export function WeatherDashboard({
   const [allActivities, setAllActivities] = useState<Activity[]>(ACTIVITIES);
   useEffect(() => {
     if (selectedActivities.length === 0) return;
-    fetch("/api/py/activities")
+    fetch(workerUrl("/v1/activities"))
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.activities?.length) setAllActivities(data.activities);
