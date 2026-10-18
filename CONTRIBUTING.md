@@ -258,12 +258,13 @@ The Rust Workers in `workers/` deploy by hand only, from **Actions → Workers d
 
 The workflow needs the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets. The token needs **Account → Secrets Store → Edit** as well as Workers edit: binding a Secrets Store secret on deploy counts as a write. The Workers' own runtime secrets live in the account's Cloudflare Secrets Store (`56f84bfa8a564c54a95dbf4f4b4281b4`), never in the workflow. Each key is one store secret, bound by every Worker that needs it (`secrets_store_secrets` in each `wrangler.jsonc`):
 
-| Store secret                      | Bound by (`workers/<dir>`) | Required | Value                                                                                         |
-| --------------------------------- | -------------------------- | -------- | --------------------------------------------------------------------------------------------- |
-| `MUKOKO_WEATHER_TOMORROW_API_KEY` | `forecast`, `tiles`        | Required | Tomorrow.io key (today in Mongo `weather.api_keys` "tomorrow")                                |
-| `MUKOKO_WEATHER_NYUCHI_API_KEY`   | `forecast`, `places`, `ai` | Required | This app's internal Nyuchi API key: places read, plus the `ai` scope for the guardrails read  |
-| `MUKOKO_WEATHER_SERVICE_API_KEY`  | `internal-api`             | Required | The bearer key nyuchi-api presents as `WEATHER_SERVICE_API_KEY` (e.g. `openssl rand -hex 32`) |
-| `MUKOKO_WEATHER_CHECKWX_API_KEY`  | `aviation`                 | Optional | CheckWX key, the METAR fallback (today in Mongo `weather.api_keys` "checkwx")                 |
+| Store secret                      | Bound by (`workers/<dir>`)                | Required | Value                                                                                                              |
+| --------------------------------- | ----------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| `MUKOKO_WEATHER_TOMORROW_API_KEY` | `forecast`, `tiles`                       | Required | Tomorrow.io key (today in Mongo `weather.api_keys` "tomorrow")                                                     |
+| `MUKOKO_WEATHER_NYUCHI_API_KEY`   | `forecast`, `places`, `ai`                | Required | This app's internal Nyuchi API key: places read, plus the `ai` scope for the guardrails read                       |
+| `MUKOKO_WEATHER_SERVICE_API_KEY`  | `internal-api`                            | Required | The bearer key nyuchi-api presents as `WEATHER_SERVICE_API_KEY` (e.g. `openssl rand -hex 32`)                      |
+| `MUKOKO_WEATHER_MONGODB_URI`      | none yet (plain `MONGODB_URI` until then) | Optional | MongoDB seed-list connection string for the Workers' read-only client (workers/README.md, "MongoDB from a Worker") |
+| `MUKOKO_WEATHER_CHECKWX_API_KEY`  | `aviation`                                | Optional | CheckWX key, the METAR fallback (today in Mongo `weather.api_keys` "checkwx")                                      |
 
 Create each one with `npx wrangler secrets-store secret create 56f84bfa8a564c54a95dbf4f4b4281b4 --name <NAME> --scopes workers --remote`, which prompts for the value (`workers/README.md`, "Owner steps"). Transition: until every value is confirmed in the store, the Workers fall back to the plain wrangler secret of the old name (`TOMORROW_API_KEY`, `NYUCHI_API_KEY`, `WEATHER_SERVICE_API_KEY`, `CHECKWX_API_KEY`) and log a warning once per isolate; the fallback is removed once the store is confirmed. Deploys share one `concurrency` group per environment and never cancel each other.
 
