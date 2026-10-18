@@ -10,6 +10,9 @@
 //! GET /v1/weather?lat=&lon=[&models=a,b]   full WeatherData, the shape of /api/py/weather
 //! GET /v1/forecast?location=|lat=&lon=[&days=1..7]   the daily forecast contract
 //! GET /v1/air-quality?lat=&lon=                     the EPA AQI, the shape of /api/py/airquality
+//! GET /v1/air-quality/grid?lat=&lon=[&radiusKm=&n=]  US AQI on an n x n grid (the shape of /api/py/airquality/grid)
+//! GET /v1/enso                                       El Nino / La Nina phase (the shape of /api/py/enso)
+//! GET /v1/sg-air?lat=&lon=                           official Singapore NEA air quality (the shape of /api/py/sg-air)
 //! GET /v1/metar?icao=                                METARs and TAF, the shape of /api/py/metar
 //! GET /v1/airports/nearest?lat=&lon=[&count=][&maxDistanceKm=]
 //!                                                    the shape of /api/py/airports/nearest
@@ -103,6 +106,18 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
             )
             .await
         }
+        "/v1/air-quality/grid" => {
+            relay(
+                req,
+                env,
+                FORECAST_BINDING,
+                "/air-quality/grid",
+                "public, max-age=900",
+            )
+            .await
+        }
+        "/v1/enso" => relay(req, env, FORECAST_BINDING, "/enso", "public, max-age=3600").await,
+        "/v1/sg-air" => relay(req, env, FORECAST_BINDING, "/sg-air", "public, max-age=300").await,
         "/v1/model-grid" => {
             relay(
                 req,
@@ -391,7 +406,17 @@ async fn relay(
         copy_header(upstream.headers(), resp.headers(), h)?;
     }
     if status == 200 {
-        resp.headers().set("Cache-Control", cache_control)?;
+        // An upstream `no-store` (a degraded answer) must never be cached.
+        let no_store = upstream
+            .headers()
+            .get("Cache-Control")
+            .ok()
+            .flatten()
+            .is_some_and(|v| v == "no-store");
+        resp.headers().set(
+            "Cache-Control",
+            if no_store { "no-store" } else { cache_control },
+        )?;
     }
     Ok(resp)
 }

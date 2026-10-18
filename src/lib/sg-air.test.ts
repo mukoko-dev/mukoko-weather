@@ -109,7 +109,8 @@ describe("display wiring for the NEA panel", () => {
   it("polls the endpoint only for Singapore, every 15 minutes", () => {
     const dash = read("app/display/DisplayDashboard.tsx");
     expect(dash).toMatch(/location\.country === "SG"/);
-    expect(dash).toContain("/api/py/sg-air?");
+    expect(dash).toContain('workerUrl("sg-air", coords)');
+    expect(dash).not.toContain("/api/py/sg-air");
     expect(DISPLAY_REFRESH_MS.sgAir).toBe(15 * 60 * 1000);
   });
 

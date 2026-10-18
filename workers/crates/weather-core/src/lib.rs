@@ -12,6 +12,7 @@
 
 pub mod ai;
 pub mod air_quality;
+pub mod aq_grid;
 pub mod auth;
 pub mod aviation;
 pub mod breaker;
@@ -19,6 +20,7 @@ pub mod budget;
 pub mod cache;
 pub mod cors;
 pub mod devkey;
+pub mod enso;
 pub mod forecast;
 pub mod geo;
 pub mod jobs;
@@ -31,6 +33,7 @@ pub mod query;
 pub mod reference;
 pub mod resolve;
 pub mod secrets;
+pub mod sg_air;
 pub mod station;
 pub mod status;
 pub mod tiles;
