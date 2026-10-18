@@ -99,7 +99,9 @@ describe("getMapLayerById", () => {
 describe("weatherOverlayTileUrl", () => {
   it("targets the server-side proxy (keeps the Tomorrow.io key server-side)", () => {
     const url = weatherOverlayTileUrl("precipitationIntensity");
-    expect(url.startsWith("/api/py/map-tiles?")).toBe(true);
+    expect(
+      url.startsWith("https://weather-tiles.mukoko.com/v1/map-tiles?"),
+    ).toBe(true);
     expect(url).not.toContain("api.tomorrow.io");
     expect(url).not.toContain("apikey");
   });
@@ -324,7 +326,9 @@ describe("map overlay sources (satellite, model fields, timeline)", () => {
       /\/\d{4}-\d{2}-\d{2}T\d{2}%3A\d{2}%3A00Z\//,
     );
     const rain = buildWeatherOverlaySource("precipitationIntensity");
-    expect(rain.tiles[0]).toContain("/api/py/map-tiles");
+    expect(rain.tiles[0]).toContain(
+      "https://weather-tiles.mukoko.com/v1/map-tiles",
+    );
     expect(rain.attribution).toContain("Tomorrow.io");
     expect(weatherOverlayOpacity("precipitationIntensity")).toBe(0.6);
     expect(weatherOverlayOpacity("satellite")).toBeGreaterThan(0.6);

@@ -121,7 +121,7 @@ const serwist = new Serwist({
 
     // Map tiles — CacheFirst (expensive, stable data)
     {
-      matcher: ({ url }) => url.pathname.startsWith("/api/py/map-tiles"),
+      matcher: ({ url }) => url.pathname.startsWith("/v1/map-tiles"),
       handler: new CacheFirst({
         cacheName: "map-tiles",
         plugins: [

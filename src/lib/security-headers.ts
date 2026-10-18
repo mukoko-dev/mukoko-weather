@@ -44,6 +44,8 @@ export const CSP_DIRECTIVES: Record<string, string[]> = {
     "https://api.maptiler.com",
     "https://*.maptiler.com",
     "https://gibs.earthdata.nasa.gov",
+    // Weather overlay tiles from the Rust tiles Worker (src/lib/map-layers.ts).
+    "https://weather-tiles.mukoko.com",
     "https://*.googleusercontent.com",
     "https://*.workoscdn.com",
     "https://avatars.githubusercontent.com",
@@ -57,6 +59,7 @@ export const CSP_DIRECTIVES: Record<string, string[]> = {
     "https://api.open-meteo.com",
     // The Rust weather Worker (NEXT_PUBLIC_WEATHER_API_URL, src/lib/weather-api.ts).
     "https://weather-api.mukoko.com",
+    "https://weather-tiles.mukoko.com",
     "https://api.tomorrow.io",
     "https://gibs.earthdata.nasa.gov",
     "https://api.workos.com",

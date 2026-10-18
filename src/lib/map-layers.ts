@@ -134,7 +134,7 @@ export function getMapLayerById(id: string): MapLayer | undefined {
 
 /**
  * Tomorrow.io weather overlay tiles are only served for zoom levels 1–12
- * (see the `/api/py/map-tiles` proxy, which rejects z<1 or z>12 with HTTP 400).
+ * (see the tiles Worker, which rejects z<1 or z>12 with HTTP 400).
  * Pinning the raster source to this range makes MapLibre overzoom the z12 tile
  * when the user zooms in past 12 instead of requesting z13+ tiles the proxy
  * rejects — which would otherwise make the overlay vanish when zoomed in.
@@ -161,14 +161,19 @@ export const WEATHER_OVERLAY_ID = "weather-overlay";
 
 /**
  * Builds the proxied tile URL template for a Tomorrow.io weather overlay layer.
- * MapLibre substitutes {z}/{x}/{y} at request time. Tiles are proxied through
- * the Python backend (`/api/py/map-tiles`) so the Tomorrow.io key stays server-side.
+ * MapLibre substitutes {z}/{x}/{y} at request time. Tiles come from the Rust
+ * tiles Worker (`weather-tiles.mukoko.com`, `/v1/map-tiles`) so the Tomorrow.io
+ * key stays server-side. It has its own host because one map view loads dozens
+ * of tiles.
  */
+/** The tiles Worker's origin. */
+export const WEATHER_TILES_ORIGIN = "https://weather-tiles.mukoko.com";
+
 export function weatherOverlayTileUrl(
   layerId: string,
   timestamp?: string,
 ): string {
-  const base = `/api/py/map-tiles?z={z}&x={x}&y={y}&layer=${encodeURIComponent(layerId)}`;
+  const base = `${WEATHER_TILES_ORIGIN}/v1/map-tiles?z={z}&x={x}&y={y}&layer=${encodeURIComponent(layerId)}`;
   if (!timestamp || timestamp === "now") return base;
   return `${base}&timestamp=${encodeURIComponent(timestamp)}`;
 }

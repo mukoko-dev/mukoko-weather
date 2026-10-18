@@ -64,13 +64,6 @@ class TestModuleTimeouts:
 
         assert _overpass.HTTP_TIMEOUT_S == 6.0
 
-    def test_tiles_upstream_timeout(self):
-        from py import _tiles
-
-        with patch("py._tiles.get_http_client") as get:
-            _tiles._get_http()
-        get.assert_called_once_with(8.0)
-
     def test_air_quality_timeout(self):
         from py import _air_quality
 

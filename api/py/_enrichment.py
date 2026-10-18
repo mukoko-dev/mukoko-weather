@@ -159,7 +159,7 @@ _skips_seen: set[tuple[str, str, str]] = set()
 #: Hour bucket (``%Y%m%d%H``) in which Tomorrow.io answered 429 for the
 #: account's hourly or daily quota. Separate from ``_exhausted``, which also
 #: records our own budget caps: only a real provider 429 should stop the map
-#: tiles (``_tiles.py``), which share the key but not the budget.
+#: tiles (the tiles Worker, ``workers/tiles``), which share the key but not the budget.
 _rate_limited_hour: dict[str, str] = {}
 
 #: A 429 with no ``X-RateLimit-Remaining-*`` header cannot be told apart from a
