@@ -1,7 +1,6 @@
 "use client";
 
 import { roundCoord } from "@/lib/location-privacy";
-import { workerApiUrl } from "@/lib/weather-api";
 import { useEffect, useState } from "react";
 import {
   formatAnomaly,
@@ -10,6 +9,7 @@ import {
   summarizeHistory,
   type HistorySummary,
 } from "@/lib/agriculture";
+import { fetchWorker } from "@/lib/weather-api";
 
 /**
  * The past 30 days against climate normals: recorded rain and mean
@@ -58,7 +58,7 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
 
   useEffect(() => {
     let live = true;
-    fetch(`/api/py/history?location=${encodeURIComponent(slug)}&days=30`)
+    fetchWorker("history", `location=${encodeURIComponent(slug)}&days=30`)
       .then(async (res) => (res.ok ? res.json() : { data: [] }))
       .then((json: { data?: unknown[] }) => {
         if (live) setHistory(summarizeHistory((json.data ?? []) as never[]));
@@ -69,11 +69,9 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
     // of it. Sequential on purpose: the first call builds the cell's table
     // (cached afterwards), the second reads it.
     const getNormals = async (date: string): Promise<Normals> => {
-      const res = await fetch(
-        workerApiUrl(
-          "normals",
-          `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
-        ),
+      const res = await fetchWorker(
+        "normals",
+        `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
       );
       return res.ok ? ((await res.json()) as Normals) : { available: false };
     };

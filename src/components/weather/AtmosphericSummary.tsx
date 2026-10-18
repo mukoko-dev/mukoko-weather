@@ -1,7 +1,6 @@
 "use client";
 
 import { roundCoord } from "@/lib/location-privacy";
-import { workerApiUrl } from "@/lib/weather-api";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type {
@@ -61,6 +60,7 @@ import {
 } from "./widgets";
 import { POLLUTANT_LABELS, type AirQualityResponse } from "./AirQualityCard";
 import { AirQualityWideSkeleton } from "./SectionSkeleton";
+import { fetchWorker } from "@/lib/weather-api";
 
 interface Props {
   current: CurrentWeather;
@@ -262,14 +262,10 @@ function useNormalHigh(
     if (typeof lat !== "number" || typeof lon !== "number") return;
     const controller = new AbortController();
     const date = localIsoDate(new Date(), offsetSeconds);
-    fetch(
-      workerApiUrl(
-        "normals",
-        `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
-      ),
-      {
-        signal: controller.signal,
-      },
+    fetchWorker(
+      "normals",
+      `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
+      { signal: controller.signal },
     )
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -310,9 +306,13 @@ function useAirQuality(lat: number | undefined, lon: number | undefined) {
   useEffect(() => {
     if (typeof lat !== "number" || typeof lon !== "number") return;
     const controller = new AbortController();
-    fetch(`/api/py/airquality?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`, {
-      signal: controller.signal,
-    })
+    fetchWorker(
+      "air-quality",
+      `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`,
+      {
+        signal: controller.signal,
+      },
+    )
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return (await res.json()) as AqPayload;

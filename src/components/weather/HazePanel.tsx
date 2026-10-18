@@ -1,7 +1,7 @@
 "use client";
 
 import { roundCoord } from "@/lib/location-privacy";
-import { workerApiUrl } from "@/lib/weather-api";
+import { fetchWorker } from "@/lib/weather-api";
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import {
   CloudIcon,
@@ -66,12 +66,9 @@ export function HazePanel({ lat, lon }: Props) {
     abortRef.current = controller;
     let cancelled = false;
 
-    fetch(
-      workerApiUrl("haze", `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`),
-      {
-        signal: controller.signal,
-      },
-    )
+    fetchWorker("haze", `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`, {
+      signal: controller.signal,
+    })
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return (await res.json()) as HazeResponse;

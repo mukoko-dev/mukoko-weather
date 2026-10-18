@@ -12,6 +12,7 @@
 //! GET /normals?lat=&lon=[&date=]                   1991-2020 average daily high and low (ERA5 via Open-Meteo)
 //! GET /enso                                        El Nino / La Nina phase (NOAA CPC ONI)
 //! GET /sg-air[?lat=&lon=]                          official Singapore NEA PSI and PM2.5
+//! GET /model-grid?lat=&lon=[&model=]               one model's 3-hourly forecast on a 7×7 grid
 //! GET /health                                      which bindings are configured
 //! ```
 //!
@@ -30,6 +31,8 @@ mod aq_grid;
 mod chain;
 mod enso;
 mod haze;
+mod limit;
+mod model_grid;
 mod normals;
 mod places;
 mod sg_air;
@@ -55,6 +58,7 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
         "/haze" => haze::haze(&req, &env, &ctx).await,
         "/normals" => normals::normals(&req, &env, &ctx).await,
         "/sg-air" => sg_air::sg_air(&req, &env, &ctx).await,
+        "/model-grid" => model_grid::model_grid(&req, &env, &ctx).await,
         "/health" => health(&env).await,
         _ => error(404, "not_found", "No such route."),
     }

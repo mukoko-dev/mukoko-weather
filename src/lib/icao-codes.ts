@@ -1,4 +1,5 @@
 import { nearestWithin } from "./geo";
+import { fetchWorker } from "./weather-api";
 
 /**
  * Maps location slugs to ICAO airport codes.
@@ -370,7 +371,7 @@ export async function fetchNearestAirports(
       count: String(count),
       maxDistanceKm: String(maxDistanceKm),
     });
-    const res = await fetch(`/api/py/airports/nearest?${params.toString()}`);
+    const res = await fetchWorker("airports/nearest", params.toString());
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = (await res.json()) as { airports?: AirportDistance[] };
     const airports = body?.airports;

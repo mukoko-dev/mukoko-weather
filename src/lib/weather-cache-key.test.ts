@@ -110,7 +110,7 @@ describe("weatherCacheKey", () => {
   });
 });
 
-describe("getWeatherForLocation reads the key the Python writer writes", () => {
+describe("getWeatherForLocation hands the Worker the coordinates its cache cell derives from", () => {
   beforeEach(() => {
     findOne.mockReset();
   });
@@ -118,26 +118,32 @@ describe("getWeatherForLocation reads the key the Python writer writes", () => {
     vi.unstubAllGlobals();
   });
 
-  it("looks up the row by the coordinate cell, not the page slug", async () => {
-    const cached = { current: { temperature_2m: 21 } };
-    findOne.mockResolvedValue({ data: cached });
-    const { getWeatherForLocation } = await import("./db");
-
-    const res = await getWeatherForLocation("harare", -17.8292, 31.0522, 1490);
-
-    expect(res).toEqual({ data: cached, source: "cache" });
-    const filter = findOne.mock.calls[0][0];
-    expect(filter.locationSlug).toBe("cell:-17.85_31.05");
-    expect(filter.locationSlug).toBe(weatherCacheKey(-17.8292, 31.0522));
-    expect(filter.expiresAt.$gt).toBeInstanceOf(Date);
-  });
-
-  it("on a miss, asks Python for the same coordinates it keyed the read on", async () => {
-    findOne.mockResolvedValue(null);
+  it("does not read MongoDB at all: the Worker owns the cache", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ current: {} }), {
         status: 200,
-        headers: { "x-weather-provider": "open-meteo" },
+        headers: {
+          "content-type": "application/json",
+          "x-weather-provider": "open-meteo",
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { getWeatherForLocation } = await import("./db");
+
+    await getWeatherForLocation("harare", -17.8292, 31.0522, 1490);
+
+    expect(findOne).not.toHaveBeenCalled();
+  });
+
+  it("sends the exact lat/lon the cell key is derived from", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ current: {} }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "x-weather-provider": "open-meteo",
+        },
       }),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -145,9 +151,8 @@ describe("getWeatherForLocation reads the key the Python writer writes", () => {
 
     await getWeatherForLocation("karachi-pk", 24.86, 67.01, 10);
 
-    expect(findOne.mock.calls[0][0].locationSlug).toBe("cell:24.85_67.00");
     const url = new URL(String(fetchMock.mock.calls[0][0]));
-    // Python derives its write key from these exact values.
+    expect(url.pathname).toBe("/v1/weather");
     expect(
       weatherCacheKey(
         Number(url.searchParams.get("lat")),

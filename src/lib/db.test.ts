@@ -781,10 +781,12 @@ describe("getWeatherForLocation — read-only SSR path (issue #101)", () => {
     expect(source).not.toContain('from "./tomorrow"');
   });
 
-  it("delegates cache misses to the canonical Python endpoint", async () => {
+  it("reads the Rust Worker for weather (no Python, no Mongo read)", async () => {
     const fs = await import("fs");
     const source = fs.readFileSync("src/lib/db.ts", "utf-8");
-    expect(source).toContain("/api/py/weather?lat=");
+    expect(source).not.toContain("internalApiTarget");
+    expect(source).not.toContain("getCachedWeather(weatherCacheKey");
+    expect(source).toContain('workerUrl(\n    "weather"');
     expect(source).toContain("x-weather-provider");
     // #245: SSR passes its slug so the cache row + history doc are keyed
     // under the slug /api/py/history?location= reads.
