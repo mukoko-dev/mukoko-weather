@@ -27,8 +27,8 @@ use serde_json::Value;
 use crate::ag_calendar::{
     self as ag, AgCalendar, CropPhase, CropWindow, DerivedGrowingWindow, GrazingNotes,
 };
+use crate::climate_normals::{round_to, MonthlyNormal, NORMALS_PERIOD, NORMALS_SOURCE};
 use crate::locations::encode_geohash;
-use crate::normals::{round_to, MonthlyNormal, NORMALS_PERIOD, NORMALS_SOURCE};
 
 pub const SCHEMA_VERSION: &str = "v3.2";
 /// Geohash length of `regionCell` (~4.9 km): nearby spots share region facts.

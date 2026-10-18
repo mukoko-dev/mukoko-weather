@@ -54,7 +54,13 @@ export type WorkerRoute =
   | "history"
   | "locations/profile"
   | "metar"
-  | "airports/nearest";
+  | "airports/nearest"
+  | "air-quality/grid"
+  | "enso"
+  | "sg-air"
+  | "haze"
+  | "normals"
+  | "aviation/nearest-metar";
 
 /** The Worker's URL for a route and its query string (no leading `?`). */
 export function workerUrl(

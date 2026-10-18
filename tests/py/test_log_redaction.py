@@ -47,27 +47,6 @@ class TestTomorrowKeyInHeader:
         assert FAKE_KEY not in str(params)
         assert call.kwargs["headers"] == {"apikey": FAKE_KEY}
 
-    @patch("py._enrichment.budget_snapshot")
-    @patch("py._status.get_http_client")
-    @patch("py._status.get_api_key")
-    def test_status_check_never_sends_the_key_anywhere(self, mock_key, mock_client, mock_budget):
-        """The Tomorrow.io status row is read from config/budget — no probe,
-        so the key never leaves the server (and no quota is spent)."""
-        from py._status import _check_tomorrow_io
-
-        mock_key.return_value = FAKE_KEY
-        mock_budget.return_value = {"hourUsed": 0, "hourCap": 20, "dayUsed": 0, "dayCap": 400}
-
-        _check_tomorrow_io()
-
-        mock_client.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# Redaction
-# ---------------------------------------------------------------------------
-
-
 class TestRedactSecrets:
     @pytest.mark.parametrize(
         "name", ["apikey", "api_key", "key", "token", "access_token", "password", "PASSWORD", "ApiKey"]

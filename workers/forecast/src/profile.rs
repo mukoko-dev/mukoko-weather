@@ -29,7 +29,7 @@ use serde_json::{json, Value};
 use weather_core::breaker::{self, Breaker};
 use weather_core::budget::Action;
 use weather_core::cache::Slot;
-use weather_core::normals as nm;
+use weather_core::climate_normals as nm;
 use weather_core::place_profile as pp;
 use weather_edge::{error, get_with_timeout, json, now, now_ms, query_pairs};
 use weather_mongo::conn::FindOptions;

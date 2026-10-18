@@ -35,8 +35,9 @@ describe("EnsoOutlook — client component", () => {
     expect(source).toContain("export function EnsoOutlook");
   });
 
-  it("fetches the Python ENSO endpoint", () => {
-    expect(source).toContain('"/api/py/enso"');
+  it("fetches the Rust Worker's ENSO route, never /api/py", () => {
+    expect(source).toContain('fetchWorker("enso"');
+    expect(source).not.toContain("/api/py/enso");
   });
 
   it("aborts the in-flight request on unmount", () => {

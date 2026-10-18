@@ -20,7 +20,7 @@ use chrono::{Datelike, Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
 
 use crate::ag_calendar_tables::{COUNTRY_ISO, SEASON_NAMES};
-use crate::normals::MonthlyNormal;
+use crate::climate_normals::MonthlyNormal;
 
 static TABLE_GZ: &[u8] = include_bytes!("../data/geoglam_cm4ew_v1_3.json.gz");
 
