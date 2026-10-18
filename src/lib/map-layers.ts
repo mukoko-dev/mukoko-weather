@@ -301,7 +301,7 @@ function hourOffsetLabel(hours: number): string {
 }
 
 /**
- * Model-field stops from the grid's 3-hourly UTC times (`/api/py/model-grid`).
+ * Model-field stops from the grid's 3-hourly UTC times (`/v1/model-grid`).
  * The grid is cached for up to 3 h, so its first time can be in the past:
  * steps that ended before `now` are dropped, the step containing `now` reads
  * "Now", and later steps are labelled by their real offset from now.
@@ -467,7 +467,7 @@ export const MAP_CHIPS: readonly MapChip[] = [
 
 /**
  * Per-model forecast fields (one blend member at a time, see MAP_MODELS).
- * Painted by MapLibreMap from /api/py/model-grid cells; `token`/`from` drive
+ * Painted by MapLibreMap from /v1/model-grid cells; `token`/`from` drive
  * the fill colour. Kept out of MAP_CHIPS: the layer sits behind the
  * `model_map_layers` flag until the owner settles Open-Meteo's commercial
  * terms (the free API is non-commercial).
