@@ -1083,7 +1083,7 @@ weather.stationObservations → QC pipeline → weather.observations
 **Local-first sync (RxDB):**
 
 - `src/lib/rxdb/bridge.ts` owns persisted preferences. `initRxDBBridge()` hydrates the Zustand store from the RxDB `preferences` document (keyed by a device UUID kept in localStorage under `mukoko-device-id`), `updatePreferences()` writes to RxDB, and RxDB change subscriptions push multi-tab changes back into Zustand. `migrateLocalStorageToRxDB()` runs once to move the legacy `mukoko-weather-prefs` localStorage blob into IndexedDB
-- `src/lib/rxdb/replication.ts` replicates preferences bidirectionally with `/v1/devices/{id}` on the Rust Worker (PATCH to push, GET to pull). Only the leader tab replicates. Suitability rules are pull-only from `/api/py/suitability` every 10 minutes
+- `src/lib/rxdb/replication.ts` replicates preferences bidirectionally with `/v1/devices/{id}` on the Rust Worker (PATCH to push, GET to pull). Only the leader tab replicates. Suitability rules are pull-only from `/v1/suitability` on the Rust Worker every 10 minutes
 - `initializeDeviceSync()` in `src/lib/store.ts` is the single entry point: it runs the bridge, then `startReplication()`
 - **Merge strategy:** Last-write-wins (not CRDT). If a user has multiple devices, whichever syncs last determines the server value for array fields like `selectedActivities` and `savedLocations`. A per-field timestamp merge is a future enhancement
 
