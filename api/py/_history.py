@@ -28,7 +28,7 @@ from ._history_store import (
     read_history_range,
     window_for_days,
 )
-from ._places_resolver import find_location
+from ._places_resolver import find_location, storage_slug
 from ._weather_cache_key import weather_cache_key
 
 router = APIRouter()
@@ -41,8 +41,13 @@ COORD_BACKFILL_RATE_LIMIT = 10
 
 
 def history_slugs(location: str, loc: dict) -> list[str]:
-    """Canonical slug first, then the platform hash slug older writes used."""
-    slugs = [location]
+    """Canonical slug first, then the platform hash slug older writes used.
+
+    A synthesized spot (a ``{name}--{geohash}`` slug with no record) is a
+    coordinate path: its history is keyed by its cell (``storage_slug``), so
+    the name half of the URL never becomes a storage key.
+    """
+    slugs = [storage_slug(location, loc)]
     platform = loc.get("platformSlug")
     if platform and platform != location:
         slugs.append(platform)
@@ -173,7 +178,7 @@ async def get_history(
         # archive response never stalls other requests on this instance.
         backfilled = await asyncio.to_thread(
             backfill_range,
-            key,
+            slugs[0],
             float(p_lat),
             lon_f,
             range_start,

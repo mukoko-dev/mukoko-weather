@@ -39,8 +39,11 @@ function SectionHeader({
       </Tag>
       {action &&
         (action.href ? (
+          // No viewport prefetch: on load it fetched the detail sub-route's
+          // RSC payload (e.g. /atmosphere) in competition with first render.
           <Link
             href={action.href}
+            prefetch={false}
             className="dikdik min-h-[var(--touch-target-min)]"
           >
             {action.label}

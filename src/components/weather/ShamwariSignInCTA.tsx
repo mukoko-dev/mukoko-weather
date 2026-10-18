@@ -11,11 +11,16 @@ import { SparklesIcon } from "@/lib/weather-icons";
 const ACCENTS = {
   sodalite: {
     icon: "text-mineral-sodalite",
-    surface: "border-mineral-sodalite/25 border-l-mineral-sodalite",
+    surface: "border-mineral-sodalite/40",
   },
   tanzanite: {
     icon: "text-tanzanite",
-    surface: "border-tanzanite/25 border-l-tanzanite",
+    surface: "border-tanzanite/40",
+  },
+  // Farming (agriculture page).
+  malachite: {
+    icon: "text-mineral-malachite",
+    surface: "border-mineral-malachite/40",
   },
 } as const;
 
@@ -42,7 +47,7 @@ export function ShamwariSignInCTA({
   const tone = ACCENTS[accent];
   return (
     <section aria-label={title}>
-      <div className={`baobab border-l-[6px] ${tone.surface}`}>
+      <div className={`baobab ${tone.surface}`}>
         <div className="flex items-center gap-2">
           <SparklesIcon size={16} className={tone.icon} />
           <h2 className="giraffe">{title}</h2>

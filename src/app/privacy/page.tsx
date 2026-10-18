@@ -17,7 +17,7 @@ export default function PrivacyPage() {
       <PageShell>
         <h1 className="elephant">Privacy Policy</h1>
         <p className="mt-2 text-base text-text-tertiary">
-          Last updated: June 2026
+          Last updated: October 2026
         </p>
 
         <div className="mt-8 space-y-8 text-text-secondary leading-relaxed">
@@ -188,9 +188,20 @@ export default function PrivacyPage() {
               <div>
                 <dt className="font-semibold text-text-primary">Open-Meteo</dt>
                 <dd className="mt-1">
-                  Weather data API. We send geographic coordinates of supported
-                  locations to retrieve weather forecasts. No personal data is
-                  transmitted. See their{" "}
+                  Weather data and geocoding API. We send geographic coordinates
+                  to retrieve weather forecasts. When a location search finds
+                  few matches in our own catalogue, the text you typed is sent
+                  to our own weather service (weather-api.mukoko.com, run by us
+                  on Cloudflare) and from there to Open-Meteo&apos;s geocoding
+                  service to find matching places worldwide. The same happens
+                  when you open a web address that names a place we do not hold,
+                  such as /koh-samui: the name in the address is looked up so we
+                  can take you to that place. Your IP address is not forwarded
+                  to Open-Meteo. Our weather service counts lookups per hour to
+                  stay within the provider&apos;s limits, keyed by a one-way
+                  hash of your address (never the address itself). Avoid typing
+                  personal details, such as a home address, into the search box
+                  if you do not want them shared. See their{" "}
                   <a
                     href="https://open-meteo.com/en/terms"
                     className="sunbird"
@@ -260,9 +271,15 @@ export default function PrivacyPage() {
                   OpenStreetMap / Nominatim
                 </dt>
                 <dd className="mt-1">
-                  Reverse geocoding used when creating new locations. We send
-                  geographic coordinates to determine place names. No personal
-                  data is transmitted. See their{" "}
+                  Reverse geocoding used when creating new locations, and to
+                  name your area when we hold no place near you. When you use
+                  your device location, your exact position goes from your
+                  browser to our weather service (weather-api.mukoko.com), which
+                  asks Nominatim to name it: a position rounded to about 1 km
+                  when only naming your area, the exact position only when you
+                  ask us to use your current location and create the place. No
+                  personal data other than the coordinates is transmitted. See
+                  their{" "}
                   <a
                     href="https://osmfoundation.org/wiki/Privacy_Policy"
                     className="sunbird"

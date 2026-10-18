@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { roundCoord } from "@/lib/location-privacy";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type {
   CurrentWeather,
@@ -29,6 +30,8 @@ import {
   temperatureAverageInsight,
 } from "@/lib/metric-insights";
 import { moonPhase } from "@/lib/moon";
+import { seedNowMs, useStableNow } from "@/lib/use-stable-now";
+import { useNearViewport } from "@/lib/use-near-viewport";
 import { AQI_BAND_LABELS, aqiBand } from "@/lib/aq-grid";
 import { lastTileSpanClass } from "@/lib/dashboard-layout";
 import { cn } from "@/lib/utils";
@@ -275,16 +278,22 @@ function useNormalHigh(
   lat: number | undefined,
   lon: number | undefined,
   offsetSeconds?: number,
+  /** False until the Conditions grid is near the viewport (deferred fetch). */
+  enabled = true,
 ) {
   const [state, setState] = useState<NormalState>({ status: "loading" });
 
   useEffect(() => {
+    if (!enabled) return;
     if (typeof lat !== "number" || typeof lon !== "number") return;
     const controller = new AbortController();
     const date = localIsoDate(new Date(), offsetSeconds);
-    fetch(`/api/py/normals?lat=${lat}&lon=${lon}&date=${date}`, {
-      signal: controller.signal,
-    })
+    fetch(
+      `/api/py/normals?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
+      {
+        signal: controller.signal,
+      },
+    )
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return (await res.json()) as NormalsPayload;
@@ -310,7 +319,7 @@ function useNormalHigh(
         }
       });
     return () => controller.abort();
-  }, [lat, lon, offsetSeconds]);
+  }, [lat, lon, offsetSeconds, enabled]);
 
   return state;
 }
@@ -330,7 +339,7 @@ function useAirQuality(lat: number | undefined, lon: number | undefined) {
   useEffect(() => {
     if (typeof lat !== "number" || typeof lon !== "number") return;
     const controller = new AbortController();
-    fetch(`/api/py/airquality?lat=${lat}&lon=${lon}`, {
+    fetch(`/api/py/airquality?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`, {
       signal: controller.signal,
     })
       .then(async (res) => {
@@ -426,9 +435,22 @@ export function AtmosphericSummary({
     daily: EMPTY_DAILY,
     current_units: {},
   };
-  const now = new Date();
+  // Payload time on the server render and the first client render (so the
+  // HTML hydrates), the real clock straight after mount.
+  const now = useStableNow(
+    seedNowMs(data.current?.time, data.utc_offset_seconds),
+  );
   const hasCoords = typeof lat === "number" && typeof lon === "number";
-  const normals = useNormalHigh(lat, lon, data.utc_offset_seconds);
+  // The climate-normal comparison is a below-the-fold detail on phones:
+  // fetch it once the Conditions grid is near the viewport, not on load.
+  const sectionRef = useRef<HTMLElement>(null);
+  const nearViewport = useNearViewport(sectionRef, "600px");
+  const normals = useNormalHigh(
+    lat,
+    lon,
+    data.utc_offset_seconds,
+    nearViewport,
+  );
 
   const wind = windInsight(data, now);
   const uv = uvInsight(data, now);
@@ -457,7 +479,7 @@ export function AtmosphericSummary({
   const moonPct = Math.round(moon.illumination * 100);
 
   return (
-    <section aria-labelledby="atmospheric-heading">
+    <section ref={sectionRef} aria-labelledby="atmospheric-heading">
       <SectionHeader
         headingId="atmospheric-heading"
         title="Conditions"

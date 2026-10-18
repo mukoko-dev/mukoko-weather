@@ -220,6 +220,7 @@ class TestFetchArchive:
         args, kwargs = series.call_args
         assert args == (-17.75, 31.0, "1991-01-01", "2020-12-31")
         assert kwargs["timeout"] == _normals.NORMALS_HTTP_TIMEOUT_S
+        assert kwargs["variables"] == _normals.DAILY_VARS
 
     def test_no_provider_raises_with_reason(self):
         with patch("py._normals.fetch_normals_series", return_value=(None, None, "circuit_open")):
@@ -228,8 +229,8 @@ class TestFetchArchive:
         assert exc.value.reason == "circuit_open"
 
     def test_power_payload_end_to_end(self):
-        """Real chain, POWER answers: the request goes to POWER with only the
-        two temperature parameters, and its days become the daily block."""
+        """Real chain, POWER answers: the request goes to POWER with the
+        temperature, mean and rain parameters, and its days become the daily block."""
         payload = {"properties": {"parameter": {
             "T2M_MAX": {"19910101": 30.0, "19910102": 31.0},
             "T2M_MIN": {"19910101": 15.0, "19910102": -999.0},
@@ -242,7 +243,7 @@ class TestFetchArchive:
         assert pid == "nasa-power"
         assert daily["time"] == ["1991-01-01"]
         params = client.get.call_args[1]["params"]
-        assert params["parameters"] == "T2M_MAX,T2M_MIN"
+        assert params["parameters"] == "T2M_MAX,T2M_MIN,T2M,PRECTOTCORR"
         assert params["start"] == "19910101" and params["end"] == "20201231"
 
     def test_source_labels(self):
@@ -453,3 +454,73 @@ class TestEndpoint:
             res = await get_normals(lat=0.0, lon=0.0, date="2028-02-29")
         assert res.normalHigh == 59.0
         assert res.normalLow == 59.0
+
+
+# ---------------------------------------------------------------------------
+# Monthly normals through the provider chain (place-knowledge profile)
+# ---------------------------------------------------------------------------
+
+
+def _monthly_daily(mean=20.0, rain=2.0):
+    days = [dt.date(1991, 1, 1) + dt.timedelta(days=i) for i in range(366 * 2)]
+    times = [d.isoformat() for d in days]
+    return {
+        "time": times,
+        "temperature_2m_max": [mean + 5] * len(times),
+        "temperature_2m_min": [mean - 5] * len(times),
+        "temperature_2m_mean": [mean] * len(times),
+        "precipitation_sum": [rain] * len(times),
+    }
+
+
+class TestMonthlyNormalsThroughChain:
+    def test_compute_monthly_normals_averages_each_month(self):
+        monthly = _normals.compute_monthly_normals(_monthly_daily())
+        assert [m["month"] for m in monthly] == list(range(1, 13))
+        assert monthly[0]["meanTempC"] == 20.0 and monthly[0]["meanHighC"] == 25.0
+        assert monthly[0]["rainyDays"] == 31.0 and monthly[0]["precipMm"] == 62.0
+
+    def test_fetch_asks_the_chain_for_mean_and_rain_too(self):
+        provider = MagicMock()
+        provider.info.id = "nasa-power"
+        with patch("py._normals.fetch_normals_series", return_value=(_monthly_daily(), provider, None)) as series:
+            _fetch_archive(-17.75, 31.0)
+        assert series.call_args[1]["variables"] == _normals.DAILY_VARS
+        assert "temperature_2m_mean" in _normals.DAILY_VARS and "precipitation_sum" in _normals.DAILY_VARS
+
+    def test_build_stores_monthly_table_provider_and_meta(self):
+        daily = _monthly_daily()
+        daily["_meta"] = {"timezone": "Africa/Harare", "utc_offset_seconds": 7200, "elevation": 1490.0}
+        coll = MagicMock()
+        coll.find_one.return_value = None
+        with patch("py._normals._normals_collection", return_value=coll), \
+             patch("py._normals._fetch_archive", return_value=(daily, "open-meteo-archive")):
+            payload = _normals.get_monthly_normals(-17.83, 31.05)
+        assert len(payload["monthly"]) == 12
+        assert payload["provider"] == "open-meteo-archive"
+        assert payload["timeZone"] == "Africa/Harare" and payload["elevation"] == 1490.0
+        stored = coll.update_one.call_args[0][1]["$set"]
+        assert len(stored["monthly"]) == 12 and stored["provider"] == "open-meteo-archive"
+        assert stored["timeZone"] == "Africa/Harare" and stored["utcOffsetSeconds"] == 7200
+
+    def test_provider_without_cell_meta_leaves_time_zone_and_elevation_unset(self):
+        coll = MagicMock()
+        coll.find_one.return_value = None
+        with patch("py._normals._normals_collection", return_value=coll), \
+             patch("py._normals._fetch_archive", return_value=(_monthly_daily(), "nasa-power")):
+            payload = _normals.get_monthly_normals(-17.83, 31.05)
+        assert payload["timeZone"] is None and payload["elevation"] is None
+        stored = coll.update_one.call_args[0][1]["$set"]
+        assert "timeZone" not in stored and "elevation" not in stored
+        assert payload["source"] == "NASA POWER, 1991–2020"
+
+    def test_unavailable_chain_returns_none_and_never_raises(self):
+        with patch("py._normals._get_cached_tables", return_value=None), \
+             patch("py._normals._fetch_archive", side_effect=_normals.NormalsUnavailable("circuit_open")):
+            assert _normals.get_monthly_normals(0.0, 0.0) is None
+
+    def test_cache_only_mode_does_not_fetch(self):
+        with patch("py._normals._get_cached_tables", return_value=None), \
+             patch("py._normals._fetch_archive") as fetch:
+            assert _normals.get_monthly_normals(0.0, 0.0, allow_fetch=False) is None
+        fetch.assert_not_called()

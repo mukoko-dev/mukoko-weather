@@ -17,6 +17,7 @@ from ._db import get_db, get_api_key, ttl_filter
 from ._http import get_http_client
 from ._ai_gateway import DEFAULT_GATEWAY_ID, gateway_headers, gateway_url, missing_ai_config
 from ._circuit_breaker import ai_breaker
+from . import _open_meteo as om
 
 router = APIRouter()
 
@@ -161,12 +162,16 @@ def _check_tomorrow_io() -> dict:
 
 
 def _check_open_meteo() -> dict:
-    name = "Open-Meteo API"
+    url, headers = om.forecast()
+    # A self-hosted instance is named as such (never by its URL); the public
+    # API keeps the original name.
+    name = "Open-Meteo API (self-hosted)" if om.is_self_hosted(url) else "Open-Meteo API"
     start = time.time()
     try:
         resp = get_http_client(PROBE_TIMEOUT_S).get(
-            "https://api.open-meteo.com/v1/forecast",
+            url,
             params={"latitude": "-17.83", "longitude": "31.05", "current": "temperature_2m"},
+            headers=headers,
         )
 
         if resp.status_code != 200:
@@ -176,6 +181,26 @@ def _check_open_meteo() -> dict:
         if data.get("current", {}).get("temperature_2m") is None:
             return _result(name, "degraded", start, "Response received but missing expected data")
 
+        return _result(name, "operational", start, "Responding normally")
+    except Exception as e:
+        return _result(name, "down", start, _failure_message(name, e))
+
+
+def _check_open_meteo_air_quality() -> dict:
+    """Probe the self-hosted CAMS air-quality endpoint (only listed when set)."""
+    name = "Open-Meteo Air Quality (self-hosted)"
+    url, headers = om.air_quality()
+    start = time.time()
+    try:
+        resp = get_http_client(PROBE_TIMEOUT_S).get(
+            url,
+            params={"latitude": "-17.83", "longitude": "31.05", "current": "pm2_5"},
+            headers=headers,
+        )
+        if resp.status_code != 200:
+            return _result(name, "down", start, f"HTTP {resp.status_code}: {resp.reason_phrase}")
+        if resp.json().get("current", {}).get("pm2_5") is None:
+            return _result(name, "degraded", start, "Response received but missing expected data")
         return _result(name, "operational", start, "Responding normally")
     except Exception as e:
         return _result(name, "down", start, _failure_message(name, e))
@@ -257,15 +282,25 @@ def _check_ai_gateway() -> dict:
     return _result(name, "operational", start, f"AI Worker reachable (gateway {gateway}, model set by the Worker)")
 
 
-def _count_active(collection: str, noun: tuple[str, str], empty_message: str, name: str) -> dict:
-    """Shared body for the cache-population checks (count of unexpired docs)."""
+def _count_active(
+    collection: str,
+    noun: tuple[str, str],
+    empty_message: str,
+    name: str,
+    empty_status: str = "degraded",
+) -> dict:
+    """Shared body for the cache-population checks (count of unexpired docs).
+
+    ``empty_status`` is the row status when nothing is cached. A failed count
+    is always ``down``: that is a real fault, unlike an empty cache.
+    """
     start = time.time()
     try:
         count = get_db()[collection].count_documents(ttl_filter({}))
         singular, plural = noun
         return _result(
             name,
-            "operational" if count > 0 else "degraded",
+            "operational" if count > 0 else empty_status,
             start,
             f"{count} active cached {singular if count == 1 else plural}" if count > 0 else empty_message,
         )
@@ -283,11 +318,20 @@ def _check_weather_cache() -> dict:
 
 
 def _check_ai_cache() -> dict:
+    """An empty AI summary cache is informational, never a degradation (#263).
+
+    Summaries are generated on demand for signed-in visitors and expire after
+    30–120 minutes, so the collection is legitimately empty whenever nobody
+    has asked for one recently. Reporting that as degraded made the whole
+    status page read "degraded" with every service healthy.
+    """
     return _count_active(
         "ai_summaries",
         ("summary", "summaries"),
-        "Cache is empty — next requests will generate fresh summaries",
+        "No summaries cached right now — normal when nobody has asked for one "
+        "recently; the next request generates a fresh one",
         "AI Summary Cache",
+        empty_status="operational",
     )
 
 
@@ -315,6 +359,11 @@ async def system_status():
         _check_weather_cache(),
         _check_ai_cache(),
     ]
+    # A self-hosted air-quality host is a separate service with its own sync,
+    # so it gets its own row. On the public API (the default) the list is
+    # unchanged.
+    if om.air_quality_is_self_hosted():
+        checks.insert(3, _check_open_meteo_air_quality())
 
     # Enrichment-only providers (Tomorrow.io) never degrade the overall status:
     # the baseline forecast does not depend on them.

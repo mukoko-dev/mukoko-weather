@@ -51,6 +51,13 @@ export const FLAGS = {
   map_layers: true,
   /** Premium map layers (radar, satellite) — requires subscription */
   premium_maps: false,
+  /**
+   * Per-model forecast fields on the map (ECMWF IFS/AIFS, GFS, ICON, GEM,
+   * ARPEGE via /api/py/model-grid). Off until the owner settles Open-Meteo's
+   * commercial terms — its free API is non-commercial. Try it locally with
+   * localStorage.setItem("ff:model_map_layers", "true").
+   */
+  model_map_layers: false,
   /** Vector semantic search for locations */
   vector_search: false,
   /** Multi-language support (Shona, Ndebele) */

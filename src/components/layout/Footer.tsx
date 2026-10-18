@@ -16,7 +16,7 @@ export function Footer() {
 
   return (
     <footer
-      className="border-t border-text-tertiary/10 bg-surface-base pb-24 sm:pb-0"
+      className="border-t border-text-tertiary/10 bg-surface-base pb-[var(--mobile-nav-clearance)] sm:pb-0"
       role="contentinfo"
     >
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 md:px-8">
@@ -123,6 +123,9 @@ export function Footer() {
             </Link>
             <Link href="/help" prefetch={false} className={link}>
               Help
+            </Link>
+            <Link href="/releases" prefetch={false} className={link}>
+              Release notes
             </Link>
             <a
               href="https://docs.nyuchi.com/mukoko-weather/user-guide/"

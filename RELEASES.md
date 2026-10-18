@@ -1,5 +1,61 @@
 # Releases
 
+## v0.12.0 — staging → main (worldwide search, location and airports)
+
+**Date:** 2026-10-17 · **Replaces:** v0.11.0 on production · **PRs:** #311, #313, #310, #309, #312, #306, #305 · **Tracking:** #302
+
+### Features
+
+- **Search lists a country's places** (#310). A geocoder hit that names an area (`PCL*` countries, `TERR`, `CONT`, `OCN`, `SEA`, `RGN`, `RGNE`, `PRSH`, `ADM1`/`ADM2`) is never offered; a country hit is replaced by the places placesGeo holds in it, or by the static seed catalogue when placesGeo holds none (generated `api/py/data/seed_locations.json`, pinned to `src/lib/locations.ts` by a parity test). The geocoder is over-fetched 3x so dropped areas never eat a slot. A hit for a shipped seed city is offered as its canonical slug.
+- **Find-only geo works anywhere** (#309). With nothing stored within 150 km, `/api/py/geo` answers with the nearest seed city within 50 km, else names the snapped point on demand (city-level Nominatim, `nominatim_breaker`, per-IP and global budgets) as a `synthesized` spot with no measured elevation. GPS escalates to `autoCreate` and stores the exact place.
+- **Bare seed names redirect** (#311, #313). `/phuket` goes to `/phuket-th` with a 308, before any lookup. `KNOWN_ROUTES` is exported from the proxy and the alias test checks it.
+- **Spot elevation from the forecast** (#312). `/api/py/weather` passes Open-Meteo's terrain height through; `reconcileElevation()` fills elevations flagged `elevationApproximate`. Stored elevations are never changed.
+- **Airports are discovered on demand** (#306). When the DB holds fewer than `count` airports in range, AWC `stationinfo?bbox=` is surveyed once per 0.5° cell and radius bucket and the stations are inserted into `weather.airports` (insert-only, `source: "awc-stationinfo"`). Per-IP and global budgets; an AWC 4xx never counts against `aviation_breaker`.
+- **World country coverage in places data.** 230 world country documents were added to `places.placesGeo` (data change, not in this repo's code).
+- **Gateway person-token groundwork** (#305): `/api/app-keys` and its helpers for upcoming developer API keys. Not live: it needs the owner steps in the PR (gateway release, WorkOS client switch, env); until then it answers 503 and sends nothing.
+
+### Fixes
+
+- A flaky timing assertion in `location-gate.test.ts` is made deterministic (#310).
+
+### Operations and risk
+
+- Python backend changes: search, geo, weather and METAR/airports. New `nominatim_breaker`; new rate-limit buckets `geo-find-geocode`, `geo-find-geocode-global`, `airport-discovery` and `airport-discovery-global`. The privacy page notes that coordinates rounded to about 1 km can reach Nominatim to name an area.
+- No new environment variable for the public features; #305 adds server-only gateway variables that are inert until set.
+- Rollback: redeploy the previous production deployment in Vercel (v0.11.0), or `git revert` the release squash commit. Discovered airports are extra insert-only `weather.airports` documents and are harmless to leave.
+
+## v0.11.0 — staging → main (fixes the slow, black-screen load on iOS)
+
+**Date:** 2026-10-17 · **Replaces:** v0.10.0 on production · **PRs:** #300, #299, #296, #276, #274, #267
+
+### Fixes
+
+- **Pages hydrate again** (#300). Cloudflare Fonts rewrote the Google Fonts `<link>` into an inline `<style>`, so React threw error #418 on every page and re-rendered the whole page on the client. Fonts are now self-hosted through `next/font`, so there is nothing to rewrite and no render-blocking cross-origin CSS. The moon disc no longer reads the clock during render.
+- **The header stays at the top and the bottom nav stays at the bottom** (#300). `overflow-x: hidden` on `html`, `body` and every page wrapper made each one a scroll container. They are now `overflow-x: clip`.
+- **Sections appear before you reach them** (#300). Two sections mount at a time (one on Save-Data or 2 GB-or-less devices), with a 1.5-viewport load margin.
+- **Lighter first load** (#300). The weather backdrop shows a static sky on reduced motion, Save-Data and low-memory devices, pauses while you scroll and uses a low-power WebGL context. Model comparison, climate normals and route prefetches no longer fire on load.
+- **Even spacing** (#300). Empty sections no longer leave doubled gaps. Card padding and heading margins follow the shared tokens.
+- **MapTiler and OpenStreetMap are credited once** (#296).
+
+### Features and performance
+
+- **Phone navigation uses the Mzizi bottom nav** (#300): Map, My Location and Locations, with the saved-place pager row above it. Swipe between places is unchanged.
+- **The map card on the location page is a static raster-tile image** (#276), not a MapLibre map. About 535 KB of requests and a full map library no longer load on the location page.
+- **Radar tiles answer at once when the Tomorrow.io quota is spent** (#267). The tile proxy no longer waits for a 429, and "now" tiles are edge-cached only until the UTC hour ends.
+- **The location pipeline works worldwide** (#274). Search results outside Africa open real pages, home no longer shows an empty chooser, country names replace codes, and the blend region and cache country are right outside Africa. African places and slugs are unchanged.
+
+### Security and privacy
+
+- The report-only CSP no longer lists `fonts.googleapis.com` or `fonts.gstatic.com` (#300).
+- Typed search text can reach Open-Meteo's geocoder; `/privacy` says so (#274).
+
+### Operations and risk
+
+- Python backend changes: tile proxy (#267), locations, weather and model blend (#274). No database migration, no new environment variable, no db-init seed change, no feature-flag change.
+- New third-party host use: MapTiler raster tiles on the location page (#276). The MapTiler key's allowed HTTP origins must cover `weather.mukoko.com`, or the card falls back to text.
+- Held back and not in this release: #271, #279, #285.
+- Rollback: redeploy the previous production deployment in Vercel (v0.10.0). The release is one squash commit on `main`, so `git revert` of it also works. Nothing needs undoing in the database.
+
 ## PR #28 — Explore chatbot, activities expansion, and suitability rules
 
 **Date:** 2026-02-21

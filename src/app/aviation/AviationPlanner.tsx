@@ -1,5 +1,6 @@
 "use client";
 
+import { roundCoord } from "@/lib/location-privacy";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 import { getIcaoForSlug, getAirportByIcao } from "@/lib/icao-codes";
@@ -318,7 +319,9 @@ export function AviationPlanner() {
     const [metarRes, wxRes] = await Promise.allSettled([
       fetch(`/api/py/metar?icao=${icao}`),
       airport
-        ? fetch(`/api/py/weather?lat=${airport.lat}&lon=${airport.lon}`)
+        ? fetch(
+            `/api/py/weather?lat=${roundCoord(airport.lat)}&lon=${roundCoord(airport.lon)}`,
+          )
         : Promise.reject(new Error(`No coordinates for ${icao}`)),
     ]);
 
@@ -408,7 +411,7 @@ export function AviationPlanner() {
   return (
     <main
       id="main-content"
-      className="mx-auto max-w-3xl px-4 py-6 pb-24 sm:px-6 sm:pb-8 md:px-8"
+      className="mx-auto max-w-3xl px-4 py-6 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-8 md:px-8"
     >
       <h1 className="text-2xl font-semibold text-text-primary font-heading mb-1">
         Aviation Weather Briefing

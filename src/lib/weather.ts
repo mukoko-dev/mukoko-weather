@@ -20,8 +20,11 @@ import {
   heatIndexC,
   moonPhase,
 } from "./derived-insights";
+import { openMeteoForecastUrl, openMeteoHeaders } from "./open-meteo-endpoint";
 
 export interface CurrentWeather {
+  /** Observation time (Open-Meteo `current.time`, location wall clock). */
+  time?: string;
   temperature_2m: number;
   relative_humidity_2m: number;
   apparent_temperature: number;
@@ -105,6 +108,19 @@ export interface WeatherData {
   utc_offset_seconds?: number;
   /** True when `utc_offset_seconds` is a longitude estimate, not a tz lookup. */
   utc_offset_estimated?: boolean;
+  /**
+   * The location's IANA time zone (Open-Meteo `timezone`, e.g. `Europe/London`).
+   * Names the country for any point on Earth — `countryForTimezone()` in
+   * `src/lib/timezone-country.ts` — so a place the platform geography has
+   * never stored still gets a correct country. `Etc/GMT±N` over open ocean.
+   */
+  timezone?: string;
+  /**
+   * Terrain height (metres) Open-Meteo used for the point (its 90 m DEM).
+   * Fills the elevation of a place we hold no measurement for — see
+   * `reconcileElevation()` in `src/lib/location-elevation.ts` (#302).
+   */
+  elevation?: number;
 }
 
 /**
@@ -386,6 +402,7 @@ export async function fetchWeather(
   lat: number,
   lon: number,
   models?: string[],
+  timeoutMs = 10_000,
 ): Promise<WeatherData> {
   // Only forward real model ids to Open-Meteo — `best_match` is the unsuffixed
   // baseline the API always returns, so it isn't sent as an explicit model.
@@ -409,9 +426,12 @@ export async function fetchWeather(
     params.set("models", requestedModels.join(","));
   }
 
-  const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, {
+  // Public API by default; the self-hosted instance when the server env sets it.
+  const url = openMeteoForecastUrl();
+  const res = await fetch(`${url}?${params}`, {
+    headers: openMeteoHeaders(url),
     next: { revalidate: 900 }, // cache for 15 minutes
-    signal: AbortSignal.timeout(10_000), // 10s timeout
+    signal: AbortSignal.timeout(timeoutMs), // 10s unless a caller is on a tighter budget
   });
 
   if (!res.ok) {

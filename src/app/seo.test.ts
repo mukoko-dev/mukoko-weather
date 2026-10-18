@@ -182,6 +182,7 @@ describe("canonical URLs — every page sets its own canonical", () => {
     ["status/page.tsx", "/status"],
     ["embed/page.tsx", "/embed"],
     ["developers/page.tsx", "/developers"],
+    ["releases/page.tsx", "/releases"],
   ];
 
   for (const [file, expectedFragment] of pagesWithCanonicals) {
@@ -230,6 +231,16 @@ describe("country-aware metadata in [location]/page.tsx", () => {
 
   it("uses addressCountry in JSON-LD schema", () => {
     expect(pageSource).toContain("addressCountry");
+  });
+
+  it("omits addressCountry and containedInPlace when the place has no country (open ocean)", () => {
+    expect(pageSource).toContain(
+      "...(countryCode ? { addressCountry: countryCode } : {})",
+    );
+    expect(pageSource).toMatch(
+      /\.\.\.\(countryCode\s*\?\s*\{\s*containedInPlace:/,
+    );
+    expect(pageSource).not.toMatch(/addressCountry: countryCode,\n/);
   });
 
   it("uses countryCode for addressCountry in JSON-LD", () => {
@@ -281,6 +292,7 @@ describe("JSON-LD script tags use safeJsonLd, never raw JSON.stringify", () => {
     "[location]/page.tsx",
     "[location]/atmosphere/page.tsx",
     "[location]/forecast/page.tsx",
+    "[location]/agriculture/page.tsx",
     "[location]/map/page.tsx",
   ];
 

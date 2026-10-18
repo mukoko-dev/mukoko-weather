@@ -1,8 +1,13 @@
 "use client";
 
+import { roundCoord } from "@/lib/location-privacy";
 import { useEffect, useState } from "react";
 import { LocationWeatherCard } from "@/components/weather/LocationWeatherCard";
-import { displayNameFromSlug, isLocationSlug } from "@/lib/current-slug";
+import {
+  displayNameFromSlug,
+  isLocationSlug,
+  legacySlugQuery,
+} from "@/lib/current-slug";
 import {
   CARD_FETCH_CONCURRENCY,
   CARD_WEATHER_TTL_MS,
@@ -77,19 +82,65 @@ async function resolvePlace(
     `/api/py/locations?slug=${encodeURIComponent(slug)}`,
     { signal },
   );
+  if (res.ok) {
+    const body = (await res.json()) as {
+      location?: {
+        name?: string;
+        lat?: number;
+        lon?: number;
+        country?: string;
+      };
+    };
+    const loc = body.location;
+    if (loc && typeof loc.lat === "number" && typeof loc.lon === "number") {
+      return {
+        name: loc.name || displayNameFromSlug(slug),
+        lat: loc.lat,
+        lon: loc.lon,
+        country: loc.country ?? null,
+      };
+    }
+  }
+  return resolveLegacySlug(slug, signal);
+}
+
+/**
+ * An old saved `{name}-{cc}` slug (e.g. `phuket-island-th`) has no stored place
+ * and no coordinate in it, so the lookup above cannot answer. Search the
+ * catalogue and geocoder for the name and take the best hit in that country,
+ * so the card shows weather instead of "Weather unavailable".
+ */
+async function resolveLegacySlug(
+  slug: string,
+  signal: AbortSignal,
+): Promise<PlaceRef | null> {
+  const legacy = legacySlugQuery(slug);
+  if (!legacy) return null;
+  const res = await fetch(
+    `/api/py/search?q=${encodeURIComponent(legacy.query)}&limit=5`,
+    { signal },
+  );
   if (!res.ok) return null;
   const body = (await res.json()) as {
-    location?: { name?: string; lat?: number; lon?: number; country?: string };
+    locations?: {
+      name?: string;
+      lat?: number;
+      lon?: number;
+      country?: string;
+    }[];
   };
-  const loc = body.location;
-  if (!loc || typeof loc.lat !== "number" || typeof loc.lon !== "number") {
-    return null;
-  }
+  const hits = (body.locations ?? []).filter(
+    (l) => typeof l.lat === "number" && typeof l.lon === "number",
+  );
+  const best =
+    hits.find((l) => (l.country ?? "").toUpperCase() === legacy.country) ??
+    hits[0];
+  if (!best) return null;
   return {
-    name: loc.name || displayNameFromSlug(slug),
-    lat: loc.lat,
-    lon: loc.lon,
-    country: loc.country ?? null,
+    name: legacy.query,
+    lat: best.lat as number,
+    lon: best.lon as number,
+    country: best.country ?? legacy.country,
   };
 }
 
@@ -97,9 +148,12 @@ async function fetchCardWeather(
   place: PlaceRef,
   signal: AbortSignal,
 ): Promise<CardWeatherInput | null> {
-  const res = await fetch(`/api/py/weather?lat=${place.lat}&lon=${place.lon}`, {
-    signal,
-  });
+  const res = await fetch(
+    `/api/py/weather?lat=${roundCoord(place.lat)}&lon=${roundCoord(place.lon)}`,
+    {
+      signal,
+    },
+  );
   if (!res.ok) return null;
   return (await res.json()) as CardWeatherInput;
 }
@@ -347,7 +401,11 @@ export function LocationsClient({ initialCurrentSlug, ipAnchor }: Props) {
         )}
       </section>
 
-      <div className="sticky bottom-[4.5rem] z-30 mt-8 sm:bottom-4">
+      {/* One stack with the floating nav: the nav and pager pill occupy
+          --mobile-nav-clearance from the bottom edge (lift, safe area, bar,
+          gap, pager), and this pill sticks directly above that, so the two
+          never overlap. */}
+      <div className="sticky bottom-[calc(var(--mobile-nav-clearance)+0.25rem)] z-30 mt-8 sm:bottom-4">
         <LocationsSearch listed={listed} />
       </div>
     </>

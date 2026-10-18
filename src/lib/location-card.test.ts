@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  hasFixedUtcOffset,
   cardTheme,
   cardConditionLabel,
   resolveUtcOffsetSeconds,
@@ -328,7 +329,8 @@ describe("plate names and minerals", () => {
     expect(classes).toBe(PLATE_CLASSES.malachite);
     expect(classes.plate).toContain("color-mix(");
     expect(classes.plate).toContain("var(--mineral-malachite)");
-    expect(classes.edge).toBe("border-l-[var(--mineral-malachite)]");
+    expect(classes.edge).toBe("border-[var(--mineral-malachite)]");
+    expect(classes.edge).not.toContain("border-l-");
   });
 
   it("uses no hardcoded hex or rgba in plate classes", () => {
@@ -398,5 +400,15 @@ describe("mapWithConcurrency", () => {
 
   it("defaults the card fetch concurrency to 3", () => {
     expect(CARD_FETCH_CONCURRENCY).toBe(3);
+  });
+});
+
+describe("hasFixedUtcOffset", () => {
+  it("is true only for countries in the fixed-offset table", () => {
+    expect(hasFixedUtcOffset("ZW")).toBe(true);
+    expect(hasFixedUtcOffset("zw")).toBe(true);
+    expect(hasFixedUtcOffset("ES")).toBe(false);
+    expect(hasFixedUtcOffset("")).toBe(false);
+    expect(hasFixedUtcOffset(undefined)).toBe(false);
   });
 });

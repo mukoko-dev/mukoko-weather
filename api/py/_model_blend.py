@@ -68,22 +68,69 @@ BLEND_WEIGHTS: dict[str, dict[str, float]] = {
     "west-africa-sahel": dict(_ECMWF_HEAVY),
     "central-africa": dict(_ECMWF_HEAVY),
     "north-africa": dict(_ECMWF_HEAVY),
+    # Rest of the world (owner decision: scope the data infrastructure for the
+    # world, so a traveller or an investor abroad gets a named blend region
+    # too). Same ECMWF-heavy start; each can be tuned via modelBlendConfig.
+    "europe": dict(_ECMWF_HEAVY),
+    "middle-east": dict(_ECMWF_HEAVY),
+    "south-asia": dict(_ECMWF_HEAVY),
+    "southeast-asia": dict(_ECMWF_HEAVY),
+    "east-asia": dict(_ECMWF_HEAVY),
+    "oceania": dict(_ECMWF_HEAVY),
+    "north-america": dict(_ECMWF_HEAVY),
+    "south-america": dict(_ECMWF_HEAVY),
     "default": dict(_ECMWF_HEAVY),
 }
 
 #: Region bounding boxes (lat_min, lat_max, lon_min, lon_max). First match
-#: wins, so the order matters where boxes touch.
+#: wins, so the order matters where boxes touch. The African boxes come first
+#: so every African coordinate keeps the region it had before the world boxes
+#: were added; the world boxes only claim what used to fall to ``default``.
 REGION_BOXES: tuple[tuple[str, tuple[float, float, float, float]], ...] = (
+    # Carve-outs: the north- and east-Africa boxes overlap Southern Europe,
+    # the Levant and Arabia. Each box below holds no African land (checked
+    # against the nearest African coast: Tangier 35.8°N, Cap Blanc 37.3°N at
+    # 9.9°E, the Libyan/Egyptian coast below 33.2°N, Sinai east to 34.9°E and
+    # north to 31.3°N, the Dahlak islands to 40.4°E, Djibouti to 43.4°E at
+    # 12.7°N, Somalia below 12°N), so no African point changes region.
+    # Edges are inclusive and the margins are thin on purpose, so re-check
+    # these before moving a box: Taba (Egypt, 29.49°N 34.89°E) sits about
+    # 0.01° west of the Negev box's 34.9°E edge; the Eritrean coast stays west
+    # of the Yemen boxes by ~0.1° (Dahlak 40.4°E vs 40.5°E, Assab 42.74°E vs
+    # 42.8°E), and Ras Doumeira (Eritrea/Djibouti, 12.7°N 43.1°E) is west of
+    # the Aden box's 44.0°E edge. A point exactly on a shared edge takes the
+    # first box listed.
+    ("europe", (36.0, 44.0, -10.0, -1.0)),  # southern Iberia, Gibraltar
+    ("europe", (36.5, 38.5, 12.0, 16.0)),  # Sicily
+    ("europe", (35.7, 36.2, 14.0, 14.7)),  # Malta
+    ("europe", (34.5, 38.0, 19.0, 34.2)),  # Greece, Crete, south Turkey
+    ("middle-east", (34.5, 38.0, 34.2, 37.0)),  # Cyprus east, Hatay, Syria coast
+    ("middle-east", (31.3, 34.5, 34.2, 37.0)),  # Israel, Lebanon, Jordan
+    ("middle-east", (29.4, 31.3, 34.9, 37.0)),  # Negev, Eilat, Aqaba
+    ("middle-east", (15.5, 19.0, 40.5, 52.0)),  # SW Saudi Arabia, north Yemen
+    ("middle-east", (13.0, 15.5, 42.8, 52.0)),  # Yemen (Sana'a)
+    ("middle-east", (12.5, 13.0, 44.0, 52.0)),  # Aden
     ("north-africa", (19.0, 38.0, -18.0, 37.0)),
     ("west-africa-sahel", (3.0, 19.0, -18.0, 16.0)),
     ("east-africa", (-12.0, 19.0, 28.0, 52.0)),
     ("central-africa", (-12.0, 12.0, 8.0, 31.0)),
     ("southern-africa", (-35.5, -12.0, 10.0, 52.0)),
+    # Sudan's Red Sea coast (Port Sudan) fell between the African boxes; claim
+    # it before the middle-east box can. Saudi Arabia starts east of 38.9°E.
+    ("east-africa", (19.0, 23.0, 36.5, 38.9)),
+    ("europe", (34.0, 72.0, -32.0, 45.0)),
+    ("middle-east", (12.0, 42.0, 34.0, 63.0)),
+    ("south-asia", (5.0, 38.0, 60.0, 92.0)),
+    ("southeast-asia", (-11.0, 23.5, 92.0, 141.0)),
+    ("east-asia", (18.0, 55.0, 92.0, 150.0)),
+    ("oceania", (-50.0, 0.0, 110.0, 180.0)),
+    ("north-america", (7.0, 84.0, -170.0, -50.0)),
+    ("south-america", (-56.0, 13.0, -82.0, -34.0)),
 )
 
 
 def region_for(lat: float, lon: float) -> str:
-    """Blend-weight region key for a coordinate (``default`` outside Africa)."""
+    """Blend-weight region key for a coordinate (``default`` where no box matches)."""
     for key, (lat_min, lat_max, lon_min, lon_max) in REGION_BOXES:
         if lat_min <= lat <= lat_max and lon_min <= lon <= lon_max:
             return key
@@ -327,7 +374,31 @@ def blend_payload(raw: dict, weights: dict[str, float], *, single: bool = False)
     offset = raw.get("utc_offset_seconds")
     if isinstance(offset, (int, float)) and not isinstance(offset, bool):
         out["utc_offset_seconds"] = int(offset)
+    # The IANA zone names the country for any point on Earth (zone.tab), which
+    # is how a page for a place the platform geography has never stored still
+    # gets a correct country — see src/lib/timezone-country.ts.
+    zone = raw.get("timezone")
+    if isinstance(zone, str) and zone:
+        out["timezone"] = zone
+    # Terrain height Open-Meteo used for the point (its 90 m DEM). A place
+    # with no stored elevation (a spot slug) takes it from here (#302).
+    elevation = forecast_elevation(raw)
+    if elevation is not None:
+        out["elevation"] = elevation
     return out
+
+
+def forecast_elevation(raw: dict) -> float | None:
+    """Open-Meteo's top-level ``elevation`` (metres) when it is a real value.
+
+    ``None`` for a missing, non-numeric, NaN or out-of-range value (Open-Meteo
+    uses ``-9999`` for "no data"; real land spans about -430 m to 8 849 m)."""
+    value = raw.get("elevation") if isinstance(raw, dict) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if value != value or not (-1000 < value < 9000):
+        return None
+    return float(value)
 
 
 def members_with_data(raw: dict, models: Iterable[str]) -> list[str]:

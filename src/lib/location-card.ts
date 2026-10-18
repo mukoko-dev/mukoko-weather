@@ -149,6 +149,15 @@ export const FIXED_UTC_OFFSET_SECONDS: Readonly<Record<string, number>> = {
  * backend ever supplies one) → the fixed-offset country table → the longitude
  * estimate (15° per hour, rounded to the quarter hour).
  */
+/** True when the country has one UTC offset all year (no DST): exact. */
+export function hasFixedUtcOffset(countryCode?: string | null): boolean {
+  const code = (countryCode ?? "").toUpperCase();
+  return (
+    code !== "" &&
+    Object.prototype.hasOwnProperty.call(FIXED_UTC_OFFSET_SECONDS, code)
+  );
+}
+
 export function resolveUtcOffsetSeconds(
   explicit: number | null | undefined,
   lon: number,
@@ -396,7 +405,7 @@ export function plateConditionFor(sky: OryxSky): PlateCondition {
 
 /**
  * Literal Tailwind classes for each mineral: a plate tint mixed into the card
- * surface, and the 4px leading edge. Kept as literals so Tailwind generates them.
+ * surface, and the mineral the card's whole border takes (all four sides). Kept as literals so Tailwind generates them.
  */
 export const PLATE_CLASSES: Readonly<
   Record<PlateMineral, { plate: string; edge: string }>
@@ -404,32 +413,32 @@ export const PLATE_CLASSES: Readonly<
   cobalt: {
     plate:
       "bg-[color-mix(in_oklab,var(--mineral-cobalt)_22%,var(--color-surface-card))]",
-    edge: "border-l-[var(--mineral-cobalt)]",
+    edge: "border-[var(--mineral-cobalt)]",
   },
   sodalite: {
     plate:
       "bg-[color-mix(in_oklab,var(--mineral-sodalite)_24%,var(--color-surface-card))]",
-    edge: "border-l-[var(--mineral-sodalite)]",
+    edge: "border-[var(--mineral-sodalite)]",
   },
   tanzanite: {
     plate:
       "bg-[color-mix(in_oklab,var(--mineral-tanzanite)_20%,var(--color-surface-card))]",
-    edge: "border-l-[var(--mineral-tanzanite)]",
+    edge: "border-[var(--mineral-tanzanite)]",
   },
   malachite: {
     plate:
       "bg-[color-mix(in_oklab,var(--mineral-malachite)_20%,var(--color-surface-card))]",
-    edge: "border-l-[var(--mineral-malachite)]",
+    edge: "border-[var(--mineral-malachite)]",
   },
   terracotta: {
     plate:
       "bg-[color-mix(in_oklab,var(--mineral-terracotta)_22%,var(--color-surface-card))]",
-    edge: "border-l-[var(--mineral-terracotta)]",
+    edge: "border-[var(--mineral-terracotta)]",
   },
   gold: {
     plate:
       "bg-[color-mix(in_oklab,var(--mineral-gold)_20%,var(--color-surface-card))]",
-    edge: "border-l-[var(--mineral-gold)]",
+    edge: "border-[var(--mineral-gold)]",
   },
 };
 

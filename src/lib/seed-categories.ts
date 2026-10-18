@@ -29,7 +29,6 @@ export interface ActivityCategoryDoc {
   style: {
     bg: string;
     border: string;
-    borderAccent?: string;
     text: string;
     badge: string;
   };
@@ -48,7 +47,6 @@ export const CATEGORIES: ActivityCategoryDoc[] = [
     style: {
       bg: "bg-mineral-malachite/10",
       border: "border-mineral-malachite",
-      borderAccent: "border-l-mineral-malachite",
       text: "text-mineral-malachite",
       badge: "bg-mineral-malachite text-mineral-malachite-fg",
     },
@@ -60,7 +58,6 @@ export const CATEGORIES: ActivityCategoryDoc[] = [
     style: {
       bg: "bg-mineral-terracotta/10",
       border: "border-mineral-terracotta",
-      borderAccent: "border-l-mineral-terracotta",
       text: "text-mineral-terracotta",
       badge: "bg-mineral-terracotta text-mineral-terracotta-fg",
     },
@@ -72,7 +69,6 @@ export const CATEGORIES: ActivityCategoryDoc[] = [
     style: {
       bg: "bg-mineral-cobalt/10",
       border: "border-mineral-cobalt",
-      borderAccent: "border-l-mineral-cobalt",
       text: "text-mineral-cobalt",
       badge: "bg-mineral-cobalt text-mineral-cobalt-fg",
     },
@@ -84,7 +80,6 @@ export const CATEGORIES: ActivityCategoryDoc[] = [
     style: {
       bg: "bg-mineral-tanzanite/10",
       border: "border-mineral-tanzanite",
-      borderAccent: "border-l-mineral-tanzanite",
       text: "text-mineral-tanzanite",
       badge: "bg-mineral-tanzanite text-mineral-tanzanite-fg",
     },
@@ -96,7 +91,6 @@ export const CATEGORIES: ActivityCategoryDoc[] = [
     style: {
       bg: "bg-mineral-gold/10",
       border: "border-mineral-gold",
-      borderAccent: "border-l-mineral-gold",
       text: "text-mineral-gold",
       badge: "bg-mineral-gold text-mineral-gold-fg",
     },
@@ -108,7 +102,6 @@ export const CATEGORIES: ActivityCategoryDoc[] = [
     style: {
       bg: "bg-primary/10",
       border: "border-primary",
-      borderAccent: "border-l-primary",
       text: "text-primary",
       badge: "bg-primary text-primary-foreground",
     },

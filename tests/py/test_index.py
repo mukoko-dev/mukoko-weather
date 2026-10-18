@@ -158,6 +158,10 @@ class TestRouterMounting:
         paths = self._get_route_paths()
         assert "/api/py/devices" in paths
 
+    def test_place_knowledge_router_mounted(self):
+        paths = self._get_route_paths()
+        assert "/api/py/locations/profile" in paths
+
     def test_chat_router_mounted(self):
         paths = self._get_route_paths()
         assert "/api/py/chat" in paths
@@ -245,6 +249,11 @@ class TestRouterMounting:
     def test_enso_router_mounted(self):
         paths = self._get_route_paths()
         assert "/api/py/enso" in paths
+
+    def test_agriculture_router_mounted(self):
+        paths = self._get_route_paths()
+        assert "/api/py/agriculture" in paths
+        assert "/api/py/ai/agriculture" in paths
 
     def test_health_endpoint_mounted(self):
         paths = self._get_route_paths()

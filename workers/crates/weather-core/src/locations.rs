@@ -42,6 +42,11 @@ pub struct LocationDoc {
     pub province_slug: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nominatim_address: Option<Value>,
+    /// Set when the answer names an area, not a place (`country` or
+    /// `region`): its coordinate is the area's centre. Such a spot is offered
+    /// last in search, and still renders weather there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -81,6 +86,7 @@ pub fn seed_locations() -> &'static [LocationDoc] {
                 country: r.country,
                 source: "seed".into(),
                 nominatim_address: None,
+                area: None,
             })
             .collect()
     })
@@ -309,6 +315,7 @@ impl LocationDoc {
             source: "geolocation".into(),
             province_slug: None,
             nominatim_address: None,
+            area: None,
         })
     }
 
@@ -335,11 +342,17 @@ impl LocationDoc {
             country,
             source: "places".into(),
             nominatim_address: None,
+            area: None,
         })
     }
 
-    /// One Open-Meteo geocoding result (`/v1/search`), as the Python search
-    /// fallback built it.
+    /// One Open-Meteo geocoding result (`/v1/search`).
+    ///
+    /// The slug is `{name}--{geohash}` of the hit, never `{name}-{country}`:
+    /// nothing backs the latter, so `london-gb` 404s for every hit outside
+    /// the seed list, while a spot slug carries its own coordinate and renders
+    /// anywhere. A hit that names an area (`feature_code` `PCLI`, `ADM1`, ...)
+    /// is flagged in `area` and sits at the area's centre.
     pub fn from_open_meteo(r: &Value) -> Option<LocationDoc> {
         let name = r.get("name")?.as_str()?.trim();
         let (lat, lon) = (r.get("latitude")?.as_f64()?, r.get("longitude")?.as_f64()?);
@@ -351,8 +364,13 @@ impl LocationDoc {
             .and_then(Value::as_str)
             .unwrap_or("")
             .to_uppercase();
+        let slug = build_smart_slug(name, lat, lon);
         Some(LocationDoc {
-            slug: generate_slug(name, &country),
+            slug: if slug.is_empty() {
+                generate_slug(name, &country)
+            } else {
+                slug
+            },
             name: name.to_owned(),
             province: r
                 .get("admin1")
@@ -361,12 +379,23 @@ impl LocationDoc {
                 .to_owned(),
             lat,
             lon,
-            elevation: r.get("elevation").and_then(Value::as_f64).unwrap_or(0.0),
+            // Open-Meteo reports -9999 for "no data"; nothing on land is
+            // lower than about -430 m.
+            elevation: r
+                .get("elevation")
+                .and_then(Value::as_f64)
+                .filter(|e| *e > -1000.0)
+                .unwrap_or(0.0),
             tags: vec![],
             country: (!country.is_empty()).then_some(country),
             source: "geocoded".into(),
             province_slug: None,
             nominatim_address: None,
+            area: r
+                .get("feature_code")
+                .and_then(Value::as_str)
+                .and_then(crate::resolve::area_kind)
+                .map(str::to_owned),
         })
     }
 
@@ -430,6 +459,7 @@ impl LocationDoc {
             country: (!country.is_empty()).then_some(country),
             source: "geolocation".into(),
             nominatim_address: Some(Value::Object(nominatim)),
+            area: None,
         })
     }
 }
@@ -605,11 +635,11 @@ mod tests {
         let r = json!({"name": "Nairobi", "latitude": -1.28, "longitude": 36.82,
             "elevation": 1661.0, "country_code": "KE", "admin1": "Nairobi Area"});
         let l = LocationDoc::from_open_meteo(&r).unwrap();
-        assert_eq!(
-            (l.slug.as_str(), l.source.as_str()),
-            ("nairobi-ke", "geocoded")
-        );
+        // A spot slug (the hit's own coordinate), never `nairobi-ke`.
+        assert!(l.slug.starts_with("nairobi--"));
+        assert_eq!(l.source, "geocoded");
         assert_eq!(l.country.as_deref(), Some("KE"));
+        assert_eq!(l.area, None);
         assert!(LocationDoc::from_open_meteo(&json!({"name": "x"})).is_none());
     }
 

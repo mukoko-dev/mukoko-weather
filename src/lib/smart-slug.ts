@@ -144,6 +144,29 @@ export function buildSmartSlug(
 }
 
 /**
+ * The name half of a coordinate spot's slug (`12-35n-45-68e`): what the
+ * backend mints for a point nothing on Earth names (open water, polar ice,
+ * empty desert; `coordinate_slug_name` in `api/py/_geohash.py`). Two-decimal
+ * latitude and longitude, hemisphere letters, dashes.
+ */
+export const COORDINATE_NAME_RE = /^\d{1,2}-\d{2}[ns]-\d{1,3}-\d{2}[ew]$/;
+
+/** True for the name half of a coordinate spot, and for the bare `place`. */
+export function isCoordinateNameSlug(nameSlug: string): boolean {
+  return nameSlug === "place" || COORDINATE_NAME_RE.test(nameSlug);
+}
+
+/**
+ * Plain label for an unnamed point: `12.35°N 45.68°E`. Mirrors
+ * `coordinate_label` in `api/py/_geohash.py`.
+ */
+export function coordinateLabel(lat: number, lon: number): string {
+  const la = Math.round(lat * 100) / 100;
+  const lo = Math.round(lon * 100) / 100;
+  return `${Math.abs(la).toFixed(2)}\u00b0${la >= 0 ? "N" : "S"} ${Math.abs(lo).toFixed(2)}\u00b0${lo >= 0 ? "E" : "W"}`;
+}
+
+/**
  * Build the slug for a PLACE — a named feature the map already knows about.
  *
  * The identity is the map's, so this slug is stable across visits, across GPS

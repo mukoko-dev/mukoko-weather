@@ -31,8 +31,20 @@ describe("LocationPager — accessible page indicator", () => {
     expect(source).toContain('aria-current={isActive ? "page" : undefined}');
   });
 
-  it("highlights the current dot with the primary colour, others muted", () => {
-    expect(source).toContain('isActive ? "bg-primary" : "bg-text-tertiary/50"');
+  it("highlights the current dot: primary and elongated, others small and muted", () => {
+    expect(source).toContain(
+      'isActive ? "w-5 bg-primary" : "w-2 bg-text-tertiary/50"',
+    );
+  });
+
+  it("draws no surface of its own: the dots sit on the nav island", () => {
+    expect(source).not.toContain("bg-surface-card/80");
+    expect(source).not.toContain("border border-text-tertiary/10");
+    expect(source).toContain("mx-auto flex w-max items-center");
+  });
+
+  it("shows a visible focus ring on every page item", () => {
+    expect(source).toContain("focus-visible:outline-primary");
   });
 
   it("keeps every item at the 48px touch-target token", () => {

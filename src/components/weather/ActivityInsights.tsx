@@ -85,7 +85,6 @@ export function uvConcernLabel(concern: number): {
 const DEFAULT_STYLE: CategoryStyle = {
   bg: "bg-primary/10",
   border: "border-primary",
-  borderAccent: "border-l-primary",
   text: "text-primary",
   badge: "bg-primary text-primary-foreground",
 };
@@ -190,9 +189,9 @@ export function ActivityInsights({
           headingId="activity-insights-heading"
           title="My Activities"
           action={{ label: "Edit", onClick: openMyWeather }}
-          className="mb-4"
+          className="mb-[var(--space-stack)]"
         />
-        <div className="space-y-3">
+        <div className="flex flex-col gap-[var(--space-stack)]">
           {selectedItems.map((activity) => (
             <ActivityCard
               key={activity.id}
@@ -211,13 +210,13 @@ export function ActivityInsights({
   // Fallback: show selected activities as badges when insights data isn't available
   return (
     <section aria-label="Selected activities">
-      <div className="pangolin sm:p-6">
+      <div className="pangolin">
         <SectionHeader
           headingId="activity-fallback-heading"
           title="Your Activities"
           as="h3"
           action={{ label: "Edit", onClick: openMyWeather }}
-          className="mb-3"
+          className="mb-[var(--space-stack)]"
         />
         <div className="flex flex-wrap gap-2">
           {selectedItems.map((activity) => {

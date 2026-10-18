@@ -87,8 +87,8 @@ describe("shamwari page client — chatbot integration", () => {
     expect(clientSource).toContain("100dvh");
   });
 
-  it("accounts for mobile bottom nav with pb-[4.5rem]", () => {
-    expect(clientSource).toContain("pb-[4.5rem]");
+  it("accounts for mobile bottom nav with pb-[var(--mobile-nav-clearance)]", () => {
+    expect(clientSource).toContain("pb-[var(--mobile-nav-clearance)]");
     expect(clientSource).toContain("sm:pb-0");
   });
 
@@ -118,7 +118,7 @@ describe("shamwari loading skeleton", () => {
   });
 
   it("accounts for mobile bottom nav spacing", () => {
-    expect(loadingSource).toContain("pb-[4.5rem]");
+    expect(loadingSource).toContain("pb-[var(--mobile-nav-clearance)]");
     expect(loadingSource).toContain("sm:pb-0");
   });
 });

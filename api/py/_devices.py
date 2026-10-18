@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from pymongo.errors import DuplicateKeyError
 
+from . import _model_blend as blend
 from ._db import (
     device_profiles_collection,
     enforce_rate_limit,
@@ -24,12 +25,23 @@ router = APIRouter()
 
 VALID_THEMES = {"light", "dark", "system"}
 # Windy-style multi-model forecast selection (Open-Meteo model ids + "Auto").
+# Must accept every id the client can store: the My Weather radio group
+# (`ForecastModel` in src/lib/weather.ts), the map's model picker (the blend
+# members, src/lib/map-sources.ts MAP_MODELS) and the legacy ids older
+# devices still carry. Keep in step with KNOWN_FORECAST_MODELS in _weather.py.
 VALID_FORECAST_MODELS = {
     "best_match",
-    "gfs_seamless",
+    blend.ECMWF_IFS,
+    blend.ECMWF_IFS025,
+    blend.ECMWF_AIFS,
+    blend.GFS,
+    blend.ICON,
+    blend.GEM,
+    blend.ARPEGE,
+    "meteofrance_seamless",
+    # Legacy ids (mapped client-side by normalizeForecastModel()).
     "ecmwf_ifs04",
     "icon_seamless",
-    "meteofrance_seamless",
 }
 MAX_ACTIVITIES = 30
 MAX_SAVED_LOCATIONS = 10

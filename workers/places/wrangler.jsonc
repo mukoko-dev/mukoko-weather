@@ -49,7 +49,9 @@
   ],
   "d1_databases": [
     {
-      // Read only: place_daily (weather history), written by mukoko-weather-jobs.
+      // place_daily (weather history, written by mukoko-weather-jobs) is read;
+      // rate_events (migration 0002) holds the hourly geocoder budgets
+      // (weather_core::budget): this Worker inserts the rows.
       "binding": "WEATHER_DB",
       "database_name": "mukoko-weather",
       "database_id": "9a8846ea-ee34-4479-bc4c-790ee2beabee",

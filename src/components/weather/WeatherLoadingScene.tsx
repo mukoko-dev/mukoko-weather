@@ -41,7 +41,11 @@ const KNOWN_ROUTES = new Set([
   "offline",
   "profile",
   "developers",
+  "releases",
 ]);
+
+/** Delay before the loading scene creates its Three.js layer (ms). */
+export const LOADING_SCENE_3D_DELAY_MS = 600;
 
 /**
  * Branded weather loading animation.
@@ -142,20 +146,26 @@ export function WeatherLoadingScene({ slug, statusText, action }: Props) {
       windSpeed: hint?.windSpeed,
     };
 
-    createWeatherScene(el, config)
-      .then((result) => {
-        if (disposed) {
-          result.dispose();
-        } else {
-          sceneCleanup = result.dispose;
-        }
-      })
-      .catch(() => {
-        // Three.js failed to load — text-only fallback is already showing
-      });
+    // Most loads finish well inside this window: start Three.js only for a
+    // load that is actually slow, so a quick navigation never spins up a
+    // second WebGL context next to the page's own backdrop.
+    const startTimer = window.setTimeout(() => {
+      createWeatherScene(el, config)
+        .then((result) => {
+          if (disposed) {
+            result.dispose();
+          } else {
+            sceneCleanup = result.dispose;
+          }
+        })
+        .catch(() => {
+          // Three.js failed to load — text-only fallback is already showing
+        });
+    }, LOADING_SCENE_3D_DELAY_MS);
 
     return () => {
       disposed = true;
+      window.clearTimeout(startTimer);
       sceneCleanup?.();
     };
   }, [use3D, isMobile, sceneType, sceneIsDay, hint]);

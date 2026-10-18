@@ -93,7 +93,7 @@ def _get_location_context() -> list[dict]:
                 "name": loc.get("name", ""),
                 "province": loc.get("province", ""),
                 "tags": loc.get("tags", []),
-                "country": loc.get("country", "ZW"),
+                "country": loc.get("country") or "",
                 "lat": loc.get("lat"),
                 "lon": loc.get("lon"),
             }
@@ -181,7 +181,7 @@ def _exec_search(args: dict) -> str:
                 "slug": loc["slug"],
                 "name": loc["name"],
                 "province": loc.get("province", ""),
-                "country": loc.get("country", "ZW"),
+                "country": loc.get("country") or "",
                 "tags": tags,
             })
 
@@ -274,7 +274,7 @@ def _text_search_fallback(query: str) -> dict:
                 "slug": loc["slug"],
                 "name": loc["name"],
                 "province": loc.get("province", ""),
-                "country": loc.get("country", "ZW"),
+                "country": loc.get("country") or "",
                 "tags": tags,
                 **weather_info,
             })

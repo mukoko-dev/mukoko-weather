@@ -1,12 +1,28 @@
-import { NextRequest } from "next/server";
+import { NextFetchEvent, NextRequest, NextResponse } from "next/server";
 import { authkit, handleAuthkitProxy } from "@workos-inc/authkit-nextjs";
+import {
+  LOCATION_NOT_FOUND_REWRITE,
+  LOCATION_SLUG_RE,
+  classifyLocationPath,
+  isRenderableLocation,
+} from "@/lib/location-gate";
+import { isBareNameCandidate, resolveBareName } from "@/lib/bare-name";
+import { resolveLocationSlug } from "@/lib/places";
+import { isFeatureEnabled } from "@/lib/feature-flags";
+
+/** Read by the home page (src/app/page.tsx) as its fallback location. */
+const LAST_LOCATION_COOKIE = "lastLocation";
+
+/** The gate needs DB errors to throw, not to read as "not found". */
+const strictResolve = (slug: string) =>
+  resolveLocationSlug(slug, { strict: true });
 
 /**
  * Top-level routes that are NOT location slugs. Every directory under
  * src/app (other than [location]) must be listed — src/proxy.test.ts fails
  * when one is missing. WeatherLoadingScene keeps the page-route subset.
  */
-const KNOWN_ROUTES = new Set([
+export const KNOWN_ROUTES = new Set([
   "explore",
   "locations",
   "shamwari",
@@ -22,13 +38,12 @@ const KNOWN_ROUTES = new Set([
   "offline",
   "profile",
   "developers",
+  "releases",
   "api",
   // WorkOS AuthKit routes — never confuse with location slugs
   "auth",
   "callback",
 ]);
-
-const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 
 /**
  * Edge middleware — WorkOS AuthKit session refresh + lastLocation cookie bookkeeping.
@@ -47,28 +62,149 @@ const SLUG_RE = /^[a-z0-9-]{1,80}$/;
  * app. That GPS refresh happens client-side instead, in
  * CurrentLocationHome's mount effect — see src/app/CurrentLocationHome.tsx.
  */
-export default async function proxy(request: NextRequest) {
+export default async function proxy(
+  request: NextRequest,
+  event?: NextFetchEvent,
+) {
   const { pathname } = request.nextUrl;
 
   // Always refresh the AuthKit session first so subsequent withAuth() reads
   // are fresh. The returned headers must be merged onto every outbound
   // response via handleAuthkitProxy.
-  const { headers } = await authkit(request);
+  //
+  // The location gate (below) doesn't depend on the session, so its lookup
+  // runs alongside the refresh instead of after it.
+  const path = classifyLocationPath(pathname, KNOWN_ROUTES);
+  const [{ headers }, renderable] = await Promise.all([
+    authkit(request),
+    path.kind === "slug"
+      ? isRenderableLocation(path.slug, strictResolve, {
+          // A lookup that outlives the timeout keeps running after the
+          // response, so it can still cache its answer.
+          keepAlive: (pending) => event?.waitUntil(pending),
+        })
+      : Promise.resolve(null),
+  ]);
+
+  // ── Unknown location slug → real 404 with a server-rendered page (#263) ──
+  // A notFound() thrown while the page renders gives a 404 with an EMPTY
+  // server HTML body in Next 16 (the not-found page only appears after
+  // hydration). Rewriting to an unmatched internal path makes Next render
+  // the root not-found page on the server, with a 404, like any unknown URL.
+  // A failed lookup (null) lets the request through to the page as before.
+  //
+  // Cost: seed slugs and smart-slug spots (almost all traffic) pass with no
+  // lookup. Other slugs are looked up here AND again by the page, because a
+  // proxy result can't be handed to the render; positive answers are cached
+  // per instance for 10 minutes to keep that second lookup the only one.
+  //
+  // A slug in the wrong case (`/Harare`) is redirected to its lowercase,
+  // canonical URL rather than 404'd: it used to render through the
+  // resolver's case-insensitive name lookup.
+  if (path.kind === "redirect") {
+    return handleAuthkitProxy(request, headers, {
+      redirect: new URL(path.location + request.nextUrl.search, request.url),
+      redirectStatus: 308,
+    });
+  }
+  // ── Bare place name (/koh-samui) → the canonical spot URL (#317) ────────
+  // The coordinate is the identity and the name in a URL is cosmetic, so a
+  // single-segment slug we hold nothing for is forward-geocoded by the Rust
+  // places Worker (Open-Meteo, with its KV cache and hourly D1 budgets) and
+  // redirected to `{name}--{geohash}`, which renders from its slug alone.
+  // The Worker sees this server's address, not the visitor's, so each visitor
+  // is also capped here (see bare-name.ts). Render-only: nothing is stored. When nothing is found, or the geocoder is
+  // over budget, slow or down, the 404 below is exactly what it was. No
+  // lastLocation cookie rides on the redirect (the spot URL sets its own).
+  if (
+    path.kind === "slug" &&
+    renderable === false &&
+    isBareNameCandidate(path.slug)
+  ) {
+    const target = await resolveBareName(path.slug, {
+      visitor:
+        request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+        "unknown",
+      keepAlive: (pending) => event?.waitUntil(pending),
+    });
+    if (target) {
+      const sub = pathname.split("/").filter(Boolean)[1];
+      const redirect = handleAuthkitProxy(request, headers, {
+        redirect: new URL(
+          `/${target}${sub ? `/${sub}` : ""}${request.nextUrl.search}`,
+          request.url,
+        ),
+        redirectStatus: 308,
+      });
+      // A geocoder answer can improve; browsers must not pin it for good.
+      redirect.headers.set("cache-control", "private, max-age=600");
+      return redirect;
+    }
+  }
+  // A paused feature route (FLAGS.shamwari_chat) is a real 404. Its page calls
+  // notFound(), but shamwari/loading.tsx flushes a 200 shell first, so the
+  // status has to be decided here (production served 200 for a paused page).
+  const pausedRoute =
+    !isFeatureEnabled("shamwari_chat") &&
+    (pathname === "/shamwari" || pathname.startsWith("/shamwari/"));
+  const unknownLocation =
+    pausedRoute || path.kind === "unknown" || renderable === false;
 
   // ── Default response with AuthKit session cookies attached ───────────────
-  const response = handleAuthkitProxy(request, headers);
+  const response = unknownLocation
+    ? rewriteWithAuthkit(request, headers, LOCATION_NOT_FOUND_REWRITE)
+    : handleAuthkitProxy(request, headers);
 
   // ── Location pages: persist slug in cookie (30 days) ────────────────────
-  // Only the first path segment — sub-routes like /harare/forecast set "harare"
+  // Only the first path segment — sub-routes like /harare/forecast set "harare".
+  // Deliberately still set for a slug the gate just 404'd: whether a 404 slug
+  // may overwrite the cookie is an open owner decision (#238).
   const slug = pathname.slice(1).split("/")[0];
-  if (slug && SLUG_RE.test(slug) && !KNOWN_ROUTES.has(slug)) {
-    response.cookies.set("lastLocation", slug, {
+  if (slug && LOCATION_SLUG_RE.test(slug) && !KNOWN_ROUTES.has(slug)) {
+    // `response.cookies` was built before AuthKit's Set-Cookie headers were
+    // applied, and setting through it rewrites the whole header from its own
+    // copy, dropping a refreshed session cookie. So set it (Next's cookie
+    // bookkeeping included), then put back whatever AuthKit had sent.
+    const authkitCookies = response.headers.getSetCookie();
+    response.cookies.set(LAST_LOCATION_COOKIE, slug, {
       maxAge: 2592000,
       path: "/",
       sameSite: "lax",
     });
+    const kept = new Set(response.headers.getSetCookie());
+    for (const cookie of authkitCookies) {
+      if (!kept.has(cookie)) response.headers.append("set-cookie", cookie);
+    }
   }
 
+  return response;
+}
+
+/**
+ * `handleAuthkitProxy` only builds `next()` and redirect responses. A rewrite
+ * takes its output as is (session cookies, the forwarded request headers,
+ * and its own PKCE cookie handling) and swaps the `next()` marker for the
+ * rewrite. Nothing about AuthKit's headers is re-implemented here, so this
+ * path can't drift from every other proxy response.
+ */
+function rewriteWithAuthkit(
+  request: NextRequest,
+  authkitHeaders: Headers,
+  path: string,
+): NextResponse {
+  const base = handleAuthkitProxy(request, authkitHeaders);
+  // Only a `next()` can become a rewrite; anything else (a redirect AuthKit
+  // decided on) goes out unchanged.
+  if (!base.headers.has("x-middleware-next")) return base;
+  const response = NextResponse.rewrite(new URL(path, request.url));
+  for (const [name, value] of base.headers) {
+    const lower = name.toLowerCase();
+    if (lower === "x-middleware-next" || lower === "set-cookie") continue;
+    response.headers.set(name, value);
+  }
+  for (const cookie of base.headers.getSetCookie()) {
+    response.headers.append("set-cookie", cookie);
+  }
   return response;
 }
 

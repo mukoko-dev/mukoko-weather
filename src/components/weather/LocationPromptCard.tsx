@@ -12,7 +12,9 @@ import { Spinner } from "@/components/ui/spinner";
  * mobile nav as a slim, dismissible card instead of a full-screen loader or a
  * banner that pushes the temperature below the fold. The browser's permission
  * prompt only appears after the visitor taps the button — never on page load —
- * so they know why it's being asked.
+ * so they know why it's being asked (the line under the place name says so).
+ * Dismissing is "Not now", remembered on this device for a week; a block is
+ * remembered for good (`device-state.ts`).
  */
 export function LocationPromptCard({
   placeName,
@@ -43,9 +45,14 @@ export function LocationPromptCard({
           <p className="text-sm text-text-primary">
             Showing weather for <strong>{placeName}</strong>
           </p>
-          {message && (
+          {message ? (
             <p className="mt-0.5 text-sm text-severity-moderate" role="alert">
               {message}
+            </p>
+          ) : (
+            <p className="mt-0.5 text-sm text-text-secondary">
+              Allow location to see weather where you are. It is only used to
+              find your place.
             </p>
           )}
         </div>

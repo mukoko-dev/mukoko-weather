@@ -75,17 +75,14 @@ export function ActivityInsightsSkeleton() {
   return (
     <div role="status" aria-label="Loading activity insights">
       {/* Section header: title + Edit action */}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-[var(--space-stack)] flex items-center justify-between">
         <Skeleton className="h-6 w-32" />
         <Skeleton className="h-5 w-10" />
       </div>
       {/* 2 activity cards */}
-      <div className="space-y-3">
+      <div className="flex flex-col gap-[var(--space-stack)]">
         {Array.from({ length: 2 }).map((_, i) => (
-          <div
-            key={i}
-            className="baobab flex items-center gap-4 p-5 border-l-[6px] border-l-text-tertiary/20"
-          >
+          <div key={i} className="baobab flex items-center gap-4">
             {/* Icon circle */}
             <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
             {/* Text rows */}
@@ -150,7 +147,7 @@ export function DailyForecastSkeleton() {
 export function AISummarySkeleton() {
   return (
     <div
-      className="baobab border-l-[6px] border-l-tanzanite"
+      className="baobab border-tanzanite/40"
       role="status"
       aria-label="Loading AI summary"
     >
@@ -179,7 +176,7 @@ export function AISummarySkeleton() {
 export function AISummaryChatSkeleton() {
   return (
     <div
-      className="rounded-[var(--radius-card)] border-l-4 border-tanzanite bg-surface-card"
+      className="acacia border-tanzanite/40 p-0"
       role="status"
       aria-label="Loading follow-up chat"
     >
@@ -265,6 +262,40 @@ export function HazeSkeleton() {
       role="status"
       aria-label="Loading haze outlook"
     />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Agriculture snapshot skeleton
+// Matches: headline, 4 window tiles (2 → 4 cols), 6 metric tiles (2 → 3 cols), link
+// ---------------------------------------------------------------------------
+
+export function AgricultureSnapshotSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="Loading agriculture snapshot"
+      className="chameleon w-full space-y-4 p-[var(--space-card)]"
+    >
+      <div className="h-6 w-2/3 rounded-full bg-surface-dim" />
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={`w${i}`}
+            className="h-16 rounded-[var(--radius-card)] bg-surface-dim"
+          />
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={`m${i}`}
+            className="h-14 rounded-[var(--radius-card)] bg-surface-dim"
+          />
+        ))}
+      </div>
+      <div className="h-4 w-40 rounded-full bg-surface-dim" />
+    </div>
   );
 }
 

@@ -29,6 +29,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from ._db import (
+    UNKNOWN_COUNTRY_CODE,
     air_quality_cache_collection,
     is_valid_coords,
     ttl_find_one,
@@ -36,6 +37,7 @@ from ._db import (
 )
 from ._http import get_http_client
 from ._circuit_breaker import open_meteo_breaker, CircuitOpenError
+from . import _open_meteo as om
 
 router = APIRouter()
 
@@ -44,7 +46,6 @@ router = APIRouter()
 # Constants
 # ---------------------------------------------------------------------------
 
-OPEN_METEO_AQ_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 
 #: Cache TTL — 1 hour. Air quality changes slowly enough that hourly refreshes
 #: catch meaningful shifts while keeping API call volume small.
@@ -334,7 +335,8 @@ def _fetch_open_meteo_air_quality(lat: float, lon: float, side: Optional[dict] =
         "past_days": 1,
         "timezone": "auto",
     }
-    resp = client.get(OPEN_METEO_AQ_URL, params=params)
+    url, headers = om.air_quality()
+    resp = client.get(url, params=params, headers=headers)
     resp.raise_for_status()
     data = resp.json()
     if side is not None:
@@ -404,7 +406,7 @@ def _set_cached(lat: float, lon: float, payload: dict, country_code: Optional[st
             fields,
             AIR_QUALITY_CACHE_TTL_SECONDS,
             stamp=True,
-            country_code=country_code or "ZW",
+            country_code=country_code or UNKNOWN_COUNTRY_CODE,
         )
     except Exception:
         # Cache write failure must not break the response — log silently.

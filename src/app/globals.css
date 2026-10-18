@@ -124,16 +124,35 @@
   /* Touch & Interaction — 56px optimal (Material Design 3 recommended) */
   --touch-target-min: 48px;
 
-  /* Mobile bottom nav geometry (Header.tsx: fixed, bottom = inset, sm:hidden).
-     --mobile-nav-clearance is the space page content must leave at the bottom
-     so nothing sits under the floating pill, including the iOS home-indicator
-     safe area. Floating controls above the nav (e.g. reorder "Done") use it too. */
+  /* Mobile bottom nav geometry — the FLOATING bar, copied from mukoko-news's
+     island (src/components/layout/bottom-nav.tsx there): inset 1rem from both
+     screen edges, lifted --mobile-nav-inset (0.75rem) above the bottom edge
+     plus the safe area, max-w-md, pill (rounded-full), 0.5px token border,
+     shadow-lg, backdrop-blur-xl, 4rem tall. The location pager is its own
+     small floating pill one touch target tall, --mobile-nav-gap above the bar.
+     --mobile-nav-height is bar + gap + pager pill WITHOUT the lift or the
+     safe area; --mobile-nav-clearance is the space page content must leave at
+     the bottom so nothing sits under the nav (lift and safe area included).
+     Floating controls above the nav (e.g. reorder "Done") use it too.
+     Header.test.ts keeps these in step with the component. */
   --mobile-nav-inset: 0.75rem;
-  --mobile-nav-height: 4.25rem;
+  --mobile-nav-bar-height: 4rem;
+  --mobile-nav-gap: 0.5rem;
+  --mobile-nav-height: calc(
+    var(--mobile-nav-bar-height) + var(--mobile-nav-gap) +
+      var(--touch-target-min)
+  );
   --mobile-nav-clearance: calc(
     env(safe-area-inset-bottom, 0px) + var(--mobile-nav-inset) +
       var(--mobile-nav-height) + 0.5rem
   );
+
+  /* Mzizi border rule: a solid border on ALL four sides, 0.5px at rest and
+     1px on hover, active/selected (aria-current, aria-pressed, aria-selected,
+     data-active) and focus-visible. Never a single-side accent stripe. The
+     fauna card classes consume --card-border-width (see "Card edge" below). */
+  --border-width-rest: 0.5px;
+  --border-width-active: 1px;
 
   /* Typography — 16px base, 18px larger variant */
   --text-body: 1rem; /* 16px — base body/footer text */
@@ -505,11 +524,12 @@
   --color-bmc: var(--color-bmc);
   --color-bmc-fg: var(--color-bmc-fg);
   --font-sans:
-    "Noto Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-display: "Noto Serif", Georgia, serif;
-  --font-heading: "Noto Serif", Georgia, serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+    var(--font-noto-sans), "Noto Sans", system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-noto-serif), "Noto Serif", Georgia, serif;
+  --font-heading: var(--font-noto-serif), "Noto Serif", Georgia, serif;
+  --font-mono:
+    var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -647,8 +667,17 @@
   }
 }
 
+/* overflow-x: clip on html and body. `hidden` on body (or on any wrapper)
+   turns it into a scroll container: the sticky header then sticks to it
+   instead of the viewport, and iOS Safari detaches or jitters the fixed
+   bottom nav. `clip` cuts horizontal overflow without that side effect.
+   html alone keeps `hidden` as a fallback for browsers without `clip`
+   (Safari < 16): overflow on the root element is applied to the viewport,
+   so it never makes html a scroll container. Browsers with `clip` use the
+   second declaration. viewport-layout.test.ts guards this. */
 html {
   overflow-x: hidden;
+  overflow-x: clip;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -681,7 +710,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
-  overflow-x: hidden;
+  overflow-x: clip;
   /* overscroll-behavior-x prevents iOS Safari from bubbling horizontal
      scroll from inner containers (e.g. hourly forecast row) to the page */
   overscroll-behavior-x: none;
@@ -1025,15 +1054,84 @@ body {
            transition-all;
   }
 
+  /* .duiker — round 48px icon control on a card surface (the duiker: small,
+     quick, ducks into cover). No surface of its own, so it sits inside the
+     nav island or a map overlay card. aria-current / aria-pressed light it
+     with a primary tint. */
+  .duiker {
+    @apply flex shrink-0 items-center justify-center rounded-full
+           w-[var(--touch-target-min)] h-[var(--touch-target-min)]
+           text-text-secondary transition-colors
+           hover:bg-surface-dim hover:text-text-primary active:scale-95
+           aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary
+           aria-pressed:bg-primary/10 aria-pressed:text-primary
+           focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* .duiker-solid — the one primary round control in a group (map timeline
+     play/pause). Filled with the brand colour, same 48px geometry. */
+  .duiker-solid {
+    @apply flex shrink-0 items-center justify-center rounded-full
+           w-[var(--touch-target-min)] h-[var(--touch-target-min)]
+           bg-primary text-primary-foreground shadow-sm transition-colors
+           hover:bg-primary/90 active:scale-95
+           focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
+  }
+
+  /* .serval — floating overlay card on the map (legend, layer sheet, control
+     stack). Solid card surface so it reads over tiles in light and dark. */
+  .serval {
+    @apply rounded-[var(--radius-card)] bg-surface-card text-text-primary
+           shadow-md ring-1 ring-border;
+  }
+
+  /* .springhare — the map timeline range input. Native <input type=range>
+     (keyboard, aria-valuetext and touch come free), restyled: a thin track,
+     a 24px thumb with a ring, and a full 48px hit area. */
+  .springhare {
+    @apply h-[var(--touch-target-min)] w-full cursor-pointer appearance-none bg-transparent
+           focus-visible:outline-none;
+  }
+  .springhare::-webkit-slider-runnable-track {
+    @apply h-1.5 rounded-full bg-text-tertiary/30;
+  }
+  .springhare::-moz-range-track {
+    @apply h-1.5 rounded-full bg-text-tertiary/30;
+  }
+  .springhare::-webkit-slider-thumb {
+    @apply -mt-[9px] h-6 w-6 appearance-none rounded-full border-4 border-surface-card bg-primary shadow-md;
+  }
+  .springhare::-moz-range-thumb {
+    @apply h-6 w-6 rounded-full border-4 border-surface-card bg-primary shadow-md;
+  }
+  .springhare:focus-visible::-webkit-slider-thumb {
+    @apply outline-2 outline-offset-2 outline-primary;
+  }
+  .springhare:focus-visible::-moz-range-thumb {
+    @apply outline-2 outline-offset-2 outline-primary;
+  }
+
   /* ── Surfaces ────────────────────────────────────────────────────────── */
 
   /* .herd — a vertical stack of page sections, one --space-section apart.
-     A lazy wrapper whose card rendered nothing (no <section>, no loading
-     skeleton) is dropped, so an empty slot never leaves a doubled gap. */
+     A slot whose card rendered nothing (no <section>, no loading skeleton,
+     no error fallback) is dropped, so an empty slot never leaves a doubled
+     gap. A slot is a lazy wrapper ([data-lazy-section]) or a draggable
+     section wrapper ([data-herd-item], the main column of the location page,
+     where every section sits inside a DraggableSection). Every child also
+     fills the column width (min-w-0, w-full), so no card is narrower than
+     the stack it sits in. */
   .herd {
     @apply flex min-w-0 flex-col gap-[var(--space-section)];
   }
-  .herd > [data-lazy-section]:not(:has(section, [role="status"])) {
+  .herd > * {
+    @apply w-full min-w-0;
+  }
+  .herd
+    > :is([data-lazy-section], [data-herd-item]):not(
+      :has(section, [role="status"], [role="alert"])
+    ) {
     display: none;
   }
 
@@ -1299,7 +1397,72 @@ body {
 
   /* ── Loading / Skeleton ──────────────────────────────────────────────── */
 
+  /* ── Card edge — the Mzizi border rule, defined ONCE ─────────────────────
+     Every card surface draws a SOLID border on all four sides: 0.5px at rest
+     (--border-width-rest), 1px on hover, active/selected and focus-visible
+     (--border-width-active). A single-side accent stripe (border-l-*, a
+     left-only coloured edge) is another brand's pattern, not Mzizi's: tint
+     the whole border colour instead (a mineral at 40% alpha), never one side.
+     Card classes below consume --card-border-width; a new card class joins
+     the lists here (src/lib/mzizi-surfaces.test.ts fails if one does not).
+     Hover only counts on something you can press (a, button, role=button,
+     data-card-interactive), so a static card does not flicker. */
+  :is(
+    .baobab,
+    .acacia,
+    .guineafowl,
+    .chameleon,
+    .nyala,
+    .bushbuck,
+    .alert-banner,
+    .alert-edge
+  ) {
+    --card-border-width: var(--border-width-rest);
+    border-style: solid;
+    border-width: var(--card-border-width);
+  }
+  :is(a, button, [role="button"], [data-card-interactive]):is(
+      .baobab,
+      .acacia,
+      .nyala,
+      .bushbuck
+    ):hover,
+  :is(.baobab, .acacia, .guineafowl, .nyala, .bushbuck):is(
+    [aria-current]:not([aria-current="false"]),
+    [aria-pressed="true"],
+    [aria-selected="true"],
+    [data-active="true"]
+  ),
+  :is(.baobab, .acacia, .nyala, .bushbuck):focus-visible {
+    --card-border-width: var(--border-width-active);
+  }
+
+  /* .nyala — a place tile on the Locations list (mineral plate tint, full
+     border tinted with the plate's mineral, never a leading stripe). */
+  .nyala {
+    @apply block min-h-44 rounded-[var(--radius-card)] p-[var(--space-card)]
+           text-text-primary;
+  }
+
+  /* .bushbuck — a selectable place row (search result, current place, saved
+     place in My Weather). One radius (--radius-card) for the row; controls
+     inside it follow their own contract (pill Button) and menus inside a
+     card use --radius-sm, which is smaller than the card minus its padding. */
+  .bushbuck {
+    @apply flex min-h-[var(--touch-target-min)] items-center gap-2
+           rounded-[var(--radius-card)] border-border px-3 py-2
+           text-left text-base text-text-primary transition-colors;
+  }
+  .bushbuck:is([aria-pressed="true"], [data-active="true"]) {
+    @apply border-primary bg-primary/10;
+  }
+
   /* .chameleon — skeleton placeholder (changes/loads, blends with background) */
+  /* Inset stat tile inside a card (label + value), e.g. haze and agriculture. */
+  .meerkat {
+    @apply rounded-[var(--radius-card)] bg-surface-dim p-3;
+  }
+
   .chameleon {
     @apply animate-pulse rounded-[var(--radius-card)]
            border border-surface-dim bg-surface-card shadow-sm;
@@ -1342,6 +1505,19 @@ body {
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Soft fade at both ends of a sideways-scrolling row (map layer chips), so a
+   clipped chip reads as "more this way" rather than as a broken edge. The
+   mask is alpha only — no colour — so it works on any surface and theme. */
+.scroll-fade-x {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 1rem,
+    #000 calc(100% - 1.5rem),
+    transparent
+  );
 }
 
 /* ===== WCAG 3.0 APCA / AAA — Focus Management ===== */
@@ -1414,6 +1590,8 @@ body {
     --background: #ffffff;
     --foreground: #000000;
     --focus-ring-width: 4px;
+    --border-width-rest: 1px;
+    --border-width-active: 2px;
   }
 
   [data-theme="dark"] {
@@ -1430,6 +1608,12 @@ body {
 
 /* ===== Forced Colors / Windows High Contrast ===== */
 @media (forced-colors: active) {
+  :root {
+    /* A 0.5px border can vanish; forced colours draw it at a full pixel. */
+    --border-width-rest: 1px;
+    --border-width-active: 2px;
+  }
+
   .minerals-stripe {
     display: none;
   }
