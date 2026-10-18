@@ -64,13 +64,6 @@ class TestModuleTimeouts:
 
         assert _overpass.HTTP_TIMEOUT_S == 6.0
 
-    def test_tiles_upstream_timeout(self):
-        from py import _tiles
-
-        with patch("py._tiles.get_http_client") as get:
-            _tiles._get_http()
-        get.assert_called_once_with(8.0)
-
     def test_air_quality_timeout(self):
         from py import _air_quality
 
@@ -79,11 +72,3 @@ class TestModuleTimeouts:
             _air_quality._fetch_open_meteo_air_quality(-17.8, 31.0)
         get.assert_called_once_with(10.0)
 
-    def test_status_probes_share_one_client_with_10s_timeout(self):
-        from py import _status
-
-        with patch("py._status.get_http_client") as get:
-            get.return_value.get.return_value.status_code = 200
-            get.return_value.get.return_value.json.return_value = {"current": {"temperature_2m": 25}}
-            _status._check_open_meteo()
-        get.assert_called_once_with(10.0)

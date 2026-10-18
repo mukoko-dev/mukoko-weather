@@ -173,3 +173,20 @@ pub async fn get_with_timeout(
         }
     }
 }
+
+/// The read-only MongoDB client, from the `MONGODB_URI` secret (the Secrets
+/// Store entry `MUKOKO_WEATHER_MONGODB_URI`, else the plain Worker secret).
+/// `None` when the secret is unset or is not a usable connection string, so a
+/// route can answer "not configured" instead of failing.
+#[cfg(target_arch = "wasm32")]
+pub async fn mongo(env: &Env) -> Option<weather_mongo::edge::Mongo> {
+    let uri = secret(env, secrets::MONGODB_URI).await?;
+    match weather_mongo::edge::Mongo::new(&uri) {
+        Ok(m) => Some(m),
+        Err(e) => {
+            // The error names the problem, never the string.
+            console_warn!("mongo: {e}");
+            None
+        }
+    }
+}

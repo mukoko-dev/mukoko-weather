@@ -37,6 +37,7 @@ pub mod resolve;
 pub mod secrets;
 pub mod sg_air;
 pub mod station;
+pub mod status;
 pub mod tiles;
 pub mod wmo;
 

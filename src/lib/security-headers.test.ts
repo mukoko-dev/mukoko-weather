@@ -66,6 +66,7 @@ describe("security headers (B05)", () => {
       "https://api.maptiler.com",
       "https://api.open-meteo.com",
       "https://weather-api.mukoko.com",
+      "https://weather-tiles.mukoko.com",
       "https://api.workos.com",
       "https://avatars.githubusercontent.com",
       "https://www.google.com",
@@ -76,6 +77,13 @@ describe("security headers (B05)", () => {
       expect.arrayContaining(["data:", "blob:"]),
     );
     expect(CSP_DIRECTIVES["object-src"]).toEqual(["'none'"]);
+  });
+
+  it("lets the map load overlay tiles from the tiles Worker", () => {
+    for (const directive of ["img-src", "connect-src"] as const)
+      expect(CSP_DIRECTIVES[directive]).toContain(
+        "https://weather-tiles.mukoko.com",
+      );
   });
 
   it("allows no Google Fonts origin (fonts are self-hosted via next/font)", () => {
