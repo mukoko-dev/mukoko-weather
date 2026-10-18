@@ -208,9 +208,17 @@ describe("page.tsx — server seeding", () => {
     expect(pageSource).toContain("GEO_FETCH_TIMEOUT_MS");
   });
 
-  it("uses a stable base URL for the self-fetch (not VERCEL_URL)", () => {
+  it("asks the Rust Worker, never a self-fetch (no VERCEL_URL, no /api/py)", () => {
     expect(pageSource).not.toContain("VERCEL_URL");
-    expect(pageSource).toContain('process.env.NODE_ENV === "production"');
+    expect(pageSource).not.toContain("/api/py");
+    expect(pageSource).toContain("fetchPlaces(");
+  });
+
+  it("never holds the first paint past a deadline: it streams the client chooser instead", () => {
+    expect(pageSource).toContain("HOME_SEED_DEADLINE_MS");
+    expect(pageSource).toContain(
+      "withinDeadline(buildHome(), HOME_SEED_DEADLINE_MS)",
+    );
   });
 
   it("NEVER redirects — home is real content now", () => {

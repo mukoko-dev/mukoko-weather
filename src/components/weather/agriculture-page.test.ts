@@ -65,7 +65,7 @@ describe("agriculture page components", () => {
 
   it("history compares /api/py/history with /api/py/normals", () => {
     const src = read("AgricultureHistory.tsx");
-    expect(src).toContain("/api/py/history?location=");
+    expect(src).toContain('fetchWorker("history", `location=');
     expect(src).toContain("days=30");
     expect(src).toContain("/api/py/normals?lat=");
   });
