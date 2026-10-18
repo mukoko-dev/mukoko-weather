@@ -9,6 +9,7 @@ import {
   type AirQualityResponse,
   type PollutantKey,
 } from "./AirQualityCard";
+import { fetchWorker } from "@/lib/weather-api";
 
 /**
  * Air Quality Details — full pollutant breakdown for the atmosphere sub-route.
@@ -69,9 +70,13 @@ export function AirQualityDetails({ lat, lon }: Props) {
 
     let cancelled = false;
 
-    fetch(`/api/py/airquality?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`, {
-      signal: controller.signal,
-    })
+    fetchWorker(
+      "air-quality",
+      `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`,
+      {
+        signal: controller.signal,
+      },
+    )
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json() as Promise<AirQualityResponse>;
