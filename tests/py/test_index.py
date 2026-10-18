@@ -126,7 +126,7 @@ class TestMongoConnectionError:
 
 
 # ---------------------------------------------------------------------------
-# Router mounting — verify all 16 routers are included
+# Router mounting — verify every router still on the Python backend is included
 # ---------------------------------------------------------------------------
 
 
@@ -162,10 +162,6 @@ class TestRouterMounting:
         paths = self._get_route_paths()
         assert "/api/py/chat" in paths
 
-    def test_suitability_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/suitability" in paths
-
     def test_embeddings_router_mounted(self):
         paths = self._get_route_paths()
         assert "/api/py/embeddings/status" in paths
@@ -182,13 +178,6 @@ class TestRouterMounting:
         paths = self._get_route_paths()
         assert "/api/py/locations" in paths
 
-    def test_data_router_mounted(self):
-        paths = self._get_route_paths()
-        # Activities, tags, regions are on the data router
-        assert "/api/py/activities" in paths
-        assert "/api/py/tags" in paths
-        assert "/api/py/regions" in paths
-
     def test_history_router_mounted(self):
         paths = self._get_route_paths()
         assert "/api/py/history" in paths
@@ -200,11 +189,6 @@ class TestRouterMounting:
     def test_tiles_router_mounted(self):
         paths = self._get_route_paths()
         assert "/api/py/map-tiles" in paths
-
-    def test_ai_prompts_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/ai/prompts" in paths
-        assert "/api/py/ai/suggested-rules" in paths
 
     def test_ai_followup_router_mounted(self):
         paths = self._get_route_paths()
@@ -230,21 +214,9 @@ class TestRouterMounting:
         paths = self._get_route_paths()
         assert "/api/py/airports/nearest" in paths
 
-    def test_aq_grid_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/airquality/grid" in paths
-
     def test_haze_router_mounted(self):
         paths = self._get_route_paths()
         assert "/api/py/haze" in paths
-
-    def test_sg_air_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/sg-air" in paths
-
-    def test_enso_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/enso" in paths
 
     def test_agriculture_router_mounted(self):
         paths = self._get_route_paths()

@@ -126,8 +126,8 @@ describe("fetchPlaceOffset — reads the API's offset, never throws", () => {
   it("calls only our own cached API", async () => {
     mockFetch({ utc_offset_seconds: 0 });
     await fetchPlaceOffset(1, 2);
-    expect(vi.mocked(globalThis.fetch).mock.calls[0][0]).toBe(
-      "/api/py/weather?lat=1&lon=2",
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[0][0])).toBe(
+      "https://weather-api.mukoko.com/v1/weather?lat=1&lon=2",
     );
   });
 

@@ -15,7 +15,7 @@ import {
   preferencesCollection,
   suitabilityRulesCollection,
 } from "./collections";
-import { workerUrl } from "../weather-api";
+import { fetchWorker, workerUrl } from "../weather-api";
 import { getDeviceId } from "./bridge";
 import type { PreferencesDocType } from "./schemas";
 
@@ -70,7 +70,7 @@ async function startPrefsReplication(): Promise<void> {
           const prefs = row.newDocumentState;
 
           try {
-            await fetch(workerUrl(`devices/${deviceId}`), {
+            await fetch(workerUrl(`devices/${deviceId}`, ""), {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -98,7 +98,7 @@ async function startPrefsReplication(): Promise<void> {
       // full profile, so incremental pull optimization doesn't apply here.
       handler: async (_lastCheckpoint, _batchSize) => {
         try {
-          const res = await fetch(workerUrl(`devices/${deviceId}`));
+          const res = await fetchWorker(`devices/${deviceId}`, "");
           if (!res.ok) return { documents: [], checkpoint: null };
 
           const profile = await res.json();
