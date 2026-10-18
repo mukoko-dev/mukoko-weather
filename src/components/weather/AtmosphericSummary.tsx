@@ -263,11 +263,10 @@ function useNormalHigh(
     if (typeof lat !== "number" || typeof lon !== "number") return;
     const controller = new AbortController();
     const date = localIsoDate(new Date(), offsetSeconds);
-    fetch(
-      `/api/py/normals?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
-      {
-        signal: controller.signal,
-      },
+    fetchWorker(
+      "normals",
+      `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
+      { signal: controller.signal },
     )
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

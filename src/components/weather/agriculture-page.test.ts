@@ -63,11 +63,12 @@ describe("agriculture page components", () => {
     expect(src).not.toContain("/api/py/ai");
   });
 
-  it("history compares /api/py/history with /api/py/normals", () => {
+  it("history compares /api/py/history with the Worker's normals", () => {
     const src = read("AgricultureHistory.tsx");
     expect(src).toContain('fetchWorker("history", `location=');
     expect(src).toContain("days=30");
-    expect(src).toContain("/api/py/normals?lat=");
+    expect(src).toContain('"normals"');
+    expect(src).not.toContain("/api/py/normals");
   });
 
   it("the briefing spends no model call without crops or while data is unavailable", () => {

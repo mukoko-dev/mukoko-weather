@@ -56,7 +56,9 @@ export type WorkerRoute =
   | "airports/nearest"
   | "air-quality/grid"
   | "enso"
-  | "sg-air";
+  | "sg-air"
+  | "haze"
+  | "normals";
 
 /** The Worker's URL for a route and its query string (no leading `?`). */
 export function workerUrl(

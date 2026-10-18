@@ -11,6 +11,8 @@
 //! GET /v1/forecast?location=|lat=&lon=[&days=1..7]   the daily forecast contract
 //! GET /v1/air-quality?lat=&lon=                     the EPA AQI, the shape of /api/py/airquality
 //! GET /v1/air-quality/grid?lat=&lon=[&radiusKm=&n=]  US AQI on an n x n grid (the shape of /api/py/airquality/grid)
+//! GET /v1/haze?lat=&lon=                             haze panel data (the shape of /api/py/haze)
+//! GET /v1/normals?lat=&lon=[&date=]                  climate normals (the shape of /api/py/normals)
 //! GET /v1/enso                                       El Nino / La Nina phase (the shape of /api/py/enso)
 //! GET /v1/sg-air?lat=&lon=                           official Singapore NEA air quality (the shape of /api/py/sg-air)
 //! GET /v1/metar?icao=                                METARs and TAF, the shape of /api/py/metar
@@ -113,6 +115,17 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
                 FORECAST_BINDING,
                 "/air-quality/grid",
                 "public, max-age=900",
+            )
+            .await
+        }
+        "/v1/haze" => relay(req, env, FORECAST_BINDING, "/haze", "public, max-age=900").await,
+        "/v1/normals" => {
+            relay(
+                req,
+                env,
+                FORECAST_BINDING,
+                "/normals",
+                "public, max-age=86400",
             )
             .await
         }
