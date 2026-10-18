@@ -3,6 +3,7 @@ import {
   fetchPlaces,
   legacyPlacesUrl,
   weatherApiBase,
+  workerApiUrl,
   workerPlacesUrl,
 } from "./weather-api";
 
@@ -35,6 +36,29 @@ describe("weatherApiBase", () => {
     "ftp://weather.test",
   ])("rejects %s", (url) => {
     expect(weatherApiBase({ NEXT_PUBLIC_WEATHER_API_URL: url })).toBeNull();
+  });
+});
+
+describe("workerApiUrl", () => {
+  it("defaults to the production Worker, no env var needed", () => {
+    expect(workerApiUrl("enso", "", {})).toBe("https://weather-api.mukoko.com/v1/enso");
+    expect(workerApiUrl("/sg-air", "lat=1.3&lon=103.8", {})).toBe(
+      "https://weather-api.mukoko.com/v1/sg-air?lat=1.3&lon=103.8",
+    );
+  });
+
+  it("uses the configured origin when set", () => {
+    expect(
+      workerApiUrl("air-quality/grid", "n=7", {
+        NEXT_PUBLIC_WEATHER_API_URL: "https://worker.example.com",
+      }),
+    ).toBe("https://worker.example.com/v1/air-quality/grid?n=7");
+  });
+
+  it("ignores an unsafe configured origin", () => {
+    expect(
+      workerApiUrl("enso", "", { NEXT_PUBLIC_WEATHER_API_URL: "http://evil.example" }),
+    ).toBe("https://weather-api.mukoko.com/v1/enso");
   });
 });
 

@@ -4,11 +4,12 @@ import { useEffect, useId, useState } from "react";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EnsoOutlookSkeleton } from "@/components/weather/SectionSkeleton";
 import { ensoImpact, type EnsoPhase } from "@/lib/enso";
+import { workerApiUrl } from "@/lib/weather-api";
 
 /**
  * El Niño / La Niña seasonal outlook card.
  *
- * Fetches `/api/py/enso` (NOAA CPC Oceanic Niño Index, cached server-side for
+ * Fetches the Worker's `/v1/enso` (NOAA CPC Oceanic Niño Index, cached server-side for
  * 12 h) and shows the latest phase, strength, ONI value with its season, the
  * last few seasons, and region-aware impact lines for this location's country.
  *
@@ -89,7 +90,7 @@ export function EnsoOutlook({ lat, lon, countryCode }: Props) {
     const controller = new AbortController();
     let cancelled = false;
 
-    fetch("/api/py/enso", { signal: controller.signal })
+    fetch(workerApiUrl("enso"), { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json() as Promise<EnsoOutlookResponse>;

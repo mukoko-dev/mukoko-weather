@@ -8,6 +8,7 @@
  */
 
 import type { Feature, FeatureCollection, Polygon } from "geojson";
+import { workerApiUrl } from "@/lib/weather-api";
 
 /** EPA US AQI categories, lowest to highest severity. */
 export type AqiBand =
@@ -218,7 +219,7 @@ export async function fetchAirQualityGrid(options: {
     radiusKm: String(options.radiusKm ?? 40),
     n: String(options.n ?? 7),
   });
-  const res = await fetch(`/api/py/airquality/grid?${params.toString()}`, {
+  const res = await fetch(workerApiUrl("air-quality/grid", params.toString()), {
     signal: options.signal,
     headers: { Accept: "application/json" },
   });

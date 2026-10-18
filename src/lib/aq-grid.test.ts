@@ -198,7 +198,7 @@ describe("fetchAirQualityGrid", () => {
 
     expect(body.available).toBe(true);
     const url = String(fetchMock.mock.calls[0][0]);
-    expect(url.startsWith("/api/py/airquality/grid?")).toBe(true);
+    expect(url.startsWith("https://weather-api.mukoko.com/v1/air-quality/grid?")).toBe(true);
     const params = new URL(url, "http://x").searchParams;
     expect(params.get("lat")).toBe("1.3512");
     expect(params.get("lon")).toBe("103.8249");

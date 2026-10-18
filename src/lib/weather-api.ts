@@ -81,3 +81,22 @@ export async function fetchPlaces(
   }
   return fetcher(legacyPlacesUrl(resource, query, legacyBase), init);
 }
+
+/** The Rust backend's public origin. The Worker is the backend; this is its
+ * address when `NEXT_PUBLIC_WEATHER_API_URL` is not set. */
+export const DEFAULT_WORKER_ORIGIN = "https://weather-api.mukoko.com";
+
+/**
+ * The Worker's `/v1/{path}` URL for a data route that has no Python fallback
+ * (enso, sg-air, air-quality/grid, ...). `query` is an encoded query string
+ * without the `?`. The configured origin wins, else the production Worker.
+ */
+export function workerApiUrl(
+  path: string,
+  query = "",
+  env: Env = process.env,
+): string {
+  const base = weatherApiBase(env) ?? DEFAULT_WORKER_ORIGIN;
+  const route = path.replace(/^\/+/, "");
+  return `${base}/v1/${route}${query ? `?${query}` : ""}`;
+}
