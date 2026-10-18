@@ -179,11 +179,13 @@ describe("AviationWeather — nearest-report wiring", () => {
   });
 
   it("asks the server for the nearest airport that actually has a report", () => {
-    expect(src).toContain("/api/py/aviation/nearest-metar?lat=");
+    expect(src).toContain('"aviation/nearest-metar"');
+    expect(src).not.toContain("/api/py/aviation");
   });
 
   it("still supports picking a specific station via /api/py/metar", () => {
-    expect(src).toContain("/api/py/metar?icao=");
+    expect(src).toContain('fetchWorker("metar"');
+    expect(src).not.toContain("/api/py/metar");
   });
 
   it("labels the chosen station as the nearest report", () => {

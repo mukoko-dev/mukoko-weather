@@ -62,7 +62,7 @@ describe("developers page — documented public endpoints", () => {
     "/api/py/locations?slug=",
     "/api/py/search?q=",
     "/api/py/airquality?lat=",
-    "/api/py/airports/nearest?lat=",
+    "/v1/airports/nearest?lat=",
   ];
 
   it.each(endpoints)("documents %s", (endpoint) => {

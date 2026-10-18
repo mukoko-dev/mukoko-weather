@@ -107,7 +107,6 @@ describe("CORS (B06)", () => {
       "/api/py/geo",
       "/api/py/search",
       "/api/py/airquality/:path*",
-      "/api/py/airports/nearest",
       "/api/embed/:path*",
       "/embed/:path*",
     ])

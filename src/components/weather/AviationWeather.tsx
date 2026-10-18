@@ -37,7 +37,7 @@ export interface NearestCandidate {
   ageMinutes: number | null;
 }
 
-/** Response of GET /api/py/aviation/nearest-metar. */
+/** Response of GET /v1/aviation/nearest-metar (the Rust Worker). */
 interface NearestResponse {
   status: "ok" | "no_recent_report" | "no_airports" | "unavailable";
   message: string | null;
@@ -54,7 +54,7 @@ interface NearestResponse {
   candidates: NearestCandidate[];
 }
 
-/** Response of GET /api/py/metar?icao=. */
+/** Response of GET /v1/metar?icao= (the Rust Worker). */
 interface StationResponse {
   icao: string;
   metar: MetarObs[];
@@ -244,12 +244,11 @@ export function AviationWeather({ slug, lat, lon }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    // The picked station is a Worker route; the nearest-station search is
-    // not on the Worker yet and stays on /api/py.
     (pickedIcao
       ? fetchWorker("metar", `icao=${encodeURIComponent(pickedIcao)}`)
-      : fetch(
-          `/api/py/aviation/nearest-metar?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`,
+      : fetchWorker(
+          "aviation/nearest-metar",
+          `lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`,
         )
     )
       .then((r) => {
