@@ -1,8 +1,8 @@
 /**
  * RxDB replication to the Python backend.
  *
- * Preferences: bidirectional (push to PATCH /api/py/devices, pull from GET /api/py/devices)
- * Suitability rules: pull-only (GET /v1/suitability on the Worker, every 10 min)
+ * Preferences: bidirectional (push to PATCH /v1/devices/{id}, pull from GET /v1/devices/{id} on the Rust Worker)
+ * Suitability rules: pull-only (GET /api/py/suitability every 10 min)
  *
  * Uses leader election — only the leader tab replicates to avoid conflicts.
  */
@@ -15,6 +15,7 @@ import {
   preferencesCollection,
   suitabilityRulesCollection,
 } from "./collections";
+import { fetchWorker, workerUrl } from "../weather-api";
 import { getDeviceId } from "./bridge";
 import type { PreferencesDocType } from "./schemas";
 
@@ -69,7 +70,7 @@ async function startPrefsReplication(): Promise<void> {
           const prefs = row.newDocumentState;
 
           try {
-            await fetch(`${API_BASE}/devices/${deviceId}`, {
+            await fetch(workerUrl(`devices/${deviceId}`, ""), {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -97,7 +98,7 @@ async function startPrefsReplication(): Promise<void> {
       // full profile, so incremental pull optimization doesn't apply here.
       handler: async (_lastCheckpoint, _batchSize) => {
         try {
-          const res = await fetch(`${API_BASE}/devices/${deviceId}`);
+          const res = await fetchWorker(`devices/${deviceId}`, "");
           if (!res.ok) return { documents: [], checkpoint: null };
 
           const profile = await res.json();
