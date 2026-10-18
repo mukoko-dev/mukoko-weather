@@ -26,7 +26,7 @@ describe("fetchModelWeather (issue #246)", () => {
       ["gfs_seamless", "ecmwf_ifs"],
     );
     const url = String((fetchMock.mock.calls[0] as unknown[])[0]);
-    expect(url.startsWith("/api/py/weather?")).toBe(true);
+    expect(url).toContain("weather-api.mukoko.com/v1/weather?");
     expect(url).toContain("model=gfs_seamless");
     expect(url).toContain("models=gfs_seamless%2Cecmwf_ifs");
     expect(baseline).not.toBeNull();

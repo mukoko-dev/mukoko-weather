@@ -25,6 +25,7 @@ pub mod forecast;
 pub mod geo;
 pub mod jobs;
 pub mod locations;
+pub mod model_grid;
 pub mod normalize;
 pub mod places;
 pub mod push;

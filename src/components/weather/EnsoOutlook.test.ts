@@ -36,7 +36,7 @@ describe("EnsoOutlook — client component", () => {
   });
 
   it("fetches the Rust Worker's ENSO route, never /api/py", () => {
-    expect(source).toContain('workerApiUrl("enso")');
+    expect(source).toContain('fetchWorker("enso"');
     expect(source).not.toContain("/api/py/enso");
   });
 

@@ -10,6 +10,7 @@
 //! GET /air-quality/grid?lat=&lon=[&radiusKm=][&n=] US AQI on an n x n grid (one batched call)
 //! GET /enso                                        El Nino / La Nina phase (NOAA CPC ONI)
 //! GET /sg-air[?lat=&lon=]                          official Singapore NEA PSI and PM2.5
+//! GET /model-grid?lat=&lon=[&model=]               one model's 3-hourly forecast on a 7×7 grid
 //! GET /health                                      which bindings are configured
 //! ```
 //!
@@ -27,6 +28,8 @@ mod air;
 mod aq_grid;
 mod chain;
 mod enso;
+mod limit;
+mod model_grid;
 mod places;
 mod sg_air;
 mod stations;
@@ -49,6 +52,7 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
         "/air-quality/grid" => aq_grid::air_quality_grid(&req, &env, &ctx).await,
         "/enso" => enso::enso(&env, &ctx).await,
         "/sg-air" => sg_air::sg_air(&req, &env, &ctx).await,
+        "/model-grid" => model_grid::model_grid(&req, &env, &ctx).await,
         "/health" => health(&env).await,
         _ => error(404, "not_found", "No such route."),
     }

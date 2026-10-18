@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EnsoOutlookSkeleton } from "@/components/weather/SectionSkeleton";
 import { ensoImpact, type EnsoPhase } from "@/lib/enso";
-import { workerApiUrl } from "@/lib/weather-api";
+import { fetchWorker } from "@/lib/weather-api";
 
 /**
  * El Niño / La Niña seasonal outlook card.
@@ -90,7 +90,7 @@ export function EnsoOutlook({ lat, lon, countryCode }: Props) {
     const controller = new AbortController();
     let cancelled = false;
 
-    fetch(workerApiUrl("enso"), { signal: controller.signal })
+    fetchWorker("enso", "", { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json() as Promise<EnsoOutlookResponse>;
