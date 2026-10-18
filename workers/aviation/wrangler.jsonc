@@ -5,7 +5,8 @@
 // Names only, never values:
 //   secrets: CHECKWX_API_KEY (optional; the fallback when the Aviation
 //            Weather Center fails. Today in Mongo weather.api_keys "checkwx"),
-//            from the Secrets Store as MUKOKO_WEATHER_CHECKWX_API_KEY (below)
+//            read as MUKOKO_WEATHER_CHECKWX_API_KEY from the Secrets Store when it
+//            is bound, else as the plain wrangler secret CHECKWX_API_KEY
 // OWNER: the KV id is the same namespace as forecast/wrangler.jsonc
 // FORECAST_CACHE (mukoko-weather-forecast-cache); entries use the `avn:`
 // prefix, so no new namespace is needed.
@@ -23,21 +24,15 @@
     "logs": { "enabled": true, "invocation_logs": true },
     "traces": { "enabled": true },
   },
-  // Secrets: the account's Cloudflare Secrets Store (the store id is not a
-  // credential). Each secret must be in the store with the "workers" scope.
-  // The code reads them by plain name through weather_edge::secret.
-  // TRANSITION: until the owner confirms every value is in the store, the
-  // code falls back to the plain wrangler secret of the plain name
-  // (warning once per isolate); remove the fallback and the plain secrets
-  // then. The binding names differ from the plain names because two
-  // bindings on a Worker may not share a name.
-  "secrets_store_secrets": [
-    {
-      "binding": "MUKOKO_WEATHER_CHECKWX_API_KEY",
-      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
-      "secret_name": "MUKOKO_WEATHER_CHECKWX_API_KEY",
-    },
-  ],
+  // No Secrets Store binding yet: Cloudflare refuses a deploy whose binding
+  // names a store secret that does not exist (error 10182), and the CheckWX
+  // key is still in Mongo, not the store. Once the owner creates
+  // MUKOKO_WEATHER_CHECKWX_API_KEY in store 56f84bfa8a564c54a95dbf4f4b4281b4
+  // (scope "workers"), add back:
+  //   "secrets_store_secrets": [{ "binding": "MUKOKO_WEATHER_CHECKWX_API_KEY",
+  //     "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+  //     "secret_name": "MUKOKO_WEATHER_CHECKWX_API_KEY" }]
+  // Until then the code reads the plain wrangler secret CHECKWX_API_KEY, if set.
   "kv_namespaces": [
     // METAR answers, 30 min.
     { "binding": "CACHE", "id": "c7b9c50b55cd43fcbf3e077a19226109" },
