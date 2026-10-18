@@ -103,6 +103,16 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
             )
             .await
         }
+        "/v1/model-grid" => {
+            relay(
+                req,
+                env,
+                FORECAST_BINDING,
+                "/model-grid",
+                "public, max-age=3600",
+            )
+            .await
+        }
         "/v1/metar" => relay(req, env, AVIATION_BINDING, "/metar", "public, max-age=600").await,
         "/v1/airports/nearest" => {
             relay(
@@ -356,8 +366,14 @@ async fn relay(
 ) -> Result<Response> {
     let query = req.url()?.query().unwrap_or("").to_owned();
     let fetcher = env.service(binding)?;
+    // The Worker behind has no public route; the visitor's address lets it
+    // meter a call that spends a third-party budget.
+    let headers = Headers::new();
+    headers.set("X-Mukoko-Client-IP", &client_ip(req))?;
+    let mut init = worker::RequestInit::new();
+    init.with_headers(headers);
     let Ok(mut upstream) = fetcher
-        .fetch(format!("https://upstream{path}?{query}"), None)
+        .fetch(format!("https://upstream{path}?{query}"), Some(init))
         .await
     else {
         return error(502, "upstream_unreachable", "The service did not answer.");
