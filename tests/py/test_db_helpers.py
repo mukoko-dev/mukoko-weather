@@ -359,10 +359,11 @@ class TestTtlUpsert:
         assert doc["bundu"]["countryCode"] == "KE"
         assert "createdAt" in doc and "updatedAt" in doc
 
-    def test_stamp_defaults_to_zimbabwe(self):
+    def test_stamp_without_country_is_unknown_not_zimbabwe(self):
+        """A coordinate cache row for London must not be labelled Zimbabwe."""
         coll = MagicMock()
         ttl_upsert(coll, {"_id": "k"}, {"_id": "k"}, ttl_seconds=60, stamp=True)
-        assert coll.update_one.call_args.args[1]["$set"]["bundu"]["countryCode"] == "ZW"
+        assert coll.update_one.call_args.args[1]["$set"]["bundu"]["countryCode"] == "ZZ"
 
     def test_errors_propagate_to_caller(self):
         coll = MagicMock()

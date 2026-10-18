@@ -28,7 +28,7 @@ from ._db import (
 from ._ai_prompts import get_ai_prompt
 from ._weather_cache_key import weather_cache_key_for
 from ._ai_gateway import call_ai, first_text
-from ._places_resolver import find_location
+from ._places_resolver import find_location, spot_storage_key, storage_slug
 
 router = APIRouter()
 
@@ -147,7 +147,9 @@ async def submit_report(body: SubmitReportRequest, request: Request):
     ttl = SEVERITY_TTL.get(severity, 172800)
 
     report = {
-        "locationSlug": body.locationSlug,
+        # A synthesized spot is a coordinate path: its reports are keyed by
+        # its cell (``geo:<geohash>``), never by the spellable name half.
+        "locationSlug": storage_slug(body.locationSlug, loc),
         "locationName": loc.get("name", body.locationSlug),
         "lat": body.lat or loc.get("lat"),
         "lon": body.lon or loc.get("lon"),
@@ -212,6 +214,13 @@ async def list_reports(location: str, hours: int = 24):
         raise HTTPException(status_code=400, detail="Missing location parameter")
 
     hours = min(max(hours, 1), 72)
+    # Read the key the submit path stored under. A spot slug with a placesGeo
+    # record keeps its own slug and one without is keyed by its cell; the
+    # list reads both (a pure parse, no DB lookup) so neither is hidden.
+    keys = [location]
+    cell = spot_storage_key(location)
+    if cell:
+        keys.append(cell)
 
     try:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
@@ -220,7 +229,7 @@ async def list_reports(location: str, hours: int = 24):
             weather_reports_collection()
             .find(
                 {
-                    "locationSlug": location,
+                    "locationSlug": {"$in": keys},
                     "reportedAt": {"$gte": cutoff},
                     "expiresAt": {"$gt": datetime.now(timezone.utc)},
                 },

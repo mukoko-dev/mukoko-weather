@@ -40,7 +40,7 @@ export function LocationsSearch({ listed }: LocationsSearchProps) {
   return (
     <div className="relative">
       {hasQuery && (
-        <div className="absolute bottom-full left-0 right-0 mb-2 max-h-72 overflow-y-auto rounded-card border border-border bg-surface-card p-1 shadow-lg">
+        <div className="absolute bottom-full left-0 right-0 mb-2 max-h-72 overflow-y-auto rounded-[var(--radius-card)] border border-border bg-surface-card p-1 shadow-lg">
           {loading && (
             <p
               role="status"
@@ -68,7 +68,7 @@ export function LocationsSearch({ listed }: LocationsSearchProps) {
                     type="button"
                     disabled={atCap}
                     onClick={() => choose(r.slug, r.name)}
-                    className="press-scale flex w-full flex-col items-start rounded-button px-3 py-2 min-h-[var(--touch-target-min)] text-left text-text-primary hover:bg-surface-dim disabled:opacity-50"
+                    className="press-scale flex w-full flex-col items-start rounded-[var(--radius-sm)] px-3 py-2 min-h-[var(--touch-target-min)] text-left text-text-primary hover:bg-surface-dim disabled:opacity-50"
                   >
                     <span className="font-semibold">{r.name}</span>
                     {(r.province || r.country) && (
@@ -89,7 +89,7 @@ export function LocationsSearch({ listed }: LocationsSearchProps) {
           another.
         </p>
       )}
-      <div className="flex h-[var(--touch-target-min)] items-center gap-3 rounded-full border border-border bg-surface-card px-4 shadow-md">
+      <div className="flex h-[var(--touch-target-min)] items-center gap-3 rounded-full border-solid border-border border-[length:var(--border-width-rest)] bg-surface-card px-4 shadow-lg focus-within:border-[length:var(--border-width-active)]">
         <label htmlFor={inputId} className="sr-only">
           Search for a city or airport
         </label>

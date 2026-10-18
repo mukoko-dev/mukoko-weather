@@ -3,7 +3,9 @@
  *
  * Caching strategies:
  *   - Static assets (_next/static): CacheFirst (content-hashed, immutable)
- *   - HTML pages: precached by Serwist; offline fallback via `fallbacks` config
+ *   - Precache: stylesheets + public icons only (src/lib/sw-precache.ts), so
+ *     install never competes with the first paint for bandwidth
+ *   - HTML pages: always the network; offline fallback via `fallbacks` config
  *   - Weather API: NetworkFirst (5s timeout, 15min cache)
  *   - Suitability/activities: StaleWhileRevalidate (1h cache)
  *   - Map tiles for a fixed forecast hour: CacheFirst (3h cache)
@@ -21,6 +23,7 @@ import {
   ExpirationPlugin,
 } from "serwist";
 import type { PrecacheEntry } from "serwist";
+import { precacheEntries } from "@/lib/sw-precache";
 
 /**
  * Only fresh overlay tiles may be stored. The proxy marks its transparent
@@ -44,7 +47,9 @@ declare const self: {
 } & Record<string, unknown>;
 
 const serwist = new Serwist({
-  precacheEntries: self.__SW_MANIFEST,
+  // Only the offline shell is precached (src/lib/sw-precache.ts); chunks and
+  // fonts are cached on first use by the CacheFirst route below.
+  precacheEntries: precacheEntries(self.__SW_MANIFEST),
   precacheOptions: {
     cleanupOutdatedCaches: true,
     concurrency: 10,
@@ -220,3 +225,62 @@ const serwist = new Serwist({
 });
 
 serwist.addEventListeners();
+
+// Web push (mukoko-dev/mukoko-weather#289). Glue only: the logic is in
+// src/lib/push/sw-logic.ts so it can move to another service-worker toolchain.
+// Delivery is best effort; a browser requires a visible notification per push.
+import {
+  notificationFor,
+  openFromClick,
+  resubscribeAfterChange,
+  showWithFallback,
+  type ClientsLike,
+} from "@/lib/push/sw-logic";
+
+interface PushScope {
+  addEventListener(type: string, listener: (event: any) => void): void; // eslint-disable-line @typescript-eslint/no-explicit-any
+  registration: {
+    showNotification(title: string, options: object): Promise<void>;
+    pushManager: {
+      subscribe(o: {
+        userVisibleOnly: true;
+        applicationServerKey: Uint8Array;
+      }): Promise<{ toJSON(): unknown }>;
+    };
+  };
+  clients: ClientsLike;
+  location: { origin: string };
+}
+const pushScope = self as unknown as PushScope;
+
+pushScope.addEventListener("push", (event) => {
+  let raw: unknown;
+  try {
+    raw = event.data?.text();
+  } catch {
+    raw = undefined;
+  }
+  event.waitUntil(
+    showWithFallback(pushScope.registration, notificationFor(raw)),
+  );
+});
+
+pushScope.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    openFromClick(
+      event.notification.data,
+      pushScope.clients,
+      pushScope.location.origin,
+    ),
+  );
+});
+
+pushScope.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    resubscribeAfterChange({
+      registration: pushScope.registration,
+      fetchFn: (i, o) => fetch(i, o),
+    }),
+  );
+});

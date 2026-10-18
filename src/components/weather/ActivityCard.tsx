@@ -18,7 +18,6 @@ import { FeasibilityChart } from "./charts/FeasibilityChart";
 const DEFAULT_STYLE: CategoryStyle = {
   bg: "bg-primary/10",
   border: "border-primary",
-  borderAccent: "border-l-primary",
   text: "text-primary",
   badge: "bg-primary text-primary-foreground",
 };
@@ -47,10 +46,8 @@ export function ActivityCard({
 }: ActivityCardProps) {
   const style = categoryStyles[activity.category] ?? DEFAULT_STYLE;
   const rating = evaluateSuitability(activity, insights, dbRules);
-  // Use borderAccent (border-l-{color}) for the left accent stripe.
-  // Fall back to deriving it from border when loading from older MongoDB data.
-  const borderAccent =
-    style.borderAccent ?? style.border.replace(/^border-/, "border-l-");
+  // The card's whole border takes the category mineral (style.border); there
+  // is no single-side accent stripe (Mzizi: solid border on all four sides).
 
   // 24h feasibility trend — evaluates the same DB rule against each forecast
   // hour. Empty when rules haven't loaded or hourly data is missing.
@@ -78,7 +75,7 @@ export function ActivityCard({
 
   return (
     <div
-      className={`baobab p-3.5 border-l-[6px] ${borderAccent}`}
+      className={`baobab ${style.border}`}
       role="group"
       aria-labelledby={headingId}
     >

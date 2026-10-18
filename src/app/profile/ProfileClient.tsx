@@ -9,6 +9,7 @@
  *   2. Preferences   — weather's My Weather modal (saved location, activities,
  *                      settings), reused rather than duplicated here
  *   3. Organizations — `entity.memberships` with their capabilities
+ *   3b. Devices      — where the person is signed in, this device's permissions
  *   4. Appearance    — Light / Dark / System
  *   5. Navigation    — every main destination, grouped
  *   6. Sign out      — full-width, below everything
@@ -21,6 +22,7 @@ import { useAppStore } from "@/lib/store";
 import type { ProfileOrganization } from "@/lib/profile";
 import { ProfileIdentity } from "@/components/profile/ProfileIdentity";
 import { ProfileOrganizations } from "@/components/profile/ProfileOrganizations";
+import { ProfileDevices } from "@/components/profile/ProfileDevices";
 import { ProfileAppearance } from "@/components/profile/ProfileAppearance";
 import { ProfileNavigation } from "@/components/profile/ProfileNavigation";
 
@@ -80,6 +82,8 @@ export function ProfileClient({
       </section>
 
       <ProfileOrganizations organizations={organizations} />
+
+      <ProfileDevices />
 
       <ProfileAppearance />
 

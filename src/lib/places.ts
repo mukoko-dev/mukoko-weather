@@ -39,13 +39,15 @@
  * `add_location` endpoint, so step (1) above resolves them directly.
  */
 
-import { placesGeoCollection } from "./db";
+import { placesGeoCollection } from "./places-geo-collection";
 import {
   LOCATIONS,
   type WeatherLocation,
   type NominatimAddress,
 } from "./locations";
 import {
+  coordinateLabel,
+  isCoordinateNameSlug,
   nameFromSlugSegment,
   parseSmartSlug,
   type ParsedSmartSlug,
@@ -364,12 +366,24 @@ export function nearestSeedLocation(
  */
 export async function resolveSmartSlug(
   slug: string,
+  options: ResolveOptions = {},
 ): Promise<AdaptedLocation | null> {
   const parsed = parseSmartSlug(slug);
   if (!parsed) return null;
   return parsed.ref.kind === "place"
-    ? resolvePlaceSlug(slug, parsed, parsed.ref)
+    ? resolvePlaceSlug(slug, parsed, parsed.ref, options)
     : resolveSpotSlug(slug, parsed, parsed.ref);
+}
+
+/**
+ * `strict`: rethrow database errors instead of degrading to "not found" (or
+ * the seed). The render path wants the degraded answer, so a blip never
+ * blanks a page. The proxy's location gate (#263) needs to tell "this slug
+ * doesn't exist" from "the lookup failed", because it turns the first into a
+ * 404 and must let the second through.
+ */
+export interface ResolveOptions {
+  strict?: boolean;
 }
 
 /**
@@ -392,11 +406,13 @@ async function resolvePlaceSlug(
   slug: string,
   parsed: ParsedSmartSlug,
   ref: PlaceRef,
+  { strict = false }: ResolveOptions = {},
 ): Promise<AdaptedLocation | null> {
   let coll;
   try {
     coll = placesGeoCollection();
-  } catch {
+  } catch (err) {
+    if (strict) throw err;
     return null;
   }
 
@@ -412,7 +428,8 @@ async function resolvePlaceSlug(
       // The URL's name is what the visitor chose to call it; keep it when set.
       return parsed.name ? { ...adapted, name: parsed.name } : adapted;
     }
-  } catch {
+  } catch (err) {
+    if (strict) throw err;
     // Fall through — a stamped-slug match may still succeed.
   }
 
@@ -424,7 +441,8 @@ async function resolvePlaceSlug(
     if (bySlug) {
       return adaptPlacesGeoToLocationDoc(bySlug, { cleanSlug: slug });
     }
-  } catch {
+  } catch (err) {
+    if (strict) throw err;
     // Nothing further to try.
   }
 
@@ -447,14 +465,20 @@ async function resolveSpotSlug(
   parsed: ParsedSmartSlug,
   ref: SpotRef,
 ): Promise<AdaptedLocation | null> {
+  // A point nothing names (`/12-35n-45-68e--s5b7zk3`, or a bare `place--…`)
+  // reads as its coordinates, not as "12 35n 45 68e".
+  const displayName = isCoordinateNameSlug(parsed.nameSlug)
+    ? coordinateLabel(ref.lat, ref.lon)
+    : parsed.name;
   const base: AdaptedLocation = {
     _id: `geo:${ref.geohash}`,
     slug,
-    name: parsed.name || "Selected location",
+    name: displayName || "Selected location",
     province: "",
     lat: ref.lat,
     lon: ref.lon,
     elevation: 0,
+    elevationApproximate: true,
     tags: ["city"],
     source: "geolocation",
     updatedAt: new Date(),
@@ -491,7 +515,9 @@ async function resolveSpotSlug(
         _id: base._id,
         lat: ref.lat,
         lon: ref.lon,
-        name: parsed.name || adapted.name,
+        name: displayName || adapted.name,
+        // A neighbour's height, not this point's.
+        elevationApproximate: true,
       };
     }
   } catch {
@@ -507,6 +533,8 @@ async function resolveSpotSlug(
       country: seedNear.country,
       elevation: seedNear.elevation,
       tags: seedNear.tags,
+      // Borrowed from a seed up to 250 km away — possibly across a border.
+      regionApproximate: true,
     };
   }
 
@@ -542,15 +570,22 @@ export const PLATFORM_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*-[0-9a-f]{6}$/;
 
 export async function resolveLocationSlug(
   slug: string,
+  options: ResolveOptions = {},
 ): Promise<AdaptedLocation | null> {
   if (!slug) return null;
+  const { strict = false } = options;
 
   // A smart slug carries its own coordinate, so it resolves without the
   // database entirely. Checked first because it is purely local and because a
   // slug containing `--` can never be a legacy catalog slug (slugification
   // collapses character runs).
-  const smart = await resolveSmartSlug(slug);
+  const smart = await resolveSmartSlug(slug, options);
   if (smart) return smart;
+  // A smart slug that missed is an OSM place we don't hold yet: its ref and
+  // stamped-slug lookups already ran in resolveSmartSlug, and its `name--ref`
+  // form is never a platform or catalog slug, so the queries below could
+  // only alias it onto some other same-named place.
+  if (parseSmartSlug(slug)) return null;
 
   // The static seed entry for this slug, if we ship one. Captured up front so
   // every miss/failure path below can fall back to it instead of 404ing.
@@ -560,7 +595,8 @@ export async function resolveLocationSlug(
   let coll;
   try {
     coll = placesGeoCollection();
-  } catch {
+  } catch (err) {
+    if (strict) throw err;
     return seedFallback();
   }
 
@@ -572,7 +608,8 @@ export async function resolveLocationSlug(
     if (stamped) {
       return adaptPlacesGeoToLocationDoc(stamped, { cleanSlug: slug, seed });
     }
-  } catch {
+  } catch (err) {
+    if (strict) throw err;
     // Continue to fallback strategies.
   }
 
@@ -589,7 +626,8 @@ export async function resolveLocationSlug(
       if (platform && platform.geoType !== "country") {
         return adaptPlacesGeoToLocationDoc(platform, { cleanSlug: slug, seed });
       }
-    } catch {
+    } catch (err) {
+      if (strict) throw err;
       // Continue to fallback strategies.
     }
   }
@@ -610,7 +648,8 @@ export async function resolveLocationSlug(
       .find({ name: { $regex: `^${escaped}$`, $options: "i" } })
       .limit(20)
       .toArray()) as unknown as PlacesGeoDoc[];
-  } catch {
+  } catch (err) {
+    if (strict) throw err;
     return seedFallback();
   }
 

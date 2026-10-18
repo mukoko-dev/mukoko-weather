@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -27,6 +27,7 @@ import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";
 import { HourlyScrollCards } from "@/components/weather/HourlyScrollCards";
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { LazySection } from "@/components/weather/LazySection";
+import { PlaceKnowledgeRows } from "@/components/weather/PlaceKnowledgeRows";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { CommunityLane } from "@/components/weather/CommunityLane";
 import { CommunityLaneSkeleton } from "@/components/weather/CommunityLaneSkeleton";
@@ -40,6 +41,7 @@ import {
   MapPreviewSkeleton,
   AirQualityMapSkeleton,
   HazeSkeleton,
+  AgricultureSnapshotSkeleton,
   SupportBannerSkeleton,
   LocationInfoSkeleton,
 } from "@/components/weather/SectionSkeleton";
@@ -51,13 +53,7 @@ import {
 import { FrostAlertBanner } from "./FrostAlertBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
 import { useAppStore } from "@/lib/store";
-import type {
-  WeatherData,
-  FrostAlert,
-  Season,
-  MinutelyData,
-  ModelForecast,
-} from "@/lib/weather";
+import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
 import {
   checkFrostRisk,
   COMPARISON_MODELS,
@@ -65,6 +61,18 @@ import {
   synthesizeOpenMeteoInsights,
 } from "@/lib/weather";
 import { fetchModelWeather } from "@/lib/home-weather";
+import { useNearViewport } from "@/lib/use-near-viewport";
+import { useIdleOnce } from "@/lib/use-idle-once";
+import {
+  emptyModelExtras,
+  MODEL_EXTRAS_IDLE_TIMEOUT_MS,
+  MODEL_EXTRAS_ROOT_MARGIN,
+  modelExtrasFromResponse,
+  modelExtrasKey,
+  selectModelExtras,
+  shouldFetchModelExtras,
+  type ModelExtras,
+} from "@/lib/dashboard-fetch-policy";
 import type { WeatherLocation } from "@/lib/locations";
 import type { AISummaryUser } from "@/components/weather/AISummary";
 import { type Activity, ACTIVITIES } from "@/lib/activities";
@@ -102,6 +110,11 @@ const MapPreview = lazy(() =>
 const AirQualityMapCard = lazy(() =>
   import("@/components/weather/AirQualityMapCard").then((m) => ({
     default: m.AirQualityMapCard,
+  })),
+);
+const AgricultureSnapshot = lazy(() =>
+  import("@/components/weather/AgricultureSnapshot").then((m) => ({
+    default: m.AgricultureSnapshot,
   })),
 );
 const HazePanel = lazy(() =>
@@ -174,7 +187,20 @@ export function WeatherDashboard({
   // A user-picked forecast model (My Weather → Settings) becomes the
   // baseline the whole dashboard renders (issue #246). Null = the server
   // seed, which is the Africa-weighted multi-model blend.
-  const [modelBaseline, setModelBaseline] = useState<WeatherData | null>(null);
+  //
+  // The baseline, nowcast and comparison series are stored together with
+  // the place + model they were fetched for, and only used while that is
+  // still the place + model on screen (selectModelExtras). Switching back
+  // to the blend therefore drops the old model's baseline, frost banner and
+  // series at once, before any new fetch.
+  const selectedForecastModel = useAppStore((s) => s.selectedForecastModel);
+  const model = normalizeForecastModel(selectedForecastModel);
+  const extrasKey = modelExtrasKey(location.lat, location.lon, model);
+  const [loadedExtras, setLoadedExtras] = useState<ModelExtras>(() =>
+    emptyModelExtras(extrasKey),
+  );
+  const extras = selectModelExtras(loadedExtras, extrasKey);
+  const modelBaseline = extras.baseline;
   const weather = modelBaseline ?? seedWeather;
   // Everything derived from the forecast follows the baseline on screen: a
   // GFS baseline must not keep the blend's frost banner (or miss its own).
@@ -189,7 +215,6 @@ export function WeatherDashboard({
   const usingFallback = modelBaseline ? false : seedUsingFallback;
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
-  const selectedForecastModel = useAppStore((s) => s.selectedForecastModel);
   const sectionOrder = useAppStore((s) => s.sectionOrder);
   const setSectionOrder = useAppStore((s) => s.setSectionOrder);
   const hydrateSectionOrder = useAppStore((s) => s.hydrateSectionOrder);
@@ -212,9 +237,9 @@ export function WeatherDashboard({
   // Windy-style ADDITIONAL data — multi-model comparison + minutely nowcast.
   // Fetched client-side after mount so it never blocks the server-rendered
   // base forecast. Re-fetched when the user changes model.
-  const [minutely, setMinutely] = useState<MinutelyData | null>(null);
-  const [modelSeries, setModelSeries] = useState<ModelForecast[]>([]);
-  const [modelsTime, setModelsTime] = useState<string[]>([]);
+  const minutely = extras.minutely;
+  const modelSeries = extras.series;
+  const modelsTime = extras.time;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -284,17 +309,31 @@ export function WeatherDashboard({
   // Best-effort — failures are swallowed so the seeded page is never affected.
   // The selected model is unioned into the comparison set so the user's pick
   // is always shown.
+  //
+  // With the default blend this fetch only feeds the nowcast and the model
+  // comparison at the END of the main column, and the comparison series is
+  // the heaviest payload on the page, so it waits for the first idle moment
+  // after load (capped at MODEL_EXTRAS_IDLE_TIMEOUT_MS) or for the end of the
+  // main column to come near, whichever is first. Starting at idle means the
+  // cards are in long before a reader reaches them, so nothing is inserted
+  // above what they are reading (Safari has no scroll anchoring). A picked
+  // model swaps the whole dashboard, so it is fetched straight away
+  // (shouldFetchModelExtras).
+  const extrasSentinelRef = useRef<HTMLDivElement>(null);
+  const extrasNear = useNearViewport(
+    extrasSentinelRef,
+    MODEL_EXTRAS_ROOT_MARGIN,
+  );
+  const afterIdle = useIdleOnce(MODEL_EXTRAS_IDLE_TIMEOUT_MS);
+  const fetchExtras = shouldFetchModelExtras(model, extrasNear || afterIdle);
   useEffect(() => {
+    if (!fetchExtras) return;
     let cancelled = false;
-    const model = normalizeForecastModel(selectedForecastModel);
     const models = Array.from(new Set([model, ...COMPARISON_MODELS]));
     fetchModelWeather(location.lat, location.lon, model, models)
       .then(({ data, baseline }) => {
         if (cancelled) return;
-        setModelBaseline(baseline);
-        setMinutely(data.minutely ?? null);
-        setModelSeries(data.models ?? []);
-        setModelsTime(data.models_time ?? []);
+        setLoadedExtras(modelExtrasFromResponse(extrasKey, data, baseline));
       })
       .catch(() => {
         // Non-critical enhancement — leave sections hidden on failure.
@@ -302,7 +341,7 @@ export function WeatherDashboard({
     return () => {
       cancelled = true;
     };
-  }, [location.lat, location.lon, selectedForecastModel]);
+  }, [location.lat, location.lon, model, extrasKey, fetchExtras]);
 
   return (
     <>
@@ -372,7 +411,7 @@ export function WeatherDashboard({
           safe-area inset); sm:pb-6 restores normal padding where the nav is hidden. */}
         <main
           id="main-content"
-          className="animate-fade-in mx-auto max-w-7xl overflow-x-hidden px-4 pt-[var(--space-section)] pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-6 md:px-8"
+          className="animate-fade-in mx-auto max-w-7xl overflow-x-clip px-4 pt-[var(--space-section)] pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-6 md:px-8"
           aria-label={`Weather dashboard for ${location.name}`}
           {...swipe}
         >
@@ -395,8 +434,16 @@ export function WeatherDashboard({
 
           {/* Main grid: mobile = 1 col, lg = 3 col (2+1), xl = 4 col (3+1) */}
           <div className="grid gap-[var(--space-section)] lg:grid-cols-3 xl:grid-cols-4">
-            {/* Primary content — lg:col-span-2, xl:col-span-3, DnD sortable */}
-            <div className={MAIN_COLUMN_CLASS}>
+            {/* Primary content — lg:col-span-2, xl:col-span-3, DnD sortable.
+                `relative` anchors the out-of-flow sentinel at its end. */}
+            <div className={`relative ${MAIN_COLUMN_CLASS}`}>
+              {/* End-of-column sentinel for the deferred model/nowcast fetch.
+                  Absolutely positioned, so it never adds a .herd gap. */}
+              <div
+                ref={extrasSentinelRef}
+                aria-hidden="true"
+                className="pointer-events-none absolute bottom-0 left-0 h-px w-px"
+              />
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
@@ -560,6 +607,30 @@ export function WeatherDashboard({
                                       }
                                       activities={allActivities}
                                       weather={weather}
+                                    />
+                                  </Suspense>
+                                </ChartErrorBoundary>
+                              </LazySection>
+                            </DraggableSection>
+                          );
+                        case "agriculture":
+                          return (
+                            <DraggableSection
+                              key="agriculture"
+                              id="agriculture"
+                              reordering={reordering}
+                            >
+                              <LazySection
+                                label="agriculture-snapshot"
+                                fallback={<AgricultureSnapshotSkeleton />}
+                              >
+                                <ChartErrorBoundary name="agriculture snapshot">
+                                  <Suspense
+                                    fallback={<AgricultureSnapshotSkeleton />}
+                                  >
+                                    <AgricultureSnapshot
+                                      location={location}
+                                      user={user}
                                     />
                                   </Suspense>
                                 </ChartErrorBoundary>
@@ -774,6 +845,16 @@ export function WeatherDashboard({
                         value={`${season.localName} (${season.name})`}
                       />
                     </dl>
+                    <ChartErrorBoundary name="place knowledge">
+                      <PlaceKnowledgeRows
+                        key={location.slug}
+                        slug={location.slug}
+                        lat={location.lat}
+                        lon={location.lon}
+                        country={location.country}
+                        labelledBy={`about-${location.slug}`}
+                      />
+                    </ChartErrorBoundary>
                   </div>
                 </section>
               </LazySection>

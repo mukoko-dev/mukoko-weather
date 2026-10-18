@@ -4,11 +4,11 @@ import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
-import { Ellipsis, List as ListIcon, Map as MapIcon } from "lucide-react";
+import { Ellipsis } from "lucide-react";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
 import { LayersIcon, BellIcon, UserIcon } from "@/lib/weather-icons";
 import { Spinner } from "@/components/ui/spinner";
-import { LocationPager } from "@/components/layout/LocationPager";
+import { MobileNav } from "@/components/layout/MobileNav";
 import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { trackEvent } from "@/lib/analytics";
@@ -35,13 +35,9 @@ const WeatherReportModal = lazy(() =>
   })),
 );
 
-/** 48px round glass button for the bottom bar's left and right parts. */
-const ROUND_BUTTON_CLASS =
-  "flex h-[var(--touch-target-min)] w-[var(--touch-target-min)] shrink-0 items-center justify-center rounded-full border border-text-tertiary/10 bg-surface-card text-text-primary shadow-sm transition-transform active:scale-95";
-
 /** One row of the mobile ⋯ menu — full 48px touch height. */
 const MENU_ITEM_CLASS =
-  "flex min-h-[var(--touch-target-min)] w-full items-center gap-2 rounded-[var(--radius-input)] px-3 text-left text-base font-medium text-text-primary transition-colors hover:bg-surface-dim aria-[current=page]:text-primary";
+  "flex min-h-[var(--touch-target-min)] w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 text-left text-base font-medium text-text-primary transition-colors hover:bg-surface-dim aria-[current=page]:text-primary";
 
 export function Header() {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
@@ -179,7 +175,6 @@ export function Header() {
   const isExplore = pathname === "/explore" || pathname.startsWith("/explore/");
   const isHistory = pathname === "/history";
   const isAviation = pathname === "/aviation";
-  const isLocationList = pathname === "/locations";
   const shamwariEnabled = isFeatureEnabled("shamwari_chat");
   const mapSlug = currentLocationSlug(pathname, selectedLocation);
   const mapHref = mapSlug ? `/${mapSlug}/map` : "/explore";
@@ -201,8 +196,11 @@ export function Header() {
           {/* Brand mark — left-aligned at every breakpoint (the parent nav's
               justify-between keeps the action pill on the right) */}
           <div className="flex min-w-0 items-center">
+            {/* No viewport prefetch: "/" is a full server-rendered dashboard,
+                and every page load was fetching it in the background. */}
             <Link
               href="/"
+              prefetch={false}
               aria-label="mukoko weather — return to home page"
               className="flex items-center"
             >
@@ -448,41 +446,14 @@ export function Header() {
         </nav>
       </header>
 
-      {/* Mobile bottom bar — iOS Weather style: a translucent full-width bar,
-          safe-area aware, with three parts. Left: the map for the location on
-          screen. Centre: the page indicator (My Location glyph + one dot per
-          saved location). Right: the location list. */}
-      <nav
-        aria-label="Mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-text-tertiary/10 bg-surface-base/80 px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom,0px)+0.625rem)] shadow-lg backdrop-blur-xl sm:hidden"
-      >
-        <div className="flex items-center gap-3">
-          <Link
-            href={mapHref}
-            prefetch={false}
-            aria-label={
-              mapSlug ? "Weather map" : "Choose a location for the weather map"
-            }
-            className={ROUND_BUTTON_CLASS}
-          >
-            <MapIcon size={22} aria-hidden="true" />
-          </Link>
-          <LocationPager
-            pathname={pathname}
-            savedLocations={savedLocations}
-            selectedLocation={selectedLocation}
-          />
-          <Link
-            href="/locations"
-            prefetch={false}
-            aria-label="All locations"
-            aria-current={isLocationList ? "page" : undefined}
-            className={`${ROUND_BUTTON_CLASS} ${isLocationList ? "text-primary" : ""}`}
-          >
-            <ListIcon size={22} aria-hidden="true" />
-          </Link>
-        </div>
-      </nav>
+      {/* Mobile navigation — the floating island (see MobileNav). */}
+      <MobileNav
+        pathname={pathname}
+        savedLocations={savedLocations}
+        selectedLocation={selectedLocation}
+        mapHref={mapHref}
+        hasMapLocation={Boolean(mapSlug)}
+      />
 
       {myWeatherOpen && (
         <Suspense>

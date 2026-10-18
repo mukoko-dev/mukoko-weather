@@ -2,13 +2,15 @@ import { notFound } from "next/navigation";
 import { loadLocation } from "./load-location";
 
 /**
- * Resolve the slug BEFORE any Suspense boundary under this segment.
+ * Backstop: resolve the slug BEFORE any Suspense boundary under this segment.
  *
- * `[location]/loading.tsx` wraps the page in Suspense, so a `notFound()`
- * thrown from the page arrives after the 200 shell has been flushed: the
- * visitor sees "Location not found" but crawlers see a soft 404 (#237).
- * Calling `notFound()` here, in the segment layout, runs before that
- * boundary, so Next.js can still send a real 404 status.
+ * The proxy's location gate (src/lib/location-gate.ts, #263) already rewrites
+ * unknown slugs to a server-rendered 404, so this only fires when the proxy
+ * let a slug through after a failed lookup. `[location]/loading.tsx` wraps
+ * the page in Suspense, so a `notFound()` thrown from the page would arrive
+ * after the 200 shell has been flushed (the soft 404 from #237). Thrown here
+ * it still yields a real 404, although Next 16 then serves an empty shell
+ * that renders after hydration — hence the proxy gate in front of it.
  */
 export default async function LocationLayout({
   children,

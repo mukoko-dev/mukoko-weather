@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   MAP_LAYERS,
   DEFAULT_LAYER,
@@ -191,18 +191,25 @@ describe("MapTiler style URLs", () => {
 });
 
 describe("map chips (full-screen map)", () => {
-  it("lists air quality plus the four tile layers, each with a label and a legend", () => {
+  it("lists air quality, the four tile layers and the two NASA satellite layers, each with a label and a legend", () => {
     expect(MAP_CHIPS.map((c) => c.id)).toEqual([
       AIR_QUALITY_LAYER_ID,
       "precipitationIntensity",
       "temperature",
       "windSpeed",
       "cloudCover",
+      "satellite",
+      "satelliteRain",
     ]);
     for (const chip of MAP_CHIPS) {
       expect(chip.label).toBeTruthy();
       expect(chip.legend.unit).toBeTruthy();
-      expect(chip.legend.segments.length).toBeGreaterThan(1);
+      // Imagery without a value scale explains itself with a note instead.
+      if (chip.legend.segments.length === 0) {
+        expect(chip.legend.note).toBeTruthy();
+      } else {
+        expect(chip.legend.segments.length).toBeGreaterThan(1);
+      }
     }
   });
 
@@ -308,5 +315,149 @@ describe("remembered map layer (localStorage)", () => {
     };
     expect(() => writeStoredMapLayer(throwing, "windSpeed")).not.toThrow();
     expect(() => writeStoredMapLayer(null, "windSpeed")).not.toThrow();
+  });
+});
+
+describe("map overlay sources (satellite, model fields, timeline)", () => {
+  it("builds GIBS sources for satellite chips and Tomorrow.io sources otherwise", async () => {
+    const { buildWeatherOverlaySource, weatherOverlayOpacity } =
+      await import("./map-layers");
+    const sat = buildWeatherOverlaySource("satellite", "2026-10-10");
+    expect(sat.tiles[0]).toContain("gibs.earthdata.nasa.gov");
+    expect(sat.tiles[0]).toContain("/2026-10-10/");
+    expect(sat.maxzoom).toBe(9);
+    expect(sat.attribution).toContain("NASA GIBS");
+    // "now" resolves to the newest frame by fixed latency (never a future 404).
+    const satNow = buildWeatherOverlaySource("satelliteRain", "now");
+    expect(satNow.tiles[0]).toMatch(
+      /\/\d{4}-\d{2}-\d{2}T\d{2}%3A\d{2}%3A00Z\//,
+    );
+    const rain = buildWeatherOverlaySource("precipitationIntensity");
+    expect(rain.tiles[0]).toContain("/api/py/map-tiles");
+    expect(rain.attribution).toContain("Tomorrow.io");
+    expect(weatherOverlayOpacity("precipitationIntensity")).toBe(0.6);
+    expect(weatherOverlayOpacity("satellite")).toBeGreaterThan(0.6);
+  });
+
+  it("keeps the model chips out of MAP_CHIPS until their flag is on", async () => {
+    const { mapChipsFor, MODEL_CHIPS } = await import("./map-layers");
+    expect(mapChipsFor({ modelLayers: false })).toBe(MAP_CHIPS);
+    const withModels = mapChipsFor({ modelLayers: true }).map((c) => c.id);
+    for (const chip of MODEL_CHIPS) {
+      expect(MAP_CHIPS.some((c) => c.id === chip.id)).toBe(false);
+      expect(withModels).toContain(chip.id);
+    }
+  });
+
+  it("gives every model legend band a token and an ascending start value", async () => {
+    const { MODEL_CHIPS } = await import("./map-layers");
+    for (const chip of MODEL_CHIPS) {
+      let last = -Infinity;
+      for (const seg of chip.legend.segments) {
+        expect(seg.token).toMatch(/^--color-/);
+        // The class and the token must name the same colour.
+        expect(seg.className).toBe(`bg-${seg.token!.replace("--color-", "")}`);
+        expect(seg.from!).toBeGreaterThanOrEqual(last);
+        last = seg.from!;
+      }
+    }
+  });
+
+  it("classifies values into legend bands", async () => {
+    const { legendBandIndex, getMapChip: chip } = await import("./map-layers");
+    const temp = chip("modelTemperature")!.legend;
+    expect(legendBandIndex(temp, -5)).toBe(0);
+    expect(legendBandIndex(temp, 10)).toBe(1);
+    expect(legendBandIndex(temp, 40)).toBe(temp.segments.length - 1);
+    expect(legendBandIndex(temp, null)).toBe(-1);
+    expect(legendBandIndex(temp, Number.NaN)).toBe(-1);
+    const rain = chip("modelPrecipitation")!.legend;
+    expect(legendBandIndex(rain, 0)).toBe(-1);
+    // Tomorrow.io legends have no numeric bands.
+    expect(legendBandIndex(chip("precipitationIntensity")!.legend, 5)).toBe(-1);
+  });
+
+  it("offers the timeline for satellite and model layers too", () => {
+    expect(layerSupportsTimeline("satellite")).toBe(true);
+    expect(layerSupportsTimeline("satelliteRain")).toBe(true);
+    expect(layerSupportsTimeline("modelWind")).toBe(true);
+    expect(layerSupportsTimeline("cloudCover")).toBe(false);
+  });
+
+  it("builds forecast, model and default timeline frames", async () => {
+    const m = await import("./map-layers");
+    const forecast = m.forecastTimelineFrames(new Date("2026-10-11T07:20:00Z"));
+    expect(forecast).toHaveLength(TIMELINE_STEPS);
+    expect(forecast[0]).toEqual({ timestamp: "now", label: "Now" });
+    expect(forecast[1].timestamp).toBe("2026-10-11T10:00:00Z");
+    const times = [
+      "2026-10-11T06:00Z",
+      "2026-10-11T09:00Z",
+      "2026-10-11T12:00Z",
+    ];
+    const model = m.modelTimelineFrames(
+      times,
+      new Date("2026-10-11T06:20:00Z"),
+    );
+    expect(model.map((f) => f.label)).toEqual(["Now", "+3h", "+6h"]);
+    // A grid cached 3 h ago: past steps drop, labels count from now.
+    const stale = m.modelTimelineFrames(
+      times,
+      new Date("2026-10-11T09:50:00Z"),
+    );
+    expect(stale.map((f) => f.timestamp)).toEqual(times.slice(1));
+    expect(stale.map((f) => f.label)).toEqual(["Now", "+2h"]);
+    expect(m.modelTimelineFrames(["junk"], new Date())).toEqual([]);
+    expect(m.timelineDefaultIndex("satellite", model)).toBe(2);
+    expect(m.timelineDefaultIndex("modelWind", model)).toBe(0);
+    expect(m.timelineDefaultIndex("satellite", [])).toBe(0);
+  });
+
+  it("spreads axis labels evenly, keeping the ends", async () => {
+    const m = await import("./map-layers");
+    const frames = m.forecastTimelineFrames(new Date("2026-10-11T07:00:00Z"));
+    expect(m.timelineAxisLabels(frames)).toEqual(["Now", "+1d", "+2d", "+3d"]);
+    expect(m.timelineAxisLabels(frames.slice(0, 2))).toEqual(["Now", "+3h"]);
+    expect(m.timelineAxisLabels([])).toEqual([]);
+  });
+
+  it("ignores a stored model chip when the flag is off", async () => {
+    const { MODEL_CHIPS, mapChipsFor } = await import("./map-layers");
+    const storage = { getItem: () => "modelTemperature" };
+    expect(readStoredMapLayer(storage)).toBeNull();
+    expect(
+      readStoredMapLayer(storage, mapChipsFor({ modelLayers: true })),
+    ).toBe(MODEL_CHIPS[0].id);
+  });
+});
+
+// Last in the file on purpose: vi.resetModules() hands later dynamic imports a
+// fresh module instance, which would break the identity checks above.
+describe("MapTiler key and style ids (#266)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("trims a key that ends in a newline (the deployed value does)", async () => {
+    vi.resetModules();
+    vi.stubEnv("NEXT_PUBLIC_MAPTILER_API_KEY", " abc123\n");
+    const m = await import("./map-layers");
+    expect(m.MAPTILER_KEY).toBe("abc123");
+    expect(m.MAPTILER_STYLE_LIGHT).toMatch(/\?key=abc123$/);
+    expect(m.MAPTILER_STYLE_DARK).toMatch(/\?key=abc123$/);
+  });
+
+  it("builds both style URLs from the shared ids", async () => {
+    vi.resetModules();
+    vi.stubEnv("NEXT_PUBLIC_MAPTILER_API_KEY", "k");
+    const m = await import("./map-layers");
+    expect(m.maptilerStyleId(false)).toBe(m.MAPTILER_STYLE_ID_LIGHT);
+    expect(m.maptilerStyleId(true)).toBe(m.MAPTILER_STYLE_ID_DARK);
+    expect(m.MAPTILER_STYLE_LIGHT).toContain(
+      `/maps/${m.MAPTILER_STYLE_ID_LIGHT}/`,
+    );
+    expect(m.MAPTILER_STYLE_DARK).toContain(
+      `/maps/${m.MAPTILER_STYLE_ID_DARK}/`,
+    );
   });
 });

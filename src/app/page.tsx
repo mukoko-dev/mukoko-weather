@@ -14,8 +14,12 @@ import {
 import { getCurrentUser } from "@/lib/auth";
 import { checkFrostRisk, createFallbackWeather } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
-import { nearestSeedLocation } from "@/lib/places";
+import { ipFallbackLocation } from "@/lib/home-location";
+import { countryDisplayName, reconcileCountry } from "@/lib/location-country";
+import { reconcileElevation } from "@/lib/location-elevation";
 import { SITE_URL } from "@/lib/site";
+import { fetchPlaces } from "@/lib/weather-api";
+import { usableIpGeo } from "@/lib/location-choice";
 import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
 
 // Stable base for the server-to-self geo lookup. The per-deployment Vercel
@@ -115,13 +119,22 @@ async function HomeContent() {
         // coarse ISP/datacentre-centroid position, so creating a location from them
         // would seed inaccurate, fine-grained entries. Auto-creation only happens on
         // explicit user GPS (CurrentLocationHome's detectUserLocation flows).
-        const res = await fetch(
-          `${APP_URL}/api/py/geo?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&autoCreate=false`,
+        const res = await fetchPlaces(
+          "geo",
+          // noName: this server shares one egress address with every visitor,
+          // so it never spends a geocoder lookup; the IP-city header below
+          // names an IP position better anyway.
+          `lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&autoCreate=false&noName=1`,
           { cache: "no-store", signal: controller.signal },
+          process.env,
+          fetch,
+          APP_URL,
         );
         if (res.ok) {
           const data = await res.json();
-          if (data?.nearest) {
+          // A coordinate label is not a name for the visitor's place: the
+          // IP-city fallback below names it better (`usableIpGeo`).
+          if (usableIpGeo(data?.nearest)) {
             detectedLocation = data.nearest as WeatherLocation;
           }
         }
@@ -138,7 +151,12 @@ async function HomeContent() {
       // country). Falling back to the nearest location we actually ship means
       // those visitors still land on real weather instead of an empty chooser.
       if (!detectedLocation) {
-        detectedLocation = nearestSeedLocation(Number(lat), Number(lon));
+        detectedLocation = ipFallbackLocation(
+          Number(lat),
+          Number(lon),
+          headersList.get("x-vercel-ip-country"),
+          headersList.get("x-vercel-ip-city"),
+        );
       }
     }
   }
@@ -154,9 +172,10 @@ async function HomeContent() {
   }
 
   // Strip MongoDB _id (ObjectId with .toJSON()) before crossing to the client.
-  const { _id: _removed, ...location } = detectedLocation as WeatherLocation & {
-    _id?: unknown;
-  };
+  const { _id: _removed, ...seededLocation } =
+    detectedLocation as WeatherLocation & {
+      _id?: unknown;
+    };
 
   // Same double-caught weather fetch as the /{slug} page — the home shell
   // ALWAYS renders, worst case with seasonal estimates.
@@ -164,22 +183,26 @@ async function HomeContent() {
   let weatherSource: string;
   try {
     const result = await getWeatherForLocation(
-      location.slug,
-      location.lat,
-      location.lon,
-      location.elevation,
+      seededLocation.slug,
+      seededLocation.lat,
+      seededLocation.lon,
+      seededLocation.elevation,
     );
     weather = result.data;
     weatherSource = result.source;
   } catch {
     weather = createFallbackWeather(
-      location.lat,
-      location.lon,
-      location.elevation,
+      seededLocation.lat,
+      seededLocation.lon,
+      seededLocation.elevation,
     );
     weatherSource = "fallback";
   }
   const usingFallback = weatherSource === "fallback";
+  const location = reconcileElevation(
+    reconcileCountry(seededLocation, weather.timezone),
+    weather.elevation,
+  );
 
   const countryCode = (location.country ?? "").toUpperCase();
   const [countryDoc, season] = await Promise.all([
@@ -197,7 +220,7 @@ async function HomeContent() {
       ? null
       : checkFrostRisk(weather.hourly, weather.utc_offset_seconds),
     season,
-    countryName: countryDoc?.name ?? countryCode,
+    countryName: countryDoc?.name ?? countryDisplayName(countryCode),
   };
 
   return <CurrentLocationHome initial={initial} user={aiUser} />;

@@ -19,7 +19,12 @@ vi.mock("./mongo", () => {
   };
 });
 
-import { getWeatherForLocation, internalWeatherFailure } from "./db";
+import {
+  getWeatherForLocation,
+  internalWeatherFailure,
+  SSR_HEDGE_AFTER_MS,
+  SSR_SELF_FETCH_TIMEOUT_MS,
+} from "./db";
 
 const PY_PAYLOAD = {
   latitude: -17.83,
@@ -183,5 +188,75 @@ describe("internalWeatherFailure", () => {
     expect(internalWeatherFailure(502, "text/plain")).toBe(
       "Internal weather endpoint returned 502, falling back to direct Open-Meteo",
     );
+  });
+});
+
+describe("SSR weather latency budget (iOS standalone blank launch)", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    delete process.env.INTERNAL_API_BASE_URL;
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  /** A fetch that never answers until its abort signal fires. */
+  const hang = (_url: unknown, init?: { signal?: AbortSignal }) =>
+    new Promise<Response>((_, reject) => {
+      init?.signal?.addEventListener("abort", () =>
+        reject(new DOMException("aborted", "TimeoutError")),
+      );
+    });
+
+  it("keeps the budget well under the old 15 s", () => {
+    expect(SSR_SELF_FETCH_TIMEOUT_MS).toBeLessThanOrEqual(5_000);
+    expect(SSR_HEDGE_AFTER_MS).toBeLessThan(SSR_SELF_FETCH_TIMEOUT_MS);
+  });
+
+  it("a silent endpoint is hedged by direct Open-Meteo and the faster one wins", async () => {
+    fetchMock.mockImplementation(
+      (url: string, init?: { signal?: AbortSignal }) =>
+        String(url).includes("/api/py/weather")
+          ? hang(url, init)
+          : Promise.resolve(json(PY_PAYLOAD)),
+    );
+
+    const pending = getWeatherForLocation("harare", -17.83, 31.05, 1490);
+    await vi.advanceTimersByTimeAsync(SSR_HEDGE_AFTER_MS + 10);
+    const result = await pending;
+
+    expect(result.source).toBe("open-meteo");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("an endpoint that answers inside the hedge window never triggers the direct read", async () => {
+    fetchMock.mockResolvedValue(
+      json(PY_PAYLOAD, { "x-weather-provider": "blend" }),
+    );
+
+    const result = await getWeatherForLocation("harare", -17.83, 31.05, 1490);
+
+    expect(result.source).toBe("blend");
+    await vi.advanceTimersByTimeAsync(SSR_HEDGE_AFTER_MS + 10);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("when everything hangs the seasonal estimate arrives inside the budget", async () => {
+    fetchMock.mockImplementation(hang);
+
+    const pending = getWeatherForLocation("harare", -17.83, 31.05, 1490);
+    await vi.advanceTimersByTimeAsync(SSR_SELF_FETCH_TIMEOUT_MS + 100);
+    const result = await pending;
+
+    expect(result.source).toBe("fallback");
   });
 });

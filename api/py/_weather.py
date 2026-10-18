@@ -29,13 +29,14 @@ from ._db import (
     observations_collection,
     weather_cache_collection,
 )
-from ._places_resolver import find_location, find_nearest_location
+from ._places_resolver import find_location, find_nearest_location, is_synthesized_spot
 from ._weather_cache_key import weather_cache_key
 from ._history_store import record_weather_history
 from ._circuit_breaker import open_meteo_breaker
 from . import _enrichment as enrichment
 from . import _model_blend as blend
 from . import _verification as verification
+from . import _open_meteo as om
 from ._insights import (
     current_hour_index,
     derive_insights,
@@ -453,7 +454,7 @@ def _fetch_open_meteo_extras(lat: float, lon: float, models: list[str] | None = 
     resolved_models = _sanitize_models(models)
     client = _get_http_client()
 
-    url = "https://api.open-meteo.com/v1/forecast"
+    url, headers = om.forecast()
     params = {
         "latitude": str(lat),
         "longitude": str(lon),
@@ -465,7 +466,7 @@ def _fetch_open_meteo_extras(lat: float, lon: float, models: list[str] | None = 
         "forecast_days": "2",
     }
 
-    resp = client.get(url, params=params)
+    resp = client.get(url, params=params, headers=headers)
     if resp.status_code != 200:
         return None
 
@@ -482,6 +483,10 @@ def _fetch_open_meteo_extras(lat: float, lon: float, models: list[str] | None = 
     }
     if (offset := _utc_offset(data)) is not None:
         result["utc_offset_seconds"] = offset
+    if zone := _zone(data):
+        result["timezone"] = zone
+    if (elevation := blend.forecast_elevation(data)) is not None:
+        result["elevation"] = elevation
     return result
 
 
@@ -529,7 +534,8 @@ def _open_meteo_forecast(
     }
     if models:
         params["models"] = ",".join(models)
-    resp = client.get("https://api.open-meteo.com/v1/forecast", params=params)
+    url, headers = om.forecast()
+    resp = client.get(url, params=params, headers=headers)
     if resp.status_code != 200:
         if raise_on_error:
             raise OpenMeteoUpstreamError(f"HTTP {resp.status_code}")
@@ -630,7 +636,23 @@ def _fetch_open_meteo(lat: float, lon: float) -> dict | None:
     result["minutely"] = _parse_minutely(data)
     if (offset := _utc_offset(data)) is not None:
         result["utc_offset_seconds"] = offset
+    if zone := _zone(data):
+        result["timezone"] = zone
+    if (elevation := blend.forecast_elevation(data)) is not None:
+        result["elevation"] = elevation
     return result
+
+
+def _zone(data: dict) -> str | None:
+    """The IANA ``timezone`` Open-Meteo reports for ``timezone=auto``, if any."""
+    zone = data.get("timezone")
+    return zone if isinstance(zone, str) and zone else None
+
+
+def _has_forecast_values(data: dict) -> bool:
+    """True when a baseline carries at least one real hourly temperature."""
+    temps = (data.get("hourly") or {}).get("temperature_2m") or []
+    return any(t is not None for t in temps)
 
 
 def _create_fallback_weather(lat: float, lon: float, elevation: int) -> dict:
@@ -925,6 +947,11 @@ def _resolve_location_hint(hint: str | None, lat: float, lon: float) -> dict | N
         loc = find_location(hint)
     except Exception:
         return None
+    # A spot slug with no record behind it is just a name + coordinate anyone
+    # can spell: keying history by it would split one cell's history across
+    # made-up names, and its elevation (0) is not a measurement.
+    if is_synthesized_spot(loc):
+        return None
     return loc if _near(loc, lat, lon) else None
 
 
@@ -1040,6 +1067,10 @@ def _attach_comparison(data: dict, lat: float, lon: float, requested: list[str] 
     # resolves it for the same point.
     if data.get("utc_offset_seconds") is None and extras.get("utc_offset_seconds") is not None:
         data["utc_offset_seconds"] = extras["utc_offset_seconds"]
+    if not data.get("timezone") and extras.get("timezone"):
+        data["timezone"] = extras["timezone"]
+    if data.get("elevation") is None and extras.get("elevation") is not None:
+        data["elevation"] = extras["elevation"]
     return data
 
 
@@ -1193,7 +1224,14 @@ async def get_weather(
         if not data and open_meteo_breaker.is_allowed:
             try:
                 data = _fetch_open_meteo(lat, lon)
-                if data:
+                if data and om.forecast_is_self_hosted() and not _has_forecast_values(data):
+                    # Our instance syncs only the global models, so best_match
+                    # may land on a regional domain it does not hold and answer
+                    # 200 with nulls. That is not an outage (no breaker
+                    # failure), but it must not be cached or recorded as real
+                    # weather: fall through to the seasonal estimate.
+                    data = None
+                elif data:
                     source = "open-meteo:best_match"
                     open_meteo_breaker.record_success()
                 else:

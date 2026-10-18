@@ -92,6 +92,30 @@ def _no_overpass_network(monkeypatch):
     monkeypatch.setattr(_overpass, "_get_http", _unavailable)
 
 
+@pytest.fixture(autouse=True)
+def _no_place_knowledge_side_effects(monkeypatch):
+    """Keep place-knowledge lookups off the network and off background threads.
+
+    The AI endpoints now ask `_place_knowledge.profile_block_for` for a profile
+    block (#277). Against the mocked pymongo that lookup must never reach
+    SoilGrids or the Open-Meteo archive, and must never start a background
+    build thread. Tests of the module itself override these patches.
+    """
+    try:
+        from py import _place_knowledge as pk
+    except Exception:  # pragma: no cover - module always importable in practice
+        return
+
+    def _soil_unavailable():
+        raise RuntimeError("SoilGrids disabled in tests")
+
+    monkeypatch.setattr(pk, "_get_soil_http", _soil_unavailable)
+    monkeypatch.setattr(pk, "schedule_knowledge_build", lambda place: False)
+    monkeypatch.setattr(pk, "_warm_enso_in_background", lambda: None)
+    monkeypatch.setitem(pk._collection_state, "ready", False)
+    monkeypatch.setitem(pk._collection_state, "checked", float("inf"))
+
+
 @pytest.fixture
 def mock_request():
     """Create a mock FastAPI Request with configurable headers and client."""
@@ -117,3 +141,32 @@ def mock_request():
         return req
 
     return _make
+
+
+@pytest.fixture(autouse=True)
+def _fresh_find_only_cache():
+    """The /api/py/geo find-only fallback keeps a per-instance cell cache
+    (#302); clear it so one test's spot never answers another's lookup."""
+    try:
+        from py import _locations
+    except Exception:  # pragma: no cover
+        yield
+        return
+    _locations._find_only_cache.clear()
+    yield
+    _locations._find_only_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_shared_breakers():
+    """Breakers are process-wide singletons: a test that opens one (the
+    aviation breaker in the METAR and airport-discovery tests) must never leak
+    an open circuit into a later test."""
+    from py import _circuit_breaker as cb
+
+    names = ("aviation_breaker", "nominatim_breaker")
+    for name in names:
+        getattr(cb, name, None) and getattr(cb, name).reset()
+    yield
+    for name in names:
+        getattr(cb, name, None) and getattr(cb, name).reset()

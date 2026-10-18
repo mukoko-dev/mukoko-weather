@@ -49,7 +49,7 @@ export default async function LocationsPage() {
       <Header />
       <main
         id="main-content"
-        className="mx-auto max-w-3xl px-4 py-10 pb-28 sm:pb-10 sm:px-6 md:px-8"
+        className="mx-auto max-w-3xl px-4 py-10 pb-[var(--mobile-nav-clearance)] sm:pb-10 sm:px-6 md:px-8"
       >
         <LocationsClient
           initialCurrentSlug={initialCurrentSlug}

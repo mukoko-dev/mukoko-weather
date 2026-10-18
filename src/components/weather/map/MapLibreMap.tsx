@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type {
   Map as MapLibreGLMap,
   Marker,
+  GeoJSONSource,
   ExpressionSpecification,
 } from "maplibre-gl";
 import type { FeatureCollection } from "geojson";
@@ -12,16 +13,23 @@ import { resolveTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { resolveColor } from "@/components/ui/chart";
 import {
+  MAPTILER_KEY,
+  maptilerStyleId,
   maplibreWorkerUrl,
   WEATHER_OVERLAY_ID,
   AQI_OVERLAY_ID,
+  MODEL_OVERLAY_ID,
   buildWeatherOverlaySource,
+  weatherOverlayOpacity,
 } from "@/lib/map-layers";
+import { overlayFrameId, planOverlayFrames } from "@/lib/overlay-frames";
 import {
-  OVERLAY_OPACITY,
-  overlayFrameId,
-  planOverlayFrames,
-} from "@/lib/overlay-frames";
+  BASE_MAP_PROVIDERS,
+  MAP_PROVIDERS,
+  attributionHtml,
+  overlayAttribution,
+  withoutStyleAttributions,
+} from "@/lib/map-sources";
 import {
   AQI_BANDS,
   AQI_BAND_BG_CLASS,
@@ -30,10 +38,8 @@ import {
   type AqBubble,
 } from "@/lib/aq-grid";
 
-const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
-
 export function getMapTilerStyle(isDark: boolean): string {
-  const style = isDark ? "streets-v2-dark" : "streets-v2";
+  const style = maptilerStyleId(isDark);
   return `https://api.maptiler.com/maps/${style}/style.json?key=${MAPTILER_KEY}`;
 }
 
@@ -47,10 +53,12 @@ export function getMapTilerStyle(isDark: boolean): string {
  */
 export function classifyMapError(
   e: { error?: unknown; sourceId?: string },
-  overlayId: string,
+  overlayId: string | readonly string[],
 ): "overlay" | "base" {
   const id = e?.sourceId;
-  return id === overlayId || (!!id && id.startsWith(`${overlayId}@`))
+  if (id === undefined) return "base";
+  const ids = typeof overlayId === "string" ? [overlayId] : overlayId;
+  return ids.some((o) => id === o || id.startsWith(`${o}@`))
     ? "overlay"
     : "base";
 }
@@ -65,10 +73,18 @@ interface FrameState {
   want: string | null;
   /** Timestamp of each frame, for the loaded callback. */
   timestamps: Record<string, string>;
+  /** Opacity of the shown frame for the layer it was built for. */
+  opacity: number;
 }
 
 function newFrameState(): FrameState {
-  return { present: new Set(), active: null, want: null, timestamps: {} };
+  return {
+    present: new Set(),
+    active: null,
+    want: null,
+    timestamps: {},
+    opacity: weatherOverlayOpacity(""),
+  };
 }
 
 function removeFrame(map: MapLibreGLMap, state: FrameState, id: string) {
@@ -86,6 +102,13 @@ function frameLoaded(map: MapLibreGLMap, id: string): boolean {
     return false;
   }
 }
+
+/** Every source we add on top of the base style; their errors are overlay errors. */
+const OVERLAY_SOURCE_IDS = [
+  WEATHER_OVERLAY_ID,
+  AQI_OVERLAY_ID,
+  MODEL_OVERLAY_ID,
+] as const;
 
 /**
  * How long a new timeline frame may load hidden before it is shown anyway,
@@ -110,7 +133,7 @@ function swapToWantIfLoaded(
   const loaded = frameLoaded(map, want);
   if (!loaded && !force) return null;
   if (state.active !== want) {
-    map.setPaintProperty(want, "raster-opacity", OVERLAY_OPACITY);
+    map.setPaintProperty(want, "raster-opacity", state.opacity);
     const old = state.active;
     state.active = want;
     if (old && old !== keep) removeFrame(map, state, old);
@@ -151,6 +174,7 @@ function syncWeatherFrames(
   if (state.active && !state.present.has(state.active)) state.active = null;
   state.want = want;
   if (!layer || !want) return null;
+  state.opacity = weatherOverlayOpacity(layer);
 
   for (const id of plan.add) {
     const ts = id === want ? timestamp : (prefetchTimestamp ?? "now");
@@ -161,7 +185,7 @@ function syncWeatherFrames(
       type: "raster",
       source: id,
       paint: {
-        "raster-opacity": visible ? OVERLAY_OPACITY : 0,
+        "raster-opacity": visible ? state.opacity : 0,
         "raster-opacity-transition": { duration: 0, delay: 0 },
       },
     });
@@ -170,7 +194,7 @@ function syncWeatherFrames(
   }
   if (plan.showWantNow) {
     // Nothing on screen yet: the first frame paints tile by tile.
-    map.setPaintProperty(want, "raster-opacity", OVERLAY_OPACITY);
+    map.setPaintProperty(want, "raster-opacity", state.opacity);
     state.active = want;
   } else if (
     prefetch &&
@@ -292,7 +316,11 @@ function applyAqiOverlay(
     .getStyle()
     ?.layers?.find((layer) => layer.type === "symbol")?.id;
 
-  map.addSource(AQI_OVERLAY_ID, { type: "geojson", data });
+  map.addSource(AQI_OVERLAY_ID, {
+    type: "geojson",
+    data,
+    attribution: attributionHtml(overlayAttribution("airQuality")),
+  });
   map.addLayer(
     {
       id: AQI_OVERLAY_ID,
@@ -305,6 +333,79 @@ function applyAqiOverlay(
     },
     beforeId,
   );
+}
+
+/**
+ * A forecast field painted from grid cells (model layers): each feature
+ * carries a `band` index into `tokens` (CSS custom properties, resolved here
+ * because paint values cannot read var()). `attribution` credits the model.
+ */
+export interface FieldOverlay {
+  data: FeatureCollection;
+  tokens: readonly string[];
+  attribution: string;
+}
+
+/**
+ * Adds (or replaces) the model-field overlay beneath the first symbol layer,
+ * like the AQI grid. Idempotent; null clears it.
+ */
+/** Colour tokens + credit each map's field overlay was built with. */
+const fieldStyleOf = new WeakMap<MapLibreGLMap, string>();
+
+function applyFieldOverlay(
+  map: MapLibreGLMap,
+  overlay: FieldOverlay | null | undefined,
+) {
+  const style = overlay
+    ? `${overlay.tokens.join(",")}|${overlay.attribution}`
+    : "";
+  // Same palette and credit (a timeline step): swap the cells in place.
+  const existing = map.getSource(MODEL_OVERLAY_ID) as GeoJSONSource | undefined;
+  if (
+    overlay &&
+    existing &&
+    map.getLayer(MODEL_OVERLAY_ID) &&
+    fieldStyleOf.get(map) === style
+  ) {
+    existing.setData(overlay.data);
+    return;
+  }
+
+  if (map.getLayer(MODEL_OVERLAY_ID)) map.removeLayer(MODEL_OVERLAY_ID);
+  if (map.getSource(MODEL_OVERLAY_ID)) map.removeSource(MODEL_OVERLAY_ID);
+  fieldStyleOf.delete(map);
+  if (!overlay || overlay.tokens.length === 0) return;
+
+  const beforeId = map
+    .getStyle()
+    ?.layers?.find((layer) => layer.type === "symbol")?.id;
+  const pairs: (number | string)[] = [];
+  overlay.tokens.forEach((token, i) => {
+    pairs.push(i, resolveColor(`var(${token})`));
+  });
+  const fillColor = [
+    "match",
+    ["get", "band"],
+    ...pairs,
+    resolveColor("var(--color-text-tertiary)"),
+  ] as unknown as ExpressionSpecification;
+
+  map.addSource(MODEL_OVERLAY_ID, {
+    type: "geojson",
+    data: overlay.data,
+    attribution: overlay.attribution,
+  });
+  map.addLayer(
+    {
+      id: MODEL_OVERLAY_ID,
+      type: "fill",
+      source: MODEL_OVERLAY_ID,
+      paint: { "fill-color": fillColor, "fill-opacity": 0.5 },
+    },
+    beforeId,
+  );
+  fieldStyleOf.set(map, style);
 }
 
 interface MapLibreMapProps {
@@ -350,6 +451,8 @@ interface MapLibreMapProps {
    * Rendered as a fill layer beneath map labels. Omit for no overlay.
    */
   aqiOverlay?: FeatureCollection | null;
+  /** Optional model forecast field (see FieldOverlay). Omit for none. */
+  fieldOverlay?: FieldOverlay | null;
   className?: string;
 }
 
@@ -366,6 +469,7 @@ export function MapLibreMap({
   navigationControl = true,
   attributionControl = true,
   aqiOverlay = null,
+  fieldOverlay = null,
   className = "h-full w-full",
 }: MapLibreMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -403,6 +507,8 @@ export function MapLibreMap({
   // Same pattern for the AQI overlay: restore() reads the latest collection.
   const aqiOverlayRef = useRef<FeatureCollection | null>(aqiOverlay);
   aqiOverlayRef.current = aqiOverlay;
+  const fieldOverlayRef = useRef<FieldOverlay | null>(fieldOverlay);
+  fieldOverlayRef.current = fieldOverlay;
   const [overlayError, setOverlayError] = useState(false);
   // Dedupes overlay tile-load logging. A single map view fires one `error` event
   // per failed raster tile (≈10 per pan/zoom), so without this guard a transient
@@ -452,7 +558,6 @@ export function MapLibreMap({
 
         const map: MapLibreGLMap = new Map({
           container: containerRef.current,
-          style: getMapTilerStyle(isDark),
           center: [lon, lat],
           zoom,
           interactive,
@@ -460,6 +565,14 @@ export function MapLibreMap({
           // with the bottom-right overlay layer switcher. Disable it here and re-add
           // it explicitly at bottom-left below.
           attributionControl: false,
+        });
+
+        // MapOptions has no transformStyle, so the style is set right after
+        // construction (no style yet → no first-style race). Credits come from
+        // map-sources.ts only; the style's own source attribution would render
+        // a second copy of MapTiler / OSM.
+        map.setStyle(getMapTilerStyle(isDark), {
+          transformStyle: (_previous, next) => withoutStyleAttributions(next),
         });
 
         // Unmounted while the Map was constructing — tear it down immediately.
@@ -473,9 +586,13 @@ export function MapLibreMap({
 
         if (attributionControl) {
           map.addControl(
+            // Base-map credits here; each overlay source carries its own
+            // `attribution` (map-sources.ts), which the control adds while
+            // that overlay is on the map.
             new AttributionControl({
-              customAttribution:
-                '© <a href="https://www.maptiler.com/">MapTiler</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+              customAttribution: attributionHtml(
+                BASE_MAP_PROVIDERS.map((id) => MAP_PROVIDERS[id]),
+              ),
             }),
             "bottom-left",
           );
@@ -505,6 +622,7 @@ export function MapLibreMap({
           framesRef.current = newFrameState();
           syncFramesFrom(map, framesRef.current, overlayPropsRef.current);
           applyAqiOverlay(map, aqiOverlayRef.current);
+          applyFieldOverlay(map, fieldOverlayRef.current);
           bubbleMarkersRef.current.forEach((m) => m.remove());
           bubbleMarkersRef.current = aqiBubblesRef.current
             ? renderAqiBubbles(map, MLMarker, aqiBubblesRef.current)
@@ -535,7 +653,7 @@ export function MapLibreMap({
         // show the "Base map unavailable" notice so a blank base map is never
         // silent.
         map.on("error", (e: { error?: unknown; sourceId?: string }) => {
-          if (classifyMapError(e, WEATHER_OVERLAY_ID) === "overlay") {
+          if (classifyMapError(e, OVERLAY_SOURCE_IDS) === "overlay") {
             const state = framesRef.current;
             // An errored tile still counts as "loaded" for the frame, so a
             // failing frame can still replace the previous one.
@@ -587,7 +705,9 @@ export function MapLibreMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.setStyle(getMapTilerStyle(isDark));
+    map.setStyle(getMapTilerStyle(isDark), {
+      transformStyle: (_previous, next) => withoutStyleAttributions(next),
+    });
   }, [isDark]);
 
   // Switch the weather overlay frame when the layer or forecast time changes.
@@ -645,6 +765,20 @@ export function MapLibreMap({
       // Style being replaced; restore() applies the latest grid.
     }
   }, [aqiOverlay]);
+
+  // Switch the model-field overlay when the field or step changes.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!map.isStyleLoaded()) {
+      const apply = () => applyFieldOverlay(map, fieldOverlay);
+      map.once("idle", apply);
+      return () => {
+        map.off("idle", apply);
+      };
+    }
+    applyFieldOverlay(map, fieldOverlay);
+  }, [fieldOverlay]);
 
   return (
     <div className={cn("relative", className)}>

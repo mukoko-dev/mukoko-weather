@@ -1,86 +1,160 @@
 /**
- * Tests for Header — the mobile bottom bar (iOS Weather style: a translucent,
- * full-width, safe-area-aware bar with map / page indicator / list) and the
- * mobile "⋯" menu that holds the destinations the bar no longer shows. Desktop
- * header stays as it was. Reads source directly (no DOM renderer needed for
- * structural checks).
+ * Tests for Header — the mobile navigation island (a floating, centred pill
+ * with map / page indicator / list, matching the mukoko-news island) and the
+ * mobile "⋯" menu that holds the destinations the island does not show.
+ * Desktop header stays as it was. Reads source directly (no DOM renderer
+ * needed for structural checks).
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
 const source = readFileSync(resolve(__dirname, "Header.tsx"), "utf-8");
+const nav = readFileSync(resolve(__dirname, "MobileNav.tsx"), "utf-8");
+const css = readFileSync(resolve(__dirname, "../../app/globals.css"), "utf-8");
+/** The body of one `@layer components` rule in globals.css. */
+function rule(name: string): string {
+  const m = css.match(new RegExp(`\\.${name} \\{([^}]*)\\}`));
+  return m ? m[1] : "";
+}
 
-describe("Header — mobile bottom bar geometry", () => {
-  it("is a full-width bar pinned to the bottom edge (not a floating pill)", () => {
-    expect(source).toContain("fixed inset-x-0 bottom-0 z-40");
-    expect(source).not.toContain("left-1/2");
-    expect(source).not.toContain("-translate-x-1/2");
-    expect(source).not.toContain(
-      "rounded-full border border-text-tertiary/10 bg-surface-base/90",
-    );
-  });
+const pager = readFileSync(resolve(__dirname, "LocationPager.tsx"), "utf-8");
+const bottomNav = readFileSync(
+  resolve(__dirname, "../ui/mzizi-bottom-nav.tsx"),
+  "utf-8",
+);
 
-  it("is translucent with a top hairline, like the iOS Weather bar", () => {
-    expect(source).toContain("border-t border-text-tertiary/10");
-    expect(source).toContain("bg-surface-base/80");
-    expect(source).toContain("backdrop-blur-xl");
-  });
-
-  it("is safe-area aware at the bottom edge", () => {
+describe("Header — mounts the mobile navigation", () => {
+  it("renders MobileNav with the saved locations, pathname and map link", () => {
     expect(source).toContain(
-      "pb-[calc(env(safe-area-inset-bottom,0px)+0.625rem)]",
+      'import { MobileNav } from "@/components/layout/MobileNav"',
     );
-  });
-
-  it("is visible only on phones (sm:hidden) and keeps its landmark label", () => {
-    expect(source).toContain('aria-label="Mobile navigation"');
-    expect(source).toContain("sm:hidden");
-  });
-
-  it("round side buttons use the 48px touch-target token", () => {
-    expect(source).toContain(
-      "h-[var(--touch-target-min)] w-[var(--touch-target-min)]",
-    );
-    expect(source).toContain("active:scale-95");
-  });
-});
-
-describe("Header — mobile bottom bar parts", () => {
-  it("left: a Map button linking to the map of the location on screen", () => {
-    expect(source).toMatch(
-      /import \{[^}]*Map as MapIcon[^}]*\} from "lucide-react"/,
-    );
-    expect(source).toContain("<MapIcon size={22}");
-    expect(source).toContain("href={mapHref}");
-    expect(source).toContain('? "Weather map"');
-  });
-
-  it("centre: the LocationPager, fed the saved locations and the current pathname", () => {
-    expect(source).toContain(
-      'import { LocationPager } from "@/components/layout/LocationPager"',
-    );
-    expect(source).toContain("<LocationPager");
+    expect(source).toContain("<MobileNav");
     expect(source).toContain("savedLocations={savedLocations}");
     expect(source).toContain("pathname={pathname}");
+    expect(source).toContain("mapHref={mapHref}");
     expect(source).toContain(
       "const savedLocations = useAppStore((s) => s.savedLocations);",
     );
   });
 
-  it("right: a List button linking to /locations with aria-current when active", () => {
-    expect(source).toMatch(
-      /import \{[^}]*List as ListIcon[^}]*\} from "lucide-react"/,
+  it("is a sibling of <header>, never inside it (a backdrop-filter header would capture a fixed child)", () => {
+    const headerClose = source.indexOf("</header>");
+    expect(headerClose).toBeGreaterThan(0);
+    expect(source.indexOf("<MobileNav")).toBeGreaterThan(headerClose);
+  });
+});
+
+describe("MobileNav — the Mzizi registry bottom nav", () => {
+  it("uses the vendored registry MziziBottomNav, not a hand-rolled island", () => {
+    expect(nav).toContain('from "@/components/ui/mzizi-bottom-nav"');
+    expect(nav).toContain("<MziziBottomNav");
+    expect(nav).not.toContain("lourie");
+    expect(css).not.toContain(".lourie {");
+    expect(bottomNav).toContain('data-slot="mzizi-bottom-nav"');
+    expect(bottomNav).toContain(
+      'data-portal="https://mzizi.dev/components/mzizi-bottom-nav"',
     );
-    expect(source).toContain("<ListIcon size={22}");
-    expect(source).toContain('href="/locations"');
-    expect(source).toContain('aria-label="All locations"');
-    expect(source).toContain(
-      'aria-current={isLocationList ? "page" : undefined}',
+  });
+
+  it("floats like mukoko-news's island: inset from the edges, lifted, max-w-md, pill, token border, shadow, blur", () => {
+    expect(bottomNav).toContain("fixed inset-x-4");
+    expect(bottomNav).toContain(
+      "bottom-[calc(env(safe-area-inset-bottom,0px)+var(--mobile-nav-inset))]",
     );
-    expect(source).toContain(
-      'const isLocationList = pathname === "/locations";',
+    expect(bottomNav).toContain("z-50 mx-auto");
+    expect(bottomNav).toContain("max-w-md");
+    // Never docked: no full-width edge-to-edge bar, no top-border-only bar.
+    const code = bottomNav.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(code).not.toContain("inset-x-0 bottom-0");
+    expect(code).not.toMatch(/\bborder-t\b/);
+    expect(bottomNav).toContain("rounded-full");
+    expect(bottomNav).toContain("border-[length:var(--border-width-rest)]");
+    expect(bottomNav).toContain("shadow-lg");
+    expect(bottomNav).toContain("backdrop-blur-xl");
+  });
+
+  it("is 4rem tall; --mobile-nav-height is bar + gap + the pager pill; clearance adds the lift and safe area", () => {
+    expect(bottomNav).toContain("h-[var(--mobile-nav-bar-height)]");
+    expect(bottomNav).toContain("h-[var(--touch-target-min)] max-w-full");
+    expect(css).toContain("--mobile-nav-bar-height: 4rem;");
+    expect(css).toContain("--mobile-nav-inset: 0.75rem;");
+    expect(css).toMatch(
+      /--mobile-nav-height: calc\(\s*var\(--mobile-nav-bar-height\) \+ var\(--mobile-nav-gap\) \+\s*var\(--touch-target-min\)\s*\);/,
     );
+    expect(css).toMatch(
+      /--mobile-nav-clearance: calc\(\s*env\(safe-area-inset-bottom, 0px\) \+ var\(--mobile-nav-inset\) \+\s*var\(--mobile-nav-height\)/,
+    );
+  });
+
+  it("the nav wrapper lets taps through; only the pills catch them", () => {
+    expect(bottomNav).toContain("pointer-events-none fixed");
+    expect(bottomNav).toContain("pointer-events-auto rounded-full");
+  });
+
+  it("items are next/link with aria-current and the 48px touch-target floor", () => {
+    expect(bottomNav).toContain('import Link from "next/link"');
+    expect(bottomNav).not.toMatch(/<a\s/);
+    expect(bottomNav).toContain('aria-current={active ? "page" : undefined}');
+    expect(bottomNav).toContain("min-h-[var(--touch-target-min)]");
+  });
+
+  it("uses tokens, not the upstream hex/rgba fallbacks", () => {
+    expect(bottomNav).not.toMatch(/#[0-9A-Fa-f]{3,6}\b/);
+    expect(bottomNav).not.toContain("rgba(");
+  });
+
+  it("is phone-only and keeps its landmark label", () => {
+    expect(nav).toContain('label="Mobile navigation"');
+    expect(nav).toContain('className="sm:hidden"');
+    expect(bottomNav).toContain("aria-label={label}");
+  });
+});
+
+describe("MobileNav — items and page dots", () => {
+  it("has Map, My Location and Locations, in that order", () => {
+    const order = ['id: "map"', 'id: "my-location"', 'id: "locations"'].map(
+      (k) => nav.indexOf(k),
+    );
+    expect(order.every((i) => i > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(nav).toContain("href: mapHref");
+    expect(nav).toContain("href: MY_LOCATION_HREF");
+    expect(nav).toContain('href: "/locations"');
+    expect(nav).toContain('? "Weather map"');
+    expect(nav).toContain('ariaLabel: "All locations"');
+  });
+
+  it("marks the current page explicitly (Map never lights up on /explore)", () => {
+    expect(nav).toContain("activeId={mobileNavActiveId(pathname)}");
+    expect(nav).toContain('return "none";');
+  });
+
+  it("shows the place sequence as tappable LocationPager dots above the items, behind a harness boundary", () => {
+    expect(nav).toContain("indicator={");
+    expect(nav).toContain("<LocationPager");
+    expect(nav).toMatch(/<MziziHarness\s+name="location-pager"/);
+    expect(pager).toContain("<Link");
+    expect(pager).toContain('aria-current={isActive ? "page" : undefined}');
+    expect(pager).toContain("aria-label={name}");
+    expect(pager).toContain(
+      "h-[var(--touch-target-min)] min-w-[var(--touch-target-min)]",
+    );
+    expect(pager).toContain('method: "saved"');
+  });
+
+  it("labels use the 16px --text-nav-label token, not upstream's 10px", () => {
+    expect(bottomNav).toContain("text-[length:var(--text-nav-label)]");
+    expect(bottomNav).not.toContain("text-[10px]");
+  });
+
+  it("uses only token radii (the alignment guard skips src/components/ui/)", () => {
+    // mzizi-alignment.test.ts exempts ui/ primitives; the vendored nav is
+    // held to the same radius rule here instead.
+    expect(bottomNav).not.toMatch(
+      /\brounded(-(sm|md|lg|xl|2xl|3xl))?(?=[\s"`])/,
+    );
+    expect(bottomNav).not.toMatch(/rounded-\[\d/);
   });
 
   it("no longer renders the old five-item nav row", () => {
