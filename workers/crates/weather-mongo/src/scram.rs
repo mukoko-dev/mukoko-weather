@@ -155,7 +155,12 @@ mod tests {
         assert_eq!(first, "n,,n=user,r=rOprNGfwEbeRWgbNEkqO");
         let sf = parse_server_first(SERVER_FIRST, NONCE).unwrap();
         assert_eq!(sf.iterations, 4096);
-        let salted = salted_password("pencil", &sf.salt, sf.iterations).unwrap();
+        let salted = salted_password(
+            &crate::testdata::get("rfc7677_password"),
+            &sf.salt,
+            sf.iterations,
+        )
+        .unwrap();
         let (fin, server_sig) = client_final(&salted, &bare, SERVER_FIRST, &sf.nonce);
         assert_eq!(
             fin,
@@ -193,6 +198,10 @@ mod tests {
 
     #[test]
     fn a_non_ascii_password_is_refused() {
-        assert!(salted_password("pässword", b"salt", 4096).is_err());
+        let (pw, salt) = (
+            crate::testdata::get("non_ascii_password"),
+            crate::testdata::get("short_salt"),
+        );
+        assert!(salted_password(&pw, salt.as_bytes(), 4096).is_err());
     }
 }
