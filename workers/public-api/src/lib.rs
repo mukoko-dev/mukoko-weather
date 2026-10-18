@@ -15,6 +15,7 @@
 //! GET /v1/normals?lat=&lon=[&date=]                  climate normals (the shape of /api/py/normals)
 //! GET /v1/enso                                       El Nino / La Nina phase (the shape of /api/py/enso)
 //! GET /v1/sg-air?lat=&lon=                           official Singapore NEA air quality (the shape of /api/py/sg-air)
+//! GET /v1/aviation/nearest-metar?lat=&lon=           nearest airport with a recent METAR (the shape of /api/py/aviation/nearest-metar)
 //! GET /v1/metar?icao=                                METARs and TAF, the shape of /api/py/metar
 //! GET /v1/airports/nearest?lat=&lon=[&count=][&maxDistanceKm=]
 //!                                                    the shape of /api/py/airports/nearest
@@ -131,6 +132,16 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
         }
         "/v1/enso" => relay(req, env, FORECAST_BINDING, "/enso", "public, max-age=3600").await,
         "/v1/sg-air" => relay(req, env, FORECAST_BINDING, "/sg-air", "public, max-age=300").await,
+        "/v1/aviation/nearest-metar" => {
+            relay(
+                req,
+                env,
+                AVIATION_BINDING,
+                "/aviation/nearest-metar",
+                "public, max-age=300",
+            )
+            .await
+        }
         "/v1/model-grid" => {
             relay(
                 req,
