@@ -292,14 +292,3 @@ class TestEndpoint:
         ):
             resp = await _call(mock_request)
         assert _body(resp)["available"] is True
-
-
-class TestDevicesAcceptMapModels:
-    def test_every_map_model_is_a_valid_device_preference(self):
-        from py._devices import VALID_FORECAST_MODELS
-
-        for model in MAP_MODELS:
-            assert model in VALID_FORECAST_MODELS
-        # Legacy ids keep working for older devices.
-        assert "ecmwf_ifs04" in VALID_FORECAST_MODELS
-        assert "icon_seamless" in VALID_FORECAST_MODELS

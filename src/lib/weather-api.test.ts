@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_WORKER_ORIGIN,
   fetchPlaces,
   legacyPlacesUrl,
   weatherApiBase,
+  workerOrigin,
   workerPlacesUrl,
+  workerUrl,
 } from "./weather-api";
 
 const ON = { NEXT_PUBLIC_WEATHER_API_URL: "https://weather-api.mukoko.com/" };
@@ -119,5 +122,26 @@ describe("fetchPlaces", () => {
       ),
     ).rejects.toThrow();
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Worker-only routes (no /api/py fallback)", () => {
+  it("default to the public Worker when no origin is configured", () => {
+    expect(workerOrigin({})).toBe(DEFAULT_WORKER_ORIGIN);
+    expect(workerUrl("devices/abc", {})).toBe(
+      "https://weather-api.mukoko.com/v1/devices/abc",
+    );
+  });
+
+  it("use the configured origin when it is a safe https origin", () => {
+    const env = { NEXT_PUBLIC_WEATHER_API_URL: "https://worker.example.test/" };
+    expect(workerUrl("/devices", env)).toBe(
+      "https://worker.example.test/v1/devices",
+    );
+  });
+
+  it("ignores an unsafe configured origin instead of calling it", () => {
+    const env = { NEXT_PUBLIC_WEATHER_API_URL: "http://evil.example.test" };
+    expect(workerOrigin(env)).toBe(DEFAULT_WORKER_ORIGIN);
   });
 });

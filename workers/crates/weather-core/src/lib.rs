@@ -17,6 +17,7 @@ pub mod aviation;
 pub mod breaker;
 pub mod budget;
 pub mod cache;
+pub mod community;
 pub mod cors;
 pub mod devkey;
 pub mod forecast;

@@ -81,3 +81,20 @@ export async function fetchPlaces(
   }
   return fetcher(legacyPlacesUrl(resource, query, legacyBase), init);
 }
+
+/** The public Worker origin, used when `NEXT_PUBLIC_WEATHER_API_URL` is unset. */
+export const DEFAULT_WORKER_ORIGIN = "https://weather-api.mukoko.com";
+
+/**
+ * Where a Worker-only route is called: the configured origin, else the public
+ * Worker. There is no `/api/py` fallback for these routes (the Python backend
+ * is being removed, #333), so there is no off switch either.
+ */
+export function workerOrigin(env: Env = process.env): string {
+  return weatherApiBase(env) ?? DEFAULT_WORKER_ORIGIN;
+}
+
+/** `{origin}/v1/{path}` for a Worker-only route. */
+export function workerUrl(path: string, env: Env = process.env): string {
+  return `${workerOrigin(env)}/v1/${path.replace(/^\/+/, "")}`;
+}
