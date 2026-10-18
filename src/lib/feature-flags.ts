@@ -53,7 +53,7 @@ export const FLAGS = {
   premium_maps: false,
   /**
    * Per-model forecast fields on the map (ECMWF IFS/AIFS, GFS, ICON, GEM,
-   * ARPEGE via /api/py/model-grid). Off until the owner settles Open-Meteo's
+   * ARPEGE via the Worker (/v1/model-grid)). Off until the owner settles Open-Meteo's
    * commercial terms — its free API is non-commercial. Try it locally with
    * localStorage.setItem("ff:model_map_layers", "true").
    */

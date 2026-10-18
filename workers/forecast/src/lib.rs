@@ -7,6 +7,7 @@
 //! GET /weather?lat=&lon=[&models=a,b][&extras=1][&refresh=1]   full WeatherData (the app's shape)
 //! GET /daily?location=|lat=&lon=[&days=1..7]       the daily forecast contract
 //! GET /air-quality?lat=&lon=                       the EPA AQI (Open-Meteo air quality)
+//! GET /model-grid?lat=&lon=[&model=]               one model's 3-hourly forecast on a 7×7 grid
 //! GET /health                                      which bindings are configured
 //! ```
 //!
@@ -22,6 +23,8 @@
 
 mod air;
 mod chain;
+mod limit;
+mod model_grid;
 mod places;
 mod stations;
 
@@ -40,6 +43,7 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
         "/weather" => weather(&req, &env, &ctx).await,
         "/daily" => daily(&req, &env, &ctx).await,
         "/air-quality" => air::air_quality(&req, &env, &ctx).await,
+        "/model-grid" => model_grid::model_grid(&req, &env, &ctx).await,
         "/health" => health(&env).await,
         _ => error(404, "not_found", "No such route."),
     }
