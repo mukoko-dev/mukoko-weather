@@ -28,6 +28,21 @@ pub mod wire;
 #[cfg(target_arch = "wasm32")]
 pub mod edge;
 
+/// Test-only inputs, read from `testdata/vectors.txt`.
+#[cfg(test)]
+pub(crate) mod testdata {
+    const RAW: &str = include_str!("../testdata/vectors.txt");
+
+    /// The value of `key`; panics when the fixture lacks it.
+    pub fn get(key: &str) -> String {
+        RAW.lines()
+            .filter(|l| !l.starts_with('#'))
+            .find_map(|l| l.split_once('=').filter(|(k, _)| *k == key))
+            .map(|(_, v)| v.to_owned())
+            .unwrap_or_else(|| panic!("testdata has no `{key}`"))
+    }
+}
+
 /// What can go wrong. Messages never carry the connection string, a password
 /// or a document's content.
 #[derive(Debug, Clone, PartialEq, Eq)]
