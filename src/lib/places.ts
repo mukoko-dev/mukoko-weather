@@ -46,6 +46,8 @@ import {
   type NominatimAddress,
 } from "./locations";
 import {
+  coordinateLabel,
+  isCoordinateNameSlug,
   nameFromSlugSegment,
   parseSmartSlug,
   type ParsedSmartSlug,
@@ -463,10 +465,15 @@ async function resolveSpotSlug(
   parsed: ParsedSmartSlug,
   ref: SpotRef,
 ): Promise<AdaptedLocation | null> {
+  // A point nothing names (`/12-35n-45-68e--s5b7zk3`, or a bare `place--…`)
+  // reads as its coordinates, not as "12 35n 45 68e".
+  const displayName = isCoordinateNameSlug(parsed.nameSlug)
+    ? coordinateLabel(ref.lat, ref.lon)
+    : parsed.name;
   const base: AdaptedLocation = {
     _id: `geo:${ref.geohash}`,
     slug,
-    name: parsed.name || "Selected location",
+    name: displayName || "Selected location",
     province: "",
     lat: ref.lat,
     lon: ref.lon,
@@ -508,7 +515,7 @@ async function resolveSpotSlug(
         _id: base._id,
         lat: ref.lat,
         lon: ref.lon,
-        name: parsed.name || adapted.name,
+        name: displayName || adapted.name,
         // A neighbour's height, not this point's.
         elevationApproximate: true,
       };

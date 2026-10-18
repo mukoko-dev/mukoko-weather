@@ -208,7 +208,7 @@ export function AISummaryChat({
 
   return (
     <section aria-label="AI weather follow-up chat">
-      <div className="rounded-[var(--radius-card)] border-l-4 border-tanzanite bg-surface-card shadow-sm">
+      <div className="acacia border-tanzanite/40 p-0 shadow-sm">
         {/* Expand/collapse toggle */}
         <button
           onClick={() => setExpanded(!expanded)}

@@ -55,6 +55,8 @@ export const CSP_DIRECTIVES: Record<string, string[]> = {
     "https://api.maptiler.com",
     "https://*.maptiler.com",
     "https://api.open-meteo.com",
+    // The Rust weather Worker (NEXT_PUBLIC_WEATHER_API_URL, src/lib/weather-api.ts).
+    "https://weather-api.mukoko.com",
     "https://api.tomorrow.io",
     "https://gibs.earthdata.nasa.gov",
     "https://api.workos.com",

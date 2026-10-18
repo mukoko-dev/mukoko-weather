@@ -65,6 +65,7 @@ describe("security headers (B05)", () => {
       "https://va.vercel-scripts.com",
       "https://api.maptiler.com",
       "https://api.open-meteo.com",
+      "https://weather-api.mukoko.com",
       "https://api.workos.com",
       "https://avatars.githubusercontent.com",
       "https://www.google.com",

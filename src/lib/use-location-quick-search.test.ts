@@ -31,8 +31,10 @@ describe("useLocationQuickSearch — module structure", () => {
     expect(source).toContain("limit = 10");
   });
 
-  it("calls the shared /api/py/search endpoint", () => {
-    expect(source).toContain("/api/py/search?q=");
+  it("calls the shared search endpoint (Worker first, /api/py fallback)", () => {
+    expect(source).toContain("fetchPlaces(");
+    expect(source).toContain('"search"');
+    expect(source).toContain("q=${encodeURIComponent(q)}");
   });
 
   it("cancels in-flight requests on rapid typing", () => {
@@ -100,6 +102,7 @@ describe("useLocationQuickSearch — minLength + error surfacing (issue #103)", 
     for (const src of [history, aviation]) {
       expect(src).toContain("useLocationQuickSearch");
       expect(src).not.toContain("/api/py/search?q=");
+      expect(src).not.toContain("/v1/search?q=");
     }
     // The old HistoryDashboard debounce had no AbortController — a stale slow
     // response could overwrite newer results. The hook owns cancellation now.

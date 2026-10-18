@@ -51,23 +51,24 @@ describe("CurrentLocationHome — silent-URL model", () => {
   });
 
   it("escalates to create-on-demand when the nearest known location is far", () => {
+    // The far-match rule itself is behaviour-tested in location-choice.test.ts.
     expect(source).toContain("FAR_NEAREST_KM");
-    expect(source).toContain(
-      "result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM",
-    );
     expect(source).toMatch(/detectUserLocation\(\{\s*autoCreate: true/);
   });
 
-  it("stores the real place when the find-only lookup only named a spot (#302)", () => {
-    // /api/py/geo find-only answers `synthesized: true` outside the stored
-    // geography; that spot must escalate to create-on-demand like a far match.
-    expect(source).toContain("result.synthesized === true ||");
+  it("decides create-on-demand and the final place through src/lib/location-choice.ts", () => {
+    // The decisions are pure and covered by behaviour tests in
+    // location-choice.test.ts (a spot named on demand escalates; a placeholder
+    // spot never does; a placeholder never replaces a real nearby place).
+    expect(source).toContain("shouldCreate(result, FAR_NEAREST_KM)");
+    expect(source).toContain("chooseResolved(result, precise)");
   });
 
   it("keeps the seeded place rather than relabelling a far one as MY LOCATION", () => {
     // Singapore audit: a POI ~9 km away was shown as MY LOCATION.
     expect(source).toMatch(/const FAR_NEAREST_KM = [1-5];/);
-    expect(source).toContain("} else if (view) {");
+    // Behaviour of the choice: location-choice.test.ts (chooseResolved).
+    expect(source).toContain("!usable && view");
   });
 
   it("refreshes the lastLocation cookie so the next server render seeds the new spot", () => {
@@ -87,16 +88,27 @@ describe("CurrentLocationHome — silent-URL model", () => {
   });
 
   it("refreshes silently only when permission is already granted — never prompts on load", () => {
-    expect(source).toMatch(
-      /navigator\.permissions\?\.query\(\{\s*name: "geolocation",?\s*\}\)/,
-    );
-    expect(source).toContain('if (state !== "granted") {');
+    expect(source).toContain('readBrowserPermission("geolocation")');
+    expect(source).toContain("decideLocationAsk(");
+    expect(source).toContain('if (ask !== "refresh-silently") {');
     // The old once-ever auto-prompt is gone: the prompt only follows a tap.
     expect(source).not.toContain("GPS_AUTOPROMPT_KEY");
   });
 
+  it("remembers the outcome per device and never re-asks after a block", () => {
+    expect(source).toContain('recordPermission("geolocation", "denied")');
+    expect(source).toContain('recordPermission("geolocation", "granted")');
+    // "Not now" is not a block; it is its own state with a retry window.
+    expect(source).toContain('recordPermission("geolocation", "dismissed")');
+    expect(source).toContain('if (ask !== "show-prompt") setDismissed(true);');
+    expect(source).toContain("LEGACY_LOCATION_CARD_DISMISSED_KEY");
+  });
+
+  it("reports a signed-in device to the account without blocking", () => {
+    expect(source).toContain("useDeviceHeartbeat(Boolean(user))");
+  });
+
   it("explains a blocked permission instead of failing silently", () => {
-    expect(source).toContain('if (state === "denied") setMessage("denied");');
     expect(source).toContain("Location is blocked in your browser settings.");
   });
 
@@ -105,7 +117,6 @@ describe("CurrentLocationHome — silent-URL model", () => {
     expect(source).toContain(
       "const showCard = promptReady && !gpsConfirmed && !dismissed;",
     );
-    expect(source).toContain("LOCATION_CARD_DISMISSED_KEY");
   });
 
   it("tells a weather failure apart from a location failure", () => {
@@ -178,6 +189,12 @@ describe("page.tsx — server seeding", () => {
   it("only trusts a lastLocation cookie that actually resolves", () => {
     expect(pageSource).toContain("getLocationFromDb(lastLocation)");
     expect(pageSource).toContain("if (resolved)");
+  });
+
+  it("asks the geo endpoint without spending a lookup and keeps only usable answers", () => {
+    // Behaviour of the filter: location-choice.test.ts (usableIpGeo).
+    expect(pageSource).toContain("noName=1");
+    expect(pageSource).toContain("usableIpGeo(");
   });
 
   it("uses autoCreate=false on the server IP-geo path (find-only, no junk locations)", () => {

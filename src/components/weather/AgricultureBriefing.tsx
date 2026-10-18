@@ -72,7 +72,7 @@ export function AgricultureBriefing({ location, crops, user, enabled }: Props) {
     return (
       <section
         aria-labelledby="agri-briefing"
-        className="baobab border-l-[6px] border-l-mineral-malachite"
+        className="baobab border-mineral-malachite/40"
       >
         <h2 id="agri-briefing" className="giraffe">
           Shamwari agronomy briefing
@@ -104,7 +104,7 @@ export function AgricultureBriefing({ location, crops, user, enabled }: Props) {
   return (
     <section
       aria-labelledby="agri-briefing"
-      className="baobab border-l-[6px] border-l-mineral-malachite"
+      className="baobab border-mineral-malachite/40"
     >
       <div className="flex items-center gap-2">
         <span aria-hidden="true" className="text-mineral-malachite">

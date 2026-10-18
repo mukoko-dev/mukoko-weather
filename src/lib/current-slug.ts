@@ -79,9 +79,53 @@ const PLATFORM_HASH_RE = /-[0-9a-f]{6}$/;
  * are stripped before title-casing (`bulawayo-e7b1f4` → `Bulawayo`).
  */
 export function displayNameFromSlug(slug: string): string {
+  return slugToDisplayName(nameSegmentOf(slug));
+}
+
+/** True for a two-letter segment that is a real ISO 3166-1 region code. */
+function isRegionCode(part: string): boolean {
+  if (!/^[a-z]{2}$/.test(part)) return false;
+  try {
+    const upper = part.toUpperCase();
+    const label = new Intl.DisplayNames(["en"], { type: "region" }).of(upper);
+    return !!label && label !== upper;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The name part of a slug: the text before a smart-slug `--`, minus a
+ * platform hash and minus a trailing ISO country suffix (`{name}-{cc}`), which
+ * is part of the URL, never of the place's name ("Phuket Island", not
+ * "Phuket Island TH").
+ */
+function nameSegmentOf(slug: string): string {
   const namePart = slug.includes("--") ? slug.split("--")[0] : slug;
   const stripped = namePart.replace(PLATFORM_HASH_RE, "") || namePart;
-  return slugToDisplayName(stripped);
+  const parts = stripped.split("-");
+  if (parts.length > 1 && isRegionCode(parts[parts.length - 1])) {
+    return parts.slice(0, -1).join("-");
+  }
+  return stripped;
+}
+
+/**
+ * For a legacy `{name}-{cc}` slug (no stored place, no coordinate in the
+ * slug), the free-text name to search for and the country it names. Null for
+ * slugs that carry a coordinate or a hash, or have no country suffix.
+ */
+export function legacySlugQuery(
+  slug: string,
+): { query: string; country: string } | null {
+  if (slug.includes("--") || PLATFORM_HASH_RE.test(slug)) return null;
+  const parts = slug.split("-");
+  const last = parts[parts.length - 1];
+  if (parts.length < 2 || !isRegionCode(last)) return null;
+  return {
+    query: slugToDisplayName(parts.slice(0, -1).join("-")),
+    country: last.toUpperCase(),
+  };
 }
 
 /** Window event the header's "My Location" button fires when it resolves a

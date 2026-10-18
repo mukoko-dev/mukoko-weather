@@ -3,7 +3,9 @@
  *
  * Caching strategies:
  *   - Static assets (_next/static): CacheFirst (content-hashed, immutable)
- *   - HTML pages: precached by Serwist; offline fallback via `fallbacks` config
+ *   - Precache: stylesheets + public icons only (src/lib/sw-precache.ts), so
+ *     install never competes with the first paint for bandwidth
+ *   - HTML pages: always the network; offline fallback via `fallbacks` config
  *   - Weather API: NetworkFirst (5s timeout, 15min cache)
  *   - Suitability/activities: StaleWhileRevalidate (1h cache)
  *   - Map tiles: CacheFirst (24h cache)
@@ -19,13 +21,16 @@ import {
   ExpirationPlugin,
 } from "serwist";
 import type { PrecacheEntry } from "serwist";
+import { precacheEntries } from "@/lib/sw-precache";
 
 declare const self: {
   __SW_MANIFEST: Array<PrecacheEntry | string>;
 } & Record<string, unknown>;
 
 const serwist = new Serwist({
-  precacheEntries: self.__SW_MANIFEST,
+  // Only the offline shell is precached (src/lib/sw-precache.ts); chunks and
+  // fonts are cached on first use by the CacheFirst route below.
+  precacheEntries: precacheEntries(self.__SW_MANIFEST),
   precacheOptions: {
     cleanupOutdatedCaches: true,
     concurrency: 10,

@@ -23,7 +23,7 @@ export function CommunityLaneSkeleton({ className }: { className?: string }) {
         ))}
       </div>
       {Array.from({ length: 2 }, (_, i) => (
-        <div key={i} className="space-y-2 border-l-4 border-surface-dim pl-3">
+        <div key={i} className="space-y-2 pl-4">
           <div className="chameleon h-5 w-48" />
           <div className="chameleon h-10 w-full" />
         </div>

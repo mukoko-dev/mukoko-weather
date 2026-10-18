@@ -397,6 +397,17 @@ describe("resolvePlaceSlug — identity from the map", () => {
     expect(loc?.lat).toBeCloseTo(-17.83, 1);
   });
 
+  it("a coordinate spot (open water, polar ice, empty desert) reads as its coordinates", async () => {
+    // Nothing names the point, so the slug's name half is its coordinates
+    // (minted by the Worker's coordinate_spot); never "40 00s 20 00w".
+    const loc = await resolveLocationSlug("40-00s-20-00w--78cu2yh");
+    expect(loc?.name).toBe("40.00\u00b0S 20.00\u00b0W");
+    expect(loc?.lat).toBeCloseTo(-40.0, 1);
+    expect(loc?.lon).toBeCloseTo(-20.0, 1);
+    const bare = await resolveLocationSlug("place--78cu2yh");
+    expect(bare?.name).toBe("40.00\u00b0S 20.00\u00b0W");
+  });
+
   it("a spot near a known place borrows its context but not its identity", async () => {
     findOneImpl = async (filter: unknown) => {
       const f = filter as Record<string, unknown>;

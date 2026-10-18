@@ -790,7 +790,9 @@ describe("getWeatherForLocation — read-only SSR path (issue #101)", () => {
     // under the slug /api/py/history?location= reads.
     expect(source).toContain("&location=${encodeURIComponent(slug)}");
     // Direct Open-Meteo remains ONLY as a read-only local-dev fallback.
-    expect(source).toContain("fetchWeather(lat, lon)");
+    expect(source).toContain(
+      "fetchWeather(lat, lon, undefined, SSR_DIRECT_TIMEOUT_MS)",
+    );
   });
 
   it("the TS Tomorrow.io client is gone", async () => {

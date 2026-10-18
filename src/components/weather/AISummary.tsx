@@ -174,7 +174,7 @@ export function AISummary({ weather, location, user, onSummaryLoaded }: Props) {
 
   return (
     <section aria-label="AI weather intelligence summary">
-      <div className="baobab border-mineral-sodalite/25 border-l-[6px] border-l-mineral-sodalite">
+      <div className="baobab border-mineral-sodalite/40">
         <div className="flex items-center gap-2">
           <SparklesIcon size={16} className="text-mineral-sodalite" />
           <h2 className="giraffe">Shamwari Weather Insight</h2>

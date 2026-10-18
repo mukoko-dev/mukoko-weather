@@ -11,7 +11,16 @@ import {
   writeLastLocationCookie,
 } from "@/lib/current-slug";
 import { detectUserLocation } from "@/lib/geolocation";
+import { chooseResolved, shouldCreate } from "@/lib/location-choice";
 import { useAppStore } from "@/lib/store";
+import {
+  decideLocationAsk,
+  LEGACY_LOCATION_CARD_DISMISSED_KEY,
+  readBrowserPermission,
+  readDeviceState,
+  recordPermission,
+} from "@/lib/device-state";
+import { useDeviceHeartbeat } from "@/lib/use-device-heartbeat";
 import { countryDisplayName, reconcileCountry } from "@/lib/location-country";
 import { reconcileElevation } from "@/lib/location-elevation";
 import { trackEvent } from "@/lib/analytics";
@@ -46,7 +55,6 @@ type GpsState = "idle" | "detecting";
 
 /** Set when the visitor dismisses the location card — the only thing that
  *  stops us offering it again. Never set automatically. */
-const LOCATION_CARD_DISMISSED_KEY = "mukoko-location-card-dismissed";
 
 // Fast, cache-friendly GPS read for the silent refresh (a device usually
 // has a recent fix; a 5-min maximumAge makes the common case near-instant).
@@ -100,6 +108,8 @@ export function CurrentLocationHome({ initial, user }: Props) {
   const [promptReady, setPromptReady] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [message, setMessage] = useState<PromptMessage>(null);
+  // Signed-in devices report themselves to the account (hourly, quietly).
+  useDeviceHeartbeat(Boolean(user));
 
   // Build the full dashboard payload for a GPS-resolved location. Weather
   // goes through our own API (same chain as the server render) — see
@@ -165,13 +175,12 @@ export function CurrentLocationHome({ initial, user }: Props) {
       return "no-location";
     }
 
-    let resolved = result.location;
-    // A spot named on demand (nothing stored near the fix, #302) is not a
-    // stored place yet: create the real one, exactly as for a far match.
-    const far =
-      result.synthesized === true ||
-      (result.distanceKm != null && result.distanceKm > FAR_NEAREST_KM);
-    if (far) {
+    let resolved: WeatherLocation = result.location;
+    // A spot named on demand, or a stored place kilometres away, is not the
+    // real place yet: create it. Never for a placeholder spot (open water,
+    // or naming skipped): nothing better exists and asking again would only
+    // spend the geocoder budget (`shouldCreate`).
+    if (shouldCreate(result, FAR_NEAREST_KM)) {
       // The fix is fresh, so this second read comes from the browser's
       // cache — a network hop to create the real place, not another wait.
       const precise = await detectUserLocation({
@@ -179,16 +188,16 @@ export function CurrentLocationHome({ initial, user }: Props) {
         maximumAgeMs: GPS_MAX_AGE_MS,
       });
       if (opts.isDisposed()) return null;
-      if (
+      const usable =
         (precise.status === "success" || precise.status === "created") &&
-        precise.location
-      ) {
-        resolved = precise.location;
-      } else if (view) {
+        precise.location;
+      if (!usable && view) {
         // Couldn't pin down the exact spot: keep what's on screen rather
         // than relabel a place kilometres away as MY LOCATION.
         return "no-location";
       }
+      // A placeholder answer never replaces a real place that was near.
+      resolved = chooseResolved(result, precise);
     }
 
     if (resolved.slug === view?.location.slug) {
@@ -207,25 +216,31 @@ export function CurrentLocationHome({ initial, user }: Props) {
   useEffect(() => {
     if (typeof window === "undefined") return;
     let disposed = false;
-    try {
-      setDismissed(Boolean(localStorage.getItem(LOCATION_CARD_DISMISSED_KEY)));
-    } catch {
-      /* storage blocked — the card stays available */
-    }
-
     void (async () => {
-      let state: PermissionState | "unknown" = "unknown";
-      try {
-        const status = await navigator.permissions?.query({
-          name: "geolocation",
-        });
-        if (status) state = status.state;
-      } catch {
-        // Permissions API unavailable (older Safari) — don't guess; offer the card.
-      }
+      const browser = await readBrowserPermission("geolocation");
       if (disposed) return;
-      if (state !== "granted") {
-        if (state === "denied") setMessage("denied");
+      // The old permanent "dismissed" flag becomes a "not now": it may ask
+      // once more after a week, as the device-state rules say.
+      try {
+        if (
+          localStorage.getItem(LEGACY_LOCATION_CARD_DISMISSED_KEY) &&
+          !readDeviceState().geolocation
+        ) {
+          recordPermission("geolocation", "dismissed");
+        }
+        localStorage.removeItem(LEGACY_LOCATION_CARD_DISMISSED_KEY);
+      } catch {
+        /* storage blocked — the card follows the browser's answer alone */
+      }
+      if (browser === "granted") recordPermission("geolocation", "granted");
+      if (browser === "denied") recordPermission("geolocation", "denied");
+      const ask = decideLocationAsk({
+        browser,
+        stored: readDeviceState().geolocation,
+      });
+      if (ask !== "refresh-silently") {
+        // Blocked or "not now": the card stays away, and nothing is asked.
+        if (ask !== "show-prompt") setDismissed(true);
         setPromptReady(true);
         return;
       }
@@ -276,7 +291,12 @@ export function CurrentLocationHome({ initial, user }: Props) {
     setGpsState("detecting");
     setMessage(null);
     try {
-      setMessage(await locate({ silent: false, isDisposed: () => false }));
+      const problem = await locate({ silent: false, isDisposed: () => false });
+      // Remember the answer on this device: a tap is the only thing that
+      // can raise the browser prompt, and a "no" is never asked again.
+      if (problem === "denied") recordPermission("geolocation", "denied");
+      else if (problem === null) recordPermission("geolocation", "granted");
+      setMessage(problem);
     } catch {
       setMessage("no-location");
     } finally {
@@ -286,11 +306,8 @@ export function CurrentLocationHome({ initial, user }: Props) {
 
   const dismissCard = () => {
     setDismissed(true);
-    try {
-      localStorage.setItem(LOCATION_CARD_DISMISSED_KEY, "1");
-    } catch {
-      /* ignore */
-    }
+    // "Not now" — the browser was never asked; it may come back in a week.
+    recordPermission("geolocation", "dismissed");
   };
 
   // ── Current-location dashboard (server-seeded or GPS-swapped) ────────────
