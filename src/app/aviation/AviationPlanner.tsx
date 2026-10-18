@@ -1,6 +1,7 @@
 "use client";
 
 import { roundCoord } from "@/lib/location-privacy";
+import { workerApiUrl } from "@/lib/weather-api";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 import { getIcaoForSlug, getAirportByIcao } from "@/lib/icao-codes";
@@ -317,7 +318,7 @@ export function AviationPlanner() {
     // the ICAO record so each airport gets its real weather (sunrise/sunset).
     const airport = getAirportByIcao(icao);
     const [metarRes, wxRes] = await Promise.allSettled([
-      fetch(`/api/py/metar?icao=${icao}`),
+      fetch(workerApiUrl("metar", `icao=${icao}`)),
       airport
         ? fetch(
             `/api/py/weather?lat=${roundCoord(airport.lat)}&lon=${roundCoord(airport.lon)}`,

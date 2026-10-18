@@ -216,14 +216,14 @@ curl "https://weather.mukoko.com/api/py/search?q=nairobi"`}
           <h2 className="eagle">Nearest airports</h2>
           <p className="mt-2 text-base text-text-secondary">
             <code className="termite">
-              GET /api/py/airports/nearest?lat=&amp;lon=&amp;count=
+              GET /v1/airports/nearest?lat=&amp;lon=&amp;count=
             </code>{" "}
             — the N nearest ICAO airports, each with its code, name, and
             distance in kilometres, sorted closest-first.{" "}
             <code className="termite">count</code> defaults to 5 (max 20).
           </p>
           <CodeBlock
-            code={`curl "https://weather.mukoko.com/api/py/airports/nearest?lat=-17.83&lon=31.05&count=3"`}
+            code={`curl "https://weather-api.mukoko.com/v1/airports/nearest?lat=-17.83&lon=31.05&count=3"`}
           />
         </section>
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getFlightCategoryClass } from "@/lib/flight-category-styles";
+import { workerApiUrl } from "@/lib/weather-api";
 
 interface CloudLayer {
   cover: string;
@@ -36,7 +37,7 @@ export interface NearestCandidate {
   ageMinutes: number | null;
 }
 
-/** Response of GET /api/py/aviation/nearest-metar. */
+/** Response of GET /v1/aviation/nearest-metar (the Rust Worker). */
 interface NearestResponse {
   status: "ok" | "no_recent_report" | "no_airports" | "unavailable";
   message: string | null;
@@ -53,7 +54,7 @@ interface NearestResponse {
   candidates: NearestCandidate[];
 }
 
-/** Response of GET /api/py/metar?icao=. */
+/** Response of GET /v1/metar?icao= (the Rust Worker). */
 interface StationResponse {
   icao: string;
   metar: MetarObs[];
@@ -244,8 +245,11 @@ export function AviationWeather({ slug, lat, lon }: Props) {
   useEffect(() => {
     let cancelled = false;
     const url = pickedIcao
-      ? `/api/py/metar?icao=${encodeURIComponent(pickedIcao)}`
-      : `/api/py/aviation/nearest-metar?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`;
+      ? workerApiUrl("metar", `icao=${encodeURIComponent(pickedIcao)}`)
+      : workerApiUrl(
+          "aviation/nearest-metar",
+          `lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`,
+        );
 
     fetch(url)
       .then((r) => {

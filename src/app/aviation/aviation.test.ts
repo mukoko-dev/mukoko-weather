@@ -42,7 +42,8 @@ describe("AviationPlanner", () => {
     expect(plannerSrc).toContain("@/lib/flight-category-styles");
   });
   it("fetches METAR from API", () => {
-    expect(plannerSrc).toContain("/api/py/metar");
+    expect(plannerSrc).toContain('workerApiUrl("metar"');
+    expect(plannerSrc).not.toContain("/api/py/metar");
   });
   it("has accessibility main landmark", () => {
     expect(plannerSrc).toContain('id="main-content"');

@@ -436,6 +436,296 @@ pub fn nearest_airports(lat: f64, lon: f64, count: usize, max_km: f64) -> Vec<Ne
         .collect()
 }
 
+// ---------------------------------------------------------------------------
+// Nearest airport with a recent report (ported from `api/py/_metar.py`)
+// ---------------------------------------------------------------------------
+
+pub const AWC_STATIONINFO_URL: &str = "https://aviationweather.gov/api/data/stationinfo";
+pub const DEFAULT_RADIUS_KM: f64 = 150.0;
+pub const DEFAULT_MAX_AGE_MIN: i64 = 180;
+pub const NEAREST_MAX_COUNT: usize = 10;
+/// A silent station is asked again after 2 minutes.
+pub const METAR_EMPTY_CACHE_TTL_SECONDS: u64 = 120;
+pub const DISCOVERY_CELL_DEG: f64 = 0.5;
+/// A surveyed cell that held stations is remembered for 7 days; one that
+/// held none for 6 hours.
+pub const DISCOVERY_FOUND_TTL_SECONDS: u64 = 7 * 24 * 3600;
+pub const DISCOVERY_EMPTY_TTL_SECONDS: u64 = 6 * 3600;
+pub const DISCOVERY_RADIUS_BUCKETS_KM: [f64; 6] = [25.0, 50.0, 100.0, 150.0, 250.0, 500.0];
+
+/// One batched AWC METAR request for many stations (last 12 h).
+pub fn awc_batch_metar_url(icaos: &[String]) -> String {
+    format!(
+        "{AWC_METAR_URL}?ids={}&format=json&hours=12",
+        icaos.join(",")
+    )
+}
+
+/// Decode a batched AWC answer into one list per requested station (every
+/// requested station appears; an empty list means AWC had no report).
+pub fn metars_by_station(
+    body: &Value,
+    icaos: &[String],
+) -> std::collections::HashMap<String, Vec<MetarObs>> {
+    let mut grouped: std::collections::HashMap<String, Vec<MetarObs>> =
+        icaos.iter().map(|i| (i.clone(), Vec::new())).collect();
+    for obs in body.as_array().into_iter().flatten() {
+        let id = obs["icaoId"]
+            .as_str()
+            .or_else(|| obs["stationId"].as_str())
+            .unwrap_or_default()
+            .to_ascii_uppercase();
+        if let Some(list) = grouped.get_mut(&id) {
+            list.push(decode_awc_metar(obs));
+        }
+    }
+    grouped
+}
+
+/// The discovery grid cell centre a point belongs to.
+pub fn discovery_cell(lat: f64, lon: f64) -> (f64, f64) {
+    let snap = |v: f64| {
+        let r = ((v / DISCOVERY_CELL_DEG).floor() + 0.5) * DISCOVERY_CELL_DEG;
+        (r * 10_000.0).round_ties_even() / 10_000.0
+    };
+    (snap(lat), snap(lon))
+}
+
+/// The survey radius: `radius_km` rounded up to a bucket (never above the
+/// largest). NaN, infinity and non-positive values take the smallest.
+pub fn discovery_radius(radius_km: f64) -> f64 {
+    if !radius_km.is_finite() || radius_km <= 0.0 {
+        return DISCOVERY_RADIUS_BUCKETS_KM[0];
+    }
+    DISCOVERY_RADIUS_BUCKETS_KM
+        .iter()
+        .copied()
+        .find(|b| radius_km <= *b)
+        .unwrap_or(DISCOVERY_RADIUS_BUCKETS_KM[5])
+}
+
+/// `(min lat, min lon, max lat, max lon)` covering `radius_km` around every
+/// point of the point's cell, clamped to WGS 84.
+pub fn discovery_bbox(lat: f64, lon: f64, radius_km: f64) -> (f64, f64, f64, f64) {
+    let (clat, clon) = discovery_cell(lat, lon);
+    let half = DISCOVERY_CELL_DEG / 2.0;
+    let dlat = radius_km / 111.0 + half;
+    let cos_lat = (clat.abs() + half).min(89.0).to_radians().cos().max(0.01);
+    let dlon = radius_km / (111.0 * cos_lat) + half;
+    let r3 = |v: f64| (v * 1000.0).round_ties_even() / 1000.0;
+    (
+        r3((clat - dlat).max(-90.0)),
+        r3((clon - dlon).max(-180.0)),
+        r3((clat + dlat).min(90.0)),
+        r3((clon + dlon).min(180.0)),
+    )
+}
+
+/// The KV key remembering that a cell was surveyed.
+pub fn discovery_key(lat: f64, lon: f64, radius_km: f64) -> String {
+    let (clat, clon) = discovery_cell(lat, lon);
+    format!(
+        "avn:disc:v1:{clat:.2}_{clon:.2}_{}",
+        discovery_radius(radius_km) as i64
+    )
+}
+
+/// The AWC station-info request for a bbox.
+pub fn awc_stationinfo_url(bbox: (f64, f64, f64, f64)) -> String {
+    let g = |v: f64| format!("{v}");
+    format!(
+        "{AWC_STATIONINFO_URL}?bbox={},{},{},{}&format=json",
+        g(bbox.0),
+        g(bbox.1),
+        g(bbox.2),
+        g(bbox.3)
+    )
+}
+
+/// A discovered METAR station.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Station {
+    pub icao: String,
+    pub name: String,
+    pub lat: f64,
+    pub lon: f64,
+}
+
+/// Validated METAR stations from an AWC `stationinfo` answer: a four-letter
+/// ICAO id, finite WGS 84 coordinates and `siteType` listing `METAR`.
+/// Duplicates keep the first row.
+pub fn parse_awc_stations(body: &Value) -> Vec<Station> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for row in body.as_array().into_iter().flatten() {
+        let Some(icao) = row["icaoId"].as_str().and_then(normalize_icao) else {
+            continue;
+        };
+        if seen.contains(&icao) {
+            continue;
+        }
+        let has_metar = row["siteType"]
+            .as_array()
+            .is_some_and(|t| t.iter().any(|x| x.as_str() == Some("METAR")));
+        if !has_metar {
+            continue;
+        }
+        let (Some(lat), Some(lon)) = (row["lat"].as_f64(), row["lon"].as_f64()) else {
+            continue;
+        };
+        if !lat.is_finite()
+            || !lon.is_finite()
+            || !(-90.0..=90.0).contains(&lat)
+            || !(-180.0..=180.0).contains(&lon)
+        {
+            continue;
+        }
+        let name: String = row["site"]
+            .as_str()
+            .unwrap_or("")
+            .trim()
+            .chars()
+            .take(120)
+            .collect();
+        seen.insert(icao.clone());
+        out.push(Station {
+            name: if name.is_empty() { icao.clone() } else { name },
+            icao,
+            lat,
+            lon,
+        });
+    }
+    out
+}
+
+/// The `count` stations nearest the point within `max_km`, closest first.
+pub fn nearest_of(
+    stations: &[Station],
+    lat: f64,
+    lon: f64,
+    count: usize,
+    max_km: f64,
+) -> Vec<NearbyAirport> {
+    let mut ranked: Vec<(f64, &Station)> = stations
+        .iter()
+        .map(|s| (haversine_km(lat, lon, s.lat, s.lon), s))
+        .collect();
+    ranked.sort_by(|a, b| a.0.total_cmp(&b.0));
+    ranked
+        .into_iter()
+        .filter(|(d, _)| *d <= max_km)
+        .take(count)
+        .map(|(d, s)| NearbyAirport {
+            icao: s.icao.clone(),
+            name: s.name.clone(),
+            distance_km: (d * 10.0).round_ties_even() / 10.0,
+        })
+        .collect()
+}
+
+/// Merge candidates with discovered airports (nearest first, no duplicates)
+/// and keep `count`.
+pub fn merge_candidates(
+    mut candidates: Vec<NearbyAirport>,
+    discovered: Vec<NearbyAirport>,
+    count: usize,
+) -> Vec<NearbyAirport> {
+    let known: std::collections::HashSet<String> =
+        candidates.iter().map(|c| c.icao.clone()).collect();
+    candidates.extend(discovered.into_iter().filter(|d| !known.contains(&d.icao)));
+    candidates.sort_by(|a, b| a.distance_km.total_cmp(&b.distance_km));
+    candidates.truncate(count);
+    candidates
+}
+
+/// Python's `{x:g}` for the radii and ages in the messages.
+fn fmt_g(x: f64) -> String {
+    if x.fract() == 0.0 {
+        format!("{}", x as i64)
+    } else {
+        format!("{x}")
+    }
+}
+
+/// Whole minutes between an ISO observation time and `now` (floored).
+pub fn age_minutes(observed: &str, now: chrono::DateTime<chrono::Utc>) -> Option<i64> {
+    let t = chrono::DateTime::parse_from_rfc3339(observed).ok()?;
+    Some(now.signed_duration_since(t).num_seconds().div_euclid(60))
+}
+
+/// Candidate rows, and the index of the nearest one with a report no older
+/// than `max_age_min` (a report up to 5 minutes in the future counts).
+pub fn evaluate(
+    candidates: &[NearbyAirport],
+    reports: &std::collections::HashMap<String, Vec<MetarObs>>,
+    now: chrono::DateTime<chrono::Utc>,
+    max_age_min: i64,
+) -> (Vec<Value>, Option<(usize, Option<i64>)>) {
+    let mut rows = Vec::new();
+    let mut chosen = None;
+    for (i, c) in candidates.iter().enumerate() {
+        let latest = reports.get(&c.icao).and_then(|l| l.first());
+        let observed = latest.map(|m| m.time.as_str()).filter(|t| !t.is_empty());
+        let age = observed.and_then(|t| age_minutes(t, now));
+        let reported = age.is_some_and(|a| (-5..=max_age_min).contains(&a));
+        rows.push(serde_json::json!({
+            "icao": c.icao,
+            "name": c.name,
+            "distanceKm": c.distance_km,
+            "reported": reported,
+            "observedAt": observed,
+            "ageMinutes": age,
+        }));
+        if reported && chosen.is_none() {
+            chosen = Some((i, age));
+        }
+    }
+    (rows, chosen)
+}
+
+/// The `NearestMetarResponse` body for each status.
+pub fn nearest_response(
+    status: &str,
+    radius_km: f64,
+    max_age_min: i64,
+    fields: serde_json::Map<String, Value>,
+) -> Value {
+    let mut body = serde_json::json!({
+        "status": status,
+        "message": null,
+        "searchRadiusKm": radius_km,
+        "maxAgeMinutes": max_age_min,
+        "icao": null,
+        "name": null,
+        "distanceKm": null,
+        "observedAt": null,
+        "ageMinutes": null,
+        "metar": [],
+        "taf": null,
+        "source": "awc",
+        "candidates": [],
+    });
+    for (k, v) in fields {
+        body[k] = v;
+    }
+    body
+}
+
+pub fn no_airports_message(radius_km: f64) -> String {
+    format!(
+        "No airport with a METAR feed within {} km of this location.",
+        fmt_g(radius_km)
+    )
+}
+
+pub fn no_recent_message(radius_km: f64, max_age_min: i64) -> String {
+    format!(
+        "No airport within {} km has reported in the last {} hours.",
+        fmt_g(radius_km),
+        max_age_min / 60
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -682,5 +972,103 @@ mod tests {
         assert!(v["taf"].is_null());
         let back: MetarResponse = serde_json::from_value(v).unwrap();
         assert_eq!(back, r);
+    }
+
+    #[test]
+    fn discovery_geometry_matches_the_python() {
+        assert_eq!(discovery_cell(-17.83, 31.05), (-17.75, 31.25));
+        assert_eq!(discovery_radius(100.0), 100.0);
+        assert_eq!(discovery_radius(101.0), 150.0);
+        assert_eq!(discovery_radius(900.0), 500.0);
+        assert_eq!(discovery_radius(f64::NAN), 25.0);
+        assert_eq!(discovery_radius(-1.0), 25.0);
+        let (a, b, c, d) = discovery_bbox(-17.83, 31.05, 150.0);
+        assert!(a < -17.75 && c > -17.75 && b < 31.25 && d > 31.25);
+        assert_eq!(
+            discovery_key(-17.83, 31.05, 120.0),
+            "avn:disc:v1:-17.75_31.25_150"
+        );
+    }
+
+    #[test]
+    fn stations_are_validated() {
+        let body = json!([
+            {"icaoId": "fvrg", "site": "Harare Intl", "lat": -17.93, "lon": 31.09, "siteType": ["METAR", "TAF"]},
+            {"icaoId": "FVRG", "site": "dup", "lat": 1.0, "lon": 1.0, "siteType": ["METAR"]},
+            {"icaoId": "FVXX", "site": "No metar", "lat": 1.0, "lon": 1.0, "siteType": ["TAF"]},
+            {"icaoId": "FV1X", "site": "Bad id", "lat": 1.0, "lon": 1.0, "siteType": ["METAR"]},
+            {"icaoId": "FVBU", "lat": 95.0, "lon": 1.0, "siteType": ["METAR"]},
+            {"icaoId": "FVWN", "lat": -18.6, "lon": 26.5, "siteType": ["METAR"]}
+        ]);
+        let s = parse_awc_stations(&body);
+        assert_eq!(s.len(), 2);
+        assert_eq!(s[0].icao, "FVRG");
+        assert_eq!(s[0].name, "Harare Intl");
+        assert_eq!(s[1].name, "FVWN");
+        let near = nearest_of(&s, -17.83, 31.05, 5, 150.0);
+        assert_eq!(near.len(), 1);
+        assert_eq!(near[0].icao, "FVRG");
+    }
+
+    #[test]
+    fn evaluates_candidates_and_picks_the_nearest_recent() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-10-18T12:00:00+00:00")
+            .unwrap()
+            .to_utc();
+        let c = |i: &str, d: f64| NearbyAirport {
+            icao: i.into(),
+            name: i.into(),
+            distance_km: d,
+        };
+        let cands = vec![c("AAAA", 10.0), c("BBBB", 20.0), c("CCCC", 30.0)];
+        let obs = |t: &str| {
+            let mut o = decode_awc_metar(&json!({"rawOb": "x"}));
+            o.time = t.into();
+            o
+        };
+        let mut reports = std::collections::HashMap::new();
+        reports.insert("AAAA".to_owned(), vec![obs("2026-10-18T08:00:00+00:00")]);
+        reports.insert("BBBB".to_owned(), vec![obs("2026-10-18T11:30:00+00:00")]);
+        reports.insert("CCCC".to_owned(), vec![]);
+        let (rows, chosen) = evaluate(&cands, &reports, now, 180);
+        assert_eq!(chosen, Some((1, Some(30))));
+        assert_eq!(rows[0]["reported"], false);
+        assert_eq!(rows[0]["ageMinutes"], 240);
+        assert_eq!(rows[2]["observedAt"], Value::Null);
+        let (_, none) = evaluate(&cands, &reports, now, 30);
+        assert_eq!(none, Some((1, Some(30))));
+        assert_eq!(age_minutes("2026-10-18T12:03:00+00:00", now), Some(-3));
+    }
+
+    #[test]
+    fn messages_format_like_python_g() {
+        assert_eq!(
+            no_airports_message(150.0),
+            "No airport with a METAR feed within 150 km of this location."
+        );
+        assert_eq!(
+            no_airports_message(25.5),
+            "No airport with a METAR feed within 25.5 km of this location."
+        );
+        assert_eq!(
+            no_recent_message(150.0, 180),
+            "No airport within 150 km has reported in the last 3 hours."
+        );
+    }
+
+    #[test]
+    fn batches_group_by_station() {
+        let body = json!([
+            {"icaoId": "FVRG", "obsTime": 1_760_000_000, "rawOb": "a"},
+            {"icaoId": "FVRG", "obsTime": 1_760_003_600, "rawOb": "b"},
+            {"stationId": "FVWN", "obsTime": 1_760_000_000, "rawOb": "c"},
+            {"icaoId": "ZZZZ", "rawOb": "ignored"}
+        ]);
+        let ids = vec!["FVRG".to_owned(), "FVWN".to_owned(), "FVBU".to_owned()];
+        let g = metars_by_station(&body, &ids);
+        assert_eq!(g["FVRG"].len(), 2);
+        assert_eq!(g["FVWN"].len(), 1);
+        assert!(g["FVBU"].is_empty());
+        assert!(!g.contains_key("ZZZZ"));
     }
 }

@@ -117,7 +117,6 @@ export const CORS_POLICY = {
     "/api/py/geo",
     "/api/py/search",
     "/api/py/airquality/:path*",
-    "/api/py/airports/nearest",
     "/api/embed/:path*",
     "/embed/:path*",
   ],

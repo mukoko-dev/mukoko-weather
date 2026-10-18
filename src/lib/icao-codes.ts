@@ -1,4 +1,5 @@
 import { nearestWithin } from "./geo";
+import { workerApiUrl } from "./weather-api";
 
 /**
  * Maps location slugs to ICAO airport codes.
@@ -349,8 +350,8 @@ export function getAirportByIcao(
 /**
  * DB-backed nearest-airport lookup with a resilient static fallback.
  *
- * Calls `GET /api/py/airports/nearest` which runs a MongoDB `$nearSphere`
- * geospatial query over the seeded `weather.airports` collection. If the
+ * Calls the Rust Worker's `GET /v1/airports/nearest`, which ranks the compiled-in
+ * ICAO catalogue. If the
  * request fails, times out, or returns nothing usable, this falls back to the
  * in-memory haversine scan (`getNearestIcaos`) so the aviation UI keeps working
  * offline or before the DB is seeded.
@@ -370,7 +371,9 @@ export async function fetchNearestAirports(
       count: String(count),
       maxDistanceKm: String(maxDistanceKm),
     });
-    const res = await fetch(`/api/py/airports/nearest?${params.toString()}`);
+    const res = await fetch(
+      workerApiUrl("airports/nearest", params.toString()),
+    );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = (await res.json()) as { airports?: AirportDistance[] };
     const airports = body?.airports;
