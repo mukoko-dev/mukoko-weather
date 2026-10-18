@@ -223,65 +223,6 @@ class TestCallSites:
         assert args[0] == "https://aq.example.com/v1/air-quality"
         assert kwargs["headers"] == {"X-Mukoko-OM-Key": "k-test"}
 
-    def test_status_probe_names_the_instance_not_the_url(self, monkeypatch):
-        from py import _status
-
-        _self_hosted(monkeypatch)
-        client = _ok_client({"current": {"temperature_2m": 21.0}})
-        with patch("py._status.get_http_client", return_value=client):
-            result = _status._check_open_meteo()
-        args, kwargs = client.get.call_args
-        assert args[0] == "https://om.example.com/v1/forecast"
-        assert kwargs["headers"] == {"X-Mukoko-OM-Key": "k-test"}
-        assert "self-hosted" in result["name"]
-        assert "om.example.com" not in str(result)
-
-    def test_status_probe_name_unchanged_by_default(self):
-        from py import _status
-
-        client = _ok_client({"current": {"temperature_2m": 21.0}})
-        with patch("py._status.get_http_client", return_value=client):
-            result = _status._check_open_meteo()
-        assert result["name"] == "Open-Meteo API"
-
-    def test_status_adds_aq_row_only_when_self_hosted(self, monkeypatch):
-        from py import _status
-
-        def names():
-            stub = {"name": "x", "status": "operational"}
-            with (
-                patch.multiple(
-                    _status,
-                    _check_mongodb=lambda: stub,
-                    _check_tomorrow_io=lambda: stub,
-                    _check_open_meteo=lambda: stub,
-                    _check_ai_gateway=lambda: stub,
-                    _check_weather_cache=lambda: stub,
-                    _check_ai_cache=lambda: stub,
-                    _check_open_meteo_air_quality=lambda: {"name": "aq", "status": "operational"},
-                ),
-                patch.dict(_status._status_cache, {"data": None, "ts": 0}),
-            ):
-                import asyncio
-
-                return [c["name"] for c in asyncio.run(_status.system_status())["checks"]]
-
-        assert "aq" not in names()
-        monkeypatch.setenv("OPEN_METEO_AQ_BASE_URL", "https://aq.example.com")
-        assert "aq" in names()
-
-    def test_aq_status_probe(self, monkeypatch):
-        from py import _status
-
-        _self_hosted(monkeypatch)
-        client = _ok_client({"current": {"pm2_5": 4.0}})
-        with patch("py._status.get_http_client", return_value=client):
-            result = _status._check_open_meteo_air_quality()
-        args, kwargs = client.get.call_args
-        assert args[0] == "https://aq.example.com/v1/air-quality"
-        assert kwargs["headers"] == {"X-Mukoko-OM-Key": "k-test"}
-        assert result["status"] == "operational"
-
     def test_archive_stays_on_the_public_api(self, monkeypatch):
         """History/normals are out of scope for the self-hosted instance."""
         from py import _history_store, _normals

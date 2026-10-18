@@ -32,6 +32,7 @@ pub mod reference;
 pub mod resolve;
 pub mod secrets;
 pub mod station;
+pub mod status;
 pub mod tiles;
 pub mod wmo;
 

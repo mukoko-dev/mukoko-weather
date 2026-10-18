@@ -713,7 +713,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `GET /v1/suitability` (Worker) — suitability rules (all, or one by `key`, validated against `^(activity|category):[a-z0-9-]+$`)
 - `GET /v1/tags` (Worker) — tag metadata (all or `featured=true`)
 - `GET /v1/regions` (Worker) — active region reference data (bounding boxes, no restrictions enforced)
-- `/api/py/status` — GET, system health checks (MongoDB ping, Open-Meteo, AI path liveness probe + breaker — no token spend, cache). Tomorrow.io is read from its key config, breaker and budget counters — never probed live, since the old probe spent its quota — and carries `role: "enrichment"`; it is summarised in the top-level `enrichment` field and never degrades `status`
+- `GET /v1/status` (Worker, `weather-core::status`) — live health: the forecast, places, aviation and AI Workers (each answers `/health` over its service binding, no model call) and Open-Meteo, in the payload the status page reads (`status`, `enrichment`, `timestamp`, `totalLatencyMs`, `checks[]`). Tomorrow.io is read from the forecast Worker's config (never probed live) and carries `role: "enrichment"`, so it never degrades `status`. There is no database row: the Workers hold no Mongo connection. Cached 60 s
 - `/api/py/history` — GET, historical weather data (query: `location`, `days`). One doc per location-local day, newest first, each tagged `source: "recorded" | "open-meteo-archive"`; response adds `backfilled` (count of days filled this call). Missing past days are filled on demand from the Open-Meteo Historical/Archive API (see "Weather history store" below)
 - `/api/py/history/analyze` — POST, AI-powered historical weather analysis. Server-side aggregation (~800 tokens) + model analysis through the AI Worker. Cached 1h in `history_analysis` collection. Rate-limited 10 req/hour/IP
 - `/api/py/explore/search` — POST, AI-powered location search using the AI model with `search_locations` + `get_weather` tools. Falls back to text search if AI unavailable. Rate-limited 15 req/hour/IP
@@ -1570,8 +1570,8 @@ Users can submit real-time ground-truth weather observations, similar to Waze fo
 **Route:** `/status` — live system health dashboard.
 
 - `src/app/status/page.tsx` — server wrapper (metadata)
-- `src/app/status/StatusDashboard.tsx` — client component, calls `GET /api/py/status`
-- Checks: MongoDB connectivity, Open-Meteo availability, Tomorrow.io enrichment (key, breaker and budget counters only — no live probe; tagged `role: "enrichment"` and excluded from the overall status), AI path liveness (an empty-`messages` probe the AI Worker refuses before any model call, so no token spend; only that exact refusal — HTTP 400 with error `invalid_request` and the Worker's empty-messages description, `AI_PROBE_EXPECTED_ERROR` / `AI_PROBE_EXPECTED_DESCRIPTION` in `api/py/_status.py` — counts as healthy, any other 400 reports degraded with its error code) + circuit state, weather cache health, AI summary cache (an empty one is informational and stays `operational`: summaries are on demand and expire within 2 h, so empty is normal when nobody has asked recently; only a failed count is `down`)
+- `src/app/status/StatusDashboard.tsx` — client component, calls the Worker's `GET /v1/status`
+- Checks (Worker `GET /v1/status`): the forecast Worker (plus its KV cache and station database bindings), Places, Aviation and the AI Worker (each `/health` over its service binding; the AI row also needs Workers AI bound, and no model runs), and Open-Meteo (a real Harare forecast request). Tomorrow.io is the enrichment row (the forecast Worker's key config, no live probe; `role: "enrichment"`, excluded from the overall status). The MongoDB, Weather Cache and AI Summary Cache rows are gone with the database
 - Each service shows operational/degraded/down status with latency
 
 ## Testing
@@ -1676,15 +1676,11 @@ _Python backend tests (pytest):_
 - `tests/py/test_ai_followup.py` — Follow-up chat: system prompt building, message truncation, history capping, rate limiting, circuit breaker, AI error handling
 - `tests/py/test_devices.py` — Device sync: validation (theme, slug, savedLocations, activities), CRUD endpoints, DuplicateKeyError handling, partial updates
 - `tests/py/test_explore_search.py` — AI search: tool execution (search/weather), text search fallback, system prompt building, rate limiting, circuit breaker
-- `tests/py/test_suitability.py` — Suitability rules: key regex validation, single/all rules, cache headers, error fallback
-- `tests/py/test_data.py` — Data endpoints: activities (by id/category/search/labels/categories), tags (all/featured), regions (active)
-- `tests/py/test_ai_prompts.py` — AI prompts: single/all prompts, suggested rules, module-level caching, DB error graceful degradation
 - `tests/py/test_index.py` — FastAPI app: CORS origins, health endpoint, ConnectionFailure handler, all 16 routers mounted
 - `tests/py/test_tiles.py` — Map tiles: Tomorrow.io weather overlay proxy (layer validation, zoom range, timestamp validation, SSRF protection, proxy behavior, cache headers)
 - `tests/py/test_stations.py` — Station ingest: unit conversions (°F/mph/inHg/inches), QC range filter, hashed-key auth, registration (key never stored raw, GeoJSON location), manual readings (validated observation writes, 401/400 paths)
 - `tests/py/test_open_meteo.py` — Configurable Open-Meteo hosts: public default with no key header, env-driven forecast/AQ URLs, key header only to self-hosted hosts, rejected values (http, credentials, query) fall back to public without logging the value, every call site (blend, extras, AQ, AQ grid, haze, status) follows the env, archive stays public
 - `tests/py/test_log_redaction.py` — Secrets out of logs: Tomorrow.io key sent as a header (enrichment fetch; the status row makes no call at all), redaction filter/record factory masks secret query params in messages and tracebacks, httpx/httpcore at WARNING after app import
-- `tests/py/test_status.py` — System health: MongoDB/Open-Meteo/AI-gateway/cache checks, Tomorrow.io enrichment row (no probe, budget/breaker based), overall status aggregation that ignores enrichment rows
 - `tests/py/test_embeddings.py` — Embeddings stub: status endpoint shape
 - `tests/py/test_place_knowledge.py` — Place knowledge: Köppen vectors (London Cfb, Bangkok Aw, Harare Cwb, Cairo BWh, Moscow Dfb, Singapore Af, tundra ET), USDA texture triangle, SoilGrids parsing + memo + breaker, seasons (seed vs AI vs derived, current/next across the year end), astronomy, build provenance and refresh dates, storage gating (no write until the collection exists), read paths, the prompt block (size, `~` markers, no crops without a calendar), the endpoint
 - `tests/py/test_ag_calendar.py` — Crop calendars: the shipped GEOGLAM table (ISO mapping, the five verification cities), point-in-region, season labels, crop phase across the year end, derived window, source chain

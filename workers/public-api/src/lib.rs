@@ -37,8 +37,8 @@ mod keys;
 use serde_json::Value;
 use weather_core::cors::origin_allowed;
 use weather_core::query::ForecastQuery;
-use weather_core::{geo, normalize, places, reference};
-use weather_edge::{config, error, json, now, query_pairs};
+use weather_core::{geo, normalize, places, reference, status as health};
+use weather_edge::{config, error, get_with_timeout, json, now, now_ms, now_rfc3339, query_pairs};
 use worker::wasm_bindgen::JsValue;
 use worker::{event, Context, Env, Headers, Method, Request, RequestInit, Response, Result};
 
@@ -125,6 +125,7 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
             .await
         }
         "/v1/locations" | "/v1/search" | "/v1/geo" | "/v1/history" => places(req, env).await,
+        "/v1/status" => status(env).await,
         path if reference::serves(path) => {
             let query = query_pairs(req)?;
             match reference::reply(path, &query) {
@@ -427,5 +428,83 @@ async fn places(req: &Request, env: &Env) -> Result<Response> {
     if let Some(cc) = upstream.headers().get("Cache-Control")? {
         resp.headers().set("Cache-Control", &cc)?;
     }
+    Ok(resp)
+}
+
+/// How long a probe of another Worker or Open-Meteo may take.
+const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+/// The status payload is rebuilt at most this often (seconds).
+const STATUS_TTL_S: &str = "public, max-age=60";
+const OPEN_METEO_PROBE: &str =
+    "https://api.open-meteo.com/v1/forecast?latitude=-17.83&longitude=31.05&current=temperature_2m";
+
+/// `GET <binding>/health`, timed.
+async fn probe_worker(env: &Env, binding: &str) -> (health::Probe, u64) {
+    let started = now_ms();
+    let outcome = match env.service(binding) {
+        Ok(fetcher) => {
+            let call = Box::pin(fetcher.fetch("https://upstream/health".to_owned(), None));
+            let timer = Box::pin(worker::Delay::from(PROBE_TIMEOUT));
+            match futures::future::select(call, timer).await {
+                futures::future::Either::Left((Ok(resp), _)) => Some(resp),
+                _ => None,
+            }
+        }
+        Err(_) => None,
+    };
+    let probe = match outcome {
+        Some(mut resp) if resp.status_code() == 200 => match resp.json::<Value>().await {
+            Ok(body) => health::Probe::Healthy(body),
+            Err(_) => health::Probe::Status(502),
+        },
+        Some(resp) => health::Probe::Status(resp.status_code()),
+        None => health::Probe::Unreachable,
+    };
+    (probe, now_ms().saturating_sub(started))
+}
+
+async fn probe_open_meteo() -> (Result<Option<f64>, u16>, u64) {
+    let started = now_ms();
+    let outcome = match get_with_timeout(OPEN_METEO_PROBE, None, PROBE_TIMEOUT).await {
+        Ok(mut resp) if resp.status_code() == 200 => Ok(resp
+            .json::<Value>()
+            .await
+            .ok()
+            .and_then(|b| b["current"]["temperature_2m"].as_f64())),
+        Ok(resp) => Err(resp.status_code()),
+        Err(_) => Err(0),
+    };
+    (outcome, now_ms().saturating_sub(started))
+}
+
+/// `GET /v1/status`: live health of the Workers and Open-Meteo, in the shape
+/// the status page reads (`weather_core::status`).
+async fn status(env: &Env) -> Result<Response> {
+    let started = now_ms();
+    let (forecast, places, aviation, ai, meteo) = futures::join!(
+        probe_worker(env, FORECAST_BINDING),
+        probe_worker(env, PLACES_BINDING),
+        probe_worker(env, AVIATION_BINDING),
+        probe_worker(env, AI_BINDING),
+        probe_open_meteo(),
+    );
+    let mut checks = vec![health::worker_row(
+        "Forecast Worker",
+        &forecast.0,
+        forecast.1,
+    )];
+    checks.extend(health::forecast_storage_row(&forecast.0, forecast.1));
+    checks.push(health::enrichment_row(&forecast.0, forecast.1));
+    checks.push(health::worker_row("Places Worker", &places.0, places.1));
+    checks.push(health::worker_row(
+        "Aviation Worker",
+        &aviation.0,
+        aviation.1,
+    ));
+    checks.push(health::ai_row(&ai.0, ai.1));
+    checks.push(health::open_meteo_row(meteo.0, meteo.1));
+    let body = health::payload(checks, &now_rfc3339(), now_ms().saturating_sub(started));
+    let resp = json(200, &body)?;
+    resp.headers().set("Cache-Control", STATUS_TTL_S)?;
     Ok(resp)
 }
