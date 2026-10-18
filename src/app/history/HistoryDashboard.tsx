@@ -35,6 +35,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 import { DEFAULT_LOCALE, formatDate as formatLocaleDate } from "@/lib/i18n";
+import { fetchWorker, workerUrl } from "@/lib/weather-api";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -625,8 +626,9 @@ export function HistoryDashboard() {
       setError(null);
       setFetched(true);
       try {
-        const res = await fetch(
-          `/api/py/history?location=${location.slug}&days=${dayCount}`,
+        const res = await fetchWorker(
+          "history",
+          `location=${location.slug}&days=${dayCount}`,
         );
         if (!res.ok) {
           const body = await res
@@ -661,7 +663,7 @@ export function HistoryDashboard() {
     didAutoSelect.current = true;
 
     fetchJson<{ location?: WeatherLocation }>(
-      `/api/py/locations?slug=${encodeURIComponent(globalSlug)}`,
+      workerUrl("locations", `slug=${encodeURIComponent(globalSlug)}`),
     )
       .then((data) => {
         const loc = data?.location;

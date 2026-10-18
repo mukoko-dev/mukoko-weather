@@ -19,11 +19,29 @@ export interface BackdropDeviceHints {
   saveData?: boolean;
   /** navigator.deviceMemory in GB (Chromium only). */
   deviceMemory?: number;
+  /** iPhone / iPad WebKit (see isIosWebKit). */
+  ios?: boolean;
+}
+
+/**
+ * iPhone and iPad (iPadOS reports a Mac UA, told apart by touch points).
+ * Every iOS browser is WebKit; a full-viewport WebGL scene on top of a heavy
+ * first load left installed-app launches on a blank screen, so iOS keeps the
+ * static sky (same palette, no WebGL context).
+ */
+export function isIosWebKit(
+  ua: string,
+  platform: string,
+  maxTouchPoints: number,
+): boolean {
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  return platform === "MacIntel" && maxTouchPoints > 1;
 }
 
 /** Whether to create the Three.js layer at all. */
 export function shouldAnimateBackdrop(h: BackdropDeviceHints): boolean {
   if (h.reducedMotion) return false;
+  if (h.ios) return false;
   if (h.saveData) return false;
   if (typeof h.deviceMemory === "number" && h.deviceMemory <= 2) return false;
   return true;
@@ -73,5 +91,6 @@ export function readBackdropHints(): BackdropDeviceHints {
     reducedMotion,
     saveData: nav.connection?.saveData === true,
     deviceMemory: nav.deviceMemory,
+    ios: isIosWebKit(nav.userAgent, nav.platform, nav.maxTouchPoints ?? 0),
   };
 }

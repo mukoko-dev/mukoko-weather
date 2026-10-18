@@ -57,8 +57,7 @@ import type { TagDoc } from "./seed-tags";
 import type { SeasonDoc } from "./seed-seasons";
 import type { ActivityCategoryDoc } from "./seed-categories";
 import type { AIPromptDoc, AISuggestedPromptRule } from "./seed-ai-prompts";
-import { internalApiTarget } from "@/lib/site";
-import { weatherCacheKey } from "./weather-cache-key";
+import { workerUrl } from "@/lib/weather-api";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -775,47 +774,16 @@ export interface WeatherResult {
   source: string;
 }
 
-/** Host of a base URL for logs; never throws on a malformed override. */
-function hostOf(base: string): string {
-  try {
-    return new URL(base).host;
-  } catch {
-    return "invalid-base-url";
-  }
-}
-
 /**
- * Log message for a non-JSON / non-2xx answer from the internal weather
- * endpoint. A 3xx is Deployment Protection (or a misconfigured base) — say
- * so, rather than "unreachable" (issue #262).
- */
-export function internalWeatherFailure(
-  status: number,
-  contentType: string,
-): string {
-  if (status >= 300 && status < 400) {
-    return `Internal weather endpoint redirected (${status}) — likely Deployment Protection; falling back to direct Open-Meteo`;
-  }
-  if (status >= 200 && status < 300) {
-    return `Internal weather endpoint returned non-JSON (${contentType || "no content-type"}), falling back to direct Open-Meteo`;
-  }
-  return `Internal weather endpoint returned ${status}, falling back to direct Open-Meteo`;
-}
-
-/**
- * Get weather data for a location for SSR, checking the MongoDB cache first.
+ * Get weather data for a location for SSR.
  *
- * On cache miss this delegates to GET /api/py/weather — the SINGLE canonical
- * weather fetch/cache/history implementation (issue #101). This TS path is
- * deliberately READ-ONLY against weather_cache/weather_history: it used to be
- * a second independent writer whose document shape (is_day, current_units)
- * and Tomorrow→WMO mapping had drifted from the Python writer's, so the two
- * poisoned each other's cache rows.
- *
- * Fallback order when the internal endpoint is unreachable (e.g. plain
- * `next dev` without the Python functions): a direct Open-Meteo fetch
- * (read-only, no cache write), then the seasonal estimate — the page always
- * renders.
+ * The Rust Worker (`GET /v1/weather`) is the single fetch/cache/history
+ * implementation; this path only reads it. There is no fallback to the
+ * Python functions and no MongoDB cache read (the Worker caches in its own
+ * KV; a cold Atlas connection used to hold the first paint for seconds).
+ * If the Worker has not answered within SSR_HEDGE_AFTER_MS a direct
+ * Open-Meteo read (read-only, no cache write) starts and whichever answers
+ * first wins; then the seasonal estimate. The page always renders.
  */
 export async function getWeatherForLocation(
   slug: string,
@@ -823,30 +791,15 @@ export async function getWeatherForLocation(
   lon: number,
   elevation: number,
 ): Promise<WeatherResult> {
-  // 1. MongoDB cache — fast path, no HTTP hop. Written only by Python, under
-  // the same coordinate-cell key it derives from the lat/lon sent below.
-  // Bounded: a cold Atlas connection must not hold the first paint.
-  try {
-    const cached = await withTimeout(
-      getCachedWeather(weatherCacheKey(lat, lon)),
-      SSR_CACHE_READ_TIMEOUT_MS,
-    );
-    if (cached) return { data: cached, source: "cache" };
-  } catch {
-    // DB unavailable or slow — proceed to the endpoint
-  }
-
-  // 2 + 3. The canonical endpoint, hedged by a direct Open-Meteo read. A cold
-  // Python function used to hold the page for the full 15 s self-fetch timeout
-  // (and then the direct fetch after it): an installed iOS app sat on its
-  // loading screen for ~20 s. Now the direct read starts if the endpoint has
-  // not answered within SSR_HEDGE_AFTER_MS, and whichever answers first wins.
-  const viaEndpoint = fetchViaInternalEndpoint(slug, lat, lon);
+  // The Worker, hedged by a direct Open-Meteo read: the direct read starts if
+  // the Worker has not answered within SSR_HEDGE_AFTER_MS, and whichever
+  // answers first wins, so a slow upstream never holds the first paint.
+  const viaWorker = fetchViaWorker(slug, lat, lon);
   const hedge = delay(SSR_HEDGE_AFTER_MS);
-  const early = await Promise.race([viaEndpoint, hedge.promise]);
+  const early = await Promise.race([viaWorker, hedge.promise]);
   let result: WeatherResult | null;
   if (early === HEDGE_ELAPSED) {
-    result = await firstNonNull([viaEndpoint, fetchDirect(slug, lat, lon)]);
+    result = await firstNonNull([viaWorker, fetchDirect(slug, lat, lon)]);
   } else {
     hedge.cancel();
     result = early ?? (await fetchDirect(slug, lat, lon));
@@ -860,10 +813,8 @@ export async function getWeatherForLocation(
   };
 }
 
-/** Longest the SSR cache read may take before it is treated as a miss. */
-export const SSR_CACHE_READ_TIMEOUT_MS = 2_500;
-/** Self-fetch budget for /api/py/weather (was 15 s). */
-export const SSR_SELF_FETCH_TIMEOUT_MS = 4_000;
+/** Budget for the Worker's /v1/weather during SSR. */
+export const SSR_WORKER_TIMEOUT_MS = 2_500;
 /** Start the direct Open-Meteo read when the endpoint is still silent. */
 export const SSR_HEDGE_AFTER_MS = 1_500;
 /** Direct Open-Meteo budget during SSR (the client default is 10 s). */
@@ -882,15 +833,6 @@ function delay(ms: number): {
   return { promise, cancel: () => clearTimeout(timer) };
 }
 
-/** Rejects when `p` has not settled within `ms`. */
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error("timeout")), ms);
-  });
-  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
-}
-
 /** Resolves with the first non-null answer, or null once every one is null. */
 function firstNonNull<T>(promises: Promise<T | null>[]): Promise<T | null> {
   return new Promise((resolve) => {
@@ -905,31 +847,23 @@ function firstNonNull<T>(promises: Promise<T | null>[]): Promise<T | null> {
 }
 
 /**
- * `GET /api/py/weather` — `redirect: "manual"` + the JSON content-type check
- * (issue #262): a Deployment Protection redirect used to be followed to
- * Vercel's 200 HTML login page, whose JSON parse failure was then logged as
- * "unreachable". Never rejects; null means "use the next source".
+ * `GET {worker}/v1/weather`. Never rejects; null means "use the next source".
+ * `location` keys the history row under THIS page's slug.
  */
-async function fetchViaInternalEndpoint(
+async function fetchViaWorker(
   slug: string,
   lat: number,
   lon: number,
 ): Promise<WeatherResult | null> {
-  const target = internalApiTarget();
-  const host = hostOf(target.base);
+  const url = workerUrl(
+    "weather",
+    `lat=${lat}&lon=${lon}&location=${encodeURIComponent(slug)}`,
+  );
   try {
-    const res = await fetch(
-      // `location` keys the history doc under THIS page's slug, so
-      // /api/py/history?location=<slug> reads what gets recorded (#245).
-      // The cache row is keyed by the lat/lon cell, not the slug (#252).
-      `${target.base}/api/py/weather?lat=${lat}&lon=${lon}&location=${encodeURIComponent(slug)}`,
-      {
-        cache: "no-store",
-        headers: target.headers,
-        redirect: "manual",
-        signal: AbortSignal.timeout(SSR_SELF_FETCH_TIMEOUT_MS),
-      },
-    );
+    const res = await fetch(url, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(SSR_WORKER_TIMEOUT_MS),
+    });
     const contentType = res.headers.get("content-type") ?? "";
     if (res.ok && contentType.includes("application/json")) {
       const data = (await res.json()) as WeatherData;
@@ -938,27 +872,19 @@ async function fetchViaInternalEndpoint(
         source: res.headers.get("x-weather-provider") ?? "open-meteo",
       };
     }
-    // Release the socket — a redirect or HTML body is never read.
     await res.body?.cancel().catch(() => undefined);
     logWarn({
       source: "weather-api",
       location: slug,
-      message: internalWeatherFailure(res.status, contentType),
-      meta: {
-        status: res.status,
-        contentType,
-        host,
-        bypassHeader: Object.keys(target.headers).length > 0,
-      },
+      message: `Weather Worker answered ${res.status}, falling back to direct Open-Meteo`,
+      meta: { status: res.status, contentType },
     });
   } catch (err) {
     logWarn({
       source: "weather-api",
       location: slug,
-      message:
-        "Internal weather endpoint unreachable, falling back to direct Open-Meteo",
+      message: "Weather Worker unreachable, falling back to direct Open-Meteo",
       error: err,
-      meta: { host },
     });
   }
   return null;

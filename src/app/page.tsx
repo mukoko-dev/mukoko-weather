@@ -22,17 +22,7 @@ import { fetchPlaces } from "@/lib/weather-api";
 import { usableIpGeo } from "@/lib/location-choice";
 import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
 
-// Stable base for the server-to-self geo lookup. The per-deployment Vercel
-// hostname env var points at a protected preview origin that 401s the self-fetch
-// (Deployment Protection) — the failure is swallowed and onboarding silently
-// degrades. Prefer the production hostname (like the embed route's fixed base) so
-// the lookup targets a stable, publicly reachable origin; fall back to localhost
-// only in development.
-const APP_URL =
-  process.env.NEXT_PUBLIC_APP_URL ??
-  (process.env.NODE_ENV === "production" ? SITE_URL : "http://localhost:3000");
-
-// Bound the server-to-self geo fetch so a hung or protected upstream can't stall
+// Bound the Worker geo fetch so a hung or protected upstream can't stall
 // the home render — the onboarding chooser is a fine fallback.
 const GEO_FETCH_TIMEOUT_MS = 2500;
 
@@ -84,7 +74,57 @@ export default function Home() {
   );
 }
 
+/**
+ * Longest the server render may spend resolving the seeded location and its
+ * weather. Past it the page streams the client chooser (GPS / search, which
+ * fetches from the Worker itself) instead of holding the first paint: an
+ * installed iOS app sat on its loading screen for 30 s behind a slow
+ * upstream.
+ */
+const HOME_SEED_DEADLINE_MS = 3_500;
+
+const SEED_DEADLINE = Symbol("seed-deadline");
+
+/** `work`, or SEED_DEADLINE once `ms` has passed. */
+function withinDeadline<T>(
+  work: Promise<T>,
+  ms: number,
+): Promise<T | typeof SEED_DEADLINE> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(SEED_DEADLINE), ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 async function HomeContent() {
+  const built = await withinDeadline(buildHome(), HOME_SEED_DEADLINE_MS);
+  if (built !== SEED_DEADLINE) return built;
+  const user = await withinDeadline(
+    getCurrentUser().catch(() => null),
+    500,
+  );
+  return (
+    <CurrentLocationHome
+      initial={null}
+      user={
+        user && user !== SEED_DEADLINE
+          ? { id: user.id, email: user.email ?? null }
+          : null
+      }
+    />
+  );
+}
+
+async function buildHome() {
   // Only trust a cookie whose slug both looks valid AND actually resolves to
   // a real location. A stale cookie pointing at a deleted/never-existent slug
   // would otherwise strand the visitor on a broken page every time — falling
@@ -126,9 +166,6 @@ async function HomeContent() {
           // names an IP position better anyway.
           `lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&autoCreate=false&noName=1`,
           { cache: "no-store", signal: controller.signal },
-          process.env,
-          fetch,
-          APP_URL,
         );
         if (res.ok) {
           const data = await res.json();

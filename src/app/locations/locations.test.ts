@@ -114,7 +114,7 @@ describe("locations list — client", () => {
     );
     expect(clientSource).toContain("CARD_WEATHER_TTL_MS");
     expect(clientSource).toContain("new TtlCache<LoadedCard>(");
-    expect(clientSource).toContain("/api/py/weather?lat=");
+    expect(clientSource).toContain('fetchWorker(\n    "weather"');
   });
 
   it("pins the search bar to the bottom and reuses the shared quick search", () => {
@@ -259,7 +259,7 @@ describe("legacy {name}-{cc} saved slugs", () => {
   it("falls back to a catalogue search instead of 'Weather unavailable'", () => {
     expect(clientSource).toContain("resolveLegacySlug");
     expect(clientSource).toContain("legacySlugQuery");
-    expect(clientSource).toContain("/api/py/search?q=");
+    expect(clientSource).toContain('"search"');
   });
 
   it("the search pill sticks above the floating nav stack via the clearance token", () => {
