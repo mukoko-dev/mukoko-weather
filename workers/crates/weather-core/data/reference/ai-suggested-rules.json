@@ -1,0 +1,277 @@
+[
+  {
+    "ruleId": "weather:storm",
+    "label": "Storm safety",
+    "queryTemplate": "Is it safe to be outdoors in {location} during this storm?",
+    "category": "weather",
+    "condition": {
+      "field": "weather_code",
+      "operator": "gte",
+      "value": 95,
+      "source": "weather"
+    },
+    "active": true,
+    "order": 1
+  },
+  {
+    "ruleId": "weather:frost",
+    "label": "Frost precautions",
+    "queryTemplate": "What frost precautions should I take in {location}?",
+    "category": "weather",
+    "condition": {
+      "field": "temperature_2m",
+      "operator": "lte",
+      "value": 3,
+      "source": "weather"
+    },
+    "active": true,
+    "order": 2
+  },
+  {
+    "ruleId": "weather:heat",
+    "label": "Heat safety",
+    "queryTemplate": "Is it safe to work outdoors in {location} at {temperature}°C?",
+    "category": "weather",
+    "condition": {
+      "field": "temperature_2m",
+      "operator": "gte",
+      "value": 35,
+      "source": "weather"
+    },
+    "active": true,
+    "order": 3
+  },
+  {
+    "ruleId": "weather:uv",
+    "label": "UV protection",
+    "queryTemplate": "What sun protection do I need with a UV index of {uvIndex}?",
+    "category": "weather",
+    "condition": {
+      "field": "uv_index",
+      "operator": "gte",
+      "value": 8,
+      "source": "weather"
+    },
+    "active": true,
+    "order": 4
+  },
+  {
+    "ruleId": "weather:rain_active",
+    "label": "Rain now",
+    "queryTemplate": "Will the current rain affect my plans in {location} today?",
+    "category": "weather",
+    "condition": {
+      "field": "precipitation",
+      "operator": "gt",
+      "value": 0,
+      "source": "weather"
+    },
+    "active": true,
+    "order": 5
+  },
+  {
+    "ruleId": "weather:rain_forecast",
+    "label": "Rain forecast",
+    "queryTemplate": "Should I prepare for rain in {location} later today?",
+    "category": "weather",
+    "condition": {
+      "field": "precipitation_probability",
+      "operator": "gt",
+      "value": 50,
+      "source": "hourly"
+    },
+    "active": true,
+    "order": 6
+  },
+  {
+    "ruleId": "weather:humidity",
+    "label": "Crop spraying",
+    "queryTemplate": "Is it safe to spray crops in {location} with {humidity}% humidity?",
+    "category": "weather",
+    "condition": {
+      "field": "relative_humidity_2m",
+      "operator": "gt",
+      "value": 75,
+      "source": "weather"
+    },
+    "active": true,
+    "order": 7
+  },
+  {
+    "ruleId": "weather:wind",
+    "label": "Wind impact",
+    "queryTemplate": "How will {windSpeed} km/h wind affect outdoor activities?",
+    "category": "weather",
+    "condition": {
+      "field": "wind_speed_10m",
+      "operator": "gt",
+      "value": 30,
+      "source": "weather"
+    },
+    "active": true,
+    "order": 8
+  },
+  {
+    "ruleId": "activity:farming",
+    "label": "Farming advice",
+    "queryTemplate": "How does today's weather affect farming in {location}?",
+    "category": "activity",
+    "condition": {
+      "field": "activities",
+      "operator": "in",
+      "value": [
+        "crop-farming",
+        "livestock",
+        "tobacco-farming",
+        "cotton-farming",
+        "horticulture",
+        "irrigation",
+        "planting",
+        "harvest",
+        "aquaculture"
+      ],
+      "source": "activities"
+    },
+    "active": true,
+    "order": 10
+  },
+  {
+    "ruleId": "activity:conservation",
+    "label": "Conservation conditions",
+    "queryTemplate": "How do weather conditions affect conservation work in {location} today?",
+    "category": "activity",
+    "condition": {
+      "field": "activities",
+      "operator": "in",
+      "value": ["conservation", "wildlife-research"],
+      "source": "activities"
+    },
+    "active": true,
+    "order": 11
+  },
+  {
+    "ruleId": "activity:drone",
+    "label": "Drone conditions",
+    "queryTemplate": "Can I fly my drone safely in {location} today?",
+    "category": "activity",
+    "condition": {
+      "field": "activities",
+      "operator": "in",
+      "value": ["drone-flying"],
+      "source": "activities"
+    },
+    "active": true,
+    "order": 12
+  },
+  {
+    "ruleId": "activity:exercise",
+    "label": "Best time to exercise",
+    "queryTemplate": "What's the best time to exercise outdoors in {location} today?",
+    "category": "activity",
+    "condition": {
+      "field": "activities",
+      "operator": "in",
+      "value": ["running", "cycling", "hiking", "athletics", "swimming"],
+      "source": "activities"
+    },
+    "active": true,
+    "order": 13
+  },
+  {
+    "ruleId": "activity:events",
+    "label": "Event weather",
+    "queryTemplate": "Will the weather be good for an outdoor event in {location} today?",
+    "category": "activity",
+    "condition": {
+      "field": "activities",
+      "operator": "in",
+      "value": ["outdoor-events", "festivals", "weddings"],
+      "source": "activities"
+    },
+    "active": true,
+    "order": 14
+  },
+  {
+    "ruleId": "activity:transport",
+    "label": "Transport conditions",
+    "queryTemplate": "How do weather conditions affect transport and logistics in {location}?",
+    "category": "activity",
+    "condition": {
+      "field": "activities",
+      "operator": "in",
+      "value": ["trucking", "shipping", "driving"],
+      "source": "activities"
+    },
+    "active": true,
+    "order": 15
+  },
+  {
+    "ruleId": "generic:plan_day",
+    "label": "Plan my day",
+    "queryTemplate": "What should I plan for today in {location}?",
+    "category": "generic",
+    "condition": null,
+    "active": true,
+    "order": 100
+  },
+  {
+    "ruleId": "explore:drone",
+    "label": "Drone flying today",
+    "queryTemplate": "Can I fly a drone today?",
+    "category": "generic",
+    "condition": null,
+    "active": true,
+    "order": 200,
+    "surface": "explore"
+  },
+  {
+    "ruleId": "explore:farming",
+    "label": "Farming advice",
+    "queryTemplate": "What's the best time to plant crops this season?",
+    "category": "generic",
+    "condition": null,
+    "active": true,
+    "order": 201,
+    "surface": "explore"
+  },
+  {
+    "ruleId": "explore:safari",
+    "label": "Safari weather",
+    "queryTemplate": "What's the weather like for safari this weekend?",
+    "category": "generic",
+    "condition": null,
+    "active": true,
+    "order": 202,
+    "surface": "explore"
+  },
+  {
+    "ruleId": "explore:compare",
+    "label": "Compare cities",
+    "queryTemplate": "Compare weather in Nairobi and Bangkok",
+    "category": "generic",
+    "condition": null,
+    "active": true,
+    "order": 203,
+    "surface": "explore"
+  },
+  {
+    "ruleId": "explore:road_trip",
+    "label": "Road trip",
+    "queryTemplate": "Is it safe for a road trip today?",
+    "category": "generic",
+    "condition": null,
+    "active": true,
+    "order": 204,
+    "surface": "explore"
+  },
+  {
+    "ruleId": "explore:weekend",
+    "label": "Weekend plans",
+    "queryTemplate": "What outdoor activities can I do this weekend?",
+    "category": "generic",
+    "condition": null,
+    "active": true,
+    "order": 205,
+    "surface": "explore"
+  }
+]

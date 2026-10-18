@@ -10,6 +10,7 @@
 import type { Activity } from "./activities";
 import type { ActivityCategoryDoc } from "./seed-categories";
 import { fetchJson } from "./fetch-json";
+import { workerUrl } from "@/lib/worker-url";
 
 const CATALOGUE_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
@@ -52,16 +53,16 @@ function loadList<T>(
 const activitiesCache = newListCache<Activity>();
 const categoriesCache = newListCache<ActivityCategoryDoc>();
 
-/** All activities from `/api/py/activities`. `[]` when unavailable. */
+/** All activities from the Worker (`/v1/activities`). `[]` when unavailable. */
 export function fetchActivities(): Promise<Activity[]> {
-  return loadList(activitiesCache, "/api/py/activities", "activities");
+  return loadList(activitiesCache, workerUrl("/v1/activities"), "activities");
 }
 
-/** Activity categories (with mineral styles) from `/api/py/activities?mode=categories`. `[]` when unavailable. */
+/** Activity categories (with mineral styles) from `/v1/activities?mode=categories`. `[]` when unavailable. */
 export function fetchActivityCategories(): Promise<ActivityCategoryDoc[]> {
   return loadList(
     categoriesCache,
-    "/api/py/activities?mode=categories",
+    workerUrl("/v1/activities?mode=categories"),
     "categories",
   );
 }
