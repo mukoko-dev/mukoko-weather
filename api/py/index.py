@@ -30,18 +30,12 @@ from ._weather import router as weather_router
 from ._ai import router as ai_router
 from ._locations import router as locations_router
 from ._history import router as history_router
-from ._status import router as status_router
-from ._tiles import router as tiles_router
 from ._stations import router as stations_router
 from ._ai_followup import router as ai_followup_router
 from ._history_analyze import router as history_analyze_router
 from ._explore_search import router as explore_search_router
 from ._reports import router as reports_router
-from ._metar import router as metar_router
 from ._air_quality import router as air_quality_router
-from ._haze import router as haze_router
-from ._airports import router as airports_router
-from ._normals import router as normals_router
 from ._agriculture import router as agriculture_router
 from ._place_knowledge import router as place_knowledge_router
 from ._db import get_db
@@ -109,17 +103,11 @@ app.include_router(weather_router)
 app.include_router(ai_router)
 app.include_router(locations_router)
 app.include_router(history_router)
-app.include_router(status_router)
-app.include_router(tiles_router)
 app.include_router(ai_followup_router)
 app.include_router(history_analyze_router)
 app.include_router(explore_search_router)
 app.include_router(reports_router)
-app.include_router(metar_router)
 app.include_router(air_quality_router)
-app.include_router(haze_router)
-app.include_router(airports_router)
-app.include_router(normals_router)
 app.include_router(agriculture_router)
 app.include_router(place_knowledge_router)
 

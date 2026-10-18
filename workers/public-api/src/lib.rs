@@ -11,8 +11,11 @@
 //! GET /v1/forecast?location=|lat=&lon=[&days=1..7]   the daily forecast contract
 //! GET /v1/air-quality?lat=&lon=                     the EPA AQI, the shape of /api/py/airquality
 //! GET /v1/air-quality/grid?lat=&lon=[&radiusKm=&n=]  US AQI on an n x n grid (the shape of /api/py/airquality/grid)
+//! GET /v1/haze?lat=&lon=                             haze panel data (the shape of /api/py/haze)
+//! GET /v1/normals?lat=&lon=[&date=]                  climate normals (the shape of /api/py/normals)
 //! GET /v1/enso                                       El Nino / La Nina phase (the shape of /api/py/enso)
 //! GET /v1/sg-air?lat=&lon=                           official Singapore NEA air quality (the shape of /api/py/sg-air)
+//! GET /v1/aviation/nearest-metar?lat=&lon=           nearest airport with a recent METAR (the shape of /api/py/aviation/nearest-metar)
 //! GET /v1/metar?icao=                                METARs and TAF, the shape of /api/py/metar
 //! GET /v1/airports/nearest?lat=&lon=[&count=][&maxDistanceKm=]
 //!                                                    the shape of /api/py/airports/nearest
@@ -41,8 +44,8 @@ mod keys;
 use serde_json::Value;
 use weather_core::cors::origin_allowed;
 use weather_core::query::ForecastQuery;
-use weather_core::{geo, normalize, places, reference};
-use weather_edge::{config, error, json, now, query_pairs};
+use weather_core::{geo, normalize, places, reference, status as health};
+use weather_edge::{config, error, get_with_timeout, json, now, now_ms, now_rfc3339, query_pairs};
 use worker::wasm_bindgen::JsValue;
 use worker::{event, Context, Env, Headers, Method, Request, RequestInit, Response, Result};
 
@@ -129,8 +132,29 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
             )
             .await
         }
+        "/v1/haze" => relay(req, env, FORECAST_BINDING, "/haze", "public, max-age=900").await,
+        "/v1/normals" => {
+            relay(
+                req,
+                env,
+                FORECAST_BINDING,
+                "/normals",
+                "public, max-age=86400",
+            )
+            .await
+        }
         "/v1/enso" => relay(req, env, FORECAST_BINDING, "/enso", "public, max-age=3600").await,
         "/v1/sg-air" => relay(req, env, FORECAST_BINDING, "/sg-air", "public, max-age=300").await,
+        "/v1/aviation/nearest-metar" => {
+            relay(
+                req,
+                env,
+                AVIATION_BINDING,
+                "/aviation/nearest-metar",
+                "public, max-age=300",
+            )
+            .await
+        }
         "/v1/model-grid" => {
             relay(
                 req,
@@ -153,6 +177,7 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
             .await
         }
         "/v1/locations" | "/v1/search" | "/v1/geo" | "/v1/history" => places(req, env).await,
+        "/v1/status" => status(env).await,
         path if reference::serves(path) => {
             let query = query_pairs(req)?;
             match reference::reply(path, &query) {
@@ -517,5 +542,83 @@ async fn places(req: &Request, env: &Env) -> Result<Response> {
     if let Some(cc) = upstream.headers().get("Cache-Control")? {
         resp.headers().set("Cache-Control", &cc)?;
     }
+    Ok(resp)
+}
+
+/// How long a probe of another Worker or Open-Meteo may take.
+const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+/// The status payload is rebuilt at most this often (seconds).
+const STATUS_TTL_S: &str = "public, max-age=60";
+const OPEN_METEO_PROBE: &str =
+    "https://api.open-meteo.com/v1/forecast?latitude=-17.83&longitude=31.05&current=temperature_2m";
+
+/// `GET <binding>/health`, timed.
+async fn probe_worker(env: &Env, binding: &str) -> (health::Probe, u64) {
+    let started = now_ms();
+    let outcome = match env.service(binding) {
+        Ok(fetcher) => {
+            let call = Box::pin(fetcher.fetch("https://upstream/health".to_owned(), None));
+            let timer = Box::pin(worker::Delay::from(PROBE_TIMEOUT));
+            match futures::future::select(call, timer).await {
+                futures::future::Either::Left((Ok(resp), _)) => Some(resp),
+                _ => None,
+            }
+        }
+        Err(_) => None,
+    };
+    let probe = match outcome {
+        Some(mut resp) if resp.status_code() == 200 => match resp.json::<Value>().await {
+            Ok(body) => health::Probe::Healthy(body),
+            Err(_) => health::Probe::Status(502),
+        },
+        Some(resp) => health::Probe::Status(resp.status_code()),
+        None => health::Probe::Unreachable,
+    };
+    (probe, now_ms().saturating_sub(started))
+}
+
+async fn probe_open_meteo() -> (Result<Option<f64>, u16>, u64) {
+    let started = now_ms();
+    let outcome = match get_with_timeout(OPEN_METEO_PROBE, None, PROBE_TIMEOUT).await {
+        Ok(mut resp) if resp.status_code() == 200 => Ok(resp
+            .json::<Value>()
+            .await
+            .ok()
+            .and_then(|b| b["current"]["temperature_2m"].as_f64())),
+        Ok(resp) => Err(resp.status_code()),
+        Err(_) => Err(0),
+    };
+    (outcome, now_ms().saturating_sub(started))
+}
+
+/// `GET /v1/status`: live health of the Workers and Open-Meteo, in the shape
+/// the status page reads (`weather_core::status`).
+async fn status(env: &Env) -> Result<Response> {
+    let started = now_ms();
+    let (forecast, places, aviation, ai, meteo) = futures::join!(
+        probe_worker(env, FORECAST_BINDING),
+        probe_worker(env, PLACES_BINDING),
+        probe_worker(env, AVIATION_BINDING),
+        probe_worker(env, AI_BINDING),
+        probe_open_meteo(),
+    );
+    let mut checks = vec![health::worker_row(
+        "Forecast Worker",
+        &forecast.0,
+        forecast.1,
+    )];
+    checks.extend(health::forecast_storage_row(&forecast.0, forecast.1));
+    checks.push(health::enrichment_row(&forecast.0, forecast.1));
+    checks.push(health::worker_row("Places Worker", &places.0, places.1));
+    checks.push(health::worker_row(
+        "Aviation Worker",
+        &aviation.0,
+        aviation.1,
+    ));
+    checks.push(health::ai_row(&ai.0, ai.1));
+    checks.push(health::open_meteo_row(meteo.0, meteo.1));
+    let body = health::payload(checks, &now_rfc3339(), now_ms().saturating_sub(started));
+    let resp = json(200, &body)?;
+    resp.headers().set("Cache-Control", STATUS_TTL_S)?;
     Ok(resp)
 }

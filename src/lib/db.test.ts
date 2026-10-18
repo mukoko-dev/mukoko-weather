@@ -862,15 +862,6 @@ describe("syncAirports keeps airports fetched on demand (#302)", () => {
     });
   });
 
-  it("uses the same source tag as the Python writer", async () => {
-    const { DISCOVERED_AIRPORT_SOURCE } = await import("./db");
-    const py = readFileSync(
-      resolve(__dirname, "../../api/py/_airports.py"),
-      "utf-8",
-    );
-    expect(py).toContain(`DISCOVERED_SOURCE = "${DISCOVERED_AIRPORT_SOURCE}"`);
-  });
-
   it("syncAirports deletes through the prune filter", () => {
     const source = readFileSync(resolve(__dirname, "db.ts"), "utf-8");
     expect(source).toContain(

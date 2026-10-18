@@ -57,6 +57,9 @@ export type WorkerRoute =
   | "air-quality/grid"
   | "enso"
   | "sg-air"
+  | "haze"
+  | "normals"
+  | "aviation/nearest-metar"
   | "devices"
   | `devices/${string}`;
 
