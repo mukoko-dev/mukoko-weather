@@ -53,7 +53,8 @@ describe("AgricultureSnapshot", () => {
   it("is labelled by its heading and uses the malachite (farming) mineral", () => {
     expect(src).toContain('aria-labelledby="agri-snapshot-heading"');
     expect(src).toContain('id="agri-snapshot-heading"');
-    expect(src).toContain("border-l-mineral-malachite");
+    expect(src).toContain("border-mineral-malachite/40");
+    expect(src).not.toContain("border-l-");
   });
 
   it("uses the shared .meerkat stat tile", () => {

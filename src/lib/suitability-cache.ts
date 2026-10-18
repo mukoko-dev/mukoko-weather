@@ -128,7 +128,6 @@ let cachedStylesAt = 0;
 export type CategoryStyle = {
   bg: string;
   border: string;
-  borderAccent?: string;
   text: string;
   badge: string;
 };

@@ -390,17 +390,28 @@ describe("withoutStyleAttributions (no duplicate base-map credits)", () => {
       .replace(/[^a-z0-9 ]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
+  // Strip tags until the string stops changing, so nested fragments such as
+  // "<<b>script>" cannot survive a single pass.
+  const stripTags = (html: string): string => {
+    let prev: string;
+    let out = html;
+    do {
+      prev = out;
+      out = out.replace(/<[^>]*>/g, "");
+    } while (out !== prev);
+    return out;
+  };
   // What MapLibre's AttributionControl shows: the custom credits plus every
   // source's own attribution, split into individual credits.
   const rendered = (s: { sources: Record<string, unknown> }, custom: string) =>
-    [
-      custom,
-      ...Object.values(s.sources).map(
-        (x) => (x as { attribution?: string }).attribution ?? "",
-      ),
-    ]
-      .join("|")
-      .replace(/<[^>]+>/g, "")
+    stripTags(
+      [
+        custom,
+        ...Object.values(s.sources).map(
+          (x) => (x as { attribution?: string }).attribution ?? "",
+        ),
+      ].join("|"),
+    )
       .replace(/&copy;/g, "©")
       .split(/[|·]|(?=©)/)
       .map(norm)

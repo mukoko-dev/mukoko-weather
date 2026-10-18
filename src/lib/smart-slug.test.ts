@@ -3,7 +3,10 @@
  */
 import { describe, it, expect } from "vitest";
 import {
+  COORDINATE_NAME_RE,
   SMART_SLUG_DELIMITER,
+  coordinateLabel,
+  isCoordinateNameSlug,
   buildPlaceSlug,
   buildSmartSlug,
   isLegacySlug,
@@ -241,5 +244,36 @@ describe("place slugs — identity from the map", () => {
     expect(isSmartSlug("west-paddock--ksy4dd7")).toBe(true);
     // And neither is mistakable for a legacy catalog slug.
     expect(isLegacySlug("harare")).toBe(true);
+  });
+});
+
+describe("coordinate spots (any valid coordinate renders)", () => {
+  // The same vectors as weather_core::resolve (workers/crates/weather-core).
+  it.each([
+    [12.3456, 45.6789, "12.35\u00b0N 45.68\u00b0E", "12-35n-45-68e"],
+    [-40.0, -20.0, "40.00\u00b0S 20.00\u00b0W", "40-00s-20-00w"],
+    [0, 0, "0.00\u00b0N 0.00\u00b0E", "0-00n-0-00e"],
+    [-0.004, 0.004, "0.00\u00b0N 0.00\u00b0E", "0-00n-0-00e"],
+    [90, 180, "90.00\u00b0N 180.00\u00b0E", "90-00n-180-00e"],
+    [-90, -180, "90.00\u00b0S 180.00\u00b0W", "90-00s-180-00w"],
+  ])("labels %s,%s as %s", (lat, lon, label, nameSlug) => {
+    expect(coordinateLabel(lat, lon)).toBe(label);
+    expect(COORDINATE_NAME_RE.test(nameSlug)).toBe(true);
+    expect(isCoordinateNameSlug(nameSlug)).toBe(true);
+  });
+
+  it("recognises a bare `place` and rejects ordinary names", () => {
+    expect(isCoordinateNameSlug("place")).toBe(true);
+    for (const name of ["harare", "12-35", "ko-samui", "40-0s-20-0w", ""]) {
+      expect(isCoordinateNameSlug(name)).toBe(false);
+    }
+  });
+
+  it("a coordinate slug parses as a spot at its cell", () => {
+    const slug = `12-35n-45-68e${SMART_SLUG_DELIMITER}${encodeGeohash(12.35, 45.68, 7)}`;
+    const parsed = parseSmartSlug(slug);
+    expect(parsed?.ref.kind).toBe("spot");
+    expect(parsed?.lat).toBeCloseTo(12.35, 2);
+    expect(parsed?.lon).toBeCloseTo(45.68, 2);
   });
 });
