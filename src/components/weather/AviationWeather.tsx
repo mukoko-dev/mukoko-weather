@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getFlightCategoryClass } from "@/lib/flight-category-styles";
+import { fetchWorker } from "@/lib/weather-api";
 
 interface CloudLayer {
   cover: string;
@@ -243,11 +244,14 @@ export function AviationWeather({ slug, lat, lon }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    const url = pickedIcao
-      ? `/api/py/metar?icao=${encodeURIComponent(pickedIcao)}`
-      : `/api/py/aviation/nearest-metar?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`;
-
-    fetch(url)
+    // The picked station is a Worker route; the nearest-station search is
+    // not on the Worker yet and stays on /api/py.
+    (pickedIcao
+      ? fetchWorker("metar", `icao=${encodeURIComponent(pickedIcao)}`)
+      : fetch(
+          `/api/py/aviation/nearest-metar?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`,
+        )
+    )
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();

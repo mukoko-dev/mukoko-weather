@@ -4,6 +4,7 @@ import { roundCoord } from "@/lib/location-privacy";
 import { useState, useEffect, useRef } from "react";
 import { MetricCard, type GaugeConfig } from "./MetricCard";
 import { CloudIcon } from "@/lib/weather-icons";
+import { fetchWorker } from "@/lib/weather-api";
 
 /**
  * Air Quality Index (AQI) gauge card.
@@ -115,9 +116,13 @@ export function AirQualityCard({ lat, lon }: Props) {
 
     let cancelled = false;
 
-    fetch(`/api/py/airquality?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`, {
-      signal: controller.signal,
-    })
+    fetchWorker(
+      "air-quality",
+      `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`,
+      {
+        signal: controller.signal,
+      },
+    )
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json() as Promise<AirQualityResponse>;

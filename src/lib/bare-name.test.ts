@@ -112,15 +112,18 @@ describe("resolveBareName", () => {
     expect(init.cache).toBe("no-store");
   });
 
-  it("is off until the Worker is configured: no call, no cache", async () => {
-    const fetcher = ok();
+  it("asks the production Worker by default, and never a plaintext override", async () => {
     for (const env of [
       {},
       { NEXT_PUBLIC_WEATHER_API_URL: "http://evil.test" },
     ]) {
-      expect(await resolveBareName("koh-samui", { fetcher, env })).toBeNull();
+      const fetcher = ok();
+      await resolveBareName("koh-samui", { fetcher, env });
+      expect(String(fetcher.mock.calls[0][0])).toContain(
+        "https://weather-api.mukoko.com/v1/search?mode=resolve",
+      );
+      resetBareNameCache();
     }
-    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it("accepts a shipped seed slug as the target", async () => {

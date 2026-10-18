@@ -64,7 +64,7 @@ describe("detectUserLocation", () => {
     expect(r.isNew).toBe(true);
   });
 
-  it("falls back to /api/py when the Worker answers a 5xx", async () => {
+  it("retries the Worker once on a 5xx (never /api/py)", async () => {
     stubGps(1, 2);
     const fetcher = vi
       .fn()
@@ -72,18 +72,20 @@ describe("detectUserLocation", () => {
       .mockResolvedValueOnce(answer({ nearest: seed }));
     vi.stubGlobal("fetch", fetcher);
     const r = await detectUserLocation();
-    expect(fetcher.mock.calls[1][0]).toBe("/api/py/geo?lat=1&lon=2");
+    expect(String(fetcher.mock.calls[1][0])).toContain("/v1/geo?lat=1&lon=2");
     expect(r.location?.slug).toBe("harare");
   });
 
-  it("uses only /api/py while the Worker switch is off", async () => {
+  it("uses the production Worker when no override is set", async () => {
     vi.stubEnv("NEXT_PUBLIC_WEATHER_API_URL", "");
     stubGps(1, 2);
     const fetcher = vi.fn(async (_url: string) => answer({ nearest: seed }));
     vi.stubGlobal("fetch", fetcher);
     await detectUserLocation();
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(fetcher.mock.calls[0][0]).toBe("/api/py/geo?lat=1&lon=2");
+    expect(String(fetcher.mock.calls[0][0])).toBe(
+      "https://weather-api.mukoko.com/v1/geo?lat=1&lon=2",
+    );
   });
 
   it("reports a definitive nothing as unnamed, not as skipped", async () => {
