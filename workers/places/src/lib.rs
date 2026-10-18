@@ -11,6 +11,7 @@
 //! GET /search?q= | tag= | lat=&lon= | mode=tags              [&limit=1..50&skip=]
 //! GET /geo?lat=&lon=[&autoCreate=true]
 //! GET /history?location=&days=1..365
+//! POST /devices | GET, PATCH /devices/{id}   device preference profiles (D1)
 //! GET /health
 //! ```
 //!
@@ -25,6 +26,8 @@
 //! `mukoko-weather-jobs`.
 
 mod budget;
+mod community;
+mod limits;
 mod sources;
 
 use serde_json::{json, Value};
@@ -58,7 +61,10 @@ impl Query {
 }
 
 #[event(fetch)]
-pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    if req.path().starts_with("/devices") {
+        return community::devices(&mut req, &env).await;
+    }
     if req.method() != Method::Get {
         return error(405, "method_not_allowed", "Only GET is served.");
     }

@@ -21,6 +21,7 @@
 //! GET /v1/airports/nearest?lat=&lon=[&count=][&maxDistanceKm=]
 //!                                                    the shape of /api/py/airports/nearest
 //! GET /v1/locations, /v1/search, /v1/geo, /v1/history   places (mukoko-weather-places)
+//! POST /v1/devices, GET|PATCH /v1/devices/{id}      device preference profiles
 //! POST /v1/ai, /v1/ai/{summary,followup,chat,history/analyze}   Shamwari Weather
 //! GET /health
 //! ```
@@ -54,6 +55,8 @@ const AVIATION_BINDING: &str = "AVIATION";
 const AI_BINDING: &str = "AI_SERVICE";
 /// AI request bodies larger than this are refused here.
 const MAX_AI_BODY_BYTES: usize = 64 * 1024;
+/// Device profile bodies are a few hundred bytes.
+const MAX_DEVICE_BODY_BYTES: usize = 16 * 1024;
 const RATE_LIMITER: &str = "RATE_LIMITER";
 const KEY_RATE_LIMITER: &str = "KEY_RATE_LIMITER";
 const PLACES_BINDING: &str = "PLACES";
@@ -77,6 +80,16 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
             limited
         } else {
             forward_ai(&mut req, &env).await
+        }
+    } else if is_devices_path(&req.path()) {
+        match req.method() {
+            Method::Get | Method::Post | Method::Patch => {
+                match rate_limited(&req, &env, &keys::Caller::Anonymous).await {
+                    Some(limited) => limited,
+                    None => forward_devices(&mut req, &env).await,
+                }
+            }
+            _ => error(405, "method_not_allowed", "Use POST, GET or PATCH."),
         }
     } else if req.method() != Method::Get {
         error(405, "method_not_allowed", "Only GET is served.")
@@ -201,7 +214,7 @@ fn preflight(allowed: bool) -> Result<Response> {
     let resp = Response::empty()?.with_status(if allowed { 204 } else { 403 });
     if allowed {
         let h = resp.headers();
-        h.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")?;
+        h.set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")?;
         h.set(
             "Access-Control-Allow-Headers",
             "Content-Type, Authorization, X-Mukoko-Client, X-API-Key, X-Client-Id, X-Client-Secret",
@@ -251,6 +264,58 @@ async fn rate_limited(req: &Request, env: &Env, caller: &keys::Caller) -> Option
             Some(resp)
         }
         _ => None,
+    }
+}
+
+fn is_devices_path(path: &str) -> bool {
+    path == "/v1/devices" || path.starts_with("/v1/devices/")
+}
+
+/// Device preference profiles: `POST /v1/devices`, `GET` and `PATCH
+/// /v1/devices/{id}`, passed to `mukoko-weather-places` with the client's IP.
+async fn forward_devices(req: &mut Request, env: &Env) -> Result<Response> {
+    let method = req.method();
+    let body = if method == Method::Get {
+        String::new()
+    } else {
+        let text = req.text().await.unwrap_or_default();
+        if text.len() > MAX_DEVICE_BODY_BYTES {
+            return error(413, "payload_too_large", "The request body is too large.");
+        }
+        text
+    };
+    let path = req.path();
+    let headers = Headers::new();
+    headers.set("Content-Type", "application/json")?;
+    headers.set("X-Mukoko-Client-IP", &client_ip(req))?;
+    let mut init = RequestInit::new();
+    init.with_method(method).with_headers(headers);
+    if !body.is_empty() {
+        init.with_body(Some(JsValue::from_str(&body)));
+    }
+    let inner = Request::new_with_init(
+        &format!("https://places{}", path.trim_start_matches("/v1")),
+        &init,
+    )?;
+    let Ok(mut upstream) = env.service(PLACES_BINDING)?.fetch_request(inner).await else {
+        return error(
+            502,
+            "upstream_unreachable",
+            "The places service did not answer.",
+        );
+    };
+    let status = upstream.status_code();
+    match upstream.json::<Value>().await {
+        Ok(body) => {
+            let resp = json(status, &body)?;
+            resp.headers().set("Cache-Control", "no-store")?;
+            Ok(resp)
+        }
+        Err(_) => error(
+            502,
+            "upstream_malformed",
+            "The places service sent a bad answer.",
+        ),
     }
 }
 

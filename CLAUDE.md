@@ -329,7 +329,7 @@ mukoko-weather/
 │   │   ├── store.ts               # Zustand app state (theme, location, activities, hasOnboarded, ShamwariContext, reportModal, RxDB init via initializeDeviceSync)
 │   │   ├── theme.ts               # Dependency-free resolveTheme (re-exported from store.ts; used by the embed widget + MapLibreMap)
 │   │   ├── store.test.ts          # Theme resolution, ShamwariContext TTL tests, RxDB init
-│   │   ├── rxdb/                  # RxDB local-first store: bridge.ts (Zustand ↔ IndexedDB preferences), replication.ts (sync to /api/py/devices), database/collections/schemas
+│   │   ├── rxdb/                  # RxDB local-first store: bridge.ts (Zustand ↔ IndexedDB preferences), replication.ts (sync to `/v1/devices` on the Rust Worker), database/collections/schemas
 │   │   ├── push/                  # Web push (#289), framework-agnostic and injected so it tests in node: client.ts (support/permission state, enablePush/disablePush, VAPID key check, /api/push client), sw-logic.ts (service-worker side: payload → notification with FALLBACK, same-origin safeTarget, click handling, pushsubscriptionchange resubscribe), push.test.ts. src/app/sw.ts only wires these to the push / notificationclick / pushsubscriptionchange events. Nothing in the app sends a push; the Rust rules live in workers/crates/weather-core/src/push.rs
 │   │   ├── suggested-prompts.ts   # Database-driven suggested prompt generation (fetches from the Worker, /v1/ai/suggested-rules)
 │   │   ├── suggested-prompts.test.ts
@@ -606,7 +606,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/history` archive backfill — 30 attempts/hour (bucket key `history-backfill`; only gates the Open-Meteo archive gap-fill, never the read itself)
 - `/api/py/locations/add` — 5 req/hour
 - `/api/py/geo?autoCreate=true` — 5 req/hour (bucket key `location-create`, shared with `/api/py/locations/add`'s coordinates mode — same expensive reverse-geocode + DB-write cost). The find-only path (`autoCreate=false`) stays unlimited while it is a cheap read; only its on-demand naming fallback (below) is budgeted: 30/hour per IP (bucket `geo-find-geocode`) and 900/hour service-wide (`geo-find-geocode-global`), skipped (404 as before), never a 429
-- `/api/py/devices` (create) — 20 req/hour, only when `deviceId` is omitted/fresh (unbounded doc creation); an existing/caller-supplied `deviceId` is idempotent and skips the limiter
+- `POST /v1/devices` (Rust places Worker, D1 `rate_events`) — 20 req/hour, only when `deviceId` is omitted/fresh (unbounded doc creation); an existing/caller-supplied `deviceId` is idempotent and skips the limiter
 - `/api/py/reports` (submit) — 5 req/hour
 - `/api/py/reports/clarify` — 10 req/hour
 - `/api/py/ai/agriculture` — 30 req/hour (bucket key `ai-agriculture`; only AI-cache misses are metered; also behind `require_internal_caller`)
@@ -721,7 +721,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 - `/api/py/reports` — POST (submit) / GET (list), community weather reports. Submit rate-limited 5 req/hour/IP, auto-captures weather snapshot for cross-validation
 - `/api/py/reports/upvote` — POST, upvote a community report (IP-based dedup)
 - `/api/py/reports/clarify` — POST, AI-generated follow-up questions for weather report clarification. Rate-limited 10 req/hour/IP
-- `/api/py/devices` — POST (create) / GET (fetch) / PATCH (update), device profile sync for cross-device preferences
+- `/v1/devices` — **Rust Worker** (`mukoko-weather-places`, D1 `device_profiles`, migration 0004; the Python `_devices.py` is deleted): POST (create) / `GET` and `PATCH /v1/devices/{id}`, device profile sync for cross-device preferences. Rules in `weather_core::community`, vectors in `tests/fixtures/community-contract.json`; the app calls it through `workerUrl()` (`src/lib/weather-api.ts`, default `https://weather-api.mukoko.com`, no `/api/py` fallback)
 - `/api/py/embeddings/status` — GET, vector search infrastructure status (stub)
 - `/api/py/airquality` — GET, EPA-standard Air Quality Index (0-500) + 7-pollutant breakdown (PM2.5, PM10, O3, NO2, SO2, CO, NH3) for `lat`/`lon`. Sourced from Open-Meteo Air Quality (free, no key) via `open_meteo_breaker`. Cached 1 h in `weather.air_quality_cache` with deterministic `_id` (`{lat:.4f}_{lon:.4f}`) so duplicate requests upsert one row, never two. Also returns `todayUsAqi`, `yesterdayAqi` (US AQI at the same local hour, from the same request via `hourly=us_aqi&past_days=1`) and `trend` (`better` | `worse` | `similar`, ±10 points; `null` when unavailable)
 - `GET https://weather-api.mukoko.com/v1/normals` (Rust Worker, `workers/forecast/src/normals.rs`, `weather_core::normals`; the Python route is gone) — climate normals: average daily high/low (°C) for `lat`/`lon` on `date` (YYYY-MM-DD, default today UTC), 1991–2020 from ERA5 via Open-Meteo Historical Weather API (free, no key) behind the shared Open-Meteo breaker. Built once per 0.25° cell as two 366-entry day-of-year tables (±7-day window, wrap-around, leap-year slots) and cached in KV without expiry under `normals:v1:{lat:.2f}_{lon:.2f}`. Returns 200 with `available: false` + `reason` (`circuit_open`, `upstream_error`, `timeout`, `no_data`, `no-store`) instead of failing; only malformed input is a 400. `api/py/_normals.py` stays only for `get_monthly_normals()` (twelve monthly normals, time zone and elevation read by the place-knowledge builder from `weather.climate_normals`) until that is ported (#333)
@@ -1053,7 +1053,7 @@ weather.stationObservations → QC pipeline → weather.observations
 - `setSelectedLocation(slug)` — updates location, queues device sync
 - `selectedActivities: string[]` — activity IDs (from `src/lib/activities.ts`), persisted to localStorage, synced to server
 - `toggleActivity(id)` — adds/removes an activity selection, queues device sync
-- `selectedForecastModel: string` — Windy-style forecast model preference (Open-Meteo model id or `"best_match"`, default `"best_match"`), persisted (RxDB) + replicated to `/api/py/devices`. Set via the "Forecast model" radio group in the My Weather modal Settings tab; `best_match` means the server's Africa-weighted blend; any other id makes that model the dashboard baseline via `fetchModelWeather()` (`src/lib/home-weather.ts` → `/api/py/weather?model=`). Legacy ids are mapped by `normalizeForecastModel()`; highlighted in `ModelComparisonChart`
+- `selectedForecastModel: string` — Windy-style forecast model preference (Open-Meteo model id or `"best_match"`, default `"best_match"`), persisted (RxDB) + replicated to `/v1/devices` (Rust Worker). Set via the "Forecast model" radio group in the My Weather modal Settings tab; `best_match` means the server's Africa-weighted blend; any other id makes that model the dashboard baseline via `fetchModelWeather()` (`src/lib/home-weather.ts` → `/api/py/weather?model=`). Legacy ids are mapped by `normalizeForecastModel()`; highlighted in `ModelComparisonChart`
 - `setSelectedForecastModel(model)` — updates the model preference, persists to RxDB
 - `homeLocation: string | null` — the Home location slug (`/locations` ⌂), persisted in the RxDB `preferences` doc (schema v2). Device-local for now: the Python device-profile sync does not carry it yet, and the pull handler keeps the local value
 - `setHomeLocation(slug | null)` — set or clear the Home location (empty string clears), persists to RxDB
@@ -1085,7 +1085,7 @@ weather.stationObservations → QC pipeline → weather.observations
 **Local-first sync (RxDB):**
 
 - `src/lib/rxdb/bridge.ts` owns persisted preferences. `initRxDBBridge()` hydrates the Zustand store from the RxDB `preferences` document (keyed by a device UUID kept in localStorage under `mukoko-device-id`), `updatePreferences()` writes to RxDB, and RxDB change subscriptions push multi-tab changes back into Zustand. `migrateLocalStorageToRxDB()` runs once to move the legacy `mukoko-weather-prefs` localStorage blob into IndexedDB
-- `src/lib/rxdb/replication.ts` replicates preferences bidirectionally with `/api/py/devices` (PATCH to push, GET to pull). Only the leader tab replicates. Suitability rules are pull-only from the Worker (`/v1/suitability`) every 10 minutes
+- `src/lib/rxdb/replication.ts` replicates preferences bidirectionally with `/v1/devices/{id}` on the Rust Worker (PATCH to push, GET to pull). Only the leader tab replicates. Suitability rules are pull-only from `/api/py/suitability` every 10 minutes
 - `initializeDeviceSync()` in `src/lib/store.ts` is the single entry point: it runs the bridge, then `startReplication()`
 - **Merge strategy:** Last-write-wins (not CRDT). If a user has multiple devices, whichever syncs last determines the server value for array fields like `selectedActivities` and `savedLocations`. A per-field timestamp merge is a future enhancement
 
@@ -1676,7 +1676,6 @@ _Python backend tests (pytest):_
 - `tests/py/test_history_store.py` — History store: unique-key upsert (the #245 regression guard), local-date math, duplicate-key race retry, logged failures, date-window reader + per-date merge, archive doc shape, backfill gating (breaker, cooldown, per-IP limit, single capped request, insert-only)
 - `tests/py/test_history_analyze.py` — History analysis: stats aggregation (temps, precip, trends, insights), system prompt building, caching, rate limiting, AI fallback
 - `tests/py/test_ai_followup.py` — Follow-up chat: system prompt building, message truncation, history capping, rate limiting, circuit breaker, AI error handling
-- `tests/py/test_devices.py` — Device sync: validation (theme, slug, savedLocations, activities), CRUD endpoints, DuplicateKeyError handling, partial updates
 - `tests/py/test_explore_search.py` — AI search: tool execution (search/weather), text search fallback, system prompt building, rate limiting, circuit breaker
 - `tests/py/test_index.py` — FastAPI app: CORS origins, health endpoint, ConnectionFailure handler, all 16 routers mounted
 - `tests/py/test_stations.py` — Station ingest: unit conversions (°F/mph/inHg/inches), QC range filter, hashed-key auth, registration (key never stored raw, GeoJSON location), manual readings (validated observation writes, 401/400 paths)
@@ -2077,7 +2076,7 @@ The app is **public by default** — weather pages, explore, search, maps, and e
 | `AISummary` widget on public location pages | Component-level | Receives a `user: AISummaryUser \| null` prop hydrated server-side via `getCurrentUser()` in `/[location]/page.tsx`. Anonymous users see a `.baobab` sign-in CTA (with `.kudu-sm` button → `/auth/signin?returnTo=<current>`). Signed-in users see the summary as before. |
 | `AISummaryChat` follow-up                   | Component-level | Same `user` prop; anonymous users see the matching tanzanite-bordered CTA.                                                                                                                                                                                                |
 
-**What is NOT gated** (must remain anonymous): `/`, `/[location]/*`, `/explore`, `/explore/**`, `/api/py/weather`, `/api/py/search`, `/api/py/geo`, `/api/py/locations`, `/api/py/airquality`, `/api/py/agriculture`, `/api/py/metar`, `/api/py/reports` (GET/POST), `/api/py/health`, `/api/py/devices`, `/api/og`, `/api/db-init`, `/embed/*`.
+**What is NOT gated** (must remain anonymous): `/`, `/[location]/*`, `/explore`, `/explore/**`, `/api/py/weather`, `/api/py/search`, `/api/py/geo`, `/api/py/locations`, `/api/py/airquality`, `/api/py/agriculture`, `/api/py/metar`, `/api/py/reports` (GET/POST), `/api/py/health`, `/v1/devices`, `/api/og`, `/api/db-init`, `/embed/*`.
 
 **Why a Next.js proxy in front of the Python AI endpoints** — the WorkOS session cookie is encrypted with `WORKOS_COOKIE_PASSWORD` on the Next.js side. Python doesn't have the WorkOS SDK or the cookie crypto, so trying to validate sessions there would either duplicate auth or punch a hole. The proxy is single-source-of-truth: AuthKit decides who's signed in, then forwards a clean request with a user-id header. The underlying `/api/py/ai/*` routes still exist (so Python tests stay simple, and internal callers can hit them directly) but the UI now only ever calls `/api/ai/*`.
 

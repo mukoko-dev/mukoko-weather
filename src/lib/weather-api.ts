@@ -60,7 +60,9 @@ export type WorkerRoute =
   | "sg-air"
   | "haze"
   | "normals"
-  | "aviation/nearest-metar";
+  | "aviation/nearest-metar"
+  | "devices"
+  | `devices/${string}`;
 
 /** The Worker's URL for a route and its query string (no leading `?`). */
 export function workerUrl(

@@ -154,9 +154,6 @@ class TestRouterMounting:
         collect(app.routes)
         return paths
 
-    def test_devices_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/devices" in paths
 
     def test_chat_router_mounted(self):
         paths = self._get_route_paths()

@@ -21,6 +21,7 @@ pub mod breaker;
 pub mod budget;
 pub mod cache;
 pub mod climate_normals;
+pub mod community;
 pub mod cors;
 pub mod devkey;
 pub mod enso;
