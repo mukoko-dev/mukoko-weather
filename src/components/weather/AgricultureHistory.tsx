@@ -1,6 +1,7 @@
 "use client";
 
 import { roundCoord } from "@/lib/location-privacy";
+import { workerApiUrl } from "@/lib/weather-api";
 import { useEffect, useState } from "react";
 import {
   formatAnomaly,
@@ -13,7 +14,7 @@ import {
 /**
  * The past 30 days against climate normals: recorded rain and mean
  * highs/lows from `/api/py/history`, today's 1991–2020 normal high/low from
- * `/api/py/normals`, and the forecast model's own 30-day rain total as a
+ * the Worker's `/v1/normals`, and the forecast model's own 30-day rain total as a
  * cross-check when few days are recorded. Failures fall back to what is known.
  */
 
@@ -69,7 +70,10 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
     // (cached afterwards), the second reads it.
     const getNormals = async (date: string): Promise<Normals> => {
       const res = await fetch(
-        `/api/py/normals?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
+        workerApiUrl(
+          "normals",
+          `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
+        ),
       );
       return res.ok ? ((await res.json()) as Normals) : { available: false };
     };

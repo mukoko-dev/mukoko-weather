@@ -8,6 +8,8 @@
 //! GET /daily?location=|lat=&lon=[&days=1..7]       the daily forecast contract
 //! GET /air-quality?lat=&lon=                       the EPA AQI (Open-Meteo air quality)
 //! GET /air-quality/grid?lat=&lon=[&radiusKm=][&n=] US AQI on an n x n grid (one batched call)
+//! GET /haze?lat=&lon=                              haze level, type, advice and season (Open-Meteo, NEA in Singapore)
+//! GET /normals?lat=&lon=[&date=]                   1991-2020 average daily high and low (ERA5 via Open-Meteo)
 //! GET /enso                                        El Nino / La Nina phase (NOAA CPC ONI)
 //! GET /sg-air[?lat=&lon=]                          official Singapore NEA PSI and PM2.5
 //! GET /health                                      which bindings are configured
@@ -27,6 +29,8 @@ mod air;
 mod aq_grid;
 mod chain;
 mod enso;
+mod haze;
+mod normals;
 mod places;
 mod sg_air;
 mod stations;
@@ -48,6 +52,8 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
         "/air-quality" => air::air_quality(&req, &env, &ctx).await,
         "/air-quality/grid" => aq_grid::air_quality_grid(&req, &env, &ctx).await,
         "/enso" => enso::enso(&env, &ctx).await,
+        "/haze" => haze::haze(&req, &env, &ctx).await,
+        "/normals" => normals::normals(&req, &env, &ctx).await,
         "/sg-air" => sg_air::sg_air(&req, &env, &ctx).await,
         "/health" => health(&env).await,
         _ => error(404, "not_found", "No such route."),

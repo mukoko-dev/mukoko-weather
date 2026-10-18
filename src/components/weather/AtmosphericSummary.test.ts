@@ -217,7 +217,8 @@ describe("AtmosphericSummary source contract", () => {
   });
 
   it("loads normals and AQI from the API and labels the sections", () => {
-    expect(source).toContain("/api/py/normals");
+    expect(source).toContain('"normals"');
+    expect(source).not.toContain("/api/py/normals");
     expect(source).toContain("/api/py/airquality");
     expect(source).toContain('aria-labelledby="atmospheric-heading"');
     expect(source).toContain('aria-labelledby="air-quality-heading"');

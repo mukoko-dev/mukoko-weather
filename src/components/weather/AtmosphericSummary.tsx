@@ -1,6 +1,7 @@
 "use client";
 
 import { roundCoord } from "@/lib/location-privacy";
+import { workerApiUrl } from "@/lib/weather-api";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type {
@@ -244,8 +245,7 @@ interface NormalsPayload {
 }
 
 type NormalState =
-  | { status: "loading" }
-  | { status: "ready"; normalHigh: number | null };
+  { status: "loading" } | { status: "ready"; normalHigh: number | null };
 
 /** ERA5 1991–2020 normal high for today at this place (null if unavailable). */
 function useNormalHigh(
@@ -263,7 +263,10 @@ function useNormalHigh(
     const controller = new AbortController();
     const date = localIsoDate(new Date(), offsetSeconds);
     fetch(
-      `/api/py/normals?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
+      workerApiUrl(
+        "normals",
+        `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
+      ),
       {
         signal: controller.signal,
       },

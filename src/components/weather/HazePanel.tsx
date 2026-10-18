@@ -1,6 +1,7 @@
 "use client";
 
 import { roundCoord } from "@/lib/location-privacy";
+import { workerApiUrl } from "@/lib/weather-api";
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import {
   CloudIcon,
@@ -30,7 +31,7 @@ import {
 /**
  * Location-aware haze panel (smoke, dust, urban smog, seasons, official PSI).
  *
- * Fetches `/api/py/haze` for the given coordinates. Renders a wide card only
+ * Fetches the Worker's `/v1/haze` for the given coordinates. Renders a wide card only
  * when there is haze, or an active haze season with elevated readings —
  * otherwise nothing at all (no empty card). Failures render nothing.
  */
@@ -65,9 +66,12 @@ export function HazePanel({ lat, lon }: Props) {
     abortRef.current = controller;
     let cancelled = false;
 
-    fetch(`/api/py/haze?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`, {
-      signal: controller.signal,
-    })
+    fetch(
+      workerApiUrl("haze", `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`),
+      {
+        signal: controller.signal,
+      },
+    )
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return (await res.json()) as HazeResponse;
