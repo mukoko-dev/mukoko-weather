@@ -32,6 +32,7 @@ pub mod place_profile;
 pub mod places;
 pub mod push;
 pub mod query;
+pub mod reference;
 pub mod resolve;
 pub mod secrets;
 pub mod station;
