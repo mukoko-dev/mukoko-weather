@@ -2,7 +2,7 @@
  * RxDB replication to the Python backend.
  *
  * Preferences: bidirectional (push to PATCH /v1/devices/{id}, pull from GET /v1/devices/{id} on the Rust Worker)
- * Suitability rules: pull-only (GET /api/py/suitability every 10 min)
+ * Suitability rules: pull-only (GET /v1/suitability on the Rust Worker every 10 min)
  *
  * Uses leader election — only the leader tab replicates to avoid conflicts.
  */
@@ -23,7 +23,6 @@ import type { PreferencesDocType } from "./schemas";
 // Constants
 // ---------------------------------------------------------------------------
 
-const API_BASE = "/api/py";
 const RULES_PULL_INTERVAL_MS = 10 * 60_000; // 10 min
 
 /** UUID v4 format — validates deviceId before interpolating into URL paths. */
@@ -145,12 +144,12 @@ async function startPrefsReplication(): Promise<void> {
 // Suitability rules refresh (pull-only, not RxDB replication)
 // ---------------------------------------------------------------------------
 
-async function refreshSuitabilityRules(): Promise<void> {
+export async function refreshSuitabilityRules(): Promise<void> {
   const col = await suitabilityRulesCollection();
   if (!col) return;
 
   try {
-    const res = await fetch(`${API_BASE}/suitability`);
+    const res = await fetchWorker("suitability", "");
     if (!res.ok) return;
 
     const data = await res.json();
