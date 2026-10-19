@@ -1,0 +1,47 @@
+// mukoko-weather-mongo-bridge: the MongoDB bridge for the Rust Workers
+// (mukoko-dev/mukoko-weather#351). Device profiles (`device.device_profiles`)
+// and community weather reports (`weather.weather_reports`) live in MongoDB;
+// this TypeScript Worker is the one place that reads AND writes them, with
+// the official `mongodb` driver (nodejs_compat). A Durable Object holds the
+// MongoClient, so the TLS + SCRAM handshake is paid once, not per request.
+//
+// No route and no workers.dev address: mukoko-weather-places reaches it
+// through the MONGO_BRIDGE service binding. Nothing else can call it.
+//
+// Names only, never values:
+//   secrets: MONGODB_RW_URI, a read-write MongoDB seed-list connection
+//            string, from the Secrets Store as MUKOKO_MONGODB_RW_URI
+//            (below). Plain wrangler secret of the same plain name is the
+//            transition fallback, as in the Rust Workers (weather_core::secrets).
+// OWNER: create the store secret BEFORE the first deploy (a binding to a
+// secret that does not exist fails the deploy, error 10182); see
+// workers/README.md, "Owner steps".
+{
+  "name": "mukoko-weather-mongo-bridge",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  // Traces and invocation metadata, with query strings redacted. The code
+  // logs no payloads, slugs, device ids or connection strings.
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true },
+  },
+  "secrets_store_secrets": [
+    {
+      "binding": "MUKOKO_MONGODB_RW_URI",
+      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+      "secret_name": "MUKOKO_MONGODB_RW_URI",
+    },
+  ],
+  // One Durable Object (named "primary") holds the one MongoClient.
+  "durable_objects": {
+    "bindings": [{ "name": "MONGO_BRIDGE_DO", "class_name": "MongoBridge" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MongoBridge"] }],
+}

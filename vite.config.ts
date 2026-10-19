@@ -27,11 +27,16 @@ const config = {
   lint: {
     // Without typeCheck, `vp check` is oxlint only and passes type errors.
     options: { typeAware: true, typeCheck: true },
-    // worker/ and station-console/ are separate packages with their own
-    // package.json and dependencies, which the root install does not
-    // provide (the root tsconfig.json excludes them for the same reason).
-    // They are still format-checked.
-    ignorePatterns: ["worker/**", "station-console/**"],
+    // worker/, station-console/ and workers/mongo-bridge/ are separate
+    // packages with their own package.json and dependencies, which the root
+    // install does not provide (the root tsconfig.json excludes them for the
+    // same reason). They are still format-checked; the bridge is typechecked
+    // and tested by its own workers.yml job.
+    ignorePatterns: [
+      "worker/**",
+      "station-console/**",
+      "workers/mongo-bridge/**",
+    ],
   },
 };
 

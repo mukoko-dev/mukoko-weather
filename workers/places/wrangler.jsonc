@@ -51,7 +51,8 @@
     {
       // place_daily (weather history, written by mukoko-weather-jobs) is read;
       // rate_events (migration 0002) holds the hourly geocoder budgets
-      // (weather_core::budget): this Worker inserts the rows.
+      // (weather_core::budget) and the 20 an hour fresh-device limit: this
+      // Worker inserts the rows. No device or report data is kept in D1.
       "binding": "WEATHER_DB",
       "database_name": "mukoko-weather",
       "database_id": "9a8846ea-ee34-4479-bc4c-790ee2beabee",
@@ -60,6 +61,12 @@
   ],
   // Reverse geocoding (Nominatim allows about one request a second), per
   // client IP as passed on by mukoko-weather-api.
+  // Device profiles and community reports live in MongoDB, read and written
+  // by the TypeScript mukoko-weather-mongo-bridge Worker (workers/mongo-bridge)
+  // through this binding. Deploy the bridge BEFORE this Worker.
+  "services": [
+    { "binding": "MONGO_BRIDGE", "service": "mukoko-weather-mongo-bridge" },
+  ],
   "ratelimits": [
     {
       "name": "GEOCODE_LIMITER",
