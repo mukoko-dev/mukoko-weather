@@ -11,7 +11,7 @@
 //! GET /search?q= | tag= | lat=&lon= | mode=tags              [&limit=1..50&skip=]
 //! GET /geo?lat=&lon=[&autoCreate=true]
 //! GET /history?location=&days=1..365
-//! POST /devices | GET, PATCH /devices/{id}   device preference profiles (D1)
+//! POST /devices | GET, PATCH /devices/{id}   device preference profiles (MongoDB, via the bridge)
 //! GET /health
 //! ```
 //!
@@ -25,6 +25,7 @@
 //! yet). History is read from D1 `place_daily`, written by
 //! `mukoko-weather-jobs`.
 
+mod bridge;
 mod budget;
 mod community;
 mod limits;
