@@ -3,6 +3,11 @@ import { updatePreferences, initRxDBBridge } from "./rxdb/bridge";
 import { startReplication } from "./rxdb/replication";
 import type { PreferencesDocType } from "./rxdb/schemas";
 import { isLocationSlug } from "./current-slug";
+import {
+  canonicalSlug,
+  migrateSlugPrefs,
+  slugPrefsChanged,
+} from "./slug-migration";
 import { isPresetAnchor, type PresetAnchor } from "./location-presets";
 import { resolveTheme, type ThemePreference } from "./theme";
 
@@ -269,23 +274,29 @@ export const useAppStore = create<AppState>()((set) => ({
       return { theme: next };
     }),
   selectedLocation: "",
-  setSelectedLocation: (slug) => {
+  setSelectedLocation: (rawSlug) => {
+    // Legacy seed slugs never enter the store; canonical only (#317).
+    const slug = canonicalSlug(rawSlug);
     set({ selectedLocation: slug });
     if (!_suppressRxDBWrites) updatePreferences({ selectedLocation: slug });
   },
   homeLocation: null,
   setHomeLocation: (slug) => {
-    const next = slug && slug.length > 0 ? slug : null;
+    const next = slug && slug.length > 0 ? canonicalSlug(slug) : null;
     set({ homeLocation: next });
     if (!_suppressRxDBWrites) updatePreferences({ homeLocation: next });
   },
   hiddenPresetSlugs: [],
   hidePresetLocation: (slug) =>
     set((state) => {
-      if (!isLocationSlug(slug) || state.hiddenPresetSlugs.includes(slug)) {
+      const canonical = canonicalSlug(slug);
+      if (
+        !isLocationSlug(canonical) ||
+        state.hiddenPresetSlugs.includes(canonical)
+      ) {
         return {};
       }
-      const next = [...state.hiddenPresetSlugs, slug];
+      const next = [...state.hiddenPresetSlugs, canonical];
       if (!_suppressRxDBWrites) updatePreferences({ hiddenPresetSlugs: next });
       return { hiddenPresetSlugs: next };
     }),
@@ -303,10 +314,11 @@ export const useAppStore = create<AppState>()((set) => ({
     if (!_suppressRxDBWrites) updatePreferences({ presetAnchor: next });
   },
   savedLocations: [],
-  saveLocation: (slug) =>
+  saveLocation: (rawSlug) =>
     set((state) => {
+      const slug = canonicalSlug(rawSlug);
       if (
-        state.savedLocations.includes(slug) ||
+        state.savedLocations.some((saved) => canonicalSlug(saved) === slug) ||
         state.savedLocations.length >= MAX_SAVED_LOCATIONS
       ) {
         return {};
@@ -315,9 +327,13 @@ export const useAppStore = create<AppState>()((set) => ({
       if (!_suppressRxDBWrites) updatePreferences({ savedLocations: next });
       return { savedLocations: next };
     }),
-  removeLocation: (slug) =>
+  removeLocation: (rawSlug) =>
     set((state) => {
-      const next = state.savedLocations.filter((s) => s !== slug);
+      // Remove the place whichever of its two spellings was saved.
+      const slug = canonicalSlug(rawSlug);
+      const next = state.savedLocations.filter(
+        (s) => canonicalSlug(s) !== slug,
+      );
       const { [slug]: _, ...remainingLabels } = state.locationLabels;
       if (!_suppressRxDBWrites)
         updatePreferences({
@@ -422,7 +438,14 @@ export function initializeDeviceSync(): void {
   if (typeof window === "undefined") return;
 
   initRxDBBridge({
-    applyToStore: (prefs: Partial<PreferencesDocType>) => {
+    applyToStore: (incoming: Partial<PreferencesDocType>) => {
+      // Canonical-slug migration (#317), once and idempotent: every path that
+      // reaches the store (RxDB hydrate, multi-tab change, device-sync pull,
+      // legacy localStorage import) lands here, so a stored `harare` becomes
+      // `harare--ksy4dd1` the first time it is read, and a second pass
+      // changes nothing.
+      const prefs = migrateSlugPrefs(incoming);
+      const slugsMigrated = slugPrefsChanged(incoming, prefs);
       _suppressRxDBWrites = true;
       try {
         if (prefs.theme !== undefined) {
@@ -468,6 +491,18 @@ export function initializeDeviceSync(): void {
         }
       } finally {
         _suppressRxDBWrites = false;
+      }
+      // Write the canonical slugs back so IndexedDB and, through replication,
+      // the device profile carry them too. The write re-enters this function
+      // with nothing left to migrate, so it cannot loop.
+      if (slugsMigrated) {
+        updatePreferences({
+          selectedLocation: prefs.selectedLocation,
+          savedLocations: prefs.savedLocations,
+          homeLocation: prefs.homeLocation,
+          hiddenPresetSlugs: prefs.hiddenPresetSlugs,
+          locationLabels: prefs.locationLabels,
+        });
       }
     },
 

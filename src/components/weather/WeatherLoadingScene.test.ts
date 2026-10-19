@@ -118,7 +118,7 @@ describe("WeatherLoadingScene — Three.js integration", () => {
 describe("WeatherLoadingScene — display", () => {
   it("formats slug for display as title case", () => {
     expect(source).toContain("locationDisplay");
-    expect(source).toContain("toUpperCase");
+    expect(source).toContain("slugToDisplayName");
   });
 
   it("shows location-specific loading text", () => {

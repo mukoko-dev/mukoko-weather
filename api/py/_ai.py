@@ -27,6 +27,7 @@ from ._db import (
 from ._ai_gateway import call_ai, first_text
 from ._ai_prompts import get_ai_prompt
 from ._place_knowledge import profile_block_for, with_profile
+from ._slug_migration import storage_key_slug
 
 logger = logging.getLogger(__name__)
 
@@ -421,7 +422,8 @@ def _summary_cache_key(location: LocationInfo, activities: list[str] | None = No
     order shares a row). Without this, the first visitor's personalised
     summary was served to everyone at the place, whatever they had picked.
     """
-    slug = (location.slug or "").strip().lower()
+    # A canonical seed slug shares the row its legacy slug always used (#317).
+    slug = storage_key_slug((location.slug or "").strip().lower())
     base = slug if SLUG_RE.match(slug) else location.name.lower().replace(" ", "-")
     if activities:
         return f"{base}:{','.join(sorted(activities))}"

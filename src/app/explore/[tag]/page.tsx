@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { getLocationsByTagFromDb, getTagBySlug } from "@/lib/db";
 import { logError } from "@/lib/observability";
 import type { LocationDoc } from "@/lib/db";
+import { locationPath } from "@/lib/slug-migration";
 
 // Cache for 1 hour; regenerates in the background after expiry (ISR).
 export const revalidate = 3600;
@@ -119,7 +120,7 @@ export default async function ExploreTagPage({ params }: Props) {
                   .map((loc) => (
                     <Link
                       key={loc.slug}
-                      href={`/${loc.slug}`}
+                      href={locationPath(loc.slug)}
                       className="group card-interactive flex min-w-0 items-center justify-between rounded-[var(--radius-card)] bg-surface-card px-4 py-3 shadow-sm"
                     >
                       <div className="min-w-0 flex-1">

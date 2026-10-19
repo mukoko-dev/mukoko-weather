@@ -49,6 +49,8 @@ from typing import Optional
 from ._db import places_geo_collection
 from ._geohash import DEFAULT_PRECISION, parse_spot_slug
 from ._places_geo import normalize_name
+from ._seed_locations import seed_by_slug
+from ._slug_migration import storage_key_slug
 
 logger = logging.getLogger(__name__)
 
@@ -316,7 +318,9 @@ def storage_slug(slug: str, loc: Optional[dict]) -> str:
     """
     if is_synthesized_spot(loc):
         return str(loc["_id"])
-    return slug
+    # A canonical seed slug (``harare--ksy4dd1``) is keyed by the legacy slug
+    # (``harare``) every existing record was written under (#317).
+    return storage_key_slug(slug)
 
 
 def find_location(slug: str) -> Optional[dict]:
@@ -332,6 +336,22 @@ def find_location(slug: str) -> Optional[dict]:
     geohash floor), and callers that persist data key it by
     :func:`storage_slug`, never by the raw string.
     """
+    # The canonical slug of a shipped seed (``harare--ksy4dd1``) is a spot by
+    # grammar but names the seed: resolve it as the seed, under its legacy
+    # slug (the durable-data key), and only fall through to a bare spot when
+    # nothing holds the seed (#317).
+    legacy = storage_key_slug(slug)
+    if legacy != slug:
+        seed_doc = resolve_location_slug(legacy)
+        if seed_doc:
+            return adapt_placesgeo_to_location(seed_doc, slug_hint=legacy)
+        seed = seed_by_slug(legacy)
+        if seed:
+            return {
+                **seed,
+                "_id": f"seed:{legacy}",
+                "geo": {"type": "Point", "coordinates": [seed["lon"], seed["lat"]]},
+            }
     doc = resolve_location_slug(slug)
     if doc:
         return adapt_placesgeo_to_location(doc, slug_hint=slug)

@@ -21,6 +21,7 @@ import { SITE_URL } from "@/lib/site";
 import { fetchPlaces } from "@/lib/weather-api";
 import { usableIpGeo } from "@/lib/location-choice";
 import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
+import { canonicalSlug } from "@/lib/slug-migration";
 
 // Bound the Worker geo fetch so a hung or protected upstream can't stall
 // the home render — the onboarding chooser is a fine fallback.
@@ -172,7 +173,11 @@ async function buildHome() {
           // A coordinate label is not a name for the visitor's place: the
           // IP-city fallback below names it better (`usableIpGeo`).
           if (usableIpGeo(data?.nearest)) {
-            detectedLocation = data.nearest as WeatherLocation;
+            const nearest = data.nearest as WeatherLocation;
+            detectedLocation = {
+              ...nearest,
+              slug: canonicalSlug(nearest.slug),
+            };
           }
         }
       } catch {

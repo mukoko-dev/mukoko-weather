@@ -4,6 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { detectUserLocation } from "./geolocation";
+import { canonicalSlug } from "./slug-migration";
 
 function stubGps(lat: number, lon: number) {
   vi.stubGlobal("navigator", {
@@ -48,7 +49,8 @@ describe("detectUserLocation", () => {
       "https://weather-api.test/v1/geo?lat=-17.83&lon=31.05",
     );
     expect(r.status).toBe("success");
-    expect(r.location?.slug).toBe("harare");
+    // The Worker answers with the legacy slug; the app holds the canonical one.
+    expect(r.location?.slug).toBe(canonicalSlug("harare"));
     expect(r.distanceKm).toBe(0);
   });
 
@@ -73,7 +75,8 @@ describe("detectUserLocation", () => {
     vi.stubGlobal("fetch", fetcher);
     const r = await detectUserLocation();
     expect(String(fetcher.mock.calls[1][0])).toContain("/v1/geo?lat=1&lon=2");
-    expect(r.location?.slug).toBe("harare");
+    // The Worker answers with the legacy slug; the app holds the canonical one.
+    expect(r.location?.slug).toBe(canonicalSlug("harare"));
   });
 
   it("uses the production Worker when no override is set", async () => {
