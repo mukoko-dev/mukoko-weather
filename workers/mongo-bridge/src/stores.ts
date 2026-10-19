@@ -60,12 +60,17 @@ export function fromMongo(col: Collection<Document>): Coll {
         maxTimeMS: MAX_TIME_MS,
       }),
     updateOne: async (filter, update) => {
-      const r = await col.updateOne(fix(filter), update, { maxTimeMS: MAX_TIME_MS });
+      const r = await col.updateOne(fix(filter), update, {
+        maxTimeMS: MAX_TIME_MS,
+      });
       return { modifiedCount: r.modifiedCount };
     },
     findMany: (filter, options) =>
       col
-        .find(fix(filter), { projection: options.projection, maxTimeMS: MAX_TIME_MS })
+        .find(fix(filter), {
+          projection: options.projection,
+          maxTimeMS: MAX_TIME_MS,
+        })
         .sort(options.sort as Document)
         .limit(options.limit)
         .toArray(),
@@ -84,13 +89,23 @@ export interface DeviceProfile {
 export interface DeviceStore {
   find(deviceId: string): Promise<DeviceProfile | null>;
   /** The existing profile when there is one (idempotent), else a new one. */
-  create(deviceId: string, preferences: Preferences, now: Date): Promise<DeviceProfile>;
+  create(
+    deviceId: string,
+    preferences: Preferences,
+    now: Date,
+  ): Promise<DeviceProfile>;
   /** `$set` of validated dotted paths; `null` when there is no such device. */
-  patch(deviceId: string, set: Record<string, unknown>, now: Date): Promise<DeviceProfile | null>;
+  patch(
+    deviceId: string,
+    set: Record<string, unknown>,
+    now: Date,
+  ): Promise<DeviceProfile | null>;
 }
 
 function iso(v: unknown): string {
-  return v instanceof Date && !Number.isNaN(v.getTime()) ? v.toISOString() : new Date(0).toISOString();
+  return v instanceof Date && !Number.isNaN(v.getTime())
+    ? v.toISOString()
+    : new Date(0).toISOString();
 }
 
 function profileOf(doc: Doc): DeviceProfile {
@@ -104,7 +119,11 @@ function profileOf(doc: Doc): DeviceProfile {
 
 /** A duplicate key error: two creates of one id raced past a unique index. */
 export function isDuplicateKey(e: unknown): boolean {
-  return typeof e === "object" && e !== null && (e as { code?: unknown }).code === 11000;
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    (e as { code?: unknown }).code === 11000
+  );
 }
 
 export function deviceStore(col: Coll): DeviceStore {
@@ -120,7 +139,9 @@ export function deviceStore(col: Coll): DeviceStore {
       try {
         // One atomic upsert: a new id inserts, an existing id is returned
         // untouched. `deviceId` comes from the filter's equality.
-        const doc = await col.findOneAndUpdate({ deviceId }, insert, { upsert: true });
+        const doc = await col.findOneAndUpdate({ deviceId }, insert, {
+          upsert: true,
+        });
         if (doc) return profileOf(doc);
       } catch (e) {
         if (!isDuplicateKey(e)) throw e;
@@ -158,7 +179,12 @@ export interface ReportStore {
   /** Inserts and returns the new report's id (24 hex). */
   insert(report: NewReport, now: Date, expiresAt: Date): Promise<string>;
   /** Unexpired reports for these keys since `cutoff`, newest first. */
-  recent(keys: string[], cutoff: Date, now: Date, limit: number): Promise<ReportView[]>;
+  recent(
+    keys: string[],
+    cutoff: Date,
+    now: Date,
+    limit: number,
+  ): Promise<ReportView[]>;
   /** One vote per voter, atomic. `false`: already voted, or no such report. */
   upvote(reportId: string, voter: string): Promise<boolean>;
 }

@@ -29,7 +29,9 @@ const WEATHER_DB = "weather";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const stub = env.MONGO_BRIDGE_DO.get(env.MONGO_BRIDGE_DO.idFromName("primary"));
+    const stub = env.MONGO_BRIDGE_DO.get(
+      env.MONGO_BRIDGE_DO.idFromName("primary"),
+    );
     return stub.fetch(request);
   },
 } satisfies ExportedHandler<Env>;
@@ -37,7 +39,10 @@ export default {
 function respond(r: Result): Response {
   return new Response(JSON.stringify(r.body), {
     status: r.status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
   });
 }
 
@@ -45,7 +50,8 @@ function respond(r: Result): Response {
 async function connectionString(env: Env): Promise<string | null> {
   const bound = env.MUKOKO_MONGODB_RW_URI;
   try {
-    const value = typeof bound === "string" ? bound : bound ? await bound.get() : "";
+    const value =
+      typeof bound === "string" ? bound : bound ? await bound.get() : "";
     if (value && value.trim()) return value.trim();
   } catch {
     // Fall through to the plain secret; the reason is logged below, never the value.
@@ -53,7 +59,9 @@ async function connectionString(env: Env): Promise<string | null> {
   }
   const plain = env.MONGODB_RW_URI;
   if (plain && plain.trim()) {
-    console.warn("mongo-bridge: using the plain MONGODB_RW_URI secret; add MUKOKO_MONGODB_RW_URI to the Secrets Store");
+    console.warn(
+      "mongo-bridge: using the plain MONGODB_RW_URI secret; add MUKOKO_MONGODB_RW_URI to the Secrets Store",
+    );
     return plain.trim();
   }
   return null;
@@ -99,32 +107,46 @@ export class MongoBridge extends DurableObject<Env> {
   private async stores(): Promise<Stores> {
     const client = await this.open();
     return {
-      devices: deviceStore(fromMongo(client.db(DEVICE_DB).collection("device_profiles"))),
-      reports: reportStore(fromMongo(client.db(WEATHER_DB).collection("weather_reports"))),
+      devices: deviceStore(
+        fromMongo(client.db(DEVICE_DB).collection("device_profiles")),
+      ),
+      reports: reportStore(
+        fromMongo(client.db(WEATHER_DB).collection("weather_reports")),
+      ),
     };
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health") return this.health(url);
-    if (!needsStores(url.pathname)) return respond(fail(404, "not_found", "No such route."));
+    if (!needsStores(url.pathname))
+      return respond(fail(404, "not_found", "No such route."));
 
     let body: unknown;
     if (request.method === "POST" || request.method === "PATCH") {
       const text = await request.text();
       if (text.length > MAX_BODY_BYTES) {
-        return respond(fail(413, "payload_too_large", "The request body is too large."));
+        return respond(
+          fail(413, "payload_too_large", "The request body is too large."),
+        );
       }
       try {
         body = text ? JSON.parse(text) : undefined;
       } catch {
-        return respond(fail(422, "invalid_request", "The body is not valid JSON."));
+        return respond(
+          fail(422, "invalid_request", "The body is not valid JSON."),
+        );
       }
     }
 
     try {
       const result = await route(
-        { method: request.method, path: url.pathname, query: url.searchParams, body },
+        {
+          method: request.method,
+          path: url.pathname,
+          query: url.searchParams,
+          body,
+        },
         {
           stores: await this.stores(),
           now: () => new Date(),
@@ -136,25 +158,40 @@ export class MongoBridge extends DurableObject<Env> {
       // Name only: a driver message can carry host names or filters.
       const name = e instanceof Error ? e.name : "error";
       console.error(`mongo-bridge: ${name}`);
-      if (name.startsWith("Mongo") || (e instanceof Error && e.message === "not_configured")) {
+      if (
+        name.startsWith("Mongo") ||
+        (e instanceof Error && e.message === "not_configured")
+      ) {
         await this.reset();
       }
-      return respond(fail(503, "unavailable", "The data store is unavailable."));
+      return respond(
+        fail(503, "unavailable", "The data store is unavailable."),
+      );
     }
   }
 
   /** `/health` never opens a connection; `?probe=mongo` pings the server. */
   private async health(url: URL): Promise<Response> {
     const base = { service: "mukoko-weather-mongo-bridge", status: "ok" };
-    if (url.searchParams.get("probe") !== "mongo") return respond({ status: 200, body: base });
+    if (url.searchParams.get("probe") !== "mongo")
+      return respond({ status: 200, body: base });
     try {
       const client = await this.open();
       await client.db(DEVICE_DB).command({ ping: 1 });
-      return respond({ status: 200, body: { ...base, mongo_probe: { ok: true } } });
+      return respond({
+        status: 200,
+        body: { ...base, mongo_probe: { ok: true } },
+      });
     } catch (e) {
       await this.reset();
-      const problem = e instanceof Error && e.message === "not_configured" ? "not_configured" : "unreachable";
-      return respond({ status: 200, body: { ...base, mongo_probe: { ok: false, problem } } });
+      const problem =
+        e instanceof Error && e.message === "not_configured"
+          ? "not_configured"
+          : "unreachable";
+      return respond({
+        status: 200,
+        body: { ...base, mongo_probe: { ok: false, problem } },
+      });
     }
   }
 }

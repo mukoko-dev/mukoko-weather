@@ -7,7 +7,12 @@ import type { Coll, Doc } from "../src/stores";
 type Call = { op: string; filter?: Doc; update?: Doc; options?: unknown };
 
 function get(doc: Doc, path: string): unknown {
-  return path.split(".").reduce<unknown>((o, k) => (o && typeof o === "object" ? (o as Doc)[k] : undefined), doc);
+  return path
+    .split(".")
+    .reduce<unknown>(
+      (o, k) => (o && typeof o === "object" ? (o as Doc)[k] : undefined),
+      doc,
+    );
 }
 
 function set(doc: Doc, path: string, value: unknown): void {
@@ -21,12 +26,19 @@ function set(doc: Doc, path: string, value: unknown): void {
 }
 
 const same = (a: unknown, b: unknown): boolean =>
-  a instanceof Date && b instanceof Date ? a.getTime() === b.getTime() : JSON.stringify(a) === JSON.stringify(b);
+  a instanceof Date && b instanceof Date
+    ? a.getTime() === b.getTime()
+    : JSON.stringify(a) === JSON.stringify(b);
 
 function matches(doc: Doc, filter: Doc): boolean {
   return Object.entries(filter).every(([k, cond]) => {
     const v = get(doc, k);
-    if (cond && typeof cond === "object" && !(cond instanceof Date) && !Array.isArray(cond)) {
+    if (
+      cond &&
+      typeof cond === "object" &&
+      !(cond instanceof Date) &&
+      !Array.isArray(cond)
+    ) {
       return Object.entries(cond as Doc).every(([op, arg]) => {
         switch (op) {
           case "$in":
@@ -36,7 +48,9 @@ function matches(doc: Doc, filter: Doc): boolean {
           case "$gt":
             return (v as Date) > (arg as Date);
           case "$ne":
-            return Array.isArray(v) ? !v.some((x) => same(x, arg)) : !same(v, arg);
+            return Array.isArray(v)
+              ? !v.some((x) => same(x, arg))
+              : !same(v, arg);
           default:
             throw new Error(`fake: unsupported operator ${op}`);
         }
@@ -63,7 +77,11 @@ function apply(doc: Doc, update: Doc, inserting: boolean): void {
           break;
         }
         case "$inc":
-          set(doc, path, ((get(doc, path) as number | undefined) ?? 0) + (value as number));
+          set(
+            doc,
+            path,
+            ((get(doc, path) as number | undefined) ?? 0) + (value as number),
+          );
           break;
         default:
           throw new Error(`fake: unsupported update operator ${op}`);
@@ -80,7 +98,9 @@ export class FakeColl implements Coll {
   constructor(private unique: string[] = []) {}
 
   private clash(doc: Doc): boolean {
-    return this.unique.some((f) => this.docs.some((d) => d !== doc && same(d[f], doc[f])));
+    return this.unique.some((f) =>
+      this.docs.some((d) => d !== doc && same(d[f], doc[f])),
+    );
   }
 
   async findOne(filter: Doc): Promise<Doc | null> {
@@ -97,15 +117,21 @@ export class FakeColl implements Coll {
     return { insertedId: stored._id };
   }
 
-  async findOneAndUpdate(filter: Doc, update: Doc, options: { upsert?: boolean }): Promise<Doc | null> {
+  async findOneAndUpdate(
+    filter: Doc,
+    update: Doc,
+    options: { upsert?: boolean },
+  ): Promise<Doc | null> {
     this.calls.push({ op: "findOneAndUpdate", filter, update, options });
     let d = this.docs.find((x) => matches(x, filter));
     if (!d) {
       if (!options.upsert) return null;
       d = { _id: (this.next++).toString(16).padStart(24, "0") };
-      for (const [k, v] of Object.entries(filter)) if (typeof v !== "object") d[k] = v;
+      for (const [k, v] of Object.entries(filter))
+        if (typeof v !== "object") d[k] = v;
       apply(d, update, true);
-      if (this.clash(d)) throw Object.assign(new Error("E11000"), { code: 11000 });
+      if (this.clash(d))
+        throw Object.assign(new Error("E11000"), { code: 11000 });
       this.docs.push(d);
     } else {
       apply(d, update, false);
@@ -113,7 +139,10 @@ export class FakeColl implements Coll {
     return structuredClone(d);
   }
 
-  async updateOne(filter: Doc, update: Doc): Promise<{ modifiedCount: number }> {
+  async updateOne(
+    filter: Doc,
+    update: Doc,
+  ): Promise<{ modifiedCount: number }> {
     this.calls.push({ op: "updateOne", filter, update });
     const d = this.docs.find((x) => matches(x, filter));
     if (!d) return { modifiedCount: 0 };
@@ -121,16 +150,23 @@ export class FakeColl implements Coll {
     return { modifiedCount: 1 };
   }
 
-  async findMany(filter: Doc, options: { projection: Doc; sort: Doc; limit: number }): Promise<Doc[]> {
+  async findMany(
+    filter: Doc,
+    options: { projection: Doc; sort: Doc; limit: number },
+  ): Promise<Doc[]> {
     this.calls.push({ op: "findMany", filter, options });
     const [[field, dir]] = Object.entries(options.sort) as [[string, number]];
     return this.docs
       .filter((x) => matches(x, filter))
-      .sort((a, b) => dir * (((a[field] as Date).getTime()) - (b[field] as Date).getTime()))
+      .sort(
+        (a, b) =>
+          dir * ((a[field] as Date).getTime() - (b[field] as Date).getTime()),
+      )
       .slice(0, options.limit)
       .map((x) => {
         const out: Doc = {};
-        for (const k of Object.keys(options.projection)) out[k] = structuredClone(x[k]);
+        for (const k of Object.keys(options.projection))
+          out[k] = structuredClone(x[k]);
         return out;
       });
   }

@@ -76,7 +76,9 @@ export function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 const has = (o: Record<string, unknown>, k: string): boolean =>
-  Object.prototype.hasOwnProperty.call(o, k) && o[k] !== undefined && o[k] !== null;
+  Object.prototype.hasOwnProperty.call(o, k) &&
+  o[k] !== undefined &&
+  o[k] !== null;
 
 /** `^[a-z0-9-]{1,80}$`, the slug rule every endpoint applies. */
 export function validSlug(s: string): boolean {
@@ -142,7 +144,8 @@ function checkActivities(list: unknown): Checked<string[]> {
 }
 
 function checkModel(m: unknown): Checked<string> {
-  return typeof m === "string" && (FORECAST_MODELS as readonly string[]).includes(m)
+  return typeof m === "string" &&
+    (FORECAST_MODELS as readonly string[]).includes(m)
     ? ok(m)
     : err(`Invalid forecast model: ${show(m)}`);
 }
@@ -159,9 +162,18 @@ function show(v: unknown): string {
 
 /** A whole preferences object; a missing field takes its default. */
 export function validatePreferences(input: unknown): Checked<Preferences> {
-  if (input === undefined || input === null) return ok({ ...DEFAULT_PREFERENCES, savedLocations: [], selectedActivities: [] });
+  if (input === undefined || input === null)
+    return ok({
+      ...DEFAULT_PREFERENCES,
+      savedLocations: [],
+      selectedActivities: [],
+    });
   if (!isRecord(input)) return err("preferences must be an object");
-  const base: Preferences = { ...DEFAULT_PREFERENCES, savedLocations: [], selectedActivities: [] };
+  const base: Preferences = {
+    ...DEFAULT_PREFERENCES,
+    savedLocations: [],
+    selectedActivities: [],
+  };
   if (has(input, "theme")) {
     const r = checkTheme(input.theme);
     if (!r.ok) return r;
@@ -200,8 +212,11 @@ export function validatePreferences(input: unknown): Checked<Preferences> {
  * present change (last write wins; an array is replaced, never merged). An
  * empty patch is `Err("No fields to update")`.
  */
-export function validatePatch(input: unknown): Checked<Record<string, unknown>> {
-  if (!isRecord(input)) return err("The body must be a preferences update object");
+export function validatePatch(
+  input: unknown,
+): Checked<Record<string, unknown>> {
+  if (!isRecord(input))
+    return err("The body must be a preferences update object");
   const set: Record<string, unknown> = {};
   if (has(input, "theme")) {
     const r = checkTheme(input.theme);
@@ -238,17 +253,27 @@ export function validatePatch(input: unknown): Checked<Record<string, unknown>> 
 
 /** What a stored preferences object reads as: a bad or missing field is its default. */
 export function readPreferences(stored: unknown): Preferences {
-  const out: Preferences = { ...DEFAULT_PREFERENCES, savedLocations: [], selectedActivities: [] };
+  const out: Preferences = {
+    ...DEFAULT_PREFERENCES,
+    savedLocations: [],
+    selectedActivities: [],
+  };
   if (!isRecord(stored)) return out;
   if (typeof stored.theme === "string") out.theme = stored.theme;
-  if (typeof stored.selectedLocation === "string") out.selectedLocation = stored.selectedLocation;
+  if (typeof stored.selectedLocation === "string")
+    out.selectedLocation = stored.selectedLocation;
   if (Array.isArray(stored.savedLocations)) {
-    out.savedLocations = stored.savedLocations.filter((s): s is string => typeof s === "string");
+    out.savedLocations = stored.savedLocations.filter(
+      (s): s is string => typeof s === "string",
+    );
   }
   if (Array.isArray(stored.selectedActivities)) {
-    out.selectedActivities = stored.selectedActivities.filter((s): s is string => typeof s === "string");
+    out.selectedActivities = stored.selectedActivities.filter(
+      (s): s is string => typeof s === "string",
+    );
   }
-  if (typeof stored.hasOnboarded === "boolean") out.hasOnboarded = stored.hasOnboarded;
+  if (typeof stored.hasOnboarded === "boolean")
+    out.hasOnboarded = stored.hasOnboarded;
   if (typeof stored.selectedForecastModel === "string") {
     out.selectedForecastModel = stored.selectedForecastModel;
   }
@@ -263,7 +288,13 @@ export interface WeatherSnapshot {
   humidity: number | null;
 }
 
-const SNAPSHOT_FIELDS = ["temperature", "weatherCode", "precipitation", "windSpeed", "humidity"] as const;
+const SNAPSHOT_FIELDS = [
+  "temperature",
+  "weatherCode",
+  "precipitation",
+  "windSpeed",
+  "humidity",
+] as const;
 
 /** `{}` (no snapshot was available) or the five fields, each a number or null. */
 function checkSnapshot(input: unknown): Checked<Partial<WeatherSnapshot>> {
@@ -284,9 +315,14 @@ function checkSnapshot(input: unknown): Checked<Partial<WeatherSnapshot>> {
   return ok(out);
 }
 
-function checkCoordinate(name: string, v: unknown, limit: number): Checked<number | null> {
+function checkCoordinate(
+  name: string,
+  v: unknown,
+  limit: number,
+): Checked<number | null> {
   if (v === undefined || v === null) return ok(null);
-  if (typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= limit) return ok(v);
+  if (typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= limit)
+    return ok(v);
   return err(`${name} must be a number within +/-${limit}, or null`);
 }
 
@@ -306,7 +342,15 @@ export interface NewReport {
 /** A report to submit. Times, votes and the expiry are the bridge's, never the caller's. */
 export function validateReport(input: unknown): Checked<NewReport> {
   if (!isRecord(input)) return err("The body must be a report object");
-  const { locationSlug, locationName, reportType, severity, description, reportedBy, verified } = input;
+  const {
+    locationSlug,
+    locationName,
+    reportType,
+    severity,
+    description,
+    reportedBy,
+    verified,
+  } = input;
   if (typeof locationSlug !== "string" || !validStorageKey(locationSlug)) {
     return err("Invalid location key");
   }
@@ -317,13 +361,22 @@ export function validateReport(input: unknown): Checked<NewReport> {
   ) {
     return err(`locationName must be 1 to ${MAX_LOCATION_NAME} characters`);
   }
-  if (typeof reportType !== "string" || !(REPORT_TYPES as readonly string[]).includes(reportType)) {
-    return err(`Invalid report type. Must be one of: ${[...REPORT_TYPES].sort().join(", ")}`);
+  if (
+    typeof reportType !== "string" ||
+    !(REPORT_TYPES as readonly string[]).includes(reportType)
+  ) {
+    return err(
+      `Invalid report type. Must be one of: ${[...REPORT_TYPES].sort().join(", ")}`,
+    );
   }
-  if (typeof severity !== "string" || !(SEVERITIES as readonly string[]).includes(severity)) {
+  if (
+    typeof severity !== "string" ||
+    !(SEVERITIES as readonly string[]).includes(severity)
+  ) {
     return err("Invalid severity. Must be one of: mild, moderate, severe");
   }
-  const desc = description === undefined || description === null ? "" : description;
+  const desc =
+    description === undefined || description === null ? "" : description;
   if (typeof desc !== "string") return err("description must be text");
   if ([...desc].length > MAX_DESCRIPTION) {
     return err(`Description too long (max ${MAX_DESCRIPTION} characters)`);
@@ -331,7 +384,8 @@ export function validateReport(input: unknown): Checked<NewReport> {
   if (typeof reportedBy !== "string" || !validVoter(reportedBy)) {
     return err("Invalid reporter id");
   }
-  if (typeof verified !== "boolean") return err("verified must be true or false");
+  if (typeof verified !== "boolean")
+    return err("verified must be true or false");
   const lat = checkCoordinate("lat", input.lat, 90);
   if (!lat.ok) return lat;
   const lon = checkCoordinate("lon", input.lon, 180);
@@ -380,7 +434,9 @@ export function validateListQuery(params: URLSearchParams): Checked<ListQuery> {
   const int = (name: string, dflt: number): Checked<number> => {
     const raw = params.get(name);
     if (raw === null || raw === "") return ok(dflt);
-    return /^-?\d{1,6}$/.test(raw) ? ok(Number(raw)) : err(`${name} must be an integer`);
+    return /^-?\d{1,6}$/.test(raw)
+      ? ok(Number(raw))
+      : err(`${name} must be an integer`);
   };
   const hours = int("hours", 24);
   if (!hours.ok) return hours;
@@ -394,7 +450,9 @@ export function validateListQuery(params: URLSearchParams): Checked<ListQuery> {
 }
 
 /** An upvote: the report's ObjectId (24 hex) and the voter's anonymous id. */
-export function validateUpvote(input: unknown): Checked<{ reportId: string; voter: string }> {
+export function validateUpvote(
+  input: unknown,
+): Checked<{ reportId: string; voter: string }> {
   if (!isRecord(input)) return err("The body must be an upvote object");
   if (typeof input.reportId !== "string" || !validReportId(input.reportId)) {
     return err("Invalid report ID");

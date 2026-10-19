@@ -47,21 +47,33 @@ export interface Deps {
   randomId: () => string;
 }
 
-export function fail(status: number, code: string, description: string): Result {
+export function fail(
+  status: number,
+  code: string,
+  description: string,
+): Result {
   return { status, body: { error: code, error_description: description } };
 }
 
-const badRequest = (detail: string): Result => fail(400, "invalid_request", detail);
+const badRequest = (detail: string): Result =>
+  fail(400, "invalid_request", detail);
 
 /** Whether a path is one this Worker serves (so `/health` never opens a connection). */
 export function needsStores(path: string): boolean {
-  return path === "/devices" || path.startsWith("/devices/") || path === "/reports" || path === "/reports/upvote";
+  return (
+    path === "/devices" ||
+    path.startsWith("/devices/") ||
+    path === "/reports" ||
+    path === "/reports/upvote"
+  );
 }
 
 export async function route(call: Call, deps: Deps): Promise<Result> {
   const { method, path } = call;
   if (path === "/devices") {
-    return method === "POST" ? createDevice(call, deps) : notAllowed("POST /devices");
+    return method === "POST"
+      ? createDevice(call, deps)
+      : notAllowed("POST /devices");
   }
   if (path.startsWith("/devices/")) {
     const id = path.slice("/devices/".length);
@@ -76,7 +88,9 @@ export async function route(call: Call, deps: Deps): Promise<Result> {
     return notAllowed("POST or GET /reports");
   }
   if (path === "/reports/upvote") {
-    return method === "POST" ? upvoteReport(call, deps) : notAllowed("POST /reports/upvote");
+    return method === "POST"
+      ? upvoteReport(call, deps)
+      : notAllowed("POST /reports/upvote");
   }
   return fail(404, "not_found", "No such route.");
 }
@@ -87,7 +101,12 @@ function notAllowed(use: string): Result {
 
 async function createDevice(call: Call, deps: Deps): Promise<Result> {
   const body = call.body;
-  if (!isRecord(body)) return fail(422, "invalid_request", "The body is not a valid device profile.");
+  if (!isRecord(body))
+    return fail(
+      422,
+      "invalid_request",
+      "The body is not a valid device profile.",
+    );
   const supplied = body.deviceId;
   let deviceId: string;
   if (supplied === undefined || supplied === null || supplied === "") {
@@ -99,35 +118,61 @@ async function createDevice(call: Call, deps: Deps): Promise<Result> {
   }
   const prefs = validatePreferences(body.preferences);
   if (!prefs.ok) return badRequest(prefs.detail);
-  const profile = await deps.stores.devices.create(deviceId, prefs.value, deps.now());
+  const profile = await deps.stores.devices.create(
+    deviceId,
+    prefs.value,
+    deps.now(),
+  );
   return { status: 201, body: profile };
 }
 
 async function getDevice(id: string, deps: Deps): Promise<Result> {
-  if (!validDeviceId(id)) return fail(404, "not_found", "Device profile not found");
+  if (!validDeviceId(id))
+    return fail(404, "not_found", "Device profile not found");
   const profile = await deps.stores.devices.find(id);
-  return profile ? { status: 200, body: profile } : fail(404, "not_found", "Device profile not found");
+  return profile
+    ? { status: 200, body: profile }
+    : fail(404, "not_found", "Device profile not found");
 }
 
-async function patchDevice(id: string, call: Call, deps: Deps): Promise<Result> {
+async function patchDevice(
+  id: string,
+  call: Call,
+  deps: Deps,
+): Promise<Result> {
   if (!isRecord(call.body)) {
-    return fail(422, "invalid_request", "The body is not a valid preferences update.");
+    return fail(
+      422,
+      "invalid_request",
+      "The body is not a valid preferences update.",
+    );
   }
-  if (!validDeviceId(id)) return fail(404, "not_found", "Device profile not found");
+  if (!validDeviceId(id))
+    return fail(404, "not_found", "Device profile not found");
   const set = validatePatch(call.body);
   if (!set.ok) return badRequest(set.detail);
   const profile = await deps.stores.devices.patch(id, set.value, deps.now());
-  return profile ? { status: 200, body: profile } : fail(404, "not_found", "Device profile not found");
+  return profile
+    ? { status: 200, body: profile }
+    : fail(404, "not_found", "Device profile not found");
 }
 
 async function submitReport(call: Call, deps: Deps): Promise<Result> {
-  if (!isRecord(call.body)) return fail(422, "invalid_request", "The body is not a valid report.");
+  if (!isRecord(call.body))
+    return fail(422, "invalid_request", "The body is not a valid report.");
   const report = validateReport(call.body);
   if (!report.ok) return badRequest(report.detail);
   const now = deps.now();
   const ttl = ttlSeconds(report.value.severity);
-  const id = await deps.stores.reports.insert(report.value, now, new Date(now.getTime() + ttl * 1000));
-  return { status: 201, body: { id, verified: report.value.verified, expiresIn: ttl } };
+  const id = await deps.stores.reports.insert(
+    report.value,
+    now,
+    new Date(now.getTime() + ttl * 1000),
+  );
+  return {
+    status: 201,
+    body: { id, verified: report.value.verified, expiresIn: ttl },
+  };
 }
 
 async function listReports(call: Call, deps: Deps): Promise<Result> {
@@ -135,17 +180,28 @@ async function listReports(call: Call, deps: Deps): Promise<Result> {
   if (!q.ok) return badRequest(q.detail);
   const now = deps.now();
   const cutoff = new Date(now.getTime() - q.value.hours * 3_600_000);
-  const reports = await deps.stores.reports.recent(q.value.keys, cutoff, now, q.value.limit);
+  const reports = await deps.stores.reports.recent(
+    q.value.keys,
+    cutoff,
+    now,
+    q.value.limit,
+  );
   return { status: 200, body: { reports } };
 }
 
 async function upvoteReport(call: Call, deps: Deps): Promise<Result> {
-  if (!isRecord(call.body)) return fail(422, "invalid_request", "The body is not a valid upvote.");
+  if (!isRecord(call.body))
+    return fail(422, "invalid_request", "The body is not a valid upvote.");
   const vote = validateUpvote(call.body);
   if (!vote.ok) return badRequest(vote.detail);
-  const added = await deps.stores.reports.upvote(vote.value.reportId, vote.value.voter);
+  const added = await deps.stores.reports.upvote(
+    vote.value.reportId,
+    vote.value.voter,
+  );
   return {
     status: 200,
-    body: added ? { upvoted: true } : { upvoted: false, reason: "Already upvoted or report not found" },
+    body: added
+      ? { upvoted: true }
+      : { upvoted: false, reason: "Already upvoted or report not found" },
   };
 }
