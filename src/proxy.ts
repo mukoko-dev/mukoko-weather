@@ -3,9 +3,12 @@ import { authkit, handleAuthkitProxy } from "@workos-inc/authkit-nextjs";
 import {
   LOCATION_NOT_FOUND_REWRITE,
   LOCATION_SLUG_RE,
+  canonicalTargetFor,
   classifyLocationPath,
   isRenderableLocation,
+  rememberCanonicalTarget,
 } from "@/lib/location-gate";
+import { LEGACY_TO_CANONICAL } from "@/lib/slug-migration";
 import { isBareNameCandidate, resolveBareName } from "@/lib/bare-name";
 import { resolveLocationSlug } from "@/lib/places";
 import { isFeatureEnabled } from "@/lib/feature-flags";
@@ -13,9 +16,16 @@ import { isFeatureEnabled } from "@/lib/feature-flags";
 /** Read by the home page (src/app/page.tsx) as its fallback location. */
 const LAST_LOCATION_COOKIE = "lastLocation";
 
-/** The gate needs DB errors to throw, not to read as "not found". */
-const strictResolve = (slug: string) =>
-  resolveLocationSlug(slug, { strict: true });
+/**
+ * The gate needs DB errors to throw, not to read as "not found". It also
+ * notes a place that resolves to a different canonical slug (a platform slug
+ * such as `harare-35c223`), so the proxy can 308 it to the canonical URL.
+ */
+const strictResolve = async (slug: string) => {
+  const found = await resolveLocationSlug(slug, { strict: true });
+  if (found) rememberCanonicalTarget(slug, found.slug);
+  return found;
+};
 
 /**
  * Top-level routes that are NOT location slugs. Every directory under
@@ -107,6 +117,25 @@ export default async function proxy(
       redirectStatus: 308,
     });
   }
+  // ── Platform / community slug → the canonical URL (#317) ────────────────
+  // `/harare-35c223` (a placesGeo platform slug) and `/foo-ke` (an old
+  // community slug) resolve to a place whose canonical slug is
+  // `{name}--{geohash}`. The seed table above needs no lookup; these do, and
+  // the gate's lookup has just made it (or cached it), so the redirect is
+  // free. Never fires for a slug that is already canonical.
+  if (path.kind === "slug" && renderable === true) {
+    const target = canonicalTargetFor(path.slug);
+    if (target && target !== path.slug) {
+      const sub = pathname.split("/").filter(Boolean)[1];
+      return handleAuthkitProxy(request, headers, {
+        redirect: new URL(
+          `/${target}${sub ? `/${sub}` : ""}${request.nextUrl.search}`,
+          request.url,
+        ),
+        redirectStatus: 308,
+      });
+    }
+  }
   // ── Bare place name (/koh-samui) → the canonical spot URL (#317) ────────
   // The coordinate is the identity and the name in a URL is cosmetic, so a
   // single-segment slug we hold nothing for is forward-geocoded by the Rust
@@ -155,29 +184,45 @@ export default async function proxy(
     ? rewriteWithAuthkit(request, headers, LOCATION_NOT_FOUND_REWRITE)
     : handleAuthkitProxy(request, headers);
 
+  // ── Legacy lastLocation cookie → canonical (home page, once) ────────────
+  // A cookie set before the canonical-slug move holds `harare`. The home
+  // page still resolves it (the resolver accepts both), so this only
+  // tidies the cookie; table only, no lookup, idempotent.
+  if (pathname === "/") {
+    const stored = request.cookies.get(LAST_LOCATION_COOKIE)?.value;
+    const canonical = stored ? LEGACY_TO_CANONICAL.get(stored) : undefined;
+    if (canonical) setLastLocationCookie(response, canonical);
+  }
+
   // ── Location pages: persist slug in cookie (30 days) ────────────────────
   // Only the first path segment — sub-routes like /harare/forecast set "harare".
   // Deliberately still set for a slug the gate just 404'd: whether a 404 slug
   // may overwrite the cookie is an open owner decision (#238).
   const slug = pathname.slice(1).split("/")[0];
   if (slug && LOCATION_SLUG_RE.test(slug) && !KNOWN_ROUTES.has(slug)) {
-    // `response.cookies` was built before AuthKit's Set-Cookie headers were
-    // applied, and setting through it rewrites the whole header from its own
-    // copy, dropping a refreshed session cookie. So set it (Next's cookie
-    // bookkeeping included), then put back whatever AuthKit had sent.
-    const authkitCookies = response.headers.getSetCookie();
-    response.cookies.set(LAST_LOCATION_COOKIE, slug, {
-      maxAge: 2592000,
-      path: "/",
-      sameSite: "lax",
-    });
-    const kept = new Set(response.headers.getSetCookie());
-    for (const cookie of authkitCookies) {
-      if (!kept.has(cookie)) response.headers.append("set-cookie", cookie);
-    }
+    setLastLocationCookie(response, slug);
   }
 
   return response;
+}
+
+/**
+ * `response.cookies` was built before AuthKit's Set-Cookie headers were
+ * applied, and setting through it rewrites the whole header from its own
+ * copy, dropping a refreshed session cookie. So set it (Next's cookie
+ * bookkeeping included), then put back whatever AuthKit had sent.
+ */
+function setLastLocationCookie(response: NextResponse, slug: string): void {
+  const authkitCookies = response.headers.getSetCookie();
+  response.cookies.set(LAST_LOCATION_COOKIE, slug, {
+    maxAge: 2592000,
+    path: "/",
+    sameSite: "lax",
+  });
+  const kept = new Set(response.headers.getSetCookie());
+  for (const cookie of authkitCookies) {
+    if (!kept.has(cookie)) response.headers.append("set-cookie", cookie);
+  }
 }
 
 /**

@@ -52,6 +52,7 @@ import {
 import { t } from "@/lib/i18n";
 import { Spinner } from "@/components/ui/spinner";
 import { workerUrl } from "@/lib/worker-url";
+import { locationPath } from "@/lib/slug-migration";
 
 /** Default category style for unknown categories */
 const DEFAULT_CATEGORY_STYLE = {
@@ -183,7 +184,7 @@ export function MyWeatherModal() {
         to: pendingSlug,
         method: pending?.method ?? "saved",
       });
-      router.push(`/${pendingSlug}`);
+      router.push(locationPath(pendingSlug));
     }
   };
 

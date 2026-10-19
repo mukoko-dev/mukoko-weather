@@ -20,6 +20,7 @@ import {
   type PlaceDoc,
 } from "./places";
 import { LOCATIONS } from "./locations";
+import { canonicalSlug } from "./slug-migration";
 
 describe("normalizeName", () => {
   it("lowercases and trims", () => {
@@ -243,7 +244,7 @@ describe("adaptSeedToLocationDoc (static seed → renderable location)", () => {
 
   it("produces a location carrying everything a weather page needs", () => {
     const adapted = adaptSeedToLocationDoc(seed);
-    expect(adapted.slug).toBe("singapore-sg");
+    expect(adapted.slug).toBe(canonicalSlug("singapore-sg"));
     expect(adapted.name).toBe("Singapore");
     expect(typeof adapted.lat).toBe("number");
     expect(typeof adapted.lon).toBe("number");
@@ -268,7 +269,7 @@ describe("adaptSeedToLocationDoc (static seed → renderable location)", () => {
     // a page without depending on a matching placesGeo document existing.
     for (const loc of LOCATIONS) {
       const adapted = adaptSeedToLocationDoc(loc);
-      expect(adapted.slug).toBe(loc.slug);
+      expect(adapted.slug).toBe(canonicalSlug(loc.slug));
       expect(Number.isFinite(adapted.lat)).toBe(true);
       expect(Number.isFinite(adapted.lon)).toBe(true);
       expect(adapted.name).toBeTruthy();
@@ -282,7 +283,7 @@ describe("nearestSeedLocation (coordinate fallback when placesGeo has no city)",
     // only as a `country`, which both nearestPlacesGeo and the slug resolver
     // filter out, so without this fallback the visitor resolves to nothing.
     const nearest = nearestSeedLocation(1.3521, 103.8198);
-    expect(nearest?.slug).toBe("singapore-sg");
+    expect(nearest?.slug).toBe(canonicalSlug("singapore-sg"));
   });
 
   it("resolves Harare coordinates to the Harare entry", () => {
@@ -297,7 +298,7 @@ describe("nearestSeedLocation (coordinate fallback when placesGeo has no city)",
 
   it("respects a custom radius", () => {
     expect(nearestSeedLocation(1.3521, 103.8198, 1000)?.slug).toBe(
-      "singapore-sg",
+      canonicalSlug("singapore-sg"),
     );
     expect(nearestSeedLocation(1.3521, 103.8198, 0)).toBeNull();
   });

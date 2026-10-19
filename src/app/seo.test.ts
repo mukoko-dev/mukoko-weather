@@ -3,6 +3,8 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import robots from "./robots";
 import sitemap from "./sitemap";
+import { canonicalSlug } from "@/lib/slug-migration";
+import { SEED_SLUG_TABLE } from "@/lib/slug-migration-data";
 
 describe("robots.ts", () => {
   const result = robots();
@@ -112,22 +114,41 @@ describe("sitemap.ts", () => {
     }
   });
 
+  it("lists only canonical location URLs, never a legacy seed slug (#317)", async () => {
+    const result = await sitemap();
+    const urls = new Set(result.map((e) => e.url));
+    const base = "https://weather.mukoko.com";
+    for (const [legacy] of SEED_SLUG_TABLE) {
+      expect(urls.has(`${base}/${legacy}`), legacy).toBe(false);
+      expect(urls.has(`${base}/${legacy}/forecast`), legacy).toBe(false);
+    }
+    // The boosted static entries are canonical (with no database here, the
+    // per-location pages are not listed; sitemap.ts maps them through
+    // canonicalSlug, which the table tests pin).
+    for (const legacy of ["harare", "bulawayo", "victoria-falls"]) {
+      expect(urls.has(`${base}/${canonicalSlug(legacy)}`), legacy).toBe(true);
+    }
+  });
+
   it("includes boosted city entries (harare, bulawayo, victoria-falls)", async () => {
     const result = await sitemap();
     const harare = result.find(
-      (e) => e.url === "https://weather.mukoko.com/harare",
+      (e) => e.url === `https://weather.mukoko.com/${canonicalSlug("harare")}`,
     );
     expect(harare).toBeDefined();
     expect(harare!.priority).toBe(0.9);
 
     const bulawayo = result.find(
-      (e) => e.url === "https://weather.mukoko.com/bulawayo",
+      (e) =>
+        e.url === `https://weather.mukoko.com/${canonicalSlug("bulawayo")}`,
     );
     expect(bulawayo).toBeDefined();
     expect(bulawayo!.priority).toBe(0.9);
 
     const vicfalls = result.find(
-      (e) => e.url === "https://weather.mukoko.com/victoria-falls",
+      (e) =>
+        e.url ===
+        `https://weather.mukoko.com/${canonicalSlug("victoria-falls")}`,
     );
     expect(vicfalls).toBeDefined();
     expect(vicfalls!.priority).toBe(0.9);
