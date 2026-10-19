@@ -1,0 +1,13 @@
+# Test-only inputs for the SCRAM tests, one `key=value` per line. They live in
+# a data file, not in Rust source, so they are plainly fixtures and never
+# credentials: none of them is used anywhere outside `cfg(test)`.
+rfc7677_password=pencil
+non_ascii_password=pässword
+short_salt=salt
+server_salt=0123456789abcdef
+server_nonce_tail=SERVERPART
+client_nonce=CLIENTNONCE123
+good_password=correct-horse
+bad_password=wrong
+other_password=other
+cache_password=pw

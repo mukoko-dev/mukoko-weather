@@ -6,44 +6,30 @@
 //! PATCH /devices/{id}  a partial preferences object → the updated profile
 //! ```
 //!
-//! The profile is kept in D1 `device_profiles` (migration 0004), last write
-//! wins. Creating a profile without a device id is limited to 20 an hour per
-//! client; an id the caller supplies is idempotent (the existing profile is
-//! returned) and unlimited.
+//! The profile is a document in MongoDB (`device.device_profiles`), last write
+//! wins, read and written by `mukoko-weather-mongo-bridge` through the
+//! `MONGO_BRIDGE` service binding (never D1). This Worker validates the request
+//! (`weather_core::community`), applies the per-client limit, and relays the
+//! bridge's answer. Creating a profile without a device id is limited to 20 an
+//! hour per client (D1 `rate_events`); an id the caller supplies is idempotent
+//! (the existing profile is returned) and unlimited.
 
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::json;
 use weather_core::community::{
-    self, apply_patch, iso_ms, valid_device_id, validate_preferences, Preferences, PreferencesPatch,
+    self, apply_patch, valid_device_id, validate_preferences, Preferences, PreferencesPatch,
 };
-use weather_edge::{error, json, now_ms};
+use weather_edge::{error, json};
 use worker::{Env, Method, Request, Response, Result};
 
-use crate::{limits, DB};
-
-#[derive(Deserialize)]
-struct Row {
-    device_id: String,
-    preferences: String,
-    created_at: f64,
-    updated_at: f64,
-}
+use crate::bridge::{self, Answer};
+use crate::limits;
 
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 struct CreateBody {
     device_id: Option<String>,
     preferences: Preferences,
-}
-
-fn profile(row: &Row) -> Value {
-    let prefs: Preferences = serde_json::from_str(&row.preferences).unwrap_or_default();
-    json!({
-        "deviceId": row.device_id,
-        "preferences": prefs,
-        "createdAt": iso_ms(row.created_at as u64),
-        "updatedAt": iso_ms(row.updated_at as u64),
-    })
 }
 
 fn client_ip(req: &Request) -> Option<String> {
@@ -53,17 +39,6 @@ fn client_ip(req: &Request) -> Option<String> {
         .flatten()
         .or_else(|| req.headers().get("CF-Connecting-IP").ok().flatten())
         .filter(|ip| !ip.is_empty())
-}
-
-async fn fetch_row(env: &Env, id: &str) -> Result<Option<Row>> {
-    env.d1(DB)?
-        .prepare(
-            "SELECT device_id, preferences, created_at, updated_at \
-             FROM device_profiles WHERE device_id = ?1",
-        )
-        .bind(&[id.into()])?
-        .first::<Row>(None)
-        .await
 }
 
 fn random_id() -> Result<String> {
@@ -101,6 +76,17 @@ pub async fn devices(req: &mut Request, env: &Env) -> Result<Response> {
     }
 }
 
+/// The bridge's answer as this Worker's: its status and body (a create is
+/// `201` whether the profile is new or already there; a rejection carries the
+/// `{error, error_description}` envelope), or `503` when the store does not
+/// answer.
+fn relay(answer: Answer) -> Result<Response> {
+    match answer {
+        Answer::Relay { status, body } => json(status, &body),
+        Answer::Unavailable => error(503, "unavailable", "Device sync is unavailable."),
+    }
+}
+
 async fn create(req: &mut Request, env: &Env) -> Result<Response> {
     let Ok(body) = req.json::<CreateBody>().await else {
         return error(
@@ -123,8 +109,8 @@ async fn create(req: &mut Request, env: &Env) -> Result<Response> {
                     "Too many device profiles created. Try again later.",
                 )
             }
-            // The limiter is a write; when D1 cannot take it the store cannot
-            // take the profile either.
+            // The limiter is a write; when D1 cannot take it the profile is
+            // not created either, so one outage never mints unlimited ids.
             Err(_) => return error(503, "unavailable", "Device sync is unavailable."),
         }
     }
@@ -136,38 +122,21 @@ async fn create(req: &mut Request, env: &Env) -> Result<Response> {
     if let Err(detail) = validate_preferences(&body.preferences) {
         return error(400, "invalid_request", &detail);
     }
-    let now = now_ms() as f64;
-    let prefs = serde_json::to_string(&body.preferences).unwrap_or_default();
-    let Ok(db) = env.d1(DB) else {
-        return error(503, "unavailable", "Device sync is unavailable.");
-    };
-    let inserted = db
-        .prepare(
-            "INSERT OR IGNORE INTO device_profiles (device_id, preferences, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?3)",
-        )
-        .bind(&[device_id.as_str().into(), prefs.as_str().into(), now.into()])?
-        .run()
-        .await;
-    if inserted.is_err() {
-        return error(503, "unavailable", "Device sync is unavailable.");
-    }
-    match fetch_row(env, &device_id).await {
-        Ok(Some(row)) => json(201, &profile(&row)),
-        Ok(None) => error(409, "conflict", "Device profile already exists"),
-        Err(_) => error(503, "unavailable", "Device sync is unavailable."),
-    }
+    let answer = bridge::call(
+        env,
+        Method::Post,
+        "/devices",
+        Some(&json!({"deviceId": device_id, "preferences": body.preferences})),
+    )
+    .await;
+    relay(answer)
 }
 
 async fn get(env: &Env, id: &str) -> Result<Response> {
     if !valid_device_id(id) {
         return error(404, "not_found", "Device profile not found");
     }
-    match fetch_row(env, id).await {
-        Ok(Some(row)) => json(200, &profile(&row)),
-        Ok(None) => error(404, "not_found", "Device profile not found"),
-        Err(_) => error(503, "unavailable", "Device sync is unavailable."),
-    }
+    relay(bridge::call(env, Method::Get, &format!("/devices/{id}"), None).await)
 }
 
 async fn patch(req: &mut Request, env: &Env, id: &str) -> Result<Response> {
@@ -181,31 +150,18 @@ async fn patch(req: &mut Request, env: &Env, id: &str) -> Result<Response> {
     if !valid_device_id(id) {
         return error(404, "not_found", "Device profile not found");
     }
-    let row = match fetch_row(env, id).await {
-        Ok(Some(row)) => row,
-        Ok(None) => return error(404, "not_found", "Device profile not found"),
-        Err(_) => return error(503, "unavailable", "Device sync is unavailable."),
-    };
-    let current: Preferences = serde_json::from_str(&row.preferences).unwrap_or_default();
-    let next = match apply_patch(&current, &body) {
-        Ok(next) => next,
-        Err(detail) => return error(400, "invalid_request", &detail),
-    };
-    let now = now_ms() as f64;
-    let prefs = serde_json::to_string(&next).unwrap_or_default();
-    let updated = env
-        .d1(DB)?
-        .prepare(
-            "UPDATE device_profiles SET preferences = ?2, updated_at = ?3 WHERE device_id = ?1",
+    // The same rules as a create, and `No fields to update` for an empty
+    // patch; the bridge then `$set`s only the fields present.
+    if let Err(detail) = apply_patch(&Preferences::default(), &body) {
+        return error(400, "invalid_request", &detail);
+    }
+    relay(
+        bridge::call(
+            env,
+            Method::Patch,
+            &format!("/devices/{id}"),
+            Some(&json!(body)),
         )
-        .bind(&[id.into(), prefs.as_str().into(), now.into()])?
-        .run()
-        .await;
-    if updated.is_err() {
-        return error(503, "unavailable", "Device sync is unavailable.");
-    }
-    match fetch_row(env, id).await {
-        Ok(Some(row)) => json(200, &profile(&row)),
-        _ => error(404, "not_found", "Device profile not found"),
-    }
+        .await,
+    )
 }
