@@ -60,6 +60,7 @@ export type WorkerRoute =
   | "haze"
   | "normals"
   | "aviation/nearest-metar"
+  | "suitability"
   | "devices"
   | `devices/${string}`;
 

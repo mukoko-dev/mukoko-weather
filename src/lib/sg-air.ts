@@ -1,9 +1,9 @@
 /**
  * Official Singapore air quality (NEA via data.gov.sg) — client-side types,
- * PSI band mapping and the response guard for `/api/py/sg-air`.
+ * PSI band mapping and the response guard for `/v1/sg-air`.
  *
  * Pure logic, no React, so every rule here is unit-tested directly. The band
- * thresholds mirror `PSI_BANDS` in `api/py/_sg_air.py`; keep them in sync.
+ * thresholds mirror `PSI_BANDS` in `weather_core::sg_air`; keep them in sync.
  */
 
 export type PsiBandKey =
@@ -110,7 +110,7 @@ export function sgRegionLabel(region: string): string {
 }
 
 /**
- * Shape guard for `/api/py/sg-air`. An unavailable response is still valid
+ * Shape guard for `/v1/sg-air`. An unavailable response is still valid
  * (it is how the endpoint reports a failed NEA read), so it is accepted and the
  * panel decides what to show.
  */

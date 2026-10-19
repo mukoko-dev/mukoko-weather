@@ -1,7 +1,7 @@
 /**
  * Air quality grid helpers for the Air Quality Map card.
  *
- * `/api/py/airquality/grid` returns current US AQI on a regular n×n grid. This
+ * `/v1/air-quality/grid` (the Rust Worker) returns current US AQI on a regular n×n grid. This
  * module turns those points into square GeoJSON cells (one per grid point) for
  * a MapLibre fill layer, classifies AQI into EPA bands, and fetches the grid.
  * Everything except `fetchAirQualityGrid` is pure and unit-tested.
