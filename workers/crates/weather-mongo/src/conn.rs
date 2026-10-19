@@ -823,7 +823,10 @@ mod tests {
             &testdata::get("client_nonce"),
             &mut SaltCache::new(),
         ));
-        assert!(matches!(r, Err(Error::Auth(_))), "{r:?}");
+        assert!(
+            matches!(r, Err(Error::Auth(_))),
+            "authentication was not refused"
+        );
     }
 
     #[test]
@@ -839,7 +842,10 @@ mod tests {
             &testdata::get("client_nonce"),
             &mut SaltCache::new(),
         ));
-        assert!(matches!(r, Err(Error::Auth(_))), "{r:?}");
+        assert!(
+            matches!(r, Err(Error::Auth(_))),
+            "authentication was not refused"
+        );
     }
 
     #[test]
