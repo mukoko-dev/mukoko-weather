@@ -1,0 +1,42 @@
+# main never holds development-only files.
+#
+# CLAUDE.md is guidance for developing the app and .claude/ holds agent
+# configuration; neither belongs in production code. The Release PR workflow
+# removes them from every release branch, and this check fails any PR to main,
+# or any push to main, whose tree still holds one (at any depth).
+name: No dev files on main
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: no-dev-files-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: No CLAUDE.md or .claude/ on main
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Fail if a development-only file is tracked
+        run: |
+          set -euo pipefail
+          found="$(git ls-files | grep -Ei '(^|/)(claude\.md$|\.claude/)' || true)"
+          if [ -n "$found" ]; then
+            echo "::error::main must not hold CLAUDE.md or .claude/. Found:"
+            printf '%s\n' "$found"
+            echo "Release through the Release PR workflow, which removes them."
+            exit 1
+          fi
+          echo "No CLAUDE.md or .claude/ files are tracked."
