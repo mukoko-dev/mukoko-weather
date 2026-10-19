@@ -207,6 +207,17 @@ Every collection (except `device_profiles` legacy) uses these patterns:
 
 ---
 
+## Weather writes from the Cloudflare Workers (the MongoDB bridge)
+
+The Rust Workers read MongoDB read-only (`workers/crates/weather-mongo`). The two weather collections the app writes from the Workers go through one TypeScript Worker, `mukoko-weather-mongo-bridge` (`workers/mongo-bridge`), over the `MONGO_BRIDGE` service binding from `mukoko-weather-places`. Nothing here is stored in D1, and nothing depends on Vercel.
+
+| Collection                | Written by                                    | Shape                                                               | Indexes (owner step, the bridge never creates indexes)                                        |
+| ------------------------- | --------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `device.device_profiles`  | the bridge (`/v1/devices` create, get, patch) | One document per device UUID: preferences, `createdAt`, `updatedAt` | `_id`, unique `deviceId`                                                                      |
+| `weather.weather_reports` | the bridge (community report submit, list)    | The existing `weather_reports` document shape (no migration)        | `_id`, `locationSlug` + `reportedAt` descending, TTL on `expiresAt` (`expireAfterSeconds: 0`) |
+
+The bridge keeps one official-driver `MongoClient` in a Durable Object, uses the read-write connection string from the shared Cloudflare Secrets Store secret `MUKOKO_MONGODB_RW_URI` (one secret for the whole Mukoko app), validates every input again, builds its own queries (no passthrough) and bounds every list. Two collections were created empty on 2026-10-19 without validators: `weather.modelBlendConfig` (per-region blend weight overrides, read by the blend) and `places.placeKnowledge` (the place-knowledge profile; its `$jsonSchema` validator is the owner step in nyuchi/data-infra#107, so it is not applied yet).
+
 ## Migration plan for mukoko-weather
 
 ### Decisions made (locked in)
