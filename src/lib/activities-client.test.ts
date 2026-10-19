@@ -29,10 +29,12 @@ afterEach(() => {
 });
 
 describe("fetchActivities", () => {
-  it("requests /api/py/activities and returns the list", async () => {
+  it("requests the Worker's /v1/activities and returns the list", async () => {
     mockFetch.mockResolvedValueOnce(okJson({ activities: [ACTIVITY] }));
     await expect(fetchActivities()).resolves.toEqual([ACTIVITY]);
-    expect(mockFetch.mock.calls[0][0]).toBe("/api/py/activities");
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      "https://weather-api.mukoko.com/v1/activities",
+    );
   });
 
   it("serves repeat calls from cache within 10 minutes", async () => {
@@ -82,7 +84,7 @@ describe("fetchActivityCategories", () => {
     mockFetch.mockResolvedValueOnce(okJson({ categories: [CATEGORY] }));
     await expect(fetchActivityCategories()).resolves.toEqual([CATEGORY]);
     expect(mockFetch.mock.calls[0][0]).toBe(
-      "/api/py/activities?mode=categories",
+      "https://weather-api.mukoko.com/v1/activities?mode=categories",
     );
   });
 

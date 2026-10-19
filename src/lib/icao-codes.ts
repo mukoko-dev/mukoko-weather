@@ -350,8 +350,8 @@ export function getAirportByIcao(
 /**
  * DB-backed nearest-airport lookup with a resilient static fallback.
  *
- * Calls `GET /api/py/airports/nearest` which runs a MongoDB `$nearSphere`
- * geospatial query over the seeded `weather.airports` collection. If the
+ * Calls the Rust Worker's `GET /v1/airports/nearest`, which ranks the compiled-in
+ * ICAO catalogue. If the
  * request fails, times out, or returns nothing usable, this falls back to the
  * in-memory haversine scan (`getNearestIcaos`) so the aviation UI keeps working
  * offline or before the DB is seeded.

@@ -1,13 +1,14 @@
 /**
  * Air quality grid helpers for the Air Quality Map card.
  *
- * `/api/py/airquality/grid` returns current US AQI on a regular n×n grid. This
+ * `/v1/air-quality/grid` (the Rust Worker) returns current US AQI on a regular n×n grid. This
  * module turns those points into square GeoJSON cells (one per grid point) for
  * a MapLibre fill layer, classifies AQI into EPA bands, and fetches the grid.
  * Everything except `fetchAirQualityGrid` is pure and unit-tested.
  */
 
 import type { Feature, FeatureCollection, Polygon } from "geojson";
+import { fetchWorker } from "@/lib/weather-api";
 
 /** EPA US AQI categories, lowest to highest severity. */
 export type AqiBand =
@@ -218,7 +219,7 @@ export async function fetchAirQualityGrid(options: {
     radiusKm: String(options.radiusKm ?? 40),
     n: String(options.n ?? 7),
   });
-  const res = await fetch(`/api/py/airquality/grid?${params.toString()}`, {
+  const res = await fetchWorker("air-quality/grid", params.toString(), {
     signal: options.signal,
     headers: { Accept: "application/json" },
   });

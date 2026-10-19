@@ -187,27 +187,27 @@ Sections also UNMOUNT when scrolled 1500px past the viewport (bidirectional), re
 
 ### Collections
 
-| Collection            |        TTL         | Purpose                                             |
-| --------------------- | :----------------: | --------------------------------------------------- |
-| `weather_cache`       |       15 min       | Weather API responses, keyed by 0.05° grid cell     |
-| `ai_summaries`        |   30/60/120 min    | Cached AI weather summaries (tiered by location)    |
-| `weather_history`     |        None        | Permanent historical weather records                |
-| `history_analysis`    |       1 hour       | Cached AI history analysis results                  |
-| `locations`           |        None        | Seed + community locations                          |
-| `activities`          |        None        | Activity definitions (30+ activities, 6 categories) |
-| `activity_categories` |        None        | Category metadata with mineral color styles         |
-| `suitability_rules`   |        None        | Condition-based weather suitability rules           |
-| `tags`                |        None        | Tag metadata (slug, label, icon, featured)          |
-| `regions`             |        None        | Supported geographic regions (bounding boxes)       |
-| `seasons`             |        None        | Country-specific season definitions                 |
-| `countries`           |        None        | Country metadata (54 AU + ASEAN)                    |
-| `provinces`           |        None        | Province/state metadata                             |
-| `ai_prompts`          |        None        | Database-driven AI system prompts                   |
-| `ai_suggested_rules`  |        None        | Dynamic suggested prompt rules                      |
-| `weather_reports`     | TTL on `expiresAt` | Community weather reports (24h/48h/72h by severity) |
-| `device_profiles`     |        None        | Cross-device preference sync (anonymous UUID)       |
-| `rate_limits`         | TTL on `expiresAt` | IP rate limiting (atomic findOneAndUpdate)          |
-| `api_keys`            |        None        | Third-party API keys (Tomorrow.io, Stytch)          |
+| Collection            |        TTL         | Purpose                                                                                   |
+| --------------------- | :----------------: | ----------------------------------------------------------------------------------------- |
+| `weather_cache`       |       15 min       | Weather API responses, keyed by 0.05° grid cell                                           |
+| `ai_summaries`        |   30/60/120 min    | Cached AI weather summaries (tiered by location)                                          |
+| `weather_history`     |        None        | Permanent historical weather records                                                      |
+| `history_analysis`    |       1 hour       | Cached AI history analysis results                                                        |
+| `locations`           |        None        | Seed + community locations                                                                |
+| `activities`          |        None        | Activity definitions (30+ activities, 6 categories)                                       |
+| `activity_categories` |        None        | Category metadata with mineral color styles                                               |
+| `suitability_rules`   |        None        | Condition-based weather suitability rules                                                 |
+| `tags`                |        None        | Tag metadata (slug, label, icon, featured)                                                |
+| `regions`             |        None        | Supported geographic regions (bounding boxes)                                             |
+| `seasons`             |        None        | Country-specific season definitions                                                       |
+| `countries`           |        None        | Country metadata (54 AU + ASEAN)                                                          |
+| `provinces`           |        None        | Province/state metadata                                                                   |
+| `ai_prompts`          |        None        | Database-driven AI system prompts                                                         |
+| `ai_suggested_rules`  |        None        | Dynamic suggested prompt rules                                                            |
+| `weather_reports`     | TTL on `expiresAt` | Community weather reports (24h/48h/72h by severity); written by the MongoDB bridge Worker |
+| `device_profiles`     |        None        | Cross-device preference sync (anonymous UUID); written by the MongoDB bridge Worker       |
+| `rate_limits`         | TTL on `expiresAt` | IP rate limiting (atomic findOneAndUpdate)                                                |
+| `api_keys`            |        None        | Third-party API keys (Tomorrow.io, Stytch)                                                |
 
 ### Atlas Search Indexes
 

@@ -10,10 +10,17 @@
 //! GET /v1/weather?lat=&lon=[&models=a,b]   full WeatherData, the shape of /api/py/weather
 //! GET /v1/forecast?location=|lat=&lon=[&days=1..7]   the daily forecast contract
 //! GET /v1/air-quality?lat=&lon=                     the EPA AQI, the shape of /api/py/airquality
+//! GET /v1/air-quality/grid?lat=&lon=[&radiusKm=&n=]  US AQI on an n x n grid (the shape of /api/py/airquality/grid)
+//! GET /v1/haze?lat=&lon=                             haze panel data (the shape of /api/py/haze)
+//! GET /v1/normals?lat=&lon=[&date=]                  climate normals (the shape of /api/py/normals)
+//! GET /v1/enso                                       El Nino / La Nina phase (the shape of /api/py/enso)
+//! GET /v1/sg-air?lat=&lon=                           official Singapore NEA air quality (the shape of /api/py/sg-air)
+//! GET /v1/aviation/nearest-metar?lat=&lon=           nearest airport with a recent METAR (the shape of /api/py/aviation/nearest-metar)
 //! GET /v1/metar?icao=                                METARs and TAF, the shape of /api/py/metar
 //! GET /v1/airports/nearest?lat=&lon=[&count=][&maxDistanceKm=]
 //!                                                    the shape of /api/py/airports/nearest
 //! GET /v1/locations, /v1/search, /v1/geo, /v1/history   places (mukoko-weather-places)
+//! POST /v1/devices, GET|PATCH /v1/devices/{id}      device preference profiles
 //! POST /v1/ai, /v1/ai/{summary,followup,chat,history/analyze}   Shamwari Weather
 //! GET /health
 //! ```
@@ -37,8 +44,8 @@ mod keys;
 use serde_json::Value;
 use weather_core::cors::origin_allowed;
 use weather_core::query::ForecastQuery;
-use weather_core::{geo, normalize, places};
-use weather_edge::{config, error, json, now, query_pairs};
+use weather_core::{geo, normalize, places, reference, status as health};
+use weather_edge::{config, error, get_with_timeout, json, now, now_ms, now_rfc3339, query_pairs};
 use worker::wasm_bindgen::JsValue;
 use worker::{event, Context, Env, Headers, Method, Request, RequestInit, Response, Result};
 
@@ -47,6 +54,8 @@ const AVIATION_BINDING: &str = "AVIATION";
 const AI_BINDING: &str = "AI_SERVICE";
 /// AI request bodies larger than this are refused here.
 const MAX_AI_BODY_BYTES: usize = 64 * 1024;
+/// Device profile bodies are a few hundred bytes.
+const MAX_DEVICE_BODY_BYTES: usize = 16 * 1024;
 const RATE_LIMITER: &str = "RATE_LIMITER";
 const KEY_RATE_LIMITER: &str = "KEY_RATE_LIMITER";
 const PLACES_BINDING: &str = "PLACES";
@@ -70,6 +79,16 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
             limited
         } else {
             forward_ai(&mut req, &env).await
+        }
+    } else if is_devices_path(&req.path()) {
+        match req.method() {
+            Method::Get | Method::Post | Method::Patch => {
+                match rate_limited(&req, &env, &keys::Caller::Anonymous).await {
+                    Some(limited) => limited,
+                    None => forward_devices(&mut req, &env).await,
+                }
+            }
+            _ => error(405, "method_not_allowed", "Use POST, GET or PATCH."),
         }
     } else if req.method() != Method::Get {
         error(405, "method_not_allowed", "Only GET is served.")
@@ -103,6 +122,39 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
             )
             .await
         }
+        "/v1/air-quality/grid" => {
+            relay(
+                req,
+                env,
+                FORECAST_BINDING,
+                "/air-quality/grid",
+                "public, max-age=900",
+            )
+            .await
+        }
+        "/v1/haze" => relay(req, env, FORECAST_BINDING, "/haze", "public, max-age=900").await,
+        "/v1/normals" => {
+            relay(
+                req,
+                env,
+                FORECAST_BINDING,
+                "/normals",
+                "public, max-age=86400",
+            )
+            .await
+        }
+        "/v1/enso" => relay(req, env, FORECAST_BINDING, "/enso", "public, max-age=3600").await,
+        "/v1/sg-air" => relay(req, env, FORECAST_BINDING, "/sg-air", "public, max-age=300").await,
+        "/v1/aviation/nearest-metar" => {
+            relay(
+                req,
+                env,
+                AVIATION_BINDING,
+                "/aviation/nearest-metar",
+                "public, max-age=300",
+            )
+            .await
+        }
         "/v1/model-grid" => {
             relay(
                 req,
@@ -125,6 +177,18 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
             .await
         }
         "/v1/locations" | "/v1/search" | "/v1/geo" | "/v1/history" => places(req, env).await,
+        "/v1/status" => status(env).await,
+        path if reference::serves(path) => {
+            let query = query_pairs(req)?;
+            match reference::reply(path, &query) {
+                Some(r) => {
+                    let resp = json(r.status, &r.body)?;
+                    resp.headers().set("Cache-Control", r.cache)?;
+                    Ok(resp)
+                }
+                None => error(404, "not_found", "No such route."),
+            }
+        }
         _ => error(404, "not_found", "No such route."),
     }
 }
@@ -139,7 +203,7 @@ fn preflight(allowed: bool) -> Result<Response> {
     let resp = Response::empty()?.with_status(if allowed { 204 } else { 403 });
     if allowed {
         let h = resp.headers();
-        h.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")?;
+        h.set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")?;
         h.set(
             "Access-Control-Allow-Headers",
             "Content-Type, Authorization, X-Mukoko-Client, X-API-Key, X-Client-Id, X-Client-Secret",
@@ -192,8 +256,62 @@ async fn rate_limited(req: &Request, env: &Env, caller: &keys::Caller) -> Option
     }
 }
 
+fn is_devices_path(path: &str) -> bool {
+    path == "/v1/devices" || path.starts_with("/v1/devices/")
+}
+
+/// Device preference profiles: `POST /v1/devices`, `GET` and `PATCH
+/// /v1/devices/{id}`, passed to `mukoko-weather-places` with the client's IP.
+async fn forward_devices(req: &mut Request, env: &Env) -> Result<Response> {
+    let method = req.method();
+    let body = if method == Method::Get {
+        String::new()
+    } else {
+        let text = req.text().await.unwrap_or_default();
+        if text.len() > MAX_DEVICE_BODY_BYTES {
+            return error(413, "payload_too_large", "The request body is too large.");
+        }
+        text
+    };
+    let path = req.path();
+    let headers = Headers::new();
+    headers.set("Content-Type", "application/json")?;
+    headers.set("X-Mukoko-Client-IP", &client_ip(req))?;
+    let mut init = RequestInit::new();
+    init.with_method(method).with_headers(headers);
+    if !body.is_empty() {
+        init.with_body(Some(JsValue::from_str(&body)));
+    }
+    let inner = Request::new_with_init(
+        &format!("https://places{}", path.trim_start_matches("/v1")),
+        &init,
+    )?;
+    let Ok(mut upstream) = env.service(PLACES_BINDING)?.fetch_request(inner).await else {
+        return error(
+            502,
+            "upstream_unreachable",
+            "The places service did not answer.",
+        );
+    };
+    let status = upstream.status_code();
+    match upstream.json::<Value>().await {
+        Ok(body) => {
+            let resp = json(status, &body)?;
+            resp.headers().set("Cache-Control", "no-store")?;
+            Ok(resp)
+        }
+        Err(_) => error(
+            502,
+            "upstream_malformed",
+            "The places service sent a bad answer.",
+        ),
+    }
+}
+
+/// Shamwari's POST routes. The two reference-data GETs under `/v1/ai/` are
+/// answered here, not forwarded.
 fn is_ai_path(path: &str) -> bool {
-    path == "/v1/ai" || path.starts_with("/v1/ai/")
+    (path == "/v1/ai" || path.starts_with("/v1/ai/")) && !reference::serves(path)
 }
 
 /// Pass a Shamwari request to `mukoko-weather-ai` with the client's IP, and
@@ -377,7 +495,17 @@ async fn relay(
         copy_header(upstream.headers(), resp.headers(), h)?;
     }
     if status == 200 {
-        resp.headers().set("Cache-Control", cache_control)?;
+        // An upstream `no-store` (a degraded answer) must never be cached.
+        let no_store = upstream
+            .headers()
+            .get("Cache-Control")
+            .ok()
+            .flatten()
+            .is_some_and(|v| v == "no-store");
+        resp.headers().set(
+            "Cache-Control",
+            if no_store { "no-store" } else { cache_control },
+        )?;
     }
     Ok(resp)
 }
@@ -414,5 +542,83 @@ async fn places(req: &Request, env: &Env) -> Result<Response> {
     if let Some(cc) = upstream.headers().get("Cache-Control")? {
         resp.headers().set("Cache-Control", &cc)?;
     }
+    Ok(resp)
+}
+
+/// How long a probe of another Worker or Open-Meteo may take.
+const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+/// The status payload is rebuilt at most this often (seconds).
+const STATUS_TTL_S: &str = "public, max-age=60";
+const OPEN_METEO_PROBE: &str =
+    "https://api.open-meteo.com/v1/forecast?latitude=-17.83&longitude=31.05&current=temperature_2m";
+
+/// `GET <binding>/health`, timed.
+async fn probe_worker(env: &Env, binding: &str) -> (health::Probe, u64) {
+    let started = now_ms();
+    let outcome = match env.service(binding) {
+        Ok(fetcher) => {
+            let call = Box::pin(fetcher.fetch("https://upstream/health".to_owned(), None));
+            let timer = Box::pin(worker::Delay::from(PROBE_TIMEOUT));
+            match futures::future::select(call, timer).await {
+                futures::future::Either::Left((Ok(resp), _)) => Some(resp),
+                _ => None,
+            }
+        }
+        Err(_) => None,
+    };
+    let probe = match outcome {
+        Some(mut resp) if resp.status_code() == 200 => match resp.json::<Value>().await {
+            Ok(body) => health::Probe::Healthy(body),
+            Err(_) => health::Probe::Status(502),
+        },
+        Some(resp) => health::Probe::Status(resp.status_code()),
+        None => health::Probe::Unreachable,
+    };
+    (probe, now_ms().saturating_sub(started))
+}
+
+async fn probe_open_meteo() -> (Result<Option<f64>, u16>, u64) {
+    let started = now_ms();
+    let outcome = match get_with_timeout(OPEN_METEO_PROBE, None, PROBE_TIMEOUT).await {
+        Ok(mut resp) if resp.status_code() == 200 => Ok(resp
+            .json::<Value>()
+            .await
+            .ok()
+            .and_then(|b| b["current"]["temperature_2m"].as_f64())),
+        Ok(resp) => Err(resp.status_code()),
+        Err(_) => Err(0),
+    };
+    (outcome, now_ms().saturating_sub(started))
+}
+
+/// `GET /v1/status`: live health of the Workers and Open-Meteo, in the shape
+/// the status page reads (`weather_core::status`).
+async fn status(env: &Env) -> Result<Response> {
+    let started = now_ms();
+    let (forecast, places, aviation, ai, meteo) = futures::join!(
+        probe_worker(env, FORECAST_BINDING),
+        probe_worker(env, PLACES_BINDING),
+        probe_worker(env, AVIATION_BINDING),
+        probe_worker(env, AI_BINDING),
+        probe_open_meteo(),
+    );
+    let mut checks = vec![health::worker_row(
+        "Forecast Worker",
+        &forecast.0,
+        forecast.1,
+    )];
+    checks.extend(health::forecast_storage_row(&forecast.0, forecast.1));
+    checks.push(health::enrichment_row(&forecast.0, forecast.1));
+    checks.push(health::worker_row("Places Worker", &places.0, places.1));
+    checks.push(health::worker_row(
+        "Aviation Worker",
+        &aviation.0,
+        aviation.1,
+    ));
+    checks.push(health::ai_row(&ai.0, ai.1));
+    checks.push(health::open_meteo_row(meteo.0, meteo.1));
+    let body = health::payload(checks, &now_rfc3339(), now_ms().saturating_sub(started));
+    let resp = json(200, &body)?;
+    resp.headers().set("Cache-Control", STATUS_TTL_S)?;
     Ok(resp)
 }
