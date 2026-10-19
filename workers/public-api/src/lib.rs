@@ -9,6 +9,7 @@
 //! ```text
 //! GET /v1/weather?lat=&lon=[&models=a,b]   full WeatherData, the shape of /api/py/weather
 //! GET /v1/forecast?location=|lat=&lon=[&days=1..7]   the daily forecast contract
+//! GET /v1/locations/profile?slug=|lat=&lon=[&country=]   a place's knowledge (seasons, crops, climate, soil) and today's context
 //! GET /v1/air-quality?lat=&lon=                     the EPA AQI, the shape of /api/py/airquality
 //! GET /v1/air-quality/grid?lat=&lon=[&radiusKm=&n=]  US AQI on an n x n grid (the shape of /api/py/airquality/grid)
 //! GET /v1/haze?lat=&lon=                             haze panel data (the shape of /api/py/haze)
@@ -152,6 +153,16 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
                 AVIATION_BINDING,
                 "/aviation/nearest-metar",
                 "public, max-age=300",
+            )
+            .await
+        }
+        "/v1/locations/profile" => {
+            relay(
+                req,
+                env,
+                FORECAST_BINDING,
+                "/profile",
+                "public, max-age=1800",
             )
             .await
         }
@@ -484,7 +495,7 @@ async fn relay(
         return error(502, "upstream_unreachable", "The service did not answer.");
     };
     let status = upstream.status_code();
-    if !matches!(status, 200 | 400 | 404 | 422 | 502 | 503) {
+    if !matches!(status, 200 | 400 | 404 | 422 | 429 | 502 | 503) {
         return error(502, "upstream_error", "The service failed.");
     }
     let Ok(body) = upstream.json::<Value>().await else {

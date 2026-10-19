@@ -33,6 +33,9 @@ pub enum Action {
     /// Open-Meteo model-grid fetch (a cache miss of `/v1/model-grid`: one
     /// request carries 49 locations, and the free API allows about 10,000 a day).
     ModelGrid,
+    /// A place-profile request that needs an upstream (a 30-year archive
+    /// request, SoilGrids): a cache hit is free.
+    PlaceProfile,
 }
 
 /// Hourly limits for one action.
@@ -50,6 +53,7 @@ impl Action {
             Action::Search => "geocode-search",
             Action::Nominatim => "nominatim",
             Action::ModelGrid => "model-grid",
+            Action::PlaceProfile => "place-profile",
         }
     }
 
@@ -80,6 +84,12 @@ impl Action {
             Action::ModelGrid => Limits {
                 per_client: 30,
                 global: 100,
+            },
+            // 120 builds an hour per client, as in the Python backend; each
+            // is one archive request (about 250 KB) and two SoilGrids calls.
+            Action::PlaceProfile => Limits {
+                per_client: 120,
+                global: 600,
             },
         }
     }

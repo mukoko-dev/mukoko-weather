@@ -1,0 +1,1834 @@
+[
+  {
+    "countryCode": "ZW",
+    "name": "Main rains",
+    "localName": "Masika",
+    "months": [11, 12, 1, 2, 3],
+    "hemisphere": "south",
+    "description": "Flooding, road damage, planting"
+  },
+  {
+    "countryCode": "ZW",
+    "name": "Short rains",
+    "localName": "Munakamwe",
+    "months": [4],
+    "hemisphere": "south",
+    "description": "Harvest, late rains"
+  },
+  {
+    "countryCode": "ZW",
+    "name": "Cool dry",
+    "localName": "Chirimo",
+    "months": [5, 6, 7, 8],
+    "hemisphere": "south",
+    "description": "Frost, cold snaps, veld fires"
+  },
+  {
+    "countryCode": "ZW",
+    "name": "Hot dry",
+    "localName": "Zhizha",
+    "months": [9, 10],
+    "hemisphere": "south",
+    "description": "Heat stress, UV, water scarcity"
+  },
+  {
+    "countryCode": "ZA",
+    "name": "Summer",
+    "localName": "Somer",
+    "months": [12, 1, 2],
+    "hemisphere": "south",
+    "description": "Hot, thunderstorms in the interior, beach season"
+  },
+  {
+    "countryCode": "ZA",
+    "name": "Autumn",
+    "localName": "Herfs",
+    "months": [3, 4, 5],
+    "hemisphere": "south",
+    "description": "Cooling, grape harvest, moderate rainfall"
+  },
+  {
+    "countryCode": "ZA",
+    "name": "Winter",
+    "localName": "Winter",
+    "months": [6, 7, 8],
+    "hemisphere": "south",
+    "description": "Cold, Cape rains, snow on peaks, frost inland"
+  },
+  {
+    "countryCode": "ZA",
+    "name": "Spring",
+    "localName": "Lente",
+    "months": [9, 10, 11],
+    "hemisphere": "south",
+    "description": "Warming, wildflower blooms, jacaranda season"
+  },
+  {
+    "countryCode": "ZM",
+    "name": "Wet season",
+    "localName": "Rainy season",
+    "months": [11, 12, 1, 2, 3],
+    "hemisphere": "south",
+    "description": "Heavy rains, flooding, planting season"
+  },
+  {
+    "countryCode": "ZM",
+    "name": "Late rains",
+    "localName": "Late rains",
+    "months": [4],
+    "hemisphere": "south",
+    "description": "Harvest, scattered showers"
+  },
+  {
+    "countryCode": "ZM",
+    "name": "Cool dry season",
+    "localName": "Winter",
+    "months": [5, 6, 7, 8],
+    "hemisphere": "south",
+    "description": "Cool temperatures, frost risk in highlands"
+  },
+  {
+    "countryCode": "ZM",
+    "name": "Hot dry season",
+    "localName": "Pre-rains",
+    "months": [9, 10],
+    "hemisphere": "south",
+    "description": "Heat, dust, bushfire risk"
+  },
+  {
+    "countryCode": "MZ",
+    "name": "Wet season",
+    "localName": "Rainy season",
+    "months": [11, 12, 1, 2, 3],
+    "hemisphere": "south",
+    "description": "Heavy rains, flooding, planting season"
+  },
+  {
+    "countryCode": "MZ",
+    "name": "Late rains",
+    "localName": "Late rains",
+    "months": [4],
+    "hemisphere": "south",
+    "description": "Harvest, scattered showers"
+  },
+  {
+    "countryCode": "MZ",
+    "name": "Cool dry season",
+    "localName": "Winter",
+    "months": [5, 6, 7, 8],
+    "hemisphere": "south",
+    "description": "Cool temperatures, frost risk in highlands"
+  },
+  {
+    "countryCode": "MZ",
+    "name": "Hot dry season",
+    "localName": "Pre-rains",
+    "months": [9, 10],
+    "hemisphere": "south",
+    "description": "Heat, dust, bushfire risk"
+  },
+  {
+    "countryCode": "MW",
+    "name": "Wet season",
+    "localName": "Rainy season",
+    "months": [11, 12, 1, 2, 3],
+    "hemisphere": "south",
+    "description": "Heavy rains, flooding, planting season"
+  },
+  {
+    "countryCode": "MW",
+    "name": "Late rains",
+    "localName": "Late rains",
+    "months": [4],
+    "hemisphere": "south",
+    "description": "Harvest, scattered showers"
+  },
+  {
+    "countryCode": "MW",
+    "name": "Cool dry season",
+    "localName": "Winter",
+    "months": [5, 6, 7, 8],
+    "hemisphere": "south",
+    "description": "Cool temperatures, frost risk in highlands"
+  },
+  {
+    "countryCode": "MW",
+    "name": "Hot dry season",
+    "localName": "Pre-rains",
+    "months": [9, 10],
+    "hemisphere": "south",
+    "description": "Heat, dust, bushfire risk"
+  },
+  {
+    "countryCode": "BW",
+    "name": "Wet season",
+    "localName": "Rainy season",
+    "months": [11, 12, 1, 2, 3],
+    "hemisphere": "south",
+    "description": "Heavy rains, flooding, planting season"
+  },
+  {
+    "countryCode": "BW",
+    "name": "Late rains",
+    "localName": "Late rains",
+    "months": [4],
+    "hemisphere": "south",
+    "description": "Harvest, scattered showers"
+  },
+  {
+    "countryCode": "BW",
+    "name": "Cool dry season",
+    "localName": "Winter",
+    "months": [5, 6, 7, 8],
+    "hemisphere": "south",
+    "description": "Cool temperatures, frost risk in highlands"
+  },
+  {
+    "countryCode": "BW",
+    "name": "Hot dry season",
+    "localName": "Pre-rains",
+    "months": [9, 10],
+    "hemisphere": "south",
+    "description": "Heat, dust, bushfire risk"
+  },
+  {
+    "countryCode": "NA",
+    "name": "Wet season",
+    "localName": "Rainy season",
+    "months": [11, 12, 1, 2, 3],
+    "hemisphere": "south",
+    "description": "Heavy rains, flooding, planting season"
+  },
+  {
+    "countryCode": "NA",
+    "name": "Late rains",
+    "localName": "Late rains",
+    "months": [4],
+    "hemisphere": "south",
+    "description": "Harvest, scattered showers"
+  },
+  {
+    "countryCode": "NA",
+    "name": "Cool dry season",
+    "localName": "Winter",
+    "months": [5, 6, 7, 8],
+    "hemisphere": "south",
+    "description": "Cool temperatures, frost risk in highlands"
+  },
+  {
+    "countryCode": "NA",
+    "name": "Hot dry season",
+    "localName": "Pre-rains",
+    "months": [9, 10],
+    "hemisphere": "south",
+    "description": "Heat, dust, bushfire risk"
+  },
+  {
+    "countryCode": "AO",
+    "name": "Wet season",
+    "localName": "Rainy season",
+    "months": [11, 12, 1, 2, 3],
+    "hemisphere": "south",
+    "description": "Heavy rains, flooding, planting season"
+  },
+  {
+    "countryCode": "AO",
+    "name": "Late rains",
+    "localName": "Late rains",
+    "months": [4],
+    "hemisphere": "south",
+    "description": "Harvest, scattered showers"
+  },
+  {
+    "countryCode": "AO",
+    "name": "Cool dry season",
+    "localName": "Winter",
+    "months": [5, 6, 7, 8],
+    "hemisphere": "south",
+    "description": "Cool temperatures, frost risk in highlands"
+  },
+  {
+    "countryCode": "AO",
+    "name": "Hot dry season",
+    "localName": "Pre-rains",
+    "months": [9, 10],
+    "hemisphere": "south",
+    "description": "Heat, dust, bushfire risk"
+  },
+  {
+    "countryCode": "SZ",
+    "name": "Wet season",
+    "localName": "Rainy season",
+    "months": [11, 12, 1, 2, 3],
+    "hemisphere": "south",
+    "description": "Heavy rains, flooding, planting season"
+  },
+  {
+    "countryCode": "SZ",
+    "name": "Late rains",
+    "localName": "Late rains",
+    "months": [4],
+    "hemisphere": "south",
+    "description": "Harvest, scattered showers"
+  },
+  {
+    "countryCode": "SZ",
+    "name": "Cool dry season",
+    "localName": "Winter",
+    "months": [5, 6, 7, 8],
+    "hemisphere": "south",
+    "description": "Cool temperatures, frost risk in highlands"
+  },
+  {
+    "countryCode": "SZ",
+    "name": "Hot dry season",
+    "localName": "Pre-rains",
+    "months": [9, 10],
+    "hemisphere": "south",
+    "description": "Heat, dust, bushfire risk"
+  },
+  {
+    "countryCode": "LS",
+    "name": "Wet season",
+    "localName": "Rainy season",
+    "months": [11, 12, 1, 2, 3],
+    "hemisphere": "south",
+    "description": "Heavy rains, flooding, planting season"
+  },
+  {
+    "countryCode": "LS",
+    "name": "Late rains",
+    "localName": "Late rains",
+    "months": [4],
+    "hemisphere": "south",
+    "description": "Harvest, scattered showers"
+  },
+  {
+    "countryCode": "LS",
+    "name": "Cool dry season",
+    "localName": "Winter",
+    "months": [5, 6, 7, 8],
+    "hemisphere": "south",
+    "description": "Cool temperatures, frost risk in highlands"
+  },
+  {
+    "countryCode": "LS",
+    "name": "Hot dry season",
+    "localName": "Pre-rains",
+    "months": [9, 10],
+    "hemisphere": "south",
+    "description": "Heat, dust, bushfire risk"
+  },
+  {
+    "countryCode": "KE",
+    "name": "Long rains",
+    "localName": "Masika",
+    "months": [3, 4, 5],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains, flooding, main planting season"
+  },
+  {
+    "countryCode": "KE",
+    "name": "Warm dry",
+    "localName": "Kiangazi",
+    "months": [6, 7, 8, 9],
+    "hemisphere": "equatorial",
+    "description": "Dry, warm, safari high season"
+  },
+  {
+    "countryCode": "KE",
+    "name": "Short rains",
+    "localName": "Vuli",
+    "months": [10, 11, 12],
+    "hemisphere": "equatorial",
+    "description": "Light rains, second planting, greening"
+  },
+  {
+    "countryCode": "KE",
+    "name": "Hot dry",
+    "localName": "Jua kali",
+    "months": [1, 2],
+    "hemisphere": "equatorial",
+    "description": "Hot, dry, dust, beach season"
+  },
+  {
+    "countryCode": "TZ",
+    "name": "Long rains",
+    "localName": "Masika",
+    "months": [3, 4, 5],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains, flooding, main planting season"
+  },
+  {
+    "countryCode": "TZ",
+    "name": "Warm dry",
+    "localName": "Kiangazi",
+    "months": [6, 7, 8, 9],
+    "hemisphere": "equatorial",
+    "description": "Dry, warm, safari high season"
+  },
+  {
+    "countryCode": "TZ",
+    "name": "Short rains",
+    "localName": "Vuli",
+    "months": [10, 11, 12],
+    "hemisphere": "equatorial",
+    "description": "Light rains, second planting, greening"
+  },
+  {
+    "countryCode": "TZ",
+    "name": "Hot dry",
+    "localName": "Jua kali",
+    "months": [1, 2],
+    "hemisphere": "equatorial",
+    "description": "Hot, dry, dust, beach season"
+  },
+  {
+    "countryCode": "UG",
+    "name": "Long rains",
+    "localName": "Masika",
+    "months": [3, 4, 5],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains, flooding, main planting season"
+  },
+  {
+    "countryCode": "UG",
+    "name": "Warm dry",
+    "localName": "Kiangazi",
+    "months": [6, 7, 8, 9],
+    "hemisphere": "equatorial",
+    "description": "Dry, warm, safari high season"
+  },
+  {
+    "countryCode": "UG",
+    "name": "Short rains",
+    "localName": "Vuli",
+    "months": [10, 11, 12],
+    "hemisphere": "equatorial",
+    "description": "Light rains, second planting, greening"
+  },
+  {
+    "countryCode": "UG",
+    "name": "Hot dry",
+    "localName": "Jua kali",
+    "months": [1, 2],
+    "hemisphere": "equatorial",
+    "description": "Hot, dry, dust, beach season"
+  },
+  {
+    "countryCode": "RW",
+    "name": "Long rains",
+    "localName": "Masika",
+    "months": [3, 4, 5],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains, flooding, main planting season"
+  },
+  {
+    "countryCode": "RW",
+    "name": "Warm dry",
+    "localName": "Kiangazi",
+    "months": [6, 7, 8, 9],
+    "hemisphere": "equatorial",
+    "description": "Dry, warm, safari high season"
+  },
+  {
+    "countryCode": "RW",
+    "name": "Short rains",
+    "localName": "Vuli",
+    "months": [10, 11, 12],
+    "hemisphere": "equatorial",
+    "description": "Light rains, second planting, greening"
+  },
+  {
+    "countryCode": "RW",
+    "name": "Hot dry",
+    "localName": "Jua kali",
+    "months": [1, 2],
+    "hemisphere": "equatorial",
+    "description": "Hot, dry, dust, beach season"
+  },
+  {
+    "countryCode": "BI",
+    "name": "Long rains",
+    "localName": "Masika",
+    "months": [3, 4, 5],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains, flooding, main planting season"
+  },
+  {
+    "countryCode": "BI",
+    "name": "Warm dry",
+    "localName": "Kiangazi",
+    "months": [6, 7, 8, 9],
+    "hemisphere": "equatorial",
+    "description": "Dry, warm, safari high season"
+  },
+  {
+    "countryCode": "BI",
+    "name": "Short rains",
+    "localName": "Vuli",
+    "months": [10, 11, 12],
+    "hemisphere": "equatorial",
+    "description": "Light rains, second planting, greening"
+  },
+  {
+    "countryCode": "BI",
+    "name": "Hot dry",
+    "localName": "Jua kali",
+    "months": [1, 2],
+    "hemisphere": "equatorial",
+    "description": "Hot, dry, dust, beach season"
+  },
+  {
+    "countryCode": "ET",
+    "name": "Main rains",
+    "localName": "Kiremt",
+    "months": [6, 7, 8, 9],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains, highland flooding, main growing season"
+  },
+  {
+    "countryCode": "ET",
+    "name": "Dry season",
+    "localName": "Bega",
+    "months": [10, 11, 12, 1, 2],
+    "hemisphere": "equatorial",
+    "description": "Dry, cool highlands, harvest, travel season"
+  },
+  {
+    "countryCode": "ET",
+    "name": "Short rains",
+    "localName": "Belg",
+    "months": [3, 4, 5],
+    "hemisphere": "equatorial",
+    "description": "Light rains, secondary planting, warming"
+  },
+  {
+    "countryCode": "SO",
+    "name": "Main rains",
+    "localName": "Gu",
+    "months": [4, 5, 6],
+    "hemisphere": "equatorial",
+    "description": "Main rainy season, pastoral grazing, planting"
+  },
+  {
+    "countryCode": "SO",
+    "name": "Dry season",
+    "localName": "Xagaa",
+    "months": [7, 8, 9],
+    "hemisphere": "equatorial",
+    "description": "Hot, dry, dust storms, water scarcity"
+  },
+  {
+    "countryCode": "SO",
+    "name": "Short rains",
+    "localName": "Deyr",
+    "months": [10, 11],
+    "hemisphere": "equatorial",
+    "description": "Short rains, secondary planting"
+  },
+  {
+    "countryCode": "SO",
+    "name": "Cool dry",
+    "localName": "Jilal",
+    "months": [12, 1, 2, 3],
+    "hemisphere": "equatorial",
+    "description": "Cool, dry, livestock migration"
+  },
+  {
+    "countryCode": "DJ",
+    "name": "Main rains",
+    "localName": "Gu",
+    "months": [4, 5, 6],
+    "hemisphere": "equatorial",
+    "description": "Main rainy season, pastoral grazing, planting"
+  },
+  {
+    "countryCode": "DJ",
+    "name": "Dry season",
+    "localName": "Xagaa",
+    "months": [7, 8, 9],
+    "hemisphere": "equatorial",
+    "description": "Hot, dry, dust storms, water scarcity"
+  },
+  {
+    "countryCode": "DJ",
+    "name": "Short rains",
+    "localName": "Deyr",
+    "months": [10, 11],
+    "hemisphere": "equatorial",
+    "description": "Short rains, secondary planting"
+  },
+  {
+    "countryCode": "DJ",
+    "name": "Cool dry",
+    "localName": "Jilal",
+    "months": [12, 1, 2, 3],
+    "hemisphere": "equatorial",
+    "description": "Cool, dry, livestock migration"
+  },
+  {
+    "countryCode": "ER",
+    "name": "Main rains",
+    "localName": "Gu",
+    "months": [4, 5, 6],
+    "hemisphere": "equatorial",
+    "description": "Main rainy season, pastoral grazing, planting"
+  },
+  {
+    "countryCode": "ER",
+    "name": "Dry season",
+    "localName": "Xagaa",
+    "months": [7, 8, 9],
+    "hemisphere": "equatorial",
+    "description": "Hot, dry, dust storms, water scarcity"
+  },
+  {
+    "countryCode": "ER",
+    "name": "Short rains",
+    "localName": "Deyr",
+    "months": [10, 11],
+    "hemisphere": "equatorial",
+    "description": "Short rains, secondary planting"
+  },
+  {
+    "countryCode": "ER",
+    "name": "Cool dry",
+    "localName": "Jilal",
+    "months": [12, 1, 2, 3],
+    "hemisphere": "equatorial",
+    "description": "Cool, dry, livestock migration"
+  },
+  {
+    "countryCode": "SD",
+    "name": "Dry season",
+    "localName": "Sayf",
+    "months": [11, 12, 1, 2, 3, 4],
+    "hemisphere": "north",
+    "description": "Hot, dry, Harmattan dust, water scarcity"
+  },
+  {
+    "countryCode": "SD",
+    "name": "Rainy season",
+    "localName": "Kharif",
+    "months": [5, 6, 7, 8, 9, 10],
+    "hemisphere": "north",
+    "description": "Monsoon rains, Nile flooding, farming"
+  },
+  {
+    "countryCode": "SS",
+    "name": "Dry season",
+    "localName": "Sayf",
+    "months": [11, 12, 1, 2, 3, 4],
+    "hemisphere": "north",
+    "description": "Hot, dry, Harmattan dust, water scarcity"
+  },
+  {
+    "countryCode": "SS",
+    "name": "Rainy season",
+    "localName": "Kharif",
+    "months": [5, 6, 7, 8, 9, 10],
+    "hemisphere": "north",
+    "description": "Monsoon rains, Nile flooding, farming"
+  },
+  {
+    "countryCode": "ML",
+    "name": "Dry season",
+    "localName": "Saison sèche",
+    "months": [10, 11, 12, 1, 2, 3, 4, 5],
+    "hemisphere": "north",
+    "description": "Hot, dry, Harmattan dust, water stress"
+  },
+  {
+    "countryCode": "ML",
+    "name": "Rainy season",
+    "localName": "Hivernage",
+    "months": [6, 7, 8, 9],
+    "hemisphere": "north",
+    "description": "Monsoon rains, flooding, main planting season"
+  },
+  {
+    "countryCode": "NE",
+    "name": "Dry season",
+    "localName": "Saison sèche",
+    "months": [10, 11, 12, 1, 2, 3, 4, 5],
+    "hemisphere": "north",
+    "description": "Hot, dry, Harmattan dust, water stress"
+  },
+  {
+    "countryCode": "NE",
+    "name": "Rainy season",
+    "localName": "Hivernage",
+    "months": [6, 7, 8, 9],
+    "hemisphere": "north",
+    "description": "Monsoon rains, flooding, main planting season"
+  },
+  {
+    "countryCode": "BF",
+    "name": "Dry season",
+    "localName": "Saison sèche",
+    "months": [10, 11, 12, 1, 2, 3, 4, 5],
+    "hemisphere": "north",
+    "description": "Hot, dry, Harmattan dust, water stress"
+  },
+  {
+    "countryCode": "BF",
+    "name": "Rainy season",
+    "localName": "Hivernage",
+    "months": [6, 7, 8, 9],
+    "hemisphere": "north",
+    "description": "Monsoon rains, flooding, main planting season"
+  },
+  {
+    "countryCode": "MR",
+    "name": "Dry season",
+    "localName": "Saison sèche",
+    "months": [10, 11, 12, 1, 2, 3, 4, 5],
+    "hemisphere": "north",
+    "description": "Hot, dry, Harmattan dust, water stress"
+  },
+  {
+    "countryCode": "MR",
+    "name": "Rainy season",
+    "localName": "Hivernage",
+    "months": [6, 7, 8, 9],
+    "hemisphere": "north",
+    "description": "Monsoon rains, flooding, main planting season"
+  },
+  {
+    "countryCode": "TD",
+    "name": "Dry season",
+    "localName": "Saison sèche",
+    "months": [10, 11, 12, 1, 2, 3, 4, 5],
+    "hemisphere": "north",
+    "description": "Hot, dry, Harmattan dust, water stress"
+  },
+  {
+    "countryCode": "TD",
+    "name": "Rainy season",
+    "localName": "Hivernage",
+    "months": [6, 7, 8, 9],
+    "hemisphere": "north",
+    "description": "Monsoon rains, flooding, main planting season"
+  },
+  {
+    "countryCode": "NG",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "NG",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "NG",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "NG",
+    "name": "Dry season",
+    "localName": "Harmattan",
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "GH",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "GH",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "GH",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "GH",
+    "name": "Dry season",
+    "localName": "Harmattan",
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "SN",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "SN",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "SN",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "SN",
+    "name": "Dry season",
+    "localName": "Harmattan",
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "CI",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "CI",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "CI",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "CI",
+    "name": "Dry season",
+    "localName": "Harmattan",
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "BJ",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "BJ",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "BJ",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "BJ",
+    "name": "Dry season",
+    "localName": "Harmattan",
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "TG",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "TG",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "TG",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "TG",
+    "name": "Dry season",
+    "localName": "Harmattan",
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "LR",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "LR",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "LR",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "LR",
+    "name": "Dry season",
+    "localName": "Harmattan",
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "SL",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "SL",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "SL",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "SL",
+    "name": "Dry season",
+    "localName": "Harmattan",
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "GN",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "GN",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "GN",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "GN",
+    "name": "Dry season",
+    "localName": "Harmattan",
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "GW",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "GW",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "GW",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "GW",
+    "name": "Dry season",
+    "localName": "Harmattan",
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "GM",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "GM",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "GM",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "GM",
+    "name": "Dry season",
+    "localName": "Harmattan",
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "CV",
+    "name": "Dry season",
+    "localName": "Tempo das Brisas",
+    "months": [11, 12, 1, 2, 3, 4, 5, 6],
+    "hemisphere": "north",
+    "description": "Dry, trade winds, mild temperatures"
+  },
+  {
+    "countryCode": "CV",
+    "name": "Rainy season",
+    "localName": "Tempo das Águas",
+    "months": [7, 8, 9, 10],
+    "hemisphere": "north",
+    "description": "Brief tropical rains, humid, hurricane season"
+  },
+  {
+    "countryCode": "CM",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [3, 4, 5],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains, forest flooding, planting"
+  },
+  {
+    "countryCode": "CM",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [6, 7],
+    "hemisphere": "equatorial",
+    "description": "Brief dry spell, harvest"
+  },
+  {
+    "countryCode": "CM",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [8, 9, 10, 11],
+    "hemisphere": "equatorial",
+    "description": "Second rains, second planting"
+  },
+  {
+    "countryCode": "CM",
+    "name": "Dry season",
+    "localName": "Grande saison sèche",
+    "months": [12, 1, 2],
+    "hemisphere": "equatorial",
+    "description": "Dry, cooler, travel season"
+  },
+  {
+    "countryCode": "CD",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [3, 4, 5],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains, forest flooding, planting"
+  },
+  {
+    "countryCode": "CD",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [6, 7],
+    "hemisphere": "equatorial",
+    "description": "Brief dry spell, harvest"
+  },
+  {
+    "countryCode": "CD",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [8, 9, 10, 11],
+    "hemisphere": "equatorial",
+    "description": "Second rains, second planting"
+  },
+  {
+    "countryCode": "CD",
+    "name": "Dry season",
+    "localName": "Grande saison sèche",
+    "months": [12, 1, 2],
+    "hemisphere": "equatorial",
+    "description": "Dry, cooler, travel season"
+  },
+  {
+    "countryCode": "CG",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [3, 4, 5],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains, forest flooding, planting"
+  },
+  {
+    "countryCode": "CG",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [6, 7],
+    "hemisphere": "equatorial",
+    "description": "Brief dry spell, harvest"
+  },
+  {
+    "countryCode": "CG",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [8, 9, 10, 11],
+    "hemisphere": "equatorial",
+    "description": "Second rains, second planting"
+  },
+  {
+    "countryCode": "CG",
+    "name": "Dry season",
+    "localName": "Grande saison sèche",
+    "months": [12, 1, 2],
+    "hemisphere": "equatorial",
+    "description": "Dry, cooler, travel season"
+  },
+  {
+    "countryCode": "GA",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [3, 4, 5],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains, forest flooding, planting"
+  },
+  {
+    "countryCode": "GA",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [6, 7],
+    "hemisphere": "equatorial",
+    "description": "Brief dry spell, harvest"
+  },
+  {
+    "countryCode": "GA",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [8, 9, 10, 11],
+    "hemisphere": "equatorial",
+    "description": "Second rains, second planting"
+  },
+  {
+    "countryCode": "GA",
+    "name": "Dry season",
+    "localName": "Grande saison sèche",
+    "months": [12, 1, 2],
+    "hemisphere": "equatorial",
+    "description": "Dry, cooler, travel season"
+  },
+  {
+    "countryCode": "CF",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [3, 4, 5],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains, forest flooding, planting"
+  },
+  {
+    "countryCode": "CF",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [6, 7],
+    "hemisphere": "equatorial",
+    "description": "Brief dry spell, harvest"
+  },
+  {
+    "countryCode": "CF",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [8, 9, 10, 11],
+    "hemisphere": "equatorial",
+    "description": "Second rains, second planting"
+  },
+  {
+    "countryCode": "CF",
+    "name": "Dry season",
+    "localName": "Grande saison sèche",
+    "months": [12, 1, 2],
+    "hemisphere": "equatorial",
+    "description": "Dry, cooler, travel season"
+  },
+  {
+    "countryCode": "GQ",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [3, 4, 5],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains, forest flooding, planting"
+  },
+  {
+    "countryCode": "GQ",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [6, 7],
+    "hemisphere": "equatorial",
+    "description": "Brief dry spell, harvest"
+  },
+  {
+    "countryCode": "GQ",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [8, 9, 10, 11],
+    "hemisphere": "equatorial",
+    "description": "Second rains, second planting"
+  },
+  {
+    "countryCode": "GQ",
+    "name": "Dry season",
+    "localName": "Grande saison sèche",
+    "months": [12, 1, 2],
+    "hemisphere": "equatorial",
+    "description": "Dry, cooler, travel season"
+  },
+  {
+    "countryCode": "ST",
+    "name": "Long rains",
+    "localName": "Grande saison des pluies",
+    "months": [3, 4, 5],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains, forest flooding, planting"
+  },
+  {
+    "countryCode": "ST",
+    "name": "Short dry",
+    "localName": "Petite saison sèche",
+    "months": [6, 7],
+    "hemisphere": "equatorial",
+    "description": "Brief dry spell, harvest"
+  },
+  {
+    "countryCode": "ST",
+    "name": "Short rains",
+    "localName": "Petite saison des pluies",
+    "months": [8, 9, 10, 11],
+    "hemisphere": "equatorial",
+    "description": "Second rains, second planting"
+  },
+  {
+    "countryCode": "ST",
+    "name": "Dry season",
+    "localName": "Grande saison sèche",
+    "months": [12, 1, 2],
+    "hemisphere": "equatorial",
+    "description": "Dry, cooler, travel season"
+  },
+  {
+    "countryCode": "MA",
+    "name": "Spring",
+    "localName": "الربيع",
+    "months": [3, 4, 5],
+    "hemisphere": "north",
+    "description": "Warming, wildflowers, olive blooms"
+  },
+  {
+    "countryCode": "MA",
+    "name": "Summer",
+    "localName": "الصيف",
+    "months": [6, 7, 8],
+    "hemisphere": "north",
+    "description": "Hot, dry, peak tourism, heat advisories"
+  },
+  {
+    "countryCode": "MA",
+    "name": "Autumn",
+    "localName": "الخريف",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Cooling, olive harvest, first rains"
+  },
+  {
+    "countryCode": "MA",
+    "name": "Winter",
+    "localName": "الشتاء",
+    "months": [12, 1, 2],
+    "hemisphere": "north",
+    "description": "Cool, Mediterranean rains, Atlas snow"
+  },
+  {
+    "countryCode": "DZ",
+    "name": "Spring",
+    "localName": "الربيع",
+    "months": [3, 4, 5],
+    "hemisphere": "north",
+    "description": "Warming, wildflowers, olive blooms"
+  },
+  {
+    "countryCode": "DZ",
+    "name": "Summer",
+    "localName": "الصيف",
+    "months": [6, 7, 8],
+    "hemisphere": "north",
+    "description": "Hot, dry, peak tourism, heat advisories"
+  },
+  {
+    "countryCode": "DZ",
+    "name": "Autumn",
+    "localName": "الخريف",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Cooling, olive harvest, first rains"
+  },
+  {
+    "countryCode": "DZ",
+    "name": "Winter",
+    "localName": "الشتاء",
+    "months": [12, 1, 2],
+    "hemisphere": "north",
+    "description": "Cool, Mediterranean rains, Atlas snow"
+  },
+  {
+    "countryCode": "TN",
+    "name": "Spring",
+    "localName": "الربيع",
+    "months": [3, 4, 5],
+    "hemisphere": "north",
+    "description": "Warming, wildflowers, olive blooms"
+  },
+  {
+    "countryCode": "TN",
+    "name": "Summer",
+    "localName": "الصيف",
+    "months": [6, 7, 8],
+    "hemisphere": "north",
+    "description": "Hot, dry, peak tourism, heat advisories"
+  },
+  {
+    "countryCode": "TN",
+    "name": "Autumn",
+    "localName": "الخريف",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Cooling, olive harvest, first rains"
+  },
+  {
+    "countryCode": "TN",
+    "name": "Winter",
+    "localName": "الشتاء",
+    "months": [12, 1, 2],
+    "hemisphere": "north",
+    "description": "Cool, Mediterranean rains, Atlas snow"
+  },
+  {
+    "countryCode": "LY",
+    "name": "Spring",
+    "localName": "الربيع",
+    "months": [3, 4, 5],
+    "hemisphere": "north",
+    "description": "Warming, wildflowers, olive blooms"
+  },
+  {
+    "countryCode": "LY",
+    "name": "Summer",
+    "localName": "الصيف",
+    "months": [6, 7, 8],
+    "hemisphere": "north",
+    "description": "Hot, dry, peak tourism, heat advisories"
+  },
+  {
+    "countryCode": "LY",
+    "name": "Autumn",
+    "localName": "الخريف",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Cooling, olive harvest, first rains"
+  },
+  {
+    "countryCode": "LY",
+    "name": "Winter",
+    "localName": "الشتاء",
+    "months": [12, 1, 2],
+    "hemisphere": "north",
+    "description": "Cool, Mediterranean rains, Atlas snow"
+  },
+  {
+    "countryCode": "EG",
+    "name": "Spring",
+    "localName": "الربيع",
+    "months": [3, 4, 5],
+    "hemisphere": "north",
+    "description": "Warming, wildflowers, olive blooms"
+  },
+  {
+    "countryCode": "EG",
+    "name": "Summer",
+    "localName": "الصيف",
+    "months": [6, 7, 8],
+    "hemisphere": "north",
+    "description": "Hot, dry, peak tourism, heat advisories"
+  },
+  {
+    "countryCode": "EG",
+    "name": "Autumn",
+    "localName": "الخريف",
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Cooling, olive harvest, first rains"
+  },
+  {
+    "countryCode": "EG",
+    "name": "Winter",
+    "localName": "الشتاء",
+    "months": [12, 1, 2],
+    "hemisphere": "north",
+    "description": "Cool, Mediterranean rains, Atlas snow"
+  },
+  {
+    "countryCode": "MG",
+    "name": "Wet season",
+    "localName": "Saison chaude",
+    "months": [11, 12, 1, 2, 3, 4],
+    "hemisphere": "south",
+    "description": "Hot, humid, cyclone risk, heavy rains"
+  },
+  {
+    "countryCode": "MG",
+    "name": "Dry season",
+    "localName": "Saison sèche",
+    "months": [5, 6, 7, 8, 9, 10],
+    "hemisphere": "south",
+    "description": "Cool, dry, trade winds, pleasant"
+  },
+  {
+    "countryCode": "MU",
+    "name": "Wet season",
+    "localName": "Saison chaude",
+    "months": [11, 12, 1, 2, 3, 4],
+    "hemisphere": "south",
+    "description": "Hot, humid, cyclone risk, heavy rains"
+  },
+  {
+    "countryCode": "MU",
+    "name": "Dry season",
+    "localName": "Saison sèche",
+    "months": [5, 6, 7, 8, 9, 10],
+    "hemisphere": "south",
+    "description": "Cool, dry, trade winds, pleasant"
+  },
+  {
+    "countryCode": "KM",
+    "name": "Wet season",
+    "localName": "Saison chaude",
+    "months": [11, 12, 1, 2, 3, 4],
+    "hemisphere": "south",
+    "description": "Hot, humid, cyclone risk, heavy rains"
+  },
+  {
+    "countryCode": "KM",
+    "name": "Dry season",
+    "localName": "Saison sèche",
+    "months": [5, 6, 7, 8, 9, 10],
+    "hemisphere": "south",
+    "description": "Cool, dry, trade winds, pleasant"
+  },
+  {
+    "countryCode": "SC",
+    "name": "Wet season",
+    "localName": "Saison chaude",
+    "months": [11, 12, 1, 2, 3, 4],
+    "hemisphere": "south",
+    "description": "Hot, humid, cyclone risk, heavy rains"
+  },
+  {
+    "countryCode": "SC",
+    "name": "Dry season",
+    "localName": "Saison sèche",
+    "months": [5, 6, 7, 8, 9, 10],
+    "hemisphere": "south",
+    "description": "Cool, dry, trade winds, pleasant"
+  },
+  {
+    "countryCode": "RE",
+    "name": "Wet season",
+    "localName": "Saison chaude",
+    "months": [11, 12, 1, 2, 3, 4],
+    "hemisphere": "south",
+    "description": "Hot, humid, cyclone risk, heavy rains"
+  },
+  {
+    "countryCode": "RE",
+    "name": "Dry season",
+    "localName": "Saison sèche",
+    "months": [5, 6, 7, 8, 9, 10],
+    "hemisphere": "south",
+    "description": "Cool, dry, trade winds, pleasant"
+  },
+  {
+    "countryCode": "YT",
+    "name": "Wet season",
+    "localName": "Saison chaude",
+    "months": [11, 12, 1, 2, 3, 4],
+    "hemisphere": "south",
+    "description": "Hot, humid, cyclone risk, heavy rains"
+  },
+  {
+    "countryCode": "YT",
+    "name": "Dry season",
+    "localName": "Saison sèche",
+    "months": [5, 6, 7, 8, 9, 10],
+    "hemisphere": "south",
+    "description": "Cool, dry, trade winds, pleasant"
+  },
+  {
+    "countryCode": "TH",
+    "name": "Hot season",
+    "localName": "Røduu ráawn",
+    "months": [3, 4, 5],
+    "hemisphere": "north",
+    "description": "Extreme heat, Songkran, pre-monsoon thunderstorms"
+  },
+  {
+    "countryCode": "TH",
+    "name": "Rainy season",
+    "localName": "Røduu fǒn",
+    "months": [6, 7, 8, 9, 10],
+    "hemisphere": "north",
+    "description": "Southwest monsoon, heavy rains, flooding"
+  },
+  {
+    "countryCode": "TH",
+    "name": "Cool season",
+    "localName": "Røduu nǎaw",
+    "months": [11, 12, 1, 2],
+    "hemisphere": "north",
+    "description": "Cool, dry, peak tourism, harvest"
+  },
+  {
+    "countryCode": "MM",
+    "name": "Hot season",
+    "localName": "Røduu ráawn",
+    "months": [3, 4, 5],
+    "hemisphere": "north",
+    "description": "Extreme heat, Songkran, pre-monsoon thunderstorms"
+  },
+  {
+    "countryCode": "MM",
+    "name": "Rainy season",
+    "localName": "Røduu fǒn",
+    "months": [6, 7, 8, 9, 10],
+    "hemisphere": "north",
+    "description": "Southwest monsoon, heavy rains, flooding"
+  },
+  {
+    "countryCode": "MM",
+    "name": "Cool season",
+    "localName": "Røduu nǎaw",
+    "months": [11, 12, 1, 2],
+    "hemisphere": "north",
+    "description": "Cool, dry, peak tourism, harvest"
+  },
+  {
+    "countryCode": "KH",
+    "name": "Hot season",
+    "localName": "Røduu ráawn",
+    "months": [3, 4, 5],
+    "hemisphere": "north",
+    "description": "Extreme heat, Songkran, pre-monsoon thunderstorms"
+  },
+  {
+    "countryCode": "KH",
+    "name": "Rainy season",
+    "localName": "Røduu fǒn",
+    "months": [6, 7, 8, 9, 10],
+    "hemisphere": "north",
+    "description": "Southwest monsoon, heavy rains, flooding"
+  },
+  {
+    "countryCode": "KH",
+    "name": "Cool season",
+    "localName": "Røduu nǎaw",
+    "months": [11, 12, 1, 2],
+    "hemisphere": "north",
+    "description": "Cool, dry, peak tourism, harvest"
+  },
+  {
+    "countryCode": "LA",
+    "name": "Hot season",
+    "localName": "Røduu ráawn",
+    "months": [3, 4, 5],
+    "hemisphere": "north",
+    "description": "Extreme heat, Songkran, pre-monsoon thunderstorms"
+  },
+  {
+    "countryCode": "LA",
+    "name": "Rainy season",
+    "localName": "Røduu fǒn",
+    "months": [6, 7, 8, 9, 10],
+    "hemisphere": "north",
+    "description": "Southwest monsoon, heavy rains, flooding"
+  },
+  {
+    "countryCode": "LA",
+    "name": "Cool season",
+    "localName": "Røduu nǎaw",
+    "months": [11, 12, 1, 2],
+    "hemisphere": "north",
+    "description": "Cool, dry, peak tourism, harvest"
+  },
+  {
+    "countryCode": "VN",
+    "name": "Hot season",
+    "localName": "Røduu ráawn",
+    "months": [3, 4, 5],
+    "hemisphere": "north",
+    "description": "Extreme heat, Songkran, pre-monsoon thunderstorms"
+  },
+  {
+    "countryCode": "VN",
+    "name": "Rainy season",
+    "localName": "Røduu fǒn",
+    "months": [6, 7, 8, 9, 10],
+    "hemisphere": "north",
+    "description": "Southwest monsoon, heavy rains, flooding"
+  },
+  {
+    "countryCode": "VN",
+    "name": "Cool season",
+    "localName": "Røduu nǎaw",
+    "months": [11, 12, 1, 2],
+    "hemisphere": "north",
+    "description": "Cool, dry, peak tourism, harvest"
+  },
+  {
+    "countryCode": "MY",
+    "name": "Northeast monsoon",
+    "localName": "Monsun Timur Laut",
+    "months": [11, 12, 1, 2, 3],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains on east coast, flooding"
+  },
+  {
+    "countryCode": "MY",
+    "name": "Inter-monsoon",
+    "localName": "Peralihan",
+    "months": [4, 5],
+    "hemisphere": "equatorial",
+    "description": "Thunderstorms, variable weather"
+  },
+  {
+    "countryCode": "MY",
+    "name": "Southwest monsoon",
+    "localName": "Monsun Barat Daya",
+    "months": [6, 7, 8, 9],
+    "hemisphere": "equatorial",
+    "description": "Drier on east, rain on west, haze season"
+  },
+  {
+    "countryCode": "MY",
+    "name": "Inter-monsoon",
+    "localName": "Peralihan",
+    "months": [10],
+    "hemisphere": "equatorial",
+    "description": "Thunderstorms, transition, variable"
+  },
+  {
+    "countryCode": "SG",
+    "name": "Northeast monsoon",
+    "localName": "Monsun Timur Laut",
+    "months": [11, 12, 1, 2, 3],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains on east coast, flooding"
+  },
+  {
+    "countryCode": "SG",
+    "name": "Inter-monsoon",
+    "localName": "Peralihan",
+    "months": [4, 5],
+    "hemisphere": "equatorial",
+    "description": "Thunderstorms, variable weather"
+  },
+  {
+    "countryCode": "SG",
+    "name": "Southwest monsoon",
+    "localName": "Monsun Barat Daya",
+    "months": [6, 7, 8, 9],
+    "hemisphere": "equatorial",
+    "description": "Drier on east, rain on west, haze season"
+  },
+  {
+    "countryCode": "SG",
+    "name": "Inter-monsoon",
+    "localName": "Peralihan",
+    "months": [10],
+    "hemisphere": "equatorial",
+    "description": "Thunderstorms, transition, variable"
+  },
+  {
+    "countryCode": "BN",
+    "name": "Northeast monsoon",
+    "localName": "Monsun Timur Laut",
+    "months": [11, 12, 1, 2, 3],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains on east coast, flooding"
+  },
+  {
+    "countryCode": "BN",
+    "name": "Inter-monsoon",
+    "localName": "Peralihan",
+    "months": [4, 5],
+    "hemisphere": "equatorial",
+    "description": "Thunderstorms, variable weather"
+  },
+  {
+    "countryCode": "BN",
+    "name": "Southwest monsoon",
+    "localName": "Monsun Barat Daya",
+    "months": [6, 7, 8, 9],
+    "hemisphere": "equatorial",
+    "description": "Drier on east, rain on west, haze season"
+  },
+  {
+    "countryCode": "BN",
+    "name": "Inter-monsoon",
+    "localName": "Peralihan",
+    "months": [10],
+    "hemisphere": "equatorial",
+    "description": "Thunderstorms, transition, variable"
+  },
+  {
+    "countryCode": "ID",
+    "name": "Wet season",
+    "localName": "Musim Hujan",
+    "months": [10, 11, 12, 1, 2, 3],
+    "hemisphere": "equatorial",
+    "description": "Heavy rains, flooding, planting, high humidity"
+  },
+  {
+    "countryCode": "ID",
+    "name": "Dry season",
+    "localName": "Musim Kemarau",
+    "months": [4, 5, 6, 7, 8, 9],
+    "hemisphere": "equatorial",
+    "description": "Dry, cooler, harvest, peak tourism"
+  },
+  {
+    "countryCode": "PH",
+    "name": "Hot dry season",
+    "localName": "Tag-init",
+    "months": [3, 4, 5],
+    "hemisphere": "north",
+    "description": "Extreme heat, drought risk, water rationing"
+  },
+  {
+    "countryCode": "PH",
+    "name": "Wet season",
+    "localName": "Tag-ulan",
+    "months": [6, 7, 8, 9, 10, 11],
+    "hemisphere": "north",
+    "description": "Southwest monsoon, typhoons, heavy flooding"
+  },
+  {
+    "countryCode": "PH",
+    "name": "Cool dry season",
+    "localName": "Tag-lamig",
+    "months": [12, 1, 2],
+    "hemisphere": "north",
+    "description": "Northeast monsoon, cooler, drier, Amihan winds"
+  },
+  {
+    "countryCode": "TL",
+    "name": "Wet season",
+    "localName": "Tempu udan",
+    "months": [11, 12, 1, 2, 3, 4, 5],
+    "hemisphere": "south",
+    "description": "Heavy monsoon rains, flooding, planting"
+  },
+  {
+    "countryCode": "TL",
+    "name": "Dry season",
+    "localName": "Tempu bailoron",
+    "months": [6, 7, 8, 9, 10],
+    "hemisphere": "south",
+    "description": "Dry, cool, harvest, dust"
+  }
+]

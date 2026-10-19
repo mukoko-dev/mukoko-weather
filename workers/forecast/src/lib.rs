@@ -13,6 +13,7 @@
 //! GET /enso                                        El Nino / La Nina phase (NOAA CPC ONI)
 //! GET /sg-air[?lat=&lon=]                          official Singapore NEA PSI and PM2.5
 //! GET /model-grid?lat=&lon=[&model=]               one model's 3-hourly forecast on a 7×7 grid
+//! GET /profile?slug=|lat=&lon=[&country=]          a place's knowledge and current context
 //! GET /health                                      which bindings are configured
 //! ```
 //!
@@ -35,6 +36,7 @@ mod limit;
 mod model_grid;
 mod normals;
 mod places;
+mod profile;
 mod sg_air;
 mod stations;
 
@@ -59,6 +61,7 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
         "/normals" => normals::normals(&req, &env, &ctx).await,
         "/sg-air" => sg_air::sg_air(&req, &env, &ctx).await,
         "/model-grid" => model_grid::model_grid(&req, &env, &ctx).await,
+        "/profile" => profile::profile(&req, &env, &ctx).await,
         "/health" => health(&req, &env).await,
         _ => error(404, "not_found", "No such route."),
     }
