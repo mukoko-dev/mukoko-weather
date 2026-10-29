@@ -2105,7 +2105,7 @@ Community locations are stored in the same MongoDB `locations` collection as see
 
 ### Database (MongoDB Atlas — Nyuchi Platform cluster)
 
-Mukoko-weather sits on the shared **Nyuchi Platform cluster** (27 databases). Mukoko consumes six of them. See `docs/mongodb-schema-map.md` for the full map.
+Mukoko-weather sits on the shared **Nyuchi Platform cluster** (31 databases besides `admin`, `config` and `local`, read 2026-10-29; the count grows, so re-read it before quoting). Mukoko consumes six of them. See `docs/mongodb-schema-map.md` for the full map.
 
 - **Clients:** `src/lib/mongo.ts` (TypeScript, module-scoped, connection-pooled via `@vercel/functions`) and `api/py/_db.py` (Python, module-scoped). One `MongoClient` per process, multiple databases via `.db("...")` / `.get_database("...")`.
 - **Operations:** `src/lib/db.ts` (used by `db-init` and OG routes) and `api/py/_db.py` (Python primary — all collection accessors, rate limiting, API key management).
