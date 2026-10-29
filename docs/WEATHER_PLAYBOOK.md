@@ -91,7 +91,46 @@ Order is priority. Objectives 1 to 3 are the foundation and unblock the rest. Do
   4. Keep history healthy: assert one doc per place per day.
 - **Done when:** a weekly error report exists per region and weights change only from that report.
 - **Safe now:** analysis, reports, prototypes, tests. **Needs sign-off:** weight changes, ingest jobs that add Cloudflare cost, and the licensing question below.
+- **StationKit is the load-bearing piece of this objective.** See section 4a.
 - **Licensing blocker:** Open-Meteo's free API is non-commercial. Fine while we run at break-even and free, but any paid tier, or the developer API sold to businesses, needs the commercial plan, the self-hosted instance (#280, code ready, not deployed), or direct ECMWF/GFS/ICON ingestion. Decide before Objective 7.
+
+### 4a. StationKit (`nyuchi/stationkit`)
+
+StationKit is the station network that makes the loop "my station improves your forecast, your station improves mine" true, and it is the only way weather gets ground truth in places the models model badly.
+
+**What exists (read 2026-10-29):**
+
+- The repo is a README and a licence. There is **no firmware and no hardware design**. The device is specification only: ESP32-C3, ESP-IDF, solar plus 18650, 5-minute reads, hourly batches of 12, about 48 h of flash buffer. The README says the figures are targets, not measurements, and that no hardware has been built from the repo.
+- The design record is four draft issues: #3 hardware, #4 firmware, #5 API contract, #6 data schema and QC. All carry `TODO` markers.
+- What runs in production is elsewhere: the pilot signup on nyuchi.com, the console at `weatherstations.nyuchi.com`, and the ingest and QC pipeline in this repo (`/api/py/stations/*`, being ported to `workers/stations`). Any consumer station can already push through the Wunderground or Ecowitt "custom upload" protocols, and analog stations can submit by hand. One station is active: Nyuchi Africa HQ, Harare.
+
+**Contract drift to resolve before any firmware is written** (nothing downstream can be built until it settles, as the README says):
+
+| Topic         | StationKit draft (#5, #6)                                           | What this repo runs today                                                        | Platform rule (#359)                    |
+| ------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------- |
+| Endpoint      | `POST /v1/stations/{stationId}/readings`, bearer token per station | WU `GET` and Ecowitt `POST` with `PASSKEY=<stationId>:<ingestKey>`; manual `POST` | Not decided                             |
+| Field names   | `temperatureC`, `windSpeedMs`, `rainfallMm`, `pressureHpa`           | `airTemperatureCelsius`, `windSpeedKph`, `precipitationMillimeters`              | CF standard names, unit declared once   |
+| Wind unit     | m/s                                                                 | km/h                                                                             | CF `wind_speed` is m/s                  |
+| QC            | Range, spike, cross-check against satellite data                    | Inline range check only; no spike or cross-validation                            | Not decided                             |
+| Identity      | Station id and key                                                  | Station id and key                                                               | Places id plus WIGOS id where it exists |
+| Publish onward | To Open-Meteo                                                       | Not found in this repo                                                           | Not decided                             |
+
+Three name sets for the same quantities is the silo problem in miniature. The draft's m/s is the one that matches CF; the live code's km/h does not.
+
+**Loop (daily, with Objective 4):**
+
+1. Hold the contract in one place. Propose a single field and unit table (CF names, SI units) and a migration path from the live names. Do not edit #5 or #6 without the owner.
+2. Add the missing QC (spike and outlier, cross-validation against the model blend) in `weather-core::station`, with native tests.
+3. Verify the loop: when a station is within 50 km, `current` must come from StationKit (`X-Current-Source: stationkit`). Add a test that proves the overlay.
+4. Report fleet health: stations active, last seen, QC pass rate.
+
+**Done when:** one written contract, the Worker implements it, QC has spike and cross-check, and the fleet report exists.
+
+**Safe now:** the contract proposal, QC code and tests, reports. **Needs sign-off:** the contract itself, anything on hardware spend or the BOM, the location-privacy policy for published data (#6 leaves it as a `TODO`), and the publish-onward path to Open-Meteo (a data-licence decision for the Bundu commons).
+
+**Bundu scorecard:** station data goes into a commons the Bundu Foundation governs. Judge this work by openness and rigour (published QC rules, a documented schema, no relicensing path), not revenue.
+
+**Story to tell:** a school or smallholder joined with a rain gauge and a thermometer. Do not claim a hardware network exists: today it is one station plus any consumer station that points at our endpoint.
 
 ### Objective 5: Reach people where they are
 
@@ -163,11 +202,12 @@ Suggested cadence: Objectives 1, 2, 3 hourly while active; 4 and 6 daily; 5 dail
 Each of these blocks a named objective. A loop surfaces them; only the owner decides.
 
 1. Payment provider for paid AI and the developer API (Objective 7, #238 P0-1).
-2. Open-Meteo commercial path: plan, self-host on Railway (#280), or direct ingestion (Objectives 4 and 7).
-3. Release blockers #351: Atlas read-write user for the Mongo bridge, index repairs, `placeKnowledge` details (Objective 2).
-4. Whether the Astro port (#293) stays on the roadmap, given Rust-only is the stated priority. Recommendation: defer it until Objective 2 is done, since it replaces the front end the other objectives are still changing.
-5. Mobile store submission and an iOS account (Objective 5).
-6. Reading and approving the `data-infra` weather plan (`#90`, `#117`) so Objective 3 can start (private; not read in this pass).
+2. StationKit: confirm the single field and unit contract (#5, #6) and whether the hardware build starts (Objective 4a).
+3. Open-Meteo commercial path: plan, self-host on Railway (#280), or direct ingestion (Objectives 4 and 7).
+4. Release blockers #351: Atlas read-write user for the Mongo bridge, index repairs, `placeKnowledge` details (Objective 2).
+5. Whether the Astro port (#293) stays on the roadmap, given Rust-only is the stated priority. Recommendation: defer it until Objective 2 is done, since it replaces the front end the other objectives are still changing.
+6. Mobile store submission and an iOS account (Objective 5).
+7. Reading and approving the `data-infra` weather plan (`#90`, `#117`) so Objective 3 can start (private; not read in this pass).
 
 ## 8. What to leave alone for now
 
@@ -179,5 +219,6 @@ Each of these blocks a named objective. A loop surfaces them; only the owner dec
 ## 9. Known limits of this playbook
 
 - Built from repo documents and issue titles and bodies (some truncated), not from production telemetry. No metric here has a measured baseline.
+- StationKit was read from its README and issues #5 and #6 (public pages); #3 and #4 (hardware, firmware) were not read.
 - `nyuchi-docs`, `nyuchi-platform` and `super-app-web` were searched for weather content only; `super-app-web` links out to weather rather than showing live data.
 - Private issues in `data-infra` were not readable from this session.
