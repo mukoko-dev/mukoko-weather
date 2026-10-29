@@ -12,10 +12,10 @@ Sources: the repo docs (`CLAUDE.md`, `README.md`, `workers/README.md`, `releases
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
 | Web app        | `weather.mukoko.com` on Next.js: forecast, activity suitability, AI summary, map, aviation, community reports, history, `/display`, embed, `/locations`, `/releases` | Port to Astro (#293)                                                                         |
 | Forecast       | Africa-weighted blend of six global models via Open-Meteo, Tomorrow.io enrichment only, seasonal fallback so a page never renders empty                            | Verification-fitted weights (groundwork only); self-hosted Open-Meteo (#280, code not live)  |
-| Backend        | Rust Workers (forecast, places, aviation, stations, jobs, AI, tiles, public API) on `staging`; Python FastAPI still serves many routes                             | Rust-only (#333): port every remaining `/api/py` route, delete Python                        |
+| Backend        | Rust Workers (forecast, places, aviation, stations, jobs, AI, tiles, internal, public API) exist on Cloudflare, last modified 2026-10-19, with a `mukoko-weather-mongo-bridge` Worker beside them; Python FastAPI still serves many routes | Rust-only (#333): port every remaining `/api/py` route, delete Python                        |
 | Public API     | `mukoko-api` routes `/v1/weather/*` to the weather Worker; developer keys scoped `weather`                                                                         | Client cutover to `api.mukoko.com` (#174)                                                    |
 | Mobile         | Expo app, thin client over the same API                                                                                                                            | Not in either store, no iOS submit config                                                    |
-| Stations       | Ingest for Wunderground, Ecowitt and manual readings                                                                                                               | One active station today (Harare HQ)                                                         |
+| Stations       | Ingest for Wunderground, Ecowitt and manual readings; the console is live at `weatherstations.nyuchi.com`, on Cloudflare (the repo's `station-console/` is a Next.js app with no Worker config) | One active station today (Harare HQ); StationKit hardware and firmware are specification only |
 | Money          | Free and anonymous; AI gated on sign-in only                                                                                                                       | No entitlement or payment layer; payment provider is an open owner decision (#238)           |
 | Platform fit   | Mongo platform DBs, placesGeo as the location source                                                                                                               | Owner order 2026-10-28 (#359): stop being a silo, use Places ids, CF names, WIGOS            |
 
@@ -76,7 +76,9 @@ Order is priority. Objectives 1 to 3 are the foundation and unblock the rest. Do
 - **Metric moved:** none for users directly. It protects every later metric: fewer duplicate records, and other Nyuchi products can read weather without translation. Measure as count of weather-owned geography/agriculture collections (target 0).
 - **Loop does:** an audit-then-migrate cycle against #359's change list: Places id on locations and stations; WIGOS id where a station has one; CF standard names with the unit declared once; ISO 8601 plus IANA zone; no stored countries or provinces; point `/agriculture` consumers at `agriconnect` when it serves them.
 - **Done when:** a drift check (the `platform-architect` agent pattern) finds no weather-owned copy of geography or agriculture data.
-- **Safe now:** read-only audit, renames behind adapters with tests. **Needs sign-off:** any data migration on the shared cluster, and anything that touches `data-infra` (private, not read in this pass: `nyuchi/data-infra#90` and `#117` must be read before this loop starts).
+- **Safe now:** read-only audit, renames behind adapters with tests. **Needs sign-off:** any data migration on the shared cluster, and anything that touches `data-infra`.
+- **What `data-infra` already says (#90, read 2026-10-29; comments dated 2026-10-28; the owner's mandatory-and-urgent note is tracked in `data-infra#122`):** weather has no module in the platform model (`schemas/model/`), so nothing checks it. Findings: ObjectId `_id` instead of UUID strings; free-text country and province on stations; two metric names per quantity (`temperatureCelsius` and `airTemperatureCelsius`, and three more pairs); daily values keyed by an instant instead of an ISO date plus IANA zone; `regions` boxes not in GeoJSON `bbox` order. Planned sequence: a `weather.yaml` model PR (no data touched), then a station-to-place match report, then a backfill that needs your yes. Unmatched stations are listed, not guessed. The sibling issues are `nyuchi-api#397` (the `/v1/weather` router, which filters stations by free-text country and province) and an unfiled audit of the mobile app. The agriculture domain was added in `data-infra#117` (merged 2026-10-28) with no data model yet; `nyuchi/agriconnect` is an empty repo (a heading in its README).
+- **Loop order for this objective:** (1) review the `weather.yaml` model PR when it lands, (2) make new code in this repo write the model's names only, behind adapters, (3) wait for the match report before any backfill.
 
 ### Objective 4: Forecasts people can trust in Africa
 
@@ -209,7 +211,7 @@ Each of these blocks a named objective. A loop surfaces them; only the owner dec
 4. Release blockers #351: Atlas read-write user for the Mongo bridge, index repairs, `placeKnowledge` details (Objective 2).
 5. Whether the Astro port (#293) stays on the roadmap, given Rust-only is the stated priority. Recommendation: defer it until Objective 2 is done, since it replaces the front end the other objectives are still changing.
 6. Mobile store submission and an iOS account (Objective 5).
-7. Reading and approving the `data-infra` weather plan (`#90`, `#117`) so Objective 3 can start (private; not read in this pass).
+7. Approving the `data-infra` weather model (`#90`) and, later, the station-to-place backfill (Objective 3). The model PR has not landed yet.
 
 ## 8. What to leave alone for now
 
@@ -224,4 +226,5 @@ Each of these blocks a named objective. A loop surfaces them; only the owner dec
 - StationKit was read from its README and issues #1 to #6 and #16. Hardware (#3) and firmware (#4) are specification with `TODO` markers: the BOM, panel, cell, rain gauge, anemometer and GSM modem parts are all unconfirmed, and OTA is undefined. Indicative kit prices are from $25 (Basic) and $65 (Full).
 - `nyuchi/maps` was read from its repo: one commit, a one-line README, a licence, no code and no issues. The base-map plan lives in `mukoko-weather#298`, not here.
 - `nyuchi-docs`, `nyuchi-platform` and `super-app-web` were searched for weather content only; `super-app-web` links out to weather rather than showing live data.
-- Private issues in `data-infra` were not readable from this session.
+- `data-infra` is now attached; only #90 (with comments) and PR #117 were read. The Cloudflare account lists the Workers by name but I could not read their routes, so which Worker serves `weatherstations.nyuchi.com` is unconfirmed.
+- Earlier text that called the Rust Workers "not deployed" came from issue #164 (2026-10-08) and is out of date: they were last modified 2026-10-19. Whether they take production traffic is unverified.
