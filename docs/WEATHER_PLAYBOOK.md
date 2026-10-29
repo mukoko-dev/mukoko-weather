@@ -130,6 +130,8 @@ Three name sets for the same quantities is the silo problem in miniature. The dr
 
 **Bundu scorecard:** station data goes into a commons the Bundu Foundation governs. Judge this work by openness and rigour (published QC rules, a documented schema, no relicensing path), not revenue.
 
+**Also open in the repo:** #16 records that CodeQL scans only the workflow files, with no dependency audit or pre-commit scan. Fix it through the org-level layer (`nyuchi/.github`), per the owner's 2026-10-07 direction, not per-repo copies.
+
 **Story to tell:** a school or smallholder joined with a rain gauge and a thermometer. Do not claim a hardware network exists: today it is one station plus any consumer station that points at our endpoint.
 
 ### Objective 5: Reach people where they are
@@ -211,7 +213,7 @@ Each of these blocks a named objective. A loop surfaces them; only the owner dec
 
 ## 8. What to leave alone for now
 
-- New map base-map service (#298, replaces MapTiler) and new overlay sources (#272): real value, but they add architecture while the backend cutover is unfinished. Revisit after Objective 2.
+- New map base-map service (#298, replaces MapTiler; the `nyuchi/maps` repo is an empty shell, so there is nothing to build on yet) and new overlay sources (#272): real value, but they add architecture while the backend cutover is unfinished. Revisit after Objective 2.
 - Shamwari full-page chat stays paused (flag off). AI stays ambient.
 - Premium-maps, vector search and multi-language flags stay off.
 - New weather data sources beyond rainfall (#247 lists more): one source at a time, after verification exists.
@@ -219,6 +221,7 @@ Each of these blocks a named objective. A loop surfaces them; only the owner dec
 ## 9. Known limits of this playbook
 
 - Built from repo documents and issue titles and bodies (some truncated), not from production telemetry. No metric here has a measured baseline.
-- StationKit was read from its README and issues #5 and #6 (public pages); #3 and #4 (hardware, firmware) were not read.
+- StationKit was read from its README and issues #1 to #6 and #16. Hardware (#3) and firmware (#4) are specification with `TODO` markers: the BOM, panel, cell, rain gauge, anemometer and GSM modem parts are all unconfirmed, and OTA is undefined. Indicative kit prices are from $25 (Basic) and $65 (Full).
+- `nyuchi/maps` was read from its repo: one commit, a one-line README, a licence, no code and no issues. The base-map plan lives in `mukoko-weather#298`, not here.
 - `nyuchi-docs`, `nyuchi-platform` and `super-app-web` were searched for weather content only; `super-app-web` links out to weather rather than showing live data.
 - Private issues in `data-infra` were not readable from this session.
