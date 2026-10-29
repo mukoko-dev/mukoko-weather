@@ -15,7 +15,7 @@ Sources: the repo docs (`CLAUDE.md`, `README.md`, `workers/README.md`, `releases
 | Backend        | Rust Workers (forecast, places, aviation, stations, jobs, AI, tiles, internal, public API) exist on Cloudflare, last modified 2026-10-19, with a `mukoko-weather-mongo-bridge` Worker beside them; Python FastAPI still serves many routes | Rust-only (#333): port every remaining `/api/py` route, delete Python                        |
 | Public API     | `mukoko-api` routes `/v1/weather/*` to the weather Worker; developer keys scoped `weather`                                                                         | Client cutover to `api.mukoko.com` (#174)                                                    |
 | Mobile         | Expo app, thin client over the same API                                                                                                                            | Not in either store, no iOS submit config                                                    |
-| Stations       | Ingest for Wunderground, Ecowitt and manual readings; the console is live at `weatherstations.nyuchi.com`, on Cloudflare (the repo's `station-console/` is a Next.js app with no Worker config) | One active station today (Harare HQ); StationKit hardware and firmware are specification only |
+| Stations       | Ingest for Wunderground, Ecowitt and manual readings; the console is live at `weatherstations.nyuchi.com`, on Cloudflare; its new source is `nyuchi/stationkit` `console/` on `staging` (Astro on Workers); the Next.js `station-console/` in this repo is the old one | One active station today (Harare HQ); StationKit hardware and firmware are specification only |
 | Money          | Free and anonymous; AI gated on sign-in only                                                                                                                       | No entitlement or payment layer; payment provider is an open owner decision (#238)           |
 | Platform fit   | Mongo platform DBs, placesGeo as the location source                                                                                                               | Owner order 2026-10-28 (#359): stop being a silo, use Places ids, CF names, WIGOS            |
 
@@ -99,6 +99,11 @@ Order is priority. Objectives 1 to 3 are the foundation and unblock the rest. Do
 ### 4a. StationKit (`nyuchi/stationkit`)
 
 StationKit is the station network that makes the loop "my station improves your forecast, your station improves mine" true, and it is the only way weather gets ground truth in places the models model badly.
+
+**Where the pieces live (read 2026-10-29):**
+
+- **Station console:** `nyuchi/stationkit` `staging` already holds it (`console/`, Astro 7 on Cloudflare Workers, deploy workflow, merged 2026-10-11 to 2026-10-21). `main` does not have it yet, which is why `main`'s README still says no code has landed. The old Next.js copy is `station-console/` in this repo. The new console talks only to `api.nyuchi.com`, where `POST /v1/stations` and the other station routes are not built (live probe 2026-10-11), so it answers "not live yet". The live ingest is the weather repo's stations Worker at `weather-ingest.nyuchi.com`. So the move is mostly done in code, and what remains is: release `staging` to `main`, build the station routes on the Nyuchi API (or point the console at the existing Worker), then delete `station-console/` here.
+- **Product page and pilot signup:** `bundu-labs/marketing`, `apps/nyuchi/src/pages/stationkit/{index,signup}.astro` (Astro monorepo with the nyuchi.com, bundu.org and mukoko.com sites). The signup form posts to Formspree, not to any station-registration API, so a pilot signup does not create a station.
 
 **What exists (read 2026-10-29):**
 
