@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { WeatherIcon, nightIcon } from "@/lib/weather-icons";
 import { weatherCodeToInfo, type HourlyWeather } from "@/lib/weather";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { SectionHeader } from "@/components/ui/section-header";
 import { useHydrated } from "@/lib/use-hydrated";
 import {
   currentHourIndex,
@@ -19,13 +20,26 @@ interface Props {
   /** The location's UTC offset (payload `utc_offset_seconds`). "Now" and
    *  every hour label are read in the PLACE's time, not the viewer's. */
   utcOffsetSeconds?: number;
+  /** Panel heading (e.g. "Hourly") with an optional "Full forecast" action.
+   *  The strip overlaps the hero's sky, so its heading lives INSIDE the panel
+   *  rather than above it. `headingId` is the id the section's
+   *  `aria-labelledby` points at. */
+  heading?: {
+    headingId: string;
+    title: string;
+    action?: { label: string; href: string };
+  };
 }
 
 /**
  * Horizontal scrollable hour-by-hour weather cards.
  * Renders eagerly above CurrentConditions on the location page.
  */
-export function HourlyScrollCards({ hourly, utcOffsetSeconds }: Props) {
+export function HourlyScrollCards({
+  hourly,
+  utcOffsetSeconds,
+  heading,
+}: Props) {
   // The start of the strip is chosen from the current instant (`new Date()`)
   // read in the LOCATION's offset, which the server can't match at SSR time
   // (it renders minutes earlier, possibly a different hour) — computing it
@@ -56,7 +70,18 @@ export function HourlyScrollCards({ hourly, utcOffsetSeconds }: Props) {
   }, []);
 
   return (
-    <div className="baobab overflow-hidden p-3">
+    <div
+      data-hourly-strip
+      className="baobab overflow-hidden p-3 shadow-none"
+    >
+      {heading && (
+        <SectionHeader
+          headingId={heading.headingId}
+          title={heading.title}
+          action={heading.action}
+          className="px-1"
+        />
+      )}
       <ScrollArea className="w-full" type="hover" viewportRef={scrollRef}>
         <div
           className="flex gap-2.5 pb-2 [overscroll-behavior-x:contain]"

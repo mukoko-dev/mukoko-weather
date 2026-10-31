@@ -522,20 +522,19 @@ export function WeatherDashboard({
                             >
                               <ChartErrorBoundary name="hourly scroll cards">
                                 <section aria-labelledby="hourly-scroll-heading">
-                                  <SectionHeader
-                                    headingId="hourly-scroll-heading"
-                                    title="Hourly"
-                                    action={{
-                                      label: "Full forecast →",
-                                      href: `/${location.slug}/forecast`,
-                                    }}
-                                    className="mb-[var(--space-stack)]"
-                                  />
                                   <HourlyScrollCards
                                     hourly={weather.hourly}
                                     utcOffsetSeconds={
                                       weather.utc_offset_seconds
                                     }
+                                    heading={{
+                                      headingId: "hourly-scroll-heading",
+                                      title: "Hourly",
+                                      action: {
+                                        label: "Full forecast →",
+                                        href: `/${location.slug}/forecast`,
+                                      },
+                                    }}
                                   />
                                 </section>
                               </ChartErrorBoundary>

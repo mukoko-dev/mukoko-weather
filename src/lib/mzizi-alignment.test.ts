@@ -36,16 +36,17 @@ export const CONTROL_CLASSES = new Set([
   // Pill buttons (Mzizi Button: default / outline variants)
   "kudu",
   "kudu-sm",
-  "kudu-plate",
   "impala",
   "impala-sm",
   "impala-primary",
-  "impala-plate",
   // Round icon button
   "bee",
   // Round icon control on a card surface (nav island, map overlays)
   "duiker",
   "duiker-solid",
+  // Quiet underlined text action / round icon control on the hero sky
+  "kestrel-link",
+  "kestrel-round",
   // Pill chip / toggle chip (aria-pressed)
   "quail",
   // Inline text actions and nav links (Mzizi Button `link` variant)
@@ -336,15 +337,16 @@ describe("Mzizi alignment guard — every button", () => {
     }
   });
 
-  it("the hero plate CTA and Share are Mzizi pills", () => {
+  it("the hero's activities link and Share are Mzizi sky controls", () => {
     const hero = FOUND.filter((f) => f.file.endsWith("CurrentConditions.tsx"));
     expect(hero.length).toBe(2);
     for (const f of hero) {
       expect(
         classTokens(f.tag).some(
-          (t) => t === "kudu-plate" || t === "impala-plate",
+          (t) => t === "kestrel-link" || t === "kestrel-round",
         ),
       ).toBe(true);
     }
   });
+
 });

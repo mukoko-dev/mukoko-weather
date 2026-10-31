@@ -161,3 +161,15 @@ describe("HourlyScrollCards — keyboard-focusable scroll region", () => {
     );
   });
 });
+
+describe("HourlyScrollCards — panel that overlaps the hero sky", () => {
+  it("is a bordered panel with no shadow, marked for the overlap rule", () => {
+    expect(source).toContain("data-hourly-strip");
+    expect(source).toContain("baobab overflow-hidden p-3 shadow-none");
+  });
+
+  it("carries its own heading inside the panel (nothing sits above it on the sky)", () => {
+    expect(source).toContain("<SectionHeader");
+    expect(source).toContain("heading?:");
+  });
+});

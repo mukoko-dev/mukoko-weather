@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect, useMemo, type ReactNode } from "react";
-import { ShareIcon, NavigationIcon } from "@/lib/weather-icons";
+import {
+  ShareIcon,
+  NavigationIcon,
+  WeatherIcon,
+  nightIcon,
+} from "@/lib/weather-icons";
 import {
   weatherCodeToInfo,
   type CurrentWeather,
@@ -14,15 +19,16 @@ import { feasibilitySeries } from "@/lib/activity-feasibility";
 import { fetchSuitabilityRules } from "@/lib/suitability-cache";
 import type { SuitabilityRuleDoc } from "@/lib/db";
 import {
-  PLATE_CLASS,
+  SKY_CLASS,
   activityDotClass,
+  formatFeelsLike,
   formatHighLow,
   heroActivityClause,
   heroBadgeLabel,
   heroEyebrowBadges,
   heroOutlook,
   isHomeLocation,
-  plateFamily,
+  skyFamily,
   type HeroBadge,
 } from "@/lib/hero";
 
@@ -41,8 +47,8 @@ interface Props {
   /** GPS-confirmed current location (silent-URL home) — shows the
    *  MY LOCATION eyebrow above the location name. */
   isCurrentLocation?: boolean;
-  /** Quiet content rendered below the sky plate (the season line on the
-   *  location page). Kept as a slot so the hero stays a single block. */
+  /** Quiet content at the foot of the sky (the season line on the location
+   *  page). Kept as a slot so the hero stays a single block. */
   footer?: ReactNode;
 }
 
@@ -92,13 +98,14 @@ export function CurrentConditions({
 }: Props) {
   const info = weatherCodeToInfo(current.weather_code);
   const isDay = current.is_day === 1;
-  const family = plateFamily(current.weather_code, isDay);
+  const family = skyFamily(current.weather_code, isDay);
   const temperature = Math.round(current.temperature_2m);
   // Guard empty daily arrays — the formatter returns null instead of "H:NaN°".
   const highLow = formatHighLow(
     daily?.temperature_2m_max?.[0],
     daily?.temperature_2m_min?.[0],
   );
+  const feels = formatFeelsLike(current.apparent_temperature);
   // homeLocation is a store field added by another agent; read it defensively
   // so this component works whether or not the field exists yet.
   const homeLocation = useAppStore(
@@ -211,54 +218,96 @@ export function CurrentConditions({
   }
 
   return (
-    <section aria-labelledby="current-conditions-heading" className="relative">
-      {/* Sky plate — one solid mineral surface (no translucent material, no animation) that
-          holds the whole hero. Tint = condition family × day/night, see
-          src/lib/hero.ts. It spans the main column edge to edge (no inset),
-          so it lines up with every card below it and with the sidebar. */}
+    <section
+      aria-labelledby="current-conditions-heading"
+      data-sky-hero
+      className="relative isolate"
+    >
+      {/* Open sky — no card. A full-bleed gradient band behind the hero,
+          condition family × day/night (src/lib/hero.ts skyFamily); static CSS,
+          so it never fights the fixed WeatherBackdrop, into which its lower
+          edge fades. The content below stays in the page column. */}
       <div
-        data-plate={family}
-        className={`kori ${PLATE_CLASS[family]} relative z-10 flex flex-col items-center px-5 pt-7 pb-7 text-center sm:px-8 sm:pt-9`}
-      >
-        {badges.length > 0 && (
-          <p className="mb-1 flex flex-wrap items-center justify-center gap-x-3 text-sm font-semibold uppercase tracking-widest opacity-90">
-            {badges.map((badge) => (
-              <EyebrowBadge key={badge} badge={badge} />
-            ))}
+        aria-hidden="true"
+        data-sky={family}
+        className={`kestrel ${SKY_CLASS[family]}`}
+      />
+      <div className="relative pt-1 pr-[env(safe-area-inset-right,0px)] pb-[var(--sky-fade)] pl-[env(safe-area-inset-left,0px)] text-left text-[var(--sky-fg)]">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            {badges.length > 0 && (
+              <p className="mb-1 flex flex-wrap items-center gap-x-3 text-sm font-semibold uppercase tracking-widest">
+                {badges.map((badge) => (
+                  <EyebrowBadge key={badge} badge={badge} />
+                ))}
+              </p>
+            )}
+            <h2
+              id="current-conditions-heading"
+              className="font-heading text-2xl font-semibold break-words sm:text-3xl"
+            >
+              {locationName}
+            </h2>
+          </div>
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={handleShare}
+              aria-label={`Share weather for ${locationName}`}
+              className="kestrel-round"
+            >
+              <ShareIcon size={20} aria-hidden="true" />
+            </button>
+            <span
+              role="status"
+              className={
+                copied || copyFailed
+                  ? "absolute top-full right-0 mt-1 text-sm font-medium whitespace-nowrap"
+                  : "sr-only"
+              }
+            >
+              {copied ? "Link copied" : copyFailed ? "Copy failed" : ""}
+            </span>
+          </div>
+        </div>
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <p className="flex items-start leading-none tracking-tight">
+            <span className="sr-only">{temperature} degrees Celsius</span>
+            <span
+              className="font-heading text-[clamp(5rem,26vw,6.5rem)] leading-[0.95] font-semibold tabular-nums"
+              aria-hidden="true"
+            >
+              {temperature}
+            </span>
+            <span
+              className="font-heading mt-[0.5rem] text-[clamp(2.25rem,12vw,3rem)] leading-none font-semibold"
+              aria-hidden="true"
+            >
+              °
+            </span>
           </p>
-        )}
-        <h2
-          id="current-conditions-heading"
-          className="font-heading text-2xl font-semibold sm:text-3xl"
-        >
-          {locationName}
-        </h2>
-        <p className="mt-1 flex items-start justify-center leading-none tracking-tight">
-          <span className="sr-only">{temperature} degrees Celsius</span>
-          <span
-            className="font-heading text-8xl font-semibold tabular-nums sm:text-9xl"
-            aria-hidden="true"
-          >
-            {temperature}
+          <span aria-hidden="true" className="shrink-0">
+            <WeatherIcon
+              icon={isDay ? info.icon : nightIcon(info.icon)}
+              size={56}
+            />
           </span>
-          <span
-            className="font-heading text-5xl font-semibold sm:text-6xl"
-            aria-hidden="true"
-          >
-            °
-          </span>
-        </p>
-        <p className="mt-2 text-xl font-semibold sm:text-2xl">{info.label}</p>
-        {highLow && (
-          <p className="mt-1 whitespace-pre text-lg font-medium tabular-nums">
-            {highLow}
+        </div>
+        <p className="mt-1 text-xl font-semibold sm:text-2xl">{info.label}</p>
+        {(highLow || feels) && (
+          <p className="mt-1 flex flex-wrap items-baseline gap-x-2 text-lg font-medium tabular-nums">
+            {highLow && <span className="whitespace-pre">{highLow}</span>}
+            {highLow && feels && <span aria-hidden="true">·</span>}
+            {feels && <span>{feels}</span>}
           </p>
         )}
         {outlook && (
-          <p className="mt-4 max-w-md text-base leading-relaxed">{outlook}</p>
+          <p className="mt-3 max-w-[30ch] text-base leading-relaxed">
+            {outlook}
+          </p>
         )}
         {activityLine ? (
-          <p className="mt-4 flex items-center justify-center gap-2 text-base font-semibold">
+          <p className="mt-3 flex items-center gap-2 text-base font-semibold">
             <span
               aria-hidden="true"
               className={`size-2.5 shrink-0 rounded-full ring-2 ring-current ${activityLine.dot}`}
@@ -272,29 +321,14 @@ export function CurrentConditions({
             <button
               type="button"
               onClick={() => openMyWeather("activities")}
-              className="kudu-plate mt-4"
+              className="kestrel-link mt-1"
             >
               Pick activities for tailored advice
             </button>
           )
         )}
-        <button
-          type="button"
-          onClick={handleShare}
-          aria-label={`Share weather for ${locationName}`}
-          className="impala-plate mt-3"
-        >
-          <ShareIcon size={16} aria-hidden="true" />
-          <span className="sr-only sm:not-sr-only">
-            {copied ? "Copied!" : copyFailed ? "Copy failed" : "Share"}
-          </span>
-        </button>
+        {footer && <div className="mt-2 flex">{footer}</div>}
       </div>
-      {footer && (
-        <div className="relative z-10 mt-[var(--space-stack)] flex justify-center">
-          {footer}
-        </div>
-      )}
     </section>
   );
 }

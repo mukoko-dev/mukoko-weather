@@ -56,28 +56,39 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 /**
- * Formats today's high/low as the hero line, e.g. "H:34°  L:25°".
+ * Formats today's high/low as the hero line, e.g. "H 34°  L 25°".
  * Returns null when either value is missing or not a finite number, so the
- * hero never renders "H:NaN°" (the daily arrays can be empty).
+ * hero never renders "H NaN°" (the daily arrays can be empty).
  */
 export function formatHighLow(
   high: number | null | undefined,
   low: number | null | undefined,
 ): string | null {
   if (!isFiniteNumber(high) || !isFiniteNumber(low)) return null;
-  return `H:${Math.round(high)}°  L:${Math.round(low)}°`;
+  return `H ${Math.round(high)}°  L ${Math.round(low)}°`;
+}
+
+/**
+ * The "Feels 27°" part of the hero's second line. Null when the apparent
+ * temperature is missing or not finite (missing is never zero).
+ */
+export function formatFeelsLike(
+  apparent: number | null | undefined,
+): string | null {
+  if (!isFiniteNumber(apparent)) return null;
+  return `Feels ${Math.round(apparent)}°`;
 }
 
 // ---------------------------------------------------------------------------
-// Sky plate — the solid mineral surface behind the hero
+// Open sky — the gradient band behind the hero
 // ---------------------------------------------------------------------------
 
 /**
- * Plate family: the condition family × day/night that picks the mineral tint.
- * Hue follows the condition family (and time of day), never a gradient or an
- * animated sky — the plate is a flat, solid surface.
+ * Sky family: the condition family × day/night that picks the gradient.
+ * The sky band is a static CSS gradient (no animation); see `.kestrel` in
+ * globals.css.
  */
-export type PlateFamily =
+export type SkyFamily =
   | "clear-day"
   | "clear-night"
   | "cloudy-day"
@@ -87,8 +98,8 @@ export type PlateFamily =
   | "storm"
   | "snow";
 
-/** WMO weather code → plate family. Unknown codes read as cloudy. */
-export function plateFamily(weatherCode: number, isDay: boolean): PlateFamily {
+/** WMO weather code → sky family. Unknown codes read as cloudy. */
+export function skyFamily(weatherCode: number, isDay: boolean): SkyFamily {
   if (weatherCode >= 95) return "storm";
   if (
     (weatherCode >= 71 && weatherCode <= 77) ||
@@ -108,18 +119,18 @@ export function plateFamily(weatherCode: number, isDay: boolean): PlateFamily {
 }
 
 /**
- * Fauna modifier class per plate family. Literal class names so Tailwind's
- * JIT keeps them; each one points `--kori-bg/fg` at a `--plate-*` token.
+ * Fauna modifier class per sky family. Literal class names so Tailwind's
+ * JIT keeps them; each one points `--kestrel-top/bottom` at a `--sky-*` pair.
  */
-export const PLATE_CLASS: Record<PlateFamily, string> = {
-  "clear-day": "kori-clear-day",
-  "clear-night": "kori-clear-night",
-  "cloudy-day": "kori-cloudy-day",
-  "cloudy-night": "kori-cloudy-night",
-  fog: "kori-fog",
-  rain: "kori-rain",
-  storm: "kori-storm",
-  snow: "kori-snow",
+export const SKY_CLASS: Record<SkyFamily, string> = {
+  "clear-day": "kestrel-clear-day",
+  "clear-night": "kestrel-clear-night",
+  "cloudy-day": "kestrel-cloudy-day",
+  "cloudy-night": "kestrel-cloudy-night",
+  fog: "kestrel-fog",
+  rain: "kestrel-rain",
+  storm: "kestrel-storm",
+  snow: "kestrel-snow",
 };
 
 /** Activity category → solid mineral dot (static literals for Tailwind JIT). */

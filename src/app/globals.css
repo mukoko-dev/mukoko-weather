@@ -1739,112 +1739,149 @@ body {
   }
 }
 
-/* ===== Location hero — solid sky plate (redesign/hero) =====
-   A flat, solid mineral surface behind the location hero: no gradient, no
-   glass, no animation. Each condition family maps to one Seven Minerals value
-   via var(), so light and dark follow the mineral tokens above and the
-   per-theme --mineral-*-fg pairs keep text contrast. The [data-theme="dark"]
-   block repeats the same var() references (they resolve per theme). Consumed
-   by the .kori fauna class and its family modifiers. */
+/* ===== Location hero — open sky (redesign/hero-open-sky) =====
+   No card: the sky is the top of the page. One full-bleed band behind the hero
+   with a vertical gradient chosen by condition family × day/night (family from
+   src/lib/hero.ts skyFamily). Light and dark are separate designs, not
+   inversions: in light the sky is a mid-saturation day or dusk gradient, in
+   dark it is deep night. Every stop keeps WHITE text (--sky-fg) at 4.5:1 or
+   better — src/lib/hero-sky.test.ts computes that for all 16 gradients.
+   The band is static CSS (no animation). Its lower edge fades out over
+   --sky-fade so it melts into the fixed WeatherBackdrop; the hourly panel
+   overlaps the last --sky-lip of it. */
 :root {
-  --radius-plate: 2rem;
-  --plate-clear-day: var(--mineral-cobalt);
-  --plate-clear-day-fg: var(--mineral-cobalt-fg);
-  --plate-clear-night: var(--mineral-tanzanite);
-  --plate-clear-night-fg: var(--mineral-tanzanite-fg);
-  --plate-cloudy-day: var(--mineral-gold);
-  --plate-cloudy-day-fg: var(--mineral-gold-fg);
-  --plate-cloudy-night: var(--mineral-tanzanite);
-  --plate-cloudy-night-fg: var(--mineral-tanzanite-fg);
-  --plate-fog: var(--mineral-terracotta);
-  --plate-fog-fg: var(--mineral-terracotta-fg);
-  --plate-rain: var(--mineral-malachite);
-  --plate-rain-fg: var(--mineral-malachite-fg);
-  --plate-storm: var(--mineral-tanzanite);
-  --plate-storm-fg: var(--mineral-tanzanite-fg);
-  --plate-snow: var(--mineral-cobalt);
-  --plate-snow-fg: var(--mineral-cobalt-fg);
+  --sky-fg: #ffffff;
+  --sky-fade: 1.75rem;
+  --sky-lip: 0.875rem;
+  --sky-clear-day-top: #1b5aa6;
+  --sky-clear-day-bottom: #3475b8;
+  --sky-clear-night-top: #0b1a33;
+  --sky-clear-night-bottom: #243f73;
+  --sky-cloudy-day-top: #4a5563;
+  --sky-cloudy-day-bottom: #667384;
+  --sky-cloudy-night-top: #1f2630;
+  --sky-cloudy-night-bottom: #3a4655;
+  --sky-fog-top: #565d66;
+  --sky-fog-bottom: #6a7179;
+  --sky-rain-top: #2b3b4f;
+  --sky-rain-bottom: #455c78;
+  --sky-storm-top: #231f30;
+  --sky-storm-bottom: #453a5c;
+  --sky-snow-top: #3f566f;
+  --sky-snow-bottom: #56718f;
 }
 
 [data-theme="dark"] {
-  --plate-clear-day: var(--mineral-cobalt);
-  --plate-clear-day-fg: var(--mineral-cobalt-fg);
-  --plate-clear-night: var(--mineral-tanzanite);
-  --plate-clear-night-fg: var(--mineral-tanzanite-fg);
-  --plate-cloudy-day: var(--mineral-gold);
-  --plate-cloudy-day-fg: var(--mineral-gold-fg);
-  --plate-cloudy-night: var(--mineral-tanzanite);
-  --plate-cloudy-night-fg: var(--mineral-tanzanite-fg);
-  --plate-fog: var(--mineral-terracotta);
-  --plate-fog-fg: var(--mineral-terracotta-fg);
-  --plate-rain: var(--mineral-malachite);
-  --plate-rain-fg: var(--mineral-malachite-fg);
-  --plate-storm: var(--mineral-tanzanite);
-  --plate-storm-fg: var(--mineral-tanzanite-fg);
-  --plate-snow: var(--mineral-cobalt);
-  --plate-snow-fg: var(--mineral-cobalt-fg);
+  --sky-clear-day-top: #0d2547;
+  --sky-clear-day-bottom: #1d4a80;
+  --sky-clear-night-top: #050c1a;
+  --sky-clear-night-bottom: #12254a;
+  --sky-cloudy-day-top: #262d37;
+  --sky-cloudy-day-bottom: #3a4553;
+  --sky-cloudy-night-top: #0f1319;
+  --sky-cloudy-night-bottom: #1f2833;
+  --sky-fog-top: #2a2f35;
+  --sky-fog-bottom: #444b53;
+  --sky-rain-top: #141d29;
+  --sky-rain-bottom: #28394f;
+  --sky-storm-top: #0f0c17;
+  --sky-storm-bottom: #2a2238;
+  --sky-snow-top: #1f2d3e;
+  --sky-snow-bottom: #3c5672;
 }
 
 @layer components {
-  /* .kori — the hero sky plate. Solid, fully rounded card, text in the
-     plate's foreground token. A family modifier points --kori-bg/fg at one
-     --plate-* pair; the default is the clear-day plate. */
-  .kori {
-    --kori-bg: var(--plate-clear-day);
-    --kori-fg: var(--plate-clear-day-fg);
-    background-color: var(--kori-bg);
-    color: var(--kori-fg);
-    border-radius: var(--radius-plate);
+  /* .kestrel — the hero's sky band (the kestrel hovers in open sky). Put on
+     an element INSIDE a `relative isolate` hero section: it spans the viewport
+     (full bleed), sits behind the content, and fades out at its lower edge.
+     A family modifier points --kestrel-top/bottom at one --sky-* pair. */
+  .kestrel {
+    --kestrel-top: var(--sky-clear-day-top);
+    --kestrel-bottom: var(--sky-clear-day-bottom);
+    position: absolute;
+    inset-block: 0;
+    left: 50%;
+    width: 100vw;
+    z-index: -1;
+    transform: translateX(-50%);
+    pointer-events: none;
+    background-image: linear-gradient(
+      to bottom,
+      var(--kestrel-top),
+      var(--kestrel-bottom)
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      black calc(100% - var(--sky-fade)),
+      transparent
+    );
   }
-  /* .kudu-plate — the hero plate's primary pill (Mzizi Button, sm size). The
-     plate's own fg/bg pair inverted, so it carries the plate's AAA contrast. */
-  .kudu-plate {
-    @apply press-scale inline-flex items-center justify-center gap-2
-           rounded-[var(--radius-button)] px-5 py-2.5 text-base font-semibold
-           transition-opacity hover:opacity-90
+  .kestrel-clear-day {
+    --kestrel-top: var(--sky-clear-day-top);
+    --kestrel-bottom: var(--sky-clear-day-bottom);
+  }
+  .kestrel-clear-night {
+    --kestrel-top: var(--sky-clear-night-top);
+    --kestrel-bottom: var(--sky-clear-night-bottom);
+  }
+  .kestrel-cloudy-day {
+    --kestrel-top: var(--sky-cloudy-day-top);
+    --kestrel-bottom: var(--sky-cloudy-day-bottom);
+  }
+  .kestrel-cloudy-night {
+    --kestrel-top: var(--sky-cloudy-night-top);
+    --kestrel-bottom: var(--sky-cloudy-night-bottom);
+  }
+  .kestrel-fog {
+    --kestrel-top: var(--sky-fog-top);
+    --kestrel-bottom: var(--sky-fog-bottom);
+  }
+  .kestrel-rain {
+    --kestrel-top: var(--sky-rain-top);
+    --kestrel-bottom: var(--sky-rain-bottom);
+  }
+  .kestrel-storm {
+    --kestrel-top: var(--sky-storm-top);
+    --kestrel-bottom: var(--sky-storm-bottom);
+  }
+  .kestrel-snow {
+    --kestrel-top: var(--sky-snow-top);
+    --kestrel-bottom: var(--sky-snow-bottom);
+  }
+  /* .kestrel-link — quiet underlined text action on the sky (the demoted
+     "Pick activities" call). A real control with a 48px hit area. */
+  .kestrel-link {
+    @apply inline-flex items-center rounded-[var(--radius-button)] text-base
+           font-medium underline underline-offset-4 transition-opacity
+           hover:opacity-80 active:opacity-70
            min-h-[var(--touch-target-min)];
-    background-color: var(--kori-fg);
-    color: var(--kori-bg);
+    color: var(--sky-fg);
   }
-  /* .impala-plate — quiet (ghost) pill on the plate: plate text, no fill
-     until hovered. Same shape and target as every other Mzizi button. */
-  .impala-plate {
-    @apply press-scale inline-flex items-center justify-center gap-1.5
-           rounded-[var(--radius-button)] px-4 py-2.5 text-base font-medium
-           transition-colors hover:bg-current/10
-           min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)];
+  /* .kestrel-round — round 48px icon control on the sky (Share). A hairline
+     border, no fill and no shadow: Mzizi separates with borders. */
+  .kestrel-round {
+    @apply flex shrink-0 items-center justify-center rounded-full border
+           transition-colors active:scale-95
+           w-[var(--touch-target-min)] h-[var(--touch-target-min)];
+    color: var(--sky-fg);
+    border-color: color-mix(in srgb, var(--sky-fg) 55%, transparent);
   }
-  .kori-clear-day {
-    --kori-bg: var(--plate-clear-day);
-    --kori-fg: var(--plate-clear-day-fg);
+  .kestrel-round:hover {
+    background-color: color-mix(in srgb, var(--sky-fg) 14%, transparent);
   }
-  .kori-clear-night {
-    --kori-bg: var(--plate-clear-night);
-    --kori-fg: var(--plate-clear-night-fg);
+  .kestrel-round:focus-visible,
+  .kestrel-link:focus-visible {
+    outline: 2px solid var(--sky-fg);
+    outline-offset: 2px;
   }
-  .kori-cloudy-day {
-    --kori-bg: var(--plate-cloudy-day);
-    --kori-fg: var(--plate-cloudy-day-fg);
-  }
-  .kori-cloudy-night {
-    --kori-bg: var(--plate-cloudy-night);
-    --kori-fg: var(--plate-cloudy-night-fg);
-  }
-  .kori-fog {
-    --kori-bg: var(--plate-fog);
-    --kori-fg: var(--plate-fog-fg);
-  }
-  .kori-rain {
-    --kori-bg: var(--plate-rain);
-    --kori-fg: var(--plate-rain-fg);
-  }
-  .kori-storm {
-    --kori-bg: var(--plate-storm);
-    --kori-fg: var(--plate-storm-fg);
-  }
-  .kori-snow {
-    --kori-bg: var(--plate-snow);
-    --kori-fg: var(--plate-snow-fg);
+
+  /* The hourly panel overlaps the bottom of the sky band: it follows the hero
+     in the stack and climbs --sky-lip into it (the stack gap is cancelled
+     first). Only the panel directly after the hero does this. */
+  .herd > :has([data-sky-hero]) + :has([data-hourly-strip]) {
+    position: relative;
+    z-index: 10;
+    margin-top: calc(-1 * (var(--space-section) + var(--sky-lip)));
   }
 }
 

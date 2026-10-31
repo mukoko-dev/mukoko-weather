@@ -2,17 +2,18 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import {
-  PLATE_CLASS,
+  SKY_CLASS,
   activityDotClass,
   currentHourIndex,
+  formatFeelsLike,
   formatHighLow,
   heroActivityClause,
   heroBadgeLabel,
   heroEyebrowBadges,
   heroOutlook,
   isHomeLocation,
-  plateFamily,
-  type PlateFamily,
+  skyFamily,
+  type SkyFamily,
 } from "./hero";
 import { contrastRatio } from "./contrast";
 import type { HourlyWeather } from "./weather";
@@ -67,11 +68,11 @@ describe("isHomeLocation", () => {
 
 describe("formatHighLow", () => {
   it("formats the hero line with two spaces between H and L", () => {
-    expect(formatHighLow(34.4, 24.6)).toBe("H:34°  L:25°");
+    expect(formatHighLow(34.4, 24.6)).toBe("H 34°  L 25°");
   });
 
   it("rounds each value to the nearest whole degree", () => {
-    expect(formatHighLow(33.5, 25.49)).toBe("H:34°  L:25°");
+    expect(formatHighLow(33.5, 25.49)).toBe("H 34°  L 25°");
   });
 
   it("returns null when either value is missing", () => {
@@ -85,40 +86,54 @@ describe("formatHighLow", () => {
   });
 });
 
-describe("plateFamily", () => {
-  it("maps clear skies to the day or night clear plate", () => {
-    expect(plateFamily(0, true)).toBe("clear-day");
-    expect(plateFamily(1, true)).toBe("clear-day");
-    expect(plateFamily(0, false)).toBe("clear-night");
+describe("formatFeelsLike", () => {
+  it("formats the apparent temperature as 'Feels N°'", () => {
+    expect(formatFeelsLike(26.6)).toBe("Feels 27°");
+    expect(formatFeelsLike(-2.4)).toBe("Feels -2°");
+    expect(formatFeelsLike(0)).toBe("Feels 0°");
   });
 
-  it("maps overcast and partly cloudy codes to the cloudy plates", () => {
-    expect(plateFamily(2, true)).toBe("cloudy-day");
-    expect(plateFamily(3, true)).toBe("cloudy-day");
-    expect(plateFamily(3, false)).toBe("cloudy-night");
-  });
-
-  it("maps fog and mist to the fog plate at any hour", () => {
-    expect(plateFamily(45, true)).toBe("fog");
-    expect(plateFamily(48, false)).toBe("fog");
-  });
-
-  it("maps drizzle, rain and showers to the rain plate", () => {
-    expect(plateFamily(51, true)).toBe("rain");
-    expect(plateFamily(63, false)).toBe("rain");
-    expect(plateFamily(81, true)).toBe("rain");
-  });
-
-  it("maps storms, snow and unknown codes to their families", () => {
-    expect(plateFamily(95, false)).toBe("storm");
-    expect(plateFamily(73, true)).toBe("snow");
-    expect(plateFamily(10, true)).toBe("cloudy-day");
+  it("returns null when missing or not finite (missing is never zero)", () => {
+    expect(formatFeelsLike(undefined)).toBeNull();
+    expect(formatFeelsLike(null)).toBeNull();
+    expect(formatFeelsLike(Number.NaN)).toBeNull();
   });
 });
 
-describe("PLATE_CLASS", () => {
-  it("has a modifier class for every plate family", () => {
-    const families: PlateFamily[] = [
+describe("skyFamily", () => {
+  it("maps clear skies to the day or night clear plate", () => {
+    expect(skyFamily(0, true)).toBe("clear-day");
+    expect(skyFamily(1, true)).toBe("clear-day");
+    expect(skyFamily(0, false)).toBe("clear-night");
+  });
+
+  it("maps overcast and partly cloudy codes to the cloudy plates", () => {
+    expect(skyFamily(2, true)).toBe("cloudy-day");
+    expect(skyFamily(3, true)).toBe("cloudy-day");
+    expect(skyFamily(3, false)).toBe("cloudy-night");
+  });
+
+  it("maps fog and mist to the fog plate at any hour", () => {
+    expect(skyFamily(45, true)).toBe("fog");
+    expect(skyFamily(48, false)).toBe("fog");
+  });
+
+  it("maps drizzle, rain and showers to the rain plate", () => {
+    expect(skyFamily(51, true)).toBe("rain");
+    expect(skyFamily(63, false)).toBe("rain");
+    expect(skyFamily(81, true)).toBe("rain");
+  });
+
+  it("maps storms, snow and unknown codes to their families", () => {
+    expect(skyFamily(95, false)).toBe("storm");
+    expect(skyFamily(73, true)).toBe("snow");
+    expect(skyFamily(10, true)).toBe("cloudy-day");
+  });
+});
+
+describe("SKY_CLASS", () => {
+  it("has a modifier class for every sky family", () => {
+    const families: SkyFamily[] = [
       "clear-day",
       "clear-night",
       "cloudy-day",
@@ -129,7 +144,7 @@ describe("PLATE_CLASS", () => {
       "snow",
     ];
     for (const f of families) {
-      expect(PLATE_CLASS[f]).toBe(`kori-${f}`);
+      expect(SKY_CLASS[f]).toBe(`kestrel-${f}`);
     }
   });
 });
@@ -309,43 +324,103 @@ describe("sky plate tokens — contrast", () => {
     return raw.toLowerCase();
   }
 
-  const families = Object.keys(PLATE_CLASS) as PlateFamily[];
+  const families = Object.keys(SKY_CLASS) as SkyFamily[];
+  const FG = "#ffffff";
 
-  it("declares every plate family's colour and foreground token in both themes", () => {
+  /** WCAG relative luminance of a #rrggbb colour. */
+  function luminance(hex: string): number {
+    const [r, g, b] = [1, 3, 5]
+      .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  it("declares the white sky foreground once", () => {
+    expect(resolveColour("--sky-fg", "light")).toBe(FG);
+    expect(resolveColour("--sky-fg", "dark")).toBe(FG);
+  });
+
+  it("declares every sky family's top and bottom stop in both themes", () => {
     for (const f of families) {
       for (const scope of ["light", "dark"] as const) {
-        expect(() => resolveColour(`--plate-${f}`, scope)).not.toThrow();
-        expect(() => resolveColour(`--plate-${f}-fg`, scope)).not.toThrow();
+        expect(() => resolveColour(`--sky-${f}-top`, scope)).not.toThrow();
+        expect(() => resolveColour(`--sky-${f}-bottom`, scope)).not.toThrow();
       }
     }
   });
 
-  it("wires each family modifier class to its plate token", () => {
-    const body = blockBody(".kori-clear-day");
-    expect(body).toContain("--kori-bg: var(--plate-clear-day)");
+  it("wires each family modifier class to its sky stops", () => {
     for (const f of families) {
-      expect(css).toContain(`.kori-${f} {`);
-      expect(css).toContain(`--kori-bg: var(--plate-${f});`);
+      const body = blockBody(`.kestrel-${f}`);
+      expect(body).toContain(`--kestrel-top: var(--sky-${f}-top)`);
+      expect(body).toContain(`--kestrel-bottom: var(--sky-${f}-bottom)`);
     }
   });
 
-  it("keeps body text on every plate at WCAG AA 4.5:1 in light and dark", () => {
+  it("keeps white text at WCAG AA 4.5:1 on EVERY gradient stop (8 families x light/dark x top/bottom)", () => {
+    let checked = 0;
     for (const f of families) {
       for (const scope of ["light", "dark"] as const) {
-        const ratio = contrastRatio(
-          resolveColour(`--plate-${f}`, scope),
-          resolveColour(`--plate-${f}-fg`, scope),
-        );
-        expect(ratio, `${f} ${scope}`).toBeGreaterThanOrEqual(4.5);
+        for (const stop of ["top", "bottom"] as const) {
+          const bg = resolveColour(`--sky-${f}-${stop}`, scope);
+          const ratio = contrastRatio(bg, FG);
+          expect(ratio, `${f} ${scope} ${stop} ${bg}`).toBeGreaterThanOrEqual(
+            4.5,
+          );
+          checked++;
+        }
       }
+    }
+    expect(checked).toBe(32);
+  });
+
+  it("makes dark a real night design, not an inversion: never lighter than light, deep clear-day", () => {
+    for (const f of families) {
+      for (const stop of ["top", "bottom"] as const) {
+        const light = luminance(resolveColour(`--sky-${f}-${stop}`, "light"));
+        const dark = luminance(resolveColour(`--sky-${f}-${stop}`, "dark"));
+        expect(dark, `${f} ${stop}`).toBeLessThan(light);
+      }
+    }
+    // No bright cyan slab in dark: the brightest dark stop stays deep.
+    for (const f of families) {
+      expect(
+        luminance(resolveColour(`--sky-${f}-bottom`, "dark")),
+        f,
+      ).toBeLessThan(0.1);
     }
   });
 
-  it("uses only solid mineral values: no gradients or translucent plates", () => {
-    const kori = css.slice(
-      css.indexOf(".kori {"),
-      css.indexOf(".kori-clear-day {"),
+  it("is a gradient that fades out at its lower edge, with no glass or shadow", () => {
+    const band = blockBody(".kestrel");
+    expect(band).toContain("linear-gradient(");
+    expect(band).toContain("mask-image");
+    expect(band).toContain("var(--sky-fade)");
+    expect(band).not.toMatch(/blur|rgba|box-shadow|animation|transition/);
+  });
+
+  it("has no hex literals in the band rules (tokens only)", () => {
+    for (const sel of [".kestrel", ".kestrel-link", ".kestrel-round"]) {
+      expect(blockBody(sel), sel).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    }
+  });
+
+  it("gives the text link and the round control a 48px target", () => {
+    expect(blockBody(".kestrel-link")).toContain(
+      "min-h-[var(--touch-target-min)]",
     );
-    expect(kori).not.toMatch(/gradient|blur|rgba/);
+    const round = blockBody(".kestrel-round");
+    expect(round).toContain("w-[var(--touch-target-min)]");
+    expect(round).toContain("h-[var(--touch-target-min)]");
+    expect(round).toContain("rounded-full");
+  });
+
+  it("overlaps the hourly panel into the sky by --sky-lip, only the one after the hero", () => {
+    expect(css).toContain(
+      ".herd > :has([data-sky-hero]) + :has([data-hourly-strip])",
+    );
+    expect(css).toContain(
+      "margin-top: calc(-1 * (var(--space-section) + var(--sky-lip)))",
+    );
   });
 });

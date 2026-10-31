@@ -1,7 +1,7 @@
 /**
- * Tests for CurrentConditions — validates the iOS-style centred hero, the
- * share button, and accessibility attributes by reading the source file
- * (Vitest runs in Node without a DOM/React renderer).
+ * Tests for CurrentConditions — the open-sky hero (no card): structure, share
+ * control and accessibility, by reading the source file. Rendered output is
+ * covered in CurrentConditions.render.test.ts.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
@@ -22,9 +22,9 @@ describe("CurrentConditions — client component", () => {
   });
 });
 
-describe("CurrentConditions — centred hero structure", () => {
+describe("CurrentConditions — open-sky hero structure", () => {
   it("renders the place name as the section heading (no duplicate h1)", () => {
-    expect(source).toContain('<h2\n          id="current-conditions-heading"');
+    expect(source).toContain('id="current-conditions-heading"');
     expect(source).not.toContain("<h1");
   });
 
@@ -36,16 +36,27 @@ describe("CurrentConditions — centred hero structure", () => {
     // Brand doctrine: temperature is Noto Serif (font-heading), never a thin
     // system numeral. layout.tsx loads Noto Serif 400/600/700 — 600 is used.
     expect(source).toContain(
-      "font-heading text-8xl font-semibold tabular-nums",
+      "font-heading text-[clamp(5rem,26vw,6.5rem)] leading-[0.95] font-semibold tabular-nums",
     );
     expect(source).not.toMatch(/font-(thin|extralight|light)\b/);
-    expect(source).not.toContain("font-sans text-8xl");
+    expect(source).not.toMatch(/font-sans text-\[/);
   });
 
-  it("renders the temperature on the sky plate, not a translucent card", () => {
-    expect(source).toContain("kori");
-    expect(source).toContain("PLATE_CLASS[family]");
-    expect(source).not.toMatch(/backdrop-blur|bg-white\/|glass/);
+  it("paints the open sky (a .kestrel band), not a card or glass", () => {
+    expect(source).toContain("kestrel ${SKY_CLASS[family]}");
+    expect(source).toContain("data-sky-hero");
+    expect(source).not.toMatch(/backdrop-blur|bg-white\/|glass|\bkori\b/);
+    expect(source).not.toMatch(/baobab|acacia|shadow-/);
+  });
+
+  it("is left-aligned, not centred", () => {
+    expect(source).toContain("text-left");
+    expect(source).not.toMatch(/items-center text-center|justify-center text-center/);
+  });
+
+  it("keeps the band decorative and the content in the page column", () => {
+    const band = source.slice(source.indexOf("<div\n        aria-hidden"));
+    expect(band.startsWith('<div\n        aria-hidden="true"')).toBe(true);
   });
 
   it("renders the temperature with an accessible degrees-Celsius label", () => {
@@ -58,13 +69,15 @@ describe("CurrentConditions — centred hero structure", () => {
     expect(source).toContain("formatHighLow(");
   });
 
-  it("does not render the big condition icon in the hero", () => {
-    expect(source).not.toContain("WeatherIcon");
-    expect(source).not.toContain("nightIcon");
+  it("shows a decorative 56px condition icon, day or night", () => {
+    expect(source).toContain("<WeatherIcon");
+    expect(source).toContain("nightIcon(info.icon)");
+    expect(source).toContain("size={56}");
+    expect(source).toContain('<span aria-hidden="true" className="shrink-0">');
   });
 
-  it("derives the plate family from the WMO code and is_day", () => {
-    expect(source).toContain("plateFamily(current.weather_code, isDay)");
+  it("derives the sky family from the WMO code and is_day", () => {
+    expect(source).toContain("skyFamily(current.weather_code, isDay)");
     expect(source).toContain("current.is_day === 1");
   });
 
@@ -91,15 +104,17 @@ describe("CurrentConditions — centred hero structure", () => {
     expect(source).toContain("activityDotClass(activity.category)");
   });
 
-  it("offers a quiet pick-activities button when nothing is selected", () => {
+  it("demotes pick-activities to a quiet underlined text link (still a control)", () => {
+    expect(source).toContain('className="kestrel-link mt-1"');
+    expect(source).not.toContain("kudu-plate");
     expect(source).toContain('openMyWeather("activities")');
     expect(source).toContain("Pick activities for tailored advice");
     expect(source).toContain("!hasSelection");
   });
 
-  it("does not render the feels-like line (moved to the metric cards)", () => {
-    expect(source).not.toContain("Feels like");
-    expect(source).not.toContain("apparent_temperature");
+  it("shows 'Feels N°' beside the high/low through the pure helper", () => {
+    expect(source).toContain("formatFeelsLike(current.apparent_temperature)");
+    expect(source).toContain("flex-wrap");
   });
 
   it("does not render inline stat boxes (consolidated into AtmosphericSummary)", () => {
@@ -114,13 +129,23 @@ describe("CurrentConditions — centred hero structure", () => {
     expect(source).not.toMatch(/rgba?\(/);
   });
 
-  it("renders a footer slot below the sky plate (season line)", () => {
+  it("renders a footer slot at the foot of the sky (season line)", () => {
     expect(source).toContain("footer?: ReactNode");
-    expect(source).toContain("{footer && (");
-    // The footer sits after the plate closes, outside the solid surface.
-    expect(source.indexOf("{footer && (")).toBeGreaterThan(
-      source.indexOf("className={`kori"),
-    );
+    expect(source).toContain("{footer && ");
+  });
+
+  it("reserves the sky fade below its content so the hourly panel can overlap it", () => {
+    expect(source).toContain("pb-[var(--sky-fade)]");
+  });
+
+  it("honours left/right safe areas", () => {
+    expect(source).toContain("env(safe-area-inset-left");
+    expect(source).toContain("env(safe-area-inset-right");
+  });
+
+  it("scales with Dynamic Type: rem sizes, wrapping H/L row, no fixed heights", () => {
+    expect(source).not.toMatch(/\bh-\[\d+px\]|truncate|line-clamp/);
+    expect(source).toContain("break-words");
   });
 });
 
@@ -146,8 +171,9 @@ describe("CurrentConditions — share button", () => {
     expect(source).toMatch(/navigator\.clipboard\s*\.writeText/);
   });
 
-  it("shows 'Copied!' feedback state after clipboard copy", () => {
-    expect(source).toContain("Copied!");
+  it("announces 'Link copied' after clipboard copy (live region)", () => {
+    expect(source).toContain("Link copied");
+    expect(source).toContain('role="status"');
     expect(source).toContain("setCopied");
   });
 
@@ -165,11 +191,11 @@ describe("CurrentConditions — share button", () => {
     expect(source).toContain("window.location.href");
   });
 
-  it("sits below the high/low line, centred", () => {
+  it("sits at the top-right of the hero, before the temperature", () => {
     const shareIdx = source.indexOf("handleShare}");
-    const hlIdx = source.indexOf("{highLow && (");
-    expect(hlIdx).toBeGreaterThan(-1);
-    expect(shareIdx).toBeGreaterThan(hlIdx);
+    const tempIdx = source.indexOf("{temperature}");
+    expect(shareIdx).toBeGreaterThan(-1);
+    expect(shareIdx).toBeLessThan(tempIdx);
   });
 });
 
@@ -179,26 +205,22 @@ describe("CurrentConditions — share button accessibility", () => {
     expect(source).toContain("aria-label");
   });
 
-  it("share button is the .impala-plate pill (carries the touch-target minimums)", () => {
-    expect(source).toContain('className="impala-plate mt-3"');
+  it("share is the round 48px .kestrel-round icon control", () => {
+    expect(source).toContain('className="kestrel-round"');
+    expect(source).not.toContain("impala-plate");
   });
 
-  it("the activities CTA is the .kudu-plate Mzizi pill, not a hand-rolled box", () => {
-    expect(source).toContain('className="kudu-plate mt-4"');
-    expect(source).not.toContain("border border-current");
-  });
-
-  it("the plate spans the main column with no horizontal inset", () => {
-    expect(source).toContain('className="relative"');
-    expect(source).not.toContain("px-3 sm:px-6");
+  it("the hero content sits flush with the page column (no horizontal padding)", () => {
+    expect(source).not.toMatch(/\bpx-\d|sm:px-/);
   });
 
   it("ShareIcon is aria-hidden to avoid duplicate label", () => {
     expect(source).toContain('aria-hidden="true"');
   });
 
-  it("share button text is sr-only on small screens and visible on sm+", () => {
-    expect(source).toContain("sr-only sm:not-sr-only");
+  it("share is icon-only: its name comes from aria-label", () => {
+    expect(source).not.toContain("sr-only sm:not-sr-only");
+    expect(source).toContain("Share weather for");
   });
 });
 
