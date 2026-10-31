@@ -6,6 +6,7 @@
  * lookups so Tailwind sees every class name at build time.
  */
 
+import { workerUrl } from "./weather-api";
 import { ACTIVITIES } from "./activities";
 
 export type WindowStatus = "go" | "wait" | "avoid";
@@ -164,7 +165,7 @@ interface AgriLocationRef {
   country?: string;
 }
 
-/** `/api/py/agriculture?...` for a location and the user's farming activities. */
+/** The Worker's `/v1/agriculture?...` for a location and the user's farming activities. */
 export function agricultureUrl(
   location: AgriLocationRef,
   crops: readonly string[] = [],
@@ -176,7 +177,7 @@ export function agricultureUrl(
   });
   if (location.country) params.set("country", location.country);
   if (crops.length) params.set("crops", crops.join(","));
-  return `/api/py/agriculture?${params.toString()}`;
+  return workerUrl("agriculture", params.toString());
 }
 
 export const WINDOW_ORDER: readonly (keyof FarmWindows)[] = [

@@ -53,6 +53,7 @@ export type WorkerRoute =
   | "locations"
   | "history"
   | "locations/profile"
+  | "agriculture"
   | "metar"
   | "airports/nearest"
   | "air-quality/grid"
