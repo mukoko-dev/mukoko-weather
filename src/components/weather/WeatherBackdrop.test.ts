@@ -129,7 +129,7 @@ describe("WeatherBackdrop — scene mapping + twilight", () => {
     expect(source).toContain("SKY_CLASS");
     expect(source).not.toContain("skyClassName");
     expect(source).not.toContain("weaver-sky");
-    expect(backdrop).toContain("<WeatherSky family={family}");
+    expect(backdrop).toContain("<WeatherSky ref={skyRef} family={family}");
   });
 
   it("derives a dawn/dusk phase from the location clock and passes it on", () => {
