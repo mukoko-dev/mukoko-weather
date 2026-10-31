@@ -34,7 +34,12 @@ import { seedNowMs, useStableNow } from "@/lib/use-stable-now";
 import { useNearViewport } from "@/lib/use-near-viewport";
 import { AQI_BAND_LABELS, aqiBand } from "@/lib/aq-grid";
 import { lastTileSpanClass } from "@/lib/dashboard-layout";
-import { METRIC_TITLES, type MetricKind } from "@/lib/metric-details";
+import {
+  METRIC_TITLES,
+  moonriseLabel,
+  type MetricKind,
+} from "@/lib/metric-details";
+import { nextMoonrise } from "@/lib/moon";
 import { MetricDetailModal } from "./MetricDetailModal";
 import { cn } from "@/lib/utils";
 import {
@@ -467,14 +472,28 @@ export function AtmosphericSummary({
       : null;
   const moonPct = Math.round(moon.illumination * 100);
   const [openMetric, setOpenMetric] = useState<MetricKind | null>(null);
+  // The next moonrise, as the place's own clock time. Recomputed at most every
+  // ten minutes (the search is a few hundred altitude evaluations).
+  const nowBucket = Math.floor(now.getTime() / 600_000);
+  const moonrise = useMemo(() => {
+    if (typeof lat !== "number" || typeof lon !== "number") return null;
+    const at = new Date(nowBucket * 600_000);
+    const rise = nextMoonrise(at, lat, lon);
+    return moonriseLabel(
+      rise ? rise.getTime() : null,
+      at.getTime(),
+      resolveOffsetSeconds(data.utc_offset_seconds, at),
+    );
+  }, [nowBucket, lat, lon, data.utc_offset_seconds]);
   const extras = useMemo(
     () => ({
       todayHigh,
       normalHigh,
       moonName: moon.name,
       moonIlluminationPct: moonPct,
+      moonrise,
     }),
-    [todayHigh, normalHigh, moon.name, moonPct],
+    [todayHigh, normalHigh, moon.name, moonPct, moonrise],
   );
 
   return (
@@ -650,7 +669,7 @@ export function AtmosphericSummary({
             headingId="insight-moon"
             icon={<MoonIcon size={16} />}
             label="Moon"
-            sentence={`${moon.name}, ${moonPct}% lit.`}
+            sentence={`${moon.name}, ${moonPct}% lit.${moonrise ? ` Moonrise ${moonrise}.` : ""}`}
           >
             <MoonDisc
               phase={moon.phase}

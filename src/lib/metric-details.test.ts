@@ -8,6 +8,8 @@ import {
   isMetricKind,
   metricDetail,
   metricSeries,
+  moonriseLabel,
+  uvForecastDays,
 } from "./metric-details";
 import type { WeatherData } from "./weather";
 
@@ -191,5 +193,79 @@ describe("tiles open the detail modal", () => {
     }
     expect(modal).not.toMatch(/style=\{\{/);
     expect(modal).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+});
+
+describe("moonrise", () => {
+  const HARARE = 2 * 3600; // UTC+2
+  const now = Date.parse("2026-10-31T10:00:00Z"); // 12:00 in Harare
+
+  it("reads the rise in the place's own clock, never the viewer's", () => {
+    expect(moonriseLabel(Date.parse("2026-10-31T17:42:00Z"), now, HARARE)).toBe(
+      "19:42",
+    );
+    // The same instant is 17:42 in London (UTC+0) and 01:42 next day in Singapore.
+    expect(moonriseLabel(Date.parse("2026-10-31T17:42:00Z"), now, 0)).toBe(
+      "17:42",
+    );
+    expect(
+      moonriseLabel(Date.parse("2026-10-31T17:42:00Z"), now, 8 * 3600),
+    ).toBe("01:42 tomorrow");
+  });
+
+  it("says tomorrow when the rise is on the next local day", () => {
+    expect(moonriseLabel(Date.parse("2026-10-31T23:30:00Z"), now, HARARE)).toBe(
+      "01:30 tomorrow",
+    );
+  });
+
+  it("is null when the moon does not rise", () => {
+    expect(moonriseLabel(null, now, HARARE)).toBeNull();
+    expect(moonriseLabel(undefined, now, HARARE)).toBeNull();
+    expect(moonriseLabel(Number.NaN, now, HARARE)).toBeNull();
+  });
+
+  it("appears in the moon sentence and stats when known", () => {
+    const d = metricDetail("moon", weather(), NOW, {
+      moonName: "Waning gibbous",
+      moonIlluminationPct: 73,
+      moonrise: "21:14",
+    });
+    expect(d.sentence).toBe("Waning gibbous, 73% lit. Moonrise 21:14.");
+    expect(d.stats.find((x) => x.label === "Moonrise")?.value).toBe("21:14");
+    const none = metricDetail("moon", weather(), NOW, {
+      moonName: "Full moon",
+      moonIlluminationPct: 100,
+    });
+    expect(none.sentence).toBe("Full moon, 100% lit.");
+    expect(none.stats.find((x) => x.label === "Moonrise")?.value).toBe("-");
+  });
+});
+
+describe("uvForecastDays", () => {
+  it("labels today, then the weekday from the date itself", () => {
+    const w = weather();
+    const days = uvForecastDays(w.daily);
+    expect(days).toHaveLength(3);
+    expect(days[0]).toMatchObject({
+      date: "2026-10-08",
+      label: "Today",
+      peak: 10,
+      category: "Very High",
+    });
+    expect(days[1].label).toBe("Fri"); // 2026-10-09 is a Friday
+    expect(days[2].label).toBe("Sat");
+  });
+
+  it("skips a day with no value instead of showing zero", () => {
+    const w = weather();
+    const daily = {
+      ...w.daily,
+      uv_index_max: [10, null, 3],
+    } as unknown as typeof w.daily;
+    const days = uvForecastDays(daily);
+    expect(days.map((d) => d.label)).toEqual(["Today", "Sat"]);
+    expect(days[1].category).toBe("Moderate");
+    expect(uvForecastDays(undefined)).toEqual([]);
   });
 });

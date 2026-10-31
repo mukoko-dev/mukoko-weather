@@ -6,8 +6,8 @@
  * no AI call, and nothing here reads the viewer's clock or time zone.
  */
 
-import type { WeatherData, HourlyWeather } from "./weather";
-import { windDirection } from "./weather";
+import type { WeatherData, HourlyWeather, DailyWeather } from "./weather";
+import { windDirection, uvLevel } from "./weather";
 import { dewPointFromTempHumidity } from "./activity-feasibility";
 import { currentHourIndex, locationClockLabel } from "./location-time";
 import {
@@ -160,6 +160,8 @@ export interface MetricExtras {
   normalHigh?: number | null;
   moonName?: string;
   moonIlluminationPct?: number;
+  /** Next moonrise in the place's time zone, e.g. "19:42" or "19:42 tomorrow". */
+  moonrise?: string | null;
 }
 
 const ABOUT: Record<MetricKind, string> = {
@@ -323,10 +325,11 @@ export function metricDetail(
         headline: extras.moonName ?? dash,
         sentence:
           extras.moonName && typeof extras.moonIlluminationPct === "number"
-            ? `${extras.moonName}, ${extras.moonIlluminationPct}% lit.`
+            ? `${extras.moonName}, ${extras.moonIlluminationPct}% lit.${extras.moonrise ? ` Moonrise ${extras.moonrise}.` : ""}`
             : "Moon data unavailable.",
         stats: [
           { label: "Phase", value: extras.moonName ?? dash },
+          { label: "Moonrise", value: extras.moonrise ?? dash },
           {
             label: "Lit",
             value:
@@ -365,3 +368,68 @@ export function metricDetail(
 
 /** Compass label helper re-exported so the modal needs one import. */
 export { windDirection };
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** The wall-clock date (YYYY-MM-DD) and time (HH:MM) of an instant in a place. */
+function placeClock(
+  ms: number,
+  offsetSeconds: number,
+): { date: string; time: string } {
+  const d = new Date(ms + offsetSeconds * 1000);
+  return {
+    date: `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`,
+    time: `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`,
+  };
+}
+
+/**
+ * A moonrise instant as the place's own clock time, with " tomorrow" when it
+ * falls on the next local day. Null in, null out (the moon does not always
+ * rise within a day at high latitudes). Never reads the viewer's zone.
+ */
+export function moonriseLabel(
+  riseMs: number | null | undefined,
+  nowMs: number,
+  offsetSeconds: number,
+): string | null {
+  if (typeof riseMs !== "number" || !Number.isFinite(riseMs)) return null;
+  const rise = placeClock(riseMs, offsetSeconds);
+  const today = placeClock(nowMs, offsetSeconds).date;
+  return rise.date === today ? rise.time : `${rise.time} tomorrow`;
+}
+
+export interface UvDay {
+  date: string;
+  /** "Today", then the weekday ("Tue"). */
+  label: string;
+  /** The day's highest UV index, one decimal. */
+  peak: number;
+  /** WHO category for the peak ("Low" to "Extreme"). */
+  category: string;
+}
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+/**
+ * The forecast days' peak UV, so today reads against the days around it. The
+ * weekday comes from the date string itself (a calendar date has one weekday
+ * everywhere). A day with no value is left out, never shown as zero.
+ */
+export function uvForecastDays(daily: DailyWeather | undefined): UvDay[] {
+  const times = daily?.time ?? [];
+  const out: UvDay[] = [];
+  for (let i = 0; i < times.length && i < 7; i++) {
+    const peak = daily?.uv_index_max?.[i];
+    if (typeof peak !== "number" || !Number.isFinite(peak)) continue;
+    const ms = Date.parse(`${times[i].slice(0, 10)}T00:00:00Z`);
+    if (!Number.isFinite(ms)) continue;
+    out.push({
+      date: times[i].slice(0, 10),
+      label: i === 0 ? "Today" : WEEKDAYS[new Date(ms).getUTCDay()],
+      peak: Math.round(peak * 10) / 10,
+      category: uvLevel(peak).label,
+    });
+  }
+  return out;
+}
