@@ -67,7 +67,9 @@ export function LocationPager({
   if (dots.length === 0) return null;
 
   return (
-    <nav aria-label="Location pages" className="min-w-0 flex-1">
+    // A labelled group, not a navigation landmark: the bottom bar already is
+    // one, and a second landmark inside it would nest them.
+    <div role="group" aria-label="Location pages" className="min-w-0 flex-1">
       {/* No surface of its own: the dots sit directly on the nav island.
           `w-max mx-auto` centres a short row and still scrolls a long one
           from its first item (justify-center would clip the start). */}
@@ -124,7 +126,7 @@ export function LocationPager({
           })}
         </ul>
       </div>
-    </nav>
+    </div>
   );
 }
 
@@ -146,22 +148,7 @@ export function useLocationSwipe({
   const router = useRouter();
   const savedLocations = useAppStore((s) => s.savedLocations);
   const selectedLocation = useAppStore((s) => s.selectedLocation);
-  const hiddenPresetSlugs = useAppStore((s) => s.hiddenPresetSlugs);
-  const presetAnchor = useAppStore((s) => s.presetAnchor);
-
-  const sequence = useMemo(
-    () =>
-      pagerSequence(
-        savedLocations,
-        visiblePresetSlugs({
-          anchor: presetAnchor,
-          hidden: hiddenPresetSlugs,
-          saved: savedLocations,
-          current: selectedLocation,
-        }),
-      ),
-    [savedLocations, hiddenPresetSlugs, presetAnchor, selectedLocation],
-  );
+  const sequence = usePagerSequence(savedLocations, selectedLocation);
 
   // Warm both neighbours once the page is idle, so a swipe lands on a page
   // that is already on its way instead of waiting for the route to load.
@@ -203,8 +190,13 @@ export function useLocationSwipe({
   });
 }
 
-/** The page sequence the pager, the dots and the swipe all walk. */
-function usePagerSequence(
+/**
+ * The page sequence the pager, the dots and the swipe all walk: the single
+ * source. Saved places, then the visible suggested places, in the order
+ * `pagerSequence` defines. Both LocationPager and useLocationSwipe call this
+ * hook; neither computes the sequence itself.
+ */
+export function usePagerSequence(
   savedLocations: readonly string[],
   selectedLocation: string,
 ): string[] {

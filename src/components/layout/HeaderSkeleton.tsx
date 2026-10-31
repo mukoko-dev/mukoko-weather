@@ -1,6 +1,11 @@
-import { MukokoLogo } from "@/components/brand/MukokoLogo";
+"use client";
 
+import { MukokoLogo } from "@/components/brand/MukokoLogo";
+import { useChromeClaimed } from "@/components/layout/chrome-context";
+
+/** Renders nothing while the root layout's persistent header is mounted. */
 export function HeaderSkeleton() {
+  if (useChromeClaimed()) return null;
   return (
     <header
       className="sticky top-0 z-30 border-b border-text-tertiary/10 bg-surface-base/80 backdrop-blur-md"

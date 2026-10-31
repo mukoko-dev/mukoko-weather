@@ -67,9 +67,8 @@ describe("gated page", () => {
     expect(page).toContain('"/developers/keys"');
   });
 
-  it("renders within the site shell (Header + Footer)", () => {
-    expect(page).toContain("<Header />");
-    expect(page).toContain("<Footer />");
+  it("renders within the shared PageShell (Header + Footer)", () => {
+    expect(page).toContain("<PageShell");
   });
 
   it("is excluded from search indexing", () => {

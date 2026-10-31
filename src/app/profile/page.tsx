@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
+import { PageShell } from "@/components/layout/PageShell";
 import { requireUser } from "@/lib/auth";
 import { getMyOrganizations, getMyProfile } from "@/lib/profile";
 import { ProfileClient } from "./ProfileClient";
@@ -30,23 +29,16 @@ export default async function ProfilePage() {
   const organizations = await getMyOrganizations(profile.personId);
 
   return (
-    <>
-      <Header />
-      <main
-        id="main-content"
-        className="animate-fade-in mx-auto w-full max-w-2xl px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:pb-8 sm:px-6 md:px-8"
-      >
-        <ProfileClient
-          user={{
-            email: user.email,
-            firstName: profile.givenName,
-            lastName: profile.familyName,
-            pictureUrl: profile.picture,
-          }}
-          organizations={organizations}
-        />
-      </main>
-      <Footer />
-    </>
+    <PageShell width="settings">
+      <ProfileClient
+        user={{
+          email: user.email,
+          firstName: profile.givenName,
+          lastName: profile.familyName,
+          pictureUrl: profile.picture,
+        }}
+        organizations={organizations}
+      />
+    </PageShell>
   );
 }

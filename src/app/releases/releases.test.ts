@@ -46,11 +46,10 @@ describe("/releases — server page", () => {
   });
 
   it("has the main landmark, one h1, a visible breadcrumb and a labelled list", () => {
-    expect(page).toContain('id="main-content"');
+    expect(page).toContain("<PageShell");
     expect(page.match(/<h1/g)).toHaveLength(1);
     expect(page).toContain('{ label: "Release notes" }');
     expect(page).toContain('aria-label="Releases"');
-    expect(page).toContain("pb-[var(--mobile-nav-clearance)]");
   });
 
   it("links the full technical history on GitHub, clearly labelled", () => {
@@ -178,9 +177,8 @@ describe("/releases — route registration", () => {
 describe("/releases — page tier files and markup details", () => {
   it("has a loading skeleton with a status role", () => {
     const loading = read("loading.tsx");
-    expect(loading).toContain('role="status"');
-    expect(loading).toContain('aria-label="Loading"');
-    expect(loading).toContain("BreadcrumbSkeleton");
+    expect(loading).toContain("<PageShellSkeleton");
+    expect(loading).toContain("breadcrumb");
   });
 
   it("has an error boundary built on RouteErrorBoundary", () => {

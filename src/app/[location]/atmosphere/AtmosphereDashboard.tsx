@@ -1,9 +1,7 @@
 "use client";
 
 import { lazy, Suspense } from "react";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
-import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { PageShell } from "@/components/layout/PageShell";
 import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { LazySection } from "@/components/weather/LazySection";
@@ -42,76 +40,65 @@ export function AtmosphereDashboard({
   season,
 }: Props) {
   return (
-    <>
-      <Header />
+    <PageShell
+      width="wide"
+      label={`Atmospheric conditions for ${location.name}`}
+      className="overflow-x-clip"
+      breadcrumb={[
+        { label: "Home", href: "/" },
+        { label: location.name, href: `/${location.slug}` },
+        { label: "Atmosphere" },
+      ]}
+    >
+      <h1 className="elephant">{location.name} Atmosphere</h1>
+      <p className="mt-1 text-base text-text-secondary">
+        {location.province} &middot; {location.elevation}m &middot;{" "}
+        {season.localName} ({season.name})
+      </p>
 
-      <Breadcrumb
-        items={[
-          { label: "Home", href: "/" },
-          { label: location.name, href: `/${location.slug}` },
-          { label: "Atmosphere" },
-        ]}
-      />
+      <div className="mt-4 mb-4">
+        <SeasonBadge season={season} />
+      </div>
 
-      <main
-        id="main-content"
-        className="mx-auto max-w-5xl overflow-x-clip px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:pb-8 sm:px-6 md:px-8"
-        aria-label={`Atmospheric conditions for ${location.name}`}
-      >
-        <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
-          {location.name} Atmosphere
-        </h1>
-        <p className="mt-1 text-base text-text-secondary">
-          {location.province} &middot; {location.elevation}m &middot;{" "}
-          {season.localName} ({season.name})
-        </p>
+      {usingFallback && <WeatherUnavailableBanner />}
+      {frostAlert && <FrostAlertBanner alert={frostAlert} />}
 
-        <div className="mt-4 mb-4">
-          <SeasonBadge season={season} />
-        </div>
+      {/* Current conditions summary cards */}
+      <div className="mt-6">
+        <ChartErrorBoundary name="atmospheric conditions">
+          <AtmosphericSummary
+            current={weather.current}
+            weather={weather}
+            lat={location.lat}
+            lon={location.lon}
+          />
+        </ChartErrorBoundary>
+      </div>
 
-        {usingFallback && <WeatherUnavailableBanner />}
-        {frostAlert && <FrostAlertBanner alert={frostAlert} />}
-
-        {/* Current conditions summary cards */}
-        <div className="mt-6">
-          <ChartErrorBoundary name="atmospheric conditions">
-            <AtmosphericSummary
-              current={weather.current}
-              weather={weather}
-              lat={location.lat}
-              lon={location.lon}
-            />
+      {/* 24-hour atmospheric charts */}
+      <div className="mt-8">
+        <LazySection label="atmospheric-details">
+          <ChartErrorBoundary name="atmospheric details charts">
+            <Suspense fallback={<SectionSkeleton />}>
+              <AtmosphericDetails
+                hourly={weather.hourly}
+                utcOffsetSeconds={weather.utc_offset_seconds}
+              />
+            </Suspense>
           </ChartErrorBoundary>
-        </div>
+        </LazySection>
+      </div>
 
-        {/* 24-hour atmospheric charts */}
-        <div className="mt-8">
-          <LazySection label="atmospheric-details">
-            <ChartErrorBoundary name="atmospheric details charts">
-              <Suspense fallback={<SectionSkeleton />}>
-                <AtmosphericDetails
-                  hourly={weather.hourly}
-                  utcOffsetSeconds={weather.utc_offset_seconds}
-                />
-              </Suspense>
-            </ChartErrorBoundary>
-          </LazySection>
-        </div>
-
-        {/* Air quality — full pollutant breakdown with WHO comparison */}
-        <div className="mt-8">
-          <LazySection label="air-quality-details">
-            <ChartErrorBoundary name="air quality details">
-              <Suspense fallback={<SectionSkeleton />}>
-                <AirQualityDetails lat={location.lat} lon={location.lon} />
-              </Suspense>
-            </ChartErrorBoundary>
-          </LazySection>
-        </div>
-      </main>
-
-      <Footer />
-    </>
+      {/* Air quality — full pollutant breakdown with WHO comparison */}
+      <div className="mt-8">
+        <LazySection label="air-quality-details">
+          <ChartErrorBoundary name="air quality details">
+            <Suspense fallback={<SectionSkeleton />}>
+              <AirQualityDetails lat={location.lat} lon={location.lon} />
+            </Suspense>
+          </ChartErrorBoundary>
+        </LazySection>
+      </div>
+    </PageShell>
   );
 }

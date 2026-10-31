@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { MineralsStripe } from "@/components/brand/MineralsStripe";
+import { AppChrome } from "@/components/layout/AppChrome";
 import { ThemeProvider } from "@/components/brand/ThemeProvider";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { PWAInstallPrompt } from "@/components/weather/PWAInstallPrompt";
@@ -387,7 +388,7 @@ export default async function RootLayout({
           <ThemeProvider>
             <MineralsStripe />
             <div className="overflow-x-clip pl-0 min-[480px]:pl-2">
-              {children}
+              <AppChrome>{children}</AppChrome>
             </div>
             <PWAInstallPrompt />
           </ThemeProvider>

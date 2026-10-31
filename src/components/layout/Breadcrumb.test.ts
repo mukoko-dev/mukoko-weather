@@ -57,11 +57,12 @@ describe("Breadcrumb usage sites", () => {
     "../../app/[location]/agriculture/AgricultureDashboard.tsx",
   ];
 
-  it("is imported by the atmosphere and forecast sub-route dashboards", () => {
+  it("is reached by the atmosphere, forecast and agriculture dashboards through PageShell's breadcrumb prop", () => {
     for (const file of usageFiles) {
       const dashboardSource = readFileSync(resolve(__dirname, file), "utf-8");
-      expect(dashboardSource).toContain("@/components/layout/Breadcrumb");
-      expect(dashboardSource).toContain("<Breadcrumb");
+      expect(dashboardSource).toContain("@/components/layout/PageShell");
+      expect(dashboardSource).toContain("<PageShell");
+      expect(dashboardSource).toContain("breadcrumb={[");
     }
   });
 
@@ -135,7 +136,8 @@ describe("BreadcrumbSkeleton (issue #104)", () => {
       "../../app/[location]/agriculture/loading.tsx",
     ]) {
       const loadingSource = readFileSync(resolve(__dirname, file), "utf-8");
-      expect(loadingSource).toContain("<BreadcrumbSkeleton");
+      expect(loadingSource).toContain("<PageShellSkeleton");
+      expect(loadingSource).toContain("breadcrumb");
       expect(loadingSource).not.toContain(
         '<span className="text-text-tertiary/30">/</span>',
       );
