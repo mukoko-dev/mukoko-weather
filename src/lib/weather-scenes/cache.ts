@@ -16,7 +16,7 @@ const KEY_PREFIX = "mukoko-weather-hint:";
 const MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 // ---------------------------------------------------------------------------
-// Synchronous localStorage fallback — needed for WeatherLoadingScene which
+// Synchronous localStorage fallback — needed for LocationSkeleton which
 // reads hints synchronously during render. RxDB is async (IndexedDB), so we
 // maintain localStorage as a fast synchronous read cache. RxDB is the source
 // of truth; localStorage is a read-through cache populated on write.
@@ -27,7 +27,7 @@ const MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
  * Writes to both RxDB (IndexedDB) and localStorage (sync fallback).
  */
 export function cacheWeatherHint(slug: string, hint: CachedWeatherHint): void {
-  // Sync write to localStorage for fast reads during loading scenes.
+  // Sync write to localStorage for fast reads while the loading skeleton paints.
   // A failed write (full / unavailable) is silently ignored.
   if (writeStorageJSON(KEY_PREFIX + slug, hint)) evictOldest();
 

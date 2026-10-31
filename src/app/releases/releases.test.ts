@@ -141,9 +141,6 @@ describe("/releases — route registration", () => {
     expect(read("../../proxy.ts")).toMatch(
       /KNOWN_ROUTES = new Set\(\[[^\]]*"releases"/,
     );
-    expect(read("../../components/weather/WeatherLoadingScene.tsx")).toMatch(
-      /KNOWN_ROUTES = new Set\(\[[^\]]*"releases"/,
-    );
     expect(NON_LOCATION_ROUTES.has("releases")).toBe(true);
   });
 

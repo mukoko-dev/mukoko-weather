@@ -113,28 +113,6 @@ describe("proxy — lastLocation cookie", () => {
   });
 });
 
-describe("WeatherLoadingScene — KNOWN_ROUTES covers every page route", () => {
-  const sceneSource = readFileSync(
-    resolve(__dirname, "components/weather/WeatherLoadingScene.tsx"),
-    "utf-8",
-  );
-  const block = sceneSource.match(/KNOWN_ROUTES = new Set\(\[([\s\S]*?)\]\)/);
-  const listed = new Set(
-    [...(block?.[1] ?? "").matchAll(/"([a-z0-9-]+)"/g)].map((m) => m[1]),
-  );
-  const pageRoutes = topLevelRoutes.filter((route) => {
-    try {
-      return readdirSync(resolve(APP_DIR, route)).includes("page.tsx");
-    } catch {
-      return false;
-    }
-  });
-
-  it.each(pageRoutes)("lists /%s", (route) => {
-    expect(listed.has(route)).toBe(true);
-  });
-});
-
 describe("proxy — unknown location slugs get a server-rendered 404 (#263)", () => {
   const REWRITE = "/__mukoko/location/not-found";
 

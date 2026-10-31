@@ -297,7 +297,7 @@ export function WeatherDashboard({
     setSelectedLocation(location.slug);
   }, [location.slug, setSelectedLocation]);
 
-  // Cache weather hint for the loading scene — enables weather-aware
+  // Cache weather hint for the loading skeleton — enables weather-aware
   // Three.js animation on subsequent visits to this location.
   useEffect(() => {
     cacheWeatherHint(location.slug, {

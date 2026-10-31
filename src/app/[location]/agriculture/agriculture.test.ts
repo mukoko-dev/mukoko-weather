@@ -84,14 +84,9 @@ describe("/[location]/agriculture route", () => {
     expect(sitemap).toContain('loc.tags.includes("farming")');
   });
 
-  it("never becomes the lastLocation cookie: proxy and loading scene read only the first segment", () => {
+  it("never becomes the lastLocation cookie: the proxy reads only the first segment", () => {
     const proxy = readFileSync(resolve(dir, "../../../proxy.ts"), "utf-8");
     expect(proxy).toContain('pathname.slice(1).split("/")[0]');
-    const scene = readFileSync(
-      resolve(dir, "../../../components/weather/WeatherLoadingScene.tsx"),
-      "utf-8",
-    );
-    expect(scene).toContain('pathname.split("/").filter(Boolean)[0]');
   });
 
   it("has no hardcoded colours, inline styles or lint suppressions", () => {
