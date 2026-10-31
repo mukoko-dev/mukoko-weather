@@ -1,6 +1,7 @@
 "use client";
 
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
+import { WX_SERIES } from "@/lib/weather-scales";
 
 interface HumidityChartProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,7 +18,7 @@ const SERIES: SeriesConfig[] = [
   {
     key: "humidity",
     label: "Humidity",
-    color: "var(--chart-2)",
+    color: WX_SERIES.humidity,
     fill: true,
     opacity: 0.2,
   },

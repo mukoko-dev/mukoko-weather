@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
+import { SITE_URL } from "@/lib/site";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/PageShell";
+import { ProsePage, ProseSection } from "@/components/layout/ProsePage";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
   description:
-    "Terms of Service for mukoko weather — an AI-powered weather intelligence platform, operated by Mukoko Africa, a division of Nyuchi Africa (PVT) Ltd.",
+    "Terms of Service for mukoko weather — a weather intelligence platform, operated by Mukoko Africa, a division of Nyuchi Africa (PVT) Ltd.",
   alternates: {
-    canonical: "https://weather.mukoko.com/terms",
+    canonical: `${SITE_URL}/terms`,
   },
 };
 
@@ -15,14 +17,8 @@ export default function TermsPage() {
   return (
     <>
       <PageShell>
-        <h1 className="elephant">Terms of Service</h1>
-        <p className="mt-2 text-base text-text-tertiary">
-          Last updated: June 2026
-        </p>
-
-        <div className="mt-8 space-y-8 text-text-secondary leading-relaxed">
-          <section>
-            <h2 className="eland">1. Agreement</h2>
+        <ProsePage title="Terms of Service" updated="Last updated: June 2026">
+          <ProseSection heading="1. Agreement">
             <p className="mt-3">
               These Terms of Service (&quot;Terms&quot;) govern your use of
               mukoko weather (&quot;the Service&quot;), operated by{" "}
@@ -42,10 +38,9 @@ export default function TermsPage() {
               , you agree to be bound by these Terms. If you do not agree,
               please do not use the Service.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">2. Description of Service</h2>
+          <ProseSection heading="2. Description of Service">
             <p className="mt-3">
               mukoko weather provides weather forecasts, current conditions,
               AI-generated weather summaries, frost alerts, aviation weather
@@ -53,10 +48,9 @@ export default function TermsPage() {
               weather reporting for locations globally. The core Service is
               provided free of charge.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">3. Weather data disclaimer</h2>
+          <ProseSection heading="3. Weather data disclaimer">
             <p className="mt-3">
               Weather information provided by the Service is sourced from
               third-party data providers (Tomorrow.io, Open-Meteo) and AI models
@@ -90,10 +84,9 @@ export default function TermsPage() {
               always consult your local meteorological service and relevant
               professional advisors.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">4. Aviation weather disclaimer</h2>
+          <ProseSection heading="4. Aviation weather disclaimer">
             <p className="mt-3">
               The aviation weather features (METAR observations, TAF forecasts,
               and pre-flight weather briefings including PDF exports) are
@@ -133,10 +126,9 @@ export default function TermsPage() {
                 information provided by this Service.
               </strong>
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">5. Community weather reports</h2>
+          <ProseSection heading="5. Community weather reports">
             <p className="mt-3">
               By submitting a community weather report, you:
             </p>
@@ -160,10 +152,9 @@ export default function TermsPage() {
               the right to remove any report that violates these Terms or our
               community standards.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">6. Acceptable use</h2>
+          <ProseSection heading="6. Acceptable use">
             <p className="mt-3">
               You may use the Service for personal, educational, and commercial
               purposes. You may not:
@@ -187,20 +178,18 @@ export default function TermsPage() {
               </li>
               <li>Use the Service for any unlawful purpose</li>
             </ul>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">7. API and embed usage</h2>
+          <ProseSection heading="7. API and embed usage">
             <p className="mt-3">
               The Service provides API endpoints and an embeddable widget. These
               are provided for reasonable use. We reserve the right to
               rate-limit or restrict access to API endpoints if usage is
               excessive or impacts the Service for other users.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">8. Intellectual property</h2>
+          <ProseSection heading="8. Intellectual property">
             <p className="mt-3">
               The mukoko weather name, logo, and brand are trademarks of Mukoko
               Africa / Nyuchi Africa (PVT) Ltd. The Service&apos;s source code
@@ -216,10 +205,9 @@ export default function TermsPage() {
               . Weather data is provided by Open-Meteo, Tomorrow.io, and the
               Aviation Weather Center under their respective terms.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">9. Limitation of liability</h2>
+          <ProseSection heading="9. Limitation of liability">
             <p className="mt-3">
               THE SERVICE IS PROVIDED &quot;AS IS&quot; AND &quot;AS
               AVAILABLE&quot; WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
@@ -234,10 +222,9 @@ export default function TermsPage() {
               any decisions made based on weather or aviation information from
               the Service.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">10. Service availability</h2>
+          <ProseSection heading="10. Service availability">
             <p className="mt-3">
               We aim to keep the Service available at all times but do not
               guarantee uninterrupted access. The Service may be temporarily
@@ -245,20 +232,18 @@ export default function TermsPage() {
               our control. We reserve the right to modify or discontinue the
               Service at any time.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">11. Changes to these Terms</h2>
+          <ProseSection heading="11. Changes to these Terms">
             <p className="mt-3">
               We may update these Terms from time to time. Changes will be
               posted on this page with an updated date. Your continued use of
               the Service after changes constitutes acceptance of the revised
               Terms.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">12. Governing law</h2>
+          <ProseSection heading="12. Governing law">
             <p className="mt-3">
               These Terms are governed by the laws of the Republic of Zimbabwe,
               where Nyuchi Africa (PVT) Ltd is incorporated. Any disputes
@@ -267,10 +252,9 @@ export default function TermsPage() {
               access the Service from outside Zimbabwe, you are responsible for
               compliance with your local laws.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">13. Contact</h2>
+          <ProseSection heading="13. Contact">
             <p className="mt-3">
               For questions about these Terms, contact us at:
             </p>
@@ -289,8 +273,8 @@ export default function TermsPage() {
             <p className="mt-3 text-base text-text-tertiary">
               Mukoko Africa, a division of Nyuchi Africa (PVT) Ltd
             </p>
-          </section>
-        </div>
+          </ProseSection>
+        </ProsePage>
 
         <nav className="mt-10 flex gap-4 text-base" aria-label="Legal pages">
           <Link href="/about" className="sunbird">

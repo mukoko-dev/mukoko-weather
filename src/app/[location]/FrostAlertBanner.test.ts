@@ -1,78 +1,35 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { FROST_BANNER_CLASSES, type FrostRisk } from "@/lib/frost-styles";
 
 /**
- * Tests for FrostAlertBanner CSS class mapping.
- * Validates that frost severity levels map to the correct design-system tokens
- * (CSS custom properties) instead of hardcoded colors.
+ * Frost banner colours are blues from the weather-scale tokens (not brand
+ * minerals, not the red severity ramp).
  */
-
-type FrostRisk = "severe" | "high" | "moderate";
-
-// Extracted CSS class logic from FrostAlertBanner — mirrors the component exactly
-function getBgColor(risk: FrostRisk): string {
-  return risk === "severe"
-    ? "bg-frost-severe-bg border-frost-severe"
-    : risk === "high"
-      ? "bg-frost-high-bg border-earth"
-      : "bg-frost-moderate-bg border-accent";
-}
-
-function getTextColor(risk: FrostRisk): string {
-  return risk === "severe"
-    ? "text-frost-severe"
-    : risk === "high"
-      ? "text-earth"
-      : "text-accent";
-}
+const RISKS: FrostRisk[] = ["moderate", "high", "severe"];
 
 describe("FrostAlertBanner CSS class mapping", () => {
-  describe("background and border classes", () => {
-    it("uses frost-severe design tokens for severe risk", () => {
-      const classes = getBgColor("severe");
-      expect(classes).toContain("bg-frost-severe-bg");
-      expect(classes).toContain("border-frost-severe");
-    });
-
-    it("uses frost-high-bg and earth border for high risk", () => {
-      const classes = getBgColor("high");
-      expect(classes).toContain("bg-frost-high-bg");
-      expect(classes).toContain("border-earth");
-    });
-
-    it("uses frost-moderate-bg and accent border for moderate risk", () => {
-      const classes = getBgColor("moderate");
-      expect(classes).toContain("bg-frost-moderate-bg");
-      expect(classes).toContain("border-accent");
-    });
-
-    it("never contains hardcoded hex colors", () => {
-      for (const risk of ["severe", "high", "moderate"] as FrostRisk[]) {
-        const classes = getBgColor(risk);
-        expect(classes).not.toMatch(/#[0-9a-fA-F]{3,8}/);
-        expect(classes).not.toMatch(/rgba?\(/);
-      }
-    });
+  it("maps each risk to a frost-scale blue, light to dark", () => {
+    expect(FROST_BANNER_CLASSES.moderate.border).toBe("border-wx-frost-1");
+    expect(FROST_BANNER_CLASSES.high.border).toBe("border-wx-frost-2");
+    expect(FROST_BANNER_CLASSES.severe.border).toBe("border-wx-frost-3");
   });
 
-  describe("text color classes", () => {
-    it("uses frost-severe token for severe risk", () => {
-      expect(getTextColor("severe")).toBe("text-frost-severe");
-    });
+  it("never uses hex, rgba, mineral or red severity classes", () => {
+    for (const risk of RISKS) {
+      const classes = Object.values(FROST_BANNER_CLASSES[risk]).join(" ");
+      expect(classes).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+      expect(classes).not.toMatch(/rgba?\(/);
+      expect(classes).not.toMatch(/mineral|severity|frost-severe|earth|accent/);
+    }
+  });
 
-    it("uses earth token for high risk", () => {
-      expect(getTextColor("high")).toBe("text-earth");
-    });
-
-    it("uses accent token for moderate risk", () => {
-      expect(getTextColor("moderate")).toBe("text-accent");
-    });
-
-    it("never contains hardcoded hex colors or dark: overrides", () => {
-      for (const risk of ["severe", "high", "moderate"] as FrostRisk[]) {
-        const classes = getTextColor(risk);
-        expect(classes).not.toMatch(/#[0-9a-fA-F]{3,8}/);
-        expect(classes).not.toContain("dark:");
-      }
-    });
+  it("the component reads the shared map", () => {
+    const source = readFileSync(
+      join(__dirname, "FrostAlertBanner.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("FROST_BANNER_CLASSES[alert.risk]");
   });
 });

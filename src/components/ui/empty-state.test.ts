@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { EmptyState } from "./empty-state";
 
 const source = readFileSync(resolve(__dirname, "empty-state.tsx"), "utf-8");
 
@@ -23,6 +26,28 @@ describe("EmptyState", () => {
   it("lets callers control spacing via className", () => {
     expect(source).toContain("className");
     expect(source).toContain("cn(");
+  });
+
+  it("keeps the original children-only output unchanged", () => {
+    const html = renderToStaticMarkup(
+      createElement(EmptyState, null, "Nothing here"),
+    );
+    expect(html).toBe(
+      '<div class="rounded-[var(--radius-card)] bg-surface-card p-6 text-center text-text-tertiary"><p>Nothing here</p></div>',
+    );
+  });
+
+  it("renders an optional title and an actions row", () => {
+    const html = renderToStaticMarkup(
+      createElement(EmptyState, {
+        title: "No activities found",
+        actions: createElement("button", { type: "button" }, "Clear"),
+      }),
+    );
+    expect(html).toContain("No activities found");
+    expect(html).toContain("<button");
+    expect(html).toContain("mt-3 flex flex-wrap");
+    expect(html).not.toContain("<p>undefined</p>");
   });
 });
 

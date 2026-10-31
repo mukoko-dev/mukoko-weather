@@ -285,7 +285,7 @@ describe("uvInsight", () => {
     expect(r.label).toBe("Low");
     expect(r.protectFrom).toBeNull();
     expect(r.protectUntil).toBeNull();
-    expect(r.positionPct).toBe(9);
+    expect(r.positionPct).toBe(7);
   });
 
   it("gives the sun-protection window through the end of the last high hour", () => {
@@ -320,16 +320,16 @@ describe("uvInsight", () => {
     );
   });
 
-  it("computes position on a 0–11 scale and clamps it", () => {
+  it("computes position on a 0–14 scale (Extreme, 11+, has room) and clamps it", () => {
     expect(
       uvInsight(makeWeather({ current: { uv_index: 11 } }), NOW).positionPct,
-    ).toBe(100);
+    ).toBe(79);
     expect(
       uvInsight(makeWeather({ current: { uv_index: 14 } }), NOW).positionPct,
     ).toBe(100);
     expect(
       uvInsight(makeWeather({ current: { uv_index: 5.5 } }), NOW).positionPct,
-    ).toBe(50);
+    ).toBe(39);
   });
 
   it("reports unavailable data without throwing", () => {

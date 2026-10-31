@@ -32,15 +32,6 @@ struct CreateBody {
     preferences: Preferences,
 }
 
-fn client_ip(req: &Request) -> Option<String> {
-    req.headers()
-        .get("X-Mukoko-Client-IP")
-        .ok()
-        .flatten()
-        .or_else(|| req.headers().get("CF-Connecting-IP").ok().flatten())
-        .filter(|ip| !ip.is_empty())
-}
-
 fn random_id() -> Result<String> {
     let mut b = [0u8; 16];
     getrandom::getrandom(&mut b).map_err(|e| worker::Error::RustError(e.to_string()))?;
@@ -97,7 +88,7 @@ async fn create(req: &mut Request, env: &Env) -> Result<Response> {
     };
     let fresh = body.device_id.as_deref().is_none_or(str::is_empty);
     if fresh {
-        let Some(ip) = client_ip(req) else {
+        let Some(ip) = weather_edge::client_ip(req) else {
             return error(400, "invalid_request", "Could not determine the client.");
         };
         match limits::allow(env, &ip, "device-create", community::DEVICE_CREATE_PER_HOUR).await {
