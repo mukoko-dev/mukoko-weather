@@ -7,6 +7,11 @@
 //! not change). Failures are HTTP 200 with `available: false` and a `reason`
 //! (`circuit_open`, `upstream_error`, `timeout`, `no_data`), `no-store`; only
 //! malformed input is a 400.
+//!
+//! `GET /monthly-normals?lat=&lon=` answers the twelve monthly normals (mean,
+//! high and low temperature, rainfall, rainy days) of the same cell and period,
+//! ported from `compute_monthly_normals` in `api/py/_normals.py`, with its own
+//! KV entry and the same breaker, timeout and failure rules.
 
 use std::time::Duration;
 
@@ -121,4 +126,77 @@ fn respond(body: &Value, cache: &str) -> Result<Response> {
         resp.headers().set("Cache-Control", "no-store")?;
     }
     Ok(resp)
+}
+
+/// `GET /monthly-normals?lat=&lon=`: the twelve monthly climate normals.
+pub async fn monthly(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
+    let pairs = query_pairs(req)?;
+    let num = |k: &str| {
+        pairs
+            .iter()
+            .find(|(name, _)| name == k)
+            .and_then(|(_, v)| v.trim().parse::<f64>().ok())
+            .filter(|x| x.is_finite())
+    };
+    let (Some(lat), Some(lon)) = (num("lat"), num("lon")) else {
+        return error(422, "invalid_request", "Give both `lat` and `lon`.");
+    };
+    if !(-90.0..=90.0).contains(&lat) || !(-180.0..=180.0).contains(&lon) {
+        return error(400, "invalid_request", "Invalid coordinates");
+    }
+
+    let (glat, glon) = (n::snap_to_grid(lat), n::snap_to_grid(lon));
+    let key = n::monthly_cache_key(glat, glon);
+    let kv = env.kv(CACHE_BINDING).ok();
+    if let Some(kv) = &kv {
+        if let Ok(Some(hit)) = kv.get(&key).json::<Value>().await {
+            if let Some(months) = hit["months"].as_array().filter(|m| m.len() == 12) {
+                let body = n::monthly_respond(lat, lon, months, hit["computedAt"].as_str());
+                return respond(&body, "HIT");
+            }
+        }
+    }
+
+    if !chain::open_meteo_allowed() {
+        return respond(&n::monthly_unavailable(lat, lon, "circuit_open"), "MISS");
+    }
+    let fetched = get_with_timeout(&n::monthly_archive_url(glat, glon), None, BUILD_TIMEOUT).await;
+    let timed_out = matches!(fetched, Err(FetchError::Timeout));
+    let daily = match fetched {
+        Ok(mut r) if r.status_code() == 200 => r
+            .json::<Value>()
+            .await
+            .ok()
+            .map(|d| d["daily"].clone())
+            .filter(|d| d["time"].as_array().is_some_and(|t| !t.is_empty())),
+        _ => None,
+    };
+    chain::record_open_meteo(daily.is_some());
+    let Some(daily) = daily else {
+        let reason = if timed_out {
+            "timeout"
+        } else {
+            "upstream_error"
+        };
+        return respond(&n::monthly_unavailable(lat, lon, reason), "MISS");
+    };
+
+    let months = n::compute_monthly_normals(&daily);
+    let computed_at = now_rfc3339();
+    let body = n::monthly_respond(lat, lon, &months, Some(&computed_at));
+    // Only an answer with data is kept: an empty one would hide a later success.
+    if body["available"] == Value::Bool(true) {
+        if let Some(kv) = kv {
+            let entry = json!({"months": months, "computedAt": computed_at});
+            if let Ok(text) = serde_json::to_string(&entry) {
+                ctx.wait_until(async move {
+                    // No expiry: the normals of 1991-2020 do not change.
+                    if let Ok(put) = kv.put(&key, text) {
+                        let _ = put.execute().await;
+                    }
+                });
+            }
+        }
+    }
+    respond(&body, "MISS")
 }
