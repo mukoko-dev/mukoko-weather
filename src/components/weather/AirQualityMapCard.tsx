@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useId, useMemo, useState } from "react";
 import { MapSkeleton } from "./map/MapSkeleton";
 import {
+  AQI_BAND_BG_CLASS,
   AQI_BAND_LABELS,
   aqiBand,
   fetchAirQualityGrid,
@@ -22,19 +23,6 @@ const GRID_RADIUS_KM = 40;
 const GRID_N = 7;
 /** Zoom that fits ±40 km inside a card-width map on phone and desktop. */
 const MAP_ZOOM = 9;
-
-/**
- * Text colour for the centre bubble's AQI number, per band. Literal class names
- * so Tailwind generates them; never assembled from strings at runtime.
- */
-const BAND_TEXT_CLASS: Record<AqiBand, string> = {
-  good: "text-severity-low",
-  moderate: "text-severity-moderate",
-  usg: "text-severity-high",
-  unhealthy: "text-severity-severe",
-  very_unhealthy: "text-severity-extreme",
-  hazardous: "text-severity-extreme",
-};
 
 type CardState =
   | { status: "loading" }
@@ -133,7 +121,11 @@ export function AirQualityMapCard({
           aria-hidden="true"
           className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-button)] border border-border bg-surface-card/95 px-3 py-1.5 text-sm font-medium text-text-primary shadow-lg backdrop-blur-sm"
         >
-          <span className={`text-base font-semibold ${BAND_TEXT_CLASS[band]}`}>
+          <span
+            aria-hidden="true"
+            className={`size-3 shrink-0 rounded-full ring-1 ring-wx-outline ${AQI_BAND_BG_CLASS[band]}`}
+          />
+          <span className="text-base font-semibold text-text-primary">
             {aqi}
           </span>
           <span>· My Location</span>

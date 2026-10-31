@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { WEATHER_SCALES } from "@/lib/weather-scales";
 import { resolveColor, resolveFallbackColor } from "@/components/ui/chart";
 
 // ---------------------------------------------------------------------------
@@ -48,6 +49,13 @@ const STROKE_TO_TOKEN: Record<string, string> = {
   "stroke-severity-cold": "var(--color-severity-cold)",
 };
 
+// Weather-scale stroke classes (stroke-wx-aqi-3 ...) map to their tokens, so a
+// gauge that supplies only a strokeClass still resolves a colour.
+for (const scale of WEATHER_SCALES) {
+  for (const band of scale.bands)
+    STROKE_TO_TOKEN[band.stroke] = `var(${band.token})`;
+}
+
 // Ordered severity ramp — the natural malachite→gold→terracotta→red sweep.
 const SEVERITY_RAMP = [
   "var(--color-severity-low)",
@@ -65,6 +73,8 @@ const SEVERITY_RAMP = [
 export function gradientFromStrokeClass(strokeClass: string): string[] {
   const token = STROKE_TO_TOKEN[strokeClass];
   if (!token) return SEVERITY_RAMP.slice(0, 2);
+  // A weather-scale stroke (stroke-wx-aqi-3 ...) is one data colour: solid, its own.
+  if (strokeClass.startsWith("stroke-wx-")) return [token];
   // severity-cold isn't part of the linear ramp — pair it with low for a sweep.
   if (token === "var(--color-severity-cold)") {
     return ["var(--color-severity-low)", token];
