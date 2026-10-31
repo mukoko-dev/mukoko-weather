@@ -15,7 +15,7 @@ describe("developers page — metadata", () => {
   });
 
   it("sets the canonical URL to /developers", () => {
-    expect(pageSource).toContain("https://weather.mukoko.com/developers");
+    expect(pageSource).toContain("${SITE_URL}/developers");
     expect(pageSource).toContain("canonical:");
   });
 });
@@ -36,7 +36,7 @@ describe("developers page — structure", () => {
   });
 
   it("includes JSON-LD structured data (TechArticle)", () => {
-    expect(pageSource).toContain("application/ld+json");
+    expect(pageSource).toContain("<JsonLd data={articleSchema} />");
     expect(pageSource).toContain("TechArticle");
   });
 

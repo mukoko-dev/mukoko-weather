@@ -1,6 +1,7 @@
 "use client";
 
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
+import { WX_SERIES } from "@/lib/weather-scales";
 
 interface FeelsLikeChartProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -14,14 +15,14 @@ const SERIES: SeriesConfig[] = [
   {
     key: "feelsLike",
     label: "Feels like",
-    color: "var(--chart-3)",
+    color: WX_SERIES.feels,
     fill: true,
     opacity: 0.12,
   },
   {
     key: "temperature",
     label: "Actual",
-    color: "var(--chart-1)",
+    color: WX_SERIES.temp,
     dashed: true,
   },
 ];

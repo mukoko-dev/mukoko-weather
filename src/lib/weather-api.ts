@@ -52,6 +52,8 @@ export type WorkerRoute =
   | "geo"
   | "locations"
   | "history"
+  | "locations/profile"
+  | "agriculture"
   | "metar"
   | "airports/nearest"
   | "air-quality/grid"
@@ -62,6 +64,7 @@ export type WorkerRoute =
   | "normals/monthly"
   | "aviation/nearest-metar"
   | "suitability"
+  | "ai/history/analyze"
   | "devices"
   | `devices/${string}`;
 

@@ -13,7 +13,13 @@
 import { DurableObject } from "cloudflare:workers";
 import { MongoClient } from "mongodb";
 import { needsStores, route, fail, type Result, type Stores } from "./handlers";
-import { deviceStore, fromMongo, reportStore } from "./stores";
+import {
+  deviceStore,
+  fromMongo,
+  historyStore,
+  placeAliasStore,
+  reportStore,
+} from "./stores";
 
 interface Env {
   MONGO_BRIDGE_DO: DurableObjectNamespace;
@@ -24,8 +30,12 @@ interface Env {
 }
 
 const MAX_BODY_BYTES = 16 * 1024;
+/** A batch of archive days (up to 800 at about 1.2 KB each). */
+const MAX_HISTORY_BODY_BYTES = 1024 * 1024;
 const DEVICE_DB = "device";
 const WEATHER_DB = "weather";
+/** Read only: the platform slugs of a place (see `placeAliasStore`). */
+const PLACES_DB = "places";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -113,6 +123,12 @@ export class MongoBridge extends DurableObject<Env> {
       reports: reportStore(
         fromMongo(client.db(WEATHER_DB).collection("weather_reports")),
       ),
+      history: historyStore(
+        fromMongo(client.db(WEATHER_DB).collection("weather_history")),
+      ),
+      places: placeAliasStore(
+        fromMongo(client.db(PLACES_DB).collection("placesGeo")),
+      ),
     };
   }
 
@@ -125,7 +141,11 @@ export class MongoBridge extends DurableObject<Env> {
     let body: unknown;
     if (request.method === "POST" || request.method === "PATCH") {
       const text = await request.text();
-      if (text.length > MAX_BODY_BYTES) {
+      const cap =
+        url.pathname === "/history/days"
+          ? MAX_HISTORY_BODY_BYTES
+          : MAX_BODY_BYTES;
+      if (text.length > cap) {
         return respond(
           fail(413, "payload_too_large", "The request body is too large."),
         );

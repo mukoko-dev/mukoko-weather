@@ -3,7 +3,7 @@
  * location slugs, never for the app's own top-level routes (issue #236).
  */
 import { beforeEach, describe, it, expect, vi } from "vitest";
-import { readdirSync, readFileSync } from "fs";
+import { readdirSync } from "fs";
 import { resolve } from "path";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -110,28 +110,6 @@ describe("proxy — lastLocation cookie", () => {
 
   it("does not set lastLocation on the home page", async () => {
     expect(await lastLocationFor("/")).toBeUndefined();
-  });
-});
-
-describe("WeatherLoadingScene — KNOWN_ROUTES covers every page route", () => {
-  const sceneSource = readFileSync(
-    resolve(__dirname, "components/weather/WeatherLoadingScene.tsx"),
-    "utf-8",
-  );
-  const block = sceneSource.match(/KNOWN_ROUTES = new Set\(\[([\s\S]*?)\]\)/);
-  const listed = new Set(
-    [...(block?.[1] ?? "").matchAll(/"([a-z0-9-]+)"/g)].map((m) => m[1]),
-  );
-  const pageRoutes = topLevelRoutes.filter((route) => {
-    try {
-      return readdirSync(resolve(APP_DIR, route)).includes("page.tsx");
-    } catch {
-      return false;
-    }
-  });
-
-  it.each(pageRoutes)("lists /%s", (route) => {
-    expect(listed.has(route)).toBe(true);
   });
 });
 

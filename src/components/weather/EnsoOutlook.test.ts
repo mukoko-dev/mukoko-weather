@@ -128,10 +128,10 @@ describe("EnsoOutlook — styling rules", () => {
     );
   });
 
-  it("uses severity and surface tokens for phase badges", () => {
-    expect(ENSO_PHASE_CLASS["El Niño"]).toContain("bg-severity-moderate");
-    expect(ENSO_PHASE_CLASS["La Niña"]).toContain("bg-severity-cold");
-    expect(ENSO_PHASE_CLASS["El Niño"]).toContain("text-severity-fg");
+  it("colours phases warm red (El Niño) and cold blue (La Niña) from the temperature scale", () => {
+    expect(ENSO_PHASE_CLASS["El Niño"]).toContain("bg-wx-temp-9");
+    expect(ENSO_PHASE_CLASS["La Niña"]).toContain("bg-wx-temp-1");
+    expect(ENSO_PHASE_CLASS["El Niño"]).toContain("text-wx-fg-light");
   });
 
   it("uses fauna classes for the card and its text (heading class comes from SectionHeader)", () => {

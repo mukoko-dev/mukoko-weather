@@ -25,9 +25,10 @@ describe("device paint on the location loading boundary (issue #269)", () => {
   it("loading.tsx renders the device-aware loader", () => {
     expect(loading).toContain("DeviceLocationLoading");
   });
-  it("falls back to the branded scene when nothing is stored", () => {
+  it("falls back to the structural skeleton when nothing is stored", () => {
     expect(snapshot).toContain("recallPlace(slug)");
-    expect(snapshot).toContain("<WeatherLoadingScene />");
+    expect(snapshot).toContain("<LocationSkeleton slug={slug} />");
+    expect(snapshot).not.toContain("WeatherLoadingScene");
   });
   it("paints only presentational sections — no network-backed cards", () => {
     for (const heavy of [
@@ -66,7 +67,9 @@ describe("WeatherDashboard writes the device store", () => {
     expect(dashboard).toContain("homeLocation");
   });
   it("shows the Updated line only for device payloads", () => {
-    expect(dashboard).toMatch(/\{device && \(\s*<UpdatedAgo/);
+    expect(dashboard).toMatch(
+      /\{device && \(\s*<div className="kestrel-ink">\s*<UpdatedAgo/,
+    );
   });
 });
 

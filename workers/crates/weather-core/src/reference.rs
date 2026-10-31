@@ -63,6 +63,12 @@ fn activities() -> &'static [Value] {
     parse(&CELL, ACTIVITIES)
 }
 
+/// Whether `id` is one of the app's activity ids (the allowlist that
+/// replaces `filter_known_activities`' database lookup).
+pub fn is_known_activity(id: &str) -> bool {
+    activities().iter().any(|a| text(a, "id") == id)
+}
+
 fn categories() -> &'static [Value] {
     static CELL: OnceLock<Vec<Value>> = OnceLock::new();
     parse(&CELL, CATEGORIES)
@@ -213,11 +219,7 @@ fn valid_rule_key(key: &str) -> bool {
     let Some((kind, rest)) = key.split_once(':') else {
         return false;
     };
-    matches!(kind, "activity" | "category")
-        && !rest.is_empty()
-        && rest
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    matches!(kind, "activity" | "category") && !rest.is_empty() && crate::slug::chars_ok(rest)
 }
 
 /// `GET /v1/suitability` (`key`).

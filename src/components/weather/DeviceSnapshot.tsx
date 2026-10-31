@@ -12,7 +12,7 @@ import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { WeatherBackdrop } from "@/components/weather/WeatherBackdrop";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { UpdatedAgo } from "@/components/weather/UpdatedAgo";
-import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
+import { LocationSkeleton } from "@/components/weather/LocationSkeleton";
 import { FrostAlertBanner } from "@/app/[location]/FrostAlertBanner";
 import { SECTION_STACK_CLASS } from "@/lib/dashboard-layout";
 
@@ -47,12 +47,14 @@ export function DeviceSnapshot({
           <h1 className="sr-only">
             {location.name} weather, saved on this device
           </h1>
-          <UpdatedAgo
-            fetchedAt={view.fetchedAt}
-            freshness={view.freshness}
-            weather={weather}
-            placeName={location.name}
-          />
+          <div className="kestrel-ink">
+            <UpdatedAgo
+              fetchedAt={view.fetchedAt}
+              freshness={view.freshness}
+              weather={weather}
+              placeName={location.name}
+            />
+          </div>
           {frostAlert && <FrostAlertBanner alert={frostAlert} />}
           <div className={SECTION_STACK_CLASS}>
             <ChartErrorBoundary name="current conditions">
@@ -63,20 +65,19 @@ export function DeviceSnapshot({
                 hourly={weather.hourly}
                 utcOffsetSeconds={weather.utc_offset_seconds}
                 slug={location.slug}
-                footer={<SeasonBadge season={season} />}
               />
             </ChartErrorBoundary>
             <ChartErrorBoundary name="hourly scroll cards">
               <section aria-labelledby="device-hourly-heading">
-                <h2
-                  id="device-hourly-heading"
-                  className="giraffe mb-[var(--space-stack)]"
-                >
-                  Hourly
-                </h2>
                 <HourlyScrollCards
                   hourly={weather.hourly}
                   utcOffsetSeconds={weather.utc_offset_seconds}
+                  variant="sky"
+                  footer={<SeasonBadge season={season} />}
+                  heading={{
+                    headingId: "device-hourly-heading",
+                    title: "Conditions",
+                  }}
                 />
               </section>
             </ChartErrorBoundary>
@@ -100,7 +101,7 @@ export function DeviceSnapshot({
 
 /**
  * The `[location]` loading boundary: paints the stored copy of this place at
- * once when the device has one, else the branded loading scene. The live
+ * once when the device has one, else the structural loading skeleton (no splash). The live
  * page replaces it as soon as it streams in.
  */
 export function DeviceLocationLoading() {
@@ -125,5 +126,5 @@ export function DeviceLocationLoading() {
   }, [slug]);
 
   if (view) return <DeviceSnapshot view={view} />;
-  return <WeatherLoadingScene />;
+  return <LocationSkeleton slug={slug} />;
 }

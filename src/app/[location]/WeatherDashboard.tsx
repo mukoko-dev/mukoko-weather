@@ -1,6 +1,14 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   DndContext,
   closestCenter,
@@ -30,11 +38,11 @@ import { LazySection } from "@/components/weather/LazySection";
 import { PlaceKnowledgeRows } from "@/components/weather/PlaceKnowledgeRows";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { CommunityLane } from "@/components/weather/CommunityLane";
+import { ActivityInvite } from "@/components/weather/ActivityInsights";
 import { CommunityLaneSkeleton } from "@/components/weather/CommunityLaneSkeleton";
 import {
   SectionSkeleton,
   ReportsSkeleton,
-  ActivityInsightsSkeleton,
   AISummarySkeleton,
   AISummaryChatSkeleton,
   EnsoOutlookSkeleton,
@@ -52,7 +60,7 @@ import {
 } from "@/lib/dashboard-layout";
 import { FrostAlertBanner } from "./FrostAlertBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, pinHeroFirst, PINNED_FIRST_SECTION } from "@/lib/store";
 import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
 import {
   checkFrostRisk,
@@ -100,9 +108,11 @@ const AISummary = lazy(() =>
     default: m.AISummary,
   })),
 );
-const ActivityInsights = lazy(() =>
-  import("@/components/weather/ActivityInsights").then((m) => ({
-    default: m.ActivityInsights,
+// The full activity advice lives in a sheet opened from the Community lane;
+// its chunk loads on first open and its cards mount only while it is open.
+const ActivitiesDetailSheet = lazy(() =>
+  import("@/components/weather/ActivitiesDetailSheet").then((m) => ({
+    default: m.ActivitiesDetailSheet,
   })),
 );
 const MapPreview = lazy(() =>
@@ -226,7 +236,11 @@ export function WeatherDashboard({
   const usingFallback = modelBaseline ? false : seedUsingFallback;
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
-  const sectionOrder = useAppStore((s) => s.sectionOrder);
+  const storedSectionOrder = useAppStore((s) => s.sectionOrder);
+  // The hero is painted white on the page sky and the phone header is not
+  // drawn over it, so it can never leave the first slot: whatever the store
+  // holds (a layout saved before it was pinned), the page renders it first.
+  const sectionOrder = pinHeroFirst(storedSectionOrder);
   const setSectionOrder = useAppStore((s) => s.setSectionOrder);
   const hydrateSectionOrder = useAppStore((s) => s.hydrateSectionOrder);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
@@ -243,6 +257,24 @@ export function WeatherDashboard({
     };
   }, [weather, location]);
   const [reordering, setReordering] = useState(false);
+  // Activity advice sheet: opened from the Community lane (whole card, "All
+  // advice", or one activity's row). `loaded` keeps it mounted after the first
+  // open so the close animation plays; its content mounts only while open.
+  const [advice, setAdvice] = useState<{
+    loaded: boolean;
+    open: boolean;
+    activityId?: string;
+    opener: HTMLElement | null;
+  }>({ loaded: false, open: false, opener: null });
+  const openAdvice = useCallback(
+    (activityId: string | undefined, opener: HTMLElement) =>
+      setAdvice({ loaded: true, open: true, activityId, opener }),
+    [],
+  );
+  const closeAdvice = useCallback(
+    () => setAdvice((a) => ({ ...a, open: false })),
+    [],
+  );
   // Swipe left/right between the visitor's locations (off while reordering).
   const swipe = useLocationSwipe({ enabled: !reordering });
   // Windy-style ADDITIONAL data — multi-model comparison + minutely nowcast.
@@ -261,7 +293,12 @@ export function WeatherDashboard({
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    if (over && active.id !== over.id) {
+    if (
+      over &&
+      active.id !== over.id &&
+      active.id !== PINNED_FIRST_SECTION &&
+      over.id !== PINNED_FIRST_SECTION
+    ) {
       const oldIndex = sectionOrder.indexOf(active.id as string);
       const newIndex = sectionOrder.indexOf(over.id as string);
       if (oldIndex !== -1 && newIndex !== -1) {
@@ -297,7 +334,7 @@ export function WeatherDashboard({
     setSelectedLocation(location.slug);
   }, [location.slug, setSelectedLocation]);
 
-  // Cache weather hint for the loading scene — enables weather-aware
+  // Cache weather hint for the loading skeleton — enables weather-aware
   // Three.js animation on subsequent visits to this location.
   useEffect(() => {
     cacheWeatherHint(location.slug, {
@@ -390,6 +427,50 @@ export function WeatherDashboard({
     };
   }, [location.lat, location.lon, model, extrasKey, fetchExtras]);
 
+  // The breadcrumb sits at the left of the hero's top row (over the sky), so
+  // its text takes the hero's foreground instead of the page text tokens.
+  // The Conditions card is the translucent sky card only while it sits
+  // directly under the hero; moved lower it is an ordinary card.
+  const skyCard =
+    sectionOrder[0] === PINNED_FIRST_SECTION &&
+    sectionOrder[1] === "hourlyScroll";
+  const breadcrumb = (
+    <nav aria-label="Breadcrumb" data-breadcrumb>
+      <ol className="flex flex-wrap items-center gap-x-1.5">
+        <li>
+          <a
+            href={BASE_URL}
+            className="dik-dik hover:underline transition-colors"
+          >
+            Home
+          </a>
+        </li>
+        <li aria-hidden="true">/</li>
+        {/* Country — always shown */}
+        {countryName && (
+          <>
+            <li>
+              <span>{countryName}</span>
+            </li>
+            <li aria-hidden="true">/</li>
+          </>
+        )}
+        {/* Province — skip only if identical to location name */}
+        {location.province && location.province !== location.name && (
+          <>
+            <li>
+              <span>{location.province}</span>
+            </li>
+            <li aria-hidden="true">/</li>
+          </>
+        )}
+        <li aria-current="page">
+          <span>{location.name}</span>
+        </li>
+      </ol>
+    </nav>
+  );
+
   return (
     <>
       {/* Full-viewport condition-aware sky behind the whole page (Apple
@@ -411,49 +492,6 @@ export function WeatherDashboard({
       <div className="relative z-10">
         <Header />
 
-        {/* Breadcrumb navigation — always three layers: Country / Province / Location */}
-        <nav
-          aria-label="Breadcrumb"
-          className="mx-auto max-w-7xl px-4 pt-3 sm:px-6 md:px-8"
-        >
-          <ol className="flex flex-wrap items-center gap-1.5 text-base text-text-tertiary">
-            <li>
-              <a
-                href={BASE_URL}
-                className="dik-dik hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded"
-              >
-                Home
-              </a>
-            </li>
-            <li aria-hidden="true">/</li>
-            {/* Country — always shown */}
-            {countryName && (
-              <>
-                <li>
-                  <span className="text-text-secondary">{countryName}</span>
-                </li>
-                <li aria-hidden="true">/</li>
-              </>
-            )}
-            {/* Province — skip only if identical to location name */}
-            {location.province && location.province !== location.name && (
-              <>
-                <li>
-                  <span className="text-text-secondary">
-                    {location.province}
-                  </span>
-                </li>
-                <li aria-hidden="true">/</li>
-              </>
-            )}
-            <li aria-current="page">
-              <span className="font-medium text-text-primary">
-                {location.name}
-              </span>
-            </li>
-          </ol>
-        </nav>
-
         {/* Mobile bottom padding clears the floating nav (token includes the
           safe-area inset); sm:pb-6 restores normal padding where the nav is hidden. */}
         <main
@@ -474,12 +512,14 @@ export function WeatherDashboard({
           </div>
 
           {device && (
-            <UpdatedAgo
-              fetchedAt={device.fetchedAt}
-              freshness={device.freshness}
-              weather={weather}
-              placeName={location.name}
-            />
+            <div className="kestrel-ink">
+              <UpdatedAgo
+                fetchedAt={device.fetchedAt}
+                freshness={device.freshness}
+                weather={weather}
+                placeName={location.name}
+              />
+            </div>
           )}
 
           {/* Weather unavailable banner — shown when all providers failed */}
@@ -522,20 +562,21 @@ export function WeatherDashboard({
                             >
                               <ChartErrorBoundary name="hourly scroll cards">
                                 <section aria-labelledby="hourly-scroll-heading">
-                                  <SectionHeader
-                                    headingId="hourly-scroll-heading"
-                                    title="Hourly"
-                                    action={{
-                                      label: "Full forecast →",
-                                      href: `/${location.slug}/forecast`,
-                                    }}
-                                    className="mb-[var(--space-stack)]"
-                                  />
                                   <HourlyScrollCards
                                     hourly={weather.hourly}
                                     utcOffsetSeconds={
                                       weather.utc_offset_seconds
                                     }
+                                    variant={skyCard ? "sky" : "card"}
+                                    footer={<SeasonBadge season={season} />}
+                                    heading={{
+                                      headingId: "hourly-scroll-heading",
+                                      title: "Conditions",
+                                      action: {
+                                        label: "Full forecast →",
+                                        href: `/${location.slug}/forecast`,
+                                      },
+                                    }}
                                   />
                                 </section>
                               </ChartErrorBoundary>
@@ -546,6 +587,7 @@ export function WeatherDashboard({
                             <DraggableSection
                               key="current"
                               id="current"
+                              pinned
                               reordering={reordering}
                             >
                               <ChartErrorBoundary name="current conditions">
@@ -557,7 +599,7 @@ export function WeatherDashboard({
                                   utcOffsetSeconds={weather.utc_offset_seconds}
                                   slug={location.slug}
                                   isCurrentLocation={isCurrentLocation}
-                                  footer={<SeasonBadge season={season} />}
+                                  breadcrumb={breadcrumb}
                                 />
                               </ChartErrorBoundary>
                             </DraggableSection>
@@ -580,6 +622,7 @@ export function WeatherDashboard({
                                     lon={location.lon}
                                     weather={weather}
                                     selectedActivities={selectedActivities}
+                                    onOpenAdvice={openAdvice}
                                   />
                                 </ChartErrorBoundary>
                               </LazySection>
@@ -638,37 +681,21 @@ export function WeatherDashboard({
                               </LazySection>
                             </DraggableSection>
                           );
-                        case "activityInsights":
-                          return (
+                        case "activityInvite":
+                          // Once activities are picked their advice lives in
+                          // the Community lane's sheet, so the page carries no
+                          // long section; only the invitation remains.
+                          return selectedActivities.length === 0 ? (
                             <DraggableSection
-                              key="activityInsights"
-                              id="activityInsights"
+                              key="activityInvite"
+                              id="activityInvite"
                               reordering={reordering}
                             >
-                              <LazySection
-                                label="activity-insights"
-                                fallback={<ActivityInsightsSkeleton />}
-                              >
-                                <ChartErrorBoundary name="activity insights">
-                                  <Suspense
-                                    fallback={<ActivityInsightsSkeleton />}
-                                  >
-                                    {/* Insights synthesized from the base forecast when the provider
-                                    (Open-Meteo fallback) doesn't supply them — activity cards
-                                    must never render without data. */}
-                                    <ActivityInsights
-                                      insights={
-                                        weather.insights ??
-                                        synthesizeOpenMeteoInsights(weather)
-                                      }
-                                      activities={allActivities}
-                                      weather={weather}
-                                    />
-                                  </Suspense>
-                                </ChartErrorBoundary>
-                              </LazySection>
+                              <ChartErrorBoundary name="activity invitation">
+                                <ActivityInvite />
+                              </ChartErrorBoundary>
                             </DraggableSection>
-                          );
+                          ) : null;
                         case "agriculture":
                           return (
                             <DraggableSection
@@ -776,6 +803,21 @@ export function WeatherDashboard({
                   </div>
                 </SortableContext>
               </DndContext>
+              {advice.loaded && selectedActivities.length > 0 && (
+                <Suspense fallback={null}>
+                  <ActivitiesDetailSheet
+                    open={advice.open}
+                    onClose={closeAdvice}
+                    focusActivityId={advice.activityId}
+                    opener={advice.opener}
+                    insights={
+                      weather.insights ?? synthesizeOpenMeteoInsights(weather)
+                    }
+                    activities={allActivities}
+                    weather={weather}
+                  />
+                </Suspense>
+              )}
               {/* Windy-style additions — the last items of the main column
                     (not full-width below the grid), so the main column and the
                     sidebar end together instead of leaving a dead band of

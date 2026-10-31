@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
-import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { PageShell } from "@/components/layout/PageShell";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { trail } from "@/components/layout/Breadcrumb";
+import { ExploreCard } from "@/components/explore/ExploreCard";
 import { getAllCountries } from "@/lib/db";
 import { getFlagEmoji } from "@/lib/countries";
 import { logError } from "@/lib/observability";
@@ -61,65 +61,52 @@ export default async function ExploreCountryPage() {
   );
 
   return (
-    <>
-      <Header />
-
-      <Breadcrumb
-        items={[
-          { label: "Home", href: "/" },
-          { label: "Explore", href: "/explore" },
-          { label: "Countries" },
-        ]}
+    <PageShell
+      width="wide"
+      breadcrumb={trail(
+        { label: "Explore", href: "/explore" },
+        { label: "Countries" },
+      )}
+    >
+      <PageHeader
+        title="Browse by Country"
+        intro={
+          countries.length > 0
+            ? `${countries.length} countries worldwide`
+            : "No countries available yet — check back soon."
+        }
       />
 
-      {/* --mobile-nav-clearance keeps the last row clear of the floating nav
-          island on phones; sm:pb-8 restores normal padding on larger screens. */}
-      <main
-        id="main-content"
-        className="mx-auto max-w-5xl overflow-x-clip px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-8 md:px-8"
-      >
-        <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
-          Browse by Country
-        </h1>
-        <p className="mt-2 text-text-secondary">
-          {countries.length > 0
-            ? `${countries.length} countries worldwide`
-            : "No countries available yet — check back soon."}
-        </p>
-
-        {sortedRegions.map((region) => (
-          <section
-            key={region}
-            aria-labelledby={`region-${region.replace(/\s+/g, "-").toLowerCase()}`}
-            className="mt-10"
+      {sortedRegions.map((region) => (
+        <section
+          key={region}
+          aria-labelledby={`region-${region.replace(/\s+/g, "-").toLowerCase()}`}
+          className="mt-10"
+        >
+          <h2
+            id={`region-${region.replace(/\s+/g, "-").toLowerCase()}`}
+            className="eland mb-4 border-b border-border-subtle pb-2"
           >
-            <h2
-              id={`region-${region.replace(/\s+/g, "-").toLowerCase()}`}
-              className="text-lg font-semibold text-text-primary font-heading mb-4 border-b border-border-subtle pb-2"
-            >
-              {region}
-            </h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {byRegion[region].map((country) => (
-                <Link
-                  key={country.code}
-                  href={`/explore/country/${country.code.toLowerCase()}`}
-                  className="group card-interactive pangolin flex items-center gap-3"
-                >
-                  <span className="text-2xl" aria-hidden="true">
-                    {getFlagEmoji(country.code)}
-                  </span>
-                  <span className="font-medium text-text-primary group-hover:text-primary transition-colors">
+            {region}
+          </h2>
+          <div className="herd-grid">
+            {byRegion[region].map((country) => (
+              <ExploreCard
+                key={country.code}
+                href={`/explore/country/${country.code.toLowerCase()}`}
+                title={
+                  <span className="inline-flex items-center gap-3">
+                    <span className="text-2xl" aria-hidden="true">
+                      {getFlagEmoji(country.code)}
+                    </span>
                     {country.name}
                   </span>
-                </Link>
-              ))}
-            </div>
-          </section>
-        ))}
-      </main>
-
-      <Footer />
-    </>
+                }
+              />
+            ))}
+          </div>
+        </section>
+      ))}
+    </PageShell>
   );
 }

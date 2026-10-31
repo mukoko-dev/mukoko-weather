@@ -39,18 +39,18 @@ describe("/releases — server page", () => {
     expect(page).not.toMatch(/index:\s*false/);
   });
 
-  it("emits JSON-LD through safeJsonLd", () => {
+  it("emits JSON-LD through the shared JsonLd component", () => {
     expect(page).toContain("releasesJsonLd(releases, SITE_URL)");
-    expect(page).toContain("safeJsonLd(schema)");
-    expect(page).toContain('type="application/ld+json"');
+    expect(page).toContain('<JsonLd key={schema["@type"]} data={schema} />');
+    expect(read("../../components/layout/JsonLd.tsx")).toContain("safeJsonLd");
   });
 
   it("has the main landmark, one h1, a visible breadcrumb and a labelled list", () => {
-    expect(page).toContain('id="main-content"');
-    expect(page.match(/<h1/g)).toHaveLength(1);
-    expect(page).toContain('{ label: "Release notes" }');
+    expect(page).toContain("<PageShell");
+    expect(page).toContain("<PageHeader");
+    expect(page).toContain('title="Release notes"');
+    expect(page).toContain('trail({ label: "Release notes" })');
     expect(page).toContain('aria-label="Releases"');
-    expect(page).toContain("pb-[var(--mobile-nav-clearance)]");
   });
 
   it("links the full technical history on GitHub, clearly labelled", () => {
@@ -142,9 +142,6 @@ describe("/releases — route registration", () => {
     expect(read("../../proxy.ts")).toMatch(
       /KNOWN_ROUTES = new Set\(\[[^\]]*"releases"/,
     );
-    expect(read("../../components/weather/WeatherLoadingScene.tsx")).toMatch(
-      /KNOWN_ROUTES = new Set\(\[[^\]]*"releases"/,
-    );
     expect(NON_LOCATION_ROUTES.has("releases")).toBe(true);
   });
 
@@ -167,9 +164,13 @@ describe("/releases — route registration", () => {
   });
 
   it("is linked from the footer, the about page and profile navigation", () => {
-    expect(read("../../components/layout/Footer.tsx")).toMatch(
-      /href="\/releases"[^>]*>\s*Release notes/,
+    // The footer reads its links from lib/nav-destinations (one list for every surface).
+    expect(read("../../components/layout/Footer.tsx")).toContain(
+      'navLink("releases")',
     );
+    expect(
+      PROFILE_DESTINATIONS.find((d) => d.href === "/releases")?.label,
+    ).toBe("Release notes");
     expect(read("../about/page.tsx")).toContain('href="/releases"');
     expect(PROFILE_DESTINATIONS.some((d) => d.href === "/releases")).toBe(true);
   });
@@ -178,9 +179,8 @@ describe("/releases — route registration", () => {
 describe("/releases — page tier files and markup details", () => {
   it("has a loading skeleton with a status role", () => {
     const loading = read("loading.tsx");
-    expect(loading).toContain('role="status"');
-    expect(loading).toContain('aria-label="Loading"');
-    expect(loading).toContain("BreadcrumbSkeleton");
+    expect(loading).toContain("<PageShellSkeleton");
+    expect(loading).toContain("breadcrumb");
   });
 
   it("has an error boundary built on RouteErrorBoundary", () => {

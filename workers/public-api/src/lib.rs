@@ -9,6 +9,8 @@
 //! ```text
 //! GET /v1/weather?lat=&lon=[&models=a,b]   full WeatherData, the shape of /api/py/weather
 //! GET /v1/forecast?location=|lat=&lon=[&days=1..7]   the daily forecast contract
+//! GET /v1/locations/profile?slug=|lat=&lon=[&country=]   a place's knowledge (seasons, crops, climate, soil) and today's context
+//! GET /v1/agriculture?lat=&lon=[&location=][&country=][&crops=]   farm windows, rain, soil, water balance, frost and heat risk (the shape of /api/py/agriculture)
 //! GET /v1/air-quality?lat=&lon=                     the EPA AQI, the shape of /api/py/airquality
 //! GET /v1/air-quality/grid?lat=&lon=[&radiusKm=&n=]  US AQI on an n x n grid (the shape of /api/py/airquality/grid)
 //! GET /v1/haze?lat=&lon=                             haze panel data (the shape of /api/py/haze)
@@ -43,10 +45,11 @@
 mod keys;
 
 use serde_json::Value;
-use weather_core::cors::origin_allowed;
 use weather_core::query::ForecastQuery;
 use weather_core::{geo, normalize, places, reference, status as health};
-use weather_edge::{config, error, get_with_timeout, json, now, now_ms, now_rfc3339, query_pairs};
+use weather_edge::{
+    cors, error, get_with_timeout, json, now, now_ms, now_rfc3339, query_pairs, responses, service,
+};
 use worker::wasm_bindgen::JsValue;
 use worker::{event, Context, Env, Headers, Method, Request, RequestInit, Response, Result};
 
@@ -68,11 +71,15 @@ const DEFAULT_ELEVATION_M: f64 = 1200.0;
 #[event(fetch)]
 pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let origin = req.headers().get("Origin")?.unwrap_or_default();
-    let cors_origin = cors_origin(&env, &origin);
+    let cors_origin = cors::allowed_origin(&env, &origin);
     let is_ai = is_ai_path(&req.path());
 
     let resp = if req.method() == Method::Options {
-        preflight(cors_origin.is_some())
+        cors::preflight(
+            cors_origin.is_some(),
+            "GET, POST, PATCH, OPTIONS",
+            "Content-Type, Authorization, X-Mukoko-Client, X-API-Key, X-Client-Id, X-Client-Secret",
+        )
     } else if is_ai {
         if req.method() != Method::Post {
             error(405, "method_not_allowed", "Only POST is served.")
@@ -102,7 +109,14 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
             },
         }
     }?;
-    with_cors(resp, cors_origin.as_deref())
+    cors::apply(
+        resp,
+        cors_origin.as_deref(),
+        Some(
+            "X-Cache, X-Weather-Provider, X-Weather-Blend, X-Enrichment, X-Current-Source, \
+             X-Fetched-At, X-AQ-Source",
+        ),
+    )
 }
 
 async fn route(req: &Request, env: &Env) -> Result<Response> {
@@ -166,6 +180,26 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
             )
             .await
         }
+        "/v1/locations/profile" => {
+            relay(
+                req,
+                env,
+                FORECAST_BINDING,
+                "/profile",
+                "public, max-age=1800",
+            )
+            .await
+        }
+        "/v1/agriculture" => {
+            relay(
+                req,
+                env,
+                FORECAST_BINDING,
+                "/agriculture",
+                weather_core::agriculture::CLIENT_CACHE_CONTROL,
+            )
+            .await
+        }
         "/v1/model-grid" => {
             relay(
                 req,
@@ -204,45 +238,9 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
     }
 }
 
-fn cors_origin(env: &Env, origin: &str) -> Option<String> {
-    let allowed = config(env, "CORS_ORIGINS").unwrap_or_default();
-    let allow_local = config(env, "ENVIRONMENT").as_deref() != Some("production");
-    origin_allowed(origin, &allowed, allow_local).then(|| origin.to_owned())
-}
-
-fn preflight(allowed: bool) -> Result<Response> {
-    let resp = Response::empty()?.with_status(if allowed { 204 } else { 403 });
-    if allowed {
-        let h = resp.headers();
-        h.set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")?;
-        h.set(
-            "Access-Control-Allow-Headers",
-            "Content-Type, Authorization, X-Mukoko-Client, X-API-Key, X-Client-Id, X-Client-Secret",
-        )?;
-        h.set("Access-Control-Max-Age", "86400")?;
-    }
-    Ok(resp)
-}
-
-fn with_cors(resp: Response, origin: Option<&str>) -> Result<Response> {
-    let h = resp.headers();
-    h.append("Vary", "Origin")?;
-    if let Some(o) = origin {
-        h.set("Access-Control-Allow-Origin", o)?;
-        h.set(
-            "Access-Control-Expose-Headers",
-            "X-Cache, X-Weather-Provider, X-Current-Source, X-Fetched-At, X-AQ-Source",
-        )?;
-    }
-    Ok(resp)
-}
-
+/// The caller's address for a call to a Worker with no public route.
 fn client_ip(req: &Request) -> String {
-    req.headers()
-        .get("CF-Connecting-IP")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| "service-binding".to_owned())
+    weather_edge::client_ip(req).unwrap_or_else(|| "service-binding".to_owned())
 }
 
 /// `Some(429)` when the caller is over its limit: per IP when anonymous, per
@@ -257,11 +255,7 @@ async fn rate_limited(req: &Request, env: &Env, caller: &keys::Caller) -> Option
     };
     match limiter.limit(key).await {
         Ok(outcome) if !outcome.success => {
-            let resp = error(429, "rate_limited", "Too many requests; slow down.");
-            if let Ok(r) = &resp {
-                let _ = r.headers().set("Retry-After", "60");
-            }
-            Some(resp)
+            Some(responses::rate_limited(60, "Too many requests; slow down."))
         }
         _ => None,
     }
@@ -356,14 +350,6 @@ async fn forward_ai(req: &mut Request, env: &Env) -> Result<Response> {
     }
 }
 
-async fn ask_forecast(env: &Env, path_and_query: &str) -> Result<Option<Response>> {
-    let fetcher = env.service(FORECAST_BINDING)?;
-    Ok(fetcher
-        .fetch(format!("https://forecast{path_and_query}"), None)
-        .await
-        .ok())
-}
-
 fn copy_header(from: &Headers, to: &Headers, name: &str) -> Result<()> {
     if let Some(v) = from.get(name)? {
         to.set(name, &v)?;
@@ -407,19 +393,31 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
         q.push_str(&safe);
     }
 
-    if let Some(mut upstream) = ask_forecast(env, &q).await? {
+    if let Some(mut upstream) = service::ask(env, FORECAST_BINDING, &q).await? {
         if upstream.status_code() == 200 {
             if let Ok(body) = upstream.json::<Value>().await {
                 let resp = json(200, &body)?;
                 for h in [
                     "X-Cache",
                     "X-Weather-Provider",
+                    "X-Weather-Blend",
+                    "X-Enrichment",
                     "X-Current-Source",
                     "X-Fetched-At",
                 ] {
                     copy_header(upstream.headers(), resp.headers(), h)?;
                 }
-                resp.headers().set("Cache-Control", "public, max-age=300")?;
+                // Only the full blend is worth five minutes at the edge. A
+                // degraded answer (single model, best_match) is short-lived,
+                // so the blend comes back as soon as it recovers.
+                let blended = upstream.headers().get("X-Weather-Provider")?.as_deref()
+                    == Some("open-meteo:blend");
+                let cache = if blended {
+                    "public, max-age=300"
+                } else {
+                    "public, max-age=30"
+                };
+                resp.headers().set("Cache-Control", cache)?;
                 return Ok(resp);
             }
         }
@@ -433,6 +431,7 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
     let h = resp.headers();
     h.set("X-Cache", "MISS")?;
     h.set("X-Weather-Provider", "fallback")?;
+    h.set("X-Enrichment", "none")?;
     h.set("X-Current-Source", "fallback")?;
     Ok(resp)
 }
@@ -443,7 +442,9 @@ async fn forecast(req: &Request, env: &Env) -> Result<Response> {
         return error(422, "invalid_request", &e.to_string());
     }
     let query = req.url()?.query().unwrap_or("").to_owned();
-    let Some(mut upstream) = ask_forecast(env, &format!("/daily?{query}")).await? else {
+    let Some(mut upstream) =
+        service::ask(env, FORECAST_BINDING, &format!("/daily?{query}")).await?
+    else {
         return error(
             502,
             "upstream_unreachable",
@@ -495,7 +496,7 @@ async fn relay(
         return error(502, "upstream_unreachable", "The service did not answer.");
     };
     let status = upstream.status_code();
-    if !matches!(status, 200 | 400 | 404 | 422 | 502 | 503) {
+    if !matches!(status, 200 | 400 | 404 | 422 | 429 | 502 | 503) {
         return error(502, "upstream_error", "The service failed.");
     }
     let Ok(body) = upstream.json::<Value>().await else {
@@ -507,6 +508,13 @@ async fn relay(
     }
     if status == 200 {
         // An upstream `no-store` (a degraded answer) must never be cached.
+        // The converse holds too: `weather_edge::json` defaults every answer
+        // to `no-store`, so the `cache_control` passed in only takes effect
+        // for a route whose handler stamps its own `Cache-Control` on success
+        // (`/agriculture` via `weather_core::agriculture::cache_control`, and
+        // the aviation `/airports/nearest`). A route that does not (haze,
+        // normals, enso, sg-air, air-quality/grid, model-grid, profile) is
+        // `no-store` however it is registered here.
         let no_store = upstream
             .headers()
             .get("Cache-Control")
@@ -619,6 +627,7 @@ async fn status(env: &Env) -> Result<Response> {
         forecast.1,
     )];
     checks.extend(health::forecast_storage_row(&forecast.0, forecast.1));
+    checks.extend(health::blend_row(&forecast.0, forecast.1));
     checks.push(health::enrichment_row(&forecast.0, forecast.1));
     checks.push(health::worker_row("Places Worker", &places.0, places.1));
     checks.push(health::worker_row(

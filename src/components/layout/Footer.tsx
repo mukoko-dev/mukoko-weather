@@ -2,9 +2,19 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useChromeClaimed } from "@/components/layout/chrome-context";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { navDestination, type NavDestinationId } from "@/lib/nav-destinations";
 
+/**
+ * The page-level footer. The root layout owns the real one (`SiteFooter`, via
+ * AppChrome) so there is one per app; while it is mounted this renders nothing.
+ */
 export function Footer() {
+  return useChromeClaimed() ? null : <SiteFooter />;
+}
+
+export function SiteFooter() {
   const year = new Date().getFullYear();
   const shamwariEnabled = isFeatureEnabled("shamwari_chat");
 
@@ -13,6 +23,17 @@ export function Footer() {
     "mb-2 text-xs font-semibold uppercase tracking-widest text-text-tertiary";
   const link =
     "text-base text-text-secondary transition-colors hover:text-text-primary";
+
+  // A footer link to a shared destination (lib/nav-destinations); the footer
+  // reads its own short label where the page has one.
+  const navLink = (id: NavDestinationId) => {
+    const d = navDestination(id);
+    return (
+      <Link key={id} href={d.href} prefetch={false} className={link}>
+        {d.footerLabel ?? d.label}
+      </Link>
+    );
+  };
 
   return (
     <footer
@@ -48,8 +69,8 @@ export function Footer() {
               </span>
             </Link>
             <p className="text-base text-text-secondary leading-relaxed max-w-[220px]">
-              AI-powered weather intelligence for Africa and beyond. Weather as
-              a public good.
+              Weather intelligence for Africa and beyond. Weather as a public
+              good.
             </p>
             <div className="flex items-center gap-3 pt-1">
               <a
@@ -90,43 +111,21 @@ export function Footer() {
           {/* Weather */}
           <div className={col}>
             <p className={heading}>Weather</p>
-            <Link href="/explore" prefetch={false} className={link}>
-              Explore
-            </Link>
-            <Link href="/history" prefetch={false} className={link}>
-              Historical data
-            </Link>
-            {shamwariEnabled && (
-              <Link href="/shamwari" prefetch={false} className={link}>
-                Shamwari AI
-              </Link>
-            )}
-            <Link href="/aviation" prefetch={false} className={link}>
-              Aviation
-            </Link>
-            <Link href="/embed" prefetch={false} className={link}>
-              Embed widget
-            </Link>
-            <Link href="/developers" prefetch={false} className={link}>
-              Developers &amp; API
-            </Link>
-            <Link href="/status" prefetch={false} className={link}>
-              System status
-            </Link>
+            {navLink("explore")}
+            {navLink("history")}
+            {shamwariEnabled && navLink("shamwari")}
+            {navLink("aviation")}
+            {navLink("embed")}
+            {navLink("developers")}
+            {navLink("status")}
           </div>
 
           {/* Company */}
           <div className={col}>
             <p className={heading}>Company</p>
-            <Link href="/about" prefetch={false} className={link}>
-              About
-            </Link>
-            <Link href="/help" prefetch={false} className={link}>
-              Help
-            </Link>
-            <Link href="/releases" prefetch={false} className={link}>
-              Release notes
-            </Link>
+            {navLink("about")}
+            {navLink("help")}
+            {navLink("releases")}
             <a
               href="https://docs.nyuchi.com/mukoko-weather/user-guide/"
               target="_blank"
@@ -135,12 +134,8 @@ export function Footer() {
             >
               Docs
             </a>
-            <Link href="/privacy" prefetch={false} className={link}>
-              Privacy
-            </Link>
-            <Link href="/terms" prefetch={false} className={link}>
-              Terms
-            </Link>
+            {navLink("privacy")}
+            {navLink("terms")}
             <a href="mailto:support@mukoko.com" className={link}>
               Contact
             </a>
@@ -166,6 +161,22 @@ export function Footer() {
               Nyuchi Africa
             </a>
             <a
+              href="https://www.bundu.org"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={link}
+            >
+              Bundu Foundation
+            </a>
+            <a
+              href="https://standards.bundu.org"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={link}
+            >
+              Bundu standards
+            </a>
+            <a
               href="https://mukoko.com"
               target="_blank"
               rel="noopener noreferrer"
@@ -174,20 +185,44 @@ export function Footer() {
               Mukoko.com
             </a>
             <a
-              href="https://barstool.mukoko.com"
+              href="https://news.mukoko.com"
               target="_blank"
               rel="noopener noreferrer"
               className={link}
             >
-              Barstool
+              Mukoko News
             </a>
             <a
-              href="https://travel-info.co.zw"
+              href="https://events.mukoko.com"
               target="_blank"
               rel="noopener noreferrer"
               className={link}
             >
-              Travel
+              Mukoko Events
+            </a>
+            <a
+              href="https://kweli.mukoko.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={link}
+            >
+              Kweli
+            </a>
+            <a
+              href="https://lingo.mukoko.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={link}
+            >
+              Mukoko Lingo
+            </a>
+            <a
+              href="https://www.bushtrade.co.zw"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={link}
+            >
+              BushTrade
             </a>
           </div>
         </div>
@@ -209,7 +244,8 @@ export function Footer() {
           {/* Model attribution (issue #246) — required by the CC BY 4.0
               licences of ECMWF open data, DWD and Open-Meteo. */}
           <p className="text-sm text-text-tertiary">
-            Weather data: ECMWF, NOAA, DWD, ECCC, Météo-France via{" "}
+            Weather data: ECMWF, NOAA, DWD, ECCC, Météo-France, UK Met Office,
+            CMA, JMA via{" "}
             <a
               href="https://open-meteo.com"
               target="_blank"
@@ -236,6 +272,16 @@ export function Footer() {
             >
               Tomorrow.io
             </a>
+            ; climate history:{" "}
+            <a
+              href="https://power.larc.nasa.gov"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="dik-dik hover:text-text-secondary transition-colors"
+            >
+              NASA POWER
+            </a>{" "}
+            (NASA LaRC POWER Project) and Open-Meteo ERA5
           </p>
         </div>
       </div>
