@@ -1,6 +1,9 @@
 import { cache } from "react";
 import type { Metadata } from "next";
-import Link from "next/link";
+import { trail } from "@/components/layout/Breadcrumb";
+import { ExploreCard } from "@/components/explore/ExploreCard";
+import { CountPill } from "@/components/explore/CountPill";
+import { SITE_URL } from "@/lib/site";
 import { notFound } from "next/navigation";
 import { PageShell } from "@/components/layout/PageShell";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -32,7 +35,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${flag} ${name} Weather | mukoko weather`,
     description: `Browse weather forecasts across provinces and cities in ${name}.`,
     alternates: {
-      canonical: `https://weather.mukoko.com/explore/country/${code.toLowerCase()}`,
+      canonical: `${SITE_URL}/explore/country/${code.toLowerCase()}`,
     },
   };
 }
@@ -59,12 +62,11 @@ export default async function CountryDetailPage({ params }: Props) {
   return (
     <PageShell
       width="wide"
-      breadcrumb={[
-        { label: "Home", href: "/" },
+      breadcrumb={trail(
         { label: "Explore", href: "/explore" },
         { label: "Countries", href: "/explore/country" },
         { label: country.name },
-      ]}
+      )}
     >
       <div className="flex items-center gap-3">
         <span className="text-4xl" aria-hidden="true">
@@ -84,24 +86,17 @@ export default async function CountryDetailPage({ params }: Props) {
           No locations available here yet.
         </EmptyState>
       ) : (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="herd-grid mt-8">
           {provinces.map((province) => {
             if (province.locationCount === 0) return null;
             return (
-              <Link
+              <ExploreCard
                 key={province.slug}
                 href={`/explore/country/${code.toLowerCase()}/${province.slug}`}
-                className="group card-interactive rounded-[var(--radius-card)] bg-surface-card p-5 shadow-sm"
-              >
-                <div className="flex items-start justify-between">
-                  <h2 className="giraffe group-hover:text-primary transition-colors">
-                    {province.name}
-                  </h2>
-                  <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-base font-medium text-primary shrink-0 ml-2">
-                    {province.locationCount}
-                  </span>
-                </div>
-              </Link>
+                as="h2"
+                title={province.name}
+                badge={<CountPill>{province.locationCount}</CountPill>}
+              />
             );
           })}
         </div>

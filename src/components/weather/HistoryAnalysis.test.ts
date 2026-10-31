@@ -121,8 +121,7 @@ describe("HistoryAnalysis", () => {
       resolve(__dirname, "HistoryAnalysis.tsx"),
       "utf-8",
     );
-    expect(source).toContain('role="status"');
-    expect(source).toContain("sr-only");
+    expect(source).toContain("<LoadingNotice");
   });
 
   it("uses global styles only — no hardcoded colors", async () => {

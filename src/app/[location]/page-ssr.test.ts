@@ -17,7 +17,7 @@ const body = page.slice(
 describe("LocationPage — parallel SSR lookups", () => {
   it("starts country, season and user before awaiting the weather", () => {
     const started = body.indexOf("const sideData = Promise.all([");
-    const weather = body.indexOf("await getWeatherForLocation(");
+    const weather = body.indexOf("await loadLocationWeather(");
     expect(started).toBeGreaterThan(-1);
     expect(weather).toBeGreaterThan(-1);
     expect(started).toBeLessThan(weather);

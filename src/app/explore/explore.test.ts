@@ -122,9 +122,10 @@ describe("explore/loading.tsx — skeleton quality", () => {
     expect(exploreShell).toContain('aria-busy="true"');
   });
 
-  it("explore loading renders multiple card skeletons", () => {
+  it("explore loading renders multiple card skeletons in a shared stack", () => {
     // Should render 8 or more skeleton cards
-    expect(exploreLoading).toContain("Array.from");
+    expect(exploreLoading).toContain("SkeletonStack");
+    expect(exploreLoading).toContain("count={8}");
   });
 
   it("explore tag loading renders province group skeletons", () => {
@@ -153,28 +154,40 @@ describe("explore — shared breadcrumb, empty state and loading shell", () => {
       expect(source).toContain(
         'import { PageShell } from "@/components/layout/PageShell"',
       );
-      expect(source).toContain("breadcrumb={[");
+      expect(source).toMatch(/breadcrumb=\{(trail\(|\[)/);
       expect(source).not.toContain('aria-label="Breadcrumb"');
       expect(source).not.toContain("<ol className");
     }
   });
 
   it("explore pages keep an accessible crumb trail with Home and Explore links", () => {
+    const breadcrumb = readFileSync(
+      resolve(__dirname, "../../components/layout/Breadcrumb.tsx"),
+      "utf-8",
+    );
+    expect(breadcrumb).toContain('label: "Home", href: "/"');
     for (const source of Object.values(pages)) {
-      expect(source).toContain('{ label: "Home", href: "/" }');
-      expect(source).toContain('{ label: "Explore"');
+      expect(source).toContain(
+        'import { trail } from "@/components/layout/Breadcrumb"',
+      );
+      expect(source).toContain('label: "Explore"');
     }
   });
 
-  it("explore link cards use .card-interactive instead of a hand-rolled hover chain", () => {
+  it("explore link cards use the shared ExploreCard (card-interactive baobab)", () => {
     for (const source of Object.values(pages)) {
       expect(source).not.toContain("hover:bg-surface-card/80");
     }
-    expect(pages.index).toContain("card-interactive");
-    expect(pages.tag).toContain("card-interactive");
-    expect(pages.country).toContain("card-interactive");
-    expect(pages.countryCode).toContain("card-interactive");
-    expect(pages.province).toContain("card-interactive");
+    const card = readFileSync(
+      resolve(__dirname, "../../components/explore/ExploreCard.tsx"),
+      "utf-8",
+    );
+    expect(card).toContain("card-interactive baobab");
+    expect(pages.index).toContain("ExploreCard");
+    expect(pages.tag).toContain("ExploreCard");
+    expect(pages.country).toContain("ExploreCard");
+    expect(pages.countryCode).toContain("ExploreCard");
+    expect(pages.province).toContain("ExploreCard");
   });
 
   it("empty-list states use the shared EmptyState primitive", () => {

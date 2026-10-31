@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { PageShell } from "@/components/layout/PageShell";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { requireUser } from "@/lib/auth";
 import { HistoryDashboard } from "./HistoryDashboard";
 import { SITE_URL } from "@/lib/site";
@@ -34,11 +35,10 @@ export default async function HistoryPage() {
   await requireUser("/history"); // redirects anon users to sign-in, returns here after
   return (
     <PageShell width="wide">
-      <h1 className="elephant">Historical Weather Data</h1>
-      <p className="gazelle mt-3">
-        Explore recorded weather data worldwide. Select a location and time
-        period to view temperature trends, precipitation, and climate patterns.
-      </p>
+      <PageHeader
+        title="Historical Weather Data"
+        intro="Explore recorded weather data worldwide. Select a location and time period to view temperature trends, precipitation, and climate patterns."
+      />
       <HistoryDashboard />
     </PageShell>
   );

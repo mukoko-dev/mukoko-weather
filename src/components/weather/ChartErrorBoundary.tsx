@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/inline-error";
 import { Component, type ReactNode } from "react";
 import { reportErrorToAnalytics } from "@/lib/observability";
 
@@ -43,18 +44,11 @@ export class ChartErrorBoundary extends Component<Props, State> {
         this.props.name,
       );
       return (
-        <div
-          role="alert"
-          className="rounded-[var(--radius-card)] bg-surface-card p-[var(--space-card)] text-center text-base text-text-tertiary"
-        >
-          <p>Unable to display {this.props.name}.</p>
-          <button
-            onClick={() => this.setState({ hasError: false })}
-            className="dikdik mt-2"
-          >
-            Try again
-          </button>
-        </div>
+        <InlineError
+          tone="quiet"
+          message={`Unable to display ${this.props.name}.`}
+          onRetry={() => this.setState({ hasError: false })}
+        />
       );
     }
 

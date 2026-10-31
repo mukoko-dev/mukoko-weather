@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { PageShell } from "@/components/layout/PageShell";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { trail } from "@/components/layout/Breadcrumb";
+import { ExploreCard } from "@/components/explore/ExploreCard";
 import { getAllCountries } from "@/lib/db";
 import { getFlagEmoji } from "@/lib/countries";
 import { logError } from "@/lib/observability";
@@ -61,18 +63,19 @@ export default async function ExploreCountryPage() {
   return (
     <PageShell
       width="wide"
-      breadcrumb={[
-        { label: "Home", href: "/" },
+      breadcrumb={trail(
         { label: "Explore", href: "/explore" },
         { label: "Countries" },
-      ]}
+      )}
     >
-      <h1 className="elephant">Browse by Country</h1>
-      <p className="gazelle mt-2">
-        {countries.length > 0
-          ? `${countries.length} countries worldwide`
-          : "No countries available yet — check back soon."}
-      </p>
+      <PageHeader
+        title="Browse by Country"
+        intro={
+          countries.length > 0
+            ? `${countries.length} countries worldwide`
+            : "No countries available yet — check back soon."
+        }
+      />
 
       {sortedRegions.map((region) => (
         <section
@@ -86,20 +89,20 @@ export default async function ExploreCountryPage() {
           >
             {region}
           </h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="herd-grid">
             {byRegion[region].map((country) => (
-              <Link
+              <ExploreCard
                 key={country.code}
                 href={`/explore/country/${country.code.toLowerCase()}`}
-                className="group card-interactive pangolin flex items-center gap-3"
-              >
-                <span className="text-2xl" aria-hidden="true">
-                  {getFlagEmoji(country.code)}
-                </span>
-                <span className="font-medium text-text-primary group-hover:text-primary transition-colors">
-                  {country.name}
-                </span>
-              </Link>
+                title={
+                  <span className="inline-flex items-center gap-3">
+                    <span className="text-2xl" aria-hidden="true">
+                      {getFlagEmoji(country.code)}
+                    </span>
+                    {country.name}
+                  </span>
+                }
+              />
             ))}
           </div>
         </section>

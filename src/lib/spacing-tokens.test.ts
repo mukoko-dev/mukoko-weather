@@ -78,10 +78,11 @@ describe("cards take their padding from --space-card", () => {
 
   it("the shared error fallback uses the card padding token", () => {
     const src = readFileSync(
-      join(SRC, "components/weather/ChartErrorBoundary.tsx"),
+      join(SRC, "components/ui/inline-error.tsx"),
       "utf-8",
     );
-    expect(src).toContain("p-[var(--space-card)]");
+    // the quiet tone is a .acacia card, whose padding is --space-card
+    expect(src).toContain("acacia");
   });
 });
 

@@ -12,6 +12,8 @@ import { isFeatureEnabled } from "@/lib/feature-flags";
 import { Noto_Sans, Noto_Serif, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { SITE_URL } from "@/lib/site";
+import { breadcrumbJsonLd } from "@/lib/json-ld";
+import { JsonLd } from "@/components/layout/JsonLd";
 
 // Brand typography, self-hosted through next/font (served from /_next/static,
 // no request to Google at runtime). Never put a fonts.googleapis.com
@@ -314,19 +316,10 @@ export default async function RootLayout({
   };
 
   // BreadcrumbList for site hierarchy — root level
-  const breadcrumbSchema = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    "@id": `${SITE_URL}/#breadcrumb`,
-    itemListElement: [
-      {
-        "@type": "ListItem",
-        position: 1,
-        name: "Home",
-        item: SITE_URL,
-      },
-    ],
-  };
+  const breadcrumbSchema = breadcrumbJsonLd([], {
+    root: "Home",
+    id: `${SITE_URL}/#breadcrumb`,
+  });
 
   return (
     <html
@@ -362,17 +355,14 @@ export default async function RootLayout({
         <meta name="format-detection" content="telephone=no" />
         <link rel="manifest" href="/manifest.json" />
         {/* Favicons come from `metadata.icons` above, which is the mukoko-news set. */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify([
-              webAppSchema,
-              orgSchema,
-              webSiteSchema,
-              siteNavSchema,
-              breadcrumbSchema,
-            ]),
-          }}
+        <JsonLd
+          data={[
+            webAppSchema,
+            orgSchema,
+            webSiteSchema,
+            siteNavSchema,
+            breadcrumbSchema,
+          ]}
         />
       </head>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">

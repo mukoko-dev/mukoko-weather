@@ -2,6 +2,10 @@ import { Suspense } from "react";
 import { Metadata } from "next";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/PageShell";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { trail } from "@/components/layout/Breadcrumb";
+import { ExploreCard } from "@/components/explore/ExploreCard";
+import { CountPill } from "@/components/explore/CountPill";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getTagCountsAndStats, getFeaturedTagsFromDb } from "@/lib/db";
 import { logError } from "@/lib/observability";
@@ -57,13 +61,13 @@ export default async function ExplorePage() {
   return (
     <PageShell
       width="wide"
-      breadcrumb={[{ label: "Home", href: "/" }, { label: "Explore" }]}
+      breadcrumb={trail({ label: "Explore" })}
       className="animate-fade-in overflow-x-clip"
     >
-      <h1 className="elephant">Explore</h1>
-      <p className="gazelle mt-3">
-        Browse weather locations worldwide by category, country, and province.
-      </p>
+      <PageHeader
+        title="Explore"
+        intro="Browse weather locations worldwide by category, country, and province."
+      />
 
       {/* AI Search */}
       <Suspense fallback={null}>
@@ -80,10 +84,7 @@ export default async function ExplorePage() {
           title="Ask Shamwari"
           description="Chat with our AI weather assistant for real-time insights and activity advice"
           action={
-            <Link
-              href="/shamwari"
-              className="press-scale shrink-0 inline-flex items-center gap-2 rounded-[var(--radius-sm)] bg-primary px-4 py-2 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-all focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)]"
-            >
+            <Link href="/shamwari" className="kudu-sm">
               Start chatting
             </Link>
           }
@@ -106,29 +107,23 @@ export default async function ExplorePage() {
           </EmptyState>
         )}
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="herd-grid mt-6">
           {tagCounts.map(({ tag, count }) => {
             const meta = tagMeta.get(tag);
             if (!meta) return null;
 
             return (
-              <Link
+              <ExploreCard
                 key={tag}
                 href={`/explore/${tag}`}
-                className="group card-interactive baobab p-5"
+                as="h3"
+                title={meta.label}
+                badge={<CountPill>{count}</CountPill>}
               >
-                <div className="flex items-start justify-between">
-                  <h3 className="giraffe group-hover:text-primary transition-colors">
-                    {meta.label}
-                  </h3>
-                  <span className="rounded-full bg-primary/10 px-2.5 py-1 text-base font-medium text-primary">
-                    {count}
-                  </span>
-                </div>
                 <p className="mt-2 text-base text-text-secondary line-clamp-2">
                   {meta.description}
                 </p>
-              </Link>
+              </ExploreCard>
             );
           })}
         </div>
@@ -138,10 +133,7 @@ export default async function ExplorePage() {
           title="Browse by Country"
           description="Explore weather worldwide — grouped by country and province"
           action={
-            <Link
-              href="/explore/country"
-              className="press-scale shrink-0 inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-primary px-4 py-2 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-all focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)]"
-            >
+            <Link href="/explore/country" className="kudu-sm">
               Browse countries
             </Link>
           }

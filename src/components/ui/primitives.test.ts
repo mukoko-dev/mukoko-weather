@@ -438,7 +438,11 @@ describe("Spinner", () => {
     ];
     for (const file of callSites) {
       const source = readFileSync(resolve(__dirname, file), "utf-8");
-      expect(source).toContain("<Spinner");
+      // HistoryAnalysis and RecentReports render the shared LoadingNotice,
+      // which wraps the Spinner primitive.
+      expect(
+        source.includes("<Spinner") || source.includes("<LoadingNotice"),
+      ).toBe(true);
       expect(source).not.toContain("animate-spin rounded-full border-2");
     }
   });

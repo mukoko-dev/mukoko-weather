@@ -41,9 +41,9 @@ describe("explore not-found pages", () => {
     ["country", country],
     ["province", province],
   ] as const) {
-    it(`${name}: renders NotFoundView with the shared explore actions`, () => {
-      expect(src).toContain("NotFoundView");
-      expect(src).toContain("EXPLORE_NOT_FOUND_ACTIONS");
+    it(`${name}: renders ExploreNotFound (shared explore actions in NotFoundView)`, () => {
+      expect(src).toContain("ExploreNotFound");
+      expect(view).toContain("EXPLORE_NOT_FOUND_ACTIONS");
       expect(src).not.toContain("<Header");
       expect(src).not.toContain("<Footer");
       expect(src).not.toMatch(/id="main-content"/);

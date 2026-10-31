@@ -1,6 +1,9 @@
 import { cache } from "react";
 import type { Metadata } from "next";
-import Link from "next/link";
+import { trail } from "@/components/layout/Breadcrumb";
+import { ExploreCard } from "@/components/explore/ExploreCard";
+import { TagPill } from "@/components/explore/TagPill";
+import { SITE_URL } from "@/lib/site";
 import { notFound } from "next/navigation";
 import { PageShell } from "@/components/layout/PageShell";
 import {
@@ -46,7 +49,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${flag} ${provinceName}, ${countryName} Weather | mukoko weather`,
     description: `Browse weather forecasts for locations in ${provinceName}, ${countryName}.`,
     alternates: {
-      canonical: `https://weather.mukoko.com/explore/country/${code.toLowerCase()}/${provinceSlug}`,
+      canonical: `${SITE_URL}/explore/country/${code.toLowerCase()}/${provinceSlug}`,
     },
   };
 }
@@ -76,8 +79,7 @@ export default async function ProvinceDetailPage({ params }: Props) {
   return (
     <PageShell
       width="wide"
-      breadcrumb={[
-        { label: "Home", href: "/" },
+      breadcrumb={trail(
         { label: "Explore", href: "/explore" },
         { label: "Countries", href: "/explore/country" },
         {
@@ -85,7 +87,7 @@ export default async function ProvinceDetailPage({ params }: Props) {
           href: `/explore/country/${code.toLowerCase()}`,
         },
         { label: provinceName },
-      ]}
+      )}
     >
       <div className="flex items-center gap-3 mb-1">
         <span className="text-3xl" aria-hidden="true">
@@ -100,32 +102,25 @@ export default async function ProvinceDetailPage({ params }: Props) {
         </div>
       </div>
 
-      <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="herd-grid mt-8">
         {locations.map((loc) => (
-          <Link
+          <ExploreCard
             key={loc.slug}
             href={`/${loc.slug}`}
-            className="group card-interactive pangolin"
+            as="h2"
+            title={loc.name}
+            meta={
+              loc.elevation > 0
+                ? `${loc.elevation.toLocaleString()} m elevation`
+                : undefined
+            }
           >
-            <h2 className="font-medium text-text-primary group-hover:text-primary transition-colors">
-              {loc.name}
-            </h2>
-            {loc.elevation > 0 && (
-              <p className="mt-0.5 text-base text-text-tertiary">
-                {loc.elevation.toLocaleString()} m elevation
-              </p>
-            )}
             <div className="mt-2 flex flex-wrap gap-1">
               {loc.tags.slice(0, 3).map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full bg-primary/10 px-2 py-0.5 text-base text-primary"
-                >
-                  {tag}
-                </span>
+                <TagPill key={tag}>{tag}</TagPill>
               ))}
             </div>
-          </Link>
+          </ExploreCard>
         ))}
       </div>
     </PageShell>

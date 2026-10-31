@@ -27,6 +27,7 @@ import {
   type HazeLevel,
   type HazeResponse,
 } from "@/lib/haze";
+import { StatGrid } from "./StatGrid";
 
 /**
  * Location-aware haze panel (smoke, dust, urban smog, seasons, official PSI).
@@ -157,28 +158,16 @@ export function HazePanel({ lat, lon }: Props) {
         })}
       </div>
 
-      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <div className="meerkat">
-          <dt className="dove">Visibility</dt>
-          <dd className="text-base font-medium text-text-primary">
-            {formatVisibility(data.visibilityKm)}
-          </dd>
-        </div>
-        <div className="meerkat">
-          <dt className="dove">PM2.5</dt>
-          <dd className="text-base font-medium text-text-primary">
-            {formatMicrograms(data.pm25)}
-          </dd>
-        </div>
-        {showDust && (
-          <div className="meerkat">
-            <dt className="dove">Dust</dt>
-            <dd className="text-base font-medium text-text-primary">
-              {formatMicrograms(data.dust)}
-            </dd>
-          </div>
-        )}
-      </dl>
+      <StatGrid
+        columns={3}
+        items={[
+          { label: "Visibility", value: formatVisibility(data.visibilityKm) },
+          { label: "PM2.5", value: formatMicrograms(data.pm25) },
+          ...(showDust
+            ? [{ label: "Dust", value: formatMicrograms(data.dust) }]
+            : []),
+        ]}
+      />
 
       {peak && <p className="gazelle">Worst around {peak}</p>}
 

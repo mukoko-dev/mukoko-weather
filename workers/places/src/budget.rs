@@ -12,9 +12,6 @@ use weather_edge::now_ms;
 use worker::{Env, Request, Result};
 
 const DB: &str = "WEATHER_DB";
-/// Set by mukoko-weather-api to the caller's IP (this Worker has no public
-/// route, so only the API's service binding can set it).
-const CLIENT_IP_HEADER: &str = "X-Mukoko-Client-IP";
 /// Reserved for a verified short-lived token subject, once a verifier exists
 /// (the issuer is a platform responsibility, tracked in #148). Nothing sets or
 /// reads a subject yet: every caller is keyed by IP.
@@ -29,13 +26,9 @@ pub struct Caller {
 
 impl Caller {
     pub fn from_request(req: &Request) -> Caller {
-        let ip = req
-            .headers()
-            .get(CLIENT_IP_HEADER)
-            .ok()
-            .flatten()
-            .or_else(|| req.headers().get("CF-Connecting-IP").ok().flatten())
-            .unwrap_or_else(|| "unknown".into());
+        // The API's service binding stamps the visitor's address (this Worker
+        // has no public route); see `weather_edge::client_ip`.
+        let ip = weather_edge::client_ip(req).unwrap_or_else(|| "unknown".into());
         Caller {
             subject: NO_VERIFIED_SUBJECT,
             ip,

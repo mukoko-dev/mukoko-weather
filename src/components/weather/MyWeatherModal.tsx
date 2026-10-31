@@ -51,6 +51,7 @@ import {
 } from "@/lib/weather";
 import { t } from "@/lib/i18n";
 import { Spinner } from "@/components/ui/spinner";
+import { SelectRow } from "./SelectRow";
 import { workerUrl } from "@/lib/worker-url";
 
 /** Default category style for unknown categories */
@@ -836,19 +837,13 @@ function SettingsTab() {
         aria-label="Theme preference"
       >
         {THEME_OPTIONS.map((option) => (
-          <button
+          <SelectRow
             key={option.value}
-            role="radio"
-            aria-checked={theme === option.value}
-            onClick={() => {
+            selected={theme === option.value}
+            onSelect={() => {
               setTheme(option.value);
               trackEvent("theme_changed", { theme: option.value });
             }}
-            className={`press-scale flex w-full min-h-[var(--touch-target-min)] items-center gap-3 rounded-[var(--radius-card)] border-2 px-4 py-3 text-left transition-all ${
-              theme === option.value
-                ? "border-primary bg-primary/5 shadow-sm"
-                : "border-transparent bg-surface-base hover:border-text-tertiary/30"
-            }`}
           >
             <span
               className={
@@ -870,27 +865,7 @@ function SettingsTab() {
                 {option.description}
               </p>
             </div>
-            {theme === option.value && (
-              <span
-                className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary animate-[scale-in_200ms_ease-out]"
-                aria-hidden="true"
-              >
-                <svg
-                  width={12}
-                  height={12}
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  className="stroke-primary-foreground"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </span>
-            )}
-          </button>
+          </SelectRow>
         ))}
       </div>
 
@@ -952,43 +927,17 @@ function ModelSelector() {
           const isSelected =
             normalizeForecastModel(selectedForecastModel) === option.value;
           return (
-            <button
+            <SelectRow
               key={option.value}
-              role="radio"
-              aria-checked={isSelected}
-              onClick={() => setSelectedForecastModel(option.value)}
-              className={`press-scale flex w-full min-h-[var(--touch-target-min)] items-center gap-3 rounded-[var(--radius-card)] border-2 px-4 py-3 text-left transition-all ${
-                isSelected
-                  ? "border-primary bg-primary/5 shadow-sm"
-                  : "border-transparent bg-surface-base hover:border-text-tertiary/30"
-              }`}
+              selected={isSelected}
+              onSelect={() => setSelectedForecastModel(option.value)}
             >
               <p
                 className={`text-base font-medium ${isSelected ? "text-primary" : "text-text-primary"}`}
               >
                 {option.label}
               </p>
-              {isSelected && (
-                <span
-                  className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary animate-[scale-in_200ms_ease-out]"
-                  aria-hidden="true"
-                >
-                  <svg
-                    width={12}
-                    height={12}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    className="stroke-primary-foreground"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </span>
-              )}
-            </button>
+            </SelectRow>
           );
         })}
       </div>

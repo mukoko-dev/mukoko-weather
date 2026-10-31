@@ -74,19 +74,28 @@ describe("[location] layout — real 404 for unknown slugs", () => {
 
   it("checks the slug before rendering children, outside loading.tsx", () => {
     const layout = read("[location]/layout.tsx");
-    expect(layout).toMatch(/await loadLocation\(slug\)/);
+    expect(layout).toMatch(/resolveLocationParam\(params\)/);
     expect(layout).toMatch(/notFound\(\)/);
     expect(layout).not.toMatch(/<Suspense/);
   });
 });
 
 describe("shared per-request location loader", () => {
-  it("is the one loadLocation the layout and page both import", () => {
+  it("is the one loadLocation the layout and page both reach, via resolveLocationParam", () => {
     expect(read("[location]/layout.tsx")).toMatch(
-      /import \{ loadLocation \} from "\.\/load-location"/,
+      /import \{ resolveLocationParam \} from "@\/lib\/load-location"/,
     );
     const page = read("[location]/page.tsx");
-    expect(page).toMatch(/import \{ loadLocation \} from "\.\/load-location"/);
+    expect(page).toMatch(
+      /import \{ resolveLocationParam \} from "@\/lib\/load-location"/,
+    );
+    const shared = readFileSync(
+      resolve(appDir, "../lib/load-location.ts"),
+      "utf-8",
+    );
+    expect(shared).toMatch(
+      /import \{ loadLocation \} from "@\/app\/\[location\]\/load-location"/,
+    );
     // A second local cache() wrapper would not dedupe with the layout's.
     expect(page).not.toMatch(/const loadLocation = cache/);
   });
@@ -95,7 +104,7 @@ describe("shared per-request location loader", () => {
     for (const sub of ["atmosphere", "forecast", "map"]) {
       const src = read(`[location]/${sub}/page.tsx`);
       expect(src).toMatch(
-        /import \{ loadLocation \} from "\.\.\/load-location"/,
+        /import \{ resolveLocationParam \} from "@\/lib\/load-location"/,
       );
       expect(src).not.toMatch(/getLocationFromDb/);
     }

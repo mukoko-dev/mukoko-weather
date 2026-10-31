@@ -190,9 +190,12 @@ describe("Header — mobile ⋯ menu holds the moved destinations", () => {
   });
 
   it("contains Explore, History, Aviation, My Weather and Use my location", () => {
-    expect(source).toMatch(/href="\/explore"[\s\S]*?\n\s*Explore\s*<\/Link>/);
-    expect(source).toMatch(/href="\/history"[\s\S]*?\n\s*History\s*<\/Link>/);
-    expect(source).toMatch(/href="\/aviation"[\s\S]*?\n\s*Aviation\s*<\/Link>/);
+    // The menu's destinations come from lib/nav-destinations (one list, one label each).
+    expect(source).toContain('navDestination("explore")');
+    expect(source).toContain('navDestination("history")');
+    expect(source).toContain('navDestination("aviation")');
+    expect(source).toContain("{navItems.map(");
+    expect(source).toMatch(/\{\s*\.\.\.navDestination\("history"\)/);
     expect(source).toMatch(
       /openMyWeather\(\);[\s\S]*?\n\s*My Weather\s*<\/button>/,
     );
@@ -200,8 +203,8 @@ describe("Header — mobile ⋯ menu holds the moved destinations", () => {
   });
 
   it("keeps Shamwari in the menu behind the shamwari_chat flag", () => {
-    expect(source).toContain("{shamwariEnabled && (");
-    expect(source).toContain('href="/shamwari"');
+    expect(source).toContain("...(shamwariEnabled");
+    expect(source).toContain('navDestination("shamwari")');
   });
 
   it("closes on item activation, outside click and Escape (returning focus)", () => {

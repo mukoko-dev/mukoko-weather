@@ -7,6 +7,8 @@ import type { WeatherData } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
 import { trackEvent } from "@/lib/analytics";
 import { SafeMarkdown } from "@/components/ui/safe-markdown";
+import { SkeletonLines } from "@/components/ui/skeleton";
+
 import { ShamwariSignInCTA } from "./ShamwariSignInCTA";
 
 /**
@@ -182,16 +184,10 @@ export function AISummary({ weather, location, user, onSummaryLoaded }: Props) {
 
         <div className="mt-3">
           {loading && (
-            <div
-              className="space-y-2"
-              role="status"
-              aria-label="Loading AI summary"
-            >
-              <div className="h-4 w-3/4 animate-pulse rounded bg-text-tertiary/20" />
-              <div className="h-4 w-full animate-pulse rounded bg-text-tertiary/20" />
-              <div className="h-4 w-2/3 animate-pulse rounded bg-text-tertiary/20" />
-              <span className="sr-only">Loading AI weather summary...</span>
-            </div>
+            <SkeletonLines
+              widths={["w-3/4", "w-full", "w-2/3"]}
+              label="Loading AI summary"
+            />
           )}
 
           {error && <p className="text-base text-text-secondary">{error}</p>}

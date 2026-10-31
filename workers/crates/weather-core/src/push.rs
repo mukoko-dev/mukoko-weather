@@ -8,7 +8,6 @@
 //! delivery. The in-app inbox is the record.
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 /// Push services we accept subscriptions from. An endpoint is a URL the
 /// server will POST to, so an open list would make the sender an SSRF tool.
@@ -139,7 +138,7 @@ pub fn validate_keys(p256dh: &str, auth: &str) -> Result<(), PushError> {
 /// The endpoint is canonicalised first (lower-case scheme and host, default
 /// port dropped) so the same subscription never hashes two ways.
 pub fn endpoint_id(endpoint: &str) -> String {
-    hex::encode(Sha256::digest(canonical_endpoint(endpoint).as_bytes()))
+    crate::crypto::sha256_hex(&canonical_endpoint(endpoint))
 }
 
 /// Lower-case the scheme and host and drop `:443`; the path and query keep

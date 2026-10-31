@@ -63,3 +63,23 @@ export function NotFoundView({
     </PageShell>
   );
 }
+
+/**
+ * The explore not-found page: the shared actions, with only the copy varying.
+ * The country and province not-found routes are thin wrappers over it.
+ */
+export function ExploreNotFound({
+  title,
+  message,
+}: {
+  title: string;
+  message: string;
+}) {
+  return (
+    <NotFoundView
+      title={title}
+      message={message}
+      actions={EXPLORE_NOT_FOUND_ACTIONS}
+    />
+  );
+}

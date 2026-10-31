@@ -6,7 +6,7 @@ use weather_core::jobs::{
 };
 use weather_core::places::resolve_seed;
 use weather_core::Place;
-use weather_edge::{now, now_ms};
+use weather_edge::{now, now_ms, service};
 use worker::{console_log, D1PreparedStatement, Env, Error, Response, Result};
 
 use crate::{enqueue, DB, FORECAST, RAW_BUCKET};
@@ -43,11 +43,8 @@ fn places(slugs: &[String]) -> Vec<&'static Place> {
 
 /// `GET` a path on the forecast Worker; `None` unless it answers `200`.
 async fn ask_forecast(env: &Env, path_and_query: &str) -> Result<Option<Response>> {
-    let fetcher = env.service(FORECAST)?;
-    Ok(fetcher
-        .fetch(format!("https://forecast{path_and_query}"), None)
-        .await
-        .ok()
+    Ok(service::ask(env, FORECAST, path_and_query)
+        .await?
         .filter(|r| r.status_code() == 200))
 }
 

@@ -1477,6 +1477,19 @@ body {
     @apply rounded-[var(--radius-card)] bg-surface-dim p-3;
   }
 
+  /* .herd-grid — a responsive card grid: one column, two from sm, three from
+     lg, gaps of --space-stack (the heading-to-card rhythm). Use for a set of
+     sibling cards, not for a page stack (that is .herd). */
+  .herd-grid {
+    @apply grid grid-cols-1 gap-[var(--space-stack)] sm:grid-cols-2 lg:grid-cols-3;
+  }
+
+  /* .oribi — uppercase mono eyebrow label (a small caption above a value or
+     heading, e.g. a card's station name or a METAR/TAF title). */
+  .oribi {
+    @apply font-mono text-xs uppercase tracking-wide text-text-secondary;
+  }
+
   .chameleon {
     @apply animate-pulse rounded-[var(--radius-card)]
            border border-surface-dim bg-surface-card shadow-sm;

@@ -6,7 +6,7 @@ import { trackEvent } from "@/lib/analytics";
 import { CloudSunIcon, MegaphoneIcon } from "@/lib/weather-icons";
 import { getReportTypeInfo } from "@/lib/report-types";
 import { fetchJson } from "@/lib/fetch-json";
-import { Spinner } from "@/components/ui/spinner";
+import { LoadingNotice } from "@/components/ui/loading-notice";
 import { Button } from "@/components/ui/button";
 import { formatRelative } from "@/lib/i18n";
 
@@ -132,13 +132,12 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
       </div>
 
       {loading && (
-        <div className="flex items-center gap-2 py-4" role="status">
-          <Spinner className="border-mineral-copper" />
-          <span className="text-base text-text-secondary">
-            Loading reports...
-          </span>
-          <span className="sr-only">Loading community weather reports</span>
-        </div>
+        <LoadingNotice
+          className="py-4"
+          label="Loading reports..."
+          textClassName="text-base text-text-secondary"
+          spinnerClassName="border-mineral-copper"
+        />
       )}
 
       {!loading && reports.length > 0 && (

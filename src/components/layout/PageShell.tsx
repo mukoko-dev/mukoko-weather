@@ -5,6 +5,7 @@ import type { BreadcrumbItem } from "@/components/layout/Breadcrumb";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { HeaderSkeleton } from "@/components/layout/HeaderSkeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 /**
@@ -103,5 +104,43 @@ export function PageShellSkeleton({
       </main>
       <Footer />
     </>
+  );
+}
+
+/**
+ * The title and intro placeholder every list or detail loader shares: a
+ * heading-sized bar over a line of intro text, in the same spacing as the
+ * PageHeader it stands for.
+ */
+export function PageHeaderSkeleton() {
+  return (
+    <>
+      <Skeleton className="mb-3 h-9 w-56" />
+      <Skeleton className="mb-8 h-4 w-80 max-w-full" />
+    </>
+  );
+}
+
+/**
+ * `count` skeleton items in one wrapper (a grid class or a stack). `children`
+ * renders item `index`; the default is one card-height bar.
+ */
+export function SkeletonStack({
+  count,
+  className,
+  children,
+}: {
+  count: number;
+  className?: string;
+  children?: (index: number) => React.ReactNode;
+}) {
+  return (
+    <div className={className}>
+      {Array.from({ length: count }, (_, i) => (
+        <React.Fragment key={i}>
+          {children ? children(i) : <Skeleton className="h-16 w-full" />}
+        </React.Fragment>
+      ))}
+    </div>
   );
 }

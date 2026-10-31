@@ -171,7 +171,6 @@ describe("canonical URLs — every page sets its own canonical", () => {
   // Pages that MUST have their own canonical to avoid GSC errors
   const pagesWithCanonicals: [string, string][] = [
     ["page.tsx", "canonical: `${SITE_URL}/`"], // home IS the current-location page — canonical is itself
-    ["[location]/page.tsx", "loc.slug"], // dynamic locations
     ["explore/page.tsx", "/explore"],
     ["shamwari/page.tsx", "/shamwari"],
     ["history/page.tsx", "/history"],
@@ -193,6 +192,23 @@ describe("canonical URLs — every page sets its own canonical", () => {
     });
   }
 
+  // Location pages set their canonical through the shared builder, which
+  // uses SITE_URL + path (src/lib/metadata.ts).
+  it("[location] pages set their canonical through buildPageMetadata", () => {
+    const meta = readFileSync(
+      resolve(__dirname, "../lib/metadata.ts"),
+      "utf-8",
+    );
+    expect(meta).toContain("canonical: url");
+    expect(meta).toContain("const url = `${SITE_URL}${input.path}`");
+    const page = readFileSync(
+      resolve(__dirname, "[location]/page.tsx"),
+      "utf-8",
+    );
+    expect(page).toContain("buildPageMetadata(");
+    expect(page).toContain("path: `/${loc.slug}`");
+  });
+
   // Dynamic explore sub-routes must set canonicals in generateMetadata
   const dynamicExplorePages = [
     "explore/[tag]/page.tsx",
@@ -204,7 +220,7 @@ describe("canonical URLs — every page sets its own canonical", () => {
     it(`${file} sets a canonical in generateMetadata`, () => {
       const src = readFileSync(resolve(__dirname, file), "utf-8");
       expect(src).toContain("canonical");
-      expect(src).toContain("weather.mukoko.com");
+      expect(src).toContain("SITE_URL");
     });
   }
 });
@@ -268,8 +284,13 @@ describe("[location]/page.tsx — breadcrumb and JSON-LD schemas", () => {
     "utf-8",
   );
 
-  it("exports BreadcrumbList JSON-LD schema", () => {
-    expect(pageSource).toContain("BreadcrumbList");
+  it("builds its BreadcrumbList with the shared breadcrumbJsonLd helper", () => {
+    expect(pageSource).toContain("breadcrumbJsonLd(");
+    const helper = readFileSync(
+      resolve(__dirname, "../lib/json-ld.ts"),
+      "utf-8",
+    );
+    expect(helper).toContain('"@type": "BreadcrumbList"');
   });
 
   it("exports Place/WebPage JSON-LD schema with geo coordinates", () => {
@@ -283,7 +304,7 @@ describe("[location]/page.tsx — breadcrumb and JSON-LD schemas", () => {
   });
 });
 
-describe("JSON-LD script tags use safeJsonLd, never raw JSON.stringify", () => {
+describe("JSON-LD script tags go through JsonLd (safeJsonLd), never raw JSON.stringify", () => {
   // location.name is Nominatim-derived and therefore attacker-influenceable
   // (see src/lib/json-ld.ts) — a value containing "</script>" would break out
   // of the script element with a raw JSON.stringify. Every page that injects
@@ -297,10 +318,11 @@ describe("JSON-LD script tags use safeJsonLd, never raw JSON.stringify", () => {
   ];
 
   for (const file of locationPages) {
-    it(`${file} imports and uses safeJsonLd for its script tag(s)`, () => {
+    it(`${file} renders its JSON-LD through the JsonLd component`, () => {
       const src = readFileSync(resolve(__dirname, file), "utf-8");
-      expect(src).toContain('from "@/lib/json-ld"');
-      expect(src).toContain("safeJsonLd(");
+      expect(src).toContain('from "@/components/layout/JsonLd"');
+      expect(src).toContain("<JsonLd");
+      expect(src).not.toContain("dangerouslySetInnerHTML");
       expect(src).not.toMatch(
         /dangerouslySetInnerHTML=\{\{\s*__html:\s*JSON\.stringify/,
       );

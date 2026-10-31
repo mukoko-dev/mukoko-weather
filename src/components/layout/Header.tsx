@@ -12,6 +12,7 @@ import { MobileNav } from "@/components/layout/MobileNav";
 import { useChromeClaimed } from "@/components/layout/chrome-context";
 import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { navDestination } from "@/lib/nav-destinations";
 import { trackEvent } from "@/lib/analytics";
 import { initialsFor, type PublicUser } from "@/lib/user-display";
 import {
@@ -185,6 +186,16 @@ export function SiteHeader() {
   const isHistory = pathname === "/history";
   const isAviation = pathname === "/aviation";
   const shamwariEnabled = isFeatureEnabled("shamwari_chat");
+  // Shared by the desktop text nav and the mobile ⋯ menu (lib/nav-destinations).
+  // Shamwari is paused: it is omitted while FLAGS.shamwari_chat is off.
+  const navItems = [
+    { ...navDestination("explore"), active: isExplore },
+    ...(shamwariEnabled
+      ? [{ ...navDestination("shamwari"), active: pathname === "/shamwari" }]
+      : []),
+    { ...navDestination("history"), active: isHistory },
+    { ...navDestination("aviation"), active: isAviation },
+  ];
   const mapSlug = currentLocationSlug(pathname, selectedLocation);
   const mapHref = mapSlug ? `/${mapSlug}/map` : "/explore";
 
@@ -222,21 +233,7 @@ export function SiteHeader() {
             className="hidden sm:flex items-center gap-6"
             aria-label="Main navigation"
           >
-            {[
-              { href: "/explore", label: "Explore", active: isExplore },
-              // Paused as a standalone destination — see FLAGS.shamwari_chat.
-              ...(shamwariEnabled
-                ? [
-                    {
-                      href: "/shamwari",
-                      label: "Shamwari",
-                      active: pathname === "/shamwari",
-                    },
-                  ]
-                : []),
-              { href: "/history", label: "History", active: isHistory },
-              { href: "/aviation", label: "Aviation", active: isAviation },
-            ].map(({ href, label, active }) => (
+            {navItems.map(({ href, label, active }) => (
               <Link
                 key={href}
                 href={href}
@@ -312,54 +309,19 @@ export function SiteHeader() {
                     className="absolute right-0 top-full z-40 mt-2 w-56 rounded-[var(--radius-card)] border border-text-tertiary/10 bg-surface-card p-2 shadow-lg"
                   >
                     <ul className="flex flex-col">
-                      <li>
-                        <Link
-                          href="/explore"
-                          prefetch={false}
-                          aria-current={isExplore ? "page" : undefined}
-                          onClick={() => setMenuOpen(false)}
-                          className={MENU_ITEM_CLASS}
-                        >
-                          Explore
-                        </Link>
-                      </li>
-                      {shamwariEnabled && (
-                        <li>
+                      {navItems.map(({ href, label, active }) => (
+                        <li key={href}>
                           <Link
-                            href="/shamwari"
+                            href={href}
                             prefetch={false}
-                            aria-current={
-                              pathname === "/shamwari" ? "page" : undefined
-                            }
+                            aria-current={active ? "page" : undefined}
                             onClick={() => setMenuOpen(false)}
                             className={MENU_ITEM_CLASS}
                           >
-                            Shamwari
+                            {label}
                           </Link>
                         </li>
-                      )}
-                      <li>
-                        <Link
-                          href="/history"
-                          prefetch={false}
-                          aria-current={isHistory ? "page" : undefined}
-                          onClick={() => setMenuOpen(false)}
-                          className={MENU_ITEM_CLASS}
-                        >
-                          History
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          href="/aviation"
-                          prefetch={false}
-                          aria-current={isAviation ? "page" : undefined}
-                          onClick={() => setMenuOpen(false)}
-                          className={MENU_ITEM_CLASS}
-                        >
-                          Aviation
-                        </Link>
-                      </li>
+                      ))}
                       <li>
                         <button
                           type="button"

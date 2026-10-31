@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
+import { SITE_URL } from "@/lib/site";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/PageShell";
+import { ProsePage, ProseSection } from "@/components/layout/ProsePage";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
     "Privacy Policy for mukoko weather. Learn how we handle your data — spoiler: we collect almost nothing.",
   alternates: {
-    canonical: "https://weather.mukoko.com/privacy",
+    canonical: `${SITE_URL}/privacy`,
   },
 };
 
@@ -15,14 +17,8 @@ export default function PrivacyPage() {
   return (
     <>
       <PageShell>
-        <h1 className="elephant">Privacy Policy</h1>
-        <p className="mt-2 text-base text-text-tertiary">
-          Last updated: October 2026
-        </p>
-
-        <div className="mt-8 space-y-8 text-text-secondary leading-relaxed">
-          <section>
-            <h2 className="eland">Introduction</h2>
+        <ProsePage title="Privacy Policy" updated="Last updated: October 2026">
+          <ProseSection heading="Introduction">
             <p className="mt-3">
               This Privacy Policy explains how{" "}
               <strong className="text-text-primary">Mukoko Africa</strong>, a
@@ -42,11 +38,9 @@ export default function PrivacyPage() {
               We are committed to your privacy. mukoko weather is designed to
               provide weather intelligence with minimal data collection.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">Information we collect</h2>
-
+          <ProseSection heading="Information we collect">
             <h3 className="mt-4 font-semibold text-text-primary">
               Information you provide
             </h3>
@@ -177,10 +171,9 @@ export default function PrivacyPage() {
               We do not use advertising pixels, fingerprinting technologies, or
               any tracking beyond Google Analytics and Vercel Analytics.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">Third-party services</h2>
+          <ProseSection heading="Third-party services">
             <p className="mt-3">
               mukoko weather uses the following third-party services:
             </p>
@@ -337,10 +330,9 @@ export default function PrivacyPage() {
                 </dd>
               </div>
             </dl>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">Data retention</h2>
+          <ProseSection heading="Data retention">
             <p className="mt-3">
               We do not retain personal data. Specific retention periods:
             </p>
@@ -362,10 +354,9 @@ export default function PrivacyPage() {
                 (typically 1 hour)
               </li>
             </ul>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">International users</h2>
+          <ProseSection heading="International users">
             <p className="mt-3">
               mukoko weather serves users globally. If you access the Service
               from outside Zimbabwe, data may be processed in countries other
@@ -374,19 +365,17 @@ export default function PrivacyPage() {
               transfers. We apply the same privacy protections to all users
               regardless of location.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">Children&apos;s privacy</h2>
+          <ProseSection heading="Children's privacy">
             <p className="mt-3">
               mukoko weather is a general-audience weather service. We do not
               knowingly collect any personal information from anyone, including
               children under 13.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">Your rights</h2>
+          <ProseSection heading="Your rights">
             <p className="mt-3">
               Since we collect no personal data tied to your identity, there is
               nothing to access, correct, or delete. If you wish to remove your
@@ -394,20 +383,18 @@ export default function PrivacyPage() {
               storage achieves this. For any other requests, contact us at the
               address below.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">Changes to this policy</h2>
+          <ProseSection heading="Changes to this policy">
             <p className="mt-3">
               We may update this Privacy Policy from time to time. Changes will
               be posted on this page with an updated date. Your continued use of
               the Service after changes constitutes acceptance of the revised
               policy.
             </p>
-          </section>
+          </ProseSection>
 
-          <section>
-            <h2 className="eland">Contact</h2>
+          <ProseSection heading="Contact">
             <p className="mt-3">
               For privacy-related questions or concerns, contact us at:
             </p>
@@ -426,8 +413,8 @@ export default function PrivacyPage() {
             <p className="mt-3 text-base text-text-tertiary">
               Mukoko Africa, a division of Nyuchi Africa (PVT) Ltd
             </p>
-          </section>
-        </div>
+          </ProseSection>
+        </ProsePage>
 
         <nav className="mt-10 flex gap-4 text-base" aria-label="Legal pages">
           <Link href="/about" className="sunbird">

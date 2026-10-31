@@ -16,11 +16,12 @@
  *   7. Footer        — product + version line
  */
 
-import Link from "next/link";
-import { ChevronRight, LogOut, SlidersHorizontal } from "lucide-react";
+import { LogOut, SlidersHorizontal } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import type { ProfileOrganization } from "@/lib/profile";
 import { ProfileIdentity } from "@/components/profile/ProfileIdentity";
+import { ProfileGroup } from "@/components/profile/ProfileGroup";
+import { GroupedRow } from "@/components/profile/GroupedRow";
 import { ProfileOrganizations } from "@/components/profile/ProfileOrganizations";
 import { ProfileDevices } from "@/components/profile/ProfileDevices";
 import { ProfileAppearance } from "@/components/profile/ProfileAppearance";
@@ -56,30 +57,14 @@ export function ProfileClient({
         pictureUrl={user.pictureUrl}
       />
 
-      <section aria-labelledby="preferences-heading" className="guineafowl">
-        <h2 id="preferences-heading" className="guineafowl-heading">
-          Preferences
-        </h2>
-        <div className="guineafowl-card">
-          <button
-            type="button"
-            onClick={() => openMyWeather()}
-            className="guineafowl-row"
-          >
-            <span className="flex min-w-0 items-center gap-3">
-              <SlidersHorizontal
-                className="h-5 w-5 shrink-0 text-text-secondary"
-                aria-hidden="true"
-              />
-              <span className="min-w-0 truncate">My Weather</span>
-            </span>
-            <span className="flex shrink-0 items-center gap-2 text-text-tertiary">
-              <span className="text-sm">{preferencesValue}</span>
-              <ChevronRight className="h-4 w-4" aria-hidden="true" />
-            </span>
-          </button>
-        </div>
-      </section>
+      <ProfileGroup id="preferences-heading" title="Preferences">
+        <GroupedRow
+          icon={SlidersHorizontal}
+          label="My Weather"
+          value={preferencesValue}
+          onClick={() => openMyWeather()}
+        />
+      </ProfileGroup>
 
       <ProfileOrganizations organizations={organizations} />
 
@@ -90,16 +75,14 @@ export function ProfileClient({
       <ProfileNavigation />
 
       <div className="guineafowl-card">
-        <Link
+        <GroupedRow
+          icon={LogOut}
+          label="Sign out"
           href="/auth/signout"
           prefetch={false}
-          className="guineafowl-row text-severity-severe"
-        >
-          <span className="flex min-w-0 items-center gap-3">
-            <LogOut className="h-5 w-5 shrink-0" aria-hidden="true" />
-            <span className="min-w-0 truncate">Sign out</span>
-          </span>
-        </Link>
+          tone="danger"
+          chevron={false}
+        />
       </div>
 
       <div className="dove mt-8 text-center">

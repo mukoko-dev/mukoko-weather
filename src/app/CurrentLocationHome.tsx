@@ -25,6 +25,7 @@ import { reconcileElevation } from "@/lib/location-elevation";
 import { trackEvent } from "@/lib/analytics";
 import { SearchIcon, NavigationIcon } from "@/lib/weather-icons";
 import { Spinner } from "@/components/ui/spinner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { LocationPromptCard } from "@/components/weather/LocationPromptCard";
 import { WeatherDashboard } from "./[location]/WeatherDashboard";
 import type { AISummaryUser } from "@/components/weather/AISummary";
@@ -451,9 +452,11 @@ export function CurrentLocationHome({ initial, user }: Props) {
           </div>
 
           {message && (
-            <p className="text-sm text-severity-moderate" role="alert">
-              {PROMPT_COPY[message]}
-            </p>
+            <Alert variant="warning">
+              <AlertDescription className="text-sm">
+                {PROMPT_COPY[message]}
+              </AlertDescription>
+            </Alert>
           )}
         </section>
       </div>

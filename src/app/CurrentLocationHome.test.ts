@@ -77,8 +77,15 @@ describe("CurrentLocationHome — silent-URL model", () => {
       resolve(__dirname, "../lib/current-slug.ts"),
       "utf-8",
     );
-    expect(helper).toContain("document.cookie = `lastLocation=${slug}");
-    expect(helper).toContain("max-age=2592000");
+    expect(helper).toContain(
+      "document.cookie = `${LAST_LOCATION_COOKIE}=${slug}",
+    );
+    expect(helper).toContain("max-age=${LAST_LOCATION_MAX_AGE_S}");
+    const lastLocation = readFileSync(
+      resolve(__dirname, "../lib/last-location.ts"),
+      "utf-8",
+    );
+    expect(lastLocation).toContain("LAST_LOCATION_MAX_AGE_S = 2592000");
   });
 
   it("picks up a place found by the header's My Location button while on /", () => {
@@ -171,7 +178,7 @@ describe("page.tsx — server seeding", () => {
   });
 
   it("renders the dashboard payload for the cookie-resolved location", () => {
-    expect(pageSource).toContain("getWeatherForLocation");
+    expect(pageSource).toContain("loadLocationWeather");
     expect(pageSource).toContain("HomeWeatherPayload");
     expect(pageSource).toContain("<CurrentLocationHome initial={initial}");
   });
@@ -231,7 +238,13 @@ describe("page.tsx — server seeding", () => {
   });
 
   it("double-catches the weather fetch so the shell always renders", () => {
-    expect(pageSource).toContain("createFallbackWeather");
+    // The fallback lives in the shared payload helper (src/lib/location-payload.ts).
+    expect(pageSource).toContain("loadLocationWeather(");
+    const payload = readFileSync(
+      resolve(__dirname, "../lib/location-payload.ts"),
+      "utf-8",
+    );
+    expect(payload).toContain("createFallbackWeather(");
   });
 
   it("skips the IP-geo lookup entirely when a cached location was already resolved", () => {
@@ -247,7 +260,9 @@ describe("middleware — edge routing", () => {
   });
 
   it("persists the lastLocation cookie on /{slug} pages (30 days)", () => {
-    expect(middlewareSource).toContain('"lastLocation"');
-    expect(middlewareSource).toContain("2592000");
+    // The name and lifetime are constants in src/lib/last-location.ts.
+    expect(middlewareSource).toContain("LAST_LOCATION_COOKIE");
+    expect(middlewareSource).toContain("LAST_LOCATION_MAX_AGE_S");
+    expect(middlewareSource).toContain('from "@/lib/last-location"');
   });
 });
