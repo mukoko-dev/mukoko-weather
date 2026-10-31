@@ -31,6 +31,7 @@ pub mod devkey;
 pub mod enrichment;
 pub mod enso;
 pub mod external_feeds;
+pub mod external_fetch;
 pub mod forecast;
 pub mod geo;
 pub mod haze;
