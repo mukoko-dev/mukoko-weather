@@ -45,6 +45,18 @@ describe("GradientScale", () => {
     expect(html).toContain('data-marker-cx="42"');
   });
 
+  it("draws UV and AQI as hard category bands, one per official band", () => {
+    const uv = render(h(GradientScale, { positionPct: 30, stops: "uv" }));
+    expect(uv.match(/data-band=/g)).toHaveLength(5);
+    const aqi = render(h(GradientScale, { positionPct: 30, stops: "aqi" }));
+    expect(aqi.match(/data-band=/g)).toHaveLength(6);
+    // The temperature preset stays a blend.
+    const temp = render(
+      h(GradientScale, { positionPct: 30, stops: "temperature" }),
+    );
+    expect(temp).not.toContain("data-band=");
+  });
+
   it("clamps the marker into 0–100", () => {
     expect(
       render(h(GradientScale, { positionPct: 150, stops: "aqi" })),

@@ -61,8 +61,8 @@ const RAIN_DAY_MM_THRESHOLD = 1;
 const PRESSURE_TREND_HPA = 1;
 /** Hours ahead the pressure card compares against. */
 const PRESSURE_SPAN_HOURS = 3;
-/** Full-scale UV index used for the gauge position. */
-const UV_SCALE_MAX = 11;
+/** Full-scale UV index used for the gauge position (bar spans 0-14 so Extreme, 11+, has room). */
+const UV_SCALE_MAX = 14;
 /** Dew point (°C) at which the air is described as muggy. */
 const MUGGY_DEW_POINT_C = 20;
 

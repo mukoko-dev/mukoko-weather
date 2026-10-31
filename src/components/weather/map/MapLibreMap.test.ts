@@ -203,13 +203,11 @@ describe("AQI grid overlay (Air Quality Map card)", () => {
     expect(source).toContain('"match",');
     expect(source).toContain('["get", "band"]');
     expect(source).toContain("for (const band of AQI_BANDS)");
-    expect(source).toContain("AQI_BAND_SEVERITY_TOKEN[band]");
+    expect(source).toContain("AQI_BAND_TOKEN[band]");
   });
 
-  it("resolves band colours from severity tokens, not hardcoded hex", () => {
-    expect(source).toContain(
-      "resolveColor(`var(${AQI_BAND_SEVERITY_TOKEN[band]})`)",
-    );
+  it("resolves band colours from weather-scale tokens, not hardcoded hex", () => {
+    expect(source).toContain("resolveColor(`var(${AQI_BAND_TOKEN[band]})`)");
     expect(source).not.toMatch(/["'`]#[0-9a-fA-F]{3,8}["'`]/);
   });
 
@@ -234,7 +232,7 @@ describe("weather timeline + AQI bubbles (full-screen map)", () => {
     expect(source).toContain("existing.setTiles(spec.tiles)");
   });
 
-  it("renders AQI bubbles as HTML markers coloured from the severity classes", () => {
+  it("renders AQI bubbles as HTML markers coloured from the weather-scale classes", () => {
     expect(source).toContain("aqiBubbles?: readonly AqBubble[] | null;");
     expect(source).toContain("new MarkerCtor({ element: el })");
     expect(source).toContain("AQI_BAND_BG_CLASS[b.band]");
