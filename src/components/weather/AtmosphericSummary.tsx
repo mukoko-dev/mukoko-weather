@@ -1,7 +1,7 @@
 "use client";
 
 import { roundCoord } from "@/lib/location-privacy";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type {
   CurrentWeather,
@@ -34,6 +34,8 @@ import { seedNowMs, useStableNow } from "@/lib/use-stable-now";
 import { useNearViewport } from "@/lib/use-near-viewport";
 import { AQI_BAND_LABELS, aqiBand } from "@/lib/aq-grid";
 import { lastTileSpanClass } from "@/lib/dashboard-layout";
+import { METRIC_TITLES, type MetricKind } from "@/lib/metric-details";
+import { MetricDetailModal } from "./MetricDetailModal";
 import { cn } from "@/lib/utils";
 import {
   CloudIcon,
@@ -115,20 +117,36 @@ export function EdgeTile({
   mineral,
   className,
   children,
+  metric,
+  onOpen,
 }: {
   mineral: Mineral;
   className?: string;
   children: ReactNode;
+  /** When set with `onOpen`, the whole tile opens that metric's detail. */
+  metric?: MetricKind;
+  onOpen?: (metric: MetricKind) => void;
 }) {
+  const interactive = Boolean(metric && onOpen);
   return (
     <div
       className={cn(
         "relative min-w-0 rounded-[var(--radius-card)] [&>section]:h-full [&>section]:shadow-md",
         EDGE_CLASS[mineral],
+        interactive && "card-interactive",
         className,
       )}
     >
       {children}
+      {metric && onOpen && (
+        <button
+          type="button"
+          onClick={() => onOpen(metric)}
+          aria-haspopup="dialog"
+          aria-label={`${METRIC_TITLES[metric]} details`}
+          className="absolute inset-0 z-[1] rounded-[var(--radius-card)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        />
+      )}
     </div>
   );
 }
@@ -448,6 +466,16 @@ export function AtmosphericSummary({
       ? temperatureAverageInsight(todayHigh, normalHigh)
       : null;
   const moonPct = Math.round(moon.illumination * 100);
+  const [openMetric, setOpenMetric] = useState<MetricKind | null>(null);
+  const extras = useMemo(
+    () => ({
+      todayHigh,
+      normalHigh,
+      moonName: moon.name,
+      moonIlluminationPct: moonPct,
+    }),
+    [todayHigh, normalHigh, moon.name, moonPct],
+  );
 
   return (
     <section ref={sectionRef} aria-labelledby="atmospheric-heading">
@@ -473,7 +501,7 @@ export function AtmosphericSummary({
           whose last tile spans whatever the final row has left
           (lastTileSpanClass), so no layout ends with an empty slot. */}
       <InsightGrid>
-        <EdgeTile mineral="cobalt">
+        <EdgeTile mineral="cobalt" metric="wind" onOpen={setOpenMetric}>
           <InsightCard
             headingId="insight-wind"
             icon={<WindIcon size={16} />}
@@ -488,7 +516,7 @@ export function AtmosphericSummary({
           </InsightCard>
         </EdgeTile>
 
-        <EdgeTile mineral="gold">
+        <EdgeTile mineral="gold" metric="uv" onOpen={setOpenMetric}>
           <InsightCard
             headingId="insight-uv"
             icon={<SunIcon size={16} />}
@@ -509,7 +537,7 @@ export function AtmosphericSummary({
           </InsightCard>
         </EdgeTile>
 
-        <EdgeTile mineral="copper">
+        <EdgeTile mineral="copper" metric="feels" onOpen={setOpenMetric}>
           <InsightCard
             headingId="insight-feels"
             icon={<ThermometerIcon size={16} />}
@@ -522,7 +550,11 @@ export function AtmosphericSummary({
           </InsightCard>
         </EdgeTile>
 
-        <EdgeTile mineral="tanzanite">
+        <EdgeTile
+          mineral="tanzanite"
+          metric="visibility"
+          onOpen={setOpenMetric}
+        >
           <InsightCard
             headingId="insight-visibility"
             icon={<EyeIcon size={16} />}
@@ -538,7 +570,12 @@ export function AtmosphericSummary({
           </InsightCard>
         </EdgeTile>
 
-        <EdgeTile mineral="sodalite" className="col-span-full">
+        <EdgeTile
+          mineral="sodalite"
+          className="col-span-full"
+          metric="rain"
+          onOpen={setOpenMetric}
+        >
           <InsightCard
             headingId="insight-rain"
             icon={<CloudRainIcon size={16} />}
@@ -561,7 +598,7 @@ export function AtmosphericSummary({
           </InsightCard>
         </EdgeTile>
 
-        <EdgeTile mineral="malachite">
+        <EdgeTile mineral="malachite" metric="humidity" onOpen={setOpenMetric}>
           <InsightCard
             headingId="insight-humidity"
             icon={<DropletIcon size={16} />}
@@ -577,7 +614,7 @@ export function AtmosphericSummary({
           </InsightCard>
         </EdgeTile>
 
-        <EdgeTile mineral="cobalt">
+        <EdgeTile mineral="cobalt" metric="pressure" onOpen={setOpenMetric}>
           <InsightCard
             headingId="insight-pressure"
             icon={<GaugeIcon size={16} />}
@@ -588,30 +625,26 @@ export function AtmosphericSummary({
           </InsightCard>
         </EdgeTile>
 
-        <EdgeTile mineral="gold">
+        <EdgeTile mineral="gold" metric="sun" onOpen={setOpenMetric}>
           <InsightCard
             headingId="insight-sun"
             icon={<SunriseIcon size={16} />}
             label="Sun"
             sentence={sun.sentence}
           >
-            <div className="flex w-full flex-col gap-1">
-              <SunArc
-                arcPct={sun.arcPct}
-                sunrise={sun.sunrise ?? "—"}
-                sunset={sun.sunset ?? "—"}
-              />
-              <p className="dove flex justify-between">
-                <span>{sun.sunrise ?? "—"}</span>
-                <span>{sun.sunset ?? "—"}</span>
-              </p>
-            </div>
+            <SunArc
+              arcPct={sun.arcPct}
+              sunrise={sun.sunrise ?? "—"}
+              sunset={sun.sunset ?? "—"}
+            />
           </InsightCard>
         </EdgeTile>
 
         <EdgeTile
           mineral="tanzanite"
           className={averages ? undefined : lastTileSpanClass(4)}
+          metric="moon"
+          onOpen={setOpenMetric}
         >
           <InsightCard
             headingId="insight-moon"
@@ -628,7 +661,12 @@ export function AtmosphericSummary({
         </EdgeTile>
 
         {averages && (
-          <EdgeTile mineral="copper" className={lastTileSpanClass(5)}>
+          <EdgeTile
+            mineral="copper"
+            className={lastTileSpanClass(5)}
+            metric="averages"
+            onOpen={setOpenMetric}
+          >
             <InsightCard
               headingId="insight-averages"
               icon={<ThermometerIcon size={16} />}
@@ -649,6 +687,14 @@ export function AtmosphericSummary({
           </EdgeTile>
         )}
       </InsightGrid>
+
+      <MetricDetailModal
+        kind={openMetric}
+        data={data}
+        now={now}
+        extras={extras}
+        onClose={() => setOpenMetric(null)}
+      />
     </section>
   );
 }

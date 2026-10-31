@@ -97,7 +97,14 @@ describe("useLocationSwipe — swipe between locations", () => {
     );
     expect(source).toContain("hiddenPresetSlugs");
     expect(source).toContain("visiblePresetSlugs({");
-    expect(source).toContain("pagerSequence(\n      savedLocations,");
+    expect(source).toContain("pagerSequence(\n        savedLocations,");
+  });
+
+  it("warms both neighbouring pages when idle so a swipe lands quickly", () => {
+    expect(source).toContain("router.prefetch(target)");
+    expect(source).toContain("requestIdleCallback");
+    expect(source).toContain("neighbour(sequence, index, 1)");
+    expect(source).toContain("neighbour(sequence, index, -1)");
   });
 
   it("can be switched off, e.g. while reordering sections", () => {
