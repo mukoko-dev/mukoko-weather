@@ -57,7 +57,7 @@ export const ACCESS_TOKEN_TYPE =
 /** The only scope weather ever asks for. */
 export const REQUESTED_SCOPE = "app-keys";
 /** "Mukoko Account" — the Console's WorkOS client, the only one accepted. */
-export const DEFAULT_CONSOLE_CLIENT_ID = "client_01KV2G518HGXVMTAFQDKSVNXCW";
+export const DEFAULT_CONSOLE_CLIENT_ID = "client_01KQBBSMQTSMTBN7HEC9KQBJC0";
 export const SAFETY_MARGIN_MS = 30_000;
 export const MAX_CACHE_MS = 5 * 60_000;
 const MAX_ENTRIES = 1_000;

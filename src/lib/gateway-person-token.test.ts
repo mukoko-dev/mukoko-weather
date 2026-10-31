@@ -216,7 +216,7 @@ describe("Console client only", () => {
   });
 
   it("defaults to the Mukoko Account client and allows an env override", () => {
-    expect(DEFAULT_CONSOLE_CLIENT_ID).toBe("client_01KV2G518HGXVMTAFQDKSVNXCW");
+    expect(DEFAULT_CONSOLE_CLIENT_ID).toBe("client_01KQBBSMQTSMTBN7HEC9KQBJC0");
     expect(consoleClientId({})).toBe(DEFAULT_CONSOLE_CLIENT_ID);
     expect(
       consoleClientId({ NYUCHI_CONSOLE_WORKOS_CLIENT_ID: "client_x" }),
