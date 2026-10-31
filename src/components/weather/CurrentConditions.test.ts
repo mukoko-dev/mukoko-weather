@@ -145,7 +145,7 @@ describe("CurrentConditions — top row (breadcrumb, Share, ⋯)", () => {
 
   it("holds Share and, on phones only, the ⋯ menu — both round 48px controls", () => {
     expect(source).toContain('className="kestrel-round"');
-    expect(source).toContain("<MobileMoreMenu");
+    expect(source).toContain("<PhoneMenu");
     expect(source).toContain('buttonClassName="kestrel-round"');
     expect(source).toContain('<div className="relative sm:hidden">');
   });

@@ -32,7 +32,8 @@ const HERO_FILES = [
   "components/weather/CurrentConditions.tsx",
   "components/weather/HourlyScrollCards.tsx",
   "components/weather/SeasonBadge.tsx",
-  "components/layout/MobileMoreMenu.tsx",
+  "components/layout/PhoneMenu.tsx",
+  "components/ui/app-account-menu.tsx",
 ];
 
 /** Tailwind size steps that equal a Mzizi scale size. */

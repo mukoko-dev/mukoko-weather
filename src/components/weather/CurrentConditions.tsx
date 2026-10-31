@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, type ReactNode } from "react";
-import { MobileMoreMenu } from "@/components/layout/MobileMoreMenu";
+import { PhoneMenu } from "@/components/layout/PhoneMenu";
 import {
   ShareIcon,
   NavigationIcon,
@@ -247,7 +247,8 @@ export function CurrentConditions({
             </span>
           </div>
           <div className="relative sm:hidden">
-            <MobileMoreMenu
+            <PhoneMenu
+              trigger="profile"
               buttonClassName="kestrel-round"
               iconClassName="text-[var(--sky-fg)]"
             />
