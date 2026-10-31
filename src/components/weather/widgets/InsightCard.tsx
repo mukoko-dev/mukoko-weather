@@ -67,7 +67,13 @@ export function InsightCard({
   );
 }
 
-/** 2 columns on mobile, 4 on large screens. wide/hero cards span the row. */
+/**
+ * 2 columns, 4 once the grid's OWN column is wide enough (a container query,
+ * not the viewport). At the viewport's `lg` (1024px, a tablet) the main column
+ * is only about two thirds of the screen, so four square tiles were ~150px
+ * wide and their content overflowed. `@3xl` is 48rem of column width.
+ * wide/hero cards span the row.
+ */
 export function InsightGrid({
   children,
   className,
@@ -76,13 +82,15 @@ export function InsightGrid({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "grid grid-cols-2 gap-[var(--space-stack)] lg:grid-cols-4",
-        className,
-      )}
-    >
-      {children}
+    <div className="@container">
+      <div
+        className={cn(
+          "grid grid-cols-2 gap-[var(--space-stack)] @3xl:grid-cols-4",
+          className,
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }
