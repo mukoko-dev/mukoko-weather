@@ -210,10 +210,11 @@ describe("AtmosphericSummary source contract", () => {
     }
   });
 
-  it("gives each mineral edge a literal Tailwind class", () => {
-    expect(source).toContain('"bg-mineral-cobalt"');
-    expect(source).toContain('"bg-mineral-terracotta"');
-    expect(source).toContain("w-1");
+  it("gives each mineral a literal full-border Tailwind class, elevated, with no side stripe", () => {
+    expect(source).toContain("[&>section]:border-mineral-cobalt/60");
+    expect(source).toContain("[&>section]:border-mineral-terracotta/60");
+    expect(source).toContain("[&>section]:shadow-md");
+    expect(source).not.toContain("w-1");
   });
 
   it("loads normals and AQI from the API and labels the sections", () => {

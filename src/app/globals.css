@@ -258,6 +258,7 @@
 
   /* Metric-card visual sizes (widgets/) */
   --size-insight-hero-max: 28rem;
+  --size-insight-square-min: 10.5rem;
   --size-insight-dial-max: 14rem;
   --size-insight-moon-max: 9rem;
 
@@ -1141,10 +1142,10 @@ body {
            bg-surface-card p-[var(--space-card)] shadow-sm;
   }
 
-  /* .acacia — quieter card surface (no primary border, lighter shadow) */
+  /* .acacia — quieter card surface (neutral border, slightly raised) */
   .acacia {
     @apply rounded-[var(--radius-card)] border border-border
-           bg-surface-card p-[var(--space-card)];
+           bg-surface-card p-[var(--space-card)] shadow-sm;
   }
 
   /* .guineafowl — grouped list card (a flock in one frame). The Mukoko

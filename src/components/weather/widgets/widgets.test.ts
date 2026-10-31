@@ -204,7 +204,11 @@ describe("InsightCard", () => {
   });
 
   it("maps sizes to layout classes", () => {
-    expect(insightCardSizeClass("square")).toBe("aspect-square");
+    // A minimum height, never a fixed 1:1 box: a square at phone width is
+    // ~170px and the content overflowed it.
+    expect(insightCardSizeClass("square")).toBe(
+      "min-h-[var(--size-insight-square-min)]",
+    );
     expect(insightCardSizeClass("wide")).toBe("col-span-full");
     expect(insightCardSizeClass("hero")).toContain(
       "max-h-[var(--size-insight-hero-max)]",

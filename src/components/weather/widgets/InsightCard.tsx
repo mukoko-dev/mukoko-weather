@@ -4,8 +4,10 @@ import { cn } from "@/lib/utils";
 export type InsightCardSize = "square" | "wide" | "hero";
 
 /**
- * Size → classes. `square` is a half-width grid cell with a 1:1 box so every
- * card in a 2-column grid lines up. `wide` spans the full row at its natural
+ * Size → classes. `square` is a half-width grid cell with a minimum height
+ * (never a fixed 1:1 box: at phone width that is ~170px and a heading, a
+ * value and a sentence do not fit, so they overlapped). The row stretches to
+ * the tallest tile so every card in a row still lines up. `wide` spans the full row at its natural
  * height. `hero` spans the full row and is square on mobile, capped on desktop.
  */
 export function insightCardSizeClass(size: InsightCardSize = "square"): string {
@@ -16,7 +18,7 @@ export function insightCardSizeClass(size: InsightCardSize = "square"): string {
       return "col-span-full aspect-square max-h-[var(--size-insight-hero-max)] w-full";
     case "square":
     default:
-      return "aspect-square";
+      return "min-h-[var(--size-insight-square-min)]";
   }
 }
 

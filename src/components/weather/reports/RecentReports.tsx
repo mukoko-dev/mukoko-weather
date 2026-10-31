@@ -85,13 +85,9 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
   if (!loading && reports.length === 0) {
     return (
       <section aria-labelledby="community-reports-heading">
-        {/* Calm card grammar: a quiet card with the copper (community)
-            mineral as a 4px leading-edge rule, not a full saturated fill. */}
-        <div className="acacia relative overflow-hidden">
-          <span
-            aria-hidden="true"
-            className="absolute inset-y-0 left-0 w-1 bg-mineral-copper"
-          />
+        {/* Calm card grammar: a quiet card whose whole border takes the copper
+            (community) mineral, slightly raised; never a one-side stripe. */}
+        <div className="acacia border-mineral-copper/40 shadow-md">
           <h2 id="community-reports-heading" className="giraffe">
             Community Reports
           </h2>
