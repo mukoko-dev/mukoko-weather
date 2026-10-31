@@ -3,6 +3,7 @@
 import type { WeatherLocation } from "./locations";
 import { haversineKm } from "./geo";
 import { fetchPlaces } from "./weather-api";
+import { canonicalSlug } from "./slug-migration";
 
 export interface GeoResult {
   status: "success" | "created" | "denied" | "unavailable" | "error";
@@ -107,7 +108,11 @@ export function detectUserLocation({
           }
 
           const data = await res.json();
-          const nearest: WeatherLocation = data.nearest;
+          const nearest: WeatherLocation = {
+            ...data.nearest,
+            // Canonical slug for a shipped seed (#317).
+            slug: canonicalSlug(data.nearest.slug),
+          };
           const isNew: boolean = data.isNew ?? false;
           const synthesized = data.synthesized === true;
           const unnamed = data.nearest?.named === false;

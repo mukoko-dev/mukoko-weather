@@ -14,6 +14,7 @@
 
 import { LOCATIONS, type WeatherLocation } from "@/lib/locations";
 import { isLocationSlug } from "@/lib/current-slug";
+import { canonicalSlug } from "@/lib/slug-migration";
 
 /** Nearest seeded cities suggested around the anchor (Harare and Bulawayo are added on top). */
 export const PRESET_NEAREST_COUNT = 4;
@@ -66,7 +67,7 @@ export function suggestPresetSlugs(
   const always = PRESET_ALWAYS_SLUGS.filter((slug) =>
     seeds.some((loc) => loc.slug === slug),
   );
-  if (!isPresetAnchor(anchor)) return [...always];
+  if (!isPresetAnchor(anchor)) return always.map(canonicalSlug);
 
   const nearest = seeds
     .filter((loc) => !always.includes(loc.slug))
@@ -78,7 +79,9 @@ export function suggestPresetSlugs(
     .slice(0, PRESET_NEAREST_COUNT)
     .map((item) => item.slug);
 
-  return [...nearest, ...always];
+  // Suggestions are canonical slugs (#317): the seed list still keys on the
+  // legacy slug, the URL and the persisted state never do.
+  return [...nearest, ...always].map(canonicalSlug);
 }
 
 export interface VisiblePresetInput {
@@ -99,13 +102,15 @@ export interface VisiblePresetInput {
  */
 export function visiblePresetSlugs(input: VisiblePresetInput): string[] {
   const suggested = input.suggested ?? suggestPresetSlugs(input.anchor);
-  const hidden = new Set(input.hidden ?? []);
-  const taken = new Set<string>([
-    ...(input.saved ?? []),
-    ...(input.current ? [input.current] : []),
-  ]);
+  const hidden = new Set((input.hidden ?? []).map(canonicalSlug));
+  const taken = new Set<string>(
+    [...(input.saved ?? []), ...(input.current ? [input.current] : [])].map(
+      canonicalSlug,
+    ),
+  );
   const out: string[] = [];
-  for (const slug of suggested) {
+  for (const raw of suggested) {
+    const slug = canonicalSlug(raw);
     if (!isLocationSlug(slug)) continue;
     if (hidden.has(slug) || taken.has(slug) || out.includes(slug)) continue;
     out.push(slug);
@@ -118,6 +123,6 @@ export function hiddenSuggestedSlugs(
   anchor: PresetAnchor | null | undefined,
   hidden: readonly string[] | null | undefined,
 ): string[] {
-  const hiddenSet = new Set(hidden ?? []);
+  const hiddenSet = new Set((hidden ?? []).map(canonicalSlug));
   return suggestPresetSlugs(anchor).filter((slug) => hiddenSet.has(slug));
 }

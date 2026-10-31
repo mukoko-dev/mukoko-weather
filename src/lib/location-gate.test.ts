@@ -6,6 +6,7 @@ import { resolve as resolvePath } from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LOCATIONS } from "./locations";
 import { slugifyName } from "./smart-slug";
+import { canonicalSlug } from "./slug-migration";
 import {
   DEGRADED_BACKOFF_MS,
   TIMEOUTS_BEFORE_BACKOFF,
@@ -34,12 +35,13 @@ beforeEach(() => resetLocationGateCache());
 
 describe("classifyLocationPath", () => {
   it.each([
-    ["/harare", "harare"],
-    ["/harare/forecast", "harare"],
-    ["/harare/atmosphere", "harare"],
-    ["/harare/agriculture", "harare"],
-    ["/harare/map", "harare"],
     ["/some-place--ksy4dd7", "some-place--ksy4dd7"],
+    ["/some-place--ksy4dd7/forecast", "some-place--ksy4dd7"],
+    ["/some-place--ksy4dd7/atmosphere", "some-place--ksy4dd7"],
+    ["/some-place--ksy4dd7/agriculture", "some-place--ksy4dd7"],
+    ["/some-place--ksy4dd7/map", "some-place--ksy4dd7"],
+    // A canonical seed slug is a plain location page (it is a spot by grammar).
+    [`/${canonicalSlug("harare")}`, canonicalSlug("harare")],
   ])("%s is the location page for %s", (path, slug) => {
     expect(classifyLocationPath(path, KNOWN)).toEqual({ kind: "slug", slug });
   });
@@ -92,13 +94,19 @@ describe("classifyLocationPath", () => {
   });
 
   it.each([
-    ["/Harare", "/harare"],
-    ["/Nairobi-KE", "/nairobi-ke"],
-    ["/Harare/Forecast", "/harare/forecast"],
-    ["/harare/Forecast", "/harare/forecast"],
-    ["/HARARE/forecast", "/harare/forecast"],
+    ["/Some-Place--ksy4dd7", "/some-place--ksy4dd7"],
+    ["/Some-Place--ksy4dd7/Forecast", "/some-place--ksy4dd7/forecast"],
+    ["/some-place--ksy4dd7/Forecast", "/some-place--ksy4dd7/forecast"],
+    ["/SOME-PLACE--ksy4dd7/forecast", "/some-place--ksy4dd7/forecast"],
     ["/Z%C3%BCrich", "/z%C3%BCrich"],
     ["/Explore", "/explore"],
+    // A legacy seed slug in the wrong case goes straight to the canonical
+    // slug: one hop, not a case hop and then a slug hop.
+    ["/Harare", `/${canonicalSlug("harare")}`],
+    ["/Nairobi-KE", `/${canonicalSlug("nairobi-ke")}`],
+    ["/Harare/Forecast", `/${canonicalSlug("harare")}/forecast`],
+    ["/harare/Forecast", `/${canonicalSlug("harare")}/forecast`],
+    ["/HARARE/forecast", `/${canonicalSlug("harare")}/forecast`],
   ])("%s in the wrong case redirects to %s", (path, location) => {
     expect(classifyLocationPath(path, KNOWN)).toEqual({
       kind: "redirect",
@@ -451,14 +459,18 @@ describe("isRenderableLocation", () => {
   });
 });
 
-describe("bare seed names redirect to the canonical seed slug (#302)", () => {
+describe("bare seed names redirect to the canonical slug in one hop (#302, #317)", () => {
+  const c = canonicalSlug;
   it.each([
-    ["/phuket", "/phuket-th"],
-    ["/Phuket", "/phuket-th"],
-    ["/phuket/forecast", "/phuket-th/forecast"],
-    ["/Phuket/Map", "/phuket-th/map"],
-    ["/nairobi", "/nairobi-ke"],
-    ["/bangkok", "/bangkok-th"],
+    ["/phuket", `/${c("phuket-th")}`],
+    ["/Phuket", `/${c("phuket-th")}`],
+    ["/phuket/forecast", `/${c("phuket-th")}/forecast`],
+    ["/Phuket/Map", `/${c("phuket-th")}/map`],
+    ["/nairobi", `/${c("nairobi-ke")}`],
+    ["/bangkok", `/${c("bangkok-th")}`],
+    // The legacy Zimbabwe slugs ARE the bare name; same one hop.
+    ["/harare", `/${c("harare")}`],
+    ["/harare/agriculture", `/${c("harare")}/agriculture`],
   ])("%s redirects to %s", (path, location) => {
     expect(classifyLocationPath(path, KNOWN)).toEqual({
       kind: "redirect",
@@ -467,14 +479,12 @@ describe("bare seed names redirect to the canonical seed slug (#302)", () => {
   });
 
   it("never shadows a seed slug or a known route", () => {
-    expect(classifyLocationPath("/harare", KNOWN)).toEqual({
-      kind: "slug",
-      slug: "harare",
-    });
     const seedSlugs = new Set(LOCATIONS.map((l) => l.slug));
     for (const [alias, target] of SEED_NAME_ALIASES) {
       expect(seedSlugs.has(alias)).toBe(false);
-      expect(seedSlugs.has(target)).toBe(true);
+      // The target is a canonical seed slug, never a legacy one.
+      expect(seedSlugs.has(target)).toBe(false);
+      expect(target.includes("--")).toBe(true);
       expect(KNOWN.has(alias)).toBe(false);
     }
     const withRoute = new Set([...KNOWN, "phuket"]);
@@ -499,7 +509,7 @@ describe("bare seed names redirect to the canonical seed slug (#302)", () => {
   it("aliases only redirect seeds whose slug differs from the bare name", () => {
     for (const [alias, target] of SEED_NAME_ALIASES) {
       expect(target).not.toBe(alias);
-      expect(target.includes("--")).toBe(false);
+      expect(target.startsWith(`${alias}--`)).toBe(true);
     }
     // Not a magic count: it only has to be a non-empty, derived table.
     expect(SEED_NAME_ALIASES.size).toBeGreaterThan(0);

@@ -20,6 +20,7 @@ import {
   getExplorePrompts,
   type SuggestedPrompt,
 } from "@/lib/suggested-prompts";
+import { locationPath } from "@/lib/slug-migration";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -562,7 +563,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
                 .map((ref) => (
                   <Link
                     key={ref.slug}
-                    href={`/${ref.slug}`}
+                    href={locationPath(ref.slug)}
                     className="flamingo-link"
                   >
                     <MapPinIcon size={10} className="shrink-0" />

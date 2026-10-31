@@ -29,6 +29,7 @@ from ._ai_prompts import get_ai_prompt
 from ._weather_cache_key import weather_cache_key_for
 from ._ai_gateway import call_ai, first_text
 from ._places_resolver import find_location, spot_storage_key, storage_slug
+from ._slug_migration import storage_key_slug
 
 router = APIRouter()
 
@@ -217,9 +218,11 @@ async def list_reports(location: str, hours: int = 24):
     # Read the key the submit path stored under. A spot slug with a placesGeo
     # record keeps its own slug and one without is keyed by its cell; the
     # list reads both (a pure parse, no DB lookup) so neither is hidden.
-    keys = [location]
+    keys = [storage_key_slug(location)]
+    if location not in keys:
+        keys.append(location)
     cell = spot_storage_key(location)
-    if cell:
+    if cell and cell not in keys:
         keys.append(cell)
 
     try:

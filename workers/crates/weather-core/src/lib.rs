@@ -38,6 +38,7 @@ pub mod reference;
 pub mod resolve;
 pub mod secrets;
 pub mod sg_air;
+pub mod slug_migration;
 pub mod station;
 pub mod status;
 pub mod tiles;

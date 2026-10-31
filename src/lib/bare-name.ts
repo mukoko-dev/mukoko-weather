@@ -22,6 +22,7 @@
  * a time, a per-visitor cap and a backoff after any upstream trouble.
  */
 import { LOCATION_SLUG_RE, rendersWithoutLookup } from "./location-gate";
+import { canonicalSlug } from "./slug-migration";
 import { weatherApiBase } from "./weather-api";
 
 /** Shortest and longest name worth a geocoder request. */
@@ -177,7 +178,8 @@ export function bareNameQuery(slug: string): string {
 function acceptableTarget(target: unknown, from: string): string | null {
   if (typeof target !== "string" || target === from) return null;
   if (!LOCATION_SLUG_RE.test(target)) return null;
-  return rendersWithoutLookup(target) ? target : null;
+  // A shipped seed is answered by its legacy slug; the URL is the canonical one.
+  return rendersWithoutLookup(target) ? canonicalSlug(target) : null;
 }
 
 /** Positive answers live long (a name does not move); misses briefly, since

@@ -14,6 +14,7 @@ import type {
   WeatherSceneConfig,
   WeatherSceneType,
 } from "@/lib/weather-scenes";
+import { slugToDisplayName } from "@/lib/utils";
 
 interface Props {
   /** Location slug — used to look up cached weather hint for scene selection */
@@ -115,10 +116,7 @@ export function WeatherLoadingScene({ slug, statusText, action }: Props) {
 
   // Format slug for display: "bulawayo" → "Bulawayo"
   const locationDisplay = resolvedSlug
-    ? resolvedSlug
-        .split("-")
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(" ")
+    ? slugToDisplayName(resolvedSlug.replace(/--.*$/, ""))
     : null;
 
   // Read the cached hint after mount (localStorage is client-only), deferred

@@ -24,8 +24,9 @@ workers/
   tiles/                 mukoko-weather-tiles      weather map overlay tiles (Tomorrow.io proxy, edge + KV cache)
   d1/migrations/         schema of the D1 database `mukoko-weather` (stations, rate events, history; no device or report data)
   scripts/               gen-reference-data.mjs (activities, suitability rules, tags, regions, AI prompts), and
-                         gen-seed-locations.mjs (seed places and airports, from src/lib/locations.ts
-                         and src/lib/icao-codes.ts)
+                         gen-seed-locations.mjs (seed places, airports and the legacy to canonical
+                         slug pairs, from src/lib/locations.ts, src/lib/icao-codes.ts
+                         and src/lib/slug-migration-data.ts)
 ```
 
 | Worker                    | Job                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Reached at                                                                                                                           | Bindings                                                                                                                                                           |
@@ -134,7 +135,9 @@ After changing `src/lib/locations.ts` or `src/lib/icao-codes.ts`, regenerate the
 node --experimental-strip-types workers/scripts/gen-seed-locations.mjs
 ```
 
-CI (`.github/workflows/workers.yml`) fails if either file is stale.
+CI (`.github/workflows/workers.yml`) fails if any generated file is stale
+(`seed-locations.json`, `airports.json`, `slug-migration.json` and the Python copy
+`api/py/data/slug_migration.json`).
 
 ## Owner steps
 

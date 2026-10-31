@@ -398,7 +398,7 @@ Statistical summary:
             {
                 "$set": {
                     "cacheKey": cache_key,
-                    "locationSlug": location_slug,
+                    "locationSlug": slugs[0],
                     "days": body.days,
                     "analysis": analysis,
                     "stats": stats_summary,
