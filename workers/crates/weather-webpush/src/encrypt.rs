@@ -3,18 +3,21 @@
 //!
 //! One record per message (RFC 8291 section 4), so the output is the 86-octet
 //! header (salt, record size, key id length, the application server's
-//! ephemeral public key) followed by one AES-128-GCM record. The salt and the
-//! ephemeral private key are INPUTS: the caller draws them from its random
-//! source, once per message and never reused. That keeps this function pure
-//! and lets the RFC's own worked example pin it byte for byte.
+//! ephemeral public key) followed by one AES-128-GCM record.
+//!
+//! The elliptic-curve step (an ephemeral P-256 key pair and the ECDH shared
+//! secret with the browser's key) is NOT done here: it is the injected
+//! [`KeyAgreement`]. No Rust elliptic-curve crate is used (the RustCrypto
+//! chain currently resolves `crypto-bigint` 0.5, RUSTSEC-2026-0387), and the
+//! Worker's runtime does the same step natively with WebCrypto. Everything
+//! else, the key derivation (HKDF-SHA-256), the header and the AES-GCM record,
+//! is here and pinned byte for byte by the RFC's own worked example. The salt
+//! is an input too, so this stays pure.
 
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes128Gcm, Nonce};
 use base64::Engine;
 use hkdf::Hkdf;
-use p256::ecdh::diffie_hellman;
-use p256::elliptic_curve::sec1::ToEncodedPoint;
-use p256::{PublicKey, SecretKey};
 use sha2::Sha256;
 
 use crate::B64URL;
@@ -35,16 +38,16 @@ const LAST_RECORD_DELIMITER: u8 = 0x02;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EncryptError {
-    /// `p256dh` is not a 65-octet uncompressed P-256 point on the curve.
+    /// `p256dh` is not a 65-octet uncompressed P-256 point (or, from a
+    /// [`KeyAgreement`], a point that is not on the curve).
     BadSubscriptionKey,
     /// `auth` is not 16 octets.
     BadAuthSecret,
-    /// The ephemeral private key is not a valid P-256 scalar.
-    BadEphemeralKey,
     /// The plaintext does not fit one record ([`MAX_PLAINTEXT`]).
     TooLong,
-    /// The key derivation or the cipher refused its input (cannot happen
-    /// with the fixed lengths used here; reported rather than unwrapped).
+    /// The key agreement, key derivation or cipher failed for a reason that
+    /// is not the subscription's (the runtime refused, or a length was off;
+    /// reported rather than unwrapped).
     Crypto,
 }
 
@@ -54,18 +57,18 @@ impl EncryptError {
         match self {
             Self::BadSubscriptionKey => "bad_subscription_key",
             Self::BadAuthSecret => "bad_auth_secret",
-            Self::BadEphemeralKey => "bad_ephemeral_key",
             Self::TooLong => "payload_too_long",
             Self::Crypto => "crypto",
         }
     }
 }
 
-/// The browser's half of the exchange, from its push subscription.
+/// The browser's half of the exchange, from its push subscription. The shape
+/// is checked here; that the point lies on the curve is the
+/// [`KeyAgreement`]'s job (RFC 8291 section 7: "MUST verify").
 #[derive(Clone)]
 pub struct Recipient {
-    public: PublicKey,
-    public_bytes: [u8; 65],
+    public: [u8; 65],
     auth: [u8; 16],
 }
 
@@ -79,19 +82,16 @@ impl std::fmt::Debug for Recipient {
 
 impl Recipient {
     /// Parse the `p256dh` and `auth` of a subscription (base64url, as the
-    /// browser's `PushSubscription.toJSON()` gives them). The point is checked
-    /// to be on the curve (RFC 8291 section 7: "MUST verify").
+    /// browser's `PushSubscription.toJSON()` gives them): an uncompressed
+    /// point (65 octets starting 0x04) and a 16-octet secret.
     pub fn parse(p256dh: &str, auth: &str) -> Result<Self, EncryptError> {
         weather_core::push::validate_keys(p256dh, auth)
             .map_err(|_| EncryptError::BadSubscriptionKey)?;
-        let point = B64URL
+        let public: [u8; 65] = B64URL
             .decode(p256dh)
-            .map_err(|_| EncryptError::BadSubscriptionKey)?;
-        let public_bytes: [u8; 65] = point
+            .map_err(|_| EncryptError::BadSubscriptionKey)?
             .as_slice()
             .try_into()
-            .map_err(|_| EncryptError::BadSubscriptionKey)?;
-        let public = PublicKey::from_sec1_bytes(&public_bytes)
             .map_err(|_| EncryptError::BadSubscriptionKey)?;
         let auth: [u8; 16] = B64URL
             .decode(auth)
@@ -99,43 +99,68 @@ impl Recipient {
             .as_slice()
             .try_into()
             .map_err(|_| EncryptError::BadAuthSecret)?;
-        Ok(Self {
-            public,
-            public_bytes,
-            auth,
-        })
+        Ok(Self { public, auth })
+    }
+
+    /// The browser's public point, uncompressed.
+    pub fn public(&self) -> &[u8; 65] {
+        &self.public
     }
 }
 
-/// Encrypt `plaintext` for `to`. `salt` and `ephemeral_secret` must be fresh
-/// random bytes for this message and are never reused.
+/// What a [`KeyAgreement`] returns.
+#[derive(Clone)]
+pub struct Agreement {
+    /// The application server's ephemeral public key, uncompressed (65
+    /// octets starting 0x04): the `keyid` of the message header.
+    pub as_public: [u8; 65],
+    /// ECDH(as_private, ua_public): the 32-octet x coordinate.
+    pub shared_secret: [u8; 32],
+}
+
+impl std::fmt::Debug for Agreement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Agreement(<redacted>)")
+    }
+}
+
+/// What a runtime supplies for the elliptic-curve step. An implementation:
+///
+/// - makes a FRESH ephemeral P-256 key pair for every call, uses its private
+///   half once and keeps it to itself (nothing here ever sees it);
+/// - REJECTS a `recipient_public` that is not a point on P-256 with
+///   [`EncryptError::BadSubscriptionKey`] (WebCrypto's `importKey` does);
+/// - returns the uncompressed public key and the raw ECDH secret.
+///
+/// In a Worker this is `crypto.subtle` (`generateKey` and `deriveBits` with
+/// ECDH on P-256). Its future is not `Send`, which is why the trait is not
+/// either.
+#[allow(async_fn_in_trait)]
+pub trait KeyAgreement {
+    async fn agree(&self, recipient_public: &[u8; 65]) -> Result<Agreement, EncryptError>;
+}
+
+/// Encrypt `plaintext` for `to` once `agreement` has been made. `salt` must be
+/// 16 fresh random bytes for this message, never reused. Pure.
 ///
 /// The result is the whole request body: header and record.
-pub fn encrypt(
+pub fn seal(
     plaintext: &[u8],
     to: &Recipient,
+    agreement: &Agreement,
     salt: &[u8; 16],
-    ephemeral_secret: &[u8; 32],
 ) -> Result<Vec<u8>, EncryptError> {
     if plaintext.len() > MAX_PLAINTEXT {
         return Err(EncryptError::TooLong);
     }
-    let secret =
-        SecretKey::from_slice(ephemeral_secret).map_err(|_| EncryptError::BadEphemeralKey)?;
-    let as_public = secret.public_key().to_encoded_point(false);
-    let as_public = as_public.as_bytes();
-    debug_assert_eq!(as_public.len(), 65);
-
     // RFC 8291 section 3.4: combine the ECDH secret with the authentication
     // secret, then derive the content encryption key and nonce (RFC 8188).
-    let shared = diffie_hellman(secret.to_nonzero_scalar(), to.public.as_affine());
-
     let mut key_info = Vec::with_capacity(14 + 65 + 65);
     key_info.extend_from_slice(b"WebPush: info\0");
-    key_info.extend_from_slice(&to.public_bytes);
-    key_info.extend_from_slice(as_public);
+    key_info.extend_from_slice(&to.public);
+    key_info.extend_from_slice(&agreement.as_public);
     let mut ikm = [0u8; 32];
-    Hkdf::<Sha256>::new(Some(&to.auth), shared.raw_secret_bytes())
+    Hkdf::<Sha256>::new(Some(&to.auth), &agreement.shared_secret)
         .expand(&key_info, &mut ikm)
         .map_err(|_| EncryptError::Crypto)?;
 
@@ -165,41 +190,101 @@ pub fn encrypt(
     body.extend_from_slice(salt);
     body.extend_from_slice(&RECORD_SIZE.to_be_bytes());
     body.push(65);
-    body.extend_from_slice(as_public);
+    body.extend_from_slice(&agreement.as_public);
     body.extend_from_slice(&sealed);
     Ok(body)
 }
 
+/// Make the key agreement with `to` and [`seal`] `plaintext`.
+pub async fn encrypt<K: KeyAgreement>(
+    keys: &K,
+    plaintext: &[u8],
+    to: &Recipient,
+    salt: &[u8; 16],
+) -> Result<Vec<u8>, EncryptError> {
+    if plaintext.len() > MAX_PLAINTEXT {
+        return Err(EncryptError::TooLong);
+    }
+    let agreement = keys.agree(to.public()).await?;
+    seal(plaintext, to, &agreement, salt)
+}
+
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+    use std::cell::RefCell;
+    use std::future::Future;
+    use std::task::{Context, Poll, Waker};
 
     // RFC 8291 section 5 and Appendix A: the worked example. These are the
-    // RFC's published test keys, not secrets.
-    const PLAINTEXT: &str = "When I grow up, I want to be a watermelon";
-    const UA_PUBLIC: &str =
+    // RFC's published test values, not secrets. The elliptic-curve results
+    // (the application server's public key and the ECDH secret) are the RFC's
+    // own intermediate values, so this crate needs no curve arithmetic to
+    // reproduce the message.
+    pub(crate) const PLAINTEXT: &str = "When I grow up, I want to be a watermelon";
+    pub(crate) const UA_PUBLIC: &str =
         "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4";
-    const AUTH_SECRET: &str = "BTBZMqHH6r4Tts7J_aSIgg";
-    const AS_PRIVATE: &str = "yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw";
-    const SALT: &str = "DGv6ra1nlYgDCS1FRnbzlw";
+    pub(crate) const AUTH_SECRET: &str = "BTBZMqHH6r4Tts7J_aSIgg";
+    pub(crate) const AS_PUBLIC: &str =
+        "BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8";
+    pub(crate) const ECDH_SECRET: &str = "kyrL1jIIOHEzg3sM2ZWRHDRB62YACZhhSlknJ672kSs";
+    pub(crate) const SALT: &str = "DGv6ra1nlYgDCS1FRnbzlw";
     const EXPECTED: &str = "DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN";
 
-    fn b64(s: &str) -> Vec<u8> {
-        B64URL.decode(s).unwrap()
+    /// The futures here complete at once (the fakes never wait), so polling
+    /// in a loop is enough and no runtime is needed.
+    pub(crate) fn block_on<F: Future>(f: F) -> F::Output {
+        let mut f = std::pin::pin!(f);
+        let mut cx = Context::from_waker(Waker::noop());
+        loop {
+            if let Poll::Ready(v) = f.as_mut().poll(&mut cx) {
+                return v;
+            }
+        }
     }
 
-    fn fixed<const N: usize>(s: &str) -> [u8; N] {
-        b64(s).as_slice().try_into().unwrap()
+    pub(crate) fn fixed<const N: usize>(s: &str) -> [u8; N] {
+        B64URL.decode(s).unwrap().as_slice().try_into().unwrap()
+    }
+
+    pub(crate) fn rfc_agreement() -> Agreement {
+        Agreement {
+            as_public: fixed(AS_PUBLIC),
+            shared_secret: fixed(ECDH_SECRET),
+        }
+    }
+
+    /// A key agreement that answers with the RFC's values and records what it
+    /// was asked, or fails.
+    pub(crate) struct Fake {
+        pub(crate) answer: Result<Agreement, EncryptError>,
+        pub(crate) asked: RefCell<Vec<[u8; 65]>>,
+    }
+
+    impl Fake {
+        pub(crate) fn rfc() -> Self {
+            Self {
+                answer: Ok(rfc_agreement()),
+                asked: RefCell::new(Vec::new()),
+            }
+        }
+    }
+
+    impl KeyAgreement for Fake {
+        async fn agree(&self, recipient_public: &[u8; 65]) -> Result<Agreement, EncryptError> {
+            self.asked.borrow_mut().push(*recipient_public);
+            self.answer.clone()
+        }
     }
 
     #[test]
     fn the_rfc_8291_worked_example_encrypts_byte_for_byte() {
         let to = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
-        let body = encrypt(
+        let body = seal(
             PLAINTEXT.as_bytes(),
             &to,
+            &rfc_agreement(),
             &fixed::<16>(SALT),
-            &fixed::<32>(AS_PRIVATE),
         )
         .unwrap();
         assert_eq!(B64URL.encode(&body), EXPECTED);
@@ -211,17 +296,29 @@ mod tests {
     }
 
     #[test]
+    fn encrypt_asks_the_agreement_for_the_browsers_key_and_seals_with_its_answer() {
+        let to = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
+        let keys = Fake::rfc();
+        let body = block_on(encrypt(
+            &keys,
+            PLAINTEXT.as_bytes(),
+            &to,
+            &fixed::<16>(SALT),
+        ))
+        .unwrap();
+        assert_eq!(B64URL.encode(&body), EXPECTED);
+        // asked exactly once, about the browser's own point
+        assert_eq!(*keys.asked.borrow(), vec![fixed::<65>(UA_PUBLIC)]);
+    }
+
+    #[test]
     fn the_header_is_salt_record_size_and_the_ephemeral_public_key() {
         let to = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
-        let body = encrypt(b"x", &to, &[7u8; 16], &fixed::<32>(AS_PRIVATE)).unwrap();
+        let body = seal(b"x", &to, &rfc_agreement(), &[7u8; 16]).unwrap();
         assert_eq!(&body[..16], &[7u8; 16]);
         assert_eq!(&body[16..20], &4096u32.to_be_bytes());
         assert_eq!(body[20], 65);
-        // the key id is the RFC's published application server public key
-        assert_eq!(
-            B64URL.encode(&body[21..86]),
-            "BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8"
-        );
+        assert_eq!(B64URL.encode(&body[21..86]), AS_PUBLIC);
         // 1 octet of plaintext + the 0x02 delimiter + the 16-octet tag
         assert_eq!(body.len(), HEADER_LEN + 1 + 1 + 16);
     }
@@ -229,24 +326,59 @@ mod tests {
     #[test]
     fn a_different_salt_or_ephemeral_key_gives_a_different_message() {
         let to = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
-        let a = encrypt(b"same", &to, &[1u8; 16], &fixed::<32>(AS_PRIVATE)).unwrap();
-        let b = encrypt(b"same", &to, &[2u8; 16], &fixed::<32>(AS_PRIVATE)).unwrap();
-        let c = encrypt(b"same", &to, &[1u8; 16], &[9u8; 32]).unwrap();
+        let a = seal(b"same", &to, &rfc_agreement(), &[1u8; 16]).unwrap();
+        let b = seal(b"same", &to, &rfc_agreement(), &[2u8; 16]).unwrap();
+        let other = Agreement {
+            shared_secret: [9u8; 32],
+            ..rfc_agreement()
+        };
+        let c = seal(b"same", &to, &other, &[1u8; 16]).unwrap();
         assert_ne!(a[HEADER_LEN..], b[HEADER_LEN..]);
-        assert_ne!(a[21..86], c[21..86]);
         assert_ne!(a[HEADER_LEN..], c[HEADER_LEN..]);
+    }
+
+    #[test]
+    fn the_authentication_secret_changes_the_key() {
+        // The auth secret is mixed into the key (RFC 8291 section 3.3): the
+        // same ECDH secret with another auth secret must not decrypt the same.
+        let a = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
+        let b = Recipient::parse(UA_PUBLIC, "AAAAAAAAAAAAAAAAAAAAAA").unwrap();
+        let salt = fixed::<16>(SALT);
+        let x = seal(b"same", &a, &rfc_agreement(), &salt).unwrap();
+        let y = seal(b"same", &b, &rfc_agreement(), &salt).unwrap();
+        assert_ne!(x[HEADER_LEN..], y[HEADER_LEN..]);
     }
 
     #[test]
     fn the_largest_message_fits_exactly_one_4096_octet_body() {
         let to = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
         let full = vec![b'a'; MAX_PLAINTEXT];
-        let body = encrypt(&full, &to, &[3u8; 16], &fixed::<32>(AS_PRIVATE)).unwrap();
+        let body = seal(&full, &to, &rfc_agreement(), &[3u8; 16]).unwrap();
         assert_eq!(body.len(), 4096);
+        let over = vec![b'a'; MAX_PLAINTEXT + 1];
         assert_eq!(
-            encrypt(&vec![b'a'; MAX_PLAINTEXT + 1], &to, &[3u8; 16], &[9u8; 32]),
+            seal(&over, &to, &rfc_agreement(), &[3u8; 16]),
             Err(EncryptError::TooLong)
         );
+        // an oversized message never reaches the key agreement
+        let keys = Fake::rfc();
+        assert_eq!(
+            block_on(encrypt(&keys, &over, &to, &[3u8; 16])),
+            Err(EncryptError::TooLong)
+        );
+        assert!(keys.asked.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_failing_key_agreement_is_passed_up_unchanged() {
+        let to = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
+        for e in [EncryptError::BadSubscriptionKey, EncryptError::Crypto] {
+            let keys = Fake {
+                answer: Err(e),
+                asked: RefCell::new(Vec::new()),
+            };
+            assert_eq!(block_on(encrypt(&keys, b"x", &to, &[3u8; 16])), Err(e));
+        }
     }
 
     #[test]
@@ -256,21 +388,15 @@ mod tests {
             Recipient::parse("BAAA", AUTH_SECRET).unwrap_err(),
             EncryptError::BadSubscriptionKey
         );
-        // right shape (starts 0x04, 87 characters) but not a point on P-256
-        let off_curve = format!("BA{}", "A".repeat(85));
+        // a compressed-looking key (0x02 first octet)
+        let compressed = format!("Ag{}", "A".repeat(85));
         assert_eq!(
-            Recipient::parse(&off_curve, AUTH_SECRET).unwrap_err(),
+            Recipient::parse(&compressed, AUTH_SECRET).unwrap_err(),
             EncryptError::BadSubscriptionKey
         );
         assert_eq!(
             Recipient::parse(UA_PUBLIC, "short").unwrap_err(),
             EncryptError::BadSubscriptionKey
-        );
-        // the secret scalar zero is no key
-        let to = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
-        assert_eq!(
-            encrypt(b"x", &to, &[0u8; 16], &[0u8; 32]),
-            Err(EncryptError::BadEphemeralKey)
         );
     }
 
@@ -281,17 +407,18 @@ mod tests {
         let a = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
         let b = Recipient::parse(&padded_key, &padded_auth).unwrap();
         let salt = fixed::<16>(SALT);
-        let key = fixed::<32>(AS_PRIVATE);
         assert_eq!(
-            encrypt(b"x", &a, &salt, &key).unwrap(),
-            encrypt(b"x", &b, &salt, &key).unwrap()
+            seal(b"x", &a, &rfc_agreement(), &salt).unwrap(),
+            seal(b"x", &b, &rfc_agreement(), &salt).unwrap()
         );
     }
 
     #[test]
-    fn recipient_debug_never_prints_the_keys() {
+    fn nothing_that_prints_carries_the_keys() {
         let to = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
-        let shown = format!("{to:?}");
-        assert!(!shown.contains(UA_PUBLIC) && !shown.contains(AUTH_SECRET));
+        let shown = format!("{to:?} {:?}", rfc_agreement());
+        for secret in [UA_PUBLIC, AUTH_SECRET, AS_PUBLIC, ECDH_SECRET] {
+            assert!(!shown.contains(secret), "{secret}");
+        }
     }
 }

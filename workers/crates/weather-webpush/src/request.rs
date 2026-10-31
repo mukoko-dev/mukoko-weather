@@ -15,8 +15,8 @@
 
 use weather_core::push::{self, Outcome, Payload, PushError};
 
-use crate::encrypt::{self, EncryptError, Recipient};
-use crate::vapid::{self, VapidError, VapidKey};
+use crate::encrypt::{self, EncryptError, KeyAgreement, Recipient};
+use crate::vapid::{self, Es256Signer, VapidError};
 
 /// How long a push service may hold a message for an offline browser, at most.
 /// An alert says "tonight", so a day is already generous; the caller passes a
@@ -28,7 +28,8 @@ pub const SEND_TIMEOUT_MS: u32 = 8_000;
 /// RFC 8030 section 5.3: how urgently the push service should wake the
 /// device. Severe frost, a safety matter for crops, is `High`; the rest is
 /// `Normal`. The lowest two are for background sync and never used for an
-/// alert, so they are not offered.
+/// alert, so they are not offered. The caller chooses it, together with the
+/// TTL, from the alert it has decided to send.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Urgency {
     Normal,
@@ -60,20 +61,13 @@ impl std::fmt::Debug for Subscription<'_> {
 }
 
 /// Who is sending, and when. The sender's Worker supplies all three.
-#[derive(Clone, Copy)]
-pub struct Identity<'a> {
-    pub key: &'a VapidKey,
+pub struct Identity<'a, S> {
+    /// Signs the VAPID token; owns the private key.
+    pub signer: &'a S,
     /// The contact URI of the operator (`mailto:` or `https:`).
     pub subject: &'a str,
     /// Seconds since the Unix epoch.
     pub now_unix: u64,
-}
-
-/// Fresh randomness for ONE message. Never reused between messages.
-#[derive(Clone, Copy)]
-pub struct Entropy {
-    pub salt: [u8; 16],
-    pub ephemeral_secret: [u8; 32],
 }
 
 /// Per-message delivery options.
@@ -110,15 +104,17 @@ impl BuildError {
         }
     }
 
-    /// True when the SUBSCRIPTION is unusable and will be again (a refused
-    /// endpoint or key): the caller deactivates it instead of retrying. The
-    /// rest is our configuration or our input, which a retry does not fix
-    /// and a deactivation would wrongly punish the person for.
+    /// True when the SUBSCRIPTION is unusable and will be again (an endpoint
+    /// we will not send to, or keys that are not a browser's): the caller
+    /// deactivates it instead of retrying. The rest is our configuration, our
+    /// input or our runtime, which a retry does not fix and a deactivation
+    /// would wrongly punish the person for.
     pub fn subscription_is_unusable(self) -> bool {
         matches!(
             self,
-            Self::Endpoint(_)
-                | Self::Encrypt(EncryptError::BadSubscriptionKey | EncryptError::BadAuthSecret)
+            Self::Endpoint(
+                PushError::NotHttps | PushError::HostNotAllowed | PushError::BadEndpoint
+            ) | Self::Encrypt(EncryptError::BadSubscriptionKey | EncryptError::BadAuthSecret)
         )
     }
 }
@@ -146,13 +142,18 @@ impl std::fmt::Debug for PushRequest {
     }
 }
 
-/// Build the request for one subscription. Pure.
-pub fn build(
-    sub: &Subscription,
+/// Build the request for one subscription. `keys` makes the elliptic-curve
+/// key agreement and `identity.signer` signs the token (both the runtime's);
+/// `salt` is 16 fresh random bytes for this message, never reused. Nothing
+/// touches the network, and an endpoint outside the allow list is refused
+/// before either the key agreement or the signer is called.
+pub async fn build<K: KeyAgreement, S: Es256Signer>(
+    sub: &Subscription<'_>,
     payload: &Payload,
-    identity: &Identity,
+    identity: &Identity<'_, S>,
     options: &Options,
-    entropy: &Entropy,
+    keys: &K,
+    salt: &[u8; 16],
 ) -> Result<PushRequest, BuildError> {
     if options.ttl_secs == 0 || options.ttl_secs > MAX_TTL_SECS {
         return Err(BuildError::Ttl);
@@ -161,11 +162,17 @@ pub fn build(
     let audience = push::endpoint_origin(sub.endpoint).map_err(BuildError::Endpoint)?;
     let to = Recipient::parse(sub.p256dh, sub.auth).map_err(BuildError::Encrypt)?;
     let plaintext = serde_json::to_vec(payload).map_err(|_| BuildError::Payload)?;
-    let body = encrypt::encrypt(&plaintext, &to, &entropy.salt, &entropy.ephemeral_secret)
+    let body = encrypt::encrypt(keys, &plaintext, &to, salt)
+        .await
         .map_err(BuildError::Encrypt)?;
-    let authorization =
-        vapid::authorization(identity.key, &audience, identity.subject, identity.now_unix)
-            .map_err(BuildError::Vapid)?;
+    let authorization = vapid::authorization(
+        identity.signer,
+        &audience,
+        identity.subject,
+        identity.now_unix,
+    )
+    .await
+    .map_err(BuildError::Vapid)?;
     Ok(PushRequest {
         url: sub.endpoint.to_string(),
         headers: vec![
@@ -223,48 +230,35 @@ pub async fn deliver<T: Transport>(transport: &T, req: &PushRequest) -> Delivery
 }
 
 /// Build and send one alert to one subscription.
-pub async fn send<T: Transport>(
+pub async fn send<T: Transport, K: KeyAgreement, S: Es256Signer>(
     transport: &T,
     sub: &Subscription<'_>,
     payload: &Payload,
-    identity: &Identity<'_>,
+    identity: &Identity<'_, S>,
     options: &Options,
-    entropy: &Entropy,
+    keys: &K,
+    salt: &[u8; 16],
 ) -> Result<Delivery, BuildError> {
-    let req = build(sub, payload, identity, options, entropy)?;
+    let req = build(sub, payload, identity, options, keys, salt).await?;
     Ok(deliver(transport, &req).await)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{encrypt::HEADER_LEN, B64URL};
+    use crate::encrypt::tests::{
+        block_on, fixed, Fake as FakeKeys, AS_PUBLIC, AUTH_SECRET, ECDH_SECRET, SALT, UA_PUBLIC,
+    };
+    use crate::encrypt::{Agreement, HEADER_LEN};
+    use crate::vapid::tests::Fake as FakeSigner;
+    use crate::B64URL;
     use base64::Engine;
     use std::cell::RefCell;
-    use std::future::Future;
-    use std::task::{Context, Poll, Waker};
     use weather_core::push::{frost_payload, FrostAlert, Risk};
 
-    // Published RFC test keys (8291 Appendix A for the browser, its
-    // application server key doubling as a fixed VAPID key): not secrets.
-    const UA_PUBLIC: &str =
-        "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4";
-    const AUTH_SECRET: &str = "BTBZMqHH6r4Tts7J_aSIgg";
-    const VAPID_PRIVATE: &str = "yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw";
     const ENDPOINT: &str = "https://fcm.googleapis.com/fcm/send/dQw4w9WgXcQ:APA91bExample";
+    const CONTACT: &str = "mailto:weather@mukoko.com";
     const NOW: u64 = 1_761_900_000;
-
-    /// The futures here complete at once (the fake never waits), so polling
-    /// in a loop is enough and no runtime is needed.
-    fn block_on<F: Future>(f: F) -> F::Output {
-        let mut f = std::pin::pin!(f);
-        let mut cx = Context::from_waker(Waker::noop());
-        loop {
-            if let Poll::Ready(v) = f.as_mut().poll(&mut cx) {
-                return v;
-            }
-        }
-    }
 
     struct Fake {
         answer: Result<u16, TransportError>,
@@ -309,13 +303,6 @@ mod tests {
         }
     }
 
-    fn entropy() -> Entropy {
-        Entropy {
-            salt: [5u8; 16],
-            ephemeral_secret: B64URL.decode(VAPID_PRIVATE).unwrap().try_into().unwrap(),
-        }
-    }
-
     fn opts() -> Options {
         Options {
             ttl_secs: 3_600,
@@ -323,14 +310,38 @@ mod tests {
         }
     }
 
-    fn built() -> PushRequest {
-        let key = VapidKey::from_b64url(VAPID_PRIVATE).unwrap();
-        let id = Identity {
-            key: &key,
-            subject: "mailto:weather@mukoko.com",
+    fn salt() -> [u8; 16] {
+        fixed(SALT)
+    }
+
+    fn identity(signer: &FakeSigner) -> Identity<'_, FakeSigner> {
+        Identity {
+            signer,
+            subject: CONTACT,
             now_unix: NOW,
-        };
-        build(&sub(), &payload(), &id, &opts(), &entropy()).unwrap()
+        }
+    }
+
+    fn built() -> PushRequest {
+        let signer = FakeSigner::new();
+        block_on(build(
+            &sub(),
+            &payload(),
+            &identity(&signer),
+            &opts(),
+            &FakeKeys::rfc(),
+            &salt(),
+        ))
+        .unwrap()
+    }
+
+    fn build_with(
+        s: &Subscription<'_>,
+        id: &Identity<'_, FakeSigner>,
+        o: &Options,
+        keys: &FakeKeys,
+    ) -> Result<PushRequest, BuildError> {
+        block_on(build(s, &payload(), id, o, keys, &salt()))
     }
 
     fn header<'a>(r: &'a PushRequest, name: &str) -> &'a str {
@@ -351,8 +362,7 @@ mod tests {
         assert_eq!(header(&r, "Urgency"), "normal");
         let auth = header(&r, "Authorization");
         assert!(auth.starts_with("vapid t="));
-        let key = VapidKey::from_b64url(VAPID_PRIVATE).unwrap();
-        assert!(auth.ends_with(&format!(", k={}", key.public_b64url())));
+        assert!(auth.ends_with(", k=BA1Hxzyi1RUM1b5wjxsn7nGxAszw2u61m164i3MrAIxHF6YK5h4SDYic-dRuU_RCPCfA5aq9ojSwk5Y2EmClBPs"));
         assert_eq!(r.timeout_ms, SEND_TIMEOUT_MS);
     }
 
@@ -386,29 +396,18 @@ mod tests {
 
     #[test]
     fn a_high_urgency_message_says_so() {
-        let key = VapidKey::from_b64url(VAPID_PRIVATE).unwrap();
-        let id = Identity {
-            key: &key,
-            subject: "mailto:weather@mukoko.com",
-            now_unix: NOW,
-        };
+        let signer = FakeSigner::new();
         let o = Options {
             ttl_secs: 600,
             urgency: Urgency::High,
         };
-        let r = build(&sub(), &payload(), &id, &o, &entropy()).unwrap();
+        let r = build_with(&sub(), &identity(&signer), &o, &FakeKeys::rfc()).unwrap();
         assert_eq!(header(&r, "Urgency"), "high");
         assert_eq!(header(&r, "TTL"), "600");
     }
 
     #[test]
-    fn a_host_outside_the_allow_list_gets_no_token_and_no_bytes() {
-        let key = VapidKey::from_b64url(VAPID_PRIVATE).unwrap();
-        let id = Identity {
-            key: &key,
-            subject: "mailto:weather@mukoko.com",
-            now_unix: NOW,
-        };
+    fn a_host_outside_the_allow_list_gets_no_token_and_no_key_agreement() {
         for endpoint in [
             "https://evil.example/x",
             "http://fcm.googleapis.com/x",
@@ -416,60 +415,79 @@ mod tests {
             "https://169.254.169.254/latest/meta-data",
             "https://fcm.googleapis.com:8443/x",
         ] {
+            let signer = FakeSigner::new();
+            let keys = FakeKeys::rfc();
             let s = Subscription { endpoint, ..sub() };
-            let e = build(&s, &payload(), &id, &opts(), &entropy()).unwrap_err();
+            let e = build_with(&s, &identity(&signer), &opts(), &keys).unwrap_err();
             assert!(matches!(e, BuildError::Endpoint(_)), "{endpoint}");
             assert!(e.subscription_is_unusable());
+            assert!(signer.signed.borrow().is_empty(), "{endpoint}");
+            assert!(keys.asked.borrow().is_empty(), "{endpoint}");
         }
     }
 
     #[test]
     fn build_errors_say_whose_fault_they_are() {
-        let key = VapidKey::from_b64url(VAPID_PRIVATE).unwrap();
-        let id = Identity {
-            key: &key,
-            subject: "mailto:weather@mukoko.com",
-            now_unix: NOW,
-        };
+        let signer = FakeSigner::new();
         // the browser's keys are bad: the subscription is dead
         let s = Subscription {
             p256dh: "BAAA",
             ..sub()
         };
-        let e = build(&s, &payload(), &id, &opts(), &entropy()).unwrap_err();
+        let e = build_with(&s, &identity(&signer), &opts(), &FakeKeys::rfc()).unwrap_err();
         assert_eq!(e, BuildError::Encrypt(EncryptError::BadSubscriptionKey));
+        assert!(e.subscription_is_unusable());
+        // the runtime says the point is off the curve: the subscription is dead
+        let off_curve = FakeKeys {
+            answer: Err(EncryptError::BadSubscriptionKey),
+            ..FakeKeys::rfc()
+        };
+        let e = build_with(&sub(), &identity(&signer), &opts(), &off_curve).unwrap_err();
         assert!(e.subscription_is_unusable());
         // our contact claim is bad: configuration, not the person's problem
         let bad_id = Identity {
             subject: "nobody",
-            ..id
+            ..identity(&signer)
         };
-        let e = build(&sub(), &payload(), &bad_id, &opts(), &entropy()).unwrap_err();
+        let e = build_with(&sub(), &bad_id, &opts(), &FakeKeys::rfc()).unwrap_err();
         assert_eq!(e, BuildError::Vapid(VapidError::BadSubject));
         assert!(!e.subscription_is_unusable());
         assert_eq!(e.code(), "bad_vapid_subject");
-        // our own randomness is bad: not the person's problem either
-        let bad_entropy = Entropy {
-            ephemeral_secret: [0u8; 32],
-            ..entropy()
+        // our runtime failed (key agreement or signer): not the person's problem
+        let failing_keys = FakeKeys {
+            answer: Err(EncryptError::Crypto),
+            ..FakeKeys::rfc()
         };
-        let e = build(&sub(), &payload(), &id, &opts(), &bad_entropy).unwrap_err();
-        assert_eq!(e, BuildError::Encrypt(EncryptError::BadEphemeralKey));
+        let e = build_with(&sub(), &identity(&signer), &opts(), &failing_keys).unwrap_err();
+        assert_eq!(e, BuildError::Encrypt(EncryptError::Crypto));
         assert!(!e.subscription_is_unusable());
+        let failing_signer = FakeSigner {
+            answer: Err(VapidError::Signing),
+            ..FakeSigner::new()
+        };
+        let e = build_with(
+            &sub(),
+            &identity(&failing_signer),
+            &opts(),
+            &FakeKeys::rfc(),
+        )
+        .unwrap_err();
+        assert_eq!(e, BuildError::Vapid(VapidError::Signing));
+        assert!(!e.subscription_is_unusable());
+        // never ours to punish: a TTL we got wrong, a payload that would not serialise
+        assert!(!BuildError::Ttl.subscription_is_unusable());
+        assert!(!BuildError::Payload.subscription_is_unusable());
+        // and a PushError that is not about the endpoint is not a dead subscription
+        assert!(!BuildError::Endpoint(PushError::TooManyPlaces).subscription_is_unusable());
     }
 
     #[test]
     fn the_ttl_is_required_and_bounded() {
-        let key = VapidKey::from_b64url(VAPID_PRIVATE).unwrap();
-        let id = Identity {
-            key: &key,
-            subject: "mailto:weather@mukoko.com",
-            now_unix: NOW,
-        };
+        let signer = FakeSigner::new();
         for ttl_secs in [0, MAX_TTL_SECS + 1] {
             let o = Options { ttl_secs, ..opts() };
             assert_eq!(
-                build(&sub(), &payload(), &id, &o, &entropy()).unwrap_err(),
+                build_with(&sub(), &identity(&signer), &o, &FakeKeys::rfc()).unwrap_err(),
                 BuildError::Ttl
             );
         }
@@ -477,7 +495,7 @@ mod tests {
             ttl_secs: MAX_TTL_SECS,
             ..opts()
         };
-        assert!(build(&sub(), &payload(), &id, &o, &entropy()).is_ok());
+        assert!(build_with(&sub(), &identity(&signer), &o, &FakeKeys::rfc()).is_ok());
     }
 
     #[test]
@@ -517,14 +535,18 @@ mod tests {
 
     #[test]
     fn send_builds_then_posts_exactly_one_request() {
-        let key = VapidKey::from_b64url(VAPID_PRIVATE).unwrap();
-        let id = Identity {
-            key: &key,
-            subject: "mailto:weather@mukoko.com",
-            now_unix: NOW,
-        };
+        let signer = FakeSigner::new();
         let t = Fake::new(Ok(201));
-        let d = block_on(send(&t, &sub(), &payload(), &id, &opts(), &entropy())).unwrap();
+        let d = block_on(send(
+            &t,
+            &sub(),
+            &payload(),
+            &identity(&signer),
+            &opts(),
+            &FakeKeys::rfc(),
+            &salt(),
+        ))
+        .unwrap();
         assert_eq!(d.outcome, Outcome::Accepted);
         assert_eq!(d.outcome.delivery_status(), "sent");
         let seen = t.seen.borrow();
@@ -534,18 +556,22 @@ mod tests {
 
     #[test]
     fn a_refused_build_never_reaches_the_transport() {
-        let key = VapidKey::from_b64url(VAPID_PRIVATE).unwrap();
-        let id = Identity {
-            key: &key,
-            subject: "mailto:weather@mukoko.com",
-            now_unix: NOW,
-        };
+        let signer = FakeSigner::new();
         let s = Subscription {
             endpoint: "https://evil.example/x",
             ..sub()
         };
         let t = Fake::new(Ok(201));
-        assert!(block_on(send(&t, &s, &payload(), &id, &opts(), &entropy())).is_err());
+        assert!(block_on(send(
+            &t,
+            &s,
+            &payload(),
+            &identity(&signer),
+            &opts(),
+            &FakeKeys::rfc(),
+            &salt(),
+        ))
+        .is_err());
         assert!(t.seen.borrow().is_empty());
     }
 
@@ -561,37 +587,26 @@ mod tests {
 
     #[test]
     fn the_payload_the_browser_reads_is_the_decided_alert() {
-        // Decrypt with the browser's private key from RFC 8291 Appendix A to
-        // prove the record really carries the JSON payload. (The receiver
-        // side is test-only: the crate never decrypts.)
+        // Decrypt as the browser would (RFC 8291 section 3.4, receiver side)
+        // from the RFC's published ECDH secret, to prove the record carries
+        // the JSON payload. The receiver side is test-only: the crate never
+        // decrypts.
         use aes_gcm::aead::{Aead, KeyInit, Payload as Aead2};
         use aes_gcm::{Aes128Gcm, Nonce};
         use hkdf::Hkdf;
-        use p256::ecdh::diffie_hellman;
-        use p256::{PublicKey, SecretKey};
         use sha2::Sha256;
 
-        let ua_private: [u8; 32] = B64URL
-            .decode("q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94")
-            .unwrap()
-            .try_into()
-            .unwrap();
         let r = built();
         let salt: [u8; 16] = r.body[..16].try_into().unwrap();
         let as_public = &r.body[21..HEADER_LEN];
-        let ua_secret = SecretKey::from_slice(&ua_private).unwrap();
-        let shared = diffie_hellman(
-            ua_secret.to_nonzero_scalar(),
-            PublicKey::from_sec1_bytes(as_public).unwrap().as_affine(),
-        );
-        let ua_pub = B64URL.decode(UA_PUBLIC).unwrap();
+        assert_eq!(B64URL.encode(as_public), AS_PUBLIC);
         let mut key_info = b"WebPush: info\0".to_vec();
-        key_info.extend_from_slice(&ua_pub);
+        key_info.extend_from_slice(&B64URL.decode(UA_PUBLIC).unwrap());
         key_info.extend_from_slice(as_public);
         let mut ikm = [0u8; 32];
         Hkdf::<Sha256>::new(
             Some(&B64URL.decode(AUTH_SECRET).unwrap()),
-            shared.raw_secret_bytes(),
+            &B64URL.decode(ECDH_SECRET).unwrap(),
         )
         .expand(&key_info, &mut ikm)
         .unwrap();
@@ -620,5 +635,17 @@ mod tests {
         assert_eq!(json["slug"], "harare");
         assert_eq!(json["url"], "/harare");
         assert_eq!(json["title"], "Frost alert for Harare");
+        // and a different ECDH secret (a different browser) cannot read it
+        let other = Agreement {
+            shared_secret: [1u8; 32],
+            ..crate::encrypt::tests::rfc_agreement()
+        };
+        let signer = FakeSigner::new();
+        let keys = FakeKeys {
+            answer: Ok(other),
+            ..FakeKeys::rfc()
+        };
+        let r2 = build_with(&sub(), &identity(&signer), &opts(), &keys).unwrap();
+        assert_ne!(r2.body[HEADER_LEN..], r.body[HEADER_LEN..]);
     }
 }

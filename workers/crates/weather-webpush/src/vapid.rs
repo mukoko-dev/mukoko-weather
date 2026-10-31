@@ -7,14 +7,14 @@
 //! 403 to a token signed by any other key, so the pair never changes without
 //! every subscription being remade.
 //!
-//! The private key is an argument, never a constant, and this crate never
-//! reads or stores one: the push Worker takes it from its secret binding. Its
-//! `Debug` prints the public key only. ES256 signing here is deterministic
-//! (RFC 6979), so no random source is needed either.
+//! This module builds and checks everything about the token EXCEPT the
+//! signature: that is the injected [`Es256Signer`], which owns the private key
+//! (in a Worker, a WebCrypto key imported from a secret binding). So this
+//! crate never holds a private key, has no `Debug` that could print one, and
+//! uses no Rust elliptic-curve crate (the RustCrypto chain currently resolves
+//! `crypto-bigint` 0.5, RUSTSEC-2026-0387).
 
 use base64::Engine;
-use p256::ecdsa::signature::Signer;
-use p256::ecdsa::{Signature, SigningKey};
 
 use crate::B64URL;
 
@@ -26,14 +26,12 @@ const JWT_HEADER: &str = r#"{"typ":"JWT","alg":"ES256"}"#;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VapidError {
-    /// Not a 32-octet P-256 private scalar.
-    BadKey,
     /// The contact claim is not a `mailto:` or `https:` URI (RFC 8292
     /// section 2.1), or is empty or oversized.
     BadSubject,
-    /// The audience is not a bare `https://host` origin.
+    /// The audience is not the bare origin of an allowed push service.
     BadAudience,
-    /// The signer refused the input (cannot happen with a valid key).
+    /// The signer refused or failed.
     Signing,
 }
 
@@ -41,7 +39,6 @@ impl VapidError {
     /// A stable machine-readable code for logs.
     pub fn code(self) -> &'static str {
         match self {
-            Self::BadKey => "bad_vapid_key",
             Self::BadSubject => "bad_vapid_subject",
             Self::BadAudience => "bad_vapid_audience",
             Self::Signing => "vapid_signing",
@@ -49,57 +46,39 @@ impl VapidError {
     }
 }
 
-/// The application server's signing key.
-pub struct VapidKey {
-    signing: SigningKey,
-    public: [u8; 65],
+/// What a runtime supplies for the signature. An implementation holds the
+/// application server's P-256 private key and:
+///
+/// - signs `message` with ECDSA over SHA-256 (ES256, RFC 7518 section 3.4);
+/// - returns the signature as the 64 octets `r || s` (the IEEE P1363 form a
+///   JWT carries, which is what WebCrypto's `sign` returns; NOT DER);
+/// - reports the matching public key as the uncompressed point.
+///
+/// The signature need not be deterministic. Its future is not `Send`, which is
+/// why the trait is not either.
+#[allow(async_fn_in_trait)]
+pub trait Es256Signer {
+    /// The public key, uncompressed (65 octets starting 0x04).
+    fn public_key(&self) -> [u8; 65];
+    async fn sign(&self, message: &[u8]) -> Result<[u8; 64], VapidError>;
 }
 
-impl std::fmt::Debug for VapidKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "VapidKey(public={})", self.public_b64url())
-    }
+/// The public key as base64url of the uncompressed point (87 characters):
+/// the `applicationServerKey` a browser subscribes against and the `k`
+/// parameter of the header.
+pub fn public_key_b64url<S: Es256Signer>(signer: &S) -> String {
+    B64URL.encode(signer.public_key())
 }
 
-impl VapidKey {
-    /// From the raw 32-octet private scalar, the form `web-push` tooling
-    /// prints and a secret store holds.
-    pub fn from_bytes(private: &[u8; 32]) -> Result<Self, VapidError> {
-        let signing = SigningKey::from_slice(private).map_err(|_| VapidError::BadKey)?;
-        let point = signing.verifying_key().to_encoded_point(false);
-        let public: [u8; 65] = point
-            .as_bytes()
-            .try_into()
-            .map_err(|_| VapidError::BadKey)?;
-        Ok(Self { signing, public })
-    }
-
-    /// From the private scalar as base64url (43 characters).
-    pub fn from_b64url(private: &str) -> Result<Self, VapidError> {
-        let raw: [u8; 32] = B64URL
-            .decode(private.trim())
-            .map_err(|_| VapidError::BadKey)?
-            .as_slice()
-            .try_into()
-            .map_err(|_| VapidError::BadKey)?;
-        Self::from_bytes(&raw)
-    }
-
-    /// The public key, base64url of the uncompressed point (87 characters):
-    /// the `applicationServerKey` a browser subscribes against and the `k`
-    /// parameter of the header.
-    pub fn public_b64url(&self) -> String {
-        B64URL.encode(self.public)
-    }
+/// A token is only ever made for the origin of a push service we send to: the
+/// same https-only, allow-listed, no-port, no-credentials rules as the
+/// endpoint itself (`weather_core::push`), and in the canonical lower-case
+/// form. One source of truth for what a push origin is.
+fn audience_ok(audience: &str) -> bool {
+    weather_core::push::endpoint_origin(&format!("{audience}/")).as_deref() == Ok(audience)
 }
 
-fn is_origin(audience: &str) -> bool {
-    audience
-        .strip_prefix("https://")
-        .is_some_and(|host| !host.is_empty() && !host.contains(['/', '?', '#', '@']))
-}
-
-fn is_contact(subject: &str) -> bool {
+fn contact_ok(subject: &str) -> bool {
     let well_formed = subject.len() <= 200 && !subject.chars().any(|c| c.is_control());
     well_formed
         && (subject
@@ -110,93 +89,115 @@ fn is_contact(subject: &str) -> bool {
                 .is_some_and(|h| !h.is_empty() && !h.starts_with('/')))
 }
 
-fn json_string(s: &str) -> String {
-    // A string always serialises; the fallback only avoids an unwrap.
-    serde_json::to_string(s).unwrap_or_else(|_| "\"\"".to_string())
+fn json_string(s: &str) -> Result<String, VapidError> {
+    serde_json::to_string(s).map_err(|_| VapidError::Signing)
+}
+
+/// `header.claims`, base64url, no padding: the JWT signing input. Claims are
+/// written in the order RFC 8292's example shows (`aud`, `exp`, `sub`), by
+/// hand, so the bytes never depend on a serializer's map order. No policy
+/// here: [`token`] checks the audience and the contact first.
+pub(crate) fn signing_input(
+    audience: &str,
+    subject: &str,
+    expires_unix: u64,
+) -> Result<String, VapidError> {
+    let claims = format!(
+        "{{\"aud\":{},\"exp\":{expires_unix},\"sub\":{}}}",
+        json_string(audience)?,
+        json_string(subject)?
+    );
+    Ok(format!(
+        "{}.{}",
+        B64URL.encode(JWT_HEADER),
+        B64URL.encode(claims.as_bytes())
+    ))
 }
 
 /// The signed JWT for one push service origin, valid for
 /// [`TOKEN_LIFETIME_SECS`] from `now_unix`. `audience` is the origin of the
 /// push endpoint (`weather_core::push::endpoint_origin`).
-///
-/// Claims are written in the order RFC 8292's example shows (`aud`, `exp`,
-/// `sub`), by hand, so the bytes never depend on a serializer's map order.
-pub fn token(
-    key: &VapidKey,
+pub async fn token<S: Es256Signer>(
+    signer: &S,
     audience: &str,
     subject: &str,
     now_unix: u64,
 ) -> Result<String, VapidError> {
-    if !is_origin(audience) {
+    if !audience_ok(audience) {
         return Err(VapidError::BadAudience);
     }
-    if !is_contact(subject) {
+    if !contact_ok(subject) {
         return Err(VapidError::BadSubject);
     }
-    let exp = now_unix.saturating_add(TOKEN_LIFETIME_SECS);
-    let claims = format!(
-        "{{\"aud\":{},\"exp\":{exp},\"sub\":{}}}",
-        json_string(audience),
-        json_string(subject)
-    );
-    let signing_input = format!(
-        "{}.{}",
-        B64URL.encode(JWT_HEADER),
-        B64URL.encode(claims.as_bytes())
-    );
-    // ES256 (RFC 7518 section 3.4): the 64 octets r || s, not DER.
-    let signature: Signature = key
-        .signing
-        .try_sign(signing_input.as_bytes())
-        .map_err(|_| VapidError::Signing)?;
-    Ok(format!(
-        "{signing_input}.{}",
-        B64URL.encode(signature.to_bytes())
-    ))
+    let input = signing_input(
+        audience,
+        subject,
+        now_unix.saturating_add(TOKEN_LIFETIME_SECS),
+    )?;
+    let signature = signer.sign(input.as_bytes()).await?;
+    Ok(format!("{input}.{}", B64URL.encode(signature)))
 }
 
 /// The value of the `Authorization` header (RFC 8292 section 3):
 /// `vapid t=<jwt>, k=<public key>`.
-pub fn authorization(
-    key: &VapidKey,
+pub async fn authorization<S: Es256Signer>(
+    signer: &S,
     audience: &str,
     subject: &str,
     now_unix: u64,
 ) -> Result<String, VapidError> {
     Ok(format!(
         "vapid t={}, k={}",
-        token(key, audience, subject, now_unix)?,
-        key.public_b64url()
+        token(signer, audience, subject, now_unix).await?,
+        public_key_b64url(signer)
     ))
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
-    use p256::ecdsa::signature::Verifier;
-    use p256::ecdsa::VerifyingKey;
+    use crate::encrypt::tests::block_on;
+    use std::cell::RefCell;
 
-    /// The RFC 8291 example's application server key. Published test key
-    /// material, used here only to have a fixed key pair: not a secret.
-    const TEST_PRIVATE: &str = "yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw";
-    const TEST_PUBLIC: &str =
-        "BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8";
-
-    // RFC 8292 section 2.4 (Figure 1 and 2): a token an application server
-    // sent and the key that signed it.
+    // RFC 8292 section 2.4 (Figures 1 and 2): a token an application server
+    // sent. Its signing key is not ours and its private half is unknown; only
+    // the bytes the signature covers matter here.
     const RFC_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJhdWQiOiJodHRwczovL3B1c2guZXhhbXBsZS5uZXQiLCJleHAiOjE0NTM1MjM3NjgsInN1YiI6Im1haWx0bzpwdXNoQGV4YW1wbGUuY29tIn0.i3CYb7t4xfxCDquptFOepC9GAu_HLGkMlMuCGSK2rpiUfnK9ojFwDXb1JrErtmysazNjjvW2L9OkSSHzvoD1oA";
     const RFC_PUBLIC: &str =
         "BA1Hxzyi1RUM1b5wjxsn7nGxAszw2u61m164i3MrAIxHF6YK5h4SDYic-dRuU_RCPCfA5aq9ojSwk5Y2EmClBPs";
+    const GOOD_AUD: &str = "https://fcm.googleapis.com";
+    const GOOD_SUB: &str = "mailto:weather@mukoko.com";
 
-    fn key() -> VapidKey {
-        VapidKey::from_b64url(TEST_PRIVATE).unwrap()
+    /// A signer that returns a fixed 64-octet signature, records the exact
+    /// message it was asked to sign, and reports a fixed public key. (No
+    /// private key exists in this crate, so the tests use no real signature.)
+    pub(crate) struct Fake {
+        pub(crate) public: [u8; 65],
+        pub(crate) answer: Result<[u8; 64], VapidError>,
+        pub(crate) signed: RefCell<Vec<Vec<u8>>>,
     }
 
-    fn verifier(public_b64url: &str) -> VerifyingKey {
-        VerifyingKey::from_sec1_bytes(&B64URL.decode(public_b64url).unwrap()).unwrap()
+    impl Fake {
+        pub(crate) fn new() -> Self {
+            Self {
+                public: crate::encrypt::tests::fixed(RFC_PUBLIC),
+                answer: Ok(core::array::from_fn(|i| i as u8)),
+                signed: RefCell::new(Vec::new()),
+            }
+        }
     }
 
-    fn parts(jwt: &str) -> (String, String, Vec<u8>) {
+    impl Es256Signer for Fake {
+        fn public_key(&self) -> [u8; 65] {
+            self.public
+        }
+        async fn sign(&self, message: &[u8]) -> Result<[u8; 64], VapidError> {
+            self.signed.borrow_mut().push(message.to_vec());
+            self.answer
+        }
+    }
+
+    fn segments(jwt: &str) -> (String, String, Vec<u8>) {
         let mut it = jwt.split('.');
         let header = it.next().unwrap();
         let claims = it.next().unwrap();
@@ -210,113 +211,113 @@ mod tests {
     }
 
     #[test]
-    fn the_public_key_is_derived_from_the_private_one() {
-        assert_eq!(key().public_b64url(), TEST_PUBLIC);
-        assert_eq!(key().public_b64url().len(), 87);
-    }
-
-    #[test]
-    fn the_rfc_8292_example_token_verifies_under_its_published_key() {
-        // Proves the signing input (header.claims, base64url, no padding) and
-        // the raw r||s signature format are what push services check.
-        let (header, claims, sig) = parts(RFC_JWT);
-        assert_eq!(header, JWT_HEADER);
-        assert_eq!(
-            claims,
-            r#"{"aud":"https://push.example.net","exp":1453523768,"sub":"mailto:push@example.com"}"#
-        );
-        let signing_input = RFC_JWT.rsplit_once('.').unwrap().0;
-        let sig = Signature::from_slice(&sig).unwrap();
-        assert!(verifier(RFC_PUBLIC)
-            .verify(signing_input.as_bytes(), &sig)
-            .is_ok());
-        // and not under any other key
-        assert!(verifier(TEST_PUBLIC)
-            .verify(signing_input.as_bytes(), &sig)
-            .is_err());
-    }
-
-    #[test]
-    fn our_token_has_the_rfc_shape_and_verifies_under_our_public_key() {
-        let now = 1_453_480_568; // RFC 8292's example exp, minus 12 hours
-        let jwt = token(
-            &key(),
+    fn the_signing_input_is_byte_for_byte_the_rfc_8292_example() {
+        // RFC 8292 section 2.4: the JWT the signature covers is the first two
+        // segments of the example token, for these claims.
+        let input = signing_input(
             "https://push.example.net",
             "mailto:push@example.com",
-            now,
+            1_453_523_768,
         )
         .unwrap();
-        let (header, claims, sig) = parts(&jwt);
+        assert_eq!(input, RFC_JWT.rsplit_once('.').unwrap().0);
+        let (header, claims, _) = segments(RFC_JWT);
         assert_eq!(header, JWT_HEADER);
         assert_eq!(
             claims,
             r#"{"aud":"https://push.example.net","exp":1453523768,"sub":"mailto:push@example.com"}"#
         );
-        assert_eq!(sig.len(), 64);
-        let signing_input = jwt.rsplit_once('.').unwrap().0;
-        assert!(verifier(TEST_PUBLIC)
-            .verify(
-                signing_input.as_bytes(),
-                &Signature::from_slice(&sig).unwrap()
+    }
+
+    #[test]
+    fn the_token_is_the_signing_input_plus_the_raw_signature() {
+        let signer = Fake::new();
+        let now = 1_453_480_568; // RFC 8292's example exp, minus 12 hours
+        let jwt = block_on(token(&signer, GOOD_AUD, GOOD_SUB, now)).unwrap();
+        let (header, claims, sig) = segments(&jwt);
+        assert_eq!(header, JWT_HEADER);
+        assert_eq!(
+            claims,
+            format!(
+                r#"{{"aud":"{GOOD_AUD}","exp":{},"sub":"{GOOD_SUB}"}}"#,
+                now + TOKEN_LIFETIME_SECS
             )
-            .is_ok());
+        );
+        // exactly the 64 raw octets, signed over exactly header.claims
+        assert_eq!(sig.as_slice(), signer.answer.unwrap().as_slice());
+        let signed = signer.signed.borrow();
+        assert_eq!(signed.len(), 1);
+        assert_eq!(
+            signed[0],
+            jwt.rsplit_once('.').unwrap().0.as_bytes(),
+            "the signer sees the JWT signing input and nothing else"
+        );
     }
 
     #[test]
     fn a_token_never_lives_longer_than_the_rfc_allows() {
         const { assert!(TOKEN_LIFETIME_SECS < 24 * 60 * 60) };
-        let jwt = token(&key(), "https://a.example", "mailto:a@b.example", 1_000).unwrap();
-        let (_, claims, _) = parts(&jwt);
+        let signer = Fake::new();
+        let jwt = block_on(token(&signer, GOOD_AUD, GOOD_SUB, 1_000)).unwrap();
+        let (_, claims, _) = segments(&jwt);
         assert!(claims.contains(&format!("\"exp\":{}", 1_000 + TOKEN_LIFETIME_SECS)));
     }
 
     #[test]
-    fn signing_is_deterministic() {
-        let a = token(&key(), "https://a.example", "mailto:a@b.example", 5).unwrap();
-        let b = token(&key(), "https://a.example", "mailto:a@b.example", 5).unwrap();
-        assert_eq!(a, b);
-    }
-
-    #[test]
     fn the_authorization_header_carries_the_token_and_the_public_key() {
-        let h = authorization(
-            &key(),
-            "https://fcm.googleapis.com",
-            "mailto:weather@mukoko.com",
-            1_700_000_000,
-        )
-        .unwrap();
+        let signer = Fake::new();
+        let h = block_on(authorization(&signer, GOOD_AUD, GOOD_SUB, 1_700_000_000)).unwrap();
         let rest = h.strip_prefix("vapid t=").unwrap();
         let (jwt, k) = rest.split_once(", k=").unwrap();
-        assert_eq!(k, TEST_PUBLIC);
+        assert_eq!(k, RFC_PUBLIC);
+        assert_eq!(k.len(), 87);
         assert_eq!(jwt.matches('.').count(), 2);
     }
 
     #[test]
-    fn the_audience_must_be_a_bare_https_origin() {
+    fn the_audience_is_only_ever_an_allowed_push_service_origin() {
+        let signer = Fake::new();
+        for ok in [
+            "https://fcm.googleapis.com",
+            "https://updates.push.services.mozilla.com",
+            "https://web.push.apple.com",
+        ] {
+            assert!(block_on(token(&signer, ok, GOOD_SUB, 1)).is_ok(), "{ok}");
+        }
         for bad in [
             "",
             "http://fcm.googleapis.com",
             "https://",
             "https://fcm.googleapis.com/fcm/send/abc",
+            "https://fcm.googleapis.com/",
             "https://user@fcm.googleapis.com",
+            "https://FCM.googleapis.com",
+            "https://fcm.googleapis.com:443",
+            "https://fcm.googleapis.com:8443",
+            "https://a b.push.apple.com",
             "fcm.googleapis.com",
+            // well formed, but not a push service we send to
+            "https://push.example.net",
+            "https://169.254.169.254",
         ] {
             assert_eq!(
-                token(&key(), bad, "mailto:a@b.example", 1),
+                block_on(token(&signer, bad, GOOD_SUB, 1)),
                 Err(VapidError::BadAudience),
                 "{bad}"
             );
         }
+        // nothing was signed for a refused audience
+        assert_eq!(signer.signed.borrow().len(), 3);
     }
 
     #[test]
     fn the_contact_must_be_a_mailto_or_https_uri() {
+        let signer = Fake::new();
         for ok in [
             "mailto:weather@mukoko.com",
             "https://weather.mukoko.com/contact",
         ] {
-            assert!(token(&key(), "https://a.example", ok, 1).is_ok(), "{ok}");
+            assert!(block_on(token(&signer, GOOD_AUD, ok, 1)).is_ok(), "{ok}");
         }
         for bad in [
             "",
@@ -329,30 +330,31 @@ mod tests {
             "mailto:a@b.example\r\nX-Evil: 1",
         ] {
             assert_eq!(
-                token(&key(), "https://a.example", bad, 1),
+                block_on(token(&signer, GOOD_AUD, bad, 1)),
                 Err(VapidError::BadSubject),
                 "{bad:?}"
             );
         }
         let long = format!("mailto:{}@mukoko.com", "a".repeat(200));
         assert_eq!(
-            token(&key(), "https://a.example", &long, 1),
+            block_on(token(&signer, GOOD_AUD, &long, 1)),
             Err(VapidError::BadSubject)
         );
     }
 
     #[test]
-    fn a_bad_private_key_is_refused_and_never_printed() {
+    fn a_failing_signer_fails_the_token_and_the_header() {
+        let signer = Fake {
+            answer: Err(VapidError::Signing),
+            ..Fake::new()
+        };
         assert_eq!(
-            VapidKey::from_b64url("short").unwrap_err(),
-            VapidError::BadKey
+            block_on(token(&signer, GOOD_AUD, GOOD_SUB, 1)),
+            Err(VapidError::Signing)
         );
         assert_eq!(
-            VapidKey::from_bytes(&[0u8; 32]).unwrap_err(),
-            VapidError::BadKey
+            block_on(authorization(&signer, GOOD_AUD, GOOD_SUB, 1)),
+            Err(VapidError::Signing)
         );
-        let shown = format!("{:?}", key());
-        assert!(!shown.contains(TEST_PRIVATE));
-        assert!(shown.contains(TEST_PUBLIC));
     }
 }
