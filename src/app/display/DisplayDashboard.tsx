@@ -89,7 +89,7 @@ export function DisplayDashboard({
   // The NEA reading is official only for Singapore; nothing is fetched elsewhere.
   const isSingapore = location.country === "SG";
   const sgState = usePolledJson<SgAirResponse>(
-    isSingapore ? `/api/py/sg-air?${coords}` : null,
+    isSingapore ? workerUrl("sg-air", coords) : null,
     DISPLAY_REFRESH_MS.sgAir,
     isSgAir,
   );

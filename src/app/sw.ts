@@ -85,11 +85,11 @@ const serwist = new Serwist({
     // Phase 1D: AI prompts/rules now flow through /api/ai/* (auth-gated proxy).
     {
       matcher: ({ url }) =>
-        url.pathname.startsWith("/api/py/suitability") ||
-        url.pathname.startsWith("/api/py/activities") ||
-        url.pathname.startsWith("/api/py/tags") ||
-        url.pathname.startsWith("/api/ai/prompts") ||
-        url.pathname.startsWith("/api/ai/suggested-rules"),
+        url.pathname.startsWith("/v1/suitability") ||
+        url.pathname.startsWith("/v1/activities") ||
+        url.pathname.startsWith("/v1/tags") ||
+        url.pathname.startsWith("/v1/ai/prompts") ||
+        url.pathname.startsWith("/v1/ai/suggested-rules"),
       handler: new StaleWhileRevalidate({
         cacheName: "reference-data",
         plugins: [
@@ -121,7 +121,7 @@ const serwist = new Serwist({
 
     // Map tiles — CacheFirst (expensive, stable data)
     {
-      matcher: ({ url }) => url.pathname.startsWith("/api/py/map-tiles"),
+      matcher: ({ url }) => url.pathname.startsWith("/v1/map-tiles"),
       handler: new CacheFirst({
         cacheName: "map-tiles",
         plugins: [
@@ -178,7 +178,7 @@ const serwist = new Serwist({
 
     // Device sync — NetworkOnly
     {
-      matcher: ({ url }) => url.pathname.startsWith("/api/py/devices"),
+      matcher: ({ url }) => url.pathname.startsWith("/v1/devices"),
       handler: new NetworkOnly(),
     },
   ],

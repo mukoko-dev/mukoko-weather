@@ -1,10 +1,12 @@
-import { loadLocation } from "../load-location";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getSeasonForDate } from "@/lib/db";
+import { resolveLocationParam } from "@/lib/load-location";
+import { getCachedSeason } from "@/lib/location-payload";
 import { getCurrentUser } from "@/lib/auth";
-import { safeJsonLd } from "@/lib/json-ld";
+import { breadcrumbJsonLd } from "@/lib/json-ld";
+import { buildPageMetadata } from "@/lib/metadata";
 import { SITE_URL } from "@/lib/site";
+import { JsonLd } from "@/components/layout/JsonLd";
 import { AgricultureDashboard } from "./AgricultureDashboard";
 
 export const dynamic = "force-dynamic";
@@ -14,16 +16,13 @@ export async function generateMetadata({
 }: {
   params: Promise<{ location: string }>;
 }): Promise<Metadata> {
-  const { location: slug } = await params;
-  const loc = await loadLocation(slug);
-  if (!loc) return { title: "Location not found" };
+  const loc = await resolveLocationParam(params);
+  if (!loc) return buildPageMetadata({ notFound: true });
 
-  const title = `${loc.name} Agriculture Weather — Spray, Plant, Soil & Water`;
-  const description = `Farm weather for ${loc.name}, ${loc.province}: spraying, planting, harvest and irrigation windows, soil moisture and temperature by depth, rain against evapotranspiration, growing degree days and frost risk.`;
-
-  return {
-    title,
-    description,
+  return buildPageMetadata({
+    title: `${loc.name} Agriculture Weather — Spray, Plant, Soil & Water`,
+    description: `Farm weather for ${loc.name}, ${loc.province}: spraying, planting, harvest and irrigation windows, soil moisture and temperature by depth, rain against evapotranspiration, growing degree days and frost risk.`,
+    path: `/${loc.slug}/agriculture`,
     keywords: [
       `${loc.name} farming weather`,
       `${loc.name} planting rains`,
@@ -34,18 +33,11 @@ export async function generateMetadata({
       "evapotranspiration",
       "mukoko weather",
     ],
-    alternates: {
-      canonical: `${SITE_URL}/${loc.slug}/agriculture`,
-    },
-    openGraph: {
+    og: {
       title: `${loc.name} Agriculture | mukoko weather`,
       description: `Spray, plant, harvest and irrigation windows, soil and water balance for ${loc.name}.`,
-      url: `${SITE_URL}/${loc.slug}/agriculture`,
-      type: "website",
-      locale: "en",
-      siteName: "mukoko weather",
     },
-  };
+  });
 }
 
 export default async function AgriculturePage({
@@ -53,35 +45,19 @@ export default async function AgriculturePage({
 }: {
   params: Promise<{ location: string }>;
 }) {
-  const { location: slug } = await params;
-  const location = await loadLocation(slug);
+  const location = await resolveLocationParam(params);
   if (!location) notFound();
 
   const [season, user] = await Promise.all([
-    getSeasonForDate(new Date(), location.country ?? "", location.lat ?? 0),
+    getCachedSeason(location.country ?? "", location.lat ?? 0),
     getCurrentUser().catch(() => null),
   ]);
   const pageUrl = `${SITE_URL}/${location.slug}/agriculture`;
 
-  const breadcrumbSchema = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      {
-        "@type": "ListItem",
-        position: 1,
-        name: "mukoko weather",
-        item: SITE_URL,
-      },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: `${location.name} Weather`,
-        item: `${SITE_URL}/${location.slug}`,
-      },
-      { "@type": "ListItem", position: 3, name: "Agriculture", item: pageUrl },
-    ],
-  };
+  const breadcrumbSchema = breadcrumbJsonLd([
+    { name: `${location.name} Weather`, path: `/${location.slug}` },
+    { name: "Agriculture", path: `/${location.slug}/agriculture` },
+  ]);
 
   const webPageSchema = {
     "@context": "https://schema.org",
@@ -111,12 +87,7 @@ export default async function AgriculturePage({
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: safeJsonLd([breadcrumbSchema, webPageSchema]),
-        }}
-      />
+      <JsonLd data={[breadcrumbSchema, webPageSchema]} />
       <AgricultureDashboard
         location={location}
         season={season}

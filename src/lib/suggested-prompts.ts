@@ -2,13 +2,14 @@
  * Generates contextual AI follow-up prompts based on current weather conditions,
  * location, and user activities. Used by AISummaryChat and other inline AI features.
  *
- * Prompt rules are fetched from MongoDB via /api/py/ai/suggested-rules.
+ * Prompt rules are fetched from the Worker (/v1/ai/suggested-rules).
  * A client-side cache (5-min TTL) avoids redundant fetches. If the API is
  * unavailable, a minimal hardcoded fallback ensures at least one prompt.
  */
 
 import type { WeatherData } from "./weather";
 import type { WeatherLocation } from "./locations";
+import { workerUrl } from "@/lib/worker-url";
 
 export interface SuggestedPrompt {
   label: string;
@@ -57,10 +58,8 @@ export async function fetchSuggestedRules(): Promise<SuggestedPromptRule[]> {
   }
 
   try {
-    // Phase 1D: routed through the auth-gated /api/ai/* proxy. The only
-    // caller (AISummaryChat) is itself gated, so an anonymous browser will
-    // never reach this fetch — the CTA is shown instead.
-    const res = await fetch("/api/ai/suggested-rules");
+    // The rules are generic prompt chips (no secrets): served by the Worker.
+    const res = await fetch(workerUrl("/v1/ai/suggested-rules"));
     if (res.ok) {
       const data = await res.json();
       const rules: SuggestedPromptRule[] = data.rules ?? [];

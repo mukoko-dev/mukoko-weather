@@ -10,6 +10,7 @@ import {
   type PollutantKey,
 } from "./AirQualityCard";
 import { fetchWorker } from "@/lib/weather-api";
+import { AQI_SCALE, aqiScaleBand } from "@/lib/weather-scales";
 
 /**
  * Air Quality Details — full pollutant breakdown for the atmosphere sub-route.
@@ -37,14 +38,10 @@ const POLLUTANT_ORDER: PollutantKey[] = [
   "nh3",
 ];
 
-/** Map an EPA AQI bucket to the matching severity bar token. */
+/** Map an EPA AQI sub-index to its official band colour (weather-scales.ts). */
 export function severityBarClass(aqi: number | undefined): string {
   if (aqi === undefined) return "bg-text-tertiary/20";
-  if (aqi <= 50) return "bg-severity-low";
-  if (aqi <= 100) return "bg-severity-moderate";
-  if (aqi <= 150) return "bg-severity-high";
-  if (aqi <= 200) return "bg-severity-severe";
-  return "bg-severity-extreme";
+  return (aqiScaleBand(aqi) ?? AQI_SCALE.bands[0]).bg;
 }
 
 /** Bar width (0-100%) based on EPA sub-index relative to a 500 max. */
@@ -138,7 +135,7 @@ export function AirQualityDetails({ lat, lon }: Props) {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="herd-grid">
         {POLLUTANT_ORDER.map((key) => {
           const value = data.pollutants?.[key] ?? null;
           const sub = subIndexes[key];
@@ -168,7 +165,7 @@ export function AirQualityDetails({ lat, lon }: Props) {
               </p>
 
               <div
-                className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-text-tertiary/15"
+                className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-text-tertiary/15 ring-1 ring-wx-outline"
                 role="presentation"
                 aria-hidden="true"
               >

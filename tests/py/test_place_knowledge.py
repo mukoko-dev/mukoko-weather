@@ -21,7 +21,6 @@ import datetime as dt
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
 
 from py import _place_knowledge as pk
 
@@ -896,57 +895,3 @@ class TestPromptBlock:
             get_enso.return_value = None
             await pk.profile_block_for(slug="harare")
         get_enso.assert_called_once()
-
-
-@pytest.mark.asyncio
-class TestEndpoint:
-    async def test_a_build_is_rate_limited_per_ip(self):
-        req = MagicMock()
-        unstored = _profile()
-        unstored.stored = False
-        with patch.object(pk, "enforce_rate_limit", side_effect=HTTPException(status_code=429, detail="slow down")) as limit, \
-             patch.object(pk, "get_location_profile", return_value=unstored) as glp:
-            with pytest.raises(HTTPException) as exc:
-                await pk.location_profile(slug="harare", lat=None, lon=None, country=None, request=req)
-        assert exc.value.status_code == 429
-        limit.assert_called_once_with(req, "place-profile", 120, 3600, require_ip=False)
-        assert glp.call_count == 1  # only the cheap look ran; nothing was built for a limited caller
-        assert glp.call_args.kwargs["allow_build"] is False and glp.call_args.kwargs["schedule_build"] is False
-
-    async def test_a_stored_profile_is_a_cheap_read_and_is_not_counted(self):
-        stored = _profile()
-        stored.stored = True
-        with patch.object(pk, "enforce_rate_limit") as limit, \
-             patch.object(pk, "get_location_profile", return_value=stored) as glp:
-            res = await pk.location_profile(slug="harare", lat=None, lon=None, country=None, request=MagicMock())
-        limit.assert_not_called()
-        assert glp.call_count == 1 and res.stored is True
-
-    async def test_needs_a_slug_or_coordinates(self):
-        with pytest.raises(HTTPException) as exc:
-            await pk.location_profile(slug=None, lat=1.0, lon=None, country=None, request=MagicMock())
-        assert exc.value.status_code == 400
-
-    async def test_rejects_a_bad_slug(self):
-        with pytest.raises(HTTPException) as exc:
-            await pk.location_profile(slug="Bad Slug!", lat=None, lon=None, country=None, request=MagicMock())
-        assert exc.value.status_code == 400
-
-    async def test_404_when_nothing_resolves(self):
-        with patch.object(pk, "get_location_profile", return_value=None), \
-             patch("py._enso.get_enso", side_effect=RuntimeError("offline")):
-            with pytest.raises(HTTPException) as exc:
-                await pk.location_profile(slug="nowhere", lat=None, lon=None, country=None, request=MagicMock())
-        assert exc.value.status_code == 404
-
-    async def test_returns_the_profile(self):
-        profile = _profile()
-        profile.stored = False
-        with patch.object(pk, "get_location_profile", return_value=profile) as glp, \
-             patch.object(pk, "enforce_rate_limit") as limit, \
-             patch("py._enso.get_enso", side_effect=RuntimeError("offline")):
-            res = await pk.location_profile(slug="harare", lat=None, lon=None, country="zw", request=MagicMock())
-        assert res.placeId == "pg-harare"
-        assert glp.call_args.kwargs["country"] == "ZW"
-        limit.assert_called_once()  # nothing stored: this request would build
-        assert glp.call_count == 2 and glp.call_args.kwargs["allow_build"] is True

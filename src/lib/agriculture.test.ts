@@ -59,13 +59,13 @@ describe("agricultureUrl", () => {
       ["crop-farming", "tobacco-farming"],
     );
     expect(url).toBe(
-      "/api/py/agriculture?lat=-17.83&lon=31.05&location=harare&country=ZW&crops=crop-farming%2Ctobacco-farming",
+      "https://weather-api.mukoko.com/v1/agriculture?lat=-17.83&lon=31.05&location=harare&country=ZW&crops=crop-farming%2Ctobacco-farming",
     );
   });
 
   it("omits empty country and crops", () => {
     expect(agricultureUrl({ slug: "x", lat: 1, lon: 2 })).toBe(
-      "/api/py/agriculture?lat=1&lon=2&location=x",
+      "https://weather-api.mukoko.com/v1/agriculture?lat=1&lon=2&location=x",
     );
   });
 });

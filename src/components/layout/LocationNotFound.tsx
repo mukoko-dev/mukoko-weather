@@ -1,9 +1,11 @@
 // Shared "Location not found" UI — used by the root not-found boundary and
 // by `[location]/not-found.tsx`, so an unknown slug looks the same whichever
-// boundary catches it.
+// boundary catches it. The layout (PageShell, skip-link target, bottom
+// clearance) lives in NotFoundView.
 import Link from "next/link";
 import { getLocationsForContext } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
+import { NotFoundView } from "@/components/layout/NotFoundView";
 
 export async function LocationNotFound() {
   let locations: { slug: string; name: string }[] = [];
@@ -14,29 +16,17 @@ export async function LocationNotFound() {
   }
 
   return (
-    // <main id="main-content">: this is now the site-wide 404 (root
-    // not-found.tsx), so it carries the landmark and the root layout's
-    // skip-link target like every other page.
-    <main
-      id="main-content"
-      aria-labelledby="not-found-heading"
-      className="flex min-h-screen flex-col items-center justify-center bg-background px-4"
+    <NotFoundView
+      title="Location not found"
+      message="We don't have weather data for that location yet."
+      actions={[{ href: "/explore", label: "Browse locations", primary: true }]}
     >
-      <h1
-        id="not-found-heading"
-        className="font-heading text-4xl font-bold text-text-primary"
-      >
-        Location not found
-      </h1>
-      <p className="mt-4 text-text-secondary">
-        We don&apos;t have weather data for that location yet.
-      </p>
       {locations.length > 0 && (
         <div className="mt-8">
           <h2 className="text-base font-semibold text-text-tertiary">
             Try one of these cities:
           </h2>
-          <ul className="mt-3 flex flex-wrap gap-2">
+          <ul className="mt-3 flex flex-wrap justify-center gap-2">
             {locations.map((loc) => (
               <li key={loc.slug}>
                 <Link href={`/${loc.slug}`}>
@@ -49,6 +39,6 @@ export async function LocationNotFound() {
           </ul>
         </div>
       )}
-    </main>
+    </NotFoundView>
   );
 }

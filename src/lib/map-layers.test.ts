@@ -99,7 +99,9 @@ describe("getMapLayerById", () => {
 describe("weatherOverlayTileUrl", () => {
   it("targets the server-side proxy (keeps the Tomorrow.io key server-side)", () => {
     const url = weatherOverlayTileUrl("precipitationIntensity");
-    expect(url.startsWith("/api/py/map-tiles?")).toBe(true);
+    expect(
+      url.startsWith("https://weather-tiles.mukoko.com/v1/map-tiles?"),
+    ).toBe(true);
     expect(url).not.toContain("api.tomorrow.io");
     expect(url).not.toContain("apikey");
   });
@@ -324,7 +326,9 @@ describe("map overlay sources (satellite, model fields, timeline)", () => {
       /\/\d{4}-\d{2}-\d{2}T\d{2}%3A\d{2}%3A00Z\//,
     );
     const rain = buildWeatherOverlaySource("precipitationIntensity");
-    expect(rain.tiles[0]).toContain("/api/py/map-tiles");
+    expect(rain.tiles[0]).toContain(
+      "https://weather-tiles.mukoko.com/v1/map-tiles",
+    );
     expect(rain.attribution).toContain("Tomorrow.io");
     expect(weatherOverlayOpacity("precipitationIntensity")).toBe(0.6);
     expect(weatherOverlayOpacity("satellite")).toBeGreaterThan(0.6);
@@ -345,9 +349,9 @@ describe("map overlay sources (satellite, model fields, timeline)", () => {
     for (const chip of MODEL_CHIPS) {
       let last = -Infinity;
       for (const seg of chip.legend.segments) {
-        expect(seg.token).toMatch(/^--color-/);
+        expect(seg.token).toMatch(/^--wx-(temp|rain|wind)-\d+$/);
         // The class and the token must name the same colour.
-        expect(seg.className).toBe(`bg-${seg.token!.replace("--color-", "")}`);
+        expect(seg.className).toBe(`bg-${seg.token!.replace(/^--/, "")}`);
         expect(seg.from!).toBeGreaterThanOrEqual(last);
         last = seg.from!;
       }
@@ -357,9 +361,10 @@ describe("map overlay sources (satellite, model fields, timeline)", () => {
   it("classifies values into legend bands", async () => {
     const { legendBandIndex, getMapChip: chip } = await import("./map-layers");
     const temp = chip("modelTemperature")!.legend;
-    expect(legendBandIndex(temp, -5)).toBe(0);
-    expect(legendBandIndex(temp, 10)).toBe(1);
-    expect(legendBandIndex(temp, 40)).toBe(temp.segments.length - 1);
+    expect(legendBandIndex(temp, -15)).toBe(0);
+    expect(legendBandIndex(temp, -5)).toBe(1);
+    expect(legendBandIndex(temp, 10)).toBe(3);
+    expect(legendBandIndex(temp, 45)).toBe(temp.segments.length - 1);
     expect(legendBandIndex(temp, null)).toBe(-1);
     expect(legendBandIndex(temp, Number.NaN)).toBe(-1);
     const rain = chip("modelPrecipitation")!.legend;

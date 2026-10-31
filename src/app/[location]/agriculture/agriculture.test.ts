@@ -21,12 +21,14 @@ describe("/[location]/agriculture route", () => {
 
   it("is a server page with its own canonical, OG and JSON-LD", () => {
     expect(page).not.toContain('"use client"');
-    expect(page).toContain("canonical: `${SITE_URL}/${loc.slug}/agriculture`");
-    expect(page).toContain("openGraph");
-    expect(page).toContain('"@type": "BreadcrumbList"');
+    // Canonical and OG come from the shared builder (src/lib/metadata.ts).
+    expect(page).toContain("buildPageMetadata(");
+    expect(page).toContain("path: `/${loc.slug}/agriculture`");
+    expect(page).toContain("og: {");
+    expect(page).toContain("breadcrumbJsonLd([");
     expect(page).toContain('"@type": "WebPage"');
     expect(page).toContain('unitCode: "MTR"');
-    expect(page).toContain("safeJsonLd(");
+    expect(page).toContain("<JsonLd");
     expect(page).toContain("notFound()");
   });
 
@@ -35,9 +37,12 @@ describe("/[location]/agriculture route", () => {
     expect(page).toContain("getCurrentUser()");
   });
 
-  it("renders the shared breadcrumb trail", () => {
-    expect(dashboard).toContain("<Breadcrumb");
+  it("renders the shared breadcrumb trail through PageShell", () => {
+    expect(dashboard).toContain("<PageShell");
+    expect(dashboard).toContain("breadcrumb={[");
     expect(dashboard).toContain('{ label: "Agriculture" }');
+    expect(dashboard).not.toContain("<Header />");
+    expect(dashboard).not.toContain("<Footer />");
   });
 
   it("wraps every section in an error boundary, lazy sections in LazySection", () => {
@@ -70,8 +75,8 @@ describe("/[location]/agriculture route", () => {
   });
 
   it("loading and error states follow the sub-route pattern", () => {
-    expect(read("loading.tsx")).toContain("<BreadcrumbSkeleton");
-    expect(read("loading.tsx")).toContain('role="status"');
+    expect(read("loading.tsx")).toContain("<PageShellSkeleton");
+    expect(read("loading.tsx")).toContain("breadcrumb");
     expect(read("error.tsx")).toContain("RouteErrorBoundary");
   });
 
@@ -81,14 +86,9 @@ describe("/[location]/agriculture route", () => {
     expect(sitemap).toContain('loc.tags.includes("farming")');
   });
 
-  it("never becomes the lastLocation cookie: proxy and loading scene read only the first segment", () => {
+  it("never becomes the lastLocation cookie: the proxy reads only the first segment", () => {
     const proxy = readFileSync(resolve(dir, "../../../proxy.ts"), "utf-8");
     expect(proxy).toContain('pathname.slice(1).split("/")[0]');
-    const scene = readFileSync(
-      resolve(dir, "../../../components/weather/WeatherLoadingScene.tsx"),
-      "utf-8",
-    );
-    expect(scene).toContain('pathname.split("/").filter(Boolean)[0]');
   });
 
   it("has no hardcoded colours, inline styles or lint suppressions", () => {

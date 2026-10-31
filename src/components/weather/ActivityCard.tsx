@@ -27,6 +27,11 @@ const DEFAULT_STYLE: CategoryStyle = {
 // badge + detail, a 24h feasibility trend line, and weather-driven tips
 // ---------------------------------------------------------------------------
 
+/** DOM id of an activity's card; the advice sheet scrolls to it. */
+export function activityCardAnchorId(activityId: string): string {
+  return `activity-card-box-${activityId}`;
+}
+
 export interface ActivityCardProps {
   activity: Activity;
   insights: WeatherInsights;
@@ -75,7 +80,9 @@ export function ActivityCard({
 
   return (
     <div
-      className={`baobab ${style.border}`}
+      id={activityCardAnchorId(activity.id)}
+      tabIndex={-1}
+      className={`baobab scroll-mt-4 ${style.border}`}
       role="group"
       aria-labelledby={headingId}
     >

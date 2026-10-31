@@ -11,7 +11,10 @@ Strength buckets use the absolute ONI value (weak 0.5–0.9, moderate 1.0–1.4,
 strong 1.5–1.9, very strong ≥ 2.0).
 
 The upstream file changes once a month, so responses are cached in memory for
-12 hours. Calls go through ``noaa_breaker``. The endpoint never fails the page:
+12 hours. Calls go through ``noaa_breaker``. The route (``GET /api/py/enso``) now lives in
+the Rust Workers (``GET /v1/enso``, ``weather_core::enso``); this module stays
+only because the place-knowledge builder reads the ENSO state through it
+(#333). It never fails the caller:
 on any upstream error, or when the breaker is open, it returns HTTP 200 with
 ``available: false``.
 """
@@ -23,13 +26,9 @@ from datetime import datetime, timezone
 from typing import Literal, Optional
 
 import httpx
-from fastapi import APIRouter
 from pydantic import BaseModel
 
 from ._circuit_breaker import noaa_breaker, CircuitOpenError
-
-router = APIRouter()
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -198,11 +197,8 @@ def _cached() -> Optional[EnsoOutlookResponse]:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/api/py/enso", response_model=EnsoOutlookResponse)
 async def get_enso() -> EnsoOutlookResponse:
     """
-    GET /api/py/enso
-
     Latest El Niño / La Niña state from NOAA CPC's ONI table, with the last
     six seasons as a series. Global (not location-specific); the frontend
     applies region-aware impact guidance.

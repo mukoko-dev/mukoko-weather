@@ -13,6 +13,14 @@ export interface BreadcrumbItem {
   plain?: boolean;
 }
 
+/** The leading "Home" item every trail starts with. */
+export const HOME_CRUMB: BreadcrumbItem = { label: "Home", href: "/" };
+
+/** A full trail: Home, then the given items. */
+export function trail(...rest: BreadcrumbItem[]): BreadcrumbItem[] {
+  return [HOME_CRUMB, ...rest];
+}
+
 interface BreadcrumbProps {
   items: BreadcrumbItem[];
   className?: string;

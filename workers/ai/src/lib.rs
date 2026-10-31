@@ -27,12 +27,12 @@ mod gateway;
 mod handlers;
 mod passthrough;
 
-use weather_edge::{error, json};
+use weather_edge::{error, json, responses};
 use worker::{event, Context, Env, Method, Request, Response, Result};
 
 pub(crate) const FORECAST_BINDING: &str = "FORECAST";
 pub(crate) const CACHE_BINDING: &str = "AI_CACHE";
-pub(crate) const DB_BINDING: &str = "WEATHER_DB";
+pub(crate) const PLACES_BINDING: &str = "PLACES";
 const RATE_LIMITER: &str = "RATE_LIMITER";
 /// Bodies larger than this are refused before parsing.
 const MAX_BODY_BYTES: usize = 64 * 1024;
@@ -50,7 +50,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
                 "status": "ok",
                 "ai": env.ai("AI").is_ok(),
                 "cache": env.kv(CACHE_BINDING).is_ok(),
-                "history_db": env.d1(DB_BINDING).is_ok(),
+                "history": env.service(PLACES_BINDING).is_ok(),
             }),
         );
     }
@@ -99,6 +99,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     let ctx = handlers::Ctx {
         env: &env,
         guardrails,
+        client_ip: req.headers().get("CF-Connecting-IP").ok().flatten(),
     };
     match route {
         Route::Summary => handlers::summary(&ctx, body).await,
@@ -121,24 +122,12 @@ enum Route {
 /// (local dev) does not block.
 async fn rate_limited(req: &Request, env: &Env) -> Option<Result<Response>> {
     let limiter = env.rate_limiter(RATE_LIMITER).ok()?;
-    let key = req
-        .headers()
-        .get("CF-Connecting-IP")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| "service-binding".to_owned());
+    let key = weather_edge::client_ip(req).unwrap_or_else(|| "service-binding".to_owned());
     match limiter.limit(key).await {
-        Ok(outcome) if !outcome.success => {
-            let resp = error(
-                429,
-                "rate_limited",
-                "Too many requests. Please wait a moment.",
-            );
-            if let Ok(r) = &resp {
-                let _ = r.headers().set("Retry-After", "60");
-            }
-            Some(resp)
-        }
+        Ok(outcome) if !outcome.success => Some(responses::rate_limited(
+            60,
+            "Too many requests. Please wait a moment.",
+        )),
         _ => None,
     }
 }

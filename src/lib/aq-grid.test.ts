@@ -5,7 +5,7 @@ import {
   fetchAirQualityGrid,
   AQI_BANDS,
   AQI_BAND_LABELS,
-  AQI_BAND_SEVERITY_TOKEN,
+  AQI_BAND_TOKEN,
   AQI_BAND_BG_CLASS,
   aqBubbles,
   type AqGridResponse,
@@ -61,14 +61,12 @@ describe("aqiBand — EPA breakpoints", () => {
     }
   });
 
-  it("maps every band to a severity token (no hardcoded colours)", () => {
-    for (const band of AQI_BANDS) {
-      expect(AQI_BAND_SEVERITY_TOKEN[band]).toMatch(
-        /^--color-severity-(low|moderate|high|severe|extreme)$/,
-      );
-    }
-    expect(AQI_BAND_SEVERITY_TOKEN.good).toBe("--color-severity-low");
-    expect(AQI_BAND_SEVERITY_TOKEN.hazardous).toBe("--color-severity-extreme");
+  it("maps every band to its own official-EPA weather-scale token", () => {
+    AQI_BANDS.forEach((band, i) => {
+      expect(AQI_BAND_TOKEN[band]).toBe(`--wx-aqi-${i + 1}`);
+    });
+    // six bands, six distinct colours (very unhealthy and hazardous no longer share one)
+    expect(new Set(Object.values(AQI_BAND_TOKEN)).size).toBe(6);
   });
 });
 
@@ -198,7 +196,9 @@ describe("fetchAirQualityGrid", () => {
 
     expect(body.available).toBe(true);
     const url = String(fetchMock.mock.calls[0][0]);
-    expect(url.startsWith("/api/py/airquality/grid?")).toBe(true);
+    expect(
+      url.startsWith("https://weather-api.mukoko.com/v1/air-quality/grid?"),
+    ).toBe(true);
     const params = new URL(url, "http://x").searchParams;
     expect(params.get("lat")).toBe("1.3512");
     expect(params.get("lon")).toBe("103.8249");
@@ -223,7 +223,11 @@ describe("fetchAirQualityGrid", () => {
     vi.stubGlobal("fetch", fetchMock);
     const controller = new AbortController();
     await fetchAirQualityGrid({ lat: 0, lon: 0, signal: controller.signal });
-    expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal);
+    // The Worker helper combines the caller's signal with its own timeout.
+    const sent = fetchMock.mock.calls[0][1].signal as AbortSignal;
+    expect(sent.aborted).toBe(false);
+    controller.abort();
+    expect(sent.aborted).toBe(true);
   });
 });
 
@@ -276,11 +280,11 @@ describe("AQI bubbles (full-screen map)", () => {
     });
   });
 
-  it("gives every band a static background class from the severity tokens", () => {
+  it("gives every band a static background class from the weather-scale tokens", () => {
     for (const band of AQI_BANDS) {
-      expect(AQI_BAND_BG_CLASS[band]).toMatch(/^bg-severity-/);
+      expect(AQI_BAND_BG_CLASS[band]).toMatch(/^bg-wx-aqi-[1-6]$/);
     }
-    expect(AQI_BAND_BG_CLASS.good).toBe("bg-severity-low");
-    expect(AQI_BAND_BG_CLASS.hazardous).toBe("bg-severity-extreme");
+    expect(AQI_BAND_BG_CLASS.good).toBe("bg-wx-aqi-1");
+    expect(AQI_BAND_BG_CLASS.hazardous).toBe("bg-wx-aqi-6");
   });
 });

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/PageShell";
+import { JsonLd } from "@/components/layout/JsonLd";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { FAQ } from "./FAQ";
 import { SITE_URL } from "@/lib/site";
 
@@ -9,7 +11,7 @@ export const metadata: Metadata = {
   description:
     "Get help with mukoko weather — how to use forecasts, understand frost alerts, install the app, and more. Frequently asked questions about our weather intelligence platform.",
   alternates: {
-    canonical: "https://weather.mukoko.com/help",
+    canonical: `${SITE_URL}/help`,
   },
 };
 export default function HelpPage() {
@@ -22,7 +24,7 @@ export default function HelpPage() {
         name: "What is mukoko weather?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "mukoko weather is an AI-powered global weather intelligence platform. It provides real-time weather conditions, 7-day forecasts, hourly predictions, frost alerts, and AI-generated weather advice for 265+ locations worldwide.",
+          text: "mukoko weather is a global weather intelligence platform. It provides real-time weather conditions, 7-day forecasts, hourly predictions, frost alerts, and AI-generated weather advice for 265+ locations worldwide.",
         },
       },
       {
@@ -62,15 +64,12 @@ export default function HelpPage() {
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
-      />
+      <JsonLd data={faqSchema} />
       <PageShell>
-        <h1 className="elephant">Help & FAQ</h1>
-        <p className="mt-3 text-text-secondary">
-          Everything you need to know about using mukoko weather.
-        </p>
+        <PageHeader
+          title="Help & FAQ"
+          intro="Everything you need to know about using mukoko weather."
+        />
 
         {/* Getting Started */}
         <section className="mt-10">

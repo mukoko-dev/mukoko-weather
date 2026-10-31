@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { WeatherIcon, nightIcon } from "@/lib/weather-icons";
 import { weatherCodeToInfo, type HourlyWeather } from "@/lib/weather";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { SectionHeader } from "@/components/ui/section-header";
 import { useHydrated } from "@/lib/use-hydrated";
+import { heroOutlook } from "@/lib/hero";
 import {
   currentHourIndex,
   locationClockLabel,
@@ -19,13 +21,32 @@ interface Props {
   /** The location's UTC offset (payload `utc_offset_seconds`). "Now" and
    *  every hour label are read in the PLACE's time, not the viewer's. */
   utcOffsetSeconds?: number;
+  /** Panel heading (e.g. "Conditions") with an optional "Full forecast"
+   *  action. `headingId` is the id the section's `aria-labelledby` points at. */
+  heading?: {
+    headingId: string;
+    title: string;
+    action?: { label: string; href: string };
+  };
+  /** "sky" paints the translucent bordered card the location page shows
+   *  right under the sky hero (`.kestrel-card`); "card" is the ordinary
+   *  opaque card used wherever the strip sits lower in the page. */
+  variant?: "sky" | "card";
+  /** Quiet line at the foot of the card (the season). */
+  footer?: ReactNode;
 }
 
 /**
- * Horizontal scrollable hour-by-hour weather cards.
- * Renders eagerly above CurrentConditions on the location page.
+ * The Conditions card: the one-sentence outlook and the horizontal
+ * hour-by-hour strip. Renders eagerly right under the hero on the location page.
  */
-export function HourlyScrollCards({ hourly, utcOffsetSeconds }: Props) {
+export function HourlyScrollCards({
+  hourly,
+  utcOffsetSeconds,
+  heading,
+  variant = "card",
+  footer,
+}: Props) {
   // The start of the strip is chosen from the current instant (`new Date()`)
   // read in the LOCATION's offset, which the server can't match at SSR time
   // (it renders minutes earlier, possibly a different hour) — computing it
@@ -37,9 +58,12 @@ export function HourlyScrollCards({ hourly, utcOffsetSeconds }: Props) {
   const offset = resolveOffsetSeconds(utcOffsetSeconds);
   const start = hydrated ? currentHourIndex(hourly.time, offset) : 0;
   const hours = hourly.time.slice(start, start + 24);
+  // The one plain sentence about the day ahead (deterministic, no AI call),
+  // read in the PLACE's time. Hydration-gated like the start hour: it needs
+  // the current instant, which the server render cannot match.
+  const outlook = hydrated ? heroOutlook(hourly, new Date(), offset) : null;
 
-  // The one-sentence outlook lives in the hero (CurrentConditions) — it is
-  // deliberately NOT repeated here, so the strip is hours only.
+  // The one-sentence outlook sits above the strip, in this card.
 
   // The horizontal scroller is Radix's Viewport, which ScrollArea doesn't let
   // us attribute directly. Keyboard users need it focusable (axe:
@@ -56,8 +80,26 @@ export function HourlyScrollCards({ hourly, utcOffsetSeconds }: Props) {
   }, []);
 
   return (
-    <div className="baobab overflow-hidden p-3">
-      <ScrollArea className="w-full" type="hover" viewportRef={scrollRef}>
+    <div
+      data-hourly-strip
+      data-sky-card={variant === "sky" ? "" : undefined}
+      className={
+        variant === "sky"
+          ? "kestrel-card overflow-hidden"
+          : "baobab overflow-hidden shadow-none"
+      }
+    >
+      {heading && (
+        <SectionHeader
+          headingId={heading.headingId}
+          title={heading.title}
+          action={heading.action}
+        />
+      )}
+      {outlook && (
+        <p className="gazelle mt-1 border-b border-border pb-3">{outlook}</p>
+      )}
+      <ScrollArea className="mt-3 w-full" type="hover" viewportRef={scrollRef}>
         <div
           className="flex gap-2.5 pb-2 [overscroll-behavior-x:contain]"
           role="list"
@@ -77,7 +119,7 @@ export function HourlyScrollCards({ hourly, utcOffsetSeconds }: Props) {
                 aria-label={`${timeLabel}: ${temp} degrees, ${info.label}`}
                 className="flex min-w-[60px] flex-col items-center gap-1.5 rounded-[var(--radius-input)] bg-surface-base px-2.5 py-2 transition-colors hover:bg-surface-elevated"
               >
-                <span className="text-base font-medium text-text-secondary">
+                <span className="text-base font-normal text-text-secondary">
                   {timeLabel}
                 </span>
                 <WeatherIcon
@@ -99,6 +141,11 @@ export function HourlyScrollCards({ hourly, utcOffsetSeconds }: Props) {
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
+      {footer && (
+        <div className="mt-3 flex justify-center border-t border-border pt-3">
+          {footer}
+        </div>
+      )}
     </div>
   );
 }

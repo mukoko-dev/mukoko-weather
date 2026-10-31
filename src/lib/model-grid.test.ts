@@ -40,8 +40,8 @@ describe("modelGridToGeoJSON", () => {
   it("colours each cell by the chip legend band for the step", () => {
     const fc = modelGridToGeoJSON(grid(), "modelTemperature", 1)!;
     expect(fc.features).toHaveLength(2);
-    // 24 °C → band "22" (index 3); 31 °C → band "30" (index 4).
-    expect(fc.features.map((f) => f.properties.band)).toEqual([3, 4]);
+    // 24 °C → band "24" (index 5); 31 °C → band "30" (index 6).
+    expect(fc.features.map((f) => f.properties.band)).toEqual([5, 6]);
     expect(fc.features[0].properties.value).toBe(24);
   });
 
@@ -58,7 +58,7 @@ describe("modelGridToGeoJSON", () => {
   it("reads wind speed for the wind chip", () => {
     const fc = modelGridToGeoJSON(grid(), "modelWind", 1)!;
     expect(fc.features).toHaveLength(1);
-    expect(fc.features[0].properties.band).toBe(4); // 70 km/h → 60+
+    expect(fc.features[0].properties.band).toBe(5); // 70 km/h → 62+ (gale)
   });
 
   it("builds closed square polygons", () => {
@@ -87,7 +87,7 @@ describe("modelLegendTokens", () => {
     const legend = getMapChip("modelTemperature")!.legend;
     const tokens = modelLegendTokens(legend);
     expect(tokens).toHaveLength(legend.segments.length);
-    for (const t of tokens) expect(t).toMatch(/^--color-/);
+    for (const t of tokens) expect(t).toMatch(/^--wx-/);
   });
 
   it("is empty without a legend", () => {

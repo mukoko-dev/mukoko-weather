@@ -34,7 +34,7 @@ use weather_core::station::{
     ecowitt_metrics, hash_ingest_key, qc_filter, scrub_raw, split_passkey, wunderground_metrics,
     IngestMessage, ManualReading, Metrics, Registration,
 };
-use weather_edge::{config, error, json, now_ms};
+use weather_edge::{config, cors, error, json, now_ms};
 use worker::{event, Context, Env, MessageBatch, Method, Request, Response, Result, Url};
 
 pub(crate) const DB: &str = "WEATHER_DB";
@@ -45,10 +45,12 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     let path = req.path();
     let route = path.strip_prefix("/api/py").unwrap_or(&path).to_owned();
     let origin = req.headers().get("Origin")?.unwrap_or_default();
-    let cors = cors_origin(&env, &origin);
+    let cors = cors::allowed_origin(&env, &origin);
 
     let resp = match (req.method(), route.as_str()) {
-        (Method::Options, _) => preflight(cors.is_some()),
+        (Method::Options, _) => {
+            cors::preflight(cors.is_some(), "GET, POST, OPTIONS", "Content-Type")
+        }
         (Method::Get, "/health") => json(
             200,
             &json!({"service": "mukoko-weather-stations", "status": "ok"}),
@@ -60,7 +62,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         (Method::Get, "/stations/status") => status(&req, &env).await,
         _ => error(404, "not_found", "No such route."),
     }?;
-    with_cors(resp, cors.as_deref())
+    cors::apply(resp, cors.as_deref(), None)
 }
 
 #[event(queue)]
@@ -68,39 +70,10 @@ pub async fn queue(batch: MessageBatch<IngestMessage>, env: Env, _ctx: Context) 
     consumer::write_batch(batch, &env).await
 }
 
-fn cors_origin(env: &Env, origin: &str) -> Option<String> {
-    let allowed = config(env, "CORS_ORIGINS").unwrap_or_default();
-    let allow_local = config(env, "ENVIRONMENT").as_deref() != Some("production");
-    weather_core::cors::origin_allowed(origin, &allowed, allow_local).then(|| origin.to_owned())
-}
-
-fn preflight(allowed: bool) -> Result<Response> {
-    let resp = Response::empty()?.with_status(if allowed { 204 } else { 403 });
-    if allowed {
-        let h = resp.headers();
-        h.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")?;
-        h.set("Access-Control-Allow-Headers", "Content-Type")?;
-        h.set("Access-Control-Max-Age", "86400")?;
-    }
-    Ok(resp)
-}
-
-fn with_cors(resp: Response, origin: Option<&str>) -> Result<Response> {
-    resp.headers().append("Vary", "Origin")?;
-    if let Some(o) = origin {
-        resp.headers().set("Access-Control-Allow-Origin", o)?;
-    }
-    Ok(resp)
-}
-
 fn text(status: u16, body: &str) -> Result<Response> {
     let resp = Response::ok(body)?.with_status(status);
     resp.headers().set("Cache-Control", "no-store")?;
     Ok(resp)
-}
-
-fn client_ip(req: &Request) -> Option<String> {
-    req.headers().get("CF-Connecting-IP").ok().flatten()
 }
 
 /// QC the metrics and queue the upload. The raw record is archived even when
@@ -173,7 +146,7 @@ async fn ingest_ecowitt(req: &mut Request, env: &Env) -> Result<Response> {
 }
 
 async fn manual(req: &mut Request, env: &Env) -> Result<Response> {
-    let Some(ip) = client_ip(req) else {
+    let Some(ip) = weather_edge::client_ip(req) else {
         return error(400, "invalid_request", "Could not determine client IP");
     };
     let reading: ManualReading = match req.json().await {
@@ -215,7 +188,7 @@ fn random_bytes<const N: usize>() -> Result<[u8; N]> {
 }
 
 async fn register(req: &mut Request, env: &Env) -> Result<Response> {
-    let Some(ip) = client_ip(req) else {
+    let Some(ip) = weather_edge::client_ip(req) else {
         return error(400, "invalid_request", "Could not determine client IP");
     };
     let body: Registration = match req.json().await {

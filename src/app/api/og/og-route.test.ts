@@ -381,8 +381,14 @@ describe("OG image wiring in metadata", () => {
   });
 
   it("[location]/page.tsx uses local season from DB with error handling", () => {
-    // Season comes from getSeasonForDate (DB-driven), not getDefaultSeason (generic fallback)
-    expect(locationPageSource).toContain("getSeasonForDate");
+    // Season comes from the DB-driven season lookup (getSeasonForDate, via the
+    // shared payload helper), not getDefaultSeason (generic fallback)
+    expect(locationPageSource).toContain("getCachedSeason");
+    const payload = readFileSync(
+      resolve(__dirname, "../../../lib/location-payload.ts"),
+      "utf-8",
+    );
+    expect(payload).toContain("getSeasonForDate");
     // Wrapped in try/catch so DB failure doesn't break all metadata
     expect(locationPageSource).toContain("seasonName");
     expect(locationPageSource).toContain("season.name");
@@ -391,12 +397,21 @@ describe("OG image wiring in metadata", () => {
   it("[location]/page.tsx deduplicates season calls with React cache()", () => {
     expect(locationPageSource).toContain("getCachedSeason");
     // Uses React cache() for per-request deduplication (generateMetadata + page component)
-    expect(locationPageSource).toContain("cache(");
-    expect(locationPageSource).toContain("getSeasonForDate");
+    const payload = readFileSync(
+      resolve(__dirname, "../../../lib/location-payload.ts"),
+      "utf-8",
+    );
+    expect(payload).toContain("cache((");
+    expect(payload).toContain("getSeasonForDate");
   });
 
   it("[location]/page.tsx passes OG image to openGraph.images", () => {
-    expect(locationPageSource).toMatch(/images: \[\s*\{\s*url: ogImageUrl/);
+    expect(locationPageSource).toMatch(/image: \{\s*url: ogImageUrl/);
+    const metadata = readFileSync(
+      resolve(__dirname, "../../../lib/metadata.ts"),
+      "utf-8",
+    );
+    expect(metadata).toContain("images: [input.og.image]");
   });
 
   it("[location]/page.tsx passes OG image to twitter.images", () => {

@@ -1,13 +1,15 @@
 /**
  * Air quality grid helpers for the Air Quality Map card.
  *
- * `/api/py/airquality/grid` returns current US AQI on a regular n×n grid. This
+ * `/v1/air-quality/grid` (the Rust Worker) returns current US AQI on a regular n×n grid. This
  * module turns those points into square GeoJSON cells (one per grid point) for
  * a MapLibre fill layer, classifies AQI into EPA bands, and fetches the grid.
  * Everything except `fetchAirQualityGrid` is pure and unit-tested.
  */
 
 import type { Feature, FeatureCollection, Polygon } from "geojson";
+import { fetchWorker } from "@/lib/weather-api";
+import { AQI_SCALE } from "@/lib/weather-scales";
 
 /** EPA US AQI categories, lowest to highest severity. */
 export type AqiBand =
@@ -37,32 +39,40 @@ export const AQI_BAND_LABELS: Record<AqiBand, string> = {
 };
 
 /**
- * CSS custom property per band. The map paints with these resolved to concrete
- * colours (MapLibre paint values cannot read var()). Six bands share five
- * severity tokens, so very_unhealthy and hazardous share the extreme token.
+ * The scale band behind each AqiBand: the six official US EPA AQI categories
+ * (weather-scales.ts), so the map fill, bubbles, gauge and legend share one
+ * source and cannot drift.
  */
-export const AQI_BAND_SEVERITY_TOKEN: Record<AqiBand, string> = {
-  good: "--color-severity-low",
-  moderate: "--color-severity-moderate",
-  usg: "--color-severity-high",
-  unhealthy: "--color-severity-severe",
-  very_unhealthy: "--color-severity-extreme",
-  hazardous: "--color-severity-extreme",
+const BAND_INDEX: Record<AqiBand, number> = {
+  good: 0,
+  moderate: 1,
+  usg: 2,
+  unhealthy: 3,
+  very_unhealthy: 4,
+  hazardous: 5,
 };
 
+function scaleBandOf(band: AqiBand) {
+  return AQI_SCALE.bands[BAND_INDEX[band]];
+}
+
 /**
- * Static Tailwind classes for a band's bubble fill. Built from the same severity
- * tokens as AQI_BAND_SEVERITY_TOKEN, so the map fill, the bubbles and the legend
- * cannot drift apart.
+ * CSS custom property per band. The map paints with these resolved to concrete
+ * colours (MapLibre paint values cannot read var()).
  */
-export const AQI_BAND_BG_CLASS: Record<AqiBand, string> = {
-  good: "bg-severity-low",
-  moderate: "bg-severity-moderate",
-  usg: "bg-severity-high",
-  unhealthy: "bg-severity-severe",
-  very_unhealthy: "bg-severity-extreme",
-  hazardous: "bg-severity-extreme",
-};
+export const AQI_BAND_TOKEN: Record<AqiBand, string> = Object.fromEntries(
+  AQI_BANDS.map((b) => [b, scaleBandOf(b).token]),
+) as Record<AqiBand, string>;
+
+/** Static Tailwind fill classes for a band (bubbles, swatches). */
+export const AQI_BAND_BG_CLASS: Record<AqiBand, string> = Object.fromEntries(
+  AQI_BANDS.map((b) => [b, scaleBandOf(b).bg]),
+) as Record<AqiBand, string>;
+
+/** Foreground class that passes 4.5:1 on the band's fill (bubble numbers). */
+export const AQI_BAND_FG_CLASS: Record<AqiBand, string> = Object.fromEntries(
+  AQI_BANDS.map((b) => [b, scaleBandOf(b).on]),
+) as Record<AqiBand, string>;
 
 /** One AQI bubble on the full-screen map. `isCenter` marks the "my location" bubble. */
 export interface AqBubble {
@@ -218,7 +228,7 @@ export async function fetchAirQualityGrid(options: {
     radiusKm: String(options.radiusKm ?? 40),
     n: String(options.n ?? 7),
   });
-  const res = await fetch(`/api/py/airquality/grid?${params.toString()}`, {
+  const res = await fetchWorker("air-quality/grid", params.toString(), {
     signal: options.signal,
     headers: { Accept: "application/json" },
   });

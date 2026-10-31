@@ -1,6 +1,14 @@
 "use client";
 
+import {
+  DEGRADED_NOTE,
+  HISTORY_FAILED_NOTE,
+  historyFetchOptions,
+  readHistoryAnswer,
+} from "@/lib/history-api";
 import { roundCoord } from "@/lib/location-privacy";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatGrid } from "./StatGrid";
 import { useEffect, useState } from "react";
 import {
   formatAnomaly,
@@ -14,7 +22,7 @@ import { fetchWorker } from "@/lib/weather-api";
 /**
  * The past 30 days against climate normals: recorded rain and mean
  * highs/lows from `/api/py/history`, today's 1991–2020 normal high/low from
- * `/api/py/normals`, and the forecast model's own 30-day rain total as a
+ * the Worker's `/v1/normals`, and the forecast model's own 30-day rain total as a
  * cross-check when few days are recorded. Failures fall back to what is known.
  */
 
@@ -22,7 +30,7 @@ interface Props {
   slug: string;
   lat: number;
   lon: number;
-  /** The forecast model's past-30-day rain (from /api/py/agriculture). */
+  /** The forecast model's past-30-day rain (from the Worker's /v1/agriculture). */
   modelRain30dMm: number | null;
 }
 
@@ -33,6 +41,15 @@ interface Normals {
 }
 
 const WINDOW_DAYS = 30;
+
+/** What the card shows of the history answer. */
+interface HistoryState {
+  summary: HistorySummary;
+  /** Part of the range could not be loaded (not the archive lag): retry may help. */
+  degraded: boolean;
+  /** The request itself failed. */
+  failed: boolean;
+}
 
 /** "YYYY-MM-DD" for `n` days ago (the normals API only uses month and day). */
 function isoDaysAgo(n: number): string {
@@ -53,24 +70,49 @@ function averageNormals(a: Normals, b: Normals): Normals {
 }
 
 export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
-  const [history, setHistory] = useState<HistorySummary | null>(null);
+  const [history, setHistory] = useState<HistoryState | null>(null);
   const [normals, setNormals] = useState<Normals | null>(null);
+  // Bumped by "Try again": reruns the effect below.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
-    fetchWorker("history", `location=${encodeURIComponent(slug)}&days=30`)
-      .then(async (res) => (res.ok ? res.json() : { data: [] }))
-      .then((json: { data?: unknown[] }) => {
-        if (live) setHistory(summarizeHistory((json.data ?? []) as never[]));
+    fetchWorker(
+      "history",
+      `location=${encodeURIComponent(slug)}&days=30`,
+      {},
+      historyFetchOptions(30),
+    )
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return readHistoryAnswer(await res.json());
       })
-      .catch(() => live && setHistory(summarizeHistory([])));
+      .then((answer) => {
+        if (live) {
+          setHistory({
+            summary: summarizeHistory(answer.data as never[]),
+            degraded: answer.degraded,
+            failed: false,
+          });
+        }
+      })
+      .catch(
+        () =>
+          live &&
+          setHistory({
+            summary: summarizeHistory([]),
+            degraded: false,
+            failed: true,
+          }),
+      );
     // Normals are for one calendar day, and temperatures slope across a
     // 30-day window, so compare against the mean of the normals at both ends
     // of it. Sequential on purpose: the first call builds the cell's table
     // (cached afterwards), the second reads it.
     const getNormals = async (date: string): Promise<Normals> => {
-      const res = await fetch(
-        `/api/py/normals?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
+      const res = await fetchWorker(
+        "normals",
+        `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
       );
       return res.ok ? ((await res.json()) as Normals) : { available: false };
     };
@@ -86,13 +128,21 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
     return () => {
       live = false;
     };
-  }, [slug, lat, lon]);
+  }, [slug, lat, lon, attempt]);
 
   const normalHigh = normals?.available ? normals.normalHigh : null;
   const normalLow = normals?.available ? normals.normalLow : null;
-  const highAnomaly = formatAnomaly(history?.meanHigh, normalHigh);
-  const lowAnomaly = formatAnomaly(history?.meanLow, normalLow);
-  const loading = history === null;
+  const summary = history?.summary;
+  const highAnomaly = formatAnomaly(summary?.meanHigh, normalHigh);
+  const lowAnomaly = formatAnomaly(summary?.meanLow, normalLow);
+  const loading = history === null || summary === undefined;
+  // Say what is wrong, honestly: an unreadable store or a failed request is
+  // not "no data", and the numbers above may then be partial.
+  const trouble = history?.failed
+    ? HISTORY_FAILED_NOTE
+    : history?.degraded
+      ? DEGRADED_NOTE
+      : null;
   const normalsPending = normals === null;
 
   return (
@@ -107,55 +157,61 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
           className="grid grid-cols-2 gap-2 sm:grid-cols-4"
         >
           {Array.from({ length: 4 }).map((_, i) => (
-            <div
+            <Skeleton
               key={i}
-              className="h-16 animate-pulse rounded-[var(--radius-card)] bg-surface-dim"
+              className="h-16 rounded-[var(--radius-card)] bg-surface-dim"
             />
           ))}
         </div>
       ) : (
         <>
-          <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="meerkat">
-              <dt className="dove">Rain on file</dt>
-              <dd className="text-base font-medium text-text-primary">
-                {history.rainMm != null ? formatMm(history.rainMm) : "—"}
-                <span className="dove block">
-                  {history.days} days stored (forecast or archive, not a gauge)
-                </span>
-              </dd>
-            </div>
-            <div className="meerkat">
-              <dt className="dove">Rain (forecast model)</dt>
-              <dd className="text-base font-medium text-text-primary">
-                {formatMm(modelRain30dMm)}
-              </dd>
-            </div>
-            <div className="meerkat">
-              <dt className="dove">Mean high</dt>
-              <dd className="text-base font-medium text-text-primary">
-                {formatTempC(history.meanHigh)}
-                <span className="dove block">
-                  Normal {normalsPending ? "…" : formatTempC(normalHigh)}
-                  {highAnomaly ? ` · ${highAnomaly}` : ""}
-                </span>
-              </dd>
-            </div>
-            <div className="meerkat">
-              <dt className="dove">Mean low</dt>
-              <dd className="text-base font-medium text-text-primary">
-                {formatTempC(history.meanLow)}
-                <span className="dove block">
-                  Normal {normalsPending ? "…" : formatTempC(normalLow)}
-                  {lowAnomaly ? ` · ${lowAnomaly}` : ""}
-                </span>
-              </dd>
-            </div>
-          </dl>
+          <StatGrid
+            columns={4}
+            items={[
+              {
+                label: "Rain on file",
+                value: summary.rainMm != null ? formatMm(summary.rainMm) : "—",
+                hint: `${summary.days} days stored (forecast or archive, not a gauge)`,
+              },
+              {
+                label: "Rain (forecast model)",
+                value: formatMm(modelRain30dMm),
+              },
+              {
+                label: "Mean high",
+                value: formatTempC(summary.meanHigh),
+                hint: `Normal ${normalsPending ? "…" : formatTempC(normalHigh)}${highAnomaly ? ` · ${highAnomaly}` : ""}`,
+              },
+              {
+                label: "Mean low",
+                value: formatTempC(summary.meanLow),
+                hint: `Normal ${normalsPending ? "…" : formatTempC(normalLow)}${lowAnomaly ? ` · ${lowAnomaly}` : ""}`,
+              },
+            ]}
+          />
           <p className="dove">
             Normals: 1991–2020 average over the same 30 days (ERA5 via
             Open-Meteo).
           </p>
+          {trouble && (
+            <div
+              className="flex flex-wrap items-center gap-3"
+              role="status"
+              data-history-trouble
+            >
+              <p className="dove">{trouble}</p>
+              <button
+                type="button"
+                className="impala-sm"
+                onClick={() => {
+                  setHistory(null);
+                  setAttempt((n) => n + 1);
+                }}
+              >
+                Try again
+              </button>
+            </div>
+          )}
         </>
       )}
     </section>

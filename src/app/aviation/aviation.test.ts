@@ -44,8 +44,8 @@ describe("AviationPlanner", () => {
   it("fetches METAR from API", () => {
     expect(plannerSrc).toContain('fetchWorker("metar"');
   });
-  it("has accessibility main landmark", () => {
-    expect(plannerSrc).toContain('id="main-content"');
+  it("leaves the main landmark to the shared PageShell", () => {
+    expect(plannerSrc).not.toContain("<main");
   });
   it("has alternate airport option", () => {
     expect(plannerSrc).toContain("Alternate Airport");
@@ -140,9 +140,8 @@ describe("Aviation page", () => {
     expect(pageSrc).toContain("export const metadata");
     expect(pageSrc).toContain("Aviation Weather Briefing");
   });
-  it("renders Header and Footer", () => {
-    expect(pageSrc).toContain("Header");
-    expect(pageSrc).toContain("Footer");
+  it("renders inside the shared PageShell", () => {
+    expect(pageSrc).toContain("PageShell");
   });
   it("renders AviationPlanner", () => {
     expect(pageSrc).toContain("AviationPlanner");

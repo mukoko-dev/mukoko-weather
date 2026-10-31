@@ -45,6 +45,13 @@ GFS = "gfs_seamless"  # NOAA GFS (only member with UV + lifted index)
 ICON = "icon_global"  # DWD ICON global
 GEM = "gem_global"  # ECCC GEM global
 ARPEGE = "meteofrance_arpege_world"  # Météo-France ARPEGE world
+#: Newer members (live-checked 2026-10-31 over Harare, Nairobi, Lagos, Cairo,
+#: Dakar, Kinshasa and Antananarivo; see CLAUDE.md → Weather Data). A bigger
+#: blend is a more accurate forecast (owner decision), so every member that
+#: returns data is used and the weights renormalise over those present.
+UKMO = "ukmo_global_deterministic_10km"  # UK Met Office global, 10 km
+CMA = "cma_grapes_global"  # CMA GRAPES global
+JMA = "jma_gsm"  # JMA GSM (no gusts, visibility or CAPE; the blend renormalises)
 
 #: Legacy / renamed ids → current id.
 MODEL_ALIASES = {"ecmwf_ifs04": ECMWF_IFS}
@@ -62,24 +69,37 @@ _ECMWF_HEAVY = {
     ARPEGE: 0.05,
 }
 
+def _with_newer(ukmo: float, cma: float, jma: float) -> dict[str, float]:
+    """The original six weights unchanged, plus the newer members on top.
+
+    Small starting weights (0.03 to 0.08) so the established blend barely
+    moves; the blend normalises over whoever is present. Mirror of
+    ``newer_members`` in ``workers/crates/weather-core/src/blend.rs``.
+    """
+    return {**_ECMWF_HEAVY, UKMO: ukmo, CMA: cma, JMA: jma}
+
+
+_AFRICA_NEWER = (0.08, 0.05, 0.03)  # Met Office leads (10 km); also the default
+_ASIA_NEWER = (0.06, 0.06, 0.05)  # regional centres get a little more at home
+
 BLEND_WEIGHTS: dict[str, dict[str, float]] = {
-    "southern-africa": dict(_ECMWF_HEAVY),
-    "east-africa": dict(_ECMWF_HEAVY),
-    "west-africa-sahel": dict(_ECMWF_HEAVY),
-    "central-africa": dict(_ECMWF_HEAVY),
-    "north-africa": dict(_ECMWF_HEAVY),
+    "southern-africa": _with_newer(*_AFRICA_NEWER),
+    "east-africa": _with_newer(*_AFRICA_NEWER),
+    "west-africa-sahel": _with_newer(*_AFRICA_NEWER),
+    "central-africa": _with_newer(*_AFRICA_NEWER),
+    "north-africa": _with_newer(*_AFRICA_NEWER),
     # Rest of the world (owner decision: scope the data infrastructure for the
     # world, so a traveller or an investor abroad gets a named blend region
     # too). Same ECMWF-heavy start; each can be tuned via modelBlendConfig.
-    "europe": dict(_ECMWF_HEAVY),
-    "middle-east": dict(_ECMWF_HEAVY),
-    "south-asia": dict(_ECMWF_HEAVY),
-    "southeast-asia": dict(_ECMWF_HEAVY),
-    "east-asia": dict(_ECMWF_HEAVY),
-    "oceania": dict(_ECMWF_HEAVY),
-    "north-america": dict(_ECMWF_HEAVY),
-    "south-america": dict(_ECMWF_HEAVY),
-    "default": dict(_ECMWF_HEAVY),
+    "europe": _with_newer(*_AFRICA_NEWER),
+    "middle-east": _with_newer(*_AFRICA_NEWER),
+    "south-asia": _with_newer(*_ASIA_NEWER),
+    "southeast-asia": _with_newer(*_ASIA_NEWER),
+    "east-asia": _with_newer(*_ASIA_NEWER),
+    "oceania": _with_newer(*_ASIA_NEWER),
+    "north-america": _with_newer(*_AFRICA_NEWER),
+    "south-america": _with_newer(*_AFRICA_NEWER),
+    "default": _with_newer(*_AFRICA_NEWER),
 }
 
 #: Region bounding boxes (lat_min, lat_max, lon_min, lon_max). First match
@@ -177,7 +197,7 @@ def weights_for(region: str) -> dict[str, float]:
 
 
 #: Models that may appear in a blend.
-BLENDABLE_MODELS = {ECMWF_IFS, ECMWF_IFS025, ECMWF_AIFS, GFS, ICON, GEM, ARPEGE}
+BLENDABLE_MODELS = {ECMWF_IFS, ECMWF_IFS025, ECMWF_AIFS, GFS, ICON, GEM, ARPEGE, UKMO, CMA, JMA}
 
 
 def order_members(weights: dict[str, float]) -> list[str]:

@@ -1,4 +1,9 @@
 import { slugToDisplayName } from "@/lib/utils";
+import { LOCATION_SLUG_RE } from "@/lib/location-gate";
+import {
+  LAST_LOCATION_COOKIE,
+  LAST_LOCATION_MAX_AGE_S,
+} from "@/lib/last-location";
 
 /**
  * Pure helpers for deriving which location the visitor is looking at.
@@ -38,13 +43,11 @@ export const NON_LOCATION_ROUTES: ReadonlySet<string> = new Set([
   "display",
 ]);
 
-const SLUG_RE = /^[a-z0-9-]{1,80}$/;
-
 /** True when `value` is a syntactically valid location slug that is not a route. */
 export function isLocationSlug(value: unknown): value is string {
   return (
     typeof value === "string" &&
-    SLUG_RE.test(value) &&
+    LOCATION_SLUG_RE.test(value) &&
     !NON_LOCATION_ROUTES.has(value)
   );
 }
@@ -140,7 +143,7 @@ export const CURRENT_LOCATION_EVENT = "mukoko:current-location";
 export function writeLastLocationCookie(slug: string): void {
   if (!isLocationSlug(slug)) return;
   try {
-    document.cookie = `lastLocation=${slug}; max-age=2592000; path=/; samesite=lax`;
+    document.cookie = `${LAST_LOCATION_COOKIE}=${slug}; max-age=${LAST_LOCATION_MAX_AGE_S}; path=/; samesite=lax`;
   } catch {
     /* non-browser environment */
   }

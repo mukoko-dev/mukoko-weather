@@ -18,7 +18,10 @@
    If you change brand color tokens below, also update src/app/api/og/route.tsx brand object
    (Satori OG images use inline hex — CSS custom properties are not supported there). */
 
-:root {
+/* `[data-theme="light"]` is listed beside :root so a subtree can pin the light
+   tokens (the Appearance preview cards), exactly as [data-theme="dark"] pins dark. */
+:root,
+[data-theme="light"] {
   /* ── Seven African Minerals ── doctrine v4.1.0 ────────────────────────────
      Ring order (clockwise from top): cobalt → gold → malachite → copper → sodalite → terracotta
      Tanzanite is the core / brand mineral. */
@@ -160,6 +163,30 @@
   --text-body-leading: 1.6;
   /* 1rem (16px) — minimum font size per app-wide hard rule. */
   --text-nav-label: 1rem;
+  /* Mzizi type scale (mzizi_get_tokens typography.scale) — the ONLY sizes the
+     hero, the Conditions card and the skeleton may use. Weights are 400, 600
+     and 700 only (Tailwind font-normal / font-semibold / font-bold). */
+  --text-display: 4.5rem; /* 72px */
+  --text-display-leading: 1.1;
+  --text-display-sm: 3.75rem; /* 60px */
+  --text-display-sm-leading: 1.1;
+  --text-h1: 3rem; /* 48px */
+  --text-h1-leading: 1.15;
+  --text-h2: 2.25rem; /* 36px */
+  --text-h2-leading: 1.2;
+  --text-h3: 1.875rem; /* 30px */
+  --text-h3-leading: 1.25;
+  --text-h4: 1.5rem; /* 24px */
+  --text-h4-leading: 1.3;
+  --text-h5: 1.25rem; /* 20px */
+  --text-h5-leading: 1.4;
+  --text-h6: 1rem; /* 16px */
+  --text-h6-leading: 1.4;
+  --text-body-lg-leading: 1.6;
+  --text-body-sm: 0.875rem; /* 14px */
+  --text-body-sm-leading: 1.5;
+  --text-caption: 0.75rem; /* 12px */
+  --text-caption-leading: 1.5;
 
   /* Layout rhythm — ONE spacing scale for the location page and every card
      (Mzizi spacing: md 12px, base 16px, base-plus 20px, lg 24px).
@@ -256,8 +283,82 @@
      --mineral-*-fg tokens. */
   --color-severity-fg: #ffffff;
 
+  /* Weather DATA colours (src/lib/weather-scales.ts). Meaning, not brand:
+     never aliased to Mzizi minerals. Scale colours are the same in both
+     themes on purpose (a published convention is recognised by its colours),
+     except frost, whose blues are retuned per theme for border contrast;
+     the series tokens below are tuned per theme for contrast on a card. */
+  --wx-temp-1: #4575b4;
+  --wx-temp-2: #74add1;
+  --wx-temp-3: #abd9e9;
+  --wx-temp-4: #e0f3f8;
+  --wx-temp-5: #ffffbf;
+  --wx-temp-6: #fee090;
+  --wx-temp-7: #fdae61;
+  --wx-temp-8: #f46d43;
+  --wx-temp-9: #d73027;
+  --wx-rain-1: #a8e6a1;
+  --wx-rain-2: #4fc65b;
+  --wx-rain-3: #1b8f3a;
+  --wx-rain-4: #f5e33b;
+  --wx-rain-5: #f7a31c;
+  --wx-rain-6: #e03a1e;
+  --wx-rain-7: #a30d2d;
+  --wx-rain-8: #d13fd1;
+  --wx-wind-1: #ffffcc;
+  --wx-wind-2: #c7e9b4;
+  --wx-wind-3: #7fcdbb;
+  --wx-wind-4: #41b6c4;
+  --wx-wind-5: #1d91c0;
+  --wx-wind-6: #225ea8;
+  --wx-wind-7: #0c2c84;
+  --wx-cloud-1: #f7f7f7;
+  --wx-cloud-2: #cccccc;
+  --wx-cloud-3: #969696;
+  --wx-cloud-4: #636363;
+  --wx-cloud-5: #252525;
+  --wx-aqi-1: #00e400;
+  --wx-aqi-2: #ffff00;
+  --wx-aqi-3: #ff7e00;
+  --wx-aqi-4: #ff0000;
+  --wx-aqi-5: #8f3f97;
+  --wx-aqi-6: #7e0023;
+  --wx-uv-1: #299501;
+  --wx-uv-2: #f7e400;
+  --wx-uv-3: #f85900;
+  --wx-uv-4: #d8001d;
+  --wx-uv-5: #6b49c8;
+  --wx-frost-1: #4292c6;
+  --wx-frost-2: #2171b5;
+  --wx-frost-3: #08306b;
+  --wx-flight-1: #2e9d4a;
+  --wx-flight-2: #2f6fd0;
+  --wx-flight-3: #d62828;
+  --wx-flight-4: #c026d3;
+  --wx-fg-dark: #0a0a0a;
+  --wx-fg-light: #ffffff;
+  /* Outline for data fills and swatches: the official fill colours (EPA, WHO)
+     cannot all be 3:1 against a light or dark base, so every data fill carries
+     this outline (non-text UI contrast, WCAG 1.4.11). Tuned per theme. */
+  --wx-outline: #5c5b55;
+  --wx-series-temp: #d73027;
+  --wx-series-temp-low: #4575b4;
+  --wx-series-feels: #b8570b;
+  --wx-series-feels-low: #2f7f96;
+  --wx-series-rain: #0b6fb8;
+  --wx-series-rain-prob: #08519c;
+  --wx-series-wind: #2a9d8f;
+  --wx-series-gust: #1b6a5f;
+  --wx-series-cloud: #6b7280;
+  --wx-series-humidity: #238b45;
+  --wx-series-pressure: #6a51a3;
+  --wx-series-dew: #0e7490;
+  --wx-series-visibility: #525252;
+  --wx-series-storm: #7b3294;
+
   /* Metric-card visual sizes (widgets/) */
   --size-insight-hero-max: 28rem;
+  --size-insight-square-min: 10.5rem;
   --size-insight-dial-max: 14rem;
   --size-insight-moon-max: 9rem;
 
@@ -405,6 +506,72 @@
      badge text readable (light-mode counterpart is white, see :root). */
   --color-severity-fg: #0a0a0a;
 
+  /* Weather DATA colours, see :root. */
+  --wx-temp-1: #4575b4;
+  --wx-temp-2: #74add1;
+  --wx-temp-3: #abd9e9;
+  --wx-temp-4: #e0f3f8;
+  --wx-temp-5: #ffffbf;
+  --wx-temp-6: #fee090;
+  --wx-temp-7: #fdae61;
+  --wx-temp-8: #f46d43;
+  --wx-temp-9: #d73027;
+  --wx-rain-1: #a8e6a1;
+  --wx-rain-2: #4fc65b;
+  --wx-rain-3: #1b8f3a;
+  --wx-rain-4: #f5e33b;
+  --wx-rain-5: #f7a31c;
+  --wx-rain-6: #e03a1e;
+  --wx-rain-7: #a30d2d;
+  --wx-rain-8: #d13fd1;
+  --wx-wind-1: #ffffcc;
+  --wx-wind-2: #c7e9b4;
+  --wx-wind-3: #7fcdbb;
+  --wx-wind-4: #41b6c4;
+  --wx-wind-5: #1d91c0;
+  --wx-wind-6: #225ea8;
+  --wx-wind-7: #0c2c84;
+  --wx-cloud-1: #f7f7f7;
+  --wx-cloud-2: #cccccc;
+  --wx-cloud-3: #969696;
+  --wx-cloud-4: #636363;
+  --wx-cloud-5: #252525;
+  --wx-aqi-1: #00e400;
+  --wx-aqi-2: #ffff00;
+  --wx-aqi-3: #ff7e00;
+  --wx-aqi-4: #ff0000;
+  --wx-aqi-5: #8f3f97;
+  --wx-aqi-6: #7e0023;
+  --wx-uv-1: #299501;
+  --wx-uv-2: #f7e400;
+  --wx-uv-3: #f85900;
+  --wx-uv-4: #d8001d;
+  --wx-uv-5: #6b49c8;
+  --wx-frost-1: #9ecae1;
+  --wx-frost-2: #4292c6;
+  --wx-frost-3: #2171b5;
+  --wx-flight-1: #2e9d4a;
+  --wx-flight-2: #2f6fd0;
+  --wx-flight-3: #d62828;
+  --wx-flight-4: #c026d3;
+  --wx-fg-dark: #0a0a0a;
+  --wx-fg-light: #ffffff;
+  --wx-outline: #b5b5b0;
+  --wx-series-temp: #f4806f;
+  --wx-series-temp-low: #74add1;
+  --wx-series-feels: #fdae61;
+  --wx-series-feels-low: #7fc4d8;
+  --wx-series-rain: #4fc3f7;
+  --wx-series-rain-prob: #9ecae1;
+  --wx-series-wind: #5fd3c4;
+  --wx-series-gust: #8fe0d3;
+  --wx-series-cloud: #a1a1aa;
+  --wx-series-humidity: #74c476;
+  --wx-series-pressure: #b2a3e0;
+  --wx-series-dew: #67d1e6;
+  --wx-series-visibility: #a3a3a3;
+  --wx-series-storm: #c996dd;
+
   /* Moon disc — dark mode */
   --color-moon-lit: #f5f0e1;
   --color-moon-shadow: #1d2330;
@@ -519,6 +686,72 @@
   --color-moon-lit: var(--color-moon-lit);
   --color-moon-shadow: var(--color-moon-shadow);
   --color-severity-fg: var(--color-severity-fg);
+
+  /* Weather data colours (src/lib/weather-scales.ts) */
+  --color-wx-temp-1: var(--wx-temp-1);
+  --color-wx-temp-2: var(--wx-temp-2);
+  --color-wx-temp-3: var(--wx-temp-3);
+  --color-wx-temp-4: var(--wx-temp-4);
+  --color-wx-temp-5: var(--wx-temp-5);
+  --color-wx-temp-6: var(--wx-temp-6);
+  --color-wx-temp-7: var(--wx-temp-7);
+  --color-wx-temp-8: var(--wx-temp-8);
+  --color-wx-temp-9: var(--wx-temp-9);
+  --color-wx-rain-1: var(--wx-rain-1);
+  --color-wx-rain-2: var(--wx-rain-2);
+  --color-wx-rain-3: var(--wx-rain-3);
+  --color-wx-rain-4: var(--wx-rain-4);
+  --color-wx-rain-5: var(--wx-rain-5);
+  --color-wx-rain-6: var(--wx-rain-6);
+  --color-wx-rain-7: var(--wx-rain-7);
+  --color-wx-rain-8: var(--wx-rain-8);
+  --color-wx-wind-1: var(--wx-wind-1);
+  --color-wx-wind-2: var(--wx-wind-2);
+  --color-wx-wind-3: var(--wx-wind-3);
+  --color-wx-wind-4: var(--wx-wind-4);
+  --color-wx-wind-5: var(--wx-wind-5);
+  --color-wx-wind-6: var(--wx-wind-6);
+  --color-wx-wind-7: var(--wx-wind-7);
+  --color-wx-cloud-1: var(--wx-cloud-1);
+  --color-wx-cloud-2: var(--wx-cloud-2);
+  --color-wx-cloud-3: var(--wx-cloud-3);
+  --color-wx-cloud-4: var(--wx-cloud-4);
+  --color-wx-cloud-5: var(--wx-cloud-5);
+  --color-wx-aqi-1: var(--wx-aqi-1);
+  --color-wx-aqi-2: var(--wx-aqi-2);
+  --color-wx-aqi-3: var(--wx-aqi-3);
+  --color-wx-aqi-4: var(--wx-aqi-4);
+  --color-wx-aqi-5: var(--wx-aqi-5);
+  --color-wx-aqi-6: var(--wx-aqi-6);
+  --color-wx-uv-1: var(--wx-uv-1);
+  --color-wx-uv-2: var(--wx-uv-2);
+  --color-wx-uv-3: var(--wx-uv-3);
+  --color-wx-uv-4: var(--wx-uv-4);
+  --color-wx-uv-5: var(--wx-uv-5);
+  --color-wx-frost-1: var(--wx-frost-1);
+  --color-wx-frost-2: var(--wx-frost-2);
+  --color-wx-frost-3: var(--wx-frost-3);
+  --color-wx-flight-1: var(--wx-flight-1);
+  --color-wx-flight-2: var(--wx-flight-2);
+  --color-wx-flight-3: var(--wx-flight-3);
+  --color-wx-flight-4: var(--wx-flight-4);
+  --color-wx-fg-dark: var(--wx-fg-dark);
+  --color-wx-fg-light: var(--wx-fg-light);
+  --color-wx-outline: var(--wx-outline);
+  --color-wx-series-temp: var(--wx-series-temp);
+  --color-wx-series-temp-low: var(--wx-series-temp-low);
+  --color-wx-series-feels: var(--wx-series-feels);
+  --color-wx-series-feels-low: var(--wx-series-feels-low);
+  --color-wx-series-rain: var(--wx-series-rain);
+  --color-wx-series-rain-prob: var(--wx-series-rain-prob);
+  --color-wx-series-wind: var(--wx-series-wind);
+  --color-wx-series-gust: var(--wx-series-gust);
+  --color-wx-series-cloud: var(--wx-series-cloud);
+  --color-wx-series-humidity: var(--wx-series-humidity);
+  --color-wx-series-pressure: var(--wx-series-pressure);
+  --color-wx-series-dew: var(--wx-series-dew);
+  --color-wx-series-visibility: var(--wx-series-visibility);
+  --color-wx-series-storm: var(--wx-series-storm);
   --color-map-overlay: var(--color-map-overlay);
   --color-map-attribution: var(--color-map-attribution);
   --color-bmc: var(--color-bmc);
@@ -1141,32 +1374,42 @@ body {
            bg-surface-card p-[var(--space-card)] shadow-sm;
   }
 
-  /* .acacia — quieter card surface (no primary border, lighter shadow) */
+  /* .acacia — quieter card surface (neutral border, slightly raised) */
   .acacia {
     @apply rounded-[var(--radius-card)] border border-border
-           bg-surface-card p-[var(--space-card)];
+           bg-surface-card p-[var(--space-card)] shadow-sm;
   }
 
-  /* .guineafowl — grouped list card (a flock in one frame). The Mukoko
-     ecosystem profile standard (mukoko-news / mukoko-events /profile): a
-     bordered card holding an uppercase heading and full-width rows. */
+  /* .guineafowl — a labelled group of settings rows (a flock in one frame).
+     The Mukoko ecosystem profile standard, in the grouped-list pattern of the
+     Claude app settings: a plain label ABOVE the card, then one rounded card
+     holding the rows. `.guineafowl` is only the section wrapper (spacing);
+     `.guineafowl-card` is the surface. */
   .guineafowl {
-    @apply mb-6 overflow-hidden rounded-[var(--radius-card)] border
-           border-border bg-surface-card;
+    @apply mb-6;
   }
 
-  /* .guineafowl-heading — the small uppercase label at the top of the card */
+  /* .guineafowl-heading — the group label above its card: plain, muted,
+     sentence case (not an uppercase eyebrow inside the card) */
   .guineafowl-heading {
-    @apply border-b border-border px-4 py-3 text-xs font-bold uppercase
-           tracking-wider text-text-tertiary;
+    @apply px-4 pb-2 text-sm font-medium text-text-tertiary;
   }
 
-  /* .guineafowl-row — one full-width row (link or button) inside the card */
+  /* .guineafowl-card — the surface that holds a group's rows */
+  .guineafowl-card {
+    @apply overflow-hidden rounded-[var(--radius-card)] border border-border
+           bg-surface-card shadow-sm;
+  }
+
+  /* .guineafowl-row — one full-width row (link or button) inside the card:
+     icon, label, optional muted value, chevron. The hairline between rows is
+     inset to start under the label, not under the icon. */
   .guineafowl-row {
-    @apply flex min-h-[var(--touch-target-min)] w-full items-center
-           justify-between gap-3 border-b border-border px-4 py-4 text-left
-           text-text-primary transition-colors last:border-b-0
-           hover:bg-surface-dim;
+    @apply relative flex min-h-[var(--touch-target-min)] w-full items-center
+           justify-between gap-3 px-4 py-3.5 text-left text-base
+           text-text-primary transition-colors hover:bg-surface-dim
+           after:absolute after:bottom-0 after:left-12 after:right-0
+           after:h-px after:bg-border after:content-[''] last:after:hidden;
   }
 
   /* .pangolin — soft card surface (no border, light shadow — armoured but unobtrusive) */
@@ -1410,7 +1653,7 @@ body {
   :is(
     .baobab,
     .acacia,
-    .guineafowl,
+    .guineafowl-card,
     .chameleon,
     .nyala,
     .bushbuck,
@@ -1427,7 +1670,7 @@ body {
       .nyala,
       .bushbuck
     ):hover,
-  :is(.baobab, .acacia, .guineafowl, .nyala, .bushbuck):is(
+  :is(.baobab, .acacia, .guineafowl-card, .nyala, .bushbuck):is(
     [aria-current]:not([aria-current="false"]),
     [aria-pressed="true"],
     [aria-selected="true"],
@@ -1463,9 +1706,35 @@ body {
     @apply rounded-[var(--radius-card)] bg-surface-dim p-3;
   }
 
+  /* .herd-grid — a responsive card grid: one column, two from sm, three from
+     lg, gaps of --space-stack (the heading-to-card rhythm). Use for a set of
+     sibling cards, not for a page stack (that is .herd). */
+  .herd-grid {
+    @apply grid grid-cols-1 gap-[var(--space-stack)] sm:grid-cols-2 lg:grid-cols-3;
+  }
+
+  /* .oribi — uppercase mono eyebrow label (a small caption above a value or
+     heading, e.g. a card's station name or a METAR/TAF title). */
+  .oribi {
+    @apply font-mono text-xs uppercase tracking-wide text-text-secondary;
+  }
+
   .chameleon {
     @apply animate-pulse rounded-[var(--radius-card)]
            border border-surface-dim bg-surface-card shadow-sm;
+  }
+
+  /* .okapi — a quiet placeholder bar for the location loading skeleton. A
+     tint of the surrounding text colour (so it reads on the sky plate and on
+     a card alike, in both themes) with a soft highlight that slides across
+     it. The slide is opt-in under `prefers-reduced-motion: no-preference`
+     (below), so with Reduce Motion the bar is a static block. Decorative:
+     the skeleton marks its blocks aria-hidden. */
+  .okapi {
+    @apply inline-block rounded-[var(--radius-sm)] align-middle;
+    --okapi-base: color-mix(in srgb, currentColor 14%, transparent);
+    --okapi-glint: color-mix(in srgb, currentColor 26%, transparent);
+    background-color: var(--okapi-base);
   }
 
   /* ── Static-page typography ──────────────────────────────────────────── */
@@ -1564,6 +1833,60 @@ body {
      stays on the cobalt pill instead of spilling onto the light header. */
   outline-offset: 0px;
   border-radius: 9999px;
+}
+
+/* Focus on the sky (WCAG 1.4.11, 3:1). The page sky is a saturated gradient
+   chosen so WHITE text clears 4.5:1 (--sky-fg, src/lib/hero.test.ts); the page
+   ring (--focus-ring, the Mzizi storm blue) measures about 1.1 to 1.4:1 on it
+   and vanishes. The global :focus-visible rule above reads --focus-ring, so
+   pointing the variable at the sky foreground inside the sky makes every
+   focusable thing there follow, with no per-control rule to forget. (A class
+   or a Tailwind `focus-visible:outline-*` utility cannot do this: the global
+   rule is unlayered and beats every @layer, which is also why these scopes
+   are unlayered rules and not utilities.) The unscrolled header's brand mark
+   and desktop links are the same scope, set in their own block below.
+
+   The ⋯ menu panel opens inside the hero but is drawn on a light card
+   surface, so it takes the page ring back. */
+[data-sky-hero],
+.kestrel-ink,
+.kestrel-card {
+  --focus-ring: var(--sky-fg);
+}
+[data-sky-hero] [data-slot="account-menu-panel"] {
+  --focus-ring: var(--exp-storm);
+}
+
+/* .kestrel-round (Share, the ⋯ trigger) — unlayered like the fauna rules above:
+   the global :focus-visible rule would otherwise square the round control to a
+   4px radius on keyboard focus. */
+.kestrel-round:focus-visible {
+  outline: var(--focus-ring-width, 3px) solid var(--sky-fg);
+  outline-offset: var(--focus-ring-offset, 2px);
+  border-radius: 9999px;
+}
+
+/* Loading-skeleton shimmer (.okapi). Only when motion is welcome; otherwise
+   the bar stays the static base tint set on the class itself. */
+@media (prefers-reduced-motion: no-preference) {
+  .okapi {
+    background-image: linear-gradient(
+      90deg,
+      var(--okapi-base) 0%,
+      var(--okapi-glint) 50%,
+      var(--okapi-base) 100%
+    );
+    background-size: 200% 100%;
+    animation: okapi-shimmer 1.6s linear infinite;
+  }
+}
+@keyframes okapi-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
 }
 
 /* ===== Reduced Motion — WCAG 2.3.3 ===== */
@@ -1725,113 +2048,264 @@ body {
   }
 }
 
-/* ===== Location hero — solid sky plate (redesign/hero) =====
-   A flat, solid mineral surface behind the location hero: no gradient, no
-   glass, no animation. Each condition family maps to one Seven Minerals value
-   via var(), so light and dark follow the mineral tokens above and the
-   per-theme --mineral-*-fg pairs keep text contrast. The [data-theme="dark"]
-   block repeats the same var() references (they resolve per theme). Consumed
-   by the .kori fauna class and its family modifiers. */
+/* ===== Location hero — the sky is the page (redesign/hero-open-sky) =====
+   No card: the sky is the PAGE BACKGROUND. WeatherBackdrop paints one fixed,
+   full-viewport gradient chosen by condition family x day/night (family from
+   src/lib/hero.ts skyFamily), so it extends under the header and the bottom
+   controls at the top of the page, and scrolls away with it. Light and dark are separate designs, not inversions: day skies
+   in light, deep night/dusk in dark. The night and rain skies are the owner's
+   mockup values. Every stop keeps WHITE text (--sky-fg) at 4.5:1 or better and
+   so does the dimmer H/L white (--sky-fg-dim): src/lib/hero.test.ts computes
+   it for every gradient. All static CSS, no animation. */
 :root {
-  --radius-plate: 2rem;
-  --plate-clear-day: var(--mineral-cobalt);
-  --plate-clear-day-fg: var(--mineral-cobalt-fg);
-  --plate-clear-night: var(--mineral-tanzanite);
-  --plate-clear-night-fg: var(--mineral-tanzanite-fg);
-  --plate-cloudy-day: var(--mineral-gold);
-  --plate-cloudy-day-fg: var(--mineral-gold-fg);
-  --plate-cloudy-night: var(--mineral-tanzanite);
-  --plate-cloudy-night-fg: var(--mineral-tanzanite-fg);
-  --plate-fog: var(--mineral-terracotta);
-  --plate-fog-fg: var(--mineral-terracotta-fg);
-  --plate-rain: var(--mineral-malachite);
-  --plate-rain-fg: var(--mineral-malachite-fg);
-  --plate-storm: var(--mineral-tanzanite);
-  --plate-storm-fg: var(--mineral-tanzanite-fg);
-  --plate-snow: var(--mineral-cobalt);
-  --plate-snow-fg: var(--mineral-cobalt-fg);
+  --sky-fg: #ffffff;
+  --sky-fg-dim: #e6eaf8;
+  --sky-fade: 6rem;
+  --sky-reach: max(100svh + 8rem, 60rem);
+  --radius-sky-card: 1.375rem;
+  --sky-clear-day-top: #1b5aa6;
+  --sky-clear-day-mid: #2563a8;
+  --sky-clear-day-bottom: #2c69ab;
+  --sky-clear-night-top: #0b1026;
+  --sky-clear-night-mid: #151c42;
+  --sky-clear-night-bottom: #1c2550;
+  --sky-cloudy-day-top: #4a5563;
+  --sky-cloudy-day-mid: #515c6b;
+  --sky-cloudy-day-bottom: #5a6574;
+  --sky-cloudy-night-top: #141a26;
+  --sky-cloudy-night-mid: #1e2636;
+  --sky-cloudy-night-bottom: #2b3548;
+  --sky-fog-top: #565d66;
+  --sky-fog-mid: #5a6169;
+  --sky-fog-bottom: #5f666e;
+  --sky-rain-top: #3a4656;
+  --sky-rain-mid: #4a5768;
+  --sky-rain-bottom: #3e4a5a;
+  --sky-storm-top: #231f30;
+  --sky-storm-mid: #33293f;
+  --sky-storm-bottom: #453a5c;
+  --sky-snow-top: #3f566f;
+  --sky-snow-mid: #476079;
+  --sky-snow-bottom: #4f6a88;
 }
 
 [data-theme="dark"] {
-  --plate-clear-day: var(--mineral-cobalt);
-  --plate-clear-day-fg: var(--mineral-cobalt-fg);
-  --plate-clear-night: var(--mineral-tanzanite);
-  --plate-clear-night-fg: var(--mineral-tanzanite-fg);
-  --plate-cloudy-day: var(--mineral-gold);
-  --plate-cloudy-day-fg: var(--mineral-gold-fg);
-  --plate-cloudy-night: var(--mineral-tanzanite);
-  --plate-cloudy-night-fg: var(--mineral-tanzanite-fg);
-  --plate-fog: var(--mineral-terracotta);
-  --plate-fog-fg: var(--mineral-terracotta-fg);
-  --plate-rain: var(--mineral-malachite);
-  --plate-rain-fg: var(--mineral-malachite-fg);
-  --plate-storm: var(--mineral-tanzanite);
-  --plate-storm-fg: var(--mineral-tanzanite-fg);
-  --plate-snow: var(--mineral-cobalt);
-  --plate-snow-fg: var(--mineral-cobalt-fg);
+  --sky-clear-day-top: #0d2547;
+  --sky-clear-day-mid: #153a68;
+  --sky-clear-day-bottom: #1d4a80;
+  --sky-cloudy-day-top: #262d37;
+  --sky-cloudy-day-mid: #303946;
+  --sky-cloudy-day-bottom: #3a4553;
+  --sky-cloudy-night-top: #0f1319;
+  --sky-cloudy-night-mid: #171d26;
+  --sky-cloudy-night-bottom: #1f2833;
+  --sky-fog-top: #2a2f35;
+  --sky-fog-mid: #373d44;
+  --sky-fog-bottom: #444b53;
+  --sky-storm-top: #0f0c17;
+  --sky-storm-mid: #1b1626;
+  --sky-storm-bottom: #2a2238;
+  --sky-snow-top: #1f2d3e;
+  --sky-snow-mid: #2c4057;
+  --sky-snow-bottom: #3c5672;
 }
 
 @layer components {
-  /* .kori — the hero sky plate. Solid, fully rounded card, text in the
-     plate's foreground token. A family modifier points --kori-bg/fg at one
-     --plate-* pair; the default is the clear-day plate. */
-  .kori {
-    --kori-bg: var(--plate-clear-day);
-    --kori-fg: var(--plate-clear-day-fg);
-    background-color: var(--kori-bg);
-    color: var(--kori-fg);
-    border-radius: var(--radius-plate);
+  /* .kestrel-reach — the sky's box (WeatherBackdrop's root): from the very top
+     of the page, under the header, one screen plus 8rem tall, so it covers
+     the hero AND the Conditions card on any viewport, and fades out over its
+     last --sky-fade. It scrolls away with the page: everything lower sits on
+     the ordinary surface, so loose text further down keeps its usual contrast. */
+  .kestrel-reach {
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: var(--sky-reach);
+    mask-image: linear-gradient(
+      to bottom,
+      black calc(100% - var(--sky-fade)),
+      transparent
+    );
   }
-  /* .kudu-plate — the hero plate's primary pill (Mzizi Button, sm size). The
-     plate's own fg/bg pair inverted, so it carries the plate's AAA contrast. */
-  .kudu-plate {
-    @apply press-scale inline-flex items-center justify-center gap-2
-           rounded-[var(--radius-button)] px-5 py-2.5 text-base font-semibold
-           transition-opacity hover:opacity-90
-           min-h-[var(--touch-target-min)];
-    background-color: var(--kori-fg);
-    color: var(--kori-bg);
+
+  /* .kestrel — the page sky (the kestrel hovers in open sky). Fills its
+     positioned parent (the .kestrel-reach box). A family modifier points
+     --kestrel-top/mid/bottom at one --sky-* triple. */
+  .kestrel {
+    --kestrel-top: var(--sky-clear-day-top);
+    --kestrel-mid: var(--sky-clear-day-mid);
+    --kestrel-bottom: var(--sky-clear-day-bottom);
+    --kestrel-mid-at: 50%;
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(
+      to bottom,
+      var(--kestrel-top) 0%,
+      var(--kestrel-mid) var(--kestrel-mid-at),
+      var(--kestrel-bottom) 100%
+    );
   }
-  /* .impala-plate — quiet (ghost) pill on the plate: plate text, no fill
-     until hovered. Same shape and target as every other Mzizi button. */
-  .impala-plate {
-    @apply press-scale inline-flex items-center justify-center gap-1.5
-           rounded-[var(--radius-button)] px-4 py-2.5 text-base font-medium
-           transition-colors hover:bg-current/10
-           min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)];
+  .kestrel-clear-day {
+    --kestrel-top: var(--sky-clear-day-top);
+    --kestrel-mid: var(--sky-clear-day-mid);
+    --kestrel-bottom: var(--sky-clear-day-bottom);
   }
-  .kori-clear-day {
-    --kori-bg: var(--plate-clear-day);
-    --kori-fg: var(--plate-clear-day-fg);
+  .kestrel-clear-night {
+    --kestrel-top: var(--sky-clear-night-top);
+    --kestrel-mid: var(--sky-clear-night-mid);
+    --kestrel-bottom: var(--sky-clear-night-bottom);
+    --kestrel-mid-at: 55%;
   }
-  .kori-clear-night {
-    --kori-bg: var(--plate-clear-night);
-    --kori-fg: var(--plate-clear-night-fg);
+  .kestrel-cloudy-day {
+    --kestrel-top: var(--sky-cloudy-day-top);
+    --kestrel-mid: var(--sky-cloudy-day-mid);
+    --kestrel-bottom: var(--sky-cloudy-day-bottom);
   }
-  .kori-cloudy-day {
-    --kori-bg: var(--plate-cloudy-day);
-    --kori-fg: var(--plate-cloudy-day-fg);
+  .kestrel-cloudy-night {
+    --kestrel-top: var(--sky-cloudy-night-top);
+    --kestrel-mid: var(--sky-cloudy-night-mid);
+    --kestrel-bottom: var(--sky-cloudy-night-bottom);
+    --kestrel-mid-at: 55%;
   }
-  .kori-cloudy-night {
-    --kori-bg: var(--plate-cloudy-night);
-    --kori-fg: var(--plate-cloudy-night-fg);
+  .kestrel-fog {
+    --kestrel-top: var(--sky-fog-top);
+    --kestrel-mid: var(--sky-fog-mid);
+    --kestrel-bottom: var(--sky-fog-bottom);
   }
-  .kori-fog {
-    --kori-bg: var(--plate-fog);
-    --kori-fg: var(--plate-fog-fg);
+  .kestrel-rain {
+    --kestrel-top: var(--sky-rain-top);
+    --kestrel-mid: var(--sky-rain-mid);
+    --kestrel-bottom: var(--sky-rain-bottom);
+    --kestrel-mid-at: 45%;
   }
-  .kori-rain {
-    --kori-bg: var(--plate-rain);
-    --kori-fg: var(--plate-rain-fg);
+  .kestrel-storm {
+    --kestrel-top: var(--sky-storm-top);
+    --kestrel-mid: var(--sky-storm-mid);
+    --kestrel-bottom: var(--sky-storm-bottom);
   }
-  .kori-storm {
-    --kori-bg: var(--plate-storm);
-    --kori-fg: var(--plate-storm-fg);
+  .kestrel-snow {
+    --kestrel-top: var(--sky-snow-top);
+    --kestrel-mid: var(--sky-snow-mid);
+    --kestrel-bottom: var(--sky-snow-bottom);
   }
-  .kori-snow {
-    --kori-bg: var(--plate-snow);
-    --kori-fg: var(--plate-snow-fg);
+
+  /* Light texture by condition — static, faint, never animated. Stars sit on
+     the night skies; diagonal streaks sit on the first 340px of rain/storm. */
+  .kestrel-stars {
+    position: absolute;
+    inset: 0;
+    background-image:
+      radial-gradient(1px 1px at 12% 9%, var(--sky-fg) 50%, transparent 51%),
+      radial-gradient(1px 1px at 31% 4%, var(--sky-fg) 50%, transparent 51%),
+      radial-gradient(
+        1.5px 1.5px at 74% 7%,
+        var(--sky-fg) 50%,
+        transparent 51%
+      ),
+      radial-gradient(1px 1px at 88% 14%, var(--sky-fg) 50%, transparent 51%),
+      radial-gradient(1px 1px at 8% 26%, var(--sky-fg) 50%, transparent 51%),
+      radial-gradient(1px 1px at 52% 19%, var(--sky-fg) 50%, transparent 51%),
+      radial-gradient(
+        1.5px 1.5px at 93% 33%,
+        var(--sky-fg) 50%,
+        transparent 51%
+      ),
+      radial-gradient(1px 1px at 22% 38%, var(--sky-fg) 50%, transparent 51%),
+      radial-gradient(1px 1px at 63% 31%, var(--sky-fg) 50%, transparent 51%),
+      radial-gradient(1px 1px at 40% 12%, var(--sky-fg) 50%, transparent 51%);
+    opacity: 0.55;
   }
+  .kestrel-streaks {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 340px;
+    background-image: repeating-linear-gradient(
+      105deg,
+      var(--sky-fg) 0 1px,
+      transparent 1px 14px
+    );
+    opacity: 0.12;
+  }
+
+  /* .kestrel-ink — re-points the text, accent and surface tokens at the sky
+     foreground for everything inside, so existing children (badges, headings,
+     hour tiles, links) read on the sky without a restyle. Shared by the
+     Conditions card and the hero's season line. */
+  .kestrel-ink,
+  .kestrel-card {
+    --color-text-primary: var(--sky-fg);
+    --color-text-secondary: var(--sky-fg-dim);
+    --color-text-tertiary: var(--sky-fg-dim);
+    --color-primary: var(--sky-fg);
+    --color-rain: var(--sky-fg);
+    --color-border: color-mix(in srgb, var(--sky-fg) 16%, transparent);
+    --color-surface-base: transparent;
+    --color-surface-elevated: color-mix(
+      in srgb,
+      var(--sky-fg) 10%,
+      transparent
+    );
+    color: var(--sky-fg);
+  }
+
+  /* .kestrel-card — a translucent bordered card on the sky (the Conditions
+     card). Fill and hairline are the sky foreground at low alpha; no shadow,
+     no blur. */
+  .kestrel-card {
+    background-color: color-mix(in srgb, var(--sky-fg) 7%, transparent);
+    border: 1px solid color-mix(in srgb, var(--sky-fg) 16%, transparent);
+    border-radius: var(--radius-sky-card);
+    padding: var(--space-card);
+  }
+
+  /* .kestrel-round — round 48px icon control on the sky (Share, the ⋯ menu).
+     A hairline border and a faint fill, no shadow: Mzizi separates with
+     borders. */
+  .kestrel-round {
+    @apply flex shrink-0 items-center justify-center rounded-full border
+           transition-colors active:scale-95
+           w-[var(--touch-target-min)] h-[var(--touch-target-min)];
+    color: var(--sky-fg);
+    background-color: color-mix(in srgb, var(--sky-fg) 8%, transparent);
+    border-color: color-mix(in srgb, var(--sky-fg) 22%, transparent);
+  }
+  .kestrel-round:hover {
+    background-color: color-mix(in srgb, var(--sky-fg) 16%, transparent);
+  }
+  /* Its :focus-visible ring is an unlayered rule next to .bee's (a rule in this
+     layer loses to the global :focus-visible one). */
+}
+
+/* The sky runs to the top of the screen. While a page shows the sky hero
+   ([data-sky-hero]) the phone header is not drawn: the hero's own top row holds
+   the breadcrumb, Share and the ⋯ menu (the bottom controls stay). From `sm`
+   the one app header stays, transparent over the sky with its text pointed at
+   the sky foreground, and only gains its blurred surface after scroll
+   ([data-scrolled]). Pure CSS on the body, so there is no flash and a page
+   without the hero (the chooser, every other route) is untouched. */
+@media (max-width: 639.98px) {
+  body:has([data-sky-hero]) [data-site-header] {
+    display: none;
+  }
+}
+/* The override is scoped to the bar's own brand mark and desktop links
+   ([data-header-ink]), never the <header> itself: the notifications popover
+   and the ⋯ menu live inside the header on a light card surface, and white
+   text there would be unreadable. */
+body:has([data-sky-hero])
+  [data-site-header]:not([data-scrolled])
+  [data-header-ink] {
+  --color-text-primary: var(--sky-fg);
+  --color-text-secondary: var(--sky-fg);
+  --color-text-tertiary: var(--sky-fg);
+  --focus-ring: var(--sky-fg);
+  color: var(--sky-fg);
+}
+body:has([data-sky-hero])
+  [data-site-header]:not([data-scrolled])
+  [data-header-ink]
+  .weaver-active {
+  color: var(--sky-fg);
 }
 
 /* ===== Weather sky palette (redesign/weather-colours) =====

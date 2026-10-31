@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   AQI_ADVICE,
-  AQI_TEXT_CLASS,
+  AQI_LEVEL_BG_CLASS,
   DISPLAY_DEFAULT_LAYER,
   DISPLAY_REFRESH_MS,
   currentHourIndex,
@@ -84,12 +84,12 @@ describe("parseDisplayParams", () => {
 });
 
 describe("AQI advice", () => {
-  it("covers every EPA level with advice and a severity token", () => {
+  it("covers every EPA level with advice and an official EPA band fill", () => {
     for (const level of Object.keys(AQI_LEVEL_LABELS)) {
       expect(AQI_ADVICE[level as keyof typeof AQI_ADVICE]).toBeTruthy();
-      expect(AQI_TEXT_CLASS[level as keyof typeof AQI_TEXT_CLASS]).toMatch(
-        /^text-severity-/,
-      );
+      expect(
+        AQI_LEVEL_BG_CLASS[level as keyof typeof AQI_LEVEL_BG_CLASS],
+      ).toMatch(/^bg-wx-aqi-[1-6]$/);
     }
   });
 
@@ -178,9 +178,6 @@ describe("display route wiring", () => {
 
   it("is reserved so it never becomes the lastLocation cookie", () => {
     expect(read("proxy.ts")).toMatch(/"display"/);
-    expect(read("components/weather/WeatherLoadingScene.tsx")).toMatch(
-      /"display"/,
-    );
   });
 
   it("keeps the screen awake and reloads periodically", () => {

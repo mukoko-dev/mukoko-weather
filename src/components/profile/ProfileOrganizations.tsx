@@ -16,6 +16,7 @@
 import { Building2, Home } from "lucide-react";
 import { CAPABILITY_LABELS, roleLabel } from "@/lib/user-display";
 import type { ProfileOrganization } from "@/lib/profile";
+import { ProfileGroup } from "@/components/profile/ProfileGroup";
 
 export function ProfileOrganizations({
   organizations,
@@ -25,10 +26,7 @@ export function ProfileOrganizations({
   if (organizations.length === 0) return null;
 
   return (
-    <section aria-labelledby="profile-organizations" className="guineafowl">
-      <h2 id="profile-organizations" className="guineafowl-heading">
-        Your organizations
-      </h2>
+    <ProfileGroup id="profile-organizations" title="Your organizations">
       <ul>
         {organizations.map((org) => {
           const Icon = org.entityType === "family" ? Home : Building2;
@@ -71,6 +69,6 @@ export function ProfileOrganizations({
       <p className="border-t border-border px-4 py-3 text-xs text-text-secondary">
         These permissions apply to each organization on its own.
       </p>
-    </section>
+    </ProfileGroup>
   );
 }

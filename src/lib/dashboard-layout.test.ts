@@ -55,15 +55,13 @@ describe("lastTileSpanClass (2 columns mobile / 4 on lg)", () => {
   it("spans the lone fifth tile across both layouts and drops the square aspect", () => {
     const cls = lastTileSpanClass(5);
     expect(cls).toContain("col-span-2");
-    expect(cls).toContain("lg:col-span-4");
-    expect(cls).toContain("[&>section]:aspect-auto");
+    expect(cls).toContain("@3xl:col-span-4");
+    expect(cls).not.toContain("aspect-");
   });
 
   it("resets the mobile span on lg when the lg row is already full", () => {
     // 6 tiles: mobile rows are full (no span), lg needs the last to span 3.
-    expect(lastTileSpanClass(6)).toBe(
-      "lg:col-span-3 lg:[&>section]:aspect-auto",
-    );
+    expect(lastTileSpanClass(6)).toBe("@3xl:col-span-3");
   });
 });
 

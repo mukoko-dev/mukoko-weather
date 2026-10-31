@@ -403,8 +403,19 @@ describe("releases/ — the shipped notes", () => {
     const versions = releases.map((r) => r.version);
     expect(versions).toContain("0.10.0");
     expect(versions).toContain("0.11.0");
-    expect(versions).toContain("0.11.0");
-    expect(versions[0]).toBe("0.12.0");
+    expect(versions).toContain("0.12.0");
+  });
+
+  it("lists the highest version first", () => {
+    const parts = (v: string) => v.split(".").map(Number);
+    const higher = (a: string, b: string) => {
+      const [x, y] = [parts(a), parts(b)];
+      for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+      return 0;
+    };
+    const versions = releases.map((r) => r.version);
+    const highest = [...versions].sort(higher).at(-1);
+    expect(versions[0]).toBe(highest);
   });
 
   it("links v0.10.0 to its published GitHub release", () => {

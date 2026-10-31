@@ -1,10 +1,11 @@
 import { cache } from "react";
 import type { Metadata } from "next";
-import Link from "next/link";
+import { trail } from "@/components/layout/Breadcrumb";
+import { ExploreCard } from "@/components/explore/ExploreCard";
+import { TagPill } from "@/components/explore/TagPill";
+import { SITE_URL } from "@/lib/site";
 import { notFound } from "next/navigation";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
-import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { PageShell } from "@/components/layout/PageShell";
 import {
   getCountryByCode,
   getLocationsByProvince,
@@ -48,7 +49,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${flag} ${provinceName}, ${countryName} Weather | mukoko weather`,
     description: `Browse weather forecasts for locations in ${provinceName}, ${countryName}.`,
     alternates: {
-      canonical: `https://weather.mukoko.com/explore/country/${code.toLowerCase()}/${provinceSlug}`,
+      canonical: `${SITE_URL}/explore/country/${code.toLowerCase()}/${provinceSlug}`,
     },
   };
 }
@@ -76,72 +77,52 @@ export default async function ProvinceDetailPage({ params }: Props) {
   const flag = getFlagEmoji(upperCode);
 
   return (
-    <>
-      <Header />
-
-      <Breadcrumb
-        items={[
-          { label: "Home", href: "/" },
-          { label: "Explore", href: "/explore" },
-          { label: "Countries", href: "/explore/country" },
-          {
-            label: countryName,
-            href: `/explore/country/${code.toLowerCase()}`,
-          },
-          { label: provinceName },
-        ]}
-      />
-
-      <main
-        id="main-content"
-        className="mx-auto max-w-5xl overflow-x-clip px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-8 md:px-8"
-      >
-        <div className="flex items-center gap-3 mb-1">
-          <span className="text-3xl" aria-hidden="true">
-            {flag}
-          </span>
-          <div>
-            <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
-              {provinceName}
-            </h1>
-            <p className="text-base text-text-secondary">
-              {countryName} &bull; {locations.length} location
-              {locations.length !== 1 ? "s" : ""}
-            </p>
-          </div>
+    <PageShell
+      width="wide"
+      breadcrumb={trail(
+        { label: "Explore", href: "/explore" },
+        { label: "Countries", href: "/explore/country" },
+        {
+          label: countryName,
+          href: `/explore/country/${code.toLowerCase()}`,
+        },
+        { label: provinceName },
+      )}
+    >
+      <div className="flex items-center gap-3 mb-1">
+        <span className="text-3xl" aria-hidden="true">
+          {flag}
+        </span>
+        <div>
+          <h1 className="elephant">{provinceName}</h1>
+          <p className="text-base text-text-secondary">
+            {countryName} &bull; {locations.length} location
+            {locations.length !== 1 ? "s" : ""}
+          </p>
         </div>
+      </div>
 
-        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {locations.map((loc) => (
-            <Link
-              key={loc.slug}
-              href={`/${loc.slug}`}
-              className="group card-interactive pangolin"
-            >
-              <h2 className="font-medium text-text-primary group-hover:text-primary transition-colors">
-                {loc.name}
-              </h2>
-              {loc.elevation > 0 && (
-                <p className="mt-0.5 text-base text-text-tertiary">
-                  {loc.elevation.toLocaleString()} m elevation
-                </p>
-              )}
-              <div className="mt-2 flex flex-wrap gap-1">
-                {loc.tags.slice(0, 3).map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full bg-primary/10 px-2 py-0.5 text-base text-primary"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </Link>
-          ))}
-        </div>
-      </main>
-
-      <Footer />
-    </>
+      <div className="herd-grid mt-8">
+        {locations.map((loc) => (
+          <ExploreCard
+            key={loc.slug}
+            href={`/${loc.slug}`}
+            as="h2"
+            title={loc.name}
+            meta={
+              loc.elevation > 0
+                ? `${loc.elevation.toLocaleString()} m elevation`
+                : undefined
+            }
+          >
+            <div className="mt-2 flex flex-wrap gap-1">
+              {loc.tags.slice(0, 3).map((tag) => (
+                <TagPill key={tag}>{tag}</TagPill>
+              ))}
+            </div>
+          </ExploreCard>
+        ))}
+      </div>
+    </PageShell>
   );
 }

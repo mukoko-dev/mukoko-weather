@@ -14,6 +14,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { PlusIcon, TrashIcon } from "@/lib/weather-icons";
 import { DEFAULT_LOCALE, formatDate } from "@/lib/i18n";
+import { fetchJsonOrThrow } from "@/lib/fetch-json";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Field } from "@/components/ui/field";
 
 interface ApiKey {
   id: string;
@@ -77,12 +80,10 @@ export function ApiKeysManager() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/keys", { cache: "no-store" });
-      if (!res.ok) throw new Error(`Failed to load keys (${res.status})`);
-      const data = (await res.json()) as {
+      const data = await fetchJsonOrThrow<{
         keys: ApiKey[];
         entityRequired?: boolean;
-      };
+      }>("/api/keys", { init: { cache: "no-store" } });
       setKeys(data.keys ?? []);
       setEntityRequired(Boolean(data.entityRequired));
     } catch {
@@ -217,34 +218,36 @@ export function ApiKeysManager() {
 
       {/* Create form */}
       <form onSubmit={handleCreate} className="acacia space-y-3">
-        <label htmlFor="key-label" className="giraffe block">
-          Create a new key
-        </label>
-        <p className="dove">
-          Give the key a label so you can recognise it later (e.g. &ldquo;My
-          weather site&rdquo;).
-        </p>
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <input
-            id="key-label"
-            type="text"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            maxLength={60}
-            placeholder="Key label"
-            disabled={creating || atCapacity || entityRequired}
-            className="flex-1 rounded-[var(--radius-input)] border border-border bg-surface-base px-3 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50"
-            aria-describedby="key-capacity"
-          />
-          <button
-            type="submit"
-            disabled={!label.trim() || creating || atCapacity || entityRequired}
-            className="kudu-sm shrink-0"
-          >
-            <PlusIcon size={16} />
-            <span>{creating ? "Creating…" : "Create new key"}</span>
-          </button>
-        </div>
+        <Field
+          label="Create a new key"
+          htmlFor="key-label"
+          labelClassName="giraffe block"
+          hint="Give the key a label so you can recognise it later (e.g. “My weather site”)."
+        >
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <input
+              id="key-label"
+              type="text"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              maxLength={60}
+              placeholder="Key label"
+              disabled={creating || atCapacity || entityRequired}
+              className="flex-1 rounded-[var(--radius-input)] border border-border bg-surface-base px-3 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50"
+              aria-describedby="key-capacity"
+            />
+            <button
+              type="submit"
+              disabled={
+                !label.trim() || creating || atCapacity || entityRequired
+              }
+              className="kudu-sm shrink-0"
+            >
+              <PlusIcon size={16} />
+              <span>{creating ? "Creating…" : "Create new key"}</span>
+            </button>
+          </div>
+        </Field>
         <p id="key-capacity" className="dove">
           {keys.length}/{MAX_KEYS} keys used
           {atCapacity ? " — revoke one to create another." : "."}
@@ -252,9 +255,11 @@ export function ApiKeysManager() {
       </form>
 
       {error && (
-        <div className="alert-banner" role="alert">
-          <p className="text-sm text-text-primary">{error}</p>
-        </div>
+        <Alert variant="severe">
+          <AlertDescription className="text-sm text-text-primary">
+            {error}
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Key list */}

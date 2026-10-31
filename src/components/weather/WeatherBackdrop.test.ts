@@ -8,7 +8,14 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const source = readFileSync(resolve(__dirname, "WeatherBackdrop.tsx"), "utf-8");
+const backdrop = readFileSync(
+  resolve(__dirname, "WeatherBackdrop.tsx"),
+  "utf-8",
+);
+// The static sky layers live in WeatherSky (shared with the loading
+// skeleton); the backdrop adds the Three.js layer inside it.
+const sky = readFileSync(resolve(__dirname, "WeatherSky.tsx"), "utf-8");
+const source = backdrop + "\n" + sky;
 
 describe("WeatherBackdrop — component contract", () => {
   it("is a client component", () => {
@@ -42,13 +49,16 @@ describe("WeatherBackdrop — performance discipline", () => {
     expect(source).toContain("handle.resume()");
   });
 
-  it("is a fixed full-viewport backdrop behind all content (no IntersectionObserver needed)", () => {
-    // POSITIVE z-0, never negative: iOS Safari paints fixed negative-z
-    // elements behind the body background (overflow-x:hidden body), making
-    // the backdrop invisible on iPhone. Content stacks above via z-10.
+  it("is the sky box at the top of the page, behind all content (no IntersectionObserver needed)", () => {
+    // POSITIVE z-0, never negative: iOS Safari paints negative-z elements
+    // behind the body background (overflow-x:hidden body), making the
+    // backdrop invisible on iPhone. Content stacks above via z-10. The box
+    // (.kestrel-reach) is absolute at the top of the page, not fixed: it
+    // scrolls away so lower sections sit on the ordinary surface.
     expect(source).toContain(
-      '"pointer-events-none fixed inset-0 z-0 overflow-hidden"',
+      '"kestrel-reach pointer-events-none z-0 overflow-hidden"',
     );
+    expect(source).not.toMatch(/\bfixed\b[^"]*inset-0/);
     expect(source).not.toContain("-z-10");
     // Always on-screen while the page is visible — tab visibility is the
     // only pause signal, so no observer is constructed (the docstring may
@@ -56,9 +66,10 @@ describe("WeatherBackdrop — performance discipline", () => {
     expect(source).not.toContain("new IntersectionObserver");
   });
 
-  it("fades the sky into the surface background lower down the page", () => {
-    expect(source).toContain("from-transparent");
-    expect(source).toContain("to-surface-base");
+  it("fades the sky out at its foot through the .kestrel-reach mask, not an overlay", () => {
+    expect(source).toContain("kestrel-reach");
+    expect(source).not.toContain("transparent_var(--sky-fade-from)");
+    expect(source).not.toContain("to-surface-base");
   });
 
   it("disposes the scene on unmount", () => {
@@ -78,7 +89,8 @@ describe("WeatherBackdrop — reduced motion + resilience", () => {
 
   it("always paints the static real-weather sky gradient as the fallback", () => {
     // Same palette as the Three.js layer (palette.ts ↔ --weather-sky-*).
-    expect(source).toContain("skyClassName(sceneType, isDay, phase)");
+    expect(source).toContain("kestrel ${SKY_CLASS[family]}");
+    expect(source).toContain("skyFamily(weatherCode, isDay)");
   });
 
   it("catches scene creation failures so the card never breaks", () => {
@@ -96,8 +108,14 @@ describe("WeatherBackdrop — accessibility + layout", () => {
     expect(source).toContain("absolute inset-0");
   });
 
-  it("applies a readability veil over the sky behind header/breadcrumb text", () => {
-    expect(source).toContain("hornbill-veil");
+  it("has no readability veil: the header and breadcrumb text take the sky foreground", () => {
+    expect(source).not.toContain("hornbill-veil");
+  });
+
+  it("carries the static night stars and rain streaks, never animated", () => {
+    expect(source).toContain("skyTexture(family)");
+    expect(source).toContain('"kestrel-stars"');
+    expect(source).toContain('"kestrel-streaks"');
   });
 
   it("uses only token-backed gradient classes (no hardcoded hex)", () => {
@@ -107,9 +125,11 @@ describe("WeatherBackdrop — accessibility + layout", () => {
 });
 
 describe("WeatherBackdrop — scene mapping + twilight", () => {
-  it("resolves sky classes from the shared palette, not a local switch", () => {
-    expect(source).toContain("skyClassName");
+  it("resolves the sky class from the hero's one family mapping, not a local switch", () => {
+    expect(source).toContain("SKY_CLASS");
+    expect(source).not.toContain("skyClassName");
     expect(source).not.toContain("weaver-sky");
+    expect(backdrop).toContain("<WeatherSky ref={skyRef} family={family}");
   });
 
   it("derives a dawn/dusk phase from the location clock and passes it on", () => {
@@ -124,17 +144,18 @@ describe("WeatherBackdrop — scene mapping + twilight", () => {
   });
 });
 
-describe("WeatherBackdrop — subdued behind the sky plate", () => {
-  it("lowers the sky and particle layers so the hero plate reads as the hero", () => {
-    expect(source).toContain("absolute inset-0 opacity-80 ${skyClassName(");
-    // Particles dim further in dark theme, like the dark-theme sky tokens.
+describe("WeatherBackdrop — subdued particle layer", () => {
+  it("keeps the particle layer subdued so it never fights the hero text", () => {
+    // The sky itself is solid (it is the page); only the particles are dimmed,
+    // and further in dark theme.
     expect(source).toContain(
-      'className="absolute inset-0 opacity-75 dark:opacity-40"',
+      'className="absolute inset-0 opacity-30 dark:opacity-20"',
     );
+    expect(source).not.toContain("opacity-80");
   });
 
-  it("does not paint the hero plate itself", () => {
-    expect(source).not.toMatch(/className=\{?[`"][^`"]*\bkori\b/);
+  it("does not use the retired solid plate", () => {
+    expect(source).not.toMatch(/\bkori\b/);
   });
 });
 
@@ -159,12 +180,34 @@ describe("WeatherBackdrop — device and scroll policy (v0.10.0 perf)", () => {
     expect(scene).toContain('powerPreference: "low-power"');
   });
 
-  it("the loading scene delays Three.js so quick loads never open a second context", () => {
-    const loading = readFileSync(
-      resolve(__dirname, "WeatherLoadingScene.tsx"),
+  it("the loading skeleton never opens a WebGL context", () => {
+    const skeleton = readFileSync(
+      resolve(__dirname, "LocationSkeleton.tsx"),
       "utf-8",
     );
-    expect(loading).toContain("LOADING_SCENE_3D_DELAY_MS");
-    expect(loading).toContain("window.clearTimeout(startTimer)");
+    expect(skeleton).not.toContain("createWeatherScene");
+    expect(skeleton).not.toMatch(/from "three"/);
+    expect(skeleton).toContain("<WeatherSky");
+  });
+});
+
+describe("WeatherBackdrop — the sky extends with its content", () => {
+  it("measures the Conditions card (or the hero) and sets --sky-reach from skyReachCss", () => {
+    expect(source).toContain("skyReachCss");
+    expect(source).toContain('document.querySelector("[data-sky-card]")');
+    expect(source).toContain('document.querySelector("[data-sky-hero]")');
+    expect(source).toContain('sky.style.setProperty("--sky-reach", css)');
+  });
+
+  it("re-measures on resize and when the card or page changes size (text zoom, landscape)", () => {
+    expect(source).toContain("new ResizeObserver(measure)");
+    expect(source).toContain('window.addEventListener("resize", measure)');
+    expect(source).toContain("ro.disconnect()");
+  });
+
+  it("reads the root font size, so the margin scales with text zoom", () => {
+    expect(source).toContain(
+      "getComputedStyle(document.documentElement).fontSize",
+    );
   });
 });

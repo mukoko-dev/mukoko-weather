@@ -26,6 +26,7 @@ import {
 } from "./shape";
 import { fetchJson } from "@/lib/fetch-json";
 import { workerUrl } from "@/lib/weather-api";
+import { LOCATION_SLUG_RE } from "@/lib/location-gate";
 
 export const runtime = "edge";
 
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     lat = qsLat;
     lon = qsLon;
     source = "coords";
-  } else if (slug && /^[a-z0-9-]{1,80}$/.test(slug)) {
+  } else if (slug && LOCATION_SLUG_RE.test(slug)) {
     // 2. Known location slug — resolve to coordinates via internal locations API.
     // `/api/py/locations?slug=` returns a `{ location: {…} }` WRAPPER (not the
     // bare doc), so unwrap it — reading `loc.lat` directly yields undefined → NaN

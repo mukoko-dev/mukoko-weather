@@ -32,8 +32,8 @@ describe("WeatherDashboard — section ordering (Google Weather pattern)", () =>
     expect(source).toContain("`/${location.slug}/forecast`");
   });
 
-  it("renders ActivityInsights before AISummary", () => {
-    const activityPos = source.indexOf('label="activity-insights"');
+  it("renders the activity invitation before AISummary", () => {
+    const activityPos = source.indexOf('case "activityInvite"');
     const aiPos = source.indexOf('label="ai-summary"');
     expect(activityPos).toBeGreaterThan(-1);
     expect(aiPos).toBeGreaterThan(-1);
@@ -85,12 +85,7 @@ describe("WeatherDashboard — section ordering (Google Weather pattern)", () =>
 });
 
 describe("WeatherDashboard — lazy loading", () => {
-  const lazySections = [
-    "ai-summary",
-    "activity-insights",
-    "weather-map",
-    "location-info",
-  ];
+  const lazySections = ["ai-summary", "weather-map", "location-info"];
 
   it("wraps all non-critical sections in LazySection", () => {
     for (const label of lazySections) {
@@ -112,6 +107,31 @@ describe("WeatherDashboard — lazy loading", () => {
   it("wraps lazy components in Suspense with skeleton fallback", () => {
     expect(source).toContain("Suspense");
     expect(source).toContain("SectionSkeleton");
+  });
+});
+
+describe("WeatherDashboard — activity advice sheet", () => {
+  it("drops the long My Activities section from the page", () => {
+    expect(source).not.toContain('case "activityInsights"');
+    expect(source).not.toContain('label="activity-insights"');
+    expect(source).not.toMatch(/<ActivityInsights\b/);
+  });
+
+  it("shows only the small invitation, and only while nothing is selected", () => {
+    expect(source).toContain('case "activityInvite"');
+    expect(source).toMatch(
+      /selectedActivities\.length === 0 \? \([\s\S]*?<ActivityInvite \/>/,
+    );
+  });
+
+  it("imports the sheet lazily and renders it only after a first open", () => {
+    expect(source).toMatch(
+      /const ActivitiesDetailSheet = lazy\(\(\) =>\s+import\("@\/components\/weather\/ActivitiesDetailSheet"\)/,
+    );
+    expect(source).toContain("advice.loaded");
+    expect(source).toContain("open={advice.open}");
+    expect(source).toContain("opener={advice.opener}");
+    expect(source).toContain("focusActivityId={advice.activityId}");
   });
 });
 
@@ -220,7 +240,7 @@ describe("WeatherDashboard — weather scene caching", () => {
 
   it("calls cacheWeatherHint in a useEffect", () => {
     // cacheWeatherHint should be called inside a useEffect so the weather
-    // hint is cached for the WeatherLoadingScene on next page load
+    // hint is cached for the LocationSkeleton on next page load
     expect(source).toContain("cacheWeatherHint");
     expect(source).toContain("useEffect");
   });
@@ -258,10 +278,11 @@ describe("WeatherDashboard — layout control placement (bottom of page)", () =>
     expect(firstOpen).toBeGreaterThan(source.indexOf("</DndContext>"));
   });
 
-  it("renders the season pill as the hero footer, not as a block above the grid", () => {
-    const currentIdx = source.indexOf("<CurrentConditions");
+  it("renders the season pill as the Conditions card footer, not in the hero or above the grid", () => {
+    const hourlyIdx = source.indexOf("<HourlyScrollCards");
     const footerIdx = source.indexOf("footer={<SeasonBadge");
-    expect(footerIdx).toBeGreaterThan(currentIdx);
+    expect(footerIdx).toBeGreaterThan(hourlyIdx);
+    expect(footerIdx).toBeLessThan(source.indexOf("<CurrentConditions"));
     expect(source).not.toMatch(/<div className="mb-3">\s*<SeasonBadge/);
   });
 
@@ -354,6 +375,7 @@ describe("WeatherDashboard — redesign wiring", () => {
       "lon={location.lon}",
       "weather={weather}",
       "selectedActivities={selectedActivities}",
+      "onOpenAdvice={openAdvice}",
     ]) {
       expect(lane.slice(0, 400)).toContain(prop);
     }
@@ -369,5 +391,30 @@ describe("selected forecast model is the baseline (issue #246)", () => {
   it("derives the frost banner and fallback flag from the baseline on screen", () => {
     expect(source).toContain("checkFrostRisk(modelBaseline.hourly");
     expect(source).toContain("modelBaseline ? false : seedUsingFallback");
+  });
+});
+
+describe("WeatherDashboard — the hero is pinned first", () => {
+  it("renders from pinHeroFirst(stored order), whatever the store holds", () => {
+    expect(source).toContain(
+      "const sectionOrder = pinHeroFirst(storedSectionOrder);",
+    );
+    expect(source).not.toContain(
+      "useAppStore((s) => s.sectionOrder);\n  const setSectionOrder",
+    );
+  });
+
+  it("marks the hero's DraggableSection pinned and ignores any drag to or from it", () => {
+    expect(source).toMatch(/key="current"\s+id="current"\s+pinned/);
+    expect(source).toContain("active.id !== PINNED_FIRST_SECTION");
+    expect(source).toContain("over.id !== PINNED_FIRST_SECTION");
+  });
+
+  it("only treats the Conditions card as the sky card when the hero is first", () => {
+    expect(source).toContain("sectionOrder[0] === PINNED_FIRST_SECTION");
+  });
+
+  it("puts the device 'updated ago' line on the sky ink so it reads over the sky", () => {
+    expect(source).toContain('<div className="kestrel-ink">');
   });
 });

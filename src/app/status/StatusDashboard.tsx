@@ -7,6 +7,7 @@ import {
   StatusBadge,
   type ServiceStatus,
 } from "@/components/ui/status-indicator";
+import { workerUrl } from "@/lib/worker-url";
 
 interface CheckResult {
   name: string;
@@ -73,7 +74,7 @@ export function StatusDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/py/status");
+      const response = await fetch(workerUrl("/v1/status"));
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -164,8 +165,9 @@ export function StatusDashboard() {
         <h3 className="font-semibold text-text-primary">About these checks</h3>
         <ul className="mt-2 space-y-1.5">
           <li>
-            <strong className="text-text-primary">MongoDB Atlas</strong> —
-            Database connectivity (weather cache, AI summaries, historical data)
+            <strong className="text-text-primary">Forecast Worker</strong> — The
+            Rust service that gathers forecasts, with its cache and the
+            weather-station database
           </li>
           <li>
             <strong className="text-text-primary">Open-Meteo API</strong> —
@@ -179,21 +181,18 @@ export function StatusDashboard() {
             overall status
           </li>
           <li>
+            <strong className="text-text-primary">Places and Aviation</strong> —
+            Location search and lookup, and METAR and TAF aviation weather
+          </li>
+          <li>
             <strong className="text-text-primary">Shamwari AI</strong> — AI
-            weather summaries (GLM on Workers AI, via Cloudflare AI Gateway)
-          </li>
-          <li>
-            <strong className="text-text-primary">Weather Cache</strong> —
-            Active cached weather data (15-min TTL)
-          </li>
-          <li>
-            <strong className="text-text-primary">AI Summary Cache</strong> —
-            Active cached AI summaries (30-120 min tiered TTL)
+            weather summaries (open-weights models on Workers AI, via Cloudflare
+            AI Gateway)
           </li>
         </ul>
         <p className="mt-3 text-text-tertiary">
-          Status auto-refreshes every 5 minutes and is cached server-side for
-          ~60 seconds. All checks run in parallel for minimum latency.
+          Status auto-refreshes every 5 minutes and is cached for about 60
+          seconds. All checks run in parallel for minimum latency.
         </p>
       </div>
     </div>

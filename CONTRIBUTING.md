@@ -186,14 +186,15 @@ The old analyzer names may have silently fallen through to Atlas defaults — th
 
 All workflows use `concurrency` groups with `cancel-in-progress: true` — rapid pushes cancel stale runs instead of creating zombie checks.
 
-| Workflow             | Trigger                                                       | Purpose                                                                                                                                                   |
-| -------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci.yml`             | Push/PR to `main`                                             | Single job: lint → typecheck → TypeScript tests → Python tests. All steps appear under one check in the GitHub PR UI.                                     |
-| `codeql.yml`         | Push/PR to `main`                                             | CodeQL security scanning for JavaScript/TypeScript, Python, and GitHub Actions workflows. Matrix strategy runs all 3 language analyses in parallel.       |
-| `db-init.yml`        | Vercel production deploy succeeds                             | Syncs seed data to MongoDB (locations, activities, rules, prompts)                                                                                        |
-| `release-pr.yml`     | Manual (`workflow_dispatch`)                                  | Cuts `release/<date>` from `staging`, asserts main's content is already in staging, records main with `git merge -s ours`, opens the release PR to `main` |
-| `workers.yml`        | Push/PR touching `workers/**`; called by `workers-deploy.yml` | Rust Workers: fmt, clippy (native + wasm32), test, and build every Worker bundle                                                                          |
-| `workers-deploy.yml` | Manual (`workflow_dispatch`)                                  | Builds and deploys the Rust Workers to Cloudflare in service-binding order, then smoke-checks each public `/health`                                       |
+| Workflow                   | Trigger                                                       | Purpose                                                                                                                                                                                       |
+| -------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`                   | Push/PR to `main`                                             | Single job: lint → typecheck → TypeScript tests → Python tests. All steps appear under one check in the GitHub PR UI.                                                                         |
+| `codeql.yml`               | Push/PR to `main`                                             | CodeQL security scanning for JavaScript/TypeScript, Python, and GitHub Actions workflows. Matrix strategy runs all 3 language analyses in parallel.                                           |
+| `db-init.yml`              | Vercel production deploy succeeds                             | Syncs seed data to MongoDB (locations, activities, rules, prompts)                                                                                                                            |
+| `release-pr.yml`           | Manual (`workflow_dispatch`)                                  | Cuts `release/<date>` from `staging`, asserts main's content is already in staging, records main with `git merge -s ours`, removes `CLAUDE.md` and `.claude/`, opens the release PR to `main` |
+| `no-dev-files-on-main.yml` | PR to `main`; push to `main`                                  | Fails when `CLAUDE.md` or a `.claude/` directory is tracked, so `main` never holds development-only files                                                                                     |
+| `workers.yml`              | Push/PR touching `workers/**`; called by `workers-deploy.yml` | Rust Workers: fmt, clippy (native + wasm32), test, and build every Worker bundle                                                                                                              |
+| `workers-deploy.yml`       | Manual (`workflow_dispatch`)                                  | Builds and deploys the Rust Workers to Cloudflare in service-binding order, then smoke-checks each public `/health`                                                                           |
 
 ## Releases
 
@@ -204,9 +205,12 @@ To open a release PR, never open `staging → main` by hand. Run the **Release P
 1. Creates `release/<date>` from `origin/staging`. It fails if that branch already exists.
 2. Asserts that main's content is already in staging. Each file on `main` must either match staging's blob at the same path or appear somewhere in staging's history. If neither holds, the workflow fails loudly and names each file, which usually means a hotfix landed on `main` without being merged back. Merge `main` into `staging` and rerun.
 3. Runs `git merge -s ours origin/main -m "chore: record main in release history"`. This records `main` as a parent while the tree stays exactly staging's, and the workflow verifies that.
-4. Pushes the branch and opens the PR to `main` with `RELEASE_BUMP_TOKEN`, so CI runs on it.
+4. Removes the development-only files in one extra commit: every `CLAUDE.md` and every `.claude/` directory, at any depth (matched case-insensitively). `main` never holds them, because they guide development and are not production code. `staging` keeps them, and the workflow fails if any is still tracked after the commit.
+5. Pushes the branch and opens the PR to `main` with `RELEASE_BUMP_TOKEN`, so CI runs on it.
 
 Squash-merge that PR. Because `main` is already in the branch's history, the squash is always clean.
+
+The `no-dev-files-on-main.yml` workflow backs step 4 up: it fails any PR to `main`, and any push to `main`, whose tree still tracks a `CLAUDE.md` or `.claude/` file. Make it a required status check on `main` in the repository's branch protection (an owner step) so a hand-opened PR cannot merge them. The Release PR workflow runs from `main`, so a change to it only takes effect after it has reached `main` once. That release has to remove the files by hand on its release branch.
 
 Once the release is on `main`, tag it with the `tag-release` workflow (Actions → tag-release → Run workflow). It tags the tip of `main` as the next version (`bump`, default patch, or an explicit `vX.Y.Z`) and publishes the GitHub release, using `RELEASE_BUMP_TOKEN`.
 
@@ -254,18 +258,26 @@ The Rust Workers in `workers/` deploy by hand only, from **Actions → Workers d
 - `worker`: `all` (default) or one Worker.
 - `environment`: `production`, the only environment the wrangler configs define. The job runs in the `workers-production` GitHub Environment, so required reviewers set there gate every deploy.
 
-`all` first runs the `workers.yml` gate (fmt, clippy, test, build), then deploys in service-binding order: `forecast`, `aviation`, `places`, `stations`, `tiles`, then `ai`, `internal-api`, `jobs`, then `public-api`. Each Worker with a custom domain must answer `GET /health` with a 2xx, and the run summary lists every Worker's result. A single Worker skips the gate, so only deploy one alone when what it binds to is already live.
+`all` first runs the `workers.yml` gate (fmt, clippy, test, build), then deploys in service-binding order: `forecast`, `aviation`, `mongo-bridge`, `places`, `stations`, `tiles`, then `ai`, `internal-api`, `jobs`, then `public-api`. `mongo-bridge` (TypeScript, `workers/mongo-bridge`) comes before `places` because `places` binds it as `MONGO_BRIDGE`: the bridge is the only writer of device profiles, community weather reports and the archive days of the weather history (MongoDB, never D1), and it has no route and no workers.dev address. `places` also comes before `ai`, which binds it (`PLACES`) so the history analysis reads the same history the app shows (#268). Each Worker with a custom domain must answer `GET /health` with a 2xx, and the run summary lists every Worker's result. A single Worker skips the gate, so only deploy one alone when what it binds to is already live.
+
+**Deploy the Workers before you promote Vercel.** A route that is ported to the Workers has its Python route deleted in the same PR, and the app calls `weather-api.mukoko.com` with no `/api/py` fallback (`src/lib/weather-api.ts`). The Workers deploy by hand and the Vercel release is promoted separately, so promoting Vercel first sends the app to a route that does not exist yet: it answers `404` and the card it feeds renders nothing. Always deploy `forecast`, then `public-api` (the order `all` uses, and the order the service bindings need), check each custom domain's `/health` and the new route, and only then promote the Vercel release. To roll back, roll Vercel back first; a Worker rolled back past a ported route breaks the live app the same way. Check the PR's own list of new bindings, secrets and D1 migrations as well: those must exist before the Worker that uses them deploys.
 
 The workflow needs the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets. The token needs **Account → Secrets Store → Edit** as well as Workers edit: binding a Secrets Store secret on deploy counts as a write. The Workers' own runtime secrets live in the account's Cloudflare Secrets Store (`56f84bfa8a564c54a95dbf4f4b4281b4`), never in the workflow. Each key is one store secret, bound by every Worker that needs it (`secrets_store_secrets` in each `wrangler.jsonc`):
 
-| Store secret                      | Bound by (`workers/<dir>`) | Required | Value                                                                                         |
-| --------------------------------- | -------------------------- | -------- | --------------------------------------------------------------------------------------------- |
-| `MUKOKO_WEATHER_TOMORROW_API_KEY` | `forecast`, `tiles`        | Required | Tomorrow.io key (today in Mongo `weather.api_keys` "tomorrow")                                |
-| `MUKOKO_WEATHER_NYUCHI_API_KEY`   | `forecast`, `places`, `ai` | Required | This app's internal Nyuchi API key: places read, plus the `ai` scope for the guardrails read  |
-| `MUKOKO_WEATHER_SERVICE_API_KEY`  | `internal-api`             | Required | The bearer key nyuchi-api presents as `WEATHER_SERVICE_API_KEY` (e.g. `openssl rand -hex 32`) |
-| `MUKOKO_WEATHER_CHECKWX_API_KEY`  | `aviation`                 | Optional | CheckWX key, the METAR fallback (today in Mongo `weather.api_keys` "checkwx")                 |
+| Store secret                      | Bound by (`workers/<dir>`)                | Required | Value                                                                                                                |
+| --------------------------------- | ----------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
+| `MUKOKO_WEATHER_TOMORROW_API_KEY` | `forecast`, `tiles`                       | Required | Tomorrow.io key (today in Mongo `weather.api_keys` "tomorrow")                                                       |
+| `MUKOKO_WEATHER_NYUCHI_API_KEY`   | `forecast`, `places`, `ai`                | Required | This app's internal Nyuchi API key: places read, plus the `ai` scope for the guardrails read                         |
+| `MUKOKO_WEATHER_SERVICE_API_KEY`  | `internal-api`                            | Required | The bearer key nyuchi-api presents as `WEATHER_SERVICE_API_KEY` (e.g. `openssl rand -hex 32`)                        |
+| `MUKOKO_WEATHER_MONGODB_URI`      | none yet (plain `MONGODB_URI` until then) | Optional | MongoDB seed-list connection string for the Workers' read-only client (workers/README.md, "MongoDB from a Worker")   |
+| `MUKOKO_MONGODB_RW_URI`           | `mongo-bridge`                            | Required | MongoDB read-write connection string for the bridge. Not weather-specific: one store secret for the whole Mukoko app |
+| `MUKOKO_WEATHER_CHECKWX_API_KEY`  | `aviation`                                | Optional | CheckWX key, the METAR fallback (today in Mongo `weather.api_keys` "checkwx")                                        |
 
 Create each one with `npx wrangler secrets-store secret create 56f84bfa8a564c54a95dbf4f4b4281b4 --name <NAME> --scopes workers --remote`, which prompts for the value (`workers/README.md`, "Owner steps"). Transition: until every value is confirmed in the store, the Workers fall back to the plain wrangler secret of the old name (`TOMORROW_API_KEY`, `NYUCHI_API_KEY`, `WEATHER_SERVICE_API_KEY`, `CHECKWX_API_KEY`) and log a warning once per isolate; the fallback is removed once the store is confirmed. Deploys share one `concurrency` group per environment and never cancel each other.
+
+### Patch deploys, then the minor release
+
+Before a release goes to `main`, deploy the Workers from `staging` by hand with wrangler, using the Cloudflare token from the environment (no GitHub Actions): `npm ci` in `workers/mongo-bridge`, then `npx wrangler@4.138.0 deploy` in each Worker directory in the order above, with `CLOUDFLARE_ACCOUNT_ID` set. There are no separate staging Workers, so this is a production deploy: record each Worker's live version first (`wrangler deployments list --name <script>`) as the rollback target, stop at the first failure, and check each custom domain's `/health` (and `/health?probe=mongo` on the public API) after it. Test the changed routes against the live Workers, and delete any test data you created. Only then merge the release PR to `main`; that is the minor bump, tagged with `tag-release`.
 
 ## Reporting Issues
 

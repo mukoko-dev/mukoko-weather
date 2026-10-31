@@ -12,10 +12,11 @@ const client = read("../../app/profile/ProfileClient.tsx");
 
 describe("ProfileDevices", () => {
   it("is a labelled grouped-list card in the profile standard", () => {
-    expect(src).toContain('aria-labelledby="profile-devices"');
-    expect(src).toContain('id="profile-devices"');
-    expect(src).toContain("guineafowl-heading");
-    expect(src).toMatch(/className="guineafowl"/);
+    expect(src).toContain('<ProfileGroup id="profile-devices" title="Devices"');
+    const group = read("ProfileGroup.tsx");
+    expect(group).toContain("aria-labelledby={id}");
+    expect(group).toContain("guineafowl-heading");
+    expect(group).toMatch(/className="guineafowl"/);
   });
 
   it("sits between organisations and appearance on /profile", () => {
@@ -48,7 +49,8 @@ describe("ProfileDevices", () => {
 
   it("has loading, empty and error states with roles", () => {
     expect(src).toContain('role="status"');
-    expect(src).toContain('role="alert"');
+    expect(src).toContain('<Alert variant="severe"');
+    expect(src).toContain('<Alert variant="warning"');
     expect(src).toContain("No signed-in devices found.");
   });
 
