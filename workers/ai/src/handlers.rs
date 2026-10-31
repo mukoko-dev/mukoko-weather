@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use weather_core::ai::guardrails::{system_prompt, Compiled};
 use weather_core::ai::history::{aggregate, fingerprint, Record};
-use weather_core::ai::prompts::{self, one_line, Season, SummaryLocation};
+use weather_core::ai::prompts::{self, ClientPlace, Season};
 use weather_core::ai::{activities, conversation, Invalid, Turn, REFUSAL};
 use weather_core::places::{place_for_point, resolve_seed, slugify};
 use weather_core::{geo, Place};
@@ -117,13 +117,6 @@ pub async fn summary(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
     }
     let place = place_for_point(lat, lon);
     let acts = ids(&body["activities"]);
-    let name = loc["name"]
-        .as_str()
-        .map(|n| one_line(n, 100))
-        .filter(|n| !n.is_empty())
-        .or_else(|| place.name.clone())
-        .unwrap_or_else(|| "this location".to_owned());
-
     let Some(data) = weather(ctx.env, lat, lon).await else {
         return error(
             503,
@@ -134,7 +127,16 @@ pub async fn summary(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
     let temp = data["current"]["temperature_2m"].as_f64();
     let code = data["current"]["weather_code"].as_i64();
 
-    let key = format!("summary:v1:{}:{}", place.slug, acts.join(","));
+    // Who the summary is about, and where it is cached, come from our own
+    // record of the place when we have one (see `summary_identity`).
+    let client = ClientPlace {
+        name: loc["name"].as_str(),
+        country: loc["country"].as_str(),
+        elevation: loc["elevation"].as_f64(),
+    };
+    let (summary_loc, key) =
+        prompts::summary_identity(&place, &client, &acts, data["elevation"].as_f64());
+    let name = summary_loc.name.clone();
     if let Some(c) = kv_get::<CachedSummary>(ctx.env, &key).await {
         let moved = match (c.temperature, temp) {
             (Some(a), Some(b)) => (a - b).abs() > STALE_TEMP_DELTA,
@@ -149,20 +151,6 @@ pub async fn summary(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
     }
 
     let season = prompts::season(lat, now());
-    let summary_loc = SummaryLocation {
-        name: name.clone(),
-        country: loc["country"]
-            .as_str()
-            .map(|c| one_line(c, 60))
-            .or_else(|| place.country.clone()),
-        lat,
-        lon,
-        elevation: loc["elevation"]
-            .as_f64()
-            .or(place.elevation)
-            .or_else(|| data["elevation"].as_f64())
-            .unwrap_or(0.0),
-    };
     let request = prompts::summary_request(&summary_loc, &data, &acts, &season);
     let system = system_prompt(&ctx.guardrails, prompts::SUMMARY);
     let call = Call {

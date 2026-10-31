@@ -73,14 +73,31 @@ fn is_timestamp(s: &str) -> bool {
     }
     // YYYY-MM-DDTHH:MM:SSZ, digits only where digits go.
     let b = s.as_bytes();
-    b.len() == 20
+    let shaped = b.len() == 20
         && b.iter().enumerate().all(|(i, c)| match i {
             4 | 7 => *c == b'-',
             10 => *c == b'T',
             13 | 16 => *c == b':',
             19 => *c == b'Z',
             _ => c.is_ascii_digit(),
-        })
+        });
+    if !shaped {
+        return false;
+    }
+    // The shape is not enough: Tomorrow.io answers 4xx for 2024-99-99, and a
+    // request it rejects must never reach it. The date has to exist.
+    let num = |a: usize, z: usize| s[a..z].parse::<u32>().unwrap_or(u32::MAX);
+    let (year, month, day) = (num(0, 4), num(5, 7), num(8, 10));
+    let (hour, minute, second) = (num(11, 13), num(14, 16), num(17, 19));
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let days = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return false,
+    };
+    year >= 1970 && (1..=days).contains(&day) && hour < 24 && minute < 60 && second < 60
 }
 
 /// An integer query value as FastAPI reads one: optional sign, digits.
@@ -220,6 +237,39 @@ mod tests {
                 parse(&[("z", "1"), ("x", "0"), ("y", "0"), ("layer", bad)]),
                 Err(refuse(400, "Invalid layer"))
             );
+        }
+    }
+
+    #[test]
+    fn tile_timestamp_rejects_impossible_dates() {
+        let at = |ts: &'static str| {
+            parse(&[
+                ("z", "3"),
+                ("x", "1"),
+                ("y", "1"),
+                ("layer", "humidity"),
+                ("timestamp", ts),
+            ])
+        };
+        for bad in [
+            "2024-99-99T99:99:99Z",
+            "0000-00-00T00:00:00Z",
+            "9999-12-31T25:61:61Z",
+            "2023-02-29T00:00:00Z",
+            "2024-04-31T00:00:00Z",
+            "2024-13-01T00:00:00Z",
+            "2024-01-01T24:00:00Z",
+            "1969-12-31T23:59:59Z",
+        ] {
+            assert_eq!(at(bad), Err(refuse(400, "Invalid timestamp")), "{bad}");
+        }
+        for good in [
+            "now",
+            "2024-02-29T00:00:00Z",
+            "2000-02-29T12:30:45Z",
+            "2026-10-31T23:59:59Z",
+        ] {
+            assert!(at(good).is_ok(), "{good}");
         }
     }
 
