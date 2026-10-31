@@ -178,9 +178,6 @@ describe("display route wiring", () => {
 
   it("is reserved so it never becomes the lastLocation cookie", () => {
     expect(read("proxy.ts")).toMatch(/"display"/);
-    expect(read("components/weather/WeatherLoadingScene.tsx")).toMatch(
-      /"display"/,
-    );
   });
 
   it("keeps the screen awake and reloads periodically", () => {

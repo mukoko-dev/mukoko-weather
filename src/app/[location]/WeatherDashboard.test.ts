@@ -240,7 +240,7 @@ describe("WeatherDashboard — weather scene caching", () => {
 
   it("calls cacheWeatherHint in a useEffect", () => {
     // cacheWeatherHint should be called inside a useEffect so the weather
-    // hint is cached for the WeatherLoadingScene on next page load
+    // hint is cached for the LocationSkeleton on next page load
     expect(source).toContain("cacheWeatherHint");
     expect(source).toContain("useEffect");
   });

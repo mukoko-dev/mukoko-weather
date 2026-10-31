@@ -156,7 +156,7 @@ describe("CurrentLocationHome — GPS chooser fallback", () => {
 
   it("never blocks the screen while GPS runs — the button shows progress", () => {
     // The old full-screen "Finding your location…" scene had no way out.
-    expect(source).not.toContain("WeatherLoadingScene");
+    expect(source).not.toContain("LocationSkeleton");
     expect(source).toContain('aria-busy={gpsState === "detecting"}');
     expect(source).toContain("Finding your location…");
   });

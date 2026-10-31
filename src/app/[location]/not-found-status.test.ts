@@ -122,9 +122,9 @@ describe("no root loading boundary", () => {
     expect(existsSync(resolve(appDir, "loading.tsx"))).toBe(false);
   });
 
-  it("keeps the home page's loading scene inside its own Suspense", () => {
+  it("keeps the home page's loading skeleton inside its own Suspense", () => {
     const home = read("page.tsx");
-    expect(home).toMatch(/<Suspense fallback=\{<WeatherLoadingScene \/>\}>/);
+    expect(home).toMatch(/<Suspense fallback=\{<LocationSkeleton \/>\}>/);
     expect(home).toMatch(/<HomeContent \/>/);
   });
 });

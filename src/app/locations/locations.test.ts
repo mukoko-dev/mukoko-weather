@@ -23,10 +23,6 @@ const searchSource = readFileSync(
 const loadingSource = readFileSync(resolve(__dirname, "loading.tsx"), "utf-8");
 const css = readFileSync(resolve(__dirname, "../globals.css"), "utf-8");
 const proxySource = readFileSync(resolve(__dirname, "../../proxy.ts"), "utf-8");
-const loadingSceneSource = readFileSync(
-  resolve(__dirname, "../../components/weather/WeatherLoadingScene.tsx"),
-  "utf-8",
-);
 const slugHelpers = readFileSync(
   resolve(__dirname, "../../lib/current-slug.ts"),
   "utf-8",
@@ -154,10 +150,6 @@ describe("locations loading state", () => {
 describe("route names — locations is not a location slug", () => {
   it("proxy.ts treats /locations as an app route", () => {
     expect(proxySource).toMatch(/KNOWN_ROUTES[\s\S]*"locations"/);
-  });
-
-  it("WeatherLoadingScene treats /locations as an app route", () => {
-    expect(loadingSceneSource).toMatch(/KNOWN_ROUTES[\s\S]*"locations"/);
   });
 
   it("current-slug.ts treats /locations as an app route", () => {
