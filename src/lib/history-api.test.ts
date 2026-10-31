@@ -5,6 +5,7 @@ import {
   HISTORY_MAX_DAYS,
   HISTORY_RANGES,
   archiveNote,
+  historyFetchOptions,
   historyQuery,
   historySource,
   isArchiveSource,
@@ -68,6 +69,27 @@ describe("historyQuery", () => {
   });
 });
 
+describe("historyFetchOptions", () => {
+  it("waits longer than the Worker's 8 s default, more for long ranges", () => {
+    expect(historyFetchOptions(7).timeoutMs).toBeGreaterThan(8_000);
+    expect(historyFetchOptions(30).timeoutMs).toBeGreaterThanOrEqual(20_000);
+    expect(historyFetchOptions(365).timeoutMs).toBeGreaterThanOrEqual(30_000);
+    expect(historyFetchOptions(730).timeoutMs).toBeGreaterThanOrEqual(40_000);
+    expect(historyFetchOptions(1825).timeoutMs).toBeGreaterThanOrEqual(40_000);
+  });
+  it("does not retry a long range (the Worker keeps filling after a give-up)", () => {
+    expect(historyFetchOptions(90).retries).toBe(1);
+    expect(historyFetchOptions(365).retries).toBe(1);
+    expect(historyFetchOptions(366).retries).toBe(0);
+    expect(historyFetchOptions(1825).retries).toBe(0);
+  });
+  it("covers every range the page offers", () => {
+    for (const r of HISTORY_RANGES) {
+      expect(historyFetchOptions(r.value).timeoutMs).toBeGreaterThan(8_000);
+    }
+  });
+});
+
 describe("sources", () => {
   it("knows the archive providers and treats anything else as recorded", () => {
     expect(ARCHIVE_SOURCES).toEqual(["nasa-power", "open-meteo-archive"]);
@@ -100,7 +122,8 @@ describe("readHistoryAnswer", () => {
       backfilled: 3,
       clamped: true,
       missing: 2,
-      saved: false,
+      saving: true,
+      degraded: true,
     });
     expect(a.data).toHaveLength(1);
     expect(a.sources).toHaveLength(1);
@@ -109,7 +132,8 @@ describe("readHistoryAnswer", () => {
       backfilled: 3,
       clamped: true,
       missing: 2,
-      saved: false,
+      saving: true,
+      degraded: true,
     });
   });
   it("tolerates an older body that has only data", () => {
@@ -119,7 +143,8 @@ describe("readHistoryAnswer", () => {
       backfilled: 0,
       clamped: false,
       missing: 0,
-      saved: true,
+      saving: false,
+      degraded: false,
     });
     expect(readHistoryAnswer(null).data).toEqual([]);
     expect(readHistoryAnswer("nope").sources).toEqual([]);

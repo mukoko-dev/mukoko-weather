@@ -65,14 +65,33 @@ async fn counts(env: &Env, action: Action, client: &str, since: u64) -> Result<(
     Ok((n(client), n(GLOBAL_CLIENT)))
 }
 
-async fn record(env: &Env, action: Action, client: &str, now: u64) -> Result<()> {
+/// One event row per unit: a weighted call (Open-Meteo history) writes its
+/// cost, so the hourly count IS the spend. The rows come from a recursive CTE,
+/// which keeps a 50-unit call to one statement.
+const INSERT_UNITS: &str =
+    "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?4) \
+     INSERT INTO rate_events (client, action, at) SELECT ?1, ?2, ?3 FROM n";
+
+/// The most units one spend may write (the history caps are far below it).
+const MAX_UNITS: u32 = 1_000;
+
+async fn record(env: &Env, action: Action, client: &str, now: u64, units: u32) -> Result<()> {
     let db = env.d1(DB)?;
     let at = now as f64;
+    let units = f64::from(units.clamp(1, MAX_UNITS));
     db.batch(vec![
-        db.prepare("INSERT INTO rate_events (client, action, at) VALUES (?1, ?2, ?3)")
-            .bind(&[client.into(), action.name().into(), at.into()])?,
-        db.prepare("INSERT INTO rate_events (client, action, at) VALUES (?1, ?2, ?3)")
-            .bind(&[GLOBAL_CLIENT.into(), action.name().into(), at.into()])?,
+        db.prepare(INSERT_UNITS).bind(&[
+            client.into(),
+            action.name().into(),
+            at.into(),
+            units.into(),
+        ])?,
+        db.prepare(INSERT_UNITS).bind(&[
+            GLOBAL_CLIENT.into(),
+            action.name().into(),
+            at.into(),
+            units.into(),
+        ])?,
         db.prepare("DELETE FROM rate_events WHERE at < ?1")
             .bind(&[(budget::prune_before(now) as f64).into()])?,
     ])
@@ -82,13 +101,19 @@ async fn record(env: &Env, action: Action, client: &str, now: u64) -> Result<()>
 
 /// Spend one call of `action` for `caller`, if the hour allows it.
 pub async fn take(env: &Env, action: Action, caller: &Caller) -> Decision {
+    take_units(env, action, caller, 1).await
+}
+
+/// Spend `units` of `action` (a weighted call) for `caller`, if the whole
+/// spend fits inside the client's and the service's hour. Fails closed.
+pub async fn take_units(env: &Env, action: Action, caller: &Caller, units: u32) -> Decision {
     let client = caller.key();
     let now = now_ms();
     let Ok((mine, all)) = counts(env, action, &client, budget::window_start(now)).await else {
         return Decision::GlobalLimit;
     };
-    let decision = budget::decide(action.limits(), mine, all);
-    if decision.allowed() && record(env, action, &client, now).await.is_err() {
+    let decision = budget::decide_units(action.limits(), mine, all, units);
+    if decision.allowed() && record(env, action, &client, now, units).await.is_err() {
         return Decision::GlobalLimit;
     }
     decision

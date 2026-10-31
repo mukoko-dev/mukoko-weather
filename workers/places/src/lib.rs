@@ -63,7 +63,7 @@ impl Query {
 }
 
 #[event(fetch)]
-pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
+pub async fn fetch(mut req: Request, env: Env, ctx: Context) -> Result<Response> {
     if req.path().starts_with("/devices") {
         return community::devices(&mut req, &env).await;
     }
@@ -79,7 +79,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         "/locations" => locations_route(&env, &q).await,
         "/search" => search_route(&req, &env, &q).await,
         "/geo" => geo_route(&req, &env, &q).await,
-        "/history" => history_route(&req, &env, &q).await,
+        "/history" => history_route(&req, &env, &ctx, &q).await,
         _ => error(404, "not_found", "No such route."),
     }
 }
@@ -446,7 +446,7 @@ async fn geo_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
     }
 }
 
-async fn history_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
+async fn history_route(req: &Request, env: &Env, ctx: &Context, q: &Query) -> Result<Response> {
     let params = match history::validate(&q.0) {
         Ok(p) => p,
         Err(resp) => return resp,
@@ -455,5 +455,5 @@ async fn history_route(req: &Request, env: &Env, q: &Query) -> Result<Response> 
         Some(slug) => Some(find_location(env, slug).await),
         None => None,
     };
-    history::serve(req, env, params, found).await
+    history::serve(req, env, ctx, params, found).await
 }

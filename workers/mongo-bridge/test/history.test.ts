@@ -163,6 +163,80 @@ describe("GET /history", () => {
     expect(days[0]).not.toHaveProperty("_id");
   });
 
+  it("reads the days stored under a platform alias of one place, and only that", async () => {
+    const { history, call } = setup();
+    history.docs.push(
+      {
+        _id: "1",
+        locationSlug: "harare",
+        date: "2026-10-18",
+        source: "recorded",
+      },
+      {
+        _id: "2",
+        locationSlug: "harare-35c223",
+        date: "2026-10-17",
+        source: "recorded",
+      },
+      {
+        _id: "3",
+        locationSlug: "harare-abcdef",
+        date: "2026-10-16",
+        source: "recorded",
+      },
+      {
+        _id: "4",
+        locationSlug: "harare-cafe",
+        date: "2026-10-15",
+        source: "recorded",
+      }, // not six hex digits
+      {
+        _id: "5",
+        locationSlug: "harare-zw-35c223",
+        date: "2026-10-14",
+        source: "recorded",
+      }, // another slug
+      {
+        _id: "6",
+        locationSlug: "nairobi-ke-35c223",
+        date: "2026-10-13",
+        source: "recorded",
+      },
+    );
+    const q = "slug=harare&start=2026-10-01&end=2026-10-31";
+    const plain = await call("GET", "/history", undefined, q);
+    expect(
+      (plain.body as { days: { date: string }[] }).days.map((d) => d.date),
+    ).toEqual(["2026-10-18"]);
+    const r = await call("GET", "/history", undefined, `${q}&aliases=1`);
+    const days = (r.body as { days: { date: string; locationSlug: string }[] })
+      .days;
+    expect(days.map((d) => d.date)).toEqual([
+      "2026-10-18",
+      "2026-10-17",
+      "2026-10-16",
+    ]);
+    expect(days.map((d) => d.locationSlug)).toEqual([
+      "harare",
+      "harare-35c223",
+      "harare-abcdef",
+    ]);
+  });
+
+  it("allows aliases for one plain place slug only", async () => {
+    const { call } = setup();
+    const status = async (q: string) =>
+      (await call("GET", "/history", undefined, q)).status;
+    const range = "&start=2026-10-01&end=2026-10-31";
+    expect(await status(`slug=harare&aliases=1${range}`)).toBe(200);
+    expect(await status(`slug=harare&slug=nairobi-ke&aliases=1${range}`)).toBe(
+      400,
+    );
+    expect(await status(`slug=geo:gcpvj0e&aliases=1${range}`)).toBe(400);
+    expect(await status(`slug=cell:-17.85_31.05&aliases=1${range}`)).toBe(400);
+    expect(await status(`slug=harare&aliases=yes${range}`)).toBe(200); // ignored, not an alias read
+  });
+
   it("builds its own filter from validated fields", async () => {
     const { history, call } = setup();
     await call(

@@ -306,8 +306,17 @@ export function reportStore(col: Coll): ReportStore {
 //   UNIQUE index {locationSlug: 1, date: -1} (db-init). Never created here.
 
 export interface HistoryStore {
-  /** Days dated `start`..`end` under any of the keys, newest first. */
-  read(keys: string[], start: string, end: string): Promise<Doc[]>;
+  /**
+   * Days dated `start`..`end` under any of the keys, newest first. With
+   * `aliasesOf` (a place slug) also the days stored under that slug's platform
+   * aliases: the slug, a dash and six hex digits.
+   */
+  read(
+    keys: string[],
+    start: string,
+    end: string,
+    aliasesOf?: string,
+  ): Promise<Doc[]>;
   /** Insert-only: a day that exists is left untouched. */
   insertArchiveDays(
     key: string,
@@ -334,9 +343,24 @@ const HISTORY_READ_LIMIT = HISTORY_MAX_KEYS * HISTORY_MAX_SPAN_DAYS;
 
 export function historyStore(col: Coll): HistoryStore {
   return {
-    async read(keys, start, end) {
+    async read(keys, start, end, aliasesOf) {
+      const byKey: Doc = { locationSlug: { $in: keys } };
+      // The pattern is built from a validated slug ([a-z0-9-] only) and a
+      // fixed suffix, anchored at both ends: a prefix match the index serves.
+      const where: Doc = aliasesOf
+        ? {
+            $or: [
+              byKey,
+              {
+                locationSlug: {
+                  $regex: `^${aliasesOf.replace(/[^a-z0-9-]/g, "")}-[0-9a-f]{6}$`,
+                },
+              },
+            ],
+          }
+        : byKey;
       const docs = await col.findMany(
-        { locationSlug: { $in: keys }, date: { $gte: start, $lte: end } },
+        { ...where, date: { $gte: start, $lte: end } },
         {
           projection: HISTORY_PROJECTION,
           sort: { date: -1 },

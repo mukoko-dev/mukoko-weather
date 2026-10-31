@@ -505,6 +505,12 @@ export interface HistoryRead {
   keys: string[];
   start: string;
   end: string;
+  /**
+   * Also read the days recorded under the place's platform slug
+   * (`harare-35c223`: the slug, a dash and six hex digits), which some
+   * writers used. Only for one plain place slug.
+   */
+  aliases: boolean;
 }
 
 export function validateHistoryRead(
@@ -527,7 +533,11 @@ export function validateHistoryRead(
   if (spanDays(start, end) > HISTORY_MAX_SPAN_DAYS) {
     return err(`range must be at most ${HISTORY_MAX_SPAN_DAYS} days`);
   }
-  return ok({ keys: [...new Set(keys)], start, end });
+  const aliases = params.get("aliases") === "1";
+  if (aliases && (keys.length !== 1 || !validSlug(keys[0]!))) {
+    return err("aliases applies to exactly one place slug");
+  }
+  return ok({ keys: [...new Set(keys)], start, end, aliases });
 }
 
 const CURRENT_FIELDS = [

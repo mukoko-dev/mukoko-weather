@@ -17,13 +17,25 @@
 //!    never write MongoDB directly; the bridge validates and inserts.
 //! 3. For the past dates neither holds: NASA POWER, then Open-Meteo's archive
 //!    (order from `HISTORY_PROVIDERS`), newest runs first, chunked to each
-//!    provider's span, at most six upstream calls a request. Each chunk is
-//!    written back insert-only as soon as it lands, so the next request is
-//!    served from our store.
+//!    provider's span, at most six upstream calls a request (Open-Meteo's are
+//!    weighted: see `open_meteo_units`). The fetched days are written back
+//!    insert-only, so the next request is served from our store.
 //!
 //! It never fails the answer because a provider did: a failing, open, spent or
-//! slow provider falls through to the next, then to what we hold. A bridge that
-//! is down means the fetched days are served but not saved (`saved: false`).
+//! slow provider falls through to the next, then to what we hold.
+//!
+//! Three rules keep a degraded answer from becoming a wrong one:
+//!
+//! - When a store could not be read (the bridge timed out, or predates the
+//!   history routes, or D1 failed) what we hold is UNKNOWN, so nothing is
+//!   fetched (every date would look missing and reanalysis would replace days
+//!   we recorded) and the answer is `no-store`.
+//! - The answer is returned as soon as the days are in hand; the insert-only
+//!   writes through the bridge finish in the background (`wait_until`), so a
+//!   client that gives up cannot lose them. `saving: true` says so.
+//! - A budget, an open breaker or a provider failure makes the answer
+//!   `no-store`; only a plain archive lag is cached (60 s).
+//!
 //! Only when nothing at all could be read AND nothing fetched is it a 502.
 
 use std::cell::RefCell;
@@ -40,7 +52,7 @@ use weather_core::history::{
 };
 use weather_core::locations::{self, LocationDoc};
 use weather_edge::{config, error, get_with_timeout, json, now_ms, secret, FetchError};
-use worker::{Env, Method, Request, Response, Result};
+use worker::{Context, Env, Method, Request, Response, Result};
 
 use crate::bridge;
 use crate::budget::{self, Caller};
@@ -88,6 +100,9 @@ struct Target {
     key: String,
     /// Keys under which MongoDB holds its days (the canonical one first).
     mongo_keys: Vec<String>,
+    /// Also read the days stored under the place's platform slug
+    /// (`harare-35c223`), which some writers used.
+    aliases: bool,
     /// The D1 `place_daily` slug, for a place the jobs record.
     d1_slug: Option<String>,
     lat: f64,
@@ -166,6 +181,7 @@ pub fn validate(q: &[(String, String)]) -> std::result::Result<Params, Result<Re
 pub async fn serve(
     req: &Request,
     env: &Env,
+    ctx: &Context,
     params: Params,
     found: Option<std::result::Result<Option<LocationDoc>, ()>>,
 ) -> Result<Response> {
@@ -195,13 +211,28 @@ pub async fn serve(
             Err(detail) => return error(400, "invalid_request", &detail),
         };
     // Spots and bare coordinates are anonymous and unbounded in number (one
-    // key per cell), so each stores at most a year.
+    // key per cell), so each stores at most the newest year, counted from
+    // TODAY: a range the caller placed in 1990 is not a year they may keep.
     let mut clamped = false;
     if !target.catalogue {
-        let floor = window_floor(&range_end, COORD_MAX_RANGE_DAYS);
-        if range_start < floor {
-            range_start = floor;
-            clamped = true;
+        match h::clamp_recent(&range_start, &range_end, &today, COORD_MAX_RANGE_DAYS) {
+            h::Clamp::Within => {}
+            h::Clamp::Start(floor) => {
+                range_start = floor;
+                clamped = true;
+            }
+            h::Clamp::Outside => {
+                let body = h::response(
+                    &target.key,
+                    &range_start,
+                    &range_end,
+                    vec![],
+                    0,
+                    true,
+                    false,
+                );
+                return stamped(body, 0, CachePolicy::Public(600));
+            }
         }
     }
 
@@ -212,26 +243,24 @@ pub async fn serve(
     docs.extend(mongo);
     let order = target.mongo_keys.clone();
     let mut stored = h::merge_by_date(docs, &order);
+    // When a store could not be read, what we hold is UNKNOWN: every date would
+    // look missing, and an archive's reanalysis would replace days we recorded.
+    let holdings_known = d1_ok && mongo_ok;
     let existing = h::dates_of(&stored);
 
-    // 3: the rest from the archives.
+    // 3: the rest from the archives (only when we know what is missing).
     let missing = h::missing_dates(&existing, &range_start, &range_end, target.lon, now);
     let mut fetched: Vec<Value> = Vec::new();
-    let mut saved: Option<bool> = None;
     let mut still_missing = missing.len();
-    if !missing.is_empty() {
+    let mut degraded = !holdings_known;
+    let mut pending: Vec<Value> = Vec::new();
+    if holdings_known && !missing.is_empty() {
         let caller = Caller::from_request(req);
-        let action = if target.catalogue {
-            Action::HistoryBackfill
-        } else {
-            Action::HistoryBackfillCoords
-        };
-        if budget::take(env, action, &caller).await.allowed() {
-            let out = backfill(env, &caller, &target, &missing).await;
-            still_missing = out.remaining;
-            saved = out.saved;
-            fetched = out.docs;
-        }
+        let out = backfill(env, &caller, &target, &missing).await;
+        still_missing = out.remaining;
+        degraded |= out.degraded;
+        pending = out.docs.clone();
+        fetched = out.docs;
     }
     let backfilled = fetched.len();
     if backfilled > 0 {
@@ -255,20 +284,50 @@ pub async fn serve(
         stored,
         backfilled,
         clamped,
-        saved,
+        !pending.is_empty(),
     );
-    body["missing"] = json!(still_missing);
-    let resp = json(200, &body)?;
-    // A request that left dates unfilled (a lag, an outage, a spent budget)
-    // must not be pinned for ten minutes.
-    let ttl = if still_missing > 0 { 60 } else { 600 };
-    resp.headers()
-        .set("Cache-Control", &format!("public, max-age={ttl}"))?;
-    Ok(resp)
+    if !holdings_known {
+        body["degraded"] = json!(true);
+    }
+    // Answer first, store after: the days are in hand, and a client that gives
+    // up (or a slow bridge) must not lose them. `wait_until` keeps the Worker
+    // alive for the writes, which are insert-only and so safe to repeat.
+    if !pending.is_empty() {
+        let env = env.clone();
+        let key = target.mongo_keys[0].clone();
+        ctx.wait_until(async move {
+            if !save(&env, &key, &pending).await {
+                worker::console_warn!("history: could not store {} archive days", pending.len());
+            }
+        });
+    }
+    let policy = if degraded {
+        // A budget, an outage, an open breaker or an unreadable store made
+        // this answer: the next call may well do better.
+        CachePolicy::NoStore
+    } else if still_missing > 0 {
+        // Only the archive lag: a minute is long enough.
+        CachePolicy::Public(60)
+    } else {
+        CachePolicy::Public(600)
+    };
+    stamped(body, still_missing, policy)
 }
 
-fn window_floor(end: &str, max_days: i64) -> String {
-    h::window_for_days(max_days, end).0
+enum CachePolicy {
+    NoStore,
+    Public(u32),
+}
+
+fn stamped(mut body: Value, missing: usize, policy: CachePolicy) -> Result<Response> {
+    body["missing"] = json!(missing);
+    let resp = json(200, &body)?;
+    let value = match policy {
+        CachePolicy::NoStore => "no-store".to_owned(),
+        CachePolicy::Public(s) => format!("public, max-age={s}"),
+    };
+    resp.headers().set("Cache-Control", &value)?;
+    Ok(resp)
 }
 
 fn target_of(loc: &LocationDoc) -> Target {
@@ -278,6 +337,7 @@ fn target_of(loc: &LocationDoc) -> Target {
         key: loc.slug.clone(),
         mongo_keys: vec![storage],
         d1_slug: catalogue.then(|| loc.slug.clone()),
+        aliases: catalogue,
         lat: loc.lat,
         lon: loc.lon,
         catalogue,
@@ -290,6 +350,7 @@ fn cell_target(lat: f64, lon: f64) -> Target {
         key: key.clone(),
         mongo_keys: vec![key],
         d1_slug: None,
+        aliases: false,
         lat,
         lon,
         catalogue: false,
@@ -335,12 +396,17 @@ async fn read_d1(env: &Env, t: &Target, start: &str, end: &str) -> (Vec<Value>, 
     (docs, true)
 }
 
-/// The days MongoDB holds, through the bridge. `false` when it did not answer.
+/// The days MongoDB holds, through the bridge. `false` when it did not answer
+/// (a timeout, a 5xx, or a bridge without the history routes).
 async fn read_bridge(env: &Env, t: &Target, start: &str, end: &str) -> (Vec<Value>, bool) {
     let mut path = format!("/history?start={start}&end={end}");
     for k in &t.mongo_keys {
         path.push_str("&slug=");
         path.push_str(&url_encode(k));
+    }
+    // A place's days may sit under its platform slug (`harare-35c223`) too.
+    if t.aliases && t.mongo_keys.len() == 1 {
+        path.push_str("&aliases=1");
     }
     match bridge::call(env, Method::Get, &path, None).await {
         bridge::Answer::Relay { status: 200, body } => {
@@ -363,8 +429,9 @@ struct Backfill {
     docs: Vec<Value>,
     /// Dates still missing after the attempt.
     remaining: usize,
-    /// `Some(false)` when days were fetched but could not be stored.
-    saved: Option<bool>,
+    /// A budget, an open breaker or a provider failure cut the attempt short
+    /// (not a plain lag or a per-request cap).
+    degraded: bool,
 }
 
 async fn backfill(env: &Env, caller: &Caller, t: &Target, missing: &[String]) -> Backfill {
@@ -372,15 +439,20 @@ async fn backfill(env: &Env, caller: &Caller, t: &Target, missing: &[String]) ->
     let key = t.mongo_keys[0].clone();
     let started = now_ms();
     let mut fetches = 0usize;
+    let mut om_units = 0u32;
     let mut unusable: BTreeSet<&'static str> = BTreeSet::new();
     let mut docs: Vec<Value> = Vec::new();
-    let mut saved: Option<bool> = None;
+    let mut degraded = false;
+    // The request-level budget is spent once, and only when a call is about to
+    // go upstream: an answer served from our own KV costs nothing.
+    let mut request_budget: Option<bool> = None;
     let mut left: BTreeSet<String> = missing.iter().cloned().collect();
 
     let out_of_budget =
         |fetches: usize| fetches >= MAX_FETCHES_PER_CALL || now_ms() - started > TIME_BUDGET_MS;
 
-    for (run_start, run_end) in h::group_runs(missing, RUN_MERGE_GAP_DAYS).into_iter().rev() {
+    'runs: for (run_start, run_end) in h::group_runs(missing, RUN_MERGE_GAP_DAYS).into_iter().rev()
+    {
         let mut remaining: BTreeSet<String> = left
             .iter()
             .filter(|d| **d >= run_start && **d <= run_end)
@@ -395,7 +467,7 @@ async fn backfill(env: &Env, caller: &Caller, t: &Target, missing: &[String]) ->
             }
             for (c_start, c_end) in h::chunks_for(spec, &remaining) {
                 if out_of_budget(fetches) {
-                    break;
+                    break 'runs;
                 }
                 // Our own KV first: no upstream call, no budget.
                 let cache_key = format!(
@@ -407,19 +479,46 @@ async fn backfill(env: &Env, caller: &Caller, t: &Target, missing: &[String]) ->
                     Some(d) => d,
                     None => {
                         if !with_breaker(spec.id, |b| b.allow(now_ms())) {
+                            degraded = true;
                             unusable.insert(spec.id);
                             break;
+                        }
+                        let units = spec.cost(h::span_days(&c_start, &c_end));
+                        if om_units.saturating_add(units) > spec.units_per_call() {
+                            // The per-request cap on Open-Meteo's weighted calls.
+                            unusable.insert(spec.id);
+                            break;
+                        }
+                        if request_budget.is_none() {
+                            let action = if t.catalogue {
+                                Action::HistoryBackfill
+                            } else {
+                                Action::HistoryBackfillCoords
+                            };
+                            request_budget =
+                                Some(budget::take(env, action, caller).await.allowed());
+                        }
+                        if request_budget == Some(false) {
+                            degraded = true;
+                            break 'runs;
                         }
                         let action = if spec.id == SOURCE_NASA_POWER {
                             Action::HistoryNasaPower
                         } else {
                             Action::HistoryOpenMeteo
                         };
-                        if !budget::take(env, action, caller).await.allowed() {
+                        if !budget::take_units(env, action, caller, units)
+                            .await
+                            .allowed()
+                        {
+                            degraded = true;
                             unusable.insert(spec.id);
                             break;
                         }
                         fetches += 1;
+                        if spec.id == SOURCE_OPEN_METEO_ARCHIVE {
+                            om_units += units;
+                        }
                         match fetch(env, spec, t.lat, t.lon, &c_start, &c_end).await {
                             Ok(d) => {
                                 with_breaker(spec.id, Breaker::record_success);
@@ -435,6 +534,7 @@ async fn backfill(env: &Env, caller: &Caller, t: &Target, missing: &[String]) ->
                                     spec.id,
                                     e.what
                                 );
+                                degraded = true;
                                 unusable.insert(spec.id);
                                 break;
                             }
@@ -457,18 +557,14 @@ async fn backfill(env: &Env, caller: &Caller, t: &Target, missing: &[String]) ->
                         left.remove(date);
                     }
                 }
-                if !chunk.is_empty() {
-                    let ok = save(env, &key, &chunk).await;
-                    saved = Some(saved.unwrap_or(true) && ok);
-                    docs.extend(chunk);
-                }
+                docs.extend(chunk);
             }
         }
     }
     Backfill {
         docs,
         remaining: left.len(),
-        saved,
+        degraded,
     }
 }
 
@@ -549,7 +645,7 @@ async fn fetch(
         transient: true,
         what: "invalid JSON".into(),
     })?;
-    Ok(h::parse_provider(spec.id, &payload, lat, lon))
+    Ok(h::parse_provider(spec.id, &payload))
 }
 
 async fn cached_days(env: &Env, key: &str) -> Option<Vec<Day>> {

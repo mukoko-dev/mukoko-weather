@@ -8,7 +8,7 @@
 //   POST /reports           a validated report          → 201 {id, verified, expiresIn}
 //   GET  /reports?slug=..[&slug=..][&hours=][&limit=]   → 200 {reports}
 //   POST /reports/upvote    {reportId, voter}           → 200 {upvoted[, reason]}
-//   GET  /history?slug=..[&slug=..]&start=&end=         → 200 {days}  (weather.weather_history)
+//   GET  /history?slug=..[&slug=..]&start=&end=[&aliases=1]  → 200 {days}  (weather.weather_history)
 //   POST /history/days      {slug, days:[archive day]}  → 200 {inserted, existing}  (insert-only)
 //
 // Errors use the Workers' envelope: {error, error_description}.
@@ -230,6 +230,7 @@ async function readHistory(call: Call, deps: Deps): Promise<Result> {
     q.value.keys,
     q.value.start,
     q.value.end,
+    q.value.aliases ? q.value.keys[0] : undefined,
   );
   return { status: 200, body: { days } };
 }

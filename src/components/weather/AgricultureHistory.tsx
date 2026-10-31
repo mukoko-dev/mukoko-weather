@@ -1,5 +1,6 @@
 "use client";
 
+import { historyFetchOptions } from "@/lib/history-api";
 import { roundCoord } from "@/lib/location-privacy";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatGrid } from "./StatGrid";
@@ -60,7 +61,12 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
 
   useEffect(() => {
     let live = true;
-    fetchWorker("history", `location=${encodeURIComponent(slug)}&days=30`)
+    fetchWorker(
+      "history",
+      `location=${encodeURIComponent(slug)}&days=30`,
+      {},
+      historyFetchOptions(30),
+    )
       .then(async (res) => (res.ok ? res.json() : { data: [] }))
       .then((json: { data?: unknown[] }) => {
         if (live) setHistory(summarizeHistory((json.data ?? []) as never[]));

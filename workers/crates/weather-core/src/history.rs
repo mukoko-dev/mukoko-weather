@@ -388,8 +388,6 @@ pub struct ProviderSpec {
     pub max_span_days: i64,
     /// Earliest date the provider has data for.
     pub earliest: &'static str,
-    /// Upstream calls allowed per hour for the whole service.
-    pub budget_per_hour: u32,
     /// Seconds an upstream call may take.
     pub timeout_s: u64,
 }
@@ -403,7 +401,6 @@ pub const NASA_POWER: ProviderSpec = ProviderSpec {
     licence_url: "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-information-policy",
     max_span_days: 3660,
     earliest: "1981-01-01",
-    budget_per_hour: 600,
     timeout_s: 12,
 };
 
@@ -417,11 +414,71 @@ pub const OPEN_METEO_ARCHIVE: ProviderSpec = ProviderSpec {
     licence_url: "https://creativecommons.org/licenses/by/4.0/",
     max_span_days: 366,
     earliest: EARLIEST_DATE,
-    // The free tier is 5,000 an hour shared with the forecast, air quality and
-    // haze; history keeps a small share.
-    budget_per_hour: 200,
     timeout_s: 8,
 };
+
+/// Open-Meteo bills a request as `max(variables / 10, 1) x max(days / 14, 1)`
+/// calls, against a free allowance of 5,000 an hour and 10,000 a day that the
+/// forecast, air quality and haze share. One 366-day request for the 19
+/// canonical variables is therefore about 50 calls, not 1. The budget and the
+/// per-request cap are spent in these weighted units.
+pub fn open_meteo_units(days: i64) -> u32 {
+    let vars = CANONICAL_DAILY_FIELDS.len() as i64;
+    let days = days.max(1);
+    // ceil(vars / 10 * max(days / 14, 1)) in integers.
+    let units = (vars * days.max(14) + 139) / 140;
+    units.clamp(1, i64::from(u32::MAX)) as u32
+}
+
+/// The most Open-Meteo units one request may spend (three year-long chunks): a
+/// request for 1940 to 1949 fetches three chunks, not ten.
+pub const OPEN_METEO_UNITS_PER_CALL: u32 = 150;
+
+impl ProviderSpec {
+    /// What fetching `days` days from this provider costs in budget units:
+    /// one call for NASA POWER, weighted for Open-Meteo.
+    pub fn cost(&self, days: i64) -> u32 {
+        if self.id == SOURCE_OPEN_METEO_ARCHIVE {
+            open_meteo_units(days)
+        } else {
+            1
+        }
+    }
+
+    /// The most units one request may spend on this provider.
+    pub fn units_per_call(&self) -> u32 {
+        if self.id == SOURCE_OPEN_METEO_ARCHIVE {
+            OPEN_METEO_UNITS_PER_CALL
+        } else {
+            u32::MAX
+        }
+    }
+}
+
+/// How a request's range sits inside the newest `max_days` days.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Clamp {
+    /// Entirely inside the window.
+    Within,
+    /// The start was before the window: it moves to this date.
+    Start(String),
+    /// The whole range ended before the window: there is nothing to serve.
+    Outside,
+}
+
+/// Limit a range to the newest `max_days` days counted from TODAY (not from
+/// the range's end, which a caller chooses), so a spot or a bare coordinate can
+/// never accumulate years one request at a time.
+pub fn clamp_recent(start: &str, end: &str, today: &str, max_days: i64) -> Clamp {
+    let floor = window_for_days(max_days, today).0;
+    if end < floor.as_str() {
+        Clamp::Outside
+    } else if start < floor.as_str() {
+        Clamp::Start(floor)
+    } else {
+        Clamp::Within
+    }
+}
 
 /// The default chain: NASA POWER (commercial use is open) then Open-Meteo.
 pub const DEFAULT_CHAIN: [&str; 2] = [SOURCE_NASA_POWER, SOURCE_OPEN_METEO_ARCHIVE];
@@ -545,8 +602,14 @@ fn put(day: &mut Day, key: &str, v: f64) {
 }
 
 /// Turn a NASA POWER daily point payload into canonical days, oldest first.
-/// With `lat`/`lon` each day also gets computed sunrise and sunset.
-pub fn parse_nasa_power(payload: &Value, coords: Option<(f64, f64)>) -> Vec<Day> {
+///
+/// `sun` is `(lat, lon, utc_offset_seconds)`: only with it do the days get a
+/// computed sunrise and sunset. Give it a REAL offset (Open-Meteo's
+/// `utc_offset_seconds`), never the longitude estimate: the estimate has no
+/// time zone or DST (London in July came out an hour early), and an archive day
+/// is stored insert-only, so a wrong time would be permanent. Without it the
+/// days carry none and the page shows a dash.
+pub fn parse_nasa_power(payload: &Value, sun: Option<(f64, f64, i64)>) -> Vec<Day> {
     let Some(params) = payload["properties"]["parameter"].as_object() else {
         return Vec::new();
     };
@@ -607,10 +670,8 @@ pub fn parse_nasa_power(payload: &Value, coords: Option<(f64, f64)>) -> Vec<Day>
                 put(&mut day, dst, at);
             }
         }
-        if let Some((lat, lon)) = coords {
-            if let (Some(rise), Some(set)) =
-                sun_times(lat, lon, &date, estimate_utc_offset_seconds(lon))
-            {
+        if let Some((lat, lon, offset)) = sun {
+            if let (Some(rise), Some(set)) = sun_times(lat, lon, &date, offset) {
                 day.insert("sunrise".into(), json!(rise));
                 day.insert("sunset".into(), json!(set));
             }
@@ -656,9 +717,9 @@ pub fn open_meteo_meta(payload: &Value) -> Value {
 }
 
 /// Parse a provider's raw payload into canonical days.
-pub fn parse_provider(id: &str, payload: &Value, lat: f64, lon: f64) -> Vec<Day> {
+pub fn parse_provider(id: &str, payload: &Value) -> Vec<Day> {
     match id {
-        SOURCE_NASA_POWER => parse_nasa_power(payload, Some((lat, lon))),
+        SOURCE_NASA_POWER => parse_nasa_power(payload, None),
         SOURCE_OPEN_METEO_ARCHIVE => parse_open_meteo_daily(payload),
         _ => Vec::new(),
     }
@@ -887,7 +948,7 @@ pub fn response(
     data: Vec<Value>,
     backfilled: usize,
     clamped: bool,
-    saved: Option<bool>,
+    saving: bool,
 ) -> Value {
     let sources = attributions_for(&data);
     let mut body = json!({
@@ -901,8 +962,10 @@ pub fn response(
         "sources": sources,
         "data": data,
     });
-    if let Some(saved) = saved {
-        body["saved"] = json!(saved);
+    if saving {
+        // The fetched days are being stored after this answer (the Worker
+        // finishes the write in the background).
+        body["saving"] = json!(true);
     }
     body
 }
@@ -952,11 +1015,13 @@ mod tests {
     fn nasa_power_parses_like_the_python_oracle() {
         let f = fx();
         for case in f["nasa"].as_array().unwrap() {
-            let coords = match (opt(&case["lat"]), opt(&case["lon"])) {
-                (Some(a), Some(b)) => Some((a, b)),
+            // The oracle computed sunrise and sunset from the longitude
+            // estimate: with that offset given, the days match it exactly.
+            let sun = match (opt(&case["lat"]), opt(&case["lon"])) {
+                (Some(a), Some(b)) => Some((a, b, estimate_utc_offset_seconds(b))),
                 _ => None,
             };
-            let got = days_value(parse_nasa_power(&case["payload"], coords));
+            let got = days_value(parse_nasa_power(&case["payload"], sun));
             assert!(
                 same(&got, &case["expected"]),
                 "case {}: {got:#?}\n!=\n{:#?}",
@@ -975,15 +1040,97 @@ mod tests {
             .iter()
             .find(|c| c["name"] == "synthetic-arctic")
             .unwrap();
-        let days = parse_nasa_power(&case["payload"], Some((69.6, 18.9)));
+        let days = parse_nasa_power(&case["payload"], None);
         // 2026-01-03 is all fill values: not a day.
         assert!(!days.iter().any(|d| d["date"] == "2026-01-03"));
         // -85.3 and 361 are out of range; 360 is kept.
         assert!(days[0].get("wind_direction_10m_dominant").is_none());
         assert_eq!(days[2]["wind_direction_10m_dominant"], json!(360.0));
         assert!(days[3].get("wind_direction_10m_dominant").is_none());
-        // Polar night in Tromso on 2026-01-01: no sunrise, never a made-up one.
         assert!(days[0].get("sunrise").is_none());
+    }
+
+    #[test]
+    fn nasa_power_has_no_sunrise_without_a_real_offset() {
+        let f = fx();
+        for case in f["nasa"].as_array().unwrap() {
+            let plain = parse_nasa_power(&case["payload"], None);
+            assert!(
+                plain
+                    .iter()
+                    .all(|d| !d.contains_key("sunrise") && !d.contains_key("sunset")),
+                "{}",
+                case["name"]
+            );
+            // Everything else is what the oracle made.
+            let with = parse_nasa_power(
+                &case["payload"],
+                opt(&case["lat"])
+                    .zip(opt(&case["lon"]))
+                    .map(|(a, b)| (a, b, 0)),
+            );
+            assert_eq!(plain.len(), with.len());
+            for (p, w) in plain.iter().zip(&with) {
+                let mut w = w.clone();
+                w.remove("sunrise");
+                w.remove("sunset");
+                assert_eq!(*p, w);
+            }
+        }
+        // London in July: the real offset (BST, +1 h) puts sunrise after 04:00.
+        let london = &fx()["nasa"][2];
+        let with = parse_nasa_power(&london["payload"], Some((51.5072, -0.1276, 3600)));
+        assert!(with[0]["sunrise"].as_str().unwrap().contains("T04:"));
+    }
+
+    #[test]
+    fn open_meteo_is_billed_in_weighted_units() {
+        // 19 variables: a factor of 1.9; a request counts per 14 days.
+        assert_eq!(open_meteo_units(366), 50);
+        assert_eq!(open_meteo_units(14), 2);
+        assert_eq!(open_meteo_units(1), 2);
+        assert_eq!(open_meteo_units(2), 2);
+        assert_eq!(open_meteo_units(28), 4);
+        assert_eq!(open_meteo_units(3660), 497);
+        assert_eq!(OPEN_METEO_ARCHIVE.cost(366), 50);
+        assert_eq!(NASA_POWER.cost(3660), 1);
+        // A 1940 to 1949 request is ten year chunks, but only three fit the cap.
+        let mut spent = 0;
+        let mut fetched = 0;
+        for _ in 0..10 {
+            let c = OPEN_METEO_ARCHIVE.cost(366);
+            if spent + c > OPEN_METEO_ARCHIVE.units_per_call() {
+                break;
+            }
+            spent += c;
+            fetched += 1;
+        }
+        assert_eq!(fetched, 3);
+        assert!(spent <= OPEN_METEO_UNITS_PER_CALL);
+        assert_eq!(NASA_POWER.units_per_call(), u32::MAX);
+    }
+
+    #[test]
+    fn a_spot_is_limited_to_the_newest_year_from_today() {
+        let today = "2026-10-31";
+        assert_eq!(clamp_recent("2026-01-01", today, today, 366), Clamp::Within);
+        assert_eq!(
+            clamp_recent("2020-01-01", today, today, 366),
+            Clamp::Start("2025-10-31".into())
+        );
+        // The range's own end does not move the window: 1990 is outside it.
+        assert_eq!(
+            clamp_recent("1990-01-01", "1990-12-31", today, 366),
+            Clamp::Outside
+        );
+        assert_eq!(
+            clamp_recent("2025-10-30", "2025-10-30", today, 366),
+            Clamp::Outside
+        );
+        assert_eq!(
+            clamp_recent("2025-10-31", "2025-10-31", today, 366),
+            Clamp::Within
+        );
     }
 
     #[test]
@@ -1326,7 +1473,7 @@ mod tests {
     }
 
     #[test]
-    fn the_response_carries_sources_and_the_saved_flag() {
+    fn the_response_carries_sources_and_the_saving_flag() {
         let data = vec![doc("2026-10-28", SOURCE_NASA_POWER, "geo:abc1234")];
         let r = response(
             "geo:abc1234",
@@ -1335,16 +1482,16 @@ mod tests {
             data,
             1,
             false,
-            Some(false),
+            true,
         );
         assert_eq!(r["days"], 7);
         assert_eq!(r["records"], 1);
         assert_eq!(r["backfilled"], 1);
-        assert_eq!(r["saved"], false);
+        assert_eq!(r["saving"], true);
         assert_eq!(r["sources"][0]["id"], "nasa-power");
         assert!(
-            response("x", "2026-10-25", "2026-10-31", vec![], 0, false, None)
-                .get("saved")
+            response("x", "2026-10-25", "2026-10-31", vec![], 0, false, false)
+                .get("saving")
                 .is_none()
         );
     }

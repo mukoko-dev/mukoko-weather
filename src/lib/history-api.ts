@@ -62,8 +62,10 @@ export interface HistoryAnswer {
   clamped: boolean;
   /** Dates in the range still without a day (an archive lags a few days). */
   missing: number;
-  /** False when days were fetched but could not be stored this time. */
-  saved: boolean;
+  /** True when fetched days are being stored after this answer. */
+  saving: boolean;
+  /** True when a store could not be read, so the answer holds only part. */
+  degraded: boolean;
 }
 
 function credit(v: unknown): HistorySourceCredit | null {
@@ -106,8 +108,25 @@ export function readHistoryAnswer(json: unknown): HistoryAnswer {
     backfilled: typeof b.backfilled === "number" ? b.backfilled : 0,
     clamped: b.clamped === true,
     missing: typeof b.missing === "number" ? b.missing : 0,
-    saved: b.saved !== false,
+    saving: b.saving === true,
+    degraded: b.degraded === true,
   };
+}
+
+/**
+ * How long to wait for a history answer. A cold view reads two stores, asks an
+ * archive for the missing years and (in the background) stores them, so it can
+ * take far longer than a cached one; the Worker's default 8 s would abort it
+ * mid-run. A long range is not retried: the Worker keeps filling after the
+ * client gives up, and the next view is served from what it stored.
+ */
+export function historyFetchOptions(days: number): {
+  timeoutMs: number;
+  retries: number;
+} {
+  if (days <= 90) return { timeoutMs: 20_000, retries: 1 };
+  if (days <= 365) return { timeoutMs: 30_000, retries: 1 };
+  return { timeoutMs: 45_000, retries: 0 };
 }
 
 export interface HistoryQuery {

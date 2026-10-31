@@ -38,8 +38,9 @@ pub enum Action {
     HistoryBackfillCoords,
     /// One NASA POWER call (whole service; POWER asks for equitable use).
     HistoryNasaPower,
-    /// One Open-Meteo archive call (whole service; the free API is shared with
-    /// the forecast, air quality and haze).
+    /// Open-Meteo archive calls, in WEIGHTED units (`history::open_meteo_units`:
+    /// a year of 19 variables is about 50). The free API's 5,000 an hour and
+    /// 10,000 a day are shared with the forecast, air quality and haze.
     HistoryOpenMeteo,
 }
 
@@ -105,14 +106,17 @@ impl Action {
                 global: 300,
             },
             // The provider budgets are service-wide: every caller counts
-            // against the same hour, so the per-client part equals the whole.
+            // against the same hour, so the per-client part is only a share.
             Action::HistoryNasaPower => Limits {
                 per_client: 600,
                 global: 600,
             },
+            // Weighted units. 250 an hour saturated is 6,000 a day, inside the
+            // 10,000 a day the free API allows and leaving the forecast, air
+            // quality and haze the rest; one client gets three year-long chunks.
             Action::HistoryOpenMeteo => Limits {
-                per_client: 200,
-                global: 200,
+                per_client: 150,
+                global: 250,
             },
         }
     }
@@ -160,9 +164,16 @@ impl Decision {
 
 /// Decide from the events already counted in the last hour.
 pub fn decide(limits: Limits, client_count: u64, global_count: u64) -> Decision {
-    if global_count >= u64::from(limits.global) {
+    decide_units(limits, client_count, global_count, 1)
+}
+
+/// Decide a spend of `units` (a weighted call: one event row per unit). It is
+/// allowed only when the whole spend fits inside both limits.
+pub fn decide_units(limits: Limits, client_count: u64, global_count: u64, units: u32) -> Decision {
+    let units = u64::from(units.max(1));
+    if global_count + units > u64::from(limits.global) {
         Decision::GlobalLimit
-    } else if client_count >= u64::from(limits.per_client) {
+    } else if client_count + units > u64::from(limits.per_client) {
         Decision::ClientLimit
     } else {
         Decision::Allow
@@ -245,5 +256,38 @@ mod tests {
         assert_eq!(window_start(HOUR_MS + 5), 5);
         assert_eq!(window_start(10), 0);
         assert_eq!(prune_before(24 * HOUR_MS + 7), 7);
+    }
+
+    #[test]
+    fn a_weighted_spend_must_fit_inside_both_limits() {
+        let l = Limits {
+            per_client: 150,
+            global: 250,
+        };
+        assert_eq!(decide_units(l, 0, 0, 50), Decision::Allow);
+        // 100 + 50 = 150 fits; one more unit does not.
+        assert_eq!(decide_units(l, 100, 100, 50), Decision::Allow);
+        assert_eq!(decide_units(l, 101, 100, 50), Decision::ClientLimit);
+        // The service-wide hour is checked first.
+        assert_eq!(decide_units(l, 0, 201, 50), Decision::GlobalLimit);
+        assert_eq!(decide_units(l, 0, 200, 50), Decision::Allow);
+        // A spend bigger than a client's whole hour is never allowed.
+        assert_eq!(decide_units(l, 0, 0, 151), Decision::ClientLimit);
+        // One unit is the old rule.
+        assert_eq!(decide(l, 149, 0), Decision::Allow);
+        assert_eq!(decide(l, 150, 0), Decision::ClientLimit);
+        assert_eq!(decide(l, 0, 250), Decision::GlobalLimit);
+        // Zero units counts as one: nothing is free.
+        assert_eq!(decide_units(l, 150, 0, 0), Decision::ClientLimit);
+    }
+
+    #[test]
+    fn history_budgets_are_named_and_ordered() {
+        assert_eq!(Action::HistoryOpenMeteo.name(), "history-open-meteo");
+        let l = Action::HistoryOpenMeteo.limits();
+        assert_eq!(l.global, 250);
+        assert!(l.per_client <= l.global);
+        assert_eq!(Action::HistoryBackfillCoords.limits().per_client, 10);
+        assert_eq!(Action::HistoryBackfill.limits().per_client, 30);
     }
 }

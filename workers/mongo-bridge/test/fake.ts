@@ -32,6 +32,9 @@ const same = (a: unknown, b: unknown): boolean =>
 
 function matches(doc: Doc, filter: Doc): boolean {
   return Object.entries(filter).every(([k, cond]) => {
+    if (k === "$or") {
+      return (cond as Doc[]).some((f) => matches(doc, f));
+    }
     const v = get(doc, k);
     if (
       cond &&
@@ -45,6 +48,8 @@ function matches(doc: Doc, filter: Doc): boolean {
             return (arg as unknown[]).some((x) => same(x, v));
           case "$gte":
             return (v as Date) >= (arg as Date);
+          case "$regex":
+            return typeof v === "string" && new RegExp(arg as string).test(v);
           case "$lte":
             return (v as Date) <= (arg as Date);
           case "$gt":

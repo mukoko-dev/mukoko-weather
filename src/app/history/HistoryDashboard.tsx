@@ -26,6 +26,7 @@ import {
   CLAMPED_NOTE,
   HISTORY_RANGES,
   archiveNote,
+  historyFetchOptions,
   historyQuery,
   historySource,
   isArchiveSource,
@@ -653,6 +654,8 @@ export function HistoryDashboard() {
             lon: location.lon,
             days: dayCount,
           }),
+          {},
+          historyFetchOptions(dayCount),
         );
         if (!res.ok) {
           const body = await res
@@ -728,6 +731,9 @@ export function HistoryDashboard() {
 
   const uvValues = records.map((r) => r.uvIndex).filter(defined);
   const gustValues = records.map((r) => r.windGusts).filter(defined);
+  const daylightValues = records
+    .map((r) => r.daylightHours)
+    .filter((h) => h > 0);
   const stats =
     records.length > 0
       ? {
@@ -755,11 +761,11 @@ export function HistoryDashboard() {
           maxGusts: gustValues.length
             ? gustValues.reduce((m, v) => Math.max(m, v), 0)
             : null,
-          avgDaylight: records[0]?.daylightHours
+          // Days a source has no sunrise or sunset for (NASA POWER has none
+          // without a real time zone) are left out, not counted as 0 h.
+          avgDaylight: daylightValues.length
             ? Math.round(
-                (avg(records.map((r) => Math.round(r.daylightHours * 10))) /
-                  10) *
-                  10,
+                (avg(daylightValues.map((h) => Math.round(h * 10))) / 10) * 10,
               ) / 10
             : null,
         }
