@@ -93,7 +93,7 @@ const ALLOWED_EXCEPTIONS: Record<string, { count: number; reason: string }> = {
   "src/components/profile/ProfileAppearance.tsx": {
     count: 1,
     reason:
-      "Light/Dark/System option tiles (role=radio) — radio cards, not pills",
+      "Light/Dark/System preview cards (role=radio) — radio cards, not pills",
   },
   "src/components/profile/ProfileIdentity.tsx": {
     count: 1,
