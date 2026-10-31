@@ -1900,10 +1900,11 @@ body {
     opacity: 0.12;
   }
 
-  /* .kestrel-card — a translucent bordered card on the sky (the Conditions
-     card). Fill and hairline are the sky foreground at low alpha; no shadow,
-     no blur. Inside it the text tokens are re-pointed at the sky foreground,
-     so every existing child (headings, hour tiles, links) reads on the sky. */
+  /* .kestrel-ink — re-points the text, accent and surface tokens at the sky
+     foreground for everything inside, so existing children (badges, headings,
+     hour tiles, links) read on the sky without a restyle. Shared by the
+     Conditions card and the hero's season line. */
+  .kestrel-ink,
   .kestrel-card {
     --color-text-primary: var(--sky-fg);
     --color-text-secondary: var(--sky-fg-dim);
@@ -1917,11 +1918,17 @@ body {
       var(--sky-fg) 10%,
       transparent
     );
+    color: var(--sky-fg);
+  }
+
+  /* .kestrel-card — a translucent bordered card on the sky (the Conditions
+     card). Fill and hairline are the sky foreground at low alpha; no shadow,
+     no blur. */
+  .kestrel-card {
     background-color: color-mix(in srgb, var(--sky-fg) 7%, transparent);
     border: 1px solid color-mix(in srgb, var(--sky-fg) 16%, transparent);
     border-radius: var(--radius-sky-card);
     padding: var(--space-card);
-    color: var(--sky-fg);
   }
 
   /* .kestrel-round — round 48px icon control on the sky (Share, the ⋯ menu).

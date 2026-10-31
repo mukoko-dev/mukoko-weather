@@ -309,7 +309,11 @@ export function CurrentConditions({
             </span>
           </p>
         )}
-        {footer && <div className="mt-3 flex justify-center">{footer}</div>}
+        {footer && (
+          <div className="kestrel-ink mt-3 flex max-w-full justify-center">
+            {footer}
+          </div>
+        )}
       </div>
     </section>
   );
