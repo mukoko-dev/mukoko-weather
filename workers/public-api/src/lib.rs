@@ -231,7 +231,7 @@ fn with_cors(resp: Response, origin: Option<&str>) -> Result<Response> {
         h.set("Access-Control-Allow-Origin", o)?;
         h.set(
             "Access-Control-Expose-Headers",
-            "X-Cache, X-Weather-Provider, X-Current-Source, X-Fetched-At, X-AQ-Source",
+            "X-Cache, X-Weather-Provider, X-Weather-Blend, X-Enrichment, X-Current-Source, X-Fetched-At, X-AQ-Source",
         )?;
     }
     Ok(resp)
@@ -414,6 +414,8 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
                 for h in [
                     "X-Cache",
                     "X-Weather-Provider",
+                    "X-Weather-Blend",
+                    "X-Enrichment",
                     "X-Current-Source",
                     "X-Fetched-At",
                 ] {
@@ -433,6 +435,7 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
     let h = resp.headers();
     h.set("X-Cache", "MISS")?;
     h.set("X-Weather-Provider", "fallback")?;
+    h.set("X-Enrichment", "none")?;
     h.set("X-Current-Source", "fallback")?;
     Ok(resp)
 }
