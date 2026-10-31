@@ -11,8 +11,9 @@
  * POST requires a same-origin `Origin` (a form on another site cannot sign a
  * visitor out) and answers 303 to the GET route, which runs the WorkOS
  * sign-out. A 303 turns the follow-up into a GET (a 307 would re-POST to the
- * AuthKit logout endpoint). Making GET itself refuse cross-site triggers is a
- * follow-up: the profile page links to it.
+ * AuthKit logout endpoint). The Location is relative, so a TLS-terminating
+ * proxy can never turn it into an internal origin. Making GET itself refuse
+ * cross-site triggers is a follow-up: the profile page links to it.
  */
 
 import { signOut } from "@workos-inc/authkit-nextjs";
@@ -31,8 +32,14 @@ export const POST = async (request: Request) => {
   if (!isSameOrigin(request)) {
     return new Response("Forbidden", { status: 403 });
   }
+  // A relative reference (RFC 9110 section 10.2.2), like the GET handler's:
+  // the browser resolves it against the URL it actually posted to. An absolute
+  // one built from `request.url` would carry whatever origin the server thinks
+  // it has, and behind a TLS-terminating proxy that can be http://localhost:PORT.
+  // The same-origin check above keeps keying off `request.url`: that is the
+  // Host-derived origin the Origin header has to match.
   return new Response(null, {
     status: 303,
-    headers: { location: new URL("/auth/signout", request.url).toString() },
+    headers: { location: "/auth/signout" },
   });
 };

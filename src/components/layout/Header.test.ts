@@ -201,21 +201,38 @@ describe("Header — the phone menu is the Mzizi account menu, filled with the h
     expect(acct).toContain("780457ae94afd5229a78a5d7ba5146bda8260812");
     // Each deviation is listed in the header (numbered), like mzizi-bottom-nav.
     expect(acct).toMatch(/Local changes from upstream/);
-    for (let n = 1; n <= 10; n++) expect(acct).toContain(` * ${n}. `);
+    for (let n = 1; n <= 11; n++) expect(acct).toContain(` * ${n}. `);
   });
 
   it("closes on Escape (focus returns to the trigger), an outside click and a chosen row", () => {
     expect(acct).toContain('e.key !== "Escape"');
     expect(acct).toContain('querySelector<HTMLElement>("summary")?.focus()');
     expect(acct).toContain(
-      'document.addEventListener("mousedown", onMouseDown)',
+      'document.addEventListener("pointerdown", onPointerDown)',
     );
     expect(acct).toContain(
-      'document.removeEventListener("mousedown", onMouseDown)',
+      'document.removeEventListener("pointerdown", onPointerDown)',
     );
+    // iOS Safari synthesises no mouse events for a tap on a non-clickable
+    // element, so a mousedown listener never fires there.
+    expect(acct).not.toContain('"mousedown"');
     expect(acct).toContain('closest("a, [data-close-menu]")');
     // The two action rows opt in to closing; Notifications expands in place.
     expect(menu.match(/data-close-menu/g)).toHaveLength(2);
+  });
+
+  it("closes when focus moves to an element outside the menu, and ignores a null relatedTarget", () => {
+    // Tab / Shift+Tab out of the open panel: relatedTarget is the next element.
+    expect(acct).toContain("onBlur={(e) => {");
+    expect(acct).toContain("const next = e.relatedTarget;");
+    expect(acct).toContain(
+      "next instanceof Node && !e.currentTarget.contains(next)",
+    );
+    // A null relatedTarget (a click on the panel's padding, the window losing
+    // focus) must NOT close it: the guard requires a real Node.
+    expect(acct).not.toMatch(/relatedTarget\s*(===|==|!==)\s*null/);
+    // Escape still hands focus back to the trigger.
+    expect(acct).toContain('querySelector<HTMLElement>("summary")?.focus()');
   });
 
   it("is mobile-only in the header, sitting inside the existing icon pill (ellipsis trigger)", () => {
@@ -324,6 +341,11 @@ describe("Header — nothing the header offers is lost in the phone menu", () =>
     expect(route).toContain("export const POST");
     expect(route).toContain("isSameOrigin(request)");
     expect(route).toContain("status: 303");
+    // The Location is relative: an absolute one built from request.url can be
+    // http://localhost:PORT behind a TLS-terminating proxy. The behaviour is
+    // pinned in src/app/auth/signout/signout-route.test.ts.
+    expect(route).toContain('location: "/auth/signout"');
+    expect(route).not.toContain("new URL(");
   });
 
   it("the hero's phone trigger is the profile button: photo, initials or the user icon", () => {

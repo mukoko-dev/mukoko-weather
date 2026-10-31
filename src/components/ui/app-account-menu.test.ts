@@ -146,3 +146,62 @@ describe("AccountMenu — trigger variants", () => {
     expect(a).toBeTruthy();
   });
 });
+
+describe("AccountMenu — the panel never leaves the viewport on a phone", () => {
+  // The header's ⋯ is the first of three buttons in the action pill, about
+  // 118px from the right edge. A panel right-aligned to it (`absolute right-0`,
+  // 18rem wide) started at W - 406px: 31px off the left edge at 375px wide.
+  const html = render({
+    name: "A",
+    initials: "A",
+    triggerClassName: "bee",
+    trigger: createElement("i", null, "dots"),
+  });
+  const panelClass = html.match(
+    /<div[^>]*class="([^"]*)"[^>]*data-slot="account-menu-panel"/,
+  )?.[1];
+  const tokens = (panelClass ?? "").split(/\s+/).filter(Boolean);
+  const phone = tokens.filter((t) => !t.includes(":"));
+
+  it("finds the panel and its classes", () => {
+    expect(panelClass).toBeDefined();
+  });
+
+  it("is pinned to the viewport's right gutter below sm (fixed, right-2), not right-aligned to its trigger", () => {
+    expect(phone).toContain("fixed");
+    expect(phone).toContain("right-2");
+    expect(phone).not.toContain("absolute");
+    expect(phone).not.toContain("right-0");
+    // No `left-*`/`top-*`/`inset-*`: it keeps its static position, directly
+    // under the trigger, wherever the trigger sits.
+    expect(phone.some((t) => /^(left|top|bottom|inset)-/.test(t))).toBe(false);
+  });
+
+  it("is the upstream absolute, right-aligned popover from sm", () => {
+    expect(tokens).toContain("sm:absolute");
+    expect(tokens).toContain("sm:right-0");
+  });
+
+  it("is never wider than the viewport minus the gutter on each side, so its left edge is at or past the gutter at every phone width", () => {
+    const w = panelClass!.match(
+      /w-\[min\((\d+(?:\.\d+)?)rem,calc\(100vw-(\d+(?:\.\d+)?)rem\)\)\]/,
+    );
+    expect(w, "panel width must be min(Nrem, 100vw - Mrem)").not.toBeNull();
+    const maxPx = Number(w![1]) * 16;
+    const shrinkPx = Number(w![2]) * 16;
+    const rightPx =
+      Number(phone.find((t) => /^right-\d+$/.test(t))!.slice(6)) * 4;
+    for (let viewport = 280; viewport < 640; viewport++) {
+      const width = Math.min(maxPx, viewport - shrinkPx);
+      const left = viewport - rightPx - width;
+      expect(left, `left edge at ${viewport}px wide`).toBeGreaterThanOrEqual(
+        rightPx,
+      );
+    }
+  });
+
+  it("still scrolls inside the viewport height", () => {
+    expect(tokens).toContain("max-h-[calc(100dvh-7rem)]");
+    expect(tokens).toContain("overflow-y-auto");
+  });
+});

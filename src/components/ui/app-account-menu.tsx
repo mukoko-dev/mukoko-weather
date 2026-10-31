@@ -44,11 +44,17 @@
  * 6. The panel scrolls (`max-h-[calc(100dvh-7rem)]`): with the app's rows it is
  *    taller than a landscape phone. The slot wrapper is `p-1`, not `px-3 py-2`,
  *    because the slot holds full-width rows that carry their own padding.
- * 7. Closing. A bare `<details>` stays open on Escape, an outside tap and a
- *    chosen link. A small effect closes it on Escape (focus returns to the
- *    trigger), on a mousedown outside, and when a link or a row marked
- *    `data-close-menu` is activated. It adds no state the markup depends on:
- *    without script the menu still opens and closes natively.
+ * 7. Closing. A bare `<details>` stays open on Escape, an outside tap, a chosen
+ *    link and when focus walks away. A small effect closes it on Escape
+ *    (focus returns to the trigger), on a `pointerdown` outside (not
+ *    `mousedown`: iOS Safari synthesises no mouse events for a tap on a
+ *    non-clickable element, so a mouse listener never fires there), and when
+ *    a link or a row marked `data-close-menu` is activated. A `blur` handler
+ *    closes it when focus moves to an element outside the menu (Tab or
+ *    Shift+Tab away); a `relatedTarget` of `null` (a click on the panel's own
+ *    padding, the window losing focus) is not "leaving", so it stays open. It
+ *    adds no state the markup depends on: without script the menu still opens
+ *    and closes natively.
  * 8. `aria-controls` points the trigger at the panel (a `useId`, since the
  *    header and the hero each mount one). The expanded state stays the native
  *    `<details>` one; no `aria-expanded` is set by hand, so the two cannot
@@ -60,6 +66,16 @@
  *
  * 10. `onOpenChange` tells the app when the disclosure opens or closes, so a
  *    row inside it (the notifications note) can reset when the menu closes.
+ * 11. Phones: the panel is `fixed` to the viewport's right gutter (`right-2`),
+ *    not `absolute` under its trigger. Upstream right-aligns the panel to the
+ *    trigger, which assumes the trigger sits at the right edge. The header's
+ *    ⋯ is the first of three buttons in the action pill (about 118px from the
+ *    right edge), so a 288px panel right-aligned to it started 31px left of
+ *    the screen at 375px wide and was clipped. `fixed` with no `top` keeps the
+ *    panel at its static position, directly under the trigger; `w-[min(18rem,
+ *    calc(100vw-1rem))]` never exceeds the viewport minus the 0.5rem gutters,
+ *    so its left edge is always at or past the left gutter whatever the
+ *    trigger's place. From `sm` it is the upstream `absolute right-0` again.
  *
  * Sign-out stays upstream's POST form (so no other page can trigger it with a
  * link). `/auth/signout` accepts the POST (a same-origin check) and answers
@@ -128,7 +144,7 @@ function AccountMenu({
 
   useEffect(() => {
     if (!open) return;
-    const onMouseDown = (e: MouseEvent) => {
+    const onPointerDown = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) close();
     };
     const onKeyDown = (e: KeyboardEvent) => {
@@ -136,10 +152,10 @@ function AccountMenu({
       close();
       ref.current?.querySelector<HTMLElement>("summary")?.focus();
     };
-    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     return () => {
-      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [open]);
@@ -186,6 +202,13 @@ function AccountMenu({
         setOpen(e.currentTarget.open);
         onOpenChange?.(e.currentTarget.open);
       }}
+      onBlur={(e) => {
+        // Focus left the menu for another element (Tab / Shift+Tab). A null
+        // relatedTarget is a click on non-focusable panel padding or the
+        // window losing focus: not leaving, and pointerdown covers outside taps.
+        const next = e.relatedTarget;
+        if (next instanceof Node && !e.currentTarget.contains(next)) close();
+      }}
     >
       <summary
         aria-controls={panelId}
@@ -210,7 +233,7 @@ function AccountMenu({
       </summary>
       <div
         id={panelId}
-        className="absolute right-0 z-40 mt-1 max-h-[calc(100dvh-7rem)] w-[min(18rem,calc(100vw-1rem))] overflow-y-auto rounded-[var(--radius-card)] border border-border bg-popover p-1 text-left text-popover-foreground"
+        className="fixed right-2 sm:absolute sm:right-0 z-40 mt-1 max-h-[calc(100dvh-7rem)] w-[min(18rem,calc(100vw-1rem))] overflow-y-auto rounded-[var(--radius-card)] border border-border bg-popover p-1 text-left text-popover-foreground"
         data-slot="account-menu-panel"
         onClick={(e) => {
           if ((e.target as Element).closest("a, [data-close-menu]")) close();
