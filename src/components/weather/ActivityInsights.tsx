@@ -90,6 +90,42 @@ const DEFAULT_STYLE: CategoryStyle = {
 };
 
 // ---------------------------------------------------------------------------
+// Invitation (nothing picked yet)
+// ---------------------------------------------------------------------------
+
+/**
+ * A quiet, in-context invitation to pick activities. This replaced the old
+ * first-visit welcome banner: activities are optional, so they are offered
+ * where their payoff is, not above the temperature. The location page shows
+ * it only while nothing is selected; once activities are picked the advice
+ * lives in the Community lane's sheet (ActivitiesDetailSheet).
+ */
+export function ActivityInvite() {
+  const openMyWeather = useAppStore((s) => s.openMyWeather);
+  return (
+    <section
+      aria-labelledby="activity-insights-empty-heading"
+      className="acacia"
+    >
+      <h2 id="activity-insights-empty-heading" className="giraffe">
+        Advice for what you do
+      </h2>
+      <p className="mt-1 gazelle">
+        Farming, football, a braai, the school run — pick a few activities and
+        we&apos;ll tell you how today&apos;s weather affects them.
+      </p>
+      <button
+        type="button"
+        onClick={() => openMyWeather("activities")}
+        className="impala-sm mt-3"
+      >
+        Choose activities
+      </button>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -97,7 +133,10 @@ export function ActivityInsights({
   insights,
   activities,
   weather,
+  onEdit,
 }: {
+  /** Replaces the default Edit action (the sheet closes itself first). */
+  onEdit?: () => void;
   insights?: WeatherInsights;
   /** All activities from MongoDB — passed from parent. Empty array = loading, show nothing. */
   activities: Activity[];
@@ -154,32 +193,10 @@ export function ActivityInsights({
   // Activities still loading → nothing yet.
   if (activities.length === 0) return null;
 
-  // Nothing picked yet → a quiet, in-context invitation. This replaces the
-  // old first-visit welcome banner: activities are optional, so they're
-  // offered where their payoff is (this section), not above the temperature.
-  if (selectedItems.length === 0) {
-    return (
-      <section
-        aria-labelledby="activity-insights-empty-heading"
-        className="acacia"
-      >
-        <h2 id="activity-insights-empty-heading" className="giraffe">
-          Advice for what you do
-        </h2>
-        <p className="mt-1 gazelle">
-          Farming, football, a braai, the school run — pick a few activities and
-          we&apos;ll tell you how today&apos;s weather affects them.
-        </p>
-        <button
-          type="button"
-          onClick={() => openMyWeather("activities")}
-          className="impala-sm mt-3"
-        >
-          Choose activities
-        </button>
-      </section>
-    );
-  }
+  // Nothing picked yet → the same quiet invitation the page shows.
+  if (selectedItems.length === 0) return <ActivityInvite />;
+
+  const edit = onEdit ?? (() => openMyWeather("activities"));
 
   // When insights data is available, show per-activity suitability cards
   if (insights) {
@@ -188,7 +205,7 @@ export function ActivityInsights({
         <SectionHeader
           headingId="activity-insights-heading"
           title="My Activities"
-          action={{ label: "Edit", onClick: openMyWeather }}
+          action={{ label: "Edit", onClick: edit }}
           className="mb-[var(--space-stack)]"
         />
         <div className="flex flex-col gap-[var(--space-stack)]">
@@ -215,7 +232,7 @@ export function ActivityInsights({
           headingId="activity-fallback-heading"
           title="Your Activities"
           as="h3"
-          action={{ label: "Edit", onClick: openMyWeather }}
+          action={{ label: "Edit", onClick: edit }}
           className="mb-[var(--space-stack)]"
         />
         <div className="flex flex-wrap gap-2">
