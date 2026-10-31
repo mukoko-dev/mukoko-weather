@@ -177,7 +177,7 @@ fn num(v: &Value) -> Option<f64> {
     v.as_f64().filter(|x| x.is_finite())
 }
 
-fn rfc3339(t: DateTime<Utc>) -> String {
+pub(crate) fn rfc3339(t: DateTime<Utc>) -> String {
     t.to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 

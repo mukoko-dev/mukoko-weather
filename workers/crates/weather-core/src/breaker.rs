@@ -55,6 +55,15 @@ pub const DEFAULT: Config = Config {
     window_ms: 5 * 60_000,
 };
 
+/// The external station feeds (WIS2, SAAOPA): 3 failures in 30 min open it for
+/// 30 min. The feeds are polled every 10 to 60 minutes, so the default's
+/// 2-minute cooldown would never hold a poll back.
+pub const EXTERNAL_FEED: Config = Config {
+    failure_threshold: 3,
+    cooldown_ms: 30 * 60_000,
+    window_ms: 30 * 60_000,
+};
+
 #[derive(Debug, Clone)]
 pub struct Breaker {
     config: Config,
