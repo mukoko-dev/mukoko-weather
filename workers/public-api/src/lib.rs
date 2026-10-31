@@ -193,7 +193,7 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
                 env,
                 FORECAST_BINDING,
                 "/agriculture",
-                "public, max-age=900",
+                weather_core::agriculture::CLIENT_CACHE_CONTROL,
             )
             .await
         }
@@ -492,6 +492,13 @@ async fn relay(
     }
     if status == 200 {
         // An upstream `no-store` (a degraded answer) must never be cached.
+        // The converse holds too: `weather_edge::json` defaults every answer
+        // to `no-store`, so the `cache_control` passed in only takes effect
+        // for a route whose handler stamps its own `Cache-Control` on success
+        // (`/agriculture` via `weather_core::agriculture::cache_control`, and
+        // the aviation `/airports/nearest`). A route that does not (haze,
+        // normals, enso, sg-air, air-quality/grid, model-grid, profile) is
+        // `no-store` however it is registered here.
         let no_store = upstream
             .headers()
             .get("Cache-Control")

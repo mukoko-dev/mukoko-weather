@@ -58,6 +58,23 @@ pub const PAST_DAYS: u32 = 30;
 pub const FORECAST_DAYS: u32 = 16;
 /// The raw Open-Meteo payload is cached this long per 0.05° cell.
 pub const DATA_CACHE_TTL_SECONDS: u64 = 3600;
+/// How long a browser or proxy may keep a SUCCESSFUL answer. The forecast
+/// Worker stamps it on an `available: true` body and the public API relay
+/// passes it on; a degraded (`available: false`) answer is `no-store`. The
+/// analysis is relative to the current hour on top of an hour-old payload,
+/// so a quarter of an hour is well inside its own freshness.
+pub const CLIENT_CACHE_CONTROL: &str = "public, max-age=900";
+
+/// The `Cache-Control` of an answer: [`CLIENT_CACHE_CONTROL`] for a success,
+/// `no-store` for a degraded one (`available: false`), which must never be
+/// kept and which the public API relay recognises by this header.
+pub fn cache_control(available: bool) -> &'static str {
+    if available {
+        CLIENT_CACHE_CONTROL
+    } else {
+        "no-store"
+    }
+}
 pub const ATTRIBUTION: &str = "Soil, evapotranspiration and forecast data: Open-Meteo (ECMWF, NOAA, DWD and others; CC BY 4.0). Windows and risks are rules of thumb computed by mukoko weather, not agronomic prescriptions.";
 
 // Spraying: drift below 3 km/h (inversions) and above 15 km/h; rain within
@@ -1409,7 +1426,25 @@ fn start_index(hours: &[Hour], local_now: NaiveDateTime) -> usize {
     0
 }
 
-/// Raw Open-Meteo payload to [`AgricultureResponse`]. No I/O.
+/// The place's wall-clock "now": the UTC instant plus the payload's
+/// `utc_offset_seconds` (a missing or non-numeric offset counts as 0).
+///
+/// `None` for an offset that cannot be applied: one chrono cannot represent,
+/// or one that lands outside the years 1 to 9999 that Python's `datetime`
+/// holds. The Python `timedelta` arithmetic raised `OverflowError` there and
+/// `build_agriculture` turned it into `analysis_error`; `Duration::seconds`
+/// and `+` would panic instead, which in wasm is a trap and a 500. Real
+/// Open-Meteo offsets are within +/-14 h, so only a corrupt upstream or KV
+/// value gets here.
+fn place_now(raw: &Value, now: DateTime<Utc>) -> Option<NaiveDateTime> {
+    let offset = num(&raw["utc_offset_seconds"]).map_or(0, |o| o as i64);
+    let local =
+        Duration::try_seconds(offset).and_then(|d| now.naive_utc().checked_add_signed(d))?;
+    (1..=9999).contains(&local.year()).then_some(local)
+}
+
+/// Raw Open-Meteo payload to [`AgricultureResponse`]. No I/O. A payload it
+/// cannot analyse (a corrupt UTC offset) is `analysis_error`, never a panic.
 pub fn analyse(
     raw: &Value,
     lat: f64,
@@ -1423,8 +1458,9 @@ pub fn analyse(
     if hours.is_empty() || !daily["time"].as_array().is_some_and(|a| !a.is_empty()) {
         return unavailable("insufficient_data", now);
     }
-    let offset = num(&raw["utc_offset_seconds"]).map_or(0, |o| o as i64);
-    let local_now = now.naive_utc() + Duration::seconds(offset);
+    let Some(local_now) = place_now(raw, now) else {
+        return unavailable("analysis_error", now);
+    };
     let today = local_now.format("%Y-%m-%d").to_string();
     let start = start_index(&hours, local_now);
 
@@ -1513,6 +1549,94 @@ mod tests {
         let r = analyse(&json!({}), -17.8, &[], None, now);
         assert!(!r.available);
         assert_eq!(r.reason.as_deref(), Some("insufficient_data"));
+    }
+
+    /// A payload `analyse` accepts (hours and a daily block) carrying `offset`
+    /// as its `utc_offset_seconds`.
+    fn payload_with_offset(offset: Value) -> Value {
+        json!({
+            "utc_offset_seconds": offset,
+            "hourly": {
+                "time": ["2026-10-31T08:00", "2026-10-31T09:00"],
+                "temperature_2m": [20.0, 21.0],
+            },
+            "daily": {"time": ["2026-10-31"]},
+        })
+    }
+
+    #[test]
+    fn corrupt_utc_offset_degrades_instead_of_panicking() {
+        let now = DateTime::from_timestamp(1_793_000_000, 0).unwrap();
+        // 1e16 s overflows `Duration::seconds`, 1e15 s the addition, and
+        // +/-1e13 s fit chrono but land outside Python's year 1..9999.
+        for bad in [
+            json!(1e16),
+            json!(-1e16),
+            json!(1e15),
+            json!(1e13),
+            json!(-1e13),
+            json!(1e300),
+            json!(i64::MAX),
+        ] {
+            let r = analyse(&payload_with_offset(bad.clone()), -17.8, &[], None, now);
+            assert!(!r.available, "offset {bad}");
+            assert_eq!(r.reason.as_deref(), Some("analysis_error"), "offset {bad}");
+            assert!(r.daily.is_empty() && r.windows.is_none());
+        }
+    }
+
+    #[test]
+    fn real_and_missing_utc_offsets_still_analyse() {
+        let now = DateTime::from_timestamp(1_793_000_000, 0).unwrap();
+        // Real offsets (a fractional-hour zone included) and a non-numeric one
+        // (0, as in Python).
+        for ok in [
+            json!(7200),
+            json!(-39_600),
+            json!(20_700),
+            json!(50_400),
+            json!(null),
+            json!("not a number"),
+        ] {
+            let r = analyse(&payload_with_offset(ok.clone()), -17.8, &[], None, now);
+            assert!(r.available, "offset {ok}");
+        }
+        let mut missing = payload_with_offset(json!(0));
+        missing
+            .as_object_mut()
+            .unwrap()
+            .remove("utc_offset_seconds");
+        assert!(analyse(&missing, -17.8, &[], None, now).available);
+    }
+
+    #[test]
+    fn place_now_applies_the_offset_inside_pythons_range() {
+        let now = DateTime::from_timestamp(1_793_000_000, 0).unwrap();
+        let at = |o: Value| place_now(&json!({ "utc_offset_seconds": o }), now);
+        assert_eq!(at(json!(7200)), Some(now.naive_utc() + Duration::hours(2)));
+        assert_eq!(at(json!(-3600)), Some(now.naive_utc() - Duration::hours(1)));
+        assert_eq!(at(json!(null)), Some(now.naive_utc()));
+        assert_eq!(at(json!(1e16)), None);
+        assert_eq!(at(json!(-1e13)), None);
+    }
+
+    #[test]
+    fn success_is_cacheable_and_a_degraded_answer_is_not() {
+        assert_eq!(cache_control(true), "public, max-age=900");
+        assert_eq!(cache_control(true), CLIENT_CACHE_CONTROL);
+        assert_eq!(cache_control(false), "no-store");
+        // Every way `analyse` and `unavailable` can degrade is `no-store`.
+        let now = DateTime::from_timestamp(1_793_000_000, 0).unwrap();
+        for r in [
+            unavailable("provider_unavailable", now),
+            analyse(&json!({}), -17.8, &[], None, now),
+            analyse(&payload_with_offset(json!(1e16)), -17.8, &[], None, now),
+        ] {
+            assert!(!r.available);
+            assert_eq!(cache_control(r.available), "no-store");
+        }
+        let ok = analyse(&payload_with_offset(json!(7200)), -17.8, &[], None, now);
+        assert_eq!(cache_control(ok.available), CLIENT_CACHE_CONTROL);
     }
 
     #[test]

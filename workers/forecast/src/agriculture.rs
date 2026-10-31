@@ -10,15 +10,22 @@
 //!   payload cached 1 h in KV per 0.05° cell. The analysis runs on every
 //!   request: it is cheap and depends on the caller's crops;
 //! - the location profile (season, crop calendars with the current phase,
-//!   climate context, ENSO) from `profile::cached_profile`: cache-only, no
-//!   upstream call and no budget, exactly as the Python's
-//!   `get_location_profile(allow_build=False)`.
+//!   climate context, ENSO) from `profile::cached_profile`: cache-only, as the
+//!   Python's `get_location_profile(allow_build=False)` was. It reads the
+//!   cell's normals when KV holds them and never fetches soil or normals, and
+//!   it spends no `PlaceProfile` budget. It is NOT free of upstream calls: a
+//!   `location` slug that is neither a seed nor a `{name}--{geohash}` spot
+//!   resolves through the Nyuchi API (`places::resolve`, KV-cached under
+//!   `place:v1:`, one call per slug per miss), as `/weather?location=` does.
+//!   Nothing but the public API's per-IP limit bounds those lookups.
 //!
-//! Only upstream trouble (5xx, 429, transport, timeout) counts against the
-//! breaker; a 4xx is our own request being refused, and letting it open the
-//! breaker would also cut off the forecast, air quality and haze. Failures are
-//! HTTP 200 with `available: false` and a `reason` (`provider_unavailable`,
-//! `provider_error`, `insufficient_data`, `analysis_error`), `no-store`.
+//! Only upstream trouble (5xx, 429, transport, timeout, an undecodable 200
+//! body) counts against the breaker; a 4xx is our own request being refused,
+//! and letting it open the breaker would also cut off the forecast, air
+//! quality and haze. Failures are HTTP 200 with `available: false` and a
+//! `reason` (`provider_unavailable`, `provider_error`, `insufficient_data`,
+//! `analysis_error`), `no-store`; a successful answer is
+//! `weather_core::agriculture::CLIENT_CACHE_CONTROL`.
 
 use std::time::Duration;
 
@@ -54,12 +61,14 @@ fn parse_crops(raw: &str) -> Vec<String> {
         .collect()
 }
 
+/// `weather_edge::json` defaults to `no-store`, and the public API relay reads
+/// an upstream `no-store` as a degraded answer, so a success must say what it
+/// may be cached for (`weather_core::agriculture::cache_control`).
 fn respond(body: &ag::AgricultureResponse, cache: &str) -> Result<Response> {
     let resp = json(200, body)?;
     resp.headers().set("X-Cache", cache)?;
-    if !body.available {
-        resp.headers().set("Cache-Control", "no-store")?;
-    }
+    resp.headers()
+        .set("Cache-Control", ag::cache_control(body.available))?;
     Ok(resp)
 }
 
@@ -92,8 +101,18 @@ async fn raw_payload(env: &Env, ctx: &Context, lat: f64, lon: f64) -> Raw {
             }
             match resp.json::<Value>().await {
                 Ok(v) if v.is_object() => v,
-                // An unusable body is not an outage.
-                _ => return Raw::Failed("provider_error"),
+                // Valid JSON of the wrong shape is not an outage (the Python
+                // did not count it either).
+                Ok(_) => return Raw::Failed("provider_error"),
+                // A truncated or undecodable 200, or a connection dropped
+                // mid-body, is upstream trouble: it counts, as it did in the
+                // Python and in `chain::open_meteo`. Otherwise the breaker never
+                // opens on this failure mode and every request waits out the
+                // timeout.
+                Err(_) => {
+                    chain::record_open_meteo(false);
+                    return Raw::Failed("provider_error");
+                }
             }
         }
         Err(_) => {
