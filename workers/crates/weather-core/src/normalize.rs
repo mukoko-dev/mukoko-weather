@@ -13,14 +13,27 @@ use crate::wmo::tomorrow_to_wmo;
 pub const TOMORROW_FORECAST_URL: &str = "https://api.tomorrow.io/v4/weather/forecast";
 pub const OPEN_METEO_FORECAST_URL: &str = "https://api.open-meteo.com/v1/forecast";
 
-/// Open-Meteo models compared by default (Windy-style).
-pub const DEFAULT_FORECAST_MODELS: [&str; 3] = ["gfs_seamless", "ecmwf_ifs04", "icon_seamless"];
-/// Models we forward to Open-Meteo; anything else a caller sends is dropped.
-pub const KNOWN_FORECAST_MODELS: [&str; 5] = [
-    "best_match",
+/// Open-Meteo models compared by default: the blend's core members (#246).
+pub const DEFAULT_FORECAST_MODELS: [&str; 4] = [
+    "ecmwf_ifs",
+    "ecmwf_aifs025_single",
     "gfs_seamless",
-    "ecmwf_ifs04",
+    "icon_global",
+];
+/// Models we forward to Open-Meteo; anything else a caller sends is dropped.
+/// Every id was checked live on 2026-10-10 (`api/py/_weather.py`).
+/// `ecmwf_ifs04` is dead upstream and is accepted only as an alias
+/// (`blend::MODEL_ALIASES`).
+pub const KNOWN_FORECAST_MODELS: [&str; 10] = [
+    "best_match",
+    "ecmwf_ifs",
+    "ecmwf_ifs025",
+    "ecmwf_aifs025_single",
+    "gfs_seamless",
+    "icon_global",
     "icon_seamless",
+    "gem_global",
+    "meteofrance_arpege_world",
     "meteofrance_seamless",
 ];
 
@@ -43,7 +56,7 @@ pub fn current_units() -> Value {
     })
 }
 
-fn query_string(pairs: &[(&str, String)]) -> String {
+pub(crate) fn query_string(pairs: &[(&str, String)]) -> String {
     let mut out = String::new();
     for (i, (k, v)) in pairs.iter().enumerate() {
         if i > 0 {
@@ -108,6 +121,10 @@ pub fn open_meteo_url(lat: f64, lon: f64) -> String {
 pub fn sanitize_models(models: &[&str]) -> Vec<String> {
     let mut cleaned: Vec<String> = Vec::new();
     for m in models.iter().map(|m| m.trim()) {
+        let m = crate::blend::MODEL_ALIASES
+            .iter()
+            .find(|(old, _)| *old == m)
+            .map_or(m, |(_, new)| *new);
         if KNOWN_FORECAST_MODELS.contains(&m)
             && m != "best_match"
             && !cleaned.iter().any(|c| c == m)
@@ -640,7 +657,7 @@ mod tests {
         assert!(o.contains("latitude=-17.83&longitude=31.05"));
         assert!(o.contains("forecast_days=7"));
         let e = open_meteo_extras_url(1.0, 2.0, &sanitize_models(&[]));
-        assert!(e.contains("models=gfs_seamless,ecmwf_ifs04,icon_seamless"));
+        assert!(e.contains("models=ecmwf_ifs,ecmwf_aifs025_single,gfs_seamless,icon_global"));
     }
 
     #[test]
@@ -652,6 +669,11 @@ mod tests {
         assert_eq!(
             sanitize_models(&["icon_seamless", " icon_seamless", "gfs_seamless"]),
             vec!["icon_seamless", "gfs_seamless"]
+        );
+        // The dead legacy id maps to its replacement, once.
+        assert_eq!(
+            sanitize_models(&["ecmwf_ifs04", "ecmwf_ifs", "gem_global"]),
+            vec!["ecmwf_ifs", "gem_global"]
         );
     }
 
