@@ -11,7 +11,7 @@ use weather_core::ai::prompts::{self, ClientPlace, Season};
 use weather_core::ai::{activities, conversation, Invalid, Turn, REFUSAL};
 use weather_core::places::{resolve_seed, slugify};
 use weather_core::{geo, Place};
-use weather_edge::{error, json, now, now_rfc3339};
+use weather_edge::{error, json, now, now_rfc3339, responses};
 use worker::{Env, Response, Result};
 
 use crate::gateway::{self, Call, ModelError};
@@ -38,13 +38,7 @@ fn invalid(i: Invalid) -> Result<Response> {
 }
 
 fn rate_limited() -> Result<Response> {
-    let resp = error(
-        429,
-        "rate_limited",
-        "Shamwari is busy right now. Please try again shortly.",
-    )?;
-    resp.headers().set("Retry-After", "60")?;
-    Ok(resp)
+    responses::rate_limited(60, "Shamwari is busy right now. Please try again shortly.")
 }
 
 fn ids(v: &Value) -> Vec<String> {
