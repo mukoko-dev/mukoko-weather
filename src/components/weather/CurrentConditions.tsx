@@ -46,9 +46,6 @@ interface Props {
   /** GPS-confirmed current location (silent-URL home) — shows the
    *  MY LOCATION eyebrow above the location name. */
   isCurrentLocation?: boolean;
-  /** Quiet content at the foot of the sky (the season line on the location
-   *  page). Kept as a slot so the hero stays a single block. */
-  footer?: ReactNode;
   /** The breadcrumb trail, rendered at the left of the hero's top row. */
   breadcrumb?: ReactNode;
 }
@@ -95,7 +92,6 @@ export function CurrentConditions({
   utcOffsetSeconds,
   slug,
   isCurrentLocation = false,
-  footer,
   breadcrumb,
 }: Props) {
   const info = weatherCodeToInfo(current.weather_code);
@@ -308,11 +304,6 @@ export function CurrentConditions({
               {activityLine.label}: {activityLine.clause}
             </span>
           </p>
-        )}
-        {footer && (
-          <div className="kestrel-ink mt-3 flex max-w-full justify-center">
-            {footer}
-          </div>
         )}
       </div>
     </section>

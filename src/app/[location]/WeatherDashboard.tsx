@@ -528,6 +528,7 @@ export function WeatherDashboard({
                                       weather.utc_offset_seconds
                                     }
                                     variant={skyCard ? "sky" : "card"}
+                                    footer={<SeasonBadge season={season} />}
                                     heading={{
                                       headingId: "hourly-scroll-heading",
                                       title: "Conditions",
@@ -557,7 +558,6 @@ export function WeatherDashboard({
                                   utcOffsetSeconds={weather.utc_offset_seconds}
                                   slug={location.slug}
                                   isCurrentLocation={isCurrentLocation}
-                                  footer={<SeasonBadge season={season} />}
                                   breadcrumb={breadcrumb}
                                 />
                               </ChartErrorBoundary>

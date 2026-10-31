@@ -42,13 +42,16 @@ describe("WeatherBackdrop — performance discipline", () => {
     expect(source).toContain("handle.resume()");
   });
 
-  it("is a fixed full-viewport backdrop behind all content (no IntersectionObserver needed)", () => {
-    // POSITIVE z-0, never negative: iOS Safari paints fixed negative-z
-    // elements behind the body background (overflow-x:hidden body), making
-    // the backdrop invisible on iPhone. Content stacks above via z-10.
+  it("is the sky box at the top of the page, behind all content (no IntersectionObserver needed)", () => {
+    // POSITIVE z-0, never negative: iOS Safari paints negative-z elements
+    // behind the body background (overflow-x:hidden body), making the
+    // backdrop invisible on iPhone. Content stacks above via z-10. The box
+    // (.kestrel-reach) is absolute at the top of the page, not fixed: it
+    // scrolls away so lower sections sit on the ordinary surface.
     expect(source).toContain(
-      '"pointer-events-none fixed inset-0 z-0 overflow-hidden"',
+      '"kestrel-reach pointer-events-none z-0 overflow-hidden"',
     );
+    expect(source).not.toMatch(/\bfixed\b[^"]*inset-0/);
     expect(source).not.toContain("-z-10");
     // Always on-screen while the page is visible — tab visibility is the
     // only pause signal, so no observer is constructed (the docstring may
@@ -56,9 +59,10 @@ describe("WeatherBackdrop — performance discipline", () => {
     expect(source).not.toContain("new IntersectionObserver");
   });
 
-  it("fades the sky into the surface background lower down the page", () => {
-    expect(source).toContain("transparent_var(--sky-fade-from)");
-    expect(source).toContain("var(--color-surface-base)");
+  it("fades the sky out at its foot through the .kestrel-reach mask, not an overlay", () => {
+    expect(source).toContain("kestrel-reach");
+    expect(source).not.toContain("transparent_var(--sky-fade-from)");
+    expect(source).not.toContain("to-surface-base");
   });
 
   it("disposes the scene on unmount", () => {

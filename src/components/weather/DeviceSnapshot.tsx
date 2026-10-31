@@ -63,7 +63,6 @@ export function DeviceSnapshot({
                 hourly={weather.hourly}
                 utcOffsetSeconds={weather.utc_offset_seconds}
                 slug={location.slug}
-                footer={<SeasonBadge season={season} />}
               />
             </ChartErrorBoundary>
             <ChartErrorBoundary name="hourly scroll cards">
@@ -72,6 +71,7 @@ export function DeviceSnapshot({
                   hourly={weather.hourly}
                   utcOffsetSeconds={weather.utc_offset_seconds}
                   variant="sky"
+                  footer={<SeasonBadge season={season} />}
                   heading={{
                     headingId: "device-hourly-heading",
                     title: "Conditions",

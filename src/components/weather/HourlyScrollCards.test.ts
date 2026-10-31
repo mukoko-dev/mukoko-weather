@@ -106,7 +106,7 @@ describe("HourlyScrollCards — the Conditions card owns the outlook", () => {
   it("shows the one-sentence outlook above the hours, hydration-gated, in the place's time", () => {
     expect(source).toContain('from "@/lib/hero"');
     expect(source).toContain(
-      "hydrated\n    ? heroOutlook(hourly, new Date(), offset)",
+      "hydrated ? heroOutlook(hourly, new Date(), offset) : null",
     );
     expect(source).toContain("{outlook && (");
     expect(source.indexOf("{outlook && (")).toBeLessThan(
@@ -138,5 +138,15 @@ describe("HourlyScrollCards — Conditions card surface", () => {
   it("carries its own heading inside the card, with the forecast link", () => {
     expect(source).toContain("<SectionHeader");
     expect(source).toContain("heading?:");
+  });
+});
+
+describe("HourlyScrollCards — footer slot", () => {
+  it("renders a quiet footer (the season line) under a hairline at the foot of the card", () => {
+    expect(source).toContain("footer?: ReactNode");
+    expect(source).toContain("{footer && (");
+    expect(source.indexOf("{footer && (")).toBeGreaterThan(
+      source.indexOf("</ScrollArea>"),
+    );
   });
 });

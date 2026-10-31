@@ -469,7 +469,8 @@ describe("sky tokens — contrast", () => {
   });
 
   it("the Conditions card is a translucent bordered card: ~7% fill, hairline, 22px, no shadow, no blur", () => {
-    const card = blockBody(".kestrel-card");
+    const at = css.indexOf("  .kestrel-card {\n    background-color");
+    const card = css.slice(at, css.indexOf("}", at));
     expect(card).toContain("var(--sky-fg) 7%, transparent");
     expect(card).toContain("border: 1px solid");
     expect(card).toContain("border-radius: var(--radius-sky-card)");
@@ -478,14 +479,17 @@ describe("sky tokens — contrast", () => {
     expect(resolveRaw("--radius-sky-card")).toBe("1.375rem");
   });
 
-  it("re-points the text tokens inside the sky card so its children read on the sky", () => {
-    const card = blockBody(".kestrel-card");
+  it("re-points the text tokens inside the sky card and the hero's season line", () => {
+    const at = css.indexOf("  .kestrel-ink,");
+    const ink = css.slice(at, css.indexOf("}", at));
+    expect(ink).toContain(".kestrel-card");
     for (const t of [
       "--color-text-primary",
       "--color-text-secondary",
       "--color-primary",
+      "--color-border",
     ]) {
-      expect(card).toContain(`${t}:`);
+      expect(ink).toContain(`${t}:`);
     }
   });
 
@@ -498,7 +502,15 @@ describe("sky tokens — contrast", () => {
     expect(round).not.toMatch(/shadow|blur/);
   });
 
-  it("the page sky fades into the surface only at the foot of the viewport", () => {
-    expect(resolveRaw("--sky-fade-from")).toBe("80%");
+  it("the sky box starts at the top of the page, is one screen + 8rem tall and fades out over 6rem", () => {
+    expect(resolveRaw("--sky-fade")).toBe("6rem");
+    expect(resolveRaw("--sky-reach")).toBe("calc(100svh + 8rem)");
+    const reach = blockBody(".kestrel-reach");
+    expect(reach).toContain("position: absolute");
+    expect(reach).toContain("top: 0");
+    expect(reach).toContain("height: var(--sky-reach)");
+    expect(reach).toContain("mask-image");
+    // It scrolls away with the page: never fixed.
+    expect(reach).not.toContain("fixed");
   });
 });

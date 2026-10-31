@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { WeatherIcon, nightIcon } from "@/lib/weather-icons";
 import { weatherCodeToInfo, type HourlyWeather } from "@/lib/weather";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -32,6 +32,8 @@ interface Props {
    *  right under the sky hero (`.kestrel-card`); "card" is the ordinary
    *  opaque card used wherever the strip sits lower in the page. */
   variant?: "sky" | "card";
+  /** Quiet line at the foot of the card (the season). */
+  footer?: ReactNode;
 }
 
 /**
@@ -43,6 +45,7 @@ export function HourlyScrollCards({
   utcOffsetSeconds,
   heading,
   variant = "card",
+  footer,
 }: Props) {
   // The start of the strip is chosen from the current instant (`new Date()`)
   // read in the LOCATION's offset, which the server can't match at SSR time
@@ -137,6 +140,11 @@ export function HourlyScrollCards({
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
+      {footer && (
+        <div className="mt-3 flex justify-center border-t border-border pt-3">
+          {footer}
+        </div>
+      )}
     </div>
   );
 }

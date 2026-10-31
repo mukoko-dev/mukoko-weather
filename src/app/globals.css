@@ -1743,7 +1743,7 @@ body {
    No card: the sky is the PAGE BACKGROUND. WeatherBackdrop paints one fixed,
    full-viewport gradient chosen by condition family x day/night (family from
    src/lib/hero.ts skyFamily), so it extends under the header and the bottom
-   controls. Light and dark are separate designs, not inversions: day skies
+   controls at the top of the page, and scrolls away with it. Light and dark are separate designs, not inversions: day skies
    in light, deep night/dusk in dark. The night and rain skies are the owner's
    mockup values. Every stop keeps WHITE text (--sky-fg) at 4.5:1 or better and
    so does the dimmer H/L white (--sky-fg-dim): src/lib/hero.test.ts computes
@@ -1751,7 +1751,8 @@ body {
 :root {
   --sky-fg: #ffffff;
   --sky-fg-dim: #e6eaf8;
-  --sky-fade-from: 80%;
+  --sky-fade: 6rem;
+  --sky-reach: calc(100svh + 8rem);
   --radius-sky-card: 1.375rem;
   --sky-clear-day-top: #1b5aa6;
   --sky-clear-day-mid: #2563a8;
@@ -1801,9 +1802,26 @@ body {
 }
 
 @layer components {
+  /* .kestrel-reach — the sky's box (WeatherBackdrop's root): from the very top
+     of the page, under the header, one screen plus 8rem tall, so it covers
+     the hero AND the Conditions card on any viewport, and fades out over its
+     last --sky-fade. It scrolls away with the page: everything lower sits on
+     the ordinary surface, so loose text further down keeps its usual contrast. */
+  .kestrel-reach {
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: var(--sky-reach);
+    mask-image: linear-gradient(
+      to bottom,
+      black calc(100% - var(--sky-fade)),
+      transparent
+    );
+  }
+
   /* .kestrel — the page sky (the kestrel hovers in open sky). Fills its
-     positioned parent (WeatherBackdrop's fixed full-viewport box). A family
-     modifier points --kestrel-top/mid/bottom at one --sky-* triple. */
+     positioned parent (the .kestrel-reach box). A family modifier points
+     --kestrel-top/mid/bottom at one --sky-* triple. */
   .kestrel {
     --kestrel-top: var(--sky-clear-day-top);
     --kestrel-mid: var(--sky-clear-day-mid);

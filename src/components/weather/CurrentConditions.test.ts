@@ -106,9 +106,8 @@ describe("CurrentConditions — hero stack (matches the owner's mockup)", () => 
     expect(source).toContain("activityDotClass(activity.category)");
   });
 
-  it("renders a footer slot at the foot of the hero (season line)", () => {
-    expect(source).toContain("footer?: ReactNode");
-    expect(source).toContain("{footer && ");
+  it("has no footer slot: the season line lives in the Conditions card", () => {
+    expect(source).not.toContain("footer");
   });
 
   it("scales with Dynamic Type: rem sizes, wrapping rows, no fixed heights or truncation", () => {

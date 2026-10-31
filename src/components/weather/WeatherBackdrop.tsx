@@ -35,11 +35,12 @@ interface Props {
 }
 
 /**
- * Condition-aware animated backdrop for the WHOLE location page — a fixed,
- * full-viewport sky behind all content (Apple Weather style), not confined
- * to the hero. It is solid through the first screen (hero + Conditions card)
- * and fades into the normal surface background at the foot of the viewport
- * so charts and cards further down keep their usual contrast.
+ * Condition-aware animated backdrop for the location page — the
+ * sky at the top of the page, behind the header and the hero (Apple Weather
+ * style). It is solid through the first screen (hero + Conditions card),
+ * fades out over its last 6rem and scrolls away with the page, so charts,
+ * cards and headings further down keep their usual contrast on the ordinary
+ * surface.
  *
  * Performance discipline (the backdrop stays mounted for the whole page life):
  * - Three.js renderer pixel ratio is capped at 1 (`maxPixelRatio`).
@@ -176,12 +177,12 @@ export function WeatherBackdrop({
   return (
     <div
       aria-hidden="true"
-      // z-0 (not a negative z-index): iOS Safari paints fixed negative-z
+      // z-0 (not a negative z-index): iOS Safari paints negative-z
       // elements behind the body background when html/body use
       // overflow-x:hidden, making the whole backdrop invisible on iPhone.
       // Explicit stacking instead: backdrop z-0, page content wrapped in
       // z-10 (see WeatherDashboard) — deterministic in every engine.
-      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+      className="kestrel-reach pointer-events-none z-0 overflow-hidden"
     >
       {/* The page sky — one static gradient by condition family x day/night
           (src/lib/hero.ts skyFamily, tokens in globals.css). It is the page
@@ -198,11 +199,6 @@ export function WeatherBackdrop({
           className="absolute inset-0 opacity-30 dark:opacity-20"
         />
       )}
-      {/* Fade the sky into the normal surface background at the foot of the
-          viewport so cards, charts and body text further down the page keep
-          their usual contrast. The first screen (hero + Conditions card) sits
-          above --sky-fade-from, on the solid sky. */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_var(--sky-fade-from),var(--color-surface-base))]" />
     </div>
   );
 }

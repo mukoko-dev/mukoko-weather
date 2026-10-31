@@ -158,9 +158,4 @@ describe("CurrentConditions render — the sky hero", () => {
     expect(html).toContain("My Location");
     expect(html).toContain("uppercase");
   });
-
-  it("places the footer slot (season line) at the foot of the hero", () => {
-    const html = render({}, { footer: createElement("span", null, "Rainy") });
-    expect(html.indexOf("Rainy")).toBeGreaterThan(html.indexOf("H:28°"));
-  });
 });
