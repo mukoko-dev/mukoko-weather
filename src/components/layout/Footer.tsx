@@ -175,6 +175,22 @@ export function SiteFooter() {
               Nyuchi Africa
             </a>
             <a
+              href="https://www.bundu.org"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={link}
+            >
+              Bundu Foundation
+            </a>
+            <a
+              href="https://www.bundu.org/research/standards"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={link}
+            >
+              Bundu standards
+            </a>
+            <a
               href="https://mukoko.com"
               target="_blank"
               rel="noopener noreferrer"
