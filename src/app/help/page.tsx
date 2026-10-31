@@ -24,7 +24,7 @@ export default function HelpPage() {
         name: "What is mukoko weather?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "mukoko weather is an AI-powered global weather intelligence platform. It provides real-time weather conditions, 7-day forecasts, hourly predictions, frost alerts, and AI-generated weather advice for 265+ locations worldwide.",
+          text: "mukoko weather is a global weather intelligence platform. It provides real-time weather conditions, 7-day forecasts, hourly predictions, frost alerts, and AI-generated weather advice for 265+ locations worldwide.",
         },
       },
       {
