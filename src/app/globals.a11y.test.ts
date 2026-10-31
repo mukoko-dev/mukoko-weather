@@ -203,3 +203,77 @@ describe("button fauna focus-visible rings (WCAG 2.4.7)", () => {
     expect(css).toContain(":focus:not(:focus-visible)");
   });
 });
+
+describe("focus on the sky (WCAG 1.4.11, 3:1)", () => {
+  // The global :focus-visible rule is UNLAYERED, so it beats every @layer rule
+  // and every Tailwind utility: a ring colour set in @layer components, or by
+  // `focus-visible:outline-[var(--sky-fg)]`, never applies. The rule reads the
+  // --focus-ring variable, so the sky is scoped by re-pointing THAT.
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, "");
+
+  /** Declarations of every top-level rule whose selector list includes `sel`. */
+  function declsFor(sel: string): string {
+    let out = "";
+    for (const m of bare.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const list = m[1].split(",").map((s) => s.replace(/\s+/g, " ").trim());
+      if (list.includes(sel)) out += `\n${m[2]}`;
+    }
+    return out;
+  }
+
+  it("points --focus-ring at the sky foreground inside the hero, the sky card and the season line", () => {
+    for (const sel of ["[data-sky-hero]", ".kestrel-card", ".kestrel-ink"]) {
+      expect(declsFor(sel), sel).toMatch(/--focus-ring:\s*var\(--sky-fg\)\s*;/);
+    }
+  });
+
+  it("points --focus-ring at the sky foreground for the unscrolled header's brand mark and desktop links", () => {
+    const sel =
+      "body:has([data-sky-hero]) [data-site-header]:not([data-scrolled]) [data-header-ink]";
+    expect(declsFor(sel)).toMatch(/--focus-ring:\s*var\(--sky-fg\)\s*;/);
+  });
+
+  it("is not scoped to the <header> itself (the notifications popover is a light card)", () => {
+    expect(
+      declsFor(
+        "body:has([data-sky-hero]) [data-site-header]:not([data-scrolled])",
+      ),
+    ).not.toContain("--focus-ring");
+    expect(declsFor("[data-site-header]")).not.toContain("--focus-ring");
+  });
+
+  it("gives the ⋯ menu panel (a light card inside the hero) the page ring back", () => {
+    expect(
+      declsFor('[data-sky-hero] [data-slot="account-menu-panel"]'),
+    ).toMatch(/--focus-ring:\s*var\(--exp-storm\)\s*;/);
+  });
+
+  it(".kestrel-round has an unlayered :focus-visible ring on the sky foreground that keeps the round shape", () => {
+    const group = focusVisibleGroups(css).find((g) =>
+      g.selectors.includes("kestrel-round"),
+    );
+    expect(
+      group,
+      "no top-level .kestrel-round:focus-visible rule",
+    ).toBeDefined();
+    expect(group!.body).toContain("solid var(--sky-fg)");
+    expect(group!.body).toContain("var(--focus-ring-width");
+    // The global rule forces border-radius: 4px on focus.
+    expect(group!.body).toContain("border-radius: 9999px");
+  });
+
+  it("keeps no .kestrel-round:focus-visible rule inside @layer (it would lose to the global rule)", () => {
+    const layerStart = css.indexOf("@layer components {");
+    const layerEnd = css.indexOf("\n}\n", layerStart);
+    const inLayer = css.slice(layerStart, layerEnd);
+    expect(inLayer).not.toMatch(/\.kestrel-round:focus-visible\s*\{/);
+  });
+
+  it("leaves no Tailwind focus-visible:outline-* utility on a sky control (the utility cannot beat the global rule)", () => {
+    const dashboard = readFileSync(
+      resolve(__dirname, "[location]/WeatherDashboard.tsx"),
+      "utf-8",
+    );
+    expect(dashboard).not.toContain("focus-visible:outline-[var(--sky-fg)]");
+  });
+});

@@ -71,6 +71,24 @@ export const DEFAULT_SECTION_ORDER = [
 
 const SECTION_ORDER_KEY = "mukoko-section-order";
 
+/**
+ * The hero (`current`) is pinned first. It is painted white on the page sky
+ * and the phone header is not drawn over it, so it cannot sit below another
+ * section (white text on the light page surface, and no header). Every path
+ * that sets or restores the order goes through `pinHeroFirst`, which also
+ * migrates layouts saved before the hero was pinned.
+ */
+export const PINNED_FIRST_SECTION = "current";
+
+/** `order` with the hero moved to the front (unchanged when it has none). */
+export function pinHeroFirst(order: readonly string[]): string[] {
+  if (!order.includes(PINNED_FIRST_SECTION)) return [...order];
+  return [
+    PINNED_FIRST_SECTION,
+    ...order.filter((id) => id !== PINNED_FIRST_SECTION),
+  ];
+}
+
 const DEFAULT_SECTION_INDEX = new Map<string, number>(
   DEFAULT_SECTION_ORDER.map((id, i) => [id, i]),
 );
@@ -87,7 +105,9 @@ const DEFAULT_SECTION_INDEX = new Map<string, number>(
  * This UNIONs the two: keep the stored ids that still exist in DEFAULT (drop the
  * rest), then splice in every missing DEFAULT id at its default position (before
  * the first existing section that follows it in the default layout). The user's
- * custom ordering of the sections they DID arrange is preserved.
+ * custom ordering of the sections they DID arrange is preserved, except that
+ * the hero is always pinned first (`pinHeroFirst`): a layout saved when the
+ * hero was draggable is migrated here.
  *
  * Exported for testing.
  */
@@ -114,7 +134,7 @@ export function mergeSectionOrder(stored: string[]): string[] {
     result.splice(insertPos, 0, id);
     seen.add(id);
   }
-  return result;
+  return pinHeroFirst(result);
 }
 
 /** Read the raw persisted section order from localStorage, or null if absent/invalid. */
@@ -388,8 +408,9 @@ export const useAppStore = create<AppState>()((set) => ({
   // `hydrateSectionOrder()`, mirroring how RxDB-backed prefs are deferred.
   sectionOrder: [...DEFAULT_SECTION_ORDER],
   setSectionOrder: (order) => {
-    saveSectionOrder(order);
-    set({ sectionOrder: order });
+    const pinned = pinHeroFirst(order);
+    saveSectionOrder(pinned);
+    set({ sectionOrder: pinned });
   },
   hydrateSectionOrder: () => {
     const stored = readStoredSectionOrder();

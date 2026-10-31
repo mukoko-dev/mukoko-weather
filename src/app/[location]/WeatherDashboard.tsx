@@ -60,7 +60,7 @@ import {
 } from "@/lib/dashboard-layout";
 import { FrostAlertBanner } from "./FrostAlertBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, pinHeroFirst, PINNED_FIRST_SECTION } from "@/lib/store";
 import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
 import {
   checkFrostRisk,
@@ -236,7 +236,11 @@ export function WeatherDashboard({
   const usingFallback = modelBaseline ? false : seedUsingFallback;
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
-  const sectionOrder = useAppStore((s) => s.sectionOrder);
+  const storedSectionOrder = useAppStore((s) => s.sectionOrder);
+  // The hero is painted white on the page sky and the phone header is not
+  // drawn over it, so it can never leave the first slot: whatever the store
+  // holds (a layout saved before it was pinned), the page renders it first.
+  const sectionOrder = pinHeroFirst(storedSectionOrder);
   const setSectionOrder = useAppStore((s) => s.setSectionOrder);
   const hydrateSectionOrder = useAppStore((s) => s.hydrateSectionOrder);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
@@ -289,7 +293,12 @@ export function WeatherDashboard({
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    if (over && active.id !== over.id) {
+    if (
+      over &&
+      active.id !== over.id &&
+      active.id !== PINNED_FIRST_SECTION &&
+      over.id !== PINNED_FIRST_SECTION
+    ) {
       const oldIndex = sectionOrder.indexOf(active.id as string);
       const newIndex = sectionOrder.indexOf(over.id as string);
       if (oldIndex !== -1 && newIndex !== -1) {
@@ -418,6 +427,50 @@ export function WeatherDashboard({
     };
   }, [location.lat, location.lon, model, extrasKey, fetchExtras]);
 
+  // The breadcrumb sits at the left of the hero's top row (over the sky), so
+  // its text takes the hero's foreground instead of the page text tokens.
+  // The Conditions card is the translucent sky card only while it sits
+  // directly under the hero; moved lower it is an ordinary card.
+  const skyCard =
+    sectionOrder[0] === PINNED_FIRST_SECTION &&
+    sectionOrder[1] === "hourlyScroll";
+  const breadcrumb = (
+    <nav aria-label="Breadcrumb" data-breadcrumb>
+      <ol className="flex flex-wrap items-center gap-x-1.5">
+        <li>
+          <a
+            href={BASE_URL}
+            className="dik-dik hover:underline transition-colors"
+          >
+            Home
+          </a>
+        </li>
+        <li aria-hidden="true">/</li>
+        {/* Country — always shown */}
+        {countryName && (
+          <>
+            <li>
+              <span>{countryName}</span>
+            </li>
+            <li aria-hidden="true">/</li>
+          </>
+        )}
+        {/* Province — skip only if identical to location name */}
+        {location.province && location.province !== location.name && (
+          <>
+            <li>
+              <span>{location.province}</span>
+            </li>
+            <li aria-hidden="true">/</li>
+          </>
+        )}
+        <li aria-current="page">
+          <span>{location.name}</span>
+        </li>
+      </ol>
+    </nav>
+  );
+
   return (
     <>
       {/* Full-viewport condition-aware sky behind the whole page (Apple
@@ -439,49 +492,6 @@ export function WeatherDashboard({
       <div className="relative z-10">
         <Header />
 
-        {/* Breadcrumb navigation — always three layers: Country / Province / Location */}
-        <nav
-          aria-label="Breadcrumb"
-          className="mx-auto max-w-7xl px-4 pt-3 sm:px-6 md:px-8"
-        >
-          <ol className="flex flex-wrap items-center gap-1.5 text-base text-text-tertiary">
-            <li>
-              <a
-                href={BASE_URL}
-                className="dik-dik hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded"
-              >
-                Home
-              </a>
-            </li>
-            <li aria-hidden="true">/</li>
-            {/* Country — always shown */}
-            {countryName && (
-              <>
-                <li>
-                  <span className="text-text-secondary">{countryName}</span>
-                </li>
-                <li aria-hidden="true">/</li>
-              </>
-            )}
-            {/* Province — skip only if identical to location name */}
-            {location.province && location.province !== location.name && (
-              <>
-                <li>
-                  <span className="text-text-secondary">
-                    {location.province}
-                  </span>
-                </li>
-                <li aria-hidden="true">/</li>
-              </>
-            )}
-            <li aria-current="page">
-              <span className="font-medium text-text-primary">
-                {location.name}
-              </span>
-            </li>
-          </ol>
-        </nav>
-
         {/* Mobile bottom padding clears the floating nav (token includes the
           safe-area inset); sm:pb-6 restores normal padding where the nav is hidden. */}
         <main
@@ -502,12 +512,14 @@ export function WeatherDashboard({
           </div>
 
           {device && (
-            <UpdatedAgo
-              fetchedAt={device.fetchedAt}
-              freshness={device.freshness}
-              weather={weather}
-              placeName={location.name}
-            />
+            <div className="kestrel-ink">
+              <UpdatedAgo
+                fetchedAt={device.fetchedAt}
+                freshness={device.freshness}
+                weather={weather}
+                placeName={location.name}
+              />
+            </div>
           )}
 
           {/* Weather unavailable banner — shown when all providers failed */}
@@ -550,20 +562,21 @@ export function WeatherDashboard({
                             >
                               <ChartErrorBoundary name="hourly scroll cards">
                                 <section aria-labelledby="hourly-scroll-heading">
-                                  <SectionHeader
-                                    headingId="hourly-scroll-heading"
-                                    title="Hourly"
-                                    action={{
-                                      label: "Full forecast →",
-                                      href: `/${location.slug}/forecast`,
-                                    }}
-                                    className="mb-[var(--space-stack)]"
-                                  />
                                   <HourlyScrollCards
                                     hourly={weather.hourly}
                                     utcOffsetSeconds={
                                       weather.utc_offset_seconds
                                     }
+                                    variant={skyCard ? "sky" : "card"}
+                                    footer={<SeasonBadge season={season} />}
+                                    heading={{
+                                      headingId: "hourly-scroll-heading",
+                                      title: "Conditions",
+                                      action: {
+                                        label: "Full forecast →",
+                                        href: `/${location.slug}/forecast`,
+                                      },
+                                    }}
                                   />
                                 </section>
                               </ChartErrorBoundary>
@@ -574,6 +587,7 @@ export function WeatherDashboard({
                             <DraggableSection
                               key="current"
                               id="current"
+                              pinned
                               reordering={reordering}
                             >
                               <ChartErrorBoundary name="current conditions">
@@ -585,7 +599,7 @@ export function WeatherDashboard({
                                   utcOffsetSeconds={weather.utc_offset_seconds}
                                   slug={location.slug}
                                   isCurrentLocation={isCurrentLocation}
-                                  footer={<SeasonBadge season={season} />}
+                                  breadcrumb={breadcrumb}
                                 />
                               </ChartErrorBoundary>
                             </DraggableSection>
