@@ -62,7 +62,7 @@ export const DEFAULT_SECTION_ORDER = [
   "communityLane",
   "atmospheric",
   "reports",
-  "activityInsights",
+  "activityInvite",
   "agriculture",
   "aiSummary",
   "aiChat",

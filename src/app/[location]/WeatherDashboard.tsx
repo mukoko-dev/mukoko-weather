@@ -1,6 +1,14 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   DndContext,
   closestCenter,
@@ -30,11 +38,11 @@ import { LazySection } from "@/components/weather/LazySection";
 import { PlaceKnowledgeRows } from "@/components/weather/PlaceKnowledgeRows";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { CommunityLane } from "@/components/weather/CommunityLane";
+import { ActivityInvite } from "@/components/weather/ActivityInsights";
 import { CommunityLaneSkeleton } from "@/components/weather/CommunityLaneSkeleton";
 import {
   SectionSkeleton,
   ReportsSkeleton,
-  ActivityInsightsSkeleton,
   AISummarySkeleton,
   AISummaryChatSkeleton,
   EnsoOutlookSkeleton,
@@ -100,9 +108,11 @@ const AISummary = lazy(() =>
     default: m.AISummary,
   })),
 );
-const ActivityInsights = lazy(() =>
-  import("@/components/weather/ActivityInsights").then((m) => ({
-    default: m.ActivityInsights,
+// The full activity advice lives in a sheet opened from the Community lane;
+// its chunk loads on first open and its cards mount only while it is open.
+const ActivitiesDetailSheet = lazy(() =>
+  import("@/components/weather/ActivitiesDetailSheet").then((m) => ({
+    default: m.ActivitiesDetailSheet,
   })),
 );
 const MapPreview = lazy(() =>
@@ -243,6 +253,24 @@ export function WeatherDashboard({
     };
   }, [weather, location]);
   const [reordering, setReordering] = useState(false);
+  // Activity advice sheet: opened from the Community lane (whole card, "All
+  // advice", or one activity's row). `loaded` keeps it mounted after the first
+  // open so the close animation plays; its content mounts only while open.
+  const [advice, setAdvice] = useState<{
+    loaded: boolean;
+    open: boolean;
+    activityId?: string;
+    opener: HTMLElement | null;
+  }>({ loaded: false, open: false, opener: null });
+  const openAdvice = useCallback(
+    (activityId: string | undefined, opener: HTMLElement) =>
+      setAdvice({ loaded: true, open: true, activityId, opener }),
+    [],
+  );
+  const closeAdvice = useCallback(
+    () => setAdvice((a) => ({ ...a, open: false })),
+    [],
+  );
   // Swipe left/right between the visitor's locations (off while reordering).
   const swipe = useLocationSwipe({ enabled: !reordering });
   // Windy-style ADDITIONAL data — multi-model comparison + minutely nowcast.
@@ -580,6 +608,7 @@ export function WeatherDashboard({
                                     lon={location.lon}
                                     weather={weather}
                                     selectedActivities={selectedActivities}
+                                    onOpenAdvice={openAdvice}
                                   />
                                 </ChartErrorBoundary>
                               </LazySection>
@@ -638,37 +667,21 @@ export function WeatherDashboard({
                               </LazySection>
                             </DraggableSection>
                           );
-                        case "activityInsights":
-                          return (
+                        case "activityInvite":
+                          // Once activities are picked their advice lives in
+                          // the Community lane's sheet, so the page carries no
+                          // long section; only the invitation remains.
+                          return selectedActivities.length === 0 ? (
                             <DraggableSection
-                              key="activityInsights"
-                              id="activityInsights"
+                              key="activityInvite"
+                              id="activityInvite"
                               reordering={reordering}
                             >
-                              <LazySection
-                                label="activity-insights"
-                                fallback={<ActivityInsightsSkeleton />}
-                              >
-                                <ChartErrorBoundary name="activity insights">
-                                  <Suspense
-                                    fallback={<ActivityInsightsSkeleton />}
-                                  >
-                                    {/* Insights synthesized from the base forecast when the provider
-                                    (Open-Meteo fallback) doesn't supply them — activity cards
-                                    must never render without data. */}
-                                    <ActivityInsights
-                                      insights={
-                                        weather.insights ??
-                                        synthesizeOpenMeteoInsights(weather)
-                                      }
-                                      activities={allActivities}
-                                      weather={weather}
-                                    />
-                                  </Suspense>
-                                </ChartErrorBoundary>
-                              </LazySection>
+                              <ChartErrorBoundary name="activity invitation">
+                                <ActivityInvite />
+                              </ChartErrorBoundary>
                             </DraggableSection>
-                          );
+                          ) : null;
                         case "agriculture":
                           return (
                             <DraggableSection
@@ -776,6 +789,21 @@ export function WeatherDashboard({
                   </div>
                 </SortableContext>
               </DndContext>
+              {advice.loaded && selectedActivities.length > 0 && (
+                <Suspense fallback={null}>
+                  <ActivitiesDetailSheet
+                    open={advice.open}
+                    onClose={closeAdvice}
+                    focusActivityId={advice.activityId}
+                    opener={advice.opener}
+                    insights={
+                      weather.insights ?? synthesizeOpenMeteoInsights(weather)
+                    }
+                    activities={allActivities}
+                    weather={weather}
+                  />
+                </Suspense>
+              )}
               {/* Windy-style additions — the last items of the main column
                     (not full-width below the grid), so the main column and the
                     sidebar end together instead of leaving a dead band of
