@@ -211,8 +211,8 @@ describe("AtmosphericSummary source contract", () => {
   });
 
   it("gives each mineral a literal full-border Tailwind class, elevated, with no side stripe", () => {
-    expect(source).toContain("[&>section]:border-mineral-cobalt/40");
-    expect(source).toContain("[&>section]:border-mineral-terracotta/40");
+    expect(source).toContain("[&>section]:border-mineral-cobalt/60");
+    expect(source).toContain("[&>section]:border-mineral-terracotta/60");
     expect(source).toContain("[&>section]:shadow-md");
     expect(source).not.toContain("w-1");
   });

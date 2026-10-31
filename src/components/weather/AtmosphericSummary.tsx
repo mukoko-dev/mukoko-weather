@@ -92,18 +92,18 @@ type Mineral =
   | "terracotta";
 
 /**
- * The whole border of a tile takes its mineral, at 40% (a SOLID border on all
+ * The whole border of a tile takes its mineral, at 60% (a SOLID border on all
  * four sides, never a one-side stripe: Mzizi border rule, see globals.css
  * "Card edge"). Static strings so Tailwind can see every class.
  */
 const EDGE_CLASS: Record<Mineral, string> = {
-  cobalt: "[&>section]:border-mineral-cobalt/40",
-  gold: "[&>section]:border-mineral-gold/40",
-  copper: "[&>section]:border-mineral-copper/40",
-  sodalite: "[&>section]:border-mineral-sodalite/40",
-  malachite: "[&>section]:border-mineral-malachite/40",
-  tanzanite: "[&>section]:border-mineral-tanzanite/40",
-  terracotta: "[&>section]:border-mineral-terracotta/40",
+  cobalt: "[&>section]:border-mineral-cobalt/60",
+  gold: "[&>section]:border-mineral-gold/60",
+  copper: "[&>section]:border-mineral-copper/60",
+  sodalite: "[&>section]:border-mineral-sodalite/60",
+  malachite: "[&>section]:border-mineral-malachite/60",
+  tanzanite: "[&>section]:border-mineral-tanzanite/60",
+  terracotta: "[&>section]:border-mineral-terracotta/60",
 };
 
 /**
