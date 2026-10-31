@@ -12,15 +12,7 @@ import {
   type MetricSeriesPoint,
 } from "@/lib/metric-details";
 import { resolveOffsetSeconds } from "@/lib/location-time";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogSheetHandle,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { DetailSheet } from "@/components/ui/detail-sheet";
 import { ChartErrorBoundary } from "./ChartErrorBoundary";
 import { AveragesDetail } from "./AveragesDetail";
 import { UVIndexChart } from "./charts/UVIndexChart";
@@ -110,93 +102,83 @@ export function MetricDetailModal({
   );
 
   return (
-    <Dialog open={kind !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent aria-describedby="metric-detail-about" className="pb-6">
-        <DialogSheetHandle />
-        {detail && (
-          <div className="flex flex-col gap-[var(--space-section)] px-4 pt-3 sm:px-5">
-            <header className="flex flex-col gap-1">
-              <DialogTitle className="hornbill text-sm">
-                {detail.title}
-              </DialogTitle>
-              <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
-                {detail.headline}
-              </p>
-              <p className="gazelle">{detail.sentence}</p>
-            </header>
+    <DetailSheet
+      open={kind !== null && detail !== null}
+      title={detail?.title ?? ""}
+      onClose={onClose}
+      description={detail?.about}
+      header={
+        detail && (
+          <>
+            <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
+              {detail.headline}
+            </p>
+            <p className="gazelle">{detail.sentence}</p>
+          </>
+        )
+      }
+    >
+      {detail && (
+        <>
+          {kind === "averages" && (
+            <ChartErrorBoundary name="averages">
+              <AveragesDetail data={data} lat={lat} lon={lon} slug={slug} />
+            </ChartErrorBoundary>
+          )}
 
-            {kind === "averages" && (
-              <ChartErrorBoundary name="averages">
-                <AveragesDetail data={data} lat={lat} lon={lon} slug={slug} />
+          {chart && series.length > 1 && (
+            <section aria-label={`${detail.title}, next 24 hours`}>
+              <h3 className="giraffe mb-[var(--space-stack)]">Next 24 hours</h3>
+              <ChartErrorBoundary name={`${detail.title} chart`}>
+                <MetricChart chart={chart} series={series} />
               </ChartErrorBoundary>
-            )}
-
-            {chart && series.length > 1 && (
-              <section aria-label={`${detail.title}, next 24 hours`}>
-                <h3 className="giraffe mb-[var(--space-stack)]">
-                  Next 24 hours
-                </h3>
-                <ChartErrorBoundary name={`${detail.title} chart`}>
-                  <MetricChart chart={chart} series={series} />
-                </ChartErrorBoundary>
-              </section>
-            )}
-            {kind === "uv" && uvDays.length > 1 && (
-              <section aria-labelledby="uv-days-heading">
-                <h3
-                  id="uv-days-heading"
-                  className="giraffe mb-[var(--space-stack)]"
-                >
-                  Peak UV, next days
-                </h3>
-                <ChartErrorBoundary name="UV by day chart">
-                  <UVIndexChart
-                    data={uvDays.map((d) => ({
-                      label: d.label,
-                      uvIndex: d.peak,
-                    }))}
-                    labelKey="label"
-                    maxTicksLimit={7}
-                  />
-                </ChartErrorBoundary>
-                <ul className="mt-[var(--space-stack)] grid grid-cols-2 gap-x-3 gap-y-1 text-sm text-text-secondary">
-                  {uvDays.map((d) => (
-                    <li key={d.date} className="flex justify-between gap-2">
-                      <span>{d.label}</span>
-                      <span className="tabular-nums text-text-primary">
-                        {d.peak} {d.category}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {chart && series.length <= 1 && <ChartSkeleton />}
-
-            {detail.stats.length > 0 && (
-              <dl className="grid grid-cols-2 gap-[var(--space-stack)]">
-                {detail.stats.map((s) => (
-                  <div key={s.label} className="meerkat">
-                    <dt className="dove">{s.label}</dt>
-                    <dd className="font-medium text-text-primary">{s.value}</dd>
-                  </div>
+            </section>
+          )}
+          {kind === "uv" && uvDays.length > 1 && (
+            <section aria-labelledby="uv-days-heading">
+              <h3
+                id="uv-days-heading"
+                className="giraffe mb-[var(--space-stack)]"
+              >
+                Peak UV, next days
+              </h3>
+              <ChartErrorBoundary name="UV by day chart">
+                <UVIndexChart
+                  data={uvDays.map((d) => ({
+                    label: d.label,
+                    uvIndex: d.peak,
+                  }))}
+                  labelKey="label"
+                  maxTicksLimit={7}
+                />
+              </ChartErrorBoundary>
+              <ul className="mt-[var(--space-stack)] grid grid-cols-2 gap-x-3 gap-y-1 text-sm text-text-secondary">
+                {uvDays.map((d) => (
+                  <li key={d.date} className="flex justify-between gap-2">
+                    <span>{d.label}</span>
+                    <span className="tabular-nums text-text-primary">
+                      {d.peak} {d.category}
+                    </span>
+                  </li>
                 ))}
-              </dl>
-            )}
+              </ul>
+            </section>
+          )}
 
-            <DialogDescription id="metric-detail-about">
-              {detail.about}
-            </DialogDescription>
+          {chart && series.length <= 1 && <ChartSkeleton />}
 
-            <DialogClose asChild>
-              <Button variant="outline" className="w-full">
-                Close
-              </Button>
-            </DialogClose>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+          {detail.stats.length > 0 && (
+            <dl className="grid grid-cols-2 gap-[var(--space-stack)]">
+              {detail.stats.map((s) => (
+                <div key={s.label} className="meerkat">
+                  <dt className="dove">{s.label}</dt>
+                  <dd className="font-medium text-text-primary">{s.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </>
+      )}
+    </DetailSheet>
   );
 }
