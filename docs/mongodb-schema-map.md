@@ -1,7 +1,7 @@
 # Nyuchi Platform — MongoDB Schema Map
 
 **Cluster:** `nyuchi-platform-doc-db.ge8d8qi.mongodb.net`
-**Total size:** 74 MB across 27 databases (excluding `admin`/`local`)
+**Total size:** about 5.1 GB across 31 databases (excluding `admin`, `config` and `local`), read 2026-10-29. `news` alone is 5.06 GB; the other 30 total about 55 MB. The original survey this map is based on counted 27 databases and 74 MB; treat the per-database sections below as that survey, and the databases listed next as not yet described here.
 **Doctrine:** Bundu / Ubuntu federated platform. Mukoko Weather is **one app** plugged into this shared platform.
 
 This document maps the platform so we know what mukoko-weather should **consume** vs. what it should **own**.
@@ -58,7 +58,9 @@ The local `mukoko-weather` MongoDB is essentially **deprecated**. Mukoko is now 
 
 ---
 
-## The 27 databases
+## The databases
+
+The cluster held 34 databases on 2026-10-29: 31 platform and working databases plus `admin`, `config` and `local`. The sections below describe the ones Mukoko Weather touches. **Not described here:** `agriculture` (created 2026-10-29, six collections, no registered model), `logistics`, `pulse`, `transport`, `mzizi_samples` (research samples) and `weather_backup_20261028` (a dated backup of part of `weather`). The Nyuchi Data tool lists 26 domains, so it cannot see the newer ones; `data-infra` `schemas/domains.yaml` is the source of truth for domains. Counts change quickly, so re-read the cluster before quoting one.
 
 ### Core platform databases (Mukoko depends on)
 
