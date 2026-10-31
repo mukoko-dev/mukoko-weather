@@ -39,7 +39,7 @@ export function fillLastRowSpan(count: number, cols: number): number {
 /** Span → class for the 2-column (mobile) Conditions grid. */
 const BASE_SPAN_CLASS: Record<number, string> = {
   1: "",
-  2: "col-span-2 [&>section]:aspect-auto",
+  2: "col-span-2",
 };
 
 /**
@@ -47,10 +47,10 @@ const BASE_SPAN_CLASS: Record<number, string> = {
  * query (`InsightGrid`), so these use `@3xl:`, not the viewport's `lg:`.
  */
 const WIDE_SPAN_CLASS: Record<number, string> = {
-  1: "@3xl:col-span-1 @3xl:[&>section]:aspect-square",
-  2: "@3xl:col-span-2 @3xl:[&>section]:aspect-auto",
-  3: "@3xl:col-span-3 @3xl:[&>section]:aspect-auto",
-  4: "@3xl:col-span-4 @3xl:[&>section]:aspect-auto",
+  1: "@3xl:col-span-1",
+  2: "@3xl:col-span-2",
+  3: "@3xl:col-span-3",
+  4: "@3xl:col-span-4",
 };
 
 /**
