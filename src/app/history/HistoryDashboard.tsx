@@ -22,11 +22,29 @@ import { useAppStore } from "@/lib/store";
 import { weatherCodeToInfo, windDirection, uvLevel } from "@/lib/weather";
 import type { WeatherInsights } from "@/lib/weather";
 import type { WeatherHistoryDoc } from "@/lib/db";
+import {
+  DEGRADED_NOTE,
+  HISTORY_RANGES,
+  STILL_WORKING_AFTER_MS,
+  STILL_WORKING_NOTE,
+  archiveNote,
+  historyFetchOptions,
+  historyNotices,
+  historyQuery,
+  historySource,
+  isArchiveSource,
+  readHistoryAnswer,
+  type HistoryDays,
+  type HistorySource,
+  type HistorySourceCredit,
+} from "@/lib/history-api";
+import { HistoryAttribution } from "@/components/weather/HistoryAttribution";
 import type { ActivityCategory } from "@/lib/activities";
 import type { ActivityCategoryDoc } from "@/lib/db";
 import type { WeatherLocation } from "@/lib/locations";
 import { CATEGORIES } from "@/lib/seed-categories";
 import { fetchJson } from "@/lib/fetch-json";
+import { createLatestRequests } from "@/lib/latest-request";
 import { fetchActivityCategories } from "@/lib/activities-client";
 import {
   heatStressLevel,
@@ -43,7 +61,7 @@ import { fetchWorker, workerUrl } from "@/lib/weather-api";
 // Types
 // ---------------------------------------------------------------------------
 
-type DayRange = 7 | 14 | 30 | 90 | 180 | 365;
+type DayRange = HistoryDays;
 type ViewTab = "weather" | "insights";
 
 /** The slice of a location this dashboard needs — satisfied by both the
@@ -52,12 +70,15 @@ type SelectedHistoryLocation = {
   slug: string;
   name: string;
   province?: string;
+  /** Sent with the slug so a place the Worker cannot name still has history. */
+  lat?: number;
+  lon?: number;
 };
 
 interface HistoryRecord {
   date: string;
-  /** Provenance — archive days are ERA5 reanalysis daily means. */
-  source: "recorded" | "open-meteo-archive";
+  /** Provenance — archive days are reanalysis daily means (NASA POWER, ERA5). */
+  source: HistorySource;
   tempHigh: number;
   tempLow: number;
   feelsLikeHigh: number;
@@ -71,13 +92,15 @@ interface HistoryRecord {
   /** null for archive days — the reanalysis archive has no UV index. */
   uvIndex: number | null;
   windSpeed: number | null;
-  windGusts: number;
-  windDirection: number;
+  /** null when the source has no gusts (an archive day may not). */
+  windGusts: number | null;
+  windDirection: number | null;
   windDirectionLabel: string;
   sunrise: string;
   sunset: string;
   daylightHours: number;
-  weatherCode: number;
+  /** null when the source publishes no present-weather code. */
+  weatherCode: number | null;
   condition: string;
 }
 
@@ -133,7 +156,7 @@ export function historyErrorMessage(status: number, detail?: unknown): string {
 
 /** Number of archive-filled days in a record set. Exported for tests. */
 export function countArchiveDays(records: { source: string }[]): number {
-  return records.filter((r) => r.source === "open-meteo-archive").length;
+  return records.filter((r) => isArchiveSource(r.source)).length;
 }
 
 /** Round a value that may be null/undefined (archive daily means can be). */
@@ -153,14 +176,17 @@ export function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
         const daily = doc.daily;
         const current = doc.current;
 
+        const windDir =
+          current.wind_direction_10m ??
+          daily?.wind_direction_10m_dominant?.[0] ??
+          null;
+        const code = current.weather_code ?? daily?.weather_code?.[0] ?? null;
         const sunriseRaw = daily?.sunrise?.[0] ?? "";
         const sunsetRaw = daily?.sunset?.[0] ?? "";
 
         return {
           date: doc.date,
-          source: (doc.source === "open-meteo-archive"
-            ? "open-meteo-archive"
-            : "recorded") as HistoryRecord["source"],
+          source: historySource(doc.source),
           tempHigh:
             daily?.temperature_2m_max?.[0] != null
               ? Math.round(daily.temperature_2m_max[0])
@@ -187,17 +213,17 @@ export function transformHistory(docs: WeatherHistoryDoc[]): HistoryRecord[] {
           windGusts:
             daily?.wind_gusts_10m_max?.[0] != null
               ? Math.round(daily.wind_gusts_10m_max[0])
-              : Math.round(current.wind_gusts_10m),
-          windDirection: current.wind_direction_10m,
-          windDirectionLabel: windDirection(current.wind_direction_10m),
+              : roundOrNull(current.wind_gusts_10m),
+          windDirection: windDir,
+          windDirectionLabel: windDir != null ? windDirection(windDir) : "—",
           sunrise: sunriseRaw ? formatSunTime(sunriseRaw) : "--:--",
           sunset: sunsetRaw ? formatSunTime(sunsetRaw) : "--:--",
           daylightHours:
             sunriseRaw && sunsetRaw
               ? daylightFromSunTimes(sunriseRaw, sunsetRaw)
               : 0,
-          weatherCode: current.weather_code,
-          condition: weatherCodeToInfo(current.weather_code).label,
+          weatherCode: code,
+          condition: code != null ? weatherCodeToInfo(code).label : "—",
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date))
@@ -226,14 +252,7 @@ export function transformInsights(docs: WeatherHistoryDoc[]): InsightsRecord[] {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-const DAY_OPTIONS: { value: DayRange; label: string }[] = [
-  { value: 7, label: "7 days" },
-  { value: 14, label: "14 days" },
-  { value: 30, label: "30 days" },
-  { value: 90, label: "3 months" },
-  { value: 180, label: "6 months" },
-  { value: 365, label: "1 year" },
-];
+const DAY_OPTIONS: { value: DayRange; label: string }[] = [...HISTORY_RANGES];
 
 /** Category style shape */
 interface CategoryStyleShape {
@@ -561,6 +580,14 @@ export function HistoryDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [fetched, setFetched] = useState(false);
+  const [sources, setSources] = useState<HistorySourceCredit[]>([]);
+  const [notices, setNotices] = useState<string[]>([]);
+  // The answer holds only part of the range for a reason other than the
+  // archive lag (an unreadable store, a spent budget, a provider outage): a
+  // retry may complete it, and the lag note would blame the wrong thing.
+  const [degraded, setDegraded] = useState(false);
+  // The request has been running long enough to say so (see STILL_WORKING_AFTER_MS).
+  const [slow, setSlow] = useState(false);
   const [visibleRowCount, setVisibleRowCount] = useState(50);
   const [activeTab, setActiveTab] = useState<ViewTab>("weather");
   const [categoryFilter, setCategoryFilter] = useState<
@@ -571,6 +598,13 @@ export function HistoryDashboard() {
   const [activityCategories, setActivityCategories] =
     useState<ActivityCategoryDoc[]>(CATEGORIES);
   const didAutoSelect = useRef(false);
+  // Only the LATEST history request may set the page: a slower, older one (a
+  // wide range for the place picked a moment ago) is aborted and ignored.
+  const [requests] = useState(createLatestRequests);
+  // The auto-select below resolves after a network round trip: it must not
+  // override a place or a range the visitor has picked by then.
+  const pickedByUser = useRef(false);
+  const daysRef = useRef<DayRange>(30);
 
   // Build category filter options and styles from API data
   const categoryFilterOptions = useMemo(() => {
@@ -624,39 +658,73 @@ export function HistoryDashboard() {
 
   const fetchHistory = useCallback(
     async (location: SelectedHistoryLocation, dayCount: DayRange) => {
+      // A new request supersedes the one in flight: it is aborted, and only
+      // this one may write state (`isLatest`, checked after every await).
+      const { signal, isLatest } = requests.begin();
       setLoading(true);
       setError(null);
+      setDegraded(false);
+      setSlow(false);
       setFetched(true);
+      const slowTimer = window.setTimeout(() => {
+        if (isLatest()) setSlow(true);
+      }, STILL_WORKING_AFTER_MS);
       try {
         const res = await fetchWorker(
           "history",
-          `location=${location.slug}&days=${dayCount}`,
+          historyQuery({
+            slug: location.slug,
+            lat: location.lat,
+            lon: location.lon,
+            days: dayCount,
+          }),
+          { signal },
+          historyFetchOptions(dayCount),
         );
         if (!res.ok) {
           const body = await res
             .json()
             .catch(() => ({ error: "Request failed" }));
+          if (!isLatest()) return;
           // FastAPI errors carry `detail`; keep `error` for older shapes.
           throw new Error(
             historyErrorMessage(res.status, body.detail ?? body.error),
           );
         }
-        const json = await res.json();
-        setRecords(transformHistory(json.data));
-        setInsightsRecords(transformInsights(json.data));
+        const json = readHistoryAnswer(await res.json());
+        if (!isLatest()) return;
+        setRecords(transformHistory(json.data as WeatherHistoryDoc[]));
+        setInsightsRecords(transformInsights(json.data as WeatherHistoryDoc[]));
+        setSources(json.sources);
+        setDegraded(json.degraded);
+        setNotices(historyNotices(json));
         setVisibleRowCount(50);
       } catch (err) {
+        // Superseded (or left the page): not an error the visitor should see.
+        if (!isLatest() || signal.aborted) return;
         setError(
           err instanceof Error ? err.message : "Failed to fetch history",
         );
         setRecords([]);
         setInsightsRecords([]);
+        setSources([]);
+        setNotices([]);
+        setDegraded(false);
       } finally {
-        setLoading(false);
+        window.clearTimeout(slowTimer);
+        if (isLatest()) {
+          setLoading(false);
+          setSlow(false);
+        }
       }
     },
-    [],
+    [requests],
   );
+
+  // Leaving the page abandons the request in flight.
+  useEffect(() => {
+    return () => requests.cancel();
+  }, [requests]);
 
   // Auto-select the global location (from My Weather / last visited location page)
   // by fetching just that one location from the API.
@@ -669,11 +737,12 @@ export function HistoryDashboard() {
     )
       .then((data) => {
         const loc = data?.location;
-        if (!loc) return;
+        // The visitor picked a place while this was looking: theirs wins.
+        if (!loc || pickedByUser.current) return;
         setSelectedLocation(loc);
         setQuery(loc.name);
         // Same path as a manual pick, so error copy and state can't drift.
-        void fetchHistory(loc, 30);
+        void fetchHistory(loc, daysRef.current);
       })
       .catch(() => {
         // Location lookup failed: leave the "select a location" state.
@@ -681,6 +750,7 @@ export function HistoryDashboard() {
   }, [globalSlug, fetchHistory]);
 
   const handleSelectLocation = (loc: SelectedHistoryLocation) => {
+    pickedByUser.current = true;
     setSelectedLocation(loc);
     setQuery(loc.name);
     setShowDropdown(false);
@@ -688,6 +758,7 @@ export function HistoryDashboard() {
   };
 
   const handleDaysChange = (newDays: DayRange) => {
+    daysRef.current = newDays;
     setDays(newDays);
     if (selectedLocation) {
       fetchHistory(selectedLocation, newDays);
@@ -697,6 +768,10 @@ export function HistoryDashboard() {
   const hasInsights = insightsRecords.length > 0;
 
   const uvValues = records.map((r) => r.uvIndex).filter(defined);
+  const gustValues = records.map((r) => r.windGusts).filter(defined);
+  const daylightValues = records
+    .map((r) => r.daylightHours)
+    .filter((h) => h > 0);
   const stats =
     records.length > 0
       ? {
@@ -721,12 +796,14 @@ export function HistoryDashboard() {
                 10
               : null,
           avgWind: avg(records.map((r) => r.windSpeed).filter(defined)),
-          maxGusts: records.reduce((m, r) => Math.max(m, r.windGusts), 0),
-          avgDaylight: records[0]?.daylightHours
+          maxGusts: gustValues.length
+            ? gustValues.reduce((m, v) => Math.max(m, v), 0)
+            : null,
+          // Days a source has no sunrise or sunset for (NASA POWER has none
+          // without a real time zone) are left out, not counted as 0 h.
+          avgDaylight: daylightValues.length
             ? Math.round(
-                (avg(records.map((r) => Math.round(r.daylightHours * 10))) /
-                  10) *
-                  10,
+                (avg(daylightValues.map((h) => Math.round(h * 10))) / 10) * 10,
               ) / 10
             : null,
         }
@@ -951,11 +1028,18 @@ export function HistoryDashboard() {
       )}
 
       {loading && (
-        <div className="flex items-center justify-center py-12">
-          <Spinner className="h-8 w-8" />
-          <span className="ml-3 text-base text-text-secondary">
-            Loading history...
-          </span>
+        <div className="flex flex-col items-center justify-center gap-2 py-12">
+          <div className="flex items-center">
+            <Spinner className="h-8 w-8" />
+            <span className="ml-3 text-base text-text-secondary">
+              Loading history...
+            </span>
+          </div>
+          {slow && (
+            <p className="dove max-w-prose text-center" role="status">
+              {STILL_WORKING_NOTE}
+            </p>
+          )}
         </div>
       )}
 
@@ -977,9 +1061,25 @@ export function HistoryDashboard() {
         </Alert>
       )}
 
+      {fetched && !loading && !error && degraded && records.length === 0 && (
+        <Alert variant="warning">
+          <AlertDescription>{DEGRADED_NOTE}</AlertDescription>
+          {selectedLocation && (
+            <button
+              type="button"
+              className="impala-sm mt-3"
+              onClick={() => fetchHistory(selectedLocation, days)}
+            >
+              Try again
+            </button>
+          )}
+        </Alert>
+      )}
+
       {fetched &&
         !loading &&
         !error &&
+        !degraded &&
         records.length === 0 &&
         selectedLocation && (
           <div className="pangolin p-8 text-center">
@@ -988,9 +1088,9 @@ export function HistoryDashboard() {
               last {days} days.
             </p>
             <p className="mt-2 text-base text-text-tertiary">
-              Past days are filled from the Open-Meteo climate archive, which
-              runs about two days behind, and today is recorded as weather is
-              fetched. Try a longer period, or check back shortly.
+              Past days are filled from climate archives (NASA POWER, then
+              Open-Meteo), which run a few days behind, and today is recorded as
+              weather is fetched. Try a longer period, or check back shortly.
             </p>
           </div>
         )}
@@ -1017,13 +1117,32 @@ export function HistoryDashboard() {
               {selectedLocation?.name} —{" "}
               {DAY_OPTIONS.find((o) => o.value === days)?.label} summary
             </h2>
-            {countArchiveDays(records) > 0 && (
-              <p className="dove mt-1">
-                {countArchiveDays(records)} of {records.length} days come from
-                the Open-Meteo climate archive (ERA5 reanalysis, daily
-                averages). The rest were recorded live.
-              </p>
+            {archiveNote(records) && (
+              <p className="dove mt-1">{archiveNote(records)}</p>
             )}
+            {notices.map((n) => (
+              <p key={n} className="dove mt-1" role="note">
+                {n}
+              </p>
+            ))}
+            {degraded && (
+              <div
+                className="mt-1 flex flex-wrap items-center gap-3"
+                role="status"
+              >
+                <p className="dove">{DEGRADED_NOTE}</p>
+                {selectedLocation && (
+                  <button
+                    type="button"
+                    className="impala-sm"
+                    onClick={() => fetchHistory(selectedLocation, days)}
+                  >
+                    Try again
+                  </button>
+                )}
+              </div>
+            )}
+            <HistoryAttribution sources={sources} />
             <h3 className="hornbill mt-4">Temperature</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Avg High" value={`${stats.avgHigh}°C`} />
@@ -1075,7 +1194,10 @@ export function HistoryDashboard() {
             <h3 className="hornbill mt-4">Wind & Daylight</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Avg Wind" value={`${stats.avgWind} km/h`} />
-              <StatCard label="Max Gusts" value={`${stats.maxGusts} km/h`} />
+              <StatCard
+                label="Max Gusts"
+                value={stats.maxGusts != null ? `${stats.maxGusts} km/h` : "—"}
+              />
               {stats.avgDaylight != null && (
                 <StatCard
                   label="Avg Daylight"
@@ -1420,7 +1542,7 @@ export function HistoryDashboard() {
                             {r.windSpeed ?? "—"}
                           </td>
                           <td className="hidden px-3 py-2 text-right text-text-tertiary md:table-cell">
-                            {r.windGusts}
+                            {r.windGusts ?? "—"}
                           </td>
                           <td className="hidden px-3 py-2 text-right text-text-tertiary text-base lg:table-cell">
                             {r.windDirectionLabel}

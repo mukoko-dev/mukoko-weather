@@ -50,19 +50,15 @@
     "AI_MODEL": "@cf/zai-org/glm-5.3-flash",
   },
   "ai": { "binding": "AI" },
-  "services": [{ "binding": "FORECAST", "service": "mukoko-weather-forecast" }],
+  "services": [
+    { "binding": "FORECAST", "service": "mukoko-weather-forecast" },
+    // The history analysis reads the same history the app shows (recorded days,
+    // archive days, and a fetch for the rest). Deploy places BEFORE this Worker.
+    { "binding": "PLACES", "service": "mukoko-weather-places" },
+  ],
   "kv_namespaces": [
     // Summaries (30 min, 1 min for fallback text) and history analyses (1 h).
     { "binding": "AI_CACHE", "id": "b0576f0244c0465d96a816a776e44e18" },
-  ],
-  "d1_databases": [
-    {
-      // place_daily, written by mukoko-weather-jobs; read for history.
-      "binding": "WEATHER_DB",
-      "database_name": "mukoko-weather",
-      "database_id": "9a8846ea-ee34-4479-bc4c-790ee2beabee",
-      "migrations_dir": "../d1/migrations",
-    },
   ],
   // Per client IP (CF-Connecting-IP, passed on by mukoko-weather-api).
   "ratelimits": [

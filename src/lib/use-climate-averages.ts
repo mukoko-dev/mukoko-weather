@@ -1,5 +1,6 @@
 "use client";
 
+import { historyFetchOptions } from "@/lib/history-api";
 import { useEffect, useState } from "react";
 import { roundCoord } from "./location-privacy";
 import { fetchWorker } from "./weather-api";
@@ -69,9 +70,12 @@ export function useRecentDays(
   useEffect(() => {
     if (!enabled || !slug) return;
     const controller = new AbortController();
-    fetchWorker("history", `location=${encodeURIComponent(slug)}&days=30`, {
-      signal: controller.signal,
-    })
+    fetchWorker(
+      "history",
+      `location=${encodeURIComponent(slug)}&days=30`,
+      { signal: controller.signal },
+      historyFetchOptions(30),
+    )
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return recentDaysFromHistory(await res.json());

@@ -462,3 +462,240 @@ export function validateUpvote(
   }
   return ok({ reportId: input.reportId.toLowerCase(), voter: input.voter });
 }
+
+// --- weather history ---------------------------------------------------------
+//
+// weather.weather_history: one document per (locationSlug, date), unique. The
+// bridge READS it (any source) and INSERTS archive days (insert-only; it never
+// updates, never writes `recorded`, which only the forecast jobs produce).
+
+/** The storage key of a place or coordinate (`weather_core::history::cell_key`). */
+export function validHistoryKey(s: string): boolean {
+  return (
+    validStorageKey(s) || /^cell:-?\d{1,3}\.\d{2}_-?\d{1,3}\.\d{2}$/.test(s)
+  );
+}
+
+export const HISTORY_ARCHIVE_SOURCES = [
+  "nasa-power",
+  "open-meteo-archive",
+] as const;
+export const HISTORY_EARLIEST = "1940-01-01";
+/** Days one read may span (about ten years). */
+export const HISTORY_MAX_SPAN_DAYS = 3660;
+export const HISTORY_MAX_KEYS = 3;
+/** Days one write may carry. */
+export const HISTORY_MAX_WRITE_DAYS = 800;
+
+/** A valid calendar date (`YYYY-MM-DD`). */
+export function validDate(s: unknown): s is string {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(`${s}T00:00:00.000Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
+const DAY_MS = 86_400_000;
+const spanDays = (a: string, b: string): number =>
+  Math.round(
+    (Date.parse(`${b}T00:00:00.000Z`) - Date.parse(`${a}T00:00:00.000Z`)) /
+      DAY_MS,
+  ) + 1;
+
+export interface HistoryRead {
+  keys: string[];
+  start: string;
+  end: string;
+  /**
+   * Also read the days recorded under the place's platform slugs
+   * (`harare-35c223`), which some writers used. The aliases are found from the
+   * place record near this point, never guessed from the name. Only for one
+   * plain place slug, with the place's own coordinates.
+   */
+  aliases: { lat: number; lon: number } | null;
+}
+
+export function validateHistoryRead(
+  params: URLSearchParams,
+): Checked<HistoryRead> {
+  const keys = params.getAll("slug");
+  if (keys.length < 1 || keys.length > HISTORY_MAX_KEYS) {
+    return err(`Give 1 to ${HISTORY_MAX_KEYS} slug parameters`);
+  }
+  if (!keys.every(validHistoryKey)) return err("Invalid location key");
+  const start = params.get("start");
+  const end = params.get("end");
+  if (!validDate(start) || !validDate(end)) {
+    return err("start and end must be YYYY-MM-DD");
+  }
+  if (start < HISTORY_EARLIEST) {
+    return err(`start must be on or after ${HISTORY_EARLIEST}`);
+  }
+  if (start > end) return err("start must be on or before end");
+  if (spanDays(start, end) > HISTORY_MAX_SPAN_DAYS) {
+    return err(`range must be at most ${HISTORY_MAX_SPAN_DAYS} days`);
+  }
+  let aliases: HistoryRead["aliases"] = null;
+  if (params.get("aliases") === "1") {
+    if (keys.length !== 1 || !validSlug(keys[0]!)) {
+      return err("aliases applies to exactly one place slug");
+    }
+    const lat = queryNumber(params.get("lat"), 90);
+    const lon = queryNumber(params.get("lon"), 180);
+    if (lat === null || lon === null) {
+      return err("aliases needs the place's lat and lon");
+    }
+    aliases = { lat, lon };
+  }
+  return ok({ keys: [...new Set(keys)], start, end, aliases });
+}
+
+/** A finite number within +-`limit`, from a query value; else `null`. */
+function queryNumber(v: string | null, limit: number): number | null {
+  if (v === null || v.trim() === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) && Math.abs(n) <= limit ? n : null;
+}
+
+const CURRENT_FIELDS = [
+  "temperature_2m",
+  "apparent_temperature",
+  "relative_humidity_2m",
+  "cloud_cover",
+  "surface_pressure",
+  "wind_speed_10m",
+  "wind_direction_10m",
+  "wind_gusts_10m",
+  "precipitation",
+  "weather_code",
+  "uv_index",
+  "is_day",
+] as const;
+
+const DAILY_NUMBER_FIELDS = [
+  "weather_code",
+  "temperature_2m_max",
+  "temperature_2m_min",
+  "apparent_temperature_max",
+  "apparent_temperature_min",
+  "precipitation_sum",
+  "wind_speed_10m_max",
+  "wind_gusts_10m_max",
+  "wind_direction_10m_dominant",
+] as const;
+
+const INSIGHT_FIELDS = ["dewPoint", "evapotranspiration"] as const;
+
+const numberOrNull = (v: unknown): v is number | null =>
+  v === null || (typeof v === "number" && Number.isFinite(v));
+
+const sunTime = (v: unknown): v is string | null =>
+  v === null ||
+  (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v));
+
+export interface ArchiveDay {
+  date: string;
+  source: (typeof HISTORY_ARCHIVE_SOURCES)[number];
+  current: Record<string, number | null>;
+  daily: Record<string, unknown[]>;
+  insights?: Record<string, number>;
+}
+
+export interface HistoryWrite {
+  key: string;
+  days: ArchiveDay[];
+}
+
+/**
+ * A batch of archive days for one key. Only fields the dashboard reads are
+ * accepted, every value is typed, and the document is built by the store from
+ * these fields, never from the caller's object. `today` bounds the dates: an
+ * archive has no future.
+ */
+export function validateHistoryWrite(
+  input: unknown,
+  today: string,
+): Checked<HistoryWrite> {
+  if (!isRecord(input)) return err("The body must be an object");
+  const { slug, days } = input;
+  if (typeof slug !== "string" || !validHistoryKey(slug)) {
+    return err("Invalid location key");
+  }
+  if (
+    !Array.isArray(days) ||
+    days.length < 1 ||
+    days.length > HISTORY_MAX_WRITE_DAYS
+  ) {
+    return err(`days must hold 1 to ${HISTORY_MAX_WRITE_DAYS} entries`);
+  }
+  const out: ArchiveDay[] = [];
+  const seen = new Set<string>();
+  for (const raw of days) {
+    if (!isRecord(raw)) return err("Each day must be an object");
+    const { date, source, current, daily, insights } = raw;
+    if (!validDate(date) || date < HISTORY_EARLIEST || date >= today) {
+      return err("Each day needs a past date (YYYY-MM-DD)");
+    }
+    if (seen.has(date)) return err("Duplicate date");
+    seen.add(date);
+    if (!HISTORY_ARCHIVE_SOURCES.includes(source as never)) {
+      return err("source must be an archive provider");
+    }
+    if (!isRecord(current)) return err("current must be an object");
+    const cur: Record<string, number | null> = {};
+    for (const k of Object.keys(current)) {
+      if (!CURRENT_FIELDS.includes(k as never)) {
+        return err(`Unknown current field ${k}`);
+      }
+      const v = current[k];
+      if (!numberOrNull(v)) return err(`current.${k} must be a number or null`);
+      cur[k] = v;
+    }
+    if (!isRecord(daily)) return err("daily must be an object");
+    const day: Record<string, unknown[]> = {};
+    for (const k of Object.keys(daily)) {
+      const v = daily[k];
+      if (!Array.isArray(v) || v.length !== 1) {
+        return err(`daily.${k} must hold one entry`);
+      }
+      if (k === "time") {
+        if (v[0] !== date) return err("daily.time must be the day's date");
+      } else if (k === "sunrise" || k === "sunset") {
+        if (!sunTime(v[0])) {
+          return err(`daily.${k} must be YYYY-MM-DDTHH:MM or null`);
+        }
+      } else if (DAILY_NUMBER_FIELDS.includes(k as never)) {
+        if (!numberOrNull(v[0])) {
+          return err(`daily.${k} must be a number or null`);
+        }
+      } else {
+        return err(`Unknown daily field ${k}`);
+      }
+      day[k] = [v[0]];
+    }
+    day.time = [date];
+    let ins: Record<string, number> | undefined;
+    if (insights !== undefined) {
+      if (!isRecord(insights)) return err("insights must be an object");
+      ins = {};
+      for (const k of Object.keys(insights)) {
+        const v = insights[k];
+        if (
+          !INSIGHT_FIELDS.includes(k as never) ||
+          typeof v !== "number" ||
+          !Number.isFinite(v)
+        ) {
+          return err(`Invalid insight ${k}`);
+        }
+        ins[k] = v;
+      }
+    }
+    out.push({
+      date,
+      source: source as ArchiveDay["source"],
+      current: cur,
+      daily: day,
+      ...(ins && Object.keys(ins).length ? { insights: ins } : {}),
+    });
+  }
+  return ok({ key: slug, days: out });
+}
