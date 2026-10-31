@@ -35,7 +35,10 @@ from py import _model_blend as blend  # noqa: E402
 
 OUT = ROOT / "tests" / "fixtures" / "model-blend.json"
 
-MEMBERS = [blend.ECMWF_IFS, blend.ECMWF_AIFS, blend.GFS, blend.ICON, blend.GEM, blend.ARPEGE]
+MEMBERS = [
+    blend.ECMWF_IFS, blend.ECMWF_AIFS, blend.GFS, blend.ICON, blend.GEM, blend.ARPEGE,
+    blend.UKMO, blend.CMA, blend.JMA,
+]
 HOURS = 26
 DAYS = 4
 
@@ -56,7 +59,12 @@ def build_raw(rng: random.Random, present: list[str], null_rate: float = 0.08) -
     daily: dict = {"time": dtimes}
     # UV, lifted index: GFS only. Visibility: some members. CAPE: some.
     only = {"uv_index": {blend.GFS}, "lifted_index": {blend.GFS}}
-    some = {"visibility": {blend.GFS, blend.ICON}, "cape": {blend.GFS, blend.ICON, blend.ECMWF_IFS}}
+    # JMA publishes no gusts, visibility or CAPE; the AIFS publishes no gusts (live-checked).
+    some = {
+        "visibility": {blend.GFS, blend.UKMO, blend.CMA, blend.ECMWF_IFS},
+        "cape": set(MEMBERS) - {blend.JMA, blend.ECMWF_AIFS},
+        "wind_gusts_10m": set(MEMBERS) - {blend.JMA, blend.ECMWF_AIFS},
+    }
 
     def num(lo, hi, nd=1):
         if rng.random() < null_rate:
@@ -256,7 +264,9 @@ def main() -> None:
     fx["now"] = now.isoformat()
     payloads = []
     cases = [
-        ("six members, seed 1", 1, MEMBERS, "southern-africa"),
+        ("nine members, seed 1", 1, MEMBERS, "southern-africa"),
+        ("the original six present, the three newer members absent", 2, MEMBERS[:6], "europe"),
+        ("eight present, one member all-null (dropped, weights renormalised)", 6, [m for m in MEMBERS if m != blend.JMA], "east-asia"),
         ("four members present (floor)", 3, [blend.ECMWF_IFS, blend.GFS, blend.ICON, blend.ARPEGE], "default"),
         ("three members present (below the new floor)", 4, [blend.ECMWF_IFS, blend.GFS, blend.GEM], "east-africa"),
         ("one member present", 5, [blend.GFS], "north-america"),
@@ -367,6 +377,41 @@ def main() -> None:
         "daily_cap_normal": enr.DAILY_CAP_NORMAL, "ttl_s": enr.ENRICHMENT_TTL_S, "empty_ttl_s": enr.EMPTY_ENRICHMENT_TTL_S,
         "unclear_429_memo_s": enr.UNCLEAR_429_MEMO_S, "fields": list(enr.ENRICHMENT_FIELDS),
     }
+
+    # --- weather.modelBlendConfig overrides (Python weights_for with a fake DB) ---
+    import types
+
+    def override_case(name, doc, region="east-africa"):
+        fake = types.ModuleType("py._db")
+
+        class _Coll:
+            def find_one(self, *_a, **_k):
+                return doc
+
+        class _DB:
+            def __getitem__(self, _k):
+                return _Coll()
+
+        fake.weather_db = lambda: _DB()
+        sys.modules["py._db"] = fake
+        blend._reset_config_cache()
+        try:
+            got = blend.weights_for(region)
+        finally:
+            del sys.modules["py._db"]
+            blend._reset_config_cache()
+        return {"name": name, "region": region, "doc": doc, "expected": got}
+
+    fx["weights_override"] = [
+        override_case("valid subset replaces the compiled-in set", {"weights": {"gfs_seamless": 0.7, "ecmwf_ifs": 0.3}}),
+        override_case("unknown ids and non-positive weights are dropped", {"weights": {"gfs_seamless": 0.7, "ecmwf_ifs": 0.3, "evil": 5, "icon_global": -1, "gem_global": 0}}),
+        override_case("a newer member can be tuned", {"weights": {"ukmo_global_deterministic_10km": 0.4, "ecmwf_ifs": 0.6}}),
+        override_case("a string weight is dropped", {"weights": {"ecmwf_ifs": "0.9", "gfs_seamless": 0.1}}),
+        override_case("nothing usable falls back to the constants", {"weights": {"evil": 1, "gfs_seamless": -2}}),
+        override_case("weights that are not an object fall back", {"weights": [1, 2]}),
+        override_case("a document without weights falls back", {"_id": "east-africa"}),
+        override_case("no document falls back", None),
+    ]
 
     OUT.write_text(json.dumps(fx, indent=2, ensure_ascii=False, sort_keys=False) + "\n")
     print(f"wrote {OUT.relative_to(ROOT)}: {OUT.stat().st_size} bytes")
