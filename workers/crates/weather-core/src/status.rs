@@ -117,13 +117,22 @@ pub fn enrichment_row(probe: &Probe, latency_ms: u64) -> Value {
     let name = "Tomorrow.io (insights enrichment)";
     let role = Some("enrichment");
     match probe {
-        Probe::Healthy(body) if flag(body, &["configured", "tomorrow"]) => row(
-            name,
-            OPERATIONAL,
-            latency_ms,
-            "Enrichment key configured; baseline unaffected",
-            role,
-        ),
+        Probe::Healthy(body) if flag(body, &["configured", "tomorrow"]) => {
+            // The forecast Worker's budget snapshot (a count of its own D1
+            // rows, no Tomorrow.io call): free tier, never the baseline.
+            let n = |k: &str| {
+                body.get("enrichment")
+                    .and_then(|e| e.get(k))
+                    .and_then(Value::as_u64)
+            };
+            let message = match (n("hourUsed"), n("hourCapNormal"), n("dayUsed"), n("dayCapNormal")) {
+                (Some(h), Some(hc), Some(d), Some(dc)) => format!(
+                    "Insights enrichment only, free tier. Calls: {h}/{hc} this hour, {d}/{dc} in 24 h (normal traffic caps). The Open-Meteo blend is the baseline"
+                ),
+                _ => "Insights enrichment only, free tier. Key configured; the Open-Meteo blend is the baseline".to_owned(),
+            };
+            row(name, OPERATIONAL, latency_ms, &message, role)
+        }
         Probe::Healthy(_) => row(
             name,
             DEGRADED,
@@ -277,6 +286,32 @@ mod tests {
         let checks = vec![core, off];
         assert_eq!(overall(&checks), OPERATIONAL);
         assert_eq!(enrichment(&checks), DEGRADED);
+    }
+
+    #[test]
+    fn enrichment_is_reported_as_enrichment_with_its_budget() {
+        let on = enrichment_row(
+            &healthy(json!({
+                "configured": {"tomorrow": true},
+                "enrichment": {"role": "enrichment", "hourUsed": 3, "hourCapNormal": 12,
+                               "dayUsed": 40, "dayCapNormal": 250},
+            })),
+            2,
+        );
+        assert_eq!(on["status"], OPERATIONAL);
+        assert_eq!(on["role"], "enrichment");
+        let m = on["message"].as_str().unwrap();
+        assert!(
+            m.contains("3/12 this hour") && m.contains("40/250 in 24 h"),
+            "{m}"
+        );
+        assert!(m.contains("blend is the baseline"), "{m}");
+        // Without a budget snapshot (D1 unreadable) the row still says what it is.
+        let bare = enrichment_row(&healthy(json!({"configured": {"tomorrow": true}})), 2);
+        assert!(bare["message"]
+            .as_str()
+            .unwrap()
+            .contains("enrichment only"));
     }
 
     #[test]
