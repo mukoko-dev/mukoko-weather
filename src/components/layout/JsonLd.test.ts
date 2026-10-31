@@ -11,7 +11,8 @@ describe("JsonLd", () => {
   it("renders a ld+json script that parses back to the data", () => {
     const html = render([{ "@type": "Place", name: "Harare" }]);
     expect(html).toMatch(/^<script type="application\/ld\+json">/);
-    const body = html.replace(/^<script[^>]*>/, "").replace(/<\/script>$/, "");
+    // The element's text is whatever sits between the first ">" and the last "</".
+    const body = html.slice(html.indexOf(">") + 1, html.lastIndexOf("</"));
     expect(JSON.parse(body)).toEqual([{ "@type": "Place", name: "Harare" }]);
   });
 
