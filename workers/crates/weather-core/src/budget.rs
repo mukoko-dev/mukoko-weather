@@ -33,6 +33,16 @@ pub enum Action {
     /// Open-Meteo model-grid fetch (a cache miss of `/v1/model-grid`: one
     /// request carries 49 locations, and the free API allows about 10,000 a day).
     ModelGrid,
+    /// A history request that goes to an external archive (a place).
+    HistoryBackfill,
+    /// The same for a bare coordinate: anonymous and unbounded in number, so
+    /// tighter.
+    HistoryBackfillCoords,
+    /// One NASA POWER call (whole service; POWER asks for equitable use).
+    HistoryNasaPower,
+    /// One Open-Meteo archive call (whole service; the free API is shared with
+    /// the forecast, air quality and haze).
+    HistoryOpenMeteo,
 }
 
 /// Hourly limits for one action.
@@ -50,6 +60,10 @@ impl Action {
             Action::Search => "geocode-search",
             Action::Nominatim => "nominatim",
             Action::ModelGrid => "model-grid",
+            Action::HistoryBackfill => "history-backfill",
+            Action::HistoryBackfillCoords => "history-backfill-coords",
+            Action::HistoryNasaPower => "history-nasa-power",
+            Action::HistoryOpenMeteo => "history-open-meteo",
         }
     }
 
@@ -80,6 +94,27 @@ impl Action {
             Action::ModelGrid => Limits {
                 per_client: 30,
                 global: 100,
+            },
+            // 30 backfilling requests an hour per client (as in the Python
+            // backend), 10 for bare coordinates; the service-wide caps keep
+            // the providers' own limits out of reach.
+            Action::HistoryBackfill => Limits {
+                per_client: 30,
+                global: 600,
+            },
+            Action::HistoryBackfillCoords => Limits {
+                per_client: 10,
+                global: 300,
+            },
+            // The provider budgets are service-wide: every caller counts
+            // against the same hour, so the per-client part equals the whole.
+            Action::HistoryNasaPower => Limits {
+                per_client: 600,
+                global: 600,
+            },
+            Action::HistoryOpenMeteo => Limits {
+                per_client: 200,
+                global: 200,
             },
         }
     }

@@ -26,6 +26,7 @@ pub mod external_feeds;
 pub mod forecast;
 pub mod geo;
 pub mod haze;
+pub mod history;
 pub mod jobs;
 pub mod locations;
 pub mod model_grid;

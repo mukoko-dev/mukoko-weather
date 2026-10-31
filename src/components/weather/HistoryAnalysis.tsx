@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SafeMarkdown } from "@/components/ui/safe-markdown";
 import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
+import { fetchWorker } from "@/lib/weather-api";
 import { ShamwariCTA } from "./ShamwariCTA";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -40,22 +41,36 @@ export function HistoryAnalysis({
     setError(null);
 
     try {
-      const res = await fetch("/api/py/history/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          location: locationSlug,
-          days,
-          ...(selectedActivities.length > 0 && {
-            activities: selectedActivities,
-          }),
+      const payload = JSON.stringify({
+        location: locationSlug,
+        days,
+        ...(selectedActivities.length > 0 && {
+          activities: selectedActivities,
         }),
       });
+      const init: RequestInit = {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+      };
+      // The Worker reads the same history the page shows (recorded days,
+      // archive days, and a fetch for the rest). The Python route reads only
+      // what MongoDB holds, so it is the fallback when the Worker is down.
+      let res = await fetchWorker("ai/history/analyze", "", init, {
+        retries: 0,
+        timeoutMs: 40_000,
+      }).catch(() => null);
+      if (!res || res.status >= 500) {
+        res = await fetch("/api/py/history/analyze", init);
+      }
 
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         throw new Error(
-          body?.detail || body?.error || `Request failed (${res.status})`,
+          body?.detail ||
+            body?.error_description ||
+            body?.error ||
+            `Request failed (${res.status})`,
         );
       }
 

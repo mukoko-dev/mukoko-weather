@@ -45,6 +45,8 @@ function matches(doc: Doc, filter: Doc): boolean {
             return (arg as unknown[]).some((x) => same(x, v));
           case "$gte":
             return (v as Date) >= (arg as Date);
+          case "$lte":
+            return (v as Date) <= (arg as Date);
           case "$gt":
             return (v as Date) > (arg as Date);
           case "$ne":
@@ -156,18 +158,34 @@ export class FakeColl implements Coll {
   ): Promise<Doc[]> {
     this.calls.push({ op: "findMany", filter, options });
     const [[field, dir]] = Object.entries(options.sort) as [[string, number]];
+    const key = (x: Doc): number | string => {
+      const v = x[field];
+      return v instanceof Date ? v.getTime() : (v as string);
+    };
     return this.docs
       .filter((x) => matches(x, filter))
-      .sort(
-        (a, b) =>
-          dir * ((a[field] as Date).getTime() - (b[field] as Date).getTime()),
-      )
+      .sort((a, b) => dir * (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0))
       .slice(0, options.limit)
       .map((x) => {
         const out: Doc = {};
         for (const k of Object.keys(options.projection))
-          out[k] = structuredClone(x[k]);
+          if (options.projection[k] === 1) out[k] = structuredClone(x[k]);
         return out;
       });
+  }
+
+  async insertIfAbsent(
+    items: { filter: Doc; doc: Doc }[],
+  ): Promise<{ inserted: number }> {
+    this.calls.push({ op: "insertIfAbsent", options: items });
+    let inserted = 0;
+    for (const { filter, doc } of items) {
+      if (this.docs.some((x) => matches(x, filter))) continue;
+      const stored: Doc = { ...structuredClone(doc) };
+      for (const [k, v] of Object.entries(filter)) stored[k] = v;
+      this.docs.push(stored);
+      inserted++;
+    }
+    return { inserted };
   }
 }

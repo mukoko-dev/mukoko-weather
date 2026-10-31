@@ -28,6 +28,7 @@
 mod bridge;
 mod budget;
 mod community;
+mod history;
 mod limits;
 mod sources;
 
@@ -36,7 +37,7 @@ use weather_core::budget::Action;
 use weather_core::geo::valid_coordinates;
 use weather_core::locations::{self, LocationDoc};
 use weather_core::resolve::{self, Naming, PointAnswer, SpotKind};
-use weather_edge::{error, json, now_ms, query_pairs};
+use weather_edge::{error, json, query_pairs};
 use worker::{event, Context, Env, Method, Request, Response, Result};
 
 const DB: &str = "WEATHER_DB";
@@ -78,7 +79,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         "/locations" => locations_route(&env, &q).await,
         "/search" => search_route(&req, &env, &q).await,
         "/geo" => geo_route(&req, &env, &q).await,
-        "/history" => history_route(&env, &q).await,
+        "/history" => history_route(&req, &env, &q).await,
         _ => error(404, "not_found", "No such route."),
     }
 }
@@ -445,55 +446,14 @@ async fn geo_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
     }
 }
 
-async fn history_route(env: &Env, q: &Query) -> Result<Response> {
-    let Some(location) = q.get("location") else {
-        return error(400, "invalid_request", "Missing location parameter");
+async fn history_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
+    let params = match history::validate(&q.0) {
+        Ok(p) => p,
+        Err(resp) => return resp,
     };
-    let days = match q.int("days", 30) {
-        Ok(d) if (1..=365).contains(&d) => d,
-        _ => return error(400, "invalid_request", "days must be between 1 and 365"),
+    let found = match params.location.as_deref() {
+        Some(slug) => Some(find_location(env, slug).await),
+        None => None,
     };
-    let slug = match find_location(env, location).await {
-        Ok(Some(loc)) => loc.slug,
-        Ok(None) => return error(404, "not_found", "Unknown location"),
-        Err(()) => return error(503, "places_unavailable", "Location service unavailable"),
-    };
-
-    let since = now_ms().saturating_sub(days as u64 * 86_400_000) as f64;
-    let rows = async {
-        env.d1(DB)?
-            .prepare(
-                "SELECT slug, recorded_at, current, daily, insights FROM place_daily \
-                 WHERE slug = ?1 AND recorded_at >= ?2 ORDER BY recorded_at DESC LIMIT 400",
-            )
-            .bind(&[slug.as_str().into(), since.into()])?
-            .all()
-            .await?
-            .results::<Value>()
-    }
-    .await;
-    let Ok(rows) = rows else {
-        return error(
-            502,
-            "history_unavailable",
-            "Failed to fetch weather history",
-        );
-    };
-    let data: Vec<Value> = rows
-        .iter()
-        .map(|r| {
-            let s = |k: &str| r.get(k).and_then(Value::as_str);
-            locations::history_record(
-                &slug,
-                r.get("recorded_at").and_then(Value::as_f64).unwrap_or(0.0) as i64,
-                s("current"),
-                s("daily"),
-                s("insights"),
-            )
-        })
-        .collect();
-    cached_json(
-        &json!({"location": slug, "days": days, "records": data.len(), "data": data}),
-        600,
-    )
+    history::serve(req, env, params, found).await
 }

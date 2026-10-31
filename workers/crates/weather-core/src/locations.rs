@@ -528,32 +528,6 @@ fn normalize_admin1(address: &Map<String, Value>, country: &str, country_name: &
     first(&["state_district", "city_district", "region", "county"])
 }
 
-/// One `/api/py/history` record from a `place_daily` row.
-pub fn history_record(
-    slug: &str,
-    recorded_at_ms: i64,
-    current: Option<&str>,
-    daily: Option<&str>,
-    insights: Option<&str>,
-) -> Value {
-    let parse = |s: Option<&str>| s.and_then(|s| serde_json::from_str::<Value>(s).ok());
-    let at = chrono::DateTime::from_timestamp_millis(recorded_at_ms)
-        .unwrap_or_default()
-        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    let mut rec = json!({
-        "locationSlug": slug,
-        "recordedAt": at,
-        "current": parse(current).unwrap_or_else(|| json!({})),
-    });
-    if let Some(d) = parse(daily) {
-        rec["daily"] = d;
-    }
-    if let Some(i) = parse(insights).filter(|v| !v.is_null()) {
-        rec["insights"] = i;
-    }
-    rec
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -688,21 +662,5 @@ mod tests {
         );
         assert_eq!(l.country.as_deref(), Some("ZW"));
         assert_eq!(l.source, "places");
-    }
-
-    #[test]
-    fn history_rows_keep_the_python_shape() {
-        let r = history_record(
-            "harare",
-            1_759_622_400_000,
-            Some(r#"{"temperature_2m": 25}"#),
-            Some(r#"{"date": "2025-10-05", "tempMax": 29}"#),
-            None,
-        );
-        assert_eq!(r["locationSlug"], "harare");
-        assert_eq!(r["recordedAt"], "2025-10-05T00:00:00Z");
-        assert_eq!(r["current"]["temperature_2m"], 25);
-        assert_eq!(r["daily"]["tempMax"], 29);
-        assert!(r.get("insights").is_none());
     }
 }

@@ -14,8 +14,11 @@
 
 import { ObjectId, type Collection, type Document } from "mongodb";
 import {
+  HISTORY_MAX_KEYS,
+  HISTORY_MAX_SPAN_DAYS,
   LIST_LIMIT,
   readPreferences,
+  type ArchiveDay,
   type NewReport,
   type Preferences,
   type WeatherSnapshot,
@@ -37,6 +40,14 @@ export interface Coll {
     filter: Doc,
     options: { projection: Doc; sort: Doc; limit: number },
   ): Promise<Doc[]>;
+  /**
+   * Insert each document unless one with the same filter exists (insert-only:
+   * `$setOnInsert` with upsert, unordered). Returns how many were inserted;
+   * a duplicate-key race with another writer is not an error.
+   */
+  insertIfAbsent(
+    items: { filter: Doc; doc: Doc }[],
+  ): Promise<{ inserted: number }>;
 }
 
 /** A server-side time limit on every operation, so a stuck query frees the connection. */
@@ -64,6 +75,31 @@ export function fromMongo(col: Collection<Document>): Coll {
         maxTimeMS: MAX_TIME_MS,
       });
       return { modifiedCount: r.modifiedCount };
+    },
+    insertIfAbsent: async (items) => {
+      if (items.length === 0) return { inserted: 0 };
+      try {
+        const r = await col.bulkWrite(
+          items.map(({ filter, doc }) => ({
+            updateOne: { filter, update: { $setOnInsert: doc }, upsert: true },
+          })),
+          { ordered: false },
+        );
+        return { inserted: r.upsertedCount };
+      } catch (e) {
+        // A concurrent writer won the unique (locationSlug, date) race for
+        // some days: theirs stays, ours is dropped. Anything else is real.
+        const errors = (e as { writeErrors?: { code?: number }[] }).writeErrors;
+        const result = (e as { result?: { upsertedCount?: number } }).result;
+        if (
+          Array.isArray(errors) &&
+          errors.length > 0 &&
+          errors.every((x) => x.code === 11000)
+        ) {
+          return { inserted: result?.upsertedCount ?? 0 };
+        }
+        throw e;
+      }
     },
     findMany: (filter, options) =>
       col
@@ -258,6 +294,81 @@ export function reportStore(col: Coll): ReportStore {
         { $addToSet: { upvotedBy: voter }, $inc: { upvotes: 1 } },
       );
       return res.modifiedCount === 1;
+    },
+  };
+}
+
+// --- weather history -------------------------------------------------------
+//
+//   weather.weather_history  {locationSlug, date, source, provider, aggregation,
+//                             current{...}, daily{...}, insights{...},
+//                             recordedAt, createdAt}
+//   UNIQUE index {locationSlug: 1, date: -1} (db-init). Never created here.
+
+export interface HistoryStore {
+  /** Days dated `start`..`end` under any of the keys, newest first. */
+  read(keys: string[], start: string, end: string): Promise<Doc[]>;
+  /** Insert-only: a day that exists is left untouched. */
+  insertArchiveDays(
+    key: string,
+    days: ArchiveDay[],
+    now: Date,
+  ): Promise<{ inserted: number; existing: number }>;
+}
+
+const HISTORY_PROJECTION: Doc = {
+  _id: 0,
+  locationSlug: 1,
+  date: 1,
+  source: 1,
+  provider: 1,
+  aggregation: 1,
+  current: 1,
+  daily: 1,
+  insights: 1,
+  recordedAt: 1,
+};
+
+/** Never more than three keys over ten years. */
+const HISTORY_READ_LIMIT = HISTORY_MAX_KEYS * HISTORY_MAX_SPAN_DAYS;
+
+export function historyStore(col: Coll): HistoryStore {
+  return {
+    async read(keys, start, end) {
+      const docs = await col.findMany(
+        { locationSlug: { $in: keys }, date: { $gte: start, $lte: end } },
+        {
+          projection: HISTORY_PROJECTION,
+          sort: { date: -1 },
+          limit: HISTORY_READ_LIMIT,
+        },
+      );
+      return docs
+        .filter((d) => typeof d.date === "string")
+        .map((d) => ({
+          ...d,
+          // Documents written before `source` existed were recorded days.
+          source: typeof d.source === "string" ? d.source : "recorded",
+          recordedAt: iso(d.recordedAt),
+        }));
+    },
+    async insertArchiveDays(key, days, now) {
+      const { inserted } = await col.insertIfAbsent(
+        days.map((d) => ({
+          filter: { locationSlug: key, date: d.date },
+          doc: {
+            source: d.source,
+            provider: d.source,
+            aggregation: "daily-mean",
+            current: d.current,
+            daily: d.daily,
+            ...(d.insights ? { insights: d.insights } : {}),
+            recordedAt: now,
+            createdAt: now,
+          },
+        })),
+      );
+      return { inserted, existing: days.length - inserted };
     },
   };
 }

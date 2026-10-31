@@ -245,6 +245,16 @@ export function SiteFooter() {
             >
               Tomorrow.io
             </a>
+            ; climate history:{" "}
+            <a
+              href="https://power.larc.nasa.gov"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="dik-dik hover:text-text-secondary transition-colors"
+            >
+              NASA POWER
+            </a>{" "}
+            (NASA LaRC POWER Project) and Open-Meteo ERA5
           </p>
         </div>
       </div>

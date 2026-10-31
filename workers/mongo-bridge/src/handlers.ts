@@ -8,16 +8,20 @@
 //   POST /reports           a validated report          → 201 {id, verified, expiresIn}
 //   GET  /reports?slug=..[&slug=..][&hours=][&limit=]   → 200 {reports}
 //   POST /reports/upvote    {reportId, voter}           → 200 {upvoted[, reason]}
+//   GET  /history?slug=..[&slug=..]&start=&end=         → 200 {days}  (weather.weather_history)
+//   POST /history/days      {slug, days:[archive day]}  → 200 {inserted, existing}  (insert-only)
 //
 // Errors use the Workers' envelope: {error, error_description}.
 
-import type { DeviceStore, ReportStore } from "./stores";
+import type { DeviceStore, HistoryStore, ReportStore } from "./stores";
 import {
   isRecord,
   ttlSeconds,
   validDeviceId,
   validatePatch,
   validatePreferences,
+  validateHistoryRead,
+  validateHistoryWrite,
   validateListQuery,
   validateReport,
   validateUpvote,
@@ -26,6 +30,7 @@ import {
 export interface Stores {
   devices: DeviceStore;
   reports: ReportStore;
+  history: HistoryStore;
 }
 
 export interface Result {
@@ -64,7 +69,9 @@ export function needsStores(path: string): boolean {
     path === "/devices" ||
     path.startsWith("/devices/") ||
     path === "/reports" ||
-    path === "/reports/upvote"
+    path === "/reports/upvote" ||
+    path === "/history" ||
+    path === "/history/days"
   );
 }
 
@@ -91,6 +98,16 @@ export async function route(call: Call, deps: Deps): Promise<Result> {
     return method === "POST"
       ? upvoteReport(call, deps)
       : notAllowed("POST /reports/upvote");
+  }
+  if (path === "/history") {
+    return method === "GET"
+      ? readHistory(call, deps)
+      : notAllowed("GET /history");
+  }
+  if (path === "/history/days") {
+    return method === "POST"
+      ? writeHistoryDays(call, deps)
+      : notAllowed("POST /history/days");
   }
   return fail(404, "not_found", "No such route.");
 }
@@ -204,4 +221,27 @@ async function upvoteReport(call: Call, deps: Deps): Promise<Result> {
       ? { upvoted: true }
       : { upvoted: false, reason: "Already upvoted or report not found" },
   };
+}
+
+async function readHistory(call: Call, deps: Deps): Promise<Result> {
+  const q = validateHistoryRead(call.query);
+  if (!q.ok) return badRequest(q.detail);
+  const days = await deps.stores.history.read(
+    q.value.keys,
+    q.value.start,
+    q.value.end,
+  );
+  return { status: 200, body: { days } };
+}
+
+async function writeHistoryDays(call: Call, deps: Deps): Promise<Result> {
+  const now = deps.now();
+  const w = validateHistoryWrite(call.body, now.toISOString().slice(0, 10));
+  if (!w.ok) return badRequest(w.detail);
+  const res = await deps.stores.history.insertArchiveDays(
+    w.value.key,
+    w.value.days,
+    now,
+  );
+  return { status: 200, body: res };
 }

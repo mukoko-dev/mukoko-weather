@@ -1,0 +1,154 @@
+import { describe, expect, it } from "vitest";
+import {
+  ARCHIVE_SOURCES,
+  CLAMPED_NOTE,
+  HISTORY_MAX_DAYS,
+  HISTORY_RANGES,
+  archiveNote,
+  historyQuery,
+  historySource,
+  isArchiveSource,
+  lagNote,
+  readHistoryAnswer,
+} from "./history-api";
+
+describe("ranges", () => {
+  it("offers 2 and 5 years, all inside what the Worker accepts", () => {
+    const days = HISTORY_RANGES.map((r) => r.value);
+    expect(days).toContain(730);
+    expect(days).toContain(1825);
+    expect(Math.max(...days)).toBeLessThanOrEqual(HISTORY_MAX_DAYS);
+    expect(new Set(days).size).toBe(days.length);
+    expect([...days].sort((a, b) => a - b)).toEqual(days);
+    expect(HISTORY_RANGES.find((r) => r.value === 1825)?.label).toBe("5 years");
+  });
+});
+
+describe("historyQuery", () => {
+  it("asks for the last N days by slug", () => {
+    expect(historyQuery({ slug: "harare", days: 30 })).toBe(
+      "location=harare&days=30",
+    );
+  });
+  it("escapes the slug and adds rounded coordinates", () => {
+    const q = new URLSearchParams(
+      historyQuery({
+        slug: "london--gcpvj0e",
+        lat: 51.507221,
+        lon: -0.127612,
+        days: 365,
+      }),
+    );
+    expect(q.get("location")).toBe("london--gcpvj0e");
+    expect(q.get("lat")).toBe("51.507");
+    expect(q.get("lon")).toBe("-0.128");
+    expect(q.get("days")).toBe("365");
+  });
+  it("lets start and end win over days", () => {
+    const q = new URLSearchParams(
+      historyQuery({
+        slug: "tokyo-jp",
+        days: 30,
+        start: "2020-01-01",
+        end: "2020-12-31",
+      }),
+    );
+    expect(q.get("start")).toBe("2020-01-01");
+    expect(q.get("end")).toBe("2020-12-31");
+    expect(q.has("days")).toBe(false);
+  });
+  it("never asks for more than the Worker allows", () => {
+    expect(historyQuery({ slug: "a", days: 99999 })).toContain(
+      `days=${HISTORY_MAX_DAYS}`,
+    );
+    expect(historyQuery({ slug: "a", days: 0 })).toContain("days=1");
+  });
+  it("omits half a coordinate pair", () => {
+    expect(historyQuery({ slug: "a", lat: 1 })).not.toContain("lat=");
+  });
+});
+
+describe("sources", () => {
+  it("knows the archive providers and treats anything else as recorded", () => {
+    expect(ARCHIVE_SOURCES).toEqual(["nasa-power", "open-meteo-archive"]);
+    expect(historySource("nasa-power")).toBe("nasa-power");
+    expect(historySource("open-meteo-archive")).toBe("open-meteo-archive");
+    expect(historySource("recorded")).toBe("recorded");
+    expect(historySource(undefined)).toBe("recorded");
+    expect(historySource("something-else")).toBe("recorded");
+    expect(isArchiveSource("nasa-power")).toBe(true);
+    expect(isArchiveSource("recorded")).toBe(false);
+  });
+});
+
+describe("readHistoryAnswer", () => {
+  it("reads the envelope the Worker sends", () => {
+    const a = readHistoryAnswer({
+      data: [{ date: "2026-10-28" }],
+      sources: [
+        {
+          id: "nasa-power",
+          name: "NASA POWER",
+          attribution: "Data obtained from NASA",
+          url: "https://power.larc.nasa.gov",
+          licence: "NASA open data",
+          licenceUrl: "https://example.org/policy",
+        },
+        { id: "broken" },
+        null,
+      ],
+      backfilled: 3,
+      clamped: true,
+      missing: 2,
+      saved: false,
+    });
+    expect(a.data).toHaveLength(1);
+    expect(a.sources).toHaveLength(1);
+    expect(a.sources[0]!.licenceUrl).toBe("https://example.org/policy");
+    expect(a).toMatchObject({
+      backfilled: 3,
+      clamped: true,
+      missing: 2,
+      saved: false,
+    });
+  });
+  it("tolerates an older body that has only data", () => {
+    expect(readHistoryAnswer({ data: [] })).toEqual({
+      data: [],
+      sources: [],
+      backfilled: 0,
+      clamped: false,
+      missing: 0,
+      saved: true,
+    });
+    expect(readHistoryAnswer(null).data).toEqual([]);
+    expect(readHistoryAnswer("nope").sources).toEqual([]);
+  });
+});
+
+describe("notes", () => {
+  it("names the archive that supplied the days", () => {
+    expect(archiveNote([{ source: "recorded" }])).toBeNull();
+    expect(
+      archiveNote([{ source: "recorded" }, { source: "nasa-power" }]),
+    ).toBe(
+      "1 of 2 days come from NASA POWER (reanalysis, daily averages). The rest were recorded live.",
+    );
+    expect(
+      archiveNote([{ source: "open-meteo-archive" }, { source: "recorded" }]),
+    ).toContain("the Open-Meteo ERA5 archive");
+    expect(
+      archiveNote([{ source: "open-meteo-archive" }, { source: "nasa-power" }]),
+    ).toContain("NASA POWER and the Open-Meteo ERA5 archive");
+  });
+  it("explains a clamp and a lag", () => {
+    expect(CLAMPED_NOTE).toContain("most recent year");
+    expect(lagNote(0)).toBeNull();
+    expect(lagNote(1)).toBe(
+      "One day has no data yet: archives run a few days behind.",
+    );
+    expect(lagNote(3)).toBe(
+      "3 days have no data yet: archives run a few days behind.",
+    );
+  });
+});

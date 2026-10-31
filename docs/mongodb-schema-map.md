@@ -129,6 +129,8 @@ Mukoko owns most of this but **must adopt the new schemas** (`_schemaVersion`, `
 | `communityReports`                                                                                                   | `weather_reports` (snake_case) | **RENAME + RESCHEMA.** Now camelCase, includes `imageUrls`, `reporterPersonId` (→ identity), `qcStatus`.                                                                                                                                                                |
 | `activities`, `activity_categories`, `suitability_rules`, `ai_prompts`, `ai_suggested_rules`, `seasons`, `locations` | Same                           | Existing; need to adopt `_schemaVersion` + `bundu` patterns.                                                                                                                                                                                                            |
 
+`weather_history` is read and written by the Rust Workers only through `mukoko-weather-mongo-bridge` (`GET /history`, `POST /history/days`, #268): the Worker never writes MongoDB directly, the bridge inserts archive days (`source` `nasa-power` or `open-meteo-archive`) insert-only into the existing unique `{locationSlug, date}` index and can never write a `recorded` day. The days the forecast jobs record live in D1 `place_daily`; the history route reads both stores.
+
 #### `shamwari` — AI / chatbot (replaces our local AI tables)
 
 Our `ai_summaries` + `ai_prompts` + `ai_suggested_rules` in `weather` DB stay (mukoko-specific). But **conversations** move here.
