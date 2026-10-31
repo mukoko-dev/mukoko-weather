@@ -36,6 +36,13 @@ pub const OPEN_METEO: Config = Config {
     window_ms: 5 * 60_000,
 };
 
+/// ISRIC SoilGrids: 3 failures in 10 min open it for 15 min.
+pub const SOILGRIDS: Config = Config {
+    failure_threshold: 3,
+    cooldown_ms: 15 * 60_000,
+    window_ms: 10 * 60_000,
+};
+
 /// The Python default for every other provider (NOAA CPC, NEA data.gov.sg,
 /// the Aviation Weather Center): 3 failures in 5 min open it for 2 min.
 pub const DEFAULT: Config = Config {
