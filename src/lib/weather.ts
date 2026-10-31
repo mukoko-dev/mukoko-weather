@@ -76,6 +76,8 @@ export interface DailyWeather {
   precipitation_probability_max: number[];
   wind_speed_10m_max: number[];
   wind_gusts_10m_max: number[];
+  /** Dominant wind direction (degrees); stored history days carry it. */
+  wind_direction_10m_dominant?: (number | null)[];
   /** FAO reference evapotranspiration (mm/day) — TS direct path only. */
   et0_fao_evapotranspiration?: (number | null)[];
 }

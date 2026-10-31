@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  DEGRADED_NOTE,
+  HISTORY_FAILED_NOTE,
+  historyFetchOptions,
+  readHistoryAnswer,
+} from "@/lib/history-api";
 import { roundCoord } from "@/lib/location-privacy";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatGrid } from "./StatGrid";
@@ -36,6 +42,15 @@ interface Normals {
 
 const WINDOW_DAYS = 30;
 
+/** What the card shows of the history answer. */
+interface HistoryState {
+  summary: HistorySummary;
+  /** Part of the range could not be loaded (not the archive lag): retry may help. */
+  degraded: boolean;
+  /** The request itself failed. */
+  failed: boolean;
+}
+
 /** "YYYY-MM-DD" for `n` days ago (the normals API only uses month and day). */
 function isoDaysAgo(n: number): string {
   return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
@@ -55,17 +70,41 @@ function averageNormals(a: Normals, b: Normals): Normals {
 }
 
 export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
-  const [history, setHistory] = useState<HistorySummary | null>(null);
+  const [history, setHistory] = useState<HistoryState | null>(null);
   const [normals, setNormals] = useState<Normals | null>(null);
+  // Bumped by "Try again": reruns the effect below.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
-    fetchWorker("history", `location=${encodeURIComponent(slug)}&days=30`)
-      .then(async (res) => (res.ok ? res.json() : { data: [] }))
-      .then((json: { data?: unknown[] }) => {
-        if (live) setHistory(summarizeHistory((json.data ?? []) as never[]));
+    fetchWorker(
+      "history",
+      `location=${encodeURIComponent(slug)}&days=30`,
+      {},
+      historyFetchOptions(30),
+    )
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return readHistoryAnswer(await res.json());
       })
-      .catch(() => live && setHistory(summarizeHistory([])));
+      .then((answer) => {
+        if (live) {
+          setHistory({
+            summary: summarizeHistory(answer.data as never[]),
+            degraded: answer.degraded,
+            failed: false,
+          });
+        }
+      })
+      .catch(
+        () =>
+          live &&
+          setHistory({
+            summary: summarizeHistory([]),
+            degraded: false,
+            failed: true,
+          }),
+      );
     // Normals are for one calendar day, and temperatures slope across a
     // 30-day window, so compare against the mean of the normals at both ends
     // of it. Sequential on purpose: the first call builds the cell's table
@@ -89,13 +128,21 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
     return () => {
       live = false;
     };
-  }, [slug, lat, lon]);
+  }, [slug, lat, lon, attempt]);
 
   const normalHigh = normals?.available ? normals.normalHigh : null;
   const normalLow = normals?.available ? normals.normalLow : null;
-  const highAnomaly = formatAnomaly(history?.meanHigh, normalHigh);
-  const lowAnomaly = formatAnomaly(history?.meanLow, normalLow);
-  const loading = history === null;
+  const summary = history?.summary;
+  const highAnomaly = formatAnomaly(summary?.meanHigh, normalHigh);
+  const lowAnomaly = formatAnomaly(summary?.meanLow, normalLow);
+  const loading = history === null || summary === undefined;
+  // Say what is wrong, honestly: an unreadable store or a failed request is
+  // not "no data", and the numbers above may then be partial.
+  const trouble = history?.failed
+    ? HISTORY_FAILED_NOTE
+    : history?.degraded
+      ? DEGRADED_NOTE
+      : null;
   const normalsPending = normals === null;
 
   return (
@@ -123,8 +170,8 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
             items={[
               {
                 label: "Rain on file",
-                value: history.rainMm != null ? formatMm(history.rainMm) : "—",
-                hint: `${history.days} days stored (forecast or archive, not a gauge)`,
+                value: summary.rainMm != null ? formatMm(summary.rainMm) : "—",
+                hint: `${summary.days} days stored (forecast or archive, not a gauge)`,
               },
               {
                 label: "Rain (forecast model)",
@@ -132,12 +179,12 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
               },
               {
                 label: "Mean high",
-                value: formatTempC(history.meanHigh),
+                value: formatTempC(summary.meanHigh),
                 hint: `Normal ${normalsPending ? "…" : formatTempC(normalHigh)}${highAnomaly ? ` · ${highAnomaly}` : ""}`,
               },
               {
                 label: "Mean low",
-                value: formatTempC(history.meanLow),
+                value: formatTempC(summary.meanLow),
                 hint: `Normal ${normalsPending ? "…" : formatTempC(normalLow)}${lowAnomaly ? ` · ${lowAnomaly}` : ""}`,
               },
             ]}
@@ -146,6 +193,25 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
             Normals: 1991–2020 average over the same 30 days (ERA5 via
             Open-Meteo).
           </p>
+          {trouble && (
+            <div
+              className="flex flex-wrap items-center gap-3"
+              role="status"
+              data-history-trouble
+            >
+              <p className="dove">{trouble}</p>
+              <button
+                type="button"
+                className="impala-sm"
+                onClick={() => {
+                  setHistory(null);
+                  setAttempt((n) => n + 1);
+                }}
+              >
+                Try again
+              </button>
+            </div>
+          )}
         </>
       )}
     </section>

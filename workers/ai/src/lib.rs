@@ -32,7 +32,7 @@ use worker::{event, Context, Env, Method, Request, Response, Result};
 
 pub(crate) const FORECAST_BINDING: &str = "FORECAST";
 pub(crate) const CACHE_BINDING: &str = "AI_CACHE";
-pub(crate) const DB_BINDING: &str = "WEATHER_DB";
+pub(crate) const PLACES_BINDING: &str = "PLACES";
 const RATE_LIMITER: &str = "RATE_LIMITER";
 /// Bodies larger than this are refused before parsing.
 const MAX_BODY_BYTES: usize = 64 * 1024;
@@ -50,7 +50,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
                 "status": "ok",
                 "ai": env.ai("AI").is_ok(),
                 "cache": env.kv(CACHE_BINDING).is_ok(),
-                "history_db": env.d1(DB_BINDING).is_ok(),
+                "history": env.service(PLACES_BINDING).is_ok(),
             }),
         );
     }
@@ -99,6 +99,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     let ctx = handlers::Ctx {
         env: &env,
         guardrails,
+        client_ip: req.headers().get("CF-Connecting-IP").ok().flatten(),
     };
     match route {
         Route::Summary => handlers::summary(&ctx, body).await,

@@ -264,6 +264,150 @@ describe("transformHistory provenance (#245)", () => {
   });
 });
 
+describe("transformHistory sources and gaps (#268)", () => {
+  it("keeps each provider as the day's source and counts both as archive days", () => {
+    const rows = transformHistory([
+      { ...makeDoc("2026-01-01"), source: "nasa-power" as const },
+      { ...makeDoc("2026-01-02"), source: "open-meteo-archive" as const },
+      makeDoc("2026-01-03"),
+    ]);
+    expect(rows.map((r) => r.source)).toEqual([
+      "nasa-power",
+      "open-meteo-archive",
+      "recorded",
+    ]);
+    expect(countArchiveDays(rows)).toBe(2);
+  });
+
+  it("shows a dash, not 0 or an invented value, where a provider has no gusts, direction or condition", () => {
+    const doc = makeDoc("2026-01-01");
+    const cur = doc.current as unknown as Record<string, number | null>;
+    cur.wind_gusts_10m = null;
+    cur.wind_direction_10m = null;
+    cur.weather_code = null;
+    (doc.daily as unknown as Record<string, unknown>).wind_gusts_10m_max = [];
+    const [r] = transformHistory([doc]);
+    expect(r.windGusts).toBeNull();
+    expect(r.windDirection).toBeNull();
+    expect(r.windDirectionLabel).toBe("—");
+    expect(r.weatherCode).toBeNull();
+    expect(r.condition).toBe("—");
+  });
+
+  it("falls back to the day's dominant direction and weather code", () => {
+    const doc = makeDoc("2026-01-01");
+    const cur = doc.current as unknown as Record<string, number | null>;
+    cur.wind_direction_10m = null;
+    cur.weather_code = null;
+    Object.assign(doc.daily, {
+      wind_direction_10m_dominant: [90],
+      weather_code: [61],
+    });
+    const [r] = transformHistory([doc]);
+    expect(r.windDirection).toBe(90);
+    expect(r.windDirectionLabel).toBe("E");
+    expect(r.condition).toBe("Slight rain");
+  });
+
+  it("reads a day recorded by the forecast jobs (Open-Meteo arrays, UV from the daily max)", () => {
+    const doc = makeDoc("2026-10-30");
+    doc.daily = {
+      time: ["2026-10-30"],
+      temperature_2m_max: [31.2],
+      temperature_2m_min: [17],
+      uv_index_max: [11],
+      sunrise: ["2026-10-30T05:17"],
+      sunset: ["2026-10-30T18:01"],
+    } as unknown as WeatherHistoryDoc["daily"];
+    const [r] = transformHistory([doc]);
+    expect(r.tempHigh).toBe(31);
+    expect(r.uvIndex).toBe(11);
+    expect(r.source).toBe("recorded");
+  });
+});
+
+describe("history page wiring (#268)", () => {
+  it("asks the Worker for ranges up to 5 years with the place's coordinates, and credits the sources", async () => {
+    const fs = await import("fs");
+    const src = fs.readFileSync(
+      "src/app/history/HistoryDashboard.tsx",
+      "utf-8",
+    );
+    expect(src).toContain("historyQuery(");
+    expect(src).toContain("HISTORY_RANGES");
+    expect(src).toContain("<HistoryAttribution sources={sources} />");
+    expect(src).toContain("readHistoryAnswer(");
+    // The notes come from one pure function: the lag note only when the lag
+    // is the cause.
+    expect(src).toContain("historyNotices(json)");
+    expect(src).not.toContain("lagNote(");
+  });
+
+  it("only the latest request may set the page (a stale one is aborted and ignored)", async () => {
+    const fs = await import("fs");
+    const src = fs.readFileSync(
+      "src/app/history/HistoryDashboard.tsx",
+      "utf-8",
+    );
+    // The rule itself is tested in src/lib/latest-request.test.ts; here it is
+    // wired: a new request aborts the old one, the signal reaches the fetch
+    // (fetchWorker honours init.signal) and nothing is written once superseded.
+    expect(src).toContain("createLatestRequests");
+    expect(src).toContain("const { signal, isLatest } = requests.begin();");
+    expect(src).toContain("{ signal },");
+    expect(src).not.toMatch(
+      /historyQuery\([\s\S]*?\),\s*\{\},\s*historyFetchOptions/,
+    );
+    // Every write after an await is behind the guard, and an abort is silent.
+    expect(src).toContain("if (!isLatest()) return;");
+    expect(src).toContain("if (!isLatest() || signal.aborted) return;");
+    // Only the latest request ends the loading state.
+    expect(src).toContain("if (isLatest()) {\n          setLoading(false);");
+    // Leaving the page abandons the request in flight.
+    expect(src).toContain("return () => requests.cancel();");
+  });
+
+  it("the auto-selected place never overrides one the visitor picked", async () => {
+    const fs = await import("fs");
+    const src = fs.readFileSync(
+      "src/app/history/HistoryDashboard.tsx",
+      "utf-8",
+    );
+    expect(src).toContain("pickedByUser.current = true;");
+    expect(src).toContain("if (!loc || pickedByUser.current) return;");
+    expect(src).toContain("fetchHistory(loc, daysRef.current)");
+    expect(src).toContain("daysRef.current = newDays;");
+  });
+
+  it("says so honestly when the answer is partial, and when it is slow", async () => {
+    const fs = await import("fs");
+    const src = fs.readFileSync(
+      "src/app/history/HistoryDashboard.tsx",
+      "utf-8",
+    );
+    // A degraded answer shows the retry notice, never the archive-lag note
+    // and never "no data recorded".
+    expect(src).toContain("setDegraded(json.degraded);");
+    expect(src).toContain("{DEGRADED_NOTE}");
+    expect(src).toContain("!degraded &&\n        records.length === 0");
+    expect(src).toContain(
+      "onClick={() => fetchHistory(selectedLocation, days)}",
+    );
+    // The wait is named after STILL_WORKING_AFTER_MS.
+    expect(src).toContain("window.setTimeout(() => {");
+    expect(src).toContain("STILL_WORKING_AFTER_MS");
+    expect(src).toContain("{STILL_WORKING_NOTE}");
+    expect(src).toContain("window.clearTimeout(slowTimer);");
+  });
+
+  it("credits the archives in the footer", async () => {
+    const fs = await import("fs");
+    const src = fs.readFileSync("src/components/layout/Footer.tsx", "utf-8");
+    expect(src).toContain("https://power.larc.nasa.gov");
+    expect(src).toContain("Open-Meteo ERA5");
+  });
+});
+
 describe("transformHistory null archive means (#245)", () => {
   it("keeps missing daily means as null instead of rounding them to 0", () => {
     const doc = makeDoc("2026-01-01");
@@ -285,7 +429,7 @@ describe("transformHistory null archive means (#245)", () => {
       "src/app/history/HistoryDashboard.tsx",
       "utf-8",
     );
-    expect(src).toContain("void fetchHistory(loc, 30);");
+    expect(src).toContain("void fetchHistory(loc, daysRef.current);");
     expect(src).not.toContain("b.error ||");
   });
 });

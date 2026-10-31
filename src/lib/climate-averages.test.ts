@@ -213,6 +213,27 @@ describe("recentDaysFromHistory", () => {
     expect(out[1].precipMm).toBe(2);
     expect(recentDaysFromHistory(null)).toEqual([]);
   });
+
+  it("reads days the Worker filled from an archive, and a day the jobs recorded (#268)", () => {
+    const out = recentDaysFromHistory({
+      data: [
+        {
+          date: "2026-10-28",
+          source: "nasa-power",
+          daily: { temperature_2m_max: [32.11], precipitation_sum: [0] },
+        },
+        {
+          date: "2026-10-30",
+          source: "recorded",
+          daily: { time: ["2026-10-30"], temperature_2m_max: [31.2] },
+        },
+      ],
+    });
+    expect(out).toEqual([
+      { date: "2026-10-28", highC: 32.11, precipMm: 0 },
+      { date: "2026-10-30", highC: 31.2, precipMm: null },
+    ]);
+  });
 });
 
 describe("the Averages detail calls only the Worker", () => {

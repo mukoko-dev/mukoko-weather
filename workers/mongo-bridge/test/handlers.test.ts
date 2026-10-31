@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { route, needsStores, type Deps, type Result } from "../src/handlers";
-import { deviceStore, reportStore } from "../src/stores";
+import {
+  deviceStore,
+  historyStore,
+  placeAliasStore,
+  reportStore,
+} from "../src/stores";
 import { FakeColl } from "./fake";
 
 const NOW = new Date("2026-10-19T10:00:00.000Z");
@@ -8,8 +13,14 @@ const NOW = new Date("2026-10-19T10:00:00.000Z");
 function setup(now: Date = NOW) {
   const devices = new FakeColl(["deviceId"]);
   const reports = new FakeColl();
+  const history = new FakeColl();
   const deps: Deps = {
-    stores: { devices: deviceStore(devices), reports: reportStore(reports) },
+    stores: {
+      devices: deviceStore(devices),
+      reports: reportStore(reports),
+      history: historyStore(history),
+      places: placeAliasStore(new FakeColl()),
+    },
     now: () => now,
     randomId: () => "generated-id",
   };
@@ -20,7 +31,7 @@ function setup(now: Date = NOW) {
     query = "",
   ): Promise<Result> =>
     route({ method, path, query: new URLSearchParams(query), body }, deps);
-  return { devices, reports, deps, call };
+  return { devices, reports, history, deps, call };
 }
 
 const goodReport = {
@@ -48,6 +59,8 @@ describe("routing", () => {
     expect(needsStores("/devices/x")).toBe(true);
     expect(needsStores("/reports")).toBe(true);
     expect(needsStores("/reports/upvote")).toBe(true);
+    expect(needsStores("/history")).toBe(true);
+    expect(needsStores("/history/days")).toBe(true);
     expect(needsStores("/health")).toBe(false);
     expect(needsStores("/admin")).toBe(false);
   });

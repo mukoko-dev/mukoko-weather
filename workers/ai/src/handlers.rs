@@ -1,7 +1,6 @@
 //! The four routes. Each validates its body, gathers the weather it needs,
 //! builds the prompt (guardrails first) and calls the model once.
 
-use chrono::Duration as Days;
 use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -15,7 +14,7 @@ use weather_edge::{error, json, now, now_rfc3339, responses};
 use worker::{Env, Response, Result};
 
 use crate::gateway::{self, Call, ModelError};
-use crate::{CACHE_BINDING, DB_BINDING, FORECAST_BINDING};
+use crate::{CACHE_BINDING, FORECAST_BINDING, PLACES_BINDING};
 
 /// Summaries live 30 minutes; the fallback text only a minute, so one
 /// failed call does not hide real summaries for long.
@@ -31,6 +30,9 @@ const TROUBLE: &str = "Shamwari is having trouble right now. Please try again in
 pub struct Ctx<'a> {
     pub env: &'a Env,
     pub guardrails: Compiled,
+    /// The visitor's address as the API passed it on, for the places Worker's
+    /// per-client history budget.
+    pub client_ip: Option<String>,
 }
 
 fn invalid(i: Invalid) -> Result<Response> {
@@ -259,20 +261,6 @@ pub async fn chat(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
     }
 }
 
-#[derive(Deserialize)]
-struct DailyRow {
-    date: String,
-    current: Option<String>,
-    daily: Option<String>,
-    insights: Option<String>,
-}
-
-fn parsed(s: &Option<String>) -> Value {
-    s.as_deref()
-        .and_then(|s| serde_json::from_str(s).ok())
-        .unwrap_or(Value::Null)
-}
-
 #[derive(Serialize, Deserialize)]
 struct CachedAnalysis {
     analysis: String,
@@ -316,15 +304,69 @@ async fn locate(env: &Env, slug: &str) -> Located {
     }
 }
 
-/// `POST /v1/ai/history/analyze`, over the D1 `place_daily` rows.
+/// The widest period the analysis takes (ten years: the statistics are a few
+/// hundred tokens whatever the span).
+const HISTORY_MAX_DAYS: u64 = 3660;
+
+/// The history of a place from `mukoko-weather-places` (`GET /history`): the
+/// days we recorded, the days we filled from an external archive, and whatever
+/// it fetches for the rest. Oldest first. `None` when it did not answer.
+async fn history_records(ctx: &Ctx<'_>, slug: &str, window: &str) -> Option<Vec<Record>> {
+    let fetcher = ctx.env.service(PLACES_BINDING).ok()?;
+    let headers = worker::Headers::new();
+    if let Some(ip) = &ctx.client_ip {
+        headers.set("X-Mukoko-Client-IP", ip).ok()?;
+    }
+    let mut init = worker::RequestInit::new();
+    init.with_method(worker::Method::Get).with_headers(headers);
+    let req = worker::Request::new_with_init(
+        &format!("https://places/history?location={slug}&{window}"),
+        &init,
+    )
+    .ok()?;
+    let mut resp = fetcher.fetch_request(req).await.ok()?;
+    if resp.status_code() != 200 {
+        return None;
+    }
+    let body: Value = resp.json().await.ok()?;
+    let mut records: Vec<Record> = body["data"]
+        .as_array()?
+        .iter()
+        .map(|d| Record {
+            date: d["date"].as_str().unwrap_or_default().to_owned(),
+            current: d["current"].clone(),
+            daily: d["daily"].clone(),
+            insights: d["insights"].clone(),
+        })
+        .collect();
+    records.sort_by(|a, b| a.date.cmp(&b.date));
+    Some(records)
+}
+
+/// `POST /v1/ai/history/analyze`, over the same history the app shows.
 pub async fn history(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
     let slug = slugify(body["location"].as_str().unwrap_or(""));
     if slug.is_empty() {
         return error(400, "invalid_request", "Missing location");
     }
-    let days = body["days"].as_u64().unwrap_or(30);
-    if !(7..=365).contains(&days) {
-        return error(422, "invalid_request", "`days` must be between 7 and 365.");
+    // `start` and `end` (YYYY-MM-DD) win over `days`; the places Worker
+    // validates them. `days` is the period the prompt names.
+    let start = body["start"].as_str().filter(|s| s.len() == 10);
+    let end = body["end"].as_str().filter(|s| s.len() == 10);
+    let mut days = body["days"].as_u64().unwrap_or(30);
+    if let (Some(s), Some(e)) = (start, end) {
+        let parse = |d: &str| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok();
+        match (parse(s), parse(e)) {
+            (Some(s), Some(e)) if e >= s => days = ((e - s).num_days() + 1) as u64,
+            _ => return error(422, "invalid_request", "`start` and `end` must be dates."),
+        }
+    }
+    if !(7..=HISTORY_MAX_DAYS).contains(&days) {
+        return error(
+            422,
+            "invalid_request",
+            &format!("`days` must be between 7 and {HISTORY_MAX_DAYS}."),
+        );
     }
     let place = match locate(ctx.env, &slug).await {
         Located::Found(p) => p,
@@ -334,35 +376,17 @@ pub async fn history(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
         }
     };
 
-    let since = (now() - Days::days(days as i64))
-        .format("%Y-%m-%d")
-        .to_string();
-    let rows: Option<Vec<DailyRow>> = async {
-        let db = ctx.env.d1(DB_BINDING).ok()?;
-        db.prepare(
-            "SELECT date, current, daily, insights FROM place_daily \
-             WHERE slug = ?1 AND date >= ?2 ORDER BY date ASC",
-        )
-        .bind(&[place.slug.as_str().into(), since.as_str().into()])
-        .ok()?
-        .all()
-        .await
-        .ok()?
-        .results()
-        .ok()
-    }
-    .await;
-    // No table yet (jobs not deployed) reads the same as no rows.
-    let records: Vec<Record> = rows
-        .unwrap_or_default()
-        .into_iter()
-        .map(|r| Record {
-            current: parsed(&r.current),
-            daily: parsed(&r.daily),
-            insights: parsed(&r.insights),
-            date: r.date,
-        })
-        .collect();
+    let window = match (start, end) {
+        (Some(s), Some(e)) => format!("start={s}&end={e}"),
+        _ => format!("days={days}"),
+    };
+    let Some(records) = history_records(ctx, &place.slug, &window).await else {
+        return error(
+            502,
+            "history_unavailable",
+            "Weather history is unavailable right now",
+        );
+    };
     if records.is_empty() {
         return error(
             404,

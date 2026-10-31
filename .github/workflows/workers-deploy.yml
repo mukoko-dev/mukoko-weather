@@ -12,7 +12,8 @@
 #   1. forecast, aviation, mongo-bridge, stations, tiles
 #                                                    (bind to no Worker)
 #   2. places                                        (binds to mongo-bridge)
-#   3. ai, internal-api, jobs                        (bind to forecast)
+#   3. ai, internal-api, jobs                        (bind to forecast; ai also
+#                                                    binds places)
 #   4. public-api                                    (binds to forecast,
 #                                                     aviation, places, ai)
 #

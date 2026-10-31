@@ -74,7 +74,7 @@ pub async fn devices(req: &mut Request, env: &Env) -> Result<Response> {
 fn relay(answer: Answer) -> Result<Response> {
     match answer {
         Answer::Relay { status, body } => json(status, &body),
-        Answer::Unavailable => error(503, "unavailable", "Device sync is unavailable."),
+        Answer::Unavailable { .. } => error(503, "unavailable", "Device sync is unavailable."),
     }
 }
 

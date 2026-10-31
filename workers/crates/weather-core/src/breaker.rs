@@ -36,6 +36,10 @@ pub const OPEN_METEO: Config = Config {
     window_ms: 5 * 60_000,
 };
 
+/// NASA POWER (history): the Python backend's `nasa_power_breaker`, 3
+/// failures in 5 min open it for 2 min. Only 5xx, 429, transport errors and
+/// timeouts count.
+pub const NASA_POWER: Config = DEFAULT;
 /// ISRIC SoilGrids: 3 failures in 10 min open it for 15 min.
 pub const SOILGRIDS: Config = Config {
     failure_threshold: 3,

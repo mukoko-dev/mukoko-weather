@@ -90,7 +90,10 @@ export interface AISummaryDoc {
  * /api/py/weather, or a past day filled from the Open-Meteo archive (ERA5
  * reanalysis; `current` then holds daily means). Legacy docs have no source.
  */
-export type WeatherHistorySource = "recorded" | "open-meteo-archive";
+export type WeatherHistorySource =
+  | "recorded"
+  | "nasa-power"
+  | "open-meteo-archive";
 
 export interface WeatherHistoryDoc {
   locationSlug: string;
