@@ -7,6 +7,7 @@ members = [
   "crates/weather-core",
   "crates/weather-edge",
   "crates/weather-mongo",
+  "crates/weather-webpush",
   "ai",
   "forecast",
   "internal-api",
@@ -30,6 +31,7 @@ publish = false
 weather-core = { path = "crates/weather-core" }
 weather-edge = { path = "crates/weather-edge" }
 weather-mongo = { path = "crates/weather-mongo" }
+weather-webpush = { path = "crates/weather-webpush" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", default-features = false, features = [
@@ -46,6 +48,17 @@ sha2 = "0.10"
 pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
 subtle = "2.6"
 hex = "0.4"
+# Web Push (RFC 8291 encryption, RFC 8292 VAPID): the symmetric half only.
+# Pure Rust, no RNG (the salt is injected, so nothing needs getrandom, which
+# wasm32-unknown-unknown cannot link without a JS shim). No elliptic-curve
+# crate: p256 0.13 resolves crypto-bigint 0.5 (RUSTSEC-2026-0387), so ECDH and
+# ECDSA are injected from the runtime's WebCrypto instead.
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }
+hkdf = { version = "0.12", default-features = false }
+aes-gcm = { version = "0.10", default-features = false, features = [
+  "aes",
+  "alloc",
+] }
 
 [profile.release]
 opt-level = "s"
