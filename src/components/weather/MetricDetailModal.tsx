@@ -6,6 +6,7 @@ import {
   METRIC_CHART,
   metricDetail,
   metricSeries,
+  uvForecastDays,
   type MetricExtras,
   type MetricKind,
   type MetricSeriesPoint,
@@ -22,9 +23,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { ChartErrorBoundary } from "./ChartErrorBoundary";
 import { AveragesDetail } from "./AveragesDetail";
+import { UVIndexChart } from "./charts/UVIndexChart";
 import { ChartSkeleton } from "@/components/ui/skeleton";
 import { WindSpeedChart } from "./charts/WindSpeedChart";
-import { UVIndexChart } from "./charts/UVIndexChart";
 import { FeelsLikeChart } from "./charts/FeelsLikeChart";
 import { VisibilityChart } from "./charts/VisibilityChart";
 import { PrecipitationChart } from "./charts/PrecipitationChart";
@@ -103,6 +104,10 @@ export function MetricDetailModal({
     [kind, data.hourly, data.utc_offset_seconds, now],
   );
   const chart = kind ? METRIC_CHART[kind] : null;
+  const uvDays = useMemo(
+    () => (kind === "uv" ? uvForecastDays(data.daily) : []),
+    [kind, data.daily],
+  );
 
   return (
     <Dialog open={kind !== null} onOpenChange={(open) => !open && onClose()}>
@@ -136,6 +141,37 @@ export function MetricDetailModal({
                 </ChartErrorBoundary>
               </section>
             )}
+            {kind === "uv" && uvDays.length > 1 && (
+              <section aria-labelledby="uv-days-heading">
+                <h3
+                  id="uv-days-heading"
+                  className="giraffe mb-[var(--space-stack)]"
+                >
+                  Peak UV, next days
+                </h3>
+                <ChartErrorBoundary name="UV by day chart">
+                  <UVIndexChart
+                    data={uvDays.map((d) => ({
+                      label: d.label,
+                      uvIndex: d.peak,
+                    }))}
+                    labelKey="label"
+                    maxTicksLimit={7}
+                  />
+                </ChartErrorBoundary>
+                <ul className="mt-[var(--space-stack)] grid grid-cols-2 gap-x-3 gap-y-1 text-sm text-text-secondary">
+                  {uvDays.map((d) => (
+                    <li key={d.date} className="flex justify-between gap-2">
+                      <span>{d.label}</span>
+                      <span className="tabular-nums text-text-primary">
+                        {d.peak} {d.category}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
             {chart && series.length <= 1 && <ChartSkeleton />}
 
             {detail.stats.length > 0 && (
