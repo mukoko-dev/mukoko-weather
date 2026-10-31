@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { SITE_URL } from "@/lib/site";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/PageShell";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { InfoRow } from "@/components/ui/info-row";
 
 export const metadata: Metadata = {
@@ -8,7 +10,7 @@ export const metadata: Metadata = {
   description:
     "Learn about mukoko weather — a global weather intelligence platform providing forecasts for farming, mining, travel, and daily life worldwide. A Mukoko Africa product by Nyuchi Web Services.",
   alternates: {
-    canonical: "https://weather.mukoko.com/about",
+    canonical: `${SITE_URL}/about`,
   },
 };
 
@@ -47,7 +49,7 @@ export default function AboutPage() {
   return (
     <>
       <PageShell>
-        <h1 className="elephant">About mukoko weather</h1>
+        <PageHeader title="About mukoko weather" />
 
         <section className="mt-8 space-y-4 text-text-secondary leading-relaxed">
           <p>

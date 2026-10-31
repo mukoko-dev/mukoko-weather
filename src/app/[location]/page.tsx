@@ -1,20 +1,15 @@
 import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import {
-  checkFrostRisk,
-  createFallbackWeather,
-  weatherCodeToInfo,
-} from "@/lib/weather";
-import {
-  getWeatherForLocation,
-  getCountryByCode,
-  getSeasonForDate,
-} from "@/lib/db";
+import { weatherCodeToInfo } from "@/lib/weather";
+import { getCountryByCode } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { safeJsonLd } from "@/lib/json-ld";
+import { breadcrumbJsonLd } from "@/lib/json-ld";
+import { buildPageMetadata } from "@/lib/metadata";
+import { resolveLocationParam } from "@/lib/load-location";
+import { getCachedSeason, loadLocationWeather } from "@/lib/location-payload";
+import { JsonLd } from "@/components/layout/JsonLd";
 import { WeatherDashboard } from "./WeatherDashboard";
-import { loadLocation } from "./load-location";
 import { SITE_URL } from "@/lib/site";
 import {
   countryDisplayName,
@@ -29,25 +24,14 @@ const loadCountry = cache((code: string) =>
   getCountryByCode(code).catch(() => null),
 );
 
-// Per-request deduplication only — React cache() does NOT persist across requests.
-// generateMetadata and the page component both call this for the same country code;
-// cache() ensures a single DB round-trip within one SSR pass. Unlike a module-level
-// Map with TTL, this is scoped to the current request and discarded afterward.
-// Note: cache key includes both countryCode and lat. Each [location] page is a
-// separate SSR request, so cross-hemisphere collisions cannot occur in practice.
-const getCachedSeason = cache((countryCode: string, lat: number = 0) =>
-  getSeasonForDate(new Date(), countryCode, lat),
-);
-
 export const dynamic = "force-dynamic";
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ location: string }>;
 }): Promise<Metadata> {
-  const { location: slug } = await params;
-  const stored = await loadLocation(slug);
-  if (!stored) return { title: "Location not found" };
+  const stored = await resolveLocationParam(params);
+  if (!stored) return buildPageMetadata({ notFound: true });
   // Metadata has no forecast to reconcile against, so a region borrowed from
   // a seed (possibly across a border) is left out rather than indexed.
   const loc = stored.regionApproximate
@@ -84,49 +68,42 @@ export async function generateMetadata({
   });
   const ogImageUrl = `${SITE_URL}/api/og?${ogParams.toString()}`;
 
-  return {
+  const keywords = [
+    `${loc.name} weather`,
+    `${loc.name} weather today`,
+    `${loc.name} forecast`,
+    `${loc.name} temperature`,
+    `weather in ${loc.name} ${countryName}`,
+    `${loc.province} weather`,
+    `${loc.name} 7 day forecast`,
+    `${loc.name} rain forecast`,
+    `${countryName} weather`,
+    "mukoko weather",
+  ]
+    .map((k) => k.trim())
+    .filter((k) => k && k !== "weather");
+
+  return buildPageMetadata({
     title,
     description,
-    keywords: [
-      `${loc.name} weather`,
-      `${loc.name} weather today`,
-      `${loc.name} forecast`,
-      `${loc.name} temperature`,
-      `weather in ${loc.name} ${countryName}`,
-      `${loc.province} weather`,
-      `${loc.name} 7 day forecast`,
-      `${loc.name} rain forecast`,
-      `${countryName} weather`,
-      "mukoko weather",
-    ]
-      .map((k) => k.trim())
-      .filter((k) => k && k !== "weather"),
-    alternates: {
-      canonical: `${SITE_URL}/${loc.slug}`,
-    },
-    openGraph: {
+    path: `/${loc.slug}`,
+    keywords,
+    og: {
       title: `${loc.name} Weather | mukoko weather`,
       description: `Live weather forecast for ${placeLine(loc.name, loc.province, countryName)}. Current conditions, 7-day outlook, and local insights.`,
-      url: `${SITE_URL}/${loc.slug}`,
-      type: "website",
-      locale: "en",
-      siteName: "mukoko weather",
-      images: [
-        {
-          url: ogImageUrl,
-          width: 1200,
-          height: 630,
-          alt: `${loc.name} weather forecast`,
-        },
-      ],
+      image: {
+        url: ogImageUrl,
+        width: 1200,
+        height: 630,
+        alt: `${loc.name} weather forecast`,
+      },
     },
     twitter: {
-      card: "summary_large_image",
       title: `${loc.name} Weather | mukoko weather`,
-      description: `Live weather for ${loc.name}, ${countryName} — current conditions, 7-day forecast, and AI insights.`,
+      description: `Live weather for ${loc.name}, ${countryName} — current conditions, 7-day forecast, and local insights.`,
       images: [ogImageUrl],
     },
-  };
+  });
 }
 
 export default async function LocationPage({
@@ -134,8 +111,7 @@ export default async function LocationPage({
 }: {
   params: Promise<{ location: string }>;
 }) {
-  const { location: slug } = await params;
-  const rawLocation = await loadLocation(slug);
+  const rawLocation = await resolveLocationParam(params);
   if (!rawLocation) notFound();
   // Strip MongoDB _id (ObjectId with .toJSON()) before passing to Client Components
   const { _id: _removed, ...storedLocation } =
@@ -161,25 +137,8 @@ export default async function LocationPage({
   // it isn't reported as unhandled while the weather await is pending.
   void sideData.catch(() => {});
 
-  let weather;
-  let weatherSource: string;
-  try {
-    const result = await getWeatherForLocation(
-      storedLocation.slug,
-      storedLocation.lat,
-      storedLocation.lon,
-      storedLocation.elevation,
-    );
-    weather = result.data;
-    weatherSource = result.source;
-  } catch {
-    weather = createFallbackWeather(
-      storedLocation.lat,
-      storedLocation.lon,
-      storedLocation.elevation,
-    );
-    weatherSource = "fallback";
-  }
+  const { weather, usingFallback, frostAlert } =
+    await loadLocationWeather(storedLocation);
 
   // A place outside the stored geography can arrive with no country (or one
   // borrowed from a seed across a border). The forecast's time zone names
@@ -190,10 +149,6 @@ export default async function LocationPage({
   );
   const countryCode = (location.country ?? "").toUpperCase();
 
-  const usingFallback = weatherSource === "fallback";
-  const frostAlert = usingFallback
-    ? null
-    : checkFrostRisk(weather.hourly, weather.utc_offset_seconds);
   const conditionInfo = weatherCodeToInfo(weather.current.weather_code);
   // Guard against empty daily arrays — Math.max(...[]) is -Infinity and
   // Math.min(...[]) is Infinity, which would render as garbage in the FAQ schema.
@@ -340,25 +295,10 @@ export default async function LocationPage({
     },
   };
 
-  const breadcrumbSchema = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      {
-        "@type": "ListItem",
-        position: 1,
-        name: "mukoko weather",
-        item: SITE_URL,
-      },
-      { "@type": "ListItem", position: 2, name: location.province },
-      {
-        "@type": "ListItem",
-        position: 3,
-        name: `${location.name} Weather`,
-        item: `${SITE_URL}/${location.slug}`,
-      },
-    ],
-  };
+  const breadcrumbSchema = breadcrumbJsonLd([
+    { name: location.province },
+    { name: `${location.name} Weather`, path: `/${location.slug}` },
+  ]);
 
   const faqSchema = {
     "@context": "https://schema.org",
@@ -397,15 +337,12 @@ export default async function LocationPage({
   return (
     <>
       {/* SEO schemas — server rendered only */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: safeJsonLd(
-            usingFallback
-              ? [breadcrumbSchema]
-              : [pageSchema, breadcrumbSchema, faqSchema],
-          ),
-        }}
+      <JsonLd
+        data={
+          usingFallback
+            ? [breadcrumbSchema]
+            : [pageSchema, breadcrumbSchema, faqSchema]
+        }
       />
 
       {/* All weather UI lives in the client component with per-section error boundaries */}

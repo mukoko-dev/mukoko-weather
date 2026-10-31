@@ -175,9 +175,7 @@ export function LocationWeatherCard({
           >
             {removeButton}
             <p className="pr-12 text-xl font-semibold">{name}</p>
-            <p className="mt-1 font-mono text-xs uppercase tracking-wide text-text-secondary">
-              {label}
-            </p>
+            <p className="mt-1 oribi">{label}</p>
             <p className="mt-10 text-base text-text-secondary">
               Weather unavailable
             </p>
@@ -189,9 +187,7 @@ export function LocationWeatherCard({
             className="acacia block min-h-44 p-[var(--space-card)] text-text-primary"
           >
             <p className="pr-12 text-xl font-semibold">{name}</p>
-            <p className="mt-1 font-mono text-xs uppercase tracking-wide text-text-secondary">
-              {label}
-            </p>
+            <p className="mt-1 oribi">{label}</p>
             <p className="mt-10 text-base text-text-secondary">
               Weather unavailable
             </p>
@@ -210,7 +206,7 @@ export function LocationWeatherCard({
       <div className="flex items-start justify-between gap-3 pr-12">
         <div className="min-w-0">
           <p className="truncate text-xl font-semibold">{name}</p>
-          <p className="font-mono text-xs uppercase tracking-wide text-text-secondary">
+          <p className="oribi">
             {label}
             {isHome && (
               <>

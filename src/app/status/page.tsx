@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { PageShell } from "@/components/layout/PageShell";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { SITE_URL } from "@/lib/site";
 import { StatusDashboard } from "./StatusDashboard";
 
 export const metadata: Metadata = {
@@ -7,7 +9,7 @@ export const metadata: Metadata = {
   description:
     "Live health checks for mukoko weather services — weather APIs, AI summaries, database, and caching status.",
   alternates: {
-    canonical: "https://weather.mukoko.com/status",
+    canonical: `${SITE_URL}/status`,
   },
 };
 
@@ -15,10 +17,10 @@ export default function StatusPage() {
   return (
     <>
       <PageShell>
-        <h1 className="elephant">System Status</h1>
-        <p className="mt-2 text-text-secondary">
-          Live health checks for mukoko weather services.
-        </p>
+        <PageHeader
+          title="System Status"
+          intro="Live health checks for mukoko weather services."
+        />
         <StatusDashboard />
       </PageShell>
     </>

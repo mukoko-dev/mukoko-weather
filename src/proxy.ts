@@ -9,9 +9,11 @@ import {
 import { isBareNameCandidate, resolveBareName } from "@/lib/bare-name";
 import { resolveLocationSlug } from "@/lib/places";
 import { isFeatureEnabled } from "@/lib/feature-flags";
-
-/** Read by the home page (src/app/page.tsx) as its fallback location. */
-const LAST_LOCATION_COOKIE = "lastLocation";
+// Constants only: the cookie name is read by the home page and display (last-location.ts).
+import {
+  LAST_LOCATION_COOKIE,
+  LAST_LOCATION_MAX_AGE_S,
+} from "@/lib/last-location";
 
 /** The gate needs DB errors to throw, not to read as "not found". */
 const strictResolve = (slug: string) =>
@@ -167,7 +169,7 @@ export default async function proxy(
     // bookkeeping included), then put back whatever AuthKit had sent.
     const authkitCookies = response.headers.getSetCookie();
     response.cookies.set(LAST_LOCATION_COOKIE, slug, {
-      maxAge: 2592000,
+      maxAge: LAST_LOCATION_MAX_AGE_S,
       path: "/",
       sameSite: "lax",
     });

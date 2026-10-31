@@ -2,6 +2,11 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageShell } from "@/components/layout/PageShell";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { trail } from "@/components/layout/Breadcrumb";
+import { ExploreCard } from "@/components/explore/ExploreCard";
+import { TagPill } from "@/components/explore/TagPill";
+import { SITE_URL } from "@/lib/site";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getLocationsByTagFromDb, getTagBySlug } from "@/lib/db";
 import { logError } from "@/lib/observability";
@@ -26,7 +31,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${meta.label} Weather Locations | mukoko weather`,
     description: meta.description,
     alternates: {
-      canonical: `https://weather.mukoko.com/explore/${tag}`,
+      canonical: `${SITE_URL}/explore/${tag}`,
     },
     openGraph: {
       title: `${meta.label} Weather Locations | mukoko weather`,
@@ -73,16 +78,15 @@ export default async function ExploreTagPage({ params }: Props) {
   return (
     <PageShell
       width="wide"
-      breadcrumb={[
-        { label: "Home", href: "/" },
+      breadcrumb={trail(
         { label: "Explore", href: "/explore" },
         { label: meta.label },
-      ]}
+      )}
     >
-      <h1 className="elephant">{meta.label}</h1>
-      <p className="gazelle mt-2">
-        {meta.description}. {locations.length} locations.
-      </p>
+      <PageHeader
+        title={meta.label}
+        intro={`${meta.description}. ${locations.length} locations.`}
+      />
 
       {locations.length === 0 && (
         <EmptyState className="mt-8">
@@ -102,37 +106,22 @@ export default async function ExploreTagPage({ params }: Props) {
             >
               {province}
             </h2>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="herd-grid mt-3">
               {locs
                 .sort((a, b) => a.name.localeCompare(b.name))
                 .map((loc) => (
-                  <Link
+                  <ExploreCard
                     key={loc.slug}
                     href={`/${loc.slug}`}
-                    className="group card-interactive flex min-w-0 items-center justify-between rounded-[var(--radius-card)] bg-surface-card px-4 py-3 shadow-sm"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <span className="block truncate font-medium text-text-primary transition-colors group-hover:text-primary">
-                        {loc.name}
-                      </span>
-                      <span className="text-base text-text-tertiary">
-                        {loc.elevation}m elevation
-                      </span>
-                    </div>
-                    <div className="ml-2 flex shrink-0 flex-wrap gap-1">
-                      {loc.tags
-                        .filter((t) => t !== tag)
-                        .slice(0, 1)
-                        .map((t) => (
-                          <span
-                            key={t}
-                            className="rounded-full bg-primary/10 px-2 py-0.5 text-base font-medium text-primary"
-                          >
-                            {t}
-                          </span>
-                        ))}
-                    </div>
-                  </Link>
+                    title={loc.name}
+                    meta={`${loc.elevation}m elevation`}
+                    badge={loc.tags
+                      .filter((t) => t !== tag)
+                      .slice(0, 1)
+                      .map((t) => (
+                        <TagPill key={t}>{t}</TagPill>
+                      ))}
+                  />
                 ))}
             </div>
           </section>
