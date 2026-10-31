@@ -27,7 +27,7 @@ mod gateway;
 mod handlers;
 mod passthrough;
 
-use weather_edge::{error, json};
+use weather_edge::{error, json, responses};
 use worker::{event, Context, Env, Method, Request, Response, Result};
 
 pub(crate) const FORECAST_BINDING: &str = "FORECAST";
@@ -122,24 +122,12 @@ enum Route {
 /// (local dev) does not block.
 async fn rate_limited(req: &Request, env: &Env) -> Option<Result<Response>> {
     let limiter = env.rate_limiter(RATE_LIMITER).ok()?;
-    let key = req
-        .headers()
-        .get("CF-Connecting-IP")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| "service-binding".to_owned());
+    let key = weather_edge::client_ip(req).unwrap_or_else(|| "service-binding".to_owned());
     match limiter.limit(key).await {
-        Ok(outcome) if !outcome.success => {
-            let resp = error(
-                429,
-                "rate_limited",
-                "Too many requests. Please wait a moment.",
-            );
-            if let Ok(r) = &resp {
-                let _ = r.headers().set("Retry-After", "60");
-            }
-            Some(resp)
-        }
+        Ok(outcome) if !outcome.success => Some(responses::rate_limited(
+            60,
+            "Too many requests. Please wait a moment.",
+        )),
         _ => None,
     }
 }

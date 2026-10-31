@@ -10,7 +10,7 @@
 use serde_json::Value;
 use weather_core::ai::completions;
 use weather_core::ai::guardrails::{system_prompt, Compiled};
-use weather_edge::{error, json};
+use weather_edge::{error, json, responses};
 use worker::{Env, Response, Result};
 
 use crate::gateway::{self, ModelError};
@@ -39,9 +39,7 @@ pub async fn handle(env: &Env, guardrails: &Compiled, body: &Value) -> Result<Re
             "The AI Gateway's guardrails blocked this request or its answer.",
         ),
         Err(ModelError::RateLimited) => {
-            let resp = error(429, "rate_limited", "The model is busy. Try again shortly.")?;
-            resp.headers().set("Retry-After", "30")?;
-            Ok(resp)
+            responses::rate_limited(30, "The model is busy. Try again shortly.")
         }
         Err(ModelError::Failed) => error(502, "model_failed", "The model gave no answer."),
     }

@@ -8,7 +8,7 @@ import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
 import { fetchWorker } from "@/lib/weather-api";
 import { ShamwariCTA } from "./ShamwariCTA";
-import { Spinner } from "@/components/ui/spinner";
+import { LoadingNotice } from "@/components/ui/loading-notice";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -131,13 +131,11 @@ export function HistoryAnalysis({
       )}
 
       {loading && (
-        <div className="mt-3 flex items-center gap-2" role="status">
-          <Spinner />
-          <span className="text-base text-text-secondary">
-            Analyzing {days}-day history...
-          </span>
-          <span className="sr-only">Shamwari is analyzing weather history</span>
-        </div>
+        <LoadingNotice
+          className="mt-3"
+          label={`Analyzing ${days}-day history...`}
+          textClassName="text-base text-text-secondary"
+        />
       )}
 
       {error && (

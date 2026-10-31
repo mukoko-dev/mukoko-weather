@@ -310,6 +310,12 @@ export interface SeriesConfig {
   order?: number;
   opacity?: number;
   showDots?: boolean;
+  /**
+   * Bars only: colour each bar from its own value (a CSS var reference, e.g. a
+   * WHO UV band token) instead of one series colour. Used where the value maps
+   * to a published scale (UV index).
+   */
+  colorByValue?: (value: number | null) => string;
 }
 
 export interface TimeSeriesChartProps {
@@ -403,7 +409,14 @@ export function TimeSeriesChart({
           type: "bar" as const,
           label: s.label,
           data: data.map((d) => d[s.key]),
-          backgroundColor: hexWithAlpha(color, s.opacity ?? 0.6),
+          backgroundColor: s.colorByValue
+            ? data.map((d) =>
+                hexWithAlpha(
+                  resolveColor(s.colorByValue!(Number(d[s.key]))),
+                  s.opacity ?? 0.6,
+                ),
+              )
+            : hexWithAlpha(color, s.opacity ?? 0.6),
           borderRadius: 2,
           yAxisID: s.yAxisID ?? "y",
           order: s.order ?? 2,

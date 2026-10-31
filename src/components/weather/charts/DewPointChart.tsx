@@ -1,6 +1,7 @@
 "use client";
 
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
+import { WX_SERIES } from "@/lib/weather-scales";
 
 interface DewPointChartProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,7 +18,7 @@ const SERIES: SeriesConfig[] = [
   {
     key: "dewPoint",
     label: "Dew Point",
-    color: "var(--chart-2)",
+    color: WX_SERIES.dew,
     fill: true,
     opacity: 0.15,
   },

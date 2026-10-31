@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
+import { WX_SERIES } from "@/lib/weather-scales";
 
 interface PressureChartProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -15,7 +16,7 @@ interface PressureChartProps {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "pressure", label: "Pressure", color: "var(--chart-3)" },
+  { key: "pressure", label: "Pressure", color: WX_SERIES.pressure },
 ];
 
 /**

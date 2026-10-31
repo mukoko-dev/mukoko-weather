@@ -10,7 +10,9 @@ import type {
   AqiLevel,
 } from "@/components/weather/AirQualityCard";
 import type { WeatherData } from "@/lib/weather";
+import { LOCATION_SLUG_RE } from "@/lib/location-gate";
 import { MAP_LAYERS } from "@/lib/map-layers";
+import { AQI_SCALE } from "@/lib/weather-scales";
 import {
   currentHourIndex as locationCurrentHourIndex,
   resolveOffsetSeconds,
@@ -34,7 +36,6 @@ export const DISPLAY_REFRESH_MS = {
 /** Radar is the point of a wall display, so it is the default layer. */
 export const DISPLAY_DEFAULT_LAYER = "precipitationIntensity";
 
-const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 const LAYER_IDS = new Set(MAP_LAYERS.map((l) => l.id));
 
 export type DisplayTheme = "light" | "dark";
@@ -76,7 +77,7 @@ export function parseDisplayParams(raw: RawParams): DisplayParams {
   const theme = first(raw.theme);
 
   return {
-    location: slug && SLUG_RE.test(slug) ? slug : null,
+    location: slug && LOCATION_SLUG_RE.test(slug) ? slug : null,
     coords: lat !== null && lon !== null ? { lat, lon } : null,
     layer: layer && LAYER_IDS.has(layer) ? layer : DISPLAY_DEFAULT_LAYER,
     theme: theme === "light" || theme === "dark" ? theme : null,
@@ -102,14 +103,18 @@ export const AQI_ADVICE: Record<AqiLevel, string> = {
     "Hazardous. Stay indoors with windows shut. Avoid all outdoor activity.",
 };
 
-/** Severity text class per AQI band, from the global severity tokens. */
-export const AQI_TEXT_CLASS: Record<AqiLevel, string> = {
-  good: "text-severity-low",
-  moderate: "text-severity-moderate",
-  unhealthy_sensitive: "text-severity-high",
-  unhealthy: "text-severity-severe",
-  very_unhealthy: "text-severity-extreme",
-  hazardous: "text-severity-extreme",
+/**
+ * Official US EPA band fill per AQI level (weather-scales.ts). A swatch, not a
+ * text colour: the EPA yellow and green cannot be read as text on a card, so
+ * the number and the band name stay in the primary text colour.
+ */
+export const AQI_LEVEL_BG_CLASS: Record<AqiLevel, string> = {
+  good: AQI_SCALE.bands[0].bg,
+  moderate: AQI_SCALE.bands[1].bg,
+  unhealthy_sensitive: AQI_SCALE.bands[2].bg,
+  unhealthy: AQI_SCALE.bands[3].bg,
+  very_unhealthy: AQI_SCALE.bands[4].bg,
+  hazardous: AQI_SCALE.bands[5].bg,
 };
 
 /**

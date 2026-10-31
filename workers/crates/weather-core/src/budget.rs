@@ -13,8 +13,6 @@
 //! every caller is keyed by IP, which is the real visitor for a browser that
 //! calls the Worker directly. Only a hash is stored, never the IP or subject.
 
-use sha2::{Digest, Sha256};
-
 /// Budgets are per hour.
 pub const HOUR_MS: u64 = 3_600_000;
 /// `rate_events.client` of the service-wide row.
@@ -131,7 +129,7 @@ pub fn client_key(verified_subject: Option<&str>, ip: &str) -> String {
         Some(s) if !s.is_empty() && s.len() <= MAX_SUBJECT_LEN => format!("sub:{s}"),
         _ => format!("ip:{}", ip.trim()),
     };
-    hex::encode(Sha256::digest(basis.as_bytes()))
+    crate::crypto::sha256_hex(&basis)
 }
 
 /// The oldest event that still counts.

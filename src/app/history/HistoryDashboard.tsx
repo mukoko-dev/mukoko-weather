@@ -47,6 +47,8 @@ import {
   uvConcernLabel,
 } from "@/components/weather/ActivityInsights";
 import { Spinner } from "@/components/ui/spinner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Field } from "@/components/ui/field";
 import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 import { DEFAULT_LOCALE, formatDate as formatLocaleDate } from "@/lib/i18n";
 import { fetchWorker, workerUrl } from "@/lib/weather-api";
@@ -853,70 +855,70 @@ export function HistoryDashboard() {
       {/* Search and filters */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
         <div className="relative flex-1">
-          <label
+          <Field
+            label="Location"
             htmlFor="history-search"
-            className="mb-1 block text-base font-medium text-text-secondary"
+            labelClassName="mb-1 block text-base font-medium text-text-secondary"
           >
-            Location
-          </label>
-          <input
-            id="history-search"
-            type="text"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setShowDropdown(true);
-            }}
-            onFocus={() => setShowDropdown(true)}
-            placeholder="Search locations..."
-            className="crane"
-            autoComplete="off"
-          />
-          {showDropdown && (results.length > 0 || searchLoading) && (
-            <ul className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-[var(--radius-input)] border border-input bg-surface-card shadow-md">
-              {searchLoading && results.length === 0 && (
-                <li className="px-3 py-2 text-base text-text-tertiary">
-                  Searching...
-                </li>
-              )}
-              {results.map((loc) => (
-                <li key={loc.slug}>
-                  <button
-                    type="button"
-                    className="w-full px-3 py-2 text-left text-base text-text-primary hover:bg-surface-dim transition-colors"
-                    onClick={() => handleSelectLocation(loc)}
-                  >
-                    <span className="font-medium">{loc.name}</span>
-                    <span className="ml-2 text-text-tertiary">
-                      {loc.province}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+            <input
+              id="history-search"
+              type="text"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setShowDropdown(true);
+              }}
+              onFocus={() => setShowDropdown(true)}
+              placeholder="Search locations..."
+              className="crane"
+              autoComplete="off"
+            />
+            {showDropdown && (results.length > 0 || searchLoading) && (
+              <ul className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-[var(--radius-input)] border border-input bg-surface-card shadow-md">
+                {searchLoading && results.length === 0 && (
+                  <li className="px-3 py-2 text-base text-text-tertiary">
+                    Searching...
+                  </li>
+                )}
+                {results.map((loc) => (
+                  <li key={loc.slug}>
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-base text-text-primary hover:bg-surface-dim transition-colors"
+                      onClick={() => handleSelectLocation(loc)}
+                    >
+                      <span className="font-medium">{loc.name}</span>
+                      <span className="ml-2 text-text-tertiary">
+                        {loc.province}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Field>
         </div>
         <div>
-          <label
+          <Field
+            label="Time period"
             htmlFor="history-days"
-            className="mb-1 block text-base font-medium text-text-secondary"
+            labelClassName="mb-1 block text-base font-medium text-text-secondary"
           >
-            Time period
-          </label>
-          <select
-            id="history-days"
-            value={days}
-            onChange={(e) =>
-              handleDaysChange(Number(e.target.value) as DayRange)
-            }
-            className="ibis"
-          >
-            {DAY_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            <select
+              id="history-days"
+              value={days}
+              onChange={(e) =>
+                handleDaysChange(Number(e.target.value) as DayRange)
+              }
+              className="ibis"
+            >
+              {DAY_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </Field>
         </div>
       </div>
 
@@ -991,11 +993,11 @@ export function HistoryDashboard() {
       )}
 
       {error && (
-        <div
-          role="alert"
-          className="rounded-[var(--radius-card)] border border-destructive/30 bg-frost-severe-bg p-4 text-base text-destructive"
+        <Alert
+          variant="severe"
+          className="border-destructive/30 bg-frost-severe-bg text-base text-destructive"
         >
-          <p>{error}</p>
+          <AlertDescription>{error}</AlertDescription>
           {selectedLocation && (
             <button
               type="button"
@@ -1005,7 +1007,7 @@ export function HistoryDashboard() {
               Try again
             </button>
           )}
-        </div>
+        </Alert>
       )}
 
       {fetched &&

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/PageShell";
+import { JsonLd } from "@/components/layout/JsonLd";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { CodeBlock } from "@/components/ui/code-block";
 import { getCurrentUser } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/feature-flags";
@@ -11,7 +13,7 @@ export const metadata: Metadata = {
   description:
     "Free, no-auth public weather API for developers. Current conditions, full forecasts, geo lookup, location search, air quality, and nearest airports — CORS-open and browser-callable, with real curl examples and response shapes.",
   alternates: {
-    canonical: "https://weather.mukoko.com/developers",
+    canonical: `${SITE_URL}/developers`,
   },
 };
 export default async function DevelopersPage() {
@@ -43,28 +45,29 @@ export default async function DevelopersPage() {
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }}
-      />
+      <JsonLd data={articleSchema} />
       <PageShell>
-        <h1 className="elephant">Developers &amp; Public API</h1>
-        <p className="mt-4 text-text-secondary leading-relaxed">
-          <strong className="text-text-primary">
-            The API is free and open — call it directly, no key needed.
-          </strong>{" "}
-          mukoko weather runs on a set of public JSON endpoints with no account
-          and no auth. They&apos;re served with{" "}
-          <code className="termite">Access-Control-Allow-Origin: *</code>, so
-          you can call them straight from the browser, cross-origin, from any
-          site or app. All coordinates are WGS 84 decimal degrees; all
-          timestamps are ISO 8601. Want a drop-in widget instead of raw JSON?
-          See the{" "}
-          <Link href="/embed" prefetch={false} className="sunbird">
-            embed page
-          </Link>
-          .
-        </p>
+        <PageHeader
+          title="Developers &amp; Public API"
+          intro={
+            <>
+              <strong className="text-text-primary">
+                The API is free and open — call it directly, no key needed.
+              </strong>{" "}
+              mukoko weather runs on a set of public JSON endpoints with no
+              account and no auth. They&apos;re served with{" "}
+              <code className="termite">Access-Control-Allow-Origin: *</code>,
+              so you can call them straight from the browser, cross-origin, from
+              any site or app. All coordinates are WGS 84 decimal degrees; all
+              timestamps are ISO 8601. Want a drop-in widget instead of raw
+              JSON? See the{" "}
+              <Link href="/embed" prefetch={false} className="sunbird">
+                embed page
+              </Link>
+              .
+            </>
+          }
+        />
 
         {/* Base URL */}
         <section className="mt-10">

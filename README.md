@@ -1,6 +1,6 @@
 # Mukoko Weather
 
-> AI-powered weather intelligence for the developing world — real-time forecasts and locally-relevant insights for farming, mining, travel, and daily life. Built in Zimbabwe, scaling globally.
+> Weather intelligence for the developing world — real-time forecasts and locally-relevant insights for farming, mining, travel, and daily life. Built in Zimbabwe, scaling globally.
 
 [![CI](https://github.com/nyuchi/mukoko-weather/actions/workflows/ci.yml/badge.svg)](https://github.com/nyuchi/mukoko-weather/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)

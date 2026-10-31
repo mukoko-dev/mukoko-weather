@@ -10,19 +10,11 @@ use weather_edge::now_ms;
 use worker::{Env, Request, Result};
 
 const DB: &str = "WEATHER_DB";
-/// Set by mukoko-weather-api to the caller's IP (this Worker has no public
-/// route, so only an API Worker's service binding can set it).
-const CLIENT_IP_HEADER: &str = "X-Mukoko-Client-IP";
-
 /// The stored identity of the caller: a hash of the IP, never the IP.
 pub fn caller_key(req: &Request) -> String {
-    let ip = req
-        .headers()
-        .get(CLIENT_IP_HEADER)
-        .ok()
-        .flatten()
-        .or_else(|| req.headers().get("CF-Connecting-IP").ok().flatten())
-        .unwrap_or_else(|| "unknown".into());
+    // The API's service binding stamps the visitor's address; see
+    // `weather_edge::client_ip`.
+    let ip = weather_edge::client_ip(req).unwrap_or_else(|| "unknown".into());
     budget::client_key(None, &ip)
 }
 
