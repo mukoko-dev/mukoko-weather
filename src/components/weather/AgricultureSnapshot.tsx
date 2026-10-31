@@ -35,7 +35,7 @@ import { AgricultureSnapshotSkeleton } from "./SectionSkeleton";
 /**
  * Agriculture snapshot card (location page).
  *
- * A glanceable farm-weather view from `/api/py/agriculture`: the day's
+ * A glanceable farm-weather view from `/v1/agriculture` (Worker): the day's
  * verdict, spray / plant / harvest / irrigate windows, rain, soil, water
  * balance, GDD, frost/heat risk and spray wind. The numbers are
  * deterministic. Signed-in users also get one AI line explaining them

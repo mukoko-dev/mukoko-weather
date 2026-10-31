@@ -7,6 +7,7 @@
 //! GET /weather?lat=&lon=[&models=a,b][&extras=1][&refresh=1]   full WeatherData (the app's shape)
 //! GET /daily?location=|lat=&lon=[&days=1..7]       the daily forecast contract
 //! GET /air-quality?lat=&lon=                       the EPA AQI (Open-Meteo air quality)
+//! GET /agriculture?lat=&lon=[&location=][&country=][&crops=]  farm windows, rain, soil, water balance, frost and heat risk
 //! GET /air-quality/grid?lat=&lon=[&radiusKm=][&n=] US AQI on an n x n grid (one batched call)
 //! GET /haze?lat=&lon=                              haze level, type, advice and season (Open-Meteo, NEA in Singapore)
 //! GET /normals?lat=&lon=[&date=]                   1991-2020 average daily high and low (ERA5 via Open-Meteo)
@@ -28,6 +29,7 @@
 //! jobs Worker sends it (cache warming); the API Workers build their own
 //! query strings, so outside callers cannot force provider calls.
 
+mod agriculture;
 mod air;
 mod aq_grid;
 mod chain;
@@ -56,6 +58,7 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
         "/weather" => weather(&req, &env, &ctx).await,
         "/daily" => daily(&req, &env, &ctx).await,
         "/air-quality" => air::air_quality(&req, &env, &ctx).await,
+        "/agriculture" => agriculture::agriculture(&req, &env, &ctx).await,
         "/air-quality/grid" => aq_grid::air_quality_grid(&req, &env, &ctx).await,
         "/enso" => enso::enso(&env, &ctx).await,
         "/haze" => haze::haze(&req, &env, &ctx).await,

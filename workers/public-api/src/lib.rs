@@ -10,6 +10,7 @@
 //! GET /v1/weather?lat=&lon=[&models=a,b]   full WeatherData, the shape of /api/py/weather
 //! GET /v1/forecast?location=|lat=&lon=[&days=1..7]   the daily forecast contract
 //! GET /v1/locations/profile?slug=|lat=&lon=[&country=]   a place's knowledge (seasons, crops, climate, soil) and today's context
+//! GET /v1/agriculture?lat=&lon=[&location=][&country=][&crops=]   farm windows, rain, soil, water balance, frost and heat risk (the shape of /api/py/agriculture)
 //! GET /v1/air-quality?lat=&lon=                     the EPA AQI, the shape of /api/py/airquality
 //! GET /v1/air-quality/grid?lat=&lon=[&radiusKm=&n=]  US AQI on an n x n grid (the shape of /api/py/airquality/grid)
 //! GET /v1/haze?lat=&lon=                             haze panel data (the shape of /api/py/haze)
@@ -174,6 +175,16 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
                 FORECAST_BINDING,
                 "/profile",
                 "public, max-age=1800",
+            )
+            .await
+        }
+        "/v1/agriculture" => {
+            relay(
+                req,
+                env,
+                FORECAST_BINDING,
+                "/agriculture",
+                "public, max-age=900",
             )
             .await
         }

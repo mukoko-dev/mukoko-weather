@@ -456,6 +456,19 @@ pub async fn profile(req: &Request, env: &Env, ctx: &Context) -> Result<Response
         }
     };
 
+    let profile = assemble(env, place, normals.as_ref(), soil).await;
+    json(200, &profile)
+}
+
+/// The profile built from what is already known: seasons (MongoDB rows or the
+/// compiled seed), the neighbour's climate for a bare spot, the zone offset
+/// and ENSO. No upstream call and no budget.
+async fn assemble(
+    env: &Env,
+    place: pp::PlaceIn,
+    normals: Option<&pp::NormalsBundle>,
+    soil: (Option<pp::Soil>, bool),
+) -> pp::LocationProfile {
     // The country's calendar: MongoDB's rows (seed and AI-made) when it
     // answers, else the compiled seed.
     let seasons = match place.country.as_deref() {
@@ -470,7 +483,7 @@ pub async fn profile(req: &Request, env: &Env, ctx: &Context) -> Result<Response
     };
 
     let when = now();
-    let mut doc = pp::build_knowledge(&place, normals.as_ref(), seasons, soil, when);
+    let mut doc = pp::build_knowledge(&place, normals, seasons, soil, when);
     if place.id.is_none() && doc.climate.is_none() {
         if let Some(neighbour) = mongo_neighbour(env, &doc.region_cell).await {
             pp::merge_neighbour(&mut doc, &neighbour);
@@ -485,5 +498,23 @@ pub async fn profile(req: &Request, env: &Env, ctx: &Context) -> Result<Response
     let enso = enso_now(env).await;
     profile.current = Some(pp::compute_current(&profile, when, offset, enso));
     pp::apply_consumer_view(&mut profile);
-    json(200, &profile)
+    profile
+}
+
+/// The profile the agriculture route grounds its advice in, as the flat
+/// consumer view (`season`, `crops`, `normals`, `koppen`, `enso`). Cache-only,
+/// as the Python `get_location_profile(allow_build=False)` was: the cell's
+/// normals when KV already holds them, no soil, no upstream call, no budget.
+/// `None` when no place can be resolved.
+pub async fn cached_profile(
+    env: &Env,
+    slug: Option<&str>,
+    lat: f64,
+    lon: f64,
+    country: Option<&str>,
+) -> Option<Value> {
+    let place = resolve_place(env, slug, Some(lat), Some(lon), country).await?;
+    let normals: Option<pp::NormalsBundle> = cached(env, &normals_key(place.lat, place.lon)).await;
+    let profile = assemble(env, place, normals.as_ref(), (None, false)).await;
+    serde_json::to_value(&profile).ok()
 }
