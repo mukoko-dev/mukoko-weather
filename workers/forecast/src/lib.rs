@@ -39,6 +39,7 @@
 
 mod air;
 mod aq_grid;
+mod blend_config;
 mod chain;
 mod enrich;
 mod enso;
@@ -115,6 +116,13 @@ async fn health(req: &Request, env: &Env) -> Result<Response> {
             "mongo_probe": probe,
             // Tomorrow.io is enrichment only; its caps and use, no live call.
             "enrichment": enrich::snapshot(env).await,
+            // The baseline blend: its members (the original six plus the Met
+            // Office, CMA and JMA) and the floor. No provider call.
+            "blend": {
+                "members": blend::order_members(&blend::weights_for("default")),
+                "floor": blend::MIN_MEMBERS,
+                "override": "weather.modelBlendConfig",
+            },
         }),
     )
 }

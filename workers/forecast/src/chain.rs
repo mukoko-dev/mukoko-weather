@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use weather_core::blend::{self, NotBlended};
+use weather_core::blend::{self, Attempt, Upstream};
 use weather_core::breaker::{self, Breaker};
 use weather_core::{geo, normalize, Source};
 use weather_edge::{get_with_timeout, now, now_ms, now_rfc3339};
@@ -75,7 +75,7 @@ pub async fn forecast(env: &Env, ctx: &Context, lat: f64, lon: f64, refresh: boo
         }
     }
 
-    let (data, provider, blend_header) = baseline(lat, lon).await?;
+    let (data, provider, blend_header) = baseline(env, lat, lon).await?;
     let ttl = if blend_header.is_some() {
         BLEND_TTL_SECONDS
     } else {
@@ -130,35 +130,49 @@ async fn fetch(url: &str) -> Fetched {
     }
 }
 
-/// The baseline: the blend when at least four members answered, else
+/// The baseline: the blend when at least four members answered (every member
+/// that returned data is used, weights renormalised over those present), else
 /// `best_match`, marked as such. `None` when Open-Meteo gave nothing usable
 /// (the caller answers 503; this Worker never invents data).
-async fn baseline(lat: f64, lon: f64) -> Option<(Value, &'static str, Option<String>)> {
+async fn baseline(env: &Env, lat: f64, lon: f64) -> Option<(Value, &'static str, Option<String>)> {
     let region = blend::region_for(lat, lon);
-    let weights = blend::weights_for(region);
-    let members = blend::order_members(&weights);
+    // The compiled-in weights, or the `weather.modelBlendConfig` override.
+    let weights = crate::blend_config::weights(env, region).await;
 
-    let mut why = NotBlended::CircuitOpen;
-    if open_meteo_allowed() {
+    let upstream = if open_meteo_allowed() {
         let url = blend::open_meteo_url(lat, lon, &blend::request_models(&weights));
-        match fetch(&url).await {
-            Fetched::Ok(raw) => match blend::build_blend(&raw, region, &weights, now()) {
-                Some(out) => {
-                    record_open_meteo(true);
-                    return Some((out.payload, blend::PROVIDER_BLEND, Some(out.header)));
-                }
-                // Too few members: not an outage, so no breaker failure.
-                None => {
-                    why = NotBlended::TooFewMembers(blend::members_with_data(&raw, &members).len())
-                }
-            },
-            Fetched::Rejected => why = NotBlended::Rejected,
-            Fetched::Failed => {
-                record_open_meteo(false);
-                why = NotBlended::UpstreamError;
-            }
+        Some(fetch(&url).await)
+    } else {
+        None
+    };
+    let attempt = blend::attempt_blend(
+        match &upstream {
+            Some(Fetched::Ok(raw)) => Upstream::Body(raw),
+            Some(Fetched::Rejected) => Upstream::Rejected,
+            Some(Fetched::Failed) => Upstream::Failed,
+            None => Upstream::BreakerOpen,
+        },
+        region,
+        &weights,
+        now(),
+    );
+    let why = match attempt {
+        Attempt::Blended(out) => {
+            record_open_meteo(true);
+            return Some((out.payload, blend::PROVIDER_BLEND, Some(out.header)));
         }
-    }
+        Attempt::Fallback {
+            why,
+            breaker_failure,
+        } => {
+            // Only an outage counts: too few members or a rejected request
+            // would open the breaker for everyone.
+            if breaker_failure {
+                record_open_meteo(false);
+            }
+            why
+        }
+    };
 
     if !open_meteo_allowed() {
         return None;

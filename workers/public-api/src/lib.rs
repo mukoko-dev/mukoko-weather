@@ -622,6 +622,7 @@ async fn status(env: &Env) -> Result<Response> {
         forecast.1,
     )];
     checks.extend(health::forecast_storage_row(&forecast.0, forecast.1));
+    checks.extend(health::blend_row(&forecast.0, forecast.1));
     checks.push(health::enrichment_row(&forecast.0, forecast.1));
     checks.push(health::worker_row("Places Worker", &places.0, places.1));
     checks.push(health::worker_row(
