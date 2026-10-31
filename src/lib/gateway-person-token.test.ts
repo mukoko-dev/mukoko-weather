@@ -10,7 +10,6 @@ vi.mock("./observability", () => ({ logWarn: warn, logError: vi.fn() }));
 import {
   createPersonTokenExchanger,
   consoleClientId,
-  DEFAULT_CONSOLE_CLIENT_ID,
   issuingClient,
   MAX_CACHE_MS,
   peekClaims,
@@ -215,12 +214,28 @@ describe("Console client only", () => {
     expect(transport).not.toHaveBeenCalled();
   });
 
-  it("defaults to the Mukoko Account client and allows an env override", () => {
-    expect(DEFAULT_CONSOLE_CLIENT_ID).toBe("client_01KQBBSMQTSMTBN7HEC9KQBJC0");
-    expect(consoleClientId({})).toBe(DEFAULT_CONSOLE_CLIENT_ID);
-    expect(
-      consoleClientId({ NYUCHI_CONSOLE_WORKOS_CLIENT_ID: "client_x" }),
-    ).toBe("client_x");
+  it("takes the client from WORKOS_CLIENT_ID and has no built-in default", () => {
+    expect(consoleClientId({})).toBe("");
+    expect(consoleClientId({ WORKOS_CLIENT_ID: "  " })).toBe("");
+    expect(consoleClientId({ WORKOS_CLIENT_ID: " client_x " })).toBe(
+      "client_x",
+    );
+  });
+
+  it("fails closed, without a call, when no client is configured", async () => {
+    const ex = createPersonTokenExchanger({
+      config: () => ({
+        transport: transport as unknown as GatewayConfig["transport"],
+        credentials: { clientId: "nyk_weatherkey01", clientSecret: SECRET },
+      }),
+      consoleClientId: () => "",
+      now: () => clock,
+    });
+    await expect(ex.getPersonToken("user_1", subject())).rejects.toMatchObject({
+      code: "gateway_unconfigured",
+      status: 503,
+    });
+    expect(transport).not.toHaveBeenCalled();
   });
 });
 

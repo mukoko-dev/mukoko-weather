@@ -56,8 +56,6 @@ export const ACCESS_TOKEN_TYPE =
   "urn:ietf:params:oauth:token-type:access_token";
 /** The only scope weather ever asks for. */
 export const REQUESTED_SCOPE = "app-keys";
-/** "Mukoko Account" — the Console's WorkOS client, the only one accepted. */
-export const DEFAULT_CONSOLE_CLIENT_ID = "client_01KQBBSMQTSMTBN7HEC9KQBJC0";
 export const SAFETY_MARGIN_MS = 30_000;
 export const MAX_CACHE_MS = 5 * 60_000;
 const MAX_ENTRIES = 1_000;
@@ -350,6 +348,7 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
     const claims = peekClaims(accessToken);
     if (!claims) throw new PersonTokenError("reauth_required");
     const expected = options.consoleClientId();
+    if (!expected) throw new PersonTokenError("gateway_unconfigured");
     if (issuingClient(claims) !== expected) {
       // Never forward another client's token to the gateway.
       logWarn({
@@ -453,12 +452,16 @@ function mapExchangeFailure(
 
 // ── Process-wide default ────────────────────────────────────────────────────
 
+/**
+ * The WorkOS client every Mukoko app signs in through ("Mukoko Account"):
+ * this app's own `WORKOS_CLIENT_ID`. One account, one client, so there is no
+ * second variable and no built-in default; "" when unset, and the exchange
+ * then fails closed (`gateway_unconfigured`).
+ */
 export function consoleClientId(
   env: Record<string, string | undefined> = process.env,
 ): string {
-  return (
-    env.NYUCHI_CONSOLE_WORKOS_CLIENT_ID?.trim() || DEFAULT_CONSOLE_CLIENT_ID
-  );
+  return env.WORKOS_CLIENT_ID?.trim() ?? "";
 }
 
 const defaultExchanger = createPersonTokenExchanger({
