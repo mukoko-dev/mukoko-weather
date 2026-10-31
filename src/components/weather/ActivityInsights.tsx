@@ -134,7 +134,10 @@ export function ActivityInsights({
   activities,
   weather,
   onEdit,
+  heading = "My Activities",
 }: {
+  /** Section title; the sheet passes its own so it does not repeat its title. */
+  heading?: string;
   /** Replaces the default Edit action (the sheet closes itself first). */
   onEdit?: () => void;
   insights?: WeatherInsights;
@@ -204,7 +207,7 @@ export function ActivityInsights({
       <section aria-labelledby="activity-insights-heading">
         <SectionHeader
           headingId="activity-insights-heading"
-          title="My Activities"
+          title={heading}
           action={{ label: "Edit", onClick: edit }}
           className="mb-[var(--space-stack)]"
         />

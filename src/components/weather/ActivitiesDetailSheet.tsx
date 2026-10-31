@@ -81,6 +81,7 @@ export function ActivitiesDetailSheet({
             insights={insights}
             activities={activities}
             weather={weather}
+            heading="Advice for today"
             onEdit={() => {
               onClose();
               openMyWeather("activities");
