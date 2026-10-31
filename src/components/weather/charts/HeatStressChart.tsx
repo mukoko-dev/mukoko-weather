@@ -1,6 +1,7 @@
 "use client";
 
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
+import { WX_SERIES } from "@/lib/weather-scales";
 
 interface HeatStressChartProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,7 +18,7 @@ const SERIES: SeriesConfig[] = [
   {
     key: "heatStress",
     label: "Heat Stress Index",
-    color: "var(--chart-3)",
+    color: WX_SERIES.temp,
     type: "bar",
     opacity: 0.6,
   },

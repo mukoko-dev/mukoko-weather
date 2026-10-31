@@ -1,13 +1,18 @@
 "use client";
 
 import * as React from "react";
-import { clampPct, gradientTokens, type GradientPreset } from "./geometry";
+import {
+  GRADIENT_BREAKS,
+  clampPct,
+  gradientTokens,
+  type GradientPreset,
+} from "./geometry";
 import { useResolvedColors } from "./use-resolved-colors";
 
 export interface GradientScaleProps {
   /** Marker position along the scale, 0–100. */
   positionPct: number;
-  /** A preset ramp or explicit CSS custom-property names (e.g. "--color-severity-low"). */
+  /** A preset ramp or explicit CSS custom-property names (e.g. "--wx-uv-1"). */
   stops: GradientPreset | readonly string[];
   /** Optional sub-range (e.g. a day's low→high). The gradient still spans 0–100. */
   rangeStartPct?: number;
@@ -36,6 +41,8 @@ export function GradientScale({
   const rStart = hasRange ? clampPct(Math.min(rangeStartPct, rangeEndPct)) : 0;
   const rEnd = hasRange ? clampPct(Math.max(rangeStartPct, rangeEndPct)) : 100;
   const ramp = colors.length > 0 ? colors : tokens;
+  // Categorical presets (UV, AQI) draw hard bands at the category edges.
+  const breaks = typeof stops === "string" ? GRADIENT_BREAKS[stops] : undefined;
 
   return (
     <svg
@@ -45,6 +52,9 @@ export function GradientScale({
       aria-label={`${label}: ${Math.round(pos)}% along the scale`}
     >
       <defs>
+        <clipPath id={`${gradientId}-clip`}>
+          <rect x={0} y={3} width={100} height={6} rx={3} />
+        </clipPath>
         <linearGradient
           id={gradientId}
           gradientUnits="userSpaceOnUse"
@@ -72,13 +82,40 @@ export function GradientScale({
         className="fill-text-tertiary/15"
       />
       {/* Coloured bar (full span, or the sub-range) */}
+      {breaks ? (
+        <g clipPath={`url(#${gradientId}-clip)`}>
+          {ramp.map((c, i) => (
+            <rect
+              key={i}
+              x={breaks[i]}
+              y={3}
+              width={Math.max(0, breaks[i + 1] - breaks[i])}
+              height={6}
+              fill={c}
+              data-band={i}
+            />
+          ))}
+        </g>
+      ) : (
+        <rect
+          x={rStart}
+          y={3}
+          width={Math.max(0, rEnd - rStart)}
+          height={6}
+          rx={3}
+          fill={`url(#${gradientId})`}
+        />
+      )}
+      {/* Outline: the official colours are not all 3:1 against the card */}
       <rect
-        x={rStart}
+        x={0}
         y={3}
-        width={Math.max(0, rEnd - rStart)}
+        width={100}
         height={6}
         rx={3}
-        fill={`url(#${gradientId})`}
+        fill="none"
+        strokeWidth={0.8}
+        className="stroke-wx-outline"
       />
       {/* Marker: outlined dot, readable on any stop */}
       <circle

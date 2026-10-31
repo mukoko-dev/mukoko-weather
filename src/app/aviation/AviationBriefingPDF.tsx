@@ -1,6 +1,7 @@
 "use client";
 
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { FLIGHT_CATEGORY_PDF } from "@/lib/weather-scales";
 
 // PDF uses inline hex — CSS custom properties are not supported by @react-pdf/renderer
 const NAVY = "#1a2744";
@@ -8,10 +9,9 @@ const WHITE = "#ffffff";
 const LIGHT_GRAY = "#f5f7fa";
 const MID_GRAY = "#94a3b8";
 const DARK_GRAY = "#334155";
-const VFR_GREEN = "#16a34a";
-const MVFR_BLUE = "#2563eb";
-const IFR_ORANGE = "#ea580c";
-const LIFR_RED = "#dc2626";
+// Flight-category badge colours come from weather-scales.ts (FLIGHT_CATEGORY_PDF),
+// the same colours as the on-screen badges (VFR green, MVFR blue, IFR red, LIFR
+// magenta), so a category never changes colour between screen and paper.
 
 const styles = StyleSheet.create({
   page: {
@@ -118,19 +118,11 @@ const styles = StyleSheet.create({
   condLabel: { fontSize: 7, color: MID_GRAY, marginBottom: 3 },
 });
 
-function fcBadgeColor(fc: string): string {
-  switch (fc) {
-    case "VFR":
-      return VFR_GREEN;
-    case "MVFR":
-      return MVFR_BLUE;
-    case "IFR":
-      return IFR_ORANGE;
-    case "LIFR":
-      return LIFR_RED;
-    default:
-      return MID_GRAY;
-  }
+function fcBadgeStyle(fc: string): { backgroundColor: string; color: string } {
+  const entry = FLIGHT_CATEGORY_PDF[fc];
+  return entry
+    ? { backgroundColor: entry.bg, color: entry.fg }
+    : { backgroundColor: MID_GRAY, color: WHITE };
 }
 
 function windStr(obs: MetarObs): string {
@@ -200,7 +192,7 @@ function AirportSection({
           {airport.icao} — {airport.name}
         </Text>
         {latest && (
-          <View style={[styles.badge, { backgroundColor: fcBadgeColor(fc) }]}>
+          <View style={[styles.badge, fcBadgeStyle(fc)]}>
             <Text>{fc}</Text>
           </View>
         )}
@@ -303,10 +295,7 @@ export function AviationBriefingPDF({ data }: { data: BriefingData }) {
             <Text style={styles.condLabel}>Departure</Text>
             <Text style={styles.valueBold}>{data.departure.icao}</Text>
             <View
-              style={[
-                styles.badge,
-                { backgroundColor: fcBadgeColor(depFc), marginTop: 3 },
-              ]}
+              style={[styles.badge, { ...fcBadgeStyle(depFc), marginTop: 3 }]}
             >
               <Text>{depFc}</Text>
             </View>
@@ -333,10 +322,7 @@ export function AviationBriefingPDF({ data }: { data: BriefingData }) {
             <Text style={styles.condLabel}>Destination</Text>
             <Text style={styles.valueBold}>{data.destination.icao}</Text>
             <View
-              style={[
-                styles.badge,
-                { backgroundColor: fcBadgeColor(destFc), marginTop: 3 },
-              ]}
+              style={[styles.badge, { ...fcBadgeStyle(destFc), marginTop: 3 }]}
             >
               <Text>{destFc}</Text>
             </View>
