@@ -222,7 +222,7 @@ export function CurrentConditions({
           globals.css, [data-sky-hero]), so these controls are the page's top
           chrome. Round 48px controls: content stays distinct from controls. */}
       <div className="flex items-center justify-between gap-3 pt-1 pr-[env(safe-area-inset-right,0px)] pl-[env(safe-area-inset-left,0px)]">
-        <div className="min-w-0 text-[0.8125rem] text-[var(--sky-fg-dim)]">
+        <div className="min-w-0 text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)] text-[var(--sky-fg-dim)]">
           {breadcrumb}
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -239,7 +239,7 @@ export function CurrentConditions({
               role="status"
               className={
                 copied || copyFailed
-                  ? "absolute top-full right-0 mt-1 text-sm font-medium whitespace-nowrap"
+                  ? "absolute top-full right-0 mt-1 text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)] font-semibold whitespace-nowrap"
                   : "sr-only"
               }
             >
@@ -258,7 +258,7 @@ export function CurrentConditions({
         {/* Eyebrow: MY LOCATION / HOME, else the place's own clock. The line is
             always reserved so the clock arriving after mount never shifts
             the page. */}
-        <p className="flex min-h-[1.125rem] flex-wrap items-center justify-center gap-x-2 font-mono text-xs font-medium uppercase tracking-[0.18em] text-[var(--sky-fg-dim)]">
+        <p className="flex min-h-[calc(var(--text-caption)*var(--text-caption-leading))] flex-wrap items-center justify-center gap-x-2 font-mono text-[length:var(--text-caption)] leading-[var(--text-caption-leading)] font-semibold uppercase tracking-widest text-[var(--sky-fg-dim)]">
           {badges.length > 0
             ? badges.map((badge, i) => (
                 <span key={badge} className="inline-flex items-center gap-2">
@@ -270,15 +270,15 @@ export function CurrentConditions({
         </p>
         <h2
           id="current-conditions-heading"
-          className="font-heading text-[2.25rem] leading-[1.15] font-medium break-words"
+          className="font-heading text-[length:var(--text-h2)] leading-[var(--text-h2-leading)] font-semibold break-words"
         >
           {locationName}
         </h2>
-        <p className="mt-1 max-w-full font-sans text-[6.5rem] leading-none font-extralight tracking-[-2px] tabular-nums">
+        <p className="mt-1 max-w-full font-sans text-[length:var(--text-display)] leading-[var(--text-display-leading)] font-normal tracking-tight tabular-nums">
           <span className="sr-only">{temperature} degrees Celsius</span>
           <span aria-hidden="true">{temperature}°</span>
         </p>
-        <p className="mt-1 flex items-center justify-center gap-1.5 text-xl font-normal">
+        <p className="mt-1 flex items-center justify-center gap-1.5 text-[length:var(--text-h5)] leading-[var(--text-h5-leading)] font-normal">
           <span aria-hidden="true" className="shrink-0">
             <WeatherIcon
               icon={isDay ? info.icon : nightIcon(info.icon)}
@@ -288,14 +288,14 @@ export function CurrentConditions({
           <span>{info.label}</span>
         </p>
         {highLow && (
-          <p className="mt-1 flex flex-wrap justify-center gap-x-3 text-[1.0625rem] font-medium tabular-nums text-[var(--sky-fg-dim)]">
+          <p className="mt-1 flex flex-wrap justify-center gap-x-3 text-[length:var(--text-body-lg)] leading-[var(--text-body-lg-leading)] font-semibold tabular-nums text-[var(--sky-fg-dim)]">
             {highLow.map((part) => (
               <span key={part}>{part}</span>
             ))}
           </p>
         )}
         {activityLine && (
-          <p className="mt-3 flex items-center justify-center gap-2 text-base font-medium">
+          <p className="mt-3 flex items-center justify-center gap-2 text-[length:var(--text-h6)] leading-[var(--text-h6-leading)] font-semibold">
             <span
               aria-hidden="true"
               className={`size-2.5 shrink-0 rounded-full ring-2 ring-current ${activityLine.dot}`}

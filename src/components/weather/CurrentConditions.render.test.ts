@@ -90,10 +90,12 @@ describe("CurrentConditions render — the sky hero", () => {
     expect(html).toMatch(/<h2 id="current-conditions-heading"[^>]*>Harare</);
   });
 
-  it("shows the temperature as one weight-200 numeral with the degree sign", () => {
+  it("shows the temperature as one Display-size, weight-400 numeral with the degree sign", () => {
     const html = render();
     expect(html).toContain("28 degrees Celsius");
-    expect(html).toContain("font-extralight");
+    expect(html).toContain("text-[length:var(--text-display)]");
+    expect(html).toContain("font-normal");
+    expect(html).not.toContain("font-extralight");
     expect(html).toMatch(/<span aria-hidden="true">28°<\/span>/);
   });
 
@@ -153,7 +155,9 @@ describe("CurrentConditions render — the sky hero", () => {
   it("shows the eyebrow only for current location or home, keeping the line reserved", () => {
     const plain = render();
     expect(plain).not.toContain("My Location");
-    expect(plain).toContain("min-h-[1.125rem]");
+    expect(plain).toContain(
+      "min-h-[calc(var(--text-caption)*var(--text-caption-leading))]",
+    );
     const html = render({}, { isCurrentLocation: true });
     expect(html).toContain("My Location");
     expect(html).toContain("uppercase");

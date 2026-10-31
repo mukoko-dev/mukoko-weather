@@ -12,7 +12,7 @@ interface SeasonBadgeProps {
 export function SeasonBadge({ season }: SeasonBadgeProps) {
   const showLocalName = season.localName && season.localName !== season.name;
   return (
-    <Badge className="max-w-full flex-wrap justify-center gap-x-2 px-3 py-1 text-center">
+    <Badge className="max-w-full flex-wrap justify-center gap-x-2 px-3 py-1 text-center font-normal">
       <span className="text-base font-semibold">
         {showLocalName ? season.localName : season.name}
       </span>

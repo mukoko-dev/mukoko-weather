@@ -19,7 +19,7 @@ import {
 
 /** One row of the mobile ⋯ menu — full 48px touch height. */
 const MENU_ITEM_CLASS =
-  "flex min-h-[var(--touch-target-min)] w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 text-left text-base font-medium text-text-primary transition-colors hover:bg-surface-dim aria-[current=page]:text-primary";
+  "flex min-h-[var(--touch-target-min)] w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 text-left text-base font-semibold text-text-primary transition-colors hover:bg-surface-dim aria-[current=page]:text-primary";
 
 interface Props {
   /** Class of the round ⋯ trigger (`bee` in the header pill, `kestrel-round`

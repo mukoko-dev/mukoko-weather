@@ -30,17 +30,17 @@ describe("CurrentConditions — hero stack (matches the owner's mockup)", () => 
     expect(source).toContain('aria-labelledby="current-conditions-heading"');
   });
 
-  it("sets the place name in Noto Serif 36px / 500 / line-height 1.15", () => {
+  it("sets the place name in Noto Serif at Mzizi H2 (36px / 1.2, weight 600)", () => {
     expect(source).toContain(
-      "font-heading text-[2.25rem] leading-[1.15] font-medium",
+      "font-heading text-[length:var(--text-h2)] leading-[var(--text-h2-leading)] font-semibold",
     );
   });
 
-  it("sets the temperature in Noto Sans weight 200, 104px, tight tracking, tabular figures", () => {
+  it("sets the temperature in Noto Sans at Mzizi Display (72px / 1.1), weight 400, tabular figures", () => {
     expect(source).toContain(
-      "font-sans text-[6.5rem] leading-none font-extralight tracking-[-2px] tabular-nums",
+      "font-sans text-[length:var(--text-display)] leading-[var(--text-display-leading)] font-normal tracking-tight tabular-nums",
     );
-    expect(source).not.toMatch(/font-(thin|light|semibold|bold)\b[^"]*6\.5rem/);
+    expect(source).not.toMatch(/font-(thin|extralight|light)\b/);
   });
 
   it("renders the temperature with an accessible degrees-Celsius label", () => {
@@ -57,14 +57,18 @@ describe("CurrentConditions — hero stack (matches the owner's mockup)", () => 
     expect(source).toContain("<WeatherIcon");
     expect(source).toContain("nightIcon(info.icon)");
     expect(source).toContain("size={20}");
-    expect(source).toContain("text-xl font-normal");
+    expect(source).toContain(
+      "text-[length:var(--text-h5)] leading-[var(--text-h5-leading)] font-normal",
+    );
     expect(source).toContain('<span aria-hidden="true" className="shrink-0">');
     expect(source).not.toContain("size={56}");
   });
 
-  it("shows H:/L: at 17px/500 in the dimmer sky white, wrapping between the parts", () => {
+  it("shows H:/L: at Mzizi Body Large (18px, weight 600) in the dimmer sky white, wrapping between the parts", () => {
     expect(source).toContain("formatHighLowParts(");
-    expect(source).toContain("text-[1.0625rem] font-medium");
+    expect(source).toContain(
+      "text-[length:var(--text-body-lg)] leading-[var(--text-body-lg-leading)] font-semibold",
+    );
     expect(source).toContain("text-[var(--sky-fg-dim)]");
     expect(source).toContain("flex-wrap");
   });
@@ -80,7 +84,9 @@ describe("CurrentConditions — hero stack (matches the owner's mockup)", () => 
     expect(source).toContain("requestAnimationFrame(() => setNow(new Date()))");
     expect(source).toContain("heroLocalTime(now, utcOffsetSeconds)");
     // The line is always reserved, so the clock arriving never shifts the page.
-    expect(source).toContain("min-h-[1.125rem]");
+    expect(source).toContain(
+      "min-h-[calc(var(--text-caption)*var(--text-caption-leading))]",
+    );
   });
 
   it("is the sky hero: no card, no glass, no shadow, no inline style", () => {
@@ -129,10 +135,12 @@ describe("CurrentConditions — hero stack (matches the owner's mockup)", () => 
 });
 
 describe("CurrentConditions — top row (breadcrumb, Share, ⋯)", () => {
-  it("takes the breadcrumb as a slot at the left of the top row, 13px, dim sky white", () => {
+  it("takes the breadcrumb as a slot at the left of the top row, Body Small 14px, dim sky white", () => {
     expect(source).toContain("breadcrumb?: ReactNode");
     expect(source).toContain("{breadcrumb}");
-    expect(source).toContain("text-[0.8125rem] text-[var(--sky-fg-dim)]");
+    expect(source).toContain(
+      "text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)] text-[var(--sky-fg-dim)]",
+    );
   });
 
   it("holds Share and, on phones only, the ⋯ menu — both round 48px controls", () => {

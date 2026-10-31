@@ -118,7 +118,7 @@ export function HourlyScrollCards({
                 aria-label={`${timeLabel}: ${temp} degrees, ${info.label}`}
                 className="flex min-w-[60px] flex-col items-center gap-1.5 rounded-[var(--radius-input)] bg-surface-base px-2.5 py-2 transition-colors hover:bg-surface-elevated"
               >
-                <span className="text-base font-medium text-text-secondary">
+                <span className="text-base font-normal text-text-secondary">
                   {timeLabel}
                 </span>
                 <WeatherIcon
