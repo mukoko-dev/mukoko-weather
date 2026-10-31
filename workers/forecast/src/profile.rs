@@ -504,7 +504,11 @@ async fn assemble(
 /// The profile the agriculture route grounds its advice in, as the flat
 /// consumer view (`season`, `crops`, `normals`, `koppen`, `enso`). Cache-only,
 /// as the Python `get_location_profile(allow_build=False)` was: the cell's
-/// normals when KV already holds them, no soil, no upstream call, no budget.
+/// normals when KV already holds them, no soil, no archive request and no
+/// `PlaceProfile` budget. It is NOT free of upstream calls: a `slug` that is
+/// neither a seed nor a `{name}--{geohash}` spot resolves through the Nyuchi
+/// API (`places::resolve`, cached in KV under `place:v1:`), so an unknown slug
+/// costs one lookup per miss, bounded only by the public API's per-IP limit.
 /// `None` when no place can be resolved.
 pub async fn cached_profile(
     env: &Env,
