@@ -16,6 +16,7 @@ import {
   wallClockMs,
 } from "@/lib/location-time";
 import { SectionHeader } from "@/components/ui/section-header";
+import { CardHitArea } from "@/components/ui/card-hit-area";
 import { LazySection } from "./LazySection";
 import { ChartErrorBoundary } from "./ChartErrorBoundary";
 import {
@@ -153,15 +154,7 @@ export function EdgeTile({
       )}
     >
       {children}
-      {open && label && (
-        <button
-          type="button"
-          onClick={open}
-          aria-haspopup="dialog"
-          aria-label={label}
-          className="absolute inset-0 z-[1] rounded-[var(--radius-card)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-        />
-      )}
+      {open && label && <CardHitArea onClick={open} aria-label={label} />}
     </div>
   );
 }
