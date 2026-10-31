@@ -192,11 +192,20 @@ impl FeedSwitches {
 }
 
 /// One GET. No body, no method: the feeds are read-only.
+///
+/// What a [`Transport`] must honour: `timeout_ms` for the whole exchange;
+/// `max_bytes` WHILE reading (stop and fail once the body passes it; the
+/// check here runs only after a body is in memory, so it is the second line);
+/// and `follow_redirects == false` (a Worker passes `redirect: "manual"`), so
+/// our headers never go to a host we did not choose and a moved feed shows up
+/// as a 3xx status instead of being quietly followed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpRequest {
     pub url: String,
     pub headers: Vec<(&'static str, String)>,
     pub timeout_ms: u32,
+    pub max_bytes: usize,
+    pub follow_redirects: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -212,8 +221,9 @@ pub enum TransportError {
     Network,
 }
 
-/// What a runtime supplies: one GET with a timeout. In a Worker this wraps
-/// `fetch`; its future is not `Send`, which is why the trait is not either.
+/// What a runtime supplies: one GET, under the limits of its [`HttpRequest`]. In
+/// a Worker this wraps `fetch`; its future is not `Send`, which is why the
+/// trait is not either.
 #[allow(async_fn_in_trait)]
 pub trait Transport {
     async fn get(&self, req: &HttpRequest) -> Result<HttpResponse, TransportError>;
@@ -237,7 +247,8 @@ pub enum FetchError {
 impl FetchError {
     /// Whether this failure counts toward opening the breaker: the feed is
     /// unwell (transport, timeout, 5xx, 429, a body that is not the feed's).
-    /// A 4xx or an unfollowed redirect is our request, and does not.
+    /// A 4xx or a redirect (never followed, see [`HttpRequest`]) is our
+    /// request, and does not.
     pub fn counts_against_breaker(self) -> bool {
         match self {
             Self::Timeout | Self::Transport | Self::BadBody(_) => true,
@@ -268,9 +279,25 @@ pub struct Fetched<T> {
     /// Requests actually made.
     pub requests: u32,
     /// `false` when the window may hold more than `items`: the page limit was
-    /// reached with a full page, or a later page failed. The writer merges
-    /// per measure either way.
+    /// reached, or reading stopped early for the reason in `stop`. The writer
+    /// merges per measure either way.
     pub complete: bool,
+    /// Why reading stopped before the window was exhausted, when something
+    /// went wrong after the first page (a later page failed, or the server
+    /// returned the same page again). A failed request is already on the
+    /// breaker; the schedule reads `unwell()` for its own back-off, because
+    /// the breaker forgets failures at the next success, including the first
+    /// page of the next run.
+    pub stop: Option<FetchError>,
+}
+
+impl<T> Fetched<T> {
+    /// Whether this run should count as a failed attempt for the schedule's
+    /// back-off (`backoff_ms`): the feed was read, but it is unwell. A run
+    /// that only hit the page limit is not.
+    pub fn unwell(&self) -> bool {
+        self.stop.is_some_and(FetchError::counts_against_breaker)
+    }
 }
 
 /// How WIS2 is paged and windowed.
@@ -307,8 +334,34 @@ fn is_feature_collection(v: &Value) -> bool {
     v.get("features").is_some_and(Value::is_array)
 }
 
-fn is_array(v: &Value) -> bool {
-    v.is_array()
+/// What identifies one WIS2 feature across pages: its report and parameter.
+fn feature_key(f: &Value) -> String {
+    let p = &f["properties"];
+    match (p["reportId"].as_str(), p["name"].as_str()) {
+        (Some(report), Some(name)) => format!("{report}|{name}"),
+        _ => f["id"]
+            .as_str()
+            .map_or_else(|| f.to_string(), str::to_string),
+    }
+}
+
+/// Whether the page just read ended the window. An empty page does. Otherwise
+/// the server's own count decides when it gives one (`numberMatched`, from
+/// OGC API Features), then a `next` link; only when it gives neither is a page
+/// shorter than we asked for taken as the last, because a server may cap
+/// `limit` below what we sent.
+fn last_page(body: &Value, page_rows: usize, received: usize, page_size: u32) -> bool {
+    if page_rows == 0 {
+        return true;
+    }
+    if let Some(matched) = body.get("numberMatched").and_then(Value::as_u64) {
+        return received as u64 >= matched;
+    }
+    let has_next = body
+        .get("links")
+        .and_then(Value::as_array)
+        .is_some_and(|links| links.iter().any(|l| l["rel"] == "next"));
+    !has_next && page_rows < page_size as usize
 }
 
 /// Reads the feeds through a [`Transport`].
@@ -371,6 +424,8 @@ impl<'a, T: Transport> Fetcher<'a, T> {
                 ("Accept", accept.to_string()),
             ],
             timeout_ms: feed.policy().timeout_ms,
+            max_bytes: MAX_BODY_BYTES,
+            follow_redirects: false,
         };
         let outcome = match self.transport.get(&req).await {
             Err(TransportError::Timeout) => Err(FetchError::Timeout),
@@ -393,11 +448,21 @@ impl<'a, T: Transport> Fetcher<'a, T> {
 
     /// Recent WIS2 observations for the Zimbabwe MSD node.
     ///
-    /// Reads pages of one window (`now - window` to `now`) until a short page,
-    /// an empty page or `max_pages`; groups all of it as one collection; drops
-    /// reports outside the window or stamped in the future. A failure on the
-    /// first page is an error; a failure on a later page returns what was
-    /// read with `complete: false`.
+    /// Reads pages of one window (`now - window` to `now`) until the server's
+    /// own count, an empty page or `max_pages` ends it (see `last_page`);
+    /// each page starts at the number of rows already received, so a server
+    /// that caps `limit` is still read in full. Groups all of it as one
+    /// collection, once per feature, and drops reports outside the window or
+    /// stamped in the future.
+    ///
+    /// A failure on the first page is an error. A failure on a later page, or
+    /// a page the server has already sent (it is ignoring `offset`), stops
+    /// the read: what was read comes back with `complete: false` and the
+    /// reason in `stop`, so the schedule can back off. Offset paging has no
+    /// pinned order here (a `sortby` is not sent, because the node's property
+    /// names are unverified), so a report published mid-read can shift a page;
+    /// the six-hour overlap of the next run re-reads the window and the writer
+    /// merges per measure, which repairs it.
     pub async fn wis2(
         &self,
         breaker: &mut Breaker,
@@ -412,10 +477,14 @@ impl<'a, T: Transport> Fetcher<'a, T> {
         let q = self.wis2;
         let from = now - Duration::minutes(i64::from(q.window_minutes));
         let mut features: Vec<Value> = Vec::new();
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        let mut received = 0usize;
         let mut requests = 0u32;
         let mut complete = false;
+        let mut stop = None;
         for page in 0..q.max_pages {
-            let url = wis2_url(from, now, q.page_size, page.saturating_mul(q.page_size));
+            let offset = u32::try_from(received).unwrap_or(u32::MAX);
+            let url = wis2_url(from, now, q.page_size, offset);
             requests += 1;
             let mut body = match self
                 .get_json(
@@ -430,15 +499,31 @@ impl<'a, T: Transport> Fetcher<'a, T> {
             {
                 Ok(b) => b,
                 Err(e) if page == 0 => return Err(e),
-                Err(_) => break,
+                Err(e) => {
+                    stop = Some(e);
+                    break;
+                }
             };
             let Some(Value::Array(rows)) = body.get_mut("features").map(Value::take) else {
                 break;
             };
-            let n = rows.len();
-            features.extend(rows);
-            if n < q.page_size as usize {
+            received += rows.len();
+            let last = last_page(&body, rows.len(), received, q.page_size);
+            let before = features.len();
+            for row in rows {
+                if seen.insert(feature_key(&row)) {
+                    features.push(row);
+                }
+            }
+            if last {
                 complete = true;
+                break;
+            }
+            if features.len() == before {
+                // A full page with nothing new: the server is not paging.
+                // (The exchange itself was fine, so the breaker is not told;
+                // `Fetched::unwell` carries it to the schedule's back-off.)
+                stop = Some(FetchError::BadBody("repeated_page"));
                 break;
             }
         }
@@ -457,7 +542,24 @@ impl<'a, T: Transport> Fetcher<'a, T> {
             items,
             requests,
             complete,
+            stop,
         })
+    }
+
+    /// The gate, the breaker and one GET, for the single-request routes.
+    async fn guarded_get(
+        &self,
+        feed: Feed,
+        breaker: &mut Breaker,
+        now_ms: u64,
+        url: &str,
+        shape: fn(&Value) -> bool,
+    ) -> Result<Value, FetchError> {
+        if !breaker.allow(now_ms) {
+            return Err(FetchError::CircuitOpen);
+        }
+        self.get_json(breaker, now_ms, feed, url.to_string(), ACCEPT_JSON, shape)
+            .await
     }
 
     /// Current SAAOPA readings for the stations in `registered` (the active
@@ -476,26 +578,23 @@ impl<'a, T: Transport> Fetcher<'a, T> {
                 items: Vec::new(),
                 requests: 0,
                 complete: true,
+                stop: None,
             });
         }
-        let now_ms = millis(now);
-        if !breaker.allow(now_ms) {
-            return Err(FetchError::CircuitOpen);
-        }
         let body = self
-            .get_json(
-                breaker,
-                now_ms,
+            .guarded_get(
                 feed,
-                SAAOPA_STATUS_URL.to_string(),
-                ACCEPT_JSON,
-                is_array,
+                breaker,
+                millis(now),
+                SAAOPA_STATUS_URL,
+                Value::is_array,
             )
             .await?;
         Ok(Fetched {
             items: saaopa_status_observations(&body, now, SAAOPA_MAX_AGE_MINUTES, Some(registered)),
             requests: 1,
             complete: true,
+            stop: None,
         })
     }
 
@@ -507,24 +606,20 @@ impl<'a, T: Transport> Fetcher<'a, T> {
     ) -> Result<Fetched<SaaopaStation>, FetchError> {
         let feed = Feed::SaaopaRegistry;
         self.gate(feed)?;
-        let now_ms = millis(now);
-        if !breaker.allow(now_ms) {
-            return Err(FetchError::CircuitOpen);
-        }
         let body = self
-            .get_json(
-                breaker,
-                now_ms,
+            .guarded_get(
                 feed,
-                SAAOPA_STATIONS_URL.to_string(),
-                ACCEPT_JSON,
-                is_array,
+                breaker,
+                millis(now),
+                SAAOPA_STATIONS_URL,
+                Value::is_array,
             )
             .await?;
         Ok(Fetched {
             items: saaopa_aws_registry(&body),
             requests: 1,
             complete: true,
+            stop: None,
         })
     }
 }
@@ -622,6 +717,26 @@ mod tests {
         v["features"].as_array().unwrap().clone()
     }
 
+    /// The recorded answer with `numberMatched` set to its own 12 rows, as a
+    /// query narrowed by `datetime` reports. (The fixture was recorded
+    /// without a filter, so its `numberMatched` is the node's whole history.)
+    fn wis2_body() -> String {
+        let mut v: Value = serde_json::from_str(WIS2).unwrap();
+        v["numberMatched"] = json!(12);
+        v.to_string()
+    }
+
+    /// A page of rows with the server's total, as OGC API - Features does.
+    fn page_of(rows: &[Value], matched: u64) -> Result<HttpResponse, TransportError> {
+        ok(&json!({
+            "type": "FeatureCollection",
+            "features": rows,
+            "numberReturned": rows.len(),
+            "numberMatched": matched
+        })
+        .to_string())
+    }
+
     fn page(rows: &[Value]) -> Result<HttpResponse, TransportError> {
         ok(
             &json!({"type": "FeatureCollection", "features": rows, "numberReturned": rows.len()})
@@ -634,7 +749,11 @@ mod tests {
 
     #[test]
     fn every_feed_is_off_until_switched_on_and_a_disabled_feed_makes_no_request() {
-        let fake = Fake::new(vec![ok(WIS2), ok(SAAOPA_STATUS), ok(SAAOPA_STATIONS)]);
+        let fake = Fake::new(vec![
+            ok(&wis2_body()),
+            ok(SAAOPA_STATUS),
+            ok(SAAOPA_STATIONS),
+        ]);
         let f = Fetcher::new(&fake, "0.13.0");
         assert_eq!(
             FeedSwitches::default(),
@@ -678,7 +797,7 @@ mod tests {
 
     #[test]
     fn wis2_reads_one_short_page_and_matches_the_parser_over_the_same_rows() {
-        let fake = Fake::new(vec![ok(WIS2)]);
+        let fake = Fake::new(vec![ok(&wis2_body())]);
         let f = Fetcher::new(&fake, "0.13.0").with_switches(on());
         let mut b = breaker();
         let got = block_on(f.wis2(&mut b, at(NOW))).unwrap();
@@ -703,7 +822,11 @@ mod tests {
 
     #[test]
     fn requests_are_polite_and_carry_no_credentials() {
-        let fake = Fake::new(vec![ok(WIS2), ok(SAAOPA_STATUS), ok(SAAOPA_STATIONS)]);
+        let fake = Fake::new(vec![
+            ok(&wis2_body()),
+            ok(SAAOPA_STATUS),
+            ok(SAAOPA_STATIONS),
+        ]);
         let f = Fetcher::new(&fake, "0.13.0").with_switches(on());
         let now = at(NOW);
         let codes: BTreeSet<String> = ["FVHP".to_string()].into();
@@ -727,6 +850,12 @@ mod tests {
                 "mukoko-weather-jobs/0.13.0 (+https://weather.mukoko.com; hi@mukoko.com)"
             );
             assert!(!r.url.contains("key") && !r.url.contains("token"));
+            // The limits a Transport must honour travel with the request.
+            assert_eq!(r.max_bytes, MAX_BODY_BYTES);
+            assert!(
+                !r.follow_redirects,
+                "our headers go only where we sent them"
+            );
         }
     }
 
@@ -789,7 +918,79 @@ mod tests {
         let got = block_on(f.wis2(&mut breaker(), at(NOW))).unwrap();
         assert_eq!(got.requests, 2);
         assert!(!got.complete);
+        assert_eq!(got.stop, None, "hitting the page limit is not a failure");
+        assert!(!got.unwell());
         assert_eq!(fake.requests().len(), 2, "never a third request");
+    }
+
+    #[test]
+    fn a_server_that_caps_limit_is_read_to_the_end_by_its_own_count() {
+        let rows = fixture_features();
+        // We ask for 500; the server hands out 4 at a time and says 12 match.
+        let fake = Fake::new(vec![
+            page_of(&rows[0..4], 12),
+            page_of(&rows[4..8], 12),
+            page_of(&rows[8..12], 12),
+        ]);
+        let f = Fetcher::new(&fake, "0.13.0").with_switches(on());
+        let got = block_on(f.wis2(&mut breaker(), at(NOW))).unwrap();
+        assert_eq!(got.requests, 3);
+        assert!(got.complete, "received 12 of 12");
+        assert_eq!(got.stop, None);
+        let whole = wis2_observations(&serde_json::from_str(WIS2).unwrap());
+        assert_eq!(got.items, whole);
+        // Each page starts where the rows received so far end, not at a
+        // multiple of the page size we asked for.
+        let offsets: Vec<_> = fake
+            .requests()
+            .iter()
+            .map(|r| r.url.rsplit("offset=").next().unwrap().to_string())
+            .collect();
+        assert_eq!(offsets, ["0", "4", "8"]);
+    }
+
+    #[test]
+    fn a_short_page_with_a_next_link_and_no_count_is_not_the_last() {
+        let rows = fixture_features();
+        let with_next = ok(&json!({
+            "type": "FeatureCollection",
+            "features": &rows[0..6],
+            "links": [{"rel": "self", "href": "x"}, {"rel": "next", "href": "y"}]
+        })
+        .to_string());
+        let fake = Fake::new(vec![with_next, page(&rows[6..12])]);
+        let f = Fetcher::new(&fake, "0.13.0").with_switches(on());
+        let got = block_on(f.wis2(&mut breaker(), at(NOW))).unwrap();
+        assert_eq!(
+            got.requests, 2,
+            "6 < 500, but the server said there is more"
+        );
+        assert!(got.complete);
+        let whole = wis2_observations(&serde_json::from_str(WIS2).unwrap());
+        assert_eq!(got.items, whole);
+    }
+
+    #[test]
+    fn a_server_that_ignores_offset_is_stopped_after_one_repeat_and_counted_unwell() {
+        let rows = fixture_features();
+        let fake = Fake::new(vec![
+            page_of(&rows[0..4], 12),
+            page_of(&rows[0..4], 12),
+            page_of(&rows[0..4], 12),
+        ]);
+        let mut b = breaker();
+        let f = Fetcher::new(&fake, "0.13.0").with_switches(on());
+        let got = block_on(f.wis2(&mut b, at(NOW))).unwrap();
+        assert_eq!(got.requests, 2, "the repeat is noticed on the second page");
+        assert!(!got.complete);
+        assert_eq!(got.stop, Some(FetchError::BadBody("repeated_page")));
+        assert!(got.unwell());
+        // Each feature once, not twice.
+        let direct = wis2_observations(&json!({"features": &rows[0..4]}));
+        assert_eq!(got.items, direct);
+        // The HTTP exchanges were fine, so the breaker stays closed: it is the
+        // schedule that backs off, off `unwell()`.
+        assert_eq!(b.state(millis(at(NOW))), State::Closed);
     }
 
     #[test]
@@ -807,6 +1008,11 @@ mod tests {
         let got = block_on(f.wis2(&mut b, at(NOW))).unwrap();
         assert!(!got.complete);
         assert!(!got.items.is_empty());
+        assert_eq!(got.stop, Some(FetchError::Status(503)));
+        assert!(
+            got.unwell(),
+            "the schedule must back off, not see a clean run"
+        );
         // That page-2 failure was recorded: one more makes two, still short of
         // the threshold of three, and a third opens the breaker.
         let fake = Fake::new(vec![status(503)]);
@@ -837,7 +1043,7 @@ mod tests {
             assert!(block_on(f.wis2(&mut b, t0)).is_err());
         }
         assert_eq!(b.state(millis(t0)), State::Open);
-        let fake = Fake::new(vec![ok(WIS2)]);
+        let fake = Fake::new(vec![ok(&wis2_body())]);
         let f = Fetcher::new(&fake, "0.13.0").with_switches(on());
         assert_eq!(
             block_on(f.wis2(&mut b, t0)).unwrap_err(),
@@ -923,13 +1129,13 @@ mod tests {
     fn wis2_drops_rows_outside_the_window_and_rows_from_the_future() {
         // The fixture is 11:00-12:00 UTC. Seven hours before 20:00 is 13:00:
         // every row is older than the window.
-        let fake = Fake::new(vec![ok(WIS2)]);
+        let fake = Fake::new(vec![ok(&wis2_body())]);
         let f = Fetcher::new(&fake, "0.13.0").with_switches(on());
         let got = block_on(f.wis2(&mut breaker(), at("2026-10-29T20:00:00Z"))).unwrap();
         assert!(got.items.is_empty());
         assert!(got.complete);
         // At 10:00 every row is stamped more than ten minutes ahead.
-        let fake = Fake::new(vec![ok(WIS2)]);
+        let fake = Fake::new(vec![ok(&wis2_body())]);
         let f = Fetcher::new(&fake, "0.13.0").with_switches(on());
         let got = block_on(f.wis2(&mut breaker(), at("2026-10-29T10:00:00Z"))).unwrap();
         assert!(got.items.is_empty());
