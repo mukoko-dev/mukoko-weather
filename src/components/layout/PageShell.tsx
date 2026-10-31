@@ -7,11 +7,18 @@ import { Header } from "@/components/layout/Header";
 import { HeaderSkeleton } from "@/components/layout/HeaderSkeleton";
 import { cn } from "@/lib/utils";
 
+/**
+ * Page layouts, named as Mzizi's `mzizi-page` names them (N6): a feed or
+ * settings page reads at 2xl, a detail page at 4xl, a dashboard at 7xl.
+ * `prose` (3xl) and `wide` (5xl) are the two long-form widths static pages use.
+ */
 const WIDTH_CLASS = {
-  "2xl": "max-w-2xl",
-  "3xl": "max-w-3xl",
-  "5xl": "max-w-5xl",
-  "7xl": "max-w-7xl",
+  feed: "max-w-2xl",
+  settings: "max-w-2xl",
+  prose: "max-w-3xl",
+  detail: "max-w-4xl",
+  wide: "max-w-5xl",
+  dashboard: "max-w-7xl",
 } as const;
 
 /** The one main-column recipe: width, side gutters and the bottom padding that clears the mobile nav. */
@@ -38,7 +45,7 @@ interface PageShellProps {
  */
 export function PageShell({
   children,
-  width = "3xl",
+  width = "prose",
   breadcrumb,
   className,
 }: PageShellProps) {
@@ -66,7 +73,7 @@ export function PageShell({
  */
 export function PageShellSkeleton({
   children,
-  width = "3xl",
+  width = "prose",
   breadcrumb = false,
   label = "Loading",
   className,

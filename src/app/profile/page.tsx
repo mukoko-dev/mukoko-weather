@@ -29,7 +29,7 @@ export default async function ProfilePage() {
   const organizations = await getMyOrganizations(profile.personId);
 
   return (
-    <PageShell width="2xl">
+    <PageShell width="settings">
       <ProfileClient
         user={{
           email: user.email,

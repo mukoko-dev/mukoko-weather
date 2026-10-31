@@ -35,3 +35,21 @@ describe("isImmersivePath", () => {
     expect(isImmersivePath("/display/other")).toBe(false);
   });
 });
+
+describe("one header and one footer per app (Mzizi N7)", () => {
+  const read = (p: string) =>
+    require("node:fs").readFileSync(
+      require("node:path").resolve(__dirname, p),
+      "utf-8",
+    );
+  it("AppChrome mounts both the site header and the site footer", () => {
+    const src = read("AppChrome.tsx");
+    expect(src).toContain("<SiteHeader />");
+    expect(src).toContain("<SiteFooter />");
+  });
+  it("the page-level Footer renders nothing while the chrome is claimed", () => {
+    expect(read("Footer.tsx")).toContain(
+      "useChromeClaimed() ? null : <SiteFooter />",
+    );
+  });
+});

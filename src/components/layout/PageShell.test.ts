@@ -25,9 +25,18 @@ describe("PageShell", () => {
     );
   });
 
-  it("supports the 3xl and 5xl reading widths", () => {
-    expect(source).toContain('"3xl": "max-w-3xl"');
-    expect(source).toContain('"5xl": "max-w-5xl"');
+  it("names its widths after the Mzizi page layouts", () => {
+    for (const k of [
+      "feed",
+      "settings",
+      "prose",
+      "detail",
+      "wide",
+      "dashboard",
+    ]) {
+      expect(source).toContain(`${k}: "max-w-`);
+    }
+    expect(source).toContain("mzizi-page");
   });
 
   it("has no inline styles or hardcoded colours", () => {

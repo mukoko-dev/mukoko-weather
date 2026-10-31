@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 
+import { SiteFooter } from "@/components/layout/Footer";
 import { SiteHeader } from "@/components/layout/Header";
 import {
   ChromeContext,
@@ -9,7 +10,7 @@ import {
 } from "@/components/layout/chrome-context";
 
 /**
- * The header and mobile bottom nav, mounted once in the root layout so they
+ * The header, footer and mobile bottom nav, mounted once in the root layout so they
  * survive navigation: the scroll state, the open menus and the location
  * pager keep their place instead of being torn down and rebuilt on every tap.
  *
@@ -24,6 +25,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     <ChromeContext.Provider value={claimed}>
       {claimed && <SiteHeader />}
       {children}
+      {claimed && <SiteFooter />}
     </ChromeContext.Provider>
   );
 }

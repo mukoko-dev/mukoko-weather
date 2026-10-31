@@ -33,7 +33,7 @@ export const metadata: Metadata = {
 export default async function HistoryPage() {
   await requireUser("/history"); // redirects anon users to sign-in, returns here after
   return (
-    <PageShell width="5xl">
+    <PageShell width="wide">
       <h1 className="elephant">Historical Weather Data</h1>
       <p className="gazelle mt-3">
         Explore recorded weather data worldwide. Select a location and time
