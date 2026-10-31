@@ -105,7 +105,14 @@ describe("LocationSkeleton — calm, no splash", () => {
       // Hidden sizing text (breadcrumb trail, season line): laid out, never drawn.
       .replace(/<ol class="invisible[^"]*">.*?<\/ol>/g, "")
       .replace(/<span class="invisible[^"]*">[^<]*<\/span>/g, "");
-    expect(visible.replace(/<[^>]+>/g, "").trim()).toBe("");
+    // Text content: each chunk after a "<" loses everything up to its closing ">".
+    const text = visible
+      .split("<")
+      .map((chunk, i) =>
+        i === 0 ? chunk : chunk.slice(chunk.indexOf(">") + 1),
+      )
+      .join("");
+    expect(text.trim()).toBe("");
     expect(skeletonSrc).not.toContain("MukokoLogo");
     expect(skeletonSrc).not.toContain("Spinner");
     expect(skeletonSrc).not.toContain("animate-pulse");
