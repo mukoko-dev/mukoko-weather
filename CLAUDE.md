@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-mukoko weather is an AI-powered global weather intelligence platform. It provides real-time weather data, 7-day forecasts, frost alerts, and AI-generated contextual advice for farming, mining, travel, and daily life. The app is fully global — any valid coordinates worldwide are accepted. Current seed data covers 265 total locations (98 Zimbabwe + 167 global) — with new locations added dynamically by the community via geolocation and search from anywhere in the world.
+mukoko weather is a global weather intelligence platform. It provides real-time weather data, 7-day forecasts, frost alerts, and AI-generated contextual advice for farming, mining, travel, and daily life. The app is fully global — any valid coordinates worldwide are accepted. Current seed data covers 265 total locations (98 Zimbabwe + 167 global) — with new locations added dynamically by the community via geolocation and search from anywhere in the world.
 
 **Live URL:** <https://weather.mukoko.com>
 

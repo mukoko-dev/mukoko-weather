@@ -46,7 +46,7 @@ export const metadata: Metadata = {
     template: "%s | mukoko weather",
   },
   description:
-    "AI-powered global weather intelligence. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 265+ locations worldwide.",
+    "Global weather intelligence. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 265+ locations worldwide.",
   keywords: [
     "global weather",
     "weather forecast",
@@ -76,7 +76,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "mukoko weather — Global Weather Intelligence",
     description:
-      "AI-powered global weather intelligence. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 265+ locations worldwide.",
+      "Global weather intelligence. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 265+ locations worldwide.",
     type: "website",
     locale: "en",
     url: SITE_URL,
@@ -94,7 +94,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "mukoko weather — Global Weather Intelligence",
     description:
-      "AI-powered global weather intelligence. Forecasts for farming, mining, travel, and daily life across 265+ locations worldwide.",
+      "Global weather intelligence. Forecasts for farming, mining, travel, and daily life across 265+ locations worldwide.",
     creator: "@mukokoafrica",
     site: "@mukokoafrica",
     images: [
@@ -166,7 +166,7 @@ export default async function RootLayout({
     name: "mukoko weather",
     alternateName: "Mukoko Weather",
     description:
-      "AI-powered global weather intelligence platform providing actionable forecasts for farming, mining, travel, and daily life across 265+ locations worldwide.",
+      "Global weather intelligence platform providing actionable forecasts for farming, mining, travel, and daily life across 265+ locations worldwide.",
     url: SITE_URL,
     applicationCategory: "WeatherApplication",
     operatingSystem: "Any",

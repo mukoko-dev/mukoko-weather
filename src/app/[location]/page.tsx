@@ -59,7 +59,7 @@ export async function generateMetadata({
   const countryName = country?.name ?? countryDisplayName(countryCode);
 
   const title = `${loc.name} Weather Today — Forecast & Conditions`;
-  const description = `Current weather conditions, 7-day forecast, and hourly predictions for ${placeLine(loc.name, loc.province, countryName)}. AI-powered weather intelligence with frost alerts, farming insights, and accurate temperature data from mukoko weather.`;
+  const description = `Current weather conditions, 7-day forecast, and hourly predictions for ${placeLine(loc.name, loc.province, countryName)}. Weather intelligence with frost alerts, farming insights, and accurate temperature data from mukoko weather.`;
 
   // Build dynamic OG image URL with location-specific season from database.
   // Note: the OG route accepts `temp` and `condition` params, but we
@@ -106,7 +106,7 @@ export async function generateMetadata({
     },
     openGraph: {
       title: `${loc.name} Weather | mukoko weather`,
-      description: `Live weather forecast for ${placeLine(loc.name, loc.province, countryName)}. Current conditions, 7-day outlook, and AI-powered insights.`,
+      description: `Live weather forecast for ${placeLine(loc.name, loc.province, countryName)}. Current conditions, 7-day outlook, and local insights.`,
       url: `${SITE_URL}/${loc.slug}`,
       type: "website",
       locale: "en",

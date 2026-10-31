@@ -5,7 +5,7 @@ import { PageShell } from "@/components/layout/PageShell";
 export const metadata: Metadata = {
   title: "Terms of Service",
   description:
-    "Terms of Service for mukoko weather — an AI-powered weather intelligence platform, operated by Mukoko Africa, a division of Nyuchi Africa (PVT) Ltd.",
+    "Terms of Service for mukoko weather — a weather intelligence platform, operated by Mukoko Africa, a division of Nyuchi Africa (PVT) Ltd.",
   alternates: {
     canonical: "https://weather.mukoko.com/terms",
   },

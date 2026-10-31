@@ -35,7 +35,7 @@ const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 export const metadata: Metadata = {
   title: "My Location Weather — Live Forecast & Conditions",
   description:
-    "Live weather for your current location — real-time conditions, hourly and 7-day forecasts, frost alerts, and AI-powered insights from mukoko weather.",
+    "Live weather for your current location — real-time conditions, hourly and 7-day forecasts, frost alerts, and local insights from mukoko weather.",
   alternates: {
     canonical: `${SITE_URL}/`,
   },
