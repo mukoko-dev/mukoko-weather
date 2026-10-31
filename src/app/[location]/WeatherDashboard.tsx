@@ -440,7 +440,7 @@ export function WeatherDashboard({
         <li>
           <a
             href={BASE_URL}
-            className="dik-dik hover:underline transition-colors focus-visible:outline-2 focus-visible:outline-[var(--sky-fg)] focus-visible:rounded"
+            className="dik-dik hover:underline transition-colors"
           >
             Home
           </a>

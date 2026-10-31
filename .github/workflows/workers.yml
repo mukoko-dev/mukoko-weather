@@ -74,6 +74,10 @@ jobs:
         working-directory: .
         run: node --experimental-strip-types workers/scripts/gen-reference-data.mjs --check
 
+      - name: Season calendars are current
+        working-directory: .
+        run: node --experimental-strip-types workers/scripts/gen-seasons.mjs --check
+
       - name: Format
         run: cargo fmt --all -- --check
 

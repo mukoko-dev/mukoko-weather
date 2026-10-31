@@ -480,6 +480,28 @@ describe("sky tokens — contrast", () => {
     expect(checked).toBe(96);
   });
 
+  it("draws the keyboard focus ring on the sky in --sky-fg: >= 3:1 on every gradient stop (WCAG 1.4.11), where the page ring (--focus-ring) is not", () => {
+    let pageRingLost = 0;
+    for (const f of families) {
+      for (const scope of ["light", "dark"] as const) {
+        for (const stop of STOPS) {
+          const bg = resolveColour(`--sky-${f}-${stop}`, scope);
+          expect(
+            contrastRatio(resolveColour("--sky-fg", scope), bg),
+            `sky ring on ${f} ${scope} ${stop} ${bg}`,
+          ).toBeGreaterThanOrEqual(3);
+          if (contrastRatio(resolveColour("--focus-ring", scope), bg) < 3) {
+            pageRingLost++;
+          }
+        }
+      }
+    }
+    // The page ring vanishes on most sky stops (the reason the sky re-points
+    // --focus-ring); if the palette ever changes so it no longer does, this
+    // guard can be revisited rather than silently kept.
+    expect(pageRingLost).toBeGreaterThan(0);
+  });
+
   it("uses the owner's mockup values for the night and rain skies", () => {
     expect(resolveColour("--sky-clear-night-top", "dark")).toBe("#0b1026");
     expect(resolveColour("--sky-clear-night-mid", "dark")).toBe("#151c42");

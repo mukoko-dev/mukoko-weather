@@ -3,7 +3,7 @@
  * location slugs, never for the app's own top-level routes (issue #236).
  */
 import { beforeEach, describe, it, expect, vi } from "vitest";
-import { readdirSync, readFileSync } from "fs";
+import { readdirSync } from "fs";
 import { resolve } from "path";
 import { NextRequest, NextResponse } from "next/server";
 

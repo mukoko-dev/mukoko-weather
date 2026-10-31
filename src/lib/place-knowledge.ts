@@ -1,5 +1,5 @@
 /**
- * Client for the stored place-knowledge profile (`GET /api/py/locations/profile`,
+ * Client for the stored place-knowledge profile (the Rust Worker's `GET /v1/locations/profile`,
  * mukoko-dev/mukoko-weather#277) and the pure formatting behind the
  * "About this place" rows.
  *
@@ -9,6 +9,8 @@
  * concurrent requests share one fetch. Anything derived or unverified is
  * labelled "estimated": never shown as a local fact.
  */
+
+import { workerUrl } from "./weather-api";
 
 export interface ProfileMonthlyNormal {
   month: number;
@@ -86,7 +88,7 @@ export function placeProfileUrl(
     params.set("lon", lon.toFixed(4));
   }
   if (country && /^[A-Za-z]{2}$/.test(country)) params.set("country", country);
-  return `/api/py/locations/profile?${params.toString()}`;
+  return workerUrl("locations/profile", params.toString());
 }
 
 const cache = new Map<string, { profile: PlaceProfile; at: number }>();

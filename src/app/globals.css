@@ -1835,6 +1835,37 @@ body {
   border-radius: 9999px;
 }
 
+/* Focus on the sky (WCAG 1.4.11, 3:1). The page sky is a saturated gradient
+   chosen so WHITE text clears 4.5:1 (--sky-fg, src/lib/hero.test.ts); the page
+   ring (--focus-ring, the Mzizi storm blue) measures about 1.1 to 1.4:1 on it
+   and vanishes. The global :focus-visible rule above reads --focus-ring, so
+   pointing the variable at the sky foreground inside the sky makes every
+   focusable thing there follow, with no per-control rule to forget. (A class
+   or a Tailwind `focus-visible:outline-*` utility cannot do this: the global
+   rule is unlayered and beats every @layer, which is also why these scopes
+   are unlayered rules and not utilities.) The unscrolled header's brand mark
+   and desktop links are the same scope, set in their own block below.
+
+   The ⋯ menu panel opens inside the hero but is drawn on a light card
+   surface, so it takes the page ring back. */
+[data-sky-hero],
+.kestrel-ink,
+.kestrel-card {
+  --focus-ring: var(--sky-fg);
+}
+[data-sky-hero] [data-slot="account-menu-panel"] {
+  --focus-ring: var(--exp-storm);
+}
+
+/* .kestrel-round (Share, the ⋯ trigger) — unlayered like the fauna rules above:
+   the global :focus-visible rule would otherwise square the round control to a
+   4px radius on keyboard focus. */
+.kestrel-round:focus-visible {
+  outline: var(--focus-ring-width, 3px) solid var(--sky-fg);
+  outline-offset: var(--focus-ring-offset, 2px);
+  border-radius: 9999px;
+}
+
 /* Loading-skeleton shimmer (.okapi). Only when motion is welcome; otherwise
    the bar stays the static base tint set on the class itself. */
 @media (prefers-reduced-motion: no-preference) {
@@ -2241,10 +2272,8 @@ body {
   .kestrel-round:hover {
     background-color: color-mix(in srgb, var(--sky-fg) 16%, transparent);
   }
-  .kestrel-round:focus-visible {
-    outline: 2px solid var(--sky-fg);
-    outline-offset: 2px;
-  }
+  /* Its :focus-visible ring is an unlayered rule next to .bee's (a rule in this
+     layer loses to the global :focus-visible one). */
 }
 
 /* The sky runs to the top of the screen. While a page shows the sky hero
@@ -2269,6 +2298,7 @@ body:has([data-sky-hero])
   --color-text-primary: var(--sky-fg);
   --color-text-secondary: var(--sky-fg);
   --color-text-tertiary: var(--sky-fg);
+  --focus-ring: var(--sky-fg);
   color: var(--sky-fg);
 }
 body:has([data-sky-hero])

@@ -12,8 +12,6 @@ import {
   LocationSkeleton,
   TILE_PLACEHOLDER_COUNT,
 } from "./LocationSkeleton";
-import { HeroSkeleton } from "./HeroSkeleton";
-import { Shimmer } from "@/components/ui/shimmer";
 
 const read = (p: string) => readFileSync(resolve(__dirname, p), "utf-8");
 const skeletonSrc = read("LocationSkeleton.tsx");
