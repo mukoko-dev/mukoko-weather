@@ -31,8 +31,9 @@ reverse-geocodes through Nominatim and becomes a location.
 
 Two things keep it honest where connectivity and upstream APIs are not. The forecast
 baseline is an Africa-weighted blend of global weather models (ECMWF IFS and
-AIFS weighted highest, then NOAA GFS, DWD ICON, ECCC GEM and Météo-France
-ARPEGE) served keyless by Open-Meteo, resolved through a four-stage chain —
+AIFS weighted highest, then NOAA GFS, DWD ICON, the UK Met Office, CMA, ECCC GEM,
+Météo-France ARPEGE and JMA; every model that answers is used, and at least
+four must) served keyless by Open-Meteo, resolved through a four-stage chain —
 MongoDB cache, the blend, Open-Meteo `best_match`, then seasonal estimates that
 always succeed — so a page never renders empty. Tomorrow.io only enriches the
 activity insights, within a call budget, and never blocks the forecast.
