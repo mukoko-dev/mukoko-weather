@@ -92,122 +92,124 @@ export function ProfileDevices() {
         Devices
       </h2>
 
-      {load.status === "loading" && (
-        <div
-          role="status"
-          aria-label="Loading"
-          className="flex items-center gap-3 px-4 py-4 text-sm text-text-secondary"
-        >
-          <Spinner className="h-4 w-4" />
-          Loading your devices
-        </div>
-      )}
+      <div className="guineafowl-card">
+        {load.status === "loading" && (
+          <div
+            role="status"
+            aria-label="Loading"
+            className="flex items-center gap-3 px-4 py-4 text-sm text-text-secondary"
+          >
+            <Spinner className="h-4 w-4" />
+            Loading your devices
+          </div>
+        )}
 
-      {load.status === "error" && (
-        <p role="alert" className="px-4 py-4 text-sm text-text-secondary">
-          Your devices are not available right now. Try again shortly.
-        </p>
-      )}
+        {load.status === "error" && (
+          <p role="alert" className="px-4 py-4 text-sm text-text-secondary">
+            Your devices are not available right now. Try again shortly.
+          </p>
+        )}
 
-      {load.status === "ready" && load.devices.length === 0 && (
-        <p className="px-4 py-4 text-sm text-text-secondary">
-          No signed-in devices found.
-        </p>
-      )}
+        {load.status === "ready" && load.devices.length === 0 && (
+          <p className="px-4 py-4 text-sm text-text-secondary">
+            No signed-in devices found.
+          </p>
+        )}
 
-      {load.status === "ready" && load.devices.length > 0 && (
-        <ul>
-          {load.devices.map((d) => {
-            const Icon = ICONS[d.formFactor];
-            const chips =
-              d.current && local
-                ? [
-                    permissionChip("geolocation", local.geolocation),
-                    permissionChip("notifications", local.notifications),
-                  ]
-                : [];
-            const hint =
-              d.current && local ? blockedHint(local.geolocation) : null;
-            return (
-              <li
-                key={d.id}
-                className="flex items-start gap-3 border-b border-border px-4 py-4 last:border-b-0"
-              >
-                <span
-                  className="hoopoe-lg bg-container-sodalite"
-                  aria-hidden="true"
+        {load.status === "ready" && load.devices.length > 0 && (
+          <ul>
+            {load.devices.map((d) => {
+              const Icon = ICONS[d.formFactor];
+              const chips =
+                d.current && local
+                  ? [
+                      permissionChip("geolocation", local.geolocation),
+                      permissionChip("notifications", local.notifications),
+                    ]
+                  : [];
+              const hint =
+                d.current && local ? blockedHint(local.geolocation) : null;
+              return (
+                <li
+                  key={d.id}
+                  className="flex items-start gap-3 border-b border-border px-4 py-4 last:border-b-0"
                 >
-                  <Icon className="h-4 w-4 text-on-container-sodalite" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <span className="block truncate font-medium text-text-primary">
-                    {d.label}
-                    {d.current && (
-                      <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                        This device{standalone ? " · app" : ""}
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-xs text-text-secondary">
-                    {d.current
-                      ? "Active now"
-                      : now !== null
-                        ? lastActiveLabel(d.lastActiveAt, now)
-                        : "Active recently"}
-                  </span>
-                  {chips.length > 0 && (
-                    <ul
-                      aria-label="Permissions"
-                      className="mt-2 flex flex-wrap gap-1.5"
-                    >
-                      {chips.map((c) => (
-                        <li
-                          key={c}
-                          className="rounded-full bg-surface-dim px-2 py-0.5 font-mono text-xs text-text-secondary"
-                        >
-                          {c}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {hint && (
-                    <p className="mt-1 text-xs text-text-tertiary">{hint}</p>
-                  )}
-                  {d.current && (
-                    <p className="mt-1 text-xs text-text-tertiary">
-                      {preferencesSummary({
-                        theme,
-                        savedLocations,
-                        selectedActivities,
-                        selectedForecastModel: "",
-                        homeLocation: null,
-                      })}
-                    </p>
-                  )}
-                </div>
-                {!d.current && (
-                  <button
-                    type="button"
-                    onClick={() => void signOut(d.id)}
-                    disabled={busyId === d.id}
-                    aria-busy={busyId === d.id}
-                    aria-label={`Sign out ${d.label}`}
-                    className="impala-sm shrink-0"
+                  <span
+                    className="hoopoe-lg bg-container-sodalite"
+                    aria-hidden="true"
                   >
-                    {busyId === d.id ? "Signing out…" : "Sign out"}
-                  </button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                    <Icon className="h-4 w-4 text-on-container-sodalite" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <span className="block truncate font-medium text-text-primary">
+                      {d.label}
+                      {d.current && (
+                        <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                          This device{standalone ? " · app" : ""}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-xs text-text-secondary">
+                      {d.current
+                        ? "Active now"
+                        : now !== null
+                          ? lastActiveLabel(d.lastActiveAt, now)
+                          : "Active recently"}
+                    </span>
+                    {chips.length > 0 && (
+                      <ul
+                        aria-label="Permissions"
+                        className="mt-2 flex flex-wrap gap-1.5"
+                      >
+                        {chips.map((c) => (
+                          <li
+                            key={c}
+                            className="rounded-full bg-surface-dim px-2 py-0.5 font-mono text-xs text-text-secondary"
+                          >
+                            {c}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {hint && (
+                      <p className="mt-1 text-xs text-text-tertiary">{hint}</p>
+                    )}
+                    {d.current && (
+                      <p className="mt-1 text-xs text-text-tertiary">
+                        {preferencesSummary({
+                          theme,
+                          savedLocations,
+                          selectedActivities,
+                          selectedForecastModel: "",
+                          homeLocation: null,
+                        })}
+                      </p>
+                    )}
+                  </div>
+                  {!d.current && (
+                    <button
+                      type="button"
+                      onClick={() => void signOut(d.id)}
+                      disabled={busyId === d.id}
+                      aria-busy={busyId === d.id}
+                      aria-label={`Sign out ${d.label}`}
+                      className="impala-sm shrink-0"
+                    >
+                      {busyId === d.id ? "Signing out…" : "Sign out"}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
-      {problem && (
-        <p role="alert" className="px-4 pb-4 text-sm text-severity-moderate">
-          {problem}
-        </p>
-      )}
+        {problem && (
+          <p role="alert" className="px-4 pb-4 text-sm text-severity-moderate">
+            {problem}
+          </p>
+        )}
+      </div>
     </section>
   );
 }

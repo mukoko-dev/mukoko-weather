@@ -165,7 +165,13 @@ describe("the card edge: one rule, tokens only", () => {
       (n) => !edgeClasses.includes(n) && n !== "bushbuck",
     );
     expect(missing).toEqual([]);
-    for (const n of ["baobab", "acacia", "guineafowl", "chameleon", "nyala"]) {
+    for (const n of [
+      "baobab",
+      "acacia",
+      "guineafowl-card",
+      "chameleon",
+      "nyala",
+    ]) {
       expect(edgeClasses).toContain(n);
     }
   });

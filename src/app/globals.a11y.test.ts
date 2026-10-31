@@ -59,7 +59,7 @@ function token(scope: string, name: string, depth = 0): string {
 }
 
 const mzizi = readFileSync(resolve(__dirname, "mzizi-tokens.css"), "utf-8");
-const LIGHT_GLOBALS = blockAfter(css, ":root {");
+const LIGHT_GLOBALS = blockAfter(css, ':root,\n[data-theme="light"] {');
 const DARK_GLOBALS = blockAfter(css, '[data-theme="dark"] {');
 const LIGHT =
   blocksMatching(mzizi, /^:root,\s*\[data-theme="light"\]$/) + LIGHT_GLOBALS;

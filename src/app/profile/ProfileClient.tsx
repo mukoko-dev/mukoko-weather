@@ -43,6 +43,9 @@ export function ProfileClient({
   organizations: ProfileOrganization[];
 }) {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
+  const savedCount = useAppStore((s) => s.savedLocations.length);
+  const activityCount = useAppStore((s) => s.selectedActivities.length);
+  const preferencesValue = `${savedCount} ${savedCount === 1 ? "place" : "places"} · ${activityCount} ${activityCount === 1 ? "activity" : "activities"}`;
 
   return (
     <>
@@ -57,28 +60,25 @@ export function ProfileClient({
         <h2 id="preferences-heading" className="guineafowl-heading">
           Preferences
         </h2>
-        <button
-          type="button"
-          onClick={() => openMyWeather()}
-          className="guineafowl-row"
-        >
-          <span className="flex min-w-0 items-center gap-3">
-            <SlidersHorizontal
-              className="h-5 w-5 shrink-0 text-primary"
-              aria-hidden="true"
-            />
-            <span className="min-w-0">
-              <span className="block font-medium">My Weather</span>
-              <span className="block text-xs text-text-tertiary">
-                Your saved location, activities, and app settings
-              </span>
+        <div className="guineafowl-card">
+          <button
+            type="button"
+            onClick={() => openMyWeather()}
+            className="guineafowl-row"
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <SlidersHorizontal
+                className="h-5 w-5 shrink-0 text-text-secondary"
+                aria-hidden="true"
+              />
+              <span className="min-w-0 truncate">My Weather</span>
             </span>
-          </span>
-          <ChevronRight
-            className="h-4 w-4 shrink-0 text-text-tertiary"
-            aria-hidden="true"
-          />
-        </button>
+            <span className="flex shrink-0 items-center gap-2 text-text-tertiary">
+              <span className="text-sm">{preferencesValue}</span>
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </span>
+          </button>
+        </div>
       </section>
 
       <ProfileOrganizations organizations={organizations} />
@@ -89,14 +89,18 @@ export function ProfileClient({
 
       <ProfileNavigation />
 
-      <Link
-        href="/auth/signout"
-        prefetch={false}
-        className="impala mt-6 flex w-full items-center justify-center gap-2"
-      >
-        <LogOut className="h-4 w-4" aria-hidden="true" />
-        Sign out
-      </Link>
+      <div className="guineafowl-card">
+        <Link
+          href="/auth/signout"
+          prefetch={false}
+          className="guineafowl-row text-severity-severe"
+        >
+          <span className="flex min-w-0 items-center gap-3">
+            <LogOut className="h-5 w-5 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 truncate">Sign out</span>
+          </span>
+        </Link>
+      </div>
 
       <div className="dove mt-8 text-center">
         <p>{APP_VERSION_LABEL}</p>

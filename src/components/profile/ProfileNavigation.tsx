@@ -153,26 +153,19 @@ export function ProfileNavigation() {
             <h2 id={headingId} className="guineafowl-heading">
               {group.label}
             </h2>
-            <ul>
+            <ul className="guineafowl-card">
               {items.map((d) => {
                 const Icon = d.icon;
                 return (
-                  <li
-                    key={d.href}
-                    className="border-b border-border last:border-b-0"
-                  >
-                    <Link href={d.href} className="guineafowl-row border-b-0">
+                  <li key={d.href}>
+                    <Link href={d.href} className="guineafowl-row">
                       <span className="flex min-w-0 items-center gap-3">
                         <Icon
-                          className="h-5 w-5 shrink-0 text-primary"
+                          className="h-5 w-5 shrink-0 text-text-secondary"
                           aria-hidden="true"
                         />
-                        <span className="min-w-0">
-                          <span className="block font-medium">{d.label}</span>
-                          <span className="block text-xs text-text-tertiary">
-                            {d.description}
-                          </span>
-                        </span>
+                        <span className="min-w-0 truncate">{d.label}</span>
+                        <span className="sr-only">{d.description}</span>
                       </span>
                       <ChevronRight
                         className="h-4 w-4 shrink-0 text-text-tertiary"

@@ -239,7 +239,10 @@ describe("sky plate tokens — contrast", () => {
       "utf-8",
     ).replace(/:root,\s*\[data-theme="light"\] \{/g, ":root {") +
     "\n" +
-    readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8");
+    readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8").replace(
+      /:root,\s*\[data-theme="light"\] \{/g,
+      ":root {",
+    );
 
   /** Body of the first top-level block whose selector matches. */
   function blockBody(selector: string): string {

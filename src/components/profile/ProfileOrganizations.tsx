@@ -29,48 +29,50 @@ export function ProfileOrganizations({
       <h2 id="profile-organizations" className="guineafowl-heading">
         Your organizations
       </h2>
-      <ul>
-        {organizations.map((org) => {
-          const Icon = org.entityType === "family" ? Home : Building2;
-          return (
-            <li
-              key={org.entityId}
-              className="flex items-start gap-3 border-b border-border px-4 py-4 last:border-b-0"
-            >
-              <span
-                className="hoopoe-lg bg-container-sodalite"
-                aria-hidden="true"
+      <div className="guineafowl-card">
+        <ul>
+          {organizations.map((org) => {
+            const Icon = org.entityType === "family" ? Home : Building2;
+            return (
+              <li
+                key={org.entityId}
+                className="flex items-start gap-3 border-b border-border px-4 py-4 last:border-b-0"
               >
-                <Icon className="h-4 w-4 text-on-container-sodalite" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <span className="block truncate font-medium text-text-primary">
-                  {org.entityName ?? "Unnamed organization"}
-                </span>
-                <span className="text-xs text-text-secondary">
-                  {roleLabel(org.title, org.role)}
-                </span>
-                <ul
-                  aria-label="Permissions"
-                  className="mt-2 flex flex-wrap gap-1.5"
+                <span
+                  className="hoopoe-lg bg-container-sodalite"
+                  aria-hidden="true"
                 >
-                  {org.capabilities.map((cap) => (
-                    <li
-                      key={cap}
-                      className="rounded-full bg-surface-dim px-2 py-0.5 font-mono text-xs text-text-secondary"
-                    >
-                      {CAPABILITY_LABELS[cap]}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-      <p className="border-t border-border px-4 py-3 text-xs text-text-secondary">
-        These permissions apply to each organization on its own.
-      </p>
+                  <Icon className="h-4 w-4 text-on-container-sodalite" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate font-medium text-text-primary">
+                    {org.entityName ?? "Unnamed organization"}
+                  </span>
+                  <span className="text-xs text-text-secondary">
+                    {roleLabel(org.title, org.role)}
+                  </span>
+                  <ul
+                    aria-label="Permissions"
+                    className="mt-2 flex flex-wrap gap-1.5"
+                  >
+                    {org.capabilities.map((cap) => (
+                      <li
+                        key={cap}
+                        className="rounded-full bg-surface-dim px-2 py-0.5 font-mono text-xs text-text-secondary"
+                      >
+                        {CAPABILITY_LABELS[cap]}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="border-t border-border px-4 py-3 text-xs text-text-secondary">
+          These permissions apply to each organization on its own.
+        </p>
+      </div>
     </section>
   );
 }
