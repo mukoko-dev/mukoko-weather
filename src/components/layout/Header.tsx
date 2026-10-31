@@ -2,25 +2,23 @@
 
 import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
-import { Ellipsis } from "lucide-react";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
 import { LayersIcon, BellIcon, UserIcon } from "@/lib/weather-icons";
-import { Spinner } from "@/components/ui/spinner";
+import { PhoneMenu } from "@/components/layout/PhoneMenu";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { useChromeClaimed } from "@/components/layout/chrome-context";
 import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
-import { navDestination } from "@/lib/nav-destinations";
-import { trackEvent } from "@/lib/analytics";
 import { initialsFor, type PublicUser } from "@/lib/user-display";
+import { currentLocationSlug } from "@/lib/current-slug";
 import {
-  currentLocationSlug,
-  isLocationSlug,
-  CURRENT_LOCATION_EVENT,
-  writeLastLocationCookie,
-} from "@/lib/current-slug";
+  NOTIFICATIONS_EMPTY_TEXT,
+  isDestinationActive,
+  visibleHeaderDestinations,
+  weatherMapHref,
+} from "@/lib/header-nav";
 
 // Code-split: MyWeatherModal imports LOCATIONS (154 items), ACTIVITIES (20 items),
 // geolocation, router, etc. Lazy-loading prevents this from bloating the initial
@@ -37,10 +35,6 @@ const WeatherReportModal = lazy(() =>
   })),
 );
 
-/** One row of the mobile ⋯ menu — full 48px touch height. */
-const MENU_ITEM_CLASS =
-  "flex min-h-[var(--touch-target-min)] w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 text-left text-base font-medium text-text-primary transition-colors hover:bg-surface-dim aria-[current=page]:text-primary";
-
 /**
  * The page-level header. The root layout owns the real one (`SiteHeader`, via
  * `AppChrome`), so this renders nothing while that is mounted.
@@ -54,19 +48,12 @@ export function SiteHeader() {
   const myWeatherOpen = useAppStore((s) => s.myWeatherOpen);
   const selectedLocation = useAppStore((s) => s.selectedLocation);
   const savedLocations = useAppStore((s) => s.savedLocations);
-  const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const reportModalOpen = useAppStore((s) => s.reportModalOpen);
   const pathname = usePathname();
-  const router = useRouter();
   const [isScrolled, setIsScrolled] = useState(false);
-  const [locating, setLocating] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
   const bellButtonRef = useRef<HTMLButtonElement>(null);
-  // Mobile "⋯" menu — the destinations that used to sit in the bottom bar.
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const menuButtonRef = useRef<HTMLButtonElement>(null);
   // AuthKit's `useAuth()` is hydrated via `<AuthKitProvider initialAuth={…}>`
   // in the root layout, so this renders with the right state on first paint.
   const { user } = useAuth();
@@ -109,99 +96,19 @@ export function SiteHeader() {
     };
   }, [notificationsOpen]);
 
-  // Dismiss the mobile ⋯ menu on outside click or Escape (Escape returns focus
-  // to its trigger). Items close the menu themselves when activated.
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    const handleKeydown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setMenuOpen(false);
-        menuButtonRef.current?.focus();
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    document.addEventListener("keydown", handleKeydown);
-    return () => {
-      document.removeEventListener("mousedown", handleClick);
-      document.removeEventListener("keydown", handleKeydown);
-    };
-  }, [menuOpen]);
-
-  // Center mobile-nav action: find where the user is right now (same GPS →
-  // /api/py/geo flow as My Weather's "Use current location" button, autoCreate
-  // included), select it, and land on the home page — the home page IS the
-  // current-location view and refreshes GPS in place, so no slug URL is needed.
-  // On denial or failure the My Weather modal opens instead — its Location tab
-  // has search plus a geolocation retry with proper error copy.
-  const handleMyLocation = async () => {
-    if (locating) return;
-    setLocating(true);
-    try {
-      // Deferred import — keeps geolocation out of the initial header bundle
-      // (same reasoning as the lazy MyWeatherModal above).
-      const { detectUserLocation } = await import("@/lib/geolocation");
-      const result = await detectUserLocation({ autoCreate: true });
-      trackEvent("geolocation_result", {
-        status: result.status,
-        location: result.location?.slug,
-      });
-      if (
-        (result.status === "success" || result.status === "created") &&
-        result.location &&
-        isLocationSlug(result.location.slug)
-      ) {
-        trackEvent("location_changed", {
-          from: currentLocationSlug(pathname, selectedLocation) ?? "",
-          to: result.location.slug,
-          method: "geolocation",
-        });
-        setSelectedLocation(result.location.slug);
-        // Seed the next server render of `/` with this place, then go home —
-        // or, already there, hand the place to CurrentLocationHome directly.
-        writeLastLocationCookie(result.location.slug);
-        if (pathname === "/") {
-          window.dispatchEvent(
-            new CustomEvent(CURRENT_LOCATION_EVENT, {
-              detail: result.location,
-            }),
-          );
-        } else {
-          router.push("/");
-        }
-      } else {
-        openMyWeather();
-      }
-    } finally {
-      setLocating(false);
-    }
-  };
-
   // Active page flags for the desktop nav and the mobile ⋯ menu.
-  const isExplore = pathname === "/explore" || pathname.startsWith("/explore/");
-  const isHistory = pathname === "/history";
-  const isAviation = pathname === "/aviation";
-  const shamwariEnabled = isFeatureEnabled("shamwari_chat");
-  // Shared by the desktop text nav and the mobile ⋯ menu (lib/nav-destinations).
-  // Shamwari is paused: it is omitted while FLAGS.shamwari_chat is off.
-  const navItems = [
-    { ...navDestination("explore"), active: isExplore },
-    ...(shamwariEnabled
-      ? [{ ...navDestination("shamwari"), active: pathname === "/shamwari" }]
-      : []),
-    { ...navDestination("history"), active: isHistory },
-    { ...navDestination("aviation"), active: isAviation },
-  ];
+  // The header's destinations come from one list shared with the phone menu
+  // (src/lib/header-nav.ts, built on lib/nav-destinations), so the two can
+  // never drift. Shamwari is paused: omitted while FLAGS.shamwari_chat is off.
+  const destinations = visibleHeaderDestinations(isFeatureEnabled);
   const mapSlug = currentLocationSlug(pathname, selectedLocation);
-  const mapHref = mapSlug ? `/${mapSlug}/map` : "/explore";
+  const mapHref = weatherMapHref(mapSlug);
 
   return (
     <>
       <header
+        data-site-header
+        data-scrolled={isScrolled ? "" : undefined}
         className={`sticky top-0 z-30 border-b transition-all duration-300 ${
           isScrolled
             ? "bg-surface-base/70 backdrop-blur-xl border-text-tertiary/10 shadow-sm"
@@ -215,7 +122,7 @@ export function SiteHeader() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 md:px-8">
           {/* Brand mark — left-aligned at every breakpoint (the parent nav's
               justify-between keeps the action pill on the right) */}
-          <div className="flex min-w-0 items-center">
+          <div data-header-ink className="flex min-w-0 items-center">
             {/* No viewport prefetch: "/" is a full server-rendered dashboard,
                 and every page load was fetching it in the background. */}
             <Link
@@ -230,20 +137,24 @@ export function SiteHeader() {
 
           {/* Desktop nav — plain text links, underline on active/hover */}
           <nav
+            data-header-ink
             className="hidden sm:flex items-center gap-6"
             aria-label="Main navigation"
           >
-            {navItems.map(({ href, label, active }) => (
-              <Link
-                key={href}
-                href={href}
-                prefetch={false}
-                aria-current={active ? "page" : undefined}
-                className={active ? "weaver-active" : "weaver"}
-              >
-                {label}
-              </Link>
-            ))}
+            {destinations.map(({ href, label }) => {
+              const active = isDestinationActive(pathname, href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  prefetch={false}
+                  aria-current={active ? "page" : undefined}
+                  className={active ? "weaver-active" : "weaver"}
+                >
+                  {label}
+                </Link>
+              );
+            })}
             {/* My Weather opens a modal (not a route), so it's a button rather
                 than a Link, but styled identically to the other nav items. It
                 lives outside the icon group below — that group is reserved
@@ -287,71 +198,12 @@ export function SiteHeader() {
               {/* Mobile only — Explore, History, Aviation, My Weather and the
                   GPS action live here now that the bottom bar is map / pages /
                   list. Desktop keeps its text nav instead. */}
-              <div className="relative sm:hidden" ref={menuRef}>
-                <button
-                  ref={menuButtonRef}
-                  onClick={() => setMenuOpen((v) => !v)}
-                  aria-label="More options"
-                  aria-expanded={menuOpen}
-                  aria-controls="mobile-more-menu"
-                  className="bee"
-                  type="button"
-                >
-                  <Ellipsis
-                    size={20}
-                    className="text-primary-foreground"
-                    aria-hidden="true"
-                  />
-                </button>
-                {menuOpen && (
-                  <div
-                    id="mobile-more-menu"
-                    className="absolute right-0 top-full z-40 mt-2 w-56 rounded-[var(--radius-card)] border border-text-tertiary/10 bg-surface-card p-2 shadow-lg"
-                  >
-                    <ul className="flex flex-col">
-                      {navItems.map(({ href, label, active }) => (
-                        <li key={href}>
-                          <Link
-                            href={href}
-                            prefetch={false}
-                            aria-current={active ? "page" : undefined}
-                            onClick={() => setMenuOpen(false)}
-                            className={MENU_ITEM_CLASS}
-                          >
-                            {label}
-                          </Link>
-                        </li>
-                      ))}
-                      <li>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMenuOpen(false);
-                            openMyWeather();
-                          }}
-                          className={MENU_ITEM_CLASS}
-                        >
-                          My Weather
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMenuOpen(false);
-                            void handleMyLocation();
-                          }}
-                          disabled={locating}
-                          aria-busy={locating}
-                          className={MENU_ITEM_CLASS}
-                        >
-                          {locating && <Spinner className="h-4 w-4" />}
-                          Use my location
-                        </button>
-                      </li>
-                    </ul>
-                  </div>
-                )}
+              <div className="relative sm:hidden">
+                <PhoneMenu
+                  trigger="ellipsis"
+                  buttonClassName="bee"
+                  iconClassName="text-primary-foreground"
+                />
               </div>
 
               <div className="relative" ref={notificationsRef}>
@@ -373,7 +225,7 @@ export function SiteHeader() {
                     className="absolute right-0 top-full z-40 mt-2 w-64 rounded-[var(--radius-card)] border border-text-tertiary/10 bg-surface-card p-4 shadow-lg"
                   >
                     <p className="dove" aria-live="polite">
-                      No notifications yet
+                      {NOTIFICATIONS_EMPTY_TEXT}
                     </p>
                   </div>
                 )}

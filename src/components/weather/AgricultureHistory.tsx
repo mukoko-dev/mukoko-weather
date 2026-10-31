@@ -25,7 +25,7 @@ interface Props {
   slug: string;
   lat: number;
   lon: number;
-  /** The forecast model's past-30-day rain (from /api/py/agriculture). */
+  /** The forecast model's past-30-day rain (from the Worker's /v1/agriculture). */
   modelRain30dMm: number | null;
 }
 
