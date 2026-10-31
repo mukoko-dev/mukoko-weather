@@ -85,10 +85,16 @@ fn is_timestamp(s: &str) -> bool {
         return false;
     }
     // The shape is not enough: Tomorrow.io answers 4xx for 2024-99-99, and a
-    // request it rejects must never reach it. The date has to exist.
-    let num = |a: usize, z: usize| s[a..z].parse::<u32>().unwrap_or(u32::MAX);
-    let (year, month, day) = (num(0, 4), num(5, 7), num(8, 10));
-    let (hour, minute, second) = (num(11, 13), num(14, 16), num(17, 19));
+    // request it rejects must never reach it. The date has to exist, and sit
+    // in a window a forecast tile can plausibly be asked for.
+    let field = |a: usize, z: usize| s[a..z].parse::<u32>().ok();
+    let (Some(year), Some(month), Some(day)) = (field(0, 4), field(5, 7), field(8, 10)) else {
+        return false;
+    };
+    let (Some(hour), Some(minute), Some(second)) = (field(11, 13), field(14, 16), field(17, 19))
+    else {
+        return false;
+    };
     let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
     let days = match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
@@ -97,7 +103,11 @@ fn is_timestamp(s: &str) -> bool {
         2 => 28,
         _ => return false,
     };
-    year >= 1970 && (1..=days).contains(&day) && hour < 24 && minute < 60 && second < 60
+    (2020..=2100).contains(&year)
+        && (1..=days).contains(&day)
+        && hour < 24
+        && minute < 60
+        && second < 60
 }
 
 /// An integer query value as FastAPI reads one: optional sign, digits.
@@ -260,13 +270,16 @@ mod tests {
             "2024-13-01T00:00:00Z",
             "2024-01-01T24:00:00Z",
             "1969-12-31T23:59:59Z",
+            "9999-12-31T23:59:59Z",
+            "2019-12-31T23:59:59Z",
+            "2101-01-01T00:00:00Z",
         ] {
             assert_eq!(at(bad), Err(refuse(400, "Invalid timestamp")), "{bad}");
         }
         for good in [
             "now",
             "2024-02-29T00:00:00Z",
-            "2000-02-29T12:30:45Z",
+            "2028-02-29T12:30:45Z",
             "2026-10-31T23:59:59Z",
         ] {
             assert!(at(good).is_ok(), "{good}");

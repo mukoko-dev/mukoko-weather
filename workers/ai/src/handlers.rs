@@ -9,7 +9,7 @@ use weather_core::ai::guardrails::{system_prompt, Compiled};
 use weather_core::ai::history::{aggregate, fingerprint, Record};
 use weather_core::ai::prompts::{self, ClientPlace, Season};
 use weather_core::ai::{activities, conversation, Invalid, Turn, REFUSAL};
-use weather_core::places::{place_for_point, resolve_seed, slugify};
+use weather_core::places::{resolve_seed, slugify};
 use weather_core::{geo, Place};
 use weather_edge::{error, json, now, now_rfc3339};
 use worker::{Env, Response, Result};
@@ -115,7 +115,6 @@ pub async fn summary(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
     if !geo::valid_coordinates(lat, lon) {
         return error(400, "invalid_request", "Invalid coordinates");
     }
-    let place = place_for_point(lat, lon);
     let acts = ids(&body["activities"]);
     let Some(data) = weather(ctx.env, lat, lon).await else {
         return error(
@@ -135,7 +134,7 @@ pub async fn summary(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
         elevation: loc["elevation"].as_f64(),
     };
     let (summary_loc, key) =
-        prompts::summary_identity(&place, &client, &acts, data["elevation"].as_f64());
+        prompts::summary_identity(lat, lon, &client, &acts, data["elevation"].as_f64());
     let name = summary_loc.name.clone();
     if let Some(c) = kv_get::<CachedSummary>(ctx.env, &key).await {
         let moved = match (c.temperature, temp) {
