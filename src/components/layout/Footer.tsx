@@ -69,8 +69,8 @@ export function SiteFooter() {
               </span>
             </Link>
             <p className="text-base text-text-secondary leading-relaxed max-w-[220px]">
-              AI-powered weather intelligence for Africa and beyond. Weather as
-              a public good.
+              Weather intelligence for Africa and beyond. Weather as a public
+              good.
             </p>
             <div className="flex items-center gap-3 pt-1">
               <a
@@ -161,6 +161,22 @@ export function SiteFooter() {
               Nyuchi Africa
             </a>
             <a
+              href="https://www.bundu.org"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={link}
+            >
+              Bundu Foundation
+            </a>
+            <a
+              href="https://standards.bundu.org"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={link}
+            >
+              Bundu standards
+            </a>
+            <a
               href="https://mukoko.com"
               target="_blank"
               rel="noopener noreferrer"
@@ -169,20 +185,44 @@ export function SiteFooter() {
               Mukoko.com
             </a>
             <a
-              href="https://barstool.mukoko.com"
+              href="https://news.mukoko.com"
               target="_blank"
               rel="noopener noreferrer"
               className={link}
             >
-              Barstool
+              Mukoko News
             </a>
             <a
-              href="https://travel-info.co.zw"
+              href="https://events.mukoko.com"
               target="_blank"
               rel="noopener noreferrer"
               className={link}
             >
-              Travel
+              Mukoko Events
+            </a>
+            <a
+              href="https://kweli.mukoko.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={link}
+            >
+              Kweli
+            </a>
+            <a
+              href="https://lingo.mukoko.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={link}
+            >
+              Mukoko Lingo
+            </a>
+            <a
+              href="https://www.bushtrade.co.zw"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={link}
+            >
+              BushTrade
             </a>
           </div>
         </div>

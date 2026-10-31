@@ -7,7 +7,7 @@ import { ProsePage, ProseSection } from "@/components/layout/ProsePage";
 export const metadata: Metadata = {
   title: "Terms of Service",
   description:
-    "Terms of Service for mukoko weather — an AI-powered weather intelligence platform, operated by Mukoko Africa, a division of Nyuchi Africa (PVT) Ltd.",
+    "Terms of Service for mukoko weather — a weather intelligence platform, operated by Mukoko Africa, a division of Nyuchi Africa (PVT) Ltd.",
   alternates: {
     canonical: `${SITE_URL}/terms`,
   },
