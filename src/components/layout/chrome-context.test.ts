@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import { describe, it, expect } from "vitest";
 
 import { isImmersivePath } from "./chrome-context";
@@ -37,11 +39,7 @@ describe("isImmersivePath", () => {
 });
 
 describe("one header and one footer per app (Mzizi N7)", () => {
-  const read = (p: string) =>
-    require("node:fs").readFileSync(
-      require("node:path").resolve(__dirname, p),
-      "utf-8",
-    );
+  const read = (p: string) => readFileSync(resolve(__dirname, p), "utf-8");
   it("AppChrome mounts both the site header and the site footer", () => {
     const src = read("AppChrome.tsx");
     expect(src).toContain("<SiteHeader />");

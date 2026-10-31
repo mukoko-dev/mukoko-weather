@@ -3,7 +3,7 @@
  * the source (Vitest runs in Node without a DOM).
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 
 const source = readFileSync(resolve(__dirname, "PageShell.tsx"), "utf-8");
@@ -46,8 +46,6 @@ describe("PageShell", () => {
 });
 
 describe("every ordinary page route has a loader and an error boundary", () => {
-  const { existsSync } = require("node:fs");
-  const { resolve } = require("node:path");
   const routes = [
     "history",
     "profile",
