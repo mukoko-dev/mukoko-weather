@@ -49,19 +49,16 @@ from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from . import _ag_calendar as ag
 from ._circuit_breaker import soilgrids_breaker
-from ._db import SLUG_RE, enforce_rate_limit, get_db, places_db
+from ._db import SLUG_RE, get_db, places_db
 from ._geohash import encode_geohash
 from ._insights import moon_phase
 from ._normals import NORMALS_PERIOD, NORMALS_SOURCE, get_monthly_normals
 
 logger = logging.getLogger(__name__)
-
-router = APIRouter()
 
 COLLECTION = "placeKnowledge"
 SCHEMA_VERSION = "v3.2"
@@ -1542,59 +1539,3 @@ async def profile_block_for(**kwargs) -> str:
 def with_profile(block: str) -> str:
     """The block plus its grounding rule, ready to splice into a prompt."""
     return f"\n{block}\n{PROFILE_GROUNDING_RULE}\n" if block else ""
-
-
-# ---------------------------------------------------------------------------
-# Endpoint
-# ---------------------------------------------------------------------------
-
-
-#: A request that can start a build (a 30-year archive request and soil
-#: calls) is rate-limited like the other upstream-heavy routes. Reads of a
-#: stored profile are cheap, are not counted, and the client caches for 30
-#: minutes.
-PROFILE_RATE_LIMIT = 120
-PROFILE_RATE_WINDOW_S = 3600
-
-
-@router.get("/api/py/locations/profile", response_model=LocationProfile)
-async def location_profile(
-    request: Request,
-    slug: Optional[str] = Query(default=None, max_length=120),
-    lat: Optional[float] = Query(default=None, ge=-90, le=90),
-    lon: Optional[float] = Query(default=None, ge=-180, le=180),
-    country: Optional[str] = Query(default=None, pattern=r"^[A-Za-z]{2}$"),
-):
-    """
-    GET /api/py/locations/profile?slug=<slug>  |  ?lat=&lon=[&country=]
-
-    The place's stored knowledge (seasons, crop calendar, climate normals and
-    zone, soil, static facts, provenance) plus its current context (season,
-    crop phases, moon, ENSO, day length). Built on first request and stored
-    in ``places.placeKnowledge`` once that collection exists. 404 when
-    nothing can be resolved; 400 without a slug or a coordinate pair.
-    """
-    if slug is not None and not SLUG_RE.match(slug):
-        raise HTTPException(status_code=400, detail="Invalid slug")
-    if not slug and (lat is None or lon is None):
-        raise HTTPException(status_code=400, detail="Provide slug, or lat and lon")
-    await _warm_enso()
-    iso = country.upper() if country else None
-    # A stored profile is a cheap read and is not counted. Only a request that
-    # would start a build (nothing stored yet) is rate-limited. The limiter is
-    # a blocking database call, so it runs off the event loop.
-    profile = await asyncio.to_thread(
-        get_location_profile, slug=slug, lat=lat, lon=lon, country=iso, allow_build=False,
-        schedule_build=False,
-    )
-    if profile is None or not profile.stored:
-        await asyncio.to_thread(
-            enforce_rate_limit, request, "place-profile", PROFILE_RATE_LIMIT, PROFILE_RATE_WINDOW_S,
-            require_ip=False,
-        )
-        profile = await asyncio.to_thread(
-            get_location_profile, slug=slug, lat=lat, lon=lon, country=iso, allow_build=True,
-        )
-    if profile is None:
-        raise HTTPException(status_code=404, detail="Location not found")
-    return profile
