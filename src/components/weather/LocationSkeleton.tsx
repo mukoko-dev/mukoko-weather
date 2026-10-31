@@ -23,6 +23,26 @@ export const HOURLY_PLACEHOLDER_COUNT = 8;
 export const TILE_PLACEHOLDER_COUNT = 4;
 
 /**
+ * Typical copy, laid out invisibly to give the placeholder its real height at
+ * every width. Sentence and note lengths are the middle of what the page
+ * shows: the hourly outlook is one or two clauses (around 80 characters), a
+ * season note is 19 to 51 characters (median 37, src/lib/seed-seasons.ts).
+ * Never drawn and `aria-hidden` with the rest of the skeleton.
+ */
+export const TYPICAL_OUTLOOK =
+  "Clear conditions will continue for the next 12 hours. Wind gusts are up to 31 km/h.";
+export const TYPICAL_SEASON_NOTE = "Warming temperatures, early rains possible";
+
+/**
+ * One bar per wrapped line of the outlook: the shimmer fills the paragraph's
+ * text box and a repeating mask (period 1.625em, the line height) keeps a
+ * 0.7em bar per line. Both the standard and the `-webkit-` property, since
+ * the arbitrary values are not prefixed for us.
+ */
+const OUTLOOK_BARS_CLASS =
+  "absolute top-0 right-[8%] bottom-3 left-0 [-webkit-mask-image:repeating-linear-gradient(to_bottom,transparent_0,transparent_0.45em,currentColor_0.45em,currentColor_1.15em,transparent_1.15em,transparent_1.625em)] [mask-image:repeating-linear-gradient(to_bottom,transparent_0,transparent_0.45em,currentColor_0.45em,currentColor_1.15em,transparent_1.15em,transparent_1.625em)]";
+
+/**
  * The Conditions card under the hero: the same `.kestrel-card` box, heading
  * row, outlook lines, hour tiles and season footer as `HourlyScrollCards`
  * (variant "sky"), with bars where the text goes.
@@ -37,13 +57,14 @@ export function ConditionsCardSkeleton() {
           </h2>
           <Shimmer className="h-4 w-28" />
         </div>
-        <p className="mt-1 border-b border-border pb-3 text-base leading-relaxed">
-          <span className="block">
-            <Shimmer className="h-[0.7em] w-full" />
-          </span>
-          <span className="block md:hidden">
-            <Shimmer className="h-[0.7em] w-2/3" />
-          </span>
+        {/* The outlook sentence: a typical one laid out invisibly, so it wraps
+            at the card's real width exactly as the sentence does (2 lines on a
+            393 wide phone, 3 on a 375 one, 1 from `md`); one quiet bar per
+            wrapped line is drawn over it by a repeating mask of one line
+            height (1.625em, `leading-relaxed`). */}
+        <p className="relative mt-1 border-b border-border pb-3 text-base leading-relaxed">
+          <span className="invisible">{TYPICAL_OUTLOOK}</span>
+          <Shimmer className={OUTLOOK_BARS_CLASS} />
         </p>
         <div className="mt-3 flex gap-2.5 pb-2" data-skeleton="hours">
           {Array.from({ length: HOURLY_PLACEHOLDER_COUNT }, (_, i) => (
@@ -69,8 +90,7 @@ export function ConditionsCardSkeleton() {
               Wet season
             </span>
             <span className="invisible text-base font-normal">
-              Rains and warm days, with storms in the afternoon and cooler
-              nights ahead
+              {TYPICAL_SEASON_NOTE}
             </span>
           </Shimmer>
         </div>

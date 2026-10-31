@@ -11,6 +11,8 @@ import {
   HOURLY_PLACEHOLDER_COUNT,
   LocationSkeleton,
   TILE_PLACEHOLDER_COUNT,
+  TYPICAL_OUTLOOK,
+  TYPICAL_SEASON_NOTE,
 } from "./LocationSkeleton";
 
 const read = (p: string) => readFileSync(resolve(__dirname, p), "utf-8");
@@ -66,6 +68,33 @@ describe("LocationSkeleton — structure", () => {
   it("keeps the hero in its own swappable component", () => {
     expect(skeletonSrc).toContain("<HeroSkeleton />");
     expect(heroSrc).toContain("export function HeroSkeleton");
+  });
+});
+
+describe("LocationSkeleton — sized by typical copy", () => {
+  it("lays a typical outlook sentence out invisibly, with the real paragraph type", () => {
+    expect(TYPICAL_OUTLOOK.length).toBeGreaterThanOrEqual(60);
+    expect(TYPICAL_OUTLOOK.length).toBeLessThanOrEqual(110);
+    expect(html).toContain(`<span class="invisible">${TYPICAL_OUTLOOK}</span>`);
+    // Same text size and leading as HourlyScrollCards' `.gazelle` outlook.
+    expect(html).toMatch(
+      /<p class="relative mt-1 border-b border-border pb-3 text-base leading-relaxed">/,
+    );
+  });
+
+  it("draws one bar per wrapped line: the mask period is the line height", () => {
+    // leading-relaxed is 1.625, so the repeating mask runs in 1.625em steps.
+    expect(skeletonSrc).toContain("transparent_1.625em");
+    expect(skeletonSrc).toContain("[mask-image:repeating-linear-gradient(");
+    expect(skeletonSrc).toContain(
+      "[-webkit-mask-image:repeating-linear-gradient(",
+    );
+  });
+
+  it("sizes the season line with a note of typical length (19 to 51 chars)", () => {
+    expect(TYPICAL_SEASON_NOTE.length).toBeGreaterThanOrEqual(19);
+    expect(TYPICAL_SEASON_NOTE.length).toBeLessThanOrEqual(51);
+    expect(html).toContain(TYPICAL_SEASON_NOTE);
   });
 });
 
