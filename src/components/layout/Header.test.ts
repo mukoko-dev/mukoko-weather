@@ -38,6 +38,15 @@ describe("Header — mounts the mobile navigation", () => {
     );
   });
 
+  it("has exactly one navigation landmark per list: no nav wraps the desktop nav", () => {
+    // The header wrapper is a div; "Main navigation" is the only nav in it.
+    expect(source).not.toContain('aria-label="Primary navigation"');
+    expect(source.match(/<nav[\s>]/g)).toHaveLength(1);
+    expect(source).toContain('aria-label="Main navigation"');
+    // Nothing from the bottom bar's pager is a nav (it nests inside MziziBottomNav's nav).
+    expect(pager.match(/<nav[\s>]/g)).toBeNull();
+  });
+
   it("is a sibling of <header>, never inside it (a backdrop-filter header would capture a fixed child)", () => {
     const headerClose = source.indexOf("</header>");
     expect(headerClose).toBeGreaterThan(0);

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
+import { PageShell } from "@/components/layout/PageShell";
 import { requireUser } from "@/lib/auth";
 import { AviationPlanner } from "./AviationPlanner";
 import { SITE_URL } from "@/lib/site";
@@ -19,10 +18,8 @@ export const metadata: Metadata = {
 export default async function AviationPage() {
   await requireUser("/aviation"); // redirects anon users to sign-in, returns here after
   return (
-    <>
-      <Header />
+    <PageShell>
       <AviationPlanner />
-      <Footer />
-    </>
+    </PageShell>
   );
 }

@@ -2,9 +2,18 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useChromeClaimed } from "@/components/layout/chrome-context";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 
+/**
+ * The page-level footer. The root layout owns the real one (`SiteFooter`, via
+ * AppChrome) so there is one per app; while it is mounted this renders nothing.
+ */
 export function Footer() {
+  return useChromeClaimed() ? null : <SiteFooter />;
+}
+
+export function SiteFooter() {
   const year = new Date().getFullYear();
   const shamwariEnabled = isFeatureEnabled("shamwari_chat");
 

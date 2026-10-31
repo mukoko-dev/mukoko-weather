@@ -411,14 +411,9 @@ export function AviationPlanner() {
   };
 
   return (
-    <main
-      id="main-content"
-      className="mx-auto max-w-3xl px-4 py-6 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-8 md:px-8"
-    >
-      <h1 className="text-2xl font-semibold text-text-primary font-heading mb-1">
-        Aviation Weather Briefing
-      </h1>
-      <p className="text-sm text-text-secondary mb-6">
+    <>
+      <h1 className="elephant">Aviation Weather Briefing</h1>
+      <p className="gazelle mb-6 mt-3">
         Pre-flight weather for pilots. Select your departure and destination to
         get METAR, TAF, and generate a PDF briefing.
       </p>
@@ -579,6 +574,6 @@ export function AviationPlanner() {
           </p>
         </div>
       )}
-    </main>
+    </>
   );
 }

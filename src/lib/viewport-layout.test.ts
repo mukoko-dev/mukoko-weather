@@ -153,9 +153,18 @@ describe("no wrapper around the page shell clips with overflow hidden", () => {
 
 describe("the header and the bottom nav are not inside a containing-block ancestor", () => {
   it("the root layout wrapper around {children} has no transform/filter/contain/will-change", () => {
-    const wrapper = layout.match(/<div className="([^"]*)">\s*\{children\}/);
+    const wrapper = layout.match(
+      /<div className="([^"]*)">\s*<AppChrome>\{children\}<\/AppChrome>/,
+    );
     expect(wrapper).not.toBeNull();
     expect(wrapper![1]).not.toMatch(CONTAINING_BLOCK);
+  });
+
+  it("the persistent chrome sits inside that wrapper, once, beside the page", () => {
+    const chrome = read("components/layout/AppChrome.tsx");
+    expect(chrome).toContain("<SiteHeader />");
+    expect(chrome).toContain("{children}");
+    expect(chrome).not.toMatch(/\b(transform|filter|will-change)\b/);
   });
 
   it("the dashboard's content layer (parent of Header) has no transform/filter/contain/will-change", () => {

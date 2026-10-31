@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
-import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { PageShell } from "@/components/layout/PageShell";
 import { ReleaseEntry } from "@/components/releases/ReleaseEntry";
 import { loadReleaseNotes } from "@/lib/release-notes-source";
 import { GITHUB_RELEASES_URL, releasesJsonLd } from "@/lib/release-notes";
@@ -36,8 +34,6 @@ export const metadata: Metadata = {
   },
 };
 
-// Not PageShell: the breadcrumb sits between the Header and <main> (as on the
-// explore pages), and PageShell has no slot outside its <main>.
 export default function ReleasesPage() {
   const releases = loadReleaseNotes();
 
@@ -50,14 +46,8 @@ export default function ReleasesPage() {
           dangerouslySetInnerHTML={{ __html: safeJsonLd(schema) }}
         />
       ))}
-      <Header />
-      <Breadcrumb
-        className="max-w-3xl"
-        items={[{ label: "Home", href: "/" }, { label: "Release notes" }]}
-      />
-      <main
-        id="main-content"
-        className="mx-auto max-w-3xl px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-10 md:px-8"
+      <PageShell
+        breadcrumb={[{ label: "Home", href: "/" }, { label: "Release notes" }]}
       >
         <h1 className="elephant">Release notes</h1>
         <p className="gazelle mt-3">
@@ -85,8 +75,7 @@ export default function ReleasesPage() {
             </li>
           ))}
         </ol>
-      </main>
-      <Footer />
+      </PageShell>
     </>
   );
 }
