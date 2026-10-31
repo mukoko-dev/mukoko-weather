@@ -52,6 +52,7 @@ pub mod secrets;
 pub mod sg_air;
 pub mod slug;
 pub mod station;
+pub mod station_alert;
 pub mod status;
 pub mod tiles;
 pub mod wmo;

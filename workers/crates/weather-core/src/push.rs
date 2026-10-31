@@ -29,6 +29,12 @@ pub const MAX_PUSHES_PER_DAY: u32 = 2;
 pub const MAX_PUSHES_PER_KIND_PER_NIGHT: u32 = 1;
 /// Frost looks at the next 24 hourly values.
 pub const FROST_LOOKAHEAD_HOURS: usize = 24;
+/// An hour at or below this air temperature (C) inside the frost window is a
+/// frost hour. Shared with the station join (`station_alert`), so a forecast
+/// and an observation can never disagree about what frost is.
+pub const FROST_THRESHOLD_C: f64 = 3.0;
+/// Local hour at which the frost window opens (22:00).
+pub const NIGHT_START_HOUR: u8 = 22;
 /// Delivery log rows older than this many days are deleted.
 pub const DELIVERY_RETENTION_DAYS: u32 = 90;
 /// A person may hold this many active subscriptions (browsers or devices).
@@ -271,12 +277,22 @@ fn parse_date(time: &str) -> Option<chrono::NaiveDate> {
     chrono::NaiveDate::parse_from_str(time.get(0..10)?, "%Y-%m-%d").ok()
 }
 
+/// Whether a local hour (0..=23) is inside the frost window: 22:00 through
+/// 08:59 (the hour that starts at 08:00 is included).
+pub fn in_frost_window(hour: u8) -> bool {
+    hour >= NIGHT_START_HOUR || hour <= NIGHT_END_HOUR
+}
+
 /// The date a frost night began on: hours 00..=08 belong to the previous
 /// evening's night.
-fn night_of(time: &str) -> Option<String> {
+pub(crate) fn night_of(time: &str) -> Option<String> {
     let date = parse_date(time)?;
     let hour = parse_hour(time)?;
-    let d = if hour <= 8 { date.pred_opt()? } else { date };
+    let d = if hour <= NIGHT_END_HOUR {
+        date.pred_opt()?
+    } else {
+        date
+    };
     Some(d.format("%Y-%m-%d").to_string())
 }
 
@@ -326,7 +342,7 @@ pub fn evaluate_frost(
             return None;
         }
         let Some(hour) = parse_hour(t) else { continue };
-        if !(hour >= 22 || hour <= 8) || !temp.is_finite() || temp > 3.0 {
+        if !in_frost_window(hour) || !temp.is_finite() || temp > FROST_THRESHOLD_C {
             continue;
         }
         let n = night_of(t)?;
