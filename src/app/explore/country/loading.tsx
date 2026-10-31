@@ -1,4 +1,8 @@
-import { Skeleton, CardSkeleton } from "@/components/ui/skeleton";
+import { CardSkeleton } from "@/components/ui/skeleton";
+import {
+  PageHeaderSkeleton,
+  SkeletonStack,
+} from "@/components/layout/PageShell";
 import { ExploreLoadingShell } from "../ExploreLoadingShell";
 
 export default function ExploreCountryLoading() {
@@ -7,13 +11,10 @@ export default function ExploreCountryLoading() {
       mainLabel="Loading countries"
       srText="Loading countries…"
     >
-      <Skeleton className="h-8 w-48 mb-2" />
-      <Skeleton className="h-4 w-64 mb-8" />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 9 }).map((_, i) => (
-          <CardSkeleton key={i} />
-        ))}
-      </div>
+      <PageHeaderSkeleton />
+      <SkeletonStack count={9} className="herd-grid">
+        {() => <CardSkeleton />}
+      </SkeletonStack>
     </ExploreLoadingShell>
   );
 }

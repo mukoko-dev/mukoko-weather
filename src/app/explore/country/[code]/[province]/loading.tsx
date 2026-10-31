@@ -1,4 +1,5 @@
-import { Skeleton, CardSkeleton } from "@/components/ui/skeleton";
+import { CardSkeleton, Skeleton } from "@/components/ui/skeleton";
+import { SkeletonStack } from "@/components/layout/PageShell";
 import { ExploreLoadingShell } from "../../../ExploreLoadingShell";
 
 export default function ProvinceDetailLoading() {
@@ -14,11 +15,9 @@ export default function ProvinceDetailLoading() {
           <Skeleton className="h-4 w-32" />
         </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <CardSkeleton key={i} />
-        ))}
-      </div>
+      <SkeletonStack count={6} className="herd-grid">
+        {() => <CardSkeleton />}
+      </SkeletonStack>
     </ExploreLoadingShell>
   );
 }
