@@ -7,6 +7,8 @@ import {
   compassTicks,
   fractionOf,
   gradientTokens,
+  GRADIENT_BREAKS,
+  GRADIENT_PRESETS,
   illuminationFromPhase,
   moonTerminatorGeometry,
   moonTerminatorPath,
@@ -148,11 +150,29 @@ describe("value helpers", () => {
 
   it("gradientTokens resolves presets and filters unsafe names", () => {
     expect(gradientTokens("uv")).toHaveLength(5);
-    expect(gradientTokens("aqi")[0]).toBe("var(--color-severity-low)");
-    expect(
-      gradientTokens(["--color-severity-low", "url(evil)", "--mineral-gold"]),
-    ).toEqual(["var(--color-severity-low)", "var(--mineral-gold)"]);
-    expect(gradientTokens([])).toEqual(["var(--color-severity-low)"]);
+    expect(gradientTokens("aqi")).toHaveLength(6);
+    expect(gradientTokens("aqi")[0]).toBe("var(--wx-aqi-1)");
+    expect(gradientTokens("uv")[4]).toBe("var(--wx-uv-5)");
+    expect(gradientTokens(["--wx-uv-1", "url(evil)", "--wx-uv-3"])).toEqual([
+      "var(--wx-uv-1)",
+      "var(--wx-uv-3)",
+    ]);
+    expect(gradientTokens([])).toEqual(["var(--wx-uv-1)"]);
+  });
+
+  it("draws UV and AQI as hard bands at the category edges", () => {
+    // UV 0-14: Low 0-3, Moderate 3-6, High 6-8, Very high 8-11, Extreme 11-14.
+    [0, 21.43, 42.86, 57.14, 78.57, 100].forEach((v, i) =>
+      expect(GRADIENT_BREAKS.uv![i]).toBeCloseTo(v, 1),
+    );
+    // AQI: each EPA band an equal sixth (aqiScalePct).
+    expect(GRADIENT_BREAKS.aqi).toHaveLength(7);
+    expect(GRADIENT_BREAKS.aqi![1]).toBeCloseTo(16.67, 1);
+    for (const preset of ["uv", "aqi"] as const) {
+      expect(GRADIENT_BREAKS[preset]!.length).toBe(
+        GRADIENT_PRESETS[preset].length + 1,
+      );
+    }
   });
 
   it("barHeights scales to the max (or series max)", () => {

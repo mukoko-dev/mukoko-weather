@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { Panel } from "@/components/display/Panel";
 import { useEffect, useState, type ReactNode } from "react";
 import { SunriseIcon, SunsetIcon, WeatherIcon } from "@/lib/weather-icons";
 import { psiBandInfo, sgRegionLabel, type SgAirResponse } from "@/lib/sg-air";
@@ -16,7 +17,7 @@ import { locationClockLabel, weatherOffsetSeconds } from "@/lib/location-time";
 import { useHydrated } from "@/lib/use-hydrated";
 import {
   AQI_ADVICE,
-  AQI_TEXT_CLASS,
+  AQI_LEVEL_BG_CLASS,
   currentHourIndex,
   nextHourIndexes,
 } from "@/lib/display";
@@ -91,10 +92,12 @@ export function DisplayNow({ weather }: { weather: WeatherData }) {
   const uv = uvLevel(c.uv_index);
 
   return (
-    <section aria-labelledby="display-now-heading" className="baobab p-5">
-      <h2 id="display-now-heading" className="sr-only">
-        Current conditions
-      </h2>
+    <Panel
+      titleId="display-now-heading"
+      title="Current conditions"
+      tone="baobab"
+      titleHidden
+    >
       <div className="flex items-center gap-5">
         <span aria-hidden="true" className="shrink-0">
           <WeatherIcon
@@ -133,7 +136,7 @@ export function DisplayNow({ weather }: { weather: WeatherData }) {
           value={`${weather.daily.precipitation_probability_max[0] ?? 0}%`}
         />
       </dl>
-    </section>
+    </Panel>
   );
 }
 
@@ -160,15 +163,12 @@ export function DisplayAirQuality({
 }) {
   if (!air) {
     return (
-      <section aria-labelledby="display-aq-heading" className="acacia p-5">
-        <h2 id="display-aq-heading" className="giraffe">
-          Air quality
-        </h2>
+      <Panel titleId="display-aq-heading" title="Air quality">
         <p className="mt-2 text-lg text-text-secondary">
           Air quality is unavailable right now. It will refresh on its own.
         </p>
         {children}
-      </section>
+      </Panel>
     );
   }
 
@@ -179,23 +179,20 @@ export function DisplayAirQuality({
     : null;
 
   return (
-    <section aria-labelledby="display-aq-heading" className="acacia p-5">
-      <h2 id="display-aq-heading" className="giraffe">
-        Air quality
-      </h2>
+    <Panel titleId="display-aq-heading" title="Air quality">
       <div className="mt-2 flex items-baseline gap-4">
-        <p
-          className={cn(
-            "font-heading text-6xl font-bold tabular-nums",
-            AQI_TEXT_CLASS[air.level],
-          )}
-        >
+        <p className="font-heading text-6xl font-bold tabular-nums text-text-primary">
           {air.aqi}
         </p>
         <div>
-          <p
-            className={cn("text-2xl font-semibold", AQI_TEXT_CLASS[air.level])}
-          >
+          <p className="flex items-center gap-2 text-2xl font-semibold text-text-primary">
+            <span
+              aria-hidden="true"
+              className={cn(
+                "size-5 shrink-0 rounded-full ring-1 ring-wx-outline",
+                AQI_LEVEL_BG_CLASS[air.level],
+              )}
+            />
             {label}
           </p>
           <p className="text-base text-text-secondary">
@@ -211,7 +208,7 @@ export function DisplayAirQuality({
         {AQI_ADVICE[air.level]}
       </p>
       {children}
-    </section>
+    </Panel>
   );
 }
 
@@ -259,16 +256,18 @@ export function DisplaySgPsi({
       <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <p className="text-xl text-text-primary">
           PSI (24h){" "}
-          <span
-            className={cn(
-              "font-heading text-4xl font-bold tabular-nums",
-              band.textClass,
-            )}
-          >
+          <span className="font-heading text-4xl font-bold tabular-nums text-text-primary">
             {sg.psi24h}
           </span>
         </p>
-        <p className={cn("text-2xl font-semibold", band.textClass)}>
+        <p className="flex items-center gap-2 text-2xl font-semibold text-text-primary">
+          <span
+            aria-hidden="true"
+            className={cn(
+              "size-4 shrink-0 rounded-full ring-1 ring-wx-outline",
+              band.bgClass,
+            )}
+          />
           {band.label}
         </p>
       </div>
@@ -344,10 +343,12 @@ export function DisplayHours({ weather }: { weather: WeatherData }) {
     : [];
 
   return (
-    <section aria-labelledby="display-hours-heading" className="acacia p-4">
-      <h2 id="display-hours-heading" className="giraffe mb-2">
-        Next hours
-      </h2>
+    <Panel
+      titleId="display-hours-heading"
+      title="Next hours"
+      className="p-4"
+      titleClassName="mb-2"
+    >
       <ol className="grid grid-cols-4 gap-2 sm:grid-cols-8">
         {idxs.map((i, n) => {
           const info = weatherCodeToInfo(h.weather_code[i]);
@@ -363,14 +364,14 @@ export function DisplayHours({ weather }: { weather: WeatherData }) {
               <span className="text-lg font-semibold tabular-nums text-text-primary">
                 {formatTemp(h.temperature_2m[i])}
               </span>
-              <span className="text-sm tabular-nums text-mineral-cobalt">
+              <span className="text-sm tabular-nums text-wx-series-rain">
                 {Math.round(h.precipitation_probability[i] ?? 0)}%
               </span>
             </li>
           );
         })}
       </ol>
-    </section>
+    </Panel>
   );
 }
 
@@ -378,10 +379,12 @@ export function DisplayDays({ weather }: { weather: WeatherData }) {
   const d = weather.daily;
   const days = d.time.slice(0, 5);
   return (
-    <section aria-labelledby="display-days-heading" className="acacia p-4">
-      <h2 id="display-days-heading" className="giraffe mb-2">
-        Next 5 days
-      </h2>
+    <Panel
+      titleId="display-days-heading"
+      title="Next 5 days"
+      className="p-4"
+      titleClassName="mb-2"
+    >
       <ol className="grid grid-cols-5 gap-2">
         {days.map((t, i) => {
           const info = weatherCodeToInfo(d.weather_code[i]);
@@ -404,7 +407,7 @@ export function DisplayDays({ weather }: { weather: WeatherData }) {
           );
         })}
       </ol>
-    </section>
+    </Panel>
   );
 }
 
@@ -431,23 +434,19 @@ export function DisplayOutlook({ weather }: { weather: WeatherData }) {
   const sunset = weather.daily.sunset?.[0];
 
   return (
-    <section
-      aria-labelledby="display-outlook-heading"
-      className="acacia flex flex-col justify-between gap-4 p-5"
+    <Panel
+      titleId="display-outlook-heading"
+      title="Today"
+      className="flex flex-col justify-between gap-4"
     >
-      <div>
-        <h2 id="display-outlook-heading" className="giraffe">
-          Today
-        </h2>
-        <p className="mt-2 text-xl leading-snug text-text-primary">
-          {summary ?? " "}
-        </p>
-      </div>
+      <p className="mt-2 text-xl leading-snug text-text-primary">
+        {summary ?? " "}
+      </p>
       {(sunrise || sunset) && (
         <dl className="flex gap-8 text-lg">
           {sunrise && (
             <div className="flex items-center gap-2">
-              <span aria-hidden="true" className="text-mineral-gold">
+              <span aria-hidden="true" className="text-text-secondary">
                 <SunriseIcon size={28} />
               </span>
               <dt className="sr-only">Sunrise</dt>
@@ -458,7 +457,7 @@ export function DisplayOutlook({ weather }: { weather: WeatherData }) {
           )}
           {sunset && (
             <div className="flex items-center gap-2">
-              <span aria-hidden="true" className="text-mineral-terracotta">
+              <span aria-hidden="true" className="text-text-secondary">
                 <SunsetIcon size={28} />
               </span>
               <dt className="sr-only">Sunset</dt>
@@ -469,6 +468,6 @@ export function DisplayOutlook({ weather }: { weather: WeatherData }) {
           )}
         </dl>
       )}
-    </section>
+    </Panel>
   );
 }

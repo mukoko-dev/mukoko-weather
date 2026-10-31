@@ -14,7 +14,7 @@ const alertVariants = cva(
           "border-severity-moderate bg-severity-moderate/10 text-text-primary",
         severe:
           "border-severity-severe bg-severity-severe/10 text-text-primary",
-        frost: "border-severity-cold bg-severity-cold/10 text-text-primary",
+        frost: "border-wx-frost-3 bg-wx-frost-3/10 text-text-primary",
         success: "border-severity-low bg-severity-low/10 text-text-primary",
       },
     },

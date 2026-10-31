@@ -15,8 +15,9 @@ describe("HazePanel data flow", () => {
 
   it("fetches the haze endpoint with lat/lon and aborts stale requests", () => {
     expect(source).toContain(
-      "/api/py/haze?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}",
+      'fetchWorker("haze", `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`',
     );
+    expect(source).not.toContain("/api/py/haze");
     expect(source).toContain("AbortController");
     expect(source).toContain("controller.abort()");
   });

@@ -33,8 +33,8 @@ describe("explore page — ISR caching", () => {
 });
 
 describe("explore page — loading skeletons", () => {
-  it('explore/loading.tsx exists and has role="status"', () => {
-    expect(exploreShell).toContain('role="status"');
+  it('explore/loading.tsx exists and renders the PageShellSkeleton frame (role="status")', () => {
+    expect(exploreShell).toContain("PageShellSkeleton");
   });
 
   it("explore/loading.tsx has sr-only text for screen readers", () => {
@@ -46,8 +46,8 @@ describe("explore page — loading skeletons", () => {
     expect(exploreLoading).toContain("Skeleton");
   });
 
-  it('explore/[tag]/loading.tsx exists and has role="status"', () => {
-    expect(exploreShell).toContain('role="status"');
+  it('explore/[tag]/loading.tsx exists and renders the PageShellSkeleton frame (role="status")', () => {
+    expect(exploreShell).toContain("PageShellSkeleton");
   });
 
   it("explore/[tag]/loading.tsx has sr-only text for screen readers", () => {
@@ -61,36 +61,25 @@ describe("explore page — loading skeletons", () => {
 });
 
 describe("explore page — layout and navigation", () => {
-  it("explore page includes Header and Footer", () => {
-    expect(exploreSource).toContain("Header");
-    expect(exploreSource).toContain("Footer");
+  // PageShell owns the header, footer, main column padding and mobile-nav
+  // clearance; the page files only pick a width.
+  it("explore page renders through PageShell (header and footer come from the root chrome)", () => {
+    expect(exploreSource).toContain(
+      'import { PageShell } from "@/components/layout/PageShell"',
+    );
+    expect(exploreSource).toContain("<PageShell");
+    expect(exploreSource).not.toContain("<Header");
+    expect(exploreSource).not.toContain("<Footer");
   });
 
-  it("explore page uses consistent max-w-5xl container", () => {
-    expect(exploreSource).toContain("max-w-5xl");
+  it('explore page uses the "wide" (5xl) PageShell width', () => {
+    expect(exploreSource).toContain('width="wide"');
   });
 
-  it("explore page has symmetric horizontal padding (sm:px-6 md:px-8)", () => {
-    expect(exploreSource).toContain("sm:px-6");
-    expect(exploreSource).toContain("md:px-8");
-  });
-
-  it("explore page clears the mobile nav island (--mobile-nav-clearance)", () => {
-    expect(exploreSource).toContain("pb-[var(--mobile-nav-clearance)]");
-  });
-
-  it("explore tag page includes Header and Footer", () => {
-    expect(exploreTagSource).toContain("Header");
-    expect(exploreTagSource).toContain("Footer");
-  });
-
-  it("explore tag page has symmetric horizontal padding (sm:px-6 md:px-8)", () => {
-    expect(exploreTagSource).toContain("sm:px-6");
-    expect(exploreTagSource).toContain("md:px-8");
-  });
-
-  it("explore tag page clears the mobile nav island (--mobile-nav-clearance)", () => {
-    expect(exploreTagSource).toContain("pb-[var(--mobile-nav-clearance)]");
+  it("explore tag page renders through PageShell (header and footer come from the root chrome)", () => {
+    expect(exploreTagSource).toContain("<PageShell");
+    expect(exploreTagSource).not.toContain("<Header");
+    expect(exploreTagSource).not.toContain("<Footer");
   });
 });
 
@@ -133,9 +122,10 @@ describe("explore/loading.tsx — skeleton quality", () => {
     expect(exploreShell).toContain('aria-busy="true"');
   });
 
-  it("explore loading renders multiple card skeletons", () => {
+  it("explore loading renders multiple card skeletons in a shared stack", () => {
     // Should render 8 or more skeleton cards
-    expect(exploreLoading).toContain("Array.from");
+    expect(exploreLoading).toContain("SkeletonStack");
+    expect(exploreLoading).toContain("count={8}");
   });
 
   it("explore tag loading renders province group skeletons", () => {
@@ -159,33 +149,45 @@ describe("explore — shared breadcrumb, empty state and loading shell", () => {
     ),
   };
 
-  it("every explore page uses the shared Breadcrumb, not a hand-rolled nav", () => {
+  it("every explore page passes its trail to PageShell's breadcrumb prop, not a hand-rolled nav", () => {
     for (const source of Object.values(pages)) {
       expect(source).toContain(
-        'import { Breadcrumb } from "@/components/layout/Breadcrumb"',
+        'import { PageShell } from "@/components/layout/PageShell"',
       );
-      expect(source).toContain("<Breadcrumb");
+      expect(source).toMatch(/breadcrumb=\{(trail\(|\[)/);
       expect(source).not.toContain('aria-label="Breadcrumb"');
       expect(source).not.toContain("<ol className");
     }
   });
 
   it("explore pages keep an accessible crumb trail with Home and Explore links", () => {
+    const breadcrumb = readFileSync(
+      resolve(__dirname, "../../components/layout/Breadcrumb.tsx"),
+      "utf-8",
+    );
+    expect(breadcrumb).toContain('label: "Home", href: "/"');
     for (const source of Object.values(pages)) {
-      expect(source).toContain('{ label: "Home", href: "/" }');
-      expect(source).toContain('{ label: "Explore"');
+      expect(source).toContain(
+        'import { trail } from "@/components/layout/Breadcrumb"',
+      );
+      expect(source).toContain('label: "Explore"');
     }
   });
 
-  it("explore link cards use .card-interactive instead of a hand-rolled hover chain", () => {
+  it("explore link cards use the shared ExploreCard (card-interactive baobab)", () => {
     for (const source of Object.values(pages)) {
       expect(source).not.toContain("hover:bg-surface-card/80");
     }
-    expect(pages.index).toContain("card-interactive");
-    expect(pages.tag).toContain("card-interactive");
-    expect(pages.country).toContain("card-interactive");
-    expect(pages.countryCode).toContain("card-interactive");
-    expect(pages.province).toContain("card-interactive");
+    const card = readFileSync(
+      resolve(__dirname, "../../components/explore/ExploreCard.tsx"),
+      "utf-8",
+    );
+    expect(card).toContain("card-interactive baobab");
+    expect(pages.index).toContain("ExploreCard");
+    expect(pages.tag).toContain("ExploreCard");
+    expect(pages.country).toContain("ExploreCard");
+    expect(pages.countryCode).toContain("ExploreCard");
+    expect(pages.province).toContain("ExploreCard");
   });
 
   it("empty-list states use the shared EmptyState primitive", () => {
@@ -212,9 +214,9 @@ describe("explore — shared breadcrumb, empty state and loading shell", () => {
     }
   });
 
-  it("the shared shell uses HeaderSkeleton and BreadcrumbSkeleton", () => {
-    expect(exploreShell).toContain("HeaderSkeleton");
-    expect(exploreShell).toContain("BreadcrumbSkeleton");
-    expect(exploreShell).not.toContain("<Header ");
+  it("the shared shell is the PageShellSkeleton twin (header, breadcrumb and footer slots)", () => {
+    expect(exploreShell).toContain("PageShellSkeleton");
+    expect(exploreShell).toContain("breadcrumb");
+    expect(exploreShell).not.toContain("<Header");
   });
 });

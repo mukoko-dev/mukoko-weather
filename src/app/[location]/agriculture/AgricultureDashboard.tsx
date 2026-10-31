@@ -2,9 +2,7 @@
 
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
-import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { PageShell } from "@/components/layout/PageShell";
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { LazySection } from "@/components/weather/LazySection";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
@@ -101,150 +99,139 @@ export function AgricultureDashboard({ location, season, user }: Props) {
   const unavailable = current !== null && !ready;
 
   return (
-    <>
-      <Header />
+    <PageShell
+      width="wide"
+      label={`Agriculture insights for ${location.name}`}
+      className="overflow-x-clip"
+      breadcrumb={[
+        { label: "Home", href: "/" },
+        { label: location.name, href: `/${location.slug}` },
+        { label: "Agriculture" },
+      ]}
+    >
+      <h1 className="elephant">{location.name} Agriculture</h1>
+      <p className="mt-1 text-base text-text-secondary">
+        {location.province} &middot; {location.elevation}m &middot;{" "}
+        {data?.season
+          ? `${data.season.localName} (${data.season.name})`
+          : `${season.localName} (${season.name})`}
+      </p>
 
-      <Breadcrumb
-        items={[
-          { label: "Home", href: "/" },
-          { label: location.name, href: `/${location.slug}` },
-          { label: "Agriculture" },
-        ]}
-      />
+      <div className="mt-4 mb-6">
+        <SeasonBadge season={season} />
+      </div>
 
-      <main
-        id="main-content"
-        className="mx-auto max-w-5xl overflow-x-clip px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:pb-8 sm:px-6 md:px-8"
-        aria-label={`Agriculture insights for ${location.name}`}
-      >
-        <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
-          {location.name} Agriculture
-        </h1>
-        <p className="mt-1 text-base text-text-secondary">
-          {location.province} &middot; {location.elevation}m &middot;{" "}
-          {data?.season
-            ? `${data.season.localName} (${data.season.name})`
-            : `${season.localName} (${season.name})`}
-        </p>
+      <div className="herd">
+        <ChartErrorBoundary name="agriculture snapshot">
+          <Suspense fallback={<AgricultureSnapshotSkeleton />}>
+            <AgricultureSnapshot
+              location={location}
+              user={user}
+              variant="page"
+            />
+          </Suspense>
+        </ChartErrorBoundary>
 
-        <div className="mt-4 mb-6">
-          <SeasonBadge season={season} />
-        </div>
+        {unavailable && (
+          <p role="status" className="acacia gazelle">
+            Farm data is unavailable right now. Check back shortly; the
+            location&apos;s forecast is still on its{" "}
+            <Link href={`/${location.slug}/forecast`} className="sunbird">
+              forecast page
+            </Link>
+            .
+          </p>
+        )}
 
-        <div className="herd">
-          <ChartErrorBoundary name="agriculture snapshot">
-            <Suspense fallback={<AgricultureSnapshotSkeleton />}>
-              <AgricultureSnapshot
+        <LazySection
+          label="agriculture-briefing"
+          fallback={<SectionSkeleton />}
+        >
+          <ChartErrorBoundary name="agronomy briefing">
+            <Suspense fallback={<SectionSkeleton />}>
+              <AgricultureBriefing
                 location={location}
+                crops={crops}
                 user={user}
-                variant="page"
+                enabled={ready}
               />
             </Suspense>
           </ChartErrorBoundary>
+        </LazySection>
 
-          {unavailable && (
-            <p role="status" className="acacia gazelle">
-              Farm data is unavailable right now. Check back shortly; the
-              location&apos;s forecast is still on its{" "}
-              <Link href={`/${location.slug}/forecast`} className="sunbird">
-                forecast page
-              </Link>
-              .
-            </p>
-          )}
+        {ready && data && (
+          <>
+            <LazySection
+              label="agriculture-crop-advice"
+              fallback={<SectionSkeleton />}
+            >
+              <ChartErrorBoundary name="crop advice">
+                <Suspense fallback={<SectionSkeleton />}>
+                  <AgricultureCropAdvice advice={advice} crops={crops} />
+                </Suspense>
+              </ChartErrorBoundary>
+            </LazySection>
 
-          <LazySection
-            label="agriculture-briefing"
-            fallback={<SectionSkeleton />}
-          >
-            <ChartErrorBoundary name="agronomy briefing">
-              <Suspense fallback={<SectionSkeleton />}>
-                <AgricultureBriefing
-                  location={location}
-                  crops={crops}
-                  user={user}
-                  enabled={ready}
-                />
-              </Suspense>
-            </ChartErrorBoundary>
-          </LazySection>
+            <LazySection
+              label="agriculture-charts"
+              fallback={<ChartSkeleton />}
+            >
+              <ChartErrorBoundary name="agriculture charts">
+                <Suspense fallback={<ChartSkeleton />}>
+                  <AgricultureCharts daily={data.daily} />
+                </Suspense>
+              </ChartErrorBoundary>
+            </LazySection>
 
-          {ready && data && (
-            <>
-              <LazySection
-                label="agriculture-crop-advice"
-                fallback={<SectionSkeleton />}
-              >
-                <ChartErrorBoundary name="crop advice">
-                  <Suspense fallback={<SectionSkeleton />}>
-                    <AgricultureCropAdvice advice={advice} crops={crops} />
-                  </Suspense>
-                </ChartErrorBoundary>
-              </LazySection>
+            <LazySection
+              label="agriculture-calendar"
+              fallback={<SectionSkeleton />}
+            >
+              <ChartErrorBoundary name="crop calendar">
+                <Suspense fallback={<SectionSkeleton />}>
+                  <CropCalendarTable
+                    calendar={data.calendar}
+                    currentMonth={month}
+                  />
+                </Suspense>
+              </ChartErrorBoundary>
+            </LazySection>
 
-              <LazySection
-                label="agriculture-charts"
-                fallback={<ChartSkeleton />}
-              >
-                <ChartErrorBoundary name="agriculture charts">
-                  <Suspense fallback={<ChartSkeleton />}>
-                    <AgricultureCharts daily={data.daily} />
-                  </Suspense>
-                </ChartErrorBoundary>
-              </LazySection>
+            <LazySection
+              label="agriculture-history"
+              fallback={<SectionSkeleton />}
+            >
+              <ChartErrorBoundary name="history against normals">
+                <Suspense fallback={<SectionSkeleton />}>
+                  <AgricultureHistory
+                    slug={location.slug}
+                    lat={location.lat}
+                    lon={location.lon}
+                    modelRain30dMm={data.rain?.past30dMm ?? null}
+                  />
+                </Suspense>
+              </ChartErrorBoundary>
+            </LazySection>
+          </>
+        )}
 
-              <LazySection
-                label="agriculture-calendar"
-                fallback={<SectionSkeleton />}
-              >
-                <ChartErrorBoundary name="crop calendar">
-                  <Suspense fallback={<SectionSkeleton />}>
-                    <CropCalendarTable
-                      calendar={data.calendar}
-                      currentMonth={month}
-                    />
-                  </Suspense>
-                </ChartErrorBoundary>
-              </LazySection>
+        <LazySection
+          label="agriculture-enso"
+          fallback={<EnsoOutlookSkeleton />}
+        >
+          <ChartErrorBoundary name="ENSO outlook">
+            <Suspense fallback={<EnsoOutlookSkeleton />}>
+              <EnsoOutlook
+                lat={location.lat}
+                lon={location.lon}
+                countryCode={location.country}
+              />
+            </Suspense>
+          </ChartErrorBoundary>
+        </LazySection>
 
-              <LazySection
-                label="agriculture-history"
-                fallback={<SectionSkeleton />}
-              >
-                <ChartErrorBoundary name="history against normals">
-                  <Suspense fallback={<SectionSkeleton />}>
-                    <AgricultureHistory
-                      slug={location.slug}
-                      lat={location.lat}
-                      lon={location.lon}
-                      modelRain30dMm={data.rain?.past30dMm ?? null}
-                    />
-                  </Suspense>
-                </ChartErrorBoundary>
-              </LazySection>
-            </>
-          )}
-
-          <LazySection
-            label="agriculture-enso"
-            fallback={<EnsoOutlookSkeleton />}
-          >
-            <ChartErrorBoundary name="ENSO outlook">
-              <Suspense fallback={<EnsoOutlookSkeleton />}>
-                <EnsoOutlook
-                  lat={location.lat}
-                  lon={location.lon}
-                  countryCode={location.country}
-                />
-              </Suspense>
-            </ChartErrorBoundary>
-          </LazySection>
-
-          {data?.attribution && <p className="dove">{data.attribution}</p>}
-        </div>
-      </main>
-
-      <Footer />
-    </>
+        {data?.attribution && <p className="dove">{data.attribution}</p>}
+      </div>
+    </PageShell>
   );
 }

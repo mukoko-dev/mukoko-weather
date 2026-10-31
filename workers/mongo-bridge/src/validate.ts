@@ -1,0 +1,701 @@
+// Validation for everything the bridge accepts. These are the same rules as
+// `weather_core::community` (workers/crates/weather-core/src/community.rs),
+// which the Rust Worker applies first; the bridge applies them again because
+// it is the last stop before the database and must not trust its caller.
+// Nothing here builds a query from caller text: handlers pick fields.
+
+export const THEMES = ["light", "dark", "system"] as const;
+
+export const FORECAST_MODELS = [
+  "best_match",
+  "ecmwf_ifs",
+  "ecmwf_ifs025",
+  "ecmwf_aifs025_single",
+  "gfs_seamless",
+  "icon_global",
+  "gem_global",
+  "meteofrance_arpege_world",
+  "meteofrance_seamless",
+  "ecmwf_ifs04",
+  "icon_seamless",
+] as const;
+
+export const REPORT_TYPES = [
+  "light-rain",
+  "heavy-rain",
+  "thunderstorm",
+  "hail",
+  "flooding",
+  "strong-wind",
+  "clear-skies",
+  "cloudy",
+  "fog",
+  "mist",
+  "haze",
+  "dust",
+  "frost",
+] as const;
+
+export const SEVERITIES = ["mild", "moderate", "severe"] as const;
+
+export const MAX_ACTIVITIES = 30;
+export const MAX_SAVED_LOCATIONS = 10;
+export const MAX_DESCRIPTION = 300;
+export const MAX_LOCATION_NAME = 120;
+/** The list never returns more than this many reports. */
+export const LIST_LIMIT = 20;
+/** At most this many storage keys in one list (a slug and its spot cell). */
+export const MAX_LIST_KEYS = 4;
+
+export interface Preferences {
+  theme: string;
+  selectedLocation: string;
+  savedLocations: string[];
+  selectedActivities: string[];
+  hasOnboarded: boolean;
+  selectedForecastModel: string;
+}
+
+export const DEFAULT_PREFERENCES: Readonly<Preferences> = Object.freeze({
+  theme: "system",
+  selectedLocation: "",
+  savedLocations: [],
+  selectedActivities: [],
+  hasOnboarded: false,
+  selectedForecastModel: "best_match",
+});
+
+/** `Ok(value)` or `Err(detail)`; a detail is the text of a 400. */
+export type Checked<T> = { ok: true; value: T } | { ok: false; detail: string };
+
+const ok = <T>(value: T): Checked<T> => ({ ok: true, value });
+const err = <T = never>(detail: string): Checked<T> => ({ ok: false, detail });
+
+export function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+const has = (o: Record<string, unknown>, k: string): boolean =>
+  Object.prototype.hasOwnProperty.call(o, k) &&
+  o[k] !== undefined &&
+  o[k] !== null;
+
+/** `^[a-z0-9-]{1,80}$`, the slug rule every endpoint applies. */
+export function validSlug(s: string): boolean {
+  return /^[a-z0-9-]{1,80}$/.test(s);
+}
+
+/** 1 to 64 of letters, digits, `-` and `_`. */
+export function validDeviceId(id: string): boolean {
+  return /^[A-Za-z0-9_-]{1,64}$/.test(id);
+}
+
+/**
+ * A key a report is stored under: a catalogue slug, or `geo:<geohash>` for a
+ * coordinate spot (`weather_core::community::storage_slug`).
+ */
+export function validStorageKey(s: string): boolean {
+  return validSlug(s) || /^geo:[0-9a-z]{5,7}$/.test(s);
+}
+
+/** The anonymous id a report and an upvote are keyed by: 16 hex characters. */
+export function validVoter(s: string): boolean {
+  return /^[0-9a-f]{16}$/.test(s);
+}
+
+export function validReportId(s: string): boolean {
+  return /^[0-9a-f]{24}$/i.test(s);
+}
+
+function checkTheme(t: unknown): Checked<string> {
+  return typeof t === "string" && (THEMES as readonly string[]).includes(t)
+    ? ok(t)
+    : err(`Invalid theme: ${show(t)}`);
+}
+
+function checkSlug(s: unknown): Checked<string> {
+  return typeof s === "string" && (s === "" || validSlug(s))
+    ? ok(s)
+    : err(`Invalid location slug: ${show(s)}`);
+}
+
+function checkSaved(list: unknown): Checked<string[]> {
+  if (!Array.isArray(list)) return err("savedLocations must be a list");
+  if (list.length > MAX_SAVED_LOCATIONS) {
+    return err(`Too many saved locations (max ${MAX_SAVED_LOCATIONS})`);
+  }
+  for (const s of list) {
+    if (typeof s !== "string" || !validSlug(s)) {
+      return err(`Invalid location slug: ${show(s)}`);
+    }
+  }
+  return ok(list as string[]);
+}
+
+function checkActivities(list: unknown): Checked<string[]> {
+  if (!Array.isArray(list)) return err("selectedActivities must be a list");
+  if (list.length > MAX_ACTIVITIES) {
+    return err(`Too many activities (max ${MAX_ACTIVITIES})`);
+  }
+  if (!list.every((a) => typeof a === "string")) {
+    return err("selectedActivities must be a list of strings");
+  }
+  return ok(list as string[]);
+}
+
+function checkModel(m: unknown): Checked<string> {
+  return typeof m === "string" &&
+    (FORECAST_MODELS as readonly string[]).includes(m)
+    ? ok(m)
+    : err(`Invalid forecast model: ${show(m)}`);
+}
+
+function checkBool(name: string, b: unknown): Checked<boolean> {
+  return typeof b === "boolean" ? ok(b) : err(`${name} must be true or false`);
+}
+
+/** A short, safe rendering of a rejected value for an error detail. */
+function show(v: unknown): string {
+  if (typeof v === "string") return v.length > 40 ? `${v.slice(0, 40)}...` : v;
+  return typeof v;
+}
+
+/** A whole preferences object; a missing field takes its default. */
+export function validatePreferences(input: unknown): Checked<Preferences> {
+  if (input === undefined || input === null)
+    return ok({
+      ...DEFAULT_PREFERENCES,
+      savedLocations: [],
+      selectedActivities: [],
+    });
+  if (!isRecord(input)) return err("preferences must be an object");
+  const base: Preferences = {
+    ...DEFAULT_PREFERENCES,
+    savedLocations: [],
+    selectedActivities: [],
+  };
+  if (has(input, "theme")) {
+    const r = checkTheme(input.theme);
+    if (!r.ok) return r;
+    base.theme = r.value;
+  }
+  if (has(input, "selectedLocation")) {
+    const r = checkSlug(input.selectedLocation);
+    if (!r.ok) return r;
+    base.selectedLocation = r.value;
+  }
+  if (has(input, "savedLocations")) {
+    const r = checkSaved(input.savedLocations);
+    if (!r.ok) return r;
+    base.savedLocations = r.value;
+  }
+  if (has(input, "selectedActivities")) {
+    const r = checkActivities(input.selectedActivities);
+    if (!r.ok) return r;
+    base.selectedActivities = r.value;
+  }
+  if (has(input, "hasOnboarded")) {
+    const r = checkBool("hasOnboarded", input.hasOnboarded);
+    if (!r.ok) return r;
+    base.hasOnboarded = r.value;
+  }
+  if (has(input, "selectedForecastModel")) {
+    const r = checkModel(input.selectedForecastModel);
+    if (!r.ok) return r;
+    base.selectedForecastModel = r.value;
+  }
+  return ok(base);
+}
+
+/**
+ * A partial update, as the dotted `$set` paths to apply. Only the fields
+ * present change (last write wins; an array is replaced, never merged). An
+ * empty patch is `Err("No fields to update")`.
+ */
+export function validatePatch(
+  input: unknown,
+): Checked<Record<string, unknown>> {
+  if (!isRecord(input))
+    return err("The body must be a preferences update object");
+  const set: Record<string, unknown> = {};
+  if (has(input, "theme")) {
+    const r = checkTheme(input.theme);
+    if (!r.ok) return r;
+    set["preferences.theme"] = r.value;
+  }
+  if (has(input, "selectedLocation")) {
+    const r = checkSlug(input.selectedLocation);
+    if (!r.ok) return r;
+    set["preferences.selectedLocation"] = r.value;
+  }
+  if (has(input, "savedLocations")) {
+    const r = checkSaved(input.savedLocations);
+    if (!r.ok) return r;
+    set["preferences.savedLocations"] = r.value;
+  }
+  if (has(input, "selectedActivities")) {
+    const r = checkActivities(input.selectedActivities);
+    if (!r.ok) return r;
+    set["preferences.selectedActivities"] = r.value;
+  }
+  if (has(input, "hasOnboarded")) {
+    const r = checkBool("hasOnboarded", input.hasOnboarded);
+    if (!r.ok) return r;
+    set["preferences.hasOnboarded"] = r.value;
+  }
+  if (has(input, "selectedForecastModel")) {
+    const r = checkModel(input.selectedForecastModel);
+    if (!r.ok) return r;
+    set["preferences.selectedForecastModel"] = r.value;
+  }
+  return Object.keys(set).length === 0 ? err("No fields to update") : ok(set);
+}
+
+/** What a stored preferences object reads as: a bad or missing field is its default. */
+export function readPreferences(stored: unknown): Preferences {
+  const out: Preferences = {
+    ...DEFAULT_PREFERENCES,
+    savedLocations: [],
+    selectedActivities: [],
+  };
+  if (!isRecord(stored)) return out;
+  if (typeof stored.theme === "string") out.theme = stored.theme;
+  if (typeof stored.selectedLocation === "string")
+    out.selectedLocation = stored.selectedLocation;
+  if (Array.isArray(stored.savedLocations)) {
+    out.savedLocations = stored.savedLocations.filter(
+      (s): s is string => typeof s === "string",
+    );
+  }
+  if (Array.isArray(stored.selectedActivities)) {
+    out.selectedActivities = stored.selectedActivities.filter(
+      (s): s is string => typeof s === "string",
+    );
+  }
+  if (typeof stored.hasOnboarded === "boolean")
+    out.hasOnboarded = stored.hasOnboarded;
+  if (typeof stored.selectedForecastModel === "string") {
+    out.selectedForecastModel = stored.selectedForecastModel;
+  }
+  return out;
+}
+
+export interface WeatherSnapshot {
+  temperature: number | null;
+  weatherCode: number | null;
+  precipitation: number | null;
+  windSpeed: number | null;
+  humidity: number | null;
+}
+
+const SNAPSHOT_FIELDS = [
+  "temperature",
+  "weatherCode",
+  "precipitation",
+  "windSpeed",
+  "humidity",
+] as const;
+
+/** `{}` (no snapshot was available) or the five fields, each a number or null. */
+function checkSnapshot(input: unknown): Checked<Partial<WeatherSnapshot>> {
+  if (input === undefined || input === null) return ok({});
+  if (!isRecord(input)) return err("weatherSnapshot must be an object");
+  const out: Partial<WeatherSnapshot> = {};
+  for (const k of SNAPSHOT_FIELDS) {
+    const v = input[k];
+    if (v === undefined) continue;
+    if (v === null) {
+      out[k] = null;
+    } else if (typeof v === "number" && Number.isFinite(v)) {
+      out[k] = v;
+    } else {
+      return err(`weatherSnapshot.${k} must be a number or null`);
+    }
+  }
+  return ok(out);
+}
+
+function checkCoordinate(
+  name: string,
+  v: unknown,
+  limit: number,
+): Checked<number | null> {
+  if (v === undefined || v === null) return ok(null);
+  if (typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= limit)
+    return ok(v);
+  return err(`${name} must be a number within +/-${limit}, or null`);
+}
+
+export interface NewReport {
+  locationSlug: string;
+  locationName: string;
+  lat: number | null;
+  lon: number | null;
+  reportType: string;
+  severity: string;
+  description: string;
+  weatherSnapshot: Partial<WeatherSnapshot>;
+  reportedBy: string;
+  verified: boolean;
+}
+
+/** A report to submit. Times, votes and the expiry are the bridge's, never the caller's. */
+export function validateReport(input: unknown): Checked<NewReport> {
+  if (!isRecord(input)) return err("The body must be a report object");
+  const {
+    locationSlug,
+    locationName,
+    reportType,
+    severity,
+    description,
+    reportedBy,
+    verified,
+  } = input;
+  if (typeof locationSlug !== "string" || !validStorageKey(locationSlug)) {
+    return err("Invalid location key");
+  }
+  if (
+    typeof locationName !== "string" ||
+    locationName.length < 1 ||
+    locationName.length > MAX_LOCATION_NAME
+  ) {
+    return err(`locationName must be 1 to ${MAX_LOCATION_NAME} characters`);
+  }
+  if (
+    typeof reportType !== "string" ||
+    !(REPORT_TYPES as readonly string[]).includes(reportType)
+  ) {
+    return err(
+      `Invalid report type. Must be one of: ${[...REPORT_TYPES].sort().join(", ")}`,
+    );
+  }
+  if (
+    typeof severity !== "string" ||
+    !(SEVERITIES as readonly string[]).includes(severity)
+  ) {
+    return err("Invalid severity. Must be one of: mild, moderate, severe");
+  }
+  const desc =
+    description === undefined || description === null ? "" : description;
+  if (typeof desc !== "string") return err("description must be text");
+  if ([...desc].length > MAX_DESCRIPTION) {
+    return err(`Description too long (max ${MAX_DESCRIPTION} characters)`);
+  }
+  if (typeof reportedBy !== "string" || !validVoter(reportedBy)) {
+    return err("Invalid reporter id");
+  }
+  if (typeof verified !== "boolean")
+    return err("verified must be true or false");
+  const lat = checkCoordinate("lat", input.lat, 90);
+  if (!lat.ok) return lat;
+  const lon = checkCoordinate("lon", input.lon, 180);
+  if (!lon.ok) return lon;
+  const snap = checkSnapshot(input.weatherSnapshot);
+  if (!snap.ok) return snap;
+  return ok({
+    locationSlug,
+    locationName,
+    lat: lat.value,
+    lon: lon.value,
+    reportType,
+    severity,
+    description: desc,
+    weatherSnapshot: snap.value,
+    reportedBy,
+    verified,
+  });
+}
+
+/** How long a report lives, by severity: 24, 48 or 72 hours. */
+export function ttlSeconds(severity: string): number {
+  switch (severity) {
+    case "mild":
+      return 86_400;
+    case "severe":
+      return 259_200;
+    default:
+      return 172_800;
+  }
+}
+
+export interface ListQuery {
+  keys: string[];
+  hours: number;
+  limit: number;
+}
+
+/** `slug` (repeatable, 1 to 4), `hours` (clamped 1..72, default 24), `limit` (clamped 1..20, default 20). */
+export function validateListQuery(params: URLSearchParams): Checked<ListQuery> {
+  const keys = params.getAll("slug");
+  if (keys.length < 1 || keys.length > MAX_LIST_KEYS) {
+    return err(`Give 1 to ${MAX_LIST_KEYS} slug parameters`);
+  }
+  if (!keys.every(validStorageKey)) return err("Invalid location key");
+  const int = (name: string, dflt: number): Checked<number> => {
+    const raw = params.get(name);
+    if (raw === null || raw === "") return ok(dflt);
+    return /^-?\d{1,6}$/.test(raw)
+      ? ok(Number(raw))
+      : err(`${name} must be an integer`);
+  };
+  const hours = int("hours", 24);
+  if (!hours.ok) return hours;
+  const limit = int("limit", LIST_LIMIT);
+  if (!limit.ok) return limit;
+  return ok({
+    keys: [...new Set(keys)],
+    hours: Math.min(Math.max(hours.value, 1), 72),
+    limit: Math.min(Math.max(limit.value, 1), LIST_LIMIT),
+  });
+}
+
+/** An upvote: the report's ObjectId (24 hex) and the voter's anonymous id. */
+export function validateUpvote(
+  input: unknown,
+): Checked<{ reportId: string; voter: string }> {
+  if (!isRecord(input)) return err("The body must be an upvote object");
+  if (typeof input.reportId !== "string" || !validReportId(input.reportId)) {
+    return err("Invalid report ID");
+  }
+  if (typeof input.voter !== "string" || !validVoter(input.voter)) {
+    return err("Invalid voter id");
+  }
+  return ok({ reportId: input.reportId.toLowerCase(), voter: input.voter });
+}
+
+// --- weather history ---------------------------------------------------------
+//
+// weather.weather_history: one document per (locationSlug, date), unique. The
+// bridge READS it (any source) and INSERTS archive days (insert-only; it never
+// updates, never writes `recorded`, which only the forecast jobs produce).
+
+/** The storage key of a place or coordinate (`weather_core::history::cell_key`). */
+export function validHistoryKey(s: string): boolean {
+  return (
+    validStorageKey(s) || /^cell:-?\d{1,3}\.\d{2}_-?\d{1,3}\.\d{2}$/.test(s)
+  );
+}
+
+export const HISTORY_ARCHIVE_SOURCES = [
+  "nasa-power",
+  "open-meteo-archive",
+] as const;
+export const HISTORY_EARLIEST = "1940-01-01";
+/** Days one read may span (about ten years). */
+export const HISTORY_MAX_SPAN_DAYS = 3660;
+export const HISTORY_MAX_KEYS = 3;
+/** Days one write may carry. */
+export const HISTORY_MAX_WRITE_DAYS = 800;
+
+/** A valid calendar date (`YYYY-MM-DD`). */
+export function validDate(s: unknown): s is string {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(`${s}T00:00:00.000Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
+const DAY_MS = 86_400_000;
+const spanDays = (a: string, b: string): number =>
+  Math.round(
+    (Date.parse(`${b}T00:00:00.000Z`) - Date.parse(`${a}T00:00:00.000Z`)) /
+      DAY_MS,
+  ) + 1;
+
+export interface HistoryRead {
+  keys: string[];
+  start: string;
+  end: string;
+  /**
+   * Also read the days recorded under the place's platform slugs
+   * (`harare-35c223`), which some writers used. The aliases are found from the
+   * place record near this point, never guessed from the name. Only for one
+   * plain place slug, with the place's own coordinates.
+   */
+  aliases: { lat: number; lon: number } | null;
+}
+
+export function validateHistoryRead(
+  params: URLSearchParams,
+): Checked<HistoryRead> {
+  const keys = params.getAll("slug");
+  if (keys.length < 1 || keys.length > HISTORY_MAX_KEYS) {
+    return err(`Give 1 to ${HISTORY_MAX_KEYS} slug parameters`);
+  }
+  if (!keys.every(validHistoryKey)) return err("Invalid location key");
+  const start = params.get("start");
+  const end = params.get("end");
+  if (!validDate(start) || !validDate(end)) {
+    return err("start and end must be YYYY-MM-DD");
+  }
+  if (start < HISTORY_EARLIEST) {
+    return err(`start must be on or after ${HISTORY_EARLIEST}`);
+  }
+  if (start > end) return err("start must be on or before end");
+  if (spanDays(start, end) > HISTORY_MAX_SPAN_DAYS) {
+    return err(`range must be at most ${HISTORY_MAX_SPAN_DAYS} days`);
+  }
+  let aliases: HistoryRead["aliases"] = null;
+  if (params.get("aliases") === "1") {
+    if (keys.length !== 1 || !validSlug(keys[0]!)) {
+      return err("aliases applies to exactly one place slug");
+    }
+    const lat = queryNumber(params.get("lat"), 90);
+    const lon = queryNumber(params.get("lon"), 180);
+    if (lat === null || lon === null) {
+      return err("aliases needs the place's lat and lon");
+    }
+    aliases = { lat, lon };
+  }
+  return ok({ keys: [...new Set(keys)], start, end, aliases });
+}
+
+/** A finite number within +-`limit`, from a query value; else `null`. */
+function queryNumber(v: string | null, limit: number): number | null {
+  if (v === null || v.trim() === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) && Math.abs(n) <= limit ? n : null;
+}
+
+const CURRENT_FIELDS = [
+  "temperature_2m",
+  "apparent_temperature",
+  "relative_humidity_2m",
+  "cloud_cover",
+  "surface_pressure",
+  "wind_speed_10m",
+  "wind_direction_10m",
+  "wind_gusts_10m",
+  "precipitation",
+  "weather_code",
+  "uv_index",
+  "is_day",
+] as const;
+
+const DAILY_NUMBER_FIELDS = [
+  "weather_code",
+  "temperature_2m_max",
+  "temperature_2m_min",
+  "apparent_temperature_max",
+  "apparent_temperature_min",
+  "precipitation_sum",
+  "wind_speed_10m_max",
+  "wind_gusts_10m_max",
+  "wind_direction_10m_dominant",
+] as const;
+
+const INSIGHT_FIELDS = ["dewPoint", "evapotranspiration"] as const;
+
+const numberOrNull = (v: unknown): v is number | null =>
+  v === null || (typeof v === "number" && Number.isFinite(v));
+
+const sunTime = (v: unknown): v is string | null =>
+  v === null ||
+  (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v));
+
+export interface ArchiveDay {
+  date: string;
+  source: (typeof HISTORY_ARCHIVE_SOURCES)[number];
+  current: Record<string, number | null>;
+  daily: Record<string, unknown[]>;
+  insights?: Record<string, number>;
+}
+
+export interface HistoryWrite {
+  key: string;
+  days: ArchiveDay[];
+}
+
+/**
+ * A batch of archive days for one key. Only fields the dashboard reads are
+ * accepted, every value is typed, and the document is built by the store from
+ * these fields, never from the caller's object. `today` bounds the dates: an
+ * archive has no future.
+ */
+export function validateHistoryWrite(
+  input: unknown,
+  today: string,
+): Checked<HistoryWrite> {
+  if (!isRecord(input)) return err("The body must be an object");
+  const { slug, days } = input;
+  if (typeof slug !== "string" || !validHistoryKey(slug)) {
+    return err("Invalid location key");
+  }
+  if (
+    !Array.isArray(days) ||
+    days.length < 1 ||
+    days.length > HISTORY_MAX_WRITE_DAYS
+  ) {
+    return err(`days must hold 1 to ${HISTORY_MAX_WRITE_DAYS} entries`);
+  }
+  const out: ArchiveDay[] = [];
+  const seen = new Set<string>();
+  for (const raw of days) {
+    if (!isRecord(raw)) return err("Each day must be an object");
+    const { date, source, current, daily, insights } = raw;
+    if (!validDate(date) || date < HISTORY_EARLIEST || date >= today) {
+      return err("Each day needs a past date (YYYY-MM-DD)");
+    }
+    if (seen.has(date)) return err("Duplicate date");
+    seen.add(date);
+    if (!HISTORY_ARCHIVE_SOURCES.includes(source as never)) {
+      return err("source must be an archive provider");
+    }
+    if (!isRecord(current)) return err("current must be an object");
+    const cur: Record<string, number | null> = {};
+    for (const k of Object.keys(current)) {
+      if (!CURRENT_FIELDS.includes(k as never)) {
+        return err(`Unknown current field ${k}`);
+      }
+      const v = current[k];
+      if (!numberOrNull(v)) return err(`current.${k} must be a number or null`);
+      cur[k] = v;
+    }
+    if (!isRecord(daily)) return err("daily must be an object");
+    const day: Record<string, unknown[]> = {};
+    for (const k of Object.keys(daily)) {
+      const v = daily[k];
+      if (!Array.isArray(v) || v.length !== 1) {
+        return err(`daily.${k} must hold one entry`);
+      }
+      if (k === "time") {
+        if (v[0] !== date) return err("daily.time must be the day's date");
+      } else if (k === "sunrise" || k === "sunset") {
+        if (!sunTime(v[0])) {
+          return err(`daily.${k} must be YYYY-MM-DDTHH:MM or null`);
+        }
+      } else if (DAILY_NUMBER_FIELDS.includes(k as never)) {
+        if (!numberOrNull(v[0])) {
+          return err(`daily.${k} must be a number or null`);
+        }
+      } else {
+        return err(`Unknown daily field ${k}`);
+      }
+      day[k] = [v[0]];
+    }
+    day.time = [date];
+    let ins: Record<string, number> | undefined;
+    if (insights !== undefined) {
+      if (!isRecord(insights)) return err("insights must be an object");
+      ins = {};
+      for (const k of Object.keys(insights)) {
+        const v = insights[k];
+        if (
+          !INSIGHT_FIELDS.includes(k as never) ||
+          typeof v !== "number" ||
+          !Number.isFinite(v)
+        ) {
+          return err(`Invalid insight ${k}`);
+        }
+        ins[k] = v;
+      }
+    }
+    out.push({
+      date,
+      source: source as ArchiveDay["source"],
+      current: cur,
+      daily: day,
+      ...(ins && Object.keys(ins).length ? { insights: ins } : {}),
+    });
+  }
+  return ok({ key: slug, days: out });
+}

@@ -18,6 +18,7 @@ import {
   fetchActivityCategories,
   resetActivitiesClientCache,
 } from "./activities-client";
+import { workerUrl } from "@/lib/worker-url";
 
 // ---------------------------------------------------------------------------
 // Suitability rules cache
@@ -82,7 +83,7 @@ export async function fetchSuitabilityRules(): Promise<SuitabilityRuleDoc[]> {
     if (!cacheIsWarm) {
       try {
         const data = await fetchJson<{ rules?: SuitabilityRuleDoc[] }>(
-          "/api/py/suitability",
+          workerUrl("/v1/suitability"),
         );
         const rules = data?.rules;
         if (rules && rules.length > 0) {

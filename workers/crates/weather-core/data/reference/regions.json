@@ -1,0 +1,142 @@
+[
+  {
+    "id": "zw",
+    "name": "Zimbabwe",
+    "north": -15.61,
+    "south": -22.42,
+    "east": 33.07,
+    "west": 25.24,
+    "center": {
+      "lat": -19.02,
+      "lon": 29.15
+    },
+    "active": true,
+    "padding": 1
+  },
+  {
+    "id": "africa",
+    "name": "Africa",
+    "north": 38,
+    "south": -35,
+    "east": 52,
+    "west": -18,
+    "center": {
+      "lat": 1.5,
+      "lon": 17
+    },
+    "active": true,
+    "padding": 1
+  },
+  {
+    "id": "asean",
+    "name": "ASEAN",
+    "north": 28.5,
+    "south": -11,
+    "east": 141,
+    "west": 92,
+    "center": {
+      "lat": 8,
+      "lon": 115
+    },
+    "active": true,
+    "padding": 1
+  },
+  {
+    "id": "south-asia",
+    "name": "South Asia",
+    "north": 38.5,
+    "south": -1,
+    "east": 98,
+    "west": 60,
+    "center": {
+      "lat": 22,
+      "lon": 79
+    },
+    "active": true,
+    "padding": 1
+  },
+  {
+    "id": "middle-east",
+    "name": "Middle East",
+    "north": 42,
+    "south": 12,
+    "east": 65,
+    "west": 25,
+    "center": {
+      "lat": 27,
+      "lon": 45
+    },
+    "active": true,
+    "padding": 1
+  },
+  {
+    "id": "central-asia",
+    "name": "Central Asia",
+    "north": 56,
+    "south": 35,
+    "east": 125,
+    "west": 46,
+    "center": {
+      "lat": 45,
+      "lon": 80
+    },
+    "active": true,
+    "padding": 1
+  },
+  {
+    "id": "south-america",
+    "name": "South America",
+    "north": 13.5,
+    "south": -57,
+    "east": -34,
+    "west": -82,
+    "center": {
+      "lat": -15,
+      "lon": -58
+    },
+    "active": true,
+    "padding": 1
+  },
+  {
+    "id": "central-america",
+    "name": "Central America, Mexico & Caribbean",
+    "north": 33,
+    "south": 7,
+    "east": -59,
+    "west": -122,
+    "center": {
+      "lat": 20,
+      "lon": -90
+    },
+    "active": true,
+    "padding": 1
+  },
+  {
+    "id": "eastern-europe",
+    "name": "Eastern Europe",
+    "north": 56,
+    "south": 35,
+    "east": 46,
+    "west": 14,
+    "center": {
+      "lat": 45,
+      "lon": 28
+    },
+    "active": true,
+    "padding": 1
+  },
+  {
+    "id": "pacific-islands",
+    "name": "Pacific Islands",
+    "north": 20,
+    "south": -25,
+    "east": -176,
+    "west": 130,
+    "center": {
+      "lat": 0,
+      "lon": -170
+    },
+    "active": true,
+    "padding": 1
+  }
+]

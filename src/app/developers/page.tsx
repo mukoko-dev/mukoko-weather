@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/PageShell";
+import { JsonLd } from "@/components/layout/JsonLd";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { CodeBlock } from "@/components/ui/code-block";
 import { getCurrentUser } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/feature-flags";
@@ -11,7 +13,7 @@ export const metadata: Metadata = {
   description:
     "Free, no-auth public weather API for developers. Current conditions, full forecasts, geo lookup, location search, air quality, and nearest airports — CORS-open and browser-callable, with real curl examples and response shapes.",
   alternates: {
-    canonical: "https://weather.mukoko.com/developers",
+    canonical: `${SITE_URL}/developers`,
   },
 };
 export default async function DevelopersPage() {
@@ -43,28 +45,29 @@ export default async function DevelopersPage() {
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }}
-      />
+      <JsonLd data={articleSchema} />
       <PageShell>
-        <h1 className="elephant">Developers &amp; Public API</h1>
-        <p className="mt-4 text-text-secondary leading-relaxed">
-          <strong className="text-text-primary">
-            The API is free and open — call it directly, no key needed.
-          </strong>{" "}
-          mukoko weather runs on a set of public JSON endpoints with no account
-          and no auth. They&apos;re served with{" "}
-          <code className="termite">Access-Control-Allow-Origin: *</code>, so
-          you can call them straight from the browser, cross-origin, from any
-          site or app. All coordinates are WGS 84 decimal degrees; all
-          timestamps are ISO 8601. Want a drop-in widget instead of raw JSON?
-          See the{" "}
-          <Link href="/embed" prefetch={false} className="sunbird">
-            embed page
-          </Link>
-          .
-        </p>
+        <PageHeader
+          title="Developers &amp; Public API"
+          intro={
+            <>
+              <strong className="text-text-primary">
+                The API is free and open — call it directly, no key needed.
+              </strong>{" "}
+              mukoko weather runs on a set of public JSON endpoints with no
+              account and no auth. They&apos;re served with{" "}
+              <code className="termite">Access-Control-Allow-Origin: *</code>,
+              so you can call them straight from the browser, cross-origin, from
+              any site or app. All coordinates are WGS 84 decimal degrees; all
+              timestamps are ISO 8601. Want a drop-in widget instead of raw
+              JSON? See the{" "}
+              <Link href="/embed" prefetch={false} className="sunbird">
+                embed page
+              </Link>
+              .
+            </>
+          }
+        />
 
         {/* Base URL */}
         <section className="mt-10">
@@ -216,14 +219,14 @@ curl "https://weather.mukoko.com/api/py/search?q=nairobi"`}
           <h2 className="eagle">Nearest airports</h2>
           <p className="mt-2 text-base text-text-secondary">
             <code className="termite">
-              GET /api/py/airports/nearest?lat=&amp;lon=&amp;count=
+              GET /v1/airports/nearest?lat=&amp;lon=&amp;count=
             </code>{" "}
             — the N nearest ICAO airports, each with its code, name, and
             distance in kilometres, sorted closest-first.{" "}
             <code className="termite">count</code> defaults to 5 (max 20).
           </p>
           <CodeBlock
-            code={`curl "https://weather.mukoko.com/api/py/airports/nearest?lat=-17.83&lon=31.05&count=3"`}
+            code={`curl "https://weather-api.mukoko.com/v1/airports/nearest?lat=-17.83&lon=31.05&count=3"`}
           />
         </section>
 
@@ -301,8 +304,8 @@ curl "https://weather.mukoko.com/api/py/search?q=nairobi"`}
             cache responses where you can and avoid hammering them in tight
             loops. Please keep the <code className="termite">attribution</code>{" "}
             back to mukoko weather when you display our data, and credit the
-            model providers: forecasts come from ECMWF, NOAA, DWD, ECCC and
-            Météo-France via{" "}
+            model providers: forecasts come from ECMWF, NOAA, DWD, ECCC,
+            Météo-France, the UK Met Office, CMA and JMA via{" "}
             <a
               href="https://open-meteo.com"
               className="sunbird"

@@ -90,7 +90,10 @@ export interface AISummaryDoc {
  * /api/py/weather, or a past day filled from the Open-Meteo archive (ERA5
  * reanalysis; `current` then holds daily means). Legacy docs have no source.
  */
-export type WeatherHistorySource = "recorded" | "open-meteo-archive";
+export type WeatherHistorySource =
+  | "recorded"
+  | "nasa-power"
+  | "open-meteo-archive";
 
 export interface WeatherHistoryDoc {
   locationSlug: string;
@@ -540,8 +543,9 @@ export async function ensureIndexes(): Promise<void> {
       { expireAfterSeconds: 0 },
     ),
 
-    // Agriculture (issue #265): the raw Open-Meteo farm payload, 1-hour TTL,
-    // `_id` = the 0.05° grid cell; and the AI agronomy text, `_id` = cell +
+    // Agriculture (issue #265): the raw Open-Meteo farm payload (now cached in
+    // the Rust Worker's KV; this TTL only lets documents the Python wrote
+    // expire), 1-hour TTL, `_id` = the 0.05° grid cell; and the AI agronomy text, `_id` = cell +
     // mode + sorted farming activity ids (1 h, 60 s for fallback text).
     safeCreateIndex(
       weatherDb().collection("agriculture_cache"),

@@ -1497,6 +1497,7 @@ class TestSanitizeModels:
             "best_match", "ecmwf_ifs", "ecmwf_ifs025", "ecmwf_aifs025_single",
             "gfs_seamless", "icon_global", "icon_seamless", "gem_global",
             "meteofrance_arpege_world", "meteofrance_seamless",
+            "ukmo_global_deterministic_10km", "cma_grapes_global", "jma_gsm",
         }
         assert "ecmwf_ifs04" not in KNOWN_FORECAST_MODELS
 

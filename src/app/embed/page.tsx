@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { PageShell } from "@/components/layout/PageShell";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { CodeBlock } from "@/components/ui/code-block";
 import { MukokoWeatherEmbed } from "@/components/embed";
 import { SITE_URL } from "@/lib/site";
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
   description:
     "Add mukoko weather widgets to any website in one line — copy-paste an <iframe>, or call the free public JSON API. Four widget types (current, today, 5-day, 7-day) for any location worldwide, or the visitor's own location automatically.",
   alternates: {
-    canonical: "https://weather.mukoko.com/embed",
+    canonical: `${SITE_URL}/embed`,
   },
 };
 // Copy-paste iframe snippets — the primary, works-anywhere embed method.
@@ -43,15 +44,19 @@ export default function EmbedPage() {
   return (
     <>
       <PageShell>
-        <h1 className="elephant">Embed Weather Widgets</h1>
-        <p className="mt-4 text-text-secondary">
-          Add live weather to any website — no build step, no API key, all free.
-          The fastest way is a copy-paste{" "}
-          <code className="termite">&lt;iframe&gt;</code>. Four widget types are
-          available. Omit the <code className="termite">location</code>{" "}
-          parameter and the widget automatically shows the visitor&apos;s local
-          weather (detected from their IP).
-        </p>
+        <PageHeader
+          title="Embed Weather Widgets"
+          intro={
+            <>
+              Add live weather to any website — no build step, no API key, all
+              free. The fastest way is a copy-paste{" "}
+              <code className="termite">&lt;iframe&gt;</code>. Four widget types
+              are available. Omit the <code className="termite">location</code>{" "}
+              parameter and the widget automatically shows the visitor&apos;s
+              local weather (detected from their IP).
+            </>
+          }
+        />
 
         {/* 1 · iframe quick start */}
         <section className="mt-10">

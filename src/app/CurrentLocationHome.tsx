@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { WeatherLocation } from "@/lib/locations";
-import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
 import { checkFrostRisk, getDefaultSeason } from "@/lib/weather";
 import { fetchHomeWeather } from "@/lib/home-weather";
 import {
@@ -26,23 +25,24 @@ import { reconcileElevation } from "@/lib/location-elevation";
 import { trackEvent } from "@/lib/analytics";
 import { SearchIcon, NavigationIcon } from "@/lib/weather-icons";
 import { Spinner } from "@/components/ui/spinner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { LocationPromptCard } from "@/components/weather/LocationPromptCard";
 import { WeatherDashboard } from "./[location]/WeatherDashboard";
 import type { AISummaryUser } from "@/components/weather/AISummary";
+import type { DashboardPayload, DeviceView } from "@/lib/device-weather";
+import { recallPlace } from "@/lib/rxdb/weather-places";
+import { readStorage, writeStorage } from "@/lib/safe-storage";
 
 /**
  * Everything WeatherDashboard needs for one location — the server seeds this
  * from the lastLocation cookie / IP geo, and the client swaps it in place
  * when GPS resolves somewhere else. The page URL never changes.
  */
-export interface HomeWeatherPayload {
-  location: WeatherLocation;
-  weather: WeatherData;
-  usingFallback: boolean;
-  frostAlert: FrostAlert | null;
-  season: Season;
-  countryName: string;
-}
+export type HomeWeatherPayload = DashboardPayload;
+
+/** The slug last shown at `/`, so a visit with nothing seeded by the server
+ *  can paint that place from the device (issue #269). */
+export const LAST_HOME_PLACE_KEY = "mukoko-home-place";
 
 interface Props {
   /** Server-seeded content (cookie-resolved or IP-geo location) — null when
@@ -111,6 +111,61 @@ export function CurrentLocationHome({ initial, user }: Props) {
   // Signed-in devices report themselves to the account (hourly, quietly).
   useDeviceHeartbeat(Boolean(user));
 
+  // Set while `view` was painted from the device rather than the network.
+  const [device, setDevice] = useState<Pick<
+    DeviceView,
+    "fetchedAt" | "freshness"
+  > | null>(null);
+
+  // Remember which place `/` shows, for the next visit's device paint.
+  useEffect(() => {
+    if (view?.location.slug)
+      writeStorage(LAST_HOME_PLACE_KEY, view.location.slug);
+  }, [view?.location.slug]);
+
+  // Nothing seeded by the server (cookies cleared, IP lookup failed): paint
+  // the last place shown here from the device, then refresh it in the
+  // background and swap the fresh forecast in.
+  useEffect(() => {
+    if (initial) return;
+    const slug = readStorage(LAST_HOME_PLACE_KEY);
+    if (!slug) return;
+    let cancelled = false;
+    void (async () => {
+      const stored = await recallPlace(slug);
+      if (cancelled || !stored) return;
+      setView((current) => current ?? stored.payload);
+      setDevice({ fetchedAt: stored.fetchedAt, freshness: stored.freshness });
+      try {
+        const loc = stored.payload.location;
+        const { weather, usingFallback } = await fetchHomeWeather(
+          loc.lat,
+          loc.lon,
+        );
+        if (cancelled || usingFallback) return;
+        setView((current) =>
+          current && current.location.slug === loc.slug
+            ? {
+                ...current,
+                weather,
+                usingFallback,
+                frostAlert: checkFrostRisk(
+                  weather.hourly,
+                  weather.utc_offset_seconds,
+                ),
+              }
+            : current,
+        );
+        setDevice(null);
+      } catch {
+        // Offline or unreachable: keep the device copy on screen.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initial]);
+
   // Build the full dashboard payload for a GPS-resolved location. Weather
   // goes through our own API (same chain as the server render) — see
   // fetchHomeWeather. Throws when no weather could be loaded at all.
@@ -132,6 +187,7 @@ export function CurrentLocationHome({ initial, user }: Props) {
       season: getDefaultSeason(new Date(), location.lat),
       countryName: countryNameFor(location.country),
     });
+    setDevice(null);
     setGpsConfirmed(true);
     setSelectedLocation(location.slug);
     // Refresh the cookie so the NEXT server render seeds this location.
@@ -325,6 +381,7 @@ export function CurrentLocationHome({ initial, user }: Props) {
           countryName={view.countryName}
           user={user}
           isCurrentLocation={gpsConfirmed}
+          device={device}
         />
         {showCard && (
           <LocationPromptCard
@@ -395,9 +452,11 @@ export function CurrentLocationHome({ initial, user }: Props) {
           </div>
 
           {message && (
-            <p className="text-sm text-severity-moderate" role="alert">
-              {PROMPT_COPY[message]}
-            </p>
+            <Alert variant="warning">
+              <AlertDescription className="text-sm">
+                {PROMPT_COPY[message]}
+              </AlertDescription>
+            </Alert>
           )}
         </section>
       </div>
