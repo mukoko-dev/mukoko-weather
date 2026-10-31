@@ -8,6 +8,7 @@
  */
 
 import type { FLAGS } from "@/lib/feature-flags";
+import { navDestination, type NavDestinationId } from "@/lib/nav-destinations";
 
 export interface HeaderDestination {
   href: string;
@@ -16,12 +17,25 @@ export interface HeaderDestination {
   flag?: keyof typeof FLAGS;
 }
 
+/**
+ * A header entry for a destination in `lib/nav-destinations` (the one list of
+ * routes, labels and hrefs the header, footer, profile and `/locations` menu
+ * all read): only the order and the flag are decided here.
+ */
+function headerDestination(
+  id: NavDestinationId,
+  flag?: keyof typeof FLAGS,
+): HeaderDestination {
+  const { href, label } = navDestination(id);
+  return flag ? { href, label, flag } : { href, label };
+}
+
 /** The header's text-nav destinations, in display order. */
 export const HEADER_DESTINATIONS: readonly HeaderDestination[] = [
-  { href: "/explore", label: "Explore" },
-  { href: "/shamwari", label: "Shamwari", flag: "shamwari_chat" },
-  { href: "/history", label: "History" },
-  { href: "/aviation", label: "Aviation" },
+  headerDestination("explore"),
+  headerDestination("shamwari", "shamwari_chat"),
+  headerDestination("history"),
+  headerDestination("aviation"),
 ];
 
 /** The destinations visible right now (flagged ones only while enabled). */

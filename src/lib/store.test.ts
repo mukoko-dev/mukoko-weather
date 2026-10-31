@@ -467,7 +467,7 @@ describe("sectionOrder", () => {
     expect(sectionOrder).toContain("hourlyScroll");
     expect(sectionOrder).toContain("current");
     expect(sectionOrder).toContain("atmospheric");
-    expect(sectionOrder).toContain("activityInsights");
+    expect(sectionOrder).toContain("activityInvite");
     expect(sectionOrder).toContain("aiSummary");
     expect(sectionOrder.length).toBeGreaterThan(5);
   });
@@ -526,7 +526,7 @@ describe("sectionOrder", () => {
       "communityLane",
       "atmospheric",
       "reports",
-      "activityInsights",
+      "activityInvite",
       "agriculture",
       "aiSummary",
       "aiChat",
@@ -545,7 +545,7 @@ describe("sectionOrder", () => {
 describe("mergeSectionOrder (Bug 2 — union stored order with defaults)", () => {
   it("appends sections added AFTER a user saved their order, at their default position", () => {
     // A legacy user saved before hourlyScroll/reports/aiChat existed.
-    const stored = ["current", "atmospheric", "activityInsights", "aiSummary"];
+    const stored = ["current", "atmospheric", "aiSummary"];
     const merged = mergeSectionOrder(stored);
     // Every default section is now present...
     for (const id of DEFAULT_SECTION_ORDER) expect(merged).toContain(id);
@@ -556,7 +556,7 @@ describe("mergeSectionOrder (Bug 2 — union stored order with defaults)", () =>
       "communityLane",
       "atmospheric",
       "reports",
-      "activityInsights",
+      "activityInvite",
       "agriculture",
       "aiSummary",
       "aiChat",
@@ -582,7 +582,6 @@ describe("mergeSectionOrder (Bug 2 — union stored order with defaults)", () =>
       "atmospheric",
       "reports",
       "hourlyForecast",
-      "activityInsights",
       "dailyForecast",
       "aiSummary",
       "aiChat",
@@ -600,7 +599,6 @@ describe("mergeSectionOrder (Bug 2 — union stored order with defaults)", () =>
       "current",
       "hourlyScroll",
       "reports",
-      "activityInsights",
       "aiSummary",
       "aiChat",
     ];
@@ -624,6 +622,71 @@ describe("mergeSectionOrder (Bug 2 — union stored order with defaults)", () =>
   });
 });
 
+describe("mergeSectionOrder — the retired activityInsights section", () => {
+  // The long "My Activities" section moved into the Community lane's sheet.
+  // A layout saved before that (localStorage or a synced copy) still lists
+  // its old id; it must be ignored without a crash or a gap, and the small
+  // invitation must appear at its default place.
+  it("drops a stored activityInsights and slots activityInvite in at its default position", () => {
+    const stored = [
+      "current",
+      "hourlyScroll",
+      "communityLane",
+      "atmospheric",
+      "reports",
+      "activityInsights",
+      "agriculture",
+      "aiSummary",
+      "aiChat",
+      "enso",
+    ];
+    const merged = mergeSectionOrder(stored);
+    expect(merged).not.toContain("activityInsights");
+    expect(merged).toEqual([...DEFAULT_SECTION_ORDER]);
+  });
+
+  it("keeps the user's own arrangement around the retired id", () => {
+    const merged = mergeSectionOrder([
+      "aiSummary",
+      "activityInsights",
+      "hourlyScroll",
+    ]);
+    expect(merged).not.toContain("activityInsights");
+    // The user's own order is kept; only the hero (the sky's content) is
+    // pinned first, wherever it was stored.
+    expect(merged[0]).toBe("current");
+    expect(merged.indexOf("aiSummary")).toBeLessThan(
+      merged.indexOf("hourlyScroll"),
+    );
+    expect(merged).toHaveLength(DEFAULT_SECTION_ORDER.length);
+    expect(new Set(merged).size).toBe(merged.length);
+  });
+
+  it("hydrateSectionOrder rewrites a stored order that still holds the old id", () => {
+    const store = new Map<string, string>([
+      [
+        "mukoko-section-order",
+        JSON.stringify(["current", "activityInsights", "aiSummary"]),
+      ],
+    ]);
+    vi.stubGlobal("window", {});
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+    });
+    try {
+      expect(() => useAppStore.getState().hydrateSectionOrder()).not.toThrow();
+      const order = useAppStore.getState().sectionOrder;
+      expect(order).not.toContain("activityInsights");
+      expect(order).toContain("activityInvite");
+      expect(JSON.parse(store.get("mukoko-section-order")!)).toEqual(order);
+    } finally {
+      vi.unstubAllGlobals();
+      useAppStore.getState().setSectionOrder([...DEFAULT_SECTION_ORDER]);
+    }
+  });
+});
+
 describe("selectedForecastModel", () => {
   it("defaults to best_match", () => {
     expect(useAppStore.getState().selectedForecastModel).toBe("best_match");
@@ -638,11 +701,11 @@ describe("selectedForecastModel", () => {
 });
 
 describe("sectionOrder — Community Lane placement", () => {
-  it("places the community lane right after the hourly strip, before activity insights", () => {
+  it("places the community lane right after the hourly strip, before the activity invitation", () => {
     const order = [...DEFAULT_SECTION_ORDER] as string[];
     const lane = order.indexOf("communityLane");
     expect(lane).toBe(order.indexOf("hourlyScroll") + 1);
-    expect(lane).toBeLessThan(order.indexOf("activityInsights"));
+    expect(lane).toBeLessThan(order.indexOf("activityInvite"));
   });
 });
 

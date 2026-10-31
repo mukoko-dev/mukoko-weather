@@ -5,6 +5,7 @@ import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 import { isLocationSlug } from "@/lib/current-slug";
 import { MAX_SAVED_LOCATIONS, useAppStore } from "@/lib/store";
 import { SearchIcon } from "@/lib/weather-icons";
+import { Field } from "@/components/ui/field";
 
 interface LocationsSearchProps {
   /** Slugs already listed (My Location, saved, suggested): never offered again. */
@@ -89,10 +90,12 @@ export function LocationsSearch({ listed }: LocationsSearchProps) {
           another.
         </p>
       )}
-      <div className="flex h-[var(--touch-target-min)] items-center gap-3 rounded-full border-solid border-border border-[length:var(--border-width-rest)] bg-surface-card px-4 shadow-lg focus-within:border-[length:var(--border-width-active)]">
-        <label htmlFor={inputId} className="sr-only">
-          Search for a city or airport
-        </label>
+      <Field
+        label="Search for a city or airport"
+        htmlFor={inputId}
+        labelClassName="sr-only"
+        className="flex h-[var(--touch-target-min)] items-center gap-3 rounded-full border-solid border-border border-[length:var(--border-width-rest)] bg-surface-card px-4 shadow-lg focus-within:border-[length:var(--border-width-active)]"
+      >
         <SearchIcon className="shrink-0 text-text-secondary" size={18} />
         <input
           id={inputId}
@@ -103,7 +106,7 @@ export function LocationsSearch({ listed }: LocationsSearchProps) {
           autoComplete="off"
           className="min-w-0 flex-1 bg-transparent text-base text-text-primary outline-none placeholder:text-text-secondary"
         />
-      </div>
+      </Field>
     </div>
   );
 }

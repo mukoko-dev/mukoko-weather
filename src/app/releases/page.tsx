@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { PageShell } from "@/components/layout/PageShell";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { trail } from "@/components/layout/Breadcrumb";
 import { ReleaseEntry } from "@/components/releases/ReleaseEntry";
 import { loadReleaseNotes } from "@/lib/release-notes-source";
 import { GITHUB_RELEASES_URL, releasesJsonLd } from "@/lib/release-notes";
-import { safeJsonLd } from "@/lib/json-ld";
+import { JsonLd } from "@/components/layout/JsonLd";
 import { SITE_URL } from "@/lib/site";
 
 // Built once from the curated files in releases/ — no request-time work and
@@ -40,33 +42,28 @@ export default function ReleasesPage() {
   return (
     <>
       {releasesJsonLd(releases, SITE_URL).map((schema) => (
-        <script
-          key={schema["@type"]}
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: safeJsonLd(schema) }}
-        />
+        <JsonLd key={schema["@type"]} data={schema} />
       ))}
-      <PageShell
-        breadcrumb={[{ label: "Home", href: "/" }, { label: "Release notes" }]}
-      >
-        <h1 className="elephant">Release notes</h1>
-        <p className="gazelle mt-3">
-          What changed in each release of mukoko weather, newest first.
-        </p>
-        <p className="dove mt-2">
-          <a href="/releases/feed.xml" className="sunbird dik-dik">
-            Follow updates with the feed
-          </a>
-          {" · "}
-          <a
-            href={GITHUB_RELEASES_URL}
-            className="sunbird dik-dik"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Full technical history on GitHub
-          </a>
-        </p>
+      <PageShell breadcrumb={trail({ label: "Release notes" })}>
+        <PageHeader
+          title="Release notes"
+          intro="What changed in each release of mukoko weather, newest first."
+        >
+          <p className="dove mt-2">
+            <a href="/releases/feed.xml" className="sunbird dik-dik">
+              Follow updates with the feed
+            </a>
+            {" · "}
+            <a
+              href={GITHUB_RELEASES_URL}
+              className="sunbird dik-dik"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Full technical history on GitHub
+            </a>
+          </p>
+        </PageHeader>
 
         <ol aria-label="Releases" className="herd mt-8">
           {releases.map((release, i) => (

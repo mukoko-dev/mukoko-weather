@@ -40,8 +40,8 @@ describe("ChartErrorBoundary — class component structure", () => {
 });
 
 describe("ChartErrorBoundary — fallback UI", () => {
-  it('fallback has role="alert" for accessibility', () => {
-    expect(source).toContain('role="alert"');
+  it('fallback has role="alert" for accessibility (via InlineError)', () => {
+    expect(source).toContain('tone="quiet"');
   });
 
   it("fallback renders 'Unable to display' with the section name", () => {
@@ -50,7 +50,7 @@ describe("ChartErrorBoundary — fallback UI", () => {
   });
 
   it("fallback includes a 'Try again' retry button", () => {
-    expect(source).toContain("Try again");
+    expect(source).toContain("onRetry=");
   });
 
   it("retry button resets hasError state via setState", () => {

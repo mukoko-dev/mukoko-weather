@@ -1,6 +1,8 @@
 "use client";
 
 import { roundCoord } from "@/lib/location-privacy";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatGrid } from "./StatGrid";
 import { useEffect, useState } from "react";
 import {
   formatAnomaly,
@@ -108,51 +110,38 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
           className="grid grid-cols-2 gap-2 sm:grid-cols-4"
         >
           {Array.from({ length: 4 }).map((_, i) => (
-            <div
+            <Skeleton
               key={i}
-              className="h-16 animate-pulse rounded-[var(--radius-card)] bg-surface-dim"
+              className="h-16 rounded-[var(--radius-card)] bg-surface-dim"
             />
           ))}
         </div>
       ) : (
         <>
-          <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="meerkat">
-              <dt className="dove">Rain on file</dt>
-              <dd className="text-base font-medium text-text-primary">
-                {history.rainMm != null ? formatMm(history.rainMm) : "—"}
-                <span className="dove block">
-                  {history.days} days stored (forecast or archive, not a gauge)
-                </span>
-              </dd>
-            </div>
-            <div className="meerkat">
-              <dt className="dove">Rain (forecast model)</dt>
-              <dd className="text-base font-medium text-text-primary">
-                {formatMm(modelRain30dMm)}
-              </dd>
-            </div>
-            <div className="meerkat">
-              <dt className="dove">Mean high</dt>
-              <dd className="text-base font-medium text-text-primary">
-                {formatTempC(history.meanHigh)}
-                <span className="dove block">
-                  Normal {normalsPending ? "…" : formatTempC(normalHigh)}
-                  {highAnomaly ? ` · ${highAnomaly}` : ""}
-                </span>
-              </dd>
-            </div>
-            <div className="meerkat">
-              <dt className="dove">Mean low</dt>
-              <dd className="text-base font-medium text-text-primary">
-                {formatTempC(history.meanLow)}
-                <span className="dove block">
-                  Normal {normalsPending ? "…" : formatTempC(normalLow)}
-                  {lowAnomaly ? ` · ${lowAnomaly}` : ""}
-                </span>
-              </dd>
-            </div>
-          </dl>
+          <StatGrid
+            columns={4}
+            items={[
+              {
+                label: "Rain on file",
+                value: history.rainMm != null ? formatMm(history.rainMm) : "—",
+                hint: `${history.days} days stored (forecast or archive, not a gauge)`,
+              },
+              {
+                label: "Rain (forecast model)",
+                value: formatMm(modelRain30dMm),
+              },
+              {
+                label: "Mean high",
+                value: formatTempC(history.meanHigh),
+                hint: `Normal ${normalsPending ? "…" : formatTempC(normalHigh)}${highAnomaly ? ` · ${highAnomaly}` : ""}`,
+              },
+              {
+                label: "Mean low",
+                value: formatTempC(history.meanLow),
+                hint: `Normal ${normalsPending ? "…" : formatTempC(normalLow)}${lowAnomaly ? ` · ${lowAnomaly}` : ""}`,
+              },
+            ]}
+          />
           <p className="dove">
             Normals: 1991–2020 average over the same 30 days (ERA5 via
             Open-Meteo).

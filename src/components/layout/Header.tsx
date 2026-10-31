@@ -98,7 +98,8 @@ export function SiteHeader() {
 
   // Active page flags for the desktop nav and the mobile ⋯ menu.
   // The header's destinations come from one list shared with the phone menu
-  // (src/lib/header-nav.ts), so the two can never drift.
+  // (src/lib/header-nav.ts, built on lib/nav-destinations), so the two can
+  // never drift. Shamwari is paused: omitted while FLAGS.shamwari_chat is off.
   const destinations = visibleHeaderDestinations(isFeatureEnabled);
   const mapSlug = currentLocationSlug(pathname, selectedLocation);
   const mapHref = weatherMapHref(mapSlug);

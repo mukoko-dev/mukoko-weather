@@ -30,6 +30,7 @@ const currentConditions = readComponent(
 const chartErrorBoundary = readComponent(
   "../components/weather/ChartErrorBoundary.tsx",
 );
+const inlineError = readComponent("../components/ui/inline-error.tsx");
 const lazySection = readComponent("../components/weather/LazySection.tsx");
 const sectionSkeleton = readComponent(
   "../components/weather/SectionSkeleton.tsx",
@@ -73,8 +74,11 @@ describe("Interactive elements — aria-label", () => {
   });
 
   it("ChartErrorBoundary retry button is inside a role=alert region", () => {
-    expect(chartErrorBoundary).toContain('role="alert"');
-    expect(chartErrorBoundary).toContain("Try again");
+    expect(chartErrorBoundary).toContain("<InlineError");
+    expect(inlineError).toContain('role="alert"');
+    // the retry control (default label "Try again") lives inside the alert
+    expect(inlineError).toContain('retryLabel = "Try again"');
+    expect(chartErrorBoundary).toContain("onRetry=");
   });
 });
 
@@ -101,7 +105,8 @@ describe('Loading states — role="status"', () => {
 
 describe('Error states — role="alert"', () => {
   it('ChartErrorBoundary fallback has role="alert"', () => {
-    expect(chartErrorBoundary).toContain('role="alert"');
+    expect(chartErrorBoundary).toContain("<InlineError");
+    expect(inlineError).toContain('role="alert"');
   });
 });
 

@@ -32,8 +32,8 @@ describe("WeatherDashboard — section ordering (Google Weather pattern)", () =>
     expect(source).toContain("`/${location.slug}/forecast`");
   });
 
-  it("renders ActivityInsights before AISummary", () => {
-    const activityPos = source.indexOf('label="activity-insights"');
+  it("renders the activity invitation before AISummary", () => {
+    const activityPos = source.indexOf('case "activityInvite"');
     const aiPos = source.indexOf('label="ai-summary"');
     expect(activityPos).toBeGreaterThan(-1);
     expect(aiPos).toBeGreaterThan(-1);
@@ -85,12 +85,7 @@ describe("WeatherDashboard — section ordering (Google Weather pattern)", () =>
 });
 
 describe("WeatherDashboard — lazy loading", () => {
-  const lazySections = [
-    "ai-summary",
-    "activity-insights",
-    "weather-map",
-    "location-info",
-  ];
+  const lazySections = ["ai-summary", "weather-map", "location-info"];
 
   it("wraps all non-critical sections in LazySection", () => {
     for (const label of lazySections) {
@@ -112,6 +107,31 @@ describe("WeatherDashboard — lazy loading", () => {
   it("wraps lazy components in Suspense with skeleton fallback", () => {
     expect(source).toContain("Suspense");
     expect(source).toContain("SectionSkeleton");
+  });
+});
+
+describe("WeatherDashboard — activity advice sheet", () => {
+  it("drops the long My Activities section from the page", () => {
+    expect(source).not.toContain('case "activityInsights"');
+    expect(source).not.toContain('label="activity-insights"');
+    expect(source).not.toMatch(/<ActivityInsights\b/);
+  });
+
+  it("shows only the small invitation, and only while nothing is selected", () => {
+    expect(source).toContain('case "activityInvite"');
+    expect(source).toMatch(
+      /selectedActivities\.length === 0 \? \([\s\S]*?<ActivityInvite \/>/,
+    );
+  });
+
+  it("imports the sheet lazily and renders it only after a first open", () => {
+    expect(source).toMatch(
+      /const ActivitiesDetailSheet = lazy\(\(\) =>\s+import\("@\/components\/weather\/ActivitiesDetailSheet"\)/,
+    );
+    expect(source).toContain("advice.loaded");
+    expect(source).toContain("open={advice.open}");
+    expect(source).toContain("opener={advice.opener}");
+    expect(source).toContain("focusActivityId={advice.activityId}");
   });
 });
 
@@ -355,6 +375,7 @@ describe("WeatherDashboard — redesign wiring", () => {
       "lon={location.lon}",
       "weather={weather}",
       "selectedActivities={selectedActivities}",
+      "onOpenAdvice={openAdvice}",
     ]) {
       expect(lane.slice(0, 400)).toContain(prop);
     }
