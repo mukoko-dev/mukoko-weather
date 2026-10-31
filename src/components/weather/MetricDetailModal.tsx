@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ChartErrorBoundary } from "./ChartErrorBoundary";
+import { AveragesDetail } from "./AveragesDetail";
 import { ChartSkeleton } from "@/components/ui/skeleton";
 import { WindSpeedChart } from "./charts/WindSpeedChart";
 import { UVIndexChart } from "./charts/UVIndexChart";
@@ -36,6 +37,10 @@ interface Props {
   data: WeatherData;
   now: Date;
   extras?: MetricExtras;
+  /** Place coordinates and slug, for the Averages detail's Worker calls. */
+  lat?: number;
+  lon?: number;
+  slug?: string;
   onClose: () => void;
 }
 
@@ -72,7 +77,16 @@ function MetricChart({
  * 24 hours as a chart, the related readings and a plain explanation. A bottom
  * sheet on phones, a centred dialog from `sm` (the shared Dialog does both).
  */
-export function MetricDetailModal({ kind, data, now, extras, onClose }: Props) {
+export function MetricDetailModal({
+  kind,
+  data,
+  now,
+  extras,
+  lat,
+  lon,
+  slug,
+  onClose,
+}: Props) {
   const detail = useMemo(
     () => (kind ? metricDetail(kind, data, now, extras) : null),
     [kind, data, now, extras],
@@ -105,6 +119,12 @@ export function MetricDetailModal({ kind, data, now, extras, onClose }: Props) {
               </p>
               <p className="gazelle">{detail.sentence}</p>
             </header>
+
+            {kind === "averages" && (
+              <ChartErrorBoundary name="averages">
+                <AveragesDetail data={data} lat={lat} lon={lon} slug={slug} />
+              </ChartErrorBoundary>
+            )}
 
             {chart && series.length > 1 && (
               <section aria-label={`${detail.title}, next 24 hours`}>

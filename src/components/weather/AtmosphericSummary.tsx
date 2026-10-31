@@ -693,6 +693,9 @@ export function AtmosphericSummary({
         data={data}
         now={now}
         extras={extras}
+        lat={lat}
+        lon={lon}
+        slug={locationSlug || undefined}
         onClose={() => setOpenMetric(null)}
       />
     </section>
