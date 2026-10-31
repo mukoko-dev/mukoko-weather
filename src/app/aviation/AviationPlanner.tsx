@@ -13,6 +13,8 @@ import type {
   MetarObs,
 } from "./AviationBriefingPDF";
 import { fetchWorker } from "@/lib/weather-api";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Field } from "@/components/ui/field";
 
 function FlightCategoryBadge({ fc }: { fc: string }) {
   return (
@@ -84,42 +86,44 @@ function AirportSearch({
 
   return (
     <div ref={containerRef} className="relative">
-      <label className="block text-sm font-medium text-text-secondary mb-1">
-        {label}
-      </label>
-      <div className="relative">
-        <SearchIcon
-          size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none"
-          aria-hidden="true"
-        />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setOpen(true);
-            if (!e.target.value) clear();
-          }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Search city or airport name…"
-          className="crane pl-9 pr-4"
-          aria-label={label}
-          aria-expanded={open}
-          aria-autocomplete="list"
-        />
-        {loading && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-xs">
-            …
-          </span>
-        )}
-      </div>
+      <Field
+        label={label}
+        labelClassName="block text-sm font-medium text-text-secondary mb-1"
+      >
+        <div className="relative">
+          <SearchIcon
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none"
+            aria-hidden="true"
+          />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
+              if (!e.target.value) clear();
+            }}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            placeholder="Search city or airport name…"
+            className="crane pl-9 pr-4"
+            aria-label={label}
+            aria-expanded={open}
+            aria-autocomplete="list"
+          />
+          {loading && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-xs">
+              …
+            </span>
+          )}
+        </div>
+      </Field>
 
       {searchError && !value && (
-        <p className="mt-1.5 text-xs text-severity-moderate" role="alert">
-          {searchError}
-        </p>
+        <Alert variant="warning" className="mt-1.5 p-3">
+          <AlertDescription className="text-xs">{searchError}</AlertDescription>
+        </Alert>
       )}
 
       {value && (
@@ -471,9 +475,9 @@ export function AviationPlanner() {
       </div>
 
       {error && (
-        <div className="alert-banner mb-6" role="alert">
-          <p className="text-sm text-severity-moderate">{error}</p>
-        </div>
+        <Alert variant="warning" className="mb-6">
+          <AlertDescription className="text-sm">{error}</AlertDescription>
+        </Alert>
       )}
 
       {/* Briefing results */}

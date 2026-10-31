@@ -219,11 +219,7 @@ fn valid_rule_key(key: &str) -> bool {
     let Some((kind, rest)) = key.split_once(':') else {
         return false;
     };
-    matches!(kind, "activity" | "category")
-        && !rest.is_empty()
-        && rest
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    matches!(kind, "activity" | "category") && !rest.is_empty() && crate::slug::chars_ok(rest)
 }
 
 /// `GET /v1/suitability` (`key`).

@@ -138,7 +138,7 @@ export function AirQualityDetails({ lat, lon }: Props) {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="herd-grid">
         {POLLUTANT_ORDER.map((key) => {
           const value = data.pollutants?.[key] ?? null;
           const sub = subIndexes[key];

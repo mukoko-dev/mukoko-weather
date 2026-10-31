@@ -163,6 +163,11 @@ describe("tiles open the detail modal", () => {
     "utf-8",
   );
 
+  const hitArea = readFileSync(
+    resolve(root, "src/components/ui/card-hit-area.tsx"),
+    "utf-8",
+  );
+
   it("wires all ten tiles to setOpenMetric", () => {
     expect(summary.match(/onOpen=\{setOpenMetric\}/g)).toHaveLength(10);
     for (const k of METRIC_KINDS) {
@@ -171,7 +176,9 @@ describe("tiles open the detail modal", () => {
   });
 
   it("makes the tile a labelled button that opens a dialog", () => {
-    expect(summary).toContain('aria-haspopup="dialog"');
+    // The overlay is the shared CardHitArea (aria-haspopup="dialog").
+    expect(summary).toContain("<CardHitArea");
+    expect(hitArea).toContain('aria-haspopup="dialog"');
     expect(summary).toContain("${METRIC_TITLES[metric]} details");
     expect(summary).toContain("aria-label={label}");
     expect(summary).not.toMatch(/absolute[^"']*\binset-y-0\b/);
@@ -179,8 +186,9 @@ describe("tiles open the detail modal", () => {
 
   it("isolates the chart and uses the shared Dialog and chart components", () => {
     expect(modal).toContain("ChartErrorBoundary");
-    expect(modal).toContain('from "@/components/ui/dialog"');
-    expect(modal).toContain("DialogSheetHandle");
+    // The dialog scaffold is the one shared DetailSheet.
+    expect(modal).toContain('from "@/components/ui/detail-sheet"');
+    expect(modal).toContain("<DetailSheet");
     for (const c of [
       "WindSpeedChart",
       "UVIndexChart",

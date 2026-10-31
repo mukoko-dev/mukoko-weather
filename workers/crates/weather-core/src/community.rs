@@ -10,7 +10,8 @@
 //! drift apart while the Python still exists.
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+
+use crate::slug::valid_slug;
 
 pub const REPORT_TYPES: [&str; 13] = [
     "light-rain",
@@ -69,7 +70,7 @@ pub fn description_ok(d: &str) -> bool {
 /// The first 16 hex characters of the SHA-256 of an IP: the anonymous id a
 /// report and an upvote are keyed by.
 pub fn hash_ip(ip: &str) -> String {
-    let mut h = hex::encode(Sha256::digest(ip.as_bytes()));
+    let mut h = crate::crypto::sha256_hex(ip);
     h.truncate(16);
     h
 }
@@ -87,13 +88,6 @@ pub fn valid_device_id(id: &str) -> bool {
         && id
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-}
-
-/// `^[a-z0-9-]{1,80}$`, the slug rule every endpoint applies.
-pub fn valid_slug(s: &str) -> bool {
-    (1..=80).contains(&s.len())
-        && s.bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 /// The cell a coordinate spot's data is stored under: `geo:<7-char geohash>`,
