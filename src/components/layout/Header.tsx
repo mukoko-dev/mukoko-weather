@@ -9,6 +9,7 @@ import { MukokoLogo } from "@/components/brand/MukokoLogo";
 import { LayersIcon, BellIcon, UserIcon } from "@/lib/weather-icons";
 import { Spinner } from "@/components/ui/spinner";
 import { MobileNav } from "@/components/layout/MobileNav";
+import { useChromeClaimed } from "@/components/layout/chrome-context";
 import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { trackEvent } from "@/lib/analytics";
@@ -39,7 +40,15 @@ const WeatherReportModal = lazy(() =>
 const MENU_ITEM_CLASS =
   "flex min-h-[var(--touch-target-min)] w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 text-left text-base font-medium text-text-primary transition-colors hover:bg-surface-dim aria-[current=page]:text-primary";
 
+/**
+ * The page-level header. The root layout owns the real one (`SiteHeader`, via
+ * `AppChrome`), so this renders nothing while that is mounted.
+ */
 export function Header() {
+  return useChromeClaimed() ? null : <SiteHeader />;
+}
+
+export function SiteHeader() {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
   const myWeatherOpen = useAppStore((s) => s.myWeatherOpen);
   const selectedLocation = useAppStore((s) => s.selectedLocation);
