@@ -10,6 +10,7 @@ import type {
   AqiLevel,
 } from "@/components/weather/AirQualityCard";
 import type { WeatherData } from "@/lib/weather";
+import { LOCATION_SLUG_RE } from "@/lib/location-gate";
 import { MAP_LAYERS } from "@/lib/map-layers";
 import {
   currentHourIndex as locationCurrentHourIndex,
@@ -34,7 +35,6 @@ export const DISPLAY_REFRESH_MS = {
 /** Radar is the point of a wall display, so it is the default layer. */
 export const DISPLAY_DEFAULT_LAYER = "precipitationIntensity";
 
-const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 const LAYER_IDS = new Set(MAP_LAYERS.map((l) => l.id));
 
 export type DisplayTheme = "light" | "dark";
@@ -76,7 +76,7 @@ export function parseDisplayParams(raw: RawParams): DisplayParams {
   const theme = first(raw.theme);
 
   return {
-    location: slug && SLUG_RE.test(slug) ? slug : null,
+    location: slug && LOCATION_SLUG_RE.test(slug) ? slug : null,
     coords: lat !== null && lon !== null ? { lat, lon } : null,
     layer: layer && LAYER_IDS.has(layer) ? layer : DISPLAY_DEFAULT_LAYER,
     theme: theme === "light" || theme === "dark" ? theme : null,

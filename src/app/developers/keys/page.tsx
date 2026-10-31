@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { PageShell } from "@/components/layout/PageShell";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { trail } from "@/components/layout/Breadcrumb";
 import { requireUser } from "@/lib/auth";
 import { ApiKeysManager } from "./ApiKeysManager";
 import { SITE_URL } from "@/lib/site";
@@ -29,18 +31,15 @@ export default async function ApiKeysPage() {
 
   return (
     <PageShell
-      breadcrumb={[
-        { label: "Home", href: "/" },
+      breadcrumb={trail(
         { label: "Developers", href: "/developers" },
         { label: "API keys" },
-      ]}
+      )}
     >
-      <h1 className="elephant">API Keys</h1>
-      <p className="gazelle mt-3">
-        The mukoko weather and embed API is free and needs no key — it is
-        rate-limited per IP. Create a key to attribute your usage and unlock
-        higher limits as they roll out.
-      </p>
+      <PageHeader
+        title="API Keys"
+        intro="The mukoko weather and embed API is free and needs no key — it is rate-limited per IP. Create a key to attribute your usage and unlock higher limits as they roll out."
+      />
       <ApiKeysManager />
     </PageShell>
   );
