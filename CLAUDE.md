@@ -6,6 +6,10 @@ mukoko weather is an AI-powered global weather intelligence platform. It provide
 
 **Live URL:** <https://weather.mukoko.com>
 
+## The standards rule (owner, 2026-10-29)
+
+If a standard does not exist we build one and publish it in `bundu-labs/bundu-standards`; otherwise we adopt the global standard. Data pulled from another source that does not match is converted at the edge and only the standard form (CF names, UCUM units, ISO codes, WIGOS ids) is stored or served. A provider's schema, names and units never become ours. `weather_core::external_feeds` is the pattern; `legacy_metrics()` is a temporary bridge to the older store names. The decisions are in the playbooks at docs.nyuchi.com/playbooks.
+
 ## Company Structure
 
 - **Nyuchi Africa (PVT) Ltd** — parent company
