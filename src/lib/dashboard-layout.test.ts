@@ -61,9 +61,7 @@ describe("lastTileSpanClass (2 columns mobile / 4 on lg)", () => {
 
   it("resets the mobile span on lg when the lg row is already full", () => {
     // 6 tiles: mobile rows are full (no span), lg needs the last to span 3.
-    expect(lastTileSpanClass(6)).toBe(
-      "@3xl:col-span-3",
-    );
+    expect(lastTileSpanClass(6)).toBe("@3xl:col-span-3");
   });
 });
 
