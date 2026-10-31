@@ -12,7 +12,7 @@ import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { WeatherBackdrop } from "@/components/weather/WeatherBackdrop";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { UpdatedAgo } from "@/components/weather/UpdatedAgo";
-import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
+import { LocationSkeleton } from "@/components/weather/LocationSkeleton";
 import { FrostAlertBanner } from "@/app/[location]/FrostAlertBanner";
 import { SECTION_STACK_CLASS } from "@/lib/dashboard-layout";
 
@@ -100,7 +100,7 @@ export function DeviceSnapshot({
 
 /**
  * The `[location]` loading boundary: paints the stored copy of this place at
- * once when the device has one, else the branded loading scene. The live
+ * once when the device has one, else the structural loading skeleton (no splash). The live
  * page replaces it as soon as it streams in.
  */
 export function DeviceLocationLoading() {
@@ -125,5 +125,5 @@ export function DeviceLocationLoading() {
   }, [slug]);
 
   if (view) return <DeviceSnapshot view={view} />;
-  return <WeatherLoadingScene />;
+  return <LocationSkeleton slug={slug} />;
 }

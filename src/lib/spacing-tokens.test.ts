@@ -48,6 +48,10 @@ const DENSE_CARD_EXCEPTIONS: Record<string, { padding: string; why: string }> =
       padding: "p-3",
       why: "frame of a horizontally scrolling hour strip",
     },
+    "components/weather/LocationSkeleton.tsx": {
+      padding: "p-3",
+      why: "mirrors the hour-strip frame so the skeleton has the same box",
+    },
   };
 
 const CARD_WITH_PADDING =

@@ -20,7 +20,7 @@ import { reconcileElevation } from "@/lib/location-elevation";
 import { SITE_URL } from "@/lib/site";
 import { fetchPlaces } from "@/lib/weather-api";
 import { usableIpGeo } from "@/lib/location-choice";
-import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
+import { LocationSkeleton } from "@/components/weather/LocationSkeleton";
 
 // Bound the Worker geo fetch so a hung or protected upstream can't stall
 // the home render — the onboarding chooser is a fine fallback.
@@ -65,10 +65,10 @@ export default function Home() {
   // Suspense, so the 200 shell was flushed before any page could call
   // notFound() or send a redirect status: unknown slugs answered 200
   // "Location not found" and /profile a 200 meta-refresh (#237). Scoping the
-  // boundary to `/` keeps the home loading scene and lets every other route
+  // boundary to `/` keeps the home loading skeleton and lets every other route
   // send its real status.
   return (
-    <Suspense fallback={<WeatherLoadingScene />}>
+    <Suspense fallback={<LocationSkeleton />}>
       <HomeContent />
     </Suspense>
   );
