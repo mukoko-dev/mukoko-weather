@@ -1,7 +1,7 @@
 # Nyuchi Platform — MongoDB Schema Map
 
 **Cluster:** `nyuchi-platform-doc-db.ge8d8qi.mongodb.net`
-**Total size:** 74 MB across 27 databases (excluding `admin`/`local`)
+**Total size:** about 5.1 GB across 31 databases (excluding `admin`, `config` and `local`), read 2026-10-29. `news` alone is 5.06 GB; the other 30 total about 55 MB. The original survey this map is based on counted 27 databases and 74 MB; treat the per-database sections below as that survey, and the databases listed next as not yet described here.
 **Doctrine:** Bundu / Ubuntu federated platform. Mukoko Weather is **one app** plugged into this shared platform.
 
 This document maps the platform so we know what mukoko-weather should **consume** vs. what it should **own**.
@@ -58,7 +58,9 @@ The local `mukoko-weather` MongoDB is essentially **deprecated**. Mukoko is now 
 
 ---
 
-## The 27 databases
+## The databases
+
+The cluster held 34 databases on 2026-10-29: 31 platform and working databases plus `admin`, `config` and `local`. The sections below describe the ones Mukoko Weather touches. **Not described here:** `agriculture` (created 2026-10-29, six collections, no registered model), `logistics`, `pulse`, `transport`, `mzizi_samples` (research samples) and `weather_backup_20261028` (a dated backup of part of `weather`). The Nyuchi Data tool lists 26 domains, so it cannot see the newer ones; `data-infra` `schemas/domains.yaml` is the source of truth for domains. Counts change quickly, so re-read the cluster before quoting one.
 
 ### Core platform databases (Mukoko depends on)
 
@@ -206,6 +208,17 @@ Every collection (except `device_profiles` legacy) uses these patterns:
 9. **Schema.org alignment** for content entities (`Place`, `LocalBusiness`, `Person`, `Observation`)
 
 ---
+
+## Weather writes from the Cloudflare Workers (the MongoDB bridge)
+
+The Rust Workers read MongoDB read-only (`workers/crates/weather-mongo`). The two weather collections the app writes from the Workers go through one TypeScript Worker, `mukoko-weather-mongo-bridge` (`workers/mongo-bridge`), over the `MONGO_BRIDGE` service binding from `mukoko-weather-places`. Nothing here is stored in D1, and nothing depends on Vercel.
+
+| Collection                | Written by                                    | Shape                                                               | Indexes (owner step, the bridge never creates indexes)                                        |
+| ------------------------- | --------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `device.device_profiles`  | the bridge (`/v1/devices` create, get, patch) | One document per device UUID: preferences, `createdAt`, `updatedAt` | `_id`, unique `deviceId`                                                                      |
+| `weather.weather_reports` | the bridge (community report submit, list)    | The existing `weather_reports` document shape (no migration)        | `_id`, `locationSlug` + `reportedAt` descending, TTL on `expiresAt` (`expireAfterSeconds: 0`) |
+
+The bridge keeps one official-driver `MongoClient` in a Durable Object, uses the read-write connection string from the shared Cloudflare Secrets Store secret `MUKOKO_MONGODB_RW_URI` (one secret for the whole Mukoko app), validates every input again, builds its own queries (no passthrough) and bounds every list. Two collections were created empty on 2026-10-19 without validators: `weather.modelBlendConfig` (per-region blend weight overrides, read by the blend) and `places.placeKnowledge` (the place-knowledge profile; its `$jsonSchema` validator is the owner step in nyuchi/data-infra#107, so it is not applied yet).
 
 ## Migration plan for mukoko-weather
 

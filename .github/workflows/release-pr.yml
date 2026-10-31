@@ -106,6 +106,20 @@ jobs:
           git merge -s ours origin/main -m "chore: record main in release history"
           # -s ours must leave staging's tree untouched.
           git diff --quiet origin/staging HEAD
+          # Development-only files never ship: CLAUDE.md is guidance for
+          # developing the app and .claude/ holds agent configuration, so main
+          # must hold neither, at any depth. They are removed on the release
+          # branch only; staging keeps them.
+          dev_files='(^|/)(claude\.md$|\.claude/)'
+          { git ls-files -z | grep -zEi "$dev_files" || true; } \
+            | xargs -0 --no-run-if-empty git rm -q --
+          if ! git diff --cached --quiet; then
+            git commit -q -m "chore: remove development-only files (CLAUDE.md, .claude/) from the release"
+          fi
+          if git ls-files | grep -Eiq "$dev_files"; then
+            echo "::error::development-only files are still tracked on $BRANCH"
+            exit 1
+          fi
           git push origin "$BRANCH"
 
       - name: Open the release PR

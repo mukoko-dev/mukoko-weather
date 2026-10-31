@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::future::Future;
 
 use serde_json::Value;
-use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 
 use crate::bson::{Bson, Doc};
 use crate::scram;
@@ -37,14 +37,16 @@ pub const MAX_AGGREGATE_DOCS: usize = 5_000;
 const MAX_TIME_MS: i32 = 8_000;
 const BATCH: i32 = 1_000;
 
-/// (user, salt, iterations, password tag).
-type SaltKey = (String, Vec<u8>, u32, [u8; 8]);
+/// (user, salt, iterations).
+type SaltKey = (String, Vec<u8>, u32);
 
 /// PBKDF2 results kept per isolate, so a reconnect does not pay 4096
-/// iterations again: keyed by user, salt, iterations and a hash of the
-/// password (a rotated password has a new salt, but never trust that).
+/// iterations again. The entry is keyed by user, salt and iterations and
+/// remembers the password it was derived from: a different password under the
+/// same key (a rotated secret) is compared in constant time, misses, and is
+/// recomputed. The password is never hashed to build a key.
 #[derive(Default)]
-pub struct SaltCache(HashMap<SaltKey, [u8; 32]>);
+pub struct SaltCache(HashMap<SaltKey, (Vec<u8>, [u8; 32])>);
 
 impl SaltCache {
     pub fn new() -> Self {
@@ -58,18 +60,19 @@ impl SaltCache {
         salt: &[u8],
         iterations: u32,
     ) -> Result<[u8; 32]> {
-        let digest = Sha256::digest(password.as_bytes());
-        let mut tag = [0u8; 8];
-        tag.copy_from_slice(&digest[..8]);
-        let key = (user.to_owned(), salt.to_vec(), iterations, tag);
-        if let Some(v) = self.0.get(&key) {
-            return Ok(*v);
+        let key = (user.to_owned(), salt.to_vec(), iterations);
+        if let Some((derived_for, v)) = self.0.get(&key) {
+            if derived_for.len() == password.len()
+                && bool::from(derived_for.as_slice().ct_eq(password.as_bytes()))
+            {
+                return Ok(*v);
+            }
         }
         let v = scram::salted_password(password, salt, iterations)?;
         if self.0.len() > 8 {
             self.0.clear();
         }
-        self.0.insert(key, v);
+        self.0.insert(key, (password.as_bytes().to_vec(), v));
         Ok(v)
     }
 }
@@ -702,15 +705,20 @@ mod tests {
 
     // ---- authentication against a server that runs SCRAM itself ----------
 
-    const SALT: &[u8] = b"0123456789abcdef";
-    const SERVER_NONCE_TAIL: &str = "SERVERPART";
+    use crate::testdata;
+
+    fn salt() -> Vec<u8> {
+        testdata::get("server_salt").into_bytes()
+    }
 
     /// The server side of SCRAM-SHA-256 for `user` / `password`.
     fn scram_server(
         user: &'static str,
-        password: &'static str,
+        password: String,
         break_signature: bool,
     ) -> impl FnMut(&Doc) -> Doc {
+        let salt = salt();
+        let nonce_tail = testdata::get("server_nonce_tail");
         let mut client_first_bare = String::new();
         let mut server_first = String::new();
         let mut combined = String::new();
@@ -727,10 +735,10 @@ mod tests {
                         .split(',')
                         .find_map(|p| p.strip_prefix("r="))
                         .unwrap();
-                    combined = format!("{nonce}{SERVER_NONCE_TAIL}");
+                    combined = format!("{nonce}{nonce_tail}");
                     server_first = format!("r={combined},s={},i=4096", {
                         use base64::Engine;
-                        base64::engine::general_purpose::STANDARD.encode(SALT)
+                        base64::engine::general_purpose::STANDARD.encode(&salt)
                     });
                     let mut d = ok();
                     d.push(("conversationId".into(), Bson::Int32(1)));
@@ -742,7 +750,7 @@ mod tests {
                     d
                 }
                 "saslContinue" => {
-                    let salted = scram::salted_password(password, SALT, 4096).unwrap();
+                    let salted = scram::salted_password(&password, &salt, 4096).unwrap();
                     let (expected_final, mut sig) =
                         scram::client_final(&salted, &client_first_bare, &server_first, &combined);
                     if payload(req) != expected_final {
@@ -778,11 +786,15 @@ mod tests {
 
     #[test]
     fn the_scram_handshake_completes_against_a_real_exchange() {
-        let (mock, seen) = Mock::new(scram_server("weather", "correct-horse", false));
+        let (mock, seen) = Mock::new(scram_server(
+            "weather",
+            testdata::get("good_password"),
+            false,
+        ));
         let mut c = Connection::new(mock);
         block_on(c.authenticate(
-            &uri("correct-horse"),
-            "CLIENTNONCE123",
+            &uri(&testdata::get("good_password")),
+            &testdata::get("client_nonce"),
             &mut SaltCache::new(),
         ))
         .unwrap();
@@ -800,36 +812,60 @@ mod tests {
 
     #[test]
     fn a_wrong_password_is_an_authentication_error() {
-        let (mock, _) = Mock::new(scram_server("weather", "correct-horse", false));
+        let (mock, _) = Mock::new(scram_server(
+            "weather",
+            testdata::get("good_password"),
+            false,
+        ));
         let mut c = Connection::new(mock);
-        let r = block_on(c.authenticate(&uri("wrong"), "CLIENTNONCE123", &mut SaltCache::new()));
-        assert!(matches!(r, Err(Error::Auth(_))), "{r:?}");
+        let r = block_on(c.authenticate(
+            &uri(&testdata::get("bad_password")),
+            &testdata::get("client_nonce"),
+            &mut SaltCache::new(),
+        ));
+        assert!(
+            matches!(r, Err(Error::Auth(_))),
+            "authentication was not refused"
+        );
     }
 
     #[test]
     fn a_server_that_cannot_prove_the_password_is_refused() {
-        let (mock, _) = Mock::new(scram_server("weather", "correct-horse", true));
+        let (mock, _) = Mock::new(scram_server(
+            "weather",
+            testdata::get("good_password"),
+            true,
+        ));
         let mut c = Connection::new(mock);
         let r = block_on(c.authenticate(
-            &uri("correct-horse"),
-            "CLIENTNONCE123",
+            &uri(&testdata::get("good_password")),
+            &testdata::get("client_nonce"),
             &mut SaltCache::new(),
         ));
-        assert!(matches!(r, Err(Error::Auth(_))), "{r:?}");
+        assert!(
+            matches!(r, Err(Error::Auth(_))),
+            "authentication was not refused"
+        );
     }
 
     #[test]
     fn the_salted_password_is_computed_once_per_isolate() {
-        let mut cache = SaltCache::new();
-        let a = cache.get_or_compute("u", "pw", b"salt", 4096).unwrap();
-        assert_eq!(cache.0.len(), 1);
-        assert_eq!(a, cache.get_or_compute("u", "pw", b"salt", 4096).unwrap());
-        assert_eq!(cache.0.len(), 1);
-        // Another password is another entry and another result.
-        assert_ne!(
-            a,
-            cache.get_or_compute("u", "other", b"salt", 4096).unwrap()
+        let (pw, other, salt) = (
+            testdata::get("cache_password"),
+            testdata::get("other_password"),
+            testdata::get("short_salt").into_bytes(),
         );
-        assert_eq!(cache.0.len(), 2);
+        let mut cache = SaltCache::new();
+        let a = cache.get_or_compute("u", &pw, &salt, 4096).unwrap();
+        assert_eq!(cache.0.len(), 1);
+        assert_eq!(a, cache.get_or_compute("u", &pw, &salt, 4096).unwrap());
+        assert_eq!(cache.0.len(), 1);
+        // Another password under the same key recomputes: a different result,
+        // and the entry now holds the new password.
+        let b = cache.get_or_compute("u", &other, &salt, 4096).unwrap();
+        assert_ne!(a, b);
+        assert_eq!(cache.0.len(), 1);
+        assert_eq!(b, scram::salted_password(&other, &salt, 4096).unwrap());
+        assert_eq!(b, cache.get_or_compute("u", &other, &salt, 4096).unwrap());
     }
 }

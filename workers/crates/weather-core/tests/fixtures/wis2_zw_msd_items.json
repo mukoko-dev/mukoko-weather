@@ -1,0 +1,236 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "geometry": {
+        "coordinates": [28.61251, -20.14446],
+        "type": "Point"
+      },
+      "id": "0-716-2-67964AWS-202610291100-0",
+      "properties": {
+        "description": null,
+        "name": "non_coordinate_pressure",
+        "phenomenonTime": "2026-10-29T11:00:00Z",
+        "reportId": "0-716-2-67964AWS-202610291100",
+        "reportTime": "2026-10-29T11:00:00Z",
+        "units": "hPa",
+        "value": 869.7,
+        "wigos_station_identifier": "0-716-2-67964AWS",
+        "id": "0-716-2-67964AWS-202610291100-0"
+      },
+      "type": "Feature"
+    },
+    {
+      "geometry": {
+        "coordinates": [25.8516, -18.10322],
+        "type": "Point"
+      },
+      "id": "0-716-2-67843AWS-202610291100-0",
+      "properties": {
+        "description": null,
+        "name": "non_coordinate_pressure",
+        "phenomenonTime": "2026-10-29T11:00:00Z",
+        "reportId": "0-716-2-67843AWS-202610291100",
+        "reportTime": "2026-10-29T11:00:00Z",
+        "units": "hPa",
+        "value": 895.2,
+        "wigos_station_identifier": "0-716-2-67843AWS",
+        "id": "0-716-2-67843AWS-202610291100-0"
+      },
+      "type": "Feature"
+    },
+    {
+      "geometry": {
+        "coordinates": [28.61251, -20.14446],
+        "type": "Point"
+      },
+      "id": "0-716-2-67964AWS-202610291100-1",
+      "properties": {
+        "description": null,
+        "name": "air_temperature",
+        "phenomenonTime": "2026-10-29T11:00:00Z",
+        "reportId": "0-716-2-67964AWS-202610291100",
+        "reportTime": "2026-10-29T11:00:00Z",
+        "units": "Celsius",
+        "value": 26.57,
+        "wigos_station_identifier": "0-716-2-67964AWS",
+        "id": "0-716-2-67964AWS-202610291100-1"
+      },
+      "type": "Feature"
+    },
+    {
+      "geometry": {
+        "coordinates": [25.8516, -18.10322],
+        "type": "Point"
+      },
+      "id": "0-716-2-67843AWS-202610291100-1",
+      "properties": {
+        "description": null,
+        "name": "air_temperature",
+        "phenomenonTime": "2026-10-29T11:00:00Z",
+        "reportId": "0-716-2-67843AWS-202610291100",
+        "reportTime": "2026-10-29T11:00:00Z",
+        "units": "Celsius",
+        "value": 34.94,
+        "wigos_station_identifier": "0-716-2-67843AWS",
+        "id": "0-716-2-67843AWS-202610291100-1"
+      },
+      "type": "Feature"
+    },
+    {
+      "geometry": {
+        "coordinates": [28.61251, -20.14446],
+        "type": "Point"
+      },
+      "id": "0-716-2-67964AWS-202610291100-2",
+      "properties": {
+        "description": null,
+        "name": "relative_humidity",
+        "phenomenonTime": "2026-10-29T11:00:00Z",
+        "reportId": "0-716-2-67964AWS-202610291100",
+        "reportTime": "2026-10-29T11:00:00Z",
+        "units": "%",
+        "value": 41.0,
+        "wigos_station_identifier": "0-716-2-67964AWS",
+        "id": "0-716-2-67964AWS-202610291100-2"
+      },
+      "type": "Feature"
+    },
+    {
+      "geometry": {
+        "coordinates": [25.8516, -18.10322],
+        "type": "Point"
+      },
+      "id": "0-716-2-67843AWS-202610291100-2",
+      "properties": {
+        "description": null,
+        "name": "relative_humidity",
+        "phenomenonTime": "2026-10-29T11:00:00Z",
+        "reportId": "0-716-2-67843AWS-202610291100",
+        "reportTime": "2026-10-29T11:00:00Z",
+        "units": "%",
+        "value": 21.0,
+        "wigos_station_identifier": "0-716-2-67843AWS",
+        "id": "0-716-2-67843AWS-202610291100-2"
+      },
+      "type": "Feature"
+    },
+    {
+      "geometry": {
+        "coordinates": [28.61251, -20.14446],
+        "type": "Point"
+      },
+      "id": "0-716-2-67964AWS-202610291100-3",
+      "properties": {
+        "description": null,
+        "name": "wind_direction",
+        "phenomenonTime": "2026-10-29T11:00:00Z",
+        "reportId": "0-716-2-67964AWS-202610291100",
+        "reportTime": "2026-10-29T11:00:00Z",
+        "units": "deg",
+        "value": 106.0,
+        "wigos_station_identifier": "0-716-2-67964AWS",
+        "id": "0-716-2-67964AWS-202610291100-3"
+      },
+      "type": "Feature"
+    },
+    {
+      "geometry": {
+        "coordinates": [25.8516, -18.10322],
+        "type": "Point"
+      },
+      "id": "0-716-2-67843AWS-202610291100-3",
+      "properties": {
+        "description": null,
+        "name": "wind_direction",
+        "phenomenonTime": "2026-10-29T11:00:00Z",
+        "reportId": "0-716-2-67843AWS-202610291100",
+        "reportTime": "2026-10-29T11:00:00Z",
+        "units": "deg",
+        "value": 96.0,
+        "wigos_station_identifier": "0-716-2-67843AWS",
+        "id": "0-716-2-67843AWS-202610291100-3"
+      },
+      "type": "Feature"
+    },
+    {
+      "geometry": {
+        "coordinates": [31.55816, -16.7807],
+        "type": "Point"
+      },
+      "id": "0-716-2-67779AWS-202610291100-0",
+      "properties": {
+        "description": null,
+        "name": "non_coordinate_pressure",
+        "phenomenonTime": "2026-10-29T11:00:00Z",
+        "reportId": "0-716-2-67779AWS-202610291100",
+        "reportTime": "2026-10-29T11:00:00Z",
+        "units": "hPa",
+        "value": 908.1,
+        "wigos_station_identifier": "0-716-2-67779AWS",
+        "id": "0-716-2-67779AWS-202610291100-0"
+      },
+      "type": "Feature"
+    },
+    {
+      "geometry": {
+        "coordinates": [28.61251, -20.14446],
+        "type": "Point"
+      },
+      "id": "0-716-2-67964AWS-202610291100-4",
+      "properties": {
+        "description": null,
+        "name": "wind_speed",
+        "phenomenonTime": "2026-10-29T11:00:00Z",
+        "reportId": "0-716-2-67964AWS-202610291100",
+        "reportTime": "2026-10-29T11:00:00Z",
+        "units": "m/s",
+        "value": 3.8000000000000003,
+        "wigos_station_identifier": "0-716-2-67964AWS",
+        "id": "0-716-2-67964AWS-202610291100-4"
+      },
+      "type": "Feature"
+    },
+    {
+      "geometry": {
+        "coordinates": [25.8516, -18.10322],
+        "type": "Point"
+      },
+      "id": "0-716-2-67843AWS-202610291100-4",
+      "properties": {
+        "description": null,
+        "name": "wind_speed",
+        "phenomenonTime": "2026-10-29T11:00:00Z",
+        "reportId": "0-716-2-67843AWS-202610291100",
+        "reportTime": "2026-10-29T11:00:00Z",
+        "units": "m/s",
+        "value": 4.1000000000000005,
+        "wigos_station_identifier": "0-716-2-67843AWS",
+        "id": "0-716-2-67843AWS-202610291100-4"
+      },
+      "type": "Feature"
+    },
+    {
+      "geometry": {
+        "coordinates": [31.55816, -16.7807],
+        "type": "Point"
+      },
+      "id": "0-716-2-67779AWS-202610291100-1",
+      "properties": {
+        "description": null,
+        "name": "air_temperature",
+        "phenomenonTime": "2026-10-29T11:00:00Z",
+        "reportId": "0-716-2-67779AWS-202610291100",
+        "reportTime": "2026-10-29T11:00:00Z",
+        "units": "Celsius",
+        "value": 27.36,
+        "wigos_station_identifier": "0-716-2-67779AWS",
+        "id": "0-716-2-67779AWS-202610291100-1"
+      },
+      "type": "Feature"
+    }
+  ],
+  "numberMatched": 460511,
+  "numberReturned": 12,
+  "timeStamp": "2026-10-29T12:46:24.129946Z"
+}

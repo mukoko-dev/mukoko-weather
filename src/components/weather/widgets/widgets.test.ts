@@ -188,10 +188,12 @@ describe("InsightCard", () => {
     expect(html).not.toContain("dove leading-snug");
   });
 
-  it("InsightGrid is 2 columns on mobile and 4 on large screens", () => {
+  it("InsightGrid is 2 columns, and 4 only when its own column is wide (container query, not the viewport)", () => {
     const html = render(h(InsightGrid, null, h("div", null, "a")));
+    expect(html).toContain("@container");
     expect(html).toContain("grid-cols-2");
-    expect(html).toContain("lg:grid-cols-4");
+    expect(html).toContain("@3xl:grid-cols-4");
+    expect(html).not.toContain("lg:grid-cols-4");
   });
 
   it("InsightCardSkeleton is a labelled status region", () => {
@@ -202,7 +204,11 @@ describe("InsightCard", () => {
   });
 
   it("maps sizes to layout classes", () => {
-    expect(insightCardSizeClass("square")).toBe("aspect-square");
+    // A minimum height, never a fixed 1:1 box: a square at phone width is
+    // ~170px and the content overflowed it.
+    expect(insightCardSizeClass("square")).toBe(
+      "min-h-[var(--size-insight-square-min)]",
+    );
     expect(insightCardSizeClass("wide")).toBe("col-span-full");
     expect(insightCardSizeClass("hero")).toContain(
       "max-h-[var(--size-insight-hero-max)]",

@@ -78,6 +78,19 @@ describe("no single-side accent borders on card surfaces", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("no component fakes a side stripe with an absolutely-positioned span (owner report 2026-10-31: EdgeTile and RecentReports drew a 4px left rule that border-l tests never saw)", () => {
+    const STRIPE =
+      /absolute[^"'`]*\binset-y-0\b[^"'`]*\b(?:left|right|start|end)-0\b|absolute[^"'`]*\b(?:left|right|start|end)-0\b[^"'`]*\binset-y-0\b/;
+    const offenders: string[] = [];
+    for (const { file, src } of SOURCES) {
+      src.split("\n").forEach((line, i) => {
+        if (line.trim().startsWith("*") || line.trim().startsWith("//")) return;
+        if (STRIPE.test(line)) offenders.push(`${file}:${i + 1}`);
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it("globals.css has no left/right-only border on a card class", () => {
     expect(css).not.toMatch(/border-(left|right)(-width|-color)?\s*:/);
     expect(css).not.toMatch(/@apply[^;]*border-[lr]-/);
@@ -152,7 +165,13 @@ describe("the card edge: one rule, tokens only", () => {
       (n) => !edgeClasses.includes(n) && n !== "bushbuck",
     );
     expect(missing).toEqual([]);
-    for (const n of ["baobab", "acacia", "guineafowl", "chameleon", "nyala"]) {
+    for (const n of [
+      "baobab",
+      "acacia",
+      "guineafowl-card",
+      "chameleon",
+      "nyala",
+    ]) {
       expect(edgeClasses).toContain(n);
     }
   });

@@ -35,9 +35,12 @@ describe("/[location]/agriculture route", () => {
     expect(page).toContain("getCurrentUser()");
   });
 
-  it("renders the shared breadcrumb trail", () => {
-    expect(dashboard).toContain("<Breadcrumb");
+  it("renders the shared breadcrumb trail through PageShell", () => {
+    expect(dashboard).toContain("<PageShell");
+    expect(dashboard).toContain("breadcrumb={[");
     expect(dashboard).toContain('{ label: "Agriculture" }');
+    expect(dashboard).not.toContain("<Header />");
+    expect(dashboard).not.toContain("<Footer />");
   });
 
   it("wraps every section in an error boundary, lazy sections in LazySection", () => {
@@ -70,8 +73,8 @@ describe("/[location]/agriculture route", () => {
   });
 
   it("loading and error states follow the sub-route pattern", () => {
-    expect(read("loading.tsx")).toContain("<BreadcrumbSkeleton");
-    expect(read("loading.tsx")).toContain('role="status"');
+    expect(read("loading.tsx")).toContain("<PageShellSkeleton");
+    expect(read("loading.tsx")).toContain("breadcrumb");
     expect(read("error.tsx")).toContain("RouteErrorBoundary");
   });
 

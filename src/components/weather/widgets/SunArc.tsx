@@ -72,7 +72,7 @@ export function SunArc({ arcPct, sunrise, sunset }: SunArcProps) {
         x={0}
         y={H + 18}
         textAnchor="start"
-        className="fill-text-tertiary text-[11px]"
+        className="fill-text-tertiary text-[13px]"
         aria-hidden="true"
       >
         {sunrise}
@@ -81,7 +81,7 @@ export function SunArc({ arcPct, sunrise, sunset }: SunArcProps) {
         x={W}
         y={H + 18}
         textAnchor="end"
-        className="fill-text-tertiary text-[11px]"
+        className="fill-text-tertiary text-[13px]"
         aria-hidden="true"
       >
         {sunset}

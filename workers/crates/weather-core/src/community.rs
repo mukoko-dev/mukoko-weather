@@ -1,8 +1,10 @@
 //! Community weather reports and device preference profiles: the rules of
 //! `api/py/_reports.py` and `api/py/_devices.py`, as pure functions.
 //!
-//! The Workers keep both in D1 (`weather_reports`, `report_upvotes`,
-//! `device_profiles`, migration 0004). The vectors in
+//! Both live in MongoDB (`weather.weather_reports`, `device.device_profiles`),
+//! reached by the Workers through the TypeScript `mukoko-weather-mongo-bridge`
+//! Worker (`workers/mongo-bridge`, which applies the same rules again before it
+//! writes). The vectors in
 //! `tests/fixtures/community-contract.json` are read by this module's tests
 //! and by `tests/py/test_community_contract.py`, so the two backends cannot
 //! drift apart while the Python still exists.
@@ -299,15 +301,40 @@ impl Default for Preferences {
 
 /// A partial update: only the fields present change (last write wins; the
 /// whole array is replaced, never merged).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PreferencesPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub theme: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub selected_location: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub saved_locations: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub selected_activities: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub has_onboarded: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub selected_forecast_model: Option<String>,
+}
+
+/// What to do with the bridge's answer to a device or report call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeAnswer {
+    /// Pass the status and body on: a success, or a rejection of the request
+    /// itself (400, 404, 413, 422, which the bridge only sends for bad input
+    /// or a missing record).
+    Relay,
+    /// The store is not answering (5xx, anything unexpected): `503`.
+    Unavailable,
+}
+
+/// Classify the status the bridge answered with.
+pub fn bridge_answer(status: u16) -> BridgeAnswer {
+    match status {
+        200..=299 | 400 | 404 | 413 | 422 => BridgeAnswer::Relay,
+        _ => BridgeAnswer::Unavailable,
+    }
 }
 
 fn check_theme(t: &str) -> Result<(), String> {
@@ -410,6 +437,33 @@ pub fn apply_patch(base: &Preferences, patch: &PreferencesPatch) -> Result<Prefe
 mod tests {
     use super::*;
     use serde_json::Value;
+
+    #[test]
+    fn a_patch_serialises_only_the_fields_present() {
+        let patch = PreferencesPatch {
+            theme: Some("dark".into()),
+            has_onboarded: Some(false),
+            ..Default::default()
+        };
+        assert_eq!(
+            serde_json::to_value(&patch).unwrap(),
+            serde_json::json!({"theme": "dark", "hasOnboarded": false})
+        );
+        assert_eq!(
+            serde_json::to_value(PreferencesPatch::default()).unwrap(),
+            serde_json::json!({})
+        );
+    }
+
+    #[test]
+    fn the_bridge_answers_are_relayed_or_become_503() {
+        for s in [200, 201, 400, 404, 413, 422] {
+            assert_eq!(bridge_answer(s), BridgeAnswer::Relay, "{s}");
+        }
+        for s in [301, 401, 403, 429, 500, 502, 503, 504] {
+            assert_eq!(bridge_answer(s), BridgeAnswer::Unavailable, "{s}");
+        }
+    }
 
     fn fixture() -> Value {
         serde_json::from_str(include_str!(

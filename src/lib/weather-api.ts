@@ -60,7 +60,9 @@ export type WorkerRoute =
   | "sg-air"
   | "haze"
   | "normals"
+  | "normals/monthly"
   | "aviation/nearest-metar"
+  | "suitability"
   | "devices"
   | `devices/${string}`;
 

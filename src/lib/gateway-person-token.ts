@@ -10,7 +10,7 @@
  *     scope=app-keys                       ← narrowed: nothing else
  *     client_id / client_secret            ← this app's internal key
  *
- * The gateway accepts only WorkOS tokens issued to the Console client
+ * The gateway accepts only WorkOS tokens issued to the Mukoko Account client
  * ("Mukoko Account"), so weather signs people in through that client. A
  * token from any other client is refused HERE, before it leaves the server:
  * it would be refused by the gateway anyway, and it must not be sent.
@@ -56,8 +56,6 @@ export const ACCESS_TOKEN_TYPE =
   "urn:ietf:params:oauth:token-type:access_token";
 /** The only scope weather ever asks for. */
 export const REQUESTED_SCOPE = "app-keys";
-/** "Mukoko Account" — the Console's WorkOS client, the only one accepted. */
-export const DEFAULT_CONSOLE_CLIENT_ID = "client_01KV2G518HGXVMTAFQDKSVNXCW";
 export const SAFETY_MARGIN_MS = 30_000;
 export const MAX_CACHE_MS = 5 * 60_000;
 const MAX_ENTRIES = 1_000;
@@ -80,7 +78,7 @@ export const REAUTH_MEMORY_MS = 60 * 60_000;
 
 export type PersonTokenErrorCode =
   | "gateway_unconfigured" // env missing or malformed — 503
-  | "wrong_workos_client" // signed in through a client other than the Console's — 503
+  | "wrong_workos_client" // signed in through a client other than Mukoko Account — 503
   | "reauth_required" // WorkOS session ended / token refused — 401
   | "exchange_refused" // the same session refused again: likely config — 503
   | "person_not_provisioned" // no identity.persons record for this user — 409
@@ -125,7 +123,7 @@ interface Entry {
 
 export interface ExchangerOptions {
   config: () => GatewayConfig | null;
-  /** Expected issuing WorkOS client of subject tokens (the Console's). */
+  /** Expected issuing WorkOS client of subject tokens (Mukoko Account, this app's WORKOS_CLIENT_ID). */
   consoleClientId: () => string;
   now?: () => number;
 }
@@ -205,7 +203,7 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
    *     has not signed in again yet);
    *   - a session issued AFTER we last said "sign in again" (`iat` later)
    *     refused too: signing in again did not help, so the session is not
-   *     the problem (most likely the Console client id configuration). An
+   *     the problem (most likely the WORKOS_CLIENT_ID configuration). An
    *     operator error, never a sign-in loop.
    * Logged without any token.
    */
@@ -222,7 +220,7 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
     logWarn({
       source: "nyuchi-gateway",
       message: signedInAgain
-        ? "Token exchange refused a session issued after the last sign-in prompt; check the Console client id configuration"
+        ? "Token exchange refused a session issued after the last sign-in prompt; check the WORKOS_CLIENT_ID configuration"
         : "Token exchange refused the WorkOS session (invalid_grant)",
       meta: {
         consoleClientId: options.consoleClientId(),
@@ -350,12 +348,21 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
     const claims = peekClaims(accessToken);
     if (!claims) throw new PersonTokenError("reauth_required");
     const expected = options.consoleClientId();
+    if (!expected) {
+      // Names the variable, never a value, so an operator can tell this from
+      // a missing gateway URL or key.
+      logWarn({
+        source: "nyuchi-gateway",
+        message: "WORKOS_CLIENT_ID is not set; person-token exchange refused",
+      });
+      throw new PersonTokenError("gateway_unconfigured");
+    }
     if (issuingClient(claims) !== expected) {
       // Never forward another client's token to the gateway.
       logWarn({
         source: "nyuchi-gateway",
         message:
-          "Signed-in session is not from the Console WorkOS client; exchange not attempted",
+          "Signed-in session is not from the Mukoko Account WorkOS client; exchange not attempted",
       });
       throw new PersonTokenError("wrong_workos_client");
     }
@@ -453,12 +460,16 @@ function mapExchangeFailure(
 
 // ── Process-wide default ────────────────────────────────────────────────────
 
+/**
+ * The WorkOS client every Mukoko app signs in through ("Mukoko Account"):
+ * this app's own `WORKOS_CLIENT_ID`. One account, one client, so there is no
+ * second variable and no built-in default; "" when unset, and the exchange
+ * then fails closed (`gateway_unconfigured`).
+ */
 export function consoleClientId(
   env: Record<string, string | undefined> = process.env,
 ): string {
-  return (
-    env.NYUCHI_CONSOLE_WORKOS_CLIENT_ID?.trim() || DEFAULT_CONSOLE_CLIENT_ID
-  );
+  return env.WORKOS_CLIENT_ID?.trim() ?? "";
 }
 
 const defaultExchanger = createPersonTokenExchanger({

@@ -68,6 +68,11 @@ const ALLOWED_EXCEPTIONS: Record<string, { count: number; reason: string }> = {
     count: 2,
     reason: "dropdown menu item rows (itemClass)",
   },
+  "src/components/weather/AtmosphericSummary.tsx": {
+    count: 1,
+    reason:
+      "transparent full-tile hit area that opens the metric detail; the visible control is the tile itself (EdgeTile)",
+  },
   "src/components/weather/DraggableSection.tsx": {
     count: 1,
     reason: "reorder drag handle — round grip, only shown while reordering",
@@ -88,7 +93,7 @@ const ALLOWED_EXCEPTIONS: Record<string, { count: number; reason: string }> = {
   "src/components/profile/ProfileAppearance.tsx": {
     count: 1,
     reason:
-      "Light/Dark/System option tiles (role=radio) — radio cards, not pills",
+      "Light/Dark/System preview cards (role=radio) — radio cards, not pills",
   },
   "src/components/profile/ProfileIdentity.tsx": {
     count: 1,

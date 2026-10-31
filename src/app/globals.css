@@ -18,7 +18,10 @@
    If you change brand color tokens below, also update src/app/api/og/route.tsx brand object
    (Satori OG images use inline hex — CSS custom properties are not supported there). */
 
-:root {
+/* `[data-theme="light"]` is listed beside :root so a subtree can pin the light
+   tokens (the Appearance preview cards), exactly as [data-theme="dark"] pins dark. */
+:root,
+[data-theme="light"] {
   /* ── Seven African Minerals ── doctrine v4.1.0 ────────────────────────────
      Ring order (clockwise from top): cobalt → gold → malachite → copper → sodalite → terracotta
      Tanzanite is the core / brand mineral. */
@@ -258,6 +261,7 @@
 
   /* Metric-card visual sizes (widgets/) */
   --size-insight-hero-max: 28rem;
+  --size-insight-square-min: 10.5rem;
   --size-insight-dial-max: 14rem;
   --size-insight-moon-max: 9rem;
 
@@ -1141,32 +1145,42 @@ body {
            bg-surface-card p-[var(--space-card)] shadow-sm;
   }
 
-  /* .acacia — quieter card surface (no primary border, lighter shadow) */
+  /* .acacia — quieter card surface (neutral border, slightly raised) */
   .acacia {
     @apply rounded-[var(--radius-card)] border border-border
-           bg-surface-card p-[var(--space-card)];
+           bg-surface-card p-[var(--space-card)] shadow-sm;
   }
 
-  /* .guineafowl — grouped list card (a flock in one frame). The Mukoko
-     ecosystem profile standard (mukoko-news / mukoko-events /profile): a
-     bordered card holding an uppercase heading and full-width rows. */
+  /* .guineafowl — a labelled group of settings rows (a flock in one frame).
+     The Mukoko ecosystem profile standard, in the grouped-list pattern of the
+     Claude app settings: a plain label ABOVE the card, then one rounded card
+     holding the rows. `.guineafowl` is only the section wrapper (spacing);
+     `.guineafowl-card` is the surface. */
   .guineafowl {
-    @apply mb-6 overflow-hidden rounded-[var(--radius-card)] border
-           border-border bg-surface-card;
+    @apply mb-6;
   }
 
-  /* .guineafowl-heading — the small uppercase label at the top of the card */
+  /* .guineafowl-heading — the group label above its card: plain, muted,
+     sentence case (not an uppercase eyebrow inside the card) */
   .guineafowl-heading {
-    @apply border-b border-border px-4 py-3 text-xs font-bold uppercase
-           tracking-wider text-text-tertiary;
+    @apply px-4 pb-2 text-sm font-medium text-text-tertiary;
   }
 
-  /* .guineafowl-row — one full-width row (link or button) inside the card */
+  /* .guineafowl-card — the surface that holds a group's rows */
+  .guineafowl-card {
+    @apply overflow-hidden rounded-[var(--radius-card)] border border-border
+           bg-surface-card shadow-sm;
+  }
+
+  /* .guineafowl-row — one full-width row (link or button) inside the card:
+     icon, label, optional muted value, chevron. The hairline between rows is
+     inset to start under the label, not under the icon. */
   .guineafowl-row {
-    @apply flex min-h-[var(--touch-target-min)] w-full items-center
-           justify-between gap-3 border-b border-border px-4 py-4 text-left
-           text-text-primary transition-colors last:border-b-0
-           hover:bg-surface-dim;
+    @apply relative flex min-h-[var(--touch-target-min)] w-full items-center
+           justify-between gap-3 px-4 py-3.5 text-left text-base
+           text-text-primary transition-colors hover:bg-surface-dim
+           after:absolute after:bottom-0 after:left-12 after:right-0
+           after:h-px after:bg-border after:content-[''] last:after:hidden;
   }
 
   /* .pangolin — soft card surface (no border, light shadow — armoured but unobtrusive) */
@@ -1410,7 +1424,7 @@ body {
   :is(
     .baobab,
     .acacia,
-    .guineafowl,
+    .guineafowl-card,
     .chameleon,
     .nyala,
     .bushbuck,
@@ -1427,7 +1441,7 @@ body {
       .nyala,
       .bushbuck
     ):hover,
-  :is(.baobab, .acacia, .guineafowl, .nyala, .bushbuck):is(
+  :is(.baobab, .acacia, .guineafowl-card, .nyala, .bushbuck):is(
     [aria-current]:not([aria-current="false"]),
     [aria-pressed="true"],
     [aria-selected="true"],
