@@ -22,7 +22,7 @@ const strictResolve = (slug: string) =>
 /**
  * Top-level routes that are NOT location slugs. Every directory under
  * src/app (other than [location]) must be listed — src/proxy.test.ts fails
- * when one is missing. WeatherLoadingScene keeps the page-route subset.
+ * when one is missing. (The loading skeleton needs no list: it reads its slug from the loader.)
  */
 export const KNOWN_ROUTES = new Set([
   "explore",

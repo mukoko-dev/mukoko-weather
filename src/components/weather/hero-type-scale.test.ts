@@ -32,6 +32,8 @@ const HERO_FILES = [
   "components/weather/CurrentConditions.tsx",
   "components/weather/HourlyScrollCards.tsx",
   "components/weather/SeasonBadge.tsx",
+  "components/weather/HeroSkeleton.tsx",
+  "components/weather/LocationSkeleton.tsx",
   "components/layout/PhoneMenu.tsx",
   "components/ui/app-account-menu.tsx",
 ];

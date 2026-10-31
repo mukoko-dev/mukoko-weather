@@ -8,7 +8,8 @@ import {
   type WeatherSceneConfig,
   type WeatherSceneHandle,
 } from "@/lib/weather-scenes";
-import { SKY_CLASS, skyFamily, skyReachCss, skyTexture } from "@/lib/hero";
+import { skyFamily, skyReachCss, skyTexture } from "@/lib/hero";
+import { WeatherSky } from "@/components/weather/WeatherSky";
 import {
   readBackdropHints,
   SCROLL_IDLE_MS,
@@ -213,24 +214,7 @@ export function WeatherBackdrop({
   }, [animate, isMobile, isDay, phase, sceneType, windSpeed]);
 
   return (
-    <div
-      ref={skyRef}
-      aria-hidden="true"
-      // z-0 (not a negative z-index): iOS Safari paints negative-z
-      // elements behind the body background when html/body use
-      // overflow-x:hidden, making the whole backdrop invisible on iPhone.
-      // Explicit stacking instead: backdrop z-0, page content wrapped in
-      // z-10 (see WeatherDashboard) — deterministic in every engine.
-      className="kestrel-reach pointer-events-none z-0 overflow-hidden"
-    >
-      {/* The page sky — one static gradient by condition family x day/night
-          (src/lib/hero.ts skyFamily, tokens in globals.css). It is the page
-          background, so it runs under the header and the bottom controls.
-          The reduced-motion and WebGL-failure fallback, and the base the
-          particle layer paints over. */}
-      <div className={`kestrel ${SKY_CLASS[family]}`} />
-      {texture === "stars" && <div className="kestrel-stars" />}
-      {texture === "streaks" && <div className="kestrel-streaks" />}
+    <WeatherSky ref={skyRef} family={family} texture={texture}>
       {/* Three.js particle layer (transparent) — only when motion is allowed. */}
       {animate && (
         <div
@@ -238,6 +222,6 @@ export function WeatherBackdrop({
           className="absolute inset-0 opacity-30 dark:opacity-20"
         />
       )}
-    </div>
+    </WeatherSky>
   );
 }
