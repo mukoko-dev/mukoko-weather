@@ -11,8 +11,8 @@ import { describe, expect, it, vi } from "vitest";
 
 // The ⋯ menu pulls in the auth client (needs the Next runtime); its own
 // structure is covered in Header.test.ts.
-vi.mock("@/components/layout/MobileMoreMenu", () => ({
-  MobileMoreMenu: (p: { buttonClassName: string }) =>
+vi.mock("@/components/layout/PhoneMenu", () => ({
+  PhoneMenu: (p: { buttonClassName: string }) =>
     createElement("button", {
       type: "button",
       "aria-label": "More options",

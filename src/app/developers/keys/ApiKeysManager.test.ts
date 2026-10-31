@@ -57,7 +57,7 @@ describe("ApiKeysManager component", () => {
   it("has accessibility affordances (aria-label / aria-labelledby / role)", () => {
     expect(manager).toContain("aria-labelledby");
     expect(manager).toContain("aria-label");
-    expect(manager).toContain('role="alert"');
+    expect(manager).toContain("<Alert");
   });
 });
 

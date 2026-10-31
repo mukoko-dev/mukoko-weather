@@ -6,13 +6,19 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
 import { LayersIcon, BellIcon, UserIcon } from "@/lib/weather-icons";
-import { MobileMoreMenu } from "@/components/layout/MobileMoreMenu";
+import { PhoneMenu } from "@/components/layout/PhoneMenu";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { useChromeClaimed } from "@/components/layout/chrome-context";
 import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { initialsFor, type PublicUser } from "@/lib/user-display";
 import { currentLocationSlug } from "@/lib/current-slug";
+import {
+  NOTIFICATIONS_EMPTY_TEXT,
+  isDestinationActive,
+  visibleHeaderDestinations,
+  weatherMapHref,
+} from "@/lib/header-nav";
 
 // Code-split: MyWeatherModal imports LOCATIONS (154 items), ACTIVITIES (20 items),
 // geolocation, router, etc. Lazy-loading prevents this from bloating the initial
@@ -91,12 +97,12 @@ export function SiteHeader() {
   }, [notificationsOpen]);
 
   // Active page flags for the desktop nav and the mobile ⋯ menu.
-  const isExplore = pathname === "/explore" || pathname.startsWith("/explore/");
-  const isHistory = pathname === "/history";
-  const isAviation = pathname === "/aviation";
-  const shamwariEnabled = isFeatureEnabled("shamwari_chat");
+  // The header's destinations come from one list shared with the phone menu
+  // (src/lib/header-nav.ts, built on lib/nav-destinations), so the two can
+  // never drift. Shamwari is paused: omitted while FLAGS.shamwari_chat is off.
+  const destinations = visibleHeaderDestinations(isFeatureEnabled);
   const mapSlug = currentLocationSlug(pathname, selectedLocation);
-  const mapHref = mapSlug ? `/${mapSlug}/map` : "/explore";
+  const mapHref = weatherMapHref(mapSlug);
 
   return (
     <>
@@ -116,7 +122,7 @@ export function SiteHeader() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 md:px-8">
           {/* Brand mark — left-aligned at every breakpoint (the parent nav's
               justify-between keeps the action pill on the right) */}
-          <div className="flex min-w-0 items-center">
+          <div data-header-ink className="flex min-w-0 items-center">
             {/* No viewport prefetch: "/" is a full server-rendered dashboard,
                 and every page load was fetching it in the background. */}
             <Link
@@ -131,34 +137,24 @@ export function SiteHeader() {
 
           {/* Desktop nav — plain text links, underline on active/hover */}
           <nav
+            data-header-ink
             className="hidden sm:flex items-center gap-6"
             aria-label="Main navigation"
           >
-            {[
-              { href: "/explore", label: "Explore", active: isExplore },
-              // Paused as a standalone destination — see FLAGS.shamwari_chat.
-              ...(shamwariEnabled
-                ? [
-                    {
-                      href: "/shamwari",
-                      label: "Shamwari",
-                      active: pathname === "/shamwari",
-                    },
-                  ]
-                : []),
-              { href: "/history", label: "History", active: isHistory },
-              { href: "/aviation", label: "Aviation", active: isAviation },
-            ].map(({ href, label, active }) => (
-              <Link
-                key={href}
-                href={href}
-                prefetch={false}
-                aria-current={active ? "page" : undefined}
-                className={active ? "weaver-active" : "weaver"}
-              >
-                {label}
-              </Link>
-            ))}
+            {destinations.map(({ href, label }) => {
+              const active = isDestinationActive(pathname, href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  prefetch={false}
+                  aria-current={active ? "page" : undefined}
+                  className={active ? "weaver-active" : "weaver"}
+                >
+                  {label}
+                </Link>
+              );
+            })}
             {/* My Weather opens a modal (not a route), so it's a button rather
                 than a Link, but styled identically to the other nav items. It
                 lives outside the icon group below — that group is reserved
@@ -203,7 +199,8 @@ export function SiteHeader() {
                   GPS action live here now that the bottom bar is map / pages /
                   list. Desktop keeps its text nav instead. */}
               <div className="relative sm:hidden">
-                <MobileMoreMenu
+                <PhoneMenu
+                  trigger="ellipsis"
                   buttonClassName="bee"
                   iconClassName="text-primary-foreground"
                 />
@@ -228,7 +225,7 @@ export function SiteHeader() {
                     className="absolute right-0 top-full z-40 mt-2 w-64 rounded-[var(--radius-card)] border border-text-tertiary/10 bg-surface-card p-4 shadow-lg"
                   >
                     <p className="dove" aria-live="polite">
-                      No notifications yet
+                      {NOTIFICATIONS_EMPTY_TEXT}
                     </p>
                   </div>
                 )}

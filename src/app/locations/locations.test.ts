@@ -36,7 +36,7 @@ describe("locations page — route contract", () => {
   });
 
   it("declares its canonical URL", () => {
-    expect(pageSource).toContain("canonical: `${BASE_URL}/locations`");
+    expect(pageSource).toContain("canonical: `${SITE_URL}/locations`");
   });
 
   it("seeds My Location from the lastLocation cookie on the server", () => {
@@ -127,9 +127,9 @@ describe("locations list — client", () => {
     );
     expect(menuSource).toContain("Edit list");
     expect(menuSource).toContain('openMyWeather("settings")');
-    expect(menuSource).toContain('href="/explore"');
-    expect(menuSource).toContain('href="/history"');
-    expect(menuSource).toContain('href="/aviation"');
+    // Destinations come from lib/nav-destinations (one list for every surface).
+    expect(menuSource).toContain('["explore", "history", "aviation"]');
+    expect(menuSource).toContain("navDestination(");
   });
 
   it("uses the global styles only (no inline styles or hardcoded colours)", () => {

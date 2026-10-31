@@ -150,3 +150,21 @@ describe("Breadcrumb touch targets", () => {
     expect(source).toMatch(/<Link[\s\S]*?className="dik-dik /);
   });
 });
+
+describe("trail and HOME_CRUMB", () => {
+  it("HOME_CRUMB links Home to /", async () => {
+    const { HOME_CRUMB } = await import("./Breadcrumb");
+    expect(HOME_CRUMB).toEqual({ label: "Home", href: "/" });
+  });
+
+  it("trail puts Home first, then the given items", async () => {
+    const { trail } = await import("./Breadcrumb");
+    expect(
+      trail({ label: "Explore", href: "/explore" }, { label: "Map" }),
+    ).toEqual([
+      { label: "Home", href: "/" },
+      { label: "Explore", href: "/explore" },
+      { label: "Map" },
+    ]);
+  });
+});

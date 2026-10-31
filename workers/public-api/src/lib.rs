@@ -43,10 +43,11 @@
 mod keys;
 
 use serde_json::Value;
-use weather_core::cors::origin_allowed;
 use weather_core::query::ForecastQuery;
 use weather_core::{geo, normalize, places, reference, status as health};
-use weather_edge::{config, error, get_with_timeout, json, now, now_ms, now_rfc3339, query_pairs};
+use weather_edge::{
+    cors, error, get_with_timeout, json, now, now_ms, now_rfc3339, query_pairs, responses, service,
+};
 use worker::wasm_bindgen::JsValue;
 use worker::{event, Context, Env, Headers, Method, Request, RequestInit, Response, Result};
 
@@ -68,11 +69,15 @@ const DEFAULT_ELEVATION_M: f64 = 1200.0;
 #[event(fetch)]
 pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let origin = req.headers().get("Origin")?.unwrap_or_default();
-    let cors_origin = cors_origin(&env, &origin);
+    let cors_origin = cors::allowed_origin(&env, &origin);
     let is_ai = is_ai_path(&req.path());
 
     let resp = if req.method() == Method::Options {
-        preflight(cors_origin.is_some())
+        cors::preflight(
+            cors_origin.is_some(),
+            "GET, POST, PATCH, OPTIONS",
+            "Content-Type, Authorization, X-Mukoko-Client, X-API-Key, X-Client-Id, X-Client-Secret",
+        )
     } else if is_ai {
         if req.method() != Method::Post {
             error(405, "method_not_allowed", "Only POST is served.")
@@ -102,7 +107,11 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
             },
         }
     }?;
-    with_cors(resp, cors_origin.as_deref())
+    cors::apply(
+        resp,
+        cors_origin.as_deref(),
+        Some("X-Cache, X-Weather-Provider, X-Current-Source, X-Fetched-At, X-AQ-Source"),
+    )
 }
 
 async fn route(req: &Request, env: &Env) -> Result<Response> {
@@ -204,45 +213,9 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
     }
 }
 
-fn cors_origin(env: &Env, origin: &str) -> Option<String> {
-    let allowed = config(env, "CORS_ORIGINS").unwrap_or_default();
-    let allow_local = config(env, "ENVIRONMENT").as_deref() != Some("production");
-    origin_allowed(origin, &allowed, allow_local).then(|| origin.to_owned())
-}
-
-fn preflight(allowed: bool) -> Result<Response> {
-    let resp = Response::empty()?.with_status(if allowed { 204 } else { 403 });
-    if allowed {
-        let h = resp.headers();
-        h.set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")?;
-        h.set(
-            "Access-Control-Allow-Headers",
-            "Content-Type, Authorization, X-Mukoko-Client, X-API-Key, X-Client-Id, X-Client-Secret",
-        )?;
-        h.set("Access-Control-Max-Age", "86400")?;
-    }
-    Ok(resp)
-}
-
-fn with_cors(resp: Response, origin: Option<&str>) -> Result<Response> {
-    let h = resp.headers();
-    h.append("Vary", "Origin")?;
-    if let Some(o) = origin {
-        h.set("Access-Control-Allow-Origin", o)?;
-        h.set(
-            "Access-Control-Expose-Headers",
-            "X-Cache, X-Weather-Provider, X-Current-Source, X-Fetched-At, X-AQ-Source",
-        )?;
-    }
-    Ok(resp)
-}
-
+/// The caller's address for a call to a Worker with no public route.
 fn client_ip(req: &Request) -> String {
-    req.headers()
-        .get("CF-Connecting-IP")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| "service-binding".to_owned())
+    weather_edge::client_ip(req).unwrap_or_else(|| "service-binding".to_owned())
 }
 
 /// `Some(429)` when the caller is over its limit: per IP when anonymous, per
@@ -257,11 +230,7 @@ async fn rate_limited(req: &Request, env: &Env, caller: &keys::Caller) -> Option
     };
     match limiter.limit(key).await {
         Ok(outcome) if !outcome.success => {
-            let resp = error(429, "rate_limited", "Too many requests; slow down.");
-            if let Ok(r) = &resp {
-                let _ = r.headers().set("Retry-After", "60");
-            }
-            Some(resp)
+            Some(responses::rate_limited(60, "Too many requests; slow down."))
         }
         _ => None,
     }
@@ -356,14 +325,6 @@ async fn forward_ai(req: &mut Request, env: &Env) -> Result<Response> {
     }
 }
 
-async fn ask_forecast(env: &Env, path_and_query: &str) -> Result<Option<Response>> {
-    let fetcher = env.service(FORECAST_BINDING)?;
-    Ok(fetcher
-        .fetch(format!("https://forecast{path_and_query}"), None)
-        .await
-        .ok())
-}
-
 fn copy_header(from: &Headers, to: &Headers, name: &str) -> Result<()> {
     if let Some(v) = from.get(name)? {
         to.set(name, &v)?;
@@ -407,7 +368,7 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
         q.push_str(&safe);
     }
 
-    if let Some(mut upstream) = ask_forecast(env, &q).await? {
+    if let Some(mut upstream) = service::ask(env, FORECAST_BINDING, &q).await? {
         if upstream.status_code() == 200 {
             if let Ok(body) = upstream.json::<Value>().await {
                 let resp = json(200, &body)?;
@@ -443,7 +404,9 @@ async fn forecast(req: &Request, env: &Env) -> Result<Response> {
         return error(422, "invalid_request", &e.to_string());
     }
     let query = req.url()?.query().unwrap_or("").to_owned();
-    let Some(mut upstream) = ask_forecast(env, &format!("/daily?{query}")).await? else {
+    let Some(mut upstream) =
+        service::ask(env, FORECAST_BINDING, &format!("/daily?{query}")).await?
+    else {
         return error(
             502,
             "upstream_unreachable",

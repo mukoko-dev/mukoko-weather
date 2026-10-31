@@ -163,6 +163,47 @@ export function skyTexture(family: SkyFamily): SkyTexture | null {
   return null;
 }
 
+/** Solid sky kept below the last thing that sits on it, in rem. */
+export const SKY_CLEARANCE_REM = 1.5;
+/** The fade at the sky's foot, in rem (mirrors `--sky-fade` in globals.css). */
+export const SKY_FADE_REM = 6;
+/**
+ * The sky is never shorter than this, in rem (mirrors `--sky-reach` in
+ * globals.css). The hero + Conditions card ends 44 to 51 rem down the page
+ * (measured at 100% and 200% text; it scales with the root font), so with the
+ * fade and clearance (7.5 rem) this floor keeps the card out of the fade in a
+ * short landscape viewport BEFORE the script has measured it (server HTML,
+ * slow hydration, no JavaScript).
+ */
+export const SKY_MIN_REM = 60;
+
+/**
+ * The sky's height (a CSS length) so it always extends past the content that
+ * sits on it: the larger of one screen + 8rem and the bottom of that content
+ * (document px) plus clearance and the fade. The sky therefore never starts
+ * fading under the hero or the Conditions card, however large the text size
+ * or short the viewport. Null when there is nothing to measure (keep the CSS
+ * default). `rootPx` is the root font size, so the margin scales with text
+ * zoom.
+ */
+export function skyReachCss(
+  contentBottomPx: number | null | undefined,
+  rootPx: number,
+): string | null {
+  if (
+    typeof contentBottomPx !== "number" ||
+    !Number.isFinite(contentBottomPx) ||
+    !Number.isFinite(rootPx) ||
+    rootPx <= 0
+  ) {
+    return null;
+  }
+  const px = Math.ceil(
+    Math.max(0, contentBottomPx) + (SKY_CLEARANCE_REM + SKY_FADE_REM) * rootPx,
+  );
+  return `max(100svh + 8rem, ${SKY_MIN_REM}rem, ${px}px)`;
+}
+
 /** Activity category → solid mineral dot (static literals for Tailwind JIT). */
 export const ACTIVITY_DOT_CLASS: Record<string, string> = {
   farming: "bg-mineral-malachite",

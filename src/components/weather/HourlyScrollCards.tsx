@@ -82,6 +82,7 @@ export function HourlyScrollCards({
   return (
     <div
       data-hourly-strip
+      data-sky-card={variant === "sky" ? "" : undefined}
       className={
         variant === "sky"
           ? "kestrel-card overflow-hidden"

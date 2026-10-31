@@ -10,7 +10,11 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 
 const source = readFileSync(resolve(__dirname, "Header.tsx"), "utf-8");
-const menu = readFileSync(resolve(__dirname, "MobileMoreMenu.tsx"), "utf-8");
+const menu = readFileSync(resolve(__dirname, "PhoneMenu.tsx"), "utf-8");
+const acct = readFileSync(
+  resolve(__dirname, "../ui/app-account-menu.tsx"),
+  "utf-8",
+);
 const nav = readFileSync(resolve(__dirname, "MobileNav.tsx"), "utf-8");
 const css = readFileSync(resolve(__dirname, "../../app/globals.css"), "utf-8");
 /** The body of one `@layer components` rule in globals.css. */
@@ -175,52 +179,161 @@ describe("MobileNav — items and page dots", () => {
   });
 });
 
-describe("Header — mobile ⋯ menu holds the moved destinations", () => {
-  it("has a labelled disclosure button that controls the menu", () => {
-    expect(menu).toContain('aria-label="More options"');
-    expect(menu).toContain('aria-controls="mobile-more-menu"');
-    expect(menu).toContain("aria-expanded={menuOpen}");
-    expect(menu).toContain('id="mobile-more-menu"');
-    expect(menu).toContain("import { Ellipsis");
+describe("Header — the phone menu is the Mzizi account menu, filled with the header's rows", () => {
+  it("PhoneMenu is a thin wrapper around the vendored Mzizi app-account-menu (no custom menu left)", () => {
+    expect(menu).toContain('from "@/components/ui/app-account-menu"');
+    expect(menu).toContain("<AccountMenu");
+    // The disclosure, outside-click, Escape and focus return are the Mzizi
+    // component's; the wrapper keeps none of its own.
+    expect(menu).not.toMatch(
+      /document\.addEventListener|menuOpen|menuRef|menuButtonRef/,
+    );
+    expect(menu).not.toContain("mobile-more-menu");
   });
 
-  it("is mobile-only, sitting inside the existing icon pill", () => {
+  it("the vendored component is a <details> disclosure with a per-instance id, a POST sign-out form and a documented header", () => {
+    expect(acct).toContain("<details");
+    expect(acct).toContain("<summary");
+    expect(acct).toContain("const panelId = useId();");
+    expect(acct).toContain("aria-controls={panelId}");
+    expect(acct).toContain('method="post"');
+    expect(acct).toContain("https://api.mzizi.dev/v1/ui/app-account-menu");
+    expect(acct).toContain("780457ae94afd5229a78a5d7ba5146bda8260812");
+    // Each deviation is listed in the header (numbered), like mzizi-bottom-nav.
+    expect(acct).toMatch(/Local changes from upstream/);
+    for (let n = 1; n <= 10; n++) expect(acct).toContain(` * ${n}. `);
+  });
+
+  it("closes on Escape (focus returns to the trigger), an outside click and a chosen row", () => {
+    expect(acct).toContain('e.key !== "Escape"');
+    expect(acct).toContain('querySelector<HTMLElement>("summary")?.focus()');
+    expect(acct).toContain(
+      'document.addEventListener("mousedown", onMouseDown)',
+    );
+    expect(acct).toContain(
+      'document.removeEventListener("mousedown", onMouseDown)',
+    );
+    expect(acct).toContain('closest("a, [data-close-menu]")');
+    // The two action rows opt in to closing; Notifications expands in place.
+    expect(menu.match(/data-close-menu/g)).toHaveLength(2);
+  });
+
+  it("is mobile-only in the header, sitting inside the existing icon pill (ellipsis trigger)", () => {
     expect(source).toContain('<div className="relative sm:hidden">');
-    expect(source).toContain("<MobileMoreMenu");
+    expect(source).toContain("<PhoneMenu");
+    expect(source).toContain('trigger="ellipsis"');
     expect(source).toContain('buttonClassName="bee"');
+    expect(menu).toContain('"More options"');
   });
 
-  it("contains Explore, History, Aviation, My Weather and Use my location", () => {
-    expect(menu).toMatch(/href="\/explore"[\s\S]*?\n\s*Explore\s*<\/Link>/);
-    expect(menu).toMatch(/href="\/history"[\s\S]*?\n\s*History\s*<\/Link>/);
-    expect(menu).toMatch(/href="\/aviation"[\s\S]*?\n\s*Aviation\s*<\/Link>/);
+  it("lists the header's destinations from the shared list (Shamwari behind its flag)", () => {
+    expect(menu).toContain("visibleHeaderDestinations(isFeatureEnabled)");
+    expect(menu).toContain("destinations.map(");
+    expect(source).toContain("visibleHeaderDestinations(isFeatureEnabled)");
+    expect(source).toContain("destinations.map(");
+  });
+
+  it("has My Weather and Use my location rows that close the menu", () => {
     expect(menu).toMatch(
-      /openMyWeather\(\);[\s\S]*?\n\s*My Weather\s*<\/button>/,
+      /data-close-menu\s+onClick=\{\(\) => openMyWeather\(\)\}[\s\S]*?My Weather/,
     );
-    expect(menu).toMatch(/void handleMyLocation\(\);[\s\S]*?Use my location/);
-  });
-
-  it("keeps Shamwari in the menu behind the shamwari_chat flag", () => {
-    expect(menu).toContain("{shamwariEnabled && (");
-    expect(menu).toContain('href="/shamwari"');
-  });
-
-  it("closes on item activation, outside click and Escape (returning focus)", () => {
-    expect(menu).toContain("onClick={() => setMenuOpen(false)}");
-    expect(menu).toContain(
-      "setMenuOpen(false);\n                  openMyWeather();",
-    );
-    expect(menu).toContain('e.key === "Escape"');
-    expect(menu).toContain("menuButtonRef.current?.focus()");
-    expect(menu).toContain(
-      'document.removeEventListener("mousedown", handleClick)',
-    );
+    expect(menu).toMatch(/void handleMyLocation\(\)[\s\S]*?Use my location/);
   });
 
   it("the Use my location item keeps the busy state and double-tap guard", () => {
     expect(menu).toContain("disabled={locating}");
     expect(menu).toContain("aria-busy={locating}");
     expect(menu).toContain("if (locating) return;");
+  });
+
+  it("rows are 48px and grouped under labelled sections (Account, Weather, Pages)", () => {
+    expect(acct).toContain("min-h-[var(--touch-target-min)]");
+    expect(menu).toContain("ACCOUNT_MENU_ROW_CLASS");
+    for (const name of ["account", "weather", "pages"]) {
+      expect(menu).toContain('groupLabel("' + name + '")');
+    }
+  });
+});
+
+describe("Header — nothing the header offers is lost in the phone menu", () => {
+  const nav = readFileSync(
+    resolve(__dirname, "../../lib/header-nav.ts"),
+    "utf-8",
+  );
+
+  it("every header nav destination (from the shared list) is in the phone menu, flags included", async () => {
+    const { HEADER_DESTINATIONS, visibleHeaderDestinations } =
+      await import("@/lib/header-nav");
+    // Both surfaces render the same function over the same list, so they
+    // cannot drift; this pins that wiring and the list's content.
+    expect(source).toContain("visibleHeaderDestinations(isFeatureEnabled)");
+    expect(menu).toContain("visibleHeaderDestinations(isFeatureEnabled)");
+    expect(HEADER_DESTINATIONS.map((d) => d.href)).toEqual([
+      "/explore",
+      "/shamwari",
+      "/history",
+      "/aviation",
+    ]);
+    expect(visibleHeaderDestinations(() => true)).toHaveLength(4);
+    expect(visibleHeaderDestinations(() => false).map((d) => d.href)).toEqual([
+      "/explore",
+      "/history",
+      "/aviation",
+    ]);
+    // The header must not hard-code a destination outside the shared list.
+    for (const d of HEADER_DESTINATIONS) {
+      expect(source, d.href).not.toContain(`href: "${d.href}"`);
+    }
+  });
+
+  it("every action in the header source has its phone-menu counterpart", () => {
+    // Derived from the header's own source: its internal links, its labelled
+    // controls and its My Weather button.
+    const headerHrefs = [...source.matchAll(/href="(\/[^"]*)"/g)]
+      .map((m) => m[1])
+      .filter((h) => h !== "/"); // "/" is the brand mark, not an action
+    expect(headerHrefs.sort()).toEqual(["/auth/signin", "/profile"].sort());
+    expect(menu).toContain('href="/profile"');
+    expect(menu).toContain('signInHref="/auth/signin"');
+
+    // Map: the header links mapHref (weatherMapHref) — the menu does too.
+    expect(source).toContain("href={mapHref}");
+    expect(source).toContain("weatherMapHref(mapSlug)");
+    expect(menu).toContain("href={weatherMapHref(mapSlug)}");
+    expect(menu).toContain("Choose a location for the weather map");
+
+    // Notifications: the header's bell and the menu row show the same copy.
+    expect(source).toContain('aria-label="Notifications"');
+    expect(menu).toContain("Notifications");
+    expect(source).toContain("{NOTIFICATIONS_EMPTY_TEXT}");
+    expect(menu).toContain("{NOTIFICATIONS_EMPTY_TEXT}");
+    expect(nav).toContain('"No notifications yet"');
+
+    // My Weather and Use my location.
+    expect(source).toContain("openMyWeather()");
+    expect(menu).toContain("openMyWeather()");
+    expect(menu).toContain("Use my location");
+  });
+
+  it("sign-out is the Mzizi POST form, handled by /auth/signout", () => {
+    expect(menu).toContain('signOutAction="/auth/signout"');
+    const route = readFileSync(
+      resolve(__dirname, "../../app/auth/signout/route.ts"),
+      "utf-8",
+    );
+    expect(route).toContain("export const POST");
+    expect(route).toContain("isSameOrigin(request)");
+    expect(route).toContain("status: 303");
+  });
+
+  it("the hero's phone trigger is the profile button: photo, initials or the user icon", () => {
+    expect(menu).toContain('trigger === "ellipsis"');
+    expect(menu).toContain(
+      "initials={authedUser ? initialsFor(authedUser) : undefined}",
+    );
+    expect(menu).toContain("imageUrl={authedUser?.profilePictureUrl ?? null}");
+    expect(acct).toContain("isValidImageUrl(imageUrl)");
+    expect(acct).toContain("<User size={20}");
   });
 });
 
@@ -314,9 +427,7 @@ describe("Header — weather map link", () => {
   });
 
   it("links to /{slug}/map when a location is known, otherwise to /explore", () => {
-    expect(source).toContain(
-      'const mapHref = mapSlug ? `/${mapSlug}/map` : "/explore";',
-    );
+    expect(source).toContain("const mapHref = weatherMapHref(mapSlug);");
     expect(source).toContain("href={mapHref}");
     expect(source).toContain("Choose a location for the weather map");
   });
@@ -330,21 +441,22 @@ describe("Header — My Location button", () => {
   });
 });
 
-describe("MobileMoreMenu — one menu, two homes", () => {
+describe("PhoneMenu — one menu, two homes", () => {
   const hero = readFileSync(
     resolve(__dirname, "../weather/CurrentConditions.tsx"),
     "utf-8",
   );
 
   it("is the header's phone menu and the hero's, from one component", () => {
-    expect(source).toContain("<MobileMoreMenu");
-    expect(hero).toContain("<MobileMoreMenu");
+    expect(source).toContain("<PhoneMenu");
+    expect(hero).toContain("<PhoneMenu");
     expect(hero).toContain('buttonClassName="kestrel-round"');
+    expect(hero).toContain('trigger="profile"');
   });
 
   it("lists the account (Account when signed in, Sign in otherwise)", () => {
-    expect(menu).toContain('authedUser ? "/profile" : "/auth/signin"');
-    expect(menu).toContain('authedUser ? "Account" : "Sign in"');
+    expect(menu).toContain('href="/profile"');
+    expect(acct).toContain('signInLabel = "Sign in"');
   });
 });
 
@@ -364,5 +476,49 @@ describe("Header over the sky hero", () => {
 
   it("gains its blurred surface only after scroll (unchanged)", () => {
     expect(source).toContain("bg-surface-base/70 backdrop-blur-xl");
+  });
+});
+
+describe("Header over the sky: white text never reaches the popovers", () => {
+  it("scopes the sky-ink override to the brand mark and desktop links, not the <header>", () => {
+    const at = css.indexOf("[data-header-ink] {");
+    expect(at).toBeGreaterThan(-1);
+    // The selector that sets the text tokens ends in [data-header-ink].
+    const sel = css.slice(
+      css.lastIndexOf("body:has", at),
+      at + "[data-header-ink]".length,
+    );
+    expect(sel).toContain("[data-site-header]:not([data-scrolled])");
+    expect(sel).toMatch(/\[data-header-ink\]$/);
+    // No rule sets the text tokens directly on the header root.
+    expect(css).not.toMatch(
+      /\[data-site-header\]:not\(\[data-scrolled\]\)\s*\{[^}]*--color-text-/,
+    );
+  });
+
+  it("marks only the logo wrapper and the desktop nav as sky ink", () => {
+    expect(source.match(/data-header-ink/g)).toHaveLength(2);
+    expect(source).toMatch(
+      /<div data-header-ink className="flex min-w-0 items-center">/,
+    );
+    expect(source).toMatch(
+      /<nav\s+data-header-ink\s+className="hidden sm:flex/,
+    );
+  });
+
+  it("keeps the notifications popover and the ⋯ menu outside the ink scopes, on a card surface", () => {
+    const popover = source.indexOf(
+      'aria-label="Notifications"\n                    className=',
+    );
+    const dialog = source.indexOf('role="dialog"');
+    expect(dialog).toBeGreaterThan(-1);
+    // The popover opens after both ink elements have closed (the action pill
+    // follows the nav), and sits on bg-surface-card.
+    expect(source.indexOf("</nav>")).toBeLessThan(dialog);
+    expect(source.slice(dialog, dialog + 400)).toContain("bg-surface-card");
+    expect(popover === -1 || popover > source.indexOf("</nav>")).toBe(true);
+    expect(acct).toContain("bg-popover");
+    expect(menu).not.toContain("data-header-ink");
+    expect(acct).not.toContain("data-header-ink");
   });
 });

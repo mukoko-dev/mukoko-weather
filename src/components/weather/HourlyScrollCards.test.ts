@@ -150,3 +150,11 @@ describe("HourlyScrollCards — footer slot", () => {
     );
   });
 });
+
+describe("HourlyScrollCards — the sky card is findable by the backdrop", () => {
+  it("marks the sky variant with data-sky-card (and only that variant)", () => {
+    expect(source).toContain(
+      'data-sky-card={variant === "sky" ? "" : undefined}',
+    );
+  });
+});

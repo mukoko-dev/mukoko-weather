@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
+import { SITE_URL } from "@/lib/site";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/PageShell";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { InfoRow } from "@/components/ui/info-row";
 
 export const metadata: Metadata = {
   title: "About",
   description:
-    "Learn about mukoko weather — an AI-powered global weather intelligence platform providing forecasts for farming, mining, travel, and daily life worldwide. A Mukoko Africa product by Nyuchi Web Services.",
+    "Learn about mukoko weather — a global weather intelligence platform providing forecasts for farming, mining, travel, and daily life worldwide. A Mukoko Africa product by Nyuchi Web Services.",
   alternates: {
-    canonical: "https://weather.mukoko.com/about",
+    canonical: `${SITE_URL}/about`,
   },
 };
 
@@ -47,16 +49,15 @@ export default function AboutPage() {
   return (
     <>
       <PageShell>
-        <h1 className="elephant">About mukoko weather</h1>
+        <PageHeader title="About mukoko weather" />
 
         <section className="mt-8 space-y-4 text-text-secondary leading-relaxed">
           <p>
-            <strong className="text-text-primary">mukoko weather</strong> is an
-            AI-powered global weather intelligence platform. We provide
-            accurate, real-time forecasts and actionable weather insights for
-            farming, mining, travel, and daily life across Africa, Asia, the
-            Middle East, South &amp; Central America, Eastern Europe, and
-            beyond.
+            <strong className="text-text-primary">mukoko weather</strong> is a
+            global weather intelligence platform. We provide accurate, real-time
+            forecasts and actionable weather insights for farming, mining,
+            travel, and daily life across Africa, Asia, the Middle East, South
+            &amp; Central America, Eastern Europe, and beyond.
           </p>
           <p>
             Our mission is simple: <em>weather as a public good</em>. Everyone

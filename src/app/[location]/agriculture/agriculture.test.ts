@@ -21,12 +21,14 @@ describe("/[location]/agriculture route", () => {
 
   it("is a server page with its own canonical, OG and JSON-LD", () => {
     expect(page).not.toContain('"use client"');
-    expect(page).toContain("canonical: `${SITE_URL}/${loc.slug}/agriculture`");
-    expect(page).toContain("openGraph");
-    expect(page).toContain('"@type": "BreadcrumbList"');
+    // Canonical and OG come from the shared builder (src/lib/metadata.ts).
+    expect(page).toContain("buildPageMetadata(");
+    expect(page).toContain("path: `/${loc.slug}/agriculture`");
+    expect(page).toContain("og: {");
+    expect(page).toContain("breadcrumbJsonLd([");
     expect(page).toContain('"@type": "WebPage"');
     expect(page).toContain('unitCode: "MTR"');
-    expect(page).toContain("safeJsonLd(");
+    expect(page).toContain("<JsonLd");
     expect(page).toContain("notFound()");
   });
 

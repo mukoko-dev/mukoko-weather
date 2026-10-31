@@ -1,7 +1,9 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { SKY_CLASS, type SkyFamily, type SkyTexture } from "@/lib/hero";
 
 interface Props {
+  /** The sky box, for the live page's reach measurement (WeatherBackdrop). */
+  ref?: Ref<HTMLDivElement>;
   family: SkyFamily;
   /** The faint static texture for the family (`skyTexture(family)`). */
   texture: SkyTexture | null;
@@ -21,9 +23,10 @@ interface Props {
  *
  * Decorative — `aria-hidden`, non-interactive.
  */
-export function WeatherSky({ family, texture, children }: Props) {
+export function WeatherSky({ ref, family, texture, children }: Props) {
   return (
     <div
+      ref={ref}
       aria-hidden="true"
       // z-0 (not a negative z-index): iOS Safari paints negative-z
       // elements behind the body background when html/body use
