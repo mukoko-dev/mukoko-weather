@@ -278,10 +278,11 @@ describe("WeatherDashboard — layout control placement (bottom of page)", () =>
     expect(firstOpen).toBeGreaterThan(source.indexOf("</DndContext>"));
   });
 
-  it("renders the season pill as the hero footer, not as a block above the grid", () => {
-    const currentIdx = source.indexOf("<CurrentConditions");
+  it("renders the season pill as the Conditions card footer, not in the hero or above the grid", () => {
+    const hourlyIdx = source.indexOf("<HourlyScrollCards");
     const footerIdx = source.indexOf("footer={<SeasonBadge");
-    expect(footerIdx).toBeGreaterThan(currentIdx);
+    expect(footerIdx).toBeGreaterThan(hourlyIdx);
+    expect(footerIdx).toBeLessThan(source.indexOf("<CurrentConditions"));
     expect(source).not.toMatch(/<div className="mb-3">\s*<SeasonBadge/);
   });
 
@@ -390,5 +391,30 @@ describe("selected forecast model is the baseline (issue #246)", () => {
   it("derives the frost banner and fallback flag from the baseline on screen", () => {
     expect(source).toContain("checkFrostRisk(modelBaseline.hourly");
     expect(source).toContain("modelBaseline ? false : seedUsingFallback");
+  });
+});
+
+describe("WeatherDashboard — the hero is pinned first", () => {
+  it("renders from pinHeroFirst(stored order), whatever the store holds", () => {
+    expect(source).toContain(
+      "const sectionOrder = pinHeroFirst(storedSectionOrder);",
+    );
+    expect(source).not.toContain(
+      "useAppStore((s) => s.sectionOrder);\n  const setSectionOrder",
+    );
+  });
+
+  it("marks the hero's DraggableSection pinned and ignores any drag to or from it", () => {
+    expect(source).toMatch(/key="current"\s+id="current"\s+pinned/);
+    expect(source).toContain("active.id !== PINNED_FIRST_SECTION");
+    expect(source).toContain("over.id !== PINNED_FIRST_SECTION");
+  });
+
+  it("only treats the Conditions card as the sky card when the hero is first", () => {
+    expect(source).toContain("sectionOrder[0] === PINNED_FIRST_SECTION");
+  });
+
+  it("puts the device 'updated ago' line on the sky ink so it reads over the sky", () => {
+    expect(source).toContain('<div className="kestrel-ink">');
   });
 });

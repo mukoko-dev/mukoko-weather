@@ -66,7 +66,9 @@ describe("WeatherDashboard writes the device store", () => {
     expect(dashboard).toContain("homeLocation");
   });
   it("shows the Updated line only for device payloads", () => {
-    expect(dashboard).toMatch(/\{device && \(\s*<UpdatedAgo/);
+    expect(dashboard).toMatch(
+      /\{device && \(\s*<div className="kestrel-ink">\s*<UpdatedAgo/,
+    );
   });
 });
 
