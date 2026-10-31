@@ -4,11 +4,11 @@ import { useRef, useEffect, useState } from "react";
 import {
   createWeatherScene,
   resolveScene,
-  skyClassName,
   skyPhase,
   type WeatherSceneConfig,
   type WeatherSceneHandle,
 } from "@/lib/weather-scenes";
+import { SKY_CLASS, skyFamily, skyTexture } from "@/lib/hero";
 import {
   readBackdropHints,
   SCROLL_IDLE_MS,
@@ -37,9 +37,9 @@ interface Props {
 /**
  * Condition-aware animated backdrop for the WHOLE location page — a fixed,
  * full-viewport sky behind all content (Apple Weather style), not confined
- * to the hero card. The sky is strongest at the top (behind the de-carded
- * CurrentConditions hero) and fades into the normal surface background
- * further down so charts and cards keep their usual contrast.
+ * to the hero. It is solid through the first screen (hero + Conditions card)
+ * and fades into the normal surface background at the foot of the viewport
+ * so charts and cards further down keep their usual contrast.
  *
  * Performance discipline (the backdrop stays mounted for the whole page life):
  * - Three.js renderer pixel ratio is capped at 1 (`maxPixelRatio`).
@@ -53,16 +53,13 @@ interface Props {
  *   Three.js entirely and show only the static sky gradient
  *   (shouldAnimateBackdrop).
  *
- * Colour: every sky, cloud, particle and light colour is the real colour of
- * that weather at that time of day (src/lib/weather-scenes/palette.ts). The
- * static `.hornbill-sky-*` gradient under the canvas is built from the SAME
- * palette (mirrored as --weather-sky-* tokens in globals.css), so the
- * reduced-motion / WebGL-failure fallback is the same sky as the animation.
- *
- * Subdued on purpose (sky at opacity-80, particles at opacity-75 — 40 in
- * dark theme, matching the dimmed dark-theme sky tokens): the location
- * hero is a solid sky plate (see CurrentConditions / `.kori`), and the page
- * sky is texture behind it, never the hero itself.
+ * Colour: the static gradient is the page sky (`.kestrel-*`, `--sky-*` tokens
+ * in globals.css, family from src/lib/hero.ts): the owner's night and rain
+ * skies, day skies for light theme, deep dusk for dark. It carries faint
+ * static texture (stars at night, diagonal streaks in rain). The Three.js
+ * particle layer paints over it (opacity-30, 20 in dark theme) and is the only
+ * thing that moves; the reduced-motion / WebGL-failure fallback is the same
+ * sky without it.
  *
  * Purely decorative — marked `aria-hidden`. A WebGL/import failure degrades to
  * the static gradient (createWeatherScene returns a no-op handle on failure),
@@ -98,6 +95,8 @@ export function WeatherBackdrop({
   }, []);
 
   const sceneType = resolveScene(weatherCode, windSpeed);
+  const family = skyFamily(weatherCode, isDay);
+  const texture = skyTexture(family);
   const phase = skyPhase(isDay, currentTime, sunrise, sunset);
 
   useEffect(() => {
@@ -184,24 +183,26 @@ export function WeatherBackdrop({
       // z-10 (see WeatherDashboard) — deterministic in every engine.
       className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
     >
-      {/* Static real-weather sky gradient — always painted; the reduced-motion
-          and WebGL-failure fallback, same palette as the animation. */}
-      <div
-        className={`absolute inset-0 opacity-80 ${skyClassName(sceneType, isDay, phase)}`}
-      />
+      {/* The page sky — one static gradient by condition family x day/night
+          (src/lib/hero.ts skyFamily, tokens in globals.css). It is the page
+          background, so it runs under the header and the bottom controls.
+          The reduced-motion and WebGL-failure fallback, and the base the
+          particle layer paints over. */}
+      <div className={`kestrel ${SKY_CLASS[family]}`} />
+      {texture === "stars" && <div className="kestrel-stars" />}
+      {texture === "streaks" && <div className="kestrel-streaks" />}
       {/* Three.js particle layer (transparent) — only when motion is allowed. */}
       {animate && (
         <div
           ref={containerRef}
-          className="absolute inset-0 opacity-75 dark:opacity-40"
+          className="absolute inset-0 opacity-30 dark:opacity-20"
         />
       )}
-      {/* Readability veil behind the header + breadcrumb text that sits
-          directly on the sky (WCAG 4.5:1 for text-tertiary on every sky). */}
-      <div className="absolute inset-0 hornbill-veil" />
-      {/* Fade the sky into the normal surface background further down the
-          page so cards, charts and body text keep their usual contrast. */}
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent from-25% via-surface-base/70 via-65% to-surface-base" />
+      {/* Fade the sky into the normal surface background at the foot of the
+          viewport so cards, charts and body text further down the page keep
+          their usual contrast. The first screen (hero + Conditions card) sits
+          above --sky-fade-from, on the solid sky. */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_var(--sky-fade-from),var(--color-surface-base))]" />
     </div>
   );
 }

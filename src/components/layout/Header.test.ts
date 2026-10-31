@@ -10,6 +10,7 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 
 const source = readFileSync(resolve(__dirname, "Header.tsx"), "utf-8");
+const menu = readFileSync(resolve(__dirname, "MobileMoreMenu.tsx"), "utf-8");
 const nav = readFileSync(resolve(__dirname, "MobileNav.tsx"), "utf-8");
 const css = readFileSync(resolve(__dirname, "../../app/globals.css"), "utf-8");
 /** The body of one `@layer components` rule in globals.css. */
@@ -176,50 +177,50 @@ describe("MobileNav — items and page dots", () => {
 
 describe("Header — mobile ⋯ menu holds the moved destinations", () => {
   it("has a labelled disclosure button that controls the menu", () => {
-    expect(source).toContain('aria-label="More options"');
-    expect(source).toContain('aria-controls="mobile-more-menu"');
-    expect(source).toContain("aria-expanded={menuOpen}");
-    expect(source).toContain('id="mobile-more-menu"');
-    expect(source).toContain("import { Ellipsis");
+    expect(menu).toContain('aria-label="More options"');
+    expect(menu).toContain('aria-controls="mobile-more-menu"');
+    expect(menu).toContain("aria-expanded={menuOpen}");
+    expect(menu).toContain('id="mobile-more-menu"');
+    expect(menu).toContain("import { Ellipsis");
   });
 
   it("is mobile-only, sitting inside the existing icon pill", () => {
-    expect(source).toContain(
-      '<div className="relative sm:hidden" ref={menuRef}>',
-    );
+    expect(source).toContain('<div className="relative sm:hidden">');
+    expect(source).toContain("<MobileMoreMenu");
+    expect(source).toContain('buttonClassName="bee"');
   });
 
   it("contains Explore, History, Aviation, My Weather and Use my location", () => {
-    expect(source).toMatch(/href="\/explore"[\s\S]*?\n\s*Explore\s*<\/Link>/);
-    expect(source).toMatch(/href="\/history"[\s\S]*?\n\s*History\s*<\/Link>/);
-    expect(source).toMatch(/href="\/aviation"[\s\S]*?\n\s*Aviation\s*<\/Link>/);
-    expect(source).toMatch(
+    expect(menu).toMatch(/href="\/explore"[\s\S]*?\n\s*Explore\s*<\/Link>/);
+    expect(menu).toMatch(/href="\/history"[\s\S]*?\n\s*History\s*<\/Link>/);
+    expect(menu).toMatch(/href="\/aviation"[\s\S]*?\n\s*Aviation\s*<\/Link>/);
+    expect(menu).toMatch(
       /openMyWeather\(\);[\s\S]*?\n\s*My Weather\s*<\/button>/,
     );
-    expect(source).toMatch(/void handleMyLocation\(\);[\s\S]*?Use my location/);
+    expect(menu).toMatch(/void handleMyLocation\(\);[\s\S]*?Use my location/);
   });
 
   it("keeps Shamwari in the menu behind the shamwari_chat flag", () => {
-    expect(source).toContain("{shamwariEnabled && (");
-    expect(source).toContain('href="/shamwari"');
+    expect(menu).toContain("{shamwariEnabled && (");
+    expect(menu).toContain('href="/shamwari"');
   });
 
   it("closes on item activation, outside click and Escape (returning focus)", () => {
-    expect(source).toContain("onClick={() => setMenuOpen(false)}");
-    expect(source).toContain(
-      "setMenuOpen(false);\n                            openMyWeather();",
+    expect(menu).toContain("onClick={() => setMenuOpen(false)}");
+    expect(menu).toContain(
+      "setMenuOpen(false);\n                  openMyWeather();",
     );
-    expect(source).toContain('e.key === "Escape"');
-    expect(source).toContain("menuButtonRef.current?.focus()");
-    expect(source).toContain(
+    expect(menu).toContain('e.key === "Escape"');
+    expect(menu).toContain("menuButtonRef.current?.focus()");
+    expect(menu).toContain(
       'document.removeEventListener("mousedown", handleClick)',
     );
   });
 
   it("the Use my location item keeps the busy state and double-tap guard", () => {
-    expect(source).toContain("disabled={locating}");
-    expect(source).toContain("aria-busy={locating}");
-    expect(source).toContain("if (locating) return;");
+    expect(menu).toContain("disabled={locating}");
+    expect(menu).toContain("aria-busy={locating}");
+    expect(menu).toContain("if (locating) return;");
   });
 });
 
@@ -236,28 +237,28 @@ describe("Header — header pill on phones", () => {
 
 describe("Header — My Location (GPS) action", () => {
   it("uses the shared geolocation flow with auto-create (same as My Weather modal)", () => {
-    expect(source).toContain('await import("@/lib/geolocation")');
-    expect(source).toContain("detectUserLocation({ autoCreate: true })");
+    expect(menu).toContain('await import("@/lib/geolocation")');
+    expect(menu).toContain("detectUserLocation({ autoCreate: true })");
   });
 
   it("selects the detected location and returns to the home page (no slug URL)", () => {
-    expect(source).toContain("setSelectedLocation(result.location.slug)");
-    expect(source).toContain('router.push("/")');
-    expect(source).not.toContain("router.push(`/${result.location.slug}`)");
+    expect(menu).toContain("setSelectedLocation(result.location.slug)");
+    expect(menu).toContain('router.push("/")');
+    expect(menu).not.toContain("router.push(`/${result.location.slug}`)");
   });
 
   it("only accepts a valid location slug from geolocation", () => {
-    expect(source).toContain("isLocationSlug(result.location.slug)");
+    expect(menu).toContain("isLocationSlug(result.location.slug)");
   });
 
   it("falls back to the My Weather modal on denial or failure", () => {
-    expect(source).toMatch(/} else \{\s*openMyWeather\(\);/);
+    expect(menu).toMatch(/} else \{\s*openMyWeather\(\);/);
   });
 
   it("tracks geolocation_result and location_changed analytics events", () => {
-    expect(source).toContain('trackEvent("geolocation_result"');
-    expect(source).toContain('trackEvent("location_changed"');
-    expect(source).toContain('method: "geolocation"');
+    expect(menu).toContain('trackEvent("geolocation_result"');
+    expect(menu).toContain('trackEvent("location_changed"');
+    expect(menu).toContain('method: "geolocation"');
   });
 });
 
@@ -304,8 +305,8 @@ describe("Header — weather map link", () => {
   });
 
   it("derives the slug from the current location (first path segment or store)", () => {
-    expect(source).toMatch(
-      /import \{[^}]*currentLocationSlug[^}]*isLocationSlug[^}]*\} from "@\/lib\/current-slug"/,
+    expect(source).toContain(
+      'import { currentLocationSlug } from "@/lib/current-slug"',
     );
     expect(source).toContain(
       "const mapSlug = currentLocationSlug(pathname, selectedLocation);",
@@ -323,8 +324,45 @@ describe("Header — weather map link", () => {
 
 describe("Header — My Location button", () => {
   it("seeds the home page with the found place and refreshes it in place on /", () => {
-    expect(source).toContain("writeLastLocationCookie(result.location.slug)");
-    expect(source).toContain("new CustomEvent(CURRENT_LOCATION_EVENT");
-    expect(source).toContain('router.push("/")');
+    expect(menu).toContain("writeLastLocationCookie(result.location.slug)");
+    expect(menu).toContain("new CustomEvent(CURRENT_LOCATION_EVENT");
+    expect(menu).toContain('router.push("/")');
+  });
+});
+
+describe("MobileMoreMenu — one menu, two homes", () => {
+  const hero = readFileSync(
+    resolve(__dirname, "../weather/CurrentConditions.tsx"),
+    "utf-8",
+  );
+
+  it("is the header's phone menu and the hero's, from one component", () => {
+    expect(source).toContain("<MobileMoreMenu");
+    expect(hero).toContain("<MobileMoreMenu");
+    expect(hero).toContain('buttonClassName="kestrel-round"');
+  });
+
+  it("lists the account (Account when signed in, Sign in otherwise)", () => {
+    expect(menu).toContain('authedUser ? "/profile" : "/auth/signin"');
+    expect(menu).toContain('authedUser ? "Account" : "Sign in"');
+  });
+});
+
+describe("Header over the sky hero", () => {
+  it("is marked so CSS can hide it on phones and make it transparent from sm", () => {
+    expect(source).toContain("data-site-header");
+    expect(source).toContain('data-scrolled={isScrolled ? "" : undefined}');
+    expect(css).toContain("body:has([data-sky-hero]) [data-site-header]");
+    const phone = css.slice(css.indexOf("@media (max-width: 639.98px)"));
+    expect(phone.slice(0, phone.indexOf("\n}\n"))).toContain("display: none");
+  });
+
+  it("keeps the bottom controls: only the <header> is hidden, never MobileNav", () => {
+    expect(css).not.toMatch(/\[data-sky-hero\][^{]*MobileNav/);
+    expect(source).toContain("<MobileNav");
+  });
+
+  it("gains its blurred surface only after scroll (unchanged)", () => {
+    expect(source).toContain("bg-surface-base/70 backdrop-blur-xl");
   });
 });

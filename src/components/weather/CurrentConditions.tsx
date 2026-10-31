@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, type ReactNode } from "react";
+import { MobileMoreMenu } from "@/components/layout/MobileMoreMenu";
 import {
   ShareIcon,
   NavigationIcon,
@@ -19,14 +20,12 @@ import { feasibilitySeries } from "@/lib/activity-feasibility";
 import { fetchSuitabilityRules } from "@/lib/suitability-cache";
 import type { SuitabilityRuleDoc } from "@/lib/db";
 import {
-  SKY_CLASS,
   activityDotClass,
-  formatFeelsLike,
-  formatHighLow,
+  formatHighLowParts,
   heroActivityClause,
+  heroLocalTime,
   heroBadgeLabel,
   heroEyebrowBadges,
-  heroOutlook,
   isHomeLocation,
   skyFamily,
   type HeroBadge,
@@ -50,6 +49,8 @@ interface Props {
   /** Quiet content at the foot of the sky (the season line on the location
    *  page). Kept as a slot so the hero stays a single block. */
   footer?: ReactNode;
+  /** The breadcrumb trail, rendered at the left of the hero's top row. */
+  breadcrumb?: ReactNode;
 }
 
 /** Small house glyph for the HOME eyebrow — currentColor, decorative. */
@@ -95,24 +96,23 @@ export function CurrentConditions({
   slug,
   isCurrentLocation = false,
   footer,
+  breadcrumb,
 }: Props) {
   const info = weatherCodeToInfo(current.weather_code);
   const isDay = current.is_day === 1;
   const family = skyFamily(current.weather_code, isDay);
   const temperature = Math.round(current.temperature_2m);
   // Guard empty daily arrays — the formatter returns null instead of "H:NaN°".
-  const highLow = formatHighLow(
+  const highLow = formatHighLowParts(
     daily?.temperature_2m_max?.[0],
     daily?.temperature_2m_min?.[0],
   );
-  const feels = formatFeelsLike(current.apparent_temperature);
   // homeLocation is a store field added by another agent; read it defensively
   // so this component works whether or not the field exists yet.
   const homeLocation = useAppStore(
     (s) => (s as { homeLocation?: string | null }).homeLocation ?? null,
   );
   const selectedActivities = useAppStore((s) => s.selectedActivities);
-  const openMyWeather = useAppStore((s) => s.openMyWeather);
   const badges = heroEyebrowBadges(
     isCurrentLocation,
     isHomeLocation(slug, homeLocation),
@@ -148,11 +148,6 @@ export function CurrentConditions({
     };
   }, [hasSelection]);
 
-  const outlook = useMemo(
-    () => (now ? heroOutlook(hourly, now, utcOffsetSeconds) : null),
-    [hourly, now, utcOffsetSeconds],
-  );
-
   // "For your activities": the first selected activity with a readable series.
   const activityLine = useMemo(() => {
     if (!now || !hourly || !hasSelection) return null;
@@ -180,6 +175,8 @@ export function CurrentConditions({
     dbRules,
     utcOffsetSeconds,
   ]);
+
+  const localTime = heroLocalTime(now, utcOffsetSeconds);
 
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
@@ -221,35 +218,19 @@ export function CurrentConditions({
     <section
       aria-labelledby="current-conditions-heading"
       data-sky-hero
-      className="relative isolate"
+      data-sky={family}
+      className="relative text-[var(--sky-fg)]"
     >
-      {/* Open sky — no card. A full-bleed gradient band behind the hero,
-          condition family × day/night (src/lib/hero.ts skyFamily); static CSS,
-          so it never fights the fixed WeatherBackdrop, into which its lower
-          edge fades. The content below stays in the page column. */}
-      <div
-        aria-hidden="true"
-        data-sky={family}
-        className={`kestrel ${SKY_CLASS[family]}`}
-      />
-      <div className="relative pt-1 pr-[env(safe-area-inset-right,0px)] pb-[var(--sky-fade)] pl-[env(safe-area-inset-left,0px)] text-left text-[var(--sky-fg)]">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            {badges.length > 0 && (
-              <p className="mb-1 flex flex-wrap items-center gap-x-3 text-sm font-semibold uppercase tracking-widest">
-                {badges.map((badge) => (
-                  <EyebrowBadge key={badge} badge={badge} />
-                ))}
-              </p>
-            )}
-            <h2
-              id="current-conditions-heading"
-              className="font-heading text-2xl font-semibold break-words sm:text-3xl"
-            >
-              {locationName}
-            </h2>
-          </div>
-          <div className="relative shrink-0">
+      {/* Top row — breadcrumb at the left, Share and (phones) the ⋯ menu at the
+          right. On phones the site header is not drawn over the sky (see
+          globals.css, [data-sky-hero]), so these controls are the page's top
+          chrome. Round 48px controls: content stays distinct from controls. */}
+      <div className="flex items-center justify-between gap-3 pt-1 pr-[env(safe-area-inset-right,0px)] pl-[env(safe-area-inset-left,0px)]">
+        <div className="min-w-0 text-[0.8125rem] text-[var(--sky-fg-dim)]">
+          {breadcrumb}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="relative">
             <button
               type="button"
               onClick={handleShare}
@@ -269,45 +250,56 @@ export function CurrentConditions({
               {copied ? "Link copied" : copyFailed ? "Copy failed" : ""}
             </span>
           </div>
+          <div className="relative sm:hidden">
+            <MobileMoreMenu
+              buttonClassName="kestrel-round"
+              iconClassName="text-[var(--sky-fg)]"
+            />
+          </div>
         </div>
-        <div className="mt-1 flex items-center justify-between gap-3">
-          <p className="flex items-start leading-none tracking-tight">
-            <span className="sr-only">{temperature} degrees Celsius</span>
-            <span
-              className="font-heading text-[clamp(5rem,26vw,6.5rem)] leading-[0.95] font-semibold tabular-nums"
-              aria-hidden="true"
-            >
-              {temperature}
-            </span>
-            <span
-              className="font-heading mt-[0.5rem] text-[clamp(2.25rem,12vw,3rem)] leading-none font-semibold"
-              aria-hidden="true"
-            >
-              °
-            </span>
-          </p>
+      </div>
+      <div className="flex flex-col items-center pt-4 pb-[26px] text-center">
+        {/* Eyebrow: MY LOCATION / HOME, else the place's own clock. The line is
+            always reserved so the clock arriving after mount never shifts
+            the page. */}
+        <p className="flex min-h-[1.125rem] flex-wrap items-center justify-center gap-x-2 font-mono text-xs font-medium uppercase tracking-[0.18em] text-[var(--sky-fg-dim)]">
+          {badges.length > 0
+            ? badges.map((badge, i) => (
+                <span key={badge} className="inline-flex items-center gap-2">
+                  {i > 0 && <span aria-hidden="true">·</span>}
+                  <EyebrowBadge badge={badge} />
+                </span>
+              ))
+            : localTime}
+        </p>
+        <h2
+          id="current-conditions-heading"
+          className="font-heading text-[2.25rem] leading-[1.15] font-medium break-words"
+        >
+          {locationName}
+        </h2>
+        <p className="mt-1 max-w-full font-sans text-[6.5rem] leading-none font-extralight tracking-[-2px] tabular-nums">
+          <span className="sr-only">{temperature} degrees Celsius</span>
+          <span aria-hidden="true">{temperature}°</span>
+        </p>
+        <p className="mt-1 flex items-center justify-center gap-1.5 text-xl font-normal">
           <span aria-hidden="true" className="shrink-0">
             <WeatherIcon
               icon={isDay ? info.icon : nightIcon(info.icon)}
-              size={56}
+              size={20}
             />
           </span>
-        </div>
-        <p className="mt-1 text-xl font-semibold sm:text-2xl">{info.label}</p>
-        {(highLow || feels) && (
-          <p className="mt-1 flex flex-wrap items-baseline gap-x-2 text-lg font-medium tabular-nums">
-            {highLow && <span className="whitespace-pre">{highLow}</span>}
-            {highLow && feels && <span aria-hidden="true">·</span>}
-            {feels && <span>{feels}</span>}
+          <span>{info.label}</span>
+        </p>
+        {highLow && (
+          <p className="mt-1 flex flex-wrap justify-center gap-x-3 text-[1.0625rem] font-medium tabular-nums text-[var(--sky-fg-dim)]">
+            {highLow.map((part) => (
+              <span key={part}>{part}</span>
+            ))}
           </p>
         )}
-        {outlook && (
-          <p className="mt-3 max-w-[30ch] text-base leading-relaxed">
-            {outlook}
-          </p>
-        )}
-        {activityLine ? (
-          <p className="mt-3 flex items-center gap-2 text-base font-semibold">
+        {activityLine && (
+          <p className="mt-3 flex items-center justify-center gap-2 text-base font-medium">
             <span
               aria-hidden="true"
               className={`size-2.5 shrink-0 rounded-full ring-2 ring-current ${activityLine.dot}`}
@@ -316,18 +308,8 @@ export function CurrentConditions({
               {activityLine.label}: {activityLine.clause}
             </span>
           </p>
-        ) : (
-          !hasSelection && (
-            <button
-              type="button"
-              onClick={() => openMyWeather("activities")}
-              className="kestrel-link mt-1"
-            >
-              Pick activities for tailored advice
-            </button>
-          )
         )}
-        {footer && <div className="mt-2 flex">{footer}</div>}
+        {footer && <div className="mt-3 flex justify-center">{footer}</div>}
       </div>
     </section>
   );

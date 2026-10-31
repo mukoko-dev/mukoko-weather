@@ -1739,150 +1739,228 @@ body {
   }
 }
 
-/* ===== Location hero — open sky (redesign/hero-open-sky) =====
-   No card: the sky is the top of the page. One full-bleed band behind the hero
-   with a vertical gradient chosen by condition family × day/night (family from
-   src/lib/hero.ts skyFamily). Light and dark are separate designs, not
-   inversions: in light the sky is a mid-saturation day or dusk gradient, in
-   dark it is deep night. Every stop keeps WHITE text (--sky-fg) at 4.5:1 or
-   better — src/lib/hero-sky.test.ts computes that for all 16 gradients.
-   The band is static CSS (no animation). Its lower edge fades out over
-   --sky-fade so it melts into the fixed WeatherBackdrop; the hourly panel
-   overlaps the last --sky-lip of it. */
+/* ===== Location hero — the sky is the page (redesign/hero-open-sky) =====
+   No card: the sky is the PAGE BACKGROUND. WeatherBackdrop paints one fixed,
+   full-viewport gradient chosen by condition family x day/night (family from
+   src/lib/hero.ts skyFamily), so it extends under the header and the bottom
+   controls. Light and dark are separate designs, not inversions: day skies
+   in light, deep night/dusk in dark. The night and rain skies are the owner's
+   mockup values. Every stop keeps WHITE text (--sky-fg) at 4.5:1 or better and
+   so does the dimmer H/L white (--sky-fg-dim): src/lib/hero.test.ts computes
+   it for every gradient. All static CSS, no animation. */
 :root {
   --sky-fg: #ffffff;
-  --sky-fade: 1.75rem;
-  --sky-lip: 0.875rem;
+  --sky-fg-dim: #e6eaf8;
+  --sky-fade-from: 80%;
+  --radius-sky-card: 1.375rem;
   --sky-clear-day-top: #1b5aa6;
-  --sky-clear-day-bottom: #3475b8;
-  --sky-clear-night-top: #0b1a33;
-  --sky-clear-night-bottom: #243f73;
+  --sky-clear-day-mid: #2563a8;
+  --sky-clear-day-bottom: #2c69ab;
+  --sky-clear-night-top: #0b1026;
+  --sky-clear-night-mid: #151c42;
+  --sky-clear-night-bottom: #1c2550;
   --sky-cloudy-day-top: #4a5563;
-  --sky-cloudy-day-bottom: #667384;
-  --sky-cloudy-night-top: #1f2630;
-  --sky-cloudy-night-bottom: #3a4655;
+  --sky-cloudy-day-mid: #515c6b;
+  --sky-cloudy-day-bottom: #5a6574;
+  --sky-cloudy-night-top: #141a26;
+  --sky-cloudy-night-mid: #1e2636;
+  --sky-cloudy-night-bottom: #2b3548;
   --sky-fog-top: #565d66;
-  --sky-fog-bottom: #6a7179;
-  --sky-rain-top: #2b3b4f;
-  --sky-rain-bottom: #455c78;
+  --sky-fog-mid: #5a6169;
+  --sky-fog-bottom: #5f666e;
+  --sky-rain-top: #3a4656;
+  --sky-rain-mid: #4a5768;
+  --sky-rain-bottom: #3e4a5a;
   --sky-storm-top: #231f30;
+  --sky-storm-mid: #33293f;
   --sky-storm-bottom: #453a5c;
   --sky-snow-top: #3f566f;
-  --sky-snow-bottom: #56718f;
+  --sky-snow-mid: #476079;
+  --sky-snow-bottom: #4f6a88;
 }
 
 [data-theme="dark"] {
   --sky-clear-day-top: #0d2547;
+  --sky-clear-day-mid: #153a68;
   --sky-clear-day-bottom: #1d4a80;
-  --sky-clear-night-top: #050c1a;
-  --sky-clear-night-bottom: #12254a;
   --sky-cloudy-day-top: #262d37;
+  --sky-cloudy-day-mid: #303946;
   --sky-cloudy-day-bottom: #3a4553;
   --sky-cloudy-night-top: #0f1319;
+  --sky-cloudy-night-mid: #171d26;
   --sky-cloudy-night-bottom: #1f2833;
   --sky-fog-top: #2a2f35;
+  --sky-fog-mid: #373d44;
   --sky-fog-bottom: #444b53;
-  --sky-rain-top: #141d29;
-  --sky-rain-bottom: #28394f;
   --sky-storm-top: #0f0c17;
+  --sky-storm-mid: #1b1626;
   --sky-storm-bottom: #2a2238;
   --sky-snow-top: #1f2d3e;
+  --sky-snow-mid: #2c4057;
   --sky-snow-bottom: #3c5672;
 }
 
 @layer components {
-  /* .kestrel — the hero's sky band (the kestrel hovers in open sky). Put on
-     an element INSIDE a `relative isolate` hero section: it spans the viewport
-     (full bleed), sits behind the content, and fades out at its lower edge.
-     A family modifier points --kestrel-top/bottom at one --sky-* pair. */
+  /* .kestrel — the page sky (the kestrel hovers in open sky). Fills its
+     positioned parent (WeatherBackdrop's fixed full-viewport box). A family
+     modifier points --kestrel-top/mid/bottom at one --sky-* triple. */
   .kestrel {
     --kestrel-top: var(--sky-clear-day-top);
+    --kestrel-mid: var(--sky-clear-day-mid);
     --kestrel-bottom: var(--sky-clear-day-bottom);
+    --kestrel-mid-at: 50%;
     position: absolute;
-    inset-block: 0;
-    left: 50%;
-    width: 100vw;
-    z-index: -1;
-    transform: translateX(-50%);
-    pointer-events: none;
+    inset: 0;
     background-image: linear-gradient(
       to bottom,
-      var(--kestrel-top),
-      var(--kestrel-bottom)
-    );
-    mask-image: linear-gradient(
-      to bottom,
-      black calc(100% - var(--sky-fade)),
-      transparent
+      var(--kestrel-top) 0%,
+      var(--kestrel-mid) var(--kestrel-mid-at),
+      var(--kestrel-bottom) 100%
     );
   }
   .kestrel-clear-day {
     --kestrel-top: var(--sky-clear-day-top);
+    --kestrel-mid: var(--sky-clear-day-mid);
     --kestrel-bottom: var(--sky-clear-day-bottom);
   }
   .kestrel-clear-night {
     --kestrel-top: var(--sky-clear-night-top);
+    --kestrel-mid: var(--sky-clear-night-mid);
     --kestrel-bottom: var(--sky-clear-night-bottom);
+    --kestrel-mid-at: 55%;
   }
   .kestrel-cloudy-day {
     --kestrel-top: var(--sky-cloudy-day-top);
+    --kestrel-mid: var(--sky-cloudy-day-mid);
     --kestrel-bottom: var(--sky-cloudy-day-bottom);
   }
   .kestrel-cloudy-night {
     --kestrel-top: var(--sky-cloudy-night-top);
+    --kestrel-mid: var(--sky-cloudy-night-mid);
     --kestrel-bottom: var(--sky-cloudy-night-bottom);
+    --kestrel-mid-at: 55%;
   }
   .kestrel-fog {
     --kestrel-top: var(--sky-fog-top);
+    --kestrel-mid: var(--sky-fog-mid);
     --kestrel-bottom: var(--sky-fog-bottom);
   }
   .kestrel-rain {
     --kestrel-top: var(--sky-rain-top);
+    --kestrel-mid: var(--sky-rain-mid);
     --kestrel-bottom: var(--sky-rain-bottom);
+    --kestrel-mid-at: 45%;
   }
   .kestrel-storm {
     --kestrel-top: var(--sky-storm-top);
+    --kestrel-mid: var(--sky-storm-mid);
     --kestrel-bottom: var(--sky-storm-bottom);
   }
   .kestrel-snow {
     --kestrel-top: var(--sky-snow-top);
+    --kestrel-mid: var(--sky-snow-mid);
     --kestrel-bottom: var(--sky-snow-bottom);
   }
-  /* .kestrel-link — quiet underlined text action on the sky (the demoted
-     "Pick activities" call). A real control with a 48px hit area. */
-  .kestrel-link {
-    @apply inline-flex items-center rounded-[var(--radius-button)] text-base
-           font-medium underline underline-offset-4 transition-opacity
-           hover:opacity-80 active:opacity-70
-           min-h-[var(--touch-target-min)];
+
+  /* Light texture by condition — static, faint, never animated. Stars sit on
+     the night skies; diagonal streaks sit on the first 340px of rain/storm. */
+  .kestrel-stars {
+    position: absolute;
+    inset: 0;
+    background-image:
+      radial-gradient(1px 1px at 12% 9%, var(--sky-fg) 50%, transparent 51%),
+      radial-gradient(1px 1px at 31% 4%, var(--sky-fg) 50%, transparent 51%),
+      radial-gradient(
+        1.5px 1.5px at 74% 7%,
+        var(--sky-fg) 50%,
+        transparent 51%
+      ),
+      radial-gradient(1px 1px at 88% 14%, var(--sky-fg) 50%, transparent 51%),
+      radial-gradient(1px 1px at 8% 26%, var(--sky-fg) 50%, transparent 51%),
+      radial-gradient(1px 1px at 52% 19%, var(--sky-fg) 50%, transparent 51%),
+      radial-gradient(
+        1.5px 1.5px at 93% 33%,
+        var(--sky-fg) 50%,
+        transparent 51%
+      ),
+      radial-gradient(1px 1px at 22% 38%, var(--sky-fg) 50%, transparent 51%),
+      radial-gradient(1px 1px at 63% 31%, var(--sky-fg) 50%, transparent 51%),
+      radial-gradient(1px 1px at 40% 12%, var(--sky-fg) 50%, transparent 51%);
+    opacity: 0.55;
+  }
+  .kestrel-streaks {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 340px;
+    background-image: repeating-linear-gradient(
+      105deg,
+      var(--sky-fg) 0 1px,
+      transparent 1px 14px
+    );
+    opacity: 0.12;
+  }
+
+  /* .kestrel-card — a translucent bordered card on the sky (the Conditions
+     card). Fill and hairline are the sky foreground at low alpha; no shadow,
+     no blur. Inside it the text tokens are re-pointed at the sky foreground,
+     so every existing child (headings, hour tiles, links) reads on the sky. */
+  .kestrel-card {
+    --color-text-primary: var(--sky-fg);
+    --color-text-secondary: var(--sky-fg-dim);
+    --color-text-tertiary: var(--sky-fg-dim);
+    --color-primary: var(--sky-fg);
+    --color-rain: var(--sky-fg);
+    --color-border: color-mix(in srgb, var(--sky-fg) 16%, transparent);
+    --color-surface-base: transparent;
+    --color-surface-elevated: color-mix(
+      in srgb,
+      var(--sky-fg) 10%,
+      transparent
+    );
+    background-color: color-mix(in srgb, var(--sky-fg) 7%, transparent);
+    border: 1px solid color-mix(in srgb, var(--sky-fg) 16%, transparent);
+    border-radius: var(--radius-sky-card);
+    padding: var(--space-card);
     color: var(--sky-fg);
   }
-  /* .kestrel-round — round 48px icon control on the sky (Share). A hairline
-     border, no fill and no shadow: Mzizi separates with borders. */
+
+  /* .kestrel-round — round 48px icon control on the sky (Share, the ⋯ menu).
+     A hairline border and a faint fill, no shadow: Mzizi separates with
+     borders. */
   .kestrel-round {
     @apply flex shrink-0 items-center justify-center rounded-full border
            transition-colors active:scale-95
            w-[var(--touch-target-min)] h-[var(--touch-target-min)];
     color: var(--sky-fg);
-    border-color: color-mix(in srgb, var(--sky-fg) 55%, transparent);
+    background-color: color-mix(in srgb, var(--sky-fg) 8%, transparent);
+    border-color: color-mix(in srgb, var(--sky-fg) 22%, transparent);
   }
   .kestrel-round:hover {
-    background-color: color-mix(in srgb, var(--sky-fg) 14%, transparent);
+    background-color: color-mix(in srgb, var(--sky-fg) 16%, transparent);
   }
-  .kestrel-round:focus-visible,
-  .kestrel-link:focus-visible {
+  .kestrel-round:focus-visible {
     outline: 2px solid var(--sky-fg);
     outline-offset: 2px;
   }
+}
 
-  /* The hourly panel overlaps the bottom of the sky band: it follows the hero
-     in the stack and climbs --sky-lip into it (the stack gap is cancelled
-     first). Only the panel directly after the hero does this. */
-  .herd > :has([data-sky-hero]) + :has([data-hourly-strip]) {
-    position: relative;
-    z-index: 10;
-    margin-top: calc(-1 * (var(--space-section) + var(--sky-lip)));
+/* The sky runs to the top of the screen. While a page shows the sky hero
+   ([data-sky-hero]) the phone header is not drawn: the hero's own top row holds
+   the breadcrumb, Share and the ⋯ menu (the bottom controls stay). From `sm`
+   the one app header stays, transparent over the sky with its text pointed at
+   the sky foreground, and only gains its blurred surface after scroll
+   ([data-scrolled]). Pure CSS on the body, so there is no flash and a page
+   without the hero (the chooser, every other route) is untouched. */
+@media (max-width: 639.98px) {
+  body:has([data-sky-hero]) [data-site-header] {
+    display: none;
   }
+}
+body:has([data-sky-hero]) [data-site-header]:not([data-scrolled]) {
+  --color-text-primary: var(--sky-fg);
+  --color-text-secondary: var(--sky-fg);
+  --color-text-tertiary: var(--sky-fg);
+  color: var(--sky-fg);
 }
 
 /* ===== Weather sky palette (redesign/weather-colours) =====

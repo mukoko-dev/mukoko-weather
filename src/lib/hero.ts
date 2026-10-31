@@ -56,7 +56,7 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 /**
- * Formats today's high/low as the hero line, e.g. "H 34°  L 25°".
+ * Formats today's high/low as the hero line, e.g. "H:34°  L:25°".
  * Returns null when either value is missing or not a finite number, so the
  * hero never renders "H NaN°" (the daily arrays can be empty).
  */
@@ -65,18 +65,37 @@ export function formatHighLow(
   low: number | null | undefined,
 ): string | null {
   if (!isFiniteNumber(high) || !isFiniteNumber(low)) return null;
-  return `H ${Math.round(high)}°  L ${Math.round(low)}°`;
+  return `H:${Math.round(high)}°  L:${Math.round(low)}°`;
 }
 
 /**
- * The "Feels 27°" part of the hero's second line. Null when the apparent
- * temperature is missing or not finite (missing is never zero).
+ * The hero's H/L line as separate parts, ["H:34°", "L:25°"] — the line wraps
+ * between them at large text sizes instead of overflowing. Null when either
+ * value is missing or not finite.
  */
-export function formatFeelsLike(
-  apparent: number | null | undefined,
+export function formatHighLowParts(
+  high: number | null | undefined,
+  low: number | null | undefined,
+): [string, string] | null {
+  if (!isFiniteNumber(high) || !isFiniteNumber(low)) return null;
+  return [`H:${Math.round(high)}°`, `L:${Math.round(low)}°`];
+}
+
+/**
+ * "17:03 LOCAL" — the place's own clock for the hero eyebrow when no MY
+ * LOCATION / HOME badge applies. Read in the PLACE's UTC offset, never the
+ * viewer's zone; null until the caller has a client clock.
+ */
+export function heroLocalTime(
+  now: Date | null,
+  offsetSeconds?: number | null,
 ): string | null {
-  if (!isFiniteNumber(apparent)) return null;
-  return `Feels ${Math.round(apparent)}°`;
+  if (!now || !Number.isFinite(now.getTime())) return null;
+  const local = new Date(
+    now.getTime() + resolveOffsetSeconds(offsetSeconds, now) * 1000,
+  );
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())} LOCAL`;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +151,17 @@ export const SKY_CLASS: Record<SkyFamily, string> = {
   storm: "kestrel-storm",
   snow: "kestrel-snow",
 };
+
+/**
+ * The faint static texture a sky carries: stars on the night skies, diagonal
+ * streaks on rain and storms, nothing on the rest. Never animated.
+ */
+export type SkyTexture = "stars" | "streaks";
+export function skyTexture(family: SkyFamily): SkyTexture | null {
+  if (family === "clear-night" || family === "cloudy-night") return "stars";
+  if (family === "rain" || family === "storm") return "streaks";
+  return null;
+}
 
 /** Activity category → solid mineral dot (static literals for Tailwind JIT). */
 export const ACTIVITY_DOT_CLASS: Record<string, string> = {

@@ -71,9 +71,10 @@ export function DeviceSnapshot({
                 <HourlyScrollCards
                   hourly={weather.hourly}
                   utcOffsetSeconds={weather.utc_offset_seconds}
+                  variant="sky"
                   heading={{
                     headingId: "device-hourly-heading",
-                    title: "Hourly",
+                    title: "Conditions",
                   }}
                 />
               </section>

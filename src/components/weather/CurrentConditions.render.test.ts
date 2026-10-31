@@ -1,14 +1,27 @@
 /**
  * The open-sky hero, rendered for real (react-dom/server): what a visitor's
- * HTML contains for each condition family, with and without an eyebrow,
- * activities and missing data. Effects do not run on the server, so the
- * clock-driven lines (outlook, activity clause) are covered by hero.test.ts.
+ * HTML contains for each condition family, with and without an eyebrow, a
+ * breadcrumb, a footer and missing data. Effects do not run on the server, so
+ * the clock-driven pieces (the local-time eyebrow, the activity clause) are
+ * covered by hero.test.ts.
  */
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// The ⋯ menu pulls in the auth client (needs the Next runtime); its own
+// structure is covered in Header.test.ts.
+vi.mock("@/components/layout/MobileMoreMenu", () => ({
+  MobileMoreMenu: (p: { buttonClassName: string }) =>
+    createElement("button", {
+      type: "button",
+      "aria-label": "More options",
+      className: p.buttonClassName,
+    }),
+}));
+
 import { CurrentConditions } from "./CurrentConditions";
-import { SKY_CLASS, skyFamily, type SkyFamily } from "@/lib/hero";
+import { skyFamily, type SkyFamily } from "@/lib/hero";
 import type { CurrentWeather, DailyWeather } from "@/lib/weather";
 
 const base: CurrentWeather = {
@@ -58,95 +71,96 @@ const CASES: Array<[SkyFamily, Partial<CurrentWeather>]> = [
   ["snow", { weather_code: 73 }],
 ];
 
-describe("CurrentConditions render — open sky", () => {
-  it.each(CASES)("paints the %s sky band behind the hero", (family, cur) => {
+describe("CurrentConditions render — the sky hero", () => {
+  it.each(CASES)("tags the %s hero with its sky family", (family, cur) => {
     expect(skyFamily(cur.weather_code ?? 0, cur.is_day !== 0)).toBe(family);
     const html = render(cur);
-    expect(html).toContain(`kestrel ${SKY_CLASS[family]}`);
     expect(html).toContain(`data-sky="${family}"`);
     expect(html).toContain("data-sky-hero");
   });
 
   it("has no card: no baobab/acacia surface, shadow or legacy plate", () => {
-    const html = render();
-    expect(html).not.toMatch(/baobab|acacia|shadow|kori|plate/);
+    expect(render()).not.toMatch(/baobab|acacia|shadow|kori|plate/);
   });
 
-  it("marks the band decorative", () => {
-    expect(render()).toMatch(/<div aria-hidden="true" data-sky="clear-day"/);
-  });
-
-  it("is left-aligned and labelled by the place-name heading", () => {
+  it("is a centred stack labelled by the place-name heading", () => {
     const html = render();
-    expect(html).toContain("text-left");
+    expect(html).toContain("text-center");
     expect(html).toContain('aria-labelledby="current-conditions-heading"');
     expect(html).toMatch(/<h2 id="current-conditions-heading"[^>]*>Harare</);
   });
 
-  it("shows the temperature as the single huge Noto Serif element", () => {
+  it("shows the temperature as one weight-200 numeral with the degree sign", () => {
     const html = render();
     expect(html).toContain("28 degrees Celsius");
-    expect(html).toContain("font-heading text-[clamp(5rem,26vw,6.5rem)]");
-    expect(html).toContain("tabular-nums");
+    expect(html).toContain("font-extralight");
+    expect(html).toMatch(/<span aria-hidden="true">28°<\/span>/);
   });
 
-  it("shows H/L and Feels on one wrapping line", () => {
-    const html = render();
-    expect(html).toContain("H 28°  L 13°");
-    expect(html).toContain("Feels 27°");
-    expect(html).toContain("flex-wrap");
-  });
-
-  it("omits the H/L and Feels parts that are missing (never zero)", () => {
-    const html = render(
-      { apparent_temperature: Number.NaN },
-      { daily: undefined },
-    );
-    expect(html).not.toContain("Feels");
-    expect(html).not.toContain("H NaN");
-    expect(html).not.toMatch(/Feels 0|H 0/);
-  });
-
-  it("renders a decorative 56px condition icon, moon at night", () => {
+  it("shows the condition with an aria-hidden 20px glyph, a moon at night", () => {
     const day = render({ weather_code: 0, is_day: 1 });
     const night = render({ weather_code: 0, is_day: 0 });
-    expect(day).toContain('width="56"');
+    expect(day).toContain('width="20"');
     expect(day).toMatch(/<span aria-hidden="true" class="shrink-0"><svg/);
-    expect(night).toContain('width="56"');
+    expect(day).toContain("Clear sky");
     expect(night).not.toBe(day);
   });
 
-  it("puts Share in a round 48px control with a name, at the top", () => {
+  it("shows H:/L: as two wrapping parts", () => {
     const html = render();
-    expect(html).toContain('aria-label="Share weather for Harare"');
-    expect(html).toContain('class="kestrel-round"');
-    expect(html.indexOf("kestrel-round")).toBeLessThan(
-      html.indexOf("degrees Celsius"),
-    );
+    expect(html).toContain("<span>H:28°</span><span>L:13°</span>");
+    expect(html).toContain("flex-wrap");
   });
 
-  it("demotes the activities call to a quiet text link that is still a button", () => {
+  it("omits H/L when missing, never H:NaN or zero", () => {
+    const html = render({}, { daily: undefined });
+    expect(html).not.toMatch(/H:/);
+    expect(html).not.toContain("NaN");
+  });
+
+  it("does not repeat the outlook, feels-like or an activities call in the hero", () => {
     const html = render();
-    expect(html).toMatch(
-      /<button type="button" class="kestrel-link mt-1">Pick activities for tailored advice<\/button>/,
-    );
+    expect(html).not.toContain("Feels");
+    expect(html).not.toContain("Pick activities");
     expect(html).not.toContain("kudu");
   });
 
-  it("shows the eyebrow only for current location or home", () => {
-    expect(render()).not.toContain("My Location");
+  it("puts the breadcrumb, Share and the phone ⋯ menu in the top row, before the stack", () => {
+    const html = render(
+      {},
+      {
+        breadcrumb: createElement(
+          "nav",
+          { "aria-label": "Breadcrumb" },
+          "Home / Harare",
+        ),
+      },
+    );
+    const crumb = html.indexOf("Home / Harare");
+    const share = html.indexOf('aria-label="Share weather for Harare"');
+    const more = html.indexOf('aria-label="More options"');
+    const name = html.indexOf('id="current-conditions-heading"');
+    expect(crumb).toBeGreaterThan(-1);
+    expect(crumb).toBeLessThan(share);
+    expect(share).toBeLessThan(more);
+    expect(more).toBeLessThan(name);
+    expect(html).toContain('class="kestrel-round"');
+    expect(html).toMatch(
+      /<div class="relative sm:hidden"><button[^>]*kestrel-round/,
+    );
+  });
+
+  it("shows the eyebrow only for current location or home, keeping the line reserved", () => {
+    const plain = render();
+    expect(plain).not.toContain("My Location");
+    expect(plain).toContain("min-h-[1.125rem]");
     const html = render({}, { isCurrentLocation: true });
     expect(html).toContain("My Location");
     expect(html).toContain("uppercase");
   });
 
-  it("places the footer slot (season line) at the foot of the sky", () => {
+  it("places the footer slot (season line) at the foot of the hero", () => {
     const html = render({}, { footer: createElement("span", null, "Rainy") });
-    expect(html).toContain("Rainy");
-    expect(html.indexOf("Rainy")).toBeGreaterThan(html.indexOf("kestrel-link"));
-  });
-
-  it("reserves the fade below its content for the overlapping hourly panel", () => {
-    expect(render()).toContain("pb-[var(--sky-fade)]");
+    expect(html.indexOf("Rainy")).toBeGreaterThan(html.indexOf("H:28°"));
   });
 });

@@ -5,7 +5,9 @@ import {
   SKY_CLASS,
   activityDotClass,
   currentHourIndex,
-  formatFeelsLike,
+  formatHighLowParts,
+  skyTexture,
+  heroLocalTime,
   formatHighLow,
   heroActivityClause,
   heroBadgeLabel,
@@ -68,11 +70,11 @@ describe("isHomeLocation", () => {
 
 describe("formatHighLow", () => {
   it("formats the hero line with two spaces between H and L", () => {
-    expect(formatHighLow(34.4, 24.6)).toBe("H 34°  L 25°");
+    expect(formatHighLow(34.4, 24.6)).toBe("H:34°  L:25°");
   });
 
   it("rounds each value to the nearest whole degree", () => {
-    expect(formatHighLow(33.5, 25.49)).toBe("H 34°  L 25°");
+    expect(formatHighLow(33.5, 25.49)).toBe("H:34°  L:25°");
   });
 
   it("returns null when either value is missing", () => {
@@ -86,17 +88,47 @@ describe("formatHighLow", () => {
   });
 });
 
-describe("formatFeelsLike", () => {
-  it("formats the apparent temperature as 'Feels N°'", () => {
-    expect(formatFeelsLike(26.6)).toBe("Feels 27°");
-    expect(formatFeelsLike(-2.4)).toBe("Feels -2°");
-    expect(formatFeelsLike(0)).toBe("Feels 0°");
+describe("formatHighLowParts", () => {
+  it("splits the line so it can wrap between H and L", () => {
+    expect(formatHighLowParts(34.4, 24.6)).toEqual(["H:34°", "L:25°"]);
   });
 
-  it("returns null when missing or not finite (missing is never zero)", () => {
-    expect(formatFeelsLike(undefined)).toBeNull();
-    expect(formatFeelsLike(null)).toBeNull();
-    expect(formatFeelsLike(Number.NaN)).toBeNull();
+  it("returns null when either value is missing or not finite (missing is never zero)", () => {
+    expect(formatHighLowParts(undefined, 25)).toBeNull();
+    expect(formatHighLowParts(34, null)).toBeNull();
+    expect(formatHighLowParts(Number.NaN, 25)).toBeNull();
+  });
+});
+
+describe("heroLocalTime", () => {
+  it("reads the clock in the PLACE's offset, never the viewer's", () => {
+    const now = new Date("2026-10-31T15:03:00Z");
+    expect(heroLocalTime(now, 7200)).toBe("17:03 LOCAL");
+    expect(heroLocalTime(now, 28800)).toBe("23:03 LOCAL");
+    expect(heroLocalTime(now, -18000)).toBe("10:03 LOCAL");
+  });
+
+  it("wraps across midnight and pads", () => {
+    expect(heroLocalTime(new Date("2026-10-31T23:30:00Z"), 7200)).toBe(
+      "01:30 LOCAL",
+    );
+  });
+
+  it("is null until there is a client clock", () => {
+    expect(heroLocalTime(null, 7200)).toBeNull();
+    expect(heroLocalTime(new Date(Number.NaN), 7200)).toBeNull();
+  });
+});
+
+describe("skyTexture", () => {
+  it("puts stars on the night skies and streaks on rain and storms, nothing else", () => {
+    expect(skyTexture("clear-night")).toBe("stars");
+    expect(skyTexture("cloudy-night")).toBe("stars");
+    expect(skyTexture("rain")).toBe("streaks");
+    expect(skyTexture("storm")).toBe("streaks");
+    for (const f of ["clear-day", "cloudy-day", "fog", "snow"] as const) {
+      expect(skyTexture(f)).toBeNull();
+    }
   });
 });
 
@@ -244,7 +276,7 @@ describe("heroActivityClause", () => {
   });
 });
 
-describe("sky plate tokens — contrast", () => {
+describe("sky tokens — contrast", () => {
   // globals.css @imports the Mzizi tokens (the --color-<mineral> sources the
   // plate tokens resolve through), so read both in cascade order. The Mzizi
   // light block is `:root, [data-theme="light"]`; normalise it to `:root`.
@@ -324,6 +356,9 @@ describe("sky plate tokens — contrast", () => {
     return raw.toLowerCase();
   }
 
+  /** A custom property's literal value from :root. */
+  const resolveRaw = (name: string) => rootVars.get(name);
+
   const families = Object.keys(SKY_CLASS) as SkyFamily[];
   const FG = "#ffffff";
 
@@ -340,11 +375,16 @@ describe("sky plate tokens — contrast", () => {
     expect(resolveColour("--sky-fg", "dark")).toBe(FG);
   });
 
-  it("declares every sky family's top and bottom stop in both themes", () => {
+  const STOPS = ["top", "mid", "bottom"] as const;
+
+  it("declares every sky family's top, mid and bottom stop in both themes", () => {
     for (const f of families) {
       for (const scope of ["light", "dark"] as const) {
-        expect(() => resolveColour(`--sky-${f}-top`, scope)).not.toThrow();
-        expect(() => resolveColour(`--sky-${f}-bottom`, scope)).not.toThrow();
+        for (const stop of STOPS) {
+          expect(() =>
+            resolveColour(`--sky-${f}-${stop}`, scope),
+          ).not.toThrow();
+        }
       }
     }
   });
@@ -353,74 +393,112 @@ describe("sky plate tokens — contrast", () => {
     for (const f of families) {
       const body = blockBody(`.kestrel-${f}`);
       expect(body).toContain(`--kestrel-top: var(--sky-${f}-top)`);
+      expect(body).toContain(`--kestrel-mid: var(--sky-${f}-mid)`);
       expect(body).toContain(`--kestrel-bottom: var(--sky-${f}-bottom)`);
     }
   });
 
-  it("keeps white text at WCAG AA 4.5:1 on EVERY gradient stop (8 families x light/dark x top/bottom)", () => {
+  it("keeps white text at WCAG AA 4.5:1 on EVERY gradient stop (8 families x light/dark x 3 stops)", () => {
     let checked = 0;
     for (const f of families) {
       for (const scope of ["light", "dark"] as const) {
-        for (const stop of ["top", "bottom"] as const) {
+        for (const stop of STOPS) {
           const bg = resolveColour(`--sky-${f}-${stop}`, scope);
-          const ratio = contrastRatio(bg, FG);
-          expect(ratio, `${f} ${scope} ${stop} ${bg}`).toBeGreaterThanOrEqual(
-            4.5,
-          );
-          checked++;
+          for (const fg of ["--sky-fg", "--sky-fg-dim"]) {
+            const ratio = contrastRatio(bg, resolveColour(fg, scope));
+            expect(
+              ratio,
+              `${fg} on ${f} ${scope} ${stop} ${bg}`,
+            ).toBeGreaterThanOrEqual(4.5);
+            checked++;
+          }
         }
       }
     }
-    expect(checked).toBe(32);
+    expect(checked).toBe(96);
   });
 
-  it("makes dark a real night design, not an inversion: never lighter than light, deep clear-day", () => {
+  it("uses the owner's mockup values for the night and rain skies", () => {
+    expect(resolveColour("--sky-clear-night-top", "dark")).toBe("#0b1026");
+    expect(resolveColour("--sky-clear-night-mid", "dark")).toBe("#151c42");
+    expect(resolveColour("--sky-clear-night-bottom", "dark")).toBe("#1c2550");
+    expect(resolveColour("--sky-rain-top", "dark")).toBe("#3a4656");
+    expect(resolveColour("--sky-rain-mid", "dark")).toBe("#4a5768");
+    expect(resolveColour("--sky-rain-bottom", "dark")).toBe("#3e4a5a");
+    expect(blockBody(".kestrel-clear-night")).toContain(
+      "--kestrel-mid-at: 55%",
+    );
+    expect(blockBody(".kestrel-rain")).toContain("--kestrel-mid-at: 45%");
+  });
+
+  it("makes dark a real night/dusk design, never lighter than light, never a bright slab", () => {
     for (const f of families) {
-      for (const stop of ["top", "bottom"] as const) {
+      for (const stop of STOPS) {
         const light = luminance(resolveColour(`--sky-${f}-${stop}`, "light"));
         const dark = luminance(resolveColour(`--sky-${f}-${stop}`, "dark"));
-        expect(dark, `${f} ${stop}`).toBeLessThan(light);
+        expect(dark, `${f} ${stop}`).toBeLessThanOrEqual(light);
       }
-    }
-    // No bright cyan slab in dark: the brightest dark stop stays deep.
-    for (const f of families) {
       expect(
         luminance(resolveColour(`--sky-${f}-bottom`, "dark")),
         f,
       ).toBeLessThan(0.1);
     }
+    // The day sky is a different design in light and dark.
+    expect(resolveColour("--sky-clear-day-top", "dark")).not.toBe(
+      resolveColour("--sky-clear-day-top", "light"),
+    );
   });
 
-  it("is a gradient that fades out at its lower edge, with no glass or shadow", () => {
+  it("paints a three-stop vertical gradient, static (no glass, shadow, blur or animation)", () => {
     const band = blockBody(".kestrel");
     expect(band).toContain("linear-gradient(");
-    expect(band).toContain("mask-image");
-    expect(band).toContain("var(--sky-fade)");
+    expect(band).toContain("var(--kestrel-mid) var(--kestrel-mid-at)");
     expect(band).not.toMatch(/blur|rgba|box-shadow|animation|transition/);
+    expect(band).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 
-  it("has no hex literals in the band rules (tokens only)", () => {
-    for (const sel of [".kestrel", ".kestrel-link", ".kestrel-round"]) {
-      expect(blockBody(sel), sel).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  it("carries faint static texture: stars on night, streaks on rain (top 340px, 105deg, 14px gaps)", () => {
+    expect(blockBody(".kestrel-stars")).toContain("radial-gradient(");
+    const streaks = blockBody(".kestrel-streaks");
+    expect(streaks).toContain("height: 340px");
+    expect(streaks).toContain("105deg");
+    expect(streaks).toContain("1px 14px");
+    for (const sel of [".kestrel-stars", ".kestrel-streaks"]) {
+      expect(blockBody(sel)).not.toMatch(/animation|transition|blur/);
     }
   });
 
-  it("gives the text link and the round control a 48px target", () => {
-    expect(blockBody(".kestrel-link")).toContain(
-      "min-h-[var(--touch-target-min)]",
-    );
+  it("the Conditions card is a translucent bordered card: ~7% fill, hairline, 22px, no shadow, no blur", () => {
+    const card = blockBody(".kestrel-card");
+    expect(card).toContain("var(--sky-fg) 7%, transparent");
+    expect(card).toContain("border: 1px solid");
+    expect(card).toContain("border-radius: var(--radius-sky-card)");
+    expect(card).toContain("padding: var(--space-card)");
+    expect(card).not.toMatch(/shadow|blur|backdrop/);
+    expect(resolveRaw("--radius-sky-card")).toBe("1.375rem");
+  });
+
+  it("re-points the text tokens inside the sky card so its children read on the sky", () => {
+    const card = blockBody(".kestrel-card");
+    for (const t of [
+      "--color-text-primary",
+      "--color-text-secondary",
+      "--color-primary",
+    ]) {
+      expect(card).toContain(`${t}:`);
+    }
+  });
+
+  it("the round control (Share, ⋯) is 48px, round, bordered, shadowless", () => {
     const round = blockBody(".kestrel-round");
     expect(round).toContain("w-[var(--touch-target-min)]");
     expect(round).toContain("h-[var(--touch-target-min)]");
     expect(round).toContain("rounded-full");
+    expect(round).toContain("border");
+    expect(round).not.toMatch(/shadow|blur/);
   });
 
-  it("overlaps the hourly panel into the sky by --sky-lip, only the one after the hero", () => {
-    expect(css).toContain(
-      ".herd > :has([data-sky-hero]) + :has([data-hourly-strip])",
-    );
-    expect(css).toContain(
-      "margin-top: calc(-1 * (var(--space-section) + var(--sky-lip)))",
-    );
+  it("the page sky fades into the surface only at the foot of the viewport", () => {
+    expect(resolveRaw("--sky-fade-from")).toBe("80%");
   });
 });

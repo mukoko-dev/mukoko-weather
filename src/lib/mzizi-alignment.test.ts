@@ -44,8 +44,7 @@ export const CONTROL_CLASSES = new Set([
   // Round icon control on a card surface (nav island, map overlays)
   "duiker",
   "duiker-solid",
-  // Quiet underlined text action / round icon control on the hero sky
-  "kestrel-link",
+  // Round icon control on the hero sky (Share, the ⋯ menu)
   "kestrel-round",
   // Pill chip / toggle chip (aria-pressed)
   "quail",
@@ -61,9 +60,10 @@ export const CONTROL_CLASSES = new Set([
  * map zoom controls, drag handles — counted per file, each with a reason.
  */
 const ALLOWED_EXCEPTIONS: Record<string, { count: number; reason: string }> = {
-  "src/components/layout/Header.tsx": {
-    count: 2,
-    reason: "mobile ⋯ menu item rows (MENU_ITEM_CLASS) — menu, not a button",
+  "src/components/layout/MobileMoreMenu.tsx": {
+    count: 3,
+    reason:
+      "mobile ⋯ menu: the trigger takes its class from the caller (bee in the header pill, kestrel-round in the hero) and two item rows (MENU_ITEM_CLASS) — menu, not a button",
   },
   "src/app/locations/LocationsMenu.tsx": {
     count: 2,
@@ -337,16 +337,11 @@ describe("Mzizi alignment guard — every button", () => {
     }
   });
 
-  it("the hero's activities link and Share are Mzizi sky controls", () => {
+  it("the hero's Share is a Mzizi sky control (the activities call lives in ActivityInsights)", () => {
     const hero = FOUND.filter((f) => f.file.endsWith("CurrentConditions.tsx"));
-    expect(hero.length).toBe(2);
+    expect(hero.length).toBe(1);
     for (const f of hero) {
-      expect(
-        classTokens(f.tag).some(
-          (t) => t === "kestrel-link" || t === "kestrel-round",
-        ),
-      ).toBe(true);
+      expect(classTokens(f.tag).some((t) => t === "kestrel-round")).toBe(true);
     }
   });
-
 });

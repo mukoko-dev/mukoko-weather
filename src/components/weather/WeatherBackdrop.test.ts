@@ -57,8 +57,8 @@ describe("WeatherBackdrop — performance discipline", () => {
   });
 
   it("fades the sky into the surface background lower down the page", () => {
-    expect(source).toContain("from-transparent");
-    expect(source).toContain("to-surface-base");
+    expect(source).toContain("transparent_var(--sky-fade-from)");
+    expect(source).toContain("var(--color-surface-base)");
   });
 
   it("disposes the scene on unmount", () => {
@@ -78,7 +78,8 @@ describe("WeatherBackdrop — reduced motion + resilience", () => {
 
   it("always paints the static real-weather sky gradient as the fallback", () => {
     // Same palette as the Three.js layer (palette.ts ↔ --weather-sky-*).
-    expect(source).toContain("skyClassName(sceneType, isDay, phase)");
+    expect(source).toContain("kestrel ${SKY_CLASS[family]}");
+    expect(source).toContain("skyFamily(weatherCode, isDay)");
   });
 
   it("catches scene creation failures so the card never breaks", () => {
@@ -96,8 +97,14 @@ describe("WeatherBackdrop — accessibility + layout", () => {
     expect(source).toContain("absolute inset-0");
   });
 
-  it("applies a readability veil over the sky behind header/breadcrumb text", () => {
-    expect(source).toContain("hornbill-veil");
+  it("has no readability veil: the header and breadcrumb text take the sky foreground", () => {
+    expect(source).not.toContain("hornbill-veil");
+  });
+
+  it("carries the static night stars and rain streaks, never animated", () => {
+    expect(source).toContain("skyTexture(family)");
+    expect(source).toContain('"kestrel-stars"');
+    expect(source).toContain('"kestrel-streaks"');
   });
 
   it("uses only token-backed gradient classes (no hardcoded hex)", () => {
@@ -107,8 +114,9 @@ describe("WeatherBackdrop — accessibility + layout", () => {
 });
 
 describe("WeatherBackdrop — scene mapping + twilight", () => {
-  it("resolves sky classes from the shared palette, not a local switch", () => {
-    expect(source).toContain("skyClassName");
+  it("resolves the sky class from the hero's one family mapping, not a local switch", () => {
+    expect(source).toContain("SKY_CLASS");
+    expect(source).not.toContain("skyClassName");
     expect(source).not.toContain("weaver-sky");
   });
 
@@ -124,17 +132,18 @@ describe("WeatherBackdrop — scene mapping + twilight", () => {
   });
 });
 
-describe("WeatherBackdrop — subdued behind the sky plate", () => {
-  it("lowers the sky and particle layers so the hero plate reads as the hero", () => {
-    expect(source).toContain("absolute inset-0 opacity-80 ${skyClassName(");
-    // Particles dim further in dark theme, like the dark-theme sky tokens.
+describe("WeatherBackdrop — subdued particle layer", () => {
+  it("keeps the particle layer subdued so it never fights the hero text", () => {
+    // The sky itself is solid (it is the page); only the particles are dimmed,
+    // and further in dark theme.
     expect(source).toContain(
-      'className="absolute inset-0 opacity-75 dark:opacity-40"',
+      'className="absolute inset-0 opacity-30 dark:opacity-20"',
     );
+    expect(source).not.toContain("opacity-80");
   });
 
-  it("does not paint the hero plate itself", () => {
-    expect(source).not.toMatch(/className=\{?[`"][^`"]*\bkori\b/);
+  it("does not use the retired solid plate", () => {
+    expect(source).not.toMatch(/\bkori\b/);
   });
 });
 

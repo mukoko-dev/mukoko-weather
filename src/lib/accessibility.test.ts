@@ -135,11 +135,6 @@ describe("Touch targets — 56px minimum", () => {
     const body = rule.slice(0, rule.indexOf("}"));
     expect(body).toContain("w-[var(--touch-target-min)]");
     expect(body).toContain("h-[var(--touch-target-min)]");
-    // The demoted activities link keeps the same 48px hit area.
-    const link = css.slice(css.indexOf(".kestrel-link {"));
-    expect(link.slice(0, link.indexOf("}"))).toContain(
-      "min-h-[var(--touch-target-min)]",
-    );
   });
 });
 
