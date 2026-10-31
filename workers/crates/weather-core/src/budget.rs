@@ -42,6 +42,9 @@ pub enum Action {
     /// a year of 19 variables is about 50). The free API's 5,000 an hour and
     /// 10,000 a day are shared with the forecast, air quality and haze.
     HistoryOpenMeteo,
+    /// A place-profile request that needs an upstream (a 30-year archive
+    /// request, SoilGrids): a cache hit is free.
+    PlaceProfile,
 }
 
 /// Hourly limits for one action.
@@ -63,6 +66,7 @@ impl Action {
             Action::HistoryBackfillCoords => "history-backfill-coords",
             Action::HistoryNasaPower => "history-nasa-power",
             Action::HistoryOpenMeteo => "history-open-meteo",
+            Action::PlaceProfile => "place-profile",
         }
     }
 
@@ -117,6 +121,12 @@ impl Action {
             Action::HistoryOpenMeteo => Limits {
                 per_client: 150,
                 global: 250,
+            },
+            // 120 builds an hour per client, as in the Python backend; each
+            // is one archive request (about 250 KB) and two SoilGrids calls.
+            Action::PlaceProfile => Limits {
+                per_client: 120,
+                global: 600,
             },
         }
     }

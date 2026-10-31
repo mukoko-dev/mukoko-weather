@@ -40,6 +40,12 @@ pub const OPEN_METEO: Config = Config {
 /// failures in 5 min open it for 2 min. Only 5xx, 429, transport errors and
 /// timeouts count.
 pub const NASA_POWER: Config = DEFAULT;
+/// ISRIC SoilGrids: 3 failures in 10 min open it for 15 min.
+pub const SOILGRIDS: Config = Config {
+    failure_threshold: 3,
+    cooldown_ms: 15 * 60_000,
+    window_ms: 10 * 60_000,
+};
 
 /// The Python default for every other provider (NOAA CPC, NEA data.gov.sg,
 /// the Aviation Weather Center): 3 failures in 5 min open it for 2 min.
