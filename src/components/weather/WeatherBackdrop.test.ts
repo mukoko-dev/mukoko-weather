@@ -181,3 +181,24 @@ describe("WeatherBackdrop — device and scroll policy (v0.10.0 perf)", () => {
     expect(loading).toContain("window.clearTimeout(startTimer)");
   });
 });
+
+describe("WeatherBackdrop — the sky extends with its content", () => {
+  it("measures the Conditions card (or the hero) and sets --sky-reach from skyReachCss", () => {
+    expect(source).toContain("skyReachCss");
+    expect(source).toContain('document.querySelector("[data-sky-card]")');
+    expect(source).toContain('document.querySelector("[data-sky-hero]")');
+    expect(source).toContain('sky.style.setProperty("--sky-reach", css)');
+  });
+
+  it("re-measures on resize and when the card or page changes size (text zoom, landscape)", () => {
+    expect(source).toContain("new ResizeObserver(measure)");
+    expect(source).toContain('window.addEventListener("resize", measure)');
+    expect(source).toContain("ro.disconnect()");
+  });
+
+  it("reads the root font size, so the margin scales with text zoom", () => {
+    expect(source).toContain(
+      "getComputedStyle(document.documentElement).fontSize",
+    );
+  });
+});

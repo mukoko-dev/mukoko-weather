@@ -9,6 +9,8 @@ import {
   MAX_SAVED_LOCATIONS,
   DEFAULT_SECTION_ORDER,
   mergeSectionOrder,
+  pinHeroFirst,
+  PINNED_FIRST_SECTION,
   type ThemePreference,
   type ShamwariContext,
 } from "./store";
@@ -494,11 +496,23 @@ describe("sectionOrder", () => {
     expect(useAppStore.getState().sectionOrder).toEqual(newOrder);
   });
 
-  it("setSectionOrder accepts any string array", () => {
+  it("setSectionOrder accepts any string array (the hero is pinned first)", () => {
     // localStorage is not available in Node test environment — only test store state
     const custom = ["atmospheric", "current", "aiSummary"];
     useAppStore.getState().setSectionOrder(custom);
-    expect(useAppStore.getState().sectionOrder).toEqual(custom);
+    expect(useAppStore.getState().sectionOrder).toEqual([
+      "current",
+      "atmospheric",
+      "aiSummary",
+    ]);
+  });
+
+  it("setSectionOrder never lets the hero leave the first slot", () => {
+    useAppStore
+      .getState()
+      .setSectionOrder(["hourlyScroll", "atmospheric", "current", "enso"]);
+    expect(useAppStore.getState().sectionOrder[0]).toBe("current");
+    useAppStore.getState().setSectionOrder([...DEFAULT_SECTION_ORDER]);
   });
 
   it("initialises to DEFAULT_SECTION_ORDER (hydration-safe — no synchronous localStorage read)", () => {
@@ -591,8 +605,11 @@ describe("mergeSectionOrder (Bug 2 — union stored order with defaults)", () =>
       "aiChat",
     ];
     const merged = mergeSectionOrder(stored);
+    // ...except the hero, which is pinned first (a layout saved when it was
+    // draggable is migrated): the rest of their arrangement is kept.
+    expect(merged[0]).toBe("current");
     expect(merged.indexOf("atmospheric")).toBeLessThan(
-      merged.indexOf("current"),
+      merged.indexOf("hourlyScroll"),
     );
     expect(merged).toHaveLength(DEFAULT_SECTION_ORDER.length);
   });
@@ -626,5 +643,34 @@ describe("sectionOrder — Community Lane placement", () => {
     const lane = order.indexOf("communityLane");
     expect(lane).toBe(order.indexOf("hourlyScroll") + 1);
     expect(lane).toBeLessThan(order.indexOf("activityInsights"));
+  });
+});
+
+describe("the hero is pinned first (white-on-sky hero, phone header hidden)", () => {
+  it("pinHeroFirst moves the hero to the front and keeps the rest in order", () => {
+    expect(pinHeroFirst(["a", "current", "b"])).toEqual(["current", "a", "b"]);
+    expect(pinHeroFirst(["current", "a"])).toEqual(["current", "a"]);
+  });
+
+  it("pinHeroFirst leaves an order without a hero alone and never mutates its input", () => {
+    const input = ["a", "b"];
+    expect(pinHeroFirst(input)).toEqual(["a", "b"]);
+    const withHero = ["a", "current"];
+    pinHeroFirst(withHero);
+    expect(withHero).toEqual(["a", "current"]);
+  });
+
+  it("migrates every stored layout that put the hero lower", () => {
+    for (let i = 0; i < DEFAULT_SECTION_ORDER.length; i++) {
+      const stored = [...DEFAULT_SECTION_ORDER];
+      stored.splice(i, 0, ...stored.splice(stored.indexOf("current"), 1));
+      expect(mergeSectionOrder(stored)[0], `hero at ${i}`).toBe(
+        PINNED_FIRST_SECTION,
+      );
+    }
+  });
+
+  it("migrates a stored order that lacks the hero by inserting it first", () => {
+    expect(mergeSectionOrder(["atmospheric", "enso"])[0]).toBe("current");
   });
 });

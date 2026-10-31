@@ -8,7 +8,7 @@ import {
   type WeatherSceneConfig,
   type WeatherSceneHandle,
 } from "@/lib/weather-scenes";
-import { SKY_CLASS, skyFamily, skyTexture } from "@/lib/hero";
+import { SKY_CLASS, skyFamily, skyReachCss, skyTexture } from "@/lib/hero";
 import {
   readBackdropHints,
   SCROLL_IDLE_MS,
@@ -75,6 +75,44 @@ export function WeatherBackdrop({
   sunset,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const skyRef = useRef<HTMLDivElement>(null);
+
+  // Extend the sky with its content: it always reaches past the Conditions
+  // card (or the hero when the card is not directly under it), so large text,
+  // a short landscape viewport or a taller card never push the card into the
+  // fade. Re-measured when the page resizes or the card's size changes.
+  useEffect(() => {
+    const sky = skyRef.current;
+    if (!sky || typeof ResizeObserver === "undefined") return;
+    let observed: Element | null = null;
+    const measure = () => {
+      const target =
+        document.querySelector("[data-sky-card]") ??
+        document.querySelector("[data-sky-hero]");
+      if (target !== observed) {
+        if (observed) ro.unobserve(observed);
+        if (target) ro.observe(target);
+        observed = target;
+      }
+      const bottom = target
+        ? target.getBoundingClientRect().bottom + window.scrollY
+        : null;
+      const rootPx = parseFloat(
+        getComputedStyle(document.documentElement).fontSize,
+      );
+      const css = skyReachCss(bottom, rootPx);
+      if (css) sky.style.setProperty("--sky-reach", css);
+      else sky.style.removeProperty("--sky-reach");
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(document.body);
+    window.addEventListener("resize", measure);
+    measure();
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [weatherCode, isDay]);
 
   // Client-only media queries. Default to SSR-safe values, resolve on mount.
   const [animate, setAnimate] = useState(false);
@@ -176,6 +214,7 @@ export function WeatherBackdrop({
 
   return (
     <div
+      ref={skyRef}
       aria-hidden="true"
       // z-0 (not a negative z-index): iOS Safari paints negative-z
       // elements behind the body background when html/body use

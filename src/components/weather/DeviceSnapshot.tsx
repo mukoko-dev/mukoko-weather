@@ -47,12 +47,14 @@ export function DeviceSnapshot({
           <h1 className="sr-only">
             {location.name} weather, saved on this device
           </h1>
-          <UpdatedAgo
-            fetchedAt={view.fetchedAt}
-            freshness={view.freshness}
-            weather={weather}
-            placeName={location.name}
-          />
+          <div className="kestrel-ink">
+            <UpdatedAgo
+              fetchedAt={view.fetchedAt}
+              freshness={view.freshness}
+              weather={weather}
+              placeName={location.name}
+            />
+          </div>
           {frostAlert && <FrostAlertBanner alert={frostAlert} />}
           <div className={SECTION_STACK_CLASS}>
             <ChartErrorBoundary name="current conditions">

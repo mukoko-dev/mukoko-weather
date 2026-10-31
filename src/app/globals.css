@@ -1776,7 +1776,7 @@ body {
   --sky-fg: #ffffff;
   --sky-fg-dim: #e6eaf8;
   --sky-fade: 6rem;
-  --sky-reach: calc(100svh + 8rem);
+  --sky-reach: max(100svh + 8rem, 60rem);
   --radius-sky-card: 1.375rem;
   --sky-clear-day-top: #1b5aa6;
   --sky-clear-day-mid: #2563a8;
@@ -2005,10 +2005,22 @@ body {
     display: none;
   }
 }
-body:has([data-sky-hero]) [data-site-header]:not([data-scrolled]) {
+/* The override is scoped to the bar's own brand mark and desktop links
+   ([data-header-ink]), never the <header> itself: the notifications popover
+   and the ⋯ menu live inside the header on a light card surface, and white
+   text there would be unreadable. */
+body:has([data-sky-hero])
+  [data-site-header]:not([data-scrolled])
+  [data-header-ink] {
   --color-text-primary: var(--sky-fg);
   --color-text-secondary: var(--sky-fg);
   --color-text-tertiary: var(--sky-fg);
+  color: var(--sky-fg);
+}
+body:has([data-sky-hero])
+  [data-site-header]:not([data-scrolled])
+  [data-header-ink]
+  .weaver-active {
   color: var(--sky-fg);
 }
 

@@ -8,6 +8,10 @@ import {
   formatHighLowParts,
   skyTexture,
   heroLocalTime,
+  skyReachCss,
+  SKY_CLEARANCE_REM,
+  SKY_FADE_REM,
+  SKY_MIN_REM,
   formatHighLow,
   heroActivityClause,
   heroBadgeLabel,
@@ -117,6 +121,64 @@ describe("heroLocalTime", () => {
   it("is null until there is a client clock", () => {
     expect(heroLocalTime(null, 7200)).toBeNull();
     expect(heroLocalTime(new Date(Number.NaN), 7200)).toBeNull();
+  });
+});
+
+describe("skyReachCss — the sky extends with its content", () => {
+  it("is the larger of one screen + 8rem, the floor and the content bottom + clearance + fade", () => {
+    const css = skyReachCss(700, 16);
+    const px = Math.ceil(700 + (SKY_CLEARANCE_REM + SKY_FADE_REM) * 16);
+    expect(css).toBe(`max(100svh + 8rem, ${SKY_MIN_REM}rem, ${px}px)`);
+    expect(px).toBe(820);
+  });
+
+  it("the floor keeps the Conditions card out of the fade before anything is measured", () => {
+    // Measured card bottoms (rem): 44 at 100% text, 51 at 200% text, with the
+    // outlook line. The floor must clear them plus clearance and the fade.
+    for (const cardBottomRem of [44, 46, 51]) {
+      expect(SKY_MIN_REM).toBeGreaterThanOrEqual(
+        cardBottomRem + SKY_CLEARANCE_REM + SKY_FADE_REM,
+      );
+    }
+    const css = readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8");
+    expect(css).toContain(
+      `--sky-reach: max(100svh + 8rem, ${SKY_MIN_REM}rem);`,
+    );
+  });
+
+  it("grows with text zoom: the margin is in root-font units", () => {
+    const normal = skyReachCss(700, 16)!;
+    const zoomed = skyReachCss(700, 32)!;
+    const n = (s: string) => parseInt(s.match(/, (\d+)px/)![1], 10);
+    expect(n(zoomed) - n(normal)).toBe(
+      Math.ceil((SKY_CLEARANCE_REM + SKY_FADE_REM) * 32) -
+        Math.ceil((SKY_CLEARANCE_REM + SKY_FADE_REM) * 16),
+    );
+  });
+
+  it("always leaves the whole fade (6rem) below the content, so content never sits in it", () => {
+    for (const rootPx of [12, 16, 24, 32]) {
+      for (const bottom of [300, 667, 900, 1500]) {
+        const px = parseInt(
+          skyReachCss(bottom, rootPx)!.match(/, (\d+)px/)![1],
+          10,
+        );
+        expect(px - bottom).toBeGreaterThanOrEqual(SKY_FADE_REM * rootPx);
+      }
+    }
+  });
+
+  it("returns null with nothing to measure or a bad root size (keep the CSS default)", () => {
+    expect(skyReachCss(null, 16)).toBeNull();
+    expect(skyReachCss(undefined, 16)).toBeNull();
+    expect(skyReachCss(Number.NaN, 16)).toBeNull();
+    expect(skyReachCss(500, 0)).toBeNull();
+    expect(skyReachCss(500, Number.NaN)).toBeNull();
+  });
+
+  it("mirrors the --sky-fade token", () => {
+    const css = readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8");
+    expect(css).toContain(`--sky-fade: ${SKY_FADE_REM}rem;`);
   });
 });
 
@@ -502,9 +564,9 @@ describe("sky tokens — contrast", () => {
     expect(round).not.toMatch(/shadow|blur/);
   });
 
-  it("the sky box starts at the top of the page, is one screen + 8rem tall and fades out over 6rem", () => {
+  it("the sky box starts at the top of the page, is one screen + 8rem tall (60rem at least) and fades out over 6rem", () => {
     expect(resolveRaw("--sky-fade")).toBe("6rem");
-    expect(resolveRaw("--sky-reach")).toBe("calc(100svh + 8rem)");
+    expect(resolveRaw("--sky-reach")).toBe("max(100svh + 8rem, 60rem)");
     const reach = blockBody(".kestrel-reach");
     expect(reach).toContain("position: absolute");
     expect(reach).toContain("top: 0");

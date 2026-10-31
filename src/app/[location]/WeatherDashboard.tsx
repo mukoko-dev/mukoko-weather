@@ -52,7 +52,7 @@ import {
 } from "@/lib/dashboard-layout";
 import { FrostAlertBanner } from "./FrostAlertBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, pinHeroFirst, PINNED_FIRST_SECTION } from "@/lib/store";
 import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
 import {
   checkFrostRisk,
@@ -226,7 +226,11 @@ export function WeatherDashboard({
   const usingFallback = modelBaseline ? false : seedUsingFallback;
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
-  const sectionOrder = useAppStore((s) => s.sectionOrder);
+  const storedSectionOrder = useAppStore((s) => s.sectionOrder);
+  // The hero is painted white on the page sky and the phone header is not
+  // drawn over it, so it can never leave the first slot: whatever the store
+  // holds (a layout saved before it was pinned), the page renders it first.
+  const sectionOrder = pinHeroFirst(storedSectionOrder);
   const setSectionOrder = useAppStore((s) => s.setSectionOrder);
   const hydrateSectionOrder = useAppStore((s) => s.hydrateSectionOrder);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
@@ -261,7 +265,12 @@ export function WeatherDashboard({
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    if (over && active.id !== over.id) {
+    if (
+      over &&
+      active.id !== over.id &&
+      active.id !== PINNED_FIRST_SECTION &&
+      over.id !== PINNED_FIRST_SECTION
+    ) {
       const oldIndex = sectionOrder.indexOf(active.id as string);
       const newIndex = sectionOrder.indexOf(over.id as string);
       if (oldIndex !== -1 && newIndex !== -1) {
@@ -395,7 +404,8 @@ export function WeatherDashboard({
   // The Conditions card is the translucent sky card only while it sits
   // directly under the hero; moved lower it is an ordinary card.
   const skyCard =
-    sectionOrder[0] === "current" && sectionOrder[1] === "hourlyScroll";
+    sectionOrder[0] === PINNED_FIRST_SECTION &&
+    sectionOrder[1] === "hourlyScroll";
   const breadcrumb = (
     <nav aria-label="Breadcrumb" data-breadcrumb>
       <ol className="flex flex-wrap items-center gap-x-1.5">
@@ -474,12 +484,14 @@ export function WeatherDashboard({
           </div>
 
           {device && (
-            <UpdatedAgo
-              fetchedAt={device.fetchedAt}
-              freshness={device.freshness}
-              weather={weather}
-              placeName={location.name}
-            />
+            <div className="kestrel-ink">
+              <UpdatedAgo
+                fetchedAt={device.fetchedAt}
+                freshness={device.freshness}
+                weather={weather}
+                placeName={location.name}
+              />
+            </div>
           )}
 
           {/* Weather unavailable banner — shown when all providers failed */}
@@ -547,6 +559,7 @@ export function WeatherDashboard({
                             <DraggableSection
                               key="current"
                               id="current"
+                              pinned
                               reordering={reordering}
                             >
                               <ChartErrorBoundary name="current conditions">
