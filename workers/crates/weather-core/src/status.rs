@@ -117,13 +117,22 @@ pub fn enrichment_row(probe: &Probe, latency_ms: u64) -> Value {
     let name = "Tomorrow.io (insights enrichment)";
     let role = Some("enrichment");
     match probe {
-        Probe::Healthy(body) if flag(body, &["configured", "tomorrow"]) => row(
-            name,
-            OPERATIONAL,
-            latency_ms,
-            "Enrichment key configured; baseline unaffected",
-            role,
-        ),
+        Probe::Healthy(body) if flag(body, &["configured", "tomorrow"]) => {
+            // The forecast Worker's budget snapshot (a count of its own D1
+            // rows, no Tomorrow.io call): free tier, never the baseline.
+            let n = |k: &str| {
+                body.get("enrichment")
+                    .and_then(|e| e.get(k))
+                    .and_then(Value::as_u64)
+            };
+            let message = match (n("hourUsed"), n("hourCapNormal"), n("dayUsed"), n("dayCapNormal")) {
+                (Some(h), Some(hc), Some(d), Some(dc)) => format!(
+                    "Insights enrichment only, free tier. Calls: {h}/{hc} this hour, {d}/{dc} in 24 h (normal traffic caps). The Open-Meteo blend is the baseline"
+                ),
+                _ => "Insights enrichment only, free tier. Key configured; the Open-Meteo blend is the baseline".to_owned(),
+            };
+            row(name, OPERATIONAL, latency_ms, &message, role)
+        }
         Probe::Healthy(_) => row(
             name,
             DEGRADED,
@@ -139,6 +148,43 @@ pub fn enrichment_row(probe: &Probe, latency_ms: u64) -> Value {
             role,
         ),
     }
+}
+
+/// The forecast baseline: how many models the blend draws on and its floor,
+/// read from the forecast Worker's `/health` (no provider call; whether each
+/// model answered at a place is per request and shows in `X-Weather-Blend`).
+pub fn blend_row(probe: &Probe, latency_ms: u64) -> Option<Value> {
+    let Probe::Healthy(body) = probe else {
+        return None;
+    };
+    let name = "Forecast blend (global models)";
+    let members = body
+        .pointer("/blend/members")
+        .and_then(Value::as_array)?
+        .len();
+    let floor = body
+        .pointer("/blend/floor")
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as usize;
+    Some(if members >= floor && floor > 0 {
+        row(
+            name,
+            OPERATIONAL,
+            latency_ms,
+            &format!(
+                "{members} global models; every one that answers is used, and at least {floor} must or the forecast is Open-Meteo best_match (labelled)"
+            ),
+            None,
+        )
+    } else {
+        row(
+            name,
+            DEGRADED,
+            latency_ms,
+            &format!("Only {members} models configured; the floor of {floor} cannot be met"),
+            None,
+        )
+    })
 }
 
 /// Shamwari: the AI Worker's `/health` (no model call, so no tokens spent).
@@ -277,6 +323,58 @@ mod tests {
         let checks = vec![core, off];
         assert_eq!(overall(&checks), OPERATIONAL);
         assert_eq!(enrichment(&checks), DEGRADED);
+    }
+
+    #[test]
+    fn enrichment_is_reported_as_enrichment_with_its_budget() {
+        let on = enrichment_row(
+            &healthy(json!({
+                "configured": {"tomorrow": true},
+                "enrichment": {"role": "enrichment", "hourUsed": 3, "hourCapNormal": 12,
+                               "dayUsed": 40, "dayCapNormal": 250},
+            })),
+            2,
+        );
+        assert_eq!(on["status"], OPERATIONAL);
+        assert_eq!(on["role"], "enrichment");
+        let m = on["message"].as_str().unwrap();
+        assert!(
+            m.contains("3/12 this hour") && m.contains("40/250 in 24 h"),
+            "{m}"
+        );
+        assert!(m.contains("blend is the baseline"), "{m}");
+        // Without a budget snapshot (D1 unreadable) the row still says what it is.
+        let bare = enrichment_row(&healthy(json!({"configured": {"tomorrow": true}})), 2);
+        assert!(bare["message"]
+            .as_str()
+            .unwrap()
+            .contains("enrichment only"));
+    }
+
+    #[test]
+    fn the_blend_row_reports_members_and_floor() {
+        let ok = blend_row(
+            &healthy(
+                json!({"blend": {"members": ["a","b","c","d","e","f","g","h","i"], "floor": 4}}),
+            ),
+            1,
+        )
+        .unwrap();
+        assert_eq!(ok["status"], OPERATIONAL);
+        let m = ok["message"].as_str().unwrap();
+        assert!(
+            m.contains("9 global models") && m.contains("at least 4"),
+            "{m}"
+        );
+        let thin = blend_row(
+            &healthy(json!({"blend": {"members": ["a","b"], "floor": 4}})),
+            1,
+        )
+        .unwrap();
+        assert_eq!(thin["status"], DEGRADED);
+        // An older forecast Worker without the field, or one that did not answer: no row.
+        assert!(blend_row(&healthy(json!({})), 1).is_none());
+        assert!(blend_row(&Probe::Unreachable, 1).is_none());
     }
 
     #[test]

@@ -22,9 +22,11 @@ describe("Footer touch targets", () => {
   });
 
   it("credits every forecast model provider (issue #246, CC BY 4.0)", () => {
-    expect(source).toContain(
-      "Weather data: ECMWF, NOAA, DWD, ECCC, Météo-France via",
-    );
+    expect(source).toContain("Weather data: ECMWF, NOAA, DWD, ECCC");
+    // Every member of the model blend is credited (CC BY 4.0, Open-Meteo).
+    for (const provider of ["Météo-France", "UK Met Office", "CMA", "JMA"]) {
+      expect(source).toContain(provider);
+    }
     expect(source).toContain("Open-Meteo.com");
     expect(source).toContain(
       'href="https://creativecommons.org/licenses/by/4.0/"',

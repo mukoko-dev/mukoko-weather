@@ -244,7 +244,8 @@ export function SiteFooter() {
           {/* Model attribution (issue #246) — required by the CC BY 4.0
               licences of ECMWF open data, DWD and Open-Meteo. */}
           <p className="text-sm text-text-tertiary">
-            Weather data: ECMWF, NOAA, DWD, ECCC, Météo-France via{" "}
+            Weather data: ECMWF, NOAA, DWD, ECCC, Météo-France, UK Met Office,
+            CMA, JMA via{" "}
             <a
               href="https://open-meteo.com"
               target="_blank"

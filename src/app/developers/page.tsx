@@ -304,8 +304,8 @@ curl "https://weather.mukoko.com/api/py/search?q=nairobi"`}
             cache responses where you can and avoid hammering them in tight
             loops. Please keep the <code className="termite">attribution</code>{" "}
             back to mukoko weather when you display our data, and credit the
-            model providers: forecasts come from ECMWF, NOAA, DWD, ECCC and
-            Météo-France via{" "}
+            model providers: forecasts come from ECMWF, NOAA, DWD, ECCC,
+            Météo-France, the UK Met Office, CMA and JMA via{" "}
             <a
               href="https://open-meteo.com"
               className="sunbird"

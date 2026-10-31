@@ -311,6 +311,9 @@ KNOWN_FORECAST_MODELS = {
     "icon_seamless",
     blend.GEM,
     blend.ARPEGE,
+    blend.UKMO,
+    blend.CMA,
+    blend.JMA,
     "meteofrance_seamless",
 }
 
