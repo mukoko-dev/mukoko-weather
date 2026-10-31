@@ -390,6 +390,49 @@ export function WeatherDashboard({
     };
   }, [location.lat, location.lon, model, extrasKey, fetchExtras]);
 
+  // The breadcrumb sits at the left of the hero's top row (over the sky), so
+  // its text takes the hero's foreground instead of the page text tokens.
+  // The Conditions card is the translucent sky card only while it sits
+  // directly under the hero; moved lower it is an ordinary card.
+  const skyCard =
+    sectionOrder[0] === "current" && sectionOrder[1] === "hourlyScroll";
+  const breadcrumb = (
+    <nav aria-label="Breadcrumb" data-breadcrumb>
+      <ol className="flex flex-wrap items-center gap-x-1.5">
+        <li>
+          <a
+            href={BASE_URL}
+            className="dik-dik hover:underline transition-colors focus-visible:outline-2 focus-visible:outline-[var(--sky-fg)] focus-visible:rounded"
+          >
+            Home
+          </a>
+        </li>
+        <li aria-hidden="true">/</li>
+        {/* Country — always shown */}
+        {countryName && (
+          <>
+            <li>
+              <span>{countryName}</span>
+            </li>
+            <li aria-hidden="true">/</li>
+          </>
+        )}
+        {/* Province — skip only if identical to location name */}
+        {location.province && location.province !== location.name && (
+          <>
+            <li>
+              <span>{location.province}</span>
+            </li>
+            <li aria-hidden="true">/</li>
+          </>
+        )}
+        <li aria-current="page">
+          <span>{location.name}</span>
+        </li>
+      </ol>
+    </nav>
+  );
+
   return (
     <>
       {/* Full-viewport condition-aware sky behind the whole page (Apple
@@ -410,49 +453,6 @@ export function WeatherDashboard({
           so the layering is expressed positively: backdrop z-0, content z-10. */}
       <div className="relative z-10">
         <Header />
-
-        {/* Breadcrumb navigation — always three layers: Country / Province / Location */}
-        <nav
-          aria-label="Breadcrumb"
-          className="mx-auto max-w-7xl px-4 pt-3 sm:px-6 md:px-8"
-        >
-          <ol className="flex flex-wrap items-center gap-1.5 text-base text-text-tertiary">
-            <li>
-              <a
-                href={BASE_URL}
-                className="dik-dik hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded"
-              >
-                Home
-              </a>
-            </li>
-            <li aria-hidden="true">/</li>
-            {/* Country — always shown */}
-            {countryName && (
-              <>
-                <li>
-                  <span className="text-text-secondary">{countryName}</span>
-                </li>
-                <li aria-hidden="true">/</li>
-              </>
-            )}
-            {/* Province — skip only if identical to location name */}
-            {location.province && location.province !== location.name && (
-              <>
-                <li>
-                  <span className="text-text-secondary">
-                    {location.province}
-                  </span>
-                </li>
-                <li aria-hidden="true">/</li>
-              </>
-            )}
-            <li aria-current="page">
-              <span className="font-medium text-text-primary">
-                {location.name}
-              </span>
-            </li>
-          </ol>
-        </nav>
 
         {/* Mobile bottom padding clears the floating nav (token includes the
           safe-area inset); sm:pb-6 restores normal padding where the nav is hidden. */}
@@ -522,20 +522,21 @@ export function WeatherDashboard({
                             >
                               <ChartErrorBoundary name="hourly scroll cards">
                                 <section aria-labelledby="hourly-scroll-heading">
-                                  <SectionHeader
-                                    headingId="hourly-scroll-heading"
-                                    title="Hourly"
-                                    action={{
-                                      label: "Full forecast →",
-                                      href: `/${location.slug}/forecast`,
-                                    }}
-                                    className="mb-[var(--space-stack)]"
-                                  />
                                   <HourlyScrollCards
                                     hourly={weather.hourly}
                                     utcOffsetSeconds={
                                       weather.utc_offset_seconds
                                     }
+                                    variant={skyCard ? "sky" : "card"}
+                                    footer={<SeasonBadge season={season} />}
+                                    heading={{
+                                      headingId: "hourly-scroll-heading",
+                                      title: "Conditions",
+                                      action: {
+                                        label: "Full forecast →",
+                                        href: `/${location.slug}/forecast`,
+                                      },
+                                    }}
                                   />
                                 </section>
                               </ChartErrorBoundary>
@@ -557,7 +558,7 @@ export function WeatherDashboard({
                                   utcOffsetSeconds={weather.utc_offset_seconds}
                                   slug={location.slug}
                                   isCurrentLocation={isCurrentLocation}
-                                  footer={<SeasonBadge season={season} />}
+                                  breadcrumb={breadcrumb}
                                 />
                               </ChartErrorBoundary>
                             </DraggableSection>

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { skeletonLook } from "./location-skeleton";
-import { resolveScene } from "./weather-scenes/resolve-scene";
+import { skyFamily, skyTexture } from "./hero";
 import type { CachedWeatherHint } from "./weather-scenes/types";
 
 const hint = (over: Partial<CachedWeatherHint> = {}): CachedWeatherHint => ({
@@ -13,28 +13,25 @@ const hint = (over: Partial<CachedWeatherHint> = {}): CachedWeatherHint => ({
 });
 
 describe("skeletonLook", () => {
-  it("is a neutral partly-cloudy day sky with no hint (first visit)", () => {
+  it("is a calm overcast-day sky with no hint (first visit)", () => {
     expect(skeletonLook(null)).toEqual({
-      sceneType: "partly-cloudy",
-      isDay: true,
+      family: "cloudy-day",
+      texture: null,
     });
   });
 
-  it("follows the cached hint with the same scene rule as the backdrop", () => {
+  it("follows the cached hint with the hero's own sky mapping", () => {
     for (const code of [0, 2, 3, 45, 63, 73, 95]) {
-      expect(skeletonLook(hint({ weatherCode: code })).sceneType).toBe(
-        resolveScene(code, 5),
-      );
+      for (const isDay of [true, false]) {
+        const look = skeletonLook(hint({ weatherCode: code, isDay }));
+        expect(look.family).toBe(skyFamily(code, isDay));
+        expect(look.texture).toBe(skyTexture(look.family));
+      }
     }
   });
 
-  it("keeps day and night from the hint", () => {
-    expect(skeletonLook(hint({ isDay: false })).isDay).toBe(false);
-  });
-
-  it("lets strong wind turn a calm sky windy, like the backdrop", () => {
-    expect(
-      skeletonLook(hint({ weatherCode: 0, windSpeed: 60 })).sceneType,
-    ).toBe("windy");
+  it("carries the night stars and the rain streaks like the page sky", () => {
+    expect(skeletonLook(hint({ isDay: false })).texture).toBe("stars");
+    expect(skeletonLook(hint({ weatherCode: 63 })).texture).toBe("streaks");
   });
 });

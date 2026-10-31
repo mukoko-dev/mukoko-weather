@@ -8,13 +8,14 @@ import {
   type WeatherSceneConfig,
   type WeatherSceneHandle,
 } from "@/lib/weather-scenes";
+import { skyFamily, skyTexture } from "@/lib/hero";
+import { WeatherSky } from "@/components/weather/WeatherSky";
 import {
   readBackdropHints,
   SCROLL_IDLE_MS,
   shouldAnimateBackdrop,
   shouldRunBackdrop,
 } from "@/lib/weather-scenes/backdrop-policy";
-import { WeatherSky } from "@/components/weather/WeatherSky";
 
 interface Props {
   /** WMO weather code for the CURRENT conditions (drives the scene). */
@@ -35,11 +36,12 @@ interface Props {
 }
 
 /**
- * Condition-aware animated backdrop for the WHOLE location page — a fixed,
- * full-viewport sky behind all content (Apple Weather style), not confined
- * to the hero card. The sky is strongest at the top (behind the de-carded
- * CurrentConditions hero) and fades into the normal surface background
- * further down so charts and cards keep their usual contrast.
+ * Condition-aware animated backdrop for the location page — the
+ * sky at the top of the page, behind the header and the hero (Apple Weather
+ * style). It is solid through the first screen (hero + Conditions card),
+ * fades out over its last 6rem and scrolls away with the page, so charts,
+ * cards and headings further down keep their usual contrast on the ordinary
+ * surface.
  *
  * Performance discipline (the backdrop stays mounted for the whole page life):
  * - Three.js renderer pixel ratio is capped at 1 (`maxPixelRatio`).
@@ -53,16 +55,13 @@ interface Props {
  *   Three.js entirely and show only the static sky gradient
  *   (shouldAnimateBackdrop).
  *
- * Colour: every sky, cloud, particle and light colour is the real colour of
- * that weather at that time of day (src/lib/weather-scenes/palette.ts). The
- * static `.hornbill-sky-*` gradient under the canvas is built from the SAME
- * palette (mirrored as --weather-sky-* tokens in globals.css), so the
- * reduced-motion / WebGL-failure fallback is the same sky as the animation.
- *
- * Subdued on purpose (sky at opacity-80, particles at opacity-75 — 40 in
- * dark theme, matching the dimmed dark-theme sky tokens): the location
- * hero is a solid sky plate (see CurrentConditions / `.kori`), and the page
- * sky is texture behind it, never the hero itself.
+ * Colour: the static gradient is the page sky (`.kestrel-*`, `--sky-*` tokens
+ * in globals.css, family from src/lib/hero.ts): the owner's night and rain
+ * skies, day skies for light theme, deep dusk for dark. It carries faint
+ * static texture (stars at night, diagonal streaks in rain). The Three.js
+ * particle layer paints over it (opacity-30, 20 in dark theme) and is the only
+ * thing that moves; the reduced-motion / WebGL-failure fallback is the same
+ * sky without it.
  *
  * Purely decorative — marked `aria-hidden`. A WebGL/import failure degrades to
  * the static gradient (createWeatherScene returns a no-op handle on failure),
@@ -98,6 +97,8 @@ export function WeatherBackdrop({
   }, []);
 
   const sceneType = resolveScene(weatherCode, windSpeed);
+  const family = skyFamily(weatherCode, isDay);
+  const texture = skyTexture(family);
   const phase = skyPhase(isDay, currentTime, sunrise, sunset);
 
   useEffect(() => {
@@ -175,12 +176,12 @@ export function WeatherBackdrop({
   }, [animate, isMobile, isDay, phase, sceneType, windSpeed]);
 
   return (
-    <WeatherSky type={sceneType} isDay={isDay} phase={phase}>
+    <WeatherSky family={family} texture={texture}>
       {/* Three.js particle layer (transparent) — only when motion is allowed. */}
       {animate && (
         <div
           ref={containerRef}
-          className="absolute inset-0 opacity-75 dark:opacity-40"
+          className="absolute inset-0 opacity-30 dark:opacity-20"
         />
       )}
     </WeatherSky>

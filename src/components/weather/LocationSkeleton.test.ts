@@ -41,11 +41,28 @@ describe("LocationSkeleton — structure", () => {
     expect(html).toContain("herd");
   });
 
-  it("reserves the breadcrumb row and does not redraw the header or nav", () => {
-    expect(html).toContain("pt-3");
+  it("does not redraw the header or the nav; the hero holds its own top row", () => {
     expect(skeletonSrc).not.toContain("<Header");
     expect(skeletonSrc).not.toContain("MobileNav");
     expect(skeletonSrc).not.toContain("<footer");
+    expect(skeletonSrc).not.toContain("<nav");
+  });
+
+  it("hides the phone header exactly as the real hero does (data-sky-hero)", () => {
+    expect(html).toContain("data-sky-hero");
+    expect(heroSrc).toContain("data-sky-hero");
+  });
+
+  it("draws the Conditions card on the sky card surface, under the hero", () => {
+    expect(html).toContain("kestrel-card");
+    expect(html.indexOf('data-skeleton="hero"')).toBeLessThan(
+      html.indexOf('data-skeleton="conditions"'),
+    );
+  });
+
+  it("paints the page sky through the shared .kestrel gradient", () => {
+    expect(html).toContain("kestrel kestrel-");
+    expect(skeletonSrc).toContain("<WeatherSky");
   });
 
   it("keeps the hero in its own swappable component", () => {
@@ -58,7 +75,9 @@ describe("LocationSkeleton — calm, no splash", () => {
   it("shows no sentence, wordmark, spinner or dots", () => {
     const visible = html
       .replace(/<span class="sr-only">[^<]*<\/span>/g, "")
-      .replace(/<span class="invisible">[^<]*<\/span>/g, "");
+      // Hidden sizing text (breadcrumb trail, season line): laid out, never drawn.
+      .replace(/<ol class="invisible[^"]*">.*?<\/ol>/g, "")
+      .replace(/<span class="invisible[^"]*">[^<]*<\/span>/g, "");
     expect(visible.replace(/<[^>]+>/g, "").trim()).toBe("");
     expect(skeletonSrc).not.toContain("MukokoLogo");
     expect(skeletonSrc).not.toContain("Spinner");
@@ -107,27 +126,25 @@ describe("LocationSkeleton — tokens only", () => {
     }
   });
 
-  it("hero bars carry the real text classes so the box matches", () => {
+  it("hero rows carry the real type-scale tokens so the box matches", () => {
     for (const cls of [
-      "text-2xl",
-      "text-8xl",
-      "sm:text-9xl",
-      "text-xl",
-      "text-lg",
-      "min-h-[var(--touch-target-min)]",
+      "--text-caption",
+      "--text-h2",
+      "--text-display",
+      "--text-h5",
+      "--text-body-lg",
+      "pt-4 pb-[26px]",
+      "size-[var(--touch-target-min)]",
     ]) {
       expect(heroSrc).toContain(cls);
     }
   });
-});
 
-describe("Shimmer and .okapi", () => {
-  it("renders a decorative bar", () => {
-    const bar = renderToStaticMarkup(
-      createElement(Shimmer, { className: "w-4" }),
-    );
-    expect(bar).toContain('class="okapi w-4"');
-    expect(bar).toContain('aria-hidden="true"');
+  it("the hero has no plate, no button and no outlook rows", () => {
+    expect(heroSrc).not.toContain("kori");
+    expect(heroSrc).not.toContain("kudu");
+    expect(heroSrc).not.toContain("Pick activities");
+    expect(heroSrc).not.toContain("leading-relaxed");
   });
 
   it("only animates when motion is welcome; static otherwise", () => {

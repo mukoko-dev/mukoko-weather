@@ -102,62 +102,51 @@ describe("HourlyScrollCards — weather data", () => {
   });
 });
 
-describe("HourlyScrollCards — no duplicate outlook", () => {
-  it("does not render the one-sentence outlook (the hero owns it)", () => {
-    // CurrentConditions shows the deterministic hourlySummary sentence; the
-    // strip repeating it was a duplicate, so the strip is hours only.
-    expect(source).not.toContain('from "@/lib/hourly-summary"');
-    expect(source).not.toContain("hourlySummary(");
-    expect(source).not.toContain("{summary}");
+describe("HourlyScrollCards — the Conditions card owns the outlook", () => {
+  it("shows the one-sentence outlook above the hours, hydration-gated, in the place's time", () => {
+    expect(source).toContain('from "@/lib/hero"');
+    expect(source).toContain(
+      "hydrated ? heroOutlook(hourly, new Date(), offset) : null",
+    );
+    expect(source).toContain("{outlook && (");
+    expect(source.indexOf("{outlook && (")).toBeLessThan(
+      source.indexOf("<ScrollArea"),
+    );
   });
 
-  it("the hero still renders the outlook sentence", () => {
+  it("the hero no longer renders the outlook", () => {
     const hero = readFileSync(
       resolve(__dirname, "CurrentConditions.tsx"),
       "utf-8",
     );
-    expect(hero).toContain("heroOutlook(hourly");
+    expect(hero).not.toContain("heroOutlook(");
   });
 });
 
-describe("HourlyScrollCards — keyboard-focusable scroll region", () => {
-  it("passes a ref to the ScrollArea viewport (the element that actually scrolls)", () => {
-    expect(source).toContain("viewportRef={scrollRef}");
-    expect(source).toContain("useRef<HTMLDivElement>(null)");
+describe("HourlyScrollCards — Conditions card surface", () => {
+  it("is the translucent bordered sky card under the hero, an ordinary card elsewhere", () => {
+    expect(source).toContain("data-hourly-strip");
+    expect(source).toContain('variant === "sky"');
+    expect(source).toContain('"kestrel-card overflow-hidden"');
+    expect(source).toContain('"baobab overflow-hidden shadow-none"');
   });
 
-  it("makes the viewport tab-focusable and a labelled region in an effect", () => {
-    expect(source).toContain("viewport.tabIndex = 0");
-    expect(source).toContain('viewport.setAttribute("role", "region")');
-    expect(source).toContain(
-      'viewport.setAttribute("aria-label", HOURLY_SCROLL_LABEL)',
-    );
+  it("does not overlap the sky: no negative margin, no z-index lift", () => {
+    expect(source).not.toMatch(/-mt-|z-10|margin-top/);
   });
 
-  it("exports a descriptive scroll-region label", () => {
-    expect(source).toContain(
-      'export const HOURLY_SCROLL_LABEL = "Hourly forecast, scroll horizontally"',
-    );
+  it("carries its own heading inside the card, with the forecast link", () => {
+    expect(source).toContain("<SectionHeader");
+    expect(source).toContain("heading?:");
   });
 });
 
-describe("HourlyScrollCards — keyboard-focusable scroll region", () => {
-  it("passes a ref to the ScrollArea viewport (the element that actually scrolls)", () => {
-    expect(source).toContain("viewportRef={scrollRef}");
-    expect(source).toContain("useRef<HTMLDivElement>(null)");
-  });
-
-  it("makes the viewport tab-focusable and a labelled region in an effect", () => {
-    expect(source).toContain("viewport.tabIndex = 0");
-    expect(source).toContain('viewport.setAttribute("role", "region")');
-    expect(source).toContain(
-      'viewport.setAttribute("aria-label", HOURLY_SCROLL_LABEL)',
-    );
-  });
-
-  it("exports a descriptive scroll-region label", () => {
-    expect(source).toContain(
-      'export const HOURLY_SCROLL_LABEL = "Hourly forecast, scroll horizontally"',
+describe("HourlyScrollCards — footer slot", () => {
+  it("renders a quiet footer (the season line) under a hairline at the foot of the card", () => {
+    expect(source).toContain("footer?: ReactNode");
+    expect(source).toContain("{footer && (");
+    expect(source.indexOf("{footer && (")).toBeGreaterThan(
+      source.indexOf("</ScrollArea>"),
     );
   });
 });

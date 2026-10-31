@@ -17,29 +17,41 @@ import {
 } from "@/lib/dashboard-layout";
 import { cn } from "@/lib/utils";
 
-/** Hourly cells in the strip skeleton (the real strip scrolls past these). */
+/** Hour tiles in the Conditions card skeleton (the real strip scrolls past these). */
 export const HOURLY_PLACEHOLDER_COUNT = 8;
 /** Square tiles in the Conditions grid skeleton (2 rows of 2, one row of 4). */
 export const TILE_PLACEHOLDER_COUNT = 4;
 
-/** The "Hourly" section: header row plus a strip of hour cells. */
-export function HourlyStripSkeleton() {
+/**
+ * The Conditions card under the hero: the same `.kestrel-card` box, heading
+ * row, outlook lines, hour tiles and season footer as `HourlyScrollCards`
+ * (variant "sky"), with bars where the text goes.
+ */
+export function ConditionsCardSkeleton() {
   return (
-    <section aria-hidden="true">
-      <div className="mb-[var(--space-stack)] flex min-h-[var(--touch-target-min)] items-center justify-between gap-2">
-        <h2 className="giraffe">
-          <Shimmer className="h-[0.7em] w-16" />
-        </h2>
-        <Shimmer className="h-4 w-28" />
-      </div>
-      <div className="baobab overflow-hidden p-3">
-        <div className="flex gap-2.5 pb-2">
+    <section aria-hidden="true" data-skeleton="conditions">
+      <div className="kestrel-card overflow-hidden">
+        <div className="flex min-h-[var(--touch-target-min)] items-center justify-between gap-2">
+          <h2 className="giraffe">
+            <Shimmer className="h-[0.7em] w-24" />
+          </h2>
+          <Shimmer className="h-4 w-28" />
+        </div>
+        <p className="mt-1 border-b border-border pb-3 text-base leading-relaxed">
+          <span className="block">
+            <Shimmer className="h-[0.7em] w-full" />
+          </span>
+          <span className="block md:hidden">
+            <Shimmer className="h-[0.7em] w-2/3" />
+          </span>
+        </p>
+        <div className="mt-3 flex gap-2.5 pb-2" data-skeleton="hours">
           {Array.from({ length: HOURLY_PLACEHOLDER_COUNT }, (_, i) => (
             <div
               key={i}
-              className="flex min-w-[60px] flex-col items-center gap-1.5 rounded-[var(--radius-input)] bg-surface-base px-2.5 py-2"
+              className="flex min-w-[60px] flex-col items-center gap-1.5 rounded-[var(--radius-input)] px-2.5 py-2"
             >
-              <span className="text-base font-medium">
+              <span className="text-base font-normal">
                 <Shimmer className="h-[0.7em] w-9" />
               </span>
               <Shimmer className="size-5 rounded-full" />
@@ -48,6 +60,19 @@ export function HourlyStripSkeleton() {
               </span>
             </div>
           ))}
+        </div>
+        <div className="mt-3 flex justify-center border-t border-border pt-3">
+          {/* Sized like the season line: a name and a description that wraps
+              (hidden text, not drawn), so the card has its usual height. */}
+          <Shimmer className="inline-flex max-w-full flex-wrap items-center justify-center gap-x-2 rounded-[var(--radius-badge)] px-3 py-1 text-center">
+            <span className="invisible text-base font-semibold">
+              Wet season
+            </span>
+            <span className="invisible text-base font-normal">
+              Rains and warm days, with storms in the afternoon and cooler
+              nights ahead
+            </span>
+          </Shimmer>
         </div>
       </div>
     </section>
@@ -106,7 +131,9 @@ export function SidebarSkeleton() {
  *   same hint WeatherDashboard writes); a first visit gets a neutral sky.
  *   The hero is bars on that sky, with no plate colour to get wrong. The hint is read after mount, so hydration never differs.
  * - The header and the floating bottom nav are the persistent app chrome and
- *   are not drawn here; the breadcrumb row keeps its height.
+ *   are not drawn here; the hero's own top row (breadcrumb bar, round
+ *   controls) is part of the hero placeholder, and `data-sky-hero` hides the
+ *   phone header exactly as the real hero does.
  * - Same frame as WeatherDashboard (`max-w-7xl`, `--space-section`, the
  *   column classes) and the same bottom clearance, so safe areas and the nav
  *   are respected.
@@ -133,18 +160,8 @@ export function LocationSkeleton({ slug }: { slug?: string | null }) {
 
   return (
     <>
-      <WeatherSky type={look.sceneType} isDay={look.isDay} />
+      <WeatherSky family={look.family} texture={look.texture} />
       <div className="relative z-10" data-location-skeleton="">
-        <nav
-          aria-hidden="true"
-          className="mx-auto max-w-7xl px-4 pt-3 sm:px-6 md:px-8"
-        >
-          <div className="flex items-center gap-1.5 text-base">
-            <span className="dik-dik">
-              <Shimmer className="h-[0.7em] w-48" />
-            </span>
-          </div>
-        </nav>
         <div
           role="status"
           aria-label="Loading"
@@ -155,7 +172,7 @@ export function LocationSkeleton({ slug }: { slug?: string | null }) {
           <div className="grid gap-[var(--space-section)] lg:grid-cols-3 xl:grid-cols-4">
             <div className={`relative ${MAIN_COLUMN_CLASS}`}>
               <HeroSkeleton />
-              <HourlyStripSkeleton />
+              <ConditionsCardSkeleton />
               <TileGridSkeleton />
             </div>
             <SidebarSkeleton />

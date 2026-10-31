@@ -258,10 +258,11 @@ describe("WeatherDashboard — layout control placement (bottom of page)", () =>
     expect(firstOpen).toBeGreaterThan(source.indexOf("</DndContext>"));
   });
 
-  it("renders the season pill as the hero footer, not as a block above the grid", () => {
-    const currentIdx = source.indexOf("<CurrentConditions");
+  it("renders the season pill as the Conditions card footer, not in the hero or above the grid", () => {
+    const hourlyIdx = source.indexOf("<HourlyScrollCards");
     const footerIdx = source.indexOf("footer={<SeasonBadge");
-    expect(footerIdx).toBeGreaterThan(currentIdx);
+    expect(footerIdx).toBeGreaterThan(hourlyIdx);
+    expect(footerIdx).toBeLessThan(source.indexOf("<CurrentConditions"));
     expect(source).not.toMatch(/<div className="mb-3">\s*<SeasonBadge/);
   });
 

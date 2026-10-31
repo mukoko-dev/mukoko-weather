@@ -120,9 +120,7 @@ describe("Screen reader text — sr-only", () => {
   });
 
   it("CurrentConditions section is labelled by the visible place-name heading", () => {
-    expect(currentConditions).toContain(
-      '<h2\n          id="current-conditions-heading"',
-    );
+    expect(currentConditions).toContain('id="current-conditions-heading"');
     expect(currentConditions).toContain("sr-only");
     expect(currentConditions).toContain("degrees Celsius");
   });
@@ -130,13 +128,13 @@ describe("Screen reader text — sr-only", () => {
 
 describe("Touch targets — 56px minimum", () => {
   it("CurrentConditions share button meets the touch target requirement", () => {
-    // Share is the .impala-plate Mzizi pill, which carries both minimums.
-    expect(currentConditions).toContain('className="impala-plate mt-3"');
+    // Share is the round .kestrel-round control, which carries both minimums.
+    expect(currentConditions).toContain('className="kestrel-round"');
     const css = readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8");
-    const rule = css.slice(css.indexOf(".impala-plate {"));
+    const rule = css.slice(css.indexOf(".kestrel-round {"));
     const body = rule.slice(0, rule.indexOf("}"));
-    expect(body).toContain("min-h-[var(--touch-target-min)]");
-    expect(body).toContain("min-w-[var(--touch-target-min)]");
+    expect(body).toContain("w-[var(--touch-target-min)]");
+    expect(body).toContain("h-[var(--touch-target-min)]");
   });
 });
 

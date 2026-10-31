@@ -58,7 +58,7 @@ function isFiniteNumber(value: unknown): value is number {
 /**
  * Formats today's high/low as the hero line, e.g. "H:34°  L:25°".
  * Returns null when either value is missing or not a finite number, so the
- * hero never renders "H:NaN°" (the daily arrays can be empty).
+ * hero never renders "H NaN°" (the daily arrays can be empty).
  */
 export function formatHighLow(
   high: number | null | undefined,
@@ -68,16 +68,46 @@ export function formatHighLow(
   return `H:${Math.round(high)}°  L:${Math.round(low)}°`;
 }
 
+/**
+ * The hero's H/L line as separate parts, ["H:34°", "L:25°"] — the line wraps
+ * between them at large text sizes instead of overflowing. Null when either
+ * value is missing or not finite.
+ */
+export function formatHighLowParts(
+  high: number | null | undefined,
+  low: number | null | undefined,
+): [string, string] | null {
+  if (!isFiniteNumber(high) || !isFiniteNumber(low)) return null;
+  return [`H:${Math.round(high)}°`, `L:${Math.round(low)}°`];
+}
+
+/**
+ * "17:03 LOCAL" — the place's own clock for the hero eyebrow when no MY
+ * LOCATION / HOME badge applies. Read in the PLACE's UTC offset, never the
+ * viewer's zone; null until the caller has a client clock.
+ */
+export function heroLocalTime(
+  now: Date | null,
+  offsetSeconds?: number | null,
+): string | null {
+  if (!now || !Number.isFinite(now.getTime())) return null;
+  const local = new Date(
+    now.getTime() + resolveOffsetSeconds(offsetSeconds, now) * 1000,
+  );
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())} LOCAL`;
+}
+
 // ---------------------------------------------------------------------------
-// Sky plate — the solid mineral surface behind the hero
+// Open sky — the gradient band behind the hero
 // ---------------------------------------------------------------------------
 
 /**
- * Plate family: the condition family × day/night that picks the mineral tint.
- * Hue follows the condition family (and time of day), never a gradient or an
- * animated sky — the plate is a flat, solid surface.
+ * Sky family: the condition family × day/night that picks the gradient.
+ * The sky band is a static CSS gradient (no animation); see `.kestrel` in
+ * globals.css.
  */
-export type PlateFamily =
+export type SkyFamily =
   | "clear-day"
   | "clear-night"
   | "cloudy-day"
@@ -87,8 +117,8 @@ export type PlateFamily =
   | "storm"
   | "snow";
 
-/** WMO weather code → plate family. Unknown codes read as cloudy. */
-export function plateFamily(weatherCode: number, isDay: boolean): PlateFamily {
+/** WMO weather code → sky family. Unknown codes read as cloudy. */
+export function skyFamily(weatherCode: number, isDay: boolean): SkyFamily {
   if (weatherCode >= 95) return "storm";
   if (
     (weatherCode >= 71 && weatherCode <= 77) ||
@@ -108,19 +138,30 @@ export function plateFamily(weatherCode: number, isDay: boolean): PlateFamily {
 }
 
 /**
- * Fauna modifier class per plate family. Literal class names so Tailwind's
- * JIT keeps them; each one points `--kori-bg/fg` at a `--plate-*` token.
+ * Fauna modifier class per sky family. Literal class names so Tailwind's
+ * JIT keeps them; each one points `--kestrel-top/bottom` at a `--sky-*` pair.
  */
-export const PLATE_CLASS: Record<PlateFamily, string> = {
-  "clear-day": "kori-clear-day",
-  "clear-night": "kori-clear-night",
-  "cloudy-day": "kori-cloudy-day",
-  "cloudy-night": "kori-cloudy-night",
-  fog: "kori-fog",
-  rain: "kori-rain",
-  storm: "kori-storm",
-  snow: "kori-snow",
+export const SKY_CLASS: Record<SkyFamily, string> = {
+  "clear-day": "kestrel-clear-day",
+  "clear-night": "kestrel-clear-night",
+  "cloudy-day": "kestrel-cloudy-day",
+  "cloudy-night": "kestrel-cloudy-night",
+  fog: "kestrel-fog",
+  rain: "kestrel-rain",
+  storm: "kestrel-storm",
+  snow: "kestrel-snow",
 };
+
+/**
+ * The faint static texture a sky carries: stars on the night skies, diagonal
+ * streaks on rain and storms, nothing on the rest. Never animated.
+ */
+export type SkyTexture = "stars" | "streaks";
+export function skyTexture(family: SkyFamily): SkyTexture | null {
+  if (family === "clear-night" || family === "cloudy-night") return "stars";
+  if (family === "rain" || family === "storm") return "streaks";
+  return null;
+}
 
 /** Activity category → solid mineral dot (static literals for Tailwind JIT). */
 export const ACTIVITY_DOT_CLASS: Record<string, string> = {
