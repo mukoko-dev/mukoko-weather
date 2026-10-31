@@ -59,7 +59,7 @@ export function AtmosphericDetails({ hourly, utcOffsetSeconds }: Props) {
 
   return (
     <section aria-labelledby="atmospheric-details-heading">
-      <div className="rounded-[var(--radius-card)] bg-surface-card p-4 shadow-sm sm:p-6">
+      <div className="acacia">
         <h2
           id="atmospheric-details-heading"
           className="text-lg font-semibold text-text-primary font-heading"

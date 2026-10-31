@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { navDestination } from "@/lib/nav-destinations";
 import { useEffect, useId, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 
@@ -101,39 +102,22 @@ export function LocationsMenu({
               Units
             </button>
           </li>
-          <li role="none">
-            <Link
-              href="/explore"
-              role="menuitem"
-              prefetch={false}
-              className={itemClass}
-              onClick={() => setOpen(false)}
-            >
-              Explore
-            </Link>
-          </li>
-          <li role="none">
-            <Link
-              href="/history"
-              role="menuitem"
-              prefetch={false}
-              className={itemClass}
-              onClick={() => setOpen(false)}
-            >
-              History
-            </Link>
-          </li>
-          <li role="none">
-            <Link
-              href="/aviation"
-              role="menuitem"
-              prefetch={false}
-              className={itemClass}
-              onClick={() => setOpen(false)}
-            >
-              Aviation
-            </Link>
-          </li>
+          {(["explore", "history", "aviation"] as const).map((id) => {
+            const d = navDestination(id);
+            return (
+              <li key={id} role="none">
+                <Link
+                  href={d.href}
+                  role="menuitem"
+                  prefetch={false}
+                  className={itemClass}
+                  onClick={() => setOpen(false)}
+                >
+                  {d.label}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

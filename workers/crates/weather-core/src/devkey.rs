@@ -8,7 +8,6 @@
 //! counts usage, then answers the key's identity ([`KeyContext`]).
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 pub const CLIENT_ID_PREFIX: &str = "nyk_";
 pub const SECRET_PREFIX: &str = "nys_";
@@ -83,7 +82,7 @@ impl Credential {
     /// the secret itself.
     pub fn fingerprint(&self) -> Option<String> {
         let combined = self.combined()?;
-        Some(hex::encode(Sha256::digest(combined.as_bytes())))
+        Some(crate::crypto::sha256_hex(&combined))
     }
 }
 

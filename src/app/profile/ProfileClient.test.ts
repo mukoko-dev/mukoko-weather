@@ -25,9 +25,11 @@ const identity = read("../../components/profile/ProfileIdentity.tsx");
 const orgs = read("../../components/profile/ProfileOrganizations.tsx");
 const appearance = read("../../components/profile/ProfileAppearance.tsx");
 const nav = read("../../components/profile/ProfileNavigation.tsx");
+const group = read("../../components/profile/ProfileGroup.tsx");
+const row = read("../../components/profile/GroupedRow.tsx");
 const pkg = JSON.parse(read("../../../package.json")) as { version: string };
 const css = read("../globals.css");
-const all = [client, identity, orgs, appearance, nav];
+const all = [client, identity, orgs, appearance, nav, group, row];
 
 describe("/profile page — server wrapper", () => {
   it("is gated by requireUser and returns to /profile", () => {
@@ -89,7 +91,7 @@ describe("ProfileIdentity", () => {
 
   it("is accessible: labelled edit button, alert + status messages, h1", () => {
     expect(identity).toContain('aria-label="Edit your profile"');
-    expect(identity).toContain('role="alert"');
+    expect(identity).toContain("<Alert");
     expect(identity).toContain('role="status"');
     expect(identity).toContain("<h1");
   });
@@ -163,16 +165,19 @@ describe("profile — grouped-list layout (label above one card)", () => {
   it("the group label sits outside the card, which holds the rows", () => {
     expect(css).toContain(".guineafowl-card {");
     expect(css).not.toMatch(/\.guineafowl-heading \{[^}]*uppercase/);
-    for (const src of [client, appearance, nav, orgs]) {
-      expect(src).toContain("guineafowl-card");
+    expect(group).toContain("guineafowl-card");
+    expect(group).toContain("guineafowl-heading");
+    for (const src of [client, appearance, orgs]) {
+      expect(src).toContain("ProfileGroup");
     }
   });
 
   it("rows are icon, label, optional muted value, chevron, with an inset hairline", () => {
     expect(css).toMatch(/\.guineafowl-row \{[^}]*after:left-12/);
     expect(client).toContain("preferencesValue");
-    expect(client).toContain("<ChevronRight");
-    expect(nav).toContain("<ChevronRight");
+    expect(row).toContain("ChevronRight");
+    expect(row).toContain("chevron = true");
+    expect(nav).toContain("GroupedRow");
   });
 
   it("appearance shows a preview card per theme, drawn in that theme's tokens", () => {
@@ -182,10 +187,11 @@ describe("profile — grouped-list layout (label above one card)", () => {
   });
 
   it("sign out is its own card row, in the severe colour, last before the footer", () => {
-    expect(client).toContain("text-severity-severe");
-    expect(client.indexOf("text-severity-severe")).toBeGreaterThan(
+    expect(client).toContain('tone="danger"');
+    expect(client.indexOf('tone="danger"')).toBeGreaterThan(
       client.indexOf("<ProfileNavigation"),
     );
+    expect(row).toContain("text-severity-severe");
   });
 });
 
@@ -206,14 +212,13 @@ describe("profile — styling + accessibility", () => {
   });
 
   it("every section is labelled by its heading id", () => {
-    for (const src of [client, orgs, appearance, nav]) {
-      const labelled = [...src.matchAll(/aria-labelledby=\{?"?([\w-]+)/g)];
-      expect(labelled.length).toBeGreaterThan(0);
-    }
+    const labelled = [...group.matchAll(/aria-labelledby=\{?"?([\w-]+)/g)];
+    expect(labelled.length).toBeGreaterThan(0);
+    expect(client).toContain('id="preferences-heading"');
+    expect(orgs).toContain('id="profile-organizations"');
   });
 
   it("marks decorative icons aria-hidden", () => {
-    expect(nav).toContain('aria-hidden="true"');
-    expect(client).toContain('aria-hidden="true"');
+    expect(row).toContain('aria-hidden="true"');
   });
 });

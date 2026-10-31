@@ -23,6 +23,7 @@ import { VisibilityChart } from "./charts/VisibilityChart";
 import { PrecipitationChart } from "./charts/PrecipitationChart";
 import { HumidityChart } from "./charts/HumidityChart";
 import { PressureChart } from "./charts/PressureChart";
+import { MetricValue } from "./MetricValue";
 
 interface Props {
   /** The tile that was opened; null keeps the modal closed. */
@@ -110,9 +111,7 @@ export function MetricDetailModal({
       header={
         detail && (
           <>
-            <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
-              {detail.headline}
-            </p>
+            <MetricValue>{detail.headline}</MetricValue>
             <p className="gazelle">{detail.sentence}</p>
           </>
         )

@@ -68,3 +68,17 @@ describe("every ordinary page route has a loader and an error boundary", () => {
     });
   }
 });
+
+describe("PageHeaderSkeleton and SkeletonStack", () => {
+  it("exports the title+intro placeholder in the PageHeader spacing", () => {
+    expect(source).toContain("export function PageHeaderSkeleton");
+    expect(source).toContain('className="mb-3 h-9 w-56"');
+    expect(source).toContain('className="mb-8 h-4 w-80 max-w-full"');
+  });
+
+  it("exports SkeletonStack, rendering `count` items inside one wrapper", () => {
+    expect(source).toContain("export function SkeletonStack");
+    expect(source).toContain("Array.from({ length: count }");
+    expect(source).toContain("<React.Fragment key={i}>");
+  });
+});

@@ -71,6 +71,7 @@ import {
 import { POLLUTANT_LABELS, type AirQualityResponse } from "./AirQualityCard";
 import { AirQualityWideSkeleton } from "./SectionSkeleton";
 import { fetchWorker } from "@/lib/weather-api";
+import { MetricValue } from "./MetricValue";
 
 interface Props {
   current: CurrentWeather;
@@ -402,9 +403,7 @@ function AirQualityWide({
           </h3>
         </header>
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
-            {data.aqi}
-          </p>
+          <MetricValue>{data.aqi}</MetricValue>
           <p className="giraffe">{AQI_BAND_LABELS[band]}</p>
         </div>
         <GradientScale
@@ -577,9 +576,7 @@ export function AtmosphericSummary({
             label="Feels like"
             sentence={feels.sentence}
           >
-            <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
-              {feels.value}°
-            </p>
+            <MetricValue>{feels.value}°</MetricValue>
           </InsightCard>
         </EdgeTile>
 
@@ -595,9 +592,9 @@ export function AtmosphericSummary({
             sentence={visibility.sentence}
           >
             <div className="flex flex-col items-center gap-1">
-              <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
+              <MetricValue>
                 {visibility.km !== null ? `${visibility.km} km` : "—"}
-              </p>
+              </MetricValue>
               <p className="dove">{visibility.label}</p>
             </div>
           </InsightCard>
@@ -639,9 +636,7 @@ export function AtmosphericSummary({
             sentence={humidity.sentence}
           >
             <div className="flex flex-col items-center gap-1">
-              <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
-                {humidity.value}%
-              </p>
+              <MetricValue>{humidity.value}%</MetricValue>
               <p className="dove">Dew point {humidity.dewPoint}°</p>
             </div>
           </InsightCard>
@@ -707,9 +702,7 @@ export function AtmosphericSummary({
               sentence={averages.sentence}
             >
               <div className="flex flex-col items-center gap-1">
-                <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
-                  {todayHigh}°
-                </p>
+                <MetricValue>{todayHigh}°</MetricValue>
                 <p className="dove">
                   {normalHigh !== null
                     ? `Normal high ${Math.round(normalHigh)}°`

@@ -21,6 +21,7 @@ import {
 } from "@/lib/air-quality-details";
 import { AIR_QUALITY_LAYER_ID, writeStoredMapLayer } from "@/lib/map-layers";
 import { GradientScale } from "./widgets";
+import { MetricValue } from "./MetricValue";
 
 interface Props {
   open: boolean;
@@ -57,10 +58,10 @@ export function AirQualityDetail({ open, reading, slug, now, onClose }: Props) {
         <div className="flex flex-col gap-[var(--space-section)] px-4 pt-3 sm:px-5">
           <header className="flex flex-col gap-1">
             <DialogTitle className="hornbill text-sm">Air quality</DialogTitle>
-            <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
+            <MetricValue>
               {reading.aqi}{" "}
               <span className="giraffe">{AQI_BAND_LABELS[band]}</span>
-            </p>
+            </MetricValue>
             <p className="dove">US EPA Air Quality Index, 0 to 500</p>
           </header>
 
