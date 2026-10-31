@@ -337,8 +337,67 @@ describe("history page wiring (#268)", () => {
     expect(src).toContain("HISTORY_RANGES");
     expect(src).toContain("<HistoryAttribution sources={sources} />");
     expect(src).toContain("readHistoryAnswer(");
-    expect(src).toContain("lagNote(json.missing)");
-    expect(src).toContain("CLAMPED_NOTE");
+    // The notes come from one pure function: the lag note only when the lag
+    // is the cause.
+    expect(src).toContain("historyNotices(json)");
+    expect(src).not.toContain("lagNote(");
+  });
+
+  it("only the latest request may set the page (a stale one is aborted and ignored)", async () => {
+    const fs = await import("fs");
+    const src = fs.readFileSync(
+      "src/app/history/HistoryDashboard.tsx",
+      "utf-8",
+    );
+    // The rule itself is tested in src/lib/latest-request.test.ts; here it is
+    // wired: a new request aborts the old one, the signal reaches the fetch
+    // (fetchWorker honours init.signal) and nothing is written once superseded.
+    expect(src).toContain("createLatestRequests");
+    expect(src).toContain("const { signal, isLatest } = requests.begin();");
+    expect(src).toContain("{ signal },");
+    expect(src).not.toMatch(
+      /historyQuery\([\s\S]*?\),\s*\{\},\s*historyFetchOptions/,
+    );
+    // Every write after an await is behind the guard, and an abort is silent.
+    expect(src).toContain("if (!isLatest()) return;");
+    expect(src).toContain("if (!isLatest() || signal.aborted) return;");
+    // Only the latest request ends the loading state.
+    expect(src).toContain("if (isLatest()) {\n          setLoading(false);");
+    // Leaving the page abandons the request in flight.
+    expect(src).toContain("return () => requests.cancel();");
+  });
+
+  it("the auto-selected place never overrides one the visitor picked", async () => {
+    const fs = await import("fs");
+    const src = fs.readFileSync(
+      "src/app/history/HistoryDashboard.tsx",
+      "utf-8",
+    );
+    expect(src).toContain("pickedByUser.current = true;");
+    expect(src).toContain("if (!loc || pickedByUser.current) return;");
+    expect(src).toContain("fetchHistory(loc, daysRef.current)");
+    expect(src).toContain("daysRef.current = newDays;");
+  });
+
+  it("says so honestly when the answer is partial, and when it is slow", async () => {
+    const fs = await import("fs");
+    const src = fs.readFileSync(
+      "src/app/history/HistoryDashboard.tsx",
+      "utf-8",
+    );
+    // A degraded answer shows the retry notice, never the archive-lag note
+    // and never "no data recorded".
+    expect(src).toContain("setDegraded(json.degraded);");
+    expect(src).toContain("{DEGRADED_NOTE}");
+    expect(src).toContain("!degraded &&\n        records.length === 0");
+    expect(src).toContain(
+      "onClick={() => fetchHistory(selectedLocation, days)}",
+    );
+    // The wait is named after STILL_WORKING_AFTER_MS.
+    expect(src).toContain("window.setTimeout(() => {");
+    expect(src).toContain("STILL_WORKING_AFTER_MS");
+    expect(src).toContain("{STILL_WORKING_NOTE}");
+    expect(src).toContain("window.clearTimeout(slowTimer);");
   });
 
   it("credits the archives in the footer", async () => {
@@ -370,7 +429,7 @@ describe("transformHistory null archive means (#245)", () => {
       "src/app/history/HistoryDashboard.tsx",
       "utf-8",
     );
-    expect(src).toContain("void fetchHistory(loc, 30);");
+    expect(src).toContain("void fetchHistory(loc, daysRef.current);");
     expect(src).not.toContain("b.error ||");
   });
 });

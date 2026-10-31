@@ -64,7 +64,11 @@ export interface HistoryAnswer {
   missing: number;
   /** True when fetched days are being stored after this answer. */
   saving: boolean;
-  /** True when a store could not be read, so the answer holds only part. */
+  /**
+   * True when the answer holds only part of the range for a reason that is NOT
+   * the archive's plain lag: a store could not be read, a budget or a provider
+   * was out, or a per-request cap was reached. A retry may complete it.
+   */
   degraded: boolean;
 }
 
@@ -114,20 +118,35 @@ export function readHistoryAnswer(json: unknown): HistoryAnswer {
 }
 
 /**
+ * Only a short range is retried: it is nearly always served from what we hold,
+ * so a retry after a network error or a 5xx is cheap. A longer one is a slow
+ * fetch from an archive, and a retry would double a wait that is already long
+ * (a 1-year view would otherwise wait up to 60 s).
+ */
+export const RETRY_UP_TO_DAYS = 31;
+
+/**
  * How long to wait for a history answer. A cold view reads two stores, asks an
  * archive for the missing years and (in the background) stores them, so it can
  * take far longer than a cached one; the Worker's default 8 s would abort it
- * mid-run. A long range is not retried: the Worker keeps filling after the
- * client gives up, and the next view is served from what it stored.
+ * mid-run. Only a short range is retried (see RETRY_UP_TO_DAYS): for a long one
+ * the Worker keeps filling after the client gives up, and the next view is
+ * served from what it stored.
  */
 export function historyFetchOptions(days: number): {
   timeoutMs: number;
   retries: number;
 } {
-  if (days <= 90) return { timeoutMs: 20_000, retries: 1 };
-  if (days <= 365) return { timeoutMs: 30_000, retries: 1 };
+  if (days <= RETRY_UP_TO_DAYS) return { timeoutMs: 20_000, retries: 1 };
+  if (days <= 365) return { timeoutMs: 30_000, retries: 0 };
   return { timeoutMs: 45_000, retries: 0 };
 }
+
+/** After this long a view says it is still working (see STILL_WORKING_NOTE). */
+export const STILL_WORKING_AFTER_MS = 10_000;
+
+export const STILL_WORKING_NOTE =
+  "Still working: days we have not stored yet are being fetched from the climate archives. A long range can take half a minute the first time.";
 
 export interface HistoryQuery {
   slug: string;
@@ -184,10 +203,43 @@ export function archiveNote(
 export const CLAMPED_NOTE =
   "This place is not in our catalogue, so history is limited to the most recent year.";
 
-/** Shown when some dates in the range have no day yet. */
+/**
+ * Shown when some dates in the range have no day yet BECAUSE the archives run
+ * a few days behind. Not for a degraded answer: there the missing dates have a
+ * different cause (see DEGRADED_NOTE), and blaming the archive would be wrong.
+ */
 export function lagNote(missing: number): string | null {
   if (missing <= 0) return null;
   return missing === 1
     ? "One day has no data yet: archives run a few days behind."
     : `${missing} days have no data yet: archives run a few days behind.`;
+}
+
+/** Shown when the answer is incomplete for a reason other than the archive lag. */
+export const DEGRADED_NOTE =
+  "Some history could not be loaded just now, so this may be incomplete. Try again in a moment.";
+
+/** Shown when the history request itself failed. */
+export const HISTORY_FAILED_NOTE = "History could not be loaded just now.";
+
+/** A quiet note: the fetched days are being stored after the answer. */
+export const SAVING_NOTE =
+  "New days are being saved, so the next view will be faster.";
+
+/**
+ * The notes under the summary, from one answer. A degraded answer carries
+ * none of the lag or saving notes (its missing dates are not the archive's
+ * lag); the page shows DEGRADED_NOTE with a retry instead.
+ */
+export function historyNotices(
+  answer: Pick<HistoryAnswer, "clamped" | "degraded" | "missing" | "saving">,
+): string[] {
+  const notes: string[] = [];
+  if (answer.clamped) notes.push(CLAMPED_NOTE);
+  if (!answer.degraded) {
+    const lag = lagNote(answer.missing);
+    if (lag) notes.push(lag);
+    if (answer.saving) notes.push(SAVING_NOTE);
+  }
+  return notes;
 }

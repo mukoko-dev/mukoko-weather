@@ -2,10 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   ARCHIVE_SOURCES,
   CLAMPED_NOTE,
+  DEGRADED_NOTE,
   HISTORY_MAX_DAYS,
   HISTORY_RANGES,
+  RETRY_UP_TO_DAYS,
+  SAVING_NOTE,
+  STILL_WORKING_AFTER_MS,
+  STILL_WORKING_NOTE,
   archiveNote,
   historyFetchOptions,
+  historyNotices,
   historyQuery,
   historySource,
   isArchiveSource,
@@ -77,11 +83,28 @@ describe("historyFetchOptions", () => {
     expect(historyFetchOptions(730).timeoutMs).toBeGreaterThanOrEqual(40_000);
     expect(historyFetchOptions(1825).timeoutMs).toBeGreaterThanOrEqual(40_000);
   });
-  it("does not retry a long range (the Worker keeps filling after a give-up)", () => {
-    expect(historyFetchOptions(90).retries).toBe(1);
-    expect(historyFetchOptions(365).retries).toBe(1);
-    expect(historyFetchOptions(366).retries).toBe(0);
+  it("retries only a short range (the Worker keeps filling after a give-up)", () => {
+    expect(historyFetchOptions(7).retries).toBe(1);
+    expect(historyFetchOptions(RETRY_UP_TO_DAYS).retries).toBe(1);
+    expect(historyFetchOptions(RETRY_UP_TO_DAYS + 1).retries).toBe(0);
+    expect(historyFetchOptions(90).retries).toBe(0);
+    expect(historyFetchOptions(365).retries).toBe(0);
     expect(historyFetchOptions(1825).retries).toBe(0);
+  });
+  it("never makes a view wait longer than its single timeout past a month", () => {
+    for (const r of HISTORY_RANGES) {
+      const { timeoutMs, retries } = historyFetchOptions(r.value);
+      const worst = timeoutMs * (retries + 1);
+      // 30 days: two 20 s attempts at worst; a year: one 30 s attempt.
+      expect(worst).toBeLessThanOrEqual(r.value <= 31 ? 40_000 : 45_000);
+    }
+  });
+  it("says it is still working well before the longest wait ends", () => {
+    expect(STILL_WORKING_AFTER_MS).toBeLessThanOrEqual(10_000);
+    expect(STILL_WORKING_AFTER_MS).toBeLessThan(
+      historyFetchOptions(365).timeoutMs,
+    );
+    expect(STILL_WORKING_NOTE).toMatch(/still working/i);
   });
   it("covers every range the page offers", () => {
     for (const r of HISTORY_RANGES) {
@@ -175,5 +198,35 @@ describe("notes", () => {
     expect(lagNote(3)).toBe(
       "3 days have no data yet: archives run a few days behind.",
     );
+  });
+});
+
+describe("historyNotices", () => {
+  const base = { clamped: false, degraded: false, missing: 0, saving: false };
+  it("blames the archive lag only when the lag is the cause", () => {
+    expect(historyNotices({ ...base, missing: 2 })).toEqual([lagNote(2)]);
+    // A degraded answer is missing days for another reason: no lag note.
+    expect(historyNotices({ ...base, missing: 40, degraded: true })).toEqual(
+      [],
+    );
+    expect(lagNote(40)).toMatch(/archives run a few days behind/);
+    expect(DEGRADED_NOTE).not.toMatch(/archive/i);
+  });
+  it("adds the clamp and the quiet saving note", () => {
+    expect(historyNotices({ ...base, clamped: true })).toEqual([CLAMPED_NOTE]);
+    expect(historyNotices({ ...base, saving: true })).toEqual([SAVING_NOTE]);
+    expect(
+      historyNotices({ ...base, clamped: true, missing: 1, saving: true }),
+    ).toEqual([CLAMPED_NOTE, lagNote(1), SAVING_NOTE]);
+    // Nothing to say about a complete, stored answer.
+    expect(historyNotices(base)).toEqual([]);
+  });
+  it("keeps the clamp note on a degraded answer, nothing else", () => {
+    expect(
+      historyNotices({ ...base, clamped: true, degraded: true, saving: true }),
+    ).toEqual([CLAMPED_NOTE]);
+  });
+  it("offers a retry notice that says what to do", () => {
+    expect(DEGRADED_NOTE).toMatch(/try again/i);
   });
 });

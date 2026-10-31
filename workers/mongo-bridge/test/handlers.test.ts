@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { route, needsStores, type Deps, type Result } from "../src/handlers";
-import { deviceStore, historyStore, reportStore } from "../src/stores";
+import {
+  deviceStore,
+  historyStore,
+  placeAliasStore,
+  reportStore,
+} from "../src/stores";
 import { FakeColl } from "./fake";
 
 const NOW = new Date("2026-10-19T10:00:00.000Z");
@@ -14,6 +19,7 @@ function setup(now: Date = NOW) {
       devices: deviceStore(devices),
       reports: reportStore(reports),
       history: historyStore(history),
+      places: placeAliasStore(new FakeColl()),
     },
     now: () => now,
     randomId: () => "generated-id",

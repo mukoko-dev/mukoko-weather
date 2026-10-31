@@ -23,14 +23,16 @@ import { weatherCodeToInfo, windDirection, uvLevel } from "@/lib/weather";
 import type { WeatherInsights } from "@/lib/weather";
 import type { WeatherHistoryDoc } from "@/lib/db";
 import {
-  CLAMPED_NOTE,
+  DEGRADED_NOTE,
   HISTORY_RANGES,
+  STILL_WORKING_AFTER_MS,
+  STILL_WORKING_NOTE,
   archiveNote,
   historyFetchOptions,
+  historyNotices,
   historyQuery,
   historySource,
   isArchiveSource,
-  lagNote,
   readHistoryAnswer,
   type HistoryDays,
   type HistorySource,
@@ -42,6 +44,7 @@ import type { ActivityCategoryDoc } from "@/lib/db";
 import type { WeatherLocation } from "@/lib/locations";
 import { CATEGORIES } from "@/lib/seed-categories";
 import { fetchJson } from "@/lib/fetch-json";
+import { createLatestRequests } from "@/lib/latest-request";
 import { fetchActivityCategories } from "@/lib/activities-client";
 import {
   heatStressLevel,
@@ -579,6 +582,12 @@ export function HistoryDashboard() {
   const [fetched, setFetched] = useState(false);
   const [sources, setSources] = useState<HistorySourceCredit[]>([]);
   const [notices, setNotices] = useState<string[]>([]);
+  // The answer holds only part of the range for a reason other than the
+  // archive lag (an unreadable store, a spent budget, a provider outage): a
+  // retry may complete it, and the lag note would blame the wrong thing.
+  const [degraded, setDegraded] = useState(false);
+  // The request has been running long enough to say so (see STILL_WORKING_AFTER_MS).
+  const [slow, setSlow] = useState(false);
   const [visibleRowCount, setVisibleRowCount] = useState(50);
   const [activeTab, setActiveTab] = useState<ViewTab>("weather");
   const [categoryFilter, setCategoryFilter] = useState<
@@ -589,6 +598,13 @@ export function HistoryDashboard() {
   const [activityCategories, setActivityCategories] =
     useState<ActivityCategoryDoc[]>(CATEGORIES);
   const didAutoSelect = useRef(false);
+  // Only the LATEST history request may set the page: a slower, older one (a
+  // wide range for the place picked a moment ago) is aborted and ignored.
+  const [requests] = useState(createLatestRequests);
+  // The auto-select below resolves after a network round trip: it must not
+  // override a place or a range the visitor has picked by then.
+  const pickedByUser = useRef(false);
+  const daysRef = useRef<DayRange>(30);
 
   // Build category filter options and styles from API data
   const categoryFilterOptions = useMemo(() => {
@@ -642,9 +658,17 @@ export function HistoryDashboard() {
 
   const fetchHistory = useCallback(
     async (location: SelectedHistoryLocation, dayCount: DayRange) => {
+      // A new request supersedes the one in flight: it is aborted, and only
+      // this one may write state (`isLatest`, checked after every await).
+      const { signal, isLatest } = requests.begin();
       setLoading(true);
       setError(null);
+      setDegraded(false);
+      setSlow(false);
       setFetched(true);
+      const slowTimer = window.setTimeout(() => {
+        if (isLatest()) setSlow(true);
+      }, STILL_WORKING_AFTER_MS);
       try {
         const res = await fetchWorker(
           "history",
@@ -654,29 +678,30 @@ export function HistoryDashboard() {
             lon: location.lon,
             days: dayCount,
           }),
-          {},
+          { signal },
           historyFetchOptions(dayCount),
         );
         if (!res.ok) {
           const body = await res
             .json()
             .catch(() => ({ error: "Request failed" }));
+          if (!isLatest()) return;
           // FastAPI errors carry `detail`; keep `error` for older shapes.
           throw new Error(
             historyErrorMessage(res.status, body.detail ?? body.error),
           );
         }
         const json = readHistoryAnswer(await res.json());
+        if (!isLatest()) return;
         setRecords(transformHistory(json.data as WeatherHistoryDoc[]));
         setInsightsRecords(transformInsights(json.data as WeatherHistoryDoc[]));
         setSources(json.sources);
-        setNotices(
-          [json.clamped ? CLAMPED_NOTE : null, lagNote(json.missing)].filter(
-            (n): n is string => n !== null,
-          ),
-        );
+        setDegraded(json.degraded);
+        setNotices(historyNotices(json));
         setVisibleRowCount(50);
       } catch (err) {
+        // Superseded (or left the page): not an error the visitor should see.
+        if (!isLatest() || signal.aborted) return;
         setError(
           err instanceof Error ? err.message : "Failed to fetch history",
         );
@@ -684,12 +709,22 @@ export function HistoryDashboard() {
         setInsightsRecords([]);
         setSources([]);
         setNotices([]);
+        setDegraded(false);
       } finally {
-        setLoading(false);
+        window.clearTimeout(slowTimer);
+        if (isLatest()) {
+          setLoading(false);
+          setSlow(false);
+        }
       }
     },
-    [],
+    [requests],
   );
+
+  // Leaving the page abandons the request in flight.
+  useEffect(() => {
+    return () => requests.cancel();
+  }, [requests]);
 
   // Auto-select the global location (from My Weather / last visited location page)
   // by fetching just that one location from the API.
@@ -702,11 +737,12 @@ export function HistoryDashboard() {
     )
       .then((data) => {
         const loc = data?.location;
-        if (!loc) return;
+        // The visitor picked a place while this was looking: theirs wins.
+        if (!loc || pickedByUser.current) return;
         setSelectedLocation(loc);
         setQuery(loc.name);
         // Same path as a manual pick, so error copy and state can't drift.
-        void fetchHistory(loc, 30);
+        void fetchHistory(loc, daysRef.current);
       })
       .catch(() => {
         // Location lookup failed: leave the "select a location" state.
@@ -714,6 +750,7 @@ export function HistoryDashboard() {
   }, [globalSlug, fetchHistory]);
 
   const handleSelectLocation = (loc: SelectedHistoryLocation) => {
+    pickedByUser.current = true;
     setSelectedLocation(loc);
     setQuery(loc.name);
     setShowDropdown(false);
@@ -721,6 +758,7 @@ export function HistoryDashboard() {
   };
 
   const handleDaysChange = (newDays: DayRange) => {
+    daysRef.current = newDays;
     setDays(newDays);
     if (selectedLocation) {
       fetchHistory(selectedLocation, newDays);
@@ -990,11 +1028,18 @@ export function HistoryDashboard() {
       )}
 
       {loading && (
-        <div className="flex items-center justify-center py-12">
-          <Spinner className="h-8 w-8" />
-          <span className="ml-3 text-base text-text-secondary">
-            Loading history...
-          </span>
+        <div className="flex flex-col items-center justify-center gap-2 py-12">
+          <div className="flex items-center">
+            <Spinner className="h-8 w-8" />
+            <span className="ml-3 text-base text-text-secondary">
+              Loading history...
+            </span>
+          </div>
+          {slow && (
+            <p className="dove max-w-prose text-center" role="status">
+              {STILL_WORKING_NOTE}
+            </p>
+          )}
         </div>
       )}
 
@@ -1016,9 +1061,25 @@ export function HistoryDashboard() {
         </Alert>
       )}
 
+      {fetched && !loading && !error && degraded && records.length === 0 && (
+        <Alert variant="warning">
+          <AlertDescription>{DEGRADED_NOTE}</AlertDescription>
+          {selectedLocation && (
+            <button
+              type="button"
+              className="impala-sm mt-3"
+              onClick={() => fetchHistory(selectedLocation, days)}
+            >
+              Try again
+            </button>
+          )}
+        </Alert>
+      )}
+
       {fetched &&
         !loading &&
         !error &&
+        !degraded &&
         records.length === 0 &&
         selectedLocation && (
           <div className="pangolin p-8 text-center">
@@ -1064,6 +1125,23 @@ export function HistoryDashboard() {
                 {n}
               </p>
             ))}
+            {degraded && (
+              <div
+                className="mt-1 flex flex-wrap items-center gap-3"
+                role="status"
+              >
+                <p className="dove">{DEGRADED_NOTE}</p>
+                {selectedLocation && (
+                  <button
+                    type="button"
+                    className="impala-sm"
+                    onClick={() => fetchHistory(selectedLocation, days)}
+                  >
+                    Try again
+                  </button>
+                )}
+              </div>
+            )}
             <HistoryAttribution sources={sources} />
             <h3 className="hornbill mt-4">Temperature</h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">

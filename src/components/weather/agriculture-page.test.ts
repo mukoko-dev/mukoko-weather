@@ -82,10 +82,29 @@ describe("agriculture page components", () => {
 
   it("history loads independently of normals and compares against the window mean", () => {
     const src = read("AgricultureHistory.tsx");
-    expect(src).toContain("const loading = history === null;");
+    expect(src).toContain(
+      "const loading = history === null || summary === undefined;",
+    );
     expect(src).toContain("averageNormals(start, end)");
     expect(src).toContain("date=${date}");
     expect(src).toContain("not a gauge");
+  });
+
+  it("history says so when it is partial or failed, with a retry", () => {
+    const src = read("AgricultureHistory.tsx");
+    // The answer's own flags are read, not just its data.
+    expect(src).toContain("readHistoryAnswer(await res.json())");
+    expect(src).toContain("degraded: answer.degraded");
+    expect(src).toContain("DEGRADED_NOTE");
+    expect(src).toContain("HISTORY_FAILED_NOTE");
+    // A failed request is "failed", not an empty history.
+    expect(src).toContain("if (!res.ok) throw new Error(");
+    expect(src).toContain("failed: true");
+    // The retry reruns the effect.
+    expect(src).toContain("setAttempt((n) => n + 1)");
+    expect(src).toContain("[slug, lat, lon, attempt]");
+    // Never blames the archive lag for it.
+    expect(src).not.toContain("lagNote");
   });
 
   it("crop advice tells apart no crops from nothing to act on", () => {

@@ -33,10 +33,16 @@
 //! - The answer is returned as soon as the days are in hand; the insert-only
 //!   writes through the bridge finish in the background (`wait_until`), so a
 //!   client that gives up cannot lose them. `saving: true` says so.
-//! - A budget, an open breaker or a provider failure makes the answer
-//!   `no-store`; only a plain archive lag is cached (60 s).
+//! - An answer that is incomplete for any reason but the archive's plain lag
+//!   (a store that could not be read, a spent budget, an open breaker, a
+//!   provider failure, a per-request cap) says `degraded: true` and is
+//!   `no-store`, so the client can offer a retry; only a plain archive lag is
+//!   cached (60 s). A provider that failed but whose dates another provider
+//!   filled is not degraded.
 //!
-//! Only when nothing at all could be read AND nothing fetched is it a 502.
+//! Only when NO store was actually read (a spot's only store, the bridge, is
+//! down, or both are) and nothing was fetched is it a 502. A store that does
+//! not apply to a request (D1 for a spot) was not read, and does not count.
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -47,8 +53,8 @@ use weather_core::budget::Action;
 use weather_core::community::storage_slug;
 use weather_core::geo::valid_coordinates;
 use weather_core::history::{
-    self as h, Day, ProviderSpec, COORD_MAX_RANGE_DAYS, MAX_DAYS_PER_WRITE, MAX_FETCHES_PER_CALL,
-    RUN_MERGE_GAP_DAYS, SOURCE_NASA_POWER, SOURCE_OPEN_METEO_ARCHIVE,
+    self as h, Day, ProviderSpec, StoreRead, COORD_MAX_RANGE_DAYS, MAX_DAYS_PER_WRITE,
+    MAX_FETCHES_PER_CALL, RUN_MERGE_GAP_DAYS, SOURCE_NASA_POWER, SOURCE_OPEN_METEO_ARCHIVE,
 };
 use weather_core::locations::{self, LocationDoc};
 use weather_edge::{config, error, get_with_timeout, json, now_ms, secret, FetchError};
@@ -237,39 +243,42 @@ pub async fn serve(
     }
 
     // 1 + 2: what we hold.
-    let (d1, d1_ok) = read_d1(env, &target, &range_start, &range_end).await;
-    let (mongo, mongo_ok) = read_bridge(env, &target, &range_start, &range_end).await;
+    let (d1, d1_read) = read_d1(env, &target, &range_start, &range_end).await;
+    let (mongo, mongo_read) = read_bridge(env, &target, &range_start, &range_end).await;
     let mut docs = d1;
     docs.extend(mongo);
     let order = target.mongo_keys.clone();
     let mut stored = h::merge_by_date(docs, &order);
     // When a store could not be read, what we hold is UNKNOWN: every date would
     // look missing, and an archive's reanalysis would replace days we recorded.
-    let holdings_known = d1_ok && mongo_ok;
+    let holdings_known = h::holdings_known(d1_read, mongo_read);
     let existing = h::dates_of(&stored);
 
     // 3: the rest from the archives (only when we know what is missing).
     let missing = h::missing_dates(&existing, &range_start, &range_end, target.lon, now);
     let mut fetched: Vec<Value> = Vec::new();
     let mut still_missing = missing.len();
-    let mut degraded = !holdings_known;
+    let mut upstream_trouble = false;
     let mut pending: Vec<Value> = Vec::new();
     if holdings_known && !missing.is_empty() {
         let caller = Caller::from_request(req);
         let out = backfill(env, &caller, &target, &missing).await;
         still_missing = out.remaining;
-        degraded |= out.degraded;
+        upstream_trouble = out.degraded;
         pending = out.docs.clone();
         fetched = out.docs;
     }
+    let degraded = h::is_degraded(holdings_known, upstream_trouble, still_missing);
     let backfilled = fetched.len();
     if backfilled > 0 {
         stored.extend(fetched);
         stored = h::merge_by_date(stored, &order);
     }
 
-    // Nothing readable and nothing fetched: say so rather than "no history".
-    if stored.is_empty() && !d1_ok && !mongo_ok {
+    // No store was actually read and nothing was fetched: say so rather than
+    // "no history". (A store that did not apply, like D1 for a spot, was not
+    // read: a spot whose bridge is down has read nothing.)
+    if stored.is_empty() && h::no_store_read(d1_read, mongo_read) {
         return error(
             502,
             "history_unavailable",
@@ -286,7 +295,7 @@ pub async fn serve(
         clamped,
         !pending.is_empty(),
     );
-    if !holdings_known {
+    if degraded {
         body["degraded"] = json!(true);
     }
     // Answer first, store after: the days are in hand, and a client that gives
@@ -296,8 +305,12 @@ pub async fn serve(
         let env = env.clone();
         let key = target.mongo_keys[0].clone();
         ctx.wait_until(async move {
-            if !save(&env, &key, &pending).await {
-                worker::console_warn!("history: could not store {} archive days", pending.len());
+            if let Err(why) = save(&env, &key, &pending).await {
+                // Status and the bridge's own error code only: no URL, no body.
+                worker::console_warn!(
+                    "history: could not store {} archive days: {why}",
+                    pending.len()
+                );
             }
         });
     }
@@ -357,10 +370,12 @@ fn cell_target(lat: f64, lon: f64) -> Target {
     }
 }
 
-/// The days the jobs Worker recorded. `false` when D1 could not be read.
-async fn read_d1(env: &Env, t: &Target, start: &str, end: &str) -> (Vec<Value>, bool) {
+/// The days the jobs Worker recorded. D1 holds nothing for a spot or a bare
+/// coordinate, so it is not asked (`NotApplicable`: not a read); `Failed` when
+/// it could not be read.
+async fn read_d1(env: &Env, t: &Target, start: &str, end: &str) -> (Vec<Value>, StoreRead) {
     let Some(slug) = &t.d1_slug else {
-        return (Vec::new(), true);
+        return (Vec::new(), StoreRead::NotApplicable);
     };
     let rows = async {
         env.d1(DB)?
@@ -376,7 +391,7 @@ async fn read_d1(env: &Env, t: &Target, start: &str, end: &str) -> (Vec<Value>, 
     }
     .await;
     let Ok(rows) = rows else {
-        return (Vec::new(), false);
+        return (Vec::new(), StoreRead::Failed);
     };
     let docs = rows
         .iter()
@@ -393,26 +408,29 @@ async fn read_d1(env: &Env, t: &Target, start: &str, end: &str) -> (Vec<Value>, 
             ))
         })
         .collect();
-    (docs, true)
+    (docs, StoreRead::Read)
 }
 
-/// The days MongoDB holds, through the bridge. `false` when it did not answer
+/// The days MongoDB holds, through the bridge. `Failed` when it did not answer
 /// (a timeout, a 5xx, or a bridge without the history routes).
-async fn read_bridge(env: &Env, t: &Target, start: &str, end: &str) -> (Vec<Value>, bool) {
+async fn read_bridge(env: &Env, t: &Target, start: &str, end: &str) -> (Vec<Value>, StoreRead) {
     let mut path = format!("/history?start={start}&end={end}");
     for k in &t.mongo_keys {
         path.push_str("&slug=");
         path.push_str(&url_encode(k));
     }
-    // A place's days may sit under its platform slug (`harare-35c223`) too.
+    // A place's days may sit under its platform slug (`harare-35c223`) too. The
+    // bridge finds that slug from the place record near these coordinates (the
+    // catalogue place's own point), never from the name alone.
     if t.aliases && t.mongo_keys.len() == 1 {
-        path.push_str("&aliases=1");
+        path.push_str(&format!("&aliases=1&lat={:.4}&lon={:.4}", t.lat, t.lon));
     }
     match bridge::call(env, Method::Get, &path, None).await {
-        bridge::Answer::Relay { status: 200, body } => {
-            (body["days"].as_array().cloned().unwrap_or_default(), true)
-        }
-        _ => (Vec::new(), false),
+        bridge::Answer::Relay { status: 200, body } => (
+            body["days"].as_array().cloned().unwrap_or_default(),
+            StoreRead::Read,
+        ),
+        _ => (Vec::new(), StoreRead::Failed),
     }
 }
 
@@ -429,8 +447,8 @@ struct Backfill {
     docs: Vec<Value>,
     /// Dates still missing after the attempt.
     remaining: usize,
-    /// A budget, an open breaker or a provider failure cut the attempt short
-    /// (not a plain lag or a per-request cap).
+    /// A budget, an open breaker, a provider failure or a per-request cap cut
+    /// the attempt short (not a plain archive lag).
     degraded: bool,
 }
 
@@ -448,9 +466,6 @@ async fn backfill(env: &Env, caller: &Caller, t: &Target, missing: &[String]) ->
     let mut request_budget: Option<bool> = None;
     let mut left: BTreeSet<String> = missing.iter().cloned().collect();
 
-    let out_of_budget =
-        |fetches: usize| fetches >= MAX_FETCHES_PER_CALL || now_ms() - started > TIME_BUDGET_MS;
-
     'runs: for (run_start, run_end) in h::group_runs(missing, RUN_MERGE_GAP_DAYS).into_iter().rev()
     {
         let mut remaining: BTreeSet<String> = left
@@ -466,7 +481,11 @@ async fn backfill(env: &Env, caller: &Caller, t: &Target, missing: &[String]) ->
                 continue;
             }
             for (c_start, c_end) in h::chunks_for(spec, &remaining) {
-                if out_of_budget(fetches) {
+                // The clock: no new chunk (not even a cached one) after the
+                // time budget. A chunk is still waiting, so the answer is cut
+                // short: say so (it is not cached as a plain lag).
+                if now_ms() - started > TIME_BUDGET_MS {
+                    degraded = true;
                     break 'runs;
                 }
                 // Our own KV first: no upstream call, no budget.
@@ -478,6 +497,12 @@ async fn backfill(env: &Env, caller: &Caller, t: &Target, missing: &[String]) ->
                 let days = match cached_days(env, &cache_key).await {
                     Some(d) => d,
                     None => {
+                        // The cap on upstream calls a request may start. A
+                        // chunk from our own KV above never counts against it.
+                        if fetches >= MAX_FETCHES_PER_CALL {
+                            degraded = true;
+                            break 'runs;
+                        }
                         if !with_breaker(spec.id, |b| b.allow(now_ms())) {
                             degraded = true;
                             unusable.insert(spec.id);
@@ -485,7 +510,10 @@ async fn backfill(env: &Env, caller: &Caller, t: &Target, missing: &[String]) ->
                         }
                         let units = spec.cost(h::span_days(&c_start, &c_end));
                         if om_units.saturating_add(units) > spec.units_per_call() {
-                            // The per-request cap on Open-Meteo's weighted calls.
+                            // The per-request cap on Open-Meteo's weighted
+                            // calls: the rest of this range is left for a
+                            // later request, so the answer is cut short.
+                            degraded = true;
                             unusable.insert(spec.id);
                             break;
                         }
@@ -568,21 +596,24 @@ async fn backfill(env: &Env, caller: &Caller, t: &Target, missing: &[String]) ->
     }
 }
 
-/// Insert-only through the bridge, in batches the bridge accepts.
-async fn save(env: &Env, key: &str, docs: &[Value]) -> bool {
-    let mut all_ok = true;
+/// Insert-only through the bridge, in batches the bridge accepts. Every batch
+/// is tried; `Err` is the reason the first failing one gave (the HTTP status
+/// and the bridge's error code, for a log line).
+async fn save(env: &Env, key: &str, docs: &[Value]) -> std::result::Result<(), String> {
+    let mut first_failure: Option<String> = None;
     for batch in docs.chunks(MAX_DAYS_PER_WRITE) {
         let body = json!({
             "slug": key,
             "days": batch.iter().map(h::to_archive_day).collect::<Vec<_>>(),
         });
-        let ok = matches!(
-            bridge::call(env, Method::Post, "/history/days", Some(&body)).await,
-            bridge::Answer::Relay { status: 200, .. }
-        );
-        all_ok &= ok;
+        match bridge::call(env, Method::Post, "/history/days", Some(&body)).await {
+            bridge::Answer::Relay { status: 200, .. } => {}
+            other => {
+                first_failure.get_or_insert_with(|| other.failure_reason());
+            }
+        }
     }
-    all_ok
+    first_failure.map_or(Ok(()), Err)
 }
 
 fn chain(env: &Env) -> Vec<&'static ProviderSpec> {

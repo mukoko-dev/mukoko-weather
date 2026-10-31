@@ -18,6 +18,7 @@ import {
   HISTORY_MAX_SPAN_DAYS,
   LIST_LIMIT,
   readPreferences,
+  validSlug,
   type ArchiveDay,
   type NewReport,
   type Preferences,
@@ -306,17 +307,8 @@ export function reportStore(col: Coll): ReportStore {
 //   UNIQUE index {locationSlug: 1, date: -1} (db-init). Never created here.
 
 export interface HistoryStore {
-  /**
-   * Days dated `start`..`end` under any of the keys, newest first. With
-   * `aliasesOf` (a place slug) also the days stored under that slug's platform
-   * aliases: the slug, a dash and six hex digits.
-   */
-  read(
-    keys: string[],
-    start: string,
-    end: string,
-    aliasesOf?: string,
-  ): Promise<Doc[]>;
+  /** Days dated `start`..`end` under any of the keys, newest first. */
+  read(keys: string[], start: string, end: string): Promise<Doc[]>;
   /** Insert-only: a day that exists is left untouched. */
   insertArchiveDays(
     key: string,
@@ -343,24 +335,9 @@ const HISTORY_READ_LIMIT = HISTORY_MAX_KEYS * HISTORY_MAX_SPAN_DAYS;
 
 export function historyStore(col: Coll): HistoryStore {
   return {
-    async read(keys, start, end, aliasesOf) {
-      const byKey: Doc = { locationSlug: { $in: keys } };
-      // The pattern is built from a validated slug ([a-z0-9-] only) and a
-      // fixed suffix, anchored at both ends: a prefix match the index serves.
-      const where: Doc = aliasesOf
-        ? {
-            $or: [
-              byKey,
-              {
-                locationSlug: {
-                  $regex: `^${aliasesOf.replace(/[^a-z0-9-]/g, "")}-[0-9a-f]{6}$`,
-                },
-              },
-            ],
-          }
-        : byKey;
+    async read(keys, start, end) {
       const docs = await col.findMany(
-        { ...where, date: { $gte: start, $lte: end } },
+        { locationSlug: { $in: keys }, date: { $gte: start, $lte: end } },
         {
           projection: HISTORY_PROJECTION,
           sort: { date: -1 },
@@ -393,6 +370,116 @@ export function historyStore(col: Coll): HistoryStore {
         })),
       );
       return { inserted, existing: days.length - inserted };
+    },
+  };
+}
+
+// --- platform aliases of a place ---------------------------------------------
+//
+//   places.placesGeo  {slug: "<name>-<last 6 hex of _id>", name, geoType,
+//                      geo (GeoJSON Point, 2dsphere index)}       READ ONLY
+//
+// A writer that recorded "the weather at the nearest known place" keyed the
+// day by that place's PLATFORM slug (`nairobi-518dd4`) instead of the
+// catalogue slug (`nairobi-ke`), and still does. Those days belong to the
+// catalogue place, so a history read also asks for them. The alias is found
+// from the place RECORD: the placesGeo cities, towns and villages within
+// ALIAS_RADIUS_KM of the place's own coordinates whose slug is the place's
+// name and six hex digits. A name alone cannot do it, because placesGeo holds
+// two Nyangas (a town in Zimbabwe, a province in Gabon) and a Nairobi city
+// beside a Nairobi province: matching `nairobi-*` or `nyanga-*` would merge
+// another place's weather into this one.
+//
+// The bridge's Atlas user needs `read` on `places.placesGeo` for this (owner
+// step in workers/README.md). Without it the lookup fails closed: no aliases,
+// the plain keys still answer, and the failure is cached for a few minutes.
+
+export interface PlaceAliasStore {
+  /**
+   * The platform slugs of the place `slug` at (`lat`, `lon`), at most
+   * ALIAS_MAX. Never throws: a lookup that fails is an empty list.
+   */
+  aliasesOf(slug: string, lat: number, lon: number): Promise<string[]>;
+}
+
+/** The writers attributed a request to the nearest known place within 25 km. */
+export const ALIAS_RADIUS_KM = 25;
+/** Mean Earth radius (km) for `$centerSphere`, which takes radians. */
+const EARTH_RADIUS_KM = 6378.1;
+const ALIAS_GEO_TYPES = ["city", "town", "village"];
+/** Candidate places read near the point (only their slugs). */
+const ALIAS_CANDIDATES = 100;
+/** One place has one city, perhaps one town record beside it. */
+export const ALIAS_MAX = 2;
+const ALIAS_TTL_MS = 3_600_000;
+const ALIAS_FAILURE_TTL_MS = 300_000;
+const ALIAS_CACHE_MAX = 500;
+
+/**
+ * The names a catalogue slug can be a place's platform alias of: the slug
+ * itself (`harare`) and, when it ends in a country suffix, the slug without it
+ * (`nairobi-ke` -> `nairobi`).
+ */
+export function aliasBases(slug: string): string[] {
+  const stripped = slug.replace(/-[a-z]{2}$/, "");
+  return stripped !== slug && stripped !== "" ? [slug, stripped] : [slug];
+}
+
+/** Whether `candidate` is one of the bases, a dash and six hex digits. */
+export function isAliasOf(
+  candidate: unknown,
+  bases: string[],
+): candidate is string {
+  if (typeof candidate !== "string" || !validSlug(candidate)) return false;
+  const m = /^(.+)-[0-9a-f]{6}$/.exec(candidate);
+  return m !== null && bases.includes(m[1]!);
+}
+
+export function placeAliasStore(
+  col: Coll,
+  now: () => number = Date.now,
+): PlaceAliasStore {
+  const cache = new Map<string, { aliases: string[]; until: number }>();
+  return {
+    async aliasesOf(slug, lat, lon) {
+      const t = now();
+      const cacheKey = `${slug}|${lat.toFixed(3)}|${lon.toFixed(3)}`;
+      const hit = cache.get(cacheKey);
+      if (hit && hit.until > t) return hit.aliases;
+      const bases = aliasBases(slug);
+      let aliases: string[] = [];
+      let ttl = ALIAS_TTL_MS;
+      try {
+        const docs = await col.findMany(
+          {
+            geoType: { $in: ALIAS_GEO_TYPES },
+            geo: {
+              $geoWithin: {
+                $centerSphere: [[lon, lat], ALIAS_RADIUS_KM / EARTH_RADIUS_KM],
+              },
+            },
+          },
+          {
+            projection: { _id: 0, slug: 1 },
+            sort: { slug: 1 },
+            limit: ALIAS_CANDIDATES,
+          },
+        );
+        aliases = [
+          ...new Set(
+            docs.map((d) => d.slug).filter((s) => isAliasOf(s, bases)),
+          ),
+        ].slice(0, ALIAS_MAX) as string[];
+      } catch (e) {
+        // Name only: a driver message can carry host names or filters.
+        console.warn(
+          `mongo-bridge: place alias lookup failed: ${e instanceof Error ? e.name : "error"}`,
+        );
+        ttl = ALIAS_FAILURE_TTL_MS;
+      }
+      if (cache.size >= ALIAS_CACHE_MAX) cache.clear();
+      cache.set(cacheKey, { aliases, until: t + ttl });
+      return aliases;
     },
   };
 }

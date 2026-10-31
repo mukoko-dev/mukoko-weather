@@ -506,11 +506,12 @@ export interface HistoryRead {
   start: string;
   end: string;
   /**
-   * Also read the days recorded under the place's platform slug
-   * (`harare-35c223`: the slug, a dash and six hex digits), which some
-   * writers used. Only for one plain place slug.
+   * Also read the days recorded under the place's platform slugs
+   * (`harare-35c223`), which some writers used. The aliases are found from the
+   * place record near this point, never guessed from the name. Only for one
+   * plain place slug, with the place's own coordinates.
    */
-  aliases: boolean;
+  aliases: { lat: number; lon: number } | null;
 }
 
 export function validateHistoryRead(
@@ -533,11 +534,26 @@ export function validateHistoryRead(
   if (spanDays(start, end) > HISTORY_MAX_SPAN_DAYS) {
     return err(`range must be at most ${HISTORY_MAX_SPAN_DAYS} days`);
   }
-  const aliases = params.get("aliases") === "1";
-  if (aliases && (keys.length !== 1 || !validSlug(keys[0]!))) {
-    return err("aliases applies to exactly one place slug");
+  let aliases: HistoryRead["aliases"] = null;
+  if (params.get("aliases") === "1") {
+    if (keys.length !== 1 || !validSlug(keys[0]!)) {
+      return err("aliases applies to exactly one place slug");
+    }
+    const lat = queryNumber(params.get("lat"), 90);
+    const lon = queryNumber(params.get("lon"), 180);
+    if (lat === null || lon === null) {
+      return err("aliases needs the place's lat and lon");
+    }
+    aliases = { lat, lon };
   }
   return ok({ keys: [...new Set(keys)], start, end, aliases });
+}
+
+/** A finite number within +-`limit`, from a query value; else `null`. */
+function queryNumber(v: string | null, limit: number): number | null {
+  if (v === null || v.trim() === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) && Math.abs(n) <= limit ? n : null;
 }
 
 const CURRENT_FIELDS = [

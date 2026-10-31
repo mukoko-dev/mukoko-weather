@@ -8,12 +8,18 @@
 //   POST /reports           a validated report          → 201 {id, verified, expiresIn}
 //   GET  /reports?slug=..[&slug=..][&hours=][&limit=]   → 200 {reports}
 //   POST /reports/upvote    {reportId, voter}           → 200 {upvoted[, reason]}
-//   GET  /history?slug=..[&slug=..]&start=&end=[&aliases=1]  → 200 {days}  (weather.weather_history)
+//   GET  /history?slug=..[&slug=..]&start=&end=[&aliases=1&lat=&lon=]  → 200 {days}  (weather.weather_history;
+//        aliases=1 also reads the days under the place's platform slugs, found in places.placesGeo near lat/lon)
 //   POST /history/days      {slug, days:[archive day]}  → 200 {inserted, existing}  (insert-only)
 //
 // Errors use the Workers' envelope: {error, error_description}.
 
-import type { DeviceStore, HistoryStore, ReportStore } from "./stores";
+import type {
+  DeviceStore,
+  HistoryStore,
+  PlaceAliasStore,
+  ReportStore,
+} from "./stores";
 import {
   isRecord,
   ttlSeconds,
@@ -31,6 +37,8 @@ export interface Stores {
   devices: DeviceStore;
   reports: ReportStore;
   history: HistoryStore;
+  /** Read only: `places.placesGeo`, for the platform aliases of a place. */
+  places: PlaceAliasStore;
 }
 
 export interface Result {
@@ -226,12 +234,17 @@ async function upvoteReport(call: Call, deps: Deps): Promise<Result> {
 async function readHistory(call: Call, deps: Deps): Promise<Result> {
   const q = validateHistoryRead(call.query);
   if (!q.ok) return badRequest(q.detail);
-  const days = await deps.stores.history.read(
-    q.value.keys,
-    q.value.start,
-    q.value.end,
-    q.value.aliases ? q.value.keys[0] : undefined,
-  );
+  // A place's platform aliases come from its record, and add keys: the
+  // history query itself is always `$in` over plain, validated slugs.
+  const aliases = q.value.aliases
+    ? await deps.stores.places.aliasesOf(
+        q.value.keys[0]!,
+        q.value.aliases.lat,
+        q.value.aliases.lon,
+      )
+    : [];
+  const keys = [...new Set([...q.value.keys, ...aliases])];
+  const days = await deps.stores.history.read(keys, q.value.start, q.value.end);
   return { status: 200, body: { days } };
 }
 

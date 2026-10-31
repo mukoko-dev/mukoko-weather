@@ -1,5 +1,5 @@
 // An in-memory stand-in for a MongoDB collection, implementing exactly the
-// operators the stores use ($in, $gte, $gt, $ne, equality; $set with dotted
+// operators the stores use ($in, $gte, $gt, $ne, $geoWithin/$centerSphere, equality; $set with dotted
 // paths, $setOnInsert, $addToSet, $inc; upsert), plus unique-index emulation
 // and a log of every call, so tests can assert the queries as well as results.
 import type { Coll, Doc } from "../src/stores";
@@ -25,6 +25,22 @@ function set(doc: Doc, path: string, value: unknown): void {
   o[keys[keys.length - 1]!] = value;
 }
 
+/** Great-circle distance in radians between two WGS 84 points (degrees). */
+function angularDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const r = Math.PI / 180;
+  const a =
+    Math.sin(((lat2 - lat1) * r) / 2) ** 2 +
+    Math.cos(lat1 * r) *
+      Math.cos(lat2 * r) *
+      Math.sin(((lon2 - lon1) * r) / 2) ** 2;
+  return 2 * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
 const same = (a: unknown, b: unknown): boolean =>
   a instanceof Date && b instanceof Date
     ? a.getTime() === b.getTime()
@@ -48,6 +64,15 @@ function matches(doc: Doc, filter: Doc): boolean {
             return (arg as unknown[]).some((x) => same(x, v));
           case "$gte":
             return (v as Date) >= (arg as Date);
+          case "$geoWithin": {
+            const [[lon, lat], radius] = (
+              arg as { $centerSphere: [[number, number], number] }
+            ).$centerSphere;
+            const c = (v as { coordinates?: [number, number] } | undefined)
+              ?.coordinates;
+            if (!c) return false;
+            return angularDistance(lat, lon, c[1], c[0]) <= radius;
+          }
           case "$regex":
             return typeof v === "string" && new RegExp(arg as string).test(v);
           case "$lte":

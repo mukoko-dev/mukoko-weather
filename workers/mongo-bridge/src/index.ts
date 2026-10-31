@@ -13,7 +13,13 @@
 import { DurableObject } from "cloudflare:workers";
 import { MongoClient } from "mongodb";
 import { needsStores, route, fail, type Result, type Stores } from "./handlers";
-import { deviceStore, fromMongo, historyStore, reportStore } from "./stores";
+import {
+  deviceStore,
+  fromMongo,
+  historyStore,
+  placeAliasStore,
+  reportStore,
+} from "./stores";
 
 interface Env {
   MONGO_BRIDGE_DO: DurableObjectNamespace;
@@ -28,6 +34,8 @@ const MAX_BODY_BYTES = 16 * 1024;
 const MAX_HISTORY_BODY_BYTES = 1024 * 1024;
 const DEVICE_DB = "device";
 const WEATHER_DB = "weather";
+/** Read only: the platform slugs of a place (see `placeAliasStore`). */
+const PLACES_DB = "places";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -117,6 +125,9 @@ export class MongoBridge extends DurableObject<Env> {
       ),
       history: historyStore(
         fromMongo(client.db(WEATHER_DB).collection("weather_history")),
+      ),
+      places: placeAliasStore(
+        fromMongo(client.db(PLACES_DB).collection("placesGeo")),
       ),
     };
   }

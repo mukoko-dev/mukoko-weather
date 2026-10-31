@@ -13,13 +13,34 @@ const root = resolve(__dirname, "../..");
 const read = (p: string) => readFileSync(resolve(root, p), "utf-8");
 const worker = read("workers/places/src/history.rs");
 const budget = read("workers/places/src/budget.rs");
+const coreBudget = read("workers/crates/weather-core/src/budget.rs");
 const bridge = read("workers/mongo-bridge/src/stores.ts");
 
 describe("history Worker: degraded answers", () => {
   it("fetches nothing when a store could not be read (what is held is unknown)", () => {
-    expect(worker).toContain("let holdings_known = d1_ok && mongo_ok;");
+    expect(worker).toContain(
+      "let holdings_known = h::holdings_known(d1_read, mongo_read);",
+    );
     expect(worker).toContain("if holdings_known && !missing.is_empty() {");
-    expect(worker).toContain("let mut degraded = !holdings_known;");
+    expect(worker).toContain(
+      "let degraded = h::is_degraded(holdings_known, upstream_trouble, still_missing);",
+    );
+  });
+
+  it("is a 502 only when no store was actually read (a skipped store is not a read)", () => {
+    expect(worker).toContain(
+      "if stored.is_empty() && h::no_store_read(d1_read, mongo_read) {",
+    );
+    // D1 holds nothing for a spot or a bare coordinate: not asked, not read.
+    expect(worker).toContain("return (Vec::new(), StoreRead::NotApplicable);");
+    expect(worker).not.toContain("d1_ok");
+    expect(worker).not.toContain("mongo_ok");
+  });
+
+  it("tells the client when the answer is degraded, not only when a store failed", () => {
+    expect(worker).toMatch(
+      /if degraded \{\s*body\["degraded"\] = json!\(true\);/,
+    );
   });
 
   it("never caches a degraded answer", () => {
@@ -32,7 +53,43 @@ describe("history Worker: degraded answers", () => {
 
   it("marks a budget denial, an open breaker and a provider failure as degraded", () => {
     const denials = worker.match(/degraded = true;/g) ?? [];
-    expect(denials.length).toBeGreaterThanOrEqual(4);
+    expect(denials.length).toBeGreaterThanOrEqual(7);
+  });
+
+  it("marks the per-request caps as degraded too (a cut-short answer is not a plain lag)", () => {
+    // The clock and the upstream-call cap end the whole attempt.
+    expect(worker).toMatch(
+      /now_ms\(\) - started > TIME_BUDGET_MS \{\s*degraded = true;\s*break 'runs;/,
+    );
+    expect(worker).toMatch(
+      /fetches >= MAX_FETCHES_PER_CALL \{\s*degraded = true;\s*break 'runs;/,
+    );
+    // And so does Open-Meteo's weighted cap.
+    expect(worker).toMatch(
+      /om_units\.saturating_add\(units\) > spec\.units_per_call\(\) \{[\s\S]*?degraded = true;[\s\S]*?unusable\.insert/,
+    );
+  });
+
+  it("serves a chunk from our own KV even after the upstream-call cap", () => {
+    // The cap is checked on a cache miss only.
+    const loop = worker.slice(worker.indexOf("async fn backfill("));
+    expect(loop.indexOf("cached_days(env")).toBeLessThan(
+      loop.indexOf("fetches >= MAX_FETCHES_PER_CALL"),
+    );
+  });
+
+  it("logs why a background save failed: the status and the bridge's error code", () => {
+    expect(worker).toContain(
+      "if let Err(why) = save(&env, &key, &pending).await {",
+    );
+    expect(worker).toContain(
+      '"history: could not store {} archive days: {why}"',
+    );
+    expect(worker).toContain("other.failure_reason()");
+    const client = read("workers/places/src/bridge.rs");
+    expect(client).toContain("bridge_failure_reason(");
+    // Never a URL or a body in a log line.
+    expect(client).not.toContain("console_warn");
   });
 });
 
@@ -77,14 +134,47 @@ describe("history Worker: budgets", () => {
     expect(worker).toContain("spec.units_per_call()");
     expect(budget).toContain("pub async fn take_units(");
     // One event row per unit.
-    expect(budget).toContain("WITH RECURSIVE n(i)");
+    expect(coreBudget).toContain("WITH RECURSIVE");
+    expect(coreBudget).toContain("n(i) AS");
+  });
+
+  it("decides a spend in ONE statement, so parallel requests cannot all pass", () => {
+    // The check and the write are one guarded INSERT; D1's change count is
+    // the decision. There is no count-then-insert pair.
+    expect(budget).toContain(".prepare(budget::SPEND_SQL)");
+    expect(budget).toContain("budget::spend_granted(changes)");
+    expect(budget).not.toContain("decide_units(");
+    expect(budget).not.toContain("INSERT_UNITS");
+    expect(budget).not.toContain("async fn record(");
+    // Both gates are in the statement itself.
+    expect(coreBudget).toContain("AND at >= ?5) + ?4 <= ?6");
+    expect(coreBudget).toContain("AND at >= ?5) + ?4 <= ?7");
+    // The counts are read only to name the full hour AFTER a refusal.
+    const take = budget.slice(budget.indexOf("pub async fn take_units("));
+    expect(take.indexOf("spend(env")).toBeGreaterThan(-1);
+    expect(take.indexOf("spend(env")).toBeLessThan(take.indexOf("counts(env"));
+    expect(take).toContain("Ok(false) => match counts(");
+  });
+
+  it("fails closed when the budget cannot be written or read", () => {
+    const take = budget.slice(budget.indexOf("pub async fn take_units("));
+    expect(take).toContain("Err(_) => Decision::GlobalLimit");
+    // A result without a change count is a refusal, not a grant.
+    expect(budget).toContain('"no change count"');
+    expect(coreBudget).toContain("changes.is_some_and(|c| c > 0)");
   });
 });
 
 describe("history Worker: keys", () => {
-  it("reads a place's platform alias too", () => {
-    expect(worker).toContain("&aliases=1");
-    expect(bridge).toContain("[0-9a-f]{6}$");
+  it("reads a place's platform alias too, found from the place record", () => {
+    // The Worker sends the catalogue place's own point with the flag ...
+    expect(worker).toContain('"&aliases=1&lat={:.4}&lon={:.4}"');
+    // ... and the bridge looks the place up in placesGeo (read only, by
+    // distance), never by a name pattern: two places share a name.
+    expect(bridge).toContain("$geoWithin");
+    expect(bridge).toContain("placeAliasStore");
+    expect(bridge).not.toContain("$regex");
+    expect(bridge).not.toContain("replace(/[^a-z0-9-]/g");
   });
 
   it("limits a spot to the newest year counted from today", () => {

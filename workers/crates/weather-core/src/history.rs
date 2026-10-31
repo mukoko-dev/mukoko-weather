@@ -939,6 +939,66 @@ pub fn chunks_for(provider: &ProviderSpec, remaining: &BTreeSet<String>) -> Vec<
         .collect()
 }
 
+/// How reading one store went. A store that does not apply to a request (D1
+/// holds nothing for a spot or a bare coordinate) was not read, and that is not
+/// the same as a read that came back empty.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StoreRead {
+    /// The store answered.
+    Read,
+    /// The store has nothing to say about this request, so it was not asked.
+    NotApplicable,
+    /// The store was asked and could not answer.
+    Failed,
+}
+
+/// What we hold is KNOWN only when no store that applies failed. When it is
+/// not known nothing is fetched: every date would look missing and an archive's
+/// reanalysis would replace days we recorded.
+pub fn holdings_known(d1: StoreRead, mongo: StoreRead) -> bool {
+    d1 != StoreRead::Failed && mongo != StoreRead::Failed
+}
+
+/// True when no store was actually read. An empty answer from here is not
+/// "no history yet" but "we could not look", which is a 502 rather than a 200.
+/// A store that was not applicable does not count as read: a spot whose only
+/// store (the bridge) is down has read nothing.
+pub fn no_store_read(d1: StoreRead, mongo: StoreRead) -> bool {
+    d1 != StoreRead::Read && mongo != StoreRead::Read
+}
+
+/// Whether the answer is incomplete for a reason that is not the archive's
+/// plain lag, so the client should offer a retry and the answer must not be
+/// cached. A store that could not be read always counts (we do not know what
+/// is missing); trouble upstream (a budget, an open breaker, a provider
+/// failure, a per-request cap) counts only while dates are still missing: a
+/// second provider that filled every date makes the answer complete.
+pub fn is_degraded(holdings_known: bool, upstream_trouble: bool, still_missing: usize) -> bool {
+    !holdings_known || (upstream_trouble && still_missing > 0)
+}
+
+/// A few words saying why a call to the bridge failed, for a log line: the HTTP
+/// status when there was one and the bridge's own error code when it sent one
+/// (`[a-z0-9_]`, at most 40 characters; anything else is dropped). Never a URL,
+/// a body or a credential.
+pub fn bridge_failure_reason(status: Option<u16>, code: Option<&str>) -> String {
+    let code = code
+        .map(str::trim)
+        .filter(|c| {
+            !c.is_empty()
+                && c.len() <= 40
+                && c.bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        })
+        .map(str::to_owned);
+    match (status, code) {
+        (Some(s), Some(c)) => format!("HTTP {s} {c}"),
+        (Some(s), None) => format!("HTTP {s}"),
+        (None, Some(c)) => c,
+        (None, None) => "no answer".to_owned(),
+    }
+}
+
 /// The response envelope.
 #[allow(clippy::too_many_arguments)]
 pub fn response(
@@ -975,6 +1035,72 @@ mod tests {
     use super::*;
 
     const FIXTURE: &str = include_str!("../../../../tests/fixtures/history-days.json");
+
+    #[test]
+    fn holdings_are_known_only_when_no_applicable_store_failed() {
+        use StoreRead::*;
+        // A place: both stores answered.
+        assert!(holdings_known(Read, Read));
+        // A spot: D1 is not applicable, the bridge answered.
+        assert!(holdings_known(NotApplicable, Read));
+        // Either failing makes the holdings unknown.
+        assert!(!holdings_known(Failed, Read));
+        assert!(!holdings_known(Read, Failed));
+        assert!(!holdings_known(NotApplicable, Failed));
+    }
+
+    #[test]
+    fn a_spot_whose_only_store_is_down_has_read_nothing() {
+        use StoreRead::*;
+        // The bug: D1 "succeeded" for a spot because it was skipped, so
+        // `!d1_ok && !mongo_ok` could never be true.
+        assert!(no_store_read(NotApplicable, Failed));
+        assert!(no_store_read(Failed, Failed));
+        // One real read is enough to answer (maybe degraded, never a 502).
+        assert!(!no_store_read(Read, Failed));
+        assert!(!no_store_read(Failed, Read));
+        assert!(!no_store_read(NotApplicable, Read));
+        assert!(!no_store_read(Read, Read));
+    }
+
+    #[test]
+    fn degraded_means_incomplete_for_a_reason_other_than_lag() {
+        // An unreadable store: we do not know what is missing.
+        assert!(is_degraded(false, false, 0));
+        assert!(is_degraded(false, true, 12));
+        // Trouble upstream with dates still missing: retry may help.
+        assert!(is_degraded(true, true, 3));
+        // Trouble upstream but a fallback filled every date: complete.
+        assert!(!is_degraded(true, true, 0));
+        // A plain archive lag is not degraded.
+        assert!(!is_degraded(true, false, 2));
+        assert!(!is_degraded(true, false, 0));
+    }
+
+    #[test]
+    fn a_bridge_failure_reason_is_short_and_safe() {
+        assert_eq!(
+            bridge_failure_reason(Some(503), Some("unavailable")),
+            "HTTP 503 unavailable"
+        );
+        assert_eq!(bridge_failure_reason(Some(404), None), "HTTP 404");
+        assert_eq!(bridge_failure_reason(None, Some("timeout")), "timeout");
+        assert_eq!(bridge_failure_reason(None, None), "no answer");
+        // Anything that is not a plain error code is dropped, not logged.
+        assert_eq!(
+            bridge_failure_reason(Some(422), Some("mongodb://user:pw@host/db")),
+            "HTTP 422"
+        );
+        assert_eq!(
+            bridge_failure_reason(Some(500), Some(&"a".repeat(41))),
+            "HTTP 500"
+        );
+        assert_eq!(bridge_failure_reason(Some(500), Some("  ")), "HTTP 500");
+        assert_eq!(
+            bridge_failure_reason(Some(500), Some("Has Space")),
+            "HTTP 500"
+        );
+    }
 
     fn fx() -> Value {
         serde_json::from_str(FIXTURE).unwrap()
