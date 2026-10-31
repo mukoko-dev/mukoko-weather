@@ -363,7 +363,7 @@ export function DisplayHours({ weather }: { weather: WeatherData }) {
               <span className="text-lg font-semibold tabular-nums text-text-primary">
                 {formatTemp(h.temperature_2m[i])}
               </span>
-              <span className="text-sm tabular-nums text-mineral-cobalt">
+              <span className="text-sm tabular-nums text-wx-series-rain">
                 {Math.round(h.precipitation_probability[i] ?? 0)}%
               </span>
             </li>
@@ -447,7 +447,7 @@ export function DisplayOutlook({ weather }: { weather: WeatherData }) {
         <dl className="flex gap-8 text-lg">
           {sunrise && (
             <div className="flex items-center gap-2">
-              <span aria-hidden="true" className="text-mineral-gold">
+              <span aria-hidden="true" className="text-text-secondary">
                 <SunriseIcon size={28} />
               </span>
               <dt className="sr-only">Sunrise</dt>
@@ -458,7 +458,7 @@ export function DisplayOutlook({ weather }: { weather: WeatherData }) {
           )}
           {sunset && (
             <div className="flex items-center gap-2">
-              <span aria-hidden="true" className="text-mineral-terracotta">
+              <span aria-hidden="true" className="text-text-secondary">
                 <SunsetIcon size={28} />
               </span>
               <dt className="sr-only">Sunset</dt>

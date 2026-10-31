@@ -33,8 +33,9 @@ import {
 import {
   AQI_BANDS,
   AQI_BAND_BG_CLASS,
+  AQI_BAND_FG_CLASS,
   AQI_BAND_LABELS,
-  AQI_BAND_SEVERITY_TOKEN,
+  AQI_BAND_TOKEN,
   type AqBubble,
 } from "@/lib/aq-grid";
 
@@ -133,8 +134,9 @@ function renderAqiBubbles(
   return bubbles.map((b) => {
     const el = document.createElement("div");
     el.className = cn(
-      "flex items-center justify-center rounded-full font-semibold text-severity-fg shadow-md ring-2 ring-surface-card",
+      "flex items-center justify-center rounded-full font-semibold shadow-md ring-2 ring-surface-card",
       AQI_BAND_BG_CLASS[b.band],
+      AQI_BAND_FG_CLASS[b.band],
       b.isCenter ? "size-12 text-sm" : "size-8 text-xs",
     );
     el.setAttribute("role", "img");
@@ -149,14 +151,14 @@ function renderAqiBubbles(
 
 /**
  * Fill colour per AQI band, as a MapLibre `match` expression. Colours come from
- * the resolved severity tokens (paint values cannot read var()), so they follow
- * the light/dark theme. Unknown bands fall back to the tertiary text token.
+ * the resolved weather-scale tokens (paint values cannot read var()), so they
+ * follow the light/dark theme. Unknown bands fall back to the tertiary text token.
  */
 function aqiFillColorExpression(): ExpressionSpecification {
   // Flat [band, colour, band, colour, …] pairs after the lookup, then fallback.
   const pairs: string[] = [];
   for (const band of AQI_BANDS) {
-    pairs.push(band, resolveColor(`var(${AQI_BAND_SEVERITY_TOKEN[band]})`));
+    pairs.push(band, resolveColor(`var(${AQI_BAND_TOKEN[band]})`));
   }
   const expression: unknown[] = [
     "match",

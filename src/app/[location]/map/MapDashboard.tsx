@@ -536,7 +536,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
             {chip && chip.legend.segments.length > 0 && (
               <>
                 <div
-                  className="mt-1.5 flex h-2 gap-px overflow-hidden rounded-full"
+                  className="mt-1.5 flex h-2 gap-px overflow-hidden rounded-full ring-1 ring-border"
                   aria-hidden="true"
                 >
                   {chip.legend.segments.map((seg) => (

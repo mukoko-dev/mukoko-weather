@@ -1,6 +1,7 @@
 "use client";
 
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
+import { WX_SERIES } from "@/lib/weather-scales";
 
 interface VisibilityChartProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,7 +18,7 @@ const SERIES: SeriesConfig[] = [
   {
     key: "visibility",
     label: "Visibility",
-    color: "var(--chart-1)",
+    color: WX_SERIES.visibility,
     fill: true,
     opacity: 0.12,
   },

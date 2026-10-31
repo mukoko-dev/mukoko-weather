@@ -329,9 +329,9 @@ describe("uvLevel", () => {
     expect(uvLevel(15).label).toBe("Extreme");
   });
 
-  it("all levels have a color class", () => {
+  it("all levels have a WHO swatch class", () => {
     for (const idx of [0, 3, 6, 8, 11]) {
-      expect(uvLevel(idx).color).toMatch(/^text-/);
+      expect(uvLevel(idx).swatch).toMatch(/^bg-wx-uv-/);
     }
   });
 });

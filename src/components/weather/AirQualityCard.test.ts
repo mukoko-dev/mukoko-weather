@@ -11,28 +11,28 @@ import {
 
 describe("aqiGauge", () => {
   it("returns low severity (green) for Good (0-50)", () => {
-    expect(aqiGauge(0).strokeClass).toBe("stroke-severity-low");
-    expect(aqiGauge(50).strokeClass).toBe("stroke-severity-low");
+    expect(aqiGauge(0).strokeClass).toBe("stroke-wx-aqi-1");
+    expect(aqiGauge(50).strokeClass).toBe("stroke-wx-aqi-1");
   });
 
   it("returns moderate severity for Moderate (51-100)", () => {
-    expect(aqiGauge(75).strokeClass).toBe("stroke-severity-moderate");
-    expect(aqiGauge(100).strokeClass).toBe("stroke-severity-moderate");
+    expect(aqiGauge(75).strokeClass).toBe("stroke-wx-aqi-2");
+    expect(aqiGauge(100).strokeClass).toBe("stroke-wx-aqi-2");
   });
 
   it("returns high severity for Unhealthy for Sensitive (101-150)", () => {
-    expect(aqiGauge(125).strokeClass).toBe("stroke-severity-high");
-    expect(aqiGauge(150).strokeClass).toBe("stroke-severity-high");
+    expect(aqiGauge(125).strokeClass).toBe("stroke-wx-aqi-3");
+    expect(aqiGauge(150).strokeClass).toBe("stroke-wx-aqi-3");
   });
 
   it("returns severe severity for Unhealthy (151-200)", () => {
-    expect(aqiGauge(175).strokeClass).toBe("stroke-severity-severe");
-    expect(aqiGauge(200).strokeClass).toBe("stroke-severity-severe");
+    expect(aqiGauge(175).strokeClass).toBe("stroke-wx-aqi-4");
+    expect(aqiGauge(200).strokeClass).toBe("stroke-wx-aqi-4");
   });
 
-  it("returns extreme severity for Very Unhealthy / Hazardous (>200)", () => {
-    expect(aqiGauge(250).strokeClass).toBe("stroke-severity-extreme");
-    expect(aqiGauge(450).strokeClass).toBe("stroke-severity-extreme");
+  it("returns purple then maroon for Very Unhealthy / Hazardous (>200)", () => {
+    expect(aqiGauge(250).strokeClass).toBe("stroke-wx-aqi-5");
+    expect(aqiGauge(450).strokeClass).toBe("stroke-wx-aqi-6");
   });
 
   it("percent scales linearly to a 500 max", () => {
@@ -45,9 +45,9 @@ describe("aqiGauge", () => {
     expect(aqiGauge(600).percent).toBe(100);
   });
 
-  it("uses severity stroke classes, not hardcoded colors", () => {
+  it("uses the official EPA weather-scale stroke classes, not hardcoded colors", () => {
     for (const aqi of [0, 60, 120, 180, 300]) {
-      expect(aqiGauge(aqi).strokeClass).toMatch(/^stroke-severity-/);
+      expect(aqiGauge(aqi).strokeClass).toMatch(/^stroke-wx-aqi-/);
     }
   });
 });

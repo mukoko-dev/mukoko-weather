@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { TimeSeriesChart, type SeriesConfig } from "./charts/TimeSeriesChart";
 import type { DailyWeather } from "@/lib/weather";
+import { WX_SERIES } from "@/lib/weather-scales";
 
 interface Props {
   daily: DailyWeather;
@@ -42,7 +43,7 @@ const SERIES: SeriesConfig[] = [
   {
     key: "high",
     label: "High",
-    color: "var(--chart-1)",
+    color: WX_SERIES.temp,
     fill: true,
     order: 1,
     showDots: true,
@@ -50,7 +51,7 @@ const SERIES: SeriesConfig[] = [
   {
     key: "low",
     label: "Low",
-    color: "var(--chart-2)",
+    color: WX_SERIES.tempLow,
     fill: true,
     dashed: true,
     order: 2,
@@ -59,14 +60,14 @@ const SERIES: SeriesConfig[] = [
   {
     key: "feelsHigh",
     label: "Feels High",
-    color: "var(--chart-3)",
+    color: WX_SERIES.feels,
     dashed: true,
     order: 3,
   },
   {
     key: "feelsLow",
     label: "Feels Low",
-    color: "var(--chart-4)",
+    color: WX_SERIES.feels,
     dashed: true,
     order: 4,
   },

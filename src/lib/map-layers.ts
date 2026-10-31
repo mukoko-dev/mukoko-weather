@@ -18,6 +18,14 @@ import {
   overlayAttribution,
   satelliteFrames,
 } from "./map-sources";
+import {
+  AQI_SCALE,
+  CLOUD_SCALE,
+  RAIN_SCALE,
+  TEMP_SCALE,
+  WIND_SCALE,
+  legendSegmentsFor,
+} from "./weather-scales";
 
 /**
  * The MapTiler key, read once and trimmed: the deployed value ends in a
@@ -375,16 +383,13 @@ export function timelineLabel(step: number): string {
   return `+${hours}h`;
 }
 
-/** Legend for US AQI, using the severity tokens shared with the grid fill. */
+/**
+ * Legend for US AQI: the six official EPA categories (weather-scales.ts), the
+ * same colours the grid fill, the bubbles and the gauge use.
+ */
 export const AQI_LEGEND: LayerLegend = {
   unit: "US AQI",
-  segments: [
-    { className: "bg-severity-low", label: "0" },
-    { className: "bg-severity-moderate", label: "51" },
-    { className: "bg-severity-high", label: "101" },
-    { className: "bg-severity-severe", label: "151" },
-    { className: "bg-severity-extreme", label: "201+" },
-  ],
+  segments: legendSegmentsFor(AQI_SCALE),
 };
 
 /** Chips in display order. Air quality first, then the four tile layers. */
@@ -399,13 +404,7 @@ export const MAP_CHIPS: readonly MapChip[] = [
     label: "Rain",
     legend: {
       unit: "mm/h",
-      segments: [
-        { className: "bg-severity-low", label: "0" },
-        { className: "bg-severity-moderate", label: "0.5" },
-        { className: "bg-severity-high", label: "2.5" },
-        { className: "bg-severity-severe", label: "10" },
-        { className: "bg-severity-extreme", label: "50+" },
-      ],
+      segments: legendSegmentsFor(RAIN_SCALE),
     },
   },
   {
@@ -413,13 +412,7 @@ export const MAP_CHIPS: readonly MapChip[] = [
     label: "Temperature",
     legend: {
       unit: "°C",
-      segments: [
-        { className: "bg-mineral-cobalt", label: "<10" },
-        { className: "bg-mineral-malachite", label: "15" },
-        { className: "bg-mineral-gold", label: "22" },
-        { className: "bg-mineral-terracotta/70", label: "30" },
-        { className: "bg-mineral-terracotta", label: "38+" },
-      ],
+      segments: legendSegmentsFor(TEMP_SCALE),
     },
   },
   {
@@ -427,13 +420,7 @@ export const MAP_CHIPS: readonly MapChip[] = [
     label: "Wind",
     legend: {
       unit: "km/h",
-      segments: [
-        { className: "bg-mineral-malachite/25", label: "0" },
-        { className: "bg-mineral-malachite/50", label: "10" },
-        { className: "bg-mineral-malachite/75", label: "25" },
-        { className: "bg-mineral-malachite", label: "40" },
-        { className: "bg-mineral-gold", label: "60+" },
-      ],
+      segments: legendSegmentsFor(WIND_SCALE),
     },
   },
   {
@@ -441,13 +428,7 @@ export const MAP_CHIPS: readonly MapChip[] = [
     label: "Cloud",
     legend: {
       unit: "%",
-      segments: [
-        { className: "bg-text-tertiary/15", label: "0" },
-        { className: "bg-text-tertiary/35", label: "25" },
-        { className: "bg-text-tertiary/60", label: "50" },
-        { className: "bg-text-tertiary/85", label: "75" },
-        { className: "bg-text-tertiary", label: "100" },
-      ],
+      segments: legendSegmentsFor(CLOUD_SCALE),
     },
   },
   {
@@ -483,44 +464,7 @@ export const MODEL_CHIPS: readonly MapChip[] = [
     label: "Model temp",
     legend: {
       unit: "°C",
-      segments: [
-        {
-          className: "bg-mineral-cobalt",
-          token: "--color-mineral-cobalt",
-          from: -Infinity,
-          label: "<10",
-        },
-        {
-          className: "bg-mineral-sodalite",
-          token: "--color-mineral-sodalite",
-          from: 10,
-          label: "10",
-        },
-        {
-          className: "bg-mineral-malachite",
-          token: "--color-mineral-malachite",
-          from: 15,
-          label: "15",
-        },
-        {
-          className: "bg-mineral-gold",
-          token: "--color-mineral-gold",
-          from: 22,
-          label: "22",
-        },
-        {
-          className: "bg-mineral-copper",
-          token: "--color-mineral-copper",
-          from: 30,
-          label: "30",
-        },
-        {
-          className: "bg-mineral-terracotta",
-          token: "--color-mineral-terracotta",
-          from: 38,
-          label: "38+",
-        },
-      ],
+      segments: legendSegmentsFor(TEMP_SCALE, { withBounds: true }),
     },
   },
   {
@@ -528,32 +472,7 @@ export const MODEL_CHIPS: readonly MapChip[] = [
     label: "Model rain",
     legend: {
       unit: "mm/h",
-      segments: [
-        {
-          className: "bg-mineral-cobalt",
-          token: "--color-mineral-cobalt",
-          from: 0.1,
-          label: "0.1",
-        },
-        {
-          className: "bg-mineral-sodalite",
-          token: "--color-mineral-sodalite",
-          from: 1,
-          label: "1",
-        },
-        {
-          className: "bg-mineral-tanzanite",
-          token: "--color-mineral-tanzanite",
-          from: 4,
-          label: "4",
-        },
-        {
-          className: "bg-mineral-terracotta",
-          token: "--color-mineral-terracotta",
-          from: 10,
-          label: "10+",
-        },
-      ],
+      segments: legendSegmentsFor(RAIN_SCALE, { withBounds: true }),
       note: "Below 0.1 mm/h is left clear",
     },
   },
@@ -562,38 +481,7 @@ export const MODEL_CHIPS: readonly MapChip[] = [
     label: "Model wind",
     legend: {
       unit: "km/h",
-      segments: [
-        {
-          className: "bg-mineral-cobalt",
-          token: "--color-mineral-cobalt",
-          from: -Infinity,
-          label: "0",
-        },
-        {
-          className: "bg-mineral-malachite",
-          token: "--color-mineral-malachite",
-          from: 10,
-          label: "10",
-        },
-        {
-          className: "bg-mineral-gold",
-          token: "--color-mineral-gold",
-          from: 25,
-          label: "25",
-        },
-        {
-          className: "bg-mineral-copper",
-          token: "--color-mineral-copper",
-          from: 40,
-          label: "40",
-        },
-        {
-          className: "bg-mineral-terracotta",
-          token: "--color-mineral-terracotta",
-          from: 60,
-          label: "60+",
-        },
-      ],
+      segments: legendSegmentsFor(WIND_SCALE, { withBounds: true }),
     },
   },
 ];

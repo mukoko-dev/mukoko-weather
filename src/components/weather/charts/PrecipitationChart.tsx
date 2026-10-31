@@ -1,6 +1,7 @@
 "use client";
 
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
+import { WX_SERIES } from "@/lib/weather-scales";
 
 interface PrecipitationChartProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -16,7 +17,7 @@ const SERIES: SeriesConfig[] = [
   {
     key: "precipitation",
     label: "Rainfall (mm)",
-    color: "var(--color-rain)",
+    color: WX_SERIES.rain,
     type: "bar",
     opacity: 0.6,
     yAxisID: "mm",
@@ -25,7 +26,7 @@ const SERIES: SeriesConfig[] = [
   {
     key: "rainProbability",
     label: "Probability (%)",
-    color: "var(--chart-5)",
+    color: WX_SERIES.rainProb,
     dashed: true,
     yAxisID: "pct",
     order: 1,
