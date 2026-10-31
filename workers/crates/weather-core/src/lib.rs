@@ -22,6 +22,7 @@ pub mod community;
 pub mod cors;
 pub mod devkey;
 pub mod enso;
+pub mod external_feeds;
 pub mod forecast;
 pub mod geo;
 pub mod haze;
