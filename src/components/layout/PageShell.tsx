@@ -33,6 +33,8 @@ interface PageShellProps {
   width?: Width;
   /** Home / ... trail shown between the header and the main column. */
   breadcrumb?: BreadcrumbItem[];
+  /** Names the main landmark when the h1 alone does not (e.g. "Weather forecast for Harare"). */
+  label?: string;
   className?: string;
 }
 
@@ -47,6 +49,7 @@ export function PageShell({
   children,
   width = "prose",
   breadcrumb,
+  label,
   className,
 }: PageShellProps) {
   return (
@@ -57,6 +60,7 @@ export function PageShell({
       )}
       <main
         id="main-content"
+        aria-label={label}
         className={cn(MAIN_CLASS, WIDTH_CLASS[width], className)}
       >
         {children}

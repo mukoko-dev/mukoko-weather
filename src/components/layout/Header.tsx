@@ -198,10 +198,10 @@ export function SiteHeader() {
         }`}
         role="banner"
       >
-        <nav
-          aria-label="Primary navigation"
-          className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 md:px-8"
-        >
+        {/* A plain wrapper, not a nav: the desktop links below are the one
+            navigation landmark in the header. A nav around a nav is nested
+            landmarks, which screen readers announce twice. */}
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 md:px-8">
           {/* Brand mark — left-aligned at every breakpoint (the parent nav's
               justify-between keeps the action pill on the right) */}
           <div className="flex min-w-0 items-center">
@@ -452,7 +452,7 @@ export function SiteHeader() {
               )}
             </div>
           </div>
-        </nav>
+        </div>
       </header>
 
       {/* Mobile navigation — the floating island (see MobileNav). */}
