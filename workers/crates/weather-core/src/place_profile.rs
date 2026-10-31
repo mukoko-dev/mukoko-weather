@@ -29,6 +29,7 @@ use crate::ag_calendar::{
 };
 use crate::climate_normals::{round_to, MonthlyNormal, NORMALS_PERIOD, NORMALS_SOURCE};
 use crate::locations::encode_geohash;
+use crate::normals::sum_like_python;
 
 pub const SCHEMA_VERSION: &str = "v3.2";
 /// Geohash length of `regionCell` (~4.9 km): nearby spots share region facts.
@@ -356,20 +357,26 @@ pub fn derive_koppen(monthly: &[MonthlyNormal], lat: f64) -> Option<String> {
     let t: Option<Vec<f64>> = rows.iter().map(|r| r.mean_temp_c).collect();
     let p: Option<Vec<f64>> = rows.iter().map(|r| r.precip_mm).collect();
     let (t, p) = (t?, p?);
+    // Ascending month index, the order the Python iterated its `set`s in: the
+    // seasonal sums below are float sums, and their order can matter in the
+    // last bit.
     let summer: Vec<usize> = if lat >= 0.0 {
         (3..9).collect()
     } else {
-        vec![9, 10, 11, 0, 1, 2]
+        vec![0, 1, 2, 9, 10, 11]
     };
     let winter: Vec<usize> = (0..12).filter(|i| !summer.contains(i)).collect();
-    let mat = t.iter().sum::<f64>() / 12.0;
-    let map = p.iter().sum::<f64>();
+    // The Python summed with the builtin `sum` (compensated, CPython 3.12+).
+    // A naive sum lands one ulp off on exact ties (a 12-month total of 619.0
+    // against `10 * p_th`), which flips a class.
+    let mat = sum_like_python(t.iter().copied()) / 12.0;
+    let map = sum_like_python(p.iter().copied());
     let t_cold = t.iter().copied().fold(f64::INFINITY, f64::min);
     let t_hot = t.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let t_mon10 = t.iter().filter(|v| **v > 10.0).count();
     let p_dry = p.iter().copied().fold(f64::INFINITY, f64::min);
-    let ps: f64 = summer.iter().map(|i| p[*i]).sum();
-    let pw: f64 = winter.iter().map(|i| p[*i]).sum();
+    let ps = sum_like_python(summer.iter().map(|i| p[*i]));
+    let pw = sum_like_python(winter.iter().map(|i| p[*i]));
     let min_of = |idx: &[usize]| idx.iter().map(|i| p[*i]).fold(f64::INFINITY, f64::min);
     let max_of = |idx: &[usize]| idx.iter().map(|i| p[*i]).fold(f64::NEG_INFINITY, f64::max);
     let (p_sdry, p_swet) = (min_of(&summer), max_of(&summer));
@@ -1487,6 +1494,27 @@ pub fn valid_slug(slug: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
+/// Whether answering a profile request will make an upstream call (the cell's
+/// 30-year archive request, or the two SoilGrids requests). That is what the
+/// hourly `PlaceProfile` budget meters, so it is taken only then: a missing
+/// group is fetched only when its provider's breaker lets a call through
+/// (`fetch_normals` and `fetch_soil` return at once when it is open), and a
+/// request answered from the caches, or with the breakers open, costs no unit.
+///
+/// The breaker questions are closures so a provider is only asked about when its
+/// group is missing. Without this a SoilGrids outage (it fails often; its
+/// breaker is open for 15 minutes) charged every view of a place with no cached
+/// soil one unit of the 600-an-hour service-wide budget for no work, and the
+/// cold-cell builds that could have succeeded then got `429`.
+pub fn will_call_upstream(
+    normals_missing: bool,
+    soil_missing: bool,
+    open_meteo_allowed: impl FnOnce() -> bool,
+    soilgrids_allowed: impl FnOnce() -> bool,
+) -> bool {
+    (normals_missing && open_meteo_allowed()) || (soil_missing && soilgrids_allowed())
+}
+
 /// Is `iso` a country this backend has facts for: a season calendar, a crop
 /// calendar or a seed place?
 pub fn known_country(iso: &str) -> bool {
@@ -1498,11 +1526,15 @@ pub fn known_country(iso: &str) -> bool {
             .any(|l| l.country.as_deref() == Some(iso.as_str()))
 }
 
-/// A seed (catalogue) place as the profile's place.
+/// A seed (catalogue) place as the profile's place. Its collection is
+/// `placesGeo`, as the Python reported for every location it resolved
+/// (`_place_from_location`): the documented contract allows only `placesGeo`
+/// or `places` (a stored `placeKnowledge` document must name one of them), and
+/// the provenance entry reads `places.placesGeo`, not an invented `places.seed`.
 pub fn place_from_seed(doc: &crate::locations::LocationDoc) -> PlaceIn {
     PlaceIn {
         id: Some(format!("seed:{}", doc.slug)),
-        collection: Some("seed".to_owned()),
+        collection: Some("placesGeo".to_owned()),
         slug: Some(doc.slug.clone()),
         name: Some(doc.name.clone()),
         lat: doc.lat,
@@ -2121,6 +2153,105 @@ mod tests {
                 "{label}: block"
             );
         }
+    }
+
+    /// Twelve monthly rows with these mean temperatures and rainfall totals.
+    fn year_of_rows(t: &[f64; 12], p: &[f64; 12]) -> Vec<MonthlyNormal> {
+        (0..12)
+            .map(|i| MonthlyNormal {
+                month: i as u32 + 1,
+                mean_temp_c: Some(t[i]),
+                mean_high_c: Some(t[i] + 5.0),
+                mean_low_c: Some(t[i] - 5.0),
+                precip_mm: Some(p[i]),
+                rainy_days: Some(10.0),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn koppen_exact_ties_follow_the_pythons_compensated_sums() {
+        // The twelve totals add up to exactly 619.0 with Python's `sum` (3.12+)
+        // and to 618.9999999999999 with a plain sum. With a mean temperature of
+        // 23.95 the dry threshold `10 * p_th` is 619.0 too, so `map < 10 * p_th`
+        // is false and the class is Aw; a plain sum read it as BSh (found by the
+        // review of the port against the Python on 30,000 random sets).
+        let p = [
+            50.1, 60.0, 38.9, 56.9, 55.0, 38.7, 46.9, 48.1, 56.2, 54.0, 55.8, 58.4,
+        ];
+        let mut t = [21.5; 12];
+        t[6..].fill(26.4);
+        let m = year_of_rows(&t, &p);
+        assert_eq!(derive_koppen(&m, -6.734).as_deref(), Some("Aw"));
+        // The same year in the other hemisphere (summer months swap).
+        assert_eq!(derive_koppen(&m, 6.734).as_deref(), Some("Aw"));
+        // A tenth of a millimetre under the threshold is dry: the fix settles ties,
+        // it does not move the boundary.
+        let mut drier = p;
+        drier[0] -= 0.1;
+        assert_eq!(
+            derive_koppen(&year_of_rows(&t, &drier), -6.734).as_deref(),
+            Some("BSh")
+        );
+    }
+
+    #[test]
+    fn the_budget_is_taken_only_when_an_upstream_call_will_go_out() {
+        use std::cell::Cell;
+        let asked = Cell::new(0_u32);
+        let yes = || {
+            asked.set(asked.get() + 1);
+            true
+        };
+        let no = || {
+            asked.set(asked.get() + 1);
+            false
+        };
+
+        // Everything cached: nothing goes out and no breaker is even asked.
+        assert!(!will_call_upstream(false, false, yes, yes));
+        assert_eq!(asked.get(), 0);
+
+        // Normals missing: a call goes out unless Open-Meteo's breaker is open.
+        // SoilGrids is not asked about a group that is cached.
+        assert!(will_call_upstream(true, false, yes, no));
+        assert!(!will_call_upstream(true, false, no, yes));
+        assert_eq!(asked.get(), 2);
+
+        // Soil missing with SoilGrids' breaker open (the review's case: it
+        // failed three times and is open for 15 minutes): no call, no unit.
+        assert!(!will_call_upstream(false, true, yes, no));
+        assert!(will_call_upstream(false, true, no, yes));
+
+        // Both missing: one open provider does not hide the other.
+        assert!(will_call_upstream(true, true, yes, no));
+        assert!(will_call_upstream(true, true, no, yes));
+        assert!(!will_call_upstream(true, true, no, no));
+    }
+
+    #[test]
+    fn a_catalogue_place_is_reported_from_placesgeo_like_the_python() {
+        // `placeCollection` is `placesGeo` or `places` in the documented
+        // contract; the Python said `placesGeo` for everything it resolved.
+        let FromSlug::Place(place) = from_slug("harare") else {
+            panic!("harare is a catalogue place");
+        };
+        assert_eq!(place.id.as_deref(), Some("seed:harare"));
+        assert_eq!(place.collection.as_deref(), Some("placesGeo"));
+        let near = place_near(-17.83, 31.05, None, None);
+        assert_eq!(near.collection.as_deref(), Some("placesGeo"));
+
+        let now = when("2026-10-18T12:00:00+00:00");
+        let doc = build_knowledge(&place, None, None, (None, false), now);
+        let profile = to_profile(&doc, &place, false, now);
+        assert_eq!(profile.place_collection.as_deref(), Some("placesGeo"));
+        let sources: Vec<&str> = profile
+            .provenance
+            .iter()
+            .filter(|e| e.field == "addressCountry,addressRegion")
+            .map(|e| e.source.as_str())
+            .collect();
+        assert_eq!(sources, ["places.placesGeo"]);
     }
 
     #[test]

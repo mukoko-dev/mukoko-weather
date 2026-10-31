@@ -424,9 +424,17 @@ pub async fn profile(req: &Request, env: &Env, ctx: &Context) -> Result<Response
         Some((None, false))
     };
 
-    // A request that would start a build is rate limited; one answered from
-    // the caches is not.
-    if normals.is_none() || soil.is_none() {
+    // A request that makes an upstream call is rate limited; one answered from
+    // the caches, or with the Open-Meteo / SoilGrids breaker open (nothing goes
+    // out then), is not: see `pp::will_call_upstream`. `allow()` is idempotent,
+    // so asking here and again in the fetch changes nothing; a breaker that
+    // opens between the two costs at most one unit.
+    if pp::will_call_upstream(
+        normals.is_none(),
+        soil.is_none(),
+        chain::open_meteo_allowed,
+        soilgrids_allowed,
+    ) {
         let caller = limit::caller_key(req);
         if !limit::take(env, Action::PlaceProfile, &caller)
             .await

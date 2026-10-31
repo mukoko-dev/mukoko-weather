@@ -51,6 +51,38 @@ fn round_to(v: f64, places: i32) -> f64 {
     (v * f).round_ties_even() / f
 }
 
+/// `sum()` of floats exactly as CPython 3.12 and later computes it: Neumaier
+/// (improved Kahan-Babuska) compensated summation, with the compensation added
+/// once at the end when it is finite. The Python these routines are pinned to
+/// used the builtin `sum` for every mean, total and threshold input, and a
+/// plain left-to-right `f64` sum differs from it in the last bit. That bit
+/// decides exact ties: a 30-year mean that lands on a `.x5` (rounded to 0.1)
+/// and a Koppen test such as `map < 10 * p_th` with both sides equal. Use this
+/// wherever the Python called `sum()` on floats; the day-of-year tables, which
+/// accumulated with `+=` in the Python, stay plain sums.
+///
+/// An empty input is `0.0`. Only floats are summed here: the Python's separate,
+/// uncompensated path for an `int` item inside a float sum is not reproduced
+/// (every caller feeds values that were `float(...)`-ed or are Open-Meteo
+/// floats).
+pub fn sum_like_python<I: IntoIterator<Item = f64>>(values: I) -> f64 {
+    let (mut sum, mut compensation) = (0.0_f64, 0.0_f64);
+    for x in values {
+        let t = sum + x;
+        if sum.abs() >= x.abs() {
+            compensation += (sum - t) + x;
+        } else {
+            compensation += (x - t) + sum;
+        }
+        sum = t;
+    }
+    if compensation != 0.0 && compensation.is_finite() {
+        sum + compensation
+    } else {
+        sum
+    }
+}
+
 /// Reduce an Open-Meteo `daily` block to `(max_table, min_table)`: the mean
 /// over a ±`HALF_WINDOW_DAYS` circular window using every observation in it,
 /// `None` values skipped, a slot with no observation `None`.
@@ -114,7 +146,7 @@ fn mean_1dp(values: &[f64]) -> Value {
         Value::Null
     } else {
         json!(round_to(
-            values.iter().sum::<f64>() / values.len() as f64,
+            sum_like_python(values.iter().copied()) / values.len() as f64,
             1
         ))
     }
@@ -193,7 +225,7 @@ pub fn compute_monthly_normals(daily: &Value) -> Vec<Value> {
         }
     }
 
-    let avg = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+    let avg = |v: &[f64]| sum_like_python(v.iter().copied()) / v.len() as f64;
     let mut per_month: Vec<MonthAcc> = (0..12).map(|_| MonthAcc::default()).collect();
     for ((_, month), b) in &buckets {
         if b.days < MIN_DAYS_PER_MONTH {
@@ -210,7 +242,7 @@ pub fn compute_monthly_normals(daily: &Value) -> Vec<Value> {
             acc.low.push(avg(&b.low));
         }
         if b.precip.len() >= MIN_DAYS_PER_MONTH {
-            acc.precip.push(b.precip.iter().sum());
+            acc.precip.push(sum_like_python(b.precip.iter().copied()));
             acc.rainy
                 .push(b.precip.iter().filter(|v| **v >= RAINY_DAY_MM).count() as f64);
         }
@@ -378,6 +410,45 @@ mod tests {
         for (g, w) in got.iter().zip(want) {
             assert_eq!(g, w, "month {}", w["month"]);
         }
+    }
+
+    /// Ten Januaries whose mean rainfall sits on a rounding tie (`expected`
+    /// came from `compute_monthly_normals` in `api/py/_normals.py`): its
+    /// compensated `sum()` gives 231.6, a plain left-to-right sum 231.5.
+    #[test]
+    fn a_mean_on_a_rounding_tie_matches_the_python() {
+        let fx: Value = serde_json::from_str(include_str!(
+            "../../../../tests/fixtures/monthly-normals.json"
+        ))
+        .unwrap();
+        let tie = &fx["tie"];
+        let got = compute_monthly_normals(&tie["daily"]);
+        assert_eq!(got[0]["precipMm"], 231.6);
+        let want = tie["expected"].as_array().unwrap();
+        assert_eq!(got.len(), want.len());
+        for (g, w) in got.iter().zip(want) {
+            assert_eq!(g, w, "month {}", w["month"]);
+        }
+    }
+
+    #[test]
+    fn sums_are_compensated_like_cpython_3_12() {
+        // Each value is what CPython's builtin `sum` returns for the list.
+        let koppen_rain = [
+            50.1, 60.0, 38.9, 56.9, 55.0, 38.7, 46.9, 48.1, 56.2, 54.0, 55.8, 58.4,
+        ];
+        assert_eq!(sum_like_python(koppen_rain), 619.0);
+        // ...which a plain sum misses by one ulp.
+        assert_eq!(koppen_rain.iter().sum::<f64>(), 618.9999999999999);
+        assert_eq!(sum_like_python([0.1; 10]), 1.0);
+        assert_eq!(sum_like_python([1e100, 1.0, -1e100]), 1.0);
+        assert_eq!(sum_like_python([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]), 2.8);
+        assert_eq!(sum_like_python([-0.1; 3]), -0.30000000000000004);
+        assert_eq!(sum_like_python([]), 0.0);
+        // Infinities and NaN are not "repaired" by the compensation.
+        assert_eq!(sum_like_python([f64::INFINITY, 1.0]), f64::INFINITY);
+        assert!(sum_like_python([f64::INFINITY, f64::NEG_INFINITY]).is_nan());
+        assert!(sum_like_python([1.0, f64::NAN]).is_nan());
     }
 
     #[test]

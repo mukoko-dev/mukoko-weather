@@ -15460,6 +15460,110 @@
       ],
       "out": null,
       "outSouth": null
+    },
+    {
+      "name": "tie-rain-total-on-the-dry-threshold",
+      "lat": -6.734,
+      "monthly": [
+        {
+          "month": 1,
+          "meanTempC": 21.5,
+          "meanHighC": 26.5,
+          "meanLowC": 16.5,
+          "precipMm": 50.1,
+          "rainyDays": 10.0
+        },
+        {
+          "month": 2,
+          "meanTempC": 21.5,
+          "meanHighC": 26.5,
+          "meanLowC": 16.5,
+          "precipMm": 60.0,
+          "rainyDays": 10.0
+        },
+        {
+          "month": 3,
+          "meanTempC": 21.5,
+          "meanHighC": 26.5,
+          "meanLowC": 16.5,
+          "precipMm": 38.9,
+          "rainyDays": 10.0
+        },
+        {
+          "month": 4,
+          "meanTempC": 21.5,
+          "meanHighC": 26.5,
+          "meanLowC": 16.5,
+          "precipMm": 56.9,
+          "rainyDays": 10.0
+        },
+        {
+          "month": 5,
+          "meanTempC": 21.5,
+          "meanHighC": 26.5,
+          "meanLowC": 16.5,
+          "precipMm": 55.0,
+          "rainyDays": 10.0
+        },
+        {
+          "month": 6,
+          "meanTempC": 21.5,
+          "meanHighC": 26.5,
+          "meanLowC": 16.5,
+          "precipMm": 38.7,
+          "rainyDays": 10.0
+        },
+        {
+          "month": 7,
+          "meanTempC": 26.4,
+          "meanHighC": 31.4,
+          "meanLowC": 21.4,
+          "precipMm": 46.9,
+          "rainyDays": 10.0
+        },
+        {
+          "month": 8,
+          "meanTempC": 26.4,
+          "meanHighC": 31.4,
+          "meanLowC": 21.4,
+          "precipMm": 48.1,
+          "rainyDays": 10.0
+        },
+        {
+          "month": 9,
+          "meanTempC": 26.4,
+          "meanHighC": 31.4,
+          "meanLowC": 21.4,
+          "precipMm": 56.2,
+          "rainyDays": 10.0
+        },
+        {
+          "month": 10,
+          "meanTempC": 26.4,
+          "meanHighC": 31.4,
+          "meanLowC": 21.4,
+          "precipMm": 54.0,
+          "rainyDays": 10.0
+        },
+        {
+          "month": 11,
+          "meanTempC": 26.4,
+          "meanHighC": 31.4,
+          "meanLowC": 21.4,
+          "precipMm": 55.8,
+          "rainyDays": 10.0
+        },
+        {
+          "month": 12,
+          "meanTempC": 26.4,
+          "meanHighC": 31.4,
+          "meanLowC": 21.4,
+          "precipMm": 58.4,
+          "rainyDays": 10.0
+        }
+      ],
+      "out": "Aw",
+      "outSouth": "Aw"
     }
   ],
   "labels": {
