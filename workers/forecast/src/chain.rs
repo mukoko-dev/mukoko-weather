@@ -4,7 +4,7 @@
 //!
 //! Ported from `api/py/_weather.py`:
 //!
-//! * the baseline is the Africa-weighted blend of six global models
+//! * the baseline is the Africa-weighted blend of nine global models
 //!   (`weather_core::blend`), served only when at least four members return
 //!   data (the owner's floor; the Python accepted two);
 //! * otherwise Open-Meteo `best_match`, clearly marked (`X-Weather-Provider:

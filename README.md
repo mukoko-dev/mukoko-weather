@@ -85,7 +85,7 @@ This repo holds three deployables, not one:
 | Database          | [MongoDB Atlas](https://mongodb.com/atlas) — cache, AI summaries, history, locations, airports; Atlas Search for fuzzy queries                                                                                                                                                                                                         |
 | Devices & reports | Device profiles and community weather reports live in MongoDB (`device.device_profiles`, `weather.weather_reports`), written and read by the TypeScript `mukoko-weather-mongo-bridge` Cloudflare Worker (official `mongodb` driver in a Durable Object, reached only through a service binding from the Rust `places` Worker). Not D1. |
 | AI                | The [Workers AI](https://developers.cloudflare.com/workers-ai/) model set in the `shamwari` [AI Gateway](https://developers.cloudflare.com/ai-gateway/) (Python backend only)                                                                                                                                                          |
-| Weather data      | Global models (ECMWF, NOAA GFS, DWD ICON, ECCC GEM, Météo-France ARPEGE) via [Open-Meteo](https://open-meteo.com) as the baseline, [Tomorrow.io](https://tomorrow.io) for budgeted insights enrichment, [NOAA AWC](https://aviationweather.gov) for METAR/TAF                                                                          |
+| Weather data      | Nine global models (ECMWF IFS and AIFS, NOAA GFS, DWD ICON, ECCC GEM, Météo-France ARPEGE, UK Met Office, CMA, JMA) via [Open-Meteo](https://open-meteo.com) as the baseline, [Tomorrow.io](https://tomorrow.io) for budgeted insights enrichment, [NOAA AWC](https://aviationweather.gov) for METAR/TAF                               |
 | UI                | [shadcn/ui](https://ui.shadcn.com) (Radix + CVA), [Tailwind CSS 4](https://tailwindcss.com)                                                                                                                                                                                                                                            |
 | Charts & maps     | [Chart.js 4](https://www.chartjs.org), [MapLibre GL](https://maplibre.org) + [MapTiler](https://www.maptiler.com), [Three.js](https://threejs.org)                                                                                                                                                                                     |
 | State             | [Zustand 5](https://zustand.docs.pmnd.rs) with `persist`                                                                                                                                                                                                                                                                               |
@@ -169,7 +169,7 @@ locations) allows. Response headers: `X-Weather-Provider`
 (`open-meteo:blend` | `open-meteo:<model>` | `open-meteo:best_match` |
 `fallback`), `X-Weather-Blend`, `X-Enrichment` (`tomorrow` | `skipped-budget` |
 `skipped-error` | `none`) and `X-Current-Source`. Data credit: ECMWF, NOAA,
-DWD, ECCC, Météo-France via Open-Meteo.com (CC BY 4.0). Open-Meteo's free API
+DWD, ECCC, Météo-France, UK Met Office, CMA, JMA via Open-Meteo.com (CC BY 4.0). Open-Meteo's free API
 is non-commercial only — see issue #246 for the licensing options.
 
 **Three-layer error isolation** — `page.tsx` wraps fetching in try/catch so the

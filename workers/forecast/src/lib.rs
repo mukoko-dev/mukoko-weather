@@ -18,7 +18,7 @@
 //! ```
 //!
 //! Provider chain (ported from `api/py/_weather.py`, issue #246): KV cache
-//! (`wx:v2:`, 15 min), then the Open-Meteo Africa-weighted blend of six global
+//! (`wx:v2:`, 15 min), then the Open-Meteo Africa-weighted blend of nine global
 //! models (served only when at least FOUR members return data), then Open-Meteo
 //! `best_match`, marked as not a blend. Tomorrow.io is ENRICHMENT ONLY: it adds
 //! a few insights fields behind a D1 budget (12 an hour and 250 a day for
