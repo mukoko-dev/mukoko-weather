@@ -36,6 +36,8 @@ import { AQI_BAND_LABELS, aqiBand } from "@/lib/aq-grid";
 import { lastTileSpanClass } from "@/lib/dashboard-layout";
 import { METRIC_TITLES, type MetricKind } from "@/lib/metric-details";
 import { MetricDetailModal } from "./MetricDetailModal";
+import { AirQualityDetail } from "./AirQualityDetail";
+import { aqiScalePct } from "@/lib/air-quality-details";
 import { cn } from "@/lib/utils";
 import {
   CloudIcon,
@@ -119,6 +121,8 @@ export function EdgeTile({
   children,
   metric,
   onOpen,
+  detailLabel,
+  onOpenDetail,
 }: {
   mineral: Mineral;
   className?: string;
@@ -126,8 +130,13 @@ export function EdgeTile({
   /** When set with `onOpen`, the whole tile opens that metric's detail. */
   metric?: MetricKind;
   onOpen?: (metric: MetricKind) => void;
+  /** For a tile that is not a MetricKind (air quality): its label and opener. */
+  detailLabel?: string;
+  onOpenDetail?: () => void;
 }) {
-  const interactive = Boolean(metric && onOpen);
+  const open = metric && onOpen ? () => onOpen(metric) : onOpenDetail;
+  const label = metric ? `${METRIC_TITLES[metric]} details` : detailLabel;
+  const interactive = Boolean(open && label);
   return (
     <div
       className={cn(
@@ -138,12 +147,12 @@ export function EdgeTile({
       )}
     >
       {children}
-      {metric && onOpen && (
+      {open && label && (
         <button
           type="button"
-          onClick={() => onOpen(metric)}
+          onClick={open}
           aria-haspopup="dialog"
-          aria-label={`${METRIC_TITLES[metric]} details`}
+          aria-label={label}
           className="absolute inset-0 z-[1] rounded-[var(--radius-card)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         />
       )}
@@ -153,23 +162,7 @@ export function EdgeTile({
 
 // ── Pure helpers (exported for tests) ───────────────────────────────────────
 
-/**
- * Position on the AQI scale bar, 0–100. Each EPA band occupies an equal
- * sixth of the bar so the colour ramp and the band edges line up by eye.
- */
-export function aqiScalePct(aqi: number): number {
-  const v = Math.max(0, Math.min(500, aqi));
-  const edges = [0, 50, 100, 150, 200, 300, 500];
-  for (let i = 1; i < edges.length; i++) {
-    if (v <= edges[i]) {
-      const lo = edges[i - 1];
-      const hi = edges[i];
-      const within = (v - lo) / (hi - lo);
-      return ((i - 1 + within) / (edges.length - 1)) * 100;
-    }
-  }
-  return 100;
-}
+export { aqiScalePct } from "@/lib/air-quality-details";
 
 /** One-line comparison with yesterday at the same hour, or null if unknown. */
 export function aqiTrendSentence(
@@ -351,8 +344,19 @@ function useAirQuality(lat: number | undefined, lon: number | undefined) {
 
 // ── Air quality (wide) ──────────────────────────────────────────────────────
 
-function AirQualityWide({ lat, lon }: { lat: number; lon: number }) {
+function AirQualityWide({
+  lat,
+  lon,
+  slug,
+  now,
+}: {
+  lat: number;
+  lon: number;
+  slug?: string;
+  now: Date;
+}) {
   const state = useAirQuality(lat, lon);
+  const [open, setOpen] = useState(false);
 
   if (state.status === "loading") return <AirQualityWideSkeleton />;
 
@@ -381,7 +385,12 @@ function AirQualityWide({ lat, lon }: { lat: number; lon: number }) {
   ].filter(Boolean);
 
   return (
-    <EdgeTile mineral="terracotta" className="mb-[var(--space-stack)]">
+    <EdgeTile
+      mineral="terracotta"
+      className="mb-[var(--space-stack)]"
+      detailLabel="Air quality details"
+      onOpenDetail={() => setOpen(true)}
+    >
       <section
         aria-labelledby="air-quality-heading"
         className="acacia flex min-w-0 flex-col gap-3"
@@ -407,6 +416,13 @@ function AirQualityWide({ lat, lon }: { lat: number; lon: number }) {
         />
         <p className="dove leading-snug">{sentenceParts.join(" ")}</p>
       </section>
+      <AirQualityDetail
+        open={open}
+        reading={data}
+        slug={slug}
+        now={now}
+        onClose={() => setOpen(false)}
+      />
     </EdgeTile>
   );
 }
@@ -489,7 +505,12 @@ export function AtmosphericSummary({
       {hasCoords && (
         <LazySection label="air-quality" fallback={<AirQualityWideSkeleton />}>
           <ChartErrorBoundary name="air quality">
-            <AirQualityWide lat={lat} lon={lon} />
+            <AirQualityWide
+              lat={lat}
+              lon={lon}
+              slug={locationSlug || undefined}
+              now={now}
+            />
           </ChartErrorBoundary>
         </LazySection>
       )}
