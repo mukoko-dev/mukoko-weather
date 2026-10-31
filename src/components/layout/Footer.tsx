@@ -183,7 +183,7 @@ export function SiteFooter() {
               Bundu Foundation
             </a>
             <a
-              href="https://www.bundu.org/research/standards"
+              href="https://standards.bundu.org"
               target="_blank"
               rel="noopener noreferrer"
               className={link}
