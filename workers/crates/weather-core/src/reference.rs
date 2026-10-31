@@ -63,6 +63,12 @@ fn activities() -> &'static [Value] {
     parse(&CELL, ACTIVITIES)
 }
 
+/// Whether `id` is one of the app's activity ids (the allowlist that
+/// replaces `filter_known_activities`' database lookup).
+pub fn is_known_activity(id: &str) -> bool {
+    activities().iter().any(|a| text(a, "id") == id)
+}
+
 fn categories() -> &'static [Value] {
     static CELL: OnceLock<Vec<Value>> = OnceLock::new();
     parse(&CELL, CATEGORIES)
