@@ -159,6 +159,36 @@ describe("ProfileNavigation", () => {
   });
 });
 
+describe("profile — grouped-list layout (label above one card)", () => {
+  it("the group label sits outside the card, which holds the rows", () => {
+    expect(css).toContain(".guineafowl-card {");
+    expect(css).not.toMatch(/\.guineafowl-heading \{[^}]*uppercase/);
+    for (const src of [client, appearance, nav, orgs]) {
+      expect(src).toContain("guineafowl-card");
+    }
+  });
+
+  it("rows are icon, label, optional muted value, chevron, with an inset hairline", () => {
+    expect(css).toMatch(/\.guineafowl-row \{[^}]*after:left-12/);
+    expect(client).toContain("preferencesValue");
+    expect(client).toContain("<ChevronRight");
+    expect(nav).toContain("<ChevronRight");
+  });
+
+  it("appearance shows a preview card per theme, drawn in that theme's tokens", () => {
+    expect(appearance).toContain("data-theme={theme}");
+    expect(appearance).toContain("polygon(0_0,100%_0,0_100%)");
+    expect(appearance).toContain("ring-primary");
+  });
+
+  it("sign out is its own card row, in the severe colour, last before the footer", () => {
+    expect(client).toContain("text-severity-severe");
+    expect(client.indexOf("text-severity-severe")).toBeGreaterThan(
+      client.indexOf("<ProfileNavigation"),
+    );
+  });
+});
+
 describe("profile — styling + accessibility", () => {
   it("uses the .guineafowl list-card fauna, defined in globals.css", () => {
     for (const cls of ["guineafowl", "guineafowl-heading", "guineafowl-row"]) {
