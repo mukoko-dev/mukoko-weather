@@ -61,7 +61,8 @@ interface Props {
 
 /** A finished request, keyed by what was asked so stale results never show. */
 type Result<T> =
-  { key: string; ok: true; value: T } | { key: string; ok: false };
+  | { key: string; ok: true; value: T }
+  | { key: string; ok: false };
 
 export function AgricultureSnapshot({
   location,

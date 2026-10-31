@@ -265,7 +265,8 @@ interface NormalsPayload {
 }
 
 type NormalState =
-  { status: "loading" } | { status: "ready"; normalHigh: number | null };
+  | { status: "loading" }
+  | { status: "ready"; normalHigh: number | null };
 
 /** ERA5 1991–2020 normal high for today at this place (null if unavailable). */
 function useNormalHigh(

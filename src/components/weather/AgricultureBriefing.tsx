@@ -29,7 +29,8 @@ interface Props {
 }
 
 type Result =
-  { key: string; ok: true; text: string } | { key: string; ok: false };
+  | { key: string; ok: true; text: string }
+  | { key: string; ok: false };
 
 export function AgricultureBriefing({ location, crops, user, enabled }: Props) {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
