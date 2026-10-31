@@ -1,6 +1,7 @@
 "use client";
 
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
+import { WX_SERIES } from "@/lib/weather-scales";
 
 interface ThunderstormChartProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,7 +18,7 @@ const SERIES: SeriesConfig[] = [
   {
     key: "thunderstorm",
     label: "Thunderstorm Risk",
-    color: "var(--chart-4)",
+    color: WX_SERIES.storm,
     type: "bar",
     opacity: 0.5,
   },

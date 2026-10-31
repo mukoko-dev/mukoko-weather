@@ -11,16 +11,12 @@ describe("FLIGHT_CATEGORY_STYLES", () => {
     );
   });
 
-  it("uses the theme-aware severity-fg token, not hardcoded white text", () => {
-    // Dark-mode severity colors are bright — text-white would be unreadable
-    // (see --color-severity-fg in globals.css). Every severity-colored
-    // category must use the theme-aware foreground token instead.
-    expect(FLIGHT_CATEGORY_STYLES.VFR).toContain("text-severity-fg");
-    expect(FLIGHT_CATEGORY_STYLES.IFR).toContain("text-severity-fg");
-    expect(FLIGHT_CATEGORY_STYLES.LIFR).toContain("text-severity-fg");
-    expect(FLIGHT_CATEGORY_STYLES.VFR).not.toContain("text-white");
-    expect(FLIGHT_CATEGORY_STYLES.IFR).not.toContain("text-white");
-    expect(FLIGHT_CATEGORY_STYLES.LIFR).not.toContain("text-white");
+  it("uses the aviation-chart weather-scale tokens, not brand or severity colours", () => {
+    for (const cls of Object.values(FLIGHT_CATEGORY_STYLES)) {
+      expect(cls).toMatch(/^bg-wx-flight-\d /);
+      expect(cls).not.toMatch(/severity|mineral|text-white/);
+      expect(cls).toMatch(/text-wx-fg-(dark|light)/);
+    }
   });
 });
 

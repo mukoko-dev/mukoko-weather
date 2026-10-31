@@ -21,6 +21,7 @@ import {
   moonPhase,
 } from "./derived-insights";
 import { openMeteoForecastUrl, openMeteoHeaders } from "./open-meteo-endpoint";
+import { UV_SCALE, uvBand } from "./weather-scales";
 
 export interface CurrentWeather {
   /** Observation time (Open-Meteo `current.time`, location wall clock). */
@@ -696,12 +697,18 @@ export function windDirection(
   return COMPASS_16[Math.round(degrees / 22.5) % 16];
 }
 
-export function uvLevel(index: number): { label: string; color: string } {
-  if (index <= 2) return { label: "Low", color: "text-success" };
-  if (index <= 5) return { label: "Moderate", color: "text-warmth" };
-  if (index <= 7) return { label: "High", color: "text-accent" };
-  if (index <= 10) return { label: "Very High", color: "text-earth" };
-  return { label: "Extreme", color: "text-primary" };
+/**
+ * WHO Global Solar UV Index category for an index (reported as a whole number:
+ * 0-2 Low, 3-5 Moderate, 6-7 High, 8-10 Very High, 11+ Extreme). `swatch` is
+ * the WHO colour as a static fill class (weather-scales.ts); colour never
+ * stands alone, so callers print the label too.
+ */
+export function uvLevel(index: number): { label: string; swatch: string } {
+  const band = uvBand(index) ?? UV_SCALE.bands[0];
+  return {
+    label: band.name === "Very high" ? "Very High" : band.name,
+    swatch: band.bg,
+  };
 }
 
 /**

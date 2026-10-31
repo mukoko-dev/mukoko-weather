@@ -47,8 +47,8 @@ interface Props {
 
 /** Phase badge — solid fill, paired with the matching `-fg` foreground token. */
 export const ENSO_PHASE_CLASS: Record<EnsoPhase, string> = {
-  "El Niño": "bg-severity-moderate text-severity-fg",
-  "La Niña": "bg-severity-cold text-severity-fg",
+  "El Niño": "bg-wx-temp-9 text-wx-fg-light",
+  "La Niña": "bg-wx-temp-1 text-wx-fg-light",
   Neutral: "bg-surface-base text-text-secondary",
 };
 

@@ -6,6 +6,8 @@
  * Tailwind can see every class name at build time.
  */
 
+import { AQI_SCALE } from "@/lib/weather-scales";
+
 export type HazeLevel = "none" | "light" | "moderate" | "heavy" | "hazardous";
 export type HazeType = "clear" | "smoke" | "dust" | "smog" | "mist";
 export type HazeSeasonType = "smoke" | "dust" | "smog";
@@ -69,43 +71,39 @@ export function hazeLevelRank(level: HazeLevel): number {
 }
 
 export interface HazeSeverityClasses {
-  /** Text colour for chips and labels. */
+  /** Text colour for chips and labels (always the primary text colour). */
   text: string;
-  /** Solid fill for scale segments. */
+  /** Solid fill for scale segments and the chip's swatch: the EPA band colour. */
   fill: string;
-  /** Soft tinted background for chips. */
+  /** Neutral chip background (the colour is carried by the fill swatch). */
   soft: string;
 }
 
-const HAZE_SEVERITY: Record<HazeLevel, HazeSeverityClasses> = {
-  none: {
-    text: "text-severity-low",
-    fill: "bg-severity-low",
-    soft: "bg-severity-low/15",
-  },
-  light: {
-    text: "text-severity-moderate",
-    fill: "bg-severity-moderate",
-    soft: "bg-severity-moderate/15",
-  },
-  moderate: {
-    text: "text-severity-high",
-    fill: "bg-severity-high",
-    soft: "bg-severity-high/15",
-  },
-  heavy: {
-    text: "text-severity-severe",
-    fill: "bg-severity-severe",
-    soft: "bg-severity-severe/15",
-  },
-  hazardous: {
-    text: "text-severity-extreme",
-    fill: "bg-severity-extreme",
-    soft: "bg-severity-extreme/15",
-  },
+/**
+ * Haze level to the official US EPA AQI colour (weather-scales.ts) it
+ * corresponds to: none green, light yellow, moderate orange, heavy red,
+ * hazardous maroon. Text stays primary; the EPA yellow is not a text colour.
+ */
+const HAZE_BAND_INDEX: Record<HazeLevel, number> = {
+  none: 0,
+  light: 1,
+  moderate: 2,
+  heavy: 3,
+  hazardous: 5,
 };
 
-/** Severity token classes for a haze level (static lookup, never built dynamically). */
+const HAZE_SEVERITY = Object.fromEntries(
+  HAZE_LEVEL_ORDER.map((level) => [
+    level,
+    {
+      text: "text-text-primary",
+      fill: AQI_SCALE.bands[HAZE_BAND_INDEX[level]].bg,
+      soft: "bg-surface-dim",
+    },
+  ]),
+) as Record<HazeLevel, HazeSeverityClasses>;
+
+/** Weather-scale classes for a haze level (static lookup, never built dynamically). */
 export function hazeSeverityClasses(level: HazeLevel): HazeSeverityClasses {
   return HAZE_SEVERITY[level];
 }

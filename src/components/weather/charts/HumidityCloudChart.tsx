@@ -1,6 +1,7 @@
 "use client";
 
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
+import { WX_SERIES } from "@/lib/weather-scales";
 
 interface HumidityCloudChartProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,14 +18,14 @@ const SERIES: SeriesConfig[] = [
   {
     key: "humidity",
     label: "Humidity",
-    color: "var(--chart-2)",
+    color: WX_SERIES.humidity,
     fill: true,
     opacity: 0.3,
   },
   {
     key: "cloudCover",
     label: "Cloud Cover",
-    color: "var(--chart-5)",
+    color: WX_SERIES.cloud,
     dashed: true,
   },
 ];

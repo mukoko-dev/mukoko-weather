@@ -134,6 +134,10 @@ export function HazePanel({ lat, lon }: Props) {
         <span
           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium ${severity.soft} ${severity.text}`}
         >
+          <span
+            aria-hidden="true"
+            className={`size-2.5 shrink-0 rounded-full ring-1 ring-wx-outline ${severity.fill}`}
+          />
           <span aria-hidden="true">
             <TypeIcon size={14} />
           </span>
@@ -148,7 +152,7 @@ export function HazePanel({ lat, lon }: Props) {
           return (
             <span
               key={segmentLevel}
-              className={`h-2 flex-1 rounded-full ${
+              className={`h-2 flex-1 rounded-full ring-1 ring-wx-outline ${
                 filled
                   ? hazeSeverityClasses(segmentLevel).fill
                   : "bg-surface-dim"

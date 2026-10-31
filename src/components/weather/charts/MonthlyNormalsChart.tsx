@@ -1,6 +1,7 @@
 "use client";
 
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
+import { WX_SERIES } from "@/lib/weather-scales";
 
 interface MonthlyNormalsChartProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -11,11 +12,11 @@ interface MonthlyNormalsChartProps {
 }
 
 const TEMPERATURE: SeriesConfig[] = [
-  { key: "meanHighC", label: "Average high", color: "var(--chart-1)" },
+  { key: "meanHighC", label: "Average high", color: WX_SERIES.temp },
   {
     key: "meanLowC",
     label: "Average low",
-    color: "var(--chart-2)",
+    color: WX_SERIES.tempLow,
     dashed: true,
   },
 ];
@@ -24,7 +25,7 @@ const PRECIPITATION: SeriesConfig[] = [
   {
     key: "precipMm",
     label: "Average rainfall",
-    color: "var(--chart-2)",
+    color: WX_SERIES.rain,
     type: "bar",
     opacity: 0.6,
   },

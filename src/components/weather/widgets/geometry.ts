@@ -140,30 +140,43 @@ export function arcPoint(cx: number, cy: number, r: number, f: number): Point {
   };
 }
 
-/** Preset gradient ramps, expressed as CSS custom-property names. */
+/**
+ * Preset ramps, expressed as CSS custom-property names from the weather
+ * scales (weather-scales.ts): WHO UV, the six official EPA AQI colours and the
+ * temperature ramp. Never brand minerals or the severity ramp.
+ */
 export const GRADIENT_PRESETS = {
-  uv: [
-    "--color-severity-low",
-    "--color-severity-moderate",
-    "--color-severity-high",
-    "--color-severity-severe",
-    "--mineral-tanzanite",
-  ],
+  uv: ["--wx-uv-1", "--wx-uv-2", "--wx-uv-3", "--wx-uv-4", "--wx-uv-5"],
   aqi: [
-    "--color-severity-low",
-    "--color-severity-moderate",
-    "--color-severity-high",
-    "--color-severity-severe",
-    "--mineral-tanzanite",
+    "--wx-aqi-1",
+    "--wx-aqi-2",
+    "--wx-aqi-3",
+    "--wx-aqi-4",
+    "--wx-aqi-5",
+    "--wx-aqi-6",
   ],
   temperature: [
-    "--color-severity-cold",
-    "--mineral-malachite",
-    "--color-severity-moderate",
-    "--color-severity-high",
-    "--color-severity-severe",
+    "--wx-temp-1",
+    "--wx-temp-3",
+    "--wx-temp-5",
+    "--wx-temp-7",
+    "--wx-temp-9",
   ],
 } as const;
+
+/**
+ * Presets drawn as hard colour bands rather than a blend: the band edges as a
+ * percentage of the bar (one more entry than there are tokens). A categorical
+ * scale (WHO UV, EPA AQI) must show where each category starts, not a smear.
+ * UV runs 0-14 so Extreme (11+) has room; AQI gives each EPA band an equal
+ * sixth (see aqiScalePct).
+ */
+export const GRADIENT_BREAKS: Partial<
+  Record<keyof typeof GRADIENT_PRESETS, readonly number[]>
+> = {
+  uv: [0, 3, 6, 8, 11, 14].map((v) => round((v / 14) * 100)),
+  aqi: [0, 1, 2, 3, 4, 5, 6].map((v) => round((v / 6) * 100)),
+};
 
 export type GradientPreset = keyof typeof GRADIENT_PRESETS;
 

@@ -141,6 +141,20 @@ describe("ArcGauge SVG geometry", () => {
 
 // ── Gradient ramp derivation ────────────────────────────────────────────────
 
+describe("gradientFromStrokeClass for weather-scale strokes", () => {
+  it("yields the stroke's own colour, solid, not the brand severity ramp", () => {
+    expect(gradientFromStrokeClass("stroke-wx-aqi-3")).toEqual([
+      "var(--wx-aqi-3)",
+    ]);
+    expect(gradientFromStrokeClass("stroke-wx-uv-5")).toEqual([
+      "var(--wx-uv-5)",
+    ]);
+    for (const cls of ["stroke-wx-aqi-1", "stroke-wx-aqi-6"]) {
+      expect(gradientFromStrokeClass(cls).join()).not.toMatch(/severity/);
+    }
+  });
+});
+
 describe("gradientFromStrokeClass", () => {
   it("derives a multi-stop ramp ending at the class severity", () => {
     const ramp = gradientFromStrokeClass("stroke-severity-severe");

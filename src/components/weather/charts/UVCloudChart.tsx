@@ -2,6 +2,7 @@
 
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
 import { uvLevel } from "@/lib/weather";
+import { WX_SERIES, uvBandToken } from "@/lib/weather-scales";
 
 interface UVCloudChartProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,7 +18,8 @@ const SERIES: SeriesConfig[] = [
   {
     key: "uvIndex",
     label: "UV Index",
-    color: "var(--chart-3)",
+    color: "var(--wx-uv-3)",
+    colorByValue: uvBandToken,
     type: "bar",
     opacity: 0.5,
     yAxisID: "uv",
@@ -26,7 +28,7 @@ const SERIES: SeriesConfig[] = [
   {
     key: "cloudCover",
     label: "Cloud Cover",
-    color: "var(--chart-2)",
+    color: WX_SERIES.cloud,
     yAxisID: "cloud",
     order: 1,
   },

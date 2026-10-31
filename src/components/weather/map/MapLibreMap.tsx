@@ -33,8 +33,9 @@ import {
 import {
   AQI_BANDS,
   AQI_BAND_BG_CLASS,
+  AQI_BAND_FG_CLASS,
   AQI_BAND_LABELS,
-  AQI_BAND_SEVERITY_TOKEN,
+  AQI_BAND_TOKEN,
   type AqBubble,
 } from "@/lib/aq-grid";
 
@@ -120,7 +121,7 @@ function applyWeatherOverlay(
 }
 
 /**
- * Renders AQI bubbles as HTML markers. Each is a severity-coloured disc with
+ * Renders AQI bubbles as HTML markers. Each is a disc in its official EPA band colour with
  * its US AQI value, so the number reads without a symbol layer or glyphs. The
  * centre ("my location") bubble is larger. Returns the markers so the caller
  * can remove them on the next render.
@@ -133,8 +134,9 @@ function renderAqiBubbles(
   return bubbles.map((b) => {
     const el = document.createElement("div");
     el.className = cn(
-      "flex items-center justify-center rounded-full font-semibold text-severity-fg shadow-md ring-2 ring-surface-card",
+      "flex items-center justify-center rounded-full border-2 border-wx-outline font-semibold shadow-md",
       AQI_BAND_BG_CLASS[b.band],
+      AQI_BAND_FG_CLASS[b.band],
       b.isCenter ? "size-12 text-sm" : "size-8 text-xs",
     );
     el.setAttribute("role", "img");
@@ -149,14 +151,14 @@ function renderAqiBubbles(
 
 /**
  * Fill colour per AQI band, as a MapLibre `match` expression. Colours come from
- * the resolved severity tokens (paint values cannot read var()), so they follow
- * the light/dark theme. Unknown bands fall back to the tertiary text token.
+ * the resolved weather-scale tokens (paint values cannot read var()), so they
+ * follow the light/dark theme. Unknown bands fall back to the tertiary text token.
  */
 function aqiFillColorExpression(): ExpressionSpecification {
   // Flat [band, colour, band, colour, …] pairs after the lookup, then fallback.
   const pairs: string[] = [];
   for (const band of AQI_BANDS) {
-    pairs.push(band, resolveColor(`var(${AQI_BAND_SEVERITY_TOKEN[band]})`));
+    pairs.push(band, resolveColor(`var(${AQI_BAND_TOKEN[band]})`));
   }
   const expression: unknown[] = [
     "match",
@@ -165,6 +167,36 @@ function aqiFillColorExpression(): ExpressionSpecification {
     resolveColor("var(--color-text-tertiary)"),
   ];
   return expression as ExpressionSpecification;
+}
+
+/** Id of the outline layer that sits on a data-fill layer. */
+function outlineLayerId(fillLayerId: string): string {
+  return `${fillLayerId}-outline`;
+}
+
+/**
+ * Outlines every data cell with the theme's --wx-outline colour. The official
+ * EPA / WHO / radar fill colours cannot all be 3:1 against a light or a dark
+ * base map (the worst AQI band, maroon, is about 1.3:1 on the dark base), so
+ * the cell edge carries the contrast (non-text UI, WCAG 1.4.11).
+ */
+function addCellOutline(
+  map: MapLibreGLMap,
+  fillLayerId: string,
+  beforeId: string | undefined,
+) {
+  map.addLayer(
+    {
+      id: outlineLayerId(fillLayerId),
+      type: "line",
+      source: fillLayerId,
+      paint: {
+        "line-color": resolveColor("var(--wx-outline)"),
+        "line-width": 1,
+      },
+    },
+    beforeId,
+  );
 }
 
 /**
@@ -177,6 +209,8 @@ function applyAqiOverlay(
   map: MapLibreGLMap,
   data: FeatureCollection | null | undefined,
 ) {
+  if (map.getLayer(outlineLayerId(AQI_OVERLAY_ID)))
+    map.removeLayer(outlineLayerId(AQI_OVERLAY_ID));
   if (map.getLayer(AQI_OVERLAY_ID)) map.removeLayer(AQI_OVERLAY_ID);
   if (map.getSource(AQI_OVERLAY_ID)) map.removeSource(AQI_OVERLAY_ID);
 
@@ -203,6 +237,7 @@ function applyAqiOverlay(
     },
     beforeId,
   );
+  addCellOutline(map, AQI_OVERLAY_ID, beforeId);
 }
 
 /**
@@ -242,6 +277,8 @@ function applyFieldOverlay(
     return;
   }
 
+  if (map.getLayer(outlineLayerId(MODEL_OVERLAY_ID)))
+    map.removeLayer(outlineLayerId(MODEL_OVERLAY_ID));
   if (map.getLayer(MODEL_OVERLAY_ID)) map.removeLayer(MODEL_OVERLAY_ID);
   if (map.getSource(MODEL_OVERLAY_ID)) map.removeSource(MODEL_OVERLAY_ID);
   fieldStyleOf.delete(map);
@@ -275,6 +312,7 @@ function applyFieldOverlay(
     },
     beforeId,
   );
+  addCellOutline(map, MODEL_OVERLAY_ID, beforeId);
   fieldStyleOf.set(map, style);
 }
 

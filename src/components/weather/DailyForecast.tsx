@@ -138,7 +138,13 @@ export function DailyForecast({ daily }: Props) {
                   {precipMm > 0 && <span>{precipMm.toFixed(1)} mm</span>}
                   <span>Wind {windMax} km/h</span>
                   {gustMax > windMax && <span>Gusts {gustMax}</span>}
-                  <span className={uvInfo.color}>UV {uvMax}</span>
+                  <span className="inline-flex items-center gap-1">
+                    <span
+                      aria-hidden="true"
+                      className={`size-2.5 rounded-full ring-1 ring-wx-outline ${uvInfo.swatch}`}
+                    />
+                    UV {uvMax} {uvInfo.label}
+                  </span>
                 </div>
               </div>
             );

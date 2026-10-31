@@ -57,16 +57,9 @@ describe("AirQualityMapCard structure", () => {
     );
   });
 
-  it("uses literal severity text classes per band (no dynamic class names)", () => {
-    for (const cls of [
-      "text-severity-low",
-      "text-severity-moderate",
-      "text-severity-high",
-      "text-severity-severe",
-      "text-severity-extreme",
-    ]) {
-      expect(source).toContain(cls);
-    }
+  it("marks the centre reading with the band's EPA fill class and a printed number", () => {
+    expect(source).toContain("AQI_BAND_BG_CLASS[band]");
+    expect(source).not.toMatch(/text-severity-/);
   });
 
   it("contains no hardcoded hex colours, rgba() or inline styles", () => {
