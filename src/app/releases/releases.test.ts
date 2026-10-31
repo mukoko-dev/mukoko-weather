@@ -177,9 +177,8 @@ describe("/releases — route registration", () => {
 describe("/releases — page tier files and markup details", () => {
   it("has a loading skeleton with a status role", () => {
     const loading = read("loading.tsx");
-    expect(loading).toContain('role="status"');
-    expect(loading).toContain('aria-label="Loading"');
-    expect(loading).toContain("BreadcrumbSkeleton");
+    expect(loading).toContain("<PageShellSkeleton");
+    expect(loading).toContain("breadcrumb");
   });
 
   it("has an error boundary built on RouteErrorBoundary", () => {

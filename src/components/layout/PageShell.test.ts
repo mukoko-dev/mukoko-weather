@@ -44,3 +44,29 @@ describe("PageShell", () => {
     expect(source).not.toMatch(/#[0-9a-fA-F]{3,6}\b/);
   });
 });
+
+describe("every ordinary page route has a loader and an error boundary", () => {
+  const { existsSync } = require("node:fs");
+  const { resolve } = require("node:path");
+  const routes = [
+    "history",
+    "profile",
+    "status",
+    "locations",
+    "releases",
+    "developers/keys",
+  ];
+  for (const r of routes) {
+    it(`${r}: loading.tsx uses PageShellSkeleton and error.tsx uses RouteErrorBoundary`, () => {
+      const dir = resolve(__dirname, "../../app", r);
+      expect(existsSync(`${dir}/loading.tsx`)).toBe(true);
+      expect(existsSync(`${dir}/error.tsx`)).toBe(true);
+      expect(readFileSync(`${dir}/loading.tsx`, "utf-8")).toContain(
+        "PageShellSkeleton",
+      );
+      expect(readFileSync(`${dir}/error.tsx`, "utf-8")).toContain(
+        "RouteErrorBoundary",
+      );
+    });
+  }
+});

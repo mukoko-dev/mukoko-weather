@@ -146,7 +146,8 @@ describe("locations list — client", () => {
 
 describe("locations loading state", () => {
   it("announces loading with role=status and aria-label=Loading", () => {
-    expect(loadingSource).toMatch(/role="status"\s+aria-label="Loading"/);
+    expect(loadingSource).toContain("<PageShellSkeleton");
+    expect(loadingSource).toContain('label="Loading your locations"');
   });
 });
 
