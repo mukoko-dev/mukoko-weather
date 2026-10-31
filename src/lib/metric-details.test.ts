@@ -170,7 +170,8 @@ describe("tiles open the detail modal", () => {
 
   it("makes the tile a labelled button that opens a dialog", () => {
     expect(summary).toContain('aria-haspopup="dialog"');
-    expect(summary).toContain("details`}");
+    expect(summary).toContain("${METRIC_TITLES[metric]} details");
+    expect(summary).toContain("aria-label={label}");
     expect(summary).not.toMatch(/absolute[^"']*\binset-y-0\b/);
   });
 
