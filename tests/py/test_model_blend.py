@@ -94,11 +94,27 @@ class TestRegions:
 class TestWeights:
     def test_ecmwf_heavy_everywhere(self):
         for region, w in BLEND_WEIGHTS.items():
-            ecmwf = w[blend.ECMWF_IFS] + w[blend.ECMWF_AIFS]
+            # Weights are relative (the blend normalises over the members
+            # present), so ECMWF-heavy is judged on the normalised share.
+            ecmwf = (w[blend.ECMWF_IFS] + w[blend.ECMWF_AIFS]) / sum(w.values())
             assert ecmwf >= 0.5, region
             assert order_members(w)[0] == blend.ECMWF_IFS
-            assert sum(w.values()) == pytest.approx(1.0)
             assert set(w) <= BLENDABLE_MODELS
+
+    def test_newer_members_are_small_and_the_original_six_unchanged(self):
+        original = {
+            blend.ECMWF_IFS: 0.35,
+            blend.ECMWF_AIFS: 0.25,
+            blend.GFS: 0.15,
+            blend.ICON: 0.15,
+            blend.GEM: 0.05,
+            blend.ARPEGE: 0.05,
+        }
+        for region, w in BLEND_WEIGHTS.items():
+            assert {m: w[m] for m in original} == original, region
+            for m in (blend.UKMO, blend.CMA, blend.JMA):
+                assert 0.03 <= w[m] <= 0.08, (region, m)
+            assert len(w) == 9
 
     def test_db_override_wins_and_is_sanitised(self):
         coll = MagicMock()

@@ -10,29 +10,36 @@
 //! request, the StationKit blending rule, the QC ranges and the station
 //! ingest-key hashing.
 
+pub mod ag_calendar;
+mod ag_calendar_tables;
 pub mod ai;
 pub mod air_quality;
 pub mod aq_grid;
 pub mod auth;
 pub mod aviation;
+pub mod blend;
 pub mod breaker;
 pub mod budget;
 pub mod cache;
 pub mod client_ip;
+pub mod climate_normals;
 pub mod community;
 pub mod cors;
 pub mod crypto;
 pub mod devkey;
+pub mod enrichment;
 pub mod enso;
 pub mod external_feeds;
 pub mod forecast;
 pub mod geo;
 pub mod haze;
+pub mod insights;
 pub mod jobs;
 pub mod locations;
 pub mod model_grid;
 pub mod normalize;
 pub mod normals;
+pub mod place_profile;
 pub mod places;
 pub mod push;
 pub mod query;

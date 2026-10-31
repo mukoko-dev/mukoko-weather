@@ -9,6 +9,7 @@
 //! ```text
 //! GET /v1/weather?lat=&lon=[&models=a,b]   full WeatherData, the shape of /api/py/weather
 //! GET /v1/forecast?location=|lat=&lon=[&days=1..7]   the daily forecast contract
+//! GET /v1/locations/profile?slug=|lat=&lon=[&country=]   a place's knowledge (seasons, crops, climate, soil) and today's context
 //! GET /v1/air-quality?lat=&lon=                     the EPA AQI, the shape of /api/py/airquality
 //! GET /v1/air-quality/grid?lat=&lon=[&radiusKm=&n=]  US AQI on an n x n grid (the shape of /api/py/airquality/grid)
 //! GET /v1/haze?lat=&lon=                             haze panel data (the shape of /api/py/haze)
@@ -110,7 +111,10 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     cors::apply(
         resp,
         cors_origin.as_deref(),
-        Some("X-Cache, X-Weather-Provider, X-Current-Source, X-Fetched-At, X-AQ-Source"),
+        Some(
+            "X-Cache, X-Weather-Provider, X-Weather-Blend, X-Enrichment, X-Current-Source, \
+             X-Fetched-At, X-AQ-Source",
+        ),
     )
 }
 
@@ -172,6 +176,16 @@ async fn route(req: &Request, env: &Env) -> Result<Response> {
                 AVIATION_BINDING,
                 "/aviation/nearest-metar",
                 "public, max-age=300",
+            )
+            .await
+        }
+        "/v1/locations/profile" => {
+            relay(
+                req,
+                env,
+                FORECAST_BINDING,
+                "/profile",
+                "public, max-age=1800",
             )
             .await
         }
@@ -375,12 +389,24 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
                 for h in [
                     "X-Cache",
                     "X-Weather-Provider",
+                    "X-Weather-Blend",
+                    "X-Enrichment",
                     "X-Current-Source",
                     "X-Fetched-At",
                 ] {
                     copy_header(upstream.headers(), resp.headers(), h)?;
                 }
-                resp.headers().set("Cache-Control", "public, max-age=300")?;
+                // Only the full blend is worth five minutes at the edge. A
+                // degraded answer (single model, best_match) is short-lived,
+                // so the blend comes back as soon as it recovers.
+                let blended = upstream.headers().get("X-Weather-Provider")?.as_deref()
+                    == Some("open-meteo:blend");
+                let cache = if blended {
+                    "public, max-age=300"
+                } else {
+                    "public, max-age=30"
+                };
+                resp.headers().set("Cache-Control", cache)?;
                 return Ok(resp);
             }
         }
@@ -394,6 +420,7 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
     let h = resp.headers();
     h.set("X-Cache", "MISS")?;
     h.set("X-Weather-Provider", "fallback")?;
+    h.set("X-Enrichment", "none")?;
     h.set("X-Current-Source", "fallback")?;
     Ok(resp)
 }
@@ -458,7 +485,7 @@ async fn relay(
         return error(502, "upstream_unreachable", "The service did not answer.");
     };
     let status = upstream.status_code();
-    if !matches!(status, 200 | 400 | 404 | 422 | 502 | 503) {
+    if !matches!(status, 200 | 400 | 404 | 422 | 429 | 502 | 503) {
         return error(502, "upstream_error", "The service failed.");
     }
     let Ok(body) = upstream.json::<Value>().await else {
@@ -582,6 +609,7 @@ async fn status(env: &Env) -> Result<Response> {
         forecast.1,
     )];
     checks.extend(health::forecast_storage_row(&forecast.0, forecast.1));
+    checks.extend(health::blend_row(&forecast.0, forecast.1));
     checks.push(health::enrichment_row(&forecast.0, forecast.1));
     checks.push(health::worker_row("Places Worker", &places.0, places.1));
     checks.push(health::worker_row(
