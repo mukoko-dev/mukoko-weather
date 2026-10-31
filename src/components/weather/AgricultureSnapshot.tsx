@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAppStore } from "@/lib/store";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatGrid } from "./StatGrid";
 import { CropIcon, SparklesIcon } from "@/lib/weather-icons";
 import {
   MOISTURE_LABELS,
@@ -59,8 +61,7 @@ interface Props {
 
 /** A finished request, keyed by what was asked so stale results never show. */
 type Result<T> =
-  | { key: string; ok: true; value: T }
-  | { key: string; ok: false };
+  { key: string; ok: true; value: T } | { key: string; ok: false };
 
 export function AgricultureSnapshot({
   location,
@@ -187,40 +188,46 @@ export function AgricultureSnapshot({
         })}
       </ul>
 
-      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <Metric
-          term="Rain 24 h / 7 d"
-          value={`${formatMm(data.rain.next24hMm)} / ${formatMm(data.rain.next7dMm)}`}
-        />
-        <Metric
-          term="Topsoil moisture"
-          value={`${formatMoisture(data.soil?.moistureTopsoil)}${
-            data.soil?.moistureBand
-              ? ` · ${MOISTURE_LABELS[data.soil.moistureBand]}`
-              : ""
-          }`}
-        />
-        <Metric
-          term="Soil at seed depth"
-          value={formatTempC(data.soil?.temperatureSeedDepth)}
-        />
-        <Metric
-          term="Water balance 7 d"
-          value={formatBalance(data.waterBalance?.balanceNext7dMm)}
-        />
-        <Metric term="GDD past 30 d" value={formatGdd(data.gdd?.past30d)} />
-        <Metric
-          term="Spray wind"
-          value={
-            data.wind?.speedKmh != null
-              ? `${Math.round(data.wind.speedKmh)} km/h · ${
-                  data.wind.sprayable ? "OK to spray" : "Not now"
-                }`
-              : "—"
-          }
-          tone={data.wind?.sprayable === false ? riskClass("high") : undefined}
-        />
-      </dl>
+      <StatGrid
+        columns={3}
+        items={[
+          {
+            label: "Rain 24 h / 7 d",
+            value: `${formatMm(data.rain.next24hMm)} / ${formatMm(data.rain.next7dMm)}`,
+          },
+          {
+            label: "Topsoil moisture",
+            value: `${formatMoisture(data.soil?.moistureTopsoil)}${
+              data.soil?.moistureBand
+                ? ` · ${MOISTURE_LABELS[data.soil.moistureBand]}`
+                : ""
+            }`,
+          },
+          {
+            label: "Soil at seed depth",
+            value: formatTempC(data.soil?.temperatureSeedDepth),
+          },
+          {
+            label: "Water balance 7 d",
+            value: formatBalance(data.waterBalance?.balanceNext7dMm),
+          },
+          {
+            label: "GDD past 30 d",
+            value: formatGdd(data.gdd?.past30d),
+          },
+          {
+            label: "Spray wind",
+            value:
+              data.wind?.speedKmh != null
+                ? `${Math.round(data.wind.speedKmh)} km/h · ${
+                    data.wind.sprayable ? "OK to spray" : "Not now"
+                  }`
+                : "—",
+            tone:
+              data.wind?.sprayable === false ? riskClass("high") : undefined,
+          },
+        ]}
+      />
 
       {risks.length > 0 && (
         <ul className="space-y-1">
@@ -254,7 +261,7 @@ export function AgricultureSnapshot({
                 <p className="gazelle">{aiNow.value}</p>
               ) : !aiNow ? (
                 <>
-                  <span className="mt-1 block h-4 w-3/4 animate-pulse rounded-full bg-text-tertiary/20" />
+                  <Skeleton className="mt-1 h-4 w-3/4 rounded-full bg-text-tertiary/20" />
                   <span className="sr-only">Loading Shamwari farm advice</span>
                 </>
               ) : (
@@ -283,24 +290,5 @@ export function AgricultureSnapshot({
         </Link>
       )}
     </section>
-  );
-}
-
-function Metric({
-  term,
-  value,
-  tone,
-}: {
-  term: string;
-  value: string;
-  tone?: string;
-}) {
-  return (
-    <div className="meerkat">
-      <dt className="dove">{term}</dt>
-      <dd className={`text-base font-medium ${tone ?? "text-text-primary"}`}>
-        {value}
-      </dd>
-    </div>
   );
 }

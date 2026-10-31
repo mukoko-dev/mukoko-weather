@@ -85,10 +85,10 @@ const ALLOWED_EXCEPTIONS: Record<string, { count: number; reason: string }> = {
     count: 1,
     reason: "round dismiss (×) icon control",
   },
-  "src/app/profile/ProfileClient.tsx": {
+  "src/components/profile/GroupedRow.tsx": {
     count: 1,
     reason:
-      "Preferences settings-list row (.guineafowl-row) — list row, not a pill",
+      "settings-list row (.guineafowl-row) used by Preferences and the profile navigation — list row, not a pill",
   },
   "src/components/profile/ProfileAppearance.tsx": {
     count: 1,
@@ -109,9 +109,13 @@ const ALLOWED_EXCEPTIONS: Record<string, { count: number; reason: string }> = {
     reason: "full-width disclosure header row of the chat card",
   },
   "src/components/weather/MyWeatherModal.tsx": {
-    count: 6,
+    count: 4,
     reason:
-      "selectable list rows and tiles: location rows, activity tiles, theme and forecast-model radio cards",
+      "selectable list rows and tiles: location rows, activity tiles (the theme and forecast-model radios are SelectRow)",
+  },
+  "src/components/weather/SelectRow.tsx": {
+    count: 1,
+    reason: "the one selectable radio row (.bushbuck) shared by MyWeatherModal",
   },
   "src/components/weather/reports/WeatherReportModal.tsx": {
     count: 2,

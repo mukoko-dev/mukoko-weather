@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { SafeMarkdown } from "@/components/ui/safe-markdown";
+import { SkeletonLines } from "@/components/ui/skeleton";
+
 import { SparklesIcon } from "@/lib/weather-icons";
 import { agriAIBody, fetchAgriAI, peekAgriAI } from "@/lib/agriculture-client";
 import type { WeatherLocation } from "@/lib/locations";
@@ -27,8 +29,7 @@ interface Props {
 }
 
 type Result =
-  | { key: string; ok: true; text: string }
-  | { key: string; ok: false };
+  { key: string; ok: true; text: string } | { key: string; ok: false };
 
 export function AgricultureBriefing({ location, crops, user, enabled }: Props) {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
@@ -123,12 +124,10 @@ export function AgricultureBriefing({ location, crops, user, enabled }: Props) {
             this page are still current.
           </p>
         ) : (
-          <div className="space-y-2">
-            <div className="h-4 w-3/4 animate-pulse rounded-full bg-text-tertiary/20" />
-            <div className="h-4 w-full animate-pulse rounded-full bg-text-tertiary/20" />
-            <div className="h-4 w-2/3 animate-pulse rounded-full bg-text-tertiary/20" />
-            <span className="sr-only">Loading the agronomy briefing</span>
-          </div>
+          <SkeletonLines
+            widths={["w-3/4", "w-full", "w-2/3"]}
+            label="Loading the agronomy briefing"
+          />
         )}
       </div>
     </section>

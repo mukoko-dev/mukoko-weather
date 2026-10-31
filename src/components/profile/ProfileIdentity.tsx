@@ -15,6 +15,8 @@
 import { useState } from "react";
 import { Check, Loader2, Pencil, X } from "lucide-react";
 import { updateProfileAction } from "@/app/profile/actions";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Field, FIELD_CONTROL_CLASS } from "@/components/ui/field";
 import {
   initialsFor,
   isValidImageUrl,
@@ -109,31 +111,31 @@ export function ProfileIdentity({
             Edit your name
           </h1>
           <div className="mb-3 grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="dove">First name</span>
+            <Field label="First name" htmlFor="profile-first-name">
               <input
+                id="profile-first-name"
                 value={first}
                 onChange={(e) => setFirst(e.target.value)}
                 maxLength={MAX_PROFILE_NAME_LENGTH}
                 autoComplete="given-name"
-                className="crane mt-1 min-h-[var(--touch-target-min)]"
+                className={FIELD_CONTROL_CLASS}
               />
-            </label>
-            <label className="block">
-              <span className="dove">Last name</span>
+            </Field>
+            <Field label="Last name" htmlFor="profile-last-name">
               <input
+                id="profile-last-name"
                 value={last}
                 onChange={(e) => setLast(e.target.value)}
                 maxLength={MAX_PROFILE_NAME_LENGTH}
                 autoComplete="family-name"
-                className="crane mt-1 min-h-[var(--touch-target-min)]"
+                className={FIELD_CONTROL_CLASS}
               />
-            </label>
+            </Field>
           </div>
           {error && (
-            <p role="alert" className="mb-3 text-sm text-severity-severe">
-              {error}
-            </p>
+            <Alert variant="severe" className="mb-3">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
           <div className="flex items-center gap-2">
             <button
