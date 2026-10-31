@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { uvBandToken } from "@/lib/weather-scales";
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
 
 interface UVIndexChartProps {
@@ -17,7 +18,8 @@ const SERIES: SeriesConfig[] = [
   {
     key: "uvIndex",
     label: "UV Index",
-    color: "var(--chart-4)",
+    color: "var(--wx-uv-3)",
+    colorByValue: uvBandToken,
     type: "bar",
     opacity: 0.6,
   },

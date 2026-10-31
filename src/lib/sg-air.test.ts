@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  PSI_BAND_TEXT_CLASS,
+  PSI_BAND_BG_CLASS,
   isSgAir,
   psiBandInfo,
   psiBandKey,
@@ -37,13 +37,13 @@ describe("psiBandInfo", () => {
     expect(psiBandInfo(140)).toEqual({
       key: "unhealthy",
       label: "Unhealthy",
-      textClass: "text-severity-severe",
+      bgClass: "bg-wx-aqi-3",
     });
   });
 
-  it("uses only severity tokens, never raw colour utilities", () => {
-    for (const cls of Object.values(PSI_BAND_TEXT_CLASS)) {
-      expect(cls).toMatch(/^text-severity-(low|moderate|high|severe|extreme)$/);
+  it("uses only weather-scale fills (NEA names and ranges, EPA colours), never raw colour utilities", () => {
+    for (const cls of Object.values(PSI_BAND_BG_CLASS)) {
+      expect(cls).toMatch(/^bg-wx-aqi-[1-6]$/);
     }
   });
 
