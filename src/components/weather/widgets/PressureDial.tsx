@@ -71,7 +71,7 @@ export function PressureDial({
         x={12}
         y={76}
         textAnchor="middle"
-        className="fill-text-tertiary text-[7px]"
+        className="fill-text-tertiary text-[10px]"
         aria-hidden="true"
       >
         {min}
@@ -80,7 +80,7 @@ export function PressureDial({
         x={108}
         y={76}
         textAnchor="middle"
-        className="fill-text-tertiary text-[7px]"
+        className="fill-text-tertiary text-[10px]"
         aria-hidden="true"
       >
         {max}
@@ -94,7 +94,7 @@ export function PressureDial({
         aria-hidden="true"
       >
         {Math.round(hPa)}
-        <tspan className="text-[6px] font-normal fill-text-tertiary">
+        <tspan className="text-[8.5px] font-normal fill-text-tertiary">
           {" "}
           hPa{" "}
         </tspan>
