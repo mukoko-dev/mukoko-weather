@@ -150,6 +150,43 @@ pub fn enrichment_row(probe: &Probe, latency_ms: u64) -> Value {
     }
 }
 
+/// The forecast baseline: how many models the blend draws on and its floor,
+/// read from the forecast Worker's `/health` (no provider call; whether each
+/// model answered at a place is per request and shows in `X-Weather-Blend`).
+pub fn blend_row(probe: &Probe, latency_ms: u64) -> Option<Value> {
+    let Probe::Healthy(body) = probe else {
+        return None;
+    };
+    let name = "Forecast blend (global models)";
+    let members = body
+        .pointer("/blend/members")
+        .and_then(Value::as_array)?
+        .len();
+    let floor = body
+        .pointer("/blend/floor")
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as usize;
+    Some(if members >= floor && floor > 0 {
+        row(
+            name,
+            OPERATIONAL,
+            latency_ms,
+            &format!(
+                "{members} global models; every one that answers is used, and at least {floor} must or the forecast is Open-Meteo best_match (labelled)"
+            ),
+            None,
+        )
+    } else {
+        row(
+            name,
+            DEGRADED,
+            latency_ms,
+            &format!("Only {members} models configured; the floor of {floor} cannot be met"),
+            None,
+        )
+    })
+}
+
 /// Shamwari: the AI Worker's `/health` (no model call, so no tokens spent).
 pub fn ai_row(probe: &Probe, latency_ms: u64) -> Value {
     let name = "Shamwari AI (weather AI Worker)";
@@ -312,6 +349,32 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("enrichment only"));
+    }
+
+    #[test]
+    fn the_blend_row_reports_members_and_floor() {
+        let ok = blend_row(
+            &healthy(
+                json!({"blend": {"members": ["a","b","c","d","e","f","g","h","i"], "floor": 4}}),
+            ),
+            1,
+        )
+        .unwrap();
+        assert_eq!(ok["status"], OPERATIONAL);
+        let m = ok["message"].as_str().unwrap();
+        assert!(
+            m.contains("9 global models") && m.contains("at least 4"),
+            "{m}"
+        );
+        let thin = blend_row(
+            &healthy(json!({"blend": {"members": ["a","b"], "floor": 4}})),
+            1,
+        )
+        .unwrap();
+        assert_eq!(thin["status"], DEGRADED);
+        // An older forecast Worker without the field, or one that did not answer: no row.
+        assert!(blend_row(&healthy(json!({})), 1).is_none());
+        assert!(blend_row(&Probe::Unreachable, 1).is_none());
     }
 
     #[test]

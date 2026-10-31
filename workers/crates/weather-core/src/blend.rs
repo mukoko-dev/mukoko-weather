@@ -38,6 +38,14 @@ pub const GFS: &str = "gfs_seamless";
 pub const ICON: &str = "icon_global";
 pub const GEM: &str = "gem_global";
 pub const ARPEGE: &str = "meteofrance_arpege_world";
+/// UK Met Office global deterministic, 10 km. Added with the 4-member floor:
+/// a bigger blend is a more accurate forecast (owner decision).
+pub const UKMO: &str = "ukmo_global_deterministic_10km";
+/// CMA GRAPES global (China Meteorological Administration).
+pub const CMA: &str = "cma_grapes_global";
+/// JMA GSM (Japan Meteorological Agency). Publishes no gusts, visibility or
+/// CAPE; the per-variable renormalisation covers that.
+pub const JMA: &str = "jma_gsm";
 
 /// The fewest blend members that must return data for an answer to be served
 /// as a blend. (Python accepted two; the owner raised it to four.)
@@ -52,10 +60,22 @@ pub const PROVIDER_BEST_MATCH: &str = "open-meteo:best_match";
 pub const MODEL_ALIASES: [(&str, &str); 1] = [("ecmwf_ifs04", ECMWF_IFS)];
 
 /// Models that may appear in a blend.
-pub const BLENDABLE_MODELS: [&str; 7] =
-    [ECMWF_IFS, ECMWF_IFS025, ECMWF_AIFS, GFS, ICON, GEM, ARPEGE];
+pub const BLENDABLE_MODELS: [&str; 10] = [
+    ECMWF_IFS,
+    ECMWF_IFS025,
+    ECMWF_AIFS,
+    GFS,
+    ICON,
+    GEM,
+    ARPEGE,
+    UKMO,
+    CMA,
+    JMA,
+];
 
-/// Starting weights, ECMWF-heavy everywhere (owner direction).
+/// The original six members' starting weights, ECMWF-heavy everywhere (owner
+/// direction). They are unchanged; the newer members are added on top and the
+/// blend normalises over whoever is present.
 const ECMWF_HEAVY: [(&str, f64); 6] = [
     (ECMWF_IFS, 0.35),
     (ECMWF_AIFS, 0.25),
@@ -64,6 +84,19 @@ const ECMWF_HEAVY: [(&str, f64); 6] = [
     (GEM, 0.05),
     (ARPEGE, 0.05),
 ];
+
+/// The newer members' starting weights `(ukmo, cma, jma)` for a region: small
+/// (0.03 to 0.08, owner direction) so the established blend barely moves.
+/// Where Africa is concerned (and where no better evidence exists) the Met
+/// Office, whose 10 km global model is the highest resolution of the three,
+/// leads; the Asian regional centres get a little more weight at home.
+/// Untuned starting values, to be fitted by skill (`_verification`).
+fn newer_members(region: &str) -> (f64, f64, f64) {
+    match region {
+        "south-asia" | "southeast-asia" | "east-asia" | "oceania" => (0.06, 0.06, 0.05),
+        _ => (0.08, 0.05, 0.03),
+    }
+}
 
 /// Every region key with its own weights entry (all ECMWF-heavy to start;
 /// tuned per region once verification data supports fitting by skill).
@@ -132,15 +165,49 @@ pub fn region_for(lat: f64, lon: f64) -> &'static str {
     "default"
 }
 
-/// Weights for a region (an unknown region gets the default). The Python also
-/// reads a `weather.modelBlendConfig` override from MongoDB; the Worker holds
-/// no MongoDB connection, so only the compiled-in weights apply.
+/// The compiled-in weights for a region (an unknown region gets the default).
+/// The Python also reads a `weather.modelBlendConfig` override from MongoDB;
+/// the Worker applies it in `workers/forecast/src/blend_config.rs`, with
+/// [`sanitize_override`] deciding what counts as a usable one.
 pub fn weights_for(region: &str) -> Weights {
-    let _ = region; // every region starts ECMWF-heavy; the table is per region so tuning is a code change here
+    let region = if REGIONS.contains(&region) {
+        region
+    } else {
+        "default"
+    };
+    let (ukmo, cma, jma) = newer_members(region);
     ECMWF_HEAVY
         .iter()
-        .map(|(m, w)| ((*m).to_owned(), *w))
+        .copied()
+        .chain([(UKMO, ukmo), (CMA, cma), (JMA, jma)])
+        .map(|(m, w)| (m.to_owned(), w))
         .collect()
+}
+
+/// The weights in a `weather.modelBlendConfig` override document
+/// (`{_id: region, weights: {model: weight}}`), or `None` when the document has
+/// no usable weights. As in the Python: unknown model ids and non-positive or
+/// non-numeric weights are dropped, and the override REPLACES the compiled-in
+/// set (a model it does not list is not requested). JSON `true` is not a weight
+/// here (Python's `isinstance(True, int)` would take it as 1.0).
+pub fn sanitize_override(weights: &Value) -> Option<Weights> {
+    let cleaned: Weights = weights
+        .as_object()?
+        .iter()
+        .filter(|(m, _)| BLENDABLE_MODELS.contains(&m.as_str()))
+        .filter_map(|(m, w)| match w {
+            Value::Number(n) => n.as_f64().filter(|w| *w > 0.0).map(|w| (m.clone(), w)),
+            _ => None,
+        })
+        .collect();
+    (!cleaned.is_empty()).then_some(cleaned)
+}
+
+/// An override the Worker will actually use: [`sanitize_override`] plus at
+/// least [`MIN_MEMBERS`] members, since an override naming fewer could never
+/// satisfy the floor and would turn every answer into `best_match`.
+pub fn usable_override(weights: &Value) -> Option<Weights> {
+    sanitize_override(weights).filter(|w| w.len() >= MIN_MEMBERS)
 }
 
 /// Members sorted by weight, highest first (the first supplies `current`),
@@ -544,9 +611,11 @@ pub fn members_with_data(raw: &Value, models: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// Whether `present` members out of `configured` are enough for a blend.
-pub fn meets_floor(present: usize, configured: usize) -> bool {
-    present >= MIN_MEMBERS.min(configured)
+/// Whether `present` members are enough for a blend: at least
+/// [`MIN_MEMBERS`], however many are configured (the Python judged against
+/// `min(2, configured)`).
+pub fn meets_floor(present: usize) -> bool {
+    present >= MIN_MEMBERS
 }
 
 /// The nowcast from `minutely_15`, unsuffixed or the first member that has
@@ -615,7 +684,7 @@ pub fn build_blend(
 ) -> Option<BlendOutcome> {
     let members = order_members(weights);
     let present = members_with_data(raw, &members);
-    if !meets_floor(present.len(), members.len()) {
+    if !meets_floor(present.len()) {
         return None;
     }
     let used: Weights = present
@@ -681,6 +750,69 @@ impl NotBlended {
             NotBlended::CircuitOpen => "circuit_open",
             NotBlended::Rejected => "request_rejected",
         }
+    }
+}
+
+/// What the multi-model Open-Meteo request came to (the Worker's fetch
+/// result, without the transport).
+#[derive(Debug, Clone, Copy)]
+pub enum Upstream<'a> {
+    /// A 200 with a readable body.
+    Body(&'a Value),
+    /// A 4xx: our request was rejected. Not an outage.
+    Rejected,
+    /// A 5xx, 429, timeout, transport error or unreadable body: an outage.
+    Failed,
+    /// The Open-Meteo circuit breaker would not let the request go out.
+    BreakerOpen,
+}
+
+/// The decision for one blend attempt.
+#[derive(Debug, Clone)]
+pub enum Attempt {
+    /// Serve this blend; the breaker records a success.
+    Blended(BlendOutcome),
+    /// Fall back to `best_match`, marked with `why`. `breaker_failure` is true
+    /// ONLY for an outage: "too few members", "no data here" and a rejected
+    /// request must not count against the shared breaker (they would open it
+    /// for everyone).
+    Fallback {
+        why: NotBlended,
+        breaker_failure: bool,
+    },
+}
+
+/// Decide a blend attempt: every member that returned data is used, weights
+/// renormalised over those present; fewer than [`MIN_MEMBERS`] (or an outage)
+/// is a labelled `best_match`, never a blend.
+pub fn attempt_blend(
+    upstream: Upstream,
+    region: &str,
+    weights: &[(String, f64)],
+    now: DateTime<Utc>,
+) -> Attempt {
+    match upstream {
+        Upstream::BreakerOpen => Attempt::Fallback {
+            why: NotBlended::CircuitOpen,
+            breaker_failure: false,
+        },
+        Upstream::Rejected => Attempt::Fallback {
+            why: NotBlended::Rejected,
+            breaker_failure: false,
+        },
+        Upstream::Failed => Attempt::Fallback {
+            why: NotBlended::UpstreamError,
+            breaker_failure: true,
+        },
+        Upstream::Body(raw) => match build_blend(raw, region, weights, now) {
+            Some(out) => Attempt::Blended(out),
+            None => Attempt::Fallback {
+                why: NotBlended::TooFewMembers(
+                    members_with_data(raw, &order_members(weights)).len(),
+                ),
+                breaker_failure: false,
+            },
+        },
     }
 }
 
@@ -890,14 +1022,44 @@ mod tests {
     #[test]
     fn every_region_has_a_weights_entry_and_the_table_matches() {
         for r in REGIONS {
-            assert_eq!(weights_for(r).len(), 6);
+            let w = weights_for(r);
+            assert_eq!(w.len(), 9, "{r}: the original six plus three newer members");
+            let get = |m: &str| w.iter().find(|(k, _)| k == m).unwrap().1;
+            // The original six are exactly as they were.
+            for (m, want) in [
+                (ECMWF_IFS, 0.35),
+                (ECMWF_AIFS, 0.25),
+                (GFS, 0.15),
+                (ICON, 0.15),
+                (GEM, 0.05),
+                (ARPEGE, 0.05),
+            ] {
+                assert_eq!(get(m), want, "{r} {m}");
+            }
+            // The newer ones start small (0.03 to 0.08), and ECMWF still leads.
+            for m in [UKMO, CMA, JMA] {
+                assert!((0.03..=0.08).contains(&get(m)), "{r} {m}");
+            }
+            assert_eq!(order_members(&w)[0], ECMWF_IFS, "{r}");
+            let total: f64 = w.iter().map(|(_, x)| x).sum();
+            let ecmwf = (get(ECMWF_IFS) + get(ECMWF_AIFS)) / total;
+            assert!(ecmwf >= 0.5, "{r}: ECMWF share {ecmwf}");
+            assert!(w
+                .iter()
+                .all(|(m, _)| BLENDABLE_MODELS.contains(&m.as_str())));
         }
         // Every box names a known region.
         for (r, _) in REGION_BOXES.iter() {
             assert!(REGIONS.contains(r), "{r}");
         }
-        let total: f64 = weights_for("default").iter().map(|(_, w)| w).sum();
-        assert!((total - 1.0).abs() < 1e-9);
+        // Africa leads with the Met Office; the Asian regional centres get a little more at home.
+        let africa = weights_for("southern-africa");
+        let asia = weights_for("east-asia");
+        let w = |ws: &Weights, m: &str| ws.iter().find(|(k, _)| k == m).unwrap().1;
+        assert_eq!(w(&africa, UKMO), 0.08);
+        assert_eq!(w(&asia, JMA), 0.05);
+        // An unknown region gets the default.
+        assert_eq!(weights_for("atlantis"), weights_for("default"));
     }
 
     #[test]
@@ -999,7 +1161,17 @@ mod tests {
         let now = now();
         // (fixture case name, expected present, served as a blend?)
         for (name, present, blended) in [
-            ("six members, seed 1", 6, true),
+            ("nine members, seed 1", 9, true),
+            (
+                "the original six present, the three newer members absent",
+                6,
+                true,
+            ),
+            (
+                "eight present, one member all-null (dropped, weights renormalised)",
+                8,
+                true,
+            ),
             ("four members present (floor)", 4, true),
             ("three members present (below the new floor)", 3, false),
             ("one member present", 1, false),
@@ -1024,10 +1196,182 @@ mod tests {
                 );
             }
         }
-        assert!(meets_floor(4, 6) && !meets_floor(3, 6));
-        // A configuration with fewer than four members is judged on its size.
-        assert!(meets_floor(2, 2) && !meets_floor(1, 2));
+        assert!(meets_floor(4) && !meets_floor(3) && meets_floor(9));
+        // However few members are configured, fewer than four present is never a blend.
+        assert!(!meets_floor(2) && !meets_floor(0));
         assert_eq!(MIN_MEMBERS, 4);
+    }
+
+    fn fixture_case(name: &str) -> Value {
+        fx()["blend_payload"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == name)
+            .unwrap()
+            .clone()
+    }
+
+    #[test]
+    fn more_members_than_the_floor_are_all_used() {
+        let case = fixture_case("nine members, seed 1");
+        let region = case["region"].as_str().unwrap();
+        let out = build_blend(&case["raw"], region, &weights_for(region), now()).unwrap();
+        assert_eq!(
+            out.present, 9,
+            "the floor is a minimum, not the size of the blend"
+        );
+        assert_eq!(
+            out.payload["baseline"]["members"].as_array().unwrap().len(),
+            9
+        );
+        assert_eq!(out.payload["baseline"]["membersConfigured"], 9);
+        for m in [UKMO, CMA, JMA] {
+            assert!(
+                out.header.contains(&format!("{m}=")),
+                "{m} is in {}",
+                out.header
+            );
+        }
+        // The nine-member blend differs from what the original six give: the
+        // newer members really contribute.
+        let six: Weights = weights_for(region)
+            .into_iter()
+            .filter(|(m, _)| ![UKMO, CMA, JMA].contains(&m.as_str()))
+            .collect();
+        let with_six = build_blend(&case["raw"], region, &six, now()).unwrap();
+        assert_ne!(
+            out.payload["hourly"]["temperature_2m"],
+            with_six.payload["hourly"]["temperature_2m"]
+        );
+    }
+
+    #[test]
+    fn a_member_with_no_data_is_dropped_and_the_weights_renormalise() {
+        let case =
+            fixture_case("eight present, one member all-null (dropped, weights renormalised)");
+        let region = case["region"].as_str().unwrap();
+        let all = weights_for(region);
+        let out = build_blend(&case["raw"], region, &all, now()).unwrap();
+        assert_eq!(out.present, 8);
+        let members = out.payload["baseline"]["members"].as_array().unwrap();
+        assert!(
+            !members.iter().any(|m| m == JMA),
+            "the all-null member is dropped"
+        );
+        assert_eq!(out.payload["models_available"].as_array().unwrap().len(), 8);
+        assert!(!out.header.contains(JMA), "{}", out.header);
+
+        // The header weights are normalised over the eight present and add up to 1.
+        let shares: Vec<f64> = out
+            .header
+            .split("; ")
+            .nth(1)
+            .unwrap()
+            .split(',')
+            .map(|p| p.split('=').nth(1).unwrap().parse().unwrap())
+            .collect();
+        assert_eq!(shares.len(), 8);
+        assert!(
+            (shares.iter().sum::<f64>() - 1.0).abs() <= 8.0 * 0.005 + 1e-9,
+            "{shares:?}"
+        );
+        // East Asia: 0.35 of (1.17 - 0.05 for JMA) = 0.3125; with all nine it would be 0.299.
+        assert!(out.header.contains("ecmwf_ifs=0.31"), "{}", out.header);
+
+        // Exactly the blend over the eight present, not a blend that still
+        // counts the missing member's weight.
+        let eight: Weights = all.into_iter().filter(|(m, _)| m != JMA).collect();
+        assert_eq!(
+            out.payload["hourly"]["temperature_2m"],
+            blend_payload(&case["raw"], &eight, false)["hourly"]["temperature_2m"]
+        );
+    }
+
+    #[test]
+    fn an_outage_is_a_labelled_best_match_and_only_an_outage_counts_against_the_breaker() {
+        let region = "southern-africa";
+        let w = weights_for(region);
+        let nine = fixture_case("nine members, seed 1");
+        let three = fixture_case("three members present (below the new floor)");
+        let empty = json!({"hourly": {}});
+
+        // The provider is down (5xx, 429, timeout, unreadable body).
+        assert!(matches!(
+            attempt_blend(Upstream::Failed, region, &w, now()),
+            Attempt::Fallback {
+                why: NotBlended::UpstreamError,
+                breaker_failure: true
+            }
+        ));
+        // A rejected request, an open breaker, too few members: not outages.
+        for (up, why) in [
+            (Upstream::Rejected, NotBlended::Rejected),
+            (Upstream::BreakerOpen, NotBlended::CircuitOpen),
+            (Upstream::Body(&three["raw"]), NotBlended::TooFewMembers(3)),
+            (Upstream::Body(&empty), NotBlended::TooFewMembers(0)),
+        ] {
+            match attempt_blend(up, region, &w, now()) {
+                Attempt::Fallback {
+                    why: got,
+                    breaker_failure,
+                } => {
+                    assert_eq!(got, why);
+                    assert!(
+                        !breaker_failure,
+                        "{why:?} must not open the breaker for everyone"
+                    );
+                }
+                Attempt::Blended(_) => panic!("{why:?} was served as a blend"),
+            }
+        }
+        match attempt_blend(Upstream::Body(&nine["raw"]), region, &w, now()) {
+            Attempt::Blended(out) => assert_eq!(out.present, 9),
+            Attempt::Fallback { .. } => panic!("nine members is a blend"),
+        }
+        // Every fallback is labelled as such in the answer.
+        let raw = json!({
+            "hourly": {"time": ["2026-10-31T10:00"], "temperature_2m": [24.0]},
+            "daily": {"time": ["2026-10-31"]},
+        });
+        for why in [
+            NotBlended::UpstreamError,
+            NotBlended::CircuitOpen,
+            NotBlended::TooFewMembers(2),
+        ] {
+            let p = best_match_payload(&raw, why, now()).unwrap();
+            assert_eq!(p["baseline"]["blend"], false);
+            assert_eq!(p["baseline"]["provider"], PROVIDER_BEST_MATCH);
+            assert_eq!(p["baseline"]["reason"], why.reason());
+        }
+    }
+
+    #[test]
+    fn the_db_override_matches_the_python_and_cannot_break_the_floor() {
+        for c in fx()["weights_override"].as_array().unwrap() {
+            let region = c["region"].as_str().unwrap();
+            let mut got = c["doc"]
+                .get("weights")
+                .and_then(sanitize_override)
+                .unwrap_or_else(|| weights_for(region));
+            got.sort_by(|a, b| a.0.cmp(&b.0));
+            let mut want = weights_from(&c["expected"]);
+            want.sort_by(|a, b| a.0.cmp(&b.0));
+            assert_eq!(got, want, "{}", c["name"]);
+        }
+        // An override naming fewer than four models could never make a blend.
+        assert!(usable_override(&json!({"ecmwf_ifs": 0.6, "gfs_seamless": 0.4})).is_none());
+        let four = json!({"ecmwf_ifs": 0.4, "gfs_seamless": 0.2, "icon_global": 0.2, UKMO: 0.2});
+        assert_eq!(usable_override(&four).unwrap().len(), 4);
+        // A tuned newer member is honoured, and the override replaces the set.
+        let tuned = usable_override(&json!({
+            "ecmwf_ifs": 0.3, "ecmwf_aifs025_single": 0.2, "gfs_seamless": 0.1, UKMO: 0.4
+        }))
+        .unwrap();
+        assert_eq!(order_members(&tuned)[0], UKMO);
+        let case = fixture_case("nine members, seed 1");
+        let out = build_blend(&case["raw"], "southern-africa", &tuned, now()).unwrap();
+        assert_eq!(out.present, 4, "only the overridden members are used");
     }
 
     #[test]
@@ -1046,7 +1390,10 @@ mod tests {
             .contains_key("et0_fao_evapotranspiration"));
         assert_eq!(out.payload["insights"], case["insights"]);
         assert_eq!(out.payload["minutely"]["time"].as_array().unwrap().len(), 8);
-        assert!(out.header.starts_with("southern-africa; ecmwf_ifs=0.35,"));
+        // Normalised over the nine: 0.35 of 1.16.
+        assert!(out
+            .header
+            .starts_with("southern-africa; ecmwf_ifs=0.30,ecmwf_aifs025_single=0.22,"));
         assert_eq!(out.payload["utc_offset_seconds"], 7200);
         assert_eq!(out.payload["timezone"], "Africa/Harare");
     }
@@ -1088,14 +1435,14 @@ mod tests {
     fn urls_request_every_member_and_the_insight_inputs() {
         let w = weights_for("default");
         let models = request_models(&w);
-        assert_eq!(models.len(), 6);
+        assert_eq!(models.len(), 9);
         assert_eq!(
             models[0], ECMWF_IFS,
             "the heaviest member is first: it supplies current"
         );
         let url = open_meteo_url(-17.83, 31.05, &models);
         assert!(url.contains("latitude=-17.83&longitude=31.05"));
-        assert!(url.contains("models=ecmwf_ifs,ecmwf_aifs025_single,gfs_seamless,icon_global,gem_global,meteofrance_arpege_world"));
+        assert!(url.contains("models=ecmwf_ifs,ecmwf_aifs025_single,gfs_seamless,icon_global,ukmo_global_deterministic_10km,cma_grapes_global,gem_global,meteofrance_arpege_world,jma_gsm"));
         assert!(url.contains("cape,lifted_index"));
         assert!(url.contains("et0_fao_evapotranspiration"));
         assert!(url.contains("forecast_minutely_15=8"));

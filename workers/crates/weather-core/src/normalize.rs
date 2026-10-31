@@ -24,7 +24,7 @@ pub const DEFAULT_FORECAST_MODELS: [&str; 4] = [
 /// Every id was checked live on 2026-10-10 (`api/py/_weather.py`).
 /// `ecmwf_ifs04` is dead upstream and is accepted only as an alias
 /// (`blend::MODEL_ALIASES`).
-pub const KNOWN_FORECAST_MODELS: [&str; 10] = [
+pub const KNOWN_FORECAST_MODELS: [&str; 13] = [
     "best_match",
     "ecmwf_ifs",
     "ecmwf_ifs025",
@@ -34,6 +34,9 @@ pub const KNOWN_FORECAST_MODELS: [&str; 10] = [
     "icon_seamless",
     "gem_global",
     "meteofrance_arpege_world",
+    "ukmo_global_deterministic_10km",
+    "cma_grapes_global",
+    "jma_gsm",
     "meteofrance_seamless",
 ];
 
