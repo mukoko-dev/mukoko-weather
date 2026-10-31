@@ -1983,7 +1983,7 @@ What exists today:
 
 - `MONGODB_URI` — required, MongoDB Atlas connection string
 - `WORKOS_API_KEY` — required, server-side WorkOS API key (sk\_...). Used by AuthKit middleware, the `/callback` handler, and `identity.persons` upsert
-- `WORKOS_CLIENT_ID` — required, WorkOS Client ID (client\_...) from the WorkOS dashboard
+- `WORKOS_CLIENT_ID` — required, the WorkOS Client ID (client\_...) of the Mukoko Account app, the one client every Mukoko app signs in through (no hardcoded id anywhere in code; the `/api/app-keys` exchange also reads it as the only issuing client it accepts, and fails closed with 503 when it is unset)
 - `WORKOS_COOKIE_PASSWORD` — required, 32+ character secret used to encrypt/sign the session cookie. Rotating this value invalidates every existing session
 - `NEXT_PUBLIC_WORKOS_REDIRECT_URI` — required, the OAuth callback URL. Local: `http://localhost:3000/callback`. Production: `https://weather.mukoko.com/callback`. Must match the Redirect URI registered in the WorkOS dashboard
 - `WEATHER_SERVICE_URL` — origin of the internal weather Worker, `https://weather-internal.mukoko.com` (not a secret). Required for AI: every model call goes to `/internal/ai/chat/completions` there
@@ -2001,7 +2001,6 @@ What exists today:
 - `VERCEL_AUTOMATION_BYPASS_SECRET` — injected by Vercel when Protection Bypass for Automation is on (Project → Settings → Deployment Protection). It lets preview SSR reach that preview's own Python functions. Production does not use it. On the #264 preview the injected secret was still answered with the SSO 302 (logged as `bypassHeader: true`, status 302), so the secret may need regenerating. Never log it. `logWarn`/`logError` redact secret query values and URL credentials (`redactSecrets` in `src/lib/observability.ts`)
 - `NYUCHI_API_URL` — optional, server-only. Nyuchi API gateway origin for `/api/app-keys` (bare `https` origin; anything else and the route answers 503)
 - `NYUCHI_APP_KEYS_API_KEY` — optional, server-only secret. This app's own internal gateway key (`nyk_….nys_…`), scoped `identity app-keys weather` only — a dedicated key, separate from the Workers' `NYUCHI_API_KEY`. Never `NEXT_PUBLIC_*`, never logged
-- `NYUCHI_CONSOLE_WORKOS_CLIENT_ID` — optional. The Console WorkOS client id the person-token exchange accepts (default `client_01KV2G518HGXVMTAFQDKSVNXCW`, "Mukoko Account"). `WORKOS_CLIENT_ID` must be this client for `/api/app-keys` to work
 - `ALERT_WEBHOOK_URL` — optional, enables webhook alerting for high/critical severity errors (Slack incoming webhook, Discord webhook, PagerDuty, or compatible services). Used by `src/lib/observability.ts`
 - `NEXT_PUBLIC_MAPTILER_API_KEY` — MapTiler Cloud API key for OpenMapTiles base map tiles and aviation map layers (`feature/openmaptiles` branch). Set in `.env.local` (gitignored). Key stored in MapTiler Cloud account.
 
